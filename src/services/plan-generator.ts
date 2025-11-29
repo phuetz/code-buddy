@@ -477,14 +477,15 @@ export class PlanGenerator {
    */
   loadPlan(json: string): ExecutionPlan {
     const data = JSON.parse(json);
-    this.currentPlan = {
+    const plan: ExecutionPlan = {
       ...data,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
       approvedAt: data.approvedAt ? new Date(data.approvedAt) : undefined,
       completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
     };
-    return this.currentPlan;
+    this.currentPlan = plan;
+    return plan;
   }
 
   /**

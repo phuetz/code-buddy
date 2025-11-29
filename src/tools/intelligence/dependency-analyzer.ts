@@ -523,7 +523,7 @@ export class DependencyAnalyzer {
     }
 
     for (const edge of this.edges) {
-      edges.push(edge);
+      edges.push({ ...edge });
     }
 
     return { nodes, edges };
