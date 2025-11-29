@@ -16,3 +16,9 @@ export { InteractiveBashTool, getInteractiveBash } from "./interactive-bash.js";
 // Enhanced competitor features
 export { CommentWatcher, getCommentWatcher, resetCommentWatcher } from "./comment-watcher.js";
 export { TestGeneratorTool, testGeneratorToolDefinition } from "./test-generator.js";
+
+// Code Intelligence (hurry-mode inspired)
+export * from "./intelligence/index.js";
+
+// Advanced Tools (hurry-mode inspired)
+export * from "./advanced/index.js";
