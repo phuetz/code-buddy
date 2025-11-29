@@ -23,6 +23,259 @@
 
 ---
 
+## ❤️ Grok-CLI — The Dev Assistant Built with Love (and a Lot of Neurons)
+
+**Because refactoring is better when you're smiling.**
+
+Welcome to grok-cli, a tool born from a simple idea:
+👉 if we're going to code with an AI, it might as well be an AI that's intelligent, elegant... and good company.
+
+This project was crafted with:
+
+- a modern architecture,
+- a pinch of creative madness,
+- lots of coffee,
+- and above all... all our heart. 💕
+
+### 🚀 Why Does grok-cli Exist?
+
+Because we were tired of AI assistants that:
+
+- hallucinate more than a poorly-indexed SQL server
+- generate code like an intern under pressure
+- and refuse to do a serious review without "could you clarify your request?"
+
+So we built something better:
+
+- a sophisticated multi-agent system,
+- deep code understanding,
+- structured reasoning (ToT + MCTS),
+- automatic repair,
+- long-term memory,
+- offline mode,
+- plugins,
+- a checkpoint system,
+- and even a collaborative mode.
+
+Yes.
+We enjoyed building this.
+And now you're going to enjoy using it too.
+
+### 🧠 1. Multi-Agent System — Because One Brain is Good... Four is Better
+
+grok-cli comes with a small internal team:
+
+- **Orchestrator** — the conductor, calm and elegant
+- **Coder** — the one who writes fast (too fast? no, just right)
+- **Reviewer** — the one who gets into the details
+- **Tester** — the one who breaks everything to see if it holds
+- **Refactorer** — the one who does feng-shui in your code
+- **Documenter** — the technical poet
+- **Analyst** — the silent sage
+
+They work together, sometimes debating, sometimes in consensus mode.
+Yes: the CLI literally has team discussions for you.
+
+(You can sit back, everything's fine.)
+
+### 🧩 2. Advanced RAG — Elephant Memory, Cheetah Speed
+
+We've built a specialized RAG for code:
+
+- intelligent chunking by language
+- code-aware + semantic embeddings
+- hybrid TF-IDF / vector search
+- "corrective RAG" to avoid off-topic responses
+- automatic complex context management
+
+In short, it's as if your project were a book that grok-cli actually reads.
+
+### 🌳 3. Tree-of-Thought + MCTS — Yes, the CLI Thinks Like an Adult
+
+Here, the AI:
+
+- explores multiple paths
+- compares
+- scores
+- eliminates
+- backtracks
+- optimizes
+- and chooses the best solution with a satisfied smile
+
+With 4 modes:
+
+- **shallow**
+- **medium**
+- **deep**
+- **exhaustive** (this one might scare you, but in a good way)
+
+### 🔧 4. APR — Automatic Program Repair
+
+You know that Monday morning dev who fixes your bugs without asking?
+Neither do we.
+
+But grok-cli does it:
+
+- fault localization (Ochiai, DStar, Tarantula)
+- 30+ repair templates
+- guided LLM generation
+- automatic test validation
+
+And no, it never complains.
+(Amazing, I know.)
+
+### 🧠💬 5. Extended Thinking Mode — Long-Duration Thought
+
+Here, grok-cli:
+
+- re-reads itself
+- self-critiques
+- detects contradictions
+- makes another pass
+- and gives you the best version of its thinking
+
+It's like a senior dev who re-reads before sending you a commit.
+(Rare.)
+
+### 🔀 6. Multi-Model Execution — LLM Speed Dating
+
+Your CLI can query:
+
+- Grok
+- Claude
+- Gemini
+- And more...
+
+And choose:
+
+- the fastest
+- the most relevant
+- or make a democratic consensus
+
+We wanted models to collaborate instead of fighting.
+
+### 🗺️ 7. Semantic Code Map — A GPS for Your Project
+
+grok-cli analyzes:
+
+- imports
+- calls
+- inheritance
+- technical layers
+- important modules
+- change impact
+
+You ask "where's the business logic?" → it shows you.
+You say "if I change this, what breaks?" → it explains.
+
+It's a GPS, but for devs.
+No subscription required.
+
+### 🤝 8. Real-Time Collaboration — Code Together, Even Remotely
+
+With WebSockets:
+
+- multi-user sessions
+- message sharing
+- file sharing
+- annotations
+- roles (owner/admin/editor/viewer)
+- audit trail
+- encryption
+
+Like Google Docs... but for coding.
+And more serious.
+
+### 📊 9. Analytics Dashboard — Because a Great Project Deserves Great Graphs
+
+Do you know how many tokens you consume?
+Which model costs the most?
+How many tests failed?
+How many MCTS iterations were done?
+
+Now you do.
+
+And you can export everything to JSON / CSV / Markdown.
+
+### 🧩 10. Plugin Marketplace — Open Your Door to Creativity
+
+Plugins with:
+
+- Sandbox
+- Stable API
+- Commands
+- Providers
+- File tools
+- MCP servers
+
+Grok-cli can become whatever you choose to make of it.
+
+### 📡 11. Offline Mode — Even Without Internet, You're Not Alone
+
+- intelligent cache
+- local execution via Ollama / llama.cpp
+- request queue
+- automatic sync
+
+You keep working.
+Even on a plane.
+Even in an elevator.
+Even at your parents' house.
+
+### 💾 12. Checkpoint & Undo System — Because Everyone Makes Mistakes
+
+Before dangerous operations:
+👉 grok-cli creates a snapshot.
+
+You broke something?
+👉 undo
+
+Want to go back?
+👉 restore checkpoint
+
+Like Git, but... cuddly.
+
+### 🎭 13. Personas — Your Personalized Assistants
+
+7 built-in personas:
+
+- senior dev
+- code reviewer
+- debugger
+- security expert
+- teacher
+- minimalist
+- architect
+
+You can create others.
+Your CLI becomes you.
+(The well-rested version.)
+
+### 🧠❤️ 14. Enhanced Memory — A Companion That Learns With You
+
+- summaries
+- preferences
+- conventions
+- habits
+- code style
+- patterns
+
+Grok-cli remembers.
+Not to judge you.
+Just to help you better. ❤️
+
+### 💞 And All This... Is Coded with Love and Good Vibes.
+
+Every module, every agent, every pipeline...
+was born in an environment where there was:
+
+- seriousness,
+- technical excellence,
+- but also a bit of ourselves,
+- and a lot of desire to create something beautiful.
+
+---
+
 ## Overview
 
 Grok CLI is a conversational AI development agent that transforms your terminal into an intelligent coding assistant. It combines the power of Grok AI with sophisticated code intelligence tools, enabling developers to analyze, refactor, and manage codebases with unprecedented efficiency.
