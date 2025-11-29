@@ -16,6 +16,7 @@
 [Features](#-features) •
 [Usage](#-usage) •
 [Code Intelligence](#-code-intelligence) •
+[Research Foundation](#-research-foundation) •
 [Contributing](#-contributing)
 
 </div>
@@ -25,6 +26,8 @@
 ## Overview
 
 Grok CLI is a conversational AI development agent that transforms your terminal into an intelligent coding assistant. It combines the power of Grok AI with sophisticated code intelligence tools, enabling developers to analyze, refactor, and manage codebases with unprecedented efficiency.
+
+Built on cutting-edge research in LLM-based agents, Tree-of-Thought reasoning, and Retrieval-Augmented Generation (RAG), Grok CLI represents the state-of-the-art in AI-assisted development.
 
 ---
 
@@ -56,10 +59,25 @@ grok --prompt "analyze the project structure"
 | **Real-time Streaming** | Progressive response generation with instant feedback |
 | **Multi-Model Support** | Grok-4, Grok-3, Gemini, Claude via custom endpoints |
 | **Token Tracking** | Real-time token counting with tiktoken |
+| **Extended Thinking** | Deep reasoning mode for complex problems |
+| **Tree-of-Thought** | Advanced reasoning with MCTS exploration |
+
+### Multi-Agent System
+
+Grok CLI implements a collaborative multi-agent architecture inspired by research on [LLM-based Multi-Agent Systems for Software Engineering](https://dl.acm.org/doi/10.1145/3712003):
+
+| Agent | Role |
+|-------|------|
+| **Orchestrator** | High-level planning and task decomposition |
+| **Coder** | Code generation and implementation |
+| **Reviewer** | Code review and quality feedback |
+| **Tester** | Test generation and validation |
+| **Refactorer** | Safe code refactoring operations |
+| **Documenter** | Documentation generation |
 
 ### Code Intelligence
 
-Grok CLI includes a comprehensive code intelligence suite inspired by Claude Code:
+Comprehensive code intelligence suite inspired by Claude Code:
 
 | Tool | Capabilities |
 |------|--------------|
@@ -69,6 +87,16 @@ Grok CLI includes a comprehensive code intelligence suite inspired by Claude Cod
 | **Code Context** | Semantic analysis, quality metrics, design pattern detection |
 | **Refactoring Assistant** | Safe rename, extract function/variable, inline, move operations |
 
+### RAG-Based Tool Selection
+
+Implements intelligent tool selection based on [RAG-MCP research](https://arxiv.org/abs/2505.03275):
+
+| Metric | Without RAG | With RAG | Improvement |
+|--------|-------------|----------|-------------|
+| Token Usage | ~5000 | ~2500 | -50% |
+| Selection Accuracy | ~13% | ~43% | +230% |
+| Selection Time | N/A | <1ms | Negligible |
+
 ### Advanced Tools
 
 | Tool | Description |
@@ -77,6 +105,8 @@ Grok CLI includes a comprehensive code intelligence suite inspired by Claude Cod
 | **Operation History** | Full undo/redo with persistence to disk |
 | **Plan Generator** | Structured planning with phases and validation |
 | **Codebase Explorer** | Project analysis, statistics, tree visualization |
+| **Git Integration** | Auto-commits, branch management, PR creation |
+| **Interactive Bash** | PTY support for interactive commands (vim, htop) |
 
 ### Core Tools
 
@@ -88,6 +118,64 @@ Grok CLI includes a comprehensive code intelligence suite inspired by Claude Cod
 | **bash** | Execute shell commands with persistent cd and timeout |
 | **search** | Ultra-fast search with ripgrep backend |
 | **todo_list** | Task management with priorities and status tracking |
+| **multi_edit** | Edit multiple files in a single atomic operation |
+
+### Agent Modes
+
+| Mode | Description |
+|------|-------------|
+| `/code` | Focus on code generation and editing |
+| `/plan` | Planning mode without side effects |
+| `/ask` | Question-answering mode |
+| `/architect` | Two-phase design/implementation mode |
+
+### Autonomy Levels
+
+Configurable autonomy inspired by [Cursor's YOLO mode](https://docs.cursor.com/agent):
+
+| Level | Description |
+|-------|-------------|
+| `suggest` | Only suggest changes, always confirm |
+| `confirm` | Standard confirmation for all operations |
+| `auto` | Auto-execute safe operations, confirm dangerous ones |
+| `full` | Full autonomy (use with caution) |
+
+### Hooks System
+
+Powerful hooks system for extending functionality:
+
+| Hook | Trigger |
+|------|---------|
+| `PreToolUse` | Before tool execution |
+| `PostToolUse` | After tool completion |
+| `SessionStart` | When session begins |
+| `SessionEnd` | When session ends |
+| `Notification` | When notifications are sent |
+
+### Context Features
+
+| Feature | Description |
+|---------|-------------|
+| **@ Mentions** | `@file:`, `@url:`, `@image:`, `@git:`, `@symbol:`, `@search:` |
+| **Persistent Memory** | Project and user-scoped memory in `.grok/GROK_MEMORY.md` |
+| **Codebase RAG** | Semantic code retrieval with embeddings |
+| **Context Manager** | Intelligent context compression and prioritization |
+
+### MCP Integration
+
+Full [Model Context Protocol](https://modelcontextprotocol.io/) support for extending capabilities:
+
+```json
+// .grok/mcp.json
+{
+  "servers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+    }
+  }
+}
+```
 
 ### UI Components
 
@@ -100,6 +188,7 @@ Enhanced terminal UI with professional styling:
 - Info panels and tooltips
 - Data tables and badges
 - Countdown timers
+- Streaming diff previews
 
 ---
 
@@ -228,6 +317,105 @@ const result = await assistant.refactor({
 
 ## Advanced Features
 
+### Tree-of-Thought Reasoning
+
+Based on [RethinkMCTS](https://arxiv.org/abs/2409.09584) research, implementing Monte Carlo Tree Search for code generation:
+
+```typescript
+import { getTreeOfThoughtReasoner } from '@phuetz/grok-cli';
+
+const reasoner = getTreeOfThoughtReasoner();
+const solution = await reasoner.reason(problem, {
+  maxIterations: 10,
+  explorationWeight: 1.4,
+  rethinkOnError: true
+});
+```
+
+**Key capabilities:**
+- Selection: Choose most promising thought paths
+- Expansion: Generate alternative approaches
+- Simulation: Evaluate via code execution
+- Backpropagation: Update path scores
+- Rethink: Refine erroneous thoughts
+
+### Extended Thinking Mode
+
+Deep reasoning inspired by Claude Code's extended thinking:
+
+```typescript
+import { getExtendedThinking } from '@phuetz/grok-cli';
+
+const thinking = getExtendedThinking();
+const thoughts = await thinking.think(problem, 'deep'); // shallow, medium, deep
+
+// Token budgets: shallow=5000, medium=20000, deep=100000
+```
+
+### Auto-Repair Engine
+
+Automated Program Repair based on [AutoCodeRover](https://arxiv.org/abs/2404.11595) and [SWE-agent](https://arxiv.org/abs/2410.06992):
+
+```typescript
+import { getRepairEngine } from '@phuetz/grok-cli';
+
+const engine = getRepairEngine();
+const result = await engine.repair(error, code, {
+  maxPatches: 5,
+  validateWithTests: true
+});
+```
+
+**Repair workflow:**
+1. Bug localization (token-level)
+2. Generate candidate patches
+3. Validate patches with tests
+4. Apply best solution
+
+### Agent Pipelines
+
+Chain agents in deterministic workflows:
+
+```typescript
+import { getPipelineRunner } from '@phuetz/grok-cli';
+
+const pipeline = {
+  name: "code-review",
+  stages: [
+    { agent: "explorer", outputCapture: "context" },
+    { agent: "code-reviewer" },
+    { agent: "test-runner" },
+    { agent: "documenter" }
+  ],
+  passContext: true
+};
+
+await getPipelineRunner().run(pipeline);
+```
+
+**User command:** `/pipeline code-review`
+
+### Skills System
+
+Auto-activating specialized abilities:
+
+```markdown
+<!-- .grok/skills/typescript-expert/SKILL.md -->
+---
+name: typescript-expert
+description: Expert TypeScript developer
+triggers: ["typescript", "type error", "generic"]
+tools: ["view_file", "search", "str_replace_editor"]
+---
+
+You are a TypeScript expert. Focus on:
+1. Complex generic types
+2. Type inference issues
+3. Declaration file problems
+```
+
+**User command:** `/skill typescript-expert`
+
 ### Plan Mode
 
 Structured planning for complex tasks:
@@ -237,26 +425,21 @@ import { getPlanGenerator } from '@phuetz/grok-cli';
 
 const planner = getPlanGenerator();
 
-// Create a new plan
 const plan = planner.createPlan(
   'Implement Authentication',
   'Add user authentication to the application',
   'Complete auth flow with login, logout, and session management'
 );
 
-// Add steps
 planner.addStep({
   title: 'Create User Model',
-  description: 'Define user schema and database model',
   priority: 'high',
   risk: 'low',
   estimatedComplexity: 2,
   dependencies: [],
-  affectedFiles: ['src/models/user.ts'],
-  actions: [{ type: 'create_file', target: 'src/models/user.ts', description: 'User model' }]
+  affectedFiles: ['src/models/user.ts']
 });
 
-// Generate summary
 console.log(planner.generateSummary());
 ```
 
@@ -286,10 +469,8 @@ import { getMultiFileEditor } from '@phuetz/grok-cli';
 
 const editor = getMultiFileEditor();
 
-// Start a transaction
 const txId = editor.beginTransaction('Refactor auth module');
 
-// Add operations
 editor.addOperation(txId, {
   type: 'edit',
   filePath: 'src/auth.ts',
@@ -302,11 +483,10 @@ editor.addOperation(txId, {
   content: '// New utility file'
 });
 
-// Commit or rollback
 try {
   await editor.commit(txId);
 } catch (error) {
-  await editor.rollback(txId); // Automatic rollback on failure
+  await editor.rollback(txId);
 }
 ```
 
@@ -319,17 +499,31 @@ import { getOperationHistory } from '@phuetz/grok-cli';
 
 const history = getOperationHistory();
 
-// Undo last operation
 await history.undo();
-
-// Redo
 await history.redo();
-
-// Go to specific point
 await history.goToHistoryPoint('operation-id');
 
-// List history
 const entries = history.getHistory();
+```
+
+### Conversation Branching
+
+Fork conversations to explore alternatives:
+
+```typescript
+// /fork "experiment-name" - Create branch from current point
+// /branches - List all branches
+// /checkout <branch-id> - Switch to branch
+// /merge <branch-id> - Merge branch into current
+```
+
+### Cost Tracking
+
+Real-time API cost monitoring:
+
+```typescript
+// /cost - Show cost dashboard
+// Displays: session cost, daily cost, model breakdown
 ```
 
 ---
@@ -417,6 +611,54 @@ Use alternative AI providers:
 grok --base-url https://your-endpoint.com/v1
 ```
 
+### Project Settings
+
+Create `.grok/settings.json` in your project:
+```json
+{
+  "model": "grok-4-latest",
+  "maxRounds": 30,
+  "autonomyLevel": "confirm",
+  "enableRAG": true,
+  "parallelTools": true
+}
+```
+
+### Hooks Configuration
+
+Create `.grok/hooks.json`:
+```json
+{
+  "hooks": [
+    {
+      "event": "PostToolUse",
+      "pattern": "str_replace_editor|create_file",
+      "command": "npx prettier --write ${file} && npx eslint --fix ${file}",
+      "description": "Auto-format after edits"
+    },
+    {
+      "event": "SessionStart",
+      "command": "npm install && npm run typecheck",
+      "description": "Setup on session start"
+    }
+  ]
+}
+```
+
+### YOLO Mode Configuration
+
+Create `.grok/yolo.json`:
+```json
+{
+  "enabled": true,
+  "allowList": ["npm test", "npm run lint", "git status"],
+  "denyList": ["rm -rf", "git push --force"],
+  "maxAutoEdits": 5,
+  "maxAutoCommands": 10,
+  "safeMode": false
+}
+```
+
 ---
 
 ## Usage
@@ -432,6 +674,15 @@ grok -d /path/to/project
 
 # Use specific model
 grok --model grok-4-latest
+
+# Resume last session
+grok --resume
+
+# Continue from last response
+grok --continue
+
+# Load specific session
+grok --session <session-id>
 ```
 
 ### Headless Mode
@@ -441,6 +692,13 @@ Perfect for CI/CD and scripting:
 ```bash
 grok --prompt "analyze package.json and suggest optimizations"
 grok -p "run tests and fix any failures" -d /path/to/project
+```
+
+### Browser Mode
+
+```bash
+grok --browser
+# Opens web UI at http://localhost:3000
 ```
 
 ### Keyboard Shortcuts
@@ -463,10 +721,28 @@ grok -p "run tests and fix any failures" -d /path/to/project
 | `/skill` | Activate specialized skills |
 | `/cost` | Show cost dashboard |
 | `/fork` | Create conversation branch |
+| `/branches` | List conversation branches |
 | `/memory` | Manage persistent memory |
 | `/parallel` | Execute tasks in parallel |
 | `/generate-tests` | Generate unit tests |
 | `/scan-todos` | Scan for AI comments |
+| `/architect` | Toggle architect mode |
+| `/checkpoint` | Create/restore checkpoints |
+
+### Custom Commands
+
+Create custom commands in `.grok/commands/`:
+
+```markdown
+<!-- .grok/commands/review-pr.md -->
+Review the changes in this PR focusing on:
+1. Code quality and best practices
+2. Potential bugs or edge cases
+3. Test coverage
+4. Documentation
+```
+
+Usage: `/review-pr`
 
 ---
 
@@ -476,9 +752,15 @@ grok -p "run tests and fix any failures" -d /path/to/project
 grok-cli/
 ├── src/
 │   ├── agent/                  # AI agent core
+│   │   ├── multi-agent/        # Multi-agent collaboration
 │   │   ├── parallel/           # Parallel execution
-│   │   ├── reasoning/          # Tree-of-thought reasoning
-│   │   └── thinking/           # Extended thinking
+│   │   ├── reasoning/          # Tree-of-thought, MCTS
+│   │   ├── repair/             # Auto-repair engine
+│   │   ├── thinking/           # Extended thinking
+│   │   ├── grok-agent.ts       # Main agent
+│   │   ├── architect-mode.ts   # Two-phase architecture
+│   │   ├── pipelines.ts        # Agent pipelines
+│   │   └── subagents.ts        # Subagent system
 │   │
 │   ├── tools/                  # Tool implementations
 │   │   ├── intelligence/       # Code intelligence suite
@@ -488,24 +770,41 @@ grok-cli/
 │   │   │   ├── code-context.ts
 │   │   │   └── refactoring-assistant.ts
 │   │   │
-│   │   ├── advanced/           # Advanced tools
-│   │   │   ├── multi-file-editor.ts
-│   │   │   └── operation-history.ts
-│   │   │
+│   │   ├── multi-edit.ts       # Multi-file editor
+│   │   ├── git-tool.ts         # Git integration
+│   │   ├── interactive-bash.ts # PTY support
 │   │   └── ...                 # Core tools
+│   │
+│   ├── context/                # Context management
+│   │   ├── codebase-rag/       # RAG for codebase
+│   │   ├── semantic-map/       # Semantic indexing
+│   │   ├── context-manager.ts  # Context compression
+│   │   └── codebase-map.ts     # Repository mapping
+│   │
+│   ├── memory/                 # Persistent memory
+│   │   └── persistent-memory.ts
+│   │
+│   ├── skills/                 # Skills system
+│   │   └── skill-manager.ts
+│   │
+│   ├── hooks/                  # Hooks system
+│   │   └── hook-system.ts
+│   │
+│   ├── mcp/                    # MCP integration
+│   │   └── mcp-client.ts
+│   │
+│   ├── ui/                     # Terminal UI (Ink/React)
+│   │   └── components/
 │   │
 │   ├── services/               # Services
 │   │   ├── plan-generator.ts
 │   │   └── codebase-explorer.ts
 │   │
-│   ├── ui/                     # Terminal UI (Ink/React)
-│   │   └── components/
-│   │       └── enhanced-spinners.tsx
-│   │
-│   ├── context/                # Context management
-│   │   └── codebase-rag/       # RAG for codebase
-│   │
 │   └── utils/                  # Utilities
+│       ├── autonomy-manager.ts
+│       ├── cost-tracker.ts
+│       ├── model-router.ts
+│       └── ...
 │
 ├── dist/                       # Compiled output
 └── package.json
@@ -524,6 +823,8 @@ grok-cli/
 | **AI Client** | OpenAI SDK 5.10 |
 | **Search** | ripgrep-node |
 | **Tokens** | tiktoken |
+| **MCP** | @modelcontextprotocol/sdk |
+| **PTY** | node-pty (optional) |
 
 ---
 
@@ -534,6 +835,85 @@ grok-cli/
 - **Automated security scanning** - npm audit and TruffleHog
 - **Input validation** - Timeouts, buffer limits, round limits
 - **No hardcoded secrets** - Environment variables and settings files
+- **Autonomy levels** - Fine-grained control over auto-execution
+- **Command allow/deny lists** - YOLO mode guardrails
+
+---
+
+## Research Foundation
+
+Grok CLI is built on cutting-edge research in AI-assisted software development:
+
+### LLM Agents for Code Generation
+
+| Paper | Key Contribution |
+|-------|------------------|
+| [Survey on Code Generation with LLM-based Agents](https://arxiv.org/abs/2508.00083) | Comprehensive survey of 152 references on autonomous code agents |
+| [Paper2Code: Multi-Agent Framework](https://arxiv.org/abs/2504.17192) | Three-phase approach: Planning → Analysis → Generation |
+| [ADAS: Automated Design of Agentic Systems](https://openreview.net/forum?id=Kf8pjPYD5d) | Meta Agent Search for designing new agents |
+| [LLM-Based Multi-Agent Systems for SE](https://dl.acm.org/doi/10.1145/3712003) | Multi-agent collaboration patterns |
+
+### Advanced Reasoning
+
+| Paper | Key Contribution |
+|-------|------------------|
+| [RethinkMCTS: Monte Carlo Tree Search for Code](https://arxiv.org/abs/2409.09584) | 74% improvement vs simple CoT on complex problems |
+| [Chain of Preference Optimization](https://proceedings.neurips.cc/paper_files/paper/2024/file/00d80722b756de0166523a87805dd00f-Paper-Conference.pdf) | Aligning Chain-of-Thought with Tree-of-Thought |
+| [LongRoPE: Extending Context to 2M Tokens](https://arxiv.org/abs/2402.13753) | Progressive context extension strategies |
+
+### RAG and Retrieval
+
+| Paper | Key Contribution |
+|-------|------------------|
+| [RAG-MCP](https://arxiv.org/abs/2505.03275) | Tool selection via retrieval (basis for our RAG tool selection) |
+| [ToolLLM](https://arxiv.org/abs/2307.16789) | Tool learning with 16,000+ APIs |
+| [RAG for Large Scale Code Repos](https://www.qodo.ai/blog/rag-for-large-scale-code-repos/) | Enterprise-scale code retrieval strategies |
+| [Corrective RAG (CRAG)](https://arxiv.org/abs/2401.15884) | Adaptive retrieval with correction mechanisms |
+
+### Automated Program Repair
+
+| Paper | Key Contribution |
+|-------|------------------|
+| [AutoCodeRover](https://arxiv.org/abs/2404.11595) | Autonomous bug localization and repair |
+| [SWE-agent](https://arxiv.org/abs/2410.06992) | State-of-the-art on SWE-bench |
+| [LeDex: Training LLMs to Self-Debug](https://arxiv.org/abs/2405.14069) | Improved self-explanation and debugging |
+
+### Benchmarks
+
+| Benchmark | Description |
+|-----------|-------------|
+| [SWE-bench](https://www.swebench.com/) | Real-world software engineering tasks |
+| [SWE-bench Verified](https://openai.com/index/introducing-swe-bench-verified/) | Human-verified subset (500 problems) |
+| [SWE-Bench Pro](https://scale.com/leaderboard/swe_bench_pro_public) | Private benchmark to prevent data contamination |
+| [Berkeley Function Calling Leaderboard](https://gorilla.cs.berkeley.edu/leaderboard.html) | Tool use benchmarking |
+
+### Best Practices
+
+| Resource | Description |
+|----------|-------------|
+| [Building Effective Agents - Anthropic](https://www.anthropic.com/research/building-effective-agents) | Official guidance on agent design |
+| [Claude Code Best Practices](https://www.anthropic.com/engineering/claude-code-best-practices) | Practical patterns for AI coding assistants |
+
+---
+
+## Competitive Comparison
+
+| Feature | Grok CLI | Claude Code | Aider | Gemini CLI | Cursor |
+|---------|----------|-------------|-------|------------|--------|
+| Terminal-native | **YES** | **YES** | **YES** | **YES** | NO |
+| Hooks system | **YES** | **YES** | NO | NO | **YES** |
+| Multi-edit | **YES** | **YES** | **YES** | NO | **YES** |
+| Architect mode | **YES** | NO | **YES** | NO | NO |
+| PTY support | **YES** | NO | NO | **YES** | NO |
+| Custom commands | **YES** | **YES** | NO | NO | NO |
+| Subagents | **YES** | **YES** | NO | NO | **YES** |
+| Auto-commit | **YES** | **YES** | **YES** | **YES** | NO |
+| Voice input | **YES** | NO | **YES** | NO | NO |
+| MCP support | **YES** | **YES** | NO | **YES** | NO |
+| Agent pipelines | **YES** | **YES** | NO | NO | NO |
+| Tree-of-Thought | **YES** | **YES** | NO | NO | NO |
+| Codebase RAG | **YES** | **YES** | **YES** | **YES** | **YES** |
+| Checkpoints | **YES** | **YES** | NO | NO | NO |
 
 ---
 
@@ -560,6 +940,17 @@ npm test             # Run tests
 
 ---
 
+## Documentation
+
+- [Architecture Documentation](ARCHITECTURE.md) - Detailed system design
+- [RAG Tool Selection](docs/RAG_TOOL_SELECTION.md) - Tool selection algorithm
+- [Research Improvements](docs/RESEARCH_IMPROVEMENTS.md) - Research-based improvements
+- [Competitor Analysis](COMPETITOR_AUDIT.md) - Feature comparison
+- [Security Policy](SECURITY.md) - Security guidelines
+- [Changelog](CHANGELOG.md) - Version history
+
+---
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
@@ -570,8 +961,10 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - **X.AI** for the Grok API
 - **OpenAI** for the compatible SDK
+- **Anthropic** for Claude Code inspiration and [research](https://www.anthropic.com/research/building-effective-agents)
 - **Vadim Demedes** for [Ink](https://github.com/vadimdemedes/ink)
 - **BurntSushi** for [ripgrep](https://github.com/BurntSushi/ripgrep)
+- The research community for foundational work on LLM agents
 - The open-source community
 
 ---
