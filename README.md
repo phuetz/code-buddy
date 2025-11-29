@@ -107,6 +107,72 @@ Implements intelligent tool selection based on [RAG-MCP research](https://arxiv.
 | **Codebase Explorer** | Project analysis, statistics, tree visualization |
 | **Git Integration** | Auto-commits, branch management, PR creation |
 | **Interactive Bash** | PTY support for interactive commands (vim, htop) |
+| **Sandboxed Terminal** | Secure command execution with namespace isolation |
+| **AI Code Review** | Automated bug detection, security analysis, performance issues |
+| **Parallel Executor** | Run 8+ agents in parallel with git worktree isolation |
+
+### IDE Integrations
+
+| Integration | Description |
+|-------------|-------------|
+| **VS Code Extension** | Full extension with chat sidebar, code actions, completions |
+| **LSP Server** | Language Server Protocol for Neovim, Sublime, Emacs |
+| **Embedded Browser** | Terminal-based web browsing with DOM inspection |
+| **Voice Control** | Native voice commands with wake word ("Hey Grok") |
+
+### Team & Collaboration
+
+| Feature | Description |
+|---------|-------------|
+| **Team Sessions** | Real-time collaboration with role-based permissions |
+| **Session Sharing** | Share sessions with team members via invite codes |
+| **Audit Logging** | Complete audit trail of all actions |
+| **Annotations** | Add comments and annotations to shared code |
+
+### Analytics & Monitoring
+
+| Feature | Description |
+|---------|-------------|
+| **Usage Dashboard** | Track sessions, messages, tokens, tool calls |
+| **Cost Tracking** | Real-time cost estimation by model |
+| **Performance Metrics** | Response times (P50, P90, P99), success rates |
+| **Export Reports** | Export to JSON, CSV, Markdown |
+
+### Plugin System
+
+| Feature | Description |
+|---------|-------------|
+| **Plugin Marketplace** | Discover and install community plugins |
+| **Plugin API** | Register commands, tools, providers, hooks |
+| **Sandboxed Execution** | Secure plugin isolation |
+| **Version Management** | Automatic updates and compatibility checking |
+
+### Offline Mode
+
+| Feature | Description |
+|---------|-------------|
+| **Response Cache** | Cache responses for offline use with LRU eviction |
+| **Local LLM** | Fallback to Ollama or llama.cpp when offline |
+| **Request Queue** | Queue requests when offline, sync on reconnect |
+| **Embedding Cache** | Semantic search works offline |
+
+### Memory & Personas
+
+| Feature | Description |
+|---------|-------------|
+| **Enhanced Memory** | Long-term memory with semantic search |
+| **Project Context** | Automatic learning of project conventions |
+| **Custom Personas** | 7 built-in + custom persona creation |
+| **Auto-Selection** | Context-aware persona switching |
+
+### Checkpoint System
+
+| Feature | Description |
+|---------|-------------|
+| **File Checkpoints** | Snapshot file states before changes |
+| **Undo/Redo** | Restore any checkpoint instantly |
+| **Auto-Checkpoint** | Automatic checkpoints before dangerous ops |
+| **Diff Viewing** | View changes between checkpoints |
 
 ### Core Tools
 
@@ -914,6 +980,18 @@ Grok CLI is built on cutting-edge research in AI-assisted software development:
 | Tree-of-Thought | **YES** | **YES** | NO | NO | NO |
 | Codebase RAG | **YES** | **YES** | **YES** | **YES** | **YES** |
 | Checkpoints | **YES** | **YES** | NO | NO | NO |
+| **VS Code Extension** | **YES** | **YES** | NO | NO | **YES** |
+| **LSP Server** | **YES** | NO | NO | NO | NO |
+| **Sandboxed Terminal** | **YES** | NO | NO | NO | **YES** |
+| **AI Code Review** | **YES** | NO | NO | NO | **YES** |
+| **8+ Parallel Agents** | **YES** | **YES** | NO | NO | **YES** |
+| **Team Collaboration** | **YES** | NO | NO | NO | **YES** |
+| **Analytics Dashboard** | **YES** | NO | NO | NO | NO |
+| **Plugin Marketplace** | **YES** | NO | NO | NO | **YES** |
+| **Offline Mode** | **YES** | NO | NO | NO | NO |
+| **Custom Personas** | **YES** | NO | NO | NO | NO |
+| **Enhanced Memory** | **YES** | **YES** | NO | NO | NO |
+| **GitHub Integration** | **YES** | **YES** | **YES** | NO | NO |
 
 ---
 
