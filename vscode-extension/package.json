@@ -1,0 +1,208 @@
+{
+  "name": "grok-cli-vscode",
+  "displayName": "Grok CLI",
+  "description": "AI-powered coding assistant powered by Grok - bring the power of Grok CLI to VS Code",
+  "version": "0.1.0",
+  "publisher": "phuetz",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Machine Learning",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "grok",
+    "assistant",
+    "code generation",
+    "code review",
+    "refactoring"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "grok.chat",
+        "title": "Grok: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "grok.explain",
+        "title": "Grok: Explain Selection"
+      },
+      {
+        "command": "grok.refactor",
+        "title": "Grok: Refactor Selection"
+      },
+      {
+        "command": "grok.fix",
+        "title": "Grok: Fix Selection"
+      },
+      {
+        "command": "grok.generateTests",
+        "title": "Grok: Generate Tests"
+      },
+      {
+        "command": "grok.review",
+        "title": "Grok: Review Code"
+      },
+      {
+        "command": "grok.terminal",
+        "title": "Grok: Open Terminal"
+      },
+      {
+        "command": "grok.inlineEdit",
+        "title": "Grok: Inline Edit"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "grok.explain",
+          "when": "editorHasSelection",
+          "group": "grok@1"
+        },
+        {
+          "command": "grok.refactor",
+          "when": "editorHasSelection",
+          "group": "grok@2"
+        },
+        {
+          "command": "grok.fix",
+          "when": "editorHasSelection",
+          "group": "grok@3"
+        },
+        {
+          "command": "grok.generateTests",
+          "when": "editorHasSelection",
+          "group": "grok@4"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "grok.review",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "grok-sidebar",
+          "title": "Grok",
+          "icon": "resources/grok-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "grok-sidebar": [
+        {
+          "type": "webview",
+          "id": "grok.chatView",
+          "name": "Chat"
+        },
+        {
+          "id": "grok.historyView",
+          "name": "History"
+        },
+        {
+          "id": "grok.issuesView",
+          "name": "Code Issues"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Grok CLI",
+      "properties": {
+        "grok.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Grok API key (or set GROK_API_KEY environment variable)"
+        },
+        "grok.model": {
+          "type": "string",
+          "default": "grok-3-latest",
+          "enum": [
+            "grok-3-latest",
+            "grok-3-fast",
+            "grok-2-1212",
+            "grok-code-fast-1"
+          ],
+          "description": "Default Grok model to use"
+        },
+        "grok.autoReview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically review code on save"
+        },
+        "grok.inlineCompletions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inline code completions"
+        },
+        "grok.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "description": "Maximum tokens per request"
+        },
+        "grok.autonomyLevel": {
+          "type": "string",
+          "default": "confirm",
+          "enum": ["suggest", "confirm", "auto", "full"],
+          "description": "Level of autonomous operation"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "grok.chat",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g"
+      },
+      {
+        "command": "grok.inlineEdit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "grok.explain",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/test-electron": "^2.3.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "openai": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phuetz/grok-cli.git"
+  },
+  "license": "MIT"
+}
