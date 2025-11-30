@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { useTheme } from "../context/theme-context.js";
 
 interface ChatInputProps {
   input: string;
@@ -14,6 +15,7 @@ export function ChatInput({
   isProcessing,
   isStreaming,
 }: ChatInputProps) {
+  const { colors } = useTheme();
   const beforeCursor = input.slice(0, cursorPosition);
 
   // Handle multiline input display
@@ -35,8 +37,8 @@ export function ChatInput({
   }
 
   const showCursor = !isProcessing && !isStreaming;
-  const borderColor = isProcessing || isStreaming ? "yellow" : "blue";
-  const promptColor = "cyan";
+  const borderColor = isProcessing || isStreaming ? colors.borderBusy : colors.borderActive;
+  const promptColor = colors.primary;
 
   // Display placeholder when input is empty
   const placeholderText = "Ask me anything...";
@@ -104,7 +106,7 @@ export function ChatInput({
         <Text color={promptColor}>❯ </Text>
         {isPlaceholder ? (
           <>
-            <Text color="gray" dimColor>
+            <Text color={colors.textMuted} dimColor>
               {placeholderText}
             </Text>
             {showCursor && (

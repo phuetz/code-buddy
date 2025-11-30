@@ -15,6 +15,7 @@ import {
 } from "../../utils/confirmation-service.js";
 import ApiKeyInput from "./api-key-input.js";
 import cfonts from "cfonts";
+import { ThemeProvider, useTheme } from "../context/theme-context.js";
 
 interface ChatInterfaceProps {
   agent?: GrokAgent;
@@ -29,6 +30,7 @@ function ChatInterfaceWithAgent({
   agent: GrokAgent;
   initialMessage?: string;
 }) {
+  const { colors, theme } = useTheme();
   const [chatHistory, setChatHistory] = useState<ChatEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingTime, setProcessingTime] = useState(0);
@@ -293,27 +295,28 @@ function ChatInterfaceWithAgent({
       {/* Show tips only when no chat history and no confirmation dialog */}
       {chatHistory.length === 0 && !confirmationOptions && (
         <Box flexDirection="column" marginBottom={2}>
-          <Text color="cyan" bold>
+          <Text color={colors.primary} bold>
             Tips for getting started:
           </Text>
           <Box marginTop={1} flexDirection="column">
-            <Text color="gray">
+            <Text color={colors.textMuted}>
               1. Ask questions, edit files, or run commands.
             </Text>
-            <Text color="gray">2. Be specific for the best results.</Text>
-            <Text color="gray">
+            <Text color={colors.textMuted}>2. Be specific for the best results.</Text>
+            <Text color={colors.textMuted}>
               3. Create GROK.md files to customize your interactions with Grok.
             </Text>
-            <Text color="gray">
+            <Text color={colors.textMuted}>
               4. Press Shift+Tab to toggle auto-edit mode.
             </Text>
-            <Text color="gray">5. /help for more information.</Text>
+            <Text color={colors.textMuted}>5. /help for more information.</Text>
+            <Text color={colors.textMuted}>6. /theme to change the theme, /avatar to change avatars.</Text>
           </Box>
         </Box>
       )}
 
       <Box flexDirection="column" marginBottom={1}>
-        <Text color="gray">
+        <Text color={colors.textMuted}>
           Type your request in natural language. Ctrl+C to clear, 'exit' to
           quit.
         </Text>
@@ -355,17 +358,20 @@ function ChatInterfaceWithAgent({
 
           <Box flexDirection="row" marginTop={1}>
             <Box marginRight={2}>
-              <Text color="cyan">
+              <Text color={colors.primary}>
                 {autoEditEnabled ? "▶" : "⏸"} auto-edit:{" "}
                 {autoEditEnabled ? "on" : "off"}
               </Text>
-              <Text color="gray" dimColor>
+              <Text color={colors.textMuted} dimColor>
                 {" "}
                 (shift + tab)
               </Text>
             </Box>
             <Box marginRight={2}>
-              <Text color="yellow">≋ {agent.getCurrentModel()}</Text>
+              <Text color={colors.accent}>≋ {agent.getCurrentModel()}</Text>
+            </Box>
+            <Box marginRight={2}>
+              <Text color={colors.secondary}>◐ {theme.name}</Text>
             </Box>
             <MCPStatus />
           </Box>
@@ -389,8 +395,8 @@ function ChatInterfaceWithAgent({
   );
 }
 
-// Main component that handles API key input or chat interface
-export default function ChatInterface({
+// Inner component that handles API key input or chat interface
+function ChatInterfaceInner({
   agent,
   initialMessage,
 }: ChatInterfaceProps) {
@@ -411,5 +417,17 @@ export default function ChatInterface({
       agent={currentAgent}
       initialMessage={initialMessage}
     />
+  );
+}
+
+// Main component wrapped with ThemeProvider
+export default function ChatInterface({
+  agent,
+  initialMessage,
+}: ChatInterfaceProps) {
+  return (
+    <ThemeProvider>
+      <ChatInterfaceInner agent={agent} initialMessage={initialMessage} />
+    </ThemeProvider>
   );
 }

@@ -502,6 +502,29 @@ Be systematic and thorough in your analysis.`,
         arguments: [
           { name: 'action', description: 'on, off, or status', required: false }
         ]
+      },
+      // ==========================================
+      // Theme & Customization Commands
+      // ==========================================
+      {
+        name: 'theme',
+        description: 'Change the UI color theme',
+        prompt: '__THEME__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'name', description: 'Theme name (default, dark, neon, pastel, matrix, ocean, sunset, minimal, high-contrast) or "list" to see all', required: false }
+        ]
+      },
+      {
+        name: 'avatar',
+        description: 'Change chat avatars',
+        prompt: '__AVATAR__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'preset', description: 'Avatar preset (default, emoji, minimal, fun, hacker, space, animal) or "list" to see all', required: false }
+        ]
       }
     ];
 

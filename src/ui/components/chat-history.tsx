@@ -3,15 +3,24 @@ import { Box, Text } from "ink";
 import { ChatEntry } from "../../agent/grok-agent.js";
 import { DiffRenderer } from "./diff-renderer.js";
 import { MarkdownRenderer } from "../utils/markdown-renderer.js";
+import { useTheme } from "../context/theme-context.js";
+import { ThemeColors, AvatarConfig } from "../../themes/theme.js";
 
 interface ChatHistoryProps {
   entries: ChatEntry[];
   isConfirmationActive?: boolean;
 }
 
+interface MemoizedChatEntryProps {
+  entry: ChatEntry;
+  index: number;
+  colors: ThemeColors;
+  avatars: AvatarConfig;
+}
+
 // Memoized ChatEntry component to prevent unnecessary re-renders
 const MemoizedChatEntry = React.memo(
-  ({ entry, index }: { entry: ChatEntry; index: number }) => {
+  ({ entry, index, colors, avatars }: MemoizedChatEntryProps) => {
     const renderDiff = (diffContent: string, filename?: string) => {
       return (
         <DiffRenderer
@@ -52,8 +61,8 @@ const MemoizedChatEntry = React.memo(
         return (
           <Box key={index} flexDirection="column" marginTop={1}>
             <Box>
-              <Text color="gray">
-                {">"} {entry.content}
+              <Text color={colors.userMessage}>
+                {avatars.user} {entry.content}
               </Text>
             </Box>
           </Box>
@@ -63,16 +72,16 @@ const MemoizedChatEntry = React.memo(
         return (
           <Box key={index} flexDirection="column" marginTop={1}>
             <Box flexDirection="row" alignItems="flex-start">
-              <Text color="white">⏺ </Text>
+              <Text color={colors.assistantMessage}>{avatars.assistant} </Text>
               <Box flexDirection="column" flexGrow={1}>
                 {entry.toolCalls ? (
                   // If there are tool calls, just show plain text
-                  <Text color="white">{entry.content.trim()}</Text>
+                  <Text color={colors.assistantMessage}>{entry.content.trim()}</Text>
                 ) : (
                   // If no tool calls, render as markdown
                   <MarkdownRenderer content={entry.content.trim()} />
                 )}
-                {entry.isStreaming && <Text color="cyan">█</Text>}
+                {entry.isStreaming && <Text color={colors.info}>█</Text>}
               </Box>
             </Box>
           </Box>
@@ -168,27 +177,27 @@ const MemoizedChatEntry = React.memo(
         return (
           <Box key={index} flexDirection="column" marginTop={1}>
             <Box>
-              <Text color="magenta">⏺</Text>
-              <Text color="white">
+              <Text color={colors.toolCall}>{avatars.tool}</Text>
+              <Text color={colors.text}>
                 {" "}
                 {filePath ? `${actionName}(${filePath})` : actionName}
               </Text>
             </Box>
             <Box marginLeft={2} flexDirection="column">
               {isExecuting ? (
-                <Text color="cyan">⎿ Executing...</Text>
+                <Text color={colors.info}>⎿ Executing...</Text>
               ) : shouldShowFileContent ? (
                 <Box flexDirection="column">
-                  <Text color="gray">⎿ File contents:</Text>
+                  <Text color={colors.toolResult}>⎿ File contents:</Text>
                   <Box marginLeft={2} flexDirection="column">
                     {renderFileContent(entry.content)}
                   </Box>
                 </Box>
               ) : shouldShowDiff ? (
                 // For diff results, show only the summary line, not the raw content
-                <Text color="gray">⎿ {entry.content.split("\n")[0]}</Text>
+                <Text color={colors.toolResult}>⎿ {entry.content.split("\n")[0]}</Text>
               ) : (
-                <Text color="gray">⎿ {formatToolContent(entry.content, toolName)}</Text>
+                <Text color={colors.toolResult}>⎿ {formatToolContent(entry.content, toolName)}</Text>
               )}
             </Box>
             {shouldShowDiff && !isExecuting && (
@@ -211,6 +220,8 @@ export function ChatHistory({
   entries,
   isConfirmationActive = false,
 }: ChatHistoryProps) {
+  const { colors, avatars } = useTheme();
+
   // Filter out tool_call entries with "Executing..." when confirmation is active
   const filteredEntries = isConfirmationActive
     ? entries.filter(
@@ -226,6 +237,8 @@ export function ChatHistory({
           key={`${entry.timestamp.getTime()}-${index}`}
           entry={entry}
           index={index}
+          colors={colors}
+          avatars={avatars}
         />
       ))}
     </Box>
