@@ -379,6 +379,10 @@ program
     "--no-self-heal",
     "disable self-healing auto-correction"
   )
+  .option(
+    "--force-tools",
+    "enable tools/function calling for local models (LM Studio)"
+  )
   .action(async (message, options) => {
     // Handle --init flag
     if (options.init) {
@@ -416,6 +420,12 @@ program
       // Save API key and base URL to user settings if provided via command line
       if (options.apiKey || options.baseUrl) {
         await saveCommandLineSettings(options.apiKey, options.baseUrl);
+      }
+
+      // Enable force-tools mode for local models
+      if (options.forceTools) {
+        process.env.GROK_FORCE_TOOLS = 'true';
+        console.log("🔧 Force tools: ENABLED (function calling for local models)");
       }
 
       // Headless mode: process prompt and exit
