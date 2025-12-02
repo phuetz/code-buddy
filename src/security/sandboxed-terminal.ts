@@ -78,6 +78,12 @@ const DEFAULT_CONFIG: SandboxTerminalConfig = {
     path.join(os.homedir(), '.config/gcloud'),
     path.join(os.homedir(), '.kube'),
     path.join(os.homedir(), '.docker'),
+    '~/.ssh',      // Also block tilde-prefixed paths
+    '~/.gnupg',
+    '~/.aws',
+    '~/.config/gcloud',
+    '~/.kube',
+    '~/.docker',
     '/etc/passwd',
     '/etc/shadow',
   ],
@@ -92,10 +98,10 @@ const DEFAULT_CONFIG: SandboxTerminalConfig = {
 };
 
 const DANGEROUS_COMMANDS = [
-  /rm\s+(-rf?|--recursive)\s+[\/~]/i,
+  /rm\s+(-rf?|--recursive)\s+[/~]/i,
   /dd\s+.*of=\/dev/i,
   /mkfs/i,
-  /:()\s*{\s*:\|:&\s*};:/,
+  /:\(\)\s*\{\s*:\|:&\s*\};:/,  // Fork bomb - escape parens and braces
   /chmod\s+-R\s+777\s+\//i,
   />\s*\/dev\/sd[a-z]/i,
   /wget.*\|\s*(ba)?sh/i,

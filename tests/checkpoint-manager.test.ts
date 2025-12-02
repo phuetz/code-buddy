@@ -31,7 +31,7 @@ jest.mock('diff-match-patch', () => ({
     patch_make: jest.fn().mockReturnValue([]),
     patch_toText: jest.fn().mockReturnValue(''),
   })),
-}));
+}), { virtual: true });
 
 describe('CheckpointManager', () => {
   let manager: CheckpointManager;

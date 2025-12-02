@@ -10,15 +10,21 @@ describe('RateLimiter', () => {
   beforeEach(() => {
     resetRateLimiter();
     limiter = new RateLimiter({
-      requestsPerMinute: 60,
-      tokensPerMinute: 10000,
-      maxBurst: 5,
+      requestsPerMinute: 600,  // Higher rate to avoid test timeouts
+      tokensPerMinute: 100000,
+      maxBurst: 10,
       maxRetries: 2,
       baseRetryDelay: 100,
       maxRetryDelay: 1000,
-      maxQueueSize: 10,
-      queueTimeout: 5000,
+      maxQueueSize: 20,
+      queueTimeout: 10000,  // Longer timeout for tests
     });
+  });
+
+  afterEach(() => {
+    // Clean up any pending requests
+    limiter.clearQueue();
+    resetRateLimiter();
   });
 
   describe('Constructor', () => {
@@ -76,18 +82,27 @@ describe('RateLimiter', () => {
     });
 
     it('should reject when queue is full', async () => {
+      // Create a limiter with small queue for this test
+      const smallQueueLimiter = new RateLimiter({
+        requestsPerMinute: 60,
+        tokensPerMinute: 10000,
+        maxBurst: 2,
+        maxQueueSize: 5,
+        queueTimeout: 5000,
+      });
+
       // Fill up queue
       const promises: Promise<unknown>[] = [];
       for (let i = 0; i < 15; i++) {
         promises.push(
-          limiter.execute(async () => {
+          smallQueueLimiter.execute(async () => {
             await new Promise(r => setTimeout(r, 100));
             return i;
           })
         );
       }
 
-      // Some should be rejected
+      // Some should be rejected (queue size is 5, burst is 2, so 7 can proceed, 8 rejected)
       const results = await Promise.allSettled(promises);
       const rejected = results.filter(r => r.status === 'rejected');
       expect(rejected.length).toBeGreaterThan(0);

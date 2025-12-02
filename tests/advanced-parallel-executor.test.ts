@@ -20,6 +20,13 @@ describe('AdvancedParallelExecutor', () => {
     });
   });
 
+  afterEach(() => {
+    // Clean up any pending operations
+    executor.cancelAll();
+    executor.removeAllListeners();
+    resetAdvancedParallelExecutor();
+  });
+
   describe('Constructor', () => {
     it('should create with default config', () => {
       const defaultExecutor = new AdvancedParallelExecutor();
@@ -44,8 +51,10 @@ describe('AdvancedParallelExecutor', () => {
       const results = await executor.executeParallel(tasks);
 
       expect(results).toHaveLength(2);
-      expect(results[0].agentId).toBe('agent1');
-      expect(results[1].agentId).toBe('agent2');
+      // Parallel execution doesn't guarantee order, so check both IDs are present
+      const agentIds = results.map(r => r.agentId);
+      expect(agentIds).toContain('agent1');
+      expect(agentIds).toContain('agent2');
     });
 
     it('should handle priority ordering', async () => {

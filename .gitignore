@@ -101,3 +101,7 @@ temp/
 # Coding agents
 .claude/
 .grok/
+# Grok CLI
+.grok/sessions/
+.grok/history/
+.grok/user-settings.json

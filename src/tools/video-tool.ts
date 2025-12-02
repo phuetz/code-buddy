@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import { ToolResult } from '../types';
+import { ToolResult } from '../types/index.js';
 
 export interface VideoInfo {
   filename: string;

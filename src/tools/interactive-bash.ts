@@ -14,7 +14,7 @@ try {
 
 // Dangerous command patterns that should be blocked
 const BLOCKED_PATTERNS = [
-  /rm\s+(-rf?|--recursive)\s+[\/~]/i,  // rm -rf on root or home
+  /rm\s+(-rf?|--recursive)\s+[/~]/i,  // rm -rf on root or home
   /mkfs\./i,                            // Format filesystem
   /dd\s+.*of=\/dev\//i,                 // dd to device
   />\s*\/dev\/sd[a-z]/i,                // Redirect to disk

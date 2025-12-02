@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, execSync, spawnSync } from 'child_process';
-import { ToolResult } from '../types';
+import { ToolResult } from '../types/index.js';
 
 /**
  * Escape a string for safe use in shell commands

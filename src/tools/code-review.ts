@@ -346,7 +346,7 @@ Provide your analysis in JSON format as specified.`;
 
       // Parse hunks
       const hunks: Array<{ startLine: number; lines: string[] }> = [];
-      const hunkMatches = fileDiff.matchAll(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@[^\n]*\n([\s\S]*?)(?=@@|\z)/g);
+      const hunkMatches = fileDiff.matchAll(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@[^\n]*\n([\s\S]*?)(?=@@|$)/g);
 
       for (const match of hunkMatches) {
         const startLine = parseInt(match[1], 10);

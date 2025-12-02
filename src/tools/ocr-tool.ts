@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
-import { ToolResult } from '../types';
+import { ToolResult } from '../types/index.js';
 
 export interface OCRResult {
   text: string;

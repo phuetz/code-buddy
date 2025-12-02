@@ -5,72 +5,73 @@
  * These tests verify the server configuration and utility functions.
  */
 
+// Mock vscode-languageserver - must be before imports
+jest.mock('vscode-languageserver/node', () => {
+  const mockConnection = {
+    console: {
+      log: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    },
+    sendDiagnostics: jest.fn(),
+    onInitialize: jest.fn(),
+    onInitialized: jest.fn(),
+    onDidChangeConfiguration: jest.fn(),
+    onCompletion: jest.fn(),
+    onCompletionResolve: jest.fn(),
+    onCodeAction: jest.fn(),
+    onHover: jest.fn(),
+    onSignatureHelp: jest.fn(),
+    listen: jest.fn(),
+  };
+
+  const mockDocuments = {
+    listen: jest.fn(),
+    all: jest.fn().mockReturnValue([]),
+    get: jest.fn(),
+    onDidChangeContent: jest.fn(),
+  };
+
+  return {
+    createConnection: jest.fn().mockReturnValue(mockConnection),
+    TextDocuments: jest.fn().mockReturnValue(mockDocuments),
+    DiagnosticSeverity: {
+      Error: 1,
+      Warning: 2,
+      Information: 3,
+      Hint: 4,
+    },
+    ProposedFeatures: {
+      all: {},
+    },
+    TextDocumentSyncKind: {
+      Incremental: 2,
+    },
+    CompletionItemKind: {
+      Text: 1,
+      Method: 2,
+      Function: 3,
+      Constructor: 4,
+      Field: 5,
+      Variable: 6,
+      Class: 7,
+      Interface: 8,
+      Module: 9,
+      Property: 10,
+    },
+    CodeActionKind: {
+      QuickFix: 'quickfix',
+      Refactor: 'refactor',
+      Source: 'source',
+    },
+    MarkupKind: {
+      PlainText: 'plaintext',
+      Markdown: 'markdown',
+    },
+  };
+});
+
 import { DiagnosticSeverity, CompletionItemKind } from 'vscode-languageserver/node';
-
-// Mock the connection and documents
-const mockConnection = {
-  console: {
-    log: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  },
-  sendDiagnostics: jest.fn(),
-  onInitialize: jest.fn(),
-  onInitialized: jest.fn(),
-  onDidChangeConfiguration: jest.fn(),
-  onCompletion: jest.fn(),
-  onCompletionResolve: jest.fn(),
-  onCodeAction: jest.fn(),
-  onHover: jest.fn(),
-  onSignatureHelp: jest.fn(),
-  listen: jest.fn(),
-};
-
-const mockDocuments = {
-  listen: jest.fn(),
-  all: jest.fn().mockReturnValue([]),
-  get: jest.fn(),
-  onDidChangeContent: jest.fn(),
-};
-
-// Mock vscode-languageserver
-jest.mock('vscode-languageserver/node', () => ({
-  createConnection: jest.fn().mockReturnValue(mockConnection),
-  TextDocuments: jest.fn().mockReturnValue(mockDocuments),
-  DiagnosticSeverity: {
-    Error: 1,
-    Warning: 2,
-    Information: 3,
-    Hint: 4,
-  },
-  ProposedFeatures: {
-    all: {},
-  },
-  TextDocumentSyncKind: {
-    Incremental: 2,
-  },
-  CompletionItemKind: {
-    Text: 1,
-    Method: 2,
-    Function: 3,
-    Constructor: 4,
-    Field: 5,
-    Variable: 6,
-    Class: 7,
-    Interface: 8,
-    Module: 9,
-    Property: 10,
-  },
-  CodeActionKind: {
-    QuickFix: 'quickfix',
-    Refactor: 'refactor',
-    Source: 'source',
-  },
-  MarkupKind: {
-    PlainText: 'plaintext',
-    Markdown: 'markdown',
-  },
-}));
 
 jest.mock('vscode-languageserver-textdocument', () => ({
   TextDocument: {
@@ -344,7 +345,7 @@ describe('LSP Server', () => {
   });
 
   describe('Cache Management', () => {
-    it('should implement cache with timeout', () => {
+    it('should implement cache with timeout', async () => {
       const cache = new Map<string, any>();
       const cacheKey = 'test_key';
       const value = { data: 'test' };
@@ -352,11 +353,14 @@ describe('LSP Server', () => {
       cache.set(cacheKey, value);
       expect(cache.has(cacheKey)).toBe(true);
 
-      // Simulate timeout
-      setTimeout(() => {
-        cache.delete(cacheKey);
-        expect(cache.has(cacheKey)).toBe(false);
-      }, 100);
+      // Simulate timeout with proper cleanup
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          cache.delete(cacheKey);
+          expect(cache.has(cacheKey)).toBe(false);
+          resolve();
+        }, 100);
+      });
     });
 
     it('should generate consistent cache keys', () => {

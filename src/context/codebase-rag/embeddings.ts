@@ -338,7 +338,7 @@ export class CodeEmbeddingProvider implements EmbeddingProvider {
     features[idx++] = /\b(export|import|from)\b/.test(text) ? 1 : 0;
 
     // Feature: Bracket density
-    const bracketCount = (text.match(/[{}\[\]()]/g) || []).length;
+    const bracketCount = (text.match(/[{}[\]()]/g) || []).length;
     features[idx++] = Math.min(bracketCount / (text.length + 1), 0.3) / 0.3;
 
     // Feature: Comment ratio

@@ -302,7 +302,7 @@ describe('EnhancedMemory', () => {
 
     it('should return profile after update', async () => {
       await memory.updateUserProfile({
-        preferences: { codeStyle: 'modern', verbosity: 'balanced' },
+        preferences: { codeStyle: 'modern', verbosity: 'moderate' },
       });
 
       const profile = memory.getUserProfile();

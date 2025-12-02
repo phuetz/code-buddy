@@ -14,6 +14,8 @@ jest.mock('fs-extra', () => ({
   readFile: jest.fn().mockResolvedValue(''),
   remove: jest.fn().mockResolvedValue(undefined),
   emptyDir: jest.fn().mockResolvedValue(undefined),
+  readdir: jest.fn().mockResolvedValue([]),
+  stat: jest.fn().mockResolvedValue({ size: 0, isFile: () => true, isDirectory: () => false }),
 }));
 
 jest.mock('axios', () => ({

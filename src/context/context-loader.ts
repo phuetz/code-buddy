@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { glob } from 'fast-glob';
+import fg from 'fast-glob';
 import ignore, { Ignore } from 'ignore';
+
+const glob = fg.glob || fg;
 
 export interface ContextFile {
   path: string;

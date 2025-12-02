@@ -1,5 +1,5 @@
 import http from 'http';
-import { GrokAgent, ChatEntry } from '../../agent/grok-agent';
+import { GrokAgent, ChatEntry } from '../../agent/grok-agent.js';
 
 /**
  * Browser UI Server

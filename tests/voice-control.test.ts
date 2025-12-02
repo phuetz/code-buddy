@@ -219,11 +219,16 @@ describe('VoiceControl', () => {
 
   describe('toggleListening', () => {
     it('should start listening when not listening', () => {
-      // Mock isAvailable to return available
+      // Mock isAvailable to return unavailable
       jest.spyOn(voiceControl, 'isAvailable').mockResolvedValue({
         available: false,
         reason: 'Test environment',
         capabilities: [],
+      });
+
+      // Add error listener to prevent unhandled error crash
+      voiceControl.on('error', () => {
+        // Expected error when voice control is not available
       });
 
       voiceControl.toggleListening();

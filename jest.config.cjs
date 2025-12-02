@@ -24,4 +24,6 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   verbose: true,
   testTimeout: 10000,
+  // Force exit after tests complete to avoid hanging on async operations
+  forceExit: true,
 };

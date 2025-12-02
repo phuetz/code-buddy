@@ -738,6 +738,7 @@ export class CodebaseRAG extends EventEmitter {
     if (content.includes("\0")) return true;
 
     // Check ratio of printable characters
+    // eslint-disable-next-line no-control-regex
     const printable = content.replace(/[\x00-\x1f\x7f-\x9f]/g, "");
     return printable.length / content.length < 0.9;
   }

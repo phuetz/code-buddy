@@ -348,10 +348,10 @@ Be concise but thorough. Use code blocks with language specifiers. Be friendly a
     function formatContent(content) {
       // Basic markdown formatting
       return content
-        .replace(/\`\`\`(\w*)\n([\s\S]*?)\`\`\`/g, '<pre><code class="language-$1">$2</code></pre>')
+        .replace(/\`\`\`(\\w*)\\n([\\s\\S]*?)\`\`\`/g, '<pre><code class="language-$1">$2</code></pre>')
         .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>');
+        .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/\\n/g, '<br>');
     }
   </script>
 </body>
