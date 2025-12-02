@@ -84,11 +84,13 @@ export class GrokClient {
   private client: OpenAI;
   private currentModel: string = "grok-code-fast-1";
   private defaultMaxTokens: number;
+  private baseURL: string;
 
   constructor(apiKey: string, model?: string, baseURL?: string) {
+    this.baseURL = baseURL || process.env.GROK_BASE_URL || "https://api.x.ai/v1";
     this.client = new OpenAI({
       apiKey,
-      baseURL: baseURL || process.env.GROK_BASE_URL || "https://api.x.ai/v1",
+      baseURL: this.baseURL,
       timeout: 360000,
     });
     const envMax = Number(process.env.GROK_MAX_TOKENS);
@@ -106,6 +108,19 @@ export class GrokClient {
         );
       }
     }
+  }
+
+  /**
+   * Check if using LM Studio or other local inference server
+   */
+  private isLocalInference(): boolean {
+    const modelInfo = getModelInfo(this.currentModel);
+    // Check if provider is lmstudio or if baseURL points to common local servers
+    if (modelInfo.provider === 'lmstudio') return true;
+    if (this.baseURL.includes('localhost:1234')) return true;
+    if (this.baseURL.includes('127.0.0.1:1234')) return true;
+    if (this.baseURL.match(/10\.\d+\.\d+\.\d+:1234/)) return true; // LAN IP with LM Studio port
+    return false;
   }
 
   setModel(model: string): void {
@@ -138,18 +153,21 @@ export class GrokClient {
         ? { model: options, searchOptions }
         : options || {};
 
+      // Disable tools for local inference (LM Studio) as they may not support function calling
+      const useTools = !this.isLocalInference() && tools && tools.length > 0;
+
       const requestPayload: ChatRequestPayload = {
         model: opts.model || this.currentModel,
         messages,
-        tools: tools || [],
-        tool_choice: tools && tools.length > 0 ? "auto" : undefined,
+        tools: useTools ? tools : [],
+        tool_choice: useTools ? "auto" : undefined,
         temperature: opts.temperature ?? 0.7,
         max_tokens: this.defaultMaxTokens,
       };
 
-      // Add search parameters if specified
+      // Add search parameters if specified (skip for local inference)
       const searchOpts = opts.searchOptions || searchOptions;
-      if (searchOpts?.search_parameters) {
+      if (searchOpts?.search_parameters && !this.isLocalInference()) {
         requestPayload.search_parameters = searchOpts.search_parameters;
       }
 
@@ -175,19 +193,22 @@ export class GrokClient {
         ? { model: options, searchOptions }
         : options || {};
 
+      // Disable tools for local inference (LM Studio) as they may not support function calling
+      const useTools = !this.isLocalInference() && tools && tools.length > 0;
+
       const requestPayload: ChatRequestPayload = {
         model: opts.model || this.currentModel,
         messages,
-        tools: tools || [],
-        tool_choice: tools && tools.length > 0 ? "auto" : undefined,
+        tools: useTools ? tools : [],
+        tool_choice: useTools ? "auto" : undefined,
         temperature: opts.temperature ?? 0.7,
         max_tokens: this.defaultMaxTokens,
         stream: true,
       };
 
-      // Add search parameters if specified
+      // Add search parameters if specified (skip for local inference)
       const searchOpts = opts.searchOptions || searchOptions;
-      if (searchOpts?.search_parameters) {
+      if (searchOpts?.search_parameters && !this.isLocalInference()) {
         requestPayload.search_parameters = searchOpts.search_parameters;
       }
 
