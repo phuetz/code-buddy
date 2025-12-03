@@ -9,7 +9,8 @@ interface ChatInputProps {
   isStreaming: boolean;
 }
 
-export function ChatInput({
+// Memoized ChatInput to reduce re-renders and prevent flickering
+export const ChatInput = React.memo(function ChatInput({
   input,
   cursorPosition,
   isProcessing,
@@ -130,4 +131,4 @@ export function ChatInput({
       </Box>
     </Box>
   );
-}
+});

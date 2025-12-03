@@ -17,27 +17,32 @@ function hasIncompleteTable(content: string): { hasTable: boolean; safeContent: 
   let tableStartIndex = -1;
   let hasSeparator = false;
   let inTable = false;
+  let lastTableEndIndex = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Detect table start (line starting with |)
-    if (line.startsWith('|') && !inTable) {
+    // Detect table start (line starting with | and containing at least one more |)
+    if (line.startsWith('|') && line.lastIndexOf('|') > 0 && !inTable) {
       tableStartIndex = i;
       inTable = true;
       hasSeparator = false;
     }
 
-    // Detect separator row (|---|---|)
-    if (inTable && /^\|[\s\-:]+\|/.test(line) && line.includes('-')) {
+    // Detect separator row (|---|---|) - more flexible pattern
+    if (inTable && /^\|[\s\-:|]+\|$/.test(line) && line.includes('-')) {
       hasSeparator = true;
     }
 
     // Table ends when we hit an empty line or non-table line after separator
-    if (inTable && hasSeparator && (line === '' || !line.startsWith('|'))) {
-      // Table is complete, reset
+    if (inTable && (line === '' || (!line.startsWith('|') && !line.endsWith('|')))) {
+      if (hasSeparator) {
+        // Table was complete
+        lastTableEndIndex = i;
+      }
       inTable = false;
       tableStartIndex = -1;
+      hasSeparator = false;
     }
   }
 
@@ -54,31 +59,50 @@ function hasIncompleteTable(content: string): { hasTable: boolean; safeContent: 
 /**
  * Check if a table is complete enough to render
  * Requires: header row, separator row, at least one data row
+ * Also checks that each row has complete pipes
  */
 function isTableComplete(tableContent: string): boolean {
   const lines = tableContent.trim().split('\n').filter(l => l.trim());
 
   if (lines.length < 3) return false;
 
-  // Check for header (first line with |)
-  const hasHeader = lines[0].trim().startsWith('|');
+  // Check for header (first line with | at start and end)
+  const firstLine = lines[0].trim();
+  const hasHeader = firstLine.startsWith('|') && firstLine.endsWith('|');
 
-  // Check for separator (line with |---|)
-  const hasSeparator = lines.some(line => /^\|[\s\-:]+\|/.test(line.trim()) && line.includes('-'));
+  if (!hasHeader) return false;
 
-  // Check for at least one data row after separator
-  let foundSeparator = false;
-  let hasDataRow = false;
-  for (const line of lines) {
-    if (/^\|[\s\-:]+\|/.test(line.trim()) && line.includes('-')) {
-      foundSeparator = true;
-    } else if (foundSeparator && line.trim().startsWith('|')) {
-      hasDataRow = true;
-      break;
+  // Count columns in header
+  const headerCols = (firstLine.match(/\|/g) || []).length - 1;
+
+  // Check for separator (line with |---|) - must have same column count
+  let separatorIndex = -1;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (/^\|[\s\-:|]+\|$/.test(line) && line.includes('-')) {
+      const sepCols = (line.match(/\|/g) || []).length - 1;
+      if (sepCols === headerCols) {
+        separatorIndex = i;
+        break;
+      }
     }
   }
 
-  return hasHeader && hasSeparator && hasDataRow;
+  if (separatorIndex === -1) return false;
+
+  // Check for at least one complete data row after separator
+  for (let i = separatorIndex + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('|') && line.endsWith('|')) {
+      // Check if the row is complete (ends with | and has content)
+      const rowCols = (line.match(/\|/g) || []).length - 1;
+      if (rowCols === headerCols) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 interface MarkdownRendererProps {

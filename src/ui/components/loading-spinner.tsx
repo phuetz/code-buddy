@@ -9,7 +9,57 @@ interface LoadingSpinnerProps {
   tokenCount: number;
 }
 
-const loadingTexts = [
+// Memoized loading spinner to reduce re-renders
+export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
+  isActive,
+  processingTime,
+  tokenCount,
+}: LoadingSpinnerProps) {
+  const { colors } = useTheme();
+  const [spinnerFrame, setSpinnerFrame] = useState(0);
+  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    const spinnerFrames = ["/", "-", "\\", "|"];
+    const interval = setInterval(() => {
+      setSpinnerFrame((prev) => (prev + 1) % spinnerFrames.length);
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    setLoadingTextIndex(Math.floor(Math.random() * loadingTextsArray.length));
+
+    const interval = setInterval(() => {
+      setLoadingTextIndex(Math.floor(Math.random() * loadingTextsArray.length));
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  if (!isActive) return null;
+
+  const spinnerFrames = ["/", "-", "\\", "|"];
+
+  return (
+    <Box marginTop={1}>
+      <Text color={colors.spinner}>
+        {spinnerFrames[spinnerFrame]} {loadingTextsArray[loadingTextIndex]}{" "}
+      </Text>
+      <Text color={colors.textMuted}>
+        ({processingTime}s · ↑ {formatTokenCount(tokenCount)} tokens · esc to
+        interrupt)
+      </Text>
+    </Box>
+  );
+});
+
+const loadingTextsArray = [
   "Thinking...",
   "Computing...",
   "Analyzing...",
@@ -25,54 +75,3 @@ const loadingTexts = [
   "Compiling...",
   "Downloading...",
 ];
-
-export function LoadingSpinner({
-  isActive,
-  processingTime,
-  tokenCount,
-}: LoadingSpinnerProps) {
-  const { colors } = useTheme();
-  const [spinnerFrame, setSpinnerFrame] = useState(0);
-  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    const spinnerFrames = ["/", "-", "\\", "|"];
-    // Reduced frequency: 500ms instead of 250ms to reduce flickering on Windows
-    const interval = setInterval(() => {
-      setSpinnerFrame((prev) => (prev + 1) % spinnerFrames.length);
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, [isActive]);
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    setLoadingTextIndex(Math.floor(Math.random() * loadingTexts.length));
-
-    // Increased interval: 4s instead of 2s to reduce state changes
-    const interval = setInterval(() => {
-      setLoadingTextIndex(Math.floor(Math.random() * loadingTexts.length));
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, [isActive]);
-
-  if (!isActive) return null;
-
-  const spinnerFrames = ["/", "-", "\\", "|"];
-
-  return (
-    <Box marginTop={1}>
-      <Text color={colors.spinner}>
-        {spinnerFrames[spinnerFrame]} {loadingTexts[loadingTextIndex]}{" "}
-      </Text>
-      <Text color={colors.textMuted}>
-        ({processingTime}s · ↑ {formatTokenCount(tokenCount)} tokens · esc to
-        interrupt)
-      </Text>
-    </Box>
-  );
-}
