@@ -59,6 +59,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",
+    "@vscode/ripgrep": "^1.17.0",
     "adm-zip": "^0.5.10",
     "axios": "^1.7.0",
     "cfonts": "^3.3.0",

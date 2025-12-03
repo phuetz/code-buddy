@@ -1,10 +1,12 @@
 import { spawn } from "child_process";
+import { rgPath } from "@vscode/ripgrep";
 import { ToolResult } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import * as fs from "fs-extra";
 import * as path from "path";
 import { SEARCH_CONFIG } from "../config/constants.js";
 import { Cache, createCacheKey } from "../utils/cache.js";
+import { getEnhancedSearch, SearchMatch, SymbolMatch } from "./enhanced-search.js";
 
 export interface SearchResult {
   file: string;
@@ -231,7 +233,9 @@ export class SearchTool {
       // Add query and search directory
       args.push(query, this.currentDirectory);
 
-      const rg = spawn("rg", args);
+      // Use bundled ripgrep binary from @vscode/ripgrep
+      const rgBinary = rgPath.replace(/\.asar([\\/])/, '.asar.unpacked$1');
+      const rg = spawn(rgBinary, args);
       let output = "";
       let errorOutput = "";
       let timedOut = false;
@@ -482,6 +486,8 @@ export class SearchTool {
    */
   setCurrentDirectory(directory: string): void {
     this.currentDirectory = directory;
+    // Also update enhanced search workdir
+    getEnhancedSearch(directory);
   }
 
   /**
@@ -489,5 +495,227 @@ export class SearchTool {
    */
   getCurrentDirectory(): string {
     return this.currentDirectory;
+  }
+
+  // ==========================================================================
+  // Enhanced Search Methods (using @vscode/ripgrep)
+  // ==========================================================================
+
+  /**
+   * Find symbols (functions, classes, interfaces, etc.)
+   */
+  async findSymbols(
+    name: string,
+    options: {
+      types?: ('function' | 'class' | 'interface' | 'type' | 'const' | 'variable' | 'method')[];
+      exportedOnly?: boolean;
+    } = {}
+  ): Promise<ToolResult> {
+    try {
+      const enhancedSearch = getEnhancedSearch(this.currentDirectory);
+      const symbols = await enhancedSearch.findSymbols(name, options);
+
+      if (symbols.length === 0) {
+        return {
+          success: true,
+          output: `No symbols found matching "${name}"`,
+        };
+      }
+
+      const output = this.formatSymbolResults(symbols, name);
+      return {
+        success: true,
+        output,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        error: `Symbol search error: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Find all references to a symbol
+   */
+  async findReferences(symbolName: string, contextLines: number = 2): Promise<ToolResult> {
+    try {
+      const enhancedSearch = getEnhancedSearch(this.currentDirectory);
+      const references = await enhancedSearch.findReferences(symbolName, { contextLines });
+
+      if (references.length === 0) {
+        return {
+          success: true,
+          output: `No references found for "${symbolName}"`,
+        };
+      }
+
+      const output = this.formatReferenceResults(references, symbolName);
+      return {
+        success: true,
+        output,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        error: `Reference search error: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Find definition of a symbol
+   */
+  async findDefinition(symbolName: string): Promise<ToolResult> {
+    try {
+      const enhancedSearch = getEnhancedSearch(this.currentDirectory);
+      const definition = await enhancedSearch.findDefinition(symbolName);
+
+      if (!definition) {
+        return {
+          success: true,
+          output: `No definition found for "${symbolName}"`,
+        };
+      }
+
+      const output = `Definition of "${symbolName}":\n` +
+        `  ${definition.type} ${definition.name}\n` +
+        `  File: ${definition.file}:${definition.line}\n` +
+        `  ${definition.exported ? '[exported]' : '[private]'}\n` +
+        `  Signature: ${definition.signature}`;
+
+      return {
+        success: true,
+        output,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        error: `Definition search error: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Search for multiple patterns (OR or AND)
+   */
+  async searchMultiple(
+    patterns: string[],
+    operator: 'OR' | 'AND' = 'OR'
+  ): Promise<ToolResult> {
+    try {
+      const enhancedSearch = getEnhancedSearch(this.currentDirectory);
+      const results = await enhancedSearch.searchMultiple(patterns, { operator });
+
+      if (results.size === 0) {
+        return {
+          success: true,
+          output: `No results found for patterns: ${patterns.join(', ')}`,
+        };
+      }
+
+      let output = `Search results (${operator}):\n\n`;
+
+      for (const [pattern, matches] of results) {
+        output += `Pattern: "${pattern}" (${matches.length} matches)\n`;
+        const uniqueFiles = [...new Set(matches.map(m => m.file))];
+        uniqueFiles.slice(0, 5).forEach(file => {
+          const fileMatches = matches.filter(m => m.file === file);
+          output += `  ${file} (${fileMatches.length} matches)\n`;
+        });
+        if (uniqueFiles.length > 5) {
+          output += `  ... +${uniqueFiles.length - 5} more files\n`;
+        }
+        output += '\n';
+      }
+
+      return {
+        success: true,
+        output: output.trim(),
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        error: `Multi-pattern search error: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Get search cache statistics
+   */
+  getCacheStats(): { searchCache: number; symbolCache: number } {
+    const enhancedSearch = getEnhancedSearch(this.currentDirectory);
+    return enhancedSearch.getCacheStats();
+  }
+
+  /**
+   * Clear search caches
+   */
+  clearCaches(): void {
+    this.searchCache.clear();
+    const enhancedSearch = getEnhancedSearch(this.currentDirectory);
+    enhancedSearch.clearCache();
+  }
+
+  // ==========================================================================
+  // Formatting helpers for enhanced search results
+  // ==========================================================================
+
+  private formatSymbolResults(symbols: SymbolMatch[], query: string): string {
+    let output = `Symbols matching "${query}":\n\n`;
+
+    // Group by type
+    const byType = new Map<string, SymbolMatch[]>();
+    for (const symbol of symbols) {
+      if (!byType.has(symbol.type)) {
+        byType.set(symbol.type, []);
+      }
+      byType.get(symbol.type)!.push(symbol);
+    }
+
+    for (const [type, typeSymbols] of byType) {
+      output += `${type.charAt(0).toUpperCase() + type.slice(1)}s:\n`;
+      for (const symbol of typeSymbols.slice(0, 10)) {
+        const exportMarker = symbol.exported ? '⬛' : '⬜';
+        output += `  ${exportMarker} ${symbol.name} - ${symbol.file}:${symbol.line}\n`;
+      }
+      if (typeSymbols.length > 10) {
+        output += `  ... +${typeSymbols.length - 10} more\n`;
+      }
+      output += '\n';
+    }
+
+    return output.trim();
+  }
+
+  private formatReferenceResults(references: SearchMatch[], symbolName: string): string {
+    let output = `References to "${symbolName}" (${references.length} found):\n\n`;
+
+    // Group by file
+    const byFile = new Map<string, SearchMatch[]>();
+    for (const ref of references) {
+      if (!byFile.has(ref.file)) {
+        byFile.set(ref.file, []);
+      }
+      byFile.get(ref.file)!.push(ref);
+    }
+
+    for (const [file, fileRefs] of byFile) {
+      output += `${file}:\n`;
+      for (const ref of fileRefs.slice(0, 5)) {
+        output += `  L${ref.line}: ${ref.text.substring(0, 80)}${ref.text.length > 80 ? '...' : ''}\n`;
+      }
+      if (fileRefs.length > 5) {
+        output += `  ... +${fileRefs.length - 5} more in this file\n`;
+      }
+      output += '\n';
+    }
+
+    return output.trim();
   }
 }
