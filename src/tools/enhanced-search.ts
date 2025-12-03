@@ -313,7 +313,8 @@ export class EnhancedSearch extends EventEmitter {
         cached: false,
       };
 
-      if (code === 0 || code === 1) {
+      if (code === 0 || code === 1 || code === 2) {
+        // code 0 = matches found, 1 = no matches, 2 = pattern error (still return results)
         // Cache results
         const cacheKey = this.createCacheKey(query, options);
         this.cache.set(cacheKey, results);
@@ -378,6 +379,7 @@ export class EnhancedSearch extends EventEmitter {
 
   /**
    * Find symbols (functions, classes, interfaces, etc.)
+   * Uses simple keyword search + post-processing for reliability
    */
   async findSymbols(name: string, options: SymbolSearchOptions = {}): Promise<SymbolMatch[]> {
     const cacheKey = `symbols:${name}:${JSON.stringify(options)}`;
@@ -386,40 +388,68 @@ export class EnhancedSearch extends EventEmitter {
 
     const symbols: SymbolMatch[] = [];
     const types = options.types || ['function', 'class', 'interface', 'type', 'const'];
+
+    // Build simple search patterns for each type
+    const typeKeywords: Record<string, string[]> = {
+      function: ['function ', 'async function ', 'def ', 'fn ', 'func '],
+      class: ['class '],
+      interface: ['interface '],
+      type: ['type '],
+      const: ['const '],
+      variable: ['let ', 'var '],
+      method: ['async ', 'public ', 'private ', 'protected '],
+      property: [],
+    };
+
+    // Search for the symbol name with each type keyword
     const searchPromises: Promise<void>[] = [];
 
-    // Search for each symbol type
     for (const type of types) {
-      for (const [lang, patterns] of Object.entries(SYMBOL_PATTERNS)) {
-        const pattern = patterns[type];
-        if (!pattern) continue;
+      const keywords = typeKeywords[type] || [];
 
-        // Build regex that includes the symbol name
-        const namePattern = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const fullPattern = pattern.replace(
-          /\([a-zA-Z_$]\[a-zA-Z0-9_$\]\*\)/,
-          `(${namePattern}[a-zA-Z0-9_$]*)`
-        );
-
-        const globs = this.getGlobsForLanguage(lang, options);
-
+      for (const keyword of keywords) {
         searchPromises.push(
-          this.search(fullPattern, {
-            regex: true,
-            includeGlob: globs,
+          this.search(`${keyword}${name}`, {
+            regex: false,
+            includeGlob: options.includeGlob,
             excludeGlob: options.excludeGlob,
-            maxResults: 100,
+            maxResults: 50,
           }).then(({ results }) => {
             for (const result of results) {
-              const symbol = this.parseSymbol(result, type, lang, options.exportedOnly);
-              if (symbol && symbol.name.toLowerCase().includes(name.toLowerCase())) {
+              const symbol = this.parseSymbolSimple(result, type, options.exportedOnly);
+              if (symbol) {
                 symbols.push(symbol);
               }
             }
+          }).catch(() => {
+            // Ignore search errors for individual patterns
           })
         );
       }
     }
+
+    // Also do a general search for the name
+    searchPromises.push(
+      this.search(name, {
+        regex: false,
+        wholeWord: true,
+        includeGlob: options.includeGlob,
+        excludeGlob: options.excludeGlob,
+        maxResults: 100,
+      }).then(({ results }) => {
+        for (const result of results) {
+          const detectedType = this.detectSymbolType(result.text);
+          if (detectedType && types.includes(detectedType)) {
+            const symbol = this.parseSymbolSimple(result, detectedType, options.exportedOnly);
+            if (symbol) {
+              symbols.push(symbol);
+            }
+          }
+        }
+      }).catch(() => {
+        // Ignore search errors
+      })
+    );
 
     await Promise.all(searchPromises);
 
@@ -428,6 +458,73 @@ export class EnhancedSearch extends EventEmitter {
     this.symbolCache.set(cacheKey, uniqueSymbols);
 
     return uniqueSymbols;
+  }
+
+  /**
+   * Detect symbol type from code line
+   */
+  private detectSymbolType(text: string): SymbolMatch['type'] | null {
+    const trimmed = text.trim();
+
+    if (/^(export\s+)?(async\s+)?function\s/.test(trimmed)) return 'function';
+    if (/^(export\s+)?class\s/.test(trimmed)) return 'class';
+    if (/^(export\s+)?interface\s/.test(trimmed)) return 'interface';
+    if (/^(export\s+)?type\s/.test(trimmed)) return 'type';
+    if (/^(export\s+)?const\s/.test(trimmed)) return 'const';
+    if (/^(export\s+)?(let|var)\s/.test(trimmed)) return 'variable';
+    if (/^(pub\s+)?(async\s+)?fn\s/.test(trimmed)) return 'function'; // Rust
+    if (/^def\s/.test(trimmed)) return 'function'; // Python
+    if (/^func\s/.test(trimmed)) return 'function'; // Go
+
+    return null;
+  }
+
+  /**
+   * Parse symbol from search result (simple approach)
+   */
+  private parseSymbolSimple(
+    result: SearchMatch,
+    type: SymbolMatch['type'],
+    exportedOnly?: boolean
+  ): SymbolMatch | null {
+    const text = result.text.trim();
+    const exported = /^(export|pub)\s/.test(text);
+
+    if (exportedOnly && !exported) return null;
+
+    // Extract symbol name using simple patterns
+    let name = '';
+
+    const patterns = [
+      /(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
+      /(?:export\s+)?class\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
+      /(?:export\s+)?interface\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
+      /(?:export\s+)?type\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
+      /(?:export\s+)?const\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
+      /(?:export\s+)?(?:let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
+      /(?:pub\s+)?(?:async\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)/,
+      /def\s+([a-zA-Z_][a-zA-Z0-9_]*)/,
+      /func\s+([a-zA-Z_][a-zA-Z0-9_]*)/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        name = match[1];
+        break;
+      }
+    }
+
+    if (!name) return null;
+
+    return {
+      name,
+      type,
+      file: result.file,
+      line: result.line,
+      signature: text.substring(0, 100),
+      exported,
+    };
   }
 
   /**
