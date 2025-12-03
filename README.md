@@ -504,6 +504,73 @@ pip3 install openai-whisper
 | `medium` | 769M | Slow | Great |
 | `large` | 1.5G | Slowest | Best |
 
+### 🔊 Text-to-Speech
+
+Make Grok CLI speak responses aloud using Microsoft Edge TTS voices:
+
+**Setup:**
+```bash
+# Install Edge TTS
+pip3 install edge-tts
+
+# Audio player (one of these)
+sudo apt install ffmpeg  # or mpv, sox
+```
+
+**Usage:**
+```bash
+/speak Bonjour!     # Speak text aloud
+/speak stop         # Stop speaking
+/tts on             # Enable TTS
+/tts off            # Disable TTS
+/tts auto           # Toggle auto-speak for AI responses
+/tts voices         # List available voices
+/tts voice <name>   # Set specific voice
+/tts status         # Show TTS status
+```
+
+**Features:**
+| Feature | Description |
+|---------|-------------|
+| **Edge TTS** | Natural Microsoft voices (free, no API key) |
+| **Multi-language** | French, English, and 50+ languages |
+| **Auto-speak** | Automatically speak AI responses |
+| **Voice Queue** | Queue multiple texts for sequential playback |
+| **Multiple Providers** | edge-tts, espeak, piper, macOS say |
+
+**French Voices:**
+| Voice | Gender | Style |
+|-------|--------|-------|
+| `fr-FR-DeniseNeural` | Female | Natural (default) |
+| `fr-FR-HenriNeural` | Male | Natural |
+| `fr-CA-SylvieNeural` | Female | Quebec French |
+| `fr-CA-AntoineNeural` | Male | Quebec French |
+| `fr-BE-CharlineNeural` | Female | Belgian French |
+
+**Configuration (~/.grok/tts-config.json):**
+```json
+{
+  "enabled": true,
+  "provider": "edge-tts",
+  "voice": "fr-FR-DeniseNeural",
+  "rate": "+0%",
+  "volume": "+0%",
+  "autoSpeak": false
+}
+```
+
+**Full Voice Conversation:**
+```bash
+# Enable both voice input and output
+/voice on           # Enable speech-to-text
+/tts auto           # Enable auto-speak responses
+
+# Now you can:
+# 1. /voice toggle  → Speak your question
+# 2. AI responds    → Response is spoken aloud
+# 3. Repeat!
+```
+
 ### Team & Collaboration
 
 | Feature | Description |
@@ -1257,6 +1324,8 @@ grok --browser
 | `/architect` | Toggle architect mode |
 | `/checkpoint` | Create/restore checkpoints |
 | `/voice` | Voice input control (on/off/toggle) |
+| `/speak` | Speak text aloud with TTS |
+| `/tts` | Text-to-speech settings (on/off/auto/voices) |
 | `/theme` | Change UI color theme |
 | `/avatar` | Change chat avatars |
 
