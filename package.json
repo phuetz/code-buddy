@@ -41,7 +41,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch",
     "validate": "npm run lint && npm run typecheck && npm test",
-    "install:bun": "bun install"
+    "install:bun": "bun install",
+    "prepare": "npm run build"
   },
   "keywords": [
     "cli",
