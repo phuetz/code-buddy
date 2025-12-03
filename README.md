@@ -448,7 +448,61 @@ Implements intelligent tool selection based on [RAG-MCP research](https://arxiv.
 | **VS Code Extension** | Full extension with chat sidebar, code actions, completions |
 | **LSP Server** | Language Server Protocol for Neovim, Sublime, Emacs |
 | **Embedded Browser** | Terminal-based web browsing with DOM inspection |
-| **Voice Control** | Native voice commands with wake word ("Hey Grok") |
+| **Voice Control** | Native voice commands with Whisper speech-to-text |
+
+### 🎤 Voice Input
+
+Control Grok CLI with your voice using OpenAI Whisper for speech-to-text:
+
+**Setup:**
+```bash
+# Install dependencies (Linux/WSL)
+sudo apt install sox libsox-fmt-all ffmpeg
+pip3 install openai-whisper
+
+# macOS
+brew install sox ffmpeg
+pip3 install openai-whisper
+```
+
+**Usage:**
+```bash
+/voice on        # Enable voice mode
+/voice toggle    # Start/stop recording
+/voice off       # Disable voice mode
+/voice status    # Show current status
+/voice config    # Show configuration
+```
+
+**Features:**
+| Feature | Description |
+|---------|-------------|
+| **Whisper Local** | Offline speech-to-text with OpenAI Whisper |
+| **Whisper API** | Cloud-based transcription (requires OPENAI_API_KEY) |
+| **Multi-language** | French, English, and 50+ languages supported |
+| **Auto-silence** | Recording stops automatically after silence |
+| **Voice Commands** | "Hey Grok" wake word (optional) |
+
+**Configuration (~/.grok/voice-config.json):**
+```json
+{
+  "enabled": true,
+  "provider": "whisper-local",
+  "language": "fr",
+  "model": "base",
+  "autoSend": true,
+  "silenceDuration": 1500
+}
+```
+
+**Whisper Models:**
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| `tiny` | 39M | Fastest | Basic |
+| `base` | 74M | Fast | Good |
+| `small` | 244M | Medium | Better |
+| `medium` | 769M | Slow | Great |
+| `large` | 1.5G | Slowest | Best |
 
 ### Team & Collaboration
 
@@ -608,6 +662,32 @@ Powerful hooks system for extending functionality:
 | **Persistent Memory** | Project and user-scoped memory in `.grok/GROK_MEMORY.md` |
 | **Codebase RAG** | Semantic code retrieval with embeddings |
 | **Context Manager** | Intelligent context compression and prioritization |
+| **Smart Compression** | Auto-compress when approaching token limits |
+
+### Context Management
+
+Intelligent context handling to prevent "context length exceeded" errors:
+
+| Strategy | Description |
+|----------|-------------|
+| **Sliding Window** | Keeps N most recent messages |
+| **Tool Truncation** | Compresses verbose tool outputs |
+| **Summarization** | Creates summaries of older conversations |
+| **Hard Truncation** | Last resort message truncation |
+
+**Configuration:**
+```bash
+# Set max context tokens (overrides model default)
+GROK_MAX_CONTEXT=4096 grok
+
+# Works great with local models (Ollama, LM Studio)
+```
+
+**Features:**
+- Auto-detects model token limits
+- Warns at 75% usage, critical at 90%
+- 12.5% tokens reserved for responses
+- Works with all providers (Grok, Ollama, LM Studio)
 
 ### MCP Integration
 
@@ -1176,6 +1256,9 @@ grok --browser
 | `/scan-todos` | Scan for AI comments |
 | `/architect` | Toggle architect mode |
 | `/checkpoint` | Create/restore checkpoints |
+| `/voice` | Voice input control (on/off/toggle) |
+| `/theme` | Change UI color theme |
+| `/avatar` | Change chat avatars |
 
 ### Custom Commands
 
