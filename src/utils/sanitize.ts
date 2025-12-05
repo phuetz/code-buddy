@@ -195,7 +195,7 @@ export function sanitizeURL(
   let parsedURL: URL;
   try {
     parsedURL = new URL(trimmed);
-  } catch (error) {
+  } catch (_error) {
     throw new ValidationError('Invalid URL format', 'url', url);
   }
 
@@ -320,4 +320,123 @@ export function sanitizePort(port: string | number): number {
   }
 
   return portNum;
+}
+
+/**
+ * Sanitize LLM output by removing control tokens and internal markers
+ * These tokens can leak from models like Grok and should not be displayed
+ * @param content - The LLM output content to sanitize
+ * @returns Sanitized content without control tokens
+ */
+export function sanitizeLLMOutput(content: string): string {
+  if (!content || typeof content !== 'string') {
+    return '';
+  }
+
+  let sanitized = content;
+
+  // Control tokens pattern from Grok and other models
+  // Matches: <|token_name|>, <|token_name|>content, etc.
+  sanitized = sanitized.replace(/<\|[^|>]+\|>/g, '');
+
+  // JSON-escaped control tokens: \u003c|token|\u003e
+  sanitized = sanitized.replace(/\\u003c\|[^|>]+\|\\u003e/gi, '');
+
+  // Internal commentary/tool call patterns (multiple formats)
+  // Format 1: "commentary to=action json{...}" or "commentary to=action{...}"
+  sanitized = sanitized.replace(/\bcommentary\s+to=\w+\s*(?:json)?\s*\{[^]*?\}(?:\s*\n)?/gi, '');
+
+  // Format 2: "commentary to=action" without JSON (simpler tool calls)
+  sanitized = sanitized.replace(/\bcommentary\s+to=\w+[^\n]*\n?/gi, '');
+
+  // Tool call JSON patterns that should not be displayed
+  // Matches: {"path": "...", ...} or {"content": "...", ...}
+  sanitized = sanitized.replace(/\{"(?:path|content|query|max_results|tool|action)":\s*"[^]*?"\s*\}/g, '');
+
+  // Remove standalone tool keywords at start of content
+  sanitized = sanitized.replace(/^(search\s+code|create_file|read_file|edit_file|run_command|json)\s*/i, '');
+
+  // IMPORTANT: Do NOT trim or collapse spaces for streaming chunks!
+  // Each chunk may contain leading/trailing spaces that are significant
+  // for word boundaries. Only remove excessive newlines.
+  sanitized = sanitized.replace(/\n{3,}/g, '\n\n'); // More than 2 newlines to 2
+
+  return sanitized;
+}
+
+/**
+ * Tool call extracted from commentary format
+ */
+export interface ExtractedToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
+  raw: string;
+}
+
+/**
+ * Extract tool calls from "commentary to=tool_name {...}" format
+ * Used for models that don't support native OpenAI tool calls
+ *
+ * @param content - Raw LLM output content
+ * @returns Array of extracted tool calls and remaining content
+ */
+export function extractCommentaryToolCalls(content: string): {
+  toolCalls: ExtractedToolCall[];
+  remainingContent: string;
+} {
+  const toolCalls: ExtractedToolCall[] = [];
+  let remaining = content;
+
+  // Pattern 1: commentary to=tool_name with various token formats
+  // Handles: "commentary to=web_search {...}"
+  // Handles: "commentary to=web_search <|constrain|>json<|message|>{...}"
+  // Handles: "<|channel|>commentary to=web_search <|constrain|>json<|message|>{...}"
+  const pattern1 = /(?:<\|[^|>]+\|>)*\s*\bcommentary\s+to=(\w+)\s*(?:<\|[^|>]+\|>)*\s*(?:json)?\s*(?:<\|[^|>]+\|>)*\s*(\{[^]*?\})/gi;
+  let match1: RegExpExecArray | null;
+
+  while ((match1 = pattern1.exec(content)) !== null) {
+    const toolName = match1[1];
+    const argsJson = match1[2];
+
+    try {
+      const args = JSON.parse(argsJson);
+      toolCalls.push({
+        name: toolName,
+        arguments: args,
+        raw: match1[0],
+      });
+      remaining = remaining.replace(match1[0], '');
+    } catch {
+      // Invalid JSON, skip this match
+    }
+  }
+
+  // Pattern 2: Direct tool name with JSON (e.g., "web_search {...}")
+  const pattern2 = /\b(web_search|search|view_file|create_file|bash|git)\s*(\{[^]*?\})/gi;
+  let match2: RegExpExecArray | null;
+
+  while ((match2 = pattern2.exec(content)) !== null) {
+    // Avoid double-parsing if already extracted via commentary
+    if (toolCalls.some(tc => tc.raw.includes(match2![2]))) continue;
+
+    const toolName = match2[1];
+    const argsJson = match2[2];
+
+    try {
+      const args = JSON.parse(argsJson);
+      toolCalls.push({
+        name: toolName,
+        arguments: args,
+        raw: match2[0],
+      });
+      remaining = remaining.replace(match2[0], '');
+    } catch {
+      // Invalid JSON, skip
+    }
+  }
+
+  return {
+    toolCalls,
+    remainingContent: remaining.trim(),
+  };
 }

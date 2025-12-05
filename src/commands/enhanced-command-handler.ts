@@ -1,5 +1,9 @@
 import { ChatEntry } from "../agent/grok-agent.js";
 import { getAutonomyManager, AutonomyLevel } from "../utils/autonomy-manager.js";
+import { AITestRunner, createAITestRunner } from "../testing/ai-integration-tests.js";
+import { GrokClient } from "../grok/client.js";
+import { getSlashCommandManager } from "./slash-commands.js";
+import stringWidth from "string-width";
 import { getMemoryManager } from "../memory/persistent-memory.js";
 import { getSkillManager } from "../skills/skill-manager.js";
 import { getCostTracker } from "../utils/cost-tracker.js";
@@ -28,9 +32,14 @@ export interface CommandHandlerResult {
 
 export class EnhancedCommandHandler {
   private conversationHistory: ChatEntry[] = [];
+  private grokClient: GrokClient | null = null;
 
   setConversationHistory(history: ChatEntry[]): void {
     this.conversationHistory = history;
+  }
+
+  setGrokClient(client: GrokClient): void {
+    this.grokClient = client;
   }
 
   /**
@@ -126,9 +135,105 @@ export class EnhancedCommandHandler {
       case "__TTS__":
         return this.handleTTS(args);
 
+      case "__AI_TEST__":
+        return this.handleAITest(args);
+
+      case "__HELP__":
+        return this.handleHelp();
+
       default:
         return { handled: false };
     }
+  }
+
+  /**
+   * Help - Show available commands (dynamically from SlashCommandManager)
+   */
+  private async handleHelp(): Promise<CommandHandlerResult> {
+    const slashManager = getSlashCommandManager();
+    const allCommands = slashManager.getAllCommands();
+
+    // Group commands by category
+    const categories: Record<string, typeof allCommands> = {
+      'Core': [],
+      'Code & Development': [],
+      'Git & Version Control': [],
+      'Context & Memory': [],
+      'Session & Export': [],
+      'Settings & UI': [],
+      'Advanced': [],
+    };
+
+    // Categorize commands
+    for (const cmd of allCommands) {
+      const name = cmd.name.toLowerCase();
+      if (['help', 'clear', 'exit', 'model', 'mode'].includes(name)) {
+        categories['Core'].push(cmd);
+      } else if (['review', 'test', 'lint', 'explain', 'refactor', 'debug', 'docs', 'generate-tests', 'ai-test'].includes(name)) {
+        categories['Code & Development'].push(cmd);
+      } else if (['commit', 'checkpoints', 'restore', 'undo', 'diff', 'branches', 'fork', 'checkout', 'merge'].includes(name)) {
+        categories['Git & Version Control'].push(cmd);
+      } else if (['memory', 'remember', 'context', 'add', 'workspace', 'scan-todos', 'address-todo'].includes(name)) {
+        categories['Context & Memory'].push(cmd);
+      } else if (['save', 'export', 'cache', 'cost'].includes(name)) {
+        categories['Session & Export'].push(cmd);
+      } else if (['theme', 'avatar', 'voice', 'speak', 'tts', 'security', 'autonomy', 'dry-run'].includes(name)) {
+        categories['Settings & UI'].push(cmd);
+      } else {
+        categories['Advanced'].push(cmd);
+      }
+    }
+
+    // Build help text
+    const lines: string[] = [];
+    lines.push('╔══════════════════════════════════════════════════════════════════╗');
+    lines.push('║                      📚 GROK CLI COMMANDS                        ║');
+    lines.push('╚══════════════════════════════════════════════════════════════════╝');
+    lines.push('');
+
+    for (const [category, cmds] of Object.entries(categories)) {
+      if (cmds.length === 0) continue;
+
+      lines.push(`── ${category} ${'─'.repeat(50 - category.length)}`);
+      lines.push('');
+
+      for (const cmd of cmds) {
+        // Build command signature with parameters
+        let signature = `/${cmd.name}`;
+        if (cmd.arguments && cmd.arguments.length > 0) {
+          const params = cmd.arguments.map(arg =>
+            arg.required ? `<${arg.name}>` : `[${arg.name}]`
+          ).join(' ');
+          signature += ` ${params}`;
+        }
+
+        lines.push(`  ${signature}`);
+        lines.push(`      ${cmd.description}`);
+
+        // Show parameter details if any
+        if (cmd.arguments && cmd.arguments.length > 0) {
+          for (const arg of cmd.arguments) {
+            const reqText = arg.required ? '(required)' : '(optional)';
+            lines.push(`      • ${arg.name}: ${arg.description} ${reqText}`);
+          }
+        }
+        lines.push('');
+      }
+    }
+
+    lines.push('─────────────────────────────────────────────────────────────────');
+    lines.push('  Tip: Type naturally to chat with the AI');
+    lines.push('  Use Ctrl+C to cancel, "exit" to quit');
+    lines.push('─────────────────────────────────────────────────────────────────');
+
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: lines.join('\n'),
+        timestamp: new Date(),
+      },
+    };
   }
 
   /**
@@ -1573,6 +1678,184 @@ Use /tts voices to list available voices.`;
         timestamp: new Date(),
       },
     };
+  }
+
+  /**
+   * AI Test - Run integration tests on the current AI provider
+   */
+  private async handleAITest(args: string[]): Promise<CommandHandlerResult> {
+    const option = args[0]?.toLowerCase();
+
+    // Check for API key
+    const apiKey = process.env.GROK_API_KEY;
+    if (!apiKey) {
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: `❌ AI Test Failed
+
+No GROK_API_KEY environment variable found.
+Set your API key to run integration tests.`,
+          timestamp: new Date(),
+        },
+      };
+    }
+
+    // Configure test options based on argument
+    const testOptions = {
+      timeout: 30000,
+      verbose: false,
+      skipExpensive: option === 'quick',
+      testTools: option !== 'stream',
+      testStreaming: option !== 'tools',
+    };
+
+    // Use current client if available, otherwise create new one from env
+    let client = this.grokClient;
+    if (!client) {
+      // Fallback: create client from environment variables
+      const model = process.env.GROK_MODEL || process.env.OPENAI_MODEL;
+      const baseURL = process.env.GROK_BASE_URL || process.env.OPENAI_BASE_URL;
+      client = new GrokClient(apiKey, model, baseURL);
+    }
+
+    const currentModel = client.getCurrentModel();
+    const currentBaseURL = client.getBaseURL();
+
+    // Show what we're testing
+    let modeDesc = 'full';
+    if (option === 'quick') modeDesc = 'quick (skipping expensive tests)';
+    else if (option === 'tools') modeDesc = 'tool calling only';
+    else if (option === 'stream') modeDesc = 'streaming only';
+
+    // Fun test names and emojis
+    const testEmojis: Record<string, string> = {
+      'Basic Completion': '🧠',
+      'Simple Math': '🔢',
+      'JSON Output': '📋',
+      'Code Generation': '💻',
+      'Context Understanding': '🧩',
+      'Streaming Response': '🌊',
+      'Tool Calling': '🔧',
+      'Error Handling': '🛡️',
+      'Long Context': '📚',
+    };
+
+    const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let spinnerIndex = 0;
+    let currentTest = '';
+    let completedTests: string[] = [];
+    let spinnerInterval: NodeJS.Timeout | null = null;
+
+    // Create client and run tests
+    try {
+      const runner = createAITestRunner(client, testOptions);
+
+      // Helper to pad string to width accounting for emoji visual width
+      const padEnd = (str: string, targetWidth: number): string => {
+        const currentWidth = stringWidth(str);
+        if (currentWidth >= targetWidth) return str;
+        return str + ' '.repeat(targetWidth - currentWidth);
+      };
+
+      const W = 60; // box width
+
+      // Build progress display with proper emoji width handling
+      const buildProgressDisplay = () => {
+        const lines: string[] = [];
+        lines.push('┌' + '─'.repeat(W - 2) + '┐');
+        lines.push('│' + padEnd('          🧪 AI INTEGRATION TESTS IN PROGRESS', W - 2) + '│');
+        lines.push('├' + '─'.repeat(W - 2) + '┤');
+        lines.push('│' + padEnd(`  Model: ${currentModel}`, W - 2) + '│');
+        lines.push('├' + '─'.repeat(W - 2) + '┤');
+
+        // Show completed tests
+        for (const test of completedTests) {
+          lines.push('│' + padEnd(`  ${test}`, W - 2) + '│');
+        }
+
+        // Show current test with spinner
+        if (currentTest) {
+          const emoji = testEmojis[currentTest] || '🔬';
+          const spinner = spinnerFrames[spinnerIndex % spinnerFrames.length];
+          lines.push('│' + padEnd(`  ${spinner} ${emoji} ${currentTest}...`, W - 2) + '│');
+        }
+
+        lines.push('└' + '─'.repeat(W - 2) + '┘');
+        return lines.join('\n');
+      };
+
+      // Track progress
+      runner.on('test:start', ({ name }) => {
+        currentTest = name;
+      });
+
+      runner.on('test:complete', (result) => {
+        const emoji = testEmojis[result.name] || '🔬';
+        const status = result.passed ? '✅' : '❌';
+        const duration = result.duration ? `${(result.duration / 1000).toFixed(1)}s` : '';
+        completedTests.push(`${status} ${emoji} ${result.name} ${duration}`);
+        currentTest = '';
+      });
+
+      runner.on('test:skipped', ({ name }) => {
+        const emoji = testEmojis[name] || '🔬';
+        completedTests.push(`⏭️  ${emoji} ${name} (skipped)`);
+      });
+
+      // Start spinner animation (write to stderr to not interfere with output)
+      spinnerInterval = setInterval(() => {
+        spinnerIndex++;
+        // Clear and redraw progress (using ANSI escape codes)
+        const progress = buildProgressDisplay();
+        process.stderr.write(`\x1b[${completedTests.length + 7}A\x1b[0J${progress}\n`);
+      }, 100);
+
+      // Show initial progress
+      process.stderr.write('\n' + buildProgressDisplay() + '\n');
+
+      const suite = await runner.runAll();
+
+      // Stop spinner
+      if (spinnerInterval) {
+        clearInterval(spinnerInterval);
+      }
+
+      // Clear progress display
+      const clearLines = completedTests.length + 8;
+      process.stderr.write(`\x1b[${clearLines}A\x1b[0J`);
+
+      // Format final results
+      const resultContent = AITestRunner.formatResults(suite);
+
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: resultContent,
+          timestamp: new Date(),
+        },
+      };
+    } catch (error) {
+      // Stop spinner on error
+      if (spinnerInterval) {
+        clearInterval(spinnerInterval);
+      }
+
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: `❌ AI Test Error
+
+${error instanceof Error ? error.message : String(error)}
+
+Check your API key and network connection.`,
+          timestamp: new Date(),
+        },
+      };
+    }
   }
 }
 

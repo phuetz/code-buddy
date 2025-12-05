@@ -205,7 +205,7 @@ export class GrokClient {
       }
 
       return hasToolCall;
-    } catch (error) {
+    } catch (_error) {
       // If the request fails (e.g., tools not supported), assume no tool support
       this.toolSupportProbed = true;
       this.toolSupportDetected = false;
@@ -298,6 +298,10 @@ export class GrokClient {
     return this.currentModel;
   }
 
+  getBaseURL(): string {
+    return this.baseURL;
+  }
+
   async chat(
     messages: GrokMessage[],
     tools?: GrokTool[],
@@ -338,6 +342,44 @@ export class GrokClient {
     }
   }
 
+  /**
+   * Convert tool messages to user messages for models that don't support the tool role
+   * LM Studio and some local models require this transformation
+   */
+  private convertToolMessagesForLocalModels(messages: GrokMessage[]): GrokMessage[] {
+    // Check if we need conversion (has tool role messages and is using a local model)
+    const hasToolMessages = messages.some((m: GrokMessage) => m.role === 'tool');
+    if (!hasToolMessages) return messages;
+
+    // Check if model uses local inference that might not support tool role
+    const needsConversion = this.baseURL.includes(':1234') ||
+                            this.baseURL.includes('lmstudio') ||
+                            process.env.GROK_CONVERT_TOOL_MESSAGES === 'true';
+    if (!needsConversion) return messages;
+
+    return messages.map((msg: GrokMessage) => {
+      if (msg.role === 'tool') {
+        // Convert tool result to user message format
+        return {
+          role: 'user' as const,
+          content: `[Tool Result]\n${msg.content}`,
+        };
+      }
+      // Remove tool_calls from assistant messages for local models that don't support them in history
+      if (msg.role === 'assistant' && (msg as any).tool_calls) {
+        const toolCalls = (msg as any).tool_calls;
+        const toolCallsDesc = toolCalls.map((tc: any) =>
+          `Called ${tc.function.name}(${tc.function.arguments})`
+        ).join('\n');
+        return {
+          role: 'assistant' as const,
+          content: msg.content ? `${msg.content}\n\n[Tools Used]\n${toolCallsDesc}` : `[Tools Used]\n${toolCallsDesc}`,
+        };
+      }
+      return msg;
+    });
+  }
+
   async *chatStream(
     messages: GrokMessage[],
     tools?: GrokTool[],
@@ -353,9 +395,12 @@ export class GrokClient {
       // Disable tools for local inference (LM Studio) as they may not support function calling
       const useTools = !this.isLocalInference() && tools && tools.length > 0;
 
+      // Convert tool messages for local models that don't support tool role
+      const processedMessages = this.convertToolMessagesForLocalModels(messages);
+
       const requestPayload: ChatRequestPayload = {
         model: opts.model || this.currentModel,
-        messages,
+        messages: processedMessages,
         tools: useTools ? tools : [],
         tool_choice: useTools ? "auto" : undefined,
         temperature: opts.temperature ?? 0.7,

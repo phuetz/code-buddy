@@ -32,6 +32,8 @@ import { getSettingsManager } from "../utils/settings-manager.js";
 import { getSystemPromptForMode } from "../prompts/index.js";
 import { getCostTracker, CostTracker } from "../utils/cost-tracker.js";
 import { ContextManagerV2, createContextManager } from "../context/context-manager-v2.js";
+import { sanitizeLLMOutput, extractCommentaryToolCalls } from "../utils/sanitize.js";
+import { getErrorMessage } from "../types/errors.js";
 
 /**
  * Represents a single entry in the chat history
@@ -592,10 +594,10 @@ export class GrokAgent extends EventEmitter {
       }
 
       return newEntries;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorEntry: ChatEntry = {
         type: "assistant",
-        content: `Sorry, I encountered an error: ${error.message}`,
+        content: `Sorry, I encountered an error: ${getErrorMessage(error)}`,
         timestamp: new Date(),
       };
       this.chatHistory.push(errorEntry);
@@ -608,8 +610,10 @@ export class GrokAgent extends EventEmitter {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private messageReducer(previous: any, item: any): any {
-    const reduce = (acc: any, delta: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const reduce = (acc: any, delta: any): any => {
       acc = { ...acc };
       for (const [key, value] of Object.entries(delta)) {
         if (acc[key] === undefined || acc[key] === null) {
@@ -770,7 +774,7 @@ export class GrokAgent extends EventEmitter {
           if (!toolCallsYielded && accumulatedMessage.tool_calls?.length > 0) {
             // Check if we have at least one complete tool call with a function name
             const hasCompleteTool = accumulatedMessage.tool_calls.some(
-              (tc: any) => tc.function?.name
+              (tc: GrokToolCall) => tc.function?.name
             );
             if (hasCompleteTool) {
               yield {
@@ -783,34 +787,74 @@ export class GrokAgent extends EventEmitter {
 
           // Stream content as it comes
           if (chunk.choices[0].delta?.content) {
-            accumulatedContent += chunk.choices[0].delta.content;
+            // Keep raw content for tool call extraction (commentary patterns)
+            const rawContent = chunk.choices[0].delta.content;
+            // Sanitize content to remove LLM control tokens (e.g., <|channel|>, <|message|>)
+            const sanitizedContent = sanitizeLLMOutput(rawContent);
 
-            // Update token count in real-time including accumulated content and any tool calls
-            const currentOutputTokens =
-              this.tokenCounter.estimateStreamingTokens(accumulatedContent) +
-              (accumulatedMessage.tool_calls
-                ? this.tokenCounter.countTokens(
-                    JSON.stringify(accumulatedMessage.tool_calls)
-                  )
-                : 0);
-            totalOutputTokens = currentOutputTokens;
+            // Accumulate raw content for potential tool call extraction later
+            // (sanitization removes "commentary to=" patterns that we need)
+            accumulatedContent += rawContent;
 
-            yield {
-              type: "content",
-              content: chunk.choices[0].delta.content,
-            };
+            // Only display sanitized content
+            if (sanitizedContent) {
 
-            // Emit token count update
-            const now = Date.now();
-            if (now - lastTokenUpdate > 500) {
-              lastTokenUpdate = now;
+              // Update token count in real-time including accumulated content and any tool calls
+              const currentOutputTokens =
+                this.tokenCounter.estimateStreamingTokens(accumulatedContent) +
+                (accumulatedMessage.tool_calls
+                  ? this.tokenCounter.countTokens(
+                      JSON.stringify(accumulatedMessage.tool_calls)
+                    )
+                  : 0);
+              totalOutputTokens = currentOutputTokens;
+
               yield {
-                type: "token_count",
-                tokenCount: inputTokens + totalOutputTokens,
+                type: "content",
+                content: sanitizedContent,
               };
+
+              // Emit token count update
+              const now = Date.now();
+              if (now - lastTokenUpdate > 500) {
+                lastTokenUpdate = now;
+                yield {
+                  type: "token_count",
+                  tokenCount: inputTokens + totalOutputTokens,
+                };
+              }
             }
+          }
         }
-      }
+
+        // Check for "commentary" style tool calls in content (for models without native tool call support)
+        // This handles patterns like: "commentary to=web_search {"query":"..."}"
+        if (!accumulatedMessage.tool_calls?.length && accumulatedContent) {
+          const { toolCalls: extractedCalls, remainingContent } = extractCommentaryToolCalls(accumulatedContent);
+
+          if (extractedCalls.length > 0) {
+            // Convert extracted calls to OpenAI tool call format
+            accumulatedMessage.tool_calls = extractedCalls.map((tc, index) => ({
+              id: `commentary_${Date.now()}_${index}`,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: JSON.stringify(tc.arguments),
+              },
+            }));
+
+            // Update content to remove the tool call text
+            accumulatedMessage.content = remainingContent;
+            accumulatedContent = remainingContent;
+
+            // Yield the extracted tool calls
+            yield {
+              type: "tool_calls",
+              toolCalls: accumulatedMessage.tool_calls,
+            };
+            toolCallsYielded = true;
+          }
+        }
 
         // Add assistant entry to history
         const assistantEntry: ChatEntry = {
@@ -918,7 +962,7 @@ export class GrokAgent extends EventEmitter {
       }
 
       yield { type: "done" };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check if this was a cancellation
       if (this.abortController?.signal.aborted) {
         yield {
@@ -931,7 +975,7 @@ export class GrokAgent extends EventEmitter {
 
       const errorEntry: ChatEntry = {
         type: "assistant",
-        content: `Sorry, I encountered an error: ${error.message}`,
+        content: `Sorry, I encountered an error: ${getErrorMessage(error)}`,
         timestamp: new Date(),
       };
       this.chatHistory.push(errorEntry);
@@ -1057,10 +1101,10 @@ export class GrokAgent extends EventEmitter {
             error: `Unknown tool: ${toolCall.function.name}`,
           };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: `Tool execution error: ${error.message}`,
+        error: `Tool execution error: ${getErrorMessage(error)}`,
       };
     }
   }
@@ -1073,9 +1117,10 @@ export class GrokAgent extends EventEmitter {
       const result = await mcpManager.callTool(toolCall.function.name, args);
 
       if (result.isError) {
+        const errorContent = result.content[0] as { text?: string } | undefined;
         return {
           success: false,
-          error: (result.content[0] as any)?.text || "MCP tool error",
+          error: errorContent?.text || "MCP tool error",
         };
       }
 
@@ -1095,10 +1140,10 @@ export class GrokAgent extends EventEmitter {
         success: true,
         output: output || "Success",
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: `MCP tool execution error: ${error.message}`,
+        error: `MCP tool execution error: ${getErrorMessage(error)}`,
       };
     }
   }
@@ -1117,6 +1162,10 @@ export class GrokAgent extends EventEmitter {
 
   getCurrentModel(): string {
     return this.grokClient.getCurrentModel();
+  }
+
+  getClient(): GrokClient {
+    return this.grokClient;
   }
 
   setModel(model: string): void {
