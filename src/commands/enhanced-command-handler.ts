@@ -1702,15 +1702,6 @@ Set your API key to run integration tests.`,
       };
     }
 
-    // Configure test options based on argument
-    const testOptions = {
-      timeout: 30000,
-      verbose: false,
-      skipExpensive: option === 'quick',
-      testTools: option !== 'stream',
-      testStreaming: option !== 'tools',
-    };
-
     // Use current client if available, otherwise create new one from env
     let client = this.grokClient;
     if (!client) {
@@ -1722,6 +1713,25 @@ Set your API key to run integration tests.`,
 
     const currentModel = client.getCurrentModel();
     const currentBaseURL = client.getBaseURL();
+
+    // Detect local models (LM Studio, Ollama) and increase timeout
+    const isLocalModel = currentBaseURL.includes(':1234') ||
+                         currentBaseURL.includes(':11434') ||
+                         currentBaseURL.includes('localhost') ||
+                         currentBaseURL.includes('127.0.0.1') ||
+                         currentBaseURL.match(/10\.\d+\.\d+\.\d+/);
+
+    // Local models get 120s timeout (vs 30s for cloud APIs)
+    const timeout = isLocalModel ? 120000 : 30000;
+
+    // Configure test options based on argument
+    const testOptions = {
+      timeout,
+      verbose: false,
+      skipExpensive: option === 'quick',
+      testTools: option !== 'stream',
+      testStreaming: option !== 'tools',
+    };
 
     // Show what we're testing
     let modeDesc = 'full';
