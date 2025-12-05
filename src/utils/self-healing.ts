@@ -243,7 +243,7 @@ If the error cannot be fixed with commands, respond with "MANUAL_FIX_REQUIRED".`
       if (fix && !fix.includes('MANUAL_FIX_REQUIRED')) {
         return fix;
       }
-    } catch (e) {
+    } catch (_e) {
       // Fall back to simple fix
     }
 

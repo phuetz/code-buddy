@@ -11,7 +11,6 @@ import {
   ToolSelector,
   getToolSelector,
   selectRelevantTools,
-  QueryClassification,
   ToolCategory
 } from '../src/tools/tool-selector';
 import { GrokTool } from '../src/grok/client';

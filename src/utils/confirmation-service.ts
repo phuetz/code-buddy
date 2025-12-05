@@ -289,4 +289,13 @@ export class ConfirmationService extends EventEmitter {
   setSessionFlag(flagType: 'fileOperations' | 'bashCommands' | 'allOperations', value: boolean) {
     this.sessionFlags[flagType] = value;
   }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    this.pendingConfirmation = null;
+    this.resolveConfirmation = null;
+    this.removeAllListeners();
+  }
 }

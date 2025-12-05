@@ -96,14 +96,14 @@ export class VideoTool {
       ]);
 
       let output = '';
-      let errorOutput = '';
+      let _errorOutput = '';
 
       ffprobe.stdout.on('data', (data) => {
         output += data.toString();
       });
 
       ffprobe.stderr.on('data', (data) => {
-        errorOutput += data.toString();
+        _errorOutput += data.toString(); // Captured for potential debugging
       });
 
       ffprobe.on('close', (code) => {

@@ -224,29 +224,31 @@ export class HookSystem extends EventEmitter {
 
   /**
    * Interpolate placeholders in hook command
+   * SECURITY: All values are escaped to prevent command injection
    */
   private interpolateCommand(command: string, context: HookContext): string {
     let result = command;
 
-    // Replace {file} with the file path
+    // Replace {file} with the file path (escaped)
     if (context.file) {
-      result = result.replace(/\{file\}/g, context.file);
+      result = result.replace(/\{file\}/g, this.escapeShellArg(context.file));
     }
 
-    // Replace {files} with space-separated file list
+    // Replace {files} with space-separated file list (each escaped)
     if (context.files) {
-      result = result.replace(/\{files\}/g, context.files.join(' '));
+      const escapedFiles = context.files.map(f => this.escapeShellArg(f)).join(' ');
+      result = result.replace(/\{files\}/g, escapedFiles);
     }
 
-    // Replace {command} with the command
+    // Replace {command} with the command (escaped)
     if (context.command) {
-      result = result.replace(/\{command\}/g, context.command);
+      result = result.replace(/\{command\}/g, this.escapeShellArg(context.command));
     }
 
-    // Replace any other context variables
+    // Replace any other context variables (all escaped)
     for (const [key, value] of Object.entries(context)) {
-      if (typeof value === 'string') {
-        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+      if (typeof value === 'string' && key !== 'file' && key !== 'files' && key !== 'command') {
+        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), this.escapeShellArg(value));
       }
     }
 
@@ -396,6 +398,22 @@ export class HookSystem extends EventEmitter {
     this.reload();
 
     return configPath;
+  }
+
+  /**
+   * Escape shell special characters for safe interpolation
+   */
+  private escapeShellArg(arg: string): string {
+    // Escape special shell characters
+    return arg.replace(/(["\s'$`\\!])/g, '\\$1');
+  }
+
+  /**
+   * Dispose the hook system and clean up resources
+   */
+  dispose(): void {
+    this.hooks.clear();
+    this.removeAllListeners();
   }
 
   /**

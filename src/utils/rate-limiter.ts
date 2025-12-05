@@ -348,6 +348,14 @@ export class RateLimiter extends EventEmitter {
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    this.clearQueue();
+    this.removeAllListeners();
+  }
 }
 
 // Singleton instance

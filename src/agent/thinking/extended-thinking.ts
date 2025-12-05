@@ -26,7 +26,7 @@ import {
   AlternativeAnswer,
   DEFAULT_THINKING_CONFIG,
   THINKING_DEPTH_CONFIG,
-  THINKING_PROMPTS,
+  // THINKING_PROMPTS is exported from types but used internally via constants below
 } from "./types.js";
 
 /**
@@ -267,7 +267,7 @@ export class ExtendedThinkingEngine extends EventEmitter {
 
       const content = response.choices[0]?.message?.content || "";
       return this.parseThought(content);
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }
@@ -308,7 +308,7 @@ export class ExtendedThinkingEngine extends EventEmitter {
   private async verifyThought(
     thought: Thought,
     session: ThinkingSession,
-    config: ThinkingConfig
+    _config: ThinkingConfig
   ): Promise<VerificationResult> {
     const prompt = VERIFICATION_PROMPT
       .replace("{thought}", thought.content)
@@ -422,7 +422,7 @@ export class ExtendedThinkingEngine extends EventEmitter {
    */
   private async checkSelfConsistency(
     session: ThinkingSession,
-    config: ThinkingConfig
+    _config: ThinkingConfig
   ): Promise<SelfConsistencyResult> {
     const completedChains = session.chains.filter(
       (c) => c.status === "completed" && c.conclusion
@@ -447,7 +447,7 @@ export class ExtendedThinkingEngine extends EventEmitter {
     let consensusConfidence = 0;
     let maxGroupSize = 0;
 
-    for (const [key, group] of answerGroups) {
+    for (const [_key, group] of answerGroups) {
       if (group.length > maxGroupSize) {
         maxGroupSize = group.length;
         consensusAnswer = group[0].answer;

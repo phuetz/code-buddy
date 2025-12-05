@@ -53,7 +53,7 @@ export class SlashCommandManager {
       {
         name: 'help',
         description: 'Show available commands and help information',
-        prompt: 'List all available slash commands and their descriptions.',
+        prompt: '__HELP__',
         filePath: '',
         isBuiltin: true
       },
@@ -558,6 +558,19 @@ Be systematic and thorough in your analysis.`,
         arguments: [
           { name: 'action', description: 'on, off, auto, status, voices, or voice <name>', required: false }
         ]
+      },
+      // ==========================================
+      // AI Testing Command
+      // ==========================================
+      {
+        name: 'ai-test',
+        description: 'Run integration tests on the current AI provider',
+        prompt: '__AI_TEST__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'options', description: 'quick (skip expensive), full (all tests), tools (test tool calling), stream (test streaming)', required: false }
+        ]
       }
     ];
 
@@ -686,6 +699,13 @@ Be systematic and thorough in your analysis.`,
    */
   getCommand(name: string): SlashCommand | undefined {
     return this.commands.get(name);
+  }
+
+  /**
+   * Get all registered commands
+   */
+  getAllCommands(): SlashCommand[] {
+    return Array.from(this.commands.values());
   }
 
   /**

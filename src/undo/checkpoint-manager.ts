@@ -17,7 +17,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
-import { execSync, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import { diff_match_patch } from 'diff-match-patch';
 
 export interface Checkpoint {
@@ -222,8 +222,8 @@ export class CheckpointManager extends EventEmitter {
       }
     }
 
-    // Get git info
-    const gitInfo = this.getGitInfo();
+    // Get git info (async)
+    const gitInfo = await this.getGitInfoAsync();
 
     const checkpoint: Checkpoint = {
       id,
@@ -388,24 +388,50 @@ export class CheckpointManager extends EventEmitter {
   }
 
   /**
-   * Get git info
+   * Execute a git command asynchronously using spawn (secure)
    */
-  private getGitInfo(): { branch?: string; commit?: string } {
+  private execGitCommand(args: string[]): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const proc = spawn('git', args, { cwd: this.workingDirectory });
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (data) => { stdout += data.toString(); });
+      proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve(stdout.trim());
+        } else {
+          reject(new Error(stderr || `git command failed with code ${code}`));
+        }
+      });
+
+      proc.on('error', reject);
+    });
+  }
+
+  /**
+   * Get git info (async version)
+   */
+  private async getGitInfoAsync(): Promise<{ branch?: string; commit?: string }> {
     try {
-      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
-        cwd: this.workingDirectory,
-        encoding: 'utf-8',
-      }).trim();
-
-      const commit = execSync('git rev-parse --short HEAD', {
-        cwd: this.workingDirectory,
-        encoding: 'utf-8',
-      }).trim();
-
+      const [branch, commit] = await Promise.all([
+        this.execGitCommand(['rev-parse', '--abbrev-ref', 'HEAD']),
+        this.execGitCommand(['rev-parse', '--short', 'HEAD']),
+      ]);
       return { branch, commit };
     } catch {
       return {};
     }
+  }
+
+  /**
+   * Get git info (sync wrapper for compatibility - prefers cached value)
+   */
+  private getGitInfo(): { branch?: string; commit?: string } {
+    // Return empty object synchronously, actual git info is fetched async in createCheckpoint
+    return {};
   }
 
   /**

@@ -86,7 +86,7 @@ export class VoiceInputManager extends EventEmitter {
       try {
         const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         this.config = { ...this.config, ...saved };
-      } catch (error) {
+      } catch (_error) {
         // Use defaults
       }
     }
@@ -389,10 +389,10 @@ export class VoiceInputManager extends EventEmitter {
         `;
 
         const osascript = spawn('osascript', ['-e', script]);
-        let stdout = '';
+        let _stdout = ''; // Captured for future use
 
         osascript.stdout.on('data', (data) => {
-          stdout += data.toString();
+          _stdout += data.toString();
         });
 
         osascript.on('close', () => {

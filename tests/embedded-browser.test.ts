@@ -214,7 +214,7 @@ describe('EmbeddedBrowser', () => {
 
   describe('dispose', () => {
     it('should clean up resources', () => {
-      const session = browser.createSession();
+      const _session = browser.createSession(); // Created to verify cleanup
       browser.dispose();
       // Sessions should be cleared
     });

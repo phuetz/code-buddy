@@ -135,6 +135,16 @@ export class CustomCommandLoader {
       });
     }
 
+    // SECURITY: Whitelist of safe environment variables
+    // Do NOT expose sensitive variables like API keys, tokens, passwords
+    const SAFE_ENV_VARS = new Set([
+      "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL",
+      "TERM", "EDITOR", "VISUAL", "PAGER",
+      "PATH", "NODE_ENV", "DEBUG",
+      "TMPDIR", "TMP", "TEMP",
+      "HOSTNAME", "LOGNAME",
+    ]);
+
     // Replace environment-style variables
     expandedPrompt = expandedPrompt.replace(/\$\{?(\w+)\}?/g, (match, varName) => {
       // Special variables
@@ -149,7 +159,12 @@ export class CustomCommandLoader {
         case "TIME":
           return new Date().toISOString().split("T")[1].slice(0, 8);
         default:
-          return process.env[varName] || match;
+          // SECURITY: Only allow whitelisted environment variables
+          if (SAFE_ENV_VARS.has(varName)) {
+            return process.env[varName] || match;
+          }
+          // Don't expose other env vars (could contain secrets)
+          return match;
       }
     });
 

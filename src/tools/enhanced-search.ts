@@ -15,8 +15,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { rgPath } from '@vscode/ripgrep';
-import * as path from 'path';
-import * as fs from 'fs';
 
 // ============================================================================
 // Types
@@ -358,7 +356,7 @@ export class EnhancedSearch extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const results: SearchMatch[] = [];
-      const startTime = Date.now();
+      const _startTime = Date.now(); // Reserved for performance metrics
       let filesSearched = 0;
 
       this.streamSearch(query, {

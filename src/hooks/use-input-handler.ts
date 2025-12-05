@@ -138,8 +138,29 @@ export function useInputHandler({
             selectedCommandIndex,
             filteredSuggestions.length - 1
           );
-          const selectedCommand = filteredSuggestions[safeIndex];
-          const newInput = selectedCommand.command + " ";
+          const selectedSuggestion = filteredSuggestions[safeIndex] as any;
+
+          let newInput: string;
+          if (selectedSuggestion.isArgument) {
+            // For arguments, keep the command and add the argument
+            const parts = input.trim().split(/\s+/);
+            const baseCommand = parts[0]; // e.g., "/ai-test"
+            newInput = `${baseCommand} ${selectedSuggestion.command}`;
+
+            // If Enter was pressed, execute the command directly
+            if (key.return) {
+              setShowCommandSuggestions(false);
+              setSelectedCommandIndex(0);
+              clearInput();
+              // Execute the full command directly
+              handleDirectCommand(newInput);
+              return true;
+            }
+          } else {
+            // For commands, just use the command
+            newInput = selectedSuggestion.command + " ";
+          }
+
           setInput(newInput);
           setCursorPosition(newInput.length);
           setShowCommandSuggestions(false);
@@ -187,8 +208,11 @@ export function useInputHandler({
     }
 
     if (userInput.trim()) {
-      const directCommandResult = await handleDirectCommand(userInput);
-      if (!directCommandResult) {
+      // For slash commands, handleDirectCommand handles clearInput
+      // For regular messages, we need to handle it here
+      if (userInput.startsWith("/")) {
+        await handleDirectCommand(userInput);
+      } else {
         await processUserMessage(userInput);
       }
     }
@@ -363,6 +387,7 @@ export function useInputHandler({
         if (result.prompt.startsWith("__") && result.prompt.endsWith("__")) {
           const enhancedHandler = getEnhancedCommandHandler();
           enhancedHandler.setConversationHistory(chatHistory);
+          enhancedHandler.setGrokClient(agent.getClient());
 
           const args = trimmedInput.split(" ").slice(1);
           const handlerResult = await enhancedHandler.handleCommand(

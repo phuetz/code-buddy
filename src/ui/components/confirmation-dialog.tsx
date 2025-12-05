@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import { DiffRenderer } from "./diff-renderer.js";
 
@@ -11,7 +11,15 @@ interface ConfirmationDialogProps {
   content?: string; // Optional content to show (file content or command)
 }
 
-export default function ConfirmationDialog({
+// Memoized options array - stable reference
+const CONFIRMATION_OPTIONS = [
+  "Yes",
+  "Yes, and don't ask again this session",
+  "No",
+  "No, with feedback",
+] as const;
+
+function ConfirmationDialogInner({
   operation,
   filename,
   onConfirm,
@@ -23,17 +31,20 @@ export default function ConfirmationDialog({
   const [feedbackMode, setFeedbackMode] = useState(false);
   const [feedback, setFeedback] = useState("");
 
-  const options = [
-    "Yes",
-    "Yes, and don't ask again this session",
-    "No",
-    "No, with feedback",
-  ];
+  // Memoized handlers
+  const handleConfirm = useCallback((dontAskAgain: boolean) => {
+    onConfirm(dontAskAgain);
+  }, [onConfirm]);
 
-  useInput((input, key) => {
+  const handleReject = useCallback((message: string) => {
+    onReject(message);
+  }, [onReject]);
+
+  // Memoized input handler
+  const handleInput = useCallback((input: string, key: { return?: boolean; backspace?: boolean; delete?: boolean; ctrl?: boolean; meta?: boolean; upArrow?: boolean; downArrow?: boolean; tab?: boolean; shift?: boolean; escape?: boolean }) => {
     if (feedbackMode) {
       if (key.return) {
-        onReject(feedback.trim());
+        handleReject(feedback.trim());
         return;
       }
       if (key.backspace || key.delete) {
@@ -47,22 +58,22 @@ export default function ConfirmationDialog({
     }
 
     if (key.upArrow || (key.shift && key.tab)) {
-      setSelectedOption((prev) => (prev > 0 ? prev - 1 : options.length - 1));
+      setSelectedOption((prev) => (prev > 0 ? prev - 1 : CONFIRMATION_OPTIONS.length - 1));
       return;
     }
 
     if (key.downArrow || key.tab) {
-      setSelectedOption((prev) => (prev + 1) % options.length);
+      setSelectedOption((prev) => (prev + 1) % CONFIRMATION_OPTIONS.length);
       return;
     }
 
     if (key.return) {
       if (selectedOption === 0) {
-        onConfirm(false);
+        handleConfirm(false);
       } else if (selectedOption === 1) {
-        onConfirm(true);
+        handleConfirm(true);
       } else if (selectedOption === 2) {
-        onReject("Operation cancelled by user");
+        handleReject("Operation cancelled by user");
       } else {
         setFeedbackMode(true);
       }
@@ -75,11 +86,13 @@ export default function ConfirmationDialog({
         setFeedback("");
       } else {
         // Cancel the confirmation when escape is pressed from main confirmation
-        onReject("Operation cancelled by user (pressed Escape)");
+        handleReject("Operation cancelled by user (pressed Escape)");
       }
       return;
     }
-  });
+  }, [feedbackMode, feedback, selectedOption, handleConfirm, handleReject]);
+
+  useInput(handleInput);
 
   if (feedbackMode) {
     return (
@@ -150,7 +163,7 @@ export default function ConfirmationDialog({
         </Box>
 
         <Box flexDirection="column">
-          {options.map((option, index) => (
+          {CONFIRMATION_OPTIONS.map((option, index) => (
             <Box key={index} paddingLeft={1}>
               <Text
                 color={selectedOption === index ? "black" : "white"}
@@ -171,3 +184,7 @@ export default function ConfirmationDialog({
     </Box>
   );
 }
+
+// Export memoized component to prevent unnecessary re-renders
+const ConfirmationDialog = React.memo(ConfirmationDialogInner);
+export default ConfirmationDialog;

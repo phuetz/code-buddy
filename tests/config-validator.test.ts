@@ -2,7 +2,7 @@
  * Tests for Configuration Validator
  */
 
-import { ConfigValidator, getConfigValidator, SCHEMAS } from '../src/utils/config-validator';
+import { ConfigValidator, getConfigValidator } from '../src/utils/config-validator';
 
 describe('ConfigValidator', () => {
   let validator: ConfigValidator;

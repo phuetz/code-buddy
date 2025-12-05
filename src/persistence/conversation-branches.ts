@@ -61,7 +61,7 @@ export class ConversationBranchManager extends EventEmitter {
       if (!this.branches.has("main")) {
         this.createBranch("main", "Main conversation");
       }
-    } catch (error) {
+    } catch (_error) {
       // Create fresh main branch
       this.createBranch("main", "Main conversation");
     }
@@ -72,7 +72,7 @@ export class ConversationBranchManager extends EventEmitter {
       fs.ensureDirSync(this.storagePath);
       const filePath = path.join(this.storagePath, `${branch.id}.json`);
       fs.writeJsonSync(filePath, branch, { spaces: 2 });
-    } catch (error) {
+    } catch (_error) {
       // Ignore save errors
     }
   }
@@ -83,7 +83,7 @@ export class ConversationBranchManager extends EventEmitter {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore
     }
   }

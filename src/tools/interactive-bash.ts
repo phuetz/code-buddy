@@ -172,27 +172,49 @@ export class InteractiveBashTool extends EventEmitter {
   private async fallbackExecute(
     command: string
   ): Promise<{ sessionId: string; output: string }> {
-    const { exec } = require("child_process");
-    const { promisify } = require("util");
-    const execAsync = promisify(exec);
+    const { spawn } = require("child_process");
 
     const sessionId = `exec-${++this.sessionCounter}`;
 
-    try {
-      const { stdout, stderr } = await execAsync(command, {
+    return new Promise((resolve) => {
+      // Use spawn with shell and array args for safer execution
+      const child = spawn("bash", ["-c", command], {
         timeout: 60000,
         maxBuffer: 10 * 1024 * 1024,
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          // Disable shell history for security
+          HISTFILE: "/dev/null",
+          HISTSIZE: "0",
+        },
       });
-      return {
-        sessionId,
-        output: stdout + (stderr ? `\nStderr:\n${stderr}` : ""),
-      };
-    } catch (error: any) {
-      return {
-        sessionId,
-        output: error.stdout + "\n" + (error.stderr || error.message),
-      };
-    }
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout?.on("data", (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      child.stderr?.on("data", (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code: number | null) => {
+        resolve({
+          sessionId,
+          output: stdout + (stderr ? `\nStderr:\n${stderr}` : ""),
+        });
+      });
+
+      child.on("error", (error: Error) => {
+        resolve({
+          sessionId,
+          output: `Error: ${error.message}`,
+        });
+      });
+    });
   }
 
   sendInput(sessionId: string, input: string): boolean {
@@ -339,6 +361,14 @@ Note: PTY support requires the 'node-pty' package:
       this.kill(sessionId);
     }
     this.sessions.clear();
+  }
+
+  /**
+   * Dispose the tool and clean up all resources
+   */
+  dispose(): void {
+    this.cleanup();
+    this.removeAllListeners();
   }
 }
 

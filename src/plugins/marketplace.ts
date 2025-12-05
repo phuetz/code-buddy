@@ -19,6 +19,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import axios from 'axios';
 import * as semver from 'semver';
+import { PluginSandbox, createPluginSandbox, SandboxPermission } from './sandbox-worker.js';
 
 export interface Plugin {
   id: string;
@@ -111,8 +112,9 @@ export interface PluginReview {
 
 export interface PluginInstance {
   plugin: InstalledPlugin;
-  module: any;
+  module: unknown;
   api: PluginAPI;
+  sandbox?: PluginSandbox;
 }
 
 export interface PluginAPI {
@@ -204,7 +206,7 @@ export class PluginMarketplace extends EventEmitter {
    * Load installed plugins from disk
    */
   private async loadInstalledPlugins(): Promise<void> {
-    const installedDir = path.join(this.pluginsDir, 'installed');
+    const _installedDir = path.join(this.pluginsDir, 'installed'); // Reserved for future use
     const manifestPath = path.join(this.pluginsDir, 'manifest.json');
 
     if (await fs.pathExists(manifestPath)) {
@@ -358,7 +360,7 @@ export class PluginMarketplace extends EventEmitter {
   /**
    * Extract plugin archive
    */
-  private async extractPlugin(installPath: string, data: Buffer): Promise<void> {
+  private async extractPlugin(installPath: string, _data: Buffer): Promise<void> {
     // In a real implementation, this would extract a tarball
     // For now, create a placeholder module
 
@@ -463,6 +465,26 @@ export class PluginMarketplace extends EventEmitter {
   }
 
   /**
+   * Validate plugin path is within allowed directory
+   */
+  private validatePluginPath(modulePath: string): boolean {
+    const normalizedPath = path.normalize(path.resolve(modulePath));
+    const normalizedPluginsDir = path.normalize(path.resolve(this.pluginsDir));
+
+    // Ensure the module path is within the plugins directory
+    if (!normalizedPath.startsWith(normalizedPluginsDir)) {
+      return false;
+    }
+
+    // Block path traversal attempts
+    if (modulePath.includes('..') || modulePath.includes('\0')) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Load a plugin
    */
   async loadPlugin(pluginId: string): Promise<void> {
@@ -478,22 +500,64 @@ export class PluginMarketplace extends EventEmitter {
     try {
       const modulePath = path.join(plugin.installPath, plugin.main || 'index.js');
 
+      // SECURITY: Validate plugin path before loading
+      if (!this.validatePluginPath(modulePath)) {
+        throw new Error(`Invalid plugin path: ${modulePath}`);
+      }
+
+      // Verify the module file exists
+      if (!await fs.pathExists(modulePath)) {
+        throw new Error(`Plugin module not found: ${modulePath}`);
+      }
+
       // Create plugin API
       const api = this.createPluginAPI(pluginId, plugin);
 
-      // Load module
-      const pluginModule = require(modulePath);
-
       // Create instance
-      const instance: PluginInstance = {
-        plugin,
-        module: pluginModule,
-        api,
-      };
+      let instance: PluginInstance;
 
-      // Activate plugin
-      if (typeof pluginModule.activate === 'function') {
-        await pluginModule.activate(api);
+      if (this.config.sandboxPlugins) {
+        // SECURITY: Load plugin in sandboxed worker thread
+        const sandboxPermissions: SandboxPermission[] = plugin.permissions.map(p => ({
+          type: p.type as SandboxPermission['type'],
+          scope: p.scope,
+        }));
+
+        const sandbox = await createPluginSandbox(
+          modulePath,
+          pluginId,
+          sandboxPermissions,
+          api,
+          {
+            timeout: 30000,
+            memoryLimit: 128 * 1024 * 1024,
+            onLog: (level, message) => {
+              this.emit('plugin:log', { pluginId, level, message });
+            },
+          }
+        );
+
+        instance = {
+          plugin,
+          module: null,
+          api,
+          sandbox,
+        };
+      } else {
+        // Non-sandboxed mode (for trusted plugins only)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const pluginModule = require(modulePath);
+
+        instance = {
+          plugin,
+          module: pluginModule,
+          api,
+        };
+
+        // Activate plugin
+        if (typeof pluginModule.activate === 'function') {
+          await pluginModule.activate(api);
+        }
       }
 
       this.loadedPlugins.set(pluginId, instance);
@@ -514,17 +578,23 @@ export class PluginMarketplace extends EventEmitter {
     }
 
     try {
-      // Deactivate plugin
-      if (typeof instance.module.deactivate === 'function') {
-        await instance.module.deactivate();
+      if (instance.sandbox) {
+        // Terminate sandboxed plugin
+        await instance.sandbox.terminate();
+      } else if (instance.module) {
+        // Deactivate non-sandboxed plugin
+        const mod = instance.module as { deactivate?: () => void | Promise<void> };
+        if (typeof mod.deactivate === 'function') {
+          await mod.deactivate();
+        }
+
+        // Clear from cache
+        const modulePath = path.join(instance.plugin.installPath, instance.plugin.main || 'index.js');
+        delete require.cache[require.resolve(modulePath)];
       }
 
       // Remove registered items
       this.removePluginRegistrations(pluginId);
-
-      // Clear from cache
-      const modulePath = path.join(instance.plugin.installPath, instance.plugin.main || 'index.js');
-      delete require.cache[require.resolve(modulePath)];
 
       this.loadedPlugins.delete(pluginId);
       this.emit('plugin:unloaded', { pluginId });

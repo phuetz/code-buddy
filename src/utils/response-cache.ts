@@ -1,4 +1,5 @@
-import fs from 'fs';
+import fs from 'fs/promises';
+import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
@@ -33,23 +34,30 @@ export class ResponseCache {
   private stats = { hits: 0, misses: 0 };
   private maxEntries: number;
   private defaultTTL: number; // seconds
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private saveDebounceMs: number = 1000; // Debounce saves by 1 second
+  private isLoaded: boolean = false;
+  private loadPromise: Promise<void> | null = null;
 
   constructor(options: { maxEntries?: number; defaultTTL?: number } = {}) {
     this.maxEntries = options.maxEntries || 1000;
     this.defaultTTL = options.defaultTTL || 86400; // 24 hours default
     this.cacheDir = path.join(os.homedir(), '.grok', 'cache');
     this.cacheFile = path.join(this.cacheDir, 'response-cache.json');
-    this.loadCache();
+    // Start loading asynchronously
+    this.loadPromise = this.loadCache();
   }
 
-  private loadCache(): void {
+  private async loadCache(): Promise<void> {
     try {
-      if (!fs.existsSync(this.cacheDir)) {
-        fs.mkdirSync(this.cacheDir, { recursive: true });
+      // Use sync for directory creation during init (only once)
+      if (!existsSync(this.cacheDir)) {
+        mkdirSync(this.cacheDir, { recursive: true });
       }
 
-      if (fs.existsSync(this.cacheFile)) {
-        const data = JSON.parse(fs.readFileSync(this.cacheFile, 'utf-8'));
+      try {
+        const content = await fs.readFile(this.cacheFile, 'utf-8');
+        const data = JSON.parse(content);
 
         // Convert to Map and filter expired entries
         const now = Date.now();
@@ -61,14 +69,30 @@ export class ResponseCache {
         }
 
         this.stats = data.stats || { hits: 0, misses: 0 };
+      } catch {
+        // File doesn't exist or is invalid - start fresh
       }
-    } catch (error) {
+    } catch (_error) {
       // Start with empty cache on error
       this.cache.clear();
+    } finally {
+      this.isLoaded = true;
     }
   }
 
-  private saveCache(): void {
+  /**
+   * Schedule a debounced save to reduce I/O
+   */
+  private scheduleSave(): void {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+    this.saveTimeout = setTimeout(() => {
+      this.saveCache();
+    }, this.saveDebounceMs);
+  }
+
+  private async saveCache(): Promise<void> {
     try {
       const data = {
         entries: Object.fromEntries(this.cache),
@@ -76,8 +100,8 @@ export class ResponseCache {
         savedAt: Date.now(),
       };
       // Use compact JSON without pretty-printing for better performance
-      fs.writeFileSync(this.cacheFile, JSON.stringify(data));
-    } catch (error) {
+      await fs.writeFile(this.cacheFile, JSON.stringify(data));
+    } catch (_error) {
       // Silently fail on save errors
     }
   }
@@ -118,7 +142,7 @@ export class ResponseCache {
     if (now - entry.timestamp > entry.ttl * 1000) {
       this.cache.delete(key);
       this.stats.misses++;
-      this.saveCache();
+      this.scheduleSave();
       return null;
     }
 
@@ -131,7 +155,7 @@ export class ResponseCache {
     // Cache hit!
     entry.hits++;
     this.stats.hits++;
-    this.saveCache();
+    this.scheduleSave();
     return entry.response;
   }
 
@@ -168,7 +192,7 @@ export class ResponseCache {
     };
 
     this.cache.set(key, entry);
-    this.saveCache();
+    this.scheduleSave();
   }
 
   /**
@@ -191,7 +215,7 @@ export class ResponseCache {
   clear(): void {
     this.cache.clear();
     this.stats = { hits: 0, misses: 0 };
-    this.saveCache();
+    this.scheduleSave();
   }
 
   /**
@@ -206,7 +230,7 @@ export class ResponseCache {
       }
     }
     if (invalidated > 0) {
-      this.saveCache();
+      this.scheduleSave();
     }
     return invalidated;
   }
@@ -262,6 +286,18 @@ Hit Rate: ${hitRate}% (${stats.totalHits} hits, ${stats.totalMisses} misses)
 ${stats.oldestEntry ? `Oldest: ${stats.oldestEntry.toLocaleDateString()}` : ''}
 ${stats.newestEntry ? `Newest: ${stats.newestEntry.toLocaleDateString()}` : ''}`;
   }
+
+  /**
+   * Dispose and flush pending saves
+   */
+  async dispose(): Promise<void> {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+    // Final save
+    await this.saveCache();
+  }
 }
 
 // Singleton instance
@@ -275,5 +311,8 @@ export function getResponseCache(): ResponseCache {
 }
 
 export function resetResponseCache(): void {
+  if (responseCacheInstance) {
+    responseCacheInstance.dispose();
+  }
   responseCacheInstance = null;
 }

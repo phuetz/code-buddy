@@ -122,7 +122,7 @@ export class PersistentMemoryManager extends EventEmitter {
       for (const memory of parsed) {
         memories.set(memory.key, memory);
       }
-    } catch (error) {
+    } catch (_error) {
       // File doesn't exist or can't be read, start fresh
     }
   }

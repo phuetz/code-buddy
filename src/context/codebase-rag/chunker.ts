@@ -13,7 +13,6 @@ import {
   CodeChunk,
   ChunkType,
   ChunkMetadata,
-  ParseResult,
   SymbolInfo,
   RAGConfig,
   DEFAULT_RAG_CONFIG,
@@ -328,7 +327,7 @@ export class CodeChunker {
    */
   private findSymbolEnd(lines: string[], startIdx: number, type: ChunkType): number {
     let braceCount = 0;
-    let parenCount = 0;
+    let _parenCount = 0; // Reserved for future parentheses matching
     let started = false;
 
     for (let i = startIdx; i < lines.length; i++) {
@@ -341,9 +340,9 @@ export class CodeChunker {
         } else if (char === "}") {
           braceCount--;
         } else if (char === "(") {
-          parenCount++;
+          _parenCount++;
         } else if (char === ")") {
-          parenCount--;
+          _parenCount--;
         }
       }
 
@@ -468,7 +467,7 @@ export class CodeChunker {
   /**
    * Split a large chunk into smaller ones
    */
-  private splitLargeChunk(chunk: CodeChunk, allLines: string[]): CodeChunk[] {
+  private splitLargeChunk(chunk: CodeChunk, _allLines: string[]): CodeChunk[] {
     const tokens = this.estimateTokens(chunk.content);
     const maxTokens = this.config.chunkSize * 2; // Allow 2x for boundary respect
 

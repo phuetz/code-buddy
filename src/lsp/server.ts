@@ -66,7 +66,7 @@ let globalSettings: GrokLSPSettings = defaultSettings;
 // Cache for completions
 const completionCache = new Map<string, CompletionItem[]>();
 
-connection.onInitialize((params: InitializeParams): InitializeResult => {
+connection.onInitialize((_params: InitializeParams): InitializeResult => {
   connection.console.log('Grok LSP server initializing...');
 
   return {

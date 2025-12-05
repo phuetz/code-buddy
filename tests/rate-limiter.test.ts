@@ -130,7 +130,7 @@ describe('RateLimiter', () => {
       ];
 
       // Clear queue
-      const cleared = limiter.clearQueue();
+      const _cleared = limiter.clearQueue(); // Count verified via status
 
       // Wait for promises to settle
       await Promise.allSettled(promises);

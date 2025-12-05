@@ -1,12 +1,13 @@
 /**
- * Professional diff renderer component
+ * Professional diff renderer component with syntax highlighting
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../utils/colors.js';
 import crypto from 'crypto';
 import { MaxSizedBox } from '../shared/max-sized-box.js';
+import { highlight } from 'cli-highlight';
 
 interface DiffLine {
   type: 'add' | 'del' | 'context' | 'hunk' | 'other';
@@ -94,27 +95,34 @@ interface DiffRendererProps {
 
 const DEFAULT_TAB_WIDTH = 4; // Spaces per tab for normalization
 
-export const DiffRenderer = ({
+export const DiffRenderer = React.memo(function DiffRenderer({
   diffContent,
   filename,
   tabWidth = DEFAULT_TAB_WIDTH,
   availableTerminalHeight,
   terminalWidth = 80,
-}: DiffRendererProps): React.ReactElement => {
+}: DiffRendererProps): React.ReactElement {
+  // Memoize parsed content to avoid recomputation
+  const parsedLines = useMemo(() => {
+    if (!diffContent || typeof diffContent !== 'string') {
+      return [];
+    }
+
+    // Strip the first summary line (e.g. "Updated file.txt with 1 addition and 2 removals")
+    const lines = diffContent.split('\n');
+    const firstLine = lines[0];
+    let actualDiff = diffContent;
+
+    if (firstLine && (firstLine.startsWith('Updated ') || firstLine.startsWith('Created '))) {
+      actualDiff = lines.slice(1).join('\n');
+    }
+
+    return parseDiffWithLineNumbers(actualDiff);
+  }, [diffContent]);
+
   if (!diffContent || typeof diffContent !== 'string') {
     return <Text color={Colors.AccentYellow}>No diff content.</Text>;
   }
-
-  // Strip the first summary line (e.g. "Updated file.txt with 1 addition and 2 removals")
-  const lines = diffContent.split('\n');
-  const firstLine = lines[0];
-  let actualDiffContent = diffContent;
-
-  if (firstLine && (firstLine.startsWith('Updated ') || firstLine.startsWith('Created '))) {
-    actualDiffContent = lines.slice(1).join('\n');
-  }
-
-  const parsedLines = parseDiffWithLineNumbers(actualDiffContent);
 
   if (parsedLines.length === 0) {
     return <Text dimColor>No changes detected.</Text>;
@@ -130,7 +138,7 @@ export const DiffRenderer = ({
   );
 
   return <>{renderedOutput}</>;
-};
+});
 
 const renderDiffContent = (
   parsedLines: DiffLine[],
@@ -139,6 +147,9 @@ const renderDiffContent = (
   availableTerminalHeight: number | undefined,
   terminalWidth: number
 ) => {
+  // Detect language for syntax highlighting
+  const language = getLanguageFromFilename(filename);
+
   // 1. Normalize whitespace (replace tabs with spaces) *before* further processing
   const normalizedLines = parsedLines.map((line) => ({
     ...line,
@@ -234,6 +245,12 @@ const renderDiffContent = (
 
         const displayContent = line.content.substring(baseIndentation);
 
+        // Apply syntax highlighting for context lines (not additions/deletions to keep diff colors visible)
+        const highlightedContent =
+          line.type === 'context' && language
+            ? highlightCode(displayContent, language)
+            : displayContent;
+
         acc.push(
           <Box key={lineKey} flexDirection="row">
             <Text color={Colors.Gray} dimColor={dim}>
@@ -252,7 +269,7 @@ const renderDiffContent = (
               dimColor={!backgroundColor && dim}
               wrap="wrap"
             >
-              {displayContent}
+              {highlightedContent}
             </Text>
           </Box>
         );
@@ -262,16 +279,26 @@ const renderDiffContent = (
   );
 };
 
-// Language detection utility for potential future syntax highlighting
-const _getLanguageFromExtension = (extension: string): string | null => {
+// Language detection utility for syntax highlighting
+const getLanguageFromFilename = (filename: string | undefined): string | null => {
+  if (!filename) return null;
+
+  const extension = filename.split('.').pop()?.toLowerCase() || '';
   const languageMap: { [key: string]: string } = {
     js: 'javascript',
+    jsx: 'javascript',
     ts: 'typescript',
+    tsx: 'typescript',
     py: 'python',
     json: 'json',
     css: 'css',
+    scss: 'scss',
+    less: 'less',
     html: 'html',
+    htm: 'html',
     sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
     md: 'markdown',
     yaml: 'yaml',
     yml: 'yaml',
@@ -279,7 +306,44 @@ const _getLanguageFromExtension = (extension: string): string | null => {
     java: 'java',
     c: 'c',
     cpp: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
     rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    php: 'php',
+    sql: 'sql',
+    swift: 'swift',
+    kt: 'kotlin',
+    scala: 'scala',
+    r: 'r',
+    lua: 'lua',
+    dockerfile: 'dockerfile',
+    makefile: 'makefile',
+    xml: 'xml',
+    toml: 'toml',
+    ini: 'ini',
+    env: 'bash',
   };
-  return languageMap[extension] || null; // Return null if extension not found
+
+  // Handle special filenames
+  const lowerFilename = filename.toLowerCase();
+  if (lowerFilename === 'dockerfile') return 'dockerfile';
+  if (lowerFilename === 'makefile') return 'makefile';
+  if (lowerFilename.endsWith('.env')) return 'bash';
+
+  return languageMap[extension] || null;
+};
+
+/**
+ * Apply syntax highlighting to code content
+ */
+const highlightCode = (content: string, language: string | null): string => {
+  if (!language || !content.trim()) return content;
+
+  try {
+    return highlight(content, { language, ignoreIllegals: true });
+  } catch {
+    return content;
+  }
 };

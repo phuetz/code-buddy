@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import { GrokAgent } from "../../agent/grok-agent.js";
 import { getSettingsManager } from "../../utils/settings-manager.js";
@@ -7,40 +7,14 @@ interface ApiKeyInputProps {
   onApiKeySet: (agent: GrokAgent) => void;
 }
 
-export default function ApiKeyInput({ onApiKeySet }: ApiKeyInputProps) {
+function ApiKeyInputInner({ onApiKeySet }: ApiKeyInputProps) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { exit } = useApp();
 
-  useInput((inputChar, key) => {
-    if (isSubmitting) return;
-
-    if (key.ctrl && inputChar === "c") {
-      exit();
-      return;
-    }
-
-    if (key.return) {
-      handleSubmit();
-      return;
-    }
-
-
-    if (key.backspace || key.delete) {
-      setInput((prev) => prev.slice(0, -1));
-      setError("");
-      return;
-    }
-
-    if (inputChar && !key.ctrl && !key.meta) {
-      setInput((prev) => prev + inputChar);
-      setError("");
-    }
-  });
-
-
-  const handleSubmit = async () => {
+  // Memoized submit handler
+  const handleSubmit = useCallback(async () => {
     if (!input.trim()) {
       setError("API key cannot be empty");
       return;
@@ -50,10 +24,10 @@ export default function ApiKeyInput({ onApiKeySet }: ApiKeyInputProps) {
     try {
       const apiKey = input.trim();
       const agent = new GrokAgent(apiKey);
-      
+
       // Set environment variable for current process
       process.env.GROK_API_KEY = apiKey;
-      
+
       // Save to user settings
       try {
         const manager = getSettingsManager();
@@ -69,11 +43,43 @@ export default function ApiKeyInput({ onApiKeySet }: ApiKeyInputProps) {
       setError("Invalid API key format");
       setIsSubmitting(false);
     }
-  };
+  }, [input, onApiKeySet]);
 
-  const displayText = input.length > 0 ? 
-    (isSubmitting ? "*".repeat(input.length) : "*".repeat(input.length) + "█") : 
-    (isSubmitting ? " " : "█");
+  // Memoized input handler
+  const handleInput = useCallback((inputChar: string, key: { ctrl?: boolean; meta?: boolean; return?: boolean; backspace?: boolean; delete?: boolean }) => {
+    if (isSubmitting) return;
+
+    if (key.ctrl && inputChar === "c") {
+      exit();
+      return;
+    }
+
+    if (key.return) {
+      handleSubmit();
+      return;
+    }
+
+    if (key.backspace || key.delete) {
+      setInput((prev) => prev.slice(0, -1));
+      setError("");
+      return;
+    }
+
+    if (inputChar && !key.ctrl && !key.meta) {
+      setInput((prev) => prev + inputChar);
+      setError("");
+    }
+  }, [isSubmitting, exit, handleSubmit]);
+
+  useInput(handleInput);
+
+  // Memoized display text to prevent re-computation
+  const displayText = useMemo(() => {
+    if (input.length > 0) {
+      return isSubmitting ? "*".repeat(input.length) : "*".repeat(input.length) + "█";
+    }
+    return isSubmitting ? " " : "█";
+  }, [input.length, isSubmitting]);
 
   return (
     <Box flexDirection="column" paddingX={2} paddingY={1}>
@@ -107,3 +113,7 @@ export default function ApiKeyInput({ onApiKeySet }: ApiKeyInputProps) {
     </Box>
   );
 }
+
+// Export memoized component to prevent unnecessary re-renders
+const ApiKeyInput = React.memo(ApiKeyInputInner);
+export default ApiKeyInput;

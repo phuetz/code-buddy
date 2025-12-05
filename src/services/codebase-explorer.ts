@@ -237,7 +237,7 @@ export class CodebaseExplorer {
         depth,
         isHidden: path.basename(dirPath).startsWith("."),
       });
-    } catch (error) {
+    } catch (_error) {
       // Skip directories we can't read
     }
   }

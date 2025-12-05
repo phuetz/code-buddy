@@ -12,13 +12,10 @@ import * as path from "path";
 import {
   CodeSymbol,
   SymbolType,
-  SymbolScope,
-  SupportedLanguage,
   SymbolSearchOptions,
   SymbolSearchResult,
   SymbolUsage,
   SearchMatch,
-  ASTParseResult,
 } from "./types.js";
 import { ASTParser, getASTParser } from "./ast-parser.js";
 
@@ -249,7 +246,7 @@ export class SymbolSearch {
         }
 
         this.indexedPaths.add(filePath);
-      } catch (error) {
+      } catch (_error) {
         // Skip files that can't be parsed
       }
     }
@@ -375,7 +372,7 @@ export class SymbolSearch {
     });
 
     // Search for references in indexed files
-    for (const [filePath, symbols] of this.index?.byFile || []) {
+    for (const [filePath, _symbols] of this.index?.byFile || []) {
       if (filePath === symbol.filePath) continue;
 
       try {

@@ -223,7 +223,7 @@ export class TextToSpeechManager extends EventEmitter {
           this.playAudio(audioFile)
             .then(() => {
               // Cleanup
-              try { fs.unlinkSync(audioFile); } catch {}
+              try { fs.unlinkSync(audioFile); } catch { /* ignore cleanup error */ }
               resolve();
             })
             .catch(reject);
@@ -295,7 +295,7 @@ export class TextToSpeechManager extends EventEmitter {
         if (code === 0 && fs.existsSync(audioFile)) {
           this.playAudio(audioFile)
             .then(() => {
-              try { fs.unlinkSync(audioFile); } catch {}
+              try { fs.unlinkSync(audioFile); } catch { /* ignore cleanup error */ }
               resolve();
             })
             .catch(reject);

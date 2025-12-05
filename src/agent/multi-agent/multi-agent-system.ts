@@ -137,7 +137,7 @@ export class MultiAgentSystem extends EventEmitter {
   /**
    * Default tool executor (placeholder - should be replaced with actual implementation)
    */
-  private async defaultToolExecutor(toolCall: GrokToolCall): Promise<ToolResult> {
+  private async defaultToolExecutor(_toolCall: GrokToolCall): Promise<ToolResult> {
     // This should be overridden by the actual tool executor
     return {
       success: false,
@@ -549,7 +549,7 @@ export class MultiAgentSystem extends EventEmitter {
     plan: ExecutionPlan,
     results: Map<string, AgentExecutionResult>,
     errors: string[],
-    options: WorkflowOptions
+    _options: WorkflowOptions
   ): Promise<void> {
     const reviewerAgent = this.agents.get("reviewer") as ReviewerAgent;
 

@@ -35,24 +35,16 @@ export class VoiceInput extends EventEmitter {
   }
 
   async isAvailable(): Promise<boolean> {
-    // Check if recording tools are available
+    // Check if recording tools are available using spawn (not exec for security)
     try {
       if (process.platform === "darwin") {
         // macOS - check for sox
-        const { exec } = require("child_process");
-        await new Promise((resolve, reject) => {
-          exec("which sox", (err: any) => (err ? reject(err) : resolve(true)));
-        });
-        return true;
+        return await this.commandExists("sox");
       } else if (process.platform === "linux") {
         // Linux - check for arecord or sox
-        const { exec } = require("child_process");
-        await new Promise((resolve, reject) => {
-          exec("which arecord || which sox", (err: any) =>
-            err ? reject(err) : resolve(true)
-          );
-        });
-        return true;
+        const hasArecord = await this.commandExists("arecord");
+        if (hasArecord) return true;
+        return await this.commandExists("sox");
       } else if (process.platform === "win32") {
         // Windows - basic support
         return true;
@@ -61,6 +53,17 @@ export class VoiceInput extends EventEmitter {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Check if a command exists using spawn (secure alternative to exec)
+   */
+  private commandExists(command: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const proc = spawn("which", [command]);
+      proc.on("close", (code) => resolve(code === 0));
+      proc.on("error", () => resolve(false));
+    });
   }
 
   async startRecording(): Promise<string> {
@@ -333,6 +336,14 @@ Tips:
     } catch {
       // Ignore cleanup errors
     }
+  }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  async dispose(): Promise<void> {
+    await this.cleanup();
+    this.removeAllListeners();
   }
 }
 

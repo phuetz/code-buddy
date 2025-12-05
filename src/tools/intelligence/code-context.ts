@@ -18,7 +18,6 @@ import {
   QualityMetrics,
   DetectedPattern,
   CodeSymbol,
-  SupportedLanguage,
 } from "./types.js";
 import { ASTParser, getASTParser } from "./ast-parser.js";
 import { SymbolSearch, getSymbolSearch } from "./symbol-search.js";
@@ -81,7 +80,7 @@ export class CodeContextBuilder {
    */
   private async enrichSymbols(
     symbols: CodeSymbol[],
-    filePath: string
+    _filePath: string
   ): Promise<ContextualSymbol[]> {
     const enriched: ContextualSymbol[] = [];
 
@@ -286,7 +285,7 @@ export class CodeContextBuilder {
    */
   private buildDependencies(
     imports: { source: string; specifiers: any[]; isTypeOnly: boolean }[],
-    filePath: string
+    _filePath: string
   ): ContextualDependency[] {
     const dependencies: ContextualDependency[] = [];
 

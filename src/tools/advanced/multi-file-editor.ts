@@ -7,13 +7,12 @@
  * Inspired by hurry-mode's multi-file editing capabilities.
  */
 
-import * as fs from "fs";
+import * as fs from "fs/promises";
+import { existsSync } from "fs";
 import * as path from "path";
 import {
   FileOperation,
-  FileOperationType,
   EditOperation,
-  EditOperationType,
   Transaction,
   TransactionResult,
   RollbackData,
@@ -147,9 +146,9 @@ export class MultiFileEditor {
   }
 
   /**
-   * Preview all changes in the transaction
+   * Preview all changes in the transaction (async)
    */
-  preview(): ChangePreview[] {
+  async preview(): Promise<ChangePreview[]> {
     if (!this.activeTransaction) {
       return [];
     }
@@ -169,7 +168,7 @@ export class MultiFileEditor {
 
         case "delete":
           try {
-            const content = fs.readFileSync(op.filePath, "utf-8");
+            const content = await fs.readFile(op.filePath, "utf-8");
             linesRemoved = content.split("\n").length;
           } catch {
             linesRemoved = 0;
@@ -209,6 +208,7 @@ export class MultiFileEditor {
 
   /**
    * Validate all operations before commit
+   * Note: Uses existsSync for validation as it's called frequently during validation
    */
   validate(): ValidationResult {
     if (!this.activeTransaction) {
@@ -221,7 +221,7 @@ export class MultiFileEditor {
     for (const op of this.activeTransaction.operations) {
       switch (op.type) {
         case "create":
-          if (fs.existsSync(op.filePath)) {
+          if (existsSync(op.filePath)) {
             warnings.push(`File already exists: ${op.filePath}`);
           }
           if (!op.content) {
@@ -230,7 +230,7 @@ export class MultiFileEditor {
           break;
 
         case "edit":
-          if (!fs.existsSync(op.filePath)) {
+          if (!existsSync(op.filePath)) {
             errors.push(`File does not exist: ${op.filePath}`);
           }
           if (!op.edits || op.edits.length === 0) {
@@ -239,20 +239,20 @@ export class MultiFileEditor {
           break;
 
         case "delete":
-          if (!fs.existsSync(op.filePath)) {
+          if (!existsSync(op.filePath)) {
             warnings.push(`File does not exist: ${op.filePath}`);
           }
           break;
 
         case "rename":
         case "move":
-          if (!fs.existsSync(op.filePath)) {
+          if (!existsSync(op.filePath)) {
             errors.push(`Source file does not exist: ${op.filePath}`);
           }
           if (!op.newPath) {
             errors.push(`No target path specified for rename: ${op.filePath}`);
           }
-          if (op.newPath && fs.existsSync(op.newPath)) {
+          if (op.newPath && existsSync(op.newPath)) {
             warnings.push(`Target already exists: ${op.newPath}`);
           }
           break;
@@ -302,18 +302,19 @@ export class MultiFileEditor {
       // Execute each operation
       for (const op of transaction.operations) {
         try {
-          // Capture rollback data before operation
-          const rollbackData = this.captureRollbackData(op);
+          // Capture rollback data before operation (async)
+          const rollbackData = await this.captureRollbackData(op);
           transaction.rollbackData.push(rollbackData);
 
           // Execute operation
           await this.executeOperation(op);
           operationsExecuted++;
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
           errors.push({
             operationId: op.id,
             filePath: op.filePath,
-            message: error.message,
+            message: errorMessage,
           });
 
           // Rollback on error
@@ -372,17 +373,15 @@ export class MultiFileEditor {
   }
 
   /**
-   * Execute a single file operation
+   * Execute a single file operation (async)
    */
   private async executeOperation(op: FileOperation): Promise<void> {
     switch (op.type) {
       case "create":
         // Ensure directory exists
         const dir = path.dirname(op.filePath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(op.filePath, op.content || "");
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(op.filePath, op.content || "");
         break;
 
       case "edit":
@@ -390,7 +389,7 @@ export class MultiFileEditor {
           throw new Error("No edits specified");
         }
 
-        let content = fs.readFileSync(op.filePath, "utf-8");
+        let content = await fs.readFile(op.filePath, "utf-8");
 
         // Apply edits in reverse order for line-based operations
         const sortedEdits = [...op.edits].sort(
@@ -401,12 +400,12 @@ export class MultiFileEditor {
           content = this.applyEdit(content, edit);
         }
 
-        fs.writeFileSync(op.filePath, content);
+        await fs.writeFile(op.filePath, content);
         break;
 
       case "delete":
-        if (fs.existsSync(op.filePath)) {
-          fs.unlinkSync(op.filePath);
+        if (existsSync(op.filePath)) {
+          await fs.unlink(op.filePath);
         }
         break;
 
@@ -418,11 +417,9 @@ export class MultiFileEditor {
 
         // Ensure target directory exists
         const targetDir = path.dirname(op.newPath);
-        if (!fs.existsSync(targetDir)) {
-          fs.mkdirSync(targetDir, { recursive: true });
-        }
+        await fs.mkdir(targetDir, { recursive: true });
 
-        fs.renameSync(op.filePath, op.newPath);
+        await fs.rename(op.filePath, op.newPath);
         break;
     }
   }
@@ -457,15 +454,15 @@ export class MultiFileEditor {
   }
 
   /**
-   * Capture rollback data for an operation
+   * Capture rollback data for an operation (async)
    */
-  private captureRollbackData(op: FileOperation): RollbackData {
-    const existed = fs.existsSync(op.filePath);
+  private async captureRollbackData(op: FileOperation): Promise<RollbackData> {
+    const existed = existsSync(op.filePath);
     let originalContent: string | undefined;
 
     if (existed && (op.type === "edit" || op.type === "delete")) {
       try {
-        originalContent = fs.readFileSync(op.filePath, "utf-8");
+        originalContent = await fs.readFile(op.filePath, "utf-8");
       } catch {
         // Can't read file
       }
@@ -481,7 +478,7 @@ export class MultiFileEditor {
   }
 
   /**
-   * Rollback a transaction
+   * Rollback a transaction (async)
    */
   private async rollbackTransaction(transaction: Transaction): Promise<void> {
     // Rollback in reverse order
@@ -495,30 +492,30 @@ export class MultiFileEditor {
         switch (op.type) {
           case "create":
             // Delete created file
-            if (fs.existsSync(op.filePath)) {
-              fs.unlinkSync(op.filePath);
+            if (existsSync(op.filePath)) {
+              await fs.unlink(op.filePath);
             }
             break;
 
           case "edit":
             // Restore original content
             if (rollback.originalContent !== undefined) {
-              fs.writeFileSync(op.filePath, rollback.originalContent);
+              await fs.writeFile(op.filePath, rollback.originalContent);
             }
             break;
 
           case "delete":
             // Restore deleted file
             if (rollback.originalContent !== undefined) {
-              fs.writeFileSync(rollback.filePath, rollback.originalContent);
+              await fs.writeFile(rollback.filePath, rollback.originalContent);
             }
             break;
 
           case "rename":
           case "move":
             // Move back to original location
-            if (op.newPath && fs.existsSync(op.newPath)) {
-              fs.renameSync(op.newPath, rollback.filePath);
+            if (op.newPath && existsSync(op.newPath)) {
+              await fs.rename(op.newPath, rollback.filePath);
             }
             break;
         }

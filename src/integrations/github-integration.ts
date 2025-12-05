@@ -10,8 +10,6 @@
 
 import { EventEmitter } from 'events';
 import { BashTool } from '../tools/bash.js';
-import * as fs from 'fs-extra';
-import * as path from 'path';
 
 export interface GitProvider {
   type: 'github' | 'gitlab';

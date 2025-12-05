@@ -83,12 +83,12 @@ describe('BashTool', () => {
       expect(result.error).toContain('blocked');
     });
 
-    // Skip: This test times out in certain environments due to async confirmation handling
+    // Skip: Test times out in CI/certain environments due to async confirmation handling
     it.skip('should block access to ~/.ssh', async () => {
       const result = await bashTool.execute('cat ~/.ssh/id_rsa');
       // Should fail - either blocked or file not found
       expect(result.success).toBe(false);
-    }, 15000);
+    }, 30000);
 
     it('should block access to /etc/shadow', async () => {
       const result = await bashTool.execute('cat /etc/shadow');

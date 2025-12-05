@@ -1,5 +1,5 @@
-import React from "react";
-import { Box, Text } from "ink";
+import React, { useMemo } from "react";
+import { Box, Text, Static } from "ink";
 import { ChatEntry } from "../../agent/grok-agent.js";
 import { DiffRenderer } from "./diff-renderer.js";
 import { MarkdownRenderer } from "../utils/markdown-renderer.js";
@@ -224,18 +224,62 @@ export function ChatHistory({
   const { colors, avatars } = useTheme();
 
   // Filter out tool_call entries with "Executing..." when confirmation is active
-  const filteredEntries = isConfirmationActive
-    ? entries.filter(
-        (entry) =>
-          !(entry.type === "tool_call" && entry.content === "Executing...")
-      )
-    : entries;
+  const filteredEntries = useMemo(() => {
+    const filtered = isConfirmationActive
+      ? entries.filter(
+          (entry) =>
+            !(entry.type === "tool_call" && entry.content === "Executing...")
+        )
+      : entries;
+    return filtered.slice(-20);
+  }, [entries, isConfirmationActive]);
+
+  // Separate completed (static) entries from streaming (dynamic) entries
+  // Static entries use Ink's Static component - they render once and never re-render
+  // This dramatically reduces flickering during streaming
+  const { staticEntries, dynamicEntries } = useMemo(() => {
+    const staticList: Array<ChatEntry & { uniqueKey: string }> = [];
+    const dynamicList: Array<ChatEntry & { uniqueKey: string }> = [];
+
+    filteredEntries.forEach((entry, index) => {
+      // Create a stable unique key based on timestamp and content hash
+      const uniqueKey = `${entry.timestamp.getTime()}-${index}`;
+      const entryWithKey = { ...entry, uniqueKey };
+
+      // Entry is dynamic if it's streaming or is a tool_call being executed
+      const isDynamic = entry.isStreaming ||
+        (entry.type === "tool_call" && entry.content === "Executing...");
+
+      if (isDynamic) {
+        dynamicList.push(entryWithKey);
+      } else {
+        staticList.push(entryWithKey);
+      }
+    });
+
+    return { staticEntries: staticList, dynamicEntries: dynamicList };
+  }, [filteredEntries]);
 
   return (
     <Box flexDirection="column">
-      {filteredEntries.slice(-20).map((entry, index) => (
+      {/* Static component renders items once and never re-renders them */}
+      {/* This prevents flickering for completed messages */}
+      <Static items={staticEntries}>
+        {(entry) => (
+          <MemoizedChatEntry
+            key={entry.uniqueKey}
+            entry={entry}
+            index={0}
+            colors={colors}
+            avatars={avatars}
+          />
+        )}
+      </Static>
+
+      {/* Dynamic entries (streaming) are rendered normally and can update */}
+      {dynamicEntries.map((entry, index) => (
         <MemoizedChatEntry
-          key={`${entry.timestamp.getTime()}-${index}`}
+          key={entry.uniqueKey}
           entry={entry}
           index={index}
           colors={colors}

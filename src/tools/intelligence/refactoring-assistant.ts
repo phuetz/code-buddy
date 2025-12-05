@@ -11,7 +11,6 @@
  */
 
 import * as fs from "fs";
-import * as path from "path";
 import {
   RefactoringType,
   RefactoringRequest,
@@ -208,11 +207,11 @@ export class RefactoringAssistant {
 
       // Build function signature
       const params = usedVariables.map((v) => v.name).join(", ");
-      const returnType = returnVariables.length > 0
+      const _returnType = returnVariables.length > 0
         ? returnVariables.length === 1
           ? returnVariables[0].name
           : `{ ${returnVariables.map((v) => v.name).join(", ")} }`
-        : "void";
+        : "void"; // Reserved for explicit return type annotation
 
       // Build function body
       let functionBody = selectedCode;
@@ -558,7 +557,7 @@ export class RefactoringAssistant {
   /**
    * Inline a variable
    */
-  private async inlineVariable(request: RefactoringRequest): Promise<RefactoringResult> {
+  private async inlineVariable(_request: RefactoringRequest): Promise<RefactoringResult> {
     // Similar to inlineFunction but for variables
     return this.errorResult("inlineVariable", "Not yet implemented");
   }

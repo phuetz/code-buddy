@@ -1,7 +1,7 @@
 /**
  * Tests for Security Mode Manager
  */
-import { SecurityModeManager, getSecurityModeManager, resetSecurityModeManager } from '../src/security/security-modes';
+import { SecurityModeManager, resetSecurityModeManager } from '../src/security/security-modes';
 
 describe('SecurityModeManager', () => {
   let manager: SecurityModeManager;

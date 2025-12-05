@@ -153,6 +153,7 @@ export class EnhancedMemory extends EventEmitter {
   private summaries: ConversationSummary[] = [];
   private userProfile: UserProfile | null = null;
   private currentProjectId: string | null = null;
+  private decayIntervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: Partial<MemoryConfig> = {}) {
     super();
@@ -175,7 +176,7 @@ export class EnhancedMemory extends EventEmitter {
     await this.loadSummaries();
 
     // Start decay timer
-    setInterval(() => this.applyDecay(), 3600000); // Every hour
+    this.decayIntervalId = setInterval(() => this.applyDecay(), 3600000); // Every hour
   }
 
   /**
@@ -888,7 +889,15 @@ export class EnhancedMemory extends EventEmitter {
    * Dispose
    */
   dispose(): void {
+    // Clear decay interval timer
+    if (this.decayIntervalId) {
+      clearInterval(this.decayIntervalId);
+      this.decayIntervalId = null;
+    }
     this.saveAll();
+    this.memories.clear();
+    this.projects.clear();
+    this.summaries = [];
     this.removeAllListeners();
   }
 }

@@ -290,7 +290,7 @@ export class TeamSessionManager extends EventEmitter {
   /**
    * Join an existing session
    */
-  async joinSession(sessionId: string, shareCode?: string): Promise<SharedSession | null> {
+  async joinSession(sessionId: string, _shareCode?: string): Promise<SharedSession | null> {
     if (!this.currentMember) {
       throw new Error('Member profile not initialized');
     }

@@ -3,6 +3,25 @@ import { Box, Text } from "ink";
 import { formatTokenCount } from "../../utils/token-counter.js";
 import { useTheme } from "../context/theme-context.js";
 
+// Constants moved outside component to avoid recreation on each render
+const SPINNER_FRAMES = ["/", "-", "\\", "|"] as const;
+const LOADING_TEXTS = [
+  "Thinking...",
+  "Computing...",
+  "Analyzing...",
+  "Processing...",
+  "Calculating...",
+  "Interfacing...",
+  "Optimizing...",
+  "Synthesizing...",
+  "Decrypting...",
+  "Calibrating...",
+  "Bootstrapping...",
+  "Synchronizing...",
+  "Compiling...",
+  "Downloading...",
+] as const;
+
 interface LoadingSpinnerProps {
   isActive: boolean;
   processingTime: number;
@@ -22,9 +41,8 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
   useEffect(() => {
     if (!isActive) return;
 
-    const spinnerFrames = ["/", "-", "\\", "|"];
     const interval = setInterval(() => {
-      setSpinnerFrame((prev) => (prev + 1) % spinnerFrames.length);
+      setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length);
     }, 500);
 
     return () => clearInterval(interval);
@@ -33,10 +51,10 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
   useEffect(() => {
     if (!isActive) return;
 
-    setLoadingTextIndex(Math.floor(Math.random() * loadingTextsArray.length));
+    setLoadingTextIndex(Math.floor(Math.random() * LOADING_TEXTS.length));
 
     const interval = setInterval(() => {
-      setLoadingTextIndex(Math.floor(Math.random() * loadingTextsArray.length));
+      setLoadingTextIndex(Math.floor(Math.random() * LOADING_TEXTS.length));
     }, 4000);
 
     return () => clearInterval(interval);
@@ -44,12 +62,10 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
 
   if (!isActive) return null;
 
-  const spinnerFrames = ["/", "-", "\\", "|"];
-
   return (
     <Box marginTop={1}>
       <Text color={colors.spinner}>
-        {spinnerFrames[spinnerFrame]} {loadingTextsArray[loadingTextIndex]}{" "}
+        {SPINNER_FRAMES[spinnerFrame]} {LOADING_TEXTS[loadingTextIndex]}{" "}
       </Text>
       <Text color={colors.textMuted}>
         ({processingTime}s · ↑ {formatTokenCount(tokenCount)} tokens · esc to
@@ -59,6 +75,7 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
   );
 });
 
+// Keep for backwards compatibility (if used elsewhere)
 const loadingTextsArray = [
   "Thinking...",
   "Computing...",

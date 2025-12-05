@@ -214,7 +214,7 @@ export class SkillManager extends EventEmitter {
           }
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors loading custom skills
     }
   }
@@ -275,7 +275,7 @@ export class SkillManager extends EventEmitter {
       }
 
       return config as Skill;
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }

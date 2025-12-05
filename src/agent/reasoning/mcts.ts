@@ -313,7 +313,7 @@ export class MCTS {
   /**
    * Rethink mechanism - refine erroneous thoughts
    */
-  private async rethink(node: ThoughtNode, problem: Problem): Promise<void> {
+  private async rethink(node: ThoughtNode, _problem: Problem): Promise<void> {
     // Find nodes that failed execution or have low scores
     const nodesToRethink = this.findNodesNeedingRethink(node);
 

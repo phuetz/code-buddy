@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text } from "ink";
 import { GrokAgent, ChatEntry } from "../../agent/grok-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
@@ -14,7 +14,7 @@ import {
   ConfirmationOptions,
 } from "../../utils/confirmation-service.js";
 import ApiKeyInput from "./api-key-input.js";
-import cfonts from "cfonts";
+import { renderColorBanner } from "../../utils/ascii-banner.js";
 import { ThemeProvider, useTheme } from "../context/theme-context.js";
 
 interface ChatInterfaceProps {
@@ -42,6 +42,49 @@ function ChatInterfaceWithAgent({
   const processingStartTime = useRef<number>(0);
 
   const confirmationService = ConfirmationService.getInstance();
+
+  // Optimized update functions to avoid O(n²) array spreading on each streaming chunk
+  // These use indexed updates instead of mapping the entire array
+  const appendStreamingContent = useCallback((content: string) => {
+    setChatHistory((prev) => {
+      const lastIndex = prev.length - 1;
+      const lastEntry = prev[lastIndex];
+      if (lastEntry?.isStreaming) {
+        // Create new array with only the last element changed
+        const updated = [...prev];
+        updated[lastIndex] = { ...lastEntry, content: lastEntry.content + content };
+        return updated;
+      }
+      return prev;
+    });
+  }, []);
+
+  const finalizeStreamingEntry = useCallback((updates?: Partial<ChatEntry>) => {
+    setChatHistory((prev) => {
+      const lastIndex = prev.length - 1;
+      const lastEntry = prev[lastIndex];
+      if (lastEntry?.isStreaming) {
+        const updated = [...prev];
+        updated[lastIndex] = { ...lastEntry, isStreaming: false, ...updates };
+        return updated;
+      }
+      return prev;
+    });
+  }, []);
+
+  const updateToolCallEntry = useCallback((toolCallId: string, updates: Partial<ChatEntry>) => {
+    setChatHistory((prev) => {
+      const index = prev.findIndex(
+        (entry) => entry.type === "tool_call" && entry.toolCall?.id === toolCallId
+      );
+      if (index !== -1) {
+        const updated = [...prev];
+        updated[index] = { ...prev[index], ...updates };
+        return updated;
+      }
+      return prev;
+    });
+  }, []);
 
   const {
     input,
@@ -82,21 +125,11 @@ function ChatInterfaceWithAgent({
     // Add top padding
     console.log("    ");
 
-    // Generate logo with margin to match Ink paddingX={2}
-    const logoOutput = cfonts.render("GROK", {
-      font: "3d",
-      align: "left",
-      colors: ["magenta", "gray"],
-      space: true,
-      maxLength: "0",
-      gradient: ["magenta", "cyan"],
-      independentGradient: false,
-      transitionGradient: true,
-      env: "node",
-    });
+    // Generate logo with MIT-licensed ascii-banner (replaces GPL cfonts)
+    const logoOutput = renderColorBanner("GROK", ["magenta", "cyan"]);
 
     // Add horizontal margin (2 spaces) to match Ink paddingX={2}
-    const logoLines = (logoOutput as any).string.split("\n");
+    const logoLines = logoOutput.split("\n");
     logoLines.forEach((line: string) => {
       if (line.trim()) {
         console.log(" " + line); // Add 2 spaces for horizontal margin
@@ -131,6 +164,7 @@ function ChatInterfaceWithAgent({
               case "content":
                 if (chunk.content) {
                   if (!streamingEntry) {
+                    // First chunk - add new streaming entry
                     const newStreamingEntry = {
                       type: "assistant" as const,
                       content: chunk.content,
@@ -140,13 +174,8 @@ function ChatInterfaceWithAgent({
                     setChatHistory((prev) => [...prev, newStreamingEntry]);
                     streamingEntry = newStreamingEntry;
                   } else {
-                    setChatHistory((prev) =>
-                      prev.map((entry, idx) =>
-                        idx === prev.length - 1 && entry.isStreaming
-                          ? { ...entry, content: entry.content + chunk.content }
-                          : entry
-                      )
-                    );
+                    // Subsequent chunks - use optimized append (avoids O(n²) mapping)
+                    appendStreamingContent(chunk.content);
                   }
                 }
                 break;
@@ -157,65 +186,39 @@ function ChatInterfaceWithAgent({
                 break;
               case "tool_calls":
                 if (chunk.toolCalls) {
-                  // Stop streaming for the current assistant message
-                  setChatHistory((prev) =>
-                    prev.map((entry) =>
-                      entry.isStreaming
-                        ? {
-                            ...entry,
-                            isStreaming: false,
-                            toolCalls: chunk.toolCalls,
-                          }
-                        : entry
-                    )
-                  );
+                  // Finalize streaming entry with tool calls
+                  finalizeStreamingEntry({ toolCalls: chunk.toolCalls });
                   streamingEntry = null;
 
                   // Add individual tool call entries to show tools are being executed
-                  chunk.toolCalls.forEach((toolCall) => {
-                    const toolCallEntry: ChatEntry = {
-                      type: "tool_call",
-                      content: "Executing...",
-                      timestamp: new Date(),
-                      toolCall: toolCall,
-                    };
-                    setChatHistory((prev) => [...prev, toolCallEntry]);
-                  });
+                  const toolCallEntries = chunk.toolCalls.map((toolCall) => ({
+                    type: "tool_call" as const,
+                    content: "Executing...",
+                    timestamp: new Date(),
+                    toolCall: toolCall,
+                  }));
+                  setChatHistory((prev) => [...prev, ...toolCallEntries]);
                 }
                 break;
               case "tool_result":
                 if (chunk.toolCall && chunk.toolResult) {
-                  setChatHistory((prev) =>
-                    prev.map((entry) => {
-                      if (entry.isStreaming) {
-                        return { ...entry, isStreaming: false };
-                      }
-                      if (
-                        entry.type === "tool_call" &&
-                        entry.toolCall?.id === chunk.toolCall?.id
-                      ) {
-                        return {
-                          ...entry,
-                          type: "tool_result",
-                          content: chunk.toolResult?.success
-                            ? chunk.toolResult?.output || "Success"
-                            : chunk.toolResult?.error || "Error occurred",
-                          toolResult: chunk.toolResult,
-                        };
-                      }
-                      return entry;
-                    })
-                  );
+                  // Finalize any streaming entry
+                  finalizeStreamingEntry();
+
+                  // Update the specific tool call entry using optimized update
+                  updateToolCallEntry(chunk.toolCall.id, {
+                    type: "tool_result",
+                    content: chunk.toolResult?.success
+                      ? chunk.toolResult?.output || "Success"
+                      : chunk.toolResult?.error || "Error occurred",
+                    toolResult: chunk.toolResult,
+                  });
                   streamingEntry = null;
                 }
                 break;
               case "done":
                 if (streamingEntry) {
-                  setChatHistory((prev) =>
-                    prev.map((entry) =>
-                      entry.isStreaming ? { ...entry, isStreaming: false } : entry
-                    )
-                  );
+                  finalizeStreamingEntry();
                 }
                 setIsStreaming(false);
                 break;

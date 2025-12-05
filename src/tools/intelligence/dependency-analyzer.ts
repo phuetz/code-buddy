@@ -15,8 +15,6 @@ import {
   DependencyEdge,
   CircularDependency,
   DependencyStats,
-  DependencyInfo,
-  ImportInfo,
 } from "./types.js";
 import { ASTParser, getASTParser } from "./ast-parser.js";
 
@@ -203,7 +201,7 @@ export class DependencyAnalyzer {
       for (const exp of result.exports) {
         node.exports.push(exp.name);
       }
-    } catch (error) {
+    } catch (_error) {
       // Skip files that can't be parsed
     }
   }
@@ -214,7 +212,7 @@ export class DependencyAnalyzer {
   private resolveImport(
     source: string,
     fromFile: string,
-    rootPath: string
+    _rootPath: string
   ): string | null {
     // Skip external packages
     if (!source.startsWith(".") && !source.startsWith("/")) {

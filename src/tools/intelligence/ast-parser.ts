@@ -11,9 +11,7 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   SupportedLanguage,
-  SymbolType,
   SymbolVisibility,
-  SymbolScope,
   CodeSymbol,
   ImportInfo,
   ImportSpecifier,
@@ -21,7 +19,6 @@ import {
   ASTParseResult,
   ParseError,
   SourceRange,
-  SourcePosition,
   ParameterInfo,
 } from "./types.js";
 

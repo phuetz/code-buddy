@@ -127,7 +127,7 @@ export class CommentWatcher extends EventEmitter {
           }
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore read errors
     }
 
@@ -185,7 +185,7 @@ export class CommentWatcher extends EventEmitter {
           }
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // Fallback to manual scan
       await this.manualScan();
     }
@@ -300,7 +300,7 @@ export class CommentWatcher extends EventEmitter {
 
         return true;
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors
     }
 

@@ -108,7 +108,7 @@ export class ModelRouter extends EventEmitter {
       try {
         const saved = fs.readJsonSync(this.configPath);
         return { ...DEFAULT_ROUTER_CONFIG, ...saved };
-      } catch (error) {
+      } catch (_error) {
         // Use defaults
       }
     }
@@ -120,7 +120,7 @@ export class ModelRouter extends EventEmitter {
       const dir = path.dirname(this.configPath);
       fs.ensureDirSync(dir);
       fs.writeJsonSync(this.configPath, this.config, { spaces: 2 });
-    } catch (error) {
+    } catch (_error) {
       // Ignore save errors
     }
   }

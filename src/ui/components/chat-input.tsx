@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Box, Text } from "ink";
 import { useTheme } from "../context/theme-context.js";
 
@@ -17,25 +17,31 @@ export const ChatInput = React.memo(function ChatInput({
   isStreaming,
 }: ChatInputProps) {
   const { colors } = useTheme();
-  const beforeCursor = input.slice(0, cursorPosition);
 
-  // Handle multiline input display
-  const lines = input.split("\n");
-  const isMultiline = lines.length > 1;
+  // Memoize cursor calculations to avoid recomputing on every render
+  const cursorData = useMemo(() => {
+    const lines = input.split("\n");
+    const isMultiline = lines.length > 1;
+    const beforeCursor = input.slice(0, cursorPosition);
 
-  // Calculate cursor position across lines
-  let currentLineIndex = 0;
-  let currentCharIndex = 0;
-  let totalChars = 0;
+    // Calculate cursor position across lines
+    let currentLineIndex = 0;
+    let currentCharIndex = 0;
+    let totalChars = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    if (totalChars + lines[i].length >= cursorPosition) {
-      currentLineIndex = i;
-      currentCharIndex = cursorPosition - totalChars;
-      break;
+    for (let i = 0; i < lines.length; i++) {
+      if (totalChars + lines[i].length >= cursorPosition) {
+        currentLineIndex = i;
+        currentCharIndex = cursorPosition - totalChars;
+        break;
+      }
+      totalChars += lines[i].length + 1; // +1 for newline
     }
-    totalChars += lines[i].length + 1; // +1 for newline
-  }
+
+    return { lines, isMultiline, beforeCursor, currentLineIndex, currentCharIndex };
+  }, [input, cursorPosition]);
+
+  const { lines, isMultiline, beforeCursor, currentLineIndex, currentCharIndex } = cursorData;
 
   const showCursor = !isProcessing && !isStreaming;
   const borderColor = isProcessing || isStreaming ? colors.borderBusy : colors.borderActive;

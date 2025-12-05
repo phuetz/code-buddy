@@ -15,7 +15,6 @@
 import { EventEmitter } from "events";
 import {
   CodeElement,
-  CodeElementType,
   CodeRelationship,
   RelationshipType,
   SemanticCluster,
@@ -116,7 +115,7 @@ export class SemanticMapBuilder extends EventEmitter {
   async build(rootPath: string): Promise<SemanticMap> {
     this.emit("map:start", { config: this.config });
 
-    const startTime = Date.now();
+    const _startTime = Date.now(); // Reserved for performance metrics
 
     // Initialize map
     this.map = {
@@ -178,7 +177,7 @@ export class SemanticMapBuilder extends EventEmitter {
   /**
    * Discover all relevant files
    */
-  private async discoverFiles(rootPath: string): Promise<string[]> {
+  private async discoverFiles(_rootPath: string): Promise<string[]> {
     if (!this.fileLister) {
       return [];
     }
@@ -915,7 +914,7 @@ export class SemanticMapBuilder extends EventEmitter {
     return "public";
   }
 
-  private inferClusterCategory(dir: string, elements: CodeElement[]): ClusterCategory {
+  private inferClusterCategory(dir: string, _elements: CodeElement[]): ClusterCategory {
     const lowerDir = dir.toLowerCase();
 
     if (lowerDir.includes("test") || lowerDir.includes("spec")) return "testing";
@@ -1047,6 +1046,20 @@ export class SemanticMapBuilder extends EventEmitter {
   }
 
   /**
+   * Dispose and clean up resources
+   */
+  dispose(): void {
+    if (this.map) {
+      this.map.elements.clear();
+      this.map.relationships.clear();
+      this.map.clusters.clear();
+      this.map.concepts.clear();
+      this.map = null;
+    }
+    this.removeAllListeners();
+  }
+
+  /**
    * Format map for display
    */
   formatMap(): string {
@@ -1129,5 +1142,8 @@ export function getSemanticMapBuilder(): SemanticMapBuilder {
 }
 
 export function resetSemanticMapBuilder(): void {
+  if (semanticMapBuilderInstance) {
+    semanticMapBuilderInstance.dispose();
+  }
   semanticMapBuilderInstance = null;
 }

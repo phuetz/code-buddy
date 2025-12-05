@@ -15,7 +15,7 @@ import {
   AVATAR_PRESETS,
   DEFAULT_AVATARS,
 } from './theme.js';
-import { BUILTIN_THEMES, DEFAULT_THEME, getBuiltinTheme } from './default-themes.js';
+import { BUILTIN_THEMES, DEFAULT_THEME } from './default-themes.js';
 
 /**
  * Singleton manager for themes and avatars
@@ -95,12 +95,12 @@ export class ThemeManager {
               theme.isBuiltin = false;
               this.themes.set(theme.id, theme);
             }
-          } catch (error) {
+          } catch (_error) {
             console.warn(`Failed to load theme from ${file}`);
           }
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently ignore if themes directory doesn't exist
     }
   }
@@ -131,7 +131,7 @@ export class ThemeManager {
       if (preferences.customColors) {
         this.customColors = preferences.customColors;
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently ignore, use defaults
     }
   }
@@ -150,7 +150,7 @@ export class ThemeManager {
       };
 
       fs.writeFileSync(this.preferencesPath, JSON.stringify(preferences, null, 2));
-    } catch (error) {
+    } catch (_error) {
       console.warn('Failed to save theme preferences');
     }
   }
@@ -313,7 +313,7 @@ export class ThemeManager {
       this.ensureDirectoryExists(this.themesDir);
       const filePath = path.join(this.themesDir, `${theme.id}.json`);
       fs.writeFileSync(filePath, JSON.stringify(theme, null, 2));
-    } catch (error) {
+    } catch (_error) {
       console.warn(`Failed to save custom theme: ${theme.id}`);
     }
   }
@@ -341,7 +341,7 @@ export class ThemeManager {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-    } catch (error) {
+    } catch (_error) {
       console.warn(`Failed to delete theme file: ${themeId}`);
     }
 
@@ -398,7 +398,7 @@ export class ThemeManager {
       this.themes.set(theme.id, theme);
       this.saveCustomTheme(theme);
       return theme;
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }

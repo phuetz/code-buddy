@@ -211,7 +211,7 @@ export class SecurityModeManager extends EventEmitter {
             ];
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // Use defaults if config can't be loaded
       }
     }

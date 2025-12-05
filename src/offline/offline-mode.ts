@@ -18,7 +18,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import axios from 'axios';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 
 export interface OfflineConfig {
   enabled: boolean;

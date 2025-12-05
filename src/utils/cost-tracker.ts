@@ -79,7 +79,7 @@ export class CostTracker extends EventEmitter {
         const saved = fs.readJsonSync(this.configPath);
         this.config = { ...this.config, ...saved };
       }
-    } catch (error) {
+    } catch (_error) {
       // Use defaults
     }
   }
@@ -89,7 +89,7 @@ export class CostTracker extends EventEmitter {
       const dir = path.dirname(this.configPath);
       fs.ensureDirSync(dir);
       fs.writeJsonSync(this.configPath, this.config, { spaces: 2 });
-    } catch (error) {
+    } catch (_error) {
       // Ignore
     }
   }
@@ -110,7 +110,7 @@ export class CostTracker extends EventEmitter {
         cutoff.setDate(cutoff.getDate() - this.config.historyDays);
         this.history = this.history.filter((u) => u.timestamp >= cutoff);
       }
-    } catch (error) {
+    } catch (_error) {
       this.history = [];
     }
   }
@@ -122,7 +122,7 @@ export class CostTracker extends EventEmitter {
       const dir = path.dirname(this.historyPath);
       fs.ensureDirSync(dir);
       fs.writeJsonSync(this.historyPath, this.history, { spaces: 2 });
-    } catch (error) {
+    } catch (_error) {
       // Ignore
     }
   }
@@ -359,6 +359,14 @@ export class CostTracker extends EventEmitter {
     const empty = width - filled;
     const color = percentage >= 100 ? "🔴" : percentage >= 80 ? "🟡" : "🟢";
     return `${color} [${"█".repeat(filled)}${"░".repeat(empty)}]`;
+  }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    this.sessionUsage = [];
+    this.removeAllListeners();
   }
 }
 

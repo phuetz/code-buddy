@@ -17,7 +17,6 @@ import {
   CodeChunk,
   ScoredChunk,
   RetrievalResult,
-  QueryContext,
   QueryIntent,
   QueryFilters,
   CRAGEvaluation,
@@ -29,7 +28,7 @@ import {
   VectorStore,
 } from "./types.js";
 import { CodeChunker, createChunker, detectLanguage } from "./chunker.js";
-import { createEmbeddingProvider, cosineSimilarity } from "./embeddings.js";
+import { createEmbeddingProvider } from "./embeddings.js";
 import { createVectorStore, InMemoryVectorStore } from "./vector-store.js";
 
 /**
@@ -224,8 +223,8 @@ export class CodebaseRAG extends EventEmitter {
     const minScore = options.minScore || this.config.minScore;
     const strategy = options.strategy || this.config.strategy;
 
-    // Classify query intent
-    const intent = this.classifyQueryIntent(query);
+    // Classify query intent (reserved for future intent-based filtering)
+    const _intent = this.classifyQueryIntent(query);
 
     // Build filter from options
     const filter = this.buildFilter(options.filters);
@@ -894,6 +893,9 @@ export class CodebaseRAG extends EventEmitter {
     if (this.vectorStore instanceof InMemoryVectorStore) {
       await this.vectorStore.dispose();
     }
+    this.chunkStore.clear();
+    this.fileIndex.clear();
+    this.removeAllListeners();
   }
 }
 

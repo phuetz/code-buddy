@@ -59,7 +59,7 @@ export function loadMCPConfig(): MCPConfig {
           seenServers.add(name);
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently ignore user config errors
     }
   }

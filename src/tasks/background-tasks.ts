@@ -86,11 +86,11 @@ export class BackgroundTaskManager extends EventEmitter {
           }
 
           this.tasks.set(task.id, task);
-        } catch (error) {
+        } catch (_error) {
           // Skip invalid task files
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // Directory doesn't exist or can't be read
     }
   }
@@ -473,6 +473,8 @@ export class BackgroundTaskManager extends EventEmitter {
     for (const [taskId] of this.runningProcesses) {
       this.cancelTask(taskId);
     }
+    this.tasks.clear();
+    this.removeAllListeners();
   }
 }
 

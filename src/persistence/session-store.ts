@@ -98,7 +98,7 @@ export class SessionStore {
         createdAt: new Date(data.createdAt),
         lastAccessedAt: new Date(data.lastAccessedAt)
       };
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }

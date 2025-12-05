@@ -3,7 +3,7 @@
  * Provides theme and avatar information to all UI components
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { Theme, ThemeColors, AvatarConfig, AvatarPreset } from '../../themes/theme.js';
 import { getThemeManager, ThemeManager } from '../../themes/theme-manager.js';
 
@@ -110,7 +110,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     refreshTheme();
   }, [themeManager, refreshTheme]);
 
-  const contextValue: ThemeContextValue = {
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  // refreshKey is included to trigger updates when theme changes
+  const contextValue = useMemo<ThemeContextValue>(() => ({
     theme,
     colors,
     avatars,
@@ -123,10 +125,17 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     setCustomColor,
     clearCustomColors,
     refreshTheme,
-  };
+  }), [
+    theme, colors, avatars, refreshKey,
+    setTheme, getAvailableThemes, setAvatarPreset,
+    setCustomAvatar, clearCustomAvatars, getAvatarPresets,
+    setCustomColor, clearCustomColors, refreshTheme
+  ]);
 
+  // Note: Removed key={refreshKey} antipattern - it caused entire tree to unmount/remount
+  // The useMemo with refreshKey dependency properly triggers re-renders without destroying state
   return (
-    <ThemeContext.Provider value={contextValue} key={refreshKey}>
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );

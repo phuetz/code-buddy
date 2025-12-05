@@ -91,7 +91,7 @@ function loadCommandsFromDirectory(dir: string, source: 'project' | 'user'): Cus
         console.error(`Failed to load command ${file}:`, error);
       }
     }
-  } catch (error) {
+  } catch (_error) {
     // Directory reading failed
   }
 
@@ -172,7 +172,7 @@ export function ensureCommandDirectories(): void {
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
     }
-  } catch (error) {
+  } catch (_error) {
     // Silently ignore errors
   }
 }

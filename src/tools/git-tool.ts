@@ -4,6 +4,13 @@ import { ToolResult } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 
 /**
+ * Extract error message from unknown error type
+ */
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
  * Execute a command safely using spawn with array arguments
  * This prevents command injection attacks
  */
@@ -59,8 +66,8 @@ export class GitTool {
   private async execGit(args: string[]): Promise<{ stdout: string; stderr: string }> {
     try {
       return await execGitSafe(args, this.cwd);
-    } catch (error: any) {
-      throw new Error(error.message);
+    } catch (error: unknown) {
+      throw new Error(getErrorMessage(error));
     }
   }
 
@@ -141,10 +148,10 @@ export class GitTool {
         success: true,
         output: `Staged: ${files === "all" ? "all changes" : files.join(", ")}`,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -178,10 +185,10 @@ export class GitTool {
         success: true,
         output: stdout.trim(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -195,14 +202,14 @@ export class GitTool {
         success: true,
         output: stdout.trim() || stderr.trim() || "Push successful",
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check if we need to set upstream
-      if (error.message.includes("no upstream branch")) {
+      if (getErrorMessage(error).includes("no upstream branch")) {
         return this.push(true);
       }
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -214,10 +221,10 @@ export class GitTool {
         success: true,
         output: stdout.trim() || "Already up to date",
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -344,10 +351,10 @@ export class GitTool {
         success: true,
         output: stdout.trim() || "Stashed changes",
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -359,10 +366,10 @@ export class GitTool {
         success: true,
         output: stdout.trim(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -376,10 +383,10 @@ export class GitTool {
         success: true,
         output: stdout.trim() || `Switched to ${branchOrFile}`,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -397,10 +404,10 @@ export class GitTool {
         const { stdout } = await this.execGit(['branch', '-a']);
         return { success: true, output: stdout.trim() };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
