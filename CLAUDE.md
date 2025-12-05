@@ -52,6 +52,7 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
 - **src/agent/** - Core agent logic, multi-agent system, reasoning (Tree-of-Thought/MCTS), auto-repair engine
   - **src/agent/repair/** - Iterative repair engine with test feedback loop (ChatRepair-inspired)
   - **src/agent/multi-agent/** - Multi-agent coordination with adaptive task allocation
+  - **src/agent/specialized/** - Specialized agents for PDF, Excel, SQL, archives, data analysis
   - **src/agent/thinking-keywords.ts** - Extended thinking triggers (think/megathink/ultrathink)
 - **src/tools/** - Tool implementations (file ops, bash, search, multi-edit) and code intelligence suite
   - **src/tools/enhanced-search.ts** - High-performance search with bundled ripgrep, symbol search, LRU caching
@@ -63,8 +64,18 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
   - **src/context/context-compressor.ts** - Intelligent context compression (JetBrains research)
   - **src/context/dependency-aware-rag.ts** - RAG with dependency graph integration (CodeRAG)
   - **src/context/observation-masking.ts** - Tool output masking for irrelevant results
+- **src/renderers/** - Specialized output renderers for structured data display
+  - **src/renderers/render-manager.ts** - Central render orchestration with type detection
+  - **src/renderers/specialized/** - Test results, weather, code structure renderers
+- **src/performance/** - Performance optimization module
+  - **src/performance/performance-manager.ts** - Central performance orchestrator
+  - **src/performance/lazy-loader.ts** - Lazy loading for heavy modules
+  - **src/performance/tool-cache.ts** - Semantic caching for tool calls
+  - **src/performance/request-optimizer.ts** - Request batching and deduplication
 - **src/security/** - Security and permission systems
+  - **src/security/index.ts** - Unified security manager
   - **src/security/approval-modes.ts** - Three-tier approval system (read-only/auto/full-access)
+  - **src/security/data-redaction.ts** - Automatic sensitive data masking
 - **src/mcp/** - Model Context Protocol integration
 - **src/hooks/** - Event hooks system (PreToolUse, PostToolUse, etc.)
 - **src/memory/** - Persistent memory system
@@ -95,6 +106,10 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
 - `ApprovalModeManager` (src/security/approval-modes.ts) - Three-tier permission system (read-only/auto/full-access)
 - `SemanticCache` (src/utils/semantic-cache.ts) - API response caching with cosine similarity matching
 - `ErrorBoundary` (src/ui/components/error-boundary.tsx) - React error boundaries for UI crash resilience
+- `RenderManager` (src/renderers/render-manager.ts) - Orchestrates specialized output renderers
+- `PerformanceManager` (src/performance/performance-manager.ts) - Central performance optimization
+- `SecurityManager` (src/security/index.ts) - Unified security layer with approval, sandbox, redaction
+- `AgentRegistry` (src/agent/specialized/agent-registry.ts) - Registry for specialized file processing agents
 
 ### Research-Based Improvements
 
@@ -110,6 +125,27 @@ Based on recent scientific publications in AI-assisted software development:
 | Semantic Caching | API optimization research | 68% API call reduction |
 | Thinking Keywords | Claude Code patterns | Variable token budgets (4K/10K/32K) |
 | Approval Modes | Codex CLI security model | Three-tier permission system |
+| Specialized Renderers | Output formatting | Structured display for test/weather/code |
+| Lazy Loading | Performance optimization | On-demand heavy module loading |
+| Request Batching | API optimization | Deduplication and retry logic |
+
+### Slash Commands
+
+Key interactive commands available during sessions:
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/model [name]` | Switch AI model |
+| `/mode <plan\|code\|ask>` | Change agent mode |
+| `/stats [action]` | Performance statistics (summary/cache/requests/reset) |
+| `/security [action]` | Security dashboard (status/mode/events/reset) |
+| `/cost [action]` | Cost tracking (status/budget/daily/export/reset) |
+| `/commit` | Generate and create git commit |
+| `/review` | Code review of current changes |
+| `/test` | Run and analyze tests |
+| `/explain [file]` | Explain code |
+| `/clear` | Clear chat history |
 
 ### Configuration Files
 
@@ -119,6 +155,7 @@ Based on recent scientific publications in AI-assisted software development:
 - `.grok/mcp.json` - MCP server configuration
 - `.grok/approval-mode.json` - Current approval mode
 - `.grok/cache/semantic-cache.json` - Cached API responses
+- `.grok/cache/tool-cache.json` - Cached tool results
 
 ## Coding Conventions
 

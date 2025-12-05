@@ -437,6 +437,49 @@ Implements intelligent tool selection based on [RAG-MCP research](https://arxiv.
 | **Codebase Explorer** | Project analysis, statistics, tree visualization |
 | **Git Integration** | Auto-commits, branch management, PR creation |
 | **Interactive Bash** | PTY support for interactive commands (vim, htop) |
+
+### Specialized Agents
+
+Auto-detect file types and process them with specialized agents:
+
+| Agent | Supported Files | Capabilities |
+|-------|-----------------|--------------|
+| **PDF Agent** | `.pdf` | Extract text, metadata, search, summarize |
+| **Excel Agent** | `.xlsx`, `.xls`, `.csv` | Read, filter, merge, convert, statistics |
+| **SQL Agent** | `.db`, `.sqlite` | Query, schema inspection, import/export |
+| **Archive Agent** | `.zip`, `.tar.gz` | List, extract, create, inspect |
+| **Data Analysis** | All data files | Aggregate, pivot, correlate, histogram |
+
+### Performance Optimization
+
+Built-in performance features for efficient operation:
+
+| Feature | Description | Impact |
+|---------|-------------|--------|
+| **Lazy Loading** | On-demand module loading | Faster startup |
+| **Tool Caching** | Semantic caching for tool results | Reduced redundant calls |
+| **Request Batching** | Deduplication and batching | Lower API costs |
+| **API Caching** | Semantic similarity matching | 68% API reduction |
+
+### Security Features
+
+Comprehensive security layer with multiple modes:
+
+| Mode | Description |
+|------|-------------|
+| **read-only** | Only read operations, no writes or commands |
+| **auto** | Auto-approve safe ops, confirm dangerous ones |
+| **full-access** | All operations auto-approved (trusted environments) |
+
+Additional security features:
+- **Data Redaction**: Automatic masking of API keys, passwords, tokens
+- **Sandbox Execution**: Isolated command execution with firejail
+- **Command Validation**: Detection of dangerous command patterns
+
+### More Tools
+
+| Tool | Description |
+|------|-------------|
 | **Sandboxed Terminal** | Secure command execution with namespace isolation |
 | **AI Code Review** | Automated bug detection, security analysis, performance issues |
 | **Parallel Executor** | Run 8+ agents in parallel with git worktree isolation |
