@@ -144,7 +144,9 @@ export class LazyLoader extends EventEmitter {
     if (this.config.preloadModules.length === 0) return;
 
     this.preloadTimeout = setTimeout(() => {
-      this.preload().catch(() => {});
+      this.preload().catch((err) => {
+        this.emit('preload:error', { error: err.message || String(err) });
+      });
     }, this.config.preloadDelay);
   }
 

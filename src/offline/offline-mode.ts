@@ -19,6 +19,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import axios from 'axios';
 import { ChildProcess } from 'child_process';
+import { LRUCache } from '../utils/lru-cache.js';
 
 export interface OfflineConfig {
   enabled: boolean;
@@ -93,12 +94,18 @@ const DEFAULT_CONFIG: OfflineConfig = {
 /**
  * Offline Mode Manager
  */
+// Cache size limits to prevent memory leaks
+const MAX_RESPONSE_CACHE_SIZE = 500;
+const MAX_EMBEDDING_CACHE_SIZE = 1000;
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export class OfflineMode extends EventEmitter {
   private config: OfflineConfig;
   private dataDir: string;
   private cacheDir: string;
-  private responseCache: Map<string, CachedResponse> = new Map();
-  private embeddingCache: Map<string, CachedEmbedding> = new Map();
+  // Use LRU cache with size limits to prevent memory leaks
+  private responseCache: LRUCache<CachedResponse>;
+  private embeddingCache: LRUCache<CachedEmbedding>;
   private requestQueue: QueuedRequest[] = [];
   private isOnline: boolean = true;
   private lastOnline: Date = new Date();
@@ -111,6 +118,24 @@ export class OfflineMode extends EventEmitter {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.dataDir = path.join(os.homedir(), '.grok', 'offline');
     this.cacheDir = path.join(this.dataDir, 'cache');
+
+    // Initialize LRU caches with size limits
+    this.responseCache = new LRUCache<CachedResponse>({
+      maxSize: MAX_RESPONSE_CACHE_SIZE,
+      ttlMs: CACHE_TTL_MS,
+      onEvict: (key, value) => {
+        this.emit('cache:evict', { type: 'response', key, query: value.query });
+      },
+    });
+
+    this.embeddingCache = new LRUCache<CachedEmbedding>({
+      maxSize: MAX_EMBEDDING_CACHE_SIZE,
+      ttlMs: CACHE_TTL_MS,
+      onEvict: (key) => {
+        this.emit('cache:evict', { type: 'embedding', key });
+      },
+    });
+
     this.stats = {
       cacheHits: 0,
       cacheMisses: 0,

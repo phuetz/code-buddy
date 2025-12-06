@@ -4,6 +4,7 @@ import { writeFile as writeFilePromise } from "fs/promises";
 import { ToolResult } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { getCheckpointManager } from "../checkpoints/checkpoint-manager.js";
+import { PathValidator } from "../utils/path-validator.js";
 
 export interface EditOperation {
   file_path: string;
@@ -26,6 +27,14 @@ export interface MultiEditResult {
 export class MultiEditTool {
   private confirmationService = ConfirmationService.getInstance();
   private checkpointManager = getCheckpointManager();
+  private pathValidator = new PathValidator();
+
+  /**
+   * Set the base directory for path validation
+   */
+  setBaseDirectory(dir: string): void {
+    this.pathValidator.setBaseDirectory(dir);
+  }
 
   async execute(edits: EditOperation[]): Promise<ToolResult> {
     if (!edits || edits.length === 0) {
@@ -35,11 +44,18 @@ export class MultiEditTool {
       };
     }
 
-    // Validate all files exist before making any changes
+    // Validate all files: path security AND existence
     const validationErrors: string[] = [];
     for (const edit of edits) {
-      const resolvedPath = path.resolve(edit.file_path);
-      if (!(await fs.pathExists(resolvedPath))) {
+      // Security check: prevent path traversal
+      const pathResult = this.pathValidator.validate(edit.file_path);
+      if (!pathResult.valid) {
+        validationErrors.push(pathResult.error || `Invalid path: ${edit.file_path}`);
+        continue;
+      }
+
+      // Existence check
+      if (!(await fs.pathExists(pathResult.resolved))) {
         validationErrors.push(`File not found: ${edit.file_path}`);
       }
     }
@@ -117,7 +133,16 @@ export class MultiEditTool {
   }
 
   private async executeEdit(edit: EditOperation): Promise<{ success: boolean; output?: string; error?: string }> {
-    const resolvedPath = path.resolve(edit.file_path);
+    // Validate path before any file operation
+    const pathResult = this.pathValidator.validate(edit.file_path);
+    if (!pathResult.valid) {
+      return {
+        success: false,
+        error: pathResult.error || `Invalid path: ${edit.file_path}`,
+      };
+    }
+
+    const resolvedPath = pathResult.resolved;
     const content = await fs.readFile(resolvedPath, "utf-8");
 
     if (!content.includes(edit.old_str)) {

@@ -926,7 +926,11 @@ export class CollaborationClient extends EventEmitter {
 
     setTimeout(() => {
       this.emit('reconnecting', { attempt: this.reconnectAttempts });
-      this.connect(url).catch(() => {
+      this.connect(url).catch((err) => {
+        this.emit('reconnect:error', {
+          attempt: this.reconnectAttempts,
+          error: err.message || String(err)
+        });
         // Will retry on next close event
       });
     }, delay);

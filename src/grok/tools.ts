@@ -1149,8 +1149,11 @@ export function addMCPToolsToGrokTools(baseTools: GrokTool[]): GrokTool[] {
 export async function getAllGrokTools(): Promise<GrokTool[]> {
   const manager = getMCPManager();
   // Try to initialize servers if not already done, but don't block
-  manager.ensureServersInitialized().catch(() => {
-    // Ignore initialization errors to avoid blocking
+  manager.ensureServersInitialized().catch((err) => {
+    // Log but don't block - MCP servers are optional
+    if (process.env.DEBUG) {
+      console.error(`MCP initialization warning: ${err.message || String(err)}`);
+    }
   });
 
   const allTools = addMCPToolsToGrokTools(GROK_TOOLS);

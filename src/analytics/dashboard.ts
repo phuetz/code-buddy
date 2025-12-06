@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { LRUCache } from '../utils/lru-cache.js';
 
 export interface UsageMetrics {
   totalSessions: number;
@@ -120,23 +121,58 @@ const DEFAULT_CONFIG: DashboardConfig = {
   exportFormat: 'json',
 };
 
+// Cache size limits to prevent memory leaks
+const MAX_SESSIONS_CACHE = 100;
+const MAX_TOOLS_CACHE = 200;
+const MAX_DAILY_STATS_CACHE = 365; // 1 year of daily stats
+const MAX_EVENTS_SIZE = 10000;
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 /**
  * Analytics Dashboard
  */
 export class AnalyticsDashboard extends EventEmitter {
   private config: DashboardConfig;
   private dataDir: string;
-  private sessions: Map<string, SessionMetrics> = new Map();
-  private tools: Map<string, ToolMetrics> = new Map();
+  // Use LRU caches with size limits to prevent memory leaks
+  private sessions: LRUCache<SessionMetrics>;
+  private tools: LRUCache<ToolMetrics>;
   private events: AnalyticsEvent[] = [];
-  private dailyStats: Map<string, DailyStats> = new Map();
+  private dailyStats: LRUCache<DailyStats>;
   private currentSessionId: string | null = null;
 
   constructor(config: Partial<DashboardConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.dataDir = path.join(os.homedir(), '.grok', 'analytics');
+
+    // Initialize LRU caches with size limits
+    this.sessions = new LRUCache<SessionMetrics>({
+      maxSize: MAX_SESSIONS_CACHE,
+      ttlMs: CACHE_TTL_MS,
+    });
+
+    this.tools = new LRUCache<ToolMetrics>({
+      maxSize: MAX_TOOLS_CACHE,
+      ttlMs: CACHE_TTL_MS,
+    });
+
+    this.dailyStats = new LRUCache<DailyStats>({
+      maxSize: MAX_DAILY_STATS_CACHE,
+      ttlMs: CACHE_TTL_MS,
+    });
+
     this.initialize();
+  }
+
+  /**
+   * Trim events array to prevent unbounded growth
+   */
+  private trimEvents(): void {
+    if (this.events.length > MAX_EVENTS_SIZE) {
+      // Keep most recent events
+      this.events = this.events.slice(-MAX_EVENTS_SIZE);
+    }
   }
 
   /**
@@ -157,21 +193,21 @@ export class AnalyticsDashboard extends EventEmitter {
       const sessionsPath = path.join(this.dataDir, 'sessions.json');
       if (await fs.pathExists(sessionsPath)) {
         const data = await fs.readJSON(sessionsPath);
-        this.sessions = new Map(Object.entries(data));
+        this.sessions.fromObject(data);
       }
 
       // Load tools
       const toolsPath = path.join(this.dataDir, 'tools.json');
       if (await fs.pathExists(toolsPath)) {
         const data = await fs.readJSON(toolsPath);
-        this.tools = new Map(Object.entries(data));
+        this.tools.fromObject(data);
       }
 
       // Load daily stats
       const statsPath = path.join(this.dataDir, 'daily-stats.json');
       if (await fs.pathExists(statsPath)) {
         const data = await fs.readJSON(statsPath);
-        this.dailyStats = new Map(Object.entries(data));
+        this.dailyStats.fromObject(data);
       }
     } catch {
       // Start fresh if loading fails
@@ -185,19 +221,19 @@ export class AnalyticsDashboard extends EventEmitter {
     try {
       await fs.writeJSON(
         path.join(this.dataDir, 'sessions.json'),
-        Object.fromEntries(this.sessions),
+        this.sessions.toObject(),
         { spaces: 2 }
       );
 
       await fs.writeJSON(
         path.join(this.dataDir, 'tools.json'),
-        Object.fromEntries(this.tools),
+        this.tools.toObject(),
         { spaces: 2 }
       );
 
       await fs.writeJSON(
         path.join(this.dataDir, 'daily-stats.json'),
-        Object.fromEntries(this.dailyStats),
+        this.dailyStats.toObject(),
         { spaces: 2 }
       );
     } catch {

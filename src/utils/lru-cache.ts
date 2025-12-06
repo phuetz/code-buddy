@@ -191,6 +191,43 @@ export class LRUCache<V = unknown> extends EventEmitter {
   }
 
   /**
+   * Symbol.iterator for for...of loops and spread operator
+   */
+  *[Symbol.iterator](): Iterator<[string, V]> {
+    for (const [key, entry] of this.cache.entries()) {
+      if (!this.isExpired(entry)) {
+        yield [key, entry.value];
+      }
+    }
+  }
+
+  /**
+   * Convert to plain object (for JSON serialization)
+   */
+  toObject(): Record<string, V> {
+    const result: Record<string, V> = {};
+    for (const [key, value] of this) {
+      result[key] = value;
+    }
+    return result;
+  }
+
+  /**
+   * Load entries from an object or Map
+   */
+  fromObject(data: Record<string, V> | Map<string, V>): void {
+    if (data instanceof Map) {
+      for (const [key, value] of data) {
+        this.set(key, value);
+      }
+    } else {
+      for (const [key, value] of Object.entries(data)) {
+        this.set(key, value);
+      }
+    }
+  }
+
+  /**
    * Get cache statistics
    */
   getStats(): CacheStats {

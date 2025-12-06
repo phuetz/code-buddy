@@ -555,7 +555,10 @@ export class VoiceControl extends EventEmitter {
       this.emit('processing:stop');
 
       // Clean up audio file
-      await fs.remove(audioFile).catch(() => {});
+      await fs.remove(audioFile).catch((err) => {
+        // Log cleanup error but don't fail the operation
+        this.emit('warning', { type: 'cleanup', message: `Failed to remove audio file: ${err.message}` });
+      });
     }
   }
 

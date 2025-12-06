@@ -419,8 +419,11 @@ export class EnhancedSearch extends EventEmitter {
                 symbols.push(symbol);
               }
             }
-          }).catch(() => {
-            // Ignore search errors for individual patterns
+          }).catch((err) => {
+            // Log search errors for debugging but continue with other patterns
+            if (process.env.DEBUG) {
+              console.error(`Symbol search pattern error: ${err.message || String(err)}`);
+            }
           })
         );
       }
@@ -444,8 +447,11 @@ export class EnhancedSearch extends EventEmitter {
             }
           }
         }
-      }).catch(() => {
-        // Ignore search errors
+      }).catch((err) => {
+        // Log search errors for debugging but continue
+        if (process.env.DEBUG) {
+          console.error(`General symbol search error: ${err.message || String(err)}`);
+        }
       })
     );
 
