@@ -20,7 +20,11 @@ export type AgentCapability =
   | 'data-visualize'
   | 'sql-query'
   | 'archive-extract'
-  | 'archive-create';
+  | 'archive-create'
+  | 'code-analyze'
+  | 'code-review'
+  | 'code-refactor'
+  | 'code-security';
 
 export interface SpecializedAgentConfig {
   /** Unique agent identifier */

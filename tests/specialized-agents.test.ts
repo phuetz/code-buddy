@@ -102,7 +102,8 @@ describe('AgentRegistry', () => {
     });
 
     it('should return null for unsupported files', () => {
-      const result = registry.findAgentForFile('script.js');
+      // Use an extension not supported by any agent (including Code Guardian)
+      const result = registry.findAgentForFile('video.mp4');
       expect(result).toBeNull();
     });
   });
@@ -115,8 +116,15 @@ describe('AgentRegistry', () => {
     });
 
     it('should return null for unsupported via utility', () => {
-      const agent = findAgentForFile('code.ts');
+      // Use an extension not supported by any agent (including Code Guardian)
+      const agent = findAgentForFile('video.mp4');
       expect(agent).toBeNull();
+    });
+
+    it('should find Code Guardian for TypeScript files', () => {
+      const agent = findAgentForFile('code.ts');
+      expect(agent).toBeDefined();
+      expect(agent?.getId()).toBe('code-guardian');
     });
   });
 });

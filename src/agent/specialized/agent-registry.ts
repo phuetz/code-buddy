@@ -18,6 +18,7 @@ import { getExcelAgent } from './excel-agent.js';
 import { getDataAnalysisAgent } from './data-analysis-agent.js';
 import { getSQLAgent } from './sql-agent.js';
 import { getArchiveAgent } from './archive-agent.js';
+import { getCodeGuardianAgent } from './code-guardian-agent.js';
 
 // ============================================================================
 // Types
@@ -63,6 +64,7 @@ export class AgentRegistry extends EventEmitter {
       getDataAnalysisAgent(),
       getSQLAgent(),
       getArchiveAgent(),
+      getCodeGuardianAgent(),
     ];
 
     for (const agent of agents) {
