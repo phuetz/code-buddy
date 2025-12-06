@@ -23,6 +23,7 @@ import {
 } from "./types.js";
 import { ASTParser, getASTParser } from "./ast-parser.js";
 import { SymbolSearch, getSymbolSearch } from "./symbol-search.js";
+import { getErrorMessage } from "../../types/index.js";
 
 /**
  * Refactoring Assistant
@@ -170,8 +171,8 @@ export class RefactoringAssistant {
         changes,
         safetyAnalysis,
       };
-    } catch (error: any) {
-      return this.errorResult("rename", error.message);
+    } catch (error) {
+      return this.errorResult("rename", getErrorMessage(error));
     }
   }
 
@@ -267,8 +268,8 @@ export class RefactoringAssistant {
         ],
         safetyAnalysis: this.createSafetyAnalysis("medium", 1, 1),
       };
-    } catch (error: any) {
-      return this.errorResult("extractFunction", error.message);
+    } catch (error) {
+      return this.errorResult("extractFunction", getErrorMessage(error));
     }
   }
 
@@ -339,8 +340,8 @@ export class RefactoringAssistant {
         ],
         safetyAnalysis: this.createSafetyAnalysis("low", 1, 1),
       };
-    } catch (error: any) {
-      return this.errorResult("extractVariable", error.message);
+    } catch (error) {
+      return this.errorResult("extractVariable", getErrorMessage(error));
     }
   }
 
@@ -428,8 +429,8 @@ export class RefactoringAssistant {
         ],
         safetyAnalysis: this.createSafetyAnalysis("low", 1, publicMembers.length + 1),
       };
-    } catch (error: any) {
-      return this.errorResult("extractInterface", error.message);
+    } catch (error) {
+      return this.errorResult("extractInterface", getErrorMessage(error));
     }
   }
 
@@ -549,8 +550,8 @@ export class RefactoringAssistant {
           callUsages.length
         ),
       };
-    } catch (error: any) {
-      return this.errorResult("inlineFunction", error.message);
+    } catch (error) {
+      return this.errorResult("inlineFunction", getErrorMessage(error));
     }
   }
 
@@ -626,8 +627,8 @@ export class RefactoringAssistant {
         changes,
         safetyAnalysis: this.createSafetyAnalysis("high", 2, 1),
       };
-    } catch (error: any) {
-      return this.errorResult("moveToFile", error.message);
+    } catch (error) {
+      return this.errorResult("moveToFile", getErrorMessage(error));
     }
   }
 

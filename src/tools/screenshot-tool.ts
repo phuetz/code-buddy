@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface ScreenshotOptions {
   fullscreen?: boolean;
@@ -63,10 +63,10 @@ export class ScreenshotTool {
         output: this.formatResult(result),
         data: result
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Screenshot capture failed: ${error.message}`
+        error: `Screenshot capture failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -289,10 +289,10 @@ $bitmap.Dispose()
         success: true,
         output: `Screenshots in ${this.defaultOutputDir}:\n${screenshotList}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list screenshots: ${error.message}`
+        error: `Failed to list screenshots: ${getErrorMessage(error)}`
       };
     }
   }
@@ -325,10 +325,10 @@ $bitmap.Dispose()
           filename: path.basename(filePath)
         }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to convert screenshot: ${error.message}`
+        error: `Failed to convert screenshot: ${getErrorMessage(error)}`
       };
     }
   }
@@ -355,10 +355,10 @@ $bitmap.Dispose()
         success: true,
         output: `Screenshot deleted: ${resolvedPath}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to delete screenshot: ${error.message}`
+        error: `Failed to delete screenshot: ${getErrorMessage(error)}`
       };
     }
   }
@@ -389,10 +389,10 @@ $bitmap.Dispose()
         success: true,
         output: `Cleared ${deleted} screenshots`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to clear screenshots: ${error.message}`
+        error: `Failed to clear screenshots: ${getErrorMessage(error)}`
       };
     }
   }

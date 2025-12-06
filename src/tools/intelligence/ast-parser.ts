@@ -21,6 +21,7 @@ import {
   SourceRange,
   ParameterInfo,
 } from "./types.js";
+import { getErrorMessage } from "../../types/index.js";
 
 /**
  * Language detection by file extension
@@ -208,14 +209,14 @@ export class ASTParser {
     let content: string;
     try {
       content = fs.readFileSync(filePath, "utf-8");
-    } catch (error: any) {
+    } catch (error) {
       return {
         filePath,
         language,
         symbols: [],
         imports: [],
         exports: [],
-        errors: [{ message: error.message, severity: "error" }],
+        errors: [{ message: getErrorMessage(error), severity: "error" }],
         parseTime: Date.now() - startTime,
         metadata: { lineCount: 0, hasErrors: true },
       };
@@ -272,8 +273,8 @@ export class ASTParser {
       // Build parent-child relationships
       this.buildSymbolHierarchy(symbols, content);
 
-    } catch (error: any) {
-      errors.push({ message: error.message, severity: "error" });
+    } catch (error) {
+      errors.push({ message: getErrorMessage(error), severity: "error" });
     }
 
     return {

@@ -7,6 +7,7 @@
 
 import { EventEmitter } from "events";
 import { GrokClient, GrokMessage, GrokTool } from "../../grok/client.js";
+import { getErrorMessage } from "../../types/index.js";
 import {
   AgentRole,
   AgentConfig,
@@ -148,7 +149,8 @@ Current working directory: ${process.cwd()}`;
       this.emit("agent:complete", { role: this.config.role, result });
       return result;
 
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
       const result: AgentExecutionResult = {
         success: false,
         role: this.config.role,
@@ -158,10 +160,10 @@ Current working directory: ${process.cwd()}`;
         toolsUsed: [...new Set(this.toolsUsed)],
         rounds: this.rounds,
         duration: Date.now() - this.startTime,
-        error: error.message,
+        error: errorMessage,
       };
 
-      this.emit("agent:error", { role: this.config.role, error: error.message });
+      this.emit("agent:error", { role: this.config.role, error: errorMessage });
       return result;
 
     } finally {

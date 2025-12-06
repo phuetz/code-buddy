@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface ImageInput {
   type: 'base64' | 'url' | 'file';
@@ -50,10 +50,10 @@ export class ImageTool {
         output: `Image processed successfully from ${processed.source}`,
         data: processed
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to process image: ${error.message}`
+        error: `Failed to process image: ${getErrorMessage(error)}`
       };
     }
   }
@@ -185,10 +185,10 @@ export class ImageTool {
         success: true,
         output: `Images in ${dirPath}:\n${imageList}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list images: ${error.message}`
+        error: `Failed to list images: ${getErrorMessage(error)}`
       };
     }
   }

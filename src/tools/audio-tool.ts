@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface AudioInfo {
   filename: string;
@@ -78,10 +78,10 @@ export class AudioTool {
         output: this.formatAudioInfo(info),
         data: info
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to get audio info: ${error.message}`
+        error: `Failed to get audio info: ${getErrorMessage(error)}`
       };
     }
   }
@@ -210,10 +210,10 @@ export class AudioTool {
         success: false,
         error: 'No transcription API available. Set OPENAI_API_KEY for Whisper transcription.'
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Transcription failed: ${error.message}`
+        error: `Transcription failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -271,8 +271,8 @@ export class AudioTool {
         output: this.formatTranscription(result, filePath),
         data: result
       };
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error?.message || error.message;
+    } catch (error) {
+      const errorMsg = (error as any).response?.data?.error?.message || getErrorMessage(error);
       return {
         success: false,
         error: `Whisper transcription failed: ${errorMsg}`
@@ -318,10 +318,10 @@ export class AudioTool {
           filename: path.basename(filePath)
         }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to convert audio to base64: ${error.message}`
+        error: `Failed to convert audio to base64: ${getErrorMessage(error)}`
       };
     }
   }
@@ -363,10 +363,10 @@ export class AudioTool {
         success: true,
         output: `Audio files in ${dirPath}:\n${audioList}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list audio files: ${error.message}`
+        error: `Failed to list audio files: ${getErrorMessage(error)}`
       };
     }
   }

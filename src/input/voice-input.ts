@@ -3,6 +3,7 @@ import * as fs from "fs-extra";
 import * as path from "path";
 import { spawn, ChildProcess } from "child_process";
 import axios from "axios";
+import { getErrorMessage } from "../types/index.js";
 
 export interface VoiceConfig {
   provider: "whisper" | "deepgram" | "system";
@@ -172,8 +173,8 @@ export class VoiceInput extends EventEmitter {
         text: response.data.text,
         confidence: 1.0,
       };
-    } catch (error: any) {
-      throw new Error(`Whisper transcription failed: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Whisper transcription failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -208,8 +209,8 @@ export class VoiceInput extends EventEmitter {
         text: result?.transcript || "",
         confidence: result?.confidence,
       };
-    } catch (error: any) {
-      throw new Error(`Deepgram transcription failed: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Deepgram transcription failed: ${getErrorMessage(error)}`);
     }
   }
 

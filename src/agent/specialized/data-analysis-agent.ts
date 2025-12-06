@@ -16,6 +16,7 @@ import {
   DataStats,
   DataTransformOperation,
 } from './types.js';
+import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
 // Configuration
@@ -126,10 +127,10 @@ export class DataAnalysisAgent extends SpecializedAgent {
         default:
           return { success: false, error: `Unknown action: ${task.action}` };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Data analysis error: ${error.message}`,
+        error: `Data analysis error: ${getErrorMessage(error)}`,
         duration: Date.now() - startTime,
       };
     }
@@ -641,8 +642,8 @@ export class DataAnalysisAgent extends SpecializedAgent {
       } else {
         return { success: false, error: `Unsupported file type: ${ext}` };
       }
-    } catch (error: any) {
-      return { success: false, error: `Parse error: ${error.message}` };
+    } catch (error) {
+      return { success: false, error: `Parse error: ${getErrorMessage(error)}` };
     }
   }
 

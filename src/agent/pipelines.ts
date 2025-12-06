@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import { SubagentManager, SubagentResult, getSubagentManager } from "./subagents.js";
 import { GrokToolCall } from "../grok/client.js";
-import { ToolResult } from "../types/index.js";
+import { ToolResult, getErrorMessage } from "../types/index.js";
 
 export interface PipelineStage {
   name: string;
@@ -348,9 +348,10 @@ export class PipelineRunner extends EventEmitter {
           break;
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       const totalDuration = Date.now() - startTime;
-      this.emit("pipeline:error", { error: error.message });
+      const errorMessage = getErrorMessage(error);
+      this.emit("pipeline:error", { error: errorMessage });
 
       return {
         success: false,
@@ -358,7 +359,7 @@ export class PipelineRunner extends EventEmitter {
         stageResults,
         capturedVariables: variables,
         totalDuration,
-        error: error.message,
+        error: errorMessage,
       };
     } finally {
       this.isRunning = false;

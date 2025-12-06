@@ -19,6 +19,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { spawn } from 'child_process';
 import { diff_match_patch } from 'diff-match-patch';
+import { getErrorMessage } from '../types/index.js';
 
 export interface Checkpoint {
   id: string;
@@ -501,10 +502,10 @@ export class CheckpointManager extends EventEmitter {
             restoredFiles.push(file.relativePath);
           }
         }
-      } catch (error: any) {
+      } catch (error) {
         errors.push({
           path: file.relativePath,
-          error: error.message,
+          error: getErrorMessage(error),
         });
       }
     }

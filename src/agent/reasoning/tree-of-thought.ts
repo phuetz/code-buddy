@@ -11,7 +11,7 @@
 
 import { EventEmitter } from "events";
 import { GrokClient, GrokMessage } from "../../grok/client.js";
-import { ToolResult } from "../../types/index.js";
+import { ToolResult, getErrorMessage } from "../../types/index.js";
 import {
   ThoughtNode,
   Problem,
@@ -242,10 +242,10 @@ Rate this thought (0-1):`;
         output: result.output,
         error: result.error,
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }

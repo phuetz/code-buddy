@@ -33,6 +33,7 @@ import {
   FileLister,
   DEFAULT_MAP_CONFIG,
 } from "./types.js";
+import { getErrorMessage } from "../../types/index.js";
 
 /**
  * Language-specific patterns for element extraction
@@ -139,8 +140,8 @@ export class SemanticMapBuilder extends EventEmitter {
       for (const file of files) {
         try {
           await this.analyzeFile(file);
-        } catch (error: any) {
-          this.emit("map:error", { error: error.message, path: file });
+        } catch (error) {
+          this.emit("map:error", { error: getErrorMessage(error), path: file });
         }
       }
 
@@ -168,8 +169,8 @@ export class SemanticMapBuilder extends EventEmitter {
       this.emit("map:complete", { stats: this.map.stats });
 
       return this.map;
-    } catch (error: any) {
-      this.emit("map:error", { error: error.message });
+    } catch (error) {
+      this.emit("map:error", { error: getErrorMessage(error) });
       throw error;
     }
   }

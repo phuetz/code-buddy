@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface DocumentContent {
   text: string;
@@ -106,10 +106,10 @@ export class DocumentTool {
         output: this.formatOutput(content, filePath),
         data: content
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to read document: ${error.message}`
+        error: `Failed to read document: ${getErrorMessage(error)}`
       };
     }
   }
@@ -536,10 +536,10 @@ export class DocumentTool {
         success: true,
         output: `Documents in ${dirPath}:\n${docList}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list documents: ${error.message}`
+        error: `Failed to list documents: ${getErrorMessage(error)}`
       };
     }
   }

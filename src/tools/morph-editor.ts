@@ -1,7 +1,7 @@
 import * as fs from "fs-extra";
 import * as path from "path";
 import axios from "axios";
-import { ToolResult } from "../types/index.js";
+import { ToolResult, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 
 export class MorphEditorTool {
@@ -100,10 +100,10 @@ export class MorphEditorTool {
         success: true,
         output: diff,
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Error editing ${targetFile} with Morph: ${error.message}`,
+        error: `Error editing ${targetFile} with Morph: ${getErrorMessage(error)}`,
       };
     }
   }
@@ -134,9 +134,10 @@ export class MorphEditorTool {
       }
 
       return response.data.choices[0].message.content;
-    } catch (error: any) {
-      if (error.response) {
-        throw new Error(`Morph API error (${error.response.status}): ${error.response.data}`);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response: { status: number; data: unknown } };
+        throw new Error(`Morph API error (${axiosError.response.status}): ${axiosError.response.data}`);
       }
       throw error;
     }
@@ -375,10 +376,10 @@ export class MorphEditorTool {
           error: `File or directory not found: ${filePath}`,
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Error viewing ${filePath}: ${error.message}`,
+        error: `Error viewing ${filePath}: ${getErrorMessage(error)}`,
       };
     }
   }

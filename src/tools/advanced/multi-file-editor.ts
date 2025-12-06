@@ -20,6 +20,7 @@ import {
   ValidationResult,
   ChangePreview,
 } from "./types.js";
+import { getErrorMessage } from "../../types/index.js";
 
 /**
  * Multi-File Editor
@@ -309,12 +310,11 @@ export class MultiFileEditor {
           // Execute operation
           await this.executeOperation(op);
           operationsExecuted++;
-        } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+        } catch (error) {
           errors.push({
             operationId: op.id,
             filePath: op.filePath,
-            message: errorMessage,
+            message: getErrorMessage(error),
           });
 
           // Rollback on error
@@ -344,7 +344,7 @@ export class MultiFileEditor {
         errors: [],
         duration: Date.now() - startTime,
       };
-    } catch (error: any) {
+    } catch (error) {
       // Attempt rollback
       await this.rollbackTransaction(transaction);
 
@@ -353,7 +353,7 @@ export class MultiFileEditor {
         transactionId: transaction.id,
         operationsExecuted,
         operationsFailed: transaction.operations.length - operationsExecuted,
-        errors: [{ operationId: "", filePath: "", message: error.message }],
+        errors: [{ operationId: "", filePath: "", message: getErrorMessage(error) }],
         duration: Date.now() - startTime,
       };
     }

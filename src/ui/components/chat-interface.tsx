@@ -16,6 +16,7 @@ import {
 import ApiKeyInput from "./api-key-input.js";
 import { renderColorBanner } from "../../utils/ascii-banner.js";
 import { ThemeProvider, useTheme } from "../context/theme-context.js";
+import { getErrorMessage } from "../../types/index.js";
 
 interface ChatInterfaceProps {
   agent?: GrokAgent;
@@ -224,10 +225,10 @@ function ChatInterfaceWithAgent({
                 break;
             }
           }
-        } catch (error: any) {
+        } catch (error) {
           const errorEntry: ChatEntry = {
             type: "assistant",
-            content: `Error: ${error.message}`,
+            content: `Error: ${getErrorMessage(error)}`,
             timestamp: new Date(),
           };
           setChatHistory((prev) => [...prev, errorEntry]);

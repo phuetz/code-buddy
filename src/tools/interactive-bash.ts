@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { ToolResult } from "../types/index.js";
+import { ToolResult, getErrorMessage } from "../types/index.js";
 
 // Note: node-pty is an optional dependency for PTY support
 // If not available, falls back to regular child_process
@@ -134,8 +134,8 @@ export class InteractiveBashTool extends EventEmitter {
             resolve({ sessionId, output });
           }
         }, 30000);
-      } catch (error: any) {
-        reject(new Error(`PTY execution failed: ${error.message}`));
+      } catch (error) {
+        reject(new Error(`PTY execution failed: ${getErrorMessage(error)}`));
       }
     });
   }
@@ -211,7 +211,7 @@ export class InteractiveBashTool extends EventEmitter {
       child.on("error", (error: Error) => {
         resolve({
           sessionId,
-          output: `Error: ${error.message}`,
+          output: `Error: ${getErrorMessage(error)}`,
         });
       });
     });
@@ -304,10 +304,10 @@ export class InteractiveBashTool extends EventEmitter {
         success: true,
         output: cleanOutput,
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }

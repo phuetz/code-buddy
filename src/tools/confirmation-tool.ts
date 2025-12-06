@@ -1,4 +1,4 @@
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 import { ConfirmationService, ConfirmationOptions } from '../utils/confirmation-service.js';
 
 export interface ConfirmationRequest {
@@ -47,10 +47,10 @@ export class ConfirmationTool {
           error: result.feedback || `User rejected: ${request.operation}(${request.filename})`,
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Confirmation error: ${error.message}`,
+        error: `Confirmation error: ${getErrorMessage(error)}`,
       };
     }
   }
@@ -69,10 +69,10 @@ export class ConfirmationTool {
             sessionFlags.fileOperations || sessionFlags.bashCommands || sessionFlags.allOperations,
         },
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Error checking session acceptance: ${error.message}`,
+        error: `Error checking session acceptance: ${getErrorMessage(error)}`,
       };
     }
   }

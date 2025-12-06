@@ -1,6 +1,6 @@
 import { GrokClient, GrokMessage, GrokToolCall } from "../grok/client.js";
 import { EventEmitter } from "events";
-import { ToolResult } from "../types/index.js";
+import { ToolResult, getErrorMessage } from "../types/index.js";
 
 export interface SubagentConfig {
   name: string;
@@ -268,13 +268,14 @@ export class Subagent extends EventEmitter {
         rounds,
         duration,
       };
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - this.startTime;
-      this.emit("subagent:error", { error: error.message });
+      const errorMessage = getErrorMessage(error);
+      this.emit("subagent:error", { error: errorMessage });
 
       return {
         success: false,
-        output: `Error: ${error.message}`,
+        output: `Error: ${errorMessage}`,
         toolsUsed: [...new Set(toolsUsed)],
         rounds,
         duration,
@@ -511,17 +512,18 @@ export class ParallelSubagentRunner extends EventEmitter {
             });
 
             return { taskId: task.id, result };
-          } catch (error: any) {
+          } catch (error) {
+            const errorMessage = getErrorMessage(error);
             const errorResult: SubagentResult = {
               success: false,
-              output: `Error: ${error.message}`,
+              output: `Error: ${errorMessage}`,
               toolsUsed: [],
               rounds: 0,
               duration: 0,
             };
             results.set(task.id, errorResult);
             failedCount++;
-            errors.push(`Task ${task.id}: ${error.message}`);
+            errors.push(`Task ${task.id}: ${errorMessage}`);
 
             if (stopOnFirstError) {
               this.isRunning = false;

@@ -16,6 +16,7 @@ import {
   ExcelWorkbook,
   ExcelWriteOptions,
 } from './types.js';
+import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
 // Configuration
@@ -161,10 +162,10 @@ export class ExcelAgent extends SpecializedAgent {
             error: `Unknown action: ${task.action}`,
           };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Excel processing error: ${error.message}`,
+        error: `Excel processing error: ${getErrorMessage(error)}`,
         duration: Date.now() - startTime,
       };
     }

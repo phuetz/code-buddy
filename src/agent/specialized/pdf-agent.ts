@@ -16,6 +16,7 @@ import {
   PDFPage,
   PDFExtractResult,
 } from './types.js';
+import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
 // Configuration
@@ -127,10 +128,10 @@ export class PDFAgent extends SpecializedAgent {
             error: `Unknown action: ${task.action}`,
           };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `PDF processing error: ${error.message}`,
+        error: `PDF processing error: ${getErrorMessage(error)}`,
         duration: Date.now() - startTime,
       };
     }
@@ -351,10 +352,10 @@ export class PDFAgent extends SpecializedAgent {
           success: true,
           data: extractResult,
         };
-      } catch (error: any) {
+      } catch (error) {
         return {
           success: false,
-          error: `PDF parse error: ${error.message}`,
+          error: `PDF parse error: ${getErrorMessage(error)}`,
         };
       }
     }

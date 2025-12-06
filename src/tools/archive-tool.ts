@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface ArchiveInfo {
   path: string;
@@ -104,10 +104,10 @@ export class ArchiveTool {
         output: this.formatArchiveInfo(info),
         data: info
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list archive: ${error.message}`
+        error: `Failed to list archive: ${getErrorMessage(error)}`
       };
     }
   }
@@ -178,10 +178,10 @@ export class ArchiveTool {
         output: `📦 Extracted ${result.files.length} items to: ${outputDir}`,
         data: { outputDir, files: result.files }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Extraction failed: ${error.message}`
+        error: `Extraction failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -245,10 +245,10 @@ export class ArchiveTool {
         output: `📦 Created archive: ${outputPath} (${this.formatSize(stats.size)})`,
         data: { path: outputPath, size: stats.size }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Archive creation failed: ${error.message}`
+        error: `Archive creation failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -721,10 +721,10 @@ export class ArchiveTool {
         success: true,
         output: `Archives in ${dirPath}:\n${list}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list archives: ${error.message}`
+        error: `Failed to list archives: ${getErrorMessage(error)}`
       };
     }
   }

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export type DiagramType = 'flowchart' | 'sequence' | 'class' | 'state' | 'er' | 'gantt' | 'pie' | 'mindmap' | 'timeline' | 'git' | 'ascii';
 
@@ -72,10 +72,10 @@ export class DiagramTool {
           mermaidCode
         }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Diagram generation failed: ${error.message}`
+        error: `Diagram generation failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -591,10 +591,10 @@ export class DiagramTool {
         success: true,
         output: `Diagrams in ${this.outputDir}:\n${list}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list diagrams: ${error.message}`
+        error: `Failed to list diagrams: ${getErrorMessage(error)}`
       };
     }
   }

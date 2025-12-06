@@ -12,7 +12,7 @@
 
 import { EventEmitter } from "events";
 import { GrokTool, GrokToolCall } from "../../grok/client.js";
-import { ToolResult } from "../../types/index.js";
+import { ToolResult, getErrorMessage } from "../../types/index.js";
 import { getAllGrokTools } from "../../grok/tools.js";
 import {
   AgentRole,
@@ -261,7 +261,8 @@ export class MultiAgentSystem extends EventEmitter {
       this.emit("workflow:complete", { result: workflowResult });
       return workflowResult;
 
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
       const workflowResult: WorkflowResult = {
         success: false,
         plan: this.currentPlan || this.createEmptyPlan(goal),
@@ -269,8 +270,8 @@ export class MultiAgentSystem extends EventEmitter {
         artifacts: [],
         timeline: this.timeline,
         totalDuration: Date.now() - startTime,
-        summary: `Workflow failed: ${error.message}`,
-        errors: [...errors, error.message],
+        summary: `Workflow failed: ${errorMessage}`,
+        errors: [...errors, errorMessage],
       };
 
       this.emit("workflow:error", { error, plan: this.currentPlan });
@@ -534,11 +535,12 @@ export class MultiAgentSystem extends EventEmitter {
         this.addTimelineEvent("task_failed", `Failed: ${task.title}`, { task, error: result.error });
       }
 
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
       task.status = "failed";
-      task.error = error.message;
-      errors.push(`Task "${task.title}" threw error: ${error.message}`);
-      this.addTimelineEvent("task_failed", `Error: ${task.title}`, { task, error: error.message });
+      task.error = errorMessage;
+      errors.push(`Task "${task.title}" threw error: ${errorMessage}`);
+      this.addTimelineEvent("task_failed", `Error: ${task.title}`, { task, error: errorMessage });
     }
   }
 

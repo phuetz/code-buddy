@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface PDFContent {
   text: string;
@@ -70,10 +70,10 @@ export class PDFTool {
         output: this.formatOutput(content, filePath),
         data: content
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to extract PDF text: ${error.message}`
+        error: `Failed to extract PDF text: ${getErrorMessage(error)}`
       };
     }
   }
@@ -302,10 +302,10 @@ export class PDFTool {
         output: `PDF Info:\n${JSON.stringify(info, null, 2)}`,
         data: info
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to get PDF info: ${error.message}`
+        error: `Failed to get PDF info: ${getErrorMessage(error)}`
       };
     }
   }
@@ -345,10 +345,10 @@ export class PDFTool {
         success: true,
         output: `PDF files in ${dirPath}:\n${pdfList}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list PDFs: ${error.message}`
+        error: `Failed to list PDFs: ${getErrorMessage(error)}`
       };
     }
   }
@@ -386,10 +386,10 @@ export class PDFTool {
           filename: path.basename(filePath)
         }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to convert PDF to base64: ${error.message}`
+        error: `Failed to convert PDF to base64: ${getErrorMessage(error)}`
       };
     }
   }

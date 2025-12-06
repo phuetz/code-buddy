@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { getErrorMessage } from '../types/index.js';
 
 export interface VoiceInputConfig {
   enabled: boolean;
@@ -365,10 +366,13 @@ export class VoiceInputManager extends EventEmitter {
         text: response.data.text,
         language: response.data.language
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMsg = error && typeof error === 'object' && 'response' in error
+        ? (error as any).response?.data?.error?.message || getErrorMessage(error)
+        : getErrorMessage(error);
       return {
         success: false,
-        error: error.response?.data?.error?.message || error.message
+        error: errorMsg
       };
     }
   }

@@ -3,6 +3,7 @@ import { useInput } from "ink";
 import { GrokAgent, ChatEntry } from "../agent/grok-agent.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { useEnhancedInput, Key } from "./use-enhanced-input.js";
+import { getErrorMessage } from "../types/index.js";
 
 import { filterCommandSuggestions } from "../ui/components/command-suggestions.js";
 import { loadModelConfig, updateCurrentModel } from "../utils/model-config.js";
@@ -718,10 +719,10 @@ Respond with ONLY the commit message, no additional text.`;
           };
           setChatHistory((prev) => [...prev, pushEntry]);
         }
-      } catch (error: any) {
+      } catch (error) {
         const errorEntry: ChatEntry = {
           type: "assistant",
-          content: `Error during commit and push: ${error.message}`,
+          content: `Error during commit and push: ${getErrorMessage(error)}`,
           timestamp: new Date(),
         };
         setChatHistory((prev) => [...prev, errorEntry]);
@@ -777,10 +778,10 @@ Respond with ONLY the commit message, no additional text.`;
           toolResult: result,
         };
         setChatHistory((prev) => [...prev, commandEntry]);
-      } catch (error: any) {
+      } catch (error) {
         const errorEntry: ChatEntry = {
           type: "assistant",
-          content: `Error executing command: ${error.message}`,
+          content: `Error executing command: ${getErrorMessage(error)}`,
           timestamp: new Date(),
         };
         setChatHistory((prev) => [...prev, errorEntry]);
@@ -928,10 +929,10 @@ Respond with ONLY the commit message, no additional text.`;
             break;
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       const errorEntry: ChatEntry = {
         type: "assistant",
-        content: `Error: ${error.message}`,
+        content: `Error: ${getErrorMessage(error)}`,
         timestamp: new Date(),
       };
       setChatHistory((prev) => [...prev, errorEntry]);

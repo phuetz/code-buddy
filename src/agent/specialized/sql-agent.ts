@@ -15,6 +15,7 @@ import {
   SQLQueryResult,
   SQLTableInfo,
 } from './types.js';
+import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
 // Configuration
@@ -120,10 +121,10 @@ export class SQLAgent extends SpecializedAgent {
         default:
           return { success: false, error: `Unknown action: ${task.action}` };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `SQL error: ${error.message}`,
+        error: `SQL error: ${getErrorMessage(error)}`,
         duration: Date.now() - startTime,
       };
     }
@@ -561,8 +562,8 @@ export class SQLAgent extends SpecializedAgent {
       } else {
         return { success: false, error: `Unsupported file type: ${ext}` };
       }
-    } catch (error: any) {
-      return { success: false, error: `Parse error: ${error.message}` };
+    } catch (error) {
+      return { success: false, error: `Parse error: ${getErrorMessage(error)}` };
     }
   }
 

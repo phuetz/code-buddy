@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface QRGenerateOptions {
   size?: number; // Module size in pixels
@@ -71,10 +71,10 @@ export class QRTool {
         output: `QR Code (ASCII):\n\n${ascii}\n\nNote: For PNG export, install qrcode package: npm install qrcode`,
         data: { format: 'ascii', content: ascii }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `QR generation failed: ${error.message}`
+        error: `QR generation failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -297,10 +297,10 @@ export class QRTool {
           error: 'zbarimg not installed. Install with: sudo apt install zbar-tools (Linux) or brew install zbar (macOS)'
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `QR decode failed: ${error.message}`
+        error: `QR decode failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -507,10 +507,10 @@ export class QRTool {
         success: true,
         output: `QR codes in ${this.outputDir}:\n${list}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list QR codes: ${error.message}`
+        error: `Failed to list QR codes: ${getErrorMessage(error)}`
       };
     }
   }

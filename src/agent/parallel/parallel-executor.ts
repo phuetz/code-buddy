@@ -12,6 +12,7 @@
 
 import { EventEmitter } from "events";
 import { GrokClient, GrokMessage } from "../../grok/client.js";
+import { getErrorMessage } from "../../types/index.js";
 import {
   ModelConfig,
   ParallelConfig,
@@ -116,7 +117,7 @@ export class ParallelExecutor extends EventEmitter {
       this.emit("parallel:complete", { result });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       return {
         strategy: effectiveStrategy,
         responses: [],
@@ -124,7 +125,7 @@ export class ParallelExecutor extends EventEmitter {
         totalLatency: Date.now() - startTime,
         effectiveLatency: Date.now() - startTime,
         totalTokens: 0,
-        metadata: { error: error.message },
+        metadata: { error: getErrorMessage(error) },
       };
     }
   }
@@ -509,9 +510,10 @@ export class ParallelExecutor extends EventEmitter {
 
       this.emit("parallel:model:complete", { response: modelResponse });
       return modelResponse;
-    } catch (error: any) {
+    } catch (error) {
       this.updateModelStats(model.id, false, Date.now() - startTime);
 
+      const errorMessage = getErrorMessage(error);
       const errorResponse: ModelResponse = {
         modelId: model.id,
         modelName: model.name,
@@ -520,10 +522,10 @@ export class ParallelExecutor extends EventEmitter {
         latency: Date.now() - startTime,
         tokensUsed: 0,
         metadata: {},
-        error: error.message,
+        error: errorMessage,
       };
 
-      this.emit("parallel:model:error", { modelId: model.id, error: error.message });
+      this.emit("parallel:model:error", { modelId: model.id, error: errorMessage });
       return errorResponse;
     }
   }

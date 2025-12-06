@@ -18,6 +18,7 @@ import {
   RollbackData,
   DEFAULT_HISTORY_CONFIG,
 } from "./types.js";
+import { getErrorMessage } from "../../types/index.js";
 
 /**
  * Operation History Manager
@@ -138,8 +139,8 @@ export class OperationHistory {
       this.save();
 
       return { success: true, entry };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 
@@ -163,8 +164,8 @@ export class OperationHistory {
       this.save();
 
       return { success: true, entry };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 
@@ -195,8 +196,8 @@ export class OperationHistory {
       }
 
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 

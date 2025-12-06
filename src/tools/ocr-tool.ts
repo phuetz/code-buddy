@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface OCRResult {
   text: string;
@@ -89,10 +89,10 @@ export class OCRTool {
           error: 'Tesseract OCR not installed. Install with: sudo apt install tesseract-ocr (Linux) or brew install tesseract (macOS). Alternatively, set OPENAI_API_KEY for vision-based OCR.'
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `OCR failed: ${error.message}`
+        error: `OCR failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -303,8 +303,8 @@ export class OCRTool {
         output: this.formatOutput(result, imagePath),
         data: result
       };
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error?.message || error.message;
+    } catch (error) {
+      const errorMsg = (error as any).response?.data?.error?.message || getErrorMessage(error);
       return {
         success: false,
         error: `Vision OCR failed: ${errorMsg}`
@@ -332,10 +332,10 @@ export class OCRTool {
         success: true,
         output: `Available OCR languages:\n${lines.map(l => `  - ${l}`).join('\n')}`
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to list languages: ${error.message}`
+        error: `Failed to list languages: ${getErrorMessage(error)}`
       };
     }
   }
@@ -408,13 +408,13 @@ export class OCRTool {
       }
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       if (fs.existsSync(tempPath)) {
         fs.unlinkSync(tempPath);
       }
       return {
         success: false,
-        error: `Region extraction failed: ${error.message}`
+        error: `Region extraction failed: ${getErrorMessage(error)}`
       };
     }
   }

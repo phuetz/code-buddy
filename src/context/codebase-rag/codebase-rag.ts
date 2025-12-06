@@ -30,6 +30,7 @@ import {
 import { CodeChunker, createChunker, detectLanguage } from "./chunker.js";
 import { createEmbeddingProvider } from "./embeddings.js";
 import { createVectorStore, InMemoryVectorStore } from "./vector-store.js";
+import { getErrorMessage } from "../../types/index.js";
 
 /**
  * Main Codebase RAG class
@@ -195,12 +196,12 @@ export class CodebaseRAG extends EventEmitter {
         processingTime: Date.now() - startTime,
       };
 
-    } catch (error: any) {
+    } catch (error) {
       return {
         filePath,
         chunks: [],
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
         processingTime: Date.now() - startTime,
       };
     }

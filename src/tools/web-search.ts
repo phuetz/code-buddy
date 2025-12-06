@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ToolResult } from '../types/index.js';
+import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface WebSearchOptions {
   maxResults?: number;
@@ -54,10 +54,10 @@ export class WebSearchTool {
         success: true,
         output: this.formatResults(results, query)
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Web search failed: ${error.message}`
+        error: `Web search failed: ${getErrorMessage(error)}`
       };
     }
   }
@@ -90,10 +90,10 @@ export class WebSearchTool {
         output: `Content from ${url}:\n\n${truncatedText}`,
         data: { url, contentLength: text.length }
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Failed to fetch page: ${error.message}`
+        error: `Failed to fetch page: ${getErrorMessage(error)}`
       };
     }
   }

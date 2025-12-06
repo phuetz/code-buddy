@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
+import { getErrorMessage } from '../types/index.js';
 
 export interface FileSnapshot {
   path: string;
@@ -157,8 +158,8 @@ export class CheckpointManager extends EventEmitter {
             restored.push(`Deleted: ${snapshot.path}`);
           }
         }
-      } catch (error: any) {
-        errors.push(`Failed to restore ${snapshot.path}: ${error.message}`);
+      } catch (error) {
+        errors.push(`Failed to restore ${snapshot.path}: ${getErrorMessage(error)}`);
       }
     }
 

@@ -18,6 +18,7 @@ import {
   ArchiveCreateOptions,
   ArchiveExtractOptions,
 } from './types.js';
+import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
 // Configuration
@@ -106,10 +107,10 @@ export class ArchiveAgent extends SpecializedAgent {
         default:
           return { success: false, error: `Unknown action: ${task.action}` };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error: `Archive error: ${error.message}`,
+        error: `Archive error: ${getErrorMessage(error)}`,
         duration: Date.now() - startTime,
       };
     }

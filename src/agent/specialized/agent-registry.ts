@@ -19,6 +19,7 @@ import { getDataAnalysisAgent } from './data-analysis-agent.js';
 import { getSQLAgent } from './sql-agent.js';
 import { getArchiveAgent } from './archive-agent.js';
 import { getCodeGuardianAgent } from './code-guardian-agent.js';
+import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
 // Types
@@ -214,16 +215,16 @@ export class AgentRegistry extends EventEmitter {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       this.emit('task:error', {
         agentId: agent.getId(),
         task: task.action,
-        error: error.message,
+        error: getErrorMessage(error),
       });
 
       return {
         success: false,
-        error: `Agent error: ${error.message}`,
+        error: `Agent error: ${getErrorMessage(error)}`,
       };
     }
   }
