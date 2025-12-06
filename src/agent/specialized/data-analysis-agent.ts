@@ -5,8 +5,8 @@
  * Works with JSON, CSV, and in-memory data structures.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { basename, extname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { extname } from 'path';
 import {
   SpecializedAgent,
   SpecializedAgentConfig,

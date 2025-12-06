@@ -9,16 +9,15 @@ import { EventEmitter } from 'events';
 import { extname } from 'path';
 import {
   SpecializedAgent,
-  SpecializedAgentConfig,
   AgentTask,
   AgentResult,
   AgentCapability,
 } from './types.js';
-import { getPDFAgent, createPDFAgent } from './pdf-agent.js';
-import { getExcelAgent, createExcelAgent } from './excel-agent.js';
-import { getDataAnalysisAgent, createDataAnalysisAgent } from './data-analysis-agent.js';
-import { getSQLAgent, createSQLAgent } from './sql-agent.js';
-import { getArchiveAgent, createArchiveAgent } from './archive-agent.js';
+import { getPDFAgent } from './pdf-agent.js';
+import { getExcelAgent } from './excel-agent.js';
+import { getDataAnalysisAgent } from './data-analysis-agent.js';
+import { getSQLAgent } from './sql-agent.js';
+import { getArchiveAgent } from './archive-agent.js';
 
 // ============================================================================
 // Types
@@ -257,7 +256,7 @@ export class AgentRegistry extends EventEmitter {
       try {
         await agent.initialize();
         results.set(id, true);
-      } catch (error) {
+      } catch (_error) {
         results.set(id, false);
       }
     }

@@ -11,19 +11,37 @@ export class TextEditorTool {
 
   /**
    * Validate path is within allowed directory (prevent path traversal)
+   * Uses realpath to resolve symlinks and prevent symlink-based traversal attacks
    */
   private validatePath(filePath: string): { valid: boolean; resolved: string; error?: string } {
     const resolved = path.resolve(filePath);
     const normalizedBase = path.normalize(this.baseDirectory);
     const normalizedResolved = path.normalize(resolved);
 
-    // Allow paths within the base directory
+    // First check: normalized path must be within base directory
     if (!normalizedResolved.startsWith(normalizedBase)) {
       return {
         valid: false,
         resolved,
         error: `Path traversal not allowed: ${filePath} resolves outside project directory`
       };
+    }
+
+    // Second check: if file exists, resolve symlinks and verify real path
+    try {
+      if (fs.existsSync(resolved)) {
+        const realPath = fs.realpathSync(resolved);
+        const realBase = fs.realpathSync(this.baseDirectory);
+        if (!realPath.startsWith(realBase)) {
+          return {
+            valid: false,
+            resolved,
+            error: `Symlink traversal not allowed: ${filePath} points outside project directory`
+          };
+        }
+      }
+    } catch (_err) {
+      // If realpath fails, allow the operation (file may not exist yet)
     }
 
     return { valid: true, resolved };

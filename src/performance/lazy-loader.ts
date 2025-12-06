@@ -278,40 +278,40 @@ export function resetLazyLoader(): void {
 export function registerCommonModules(loader: LazyLoader): void {
   // PDF processing
   loader.register('pdf-parse', async () => {
-    // @ts-ignore - Optional dependency
+    // @ts-expect-error - Optional dependency
     const module = await import('pdf-parse');
     return module.default || module;
   });
 
   // Excel processing
   loader.register('xlsx', async () => {
-    // @ts-ignore - Optional dependency
+    // @ts-expect-error - Optional dependency
     const module = await import('xlsx');
     return module.default || module;
   });
 
   // Archive handling
   loader.register('jszip', async () => {
-    // @ts-ignore - Optional dependency
+    // @ts-expect-error - Optional dependency
     const module = await import('jszip');
     return module.default || module;
   });
 
   loader.register('tar', async () => {
-    // @ts-ignore - Optional dependency
+    // @ts-expect-error - Optional dependency
     const module = await import('tar');
     return module.default || module;
   });
 
   // SQL engines
   loader.register('better-sqlite3', async () => {
-    // @ts-ignore - Optional dependency
+    // @ts-expect-error - Optional dependency
     const module = await import('better-sqlite3');
     return module.default || module;
   });
 
   loader.register('alasql', async () => {
-    // @ts-ignore - Optional dependency
+    // @ts-expect-error - Optional dependency
     const module = await import('alasql');
     return module.default || module;
   });

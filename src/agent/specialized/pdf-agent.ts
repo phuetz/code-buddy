@@ -45,12 +45,12 @@ export class PDFAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     try {
       // Dynamic import of pdf-parse
-      // @ts-ignore - Optional dependency
+      // @ts-expect-error - Optional dependency
       const pdfParseModule = await import('pdf-parse');
       this.pdfParse = pdfParseModule.default || pdfParseModule;
       this.isInitialized = true;
       this.emit('initialized');
-    } catch (error) {
+    } catch (_error) {
       // pdf-parse not available, will use fallback
       this.isInitialized = true;
       this.emit('initialized', { warning: 'pdf-parse not available, using limited functionality' });

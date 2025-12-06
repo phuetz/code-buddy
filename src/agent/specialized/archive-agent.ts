@@ -5,10 +5,8 @@
  * Supports zip, tar, tar.gz, and other common formats.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, createReadStream, createWriteStream } from 'fs';
-import { basename, extname, join, dirname, relative } from 'path';
-import { createGzip, createGunzip } from 'zlib';
-import { pipeline } from 'stream/promises';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { basename, join, dirname, relative } from 'path';
 import {
   SpecializedAgent,
   SpecializedAgentConfig,
@@ -50,18 +48,18 @@ export class ArchiveAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     // Try to load archiving libraries
     try {
-      // @ts-ignore - Optional dependency
+      // @ts-expect-error - Optional dependency
       const jszipModule = await import('jszip');
       this.jszip = jszipModule.default || jszipModule;
-    } catch (error) {
+    } catch (_error) {
       // jszip not available
     }
 
     try {
-      // @ts-ignore - Optional dependency
+      // @ts-expect-error - Optional dependency
       const tarModule = await import('tar');
       this.tar = tarModule.default || tarModule;
-    } catch (error) {
+    } catch (_error) {
       // tar not available
     }
 

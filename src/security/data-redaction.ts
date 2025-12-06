@@ -156,17 +156,24 @@ const DEFAULT_PATTERNS: RedactionPattern[] = [
   // Stripe
   {
     name: 'Stripe API Key',
-    pattern: /sk_live_[a-zA-Z0-9]{24,}/g,
+    pattern: /sk_live_[a-zA-Z0-9_]{20,}/g,
     replacement: '[REDACTED:STRIPE_KEY]',
     category: 'api_key',
     severity: 'critical',
   },
   {
     name: 'Stripe Test Key',
-    pattern: /sk_test_[a-zA-Z0-9]{24,}/g,
+    pattern: /sk_test_[a-zA-Z0-9_]{20,}/g,
     replacement: '[REDACTED:STRIPE_TEST_KEY]',
     category: 'api_key',
     severity: 'high',
+  },
+  {
+    name: 'Stripe Restricted Key',
+    pattern: /rk_live_[a-zA-Z0-9_]{20,}/g,
+    replacement: '[REDACTED:STRIPE_RESTRICTED_KEY]',
+    category: 'api_key',
+    severity: 'critical',
   },
 
   // Slack

@@ -47,25 +47,25 @@ export class SQLAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     // Try to load better-sqlite3 first
     try {
-      // @ts-ignore - Optional dependency
+      // @ts-expect-error - Optional dependency
       const sqliteModule = await import('better-sqlite3');
       this.sqlite = sqliteModule.default || sqliteModule;
       this.isInitialized = true;
       this.emit('initialized', { engine: 'better-sqlite3' });
       return;
-    } catch (error) {
+    } catch (_error) {
       // better-sqlite3 not available
     }
 
     // Fallback to alasql
     try {
-      // @ts-ignore - Optional dependency
+      // @ts-expect-error - Optional dependency
       const alasqlModule = await import('alasql');
       this.alasql = alasqlModule.default || alasqlModule;
       this.isInitialized = true;
       this.emit('initialized', { engine: 'alasql' });
       return;
-    } catch (error) {
+    } catch (_error) {
       // alasql not available either
     }
 
@@ -78,7 +78,7 @@ export class SQLAgent extends SpecializedAgent {
     if (this.tempDir) {
       try {
         rmSync(this.tempDir, { recursive: true, force: true });
-      } catch (error) {
+      } catch (_error) {
         // Ignore cleanup errors
       }
       this.tempDir = null;

@@ -5,7 +5,7 @@
  * Uses xlsx library for Excel files and built-in parsing for CSV.
  */
 
-import { existsSync, readFileSync, writeFileSync, statSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { basename, extname } from 'path';
 import {
   SpecializedAgent,
@@ -107,12 +107,12 @@ export class ExcelAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     try {
       // Dynamic import of xlsx
-      // @ts-ignore - Optional dependency
+      // @ts-expect-error - Optional dependency
       const xlsxModule = await import('xlsx');
       this.xlsx = xlsxModule.default || xlsxModule;
       this.isInitialized = true;
       this.emit('initialized');
-    } catch (error) {
+    } catch (_error) {
       // xlsx not available, CSV-only mode
       this.isInitialized = true;
       this.emit('initialized', { warning: 'xlsx not available, CSV-only mode' });
