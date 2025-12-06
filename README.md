@@ -30,7 +30,8 @@
 [✨ Fonctionnalités](#-fonctionnalités) •
 [🧠 Intelligence du Code](#-intelligence-du-code) •
 [💾 Base de Données](#-système-de-persistance) •
-[📚 Documentation](#-documentation)
+[📚 Documentation](#-documentation) •
+[📖 Le Livre](docs/livre/)
 
 </div>
 
@@ -832,6 +833,70 @@ npm test
 - 🔬 [Research](docs/RESEARCH_IMPROVEMENTS.md) — Améliorations basées recherche
 - 🔒 [Security](SECURITY.md) — Politique de sécurité
 - 📝 [Changelog](CHANGELOG.md) — Historique des versions
+
+---
+
+## 📖 Le Livre : "Construire un Agent LLM Moderne"
+
+> *Un guide complet de 60 000 mots pour comprendre et construire des agents IA comme Grok-CLI*
+
+<table>
+<tr>
+<td width="60%">
+
+**15 chapitres couvrant :**
+
+| Partie | Chapitres | Sujets |
+|:-------|:----------|:-------|
+| **I. Fondations** | 1-3 | LLMs, taxonomie agents, anatomie |
+| **II. Raisonnement** | 4-6 | Tree-of-Thought, MCTS, Repair |
+| **III. Mémoire & RAG** | 7-9 | RAG moderne, dépendances, compression |
+| **IV. Actions** | 10-11 | Tool-use, MCP, plugins |
+| **V. Optimisation** | 12-13 | Cache, routing, parallélisation |
+| **VI. Apprentissage** | 14 | Mémoire persistante |
+| **VII. Architecture** | 15 | Grok-CLI de A à Z |
+
+</td>
+<td width="40%">
+
+**Contenu :**
+- Scènes narratives avec "Lina"
+- Code TypeScript complet
+- Diagrammes ASCII
+- Exercices pratiques
+- Références scientifiques
+
+**Format :** 16 fichiers Markdown
+
+</td>
+</tr>
+</table>
+
+### Lire le livre
+
+```bash
+# Avec glow (recommandé)
+brew install glow        # macOS
+sudo apt install glow    # Ubuntu
+
+glow docs/livre/         # Parcourir tous les chapitres
+glow docs/livre/01-comprendre-les-llms.md  # Lire un chapitre
+
+# Dans VS Code
+code docs/livre/
+# Puis Ctrl+Shift+V pour prévisualiser
+
+# Générer un PDF
+cd docs/livre
+pandoc -o livre-grok-cli.pdf *.md --pdf-engine=xelatex
+
+# Dans le navigateur (GitHub style)
+pip install grip
+grip docs/livre/
+# Ouvrir http://localhost:6419
+```
+
+**[Accéder au livre](docs/livre/)**
 
 ---
 
