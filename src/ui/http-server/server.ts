@@ -2,33 +2,33 @@ import http from 'http';
 import { GrokAgent, ChatEntry } from '../../agent/grok-agent.js';
 
 /**
- * Browser UI Server
+ * HTTP Server for Web Interface
  *
  * A simple HTTP server that provides a web interface for Grok CLI.
  * Uses Server-Sent Events (SSE) for real-time streaming.
  */
 
-export interface BrowserServerOptions {
+export interface HttpServerOptions {
   port?: number;
   host?: string;
   agent: GrokAgent;
 }
 
-export class BrowserServer {
+export class HttpServer {
   private server: http.Server | null = null;
   private agent: GrokAgent;
   private port: number;
   private host: string;
   private chatHistory: ChatEntry[] = [];
 
-  constructor(options: BrowserServerOptions) {
+  constructor(options: HttpServerOptions) {
     this.agent = options.agent;
     this.port = options.port || 3000;
     this.host = options.host || 'localhost';
   }
 
   /**
-   * Start the browser server
+   * Start the HTTP server
    */
   start(): Promise<string> {
     return new Promise((resolve, reject) => {
