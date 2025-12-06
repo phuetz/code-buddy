@@ -591,6 +591,20 @@ Be systematic and thorough in your analysis.`,
         arguments: [
           { name: 'options', description: 'quick (skip expensive), full (all tests), tools (test tool calling), stream (test streaming)', required: false }
         ]
+      },
+      // ==========================================
+      // Code Guardian - Grokinette
+      // ==========================================
+      {
+        name: 'guardian',
+        description: 'Activate Code Guardian for code analysis and review',
+        prompt: '__GUARDIAN__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'action', description: 'analyze <path>, security, review, refactor, plan, architecture', required: false },
+          { name: 'mode', description: 'Mode: analyze-only, suggest, plan, diff', required: false }
+        ]
       }
     ];
 

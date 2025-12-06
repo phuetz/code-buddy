@@ -20,6 +20,7 @@ import { getVoiceInputManager } from "../input/voice-input-enhanced.js";
 import { getTTSManager } from "../input/text-to-speech.js";
 import { getPerformanceManager } from "../performance/index.js";
 import { getSecurityManager, ApprovalMode } from "../security/index.js";
+import { getCodeGuardianAgent, CodeGuardianMode } from "../agent/specialized/code-guardian-agent.js";
 
 /**
  * Enhanced Command Handler - Processes special command tokens
@@ -149,6 +150,9 @@ export class EnhancedCommandHandler {
       case "__HELP__":
         return this.handleHelp();
 
+      case "__GUARDIAN__":
+        return this.handleGuardian(args);
+
       default:
         return { handled: false };
     }
@@ -177,7 +181,7 @@ export class EnhancedCommandHandler {
       const name = cmd.name.toLowerCase();
       if (['help', 'clear', 'exit', 'model', 'mode'].includes(name)) {
         categories['Core'].push(cmd);
-      } else if (['review', 'test', 'lint', 'explain', 'refactor', 'debug', 'docs', 'generate-tests', 'ai-test'].includes(name)) {
+      } else if (['review', 'test', 'lint', 'explain', 'refactor', 'debug', 'docs', 'generate-tests', 'ai-test', 'guardian'].includes(name)) {
         categories['Code & Development'].push(cmd);
       } else if (['commit', 'checkpoints', 'restore', 'undo', 'diff', 'branches', 'fork', 'checkout', 'merge'].includes(name)) {
         categories['Git & Version Control'].push(cmd);
@@ -2016,6 +2020,142 @@ Set your API key to run integration tests.`,
 ${error instanceof Error ? error.message : String(error)}
 
 Check your API key and network connection.`,
+          timestamp: new Date(),
+        },
+      };
+    }
+  }
+
+  /**
+   * Guardian - Code Guardian agent for code analysis and review
+   */
+  private async handleGuardian(args: string[]): Promise<CommandHandlerResult> {
+    const guardian = getCodeGuardianAgent();
+
+    // Initialize if needed
+    if (!guardian.isReady()) {
+      await guardian.initialize();
+    }
+
+    const action = args[0]?.toLowerCase() || 'help';
+    const target = args[1] || process.cwd();
+
+    // Handle mode setting
+    if (action === 'mode') {
+      const modeMap: Record<string, CodeGuardianMode> = {
+        'analyze': 'ANALYZE_ONLY',
+        'analyze-only': 'ANALYZE_ONLY',
+        'suggest': 'SUGGEST_REFACTOR',
+        'plan': 'PATCH_PLAN',
+        'diff': 'PATCH_DIFF',
+      };
+      const newMode = modeMap[args[1]?.toLowerCase() || ''];
+      if (newMode) {
+        guardian.setMode(newMode);
+        return {
+          handled: true,
+          entry: {
+            type: "assistant",
+            content: `🛡️ Code Guardian - Mode: ${newMode}
+
+Les modifications sont ${newMode === 'ANALYZE_ONLY' ? 'désactivées' : 'possibles'}.`,
+            timestamp: new Date(),
+          },
+        };
+      }
+    }
+
+    // Map actions to agent tasks
+    const actionMap: Record<string, { action: string; description: string }> = {
+      'analyze': { action: 'analyze-directory', description: 'Analyse complète du répertoire' },
+      'security': { action: 'check-security', description: 'Audit de sécurité' },
+      'review': { action: 'analyze-file', description: 'Revue de code' },
+      'refactor': { action: 'suggest-refactor', description: 'Suggestions de refactoring' },
+      'plan': { action: 'create-patch-plan', description: 'Plan de modifications' },
+      'architecture': { action: 'review-architecture', description: 'Revue d\'architecture' },
+      'deps': { action: 'map-dependencies', description: 'Carte des dépendances' },
+      'explain': { action: 'explain-code', description: 'Explication du code' },
+    };
+
+    if (action === 'help' || !actionMap[action]) {
+      const currentMode = guardian.getMode();
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: `🛡️ Grokinette - Code Guardian
+═══════════════════════════════════════════════════
+
+Mode actuel: ${currentMode}
+
+📋 Actions disponibles:
+  /guardian analyze [path]     - Analyse complète du code
+  /guardian security [path]    - Audit de sécurité
+  /guardian review <file>      - Revue d'un fichier
+  /guardian refactor [path]    - Suggestions de refactoring
+  /guardian architecture       - Revue d'architecture
+  /guardian deps [path]        - Carte des dépendances
+  /guardian explain <file>     - Explication du code
+
+⚙️ Modes:
+  /guardian mode analyze-only  - Lecture seule
+  /guardian mode suggest       - Analyse + suggestions
+  /guardian mode plan          - Plans de modification
+  /guardian mode diff          - Génération de diffs
+
+🔒 Règles de sécurité:
+  • Validation humaine requise pour les modifications
+  • Pas de suppression massive
+  • Rollback toujours disponible`,
+          timestamp: new Date(),
+        },
+      };
+    }
+
+    const taskInfo = actionMap[action];
+
+    try {
+      // Set mode for refactoring actions
+      if (['refactor', 'plan'].includes(action)) {
+        if (guardian.getMode() === 'ANALYZE_ONLY') {
+          guardian.setMode('SUGGEST_REFACTOR');
+        }
+      }
+
+      const result = await guardian.execute({
+        action: taskInfo.action,
+        inputFiles: [target],
+      });
+
+      if (result.success) {
+        return {
+          handled: true,
+          entry: {
+            type: "assistant",
+            content: result.output || JSON.stringify(result.data, null, 2),
+            timestamp: new Date(),
+          },
+        };
+      } else {
+        return {
+          handled: true,
+          entry: {
+            type: "assistant",
+            content: `❌ Code Guardian - Erreur
+
+${result.error || 'Une erreur inconnue s\'est produite'}`,
+            timestamp: new Date(),
+          },
+        };
+      }
+    } catch (error) {
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: `❌ Code Guardian - Erreur
+
+${error instanceof Error ? error.message : String(error)}`,
           timestamp: new Date(),
         },
       };
