@@ -409,6 +409,10 @@ program
     "--no-emoji",
     "disable emoji in output"
   )
+  .option(
+    "--list-models",
+    "list available models from the API endpoint and exit"
+  )
   .action(async (message, options) => {
     // Handle --init flag
     if (options.init) {
@@ -416,6 +420,34 @@ program
       const result = initGrokProject();
       console.log(formatInitResult(result));
       process.exit(result.success ? 0 : 1);
+    }
+
+    // Handle --list-models flag
+    if (options.listModels) {
+      const baseURL = options.baseUrl || loadBaseURL();
+      try {
+        const response = await fetch(`${baseURL}/models`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json() as { data?: Array<{ id: string; owned_by?: string }> };
+
+        console.log("📋 Available models:\n");
+        if (data.data && data.data.length > 0) {
+          data.data.forEach((model: { id: string; owned_by?: string }) => {
+            console.log(`  • ${model.id}`);
+          });
+          console.log(`\n  Total: ${data.data.length} model(s)`);
+        } else {
+          console.log("  (no models found)");
+        }
+        process.exit(0);
+      } catch (error) {
+        console.error(`❌ Error fetching models from ${baseURL}/models:`);
+        console.error(`   ${error instanceof Error ? error.message : String(error)}`);
+        console.error("\n💡 Make sure the API server is running (LM Studio, Ollama, etc.)");
+        process.exit(1);
+      }
     }
     if (options.directory) {
       try {
