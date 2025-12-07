@@ -1,0 +1,44 @@
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Visualisation Embeddings</text>
+
+
+           <line x1="175" y1="220" x2="460" y2="170" class="line" marker-end="url(#arrowhead)" />
+           <text x="317.5" y="190" class="text desc">0.85</text>
+
+           <line x1="175" y1="220" x2="460" y2="220" class="line" marker-end="url(#arrowhead)" />
+           <text x="317.5" y="215" class="text desc">0.82</text>
+
+           <line x1="175" y1="220" x2="660" y2="320" class="line" marker-end="url(#arrowhead)" />
+           <text x="417.5" y="265" class="text desc">0.12</text>
+
+
+         <rect x="100" y="200" width="150" height="40" class="box" rx="5" />
+         <text x="175" y="225" class="text label">Query: calculateTotal</text>
+
+         <rect x="400" y="150" width="120" height="40" class="box" rx="5" />
+         <text x="460" y="175" class="text label">computeSum</text>
+
+         <rect x="400" y="200" width="120" height="40" class="box" rx="5" />
+         <text x="460" y="225" class="text label">sumPrices</text>
+
+         <rect x="600" y="300" width="120" height="40" class="box" rx="5" />
+         <text x="660" y="325" class="text label">sendEmail</text>
+
+
+</svg>

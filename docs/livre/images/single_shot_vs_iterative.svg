@@ -1,0 +1,28 @@
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Single-Shot vs Iterative Success</text>
+
+            <rect x="250" y="256.25" width="100" height="93.75" fill="#FF6B6B" />
+            <text x="300" y="246.25" class="text label">15%</text>
+            <text x="300" y="370" class="text label">Single-Shot</text>
+
+            <rect x="400" y="100" width="100" height="250" fill="#4ECDC4" />
+            <text x="450" y="90" class="text label">40%</text>
+            <text x="450" y="370" class="text label">Iterative (ChatRepair)</text>
+         <line x1="50" y1="350" x2="750" y2="350" stroke="#666" stroke-width="2" />
+</svg>

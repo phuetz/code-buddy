@@ -1,0 +1,53 @@
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Retrieval Hybride</text>
+
+
+           <line x1="350" y1="70" x2="225" y2="180" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="350" y1="70" x2="525" y2="180" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="225" y1="180" x2="400" y2="330" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="525" y1="180" x2="400" y2="330" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="400" y1="330" x2="400" y2="430" class="line" marker-end="url(#arrowhead)" />
+
+
+
+         <rect x="300" y="50" width="100" height="40" class="box" rx="5" />
+         <text x="350" y="75" class="text label">Query</text>
+
+         <rect x="150" y="150" width="150" height="60" class="box" rx="5" />
+         <text x="225" y="185" class="text label">Semantic (Vector)</text>
+
+         <rect x="450" y="150" width="150" height="60" class="box" rx="5" />
+         <text x="525" y="185" class="text label">Keyword (BM25)</text>
+
+         <rect x="300" y="300" width="200" height="60" class="box" rx="5" />
+         <text x="400" y="335" class="text label">RRF Fusion</text>
+
+         <rect x="300" y="400" width="200" height="60" class="box" rx="5" />
+         <text x="400" y="435" class="text label">Final Results</text>
+
+
+</svg>

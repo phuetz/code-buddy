@@ -1,0 +1,41 @@
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Spectre de l'Autonomie</text>
+
+      <line x1="50" y1="200" x2="750" y2="200" stroke="#fff" stroke-width="4" />
+      <text x="50" y="230" class="text" text-anchor="start">Aucune autonomie</text>
+      <text x="750" y="230" class="text" text-anchor="end">Autonomie totale</text>
+
+        <circle cx="120" cy="200" r="10" fill="#4ECDC4" />
+        <text x="120" y="180" class="text label">Chatbot</text>
+        <text x="120" y="250" class="text desc">L'humain décide tout</text>
+
+        <circle cx="295" cy="200" r="10" fill="#4ECDC4" />
+        <text x="295" y="180" class="text label">Assistant</text>
+        <text x="295" y="250" class="text desc">L'humain guide</text>
+
+        <circle cx="505" cy="200" r="10" fill="#4ECDC4" />
+        <text x="505" y="180" class="text label">Agent</text>
+        <text x="505" y="250" class="text desc">L'humain supervise</text>
+
+        <circle cx="680" cy="200" r="10" fill="#4ECDC4" />
+        <text x="680" y="180" class="text label">AGI?</text>
+        <text x="680" y="250" class="text desc">Autonomie complète</text>
+
+
+</svg>

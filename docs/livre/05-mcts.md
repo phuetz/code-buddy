@@ -34,30 +34,7 @@ Marc se pencha vers l'écran.
 
 Tree-of-Thought évalue chaque pensée **localement** — est-ce que cette pensée semble bonne maintenant ? Mais une pensée qui semble bonne peut mener à une impasse, et vice versa.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    ⚠️ LIMITE DE L'ÉVALUATION LOCALE                 │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Problème : Debugging d'un bug intermittent                         │
-│                                                                      │
-│  ToT évalue localement :                                            │
-│  ════════════════════════                                           │
-│                                                                      │
-│  ├─ "Vérifier les logs" → Score local : 0.8 ⭐                      │
-│  │   └─ Semble prometteur ! C'est une bonne pratique...            │
-│  │   └─ ... mais les logs ne montrent rien d'utile 😞              │
-│  │   └─ → Impasse après 3 niveaux d'exploration                    │
-│  │                                                                   │
-│  └─ "Reproduire le bug" → Score local : 0.5                         │
-│      └─ Semble basique, pas très excitant...                        │
-│      └─ ... mais mène directement à la cause root ! 🎯             │
-│      └─ → Solution trouvée en 2 niveaux                            │
-│                                                                      │
-│  ❌ PROBLÈME : L'évaluation locale ne prédit pas le succès final   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Limite Évaluation Locale généré par Nanobanana](images/limit_eval_locale.svg)
 
 ### 5.1.2 💡 L'Intuition MCTS
 
@@ -89,34 +66,7 @@ Au lieu d'évaluer localement, MCTS **simule jusqu'au bout** :
 
 ### 5.1.3 🔄 Les Quatre Phases de MCTS
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🔄 CYCLE MCTS : 4 PHASES                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│                                                                      │
-│   ┌──────────────┐        ┌──────────────┐        ┌──────────────┐ │
-│   │  1️⃣ SELECT   │───────▶│  2️⃣ EXPAND   │───────▶│ 3️⃣ SIMULATE │ │
-│   │              │        │              │        │   (Rollout)  │ │
-│   │  Choisir le  │        │  Ajouter un  │        │              │ │
-│   │  nœud le     │        │  nouvel      │        │  Jouer       │ │
-│   │  plus        │        │  enfant      │        │  jusqu'au    │ │
-│   │  prometteur  │        │              │        │  bout        │ │
-│   └──────────────┘        └──────────────┘        └──────┬───────┘ │
-│          ▲                                               │         │
-│          │                                               ▼         │
-│          │                                      ┌──────────────┐   │
-│          └──────────────────────────────────────│4️⃣ BACKPROP   │   │
-│                                                 │              │   │
-│                                                 │  Remonter le │   │
-│                                                 │  résultat    │   │
-│                                                 │  dans l'arbre│   │
-│                                                 └──────────────┘   │
-│                                                                      │
-│   🔁 Répéter N fois (budget de simulations)                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Cycle MCTS généré par Nanobanana](images/mcts_cycle.svg)
 
 | Phase | Action | Objectif |
 |:------|:-------|:---------|
@@ -349,108 +299,83 @@ interface MCTSConfig {
 }
 ```
 
-### 5.4.2 💻 Pseudo-code Complet
+### 5.4.2 💻 Implémentation Réelle
+
+Voici la véritable implémentation de MCTS dans `Grok-CLI` (extraite de `src/agent/reasoning/mcts.ts`), incluant le mécanisme de **Rethink** qui permet de raffiner les pensées erronées :
 
 ```typescript
-class MCTS {
-  async search(problem: string, context?: CodeContext): Promise<Solution> {
+// src/agent/reasoning/mcts.ts
+export class MCTS {
+  async search(problem: Problem): Promise<ReasoningResult> {
+    // ... initialisation ...
+
     // Créer la racine
-    const root = new MCTSNode({ action: problem, depth: 0 });
+    this.root = this.createNode(`Understanding the problem: ${problem.description}`, "analysis", null, 0);
 
-    // Boucle principale
+    // Boucle principale MCTS
     for (let i = 0; i < this.config.maxIterations; i++) {
+      this.stats.iterations = i + 1;
 
-      // 1️⃣ SELECT : Descendre l'arbre avec UCB1
-      let node = root;
-      while (!node.isTerminal && node.isFullyExpanded && node.hasChildren()) {
-        node = this.selectBestChild(node);
+      // 1️⃣ SELECTION : Descente avec UCB1
+      const selectedNode = this.select(this.root);
+
+      // 2️⃣ EXPANSION
+      if (selectedNode.depth < this.config.maxDepth) {
+        await this.expand(selectedNode, problem);
       }
 
-      // 2️⃣ EXPAND : Ajouter un nouvel enfant
-      if (!node.isTerminal && !node.isFullyExpanded) {
-        node = await this.expand(node, problem);
-      }
-
-      // 3️⃣ SIMULATE : Rollout jusqu'au bout
-      const reward = await this.simulate(node, problem, context);
-
-      // 4️⃣ BACKPROPAGATE : Remonter le résultat
-      this.backpropagate(node, reward);
-
-      // ⚡ Early stopping si excellente solution
-      if (reward >= this.config.earlyStopThreshold) {
-        if (await this.verifySolution(node, context)) {
-          console.log(`✅ Early stop at iteration ${i}`);
-          break;
+      // 3️⃣ SIMULATION & ÉVALUATION
+      if (selectedNode.children.length > 0) {
+        for (const child of selectedNode.children) {
+          await this.simulate(child, problem);
         }
       }
-    }
 
-    // Retourner le meilleur chemin (par visites, pas par UCB1)
-    return this.extractBestPath(root);
-  }
+      // 4️⃣ BACKPROPAGATION
+      this.backpropagate(selectedNode);
 
-  private selectBestChild(node: MCTSNode): MCTSNode {
-    let bestScore = -Infinity;
-    let bestChild: MCTSNode | null = null;
-
-    for (const child of node.children) {
-      const ucb1 = this.calculateUCB1(child, node);
-      if (ucb1 > bestScore) {
-        bestScore = ucb1;
-        bestChild = child;
+      // 5️⃣ RETHINK (Nouveauté Grok-CLI)
+      // Si une pensée a échoué mais semble prometteuse, on la "repense"
+      if (this.config.useRethink) {
+        await this.rethink(selectedNode, problem);
       }
+
+      // Early stopping si solution excellente trouvée
+      const solution = this.findBestSolution();
+      if (solution && solution.score > 0.9) break;
     }
 
-    return bestChild!;
+    return this.buildResult();
   }
 
-  private calculateUCB1(node: MCTSNode, parent: MCTSNode): number {
-    if (node.visits === 0) {
-      return Infinity; // Priorité absolue aux non-visités
-    }
+  // Calcul UCB1 (Upper Confidence Bound)
+  private calculateUCB1(node: ThoughtNode, parentVisits: number): number {
+    if (node.visits === 0) return Infinity; // Exploration infinie pour les non-visités
 
-    const exploitation = node.meanReward;
+    const exploitation = node.score / node.visits;
     const exploration = this.config.explorationConstant *
-      Math.sqrt(Math.log(parent.visits) / node.visits);
+      Math.sqrt(Math.log(parentVisits) / node.visits);
 
     return exploitation + exploration;
   }
 
-  private backpropagate(node: MCTSNode, reward: number): void {
-    let current: MCTSNode | null = node;
+  // Mécanisme de Rethink
+  private async rethink(node: ThoughtNode, _problem: Problem): Promise<void> {
+    const nodesToRethink = this.findNodesNeedingRethink(node);
 
-    while (current !== null) {
-      current.visits++;
-      current.totalReward += reward;
-      current.meanReward = current.totalReward / current.visits;
+    for (const n of nodesToRethink) {
+      if (n.metadata.feedback) {
+        // Demander au LLM de corriger sa pensée
+        const refinedContent = await this.refineThought(n, n.metadata.feedback);
 
-      if (reward > current.bestReward) {
-        current.bestReward = reward;
+        // Créer une version raffinée
+        const refinedNode = this.createNode(refinedContent, n.type, n.parent, n.depth);
+        refinedNode.state = "refined";
+
+        if (n.parent) n.parent.children.push(refinedNode);
+        n.state = "pruned"; // On élague l'ancienne version
       }
-
-      current = current.parent;
     }
-  }
-
-  private extractBestPath(root: MCTSNode): Solution {
-    const path: string[] = [];
-    let current = root;
-
-    // Suivre les enfants les plus visités (robuste)
-    while (current.hasChildren()) {
-      current = current.children.reduce((best, child) =>
-        child.visits > best.visits ? child : best
-      );
-      path.push(current.action);
-    }
-
-    return {
-      path,
-      score: current.meanReward,
-      confidence: current.visits / root.visits,
-      totalIterations: root.visits
-    };
   }
 }
 ```
@@ -575,48 +500,7 @@ export class HybridReasoner {
 }
 ```
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🔀 PIPELINE HYBRIDE ToT + MCTS                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│                        Problème                                     │
-│                           │                                          │
-│                           ▼                                          │
-│                   ┌───────────────┐                                 │
-│                   │  🌳 ToT       │                                 │
-│                   │  (exploration │                                 │
-│                   │   rapide)     │                                 │
-│                   └───────┬───────┘                                 │
-│                           │                                          │
-│                           ▼                                          │
-│               ┌───────────────────────┐                             │
-│               │  Top 3 candidats      │                             │
-│               │  • Candidat A (0.75)  │                             │
-│               │  • Candidat B (0.70)  │                             │
-│               │  • Candidat C (0.65)  │                             │
-│               └───────────┬───────────┘                             │
-│                           │                                          │
-│         ┌─────────────────┼─────────────────┐                       │
-│         │                 │                 │                        │
-│         ▼                 ▼                 ▼                        │
-│    ┌─────────┐      ┌─────────┐      ┌─────────┐                   │
-│    │🎲 MCTS  │      │🎲 MCTS  │      │🎲 MCTS  │                   │
-│    │(affine A)│      │(affine B)│      │(affine C)│                   │
-│    └────┬────┘      └────┬────┘      └────┬────┘                   │
-│         │                │                 │                        │
-│         ▼                ▼                 ▼                        │
-│      A: 0.82          B: 0.95 ⭐        C: 0.78                    │
-│                           │                                          │
-│                           ▼                                          │
-│                   ┌───────────────┐                                 │
-│                   │ 🏆 Meilleure  │                                 │
-│                   │   solution    │                                 │
-│                   │   (B: 0.95)   │                                 │
-│                   └───────────────┘                                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Pipeline Hybride généré par Nanobanana](images/hybrid_pipeline.svg)
 
 ---
 

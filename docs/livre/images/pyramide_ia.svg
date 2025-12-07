@@ -1,0 +1,36 @@
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Pyramide de l'IA Appliquée</text>
+
+        <rect x="300" y="50" width="200" height="75" fill="#FF6B6B" opacity="0.8" />
+        <text x="400" y="87.5" class="text label" fill="black" style="fill: black; font-weight: bold;">NIVEAU 4 : MULTI-AGENTS</text>
+        <text x="400" y="102.5" class="text desc" fill="#333" style="fill: #333;">Collaboration</text>
+
+        <rect x="250" y="125" width="300" height="75" fill="#4ECDC4" opacity="0.8" />
+        <text x="400" y="162.5" class="text label" fill="black" style="fill: black; font-weight: bold;">NIVEAU 3 : AGENT AUTONOME</text>
+        <text x="400" y="177.5" class="text desc" fill="#333" style="fill: #333;">Boucle autonome</text>
+
+        <rect x="200" y="200" width="400" height="75" fill="#45B7D1" opacity="0.8" />
+        <text x="400" y="237.5" class="text label" fill="black" style="fill: black; font-weight: bold;">NIVEAU 2 : ASSISTANT AUGMENTÉ</text>
+        <text x="400" y="252.5" class="text desc" fill="#333" style="fill: #333;">Aide l'humain</text>
+
+        <rect x="150" y="275" width="500" height="75" fill="#96CEB4" opacity="0.8" />
+        <text x="400" y="312.5" class="text label" fill="black" style="fill: black; font-weight: bold;">NIVEAU 1 : CHATBOT</text>
+        <text x="400" y="327.5" class="text desc" fill="#333" style="fill: #333;">Conversation simple</text>
+
+</svg>

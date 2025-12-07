@@ -1,0 +1,50 @@
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Limites du LLM Seul</text>
+
+
+           <line x1="400" y1="240" x2="150" y2="80" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="400" y1="240" x2="650" y2="80" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="400" y1="240" x2="150" y2="380" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="400" y1="240" x2="650" y2="380" class="line" marker-end="url(#arrowhead)" />
+
+
+
+         <rect x="300" y="200" width="200" height="80" class="box" rx="5" />
+         <text x="400" y="245" class="text label">LLM (Training Data)</text>
+
+         <rect x="50" y="50" width="200" height="60" class="box" rx="5" />
+         <text x="150" y="85" class="text label">⚠️ Connaissance Figée</text>
+
+         <rect x="550" y="50" width="200" height="60" class="box" rx="5" />
+         <text x="650" y="85" class="text label">⚠️ Pas de Code Privé</text>
+
+         <rect x="50" y="350" width="200" height="60" class="box" rx="5" />
+         <text x="150" y="385" class="text label">⚠️ Contexte Limité</text>
+
+         <rect x="550" y="350" width="200" height="60" class="box" rx="5" />
+         <text x="650" y="385" class="text label">⚠️ Coût Token</text>
+
+
+</svg>

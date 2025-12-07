@@ -1,0 +1,48 @@
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Chronologie des Innovations 2020-2025</text>
+
+      <line x1="50" y1="200" x2="750" y2="200" stroke="#666" stroke-width="4" />
+
+          <circle cx="50" cy="200" r="8" fill="#FF6B6B" />
+          <text x="50" y="170" class="text label" style="font-weight: bold;">2020</text>
+          <text x="50" y="190" class="text label">GPT-3</text>
+          <text x="50" y="230" class="text desc">Fondations</text>
+
+          <circle cx="225" cy="200" r="8" fill="#FF6B6B" />
+          <text x="225" y="170" class="text label" style="font-weight: bold;">2022</text>
+          <text x="225" y="190" class="text label">ChatGPT</text>
+          <text x="225" y="230" class="text desc">Grand Public</text>
+
+          <circle cx="400" cy="200" r="8" fill="#FF6B6B" />
+          <text x="400" y="170" class="text label" style="font-weight: bold;">2023</text>
+          <text x="400" y="190" class="text label">GPT-4 / AutoGPT</text>
+          <text x="400" y="230" class="text desc">Outils & Agents</text>
+
+          <circle cx="575" cy="200" r="8" fill="#FF6B6B" />
+          <text x="575" y="170" class="text label" style="font-weight: bold;">2024</text>
+          <text x="575" y="190" class="text label">Claude 3 / MCP</text>
+          <text x="575" y="230" class="text desc">Contexte & Standards</text>
+
+          <circle cx="750" cy="200" r="8" fill="#FF6B6B" />
+          <text x="750" y="170" class="text label" style="font-weight: bold;">2025</text>
+          <text x="750" y="190" class="text label">Grok-CLI</text>
+          <text x="750" y="230" class="text desc">Maturité Open Source</text>
+
+
+</svg>
