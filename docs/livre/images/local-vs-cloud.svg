@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 550">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="900" height="550" fill="url(#bgGrad)"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="20" font-weight="bold">Exécution Locale vs API Cloud</text>
+
+  <!-- LOCAL Section -->
+  <rect x="30" y="60" width="400" height="470" rx="12" fill="#1e3a5f" stroke="#2ecc71" stroke-width="2"/>
+  <text x="230" y="95" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="18" font-weight="bold">🏠 EXÉCUTION LOCALE</text>
+
+  <!-- Local tools -->
+  <rect x="50" y="115" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#2ecc71" stroke-width="1"/>
+  <text x="135" y="140" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Ollama</text>
+  <text x="135" y="160" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">Installation simple</text>
+  <text x="135" y="175" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">curl + run</text>
+  <text x="135" y="188" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">⭐ Débutants</text>
+
+  <rect x="240" y="115" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#3498db" stroke-width="1"/>
+  <text x="325" y="140" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="14" font-weight="bold">vLLM</text>
+  <text x="325" y="160" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">Haute performance</text>
+  <text x="325" y="175" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">Multi-GPU, batching</text>
+  <text x="325" y="188" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">⭐ Production</text>
+
+  <rect x="50" y="205" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#9b59b6" stroke-width="1"/>
+  <text x="135" y="230" text-anchor="middle" fill="#9b59b6" font-family="Arial, sans-serif" font-size="14" font-weight="bold">LM Studio</text>
+  <text x="135" y="250" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">Interface graphique</text>
+  <text x="135" y="265" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">Mac/Win/Linux</text>
+  <text x="135" y="278" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">⭐ Desktop</text>
+
+  <rect x="240" y="205" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="325" y="230" text-anchor="middle" fill="#e74c3c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">llama.cpp</text>
+  <text x="325" y="250" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">CPU optimisé</text>
+  <text x="325" y="265" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">Quantification GGUF</text>
+  <text x="325" y="278" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">⭐ Edge/Embarqué</text>
+
+  <!-- Local advantages -->
+  <text x="230" y="310" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="12" font-weight="bold">✓ Avantages</text>
+  <text x="60" y="335" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ 100% confidentialité</text>
+  <text x="60" y="355" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Pas de coût par token</text>
+  <text x="60" y="375" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Latence minimale (50-200ms)</text>
+  <text x="60" y="395" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Fonctionne hors ligne</text>
+  <text x="60" y="415" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Fine-tuning possible</text>
+
+  <!-- Local disadvantages -->
+  <text x="230" y="445" text-anchor="middle" fill="#e74c3c" font-family="Arial, sans-serif" font-size="12" font-weight="bold">✗ Inconvénients</text>
+  <text x="60" y="470" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="11">✗ GPU coûteux ($500-$50K)</text>
+  <text x="60" y="490" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="11">✗ Qualité inférieure (vs GPT-4)</text>
+  <text x="60" y="510" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="11">✗ Maintenance requise</text>
+
+  <!-- CLOUD Section -->
+  <rect x="470" y="60" width="400" height="470" rx="12" fill="#1e3a5f" stroke="#3498db" stroke-width="2"/>
+  <text x="670" y="95" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="18" font-weight="bold">☁️ API CLOUD</text>
+
+  <!-- Cloud providers -->
+  <rect x="490" y="115" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#2ecc71" stroke-width="1"/>
+  <text x="575" y="140" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="14" font-weight="bold">OpenAI</text>
+  <text x="575" y="160" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">GPT-4o, GPT-4 Turbo</text>
+  <text x="575" y="175" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">api.openai.com</text>
+  <text x="575" y="188" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">$5-30 / 1M tokens</text>
+
+  <rect x="680" y="115" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#9b59b6" stroke-width="1"/>
+  <text x="765" y="140" text-anchor="middle" fill="#9b59b6" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Anthropic</text>
+  <text x="765" y="160" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">Claude 3.5, Opus</text>
+  <text x="765" y="175" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">api.anthropic.com</text>
+  <text x="765" y="188" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">$3-75 / 1M tokens</text>
+
+  <rect x="490" y="205" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#f39c12" stroke-width="1"/>
+  <text x="575" y="230" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Google AI</text>
+  <text x="575" y="250" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">Gemini 1.5 Pro/Flash</text>
+  <text x="575" y="265" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">ai.google.dev</text>
+  <text x="575" y="278" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">$0.07-10 / 1M tokens</text>
+
+  <rect x="680" y="205" width="170" height="80" rx="8" fill="#0a0a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="765" y="230" text-anchor="middle" fill="#e74c3c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Groq / Together</text>
+  <text x="765" y="250" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10">Llama, Mixtral hosted</text>
+  <text x="765" y="265" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">Ultra rapide</text>
+  <text x="765" y="278" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="9">$0.2-2 / 1M tokens</text>
+
+  <!-- Cloud advantages -->
+  <text x="670" y="310" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="12" font-weight="bold">✓ Avantages</text>
+  <text x="500" y="335" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Meilleure qualité (GPT-4, Claude)</text>
+  <text x="500" y="355" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Setup en 5 minutes</text>
+  <text x="500" y="375" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Pas de hardware</text>
+  <text x="500" y="395" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Scalabilité infinie</text>
+  <text x="500" y="415" fill="#fff" font-family="Arial, sans-serif" font-size="11">✓ Mises à jour automatiques</text>
+
+  <!-- Cloud disadvantages -->
+  <text x="670" y="445" text-anchor="middle" fill="#e74c3c" font-family="Arial, sans-serif" font-size="12" font-weight="bold">✗ Inconvénients</text>
+  <text x="500" y="470" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="11">✗ Coût par token</text>
+  <text x="500" y="490" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="11">✗ Données envoyées au cloud</text>
+  <text x="500" y="510" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="11">✗ Latence réseau (200-2000ms)</text>
+</svg>

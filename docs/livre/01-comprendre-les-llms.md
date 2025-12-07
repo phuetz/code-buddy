@@ -39,7 +39,10 @@ Il sortit un carnet et un stylo, dessina rapidement un schéma.
 | 1.5 | 📈 Scaling Laws | Pourquoi plus grand = meilleur (avec nuances) |
 | 1.6 | ⚠️ Hallucinations | Comprendre pourquoi les LLMs "mentent" |
 | 1.7 | 💻 Implications pour le Code | Ce que tout développeur doit savoir |
-| 1.8 | 📝 Points Clés | Synthèse et concepts essentiels |
+| 1.8 | 🌐 Panorama des Modèles 2025 | Comparatif GPT-4, Claude, Gemini, Mistral, Llama |
+| 1.9 | 🏠 Exécution Locale vs API Cloud | Ollama, vLLM, et alternatives locales |
+| 1.10 | 📡 Format d'Échange Standard | Protocole API OpenAI, messages, completions |
+| 1.11 | 📝 Points Clés | Synthèse et concepts essentiels |
 
 ---
 
@@ -434,7 +437,414 @@ Comprendre le fonctionnement des LLMs change fondamentalement la façon dont on 
 
 ---
 
-## 📝 1.8 Points Clés du Chapitre
+## 🌐 1.8 Panorama des Modèles 2025
+
+Le paysage des LLMs évolue rapidement. Cette section présente les principaux modèles disponibles en 2025, leurs forces, faiblesses, et cas d'usage recommandés.
+
+### 1.8.1 Les Modèles Propriétaires (API Cloud)
+
+![Comparatif des Modèles](images/models-comparison.svg)
+
+| Modèle | Éditeur | Forces | Faiblesses | Coût (1M tokens) |
+|--------|---------|--------|------------|------------------|
+| **GPT-4o** | OpenAI | Polyvalent, multimodal, rapide | Coût élevé, données jusqu'à 2024 | ~$5-15 |
+| **GPT-4 Turbo** | OpenAI | Raisonnement avancé, 128K contexte | Plus lent, plus cher | ~$10-30 |
+| **Claude 3.5 Sonnet** | Anthropic | Code excellent, 200K contexte, sûr | Moins bon en maths | ~$3-15 |
+| **Claude 3 Opus** | Anthropic | Raisonnement le plus avancé | Très cher, plus lent | ~$15-75 |
+| **Gemini 1.5 Pro** | Google | 1M tokens contexte, multimodal | Moins bon en code | ~$3.5-10.5 |
+| **Gemini 1.5 Flash** | Google | Très rapide, économique | Moins précis | ~$0.075-0.3 |
+| **Grok-2** | xAI | Accès temps réel (X/Twitter) | Moins mature | ~$2-10 |
+
+### 1.8.2 Les Modèles Open Source / Open Weights
+
+Ces modèles peuvent être exécutés localement ou hébergés sur vos propres serveurs :
+
+| Modèle | Paramètres | Licence | Forces | Usage idéal |
+|--------|------------|---------|--------|-------------|
+| **Llama 3.1** | 8B/70B/405B | Meta Llama 3.1 | Polyvalent, bien documenté | Production générale |
+| **Mistral Large 2** | 123B | Apache 2.0 | Multilingue, code | Applications européennes |
+| **Mixtral 8x22B** | 141B (MoE) | Apache 2.0 | Efficace, rapide | Serveurs moyens |
+| **Qwen 2.5** | 0.5B-72B | Apache 2.0 | Multilangue, code | Asie, embarqué |
+| **DeepSeek V3** | 685B (MoE) | MIT | État de l'art open | Recherche, HPC |
+| **CodeLlama** | 7B-70B | Meta Llama 2 | Spécialisé code | IDE, assistants dev |
+| **Phi-3** | 3.8B-14B | MIT | Compact, performant | Edge, mobile |
+
+### 1.8.3 Critères de Choix
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ARBRE DE DÉCISION MODÈLE                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Besoin de confidentialité totale ?                            │
+│     │                                                          │
+│     ├── OUI → Modèle LOCAL (Llama, Mistral, Qwen)             │
+│     │          └── GPU disponible ?                            │
+│     │               ├── OUI → vLLM + Llama 70B                │
+│     │               └── NON → Ollama + Llama 8B / Phi-3       │
+│     │                                                          │
+│     └── NON → API CLOUD                                        │
+│              │                                                 │
+│              ├── Budget serré ?                                │
+│              │    ├── OUI → Gemini Flash, GPT-4o-mini         │
+│              │    └── NON → ↓                                  │
+│              │                                                 │
+│              ├── Besoin principal ?                            │
+│              │    ├── CODE → Claude 3.5 Sonnet                │
+│              │    ├── RAISONNEMENT → GPT-4 / Claude Opus      │
+│              │    ├── MULTIMODAL → GPT-4o / Gemini Pro        │
+│              │    ├── CONTEXTE LONG → Gemini 1.5 (1M)         │
+│              │    └── TEMPS RÉEL → Grok-2                     │
+│              │                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 1.8.4 Benchmarks Comparatifs (2025)
+
+| Benchmark | GPT-4o | Claude 3.5 | Gemini 1.5 | Llama 3.1 405B |
+|-----------|--------|------------|------------|----------------|
+| **MMLU** (connaissances) | 88.7% | 88.3% | 85.9% | 88.6% |
+| **HumanEval** (code) | 90.2% | 92.0% | 84.1% | 89.0% |
+| **GSM8K** (maths) | 95.3% | 96.4% | 94.4% | 96.8% |
+| **MATH** (maths avancées) | 76.6% | 71.1% | 67.7% | 73.8% |
+| **MT-Bench** (conversation) | 9.32 | 9.18 | 8.96 | 9.10 |
+
+> **Note** : Les benchmarks évoluent rapidement. Vérifiez les derniers résultats sur [lmsys.org/leaderboard](https://lmsys.org) pour des comparaisons à jour.
+
+---
+
+## 🏠 1.9 Exécution Locale vs API Cloud
+
+### 1.9.1 Pourquoi Exécuter un LLM Localement ?
+
+| Avantage | Description |
+|----------|-------------|
+| **Confidentialité** | Données ne quittent jamais votre infrastructure |
+| **Coût à long terme** | Pas de facturation par token après investissement initial |
+| **Latence** | Pas de latence réseau, réponse immédiate |
+| **Disponibilité** | Pas de dépendance aux API tierces |
+| **Personnalisation** | Fine-tuning possible sur vos données |
+
+### 1.9.2 Solutions d'Exécution Locale
+
+![Exécution Locale vs Cloud](images/local-vs-cloud.svg)
+
+#### Ollama — La Solution Simple
+
+```bash
+# Installation
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Télécharger et lancer un modèle
+ollama pull llama3.1:8b
+ollama run llama3.1:8b
+
+# API compatible OpenAI sur localhost:11434
+curl http://localhost:11434/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama3.1:8b",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+**Modèles recommandés pour Ollama :**
+
+| Modèle | RAM requise | Usage |
+|--------|-------------|-------|
+| `phi3:mini` | 4 GB | Tests, machines légères |
+| `llama3.1:8b` | 8 GB | Usage général |
+| `mistral:7b` | 8 GB | Bon compromis |
+| `codellama:13b` | 16 GB | Code |
+| `llama3.1:70b` | 48 GB | Haute qualité |
+
+#### LM Studio — Interface Graphique
+
+- Application desktop (Mac, Windows, Linux)
+- Interface chat intégrée
+- Gestion des modèles visuelle
+- API locale compatible OpenAI
+- Idéal pour débutants
+
+#### vLLM — Production à Grande Échelle
+
+```bash
+# Installation
+pip install vllm
+
+# Serveur haute performance
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Llama-3.1-70B-Instruct \
+  --tensor-parallel-size 4  # Multi-GPU
+```
+
+**Avantages de vLLM :**
+- PagedAttention : utilisation mémoire optimale
+- Continuous batching : débit maximal
+- Tensor parallelism : multi-GPU transparent
+- Compatible API OpenAI
+
+#### llama.cpp — Performance CPU/Edge
+
+```bash
+# Compilation
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp && make
+
+# Exécution (même sans GPU)
+./main -m llama-3.1-8b-q4_k_m.gguf \
+  -p "Explain quantum computing" \
+  -n 256
+```
+
+**Formats de quantification :**
+
+| Format | Taille (8B) | Qualité | Usage |
+|--------|-------------|---------|-------|
+| Q8_0 | ~8 GB | 99% | GPU avec VRAM suffisante |
+| Q5_K_M | ~5.5 GB | 97% | Bon compromis |
+| Q4_K_M | ~4.5 GB | 95% | CPU / RAM limitée |
+| Q3_K_S | ~3.5 GB | 90% | Embarqué / Edge |
+
+### 1.9.3 Comparaison Cloud vs Local
+
+| Critère | API Cloud | Local (Ollama/vLLM) |
+|---------|-----------|---------------------|
+| **Setup** | 5 minutes | 30 min - 2 heures |
+| **Coût initial** | $0 | GPU $500 - $50,000 |
+| **Coût par token** | $0.001 - $0.06 | ~$0 (électricité) |
+| **Latence** | 200-2000ms | 50-500ms |
+| **Confidentialité** | ⚠️ Données transmises | ✅ 100% local |
+| **Qualité max** | GPT-4, Claude Opus | Llama 405B, DeepSeek |
+| **Maintenance** | Aucune | Mises à jour manuelles |
+| **Scalabilité** | Infinie | Limitée au hardware |
+
+### 1.9.4 Configuration Hybride Recommandée
+
+```typescript
+// Routage intelligent local/cloud
+const routeModel = (task: Task): ModelConfig => {
+  // Tâches sensibles → Local
+  if (task.containsSensitiveData) {
+    return { provider: 'ollama', model: 'llama3.1:70b' };
+  }
+
+  // Tâches simples → Local (économie)
+  if (task.complexity === 'simple') {
+    return { provider: 'ollama', model: 'llama3.1:8b' };
+  }
+
+  // Tâches complexes → Cloud (qualité)
+  if (task.complexity === 'complex') {
+    return { provider: 'anthropic', model: 'claude-3-5-sonnet' };
+  }
+
+  // Défaut → Cloud économique
+  return { provider: 'openai', model: 'gpt-4o-mini' };
+};
+```
+
+---
+
+## 📡 1.10 Format d'Échange Standard
+
+### 1.10.1 L'API Chat Completions
+
+La quasi-totalité des LLMs modernes (OpenAI, Anthropic, Google, Mistral, Ollama) utilisent un format d'échange similaire, inspiré de l'API OpenAI. Comprendre ce format est essentiel pour tout développeur.
+
+![Format d'Échange API](images/api-exchange-format.svg)
+
+#### Structure d'une Requête
+
+```typescript
+interface ChatCompletionRequest {
+  model: string;                    // ex: "gpt-4o", "claude-3-5-sonnet"
+  messages: Message[];              // Historique de conversation
+  temperature?: number;             // 0-2, créativité (défaut: 1)
+  max_tokens?: number;              // Limite de réponse
+  top_p?: number;                   // Nucleus sampling
+  stream?: boolean;                 // Réponse en streaming
+  tools?: Tool[];                   // Outils disponibles (function calling)
+  tool_choice?: 'auto' | 'none' | ToolChoice;
+}
+
+interface Message {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | ContentPart[];  // Texte ou multimodal
+  name?: string;                    // Identifiant optionnel
+  tool_calls?: ToolCall[];          // Appels d'outils (assistant)
+  tool_call_id?: string;            // Réponse d'outil (tool)
+}
+```
+
+### 1.10.2 Les Rôles des Messages
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    STRUCTURE CONVERSATION                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ SYSTEM (1 seul, au début)                               │   │
+│  │ "Tu es un assistant expert en Python..."                │   │
+│  │ → Définit le comportement global du modèle              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                           ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ USER                                                    │   │
+│  │ "Comment lire un fichier JSON en Python ?"              │   │
+│  │ → Message de l'utilisateur                              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                           ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ ASSISTANT                                               │   │
+│  │ "Voici comment faire : import json..."                  │   │
+│  │ → Réponse précédente du modèle                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                           ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ USER                                                    │   │
+│  │ "Et si le fichier est très gros ?"                      │   │
+│  │ → Question de suivi                                     │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                           ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ ASSISTANT (avec tool_calls)                             │   │
+│  │ tool_calls: [{ function: "read_file", args: {...} }]    │   │
+│  │ → Le modèle demande à exécuter un outil                 │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                           ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ TOOL                                                    │   │
+│  │ tool_call_id: "call_123", content: "{ résultat... }"   │   │
+│  │ → Résultat de l'exécution de l'outil                    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 1.10.3 Exemple Complet
+
+```typescript
+// Requête complète avec outils
+const request = {
+  model: "gpt-4o",
+  messages: [
+    {
+      role: "system",
+      content: "Tu es un assistant de développement. Tu peux lire et modifier des fichiers."
+    },
+    {
+      role: "user",
+      content: "Lis le fichier config.json et dis-moi la version"
+    }
+  ],
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "read_file",
+        description: "Lit le contenu d'un fichier",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Chemin du fichier" }
+          },
+          required: ["path"]
+        }
+      }
+    }
+  ],
+  tool_choice: "auto"  // Le modèle décide s'il utilise un outil
+};
+
+// Réponse du modèle (avec appel d'outil)
+const response = {
+  id: "chatcmpl-123",
+  model: "gpt-4o",
+  choices: [{
+    index: 0,
+    message: {
+      role: "assistant",
+      content: null,  // Pas de texte car tool_call
+      tool_calls: [{
+        id: "call_abc123",
+        type: "function",
+        function: {
+          name: "read_file",
+          arguments: '{"path": "config.json"}'
+        }
+      }]
+    },
+    finish_reason: "tool_calls"
+  }],
+  usage: { prompt_tokens: 85, completion_tokens: 23, total_tokens: 108 }
+};
+
+// On exécute l'outil et on renvoie le résultat
+const followUp = {
+  model: "gpt-4o",
+  messages: [
+    ...request.messages,
+    response.choices[0].message,  // Message assistant avec tool_call
+    {
+      role: "tool",
+      tool_call_id: "call_abc123",
+      content: '{"version": "2.3.1", "name": "my-app"}'
+    }
+  ]
+};
+
+// Réponse finale
+// → "Le fichier config.json indique que la version est 2.3.1"
+```
+
+### 1.10.4 Paramètres de Génération
+
+| Paramètre | Plage | Effet | Usage recommandé |
+|-----------|-------|-------|------------------|
+| **temperature** | 0-2 | Créativité/aléatoire | 0 pour code, 0.7 pour créatif |
+| **max_tokens** | 1-∞ | Longueur max réponse | Selon besoin |
+| **top_p** | 0-1 | Nucleus sampling | 0.9-1 (alternatif à temperature) |
+| **frequency_penalty** | -2 à 2 | Pénalise répétitions | 0.5 pour texte varié |
+| **presence_penalty** | -2 à 2 | Encourage nouveaux sujets | 0.5 pour exploration |
+| **stop** | string[] | Séquences d'arrêt | ["```", "\n\n"] |
+
+### 1.10.5 Streaming
+
+Pour une meilleure UX, les réponses peuvent être streamées token par token :
+
+```typescript
+const stream = await openai.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "Écris un poème" }],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content || '';
+  process.stdout.write(content);  // Affiche progressivement
+}
+```
+
+### 1.10.6 Compatibilité Entre Fournisseurs
+
+| Fournisseur | Endpoint | Compatibilité OpenAI |
+|-------------|----------|---------------------|
+| **OpenAI** | `api.openai.com/v1` | ✅ Native |
+| **Anthropic** | `api.anthropic.com/v1` | ⚠️ Format différent |
+| **Google AI** | `generativelanguage.googleapis.com` | ⚠️ Format différent |
+| **Mistral** | `api.mistral.ai/v1` | ✅ Compatible |
+| **Ollama** | `localhost:11434/v1` | ✅ Compatible |
+| **vLLM** | `localhost:8000/v1` | ✅ Compatible |
+| **Together AI** | `api.together.xyz/v1` | ✅ Compatible |
+| **Groq** | `api.groq.com/v1` | ✅ Compatible |
+
+> **Conseil** : Utilisez un SDK comme LiteLLM ou OpenRouter pour abstraire les différences entre fournisseurs.
+
+---
+
+## 📝 1.11 Points Clés du Chapitre
 
 | Concept | Description | Importance |
 |---------|-------------|------------|
