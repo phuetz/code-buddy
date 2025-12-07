@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/cover-image.png" alt="Couverture du livre" width="400"/>
+</p>
+
 # Construire un Agent LLM Moderne
 
 **De la Théorie à Grok-CLI**
