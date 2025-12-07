@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="bgGrad7" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="criticalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e74c3c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c0392b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="highGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f39c12;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d68910;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="mediumGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f1c40f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d4ac0d;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="lowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2ecc71;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#27ae60;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="noiseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7f8c8d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#636e72;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="500" fill="url(#bgGrad7)"/>
+
+  <!-- Title -->
+  <text x="400" y="35" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#ffffff" text-anchor="middle">⚖️ PYRAMIDE DES PRIORITÉS DE CONTEXTE</text>
+
+  <!-- Pyramid levels -->
+  <!-- Critical (top) -->
+  <polygon points="400,70 320,140 480,140" fill="url(#criticalGrad)"/>
+  <text x="400" y="115" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">🔴 CRITICAL</text>
+
+  <!-- High -->
+  <polygon points="320,145 260,220 540,220 480,145" fill="url(#highGrad)"/>
+  <text x="400" y="190" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">🟠 HIGH</text>
+
+  <!-- Medium -->
+  <polygon points="260,225 200,300 600,300 540,225" fill="url(#mediumGrad)"/>
+  <text x="400" y="270" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333333" text-anchor="middle">🟡 MEDIUM</text>
+
+  <!-- Low -->
+  <polygon points="200,305 140,380 660,380 600,305" fill="url(#lowGrad)"/>
+  <text x="400" y="350" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">🟢 LOW</text>
+
+  <!-- Noise (bottom) -->
+  <polygon points="140,385 80,460 720,460 660,385" fill="url(#noiseGrad)"/>
+  <text x="400" y="430" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">⚫ NOISE → SUPPRIMER</text>
+
+  <!-- Right side descriptions -->
+  <!-- Critical items -->
+  <rect x="520" y="75" width="250" height="55" rx="5" fill="#2d2d44" stroke="#e74c3c" stroke-width="1"/>
+  <text x="535" y="95" font-family="Arial, sans-serif" font-size="10" fill="#e74c3c">Toujours garder :</text>
+  <text x="535" y="110" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• System prompt</text>
+  <text x="535" y="122" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Message actuel, Erreurs en cours</text>
+
+  <!-- High items -->
+  <rect x="570" y="155" width="200" height="55" rx="5" fill="#2d2d44" stroke="#f39c12" stroke-width="1"/>
+  <text x="585" y="175" font-family="Arial, sans-serif" font-size="10" fill="#f39c12">Garder si possible :</text>
+  <text x="585" y="190" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Code récent</text>
+  <text x="585" y="202" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Résultats d'outils</text>
+
+  <!-- Medium items -->
+  <rect x="620" y="235" width="160" height="55" rx="5" fill="#2d2d44" stroke="#f1c40f" stroke-width="1"/>
+  <text x="635" y="255" font-family="Arial, sans-serif" font-size="10" fill="#f1c40f">Peut être résumé :</text>
+  <text x="635" y="270" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Conversation</text>
+  <text x="635" y="282" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Documentation</text>
+
+  <!-- Low items -->
+  <rect x="670" y="315" width="110" height="55" rx="5" fill="#2d2d44" stroke="#2ecc71" stroke-width="1"/>
+  <text x="685" y="335" font-family="Arial, sans-serif" font-size="10" fill="#2ecc71">Supprimer si besoin :</text>
+  <text x="685" y="350" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Logs verbeux</text>
+  <text x="685" y="362" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Old context</text>
+
+  <!-- Noise items -->
+  <rect x="50" y="395" width="200" height="55" rx="5" fill="#2d2d44" stroke="#7f8c8d" stroke-width="1"/>
+  <text x="65" y="415" font-family="Arial, sans-serif" font-size="10" fill="#7f8c8d">Supprimer systématiquement :</text>
+  <text x="65" y="430" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Progress bars</text>
+  <text x="65" y="442" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Timestamps répétés, Lignes vides</text>
+
+  <!-- Arrows -->
+  <line x1="485" y1="110" x2="515" y2="100" stroke="#e74c3c" stroke-width="2"/>
+  <line x1="545" y1="180" x2="565" y2="180" stroke="#f39c12" stroke-width="2"/>
+  <line x1="605" y1="260" x2="615" y2="260" stroke="#f1c40f" stroke-width="2"/>
+  <line x1="665" y1="340" x2="665" y2="340" stroke="#2ecc71" stroke-width="2"/>
+  <line x1="255" y1="420" x2="290" y2="420" stroke="#7f8c8d" stroke-width="2"/>
+</svg>

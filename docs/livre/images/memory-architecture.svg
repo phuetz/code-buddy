@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="bgGrad5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="episodicGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e74c3c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c0392b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="semanticGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3498db;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2980b9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="proceduralGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f39c12;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d68910;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="prospectiveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#9b59b6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8e44ad;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="500" fill="url(#bgGrad5)"/>
+
+  <!-- Title -->
+  <text x="400" y="35" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#ffffff" text-anchor="middle">🧠 ARCHITECTURE MÉMOIRE PERSISTANTE</text>
+
+  <!-- Agent box at top -->
+  <rect x="325" y="55" width="150" height="50" rx="10" fill="#2d2d44" stroke="#2ecc71" stroke-width="2"/>
+  <text x="400" y="77" font-family="Arial, sans-serif" font-size="14" fill="#2ecc71" text-anchor="middle">🤖 Agent</text>
+  <text x="400" y="95" font-family="Arial, sans-serif" font-size="11" fill="#888888" text-anchor="middle">GrokAgent</text>
+
+  <!-- Arrow down -->
+  <path d="M 400 105 L 400 135" stroke="#4a4a6a" stroke-width="2" marker-end="url(#arrow2)"/>
+  <defs>
+    <marker id="arrow2" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a4a6a"/>
+    </marker>
+  </defs>
+
+  <!-- MemorySystem box -->
+  <rect x="275" y="140" width="250" height="70" rx="10" fill="#2d2d44" stroke="#f39c12" stroke-width="2"/>
+  <text x="400" y="165" font-family="Arial, sans-serif" font-size="14" fill="#f39c12" text-anchor="middle">🧠 MemorySystem</text>
+  <rect x="295" y="175" width="50" height="25" rx="5" fill="#3d3d54"/>
+  <text x="320" y="192" font-family="Arial, sans-serif" font-size="9" fill="#aaaaaa" text-anchor="middle">Index</text>
+  <rect x="355" y="175" width="50" height="25" rx="5" fill="#3d3d54"/>
+  <text x="380" y="192" font-family="Arial, sans-serif" font-size="9" fill="#aaaaaa" text-anchor="middle">Cache</text>
+
+  <!-- Arrows to memory types -->
+  <path d="M 320 210 L 150 260" stroke="#4a4a6a" stroke-width="2"/>
+  <path d="M 370 210 L 300 260" stroke="#4a4a6a" stroke-width="2"/>
+  <path d="M 430 210 L 500 260" stroke="#4a4a6a" stroke-width="2"/>
+  <path d="M 480 210 L 650 260" stroke="#4a4a6a" stroke-width="2"/>
+
+  <!-- Episodic Memory -->
+  <rect x="50" y="260" width="180" height="120" rx="10" fill="url(#episodicGrad)" filter="url(#glow2)"/>
+  <text x="140" y="290" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">📖 Épisodique</text>
+  <text x="140" y="315" font-family="Arial, sans-serif" font-size="10" fill="#ffcccc" text-anchor="middle">"Que s'est-il passé ?"</text>
+  <line x1="70" y1="325" x2="210" y2="325" stroke="#ffffff" stroke-width="1" opacity="0.3"/>
+  <text x="80" y="345" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Conversations</text>
+  <text x="80" y="360" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Actions</text>
+  <text x="80" y="375" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Résultats</text>
+
+  <!-- Semantic Memory -->
+  <rect x="250" y="260" width="180" height="120" rx="10" fill="url(#semanticGrad)" filter="url(#glow2)"/>
+  <text x="340" y="290" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">🧠 Sémantique</text>
+  <text x="340" y="315" font-family="Arial, sans-serif" font-size="10" fill="#bbdefb" text-anchor="middle">"Qu'ai-je appris ?"</text>
+  <line x1="270" y1="325" x2="410" y2="325" stroke="#ffffff" stroke-width="1" opacity="0.3"/>
+  <text x="280" y="345" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Faits codebase</text>
+  <text x="280" y="360" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Préférences user</text>
+  <text x="280" y="375" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Patterns</text>
+
+  <!-- Procedural Memory -->
+  <rect x="450" y="260" width="180" height="120" rx="10" fill="url(#proceduralGrad)" filter="url(#glow2)"/>
+  <text x="540" y="290" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">⚙️ Procédurale</text>
+  <text x="540" y="315" font-family="Arial, sans-serif" font-size="10" fill="#fdebd0" text-anchor="middle">"Comment faire ?"</text>
+  <line x1="470" y1="325" x2="610" y2="325" stroke="#ffffff" stroke-width="1" opacity="0.3"/>
+  <text x="480" y="345" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Workflows</text>
+  <text x="480" y="360" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Solutions</text>
+  <text x="480" y="375" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Séquences</text>
+
+  <!-- Prospective Memory -->
+  <rect x="650" y="260" width="130" height="120" rx="10" fill="url(#prospectiveGrad)" filter="url(#glow2)"/>
+  <text x="715" y="290" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">🔮 Prospective</text>
+  <text x="715" y="315" font-family="Arial, sans-serif" font-size="10" fill="#e1bee7" text-anchor="middle">"À faire ?"</text>
+  <line x1="665" y1="325" x2="765" y2="325" stroke="#ffffff" stroke-width="1" opacity="0.3"/>
+  <text x="670" y="345" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Tâches</text>
+  <text x="670" y="360" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Rappels</text>
+  <text x="670" y="375" font-family="Arial, sans-serif" font-size="9" fill="#ffffff">• Objectifs</text>
+
+  <!-- Arrow to storage -->
+  <path d="M 400 380 L 400 420" stroke="#4a4a6a" stroke-width="2" marker-end="url(#arrow2)"/>
+
+  <!-- Storage box -->
+  <rect x="275" y="425" width="250" height="50" rx="10" fill="#1e3a1e" stroke="#27ae60" stroke-width="2"/>
+  <text x="400" y="450" font-family="Arial, sans-serif" font-size="14" fill="#27ae60" text-anchor="middle">💾 Stockage (JSON)</text>
+  <text x="400" y="468" font-family="Arial, sans-serif" font-size="10" fill="#888888" text-anchor="middle">~/.grok/memory/</text>
+</svg>

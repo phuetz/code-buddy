@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <defs>
+    <linearGradient id="bgGrad10" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="beforeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e74c3c;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#c0392b;stop-opacity:0.8" />
+    </linearGradient>
+    <linearGradient id="afterGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2ecc71;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#27ae60;stop-opacity:0.8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="450" fill="url(#bgGrad10)"/>
+
+  <!-- Title -->
+  <text x="400" y="35" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#ffffff" text-anchor="middle">🚀 IMPACT DU LAZY LOADING</text>
+
+  <!-- Before section -->
+  <rect x="50" y="60" width="340" height="170" rx="10" fill="#2d2d44" stroke="#e74c3c" stroke-width="2"/>
+  <text x="220" y="90" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#e74c3c" text-anchor="middle">❌ AVANT (Chargement complet)</text>
+
+  <!-- Before loading bar -->
+  <rect x="70" y="110" width="300" height="30" rx="5" fill="url(#beforeGrad)"/>
+  <text x="220" y="130" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">3000ms (tous modules)</text>
+
+  <!-- Before stats -->
+  <text x="80" y="165" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">📦 Modules chargés: 47</text>
+  <text x="80" y="185" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">💾 Mémoire initiale: 245 MB</text>
+  <text x="80" y="205" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">⏱️ Premier message: 3500ms</text>
+
+  <!-- After section -->
+  <rect x="410" y="60" width="340" height="170" rx="10" fill="#2d2d44" stroke="#2ecc71" stroke-width="2"/>
+  <text x="580" y="90" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2ecc71" text-anchor="middle">✅ APRÈS (Lazy Loading)</text>
+
+  <!-- After loading bar -->
+  <rect x="430" y="110" width="12" height="30" rx="5" fill="url(#afterGrad)"/>
+  <text x="510" y="130" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71" text-anchor="middle">37ms (modules critiques)</text>
+
+  <!-- After stats -->
+  <text x="440" y="165" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">📦 Modules chargés: 5</text>
+  <text x="440" y="185" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">💾 Mémoire initiale: 48 MB</text>
+  <text x="440" y="205" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">⏱️ Premier message: 187ms</text>
+
+  <!-- Improvement arrow -->
+  <path d="M 390 145 L 410 145" stroke="#f39c12" stroke-width="3"/>
+  <polygon points="410,145 400,140 400,150" fill="#f39c12"/>
+  <text x="400" y="135" font-family="Arial, sans-serif" font-size="20" fill="#f39c12" text-anchor="middle">→</text>
+
+  <!-- Improvement boxes -->
+  <rect x="50" y="250" width="220" height="80" rx="10" fill="#1e3a1e" stroke="#2ecc71" stroke-width="2"/>
+  <text x="160" y="275" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71" text-anchor="middle">⏱️ Temps de démarrage</text>
+  <text x="160" y="300" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">3000ms → 37ms</text>
+  <text x="160" y="320" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2ecc71" text-anchor="middle">📉 -98.8%</text>
+
+  <rect x="290" y="250" width="220" height="80" rx="10" fill="#1e3a1e" stroke="#2ecc71" stroke-width="2"/>
+  <text x="400" y="275" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71" text-anchor="middle">💾 Mémoire initiale</text>
+  <text x="400" y="300" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">245 MB → 48 MB</text>
+  <text x="400" y="320" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2ecc71" text-anchor="middle">📉 -80.4%</text>
+
+  <rect x="530" y="250" width="220" height="80" rx="10" fill="#1e3a1e" stroke="#2ecc71" stroke-width="2"/>
+  <text x="640" y="275" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71" text-anchor="middle">📨 Premier message</text>
+  <text x="640" y="300" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">3500ms → 187ms</text>
+  <text x="640" y="320" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2ecc71" text-anchor="middle">📉 -94.7%</text>
+
+  <!-- Strategy box -->
+  <rect x="50" y="350" width="700" height="80" rx="10" fill="#2d2d44" stroke="#f39c12" stroke-width="2"/>
+  <text x="400" y="375" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f39c12" text-anchor="middle">🔮 Stratégie de Préchargement Intelligent</text>
+
+  <text x="80" y="400" font-family="Arial, sans-serif" font-size="10" fill="#ffffff">1️⃣ Charger uniquement: UI + Agent core</text>
+  <text x="300" y="400" font-family="Arial, sans-serif" font-size="10" fill="#ffffff">2️⃣ Précharger en arrière-plan</text>
+  <text x="520" y="400" font-family="Arial, sans-serif" font-size="10" fill="#ffffff">3️⃣ À la demande: PDF, Excel, etc.</text>
+
+  <text x="80" y="420" font-family="Arial, sans-serif" font-size="9" fill="#888888">→ ~37ms</text>
+  <text x="300" y="420" font-family="Arial, sans-serif" font-size="9" fill="#888888">→ Pendant l'attente user</text>
+  <text x="520" y="420" font-family="Arial, sans-serif" font-size="9" fill="#888888">→ Quand trigger détecté</text>
+</svg>

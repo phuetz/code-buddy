@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <defs>
+    <linearGradient id="bgGrad4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="cpuGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#9b59b6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8e44ad;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="ramGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3498db;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2980b9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="diskGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#27ae60;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e8449;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="450" fill="url(#bgGrad4)"/>
+
+  <!-- Title -->
+  <text x="400" y="35" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#ffffff" text-anchor="middle">🖥️ L'ANALOGIE MEMGPT / OS</text>
+
+  <!-- Column headers -->
+  <text x="200" y="70" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#9b59b6" text-anchor="middle">SYSTÈME D'EXPLOITATION</text>
+  <text x="600" y="70" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#3498db" text-anchor="middle">AGENT LLM (MemGPT)</text>
+
+  <!-- Divider -->
+  <line x1="400" y1="85" x2="400" y2="420" stroke="#4a4a6a" stroke-width="2" stroke-dasharray="5,5"/>
+
+  <!-- OS Side - CPU -->
+  <rect x="100" y="100" width="200" height="70" rx="10" fill="url(#cpuGrad)"/>
+  <text x="200" y="130" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">🔲 CPU</text>
+  <text x="200" y="150" font-family="Arial, sans-serif" font-size="11" fill="#e1bee7" text-anchor="middle">(traitement)</text>
+
+  <!-- OS Side - RAM -->
+  <rect x="100" y="190" width="200" height="70" rx="10" fill="url(#ramGrad)"/>
+  <text x="200" y="220" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">💾 RAM</text>
+  <text x="200" y="240" font-family="Arial, sans-serif" font-size="11" fill="#bbdefb" text-anchor="middle">(rapide, limité)</text>
+
+  <!-- OS Side - Disk -->
+  <rect x="100" y="280" width="200" height="70" rx="10" fill="url(#diskGrad)"/>
+  <text x="200" y="310" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">💿 Disque Dur</text>
+  <text x="200" y="330" font-family="Arial, sans-serif" font-size="11" fill="#a9dfbf" text-anchor="middle">(lent, illimité)</text>
+
+  <!-- Arrows OS side -->
+  <path d="M 200 170 L 200 190" stroke="#ffffff" stroke-width="2" marker-end="url(#arrowWhite)"/>
+  <path d="M 200 260 L 200 280" stroke="#ffffff" stroke-width="2" marker-end="url(#arrowWhite)"/>
+  <defs>
+    <marker id="arrowWhite" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ffffff"/>
+    </marker>
+  </defs>
+
+  <!-- LLM Side - LLM -->
+  <rect x="500" y="100" width="200" height="70" rx="10" fill="url(#cpuGrad)"/>
+  <text x="600" y="130" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">🤖 LLM</text>
+  <text x="600" y="150" font-family="Arial, sans-serif" font-size="11" fill="#e1bee7" text-anchor="middle">(raisonnement)</text>
+
+  <!-- LLM Side - Context Window -->
+  <rect x="500" y="190" width="200" height="70" rx="10" fill="url(#ramGrad)"/>
+  <text x="600" y="220" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">📝 Fenêtre Contexte</text>
+  <text x="600" y="240" font-family="Arial, sans-serif" font-size="11" fill="#bbdefb" text-anchor="middle">(limité, actif)</text>
+
+  <!-- LLM Side - Storage -->
+  <rect x="500" y="280" width="200" height="70" rx="10" fill="url(#diskGrad)"/>
+  <text x="600" y="310" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">📁 Stockage JSON</text>
+  <text x="600" y="330" font-family="Arial, sans-serif" font-size="11" fill="#a9dfbf" text-anchor="middle">(persistant)</text>
+
+  <!-- Arrows LLM side -->
+  <path d="M 600 170 L 600 190" stroke="#ffffff" stroke-width="2" marker-end="url(#arrowWhite)"/>
+  <path d="M 600 260 L 600 280" stroke="#ffffff" stroke-width="2" marker-end="url(#arrowWhite)"/>
+
+  <!-- Equivalence arrows -->
+  <text x="400" y="140" font-family="Arial, sans-serif" font-size="20" fill="#f39c12" text-anchor="middle">≡</text>
+  <text x="400" y="230" font-family="Arial, sans-serif" font-size="20" fill="#f39c12" text-anchor="middle">≡</text>
+  <text x="400" y="320" font-family="Arial, sans-serif" font-size="20" fill="#f39c12" text-anchor="middle">≡</text>
+
+  <!-- Bottom explanation boxes -->
+  <rect x="80" y="370" width="240" height="60" rx="8" fill="#2d2d44" stroke="#9b59b6" stroke-width="1"/>
+  <text x="200" y="395" font-family="Arial, sans-serif" font-size="11" fill="#cccccc" text-anchor="middle">Le gestionnaire de mémoire</text>
+  <text x="200" y="412" font-family="Arial, sans-serif" font-size="11" fill="#cccccc" text-anchor="middle">décide quoi garder en RAM</text>
+
+  <rect x="480" y="370" width="240" height="60" rx="8" fill="#2d2d44" stroke="#3498db" stroke-width="1"/>
+  <text x="600" y="395" font-family="Arial, sans-serif" font-size="11" fill="#cccccc" text-anchor="middle">MemGPT décide quoi</text>
+  <text x="600" y="412" font-family="Arial, sans-serif" font-size="11" fill="#cccccc" text-anchor="middle">garder dans le contexte</text>
+</svg>
