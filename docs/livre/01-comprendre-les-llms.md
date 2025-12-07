@@ -471,33 +471,7 @@ Ces modèles peuvent être exécutés localement ou hébergés sur vos propres s
 
 ### 1.8.3 Critères de Choix
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ARBRE DE DÉCISION MODÈLE                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Besoin de confidentialité totale ?                            │
-│     │                                                          │
-│     ├── OUI → Modèle LOCAL (Llama, Mistral, Qwen)             │
-│     │          └── GPU disponible ?                            │
-│     │               ├── OUI → vLLM + Llama 70B                │
-│     │               └── NON → Ollama + Llama 8B / Phi-3       │
-│     │                                                          │
-│     └── NON → API CLOUD                                        │
-│              │                                                 │
-│              ├── Budget serré ?                                │
-│              │    ├── OUI → Gemini Flash, GPT-4o-mini         │
-│              │    └── NON → ↓                                  │
-│              │                                                 │
-│              ├── Besoin principal ?                            │
-│              │    ├── CODE → Claude 3.5 Sonnet                │
-│              │    ├── RAISONNEMENT → GPT-4 / Claude Opus      │
-│              │    ├── MULTIMODAL → GPT-4o / Gemini Pro        │
-│              │    ├── CONTEXTE LONG → Gemini 1.5 (1M)         │
-│              │    └── TEMPS RÉEL → Grok-2                     │
-│              │                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Arbre de décision pour le choix de modèle](images/decision-tree-model.svg)
 
 ### 1.8.4 Benchmarks Comparatifs (2025)
 
@@ -679,49 +653,7 @@ interface Message {
 
 ### 1.10.2 Les Rôles des Messages
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    STRUCTURE CONVERSATION                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ SYSTEM (1 seul, au début)                               │   │
-│  │ "Tu es un assistant expert en Python..."                │   │
-│  │ → Définit le comportement global du modèle              │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ USER                                                    │   │
-│  │ "Comment lire un fichier JSON en Python ?"              │   │
-│  │ → Message de l'utilisateur                              │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ ASSISTANT                                               │   │
-│  │ "Voici comment faire : import json..."                  │   │
-│  │ → Réponse précédente du modèle                          │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ USER                                                    │   │
-│  │ "Et si le fichier est très gros ?"                      │   │
-│  │ → Question de suivi                                     │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ ASSISTANT (avec tool_calls)                             │   │
-│  │ tool_calls: [{ function: "read_file", args: {...} }]    │   │
-│  │ → Le modèle demande à exécuter un outil                 │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ TOOL                                                    │   │
-│  │ tool_call_id: "call_123", content: "{ résultat... }"   │   │
-│  │ → Résultat de l'exécution de l'outil                    │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Structure d'une conversation](images/conversation-structure.svg)
 
 ### 1.10.3 Exemple Complet
 

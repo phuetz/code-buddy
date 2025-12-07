@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
@@ -64,7 +65,10 @@ export class ImageTool {
   private async processFileImage(filePath: string): Promise<ProcessedImage> {
     const resolvedPath = path.resolve(process.cwd(), filePath);
 
-    if (!fs.existsSync(resolvedPath)) {
+    // Check file existence asynchronously
+    try {
+      await fsPromises.access(resolvedPath, fs.constants.R_OK);
+    } catch {
       throw new Error(`Image file not found: ${filePath}`);
     }
 
@@ -73,13 +77,13 @@ export class ImageTool {
       throw new Error(`Unsupported image format: ${ext}. Supported: ${this.supportedExtensions.join(', ')}`);
     }
 
-    const stats = fs.statSync(resolvedPath);
+    const stats = await fsPromises.stat(resolvedPath);
     const fileSizeMB = stats.size / (1024 * 1024);
     if (fileSizeMB > this.maxFileSizeMB) {
       throw new Error(`Image file too large: ${fileSizeMB.toFixed(2)}MB. Max: ${this.maxFileSizeMB}MB`);
     }
 
-    const buffer = fs.readFileSync(resolvedPath);
+    const buffer = await fsPromises.readFile(resolvedPath);
     const base64 = buffer.toString('base64');
     const mediaType = this.getMediaType(ext);
 

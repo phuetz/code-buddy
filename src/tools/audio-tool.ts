@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
@@ -40,7 +41,9 @@ export class AudioTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      try {
+        await fsPromises.access(resolvedPath, fs.constants.R_OK);
+      } catch {
         return {
           success: false,
           error: `Audio file not found: ${filePath}`
@@ -55,8 +58,8 @@ export class AudioTool {
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
-      const buffer = fs.readFileSync(resolvedPath);
+      const stats = await fsPromises.stat(resolvedPath);
+      const buffer = await fsPromises.readFile(resolvedPath);
 
       const info: AudioInfo = {
         filename: path.basename(filePath),
@@ -287,7 +290,9 @@ export class AudioTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      try {
+        await fsPromises.access(resolvedPath, fs.constants.R_OK);
+      } catch {
         return {
           success: false,
           error: `Audio file not found: ${filePath}`
@@ -295,7 +300,7 @@ export class AudioTool {
       }
 
       const ext = path.extname(resolvedPath).toLowerCase();
-      const buffer = fs.readFileSync(resolvedPath);
+      const buffer = await fsPromises.readFile(resolvedPath);
       const base64 = buffer.toString('base64');
 
       const mimeTypes: Record<string, string> = {

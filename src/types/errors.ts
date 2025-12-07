@@ -485,3 +485,133 @@ export function createApiError(
   }
   return new ApiError(message, { statusCode, endpoint });
 }
+
+// ============================================================================
+// Safe JSON Parsing Utilities
+// ============================================================================
+
+/**
+ * JSON parse error with context
+ */
+export class JSONParseError extends GrokError {
+  public readonly source?: string;
+  public readonly position?: number;
+
+  constructor(message: string, options: { source?: string; cause?: Error } = {}) {
+    super('JSON_PARSE_ERROR', message, { cause: options.cause, isOperational: true });
+    this.name = 'JSONParseError';
+    this.source = options.source;
+    // Try to extract position from SyntaxError
+    if (options.cause instanceof SyntaxError) {
+      const match = options.cause.message.match(/position\s+(\d+)/i);
+      if (match) {
+        this.position = parseInt(match[1], 10);
+      }
+    }
+  }
+}
+
+/**
+ * Safely parse JSON with error handling
+ * Returns parsed value or defaultValue on failure
+ *
+ * @param json - JSON string to parse
+ * @param defaultValue - Value to return on parse failure
+ * @param context - Optional context for error logging
+ * @returns Parsed value or default
+ *
+ * @example
+ * ```typescript
+ * const config = safeJSONParse(fileContent, { servers: [] }, 'config.json');
+ * const data = safeJSONParse<UserData>(apiResponse, null);
+ * ```
+ */
+export function safeJSONParse<T>(
+  json: string,
+  defaultValue: T,
+  context?: string
+): T {
+  if (!json || typeof json !== 'string') {
+    return defaultValue;
+  }
+  try {
+    return JSON.parse(json) as T;
+  } catch (error) {
+    // Log in development, silent in production
+    if (process.env.NODE_ENV !== 'production' && context) {
+      console.warn(`JSON parse failed for ${context}:`, getErrorMessage(error));
+    }
+    return defaultValue;
+  }
+}
+
+/**
+ * Parse JSON and throw typed error on failure
+ * Use when parsing failure should be handled explicitly
+ *
+ * @param json - JSON string to parse
+ * @param source - Source identifier for error context
+ * @returns Parsed value
+ * @throws {JSONParseError} on parse failure
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   const config = parseJSONOrThrow(content, 'settings.json');
+ * } catch (error) {
+ *   if (error instanceof JSONParseError) {
+ *     console.error(`Invalid JSON in ${error.source}`);
+ *   }
+ * }
+ * ```
+ */
+export function parseJSONOrThrow<T = unknown>(json: string, source?: string): T {
+  if (!json || typeof json !== 'string') {
+    throw new JSONParseError('Input is not a valid string', { source });
+  }
+  try {
+    return JSON.parse(json) as T;
+  } catch (error) {
+    throw new JSONParseError(
+      `Failed to parse JSON${source ? ` from ${source}` : ''}: ${getErrorMessage(error)}`,
+      { source, cause: error instanceof Error ? error : undefined }
+    );
+  }
+}
+
+/**
+ * Parse JSON with validation function
+ * Returns null if parsing fails or validation returns false
+ *
+ * @param json - JSON string to parse
+ * @param validator - Function to validate parsed result
+ * @param context - Optional context for error logging
+ * @returns Validated parsed value or null
+ *
+ * @example
+ * ```typescript
+ * interface Config { apiKey: string }
+ * const config = parseJSONWithValidation<Config>(
+ *   content,
+ *   (val): val is Config => typeof val?.apiKey === 'string',
+ *   'config.json'
+ * );
+ * ```
+ */
+export function parseJSONWithValidation<T>(
+  json: string,
+  validator: (value: unknown) => value is T,
+  context?: string
+): T | null {
+  const parsed = safeJSONParse(json, null, context);
+  if (parsed === null) {
+    return null;
+  }
+  if (!validator(parsed)) {
+    if (process.env.NODE_ENV !== 'production' && context) {
+      console.warn(`JSON validation failed for ${context}`);
+    }
+    return null;
+  }
+  return parsed;
+}

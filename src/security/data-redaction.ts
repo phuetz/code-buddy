@@ -233,31 +233,31 @@ const DEFAULT_PATTERNS: RedactionPattern[] = [
     severity: 'critical',
   },
 
-  // Database Connection Strings
+  // Database Connection Strings - Fixed with length limits to prevent ReDoS
   {
     name: 'PostgreSQL Connection String',
-    pattern: /postgres(?:ql)?:\/\/[^:]+:[^@]+@[^\s]+/gi,
+    pattern: /postgres(?:ql)?:\/\/[^:@\s]{1,128}:[^@\s]{1,256}@[^\s]{1,512}/gi,
     replacement: '[REDACTED:POSTGRES_URL]',
     category: 'connection_string',
     severity: 'critical',
   },
   {
     name: 'MySQL Connection String',
-    pattern: /mysql:\/\/[^:]+:[^@]+@[^\s]+/gi,
+    pattern: /mysql:\/\/[^:@\s]{1,128}:[^@\s]{1,256}@[^\s]{1,512}/gi,
     replacement: '[REDACTED:MYSQL_URL]',
     category: 'connection_string',
     severity: 'critical',
   },
   {
     name: 'MongoDB Connection String',
-    pattern: /mongodb(?:\+srv)?:\/\/[^:]+:[^@]+@[^\s]+/gi,
+    pattern: /mongodb(?:\+srv)?:\/\/[^:@\s]{1,128}:[^@\s]{1,256}@[^\s]{1,512}/gi,
     replacement: '[REDACTED:MONGODB_URL]',
     category: 'connection_string',
     severity: 'critical',
   },
   {
     name: 'Redis Connection String',
-    pattern: /redis:\/\/[^:]*:[^@]+@[^\s]+/gi,
+    pattern: /redis:\/\/[^:@\s]{0,128}:[^@\s]{1,256}@[^\s]{1,512}/gi,
     replacement: '[REDACTED:REDIS_URL]',
     category: 'connection_string',
     severity: 'critical',
@@ -272,10 +272,10 @@ const DEFAULT_PATTERNS: RedactionPattern[] = [
     severity: 'high',
   },
 
-  // Passwords in URLs
+  // Passwords in URLs - Fixed to prevent ReDoS with possessive-like matching
   {
     name: 'Password in URL',
-    pattern: /:\/\/[^:]+:([^@]{8,})@/g,
+    pattern: /:\/\/[^:@]{1,256}:([^@]{8,128})@/g,
     replacement: '://[user]:[REDACTED:PASSWORD]@',
     category: 'password',
     severity: 'critical',
@@ -291,7 +291,7 @@ const DEFAULT_PATTERNS: RedactionPattern[] = [
   },
   {
     name: 'Bearer Token',
-    pattern: /Bearer\s+[A-Za-z0-9\-_.~+/]+=*/gi,
+    pattern: /Bearer\s+[A-Za-z0-9\-_.~+/=]{20,512}/gi,
     replacement: 'Bearer [REDACTED:TOKEN]',
     category: 'token',
     severity: 'high',

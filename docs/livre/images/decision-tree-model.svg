@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 550">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="localGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#34d399"/>
+    </linearGradient>
+    <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#60a5fa"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="550" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <rect x="200" y="15" width="400" height="40" rx="8" fill="url(#headerGrad)" filter="url(#shadow)"/>
+  <text x="400" y="42" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16" font-weight="bold">ARBRE DE DECISION - CHOIX DE MODELE</text>
+
+  <!-- Question 1: Confidentialité -->
+  <rect x="250" y="75" width="300" height="45" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" filter="url(#shadow)"/>
+  <text x="400" y="103" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#92400e">Besoin de confidentialité totale ?</text>
+
+  <!-- Arrows from Q1 -->
+  <path d="M325 120 L200 155" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#arrowGreen)"/>
+  <path d="M475 120 L600 155" stroke="#3b82f6" stroke-width="2" fill="none"/>
+  <text x="230" y="140" font-family="Arial, sans-serif" font-size="11" fill="#10b981" font-weight="bold">OUI</text>
+  <text x="550" y="140" font-family="Arial, sans-serif" font-size="11" fill="#3b82f6" font-weight="bold">NON</text>
+
+  <!-- LOCAL Branch -->
+  <rect x="50" y="160" width="280" height="35" rx="6" fill="url(#localGrad)" filter="url(#shadow)"/>
+  <text x="190" y="183" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Modele LOCAL (Llama, Mistral, Qwen)</text>
+
+  <!-- GPU Question -->
+  <rect x="80" y="215" width="220" height="35" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="190" y="238" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#065f46">GPU disponible ?</text>
+
+  <!-- GPU Options -->
+  <rect x="30" y="270" width="150" height="50" rx="5" fill="#ecfdf5" stroke="#10b981" stroke-width="1"/>
+  <text x="105" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#047857">OUI</text>
+  <text x="105" y="308" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#065f46">vLLM + Llama 70B</text>
+
+  <rect x="200" y="270" width="150" height="50" rx="5" fill="#ecfdf5" stroke="#10b981" stroke-width="1"/>
+  <text x="275" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#047857">NON</text>
+  <text x="275" y="308" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#065f46">Ollama + Llama 8B/Phi-3</text>
+
+  <!-- CLOUD Branch -->
+  <rect x="470" y="160" width="280" height="35" rx="6" fill="url(#cloudGrad)" filter="url(#shadow)"/>
+  <text x="610" y="183" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="12" font-weight="bold">API CLOUD</text>
+
+  <!-- Budget Question -->
+  <rect x="500" y="215" width="220" height="35" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="610" y="238" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1e40af">Budget serre ?</text>
+
+  <!-- Budget OUI -->
+  <rect x="450" y="270" width="140" height="45" rx="5" fill="#eff6ff" stroke="#3b82f6" stroke-width="1"/>
+  <text x="520" y="288" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#1d4ed8">OUI</text>
+  <text x="520" y="303" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#1e40af">Gemini Flash</text>
+  <text x="520" y="313" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#1e40af">GPT-4o-mini</text>
+
+  <!-- Budget NON - Besoin principal -->
+  <rect x="610" y="270" width="150" height="35" rx="5" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="685" y="293" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#1d4ed8">NON - Besoin principal ?</text>
+
+  <!-- Use cases -->
+  <g transform="translate(420, 330)">
+    <rect x="0" y="0" width="110" height="55" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+    <text x="55" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#92400e">CODE</text>
+    <text x="55" y="33" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#78350f">Claude 3.5</text>
+    <text x="55" y="46" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#78350f">Sonnet</text>
+  </g>
+
+  <g transform="translate(540, 330)">
+    <rect x="0" y="0" width="110" height="55" rx="4" fill="#fce7f3" stroke="#ec4899" stroke-width="1"/>
+    <text x="55" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#9d174d">RAISONNEMENT</text>
+    <text x="55" y="33" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#831843">GPT-4 /</text>
+    <text x="55" y="46" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#831843">Claude Opus</text>
+  </g>
+
+  <g transform="translate(660, 330)">
+    <rect x="0" y="0" width="110" height="55" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="1"/>
+    <text x="55" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#3730a3">MULTIMODAL</text>
+    <text x="55" y="33" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#312e81">GPT-4o /</text>
+    <text x="55" y="46" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#312e81">Gemini Pro</text>
+  </g>
+
+  <g transform="translate(420, 400)">
+    <rect x="0" y="0" width="110" height="55" rx="4" fill="#ccfbf1" stroke="#14b8a6" stroke-width="1"/>
+    <text x="55" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#0f766e">CONTEXTE LONG</text>
+    <text x="55" y="33" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#115e59">Gemini 1.5</text>
+    <text x="55" y="46" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#115e59">(1M tokens)</text>
+  </g>
+
+  <g transform="translate(540, 400)">
+    <rect x="0" y="0" width="110" height="55" rx="4" fill="#fee2e2" stroke="#ef4444" stroke-width="1"/>
+    <text x="55" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#991b1b">TEMPS REEL</text>
+    <text x="55" y="38" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#7f1d1d">Grok-2</text>
+  </g>
+
+  <!-- Arrows -->
+  <line x1="190" y1="195" x2="190" y2="215" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="105" y1="250" x2="105" y2="270" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="275" y1="250" x2="275" y2="270" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="610" y1="195" x2="610" y2="215" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="520" y1="250" x2="520" y2="270" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="685" y1="250" x2="685" y2="270" stroke="#3b82f6" stroke-width="1.5"/>
+
+  <!-- Legend -->
+  <rect x="30" y="480" width="740" height="55" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="50" y="502" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#475569">Legende:</text>
+  <rect x="120" y="490" width="15" height="15" rx="3" fill="url(#localGrad)"/>
+  <text x="140" y="502" font-family="Arial, sans-serif" font-size="10" fill="#475569">Local (confidentialite)</text>
+  <rect x="280" y="490" width="15" height="15" rx="3" fill="url(#cloudGrad)"/>
+  <text x="300" y="502" font-family="Arial, sans-serif" font-size="10" fill="#475569">Cloud (qualite/scalabilite)</text>
+  <rect x="460" y="490" width="15" height="15" rx="3" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="480" y="502" font-family="Arial, sans-serif" font-size="10" fill="#475569">Question/Decision</text>
+  <rect x="620" y="490" width="15" height="15" rx="3" fill="#ecfdf5" stroke="#10b981"/>
+  <text x="640" y="502" font-family="Arial, sans-serif" font-size="10" fill="#475569">Resultat</text>
+</svg>

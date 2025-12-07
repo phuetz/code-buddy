@@ -779,33 +779,7 @@ Un aspect clé de Grok-CLI est son ancrage dans la **recherche académique réce
 
 ### 15.11.2 Comment Lire un Article et l'Implémenter
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│            PROCESSUS : Article → Implémentation                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. LECTURE CRITIQUE                                            │
-│     ├── Abstract : Problème résolu ?                           │
-│     ├── Results : Gains quantifiés ?                           │
-│     └── Method : Algorithme clair ?                            │
-│                                                                 │
-│  2. PROTOTYPE                                                   │
-│     ├── Implémenter le cas simple                              │
-│     ├── Tester sur exemples du paper                           │
-│     └── Valider les métriques                                  │
-│                                                                 │
-│  3. ADAPTATION                                                  │
-│     ├── Adapter au contexte Grok-CLI                           │
-│     ├── Gérer les cas edge                                     │
-│     └── Optimiser pour la production                           │
-│                                                                 │
-│  4. INTÉGRATION                                                 │
-│     ├── Interface TypeScript typée                             │
-│     ├── Tests unitaires et intégration                         │
-│     └── Documentation inline                                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Processus Article vers Implémentation](images/article-to-implementation.svg)
 
 ### 15.11.3 Exemple : Implémenter FrugalGPT
 

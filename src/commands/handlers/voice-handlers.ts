@@ -138,8 +138,10 @@ Install with: pip3 install edge-tts`,
     };
   }
 
-  // Start speaking in background
-  ttsManager.speak(text, 'fr');
+  // Start speaking in background (fire-and-forget with error handling)
+  ttsManager.speak(text, 'fr').catch(() => {
+    // Errors are emitted via 'error' event, no need to handle here
+  });
 
   return {
     handled: true,

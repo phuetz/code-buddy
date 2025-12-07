@@ -31,6 +31,7 @@ import { getMCPClient, MCPClient } from "../mcp/mcp-client.js";
 import { getSettingsManager } from "../utils/settings-manager.js";
 import { getSystemPromptForMode } from "../prompts/index.js";
 import { getCostTracker, CostTracker } from "../utils/cost-tracker.js";
+import { getAutonomyManager } from "../utils/autonomy-manager.js";
 import { ContextManagerV2, createContextManager } from "../context/context-manager-v2.js";
 import { sanitizeLLMOutput, extractCommentaryToolCalls } from "../utils/sanitize.js";
 import { getErrorMessage } from "../types/errors.js";
@@ -59,14 +60,65 @@ import type { ChatEntry, StreamingChunk } from "./types.js";
  */
 export class GrokAgent extends EventEmitter {
   private grokClient: GrokClient;
-  private textEditor: TextEditorTool;
-  private morphEditor: MorphEditorTool | null;
-  private bash: BashTool;
-  private todoTool: TodoTool;
-  private search: SearchTool;
-  private webSearch: WebSearchTool;
-  private imageTool: ImageTool;
+  // Lazy-loaded tool instances (improves startup time)
+  private _textEditor: TextEditorTool | null = null;
+  private _morphEditor: MorphEditorTool | null | undefined = undefined; // undefined = not checked yet
+  private _bash: BashTool | null = null;
+  private _todoTool: TodoTool | null = null;
+  private _search: SearchTool | null = null;
+  private _webSearch: WebSearchTool | null = null;
+  private _imageTool: ImageTool | null = null;
   private chatHistory: ChatEntry[] = [];
+
+  // Lazy tool getters - only instantiate when first accessed
+  private get textEditor(): TextEditorTool {
+    if (!this._textEditor) {
+      this._textEditor = new TextEditorTool();
+    }
+    return this._textEditor;
+  }
+
+  private get morphEditor(): MorphEditorTool | null {
+    if (this._morphEditor === undefined) {
+      this._morphEditor = process.env.MORPH_API_KEY ? new MorphEditorTool() : null;
+    }
+    return this._morphEditor;
+  }
+
+  private get bash(): BashTool {
+    if (!this._bash) {
+      this._bash = new BashTool();
+    }
+    return this._bash;
+  }
+
+  private get todoTool(): TodoTool {
+    if (!this._todoTool) {
+      this._todoTool = new TodoTool();
+    }
+    return this._todoTool;
+  }
+
+  private get search(): SearchTool {
+    if (!this._search) {
+      this._search = new SearchTool();
+    }
+    return this._search;
+  }
+
+  private get webSearch(): WebSearchTool {
+    if (!this._webSearch) {
+      this._webSearch = new WebSearchTool();
+    }
+    return this._webSearch;
+  }
+
+  private get imageTool(): ImageTool {
+    if (!this._imageTool) {
+      this._imageTool = new ImageTool();
+    }
+    return this._imageTool;
+  }
   private messages: GrokMessage[] = [];
   private tokenCounter: TokenCounter;
   // Maximum history entries to prevent memory bloat (keep last N entries)
@@ -112,27 +164,43 @@ export class GrokAgent extends EventEmitter {
     const savedModel = manager.getCurrentModel();
     const modelToUse = model || savedModel || "grok-code-fast-1";
 
-    // YOLO mode: full autonomy with high rounds, otherwise conservative defaults
-    this.yoloMode = process.env.YOLO_MODE === "true";
+    // YOLO mode: requires BOTH env var AND explicit config confirmation
+    // This prevents accidental activation via env var alone
+    const autonomyManager = getAutonomyManager();
+    const envYoloMode = process.env.YOLO_MODE === "true";
+    const configYoloMode = autonomyManager.isYOLOEnabled();
+
+    // YOLO mode requires explicit enablement through autonomy manager
+    // Env var alone only triggers a warning, doesn't enable YOLO
+    if (envYoloMode && !configYoloMode) {
+      console.warn("⚠️  YOLO_MODE env var set but not enabled via /yolo command or config.");
+      console.warn("   Use '/yolo on' to explicitly enable YOLO mode.");
+      this.yoloMode = false;
+    } else {
+      this.yoloMode = configYoloMode;
+    }
+
     this.maxToolRounds = maxToolRounds || (this.yoloMode ? 400 : 50);
 
-    // Session cost limit: default $10, unlimited in YOLO mode
-    this.sessionCostLimit = process.env.MAX_COST
-      ? parseFloat(process.env.MAX_COST)
-      : this.yoloMode
-        ? Infinity
-        : 10;
+    // Session cost limit: ALWAYS have a hard limit, even in YOLO mode
+    // Default $10, YOLO mode gets $100 max (prevents runaway costs)
+    const YOLO_HARD_LIMIT = 100; // $100 max even in YOLO mode
+    const maxCostEnv = process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : null;
+
+    if (this.yoloMode) {
+      // In YOLO mode, use env var if set, otherwise $100 hard limit
+      this.sessionCostLimit = maxCostEnv !== null
+        ? Math.min(maxCostEnv, YOLO_HARD_LIMIT * 10) // Allow up to $1000 if explicitly set
+        : YOLO_HARD_LIMIT;
+      console.warn(`🚀 YOLO MODE ACTIVE - Cost limit: $${this.sessionCostLimit}, Max rounds: ${this.maxToolRounds}`);
+    } else {
+      this.sessionCostLimit = maxCostEnv !== null ? maxCostEnv : 10;
+    }
 
     this.costTracker = getCostTracker();
     this.useRAGToolSelection = useRAGToolSelection;
     this.grokClient = new GrokClient(apiKey, modelToUse, baseURL);
-    this.textEditor = new TextEditorTool();
-    this.morphEditor = process.env.MORPH_API_KEY ? new MorphEditorTool() : null;
-    this.bash = new BashTool();
-    this.todoTool = new TodoTool();
-    this.search = new SearchTool();
-    this.webSearch = new WebSearchTool();
-    this.imageTool = new ImageTool();
+    // Tools are now lazy-loaded via getters (see lazy tool getters above)
     this.tokenCounter = createTokenCounter(modelToUse);
 
     // Initialize context manager with model-specific limits
@@ -305,10 +373,21 @@ export class GrokAgent extends EventEmitter {
     const results = new Map<string, ToolResult>();
 
     if (this.canParallelizeToolCalls(toolCalls)) {
-      // Execute in parallel
+      // Execute in parallel with proper error handling per tool
       const promises = toolCalls.map(async (toolCall) => {
-        const result = await this.executeTool(toolCall);
-        return { id: toolCall.id, result };
+        try {
+          const result = await this.executeTool(toolCall);
+          return { id: toolCall.id, result };
+        } catch (error) {
+          // Individual tool failure doesn't crash other parallel tools
+          return {
+            id: toolCall.id,
+            result: {
+              success: false,
+              error: `Tool execution failed: ${getErrorMessage(error)}`,
+            } as ToolResult,
+          };
+        }
       });
 
       const settled = await Promise.all(promises);

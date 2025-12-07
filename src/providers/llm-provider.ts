@@ -496,11 +496,18 @@ export class ClaudeProvider extends BaseLLMProvider {
           content.push({ type: 'text', text: msg.content });
         }
         for (const tc of msg.tool_calls) {
+          let input: unknown = {};
+          try {
+            input = JSON.parse(tc.function.arguments);
+          } catch {
+            // Invalid JSON in tool arguments - use empty object
+            input = {};
+          }
           content.push({
             type: 'tool_use',
             id: tc.id,
             name: tc.function.name,
-            input: JSON.parse(tc.function.arguments),
+            input,
           });
         }
         messages.push({ role: 'assistant', content: content as Array<{ type: string }> });

@@ -52,7 +52,13 @@ export class CacheRepository {
     // Update hit count
     this.db.prepare('UPDATE cache SET hits = hits + 1 WHERE key = ?').run(key);
 
-    return JSON.parse(result.value) as T;
+    try {
+      return JSON.parse(result.value) as T;
+    } catch {
+      // Corrupted cache entry - delete it and return null
+      this.delete(key);
+      return null;
+    }
   }
 
   /**
@@ -230,12 +236,19 @@ export class CacheRepository {
           r.embedding.byteOffset + r.embedding.byteLength
         )
       );
+      let value: unknown = null;
+      try {
+        value = JSON.parse(r.value);
+      } catch {
+        // Skip corrupted entries
+        value = null;
+      }
       return {
         key: r.key,
-        value: JSON.parse(r.value),
+        value,
         similarity: this.cosineSimilarity(queryEmbedding, embedding),
       };
-    });
+    }).filter(r => r.value !== null);
 
     // Sort and return top K
     return withSimilarity

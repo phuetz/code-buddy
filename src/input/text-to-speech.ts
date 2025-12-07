@@ -145,8 +145,11 @@ export class TextToSpeechManager extends EventEmitter {
 
   /**
    * Speak text
+   * Note: This method catches all errors internally to avoid unhandled rejections.
+   * Errors are emitted via 'error' event instead.
    */
   async speak(text: string, language: string = 'fr'): Promise<void> {
+    // Check enabled state immediately
     if (!this.config.enabled) {
       return;
     }
@@ -157,17 +160,23 @@ export class TextToSpeechManager extends EventEmitter {
       return;
     }
 
-    const availability = await this.isAvailable();
-    if (!availability.available) {
-      this.emit('error', new Error(availability.reason));
-      return;
-    }
-
-    this.state.isSpeaking = true;
-    this.state.currentText = text;
-    this.emit('speaking-started', text);
-
     try {
+      const availability = await this.isAvailable();
+      if (!availability.available) {
+        this.emit('error', new Error(availability.reason));
+        return;
+      }
+
+      // Double-check enabled state after async availability check
+      // (user might have disabled TTS while we were checking)
+      if (!this.config.enabled) {
+        return;
+      }
+
+      this.state.isSpeaking = true;
+      this.state.currentText = text;
+      this.emit('speaking-started', text);
+
       switch (this.config.provider) {
         case 'edge-tts':
           await this.speakWithEdgeTTS(text, language);
@@ -185,16 +194,25 @@ export class TextToSpeechManager extends EventEmitter {
           await this.speakWithEdgeTTS(text, language);
       }
     } catch (error) {
+      // Emit error event but don't throw - prevents unhandled rejections
       this.emit('error', error);
     } finally {
       this.state.isSpeaking = false;
       this.state.currentText = undefined;
       this.emit('speaking-stopped');
 
-      // Process queue
-      if (this.state.queue.length > 0) {
+      // Process queue only if still enabled
+      if (this.config.enabled && this.state.queue.length > 0) {
         const next = this.state.queue.shift()!;
-        this.speak(next, language);
+        // Use setImmediate to avoid deep recursion
+        setImmediate(() => {
+          this.speak(next, language).catch(() => {
+            // Silently ignore - error already emitted
+          });
+        });
+      } else if (!this.config.enabled) {
+        // Clear queue if disabled
+        this.state.queue = [];
       }
     }
   }

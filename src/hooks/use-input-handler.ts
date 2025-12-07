@@ -935,7 +935,10 @@ Respond with ONLY the commit message, no additional text.`;
                 .replace(/\n+/g, '. ') // Newlines to pauses
                 .trim();
               if (textToSpeak) {
-                ttsManager.speak(textToSpeak, 'fr');
+                // Fire-and-forget with error handling
+                ttsManager.speak(textToSpeak, 'fr').catch(() => {
+                  // Errors are emitted via 'error' event, no need to handle here
+                });
               }
             }
             break;

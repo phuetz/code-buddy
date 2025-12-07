@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
@@ -38,7 +39,10 @@ export class PDFTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      // Check file existence asynchronously
+      try {
+        await fsPromises.access(resolvedPath, fs.constants.R_OK);
+      } catch {
         return {
           success: false,
           error: `PDF file not found: ${filePath}`
@@ -53,7 +57,7 @@ export class PDFTool {
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
+      const stats = await fsPromises.stat(resolvedPath);
       const fileSizeMB = stats.size / (1024 * 1024);
       if (fileSizeMB > this.maxFileSizeMB) {
         return {
@@ -62,7 +66,7 @@ export class PDFTool {
         };
       }
 
-      const buffer = fs.readFileSync(resolvedPath);
+      const buffer = await fsPromises.readFile(resolvedPath);
       const content = await this.parsePDF(buffer, options);
 
       return {
@@ -274,15 +278,17 @@ export class PDFTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      try {
+        await fsPromises.access(resolvedPath, fs.constants.R_OK);
+      } catch {
         return {
           success: false,
           error: `PDF file not found: ${filePath}`
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
-      const buffer = fs.readFileSync(resolvedPath);
+      const stats = await fsPromises.stat(resolvedPath);
+      const buffer = await fsPromises.readFile(resolvedPath);
       const pdfString = buffer.toString('latin1');
 
       const metadata = this.extractMetadata(pdfString);
@@ -313,18 +319,20 @@ export class PDFTool {
   /**
    * List PDF files in a directory
    */
-  listPDFs(dirPath: string = '.'): ToolResult {
+  async listPDFs(dirPath: string = '.'): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), dirPath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      try {
+        await fsPromises.access(resolvedPath, fs.constants.R_OK);
+      } catch {
         return {
           success: false,
           error: `Directory not found: ${dirPath}`
         };
       }
 
-      const files = fs.readdirSync(resolvedPath);
+      const files = await fsPromises.readdir(resolvedPath);
       const pdfs = files.filter(f => path.extname(f).toLowerCase() === '.pdf');
 
       if (pdfs.length === 0) {
@@ -334,16 +342,16 @@ export class PDFTool {
         };
       }
 
-      const pdfList = pdfs.map(pdf => {
+      const pdfList = await Promise.all(pdfs.map(async pdf => {
         const fullPath = path.join(resolvedPath, pdf);
-        const stats = fs.statSync(fullPath);
+        const stats = await fsPromises.stat(fullPath);
         const sizeKB = (stats.size / 1024).toFixed(2);
         return `  📄 ${pdf} (${sizeKB} KB)`;
-      }).join('\n');
+      }));
 
       return {
         success: true,
-        output: `PDF files in ${dirPath}:\n${pdfList}`
+        output: `PDF files in ${dirPath}:\n${pdfList.join('\n')}`
       };
     } catch (error) {
       return {
@@ -367,14 +375,16 @@ export class PDFTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      try {
+        await fsPromises.access(resolvedPath, fs.constants.R_OK);
+      } catch {
         return {
           success: false,
           error: `PDF file not found: ${filePath}`
         };
       }
 
-      const buffer = fs.readFileSync(resolvedPath);
+      const buffer = await fsPromises.readFile(resolvedPath);
       const base64 = buffer.toString('base64');
 
       return {

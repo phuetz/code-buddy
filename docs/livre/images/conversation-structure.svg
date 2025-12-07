@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 520">
+  <defs>
+    <linearGradient id="systemGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="userGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#60a5fa"/>
+    </linearGradient>
+    <linearGradient id="assistantGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#34d399"/>
+    </linearGradient>
+    <linearGradient id="toolGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#fbbf24"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="700" height="520" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <rect x="150" y="10" width="400" height="40" rx="8" fill="#1e293b" filter="url(#shadow)"/>
+  <text x="350" y="37" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16" font-weight="bold">STRUCTURE D'UNE CONVERSATION</text>
+
+  <!-- SYSTEM Message -->
+  <g transform="translate(100, 70)">
+    <rect x="0" y="0" width="500" height="60" rx="8" fill="url(#systemGrad)" filter="url(#shadow)"/>
+    <rect x="10" y="8" width="80" height="20" rx="4" fill="rgba(255,255,255,0.2)"/>
+    <text x="50" y="23" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11" font-weight="bold">SYSTEM</text>
+    <text x="20" y="45" fill="white" font-family="Arial, sans-serif" font-size="11" font-style="italic">"Tu es un assistant expert en Python..."</text>
+    <text x="380" y="45" fill="rgba(255,255,255,0.8)" font-family="Arial, sans-serif" font-size="9">1 seul, au debut</text>
+  </g>
+
+  <!-- Arrow 1 -->
+  <line x1="350" y1="135" x2="350" y2="155" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- USER Message 1 -->
+  <g transform="translate(100, 160)">
+    <rect x="0" y="0" width="500" height="55" rx="8" fill="url(#userGrad)" filter="url(#shadow)"/>
+    <rect x="10" y="8" width="60" height="20" rx="4" fill="rgba(255,255,255,0.2)"/>
+    <text x="40" y="23" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11" font-weight="bold">USER</text>
+    <text x="20" y="43" fill="white" font-family="Arial, sans-serif" font-size="11" font-style="italic">"Comment lire un fichier JSON en Python ?"</text>
+  </g>
+
+  <!-- Arrow 2 -->
+  <line x1="350" y1="220" x2="350" y2="240" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ASSISTANT Message 1 -->
+  <g transform="translate(100, 245)">
+    <rect x="0" y="0" width="500" height="55" rx="8" fill="url(#assistantGrad)" filter="url(#shadow)"/>
+    <rect x="10" y="8" width="90" height="20" rx="4" fill="rgba(255,255,255,0.2)"/>
+    <text x="55" y="23" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11" font-weight="bold">ASSISTANT</text>
+    <text x="20" y="43" fill="white" font-family="Arial, sans-serif" font-size="11" font-style="italic">"Voici comment faire : import json..."</text>
+  </g>
+
+  <!-- Arrow 3 -->
+  <line x1="350" y1="305" x2="350" y2="325" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- USER Message 2 -->
+  <g transform="translate(100, 330)">
+    <rect x="0" y="0" width="500" height="55" rx="8" fill="url(#userGrad)" filter="url(#shadow)"/>
+    <rect x="10" y="8" width="60" height="20" rx="4" fill="rgba(255,255,255,0.2)"/>
+    <text x="40" y="23" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="11" font-weight="bold">USER</text>
+    <text x="20" y="43" fill="white" font-family="Arial, sans-serif" font-size="11" font-style="italic">"Et si le fichier est tres gros ?"</text>
+  </g>
+
+  <!-- Arrow 4 -->
+  <line x1="350" y1="390" x2="350" y2="410" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ASSISTANT with tool_calls -->
+  <g transform="translate(100, 415)">
+    <rect x="0" y="0" width="240" height="50" rx="8" fill="url(#assistantGrad)" filter="url(#shadow)"/>
+    <rect x="10" y="8" width="90" height="18" rx="4" fill="rgba(255,255,255,0.2)"/>
+    <text x="55" y="22" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10" font-weight="bold">ASSISTANT</text>
+    <text x="20" y="40" fill="white" font-family="monospace" font-size="9">tool_calls: [{ read_file }]</text>
+  </g>
+
+  <!-- Arrow between ASSISTANT and TOOL -->
+  <line x1="345" y1="440" x2="365" y2="440" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- TOOL Response -->
+  <g transform="translate(360, 415)">
+    <rect x="0" y="0" width="240" height="50" rx="8" fill="url(#toolGrad)" filter="url(#shadow)"/>
+    <rect x="10" y="8" width="55" height="18" rx="4" fill="rgba(255,255,255,0.2)"/>
+    <text x="38" y="22" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="10" font-weight="bold">TOOL</text>
+    <text x="20" y="40" fill="white" font-family="monospace" font-size="9">content: "{ resultat... }"</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(50, 480)">
+    <rect x="0" y="0" width="600" height="30" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+    <rect x="15" y="8" width="14" height="14" rx="3" fill="url(#systemGrad)"/>
+    <text x="35" y="19" font-family="Arial, sans-serif" font-size="9" fill="#475569">System</text>
+    <rect x="100" y="8" width="14" height="14" rx="3" fill="url(#userGrad)"/>
+    <text x="120" y="19" font-family="Arial, sans-serif" font-size="9" fill="#475569">User</text>
+    <rect x="180" y="8" width="14" height="14" rx="3" fill="url(#assistantGrad)"/>
+    <text x="200" y="19" font-family="Arial, sans-serif" font-size="9" fill="#475569">Assistant</text>
+    <rect x="280" y="8" width="14" height="14" rx="3" fill="url(#toolGrad)"/>
+    <text x="300" y="19" font-family="Arial, sans-serif" font-size="9" fill="#475569">Tool</text>
+    <text x="400" y="19" font-family="Arial, sans-serif" font-size="9" fill="#64748b">Les messages s'enchainent dans cet ordre</text>
+  </g>
+</svg>

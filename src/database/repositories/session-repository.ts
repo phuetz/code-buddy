@@ -346,18 +346,45 @@ export class SessionRepository {
   // ============================================================================
 
   private deserializeSession(row: Session & { metadata: string | null }): Session {
+    let metadata: Record<string, unknown> | undefined;
+    if (row.metadata) {
+      try {
+        metadata = JSON.parse(row.metadata);
+      } catch {
+        metadata = undefined;
+      }
+    }
     return {
       ...row,
       is_archived: Boolean(row.is_archived),
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      metadata,
     };
   }
 
   private deserializeMessage(row: Message & { tool_calls: string | null; metadata: string | null }): Message {
+    let toolCalls: unknown[] | undefined;
+    let metadata: Record<string, unknown> | undefined;
+
+    if (row.tool_calls) {
+      try {
+        toolCalls = JSON.parse(row.tool_calls);
+      } catch {
+        toolCalls = undefined;
+      }
+    }
+
+    if (row.metadata) {
+      try {
+        metadata = JSON.parse(row.metadata);
+      } catch {
+        metadata = undefined;
+      }
+    }
+
     return {
       ...row,
-      tool_calls: row.tool_calls ? JSON.parse(row.tool_calls) : undefined,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      tool_calls: toolCalls,
+      metadata,
     };
   }
 }
