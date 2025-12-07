@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 380">
+  <defs>
+    <linearGradient id="bgGradChunk" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="380" fill="url(#bgGradChunk)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">CHUNKING : BON vs MAUVAIS</text>
+
+  <!-- Bad chunking -->
+  <rect x="40" y="50" width="350" height="145" rx="8" fill="#3a1e2a" stroke="#e74c3c" stroke-width="2"/>
+  <text x="215" y="72" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e74c3c" text-anchor="middle">MAUVAIS : Chunking par lignes (naif)</text>
+
+  <!-- Chunk 1 bad -->
+  <rect x="60" y="85" width="140" height="80" rx="4" fill="#2d2d44"/>
+  <text x="70" y="102" font-family="monospace" font-size="8" fill="#888888">Chunk 1 (lignes 1-50)</text>
+  <text x="70" y="118" font-family="monospace" font-size="7" fill="#cccccc">import ...</text>
+  <text x="70" y="130" font-family="monospace" font-size="7" fill="#cccccc">export class UserService</text>
+  <text x="70" y="142" font-family="monospace" font-size="7" fill="#cccccc">  constructor() {</text>
+  <text x="70" y="154" font-family="monospace" font-size="7" fill="#cccccc">    // ...</text>
+
+  <!-- Chunk 2 bad -->
+  <rect x="220" y="85" width="150" height="80" rx="4" fill="#2d2d44"/>
+  <text x="230" y="102" font-family="monospace" font-size="8" fill="#888888">Chunk 2 (lignes 51-100)</text>
+  <text x="230" y="118" font-family="monospace" font-size="7" fill="#cccccc">    }</text>
+  <text x="230" y="130" font-family="monospace" font-size="7" fill="#cccccc">  }</text>
+  <text x="230" y="142" font-family="monospace" font-size="7" fill="#e74c3c">  async getUser(id) {</text>
+  <text x="230" y="154" font-family="monospace" font-size="7" fill="#e74c3c">    // Coupee!</text>
+
+  <text x="215" y="180" font-family="Arial, sans-serif" font-size="9" fill="#e74c3c" text-anchor="middle">getUser() est coupee en deux!</text>
+
+  <!-- Good chunking -->
+  <rect x="410" y="50" width="350" height="145" rx="8" fill="#1e3a3a" stroke="#2ecc71" stroke-width="2"/>
+  <text x="585" y="72" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71" text-anchor="middle">BON : Chunking par AST (intelligent)</text>
+
+  <!-- Chunk 1 good -->
+  <rect x="430" y="85" width="140" height="80" rx="4" fill="#2d2d44"/>
+  <text x="440" y="102" font-family="monospace" font-size="8" fill="#888888">Chunk 1 (classe)</text>
+  <text x="440" y="118" font-family="monospace" font-size="7" fill="#cccccc">export class UserService</text>
+  <text x="440" y="130" font-family="monospace" font-size="7" fill="#cccccc">  constructor() {</text>
+  <text x="440" y="142" font-family="monospace" font-size="7" fill="#cccccc">    this.db = db;</text>
+  <text x="440" y="154" font-family="monospace" font-size="7" fill="#cccccc">  }</text>
+
+  <!-- Chunk 2 good -->
+  <rect x="590" y="85" width="150" height="80" rx="4" fill="#2d2d44"/>
+  <text x="600" y="102" font-family="monospace" font-size="8" fill="#888888">Chunk 2 (methode)</text>
+  <text x="600" y="118" font-family="monospace" font-size="7" fill="#2ecc71">async getUser(id) {</text>
+  <text x="600" y="130" font-family="monospace" font-size="7" fill="#cccccc">  return await</text>
+  <text x="600" y="142" font-family="monospace" font-size="7" fill="#cccccc">    db.find(id);</text>
+  <text x="600" y="154" font-family="monospace" font-size="7" fill="#2ecc71">}</text>
+
+  <text x="585" y="180" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">Chaque chunk = unite logique complete</text>
+
+  <!-- Strategies comparison -->
+  <rect x="100" y="210" width="600" height="150" rx="10" fill="#2d2d44" stroke="#4a4a6a" stroke-width="2"/>
+  <text x="400" y="235" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">STRATEGIES DE CHUNKING</text>
+
+  <!-- Strategy boxes -->
+  <rect x="130" y="250" width="160" height="45" rx="4" fill="#3a1e2a"/>
+  <text x="210" y="270" font-family="Arial, sans-serif" font-size="10" fill="#e74c3c" text-anchor="middle">Par lignes (naif)</text>
+  <text x="210" y="285" font-family="Arial, sans-serif" font-size="8" fill="#888888" text-anchor="middle">~500 tokens/chunk</text>
+
+  <rect x="320" y="250" width="160" height="45" rx="4" fill="#3a3a1e"/>
+  <text x="400" y="270" font-family="Arial, sans-serif" font-size="10" fill="#f39c12" text-anchor="middle">Par tokens</text>
+  <text x="400" y="285" font-family="Arial, sans-serif" font-size="8" fill="#888888" text-anchor="middle">Overlap 10%</text>
+
+  <rect x="510" y="250" width="160" height="45" rx="4" fill="#1e3a3a"/>
+  <text x="590" y="270" font-family="Arial, sans-serif" font-size="10" fill="#2ecc71" text-anchor="middle">Par AST (recommande)</text>
+  <text x="590" y="285" font-family="Arial, sans-serif" font-size="8" fill="#888888" text-anchor="middle">Fonction/Classe</text>
+
+  <text x="400" y="340" font-family="Arial, sans-serif" font-size="10" fill="#888888" text-anchor="middle">Le chunking AST preserve la semantique du code</text>
+</svg>
