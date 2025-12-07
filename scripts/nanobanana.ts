@@ -18,7 +18,225 @@ interface DiagramSpec {
 }
 
 const specs: DiagramSpec[] = [
+  // Chapter 1
+  {
+    name: 'rnn_vs_transformer',
+    type: 'box',
+    title: 'RNN vs Transformer',
+    data: {
+      nodes: [
+        { id: 'R1', label: 'Mot 1', x: 50, y: 100, w: 80, h: 40, type: 'input' },
+        { id: 'R2', label: 'Mot 2', x: 150, y: 100, w: 80, h: 40, type: 'input' },
+        { id: 'R3', label: 'Mot 3', x: 250, y: 100, w: 80, h: 40, type: 'input' },
+        { id: 'RNN_L', label: 'RNN (Séquentiel)', x: 150, y: 50, w: 200, h: 30, type: 'desc' },
+
+        { id: 'T1', label: 'Mot 1', x: 450, y: 100, w: 80, h: 40, type: 'input' },
+        { id: 'T2', label: 'Mot 2', x: 550, y: 100, w: 80, h: 40, type: 'input' },
+        { id: 'T3', label: 'Mot 3', x: 650, y: 100, w: 80, h: 40, type: 'input' },
+        { id: 'TRANS_L', label: 'Transformer (Parallèle)', x: 550, y: 50, w: 200, h: 30, type: 'desc' },
+
+        { id: 'ATT', label: 'ATTENTION (Tout connecté)', x: 450, y: 200, w: 280, h: 60, type: 'core' }
+      ],
+      edges: [
+        { from: 'R1', to: 'R2', label: 'h1' },
+        { from: 'R2', to: 'R3', label: 'h2' },
+        { from: 'T1', to: 'ATT' },
+        { from: 'T2', to: 'ATT' },
+        { from: 'T3', to: 'ATT' }
+      ]
+    }
+  },
+  {
+    name: 'tokenisation_process',
+    type: 'flow',
+    title: 'Processus de Tokenisation',
+    data: {
+      steps: ['TEXTE BRUT', 'NORMALISATION', 'PRE-TOKENIZATION', 'MODEL (BPE)', 'TOKENS IDS'],
+      loop: false
+    }
+  },
+  {
+    name: 'embeddings_analogy',
+    type: 'box',
+    title: 'Analogie Roi - Homme + Femme = Reine',
+    data: {
+      nodes: [
+        { id: 'K', label: 'ROI', x: 100, y: 100, w: 100, h: 50, type: 'component' },
+        { id: 'M', label: 'HOMME', x: 100, y: 300, w: 100, h: 50, type: 'component' },
+        { id: 'W', label: 'FEMME', x: 500, y: 300, w: 100, h: 50, type: 'component' },
+        { id: 'Q', label: 'REINE', x: 500, y: 100, w: 100, h: 50, type: 'core' }
+      ],
+      edges: [
+        { from: 'M', to: 'K', label: 'Royauté' },
+        { from: 'W', to: 'Q', label: 'Royauté' },
+        { from: 'K', to: 'Q', label: 'Genre' },
+        { from: 'M', to: 'W', label: 'Genre' }
+      ]
+    }
+  },
+  {
+    name: 'attention_mechanism',
+    type: 'box',
+    title: 'Mécanisme d\'Attention (Q, K, V)',
+    data: {
+      nodes: [
+        { id: 'IN', label: 'Token Input', x: 50, y: 200, w: 100, h: 50, type: 'input' },
+        { id: 'Q', label: 'Q (Query)', x: 250, y: 100, w: 100, h: 50, type: 'component' },
+        { id: 'K', label: 'K (Key)', x: 250, y: 200, w: 100, h: 50, type: 'component' },
+        { id: 'V', label: 'V (Value)', x: 250, y: 300, w: 100, h: 50, type: 'component' },
+        { id: 'MAT', label: 'Matrice Attention', x: 450, y: 150, w: 150, h: 100, type: 'core' },
+        { id: 'OUT', label: 'Contexte', x: 650, y: 200, w: 100, h: 50, type: 'output' }
+      ],
+      edges: [
+        { from: 'IN', to: 'Q' },
+        { from: 'IN', to: 'K' },
+        { from: 'IN', to: 'V' },
+        { from: 'Q', to: 'MAT' },
+        { from: 'K', to: 'MAT' },
+        { from: 'MAT', to: 'OUT' },
+        { from: 'V', to: 'OUT' }
+      ]
+    }
+  },
+  {
+    name: 'layer_hierarchy',
+    type: 'pyramid',
+    title: 'Hiérarchie des Couches Transformer',
+    data: [
+      { label: 'COUCHES HAUTES', detail: 'Intentions, Raisonnement', color: '#FF6B6B' },
+      { label: 'COUCHES MOYENNES', detail: 'Sémantique, Relations', color: '#4ECDC4' },
+      { label: 'COUCHES BASSES', detail: 'Syntaxe, Grammaire', color: '#45B7D1' },
+      { label: 'EMBEDDINGS', detail: 'Représentation vectorielle', color: '#2d2d2d' }
+    ]
+  },
+  {
+    name: 'next_token_prediction',
+    type: 'chart',
+    title: 'Prédiction du Token Suivant',
+    data: {
+      labels: ['bug', 'problème', 'code', 'fichier', 'test'],
+      values: [23, 18, 12, 8, 5],
+      colors: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD']
+    }
+  },
+  {
+    name: 'context_window_vis',
+    type: 'box',
+    title: 'Fenêtre de Contexte Glissante',
+    data: {
+      nodes: [
+        { id: 'PAST', label: 'PASSÉ (Oublié)', x: 50, y: 200, w: 150, h: 100, type: 'component' },
+        { id: 'WIN', label: 'FENÊTRE DE CONTEXTE ACTUELLE', x: 250, y: 150, w: 300, h: 200, type: 'core' },
+        { id: 'FUT', label: 'FUTUR (À générer)', x: 600, y: 200, w: 150, h: 100, type: 'component' }
+      ],
+      edges: [
+        { from: 'PAST', to: 'WIN', label: 'Sort du contexte' },
+        { from: 'WIN', to: 'FUT', label: 'Génération' }
+      ]
+    }
+  },
   // Chapter 2
+  {
+    name: 'function_calling_flow',
+    type: 'box',
+    title: 'Function Calling: Structuré vs Non-Structuré',
+    data: {
+      nodes: [
+        { id: 'TXT', label: 'AVANT: Parsing Texte', x: 100, y: 100, w: 200, h: 50, type: 'component' },
+        { id: 'JSON', label: 'APRÈS: JSON Structuré', x: 500, y: 100, w: 200, h: 50, type: 'core' },
+        { id: 'FAIL', label: 'Parsing Fragile', x: 100, y: 200, w: 200, h: 40, type: 'desc' },
+        { id: 'OK', label: 'Typage Garanti', x: 500, y: 200, w: 200, h: 40, type: 'desc' }
+      ],
+      edges: [
+        { from: 'TXT', to: 'FAIL' },
+        { from: 'JSON', to: 'OK' }
+      ]
+    }
+  },
+  {
+    name: 'mcp_architecture',
+    type: 'box',
+    title: 'Architecture MCP',
+    data: {
+      nodes: [
+        { id: 'AGT', label: 'Client (Agent)', x: 100, y: 150, w: 150, h: 60, type: 'core' },
+        { id: 'MCP', label: 'MCP Protocol', x: 350, y: 150, w: 100, h: 60, type: 'component' },
+        { id: 'S1', label: 'Server: Files', x: 600, y: 50, w: 150, h: 50, type: 'component' },
+        { id: 'S2', label: 'Server: Git', x: 600, y: 150, w: 150, h: 50, type: 'component' },
+        { id: 'S3', label: 'Server: DB', x: 600, y: 250, w: 150, h: 50, type: 'component' }
+      ],
+      edges: [
+        { from: 'AGT', to: 'MCP' },
+        { from: 'MCP', to: 'S1' },
+        { from: 'MCP', to: 'S2' },
+        { from: 'MCP', to: 'S3' }
+      ]
+    }
+  },
+  {
+    name: 'frugal_gpt',
+    type: 'box',
+    title: 'FrugalGPT: Model Routing',
+    data: {
+      nodes: [
+        { id: 'IN', label: 'Query', x: 50, y: 200, w: 80, h: 40, type: 'input' },
+        { id: 'ROUTER', label: 'Routeur / Classifier', x: 200, y: 200, w: 150, h: 60, type: 'core' },
+        { id: 'T1', label: 'Tier 1 (Cheap)', x: 500, y: 100, w: 120, h: 50, type: 'component' },
+        { id: 'T2', label: 'Tier 2 (Mid)', x: 500, y: 200, w: 120, h: 50, type: 'component' },
+        { id: 'T3', label: 'Tier 3 (Smart)', x: 500, y: 300, w: 120, h: 50, type: 'component' }
+      ],
+      edges: [
+        { from: 'IN', to: 'ROUTER' },
+        { from: 'ROUTER', to: 'T1', label: 'Simple' },
+        { from: 'ROUTER', to: 'T2', label: 'Moyen' },
+        { from: 'ROUTER', to: 'T3', label: 'Complexe' }
+      ]
+    }
+  },
+  {
+    name: 'llm_compiler',
+    type: 'box',
+    title: 'LLMCompiler: Parallélisation',
+    data: {
+      nodes: [
+        { id: 'SEQ', label: 'Séquentiel: A -> B -> C', x: 200, y: 100, w: 400, h: 50, type: 'component' },
+        { id: 'PAR', label: 'Parallèle: A + B + C', x: 200, y: 250, w: 400, h: 50, type: 'core' },
+        { id: 'TIME1', label: 'Temps: 3s', x: 650, y: 100, w: 100, h: 30, type: 'desc' },
+        { id: 'TIME2', label: 'Temps: 1s', x: 650, y: 250, w: 100, h: 30, type: 'desc' }
+      ],
+      edges: []
+    }
+  },
+  {
+    name: 'context_compression',
+    type: 'pyramid',
+    title: 'Compression de Contexte',
+    data: [
+      { label: 'ESSENTIEL', detail: 'Code modifié, Erreurs', color: '#FF6B6B' },
+      { label: 'IMPORTANT', detail: 'Signatures, Résumés', color: '#4ECDC4' },
+      { label: 'BRUIT', detail: 'Docs inutiles, Logs', color: '#2d2d2d' }
+    ]
+  },
+  {
+    name: 'coderag_graph',
+    type: 'box',
+    title: 'CodeRAG: Graphe de Dépendances',
+    data: {
+      nodes: [
+        { id: 'MAIN', label: 'Main.ts', x: 300, y: 50, w: 100, h: 50, type: 'core' },
+        { id: 'LIB', label: 'Lib.ts', x: 150, y: 150, w: 100, h: 50, type: 'component' },
+        { id: 'UTIL', label: 'Utils.ts', x: 450, y: 150, w: 100, h: 50, type: 'component' },
+        { id: 'DB', label: 'Db.ts', x: 150, y: 250, w: 100, h: 50, type: 'component' },
+        { id: 'LOG', label: 'Log.ts', x: 450, y: 250, w: 100, h: 50, type: 'component' }
+      ],
+      edges: [
+        { from: 'MAIN', to: 'LIB' },
+        { from: 'MAIN', to: 'UTIL' },
+        { from: 'LIB', to: 'DB' },
+        { from: 'UTIL', to: 'LOG' }
+      ]
+    }
+  },
   {
     name: 'pyramide_ia',
     type: 'pyramid',
@@ -116,6 +334,62 @@ const specs: DiagramSpec[] = [
     }
   },
   // Chapter 4
+  {
+    name: 'autoregressive_gen',
+    type: 'flow',
+    title: 'Génération Autorégressive (Linéaire)',
+    data: {
+      steps: ['Token 1', 'Token 2', 'Token 3', 'Token 4', '...'],
+      loop: false
+    }
+  },
+  {
+    name: 'tot_phases',
+    type: 'flow',
+    title: 'Les 4 Phases de ToT',
+    data: {
+      steps: ['DECOMPOSE', 'GENERATE', 'EVALUATE', 'SELECT'],
+      loop: true
+    }
+  },
+  {
+    name: 'tot_example_tree',
+    type: 'tree',
+    title: 'Exemple ToT: Debugging',
+    data: {
+      root: 'Bug NaN',
+      children: [
+        { label: 'Div/0 (0.9)', color: '#4ECDC4', children: [
+             { label: 'Fix (0.95)', color: '#4ECDC4' }
+        ]},
+        { label: 'Input? (0.7)', color: '#FF6B6B', children: [
+             { label: 'Check (0.5)', color: '#FF6B6B' }
+        ]}
+      ]
+    }
+  },
+  {
+    name: 'search_strategies',
+    type: 'box',
+    title: 'Stratégies: BFS vs DFS vs Beam',
+    data: {
+      nodes: [
+        { id: 'ROOT', label: 'Start', x: 350, y: 50, w: 100, h: 40, type: 'input' },
+        { id: 'BFS', label: 'BFS: Niveau par niveau', x: 100, y: 350, w: 180, h: 60, type: 'component' },
+        { id: 'DFS', label: 'DFS: Profondeur d\'abord', x: 310, y: 350, w: 180, h: 60, type: 'component' },
+        { id: 'BEAM', label: 'Beam: Top K seulement', x: 520, y: 350, w: 180, h: 60, type: 'core' },
+        { id: 'N1', label: 'Level 1', x: 350, y: 150, w: 100, h: 40, type: 'component' },
+        { id: 'N2', label: 'Level 2', x: 350, y: 250, w: 100, h: 40, type: 'component' }
+      ],
+      edges: [
+        { from: 'ROOT', to: 'N1' },
+        { from: 'N1', to: 'N2' },
+        { from: 'N2', to: 'BFS' },
+        { from: 'N2', to: 'DFS' },
+        { from: 'N2', to: 'BEAM' }
+      ]
+    }
+  },
   {
     name: 'tot_vs_cot',
     type: 'tree',

@@ -38,38 +38,15 @@ Elle retourna à son code.
 
 Les LLMs génèrent du texte **token par token**, chaque token dépendant des précédents. C'est la génération autorégressive.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🔗 GÉNÉRATION AUTORÉGRESSIVE                     │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  "Le problème est que" → P(token₁) → "la" →                        │
-│    P(token₂|token₁) → "fonction" →                                  │
-│      P(token₃|token₁,token₂) → "retourne" → ...                     │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  ✅ FORCE : Cohérence locale                                │   │
-│  │     Chaque token est cohérent avec son contexte immédiat    │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  ❌ FAIBLESSE : Pas de vision globale                       │   │
-│  │     Le modèle ne peut pas "voir" où mène un chemin          │   │
-│  │     avant de s'y engager complètement                       │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  Si le modèle s'engage sur une mauvaise piste au token 50,         │
-│  il doit continuer sur cette piste jusqu'à la fin.                 │
-│  PAS DE RETOUR EN ARRIÈRE POSSIBLE.                                │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Génération Autorégressive](images/autoregressive_gen.svg)
+
+Si le modèle s'engage sur une mauvaise piste au token 50, il doit continuer sur cette piste jusqu'à la fin. **Pas de retour en arrière possible.**
 
 ### 4.1.2 🎮 Exemple Concret : Le Game of 24
 
 Le **Game of 24** est un benchmark classique : utiliser quatre nombres avec +, -, ×, ÷ pour obtenir 24.
 
-![Tree-of-Thought vs Linear généré par Nanobanana](images/tot_vs_cot.svg)
+![Tree-of-Thought vs Linear](images/tot_vs_cot.svg)
 
 ### 4.1.3 🧠 Pourquoi Ça Marche
 
@@ -119,103 +96,16 @@ interface ThoughtTree {
 
 ### 4.2.2 🔄 Les Quatre Phases
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🔄 ALGORITHME TREE-OF-THOUGHT                    │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  📋 PHASE 1 : DÉCOMPOSITION                                         │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Identifier les étapes du problème                          │    │
-│  │  "Pour débugger, je dois : localiser → comprendre → corriger"│    │
-│  │                                                              │    │
-│  │  Input : "Corrige le bug dans calculateTotal"               │    │
-│  │  Output : ["localiser le bug", "comprendre la cause",       │    │
-│  │           "implémenter le fix", "vérifier avec tests"]      │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                               │                                      │
-│                               ▼                                      │
-│  🌱 PHASE 2 : GÉNÉRATION                                            │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Pour chaque nœud, générer N pensées candidates             │    │
-│  │                                                              │    │
-│  │  Nœud actuel : "Localiser le bug"                           │    │
-│  │  Pensées générées :                                         │    │
-│  │    → Pensée 1 : "Vérifier les logs"                         │    │
-│  │    → Pensée 2 : "Analyser le stack trace"                   │    │
-│  │    → Pensée 3 : "Ajouter des console.log"                   │    │
-│  │    → Pensée 4 : "Utiliser le debugger"                      │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                               │                                      │
-│                               ▼                                      │
-│  ⚖️ PHASE 3 : ÉVALUATION                                            │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Scorer chaque pensée (0-1)                                 │    │
-│  │                                                              │    │
-│  │    → "Vérifier les logs" : 0.8 (souvent utile)              │    │
-│  │    → "Analyser stack trace" : 0.9 (erreur avec trace)       │    │
-│  │    → "console.log" : 0.5 (basique mais lent)                │    │
-│  │    → "Debugger" : 0.7 (puissant mais setup requis)          │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                               │                                      │
-│                               ▼                                      │
-│  ✂️ PHASE 4 : SÉLECTION                                             │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Garder les K meilleures pensées, élaguer le reste          │    │
-│  │                                                              │    │
-│  │    ✅ Garde : "stack trace" (0.9), "logs" (0.8)             │    │
-│  │    ❌ Élague : "console.log" (0.5), "debugger" (0.7)        │    │
-│  │                                                              │    │
-│  │  → Continue avec les branches sélectionnées                 │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                               │                                      │
-│                               ▼                                      │
-│                    🔁 Répéter jusqu'à :                              │
-│                       • Solution trouvée (score ≥ 0.9)              │
-│                       • Profondeur max atteinte                     │
-│                       • Toutes branches élaguées                    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Phases ToT](images/tot_phases.svg)
+
+1.  **Décomposer** : Casser le problème en étapes.
+2.  **Générer** : Créer plusieurs options pour la prochaine étape.
+3.  **Évaluer** : Juger chaque option.
+4.  **Sélectionner** : Garder les meilleures et recommencer.
 
 ### 4.2.3 🌲 Visualisation d'un Arbre
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🌲 EXEMPLE D'ARBRE ToT                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│                    "Corriger le bug NaN"                            │
-│                           │                                          │
-│         ┌─────────────────┼─────────────────┐                       │
-│         │                 │                 │                        │
-│         ▼                 ▼                 ▼                        │
-│    ┌─────────┐      ┌─────────┐      ┌─────────┐                    │
-│    │"Division│      │"Input   │      │"Type    │                    │
-│    │ par 0"  │      │undefined│      │ coercion│                    │
-│    │  (0.9)  │      │  (0.7)  │      │  (0.4)  │                    │
-│    └────┬────┘      └────┬────┘      └────┬────┘                    │
-│         │                │               ✗ élagué                    │
-│    ┌────┴────┐      ┌────┴────┐                                     │
-│    │         │      │         │                                      │
-│    ▼         ▼      ▼         ▼                                      │
-│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                                │
-│ │price │ │qty=0?│ │arg1? │ │arg2? │                                │
-│ │ =0?  │ │      │ │      │ │      │                                │
-│ │(0.95)│ │(0.85)│ │(0.6) │ │(0.5) │                                │
-│ └──┬───┘ └──────┘ └──────┘ └──────┘                                │
-│    │                                                                 │
-│    ▼                                                                 │
-│ ┌──────────────────────────────────┐                                │
-│ │ ✅ SOLUTION TROUVÉE !            │                                │
-│ │                                  │                                │
-│ │ Ligne 45 : `total / price`       │                                │
-│ │ Fix : if (price === 0) return 0  │                                │
-│ │ Score : 0.98                     │                                │
-│ └──────────────────────────────────┘                                │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Tree-of-Thought Example](images/tot_example_tree.svg)
 
 ---
 
@@ -231,82 +121,9 @@ Il existe plusieurs façons de parcourir l'arbre. Le choix de la stratégie impa
 | **DFS** | Explorer une branche jusqu'au bout | Économe en mémoire | Peut s'enliser dans une impasse |
 | **Beam** | Garder les K meilleurs à chaque niveau | Bon compromis | Peut élaguer une bonne branche |
 
-### 4.3.2 📐 Breadth-First Search (BFS)
+### 4.3.2 📐 Visualisation des Stratégies
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    📐 BREADTH-FIRST SEARCH                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│                        Problème                                     │
-│                           │                                          │
-│         ┌─────────────────┼─────────────────┐                       │
-│         │                 │                 │                        │
-│      Pensée 1         Pensée 2         Pensée 3    ◄── Niveau 1     │
-│         │                 │                 │          (complet)     │
-│     ┌───┴───┐         ┌───┴───┐         ┌───┴───┐                   │
-│    1.1    1.2        2.1    2.2        3.1    3.2  ◄── Niveau 2     │
-│                                                        (complet)     │
-│                                                                      │
-│  🔄 Ordre d'exploration : 1 → 2 → 3 → 1.1 → 1.2 → 2.1 → ...        │
-│                                                                      │
-│  ✅ Garantit de trouver la solution la plus proche de la racine    │
-│  ❌ Explore beaucoup de nœuds avant d'aller en profondeur          │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### 4.3.3 📏 Depth-First Search (DFS)
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    📏 DEPTH-FIRST SEARCH                            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│                        Problème                                     │
-│                           │                                          │
-│                       Pensée 1  ◄── Exploré en premier              │
-│                           │                                          │
-│                         1.1                                         │
-│                           │                                          │
-│                        1.1.1    ◄── Profondeur max                  │
-│                           │                                          │
-│                   (backtrack vers 1.2, puis Pensée 2)               │
-│                                                                      │
-│  🔄 Ordre d'exploration : 1 → 1.1 → 1.1.1 → backtrack → 1.2 → ...  │
-│                                                                      │
-│  ✅ Trouve rapidement des solutions profondes                       │
-│  ❌ Peut explorer une longue branche inutile                        │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### 4.3.4 ⭐ Beam Search (Recommandé)
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    ⭐ BEAM SEARCH (K=2)                              │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│                        Problème                                     │
-│                           │                                          │
-│         ┌─────────────────┼─────────────────┐                       │
-│         │                 │                 │                        │
-│      P1(0.9) ✅       P2(0.7) ✅       P3(0.4) ❌                    │
-│         │                 │              élagué                      │
-│     ┌───┴───┐         ┌───┴───┐                                     │
-│  1.1(0.85)✅ 1.2(0.5)❌ 2.1(0.6)✅ 2.2(0.3)❌                        │
-│         │              élagué        │      élagué                  │
-│        ...                         ...                              │
-│                                                                      │
-│  🔄 À chaque niveau : garde les K=2 meilleurs, élague le reste     │
-│                                                                      │
-│  ✅ Bon compromis exploration/exploitation                          │
-│  ✅ Limite le nombre de nœuds (économie d'appels API)              │
-│  ⚠️ Peut élaguer une branche qui deviendrait excellente plus tard  │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Stratégies de Recherche](images/search_strategies.svg)
 
 ### 4.3.5 🎯 Configuration Recommandée par Tâche
 
@@ -332,7 +149,9 @@ L'évaluation est **critique** — une mauvaise évaluation mène à de mauvaise
 | **Vote** | Plusieurs évaluations, puis moyenne | Plus robuste | Plus d'appels API |
 | **Execution** | Exécuter le code et vérifier | Objectif, précis | Seulement pour le code |
 
-### 4.4.2 🤖 Auto-évaluation (Self)
+### 🧪 Laboratoire : Implémenter une Auto-évaluation
+
+Voici comment implémenter une évaluation robuste avec un LLM :
 
 ```typescript
 async function selfEvaluate(thought: ThoughtNode, problem: string): Promise<number> {
@@ -348,68 +167,11 @@ async function selfEvaluate(thought: ThoughtNode, problem: string): Promise<numb
     - 0.7-0.8 : Prometteuse, probablement sur la bonne piste
     - 0.9-1.0 : Excellente, très probablement la solution
 
-    Réponds avec un seul nombre entre 0 et 1.
+    Réponds UNIQUEMENT avec un nombre flottant (ex: 0.85).
   `;
 
   const response = await llm.complete(prompt);
-  return parseFloat(response);
-}
-```
-
-### 4.4.3 🗳️ Évaluation par Vote
-
-```typescript
-async function voteEvaluate(
-  thought: ThoughtNode,
-  problem: string,
-  numVotes: number = 3
-): Promise<number> {
-  const scores: number[] = [];
-
-  // Générer plusieurs évaluations indépendantes
-  for (let i = 0; i < numVotes; i++) {
-    const score = await selfEvaluate(thought, problem);
-    scores.push(score);
-  }
-
-  // Moyenne (ou médiane pour plus de robustesse)
-  return scores.reduce((a, b) => a + b, 0) / scores.length;
-}
-```
-
-### 4.4.4 ⚡ Évaluation par Exécution (Pour le Code)
-
-La **meilleure** évaluation pour du code : l'exécuter et vérifier !
-
-```typescript
-async function executionEvaluate(
-  thought: ThoughtNode,
-  context: CodeContext
-): Promise<number> {
-  // Extraire le code de la pensée
-  if (!thought.content.includes('```')) {
-    return selfEvaluate(thought, context.problem);
-  }
-
-  const code = extractCode(thought.content);
-
-  try {
-    // Exécuter dans une sandbox
-    await sandbox.execute(code);
-
-    // Vérifier contre les tests
-    const testResult = await runTests(context.tests);
-
-    if (testResult.allPassed) {
-      return 1.0;  // 🎯 Solution !
-    }
-
-    // Score proportionnel aux tests passés
-    return testResult.passed / testResult.total;
-  } catch (error) {
-    // Erreur de syntaxe ou d'exécution
-    return 0.1;
-  }
+  return parseFloat(response.trim());
 }
 ```
 
@@ -433,239 +195,26 @@ src/agent/reasoning/
     └── evaluate.ts          # Prompts d'évaluation
 ```
 
-### 4.5.2 💻 Code Principal (Simplifié)
-
-```typescript
-// src/agent/reasoning/tree-of-thought.ts
-export class TreeOfThought {
-  private llm: LLMClient;
-  private config: ToTConfig;
-
-  constructor(llm: LLMClient, config: Partial<ToTConfig> = {}) {
-    this.llm = llm;
-    this.config = {
-      maxDepth: config.maxDepth ?? 4,
-      branchingFactor: config.branchingFactor ?? 3,
-      beamWidth: config.beamWidth ?? 3,
-      threshold: config.threshold ?? 0.3,
-      maxSolutions: config.maxSolutions ?? 1,
-      searchStrategy: config.searchStrategy ?? 'beam',
-      evaluationMethod: config.evaluationMethod ?? 'self',
-      ...config
-    };
-  }
-
-  async solve(problem: string): Promise<Solution[]> {
-    // 1. Créer la racine
-    const root = this.createNode(problem, 0);
-
-    // 2. Décomposer le problème
-    const decomposition = await this.decompose(problem);
-
-    // 3. Exécuter la recherche
-    const solutions = await this.search(root, decomposition);
-
-    // 4. Trier par score et retourner
-    return solutions
-      .sort((a, b) => b.score - a.score)
-      .map(node => ({
-        path: this.getPath(node),
-        content: node.content,
-        score: node.score
-      }));
-  }
-
-  private async search(root: ThoughtNode, decomp: Decomposition): Promise<ThoughtNode[]> {
-    const solutions: ThoughtNode[] = [];
-    const frontier: ThoughtNode[] = [root];
-
-    while (frontier.length > 0 && solutions.length < this.config.maxSolutions) {
-      // Sélectionner le prochain nœud selon la stratégie
-      const node = this.selectNext(frontier);
-      if (!node) break;
-
-      // Profondeur max atteinte ?
-      if (node.depth >= this.config.maxDepth) {
-        if (node.score >= 0.7) solutions.push(node);
-        continue;
-      }
-
-      // PHASE 2 : Générer des enfants
-      const children = await this.generateThoughts(node);
-
-      // PHASE 3 : Évaluer
-      for (const child of children) {
-        child.score = await this.evaluateThought(child, root.content);
-      }
-
-      // PHASE 4 : Sélectionner les meilleurs (beam)
-      const selected = children
-        .filter(c => c.score >= this.config.threshold)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, this.config.beamWidth);
-
-      // Ajouter à la frontière
-      node.children = selected;
-      frontier.push(...selected);
-
-      // Early stopping : solution excellente trouvée
-      for (const child of selected) {
-        if (child.score >= 0.95) {
-          solutions.push(child);
-        }
-      }
-    }
-
-    return solutions;
-  }
-}
-```
-
-### 4.5.3 🔗 Intégration avec les Thinking Keywords
-
-```typescript
-// src/agent/thinking-keywords.ts
-export class ThinkingKeywordsManager {
-  private tot: TreeOfThought;
-
-  async processWithThinking(message: string, level: ThinkingLevel): Promise<string> {
-    switch (level) {
-      case ThinkingLevel.DIRECT:
-        return message; // Pas de ToT
-
-      case ThinkingLevel.CHAIN_OF_THOUGHT:
-        return this.chainOfThought(message); // CoT simple
-
-      case ThinkingLevel.TREE_OF_THOUGHT: // "megathink"
-        const solutions = await this.tot.solve(message);
-        return this.formatResult(solutions);
-
-      case ThinkingLevel.MCTS: // "ultrathink" - chapitre suivant
-        return this.mctsThink(message);
-    }
-  }
-
-  private formatResult(solutions: Solution[]): string {
-    if (solutions.length === 0) {
-      return "Je n'ai pas trouvé de solution satisfaisante.";
-    }
-
-    const best = solutions[0];
-    return `
-## 🧠 Raisonnement
-
-${best.path.map((p, i) => `${'  '.repeat(i)}→ ${p}`).join('\n')}
-
-## ✅ Solution (confiance: ${(best.score * 100).toFixed(0)}%)
-
-${best.content}
-    `.trim();
-  }
-}
-```
-
 ---
 
 ## 🎬 4.6 Cas Pratiques
 
 ### 4.6.1 🐛 Cas 1 : Debugging d'une Fonction
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  🐛 PROBLÈME : "calculateDiscount retourne parfois NaN"             │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  🌳 EXPLORATION ToT :                                               │
-│                                                                      │
-│  Niveau 1 : Hypothèses initiales                                    │
-│  ├─ (0.8) "NaN vient souvent de division par 0"                    │
-│  ├─ (0.7) "Peut-être un undefined dans les inputs"                 │
-│  ├─ (0.5) "Conversion de type échouée"                             │
-│  └─ (0.4) "Problème d'arrondi flottant" ❌ élagué                  │
-│                                                                      │
-│  Niveau 2 : Développement "Division par 0"                          │
-│  ├─ "Division par 0"                                                │
-│  │   ├─ (0.85) "Vérifier si price peut être 0"                     │
-│  │   ├─ (0.75) "Vérifier si quantity peut être 0"                  │
-│  │   └─ (0.60) "Vérifier le diviseur dans la formule"              │
-│                                                                      │
-│  Niveau 3 : Investigation ciblée                                    │
-│  ├─ "Vérifier si price peut être 0"                                │
-│  │   ├─ (0.95) "Lire la fonction, chercher division par price"     │
-│  │   └─ → 🎯 TROUVÉ : `total / price` sans garde !                 │
-│                                                                      │
-│  ✅ SOLUTION : Ajouter `if (price === 0) return 0;`                │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+**Problème** : "calculateDiscount retourne parfois NaN"
+
+L'arbre généré (simplifié) :
+1.  **Hypothèse NaN** (Score 0.9)
+    *   **Div par 0** (Score 0.85) -> **Trouvé : `total / price`** -> **Fix : `if (price === 0)`**
+    *   **Input undefined** (Score 0.7) -> Non reproduit
 
 ### 4.6.2 🏗️ Cas 2 : Refactoring d'Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  🏗️ PROBLÈME : "Refactorer UserService en modules séparés"         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  🌳 EXPLORATION ToT :                                               │
-│                                                                      │
-│  Niveau 1 : Stratégies de découpage                                 │
-│  ├─ (0.8) "Découper par domaine (auth, profile, settings)"         │
-│  ├─ (0.7) "Découper par couche (controller, service, repo)"        │
-│  ├─ (0.6) "Découper par feature (login, signup, password)"         │
-│  └─ (0.5) "Microservices complets" ❌ élagué (overkill)            │
-│                                                                      │
-│  Niveau 2 : Développement "par domaine"                             │
-│  ├─ AuthModule                                                      │
-│  │   ├─ (0.9) "login, logout, validateToken, refreshToken"         │
-│  │   └─ Dépendances : UserRepository, TokenService                 │
-│  ├─ ProfileModule                                                   │
-│  │   ├─ (0.85) "getProfile, updateProfile, uploadAvatar"           │
-│  │   └─ Dépendances : UserRepository, StorageService               │
-│  └─ SettingsModule                                                  │
-│      ├─ (0.80) "getSettings, updateSettings, deleteAccount"        │
-│      └─ Dépendances : UserRepository, NotificationService          │
-│                                                                      │
-│  Niveau 3 : Plan d'implémentation                                   │
-│  ├─ Ordre : Auth (critique) → Profile → Settings                   │
-│  ├─ Migration : progressive avec feature flags                     │
-│  └─ Tests : ajouter tests d'intégration inter-modules              │
-│                                                                      │
-│  ✅ SOLUTION : Plan de refactoring en 3 phases                     │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+**Problème** : "Refactorer UserService"
 
-### 4.6.3 ⚡ Cas 3 : Optimisation de Performance
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  ⚡ PROBLÈME : "L'API /users est lente (2s de latence)"            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  🌳 EXPLORATION ToT :                                               │
-│                                                                      │
-│  Niveau 1 : Sources de lenteur possibles                            │
-│  ├─ (0.85) "Query N+1 sur la base de données"                      │
-│  ├─ (0.75) "Pas de cache"                                          │
-│  ├─ (0.65) "Serialisation JSON lourde"                             │
-│  ├─ (0.55) "Trop de données retournées"                            │
-│  └─ (0.40) "Connexion DB non poolée" ❌ élagué                     │
-│                                                                      │
-│  Niveau 2 : Investigation "Query N+1"                               │
-│  ├─ (0.90) "Logger les queries SQL"                                │
-│  │   └─ 📊 Résultat : 47 queries pour 10 users !                   │
-│  └─ (0.85) "Vérifier les relations Prisma/ORM"                     │
-│      └─ 📊 Résultat : `include` manquant sur posts, comments       │
-│                                                                      │
-│  Niveau 3 : Solution                                                │
-│  ├─ Fix : `include: { posts: true, comments: { take: 5 } }`        │
-│  ├─ Résultat : 3 queries au lieu de 47                             │
-│  └─ Latence : 2s → 200ms (🚀 10× plus rapide !)                    │
-│                                                                      │
-│  ✅ SOLUTION : Eager loading des relations avec limite             │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+L'arbre généré :
+1.  **Stratégie Domaine** (Score 0.9) -> **Auth/Profile/Settings** -> **Plan Migration**
+2.  **Stratégie Technique** (Score 0.6) -> Controller/Service -> Élagué
 
 ---
 
@@ -673,224 +222,40 @@ ${best.content}
 
 ### 4.7.1 📊 Réduire les Appels API
 
-```typescript
-// ❌ Évaluation individuelle : N appels
-for (const thought of thoughts) {
-  thought.score = await evaluate(thought); // 1 appel par pensée
-}
+Au lieu d'évaluer chaque pensée individuellement, demandez au LLM d'évaluer une liste en une seule fois.
 
+```typescript
 // ✅ Évaluation batch : 1 appel pour N pensées
 async function batchEvaluate(thoughts: ThoughtNode[], problem: string): Promise<void> {
-  const prompt = `
-    Problème : ${problem}
-
-    Évalue chacune de ces pensées (0-1) :
-    ${thoughts.map((t, i) => `${i + 1}. ${t.content}`).join('\n')}
-
-    Réponds en JSON : { "scores": [0.8, 0.5, ...] }
-  `;
-
-  const response = await llm.complete(prompt);
-  const { scores } = JSON.parse(response);
-
-  thoughts.forEach((t, i) => { t.score = scores[i] ?? 0.5; });
+  const prompt = `... Évalue ces ${thoughts.length} pensées ...`;
+  // ...
 }
 ```
 
 ### 4.7.2 🏃 Early Stopping
 
-```typescript
-// Arrêter si on trouve une excellente solution tôt
-if (node.score >= 0.95 && await verifySolution(node)) {
-  return [node]; // 🎯 Pas besoin d'explorer plus !
-}
-```
-
-### 4.7.3 💾 Cache des Pensées Similaires
-
-```typescript
-const thoughtCache = new Map<string, number>();
-
-async function evaluateWithCache(thought: ThoughtNode): Promise<number> {
-  const key = thought.content.toLowerCase().trim();
-
-  if (thoughtCache.has(key)) {
-    return thoughtCache.get(key)!; // Cache hit !
-  }
-
-  const score = await evaluate(thought);
-  thoughtCache.set(key, score);
-  return score;
-}
-```
-
-### 4.7.4 📏 Profondeur Adaptative
-
-```typescript
-function adaptDepth(problem: string): number {
-  const complexityIndicators = [
-    'architecture', 'refactor', 'optimize',
-    'debug intermittent', 'race condition'
-  ];
-
-  const isComplex = complexityIndicators.some(ind =>
-    problem.toLowerCase().includes(ind)
-  );
-
-  return isComplex ? 6 : 3; // Plus profond si complexe
-}
-```
+Si vous trouvez un score > 0.95, arrêtez tout et retournez la solution ! Pas besoin d'être perfectionniste si le code marche.
 
 ---
 
 ## ⚠️ 4.8 Limitations : Quand Ne Pas Utiliser ToT
 
-### 4.8.1 💰 Le Coût
-
-ToT multiplie les appels API :
+ToT est puissant mais coûteux.
 
 | Configuration | Appels max | Coût estimé |
 |:--------------|:----------:|:-----------:|
 | Branching=3, Depth=4 | 3⁴ = 81 | ~$0.40 |
 | Branching=4, Depth=4 | 4⁴ = 256 | ~$1.30 |
-| + Évaluations | ×2 | ×2 |
 
-> ⚠️ **Règle** : N'utilisez ToT que si le problème justifie le coût.
-
-### 4.8.2 🚫 Tâches Inadaptées
-
-| 🎯 Tâche | ToT ? | Raison |
-|:---------|:-----:|:-------|
-| "Quelle heure est-il ?" | ❌ | Trivial, pas d'ambiguïté |
-| "Crée un fichier README" | ❌ | Pas d'exploration nécessaire |
-| "Formatte ce JSON" | ❌ | Déterministe |
-| "Corrige ce bug de race condition" | ✅ | Plusieurs hypothèses à explorer |
-| "Optimise cette architecture" | ✅ | Trade-offs complexes |
-| "Debug ce crash aléatoire" | ✅ | Causes multiples possibles |
-
-### 4.8.3 🌀 Risque de Sur-exploration
-
-ToT peut partir dans des directions absurdes si mal configuré :
-
-```
-Problème : "Ajoute un bouton"
-
-ToT mal configuré :
-├─ "Créer un bouton HTML"
-│   ├─ "Avec quelle couleur ?"
-│   │   ├─ "Rouge symbolise l'action"
-│   │   ├─ "Bleu inspire confiance"
-│   │   │   ├─ "Bleu clair ou foncé ?"
-│   │   │   │   ├─ ... (exploration inutile !)
-```
-
-**Solutions** :
-- Seuil de score élevé (0.5+)
-- Early stopping agressif
-- Limite de profondeur stricte
+> ⚠️ **Règle** : N'utilisez ToT que pour les problèmes complexes (debugging difficile, architecture). Pour "Quelle heure est-il ?", un appel direct suffit.
 
 ---
 
 ## 📝 4.9 Points Clés à Retenir
 
-### 🎯 Sur le Problème
-
-| Concept | Point clé |
-|:--------|:----------|
-| **Limite linéaire** | Le raisonnement token-by-token ne backtrack pas |
-| **Conséquence** | Une erreur précoce se propage jusqu'à la fin |
-| **Humain vs LLM** | Les humains explorent naturellement plusieurs pistes |
-
-### 🌳 Sur Tree-of-Thought
-
-| Concept | Point clé |
-|:--------|:----------|
-| **4 phases** | Décomposer → Générer → Évaluer → Sélectionner |
-| **Stratégies** | BFS (exhaustif), DFS (profond), Beam (compromis) |
-| **Évaluation** | Self (simple), Vote (robuste), Execution (objectif) |
-| **Amélioration** | Game of 24 : 7% → 74% (+10×) |
-
-### ⚙️ Sur l'Implémentation
-
-| Concept | Point clé |
-|:--------|:----------|
-| **Fichier** | `src/agent/reasoning/tree-of-thought.ts` |
-| **Activation** | Mot-clé "megathink" ou détection auto |
-| **Optimisations** | Batch eval, cache, early stopping |
-| **Coût** | Multiplié par branching × depth |
-
----
-
-## 🏋️ 4.10 Exercices
-
-### Exercice 1 : Visualisation (30 min)
-
-Ajoutez une méthode `visualize()` qui affiche l'arbre en ASCII :
-```
-root
-├── [0.9] pensée 1
-│   ├── [0.85] pensée 1.1
-│   └── [0.6] pensée 1.2
-└── [0.7] pensée 2
-```
-
-### Exercice 2 : Benchmark (1h)
-
-Comparez CoT vs ToT sur 5 bugs de votre codebase :
-- Mesurez le taux de succès
-- Comptez les appels API
-- Calculez le coût
-
-### Exercice 3 : Batch Evaluation (30 min)
-
-Implémentez le batching d'évaluations et mesurez :
-- Réduction du nombre d'appels
-- Impact sur la qualité des scores
-
-### Exercice 4 : Persistance (45 min)
-
-Ajoutez la possibilité de sauvegarder et reprendre un arbre partiellement exploré (utile pour les problèmes longs).
-
----
-
-## 📚 4.11 Pour Aller Plus Loin
-
-### Publications
-
-- Yao, S., et al. (2023). "Tree of Thoughts: Deliberate Problem Solving with Large Language Models." arXiv:2305.10601
-- Long, J. (2023). "Large Language Model Guided Tree-of-Thought." arXiv:2305.08291
-
-### Code Source
-
-- Grok-CLI : `src/agent/reasoning/tree-of-thought.ts`
-- Types : `src/agent/reasoning/types.ts`
-
----
-
-## 🌅 Épilogue : La Première Victoire
-
-Lina activa ToT sur son bug intermittent.
-
-L'arbre se construisit sous ses yeux :
-- Hypothèse "race condition" : score 0.85
-- Sous-hypothèse "accès concurrent à la variable partagée" : score 0.92
-- Solution proposée : "ajouter un mutex" : score 0.95
-
-Elle appliqua le fix. Les tests passèrent. Dix fois de suite.
-
-— "Enfin," souffla-t-elle.
-
-Marc passa la tête par la porte.
-
-— "T'as résolu le bug mystère ?"
-
-— "Mieux. J'ai appris à l'agent à réfléchir comme moi. À explorer plusieurs pistes, à les évaluer, à abandonner les impasses."
-
-— "Et maintenant ?"
-
-Lina sourit.
-
-— "Maintenant, on passe à la vitesse supérieure. MCTS — Monte-Carlo Tree Search. L'algorithme qui a battu les champions du monde de Go."
+*   **ToT** permet de sortir des impasses du raisonnement linéaire.
+*   **Beam Search** est souvent la meilleure stratégie pour le code (équilibre coût/qualité).
+*   **L'évaluation** est l'étape la plus difficile et la plus importante.
 
 ---
 

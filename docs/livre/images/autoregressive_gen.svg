@@ -1,0 +1,40 @@
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Génération Autorégressive (Linéaire)</text>
+
+         <rect x="25" y="150" width="120" height="60" class="box" fill="#333" />
+         <text x="85" y="185" class="text label" font-size="14px">Token 1</text>
+         <line x1="145" y1="180" x2="175" y2="180" class="line" marker-end="url(#arrowhead)" />
+
+         <rect x="175" y="150" width="120" height="60" class="box" fill="#333" />
+         <text x="235" y="185" class="text label" font-size="14px">Token 2</text>
+         <line x1="295" y1="180" x2="325" y2="180" class="line" marker-end="url(#arrowhead)" />
+
+         <rect x="325" y="150" width="120" height="60" class="box" fill="#333" />
+         <text x="385" y="185" class="text label" font-size="14px">Token 3</text>
+         <line x1="445" y1="180" x2="475" y2="180" class="line" marker-end="url(#arrowhead)" />
+
+         <rect x="475" y="150" width="120" height="60" class="box" fill="#333" />
+         <text x="535" y="185" class="text label" font-size="14px">Token 4</text>
+         <line x1="595" y1="180" x2="625" y2="180" class="line" marker-end="url(#arrowhead)" />
+
+         <rect x="625" y="150" width="120" height="60" class="box" fill="#333" />
+         <text x="685" y="185" class="text label" font-size="14px">...</text>
+
+
+</svg>

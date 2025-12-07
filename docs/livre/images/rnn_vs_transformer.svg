@@ -1,0 +1,65 @@
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">RNN vs Transformer</text>
+
+
+           <line x1="90" y1="120" x2="190" y2="120" class="line" marker-end="url(#arrowhead)" />
+           <text x="140" y="115" class="text desc">h1</text>
+
+           <line x1="190" y1="120" x2="290" y2="120" class="line" marker-end="url(#arrowhead)" />
+           <text x="240" y="115" class="text desc">h2</text>
+
+           <line x1="490" y1="120" x2="590" y2="230" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="590" y1="120" x2="590" y2="230" class="line" marker-end="url(#arrowhead)" />
+
+
+           <line x1="690" y1="120" x2="590" y2="230" class="line" marker-end="url(#arrowhead)" />
+
+
+
+         <rect x="50" y="100" width="80" height="40" class="box" rx="5" />
+         <text x="90" y="125" class="text label">Mot 1</text>
+
+         <rect x="150" y="100" width="80" height="40" class="box" rx="5" />
+         <text x="190" y="125" class="text label">Mot 2</text>
+
+         <rect x="250" y="100" width="80" height="40" class="box" rx="5" />
+         <text x="290" y="125" class="text label">Mot 3</text>
+
+         <rect x="150" y="50" width="200" height="30" class="box" rx="5" />
+         <text x="250" y="70" class="text label">RNN (Séquentiel)</text>
+
+         <rect x="450" y="100" width="80" height="40" class="box" rx="5" />
+         <text x="490" y="125" class="text label">Mot 1</text>
+
+         <rect x="550" y="100" width="80" height="40" class="box" rx="5" />
+         <text x="590" y="125" class="text label">Mot 2</text>
+
+         <rect x="650" y="100" width="80" height="40" class="box" rx="5" />
+         <text x="690" y="125" class="text label">Mot 3</text>
+
+         <rect x="550" y="50" width="200" height="30" class="box" rx="5" />
+         <text x="650" y="70" class="text label">Transformer (Parallèle)</text>
+
+         <rect x="450" y="200" width="280" height="60" class="box" rx="5" />
+         <text x="590" y="235" class="text label">ATTENTION (Tout connecté)</text>
+
+
+</svg>

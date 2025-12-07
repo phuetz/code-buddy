@@ -1,0 +1,40 @@
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#1a1a1a" />
+
+    <style>
+      .text { font-family: sans-serif; fill: #eee; }
+      .title { font-size: 24px; font-weight: bold; text-anchor: middle; fill: #fff; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .desc { font-size: 10px; fill: #aaa; text-anchor: middle; }
+      .box { fill: #2d2d2d; stroke: #4ECDC4; stroke-width: 2; }
+      .line { stroke: #666; stroke-width: 2; }
+    </style>
+
+  <text x="400" y="30" class="title">Prédiction du Token Suivant</text>
+
+            <rect x="25" y="100" width="100" height="250" fill="#FF6B6B" />
+            <text x="75" y="90" class="text label">23%</text>
+            <text x="75" y="370" class="text label">bug</text>
+
+            <rect x="175" y="154.3478260869565" width="100" height="195.6521739130435" fill="#4ECDC4" />
+            <text x="225" y="144.3478260869565" class="text label">18%</text>
+            <text x="225" y="370" class="text label">problème</text>
+
+            <rect x="325" y="219.56521739130434" width="100" height="130.43478260869566" fill="#45B7D1" />
+            <text x="375" y="209.56521739130434" class="text label">12%</text>
+            <text x="375" y="370" class="text label">code</text>
+
+            <rect x="475" y="263.04347826086956" width="100" height="86.95652173913044" fill="#96CEB4" />
+            <text x="525" y="253.04347826086956" class="text label">8%</text>
+            <text x="525" y="370" class="text label">fichier</text>
+
+            <rect x="625" y="295.6521739130435" width="100" height="54.34782608695652" fill="#FFEEAD" />
+            <text x="675" y="285.6521739130435" class="text label">5%</text>
+            <text x="675" y="370" class="text label">test</text>
+         <line x1="50" y1="350" x2="750" y2="350" stroke="#666" stroke-width="2" />
+</svg>
