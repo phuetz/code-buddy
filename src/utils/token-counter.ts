@@ -25,7 +25,7 @@ export class TokenCounter {
    * Count tokens in messages array (for chat completions)
    */
   countMessageTokens(
-    messages: Array<{ role: string; content: string | null; [key: string]: any }>
+    messages: Array<{ role: string; content: string | null; tool_calls?: unknown }>
   ): number {
     let totalTokens = 0;
 

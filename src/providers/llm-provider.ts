@@ -72,6 +72,21 @@ export interface ProviderConfig {
   maxRetries?: number;
 }
 
+/** Internal interface for Anthropic API response */
+interface AnthropicResponse {
+  id: string;
+  model: string;
+  content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
+  stop_reason: string | null;
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+/** Internal interface for Anthropic stream events */
+interface AnthropicStreamEvent {
+  type: string;
+  delta?: { type: string; text?: string; partial_json?: string };
+}
+
 export interface CompletionOptions {
   messages: LLMMessage[];
   tools?: ToolDefinition[];
@@ -225,14 +240,18 @@ export class GrokProvider extends BaseLLMProvider {
     return {
       id: response.id,
       content: choice.message.content,
-      toolCalls: (choice.message.tool_calls || []).map(tc => ({
-        id: tc.id,
-        type: 'function' as const,
-        function: {
-          name: (tc as any).function.name,
-          arguments: (tc as any).function.arguments,
-        },
-      })),
+      toolCalls: (choice.message.tool_calls || []).map(tc => {
+        // Handle both standard and custom tool call formats
+        const func = 'function' in tc ? tc.function : { name: '', arguments: '' };
+        return {
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: func.name,
+            arguments: func.arguments,
+          },
+        };
+      }),
       finishReason: choice.finish_reason as LLMResponse['finishReason'],
       usage: {
         promptTokens: response.usage?.prompt_tokens || 0,
@@ -364,13 +383,19 @@ export class ClaudeProvider extends BaseLLMProvider {
     await super.initialize(config);
 
     // Dynamic import - SDK is optional
-    const Anthropic = (await import('@anthropic-ai/sdk' as any)).default;
-    this.client = new Anthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseUrl,
-      timeout: config.timeout || 120000,
-      maxRetries: config.maxRetries || 3,
-    });
+    try {
+      // @ts-expect-error - Optional dependency may not be installed
+      const module = await import('@anthropic-ai/sdk');
+      const Anthropic = module.default;
+      this.client = new Anthropic({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl,
+        timeout: config.timeout || 120000,
+        maxRetries: config.maxRetries || 3,
+      });
+    } catch {
+      throw new Error('Anthropic SDK not installed. Run: npm install @anthropic-ai/sdk');
+    }
   }
 
   async complete(options: CompletionOptions): Promise<LLMResponse> {
@@ -378,7 +403,8 @@ export class ClaudeProvider extends BaseLLMProvider {
       throw new Error('Provider not initialized');
     }
 
-    const anthropic = this.client as any;
+    // Client is typed as unknown, cast to expected interface
+    const anthropic = this.client as { messages: { create: (params: unknown) => Promise<AnthropicResponse> } };
     const { system, messages } = this.formatMessages(options);
 
     const response = await anthropic.messages.create({
@@ -393,9 +419,9 @@ export class ClaudeProvider extends BaseLLMProvider {
     let content = '';
 
     for (const block of response.content) {
-      if (block.type === 'text') {
+      if (block.type === 'text' && block.text) {
         content += block.text;
-      } else if (block.type === 'tool_use') {
+      } else if (block.type === 'tool_use' && block.id && block.name) {
         toolCalls.push({
           id: block.id,
           type: 'function',
@@ -427,7 +453,8 @@ export class ClaudeProvider extends BaseLLMProvider {
       throw new Error('Provider not initialized');
     }
 
-    const anthropic = this.client as any;
+    // Client is typed as unknown, cast to expected interface
+    const anthropic = this.client as { messages: { stream: (params: unknown) => AsyncIterable<AnthropicStreamEvent> } };
     const { system, messages } = this.formatMessages(options);
 
     const stream = anthropic.messages.stream({
@@ -439,8 +466,8 @@ export class ClaudeProvider extends BaseLLMProvider {
     });
 
     for await (const event of stream) {
-      if (event.type === 'content_block_delta') {
-        const delta = event.delta as { type: string; text?: string; partial_json?: string };
+      if (event.type === 'content_block_delta' && event.delta) {
+        const delta = event.delta;
         if (delta.type === 'text_delta' && delta.text) {
           yield { type: 'content', content: delta.text };
         } else if (delta.type === 'input_json_delta' && delta.partial_json) {
@@ -578,14 +605,18 @@ export class OpenAIProvider extends BaseLLMProvider {
     return {
       id: response.id,
       content: choice.message.content,
-      toolCalls: (choice.message.tool_calls || []).map(tc => ({
-        id: tc.id,
-        type: 'function' as const,
-        function: {
-          name: (tc as any).function.name,
-          arguments: (tc as any).function.arguments,
-        },
-      })),
+      toolCalls: (choice.message.tool_calls || []).map(tc => {
+        // Handle both standard and custom tool call formats
+        const func = 'function' in tc ? tc.function : { name: '', arguments: '' };
+        return {
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: func.name,
+            arguments: func.arguments,
+          },
+        };
+      }),
       finishReason: choice.finish_reason as LLMResponse['finishReason'],
       usage: {
         promptTokens: response.usage?.prompt_tokens || 0,

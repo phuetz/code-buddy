@@ -191,8 +191,8 @@ export class SecurityManager extends EventEmitter {
         redactions: [],
         stats: {
           totalRedactions: 0,
-          byCategory: {} as any,
-          bySeverity: {},
+          byCategory: {} as Record<string, number>,
+          bySeverity: {} as Record<string, number>,
         },
       };
     }

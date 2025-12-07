@@ -78,7 +78,13 @@ export class ContextManagerV2 {
    * Count tokens in messages
    */
   countTokens(messages: GrokMessage[]): number {
-    return this.tokenCounter.countMessageTokens(messages as any);
+    // Map GrokMessage to the format expected by TokenCounter
+    const tokenMessages = messages.map(msg => ({
+      role: msg.role,
+      content: typeof msg.content === 'string' ? msg.content : null,
+      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
+    }));
+    return this.tokenCounter.countMessageTokens(tokenMessages);
   }
 
   /**

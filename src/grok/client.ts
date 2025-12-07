@@ -49,6 +49,18 @@ export interface GrokToolCall {
   };
 }
 
+/** Message with tool calls (assistant message that requested tool use) */
+export interface GrokMessageWithToolCalls {
+  role: 'assistant';
+  content: string | null;
+  tool_calls: GrokToolCall[];
+}
+
+/** Type guard for messages with tool calls */
+export function hasToolCalls(msg: GrokMessage): msg is GrokMessageWithToolCalls {
+  return msg.role === 'assistant' && 'tool_calls' in msg && Array.isArray((msg as GrokMessageWithToolCalls).tool_calls);
+}
+
 export interface SearchParameters {
   mode?: "auto" | "on" | "off";
   // sources removed - let API use default sources to avoid format issues
@@ -365,9 +377,8 @@ export class GrokClient {
         };
       }
       // Remove tool_calls from assistant messages for local models that don't support them in history
-      if (msg.role === 'assistant' && (msg as any).tool_calls) {
-        const toolCalls = (msg as any).tool_calls;
-        const toolCallsDesc = toolCalls.map((tc: any) =>
+      if (hasToolCalls(msg)) {
+        const toolCallsDesc = msg.tool_calls.map((tc: GrokToolCall) =>
           `Called ${tc.function.name}(${tc.function.arguments})`
         ).join('\n');
         return {

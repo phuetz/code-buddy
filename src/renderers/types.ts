@@ -299,36 +299,43 @@ export type RenderableData =
   | JsonData;
 
 /**
+ * Helper to check if data has a specific type field
+ */
+function hasType(data: unknown, type: string): boolean {
+  return typeof data === 'object' && data !== null && 'type' in data && (data as { type: unknown }).type === type;
+}
+
+/**
  * Type guard helpers
  */
 export function isDiffData(data: unknown): data is DiffData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'diff';
+  return hasType(data, 'diff');
 }
 
 export function isTestResultsData(data: unknown): data is TestResultsData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'test-results';
+  return hasType(data, 'test-results');
 }
 
 export function isCodeStructureData(data: unknown): data is CodeStructureData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'code-structure';
+  return hasType(data, 'code-structure');
 }
 
 export function isWeatherData(data: unknown): data is WeatherData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'weather';
+  return hasType(data, 'weather');
 }
 
 export function isTableData(data: unknown): data is TableData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'table';
+  return hasType(data, 'table');
 }
 
 export function isProgressData(data: unknown): data is ProgressData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'progress';
+  return hasType(data, 'progress');
 }
 
 export function isTreeData(data: unknown): data is TreeData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'tree';
+  return hasType(data, 'tree');
 }
 
 export function isJsonData(data: unknown): data is JsonData {
-  return typeof data === 'object' && data !== null && (data as any).type === 'json';
+  return hasType(data, 'json');
 }
