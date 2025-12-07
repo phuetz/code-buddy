@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420">
+  <defs>
+    <linearGradient id="bgGradAS2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="420" fill="url(#bgGradAS2)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">📊 RÉCAPITULATIF ARCHITECTURE</text>
+
+  <!-- Section 1: Design Principles -->
+  <rect x="40" y="50" width="350" height="130" rx="8" fill="#2a1e3a" stroke="#9b59b6"/>
+  <text x="60" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#9b59b6">1. PRINCIPES DE DESIGN</text>
+  <text x="70" y="100" font-family="monospace" font-size="9" fill="#cccccc">├─ Modularité (composants indépendants)</text>
+  <text x="70" y="118" font-family="monospace" font-size="9" fill="#cccccc">├─ Extensibilité (plugins, MCP)</text>
+  <text x="70" y="136" font-family="monospace" font-size="9" fill="#cccccc">├─ Observabilité (métriques, logs, audit)</text>
+  <text x="70" y="154" font-family="monospace" font-size="9" fill="#cccccc">├─ Sécurité par défaut (3 modes)</text>
+  <text x="70" y="172" font-family="monospace" font-size="9" fill="#cccccc">└─ Performance (lazy loading, cache)</text>
+
+  <!-- Section 2: Data Flow -->
+  <rect x="410" y="50" width="350" height="130" rx="8" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="430" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">2. FLUX DE DONNÉES</text>
+  <text x="440" y="100" font-family="monospace" font-size="9" fill="#cccccc">Input → Security → Context → Model</text>
+  <text x="440" y="125" font-family="monospace" font-size="9" fill="#cccccc">Model → Tools → Parallel Execution</text>
+  <text x="440" y="150" font-family="monospace" font-size="9" fill="#cccccc">Results → Memory → Streaming Output</text>
+
+  <!-- Section 3: Measured Optimizations -->
+  <rect x="40" y="195" width="350" height="130" rx="8" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="60" y="220" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">3. OPTIMISATIONS MESURÉES</text>
+  <text x="70" y="248" font-family="monospace" font-size="9" fill="#cccccc">├─ Démarrage : 3s → 40ms</text>
+  <text x="280" y="248" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#2ecc71">-98%</text>
+  <text x="70" y="268" font-family="monospace" font-size="9" fill="#cccccc">├─ Coûts API (routing + cache)</text>
+  <text x="280" y="268" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#2ecc71">-68%</text>
+  <text x="70" y="288" font-family="monospace" font-size="9" fill="#cccccc">├─ Latence (parallélisation)</text>
+  <text x="280" y="288" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#2ecc71">-64%</text>
+  <text x="70" y="308" font-family="monospace" font-size="9" fill="#cccccc">└─ Mémoire : apprentissage continu</text>
+
+  <!-- Section 4: Extensibility -->
+  <rect x="410" y="195" width="350" height="130" rx="8" fill="#3a3a1e" stroke="#f39c12"/>
+  <text x="430" y="220" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f39c12">4. EXTENSIBILITÉ</text>
+  <text x="440" y="248" font-family="monospace" font-size="9" fill="#cccccc">├─ Nouveaux outils via ToolRegistry</text>
+  <text x="440" y="268" font-family="monospace" font-size="9" fill="#cccccc">├─ Serveurs MCP (stdio/HTTP)</text>
+  <text x="440" y="288" font-family="monospace" font-size="9" fill="#cccccc">├─ Agents spécialisés (PDF, Excel, SQL)</text>
+  <text x="440" y="308" font-family="monospace" font-size="9" fill="#cccccc">└─ Hooks pour événements</text>
+
+  <!-- Bottom summary -->
+  <rect x="40" y="340" width="720" height="65" rx="8" fill="#2d2d44" stroke="#4a4a6a"/>
+  <text x="400" y="365" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">Résumé</text>
+  <text x="120" y="388" font-family="Arial, sans-serif" font-size="9" fill="#9b59b6" text-anchor="middle">🏗️ 6 Couches</text>
+  <text x="240" y="388" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">🎯 30 rounds max</text>
+  <text x="360" y="388" font-family="Arial, sans-serif" font-size="9" fill="#f39c12" text-anchor="middle">⚡ 41 outils</text>
+  <text x="480" y="388" font-family="Arial, sans-serif" font-size="9" fill="#3498db" text-anchor="middle">💾 4 mémoires</text>
+  <text x="600" y="388" font-family="Arial, sans-serif" font-size="9" fill="#e74c3c" text-anchor="middle">🔒 3 modes</text>
+  <text x="720" y="388" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">🚀 40ms start</text>
+</svg>

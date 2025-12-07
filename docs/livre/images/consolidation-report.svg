@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340">
+  <defs>
+    <linearGradient id="bgGradCR" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="340" fill="url(#bgGradCR)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#9b59b6" text-anchor="middle">🧹 RAPPORT DE CONSOLIDATION</text>
+
+  <!-- Main container -->
+  <rect x="40" y="50" width="720" height="275" rx="8" fill="#2d2d44" stroke="#4a4a6a"/>
+
+  <!-- Header stats -->
+  <text x="60" y="80" font-family="Arial, sans-serif" font-size="12" fill="#cccccc">📊 Mémoires analysées : <tspan font-weight="bold" fill="#ffffff">1,234</tspan></text>
+
+  <!-- Bar chart area -->
+  <rect x="60" y="100" width="560" height="160" rx="6" fill="#1a1a2e"/>
+
+  <!-- Oubliées (12.6%) -->
+  <text x="80" y="128" font-family="Arial, sans-serif" font-size="10" fill="#e74c3c">🗑️ Oubliées</text>
+  <rect x="180" y="115" width="300" height="20" rx="3" fill="#2d2d44"/>
+  <rect x="180" y="115" width="38" height="20" rx="3" fill="#e74c3c"/>
+  <text x="490" y="130" font-family="monospace" font-size="10" fill="#e74c3c">156 (12.6%)</text>
+
+  <!-- Archivées (19.0%) -->
+  <text x="80" y="158" font-family="Arial, sans-serif" font-size="10" fill="#f39c12">📦 Archivées</text>
+  <rect x="180" y="145" width="300" height="20" rx="3" fill="#2d2d44"/>
+  <rect x="180" y="145" width="57" height="20" rx="3" fill="#f39c12"/>
+  <text x="490" y="160" font-family="monospace" font-size="10" fill="#f39c12">234 (19.0%)</text>
+
+  <!-- Promues (7.2%) -->
+  <text x="80" y="188" font-family="Arial, sans-serif" font-size="10" fill="#3498db">⬆️ Promues</text>
+  <rect x="180" y="175" width="300" height="20" rx="3" fill="#2d2d44"/>
+  <rect x="180" y="175" width="22" height="20" rx="3" fill="#3498db"/>
+  <text x="490" y="190" font-family="monospace" font-size="10" fill="#3498db">89 (7.2%)</text>
+
+  <!-- Fusionnées (3.6%) -->
+  <text x="80" y="218" font-family="Arial, sans-serif" font-size="10" fill="#9b59b6">🔗 Fusionnées</text>
+  <rect x="180" y="205" width="300" height="20" rx="3" fill="#2d2d44"/>
+  <rect x="180" y="205" width="11" height="20" rx="3" fill="#9b59b6"/>
+  <text x="490" y="220" font-family="monospace" font-size="10" fill="#9b59b6">45 (3.6%)</text>
+
+  <!-- Conservées (57.5%) -->
+  <text x="80" y="248" font-family="Arial, sans-serif" font-size="10" fill="#2ecc71">✅ Conservées</text>
+  <rect x="180" y="235" width="300" height="20" rx="3" fill="#2d2d44"/>
+  <rect x="180" y="235" width="173" height="20" rx="3" fill="#2ecc71"/>
+  <text x="490" y="250" font-family="monospace" font-size="10" fill="#2ecc71">710 (57.5%)</text>
+
+  <!-- Summary stats on right -->
+  <rect x="640" y="100" width="110" height="160" rx="6" fill="#1e3a3a"/>
+  
+  <text x="695" y="130" font-family="Arial, sans-serif" font-size="9" fill="#888888" text-anchor="middle">💾 Espace</text>
+  <text x="695" y="148" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2ecc71" text-anchor="middle">2.3 MB</text>
+  <text x="695" y="162" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">libéré</text>
+
+  <rect x="655" y="175" width="80" height="1" fill="#4a4a6a"/>
+
+  <text x="695" y="198" font-family="Arial, sans-serif" font-size="9" fill="#888888" text-anchor="middle">📈 Importance</text>
+  <text x="695" y="216" font-family="monospace" font-size="11" fill="#cccccc" text-anchor="middle">0.52 → 0.68</text>
+  <text x="695" y="235" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71" text-anchor="middle">+30%</text>
+
+  <!-- Bottom summary -->
+  <text x="400" y="305" font-family="Arial, sans-serif" font-size="11" fill="#888888" text-anchor="middle">Consolidation intelligente : les mémoires peu pertinentes sont oubliées, les importantes promues</text>
+</svg>

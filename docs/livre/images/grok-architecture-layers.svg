@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480">
+  <defs>
+    <linearGradient id="bgGradGAL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="480" fill="url(#bgGradGAL)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">🏗️ ARCHITECTURE GROK-CLI</text>
+
+  <!-- Layer 1: Interface -->
+  <rect x="80" y="55" width="640" height="55" rx="8" fill="#2a1e3a" stroke="#9b59b6" stroke-width="2"/>
+  <text x="120" y="78" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#9b59b6">🖥️ INTERFACE (UI)</text>
+  <text x="120" y="98" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">React/Ink • Streaming • Rendu Markdown • Thèmes</text>
+  
+  <line x1="400" y1="110" x2="400" y2="125" stroke="#4a4a6a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Layer 2: Orchestration -->
+  <rect x="80" y="125" width="640" height="55" rx="8" fill="#1e3a3a" stroke="#2ecc71" stroke-width="2"/>
+  <text x="120" y="148" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71">🎯 ORCHESTRATION</text>
+  <text x="120" y="168" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">GrokAgent • Boucle Agentique • Coordination</text>
+
+  <line x1="400" y1="180" x2="400" y2="195" stroke="#4a4a6a" stroke-width="2"/>
+
+  <!-- Layer 3: Reasoning -->
+  <rect x="80" y="195" width="640" height="55" rx="8" fill="#3a3a1e" stroke="#f39c12" stroke-width="2"/>
+  <text x="120" y="218" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#f39c12">🧠 RAISONNEMENT</text>
+  <text x="120" y="238" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">ToT • MCTS • Repair • Réflexion • Planning</text>
+
+  <line x1="400" y1="250" x2="400" y2="265" stroke="#4a4a6a" stroke-width="2"/>
+
+  <!-- Layer 4: Context & Memory -->
+  <rect x="80" y="265" width="640" height="55" rx="8" fill="#1e2a3a" stroke="#3498db" stroke-width="2"/>
+  <text x="120" y="288" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#3498db">💾 CONTEXTE & MÉMOIRE</text>
+  <text x="120" y="308" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">RAG • Compression • Embedding • Persistance</text>
+
+  <line x1="400" y1="320" x2="400" y2="335" stroke="#4a4a6a" stroke-width="2"/>
+
+  <!-- Layer 5: Actions -->
+  <rect x="80" y="335" width="640" height="55" rx="8" fill="#2d2d44" stroke="#e74c3c" stroke-width="2"/>
+  <text x="120" y="358" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e74c3c">⚡ ACTIONS</text>
+  <text x="120" y="378" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Tools • MCP • Plugins • Exécution Parallèle</text>
+
+  <line x1="400" y1="390" x2="400" y2="405" stroke="#4a4a6a" stroke-width="2"/>
+
+  <!-- Layer 6: Security -->
+  <rect x="80" y="405" width="640" height="55" rx="8" fill="#3a1e2a" stroke="#e74c3c" stroke-width="2"/>
+  <text x="120" y="428" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e74c3c">🔒 SÉCURITÉ</text>
+  <text x="120" y="448" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Permissions • Sandbox • Redaction • Audit</text>
+</svg>

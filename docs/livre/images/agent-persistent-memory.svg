@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="bgGradAPM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="400" fill="url(#bgGradAPM)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#2ecc71" text-anchor="middle">✅ AGENT AVEC MÉMOIRE PERSISTANTE</text>
+
+  <!-- Main container -->
+  <rect x="40" y="50" width="720" height="290" rx="8" fill="#1e3a3a" stroke="#2ecc71"/>
+
+  <!-- Three input sessions -->
+  <rect x="70" y="70" width="150" height="50" rx="6" fill="#2d2d44" stroke="#3498db"/>
+  <text x="145" y="90" font-family="Arial, sans-serif" font-size="9" fill="#3498db" text-anchor="middle">Session 1</text>
+  <text x="145" y="108" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">"Qui suis-je ?"</text>
+
+  <rect x="325" y="70" width="150" height="50" rx="6" fill="#2d2d44" stroke="#3498db"/>
+  <text x="400" y="90" font-family="Arial, sans-serif" font-size="9" fill="#3498db" text-anchor="middle">Session 2</text>
+  <text x="400" y="108" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">"Continue"</text>
+
+  <rect x="580" y="70" width="150" height="50" rx="6" fill="#2d2d44" stroke="#3498db"/>
+  <text x="655" y="90" font-family="Arial, sans-serif" font-size="9" fill="#3498db" text-anchor="middle">Session 3</text>
+  <text x="655" y="108" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">"Comme d'hab"</text>
+
+  <!-- Arrows to memory -->
+  <line x1="145" y1="120" x2="145" y2="140" stroke="#3498db" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="400" y1="120" x2="400" y2="140" stroke="#3498db" stroke-width="2"/>
+  <line x1="655" y1="120" x2="655" y2="140" stroke="#3498db" stroke-width="2"/>
+  <line x1="145" y1="140" x2="400" y2="155" stroke="#3498db" stroke-width="2"/>
+  <line x1="655" y1="140" x2="400" y2="155" stroke="#3498db" stroke-width="2"/>
+
+  <!-- Central memory box -->
+  <rect x="250" y="155" width="300" height="100" rx="8" fill="#2a1e3a" stroke="#9b59b6" stroke-width="2"/>
+  <text x="400" y="178" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#9b59b6" text-anchor="middle">🧠 MÉMOIRE PERSISTANTE</text>
+  
+  <text x="280" y="200" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">📖 Épisodique : événements</text>
+  <text x="280" y="216" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">🧠 Sémantique : savoirs</text>
+  <text x="450" y="200" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">⚙️ Procédurale : comment</text>
+  <text x="450" y="216" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">🔮 Prospective : à faire</text>
+
+  <!-- Arrows from memory -->
+  <line x1="400" y1="255" x2="400" y2="270" stroke="#2ecc71" stroke-width="2"/>
+  <line x1="400" y1="270" x2="145" y2="280" stroke="#2ecc71" stroke-width="2"/>
+  <line x1="400" y1="270" x2="655" y2="280" stroke="#2ecc71" stroke-width="2"/>
+
+  <!-- Three output sessions -->
+  <rect x="70" y="280" width="150" height="50" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="145" y="300" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">"Bonjour Lina !</text>
+  <text x="145" y="315" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">Tu travailles sur payment"</text>
+
+  <rect x="325" y="280" width="150" height="50" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="400" y="300" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">"Je reprends</text>
+  <text x="400" y="315" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">le refactor d'hier"</text>
+
+  <rect x="580" y="280" width="150" height="50" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="655" y="300" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">"Je lance les tests</text>
+  <text x="655" y="315" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">comme tu aimes"</text>
+
+  <!-- Benefits -->
+  <rect x="40" y="355" width="720" height="35" rx="6" fill="#2d2d44"/>
+  <text x="140" y="377" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">✅ Continuité</text>
+  <text x="320" y="377" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">✅ Apprentissage</text>
+  <text x="500" y="377" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">✅ Personnalisation</text>
+  <text x="680" y="377" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">✅ Amélioration</text>
+</svg>

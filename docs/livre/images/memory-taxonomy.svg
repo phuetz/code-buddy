@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 380">
+  <defs>
+    <linearGradient id="bgGradMT" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="380" fill="url(#bgGradMT)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">📊 TAXONOMIE DES MÉMOIRES D'AGENT</text>
+
+  <!-- Episodic Memory -->
+  <rect x="40" y="55" width="350" height="140" rx="8" fill="#2a1e3a" stroke="#9b59b6"/>
+  <text x="60" y="80" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#9b59b6">📖 MÉMOIRE ÉPISODIQUE</text>
+  <text x="60" y="102" font-family="Arial, sans-serif" font-size="10" fill="#888888">"Que s'est-il passé ?"</text>
+  
+  <text x="75" y="125" font-family="monospace" font-size="9" fill="#cccccc">├── Conversations passées</text>
+  <text x="75" y="143" font-family="monospace" font-size="9" fill="#cccccc">├── Actions effectuées</text>
+  <text x="75" y="161" font-family="monospace" font-size="9" fill="#cccccc">└── Résultats obtenus</text>
+
+  <rect x="300" y="175" width="80" height="18" rx="3" fill="#2d2d44"/>
+  <text x="340" y="188" font-family="Arial, sans-serif" font-size="9" fill="#9b59b6" text-anchor="middle">Contexte</text>
+
+  <!-- Semantic Memory -->
+  <rect x="410" y="55" width="350" height="140" rx="8" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="430" y="80" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#2ecc71">🧠 MÉMOIRE SÉMANTIQUE</text>
+  <text x="430" y="102" font-family="Arial, sans-serif" font-size="10" fill="#888888">"Qu'ai-je appris ?"</text>
+  
+  <text x="445" y="125" font-family="monospace" font-size="9" fill="#cccccc">├── Faits sur le codebase</text>
+  <text x="445" y="143" font-family="monospace" font-size="9" fill="#cccccc">├── Préférences utilisateur</text>
+  <text x="445" y="161" font-family="monospace" font-size="9" fill="#cccccc">└── Patterns récurrents</text>
+
+  <rect x="670" y="175" width="80" height="18" rx="3" fill="#2d2d44"/>
+  <text x="710" y="188" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">Savoirs</text>
+
+  <!-- Procedural Memory -->
+  <rect x="40" y="210" width="350" height="140" rx="8" fill="#3a3a1e" stroke="#f39c12"/>
+  <text x="60" y="235" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#f39c12">⚙️ MÉMOIRE PROCÉDURALE</text>
+  <text x="60" y="257" font-family="Arial, sans-serif" font-size="10" fill="#888888">"Comment faire ?"</text>
+  
+  <text x="75" y="280" font-family="monospace" font-size="9" fill="#cccccc">├── Séquences d'actions efficaces</text>
+  <text x="75" y="298" font-family="monospace" font-size="9" fill="#cccccc">├── Solutions à des problèmes types</text>
+  <text x="75" y="316" font-family="monospace" font-size="9" fill="#cccccc">└── Workflows optimisés</text>
+
+  <rect x="300" y="330" width="80" height="18" rx="3" fill="#2d2d44"/>
+  <text x="340" y="343" font-family="Arial, sans-serif" font-size="9" fill="#f39c12" text-anchor="middle">Savoir-faire</text>
+
+  <!-- Prospective Memory -->
+  <rect x="410" y="210" width="350" height="140" rx="8" fill="#1e2a3a" stroke="#3498db"/>
+  <text x="430" y="235" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#3498db">🔮 MÉMOIRE PROSPECTIVE</text>
+  <text x="430" y="257" font-family="Arial, sans-serif" font-size="10" fill="#888888">"Que dois-je faire ensuite ?"</text>
+  
+  <text x="445" y="280" font-family="monospace" font-size="9" fill="#cccccc">├── Tâches planifiées</text>
+  <text x="445" y="298" font-family="monospace" font-size="9" fill="#cccccc">├── Rappels contextuels</text>
+  <text x="445" y="316" font-family="monospace" font-size="9" fill="#cccccc">└── Objectifs à long terme</text>
+
+  <rect x="670" y="330" width="80" height="18" rx="3" fill="#2d2d44"/>
+  <text x="710" y="343" font-family="Arial, sans-serif" font-size="9" fill="#3498db" text-anchor="middle">Intentions</text>
+</svg>

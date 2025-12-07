@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340">
+  <defs>
+    <linearGradient id="bgGradDM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="340" fill="url(#bgGradDM)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#3498db" text-anchor="middle">📊 GROK-CLI DASHBOARD</text>
+
+  <!-- Session section -->
+  <rect x="40" y="50" width="350" height="85" rx="8" fill="#2d2d44" stroke="#9b59b6"/>
+  <text x="60" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#9b59b6">Session</text>
+  <text x="60" y="98" font-family="Arial, sans-serif" font-size="10" fill="#888888">Duration:</text>
+  <text x="170" y="98" font-family="monospace" font-size="10" fill="#cccccc">1h 23m 45s</text>
+  <text x="60" y="118" font-family="Arial, sans-serif" font-size="10" fill="#888888">Requests:</text>
+  <text x="170" y="118" font-family="monospace" font-size="10" fill="#cccccc">47</text>
+
+  <!-- Performance section -->
+  <rect x="410" y="50" width="350" height="85" rx="8" fill="#2d2d44" stroke="#2ecc71"/>
+  <text x="430" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">Performance</text>
+  <text x="430" y="98" font-family="Arial, sans-serif" font-size="10" fill="#888888">Avg Latency:</text>
+  <text x="560" y="98" font-family="monospace" font-size="10" fill="#2ecc71">245ms (P50)</text>
+  <text x="430" y="118" font-family="Arial, sans-serif" font-size="10" fill="#888888">Cache Hit:</text>
+  <text x="560" y="118" font-family="monospace" font-size="10" fill="#2ecc71">68.2%</text>
+
+  <!-- Tools section -->
+  <rect x="40" y="150" width="350" height="85" rx="8" fill="#2d2d44" stroke="#f39c12"/>
+  <text x="60" y="175" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f39c12">Tools</text>
+  <text x="60" y="198" font-family="Arial, sans-serif" font-size="10" fill="#888888">Total Calls:</text>
+  <text x="170" y="198" font-family="monospace" font-size="10" fill="#cccccc">156</text>
+  <text x="60" y="218" font-family="Arial, sans-serif" font-size="10" fill="#888888">Success Rate:</text>
+  <text x="170" y="218" font-family="monospace" font-size="10" fill="#2ecc71">98.7%</text>
+
+  <!-- Memory section -->
+  <rect x="410" y="150" width="350" height="85" rx="8" fill="#2d2d44" stroke="#3498db"/>
+  <text x="430" y="175" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#3498db">Memory</text>
+  <text x="430" y="198" font-family="Arial, sans-serif" font-size="10" fill="#888888">Total:</text>
+  <text x="560" y="198" font-family="monospace" font-size="10" fill="#cccccc">234 memories</text>
+  <text x="430" y="218" font-family="Arial, sans-serif" font-size="10" fill="#888888">User Confidence:</text>
+  <text x="560" y="218" font-family="monospace" font-size="10" fill="#2ecc71">87%</text>
+
+  <!-- Cost summary -->
+  <rect x="40" y="250" width="720" height="75" rx="8" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="60" y="278" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">💰 Cost Analysis</text>
+  <text x="60" y="303" font-family="Arial, sans-serif" font-size="10" fill="#888888">Session Cost:</text>
+  <text x="180" y="303" font-family="monospace" font-size="11" fill="#cccccc">$0.1234</text>
+  <text x="300" y="303" font-family="Arial, sans-serif" font-size="10" fill="#888888">Cost Reduction:</text>
+  <text x="440" y="303" font-family="monospace" font-size="11" fill="#2ecc71">42%</text>
+  <text x="540" y="303" font-family="Arial, sans-serif" font-size="10" fill="#888888">Top Tools:</text>
+  <text x="640" y="303" font-family="monospace" font-size="10" fill="#cccccc">Read, Grep, Bash</text>
+</svg>

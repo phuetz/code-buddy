@@ -1,205 +1,49 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" font-family="'Segoe UI', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 380">
   <defs>
-    <linearGradient id="indexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#667eea"/>
-      <stop offset="100%" style="stop-color:#764ba2"/>
+    <linearGradient id="bgGradRP" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
     </linearGradient>
-    <linearGradient id="queryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4facfe"/>
-      <stop offset="100%" style="stop-color:#00f2fe"/>
-    </linearGradient>
-    <linearGradient id="retrieveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#11998e"/>
-      <stop offset="100%" style="stop-color:#38ef7d"/>
-    </linearGradient>
-    <linearGradient id="augmentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f093fb"/>
-      <stop offset="100%" style="stop-color:#f5576c"/>
-    </linearGradient>
-    <linearGradient id="generateGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ed8936"/>
-      <stop offset="100%" style="stop-color:#dd6b20"/>
-    </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
-    </filter>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <marker id="arrowRAG" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
-    </marker>
   </defs>
 
   <!-- Background -->
-  <rect width="1000" height="700" fill="#0f0f23"/>
+  <rect width="800" height="380" fill="url(#bgGradRP)"/>
 
   <!-- Title -->
-  <text x="500" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
-    RAG : Retrieval-Augmented Generation
-  </text>
-  <text x="500" y="68" text-anchor="middle" fill="#718096" font-size="14">
-    Enrichir le contexte LLM avec des informations externes pertinentes
-  </text>
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#3498db" text-anchor="middle">📚 RAG PIPELINE</text>
 
-  <!-- Offline Indexing Phase (Left side) -->
-  <g transform="translate(50, 100)">
-    <rect x="0" y="0" width="280" height="450" rx="15" fill="#1a1a3a" stroke="url(#indexGrad)" stroke-width="3" stroke-dasharray="10,5"/>
-    <text x="140" y="30" text-anchor="middle" fill="#667eea" font-size="16" font-weight="bold">PHASE OFFLINE</text>
-    <text x="140" y="50" text-anchor="middle" fill="#718096" font-size="11">Indexation du codebase</text>
+  <!-- Main container -->
+  <rect x="40" y="50" width="720" height="315" rx="8" fill="#2d2d44" stroke="#3498db"/>
 
-    <!-- Documents -->
-    <g transform="translate(30, 80)">
-      <rect x="0" y="0" width="220" height="80" rx="10" fill="#2d3748" filter="url(#shadow)"/>
-      <text x="110" y="22" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="bold">1. Documents Source</text>
-      <text x="20" y="45" fill="#a0aec0" font-size="10">src/agent/*.ts</text>
-      <text x="20" y="60" fill="#a0aec0" font-size="10">src/tools/*.ts</text>
-      <text x="20" y="75" fill="#a0aec0" font-size="10">README.md, docs/...</text>
-    </g>
+  <!-- Query input -->
+  <text x="70" y="80" font-family="Arial, sans-serif" font-size="11" fill="#cccccc">Query</text>
+  <line x1="90" y1="85" x2="90" y2="100" stroke="#4a4a6a" stroke-width="2"/>
 
-    <!-- Chunking arrow -->
-    <path d="M140 170 L140 200" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
+  <!-- Step 1: Cache Check -->
+  <rect x="70" y="105" width="660" height="60" rx="6" fill="#2a1e3a" stroke="#9b59b6"/>
+  <text x="100" y="130" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#9b59b6">🔍 Cache Check (Semantic)</text>
+  <text x="100" y="150" font-family="monospace" font-size="10" fill="#cccccc">cosine similarity &gt; 0.92 → cache hit</text>
+  
+  <text x="670" y="140" font-family="Arial, sans-serif" font-size="10" fill="#2ecc71">hit ✓</text>
+  <line x1="90" y1="165" x2="90" y2="180" stroke="#e74c3c" stroke-width="2"/>
+  <text x="100" y="178" font-family="Arial, sans-serif" font-size="9" fill="#e74c3c">miss</text>
 
-    <!-- Chunking -->
-    <g transform="translate(30, 200)">
-      <rect x="0" y="0" width="220" height="70" rx="10" fill="url(#indexGrad)" filter="url(#shadow)"/>
-      <text x="110" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">2. Chunking</text>
-      <text x="110" y="42" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Découper en morceaux</text>
-      <text x="110" y="58" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">~500 tokens/chunk</text>
-    </g>
+  <!-- Step 2: Retrieval -->
+  <rect x="70" y="190" width="660" height="70" rx="6" fill="#1e2a3a" stroke="#3498db"/>
+  <text x="100" y="215" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#3498db">📖 Retrieval (Dependency-Aware)</text>
+  <text x="100" y="235" font-family="monospace" font-size="9" fill="#cccccc">• Embedding search</text>
+  <text x="280" y="235" font-family="monospace" font-size="9" fill="#cccccc">• Import expansion</text>
+  <text x="480" y="235" font-family="monospace" font-size="9" fill="#cccccc">• Caller context</text>
 
-    <!-- Embedding arrow -->
-    <path d="M140 280 L140 310" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
+  <line x1="90" y1="260" x2="90" y2="275" stroke="#4a4a6a" stroke-width="2"/>
 
-    <!-- Embedding -->
-    <g transform="translate(30, 310)">
-      <rect x="0" y="0" width="220" height="70" rx="10" fill="url(#indexGrad)" filter="url(#shadow)"/>
-      <text x="110" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">3. Embedding</text>
-      <text x="110" y="42" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Texte → Vecteur</text>
-      <text x="110" y="58" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">[0.23, -0.45, 0.12, ...]</text>
-    </g>
+  <!-- Step 3: Compression -->
+  <rect x="70" y="280" width="660" height="60" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="100" y="305" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">🗜️ Compression</text>
+  <text x="100" y="325" font-family="monospace" font-size="9" fill="#cccccc">• Priority-based retention</text>
+  <text x="360" y="325" font-family="monospace" font-size="9" fill="#cccccc">• Target: 4000 tokens</text>
 
-    <!-- Storage arrow -->
-    <path d="M140 390 L140 420" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
-
-    <!-- Vector DB -->
-    <g transform="translate(30, 420)">
-      <rect x="0" y="0" width="220" height="50" rx="10" fill="#2d3748" stroke="#764ba2" stroke-width="2"/>
-      <text x="110" y="20" text-anchor="middle" fill="#764ba2" font-size="12" font-weight="bold">4. Vector Database</text>
-      <text x="110" y="38" text-anchor="middle" fill="#a0aec0" font-size="10">Stockage indexé</text>
-    </g>
-  </g>
-
-  <!-- Online Query Phase (Right side) -->
-  <g transform="translate(380, 100)">
-    <!-- User Query -->
-    <g transform="translate(120, 0)" filter="url(#shadow)">
-      <rect x="0" y="0" width="200" height="50" rx="10" fill="#2d3748" stroke="#4facfe" stroke-width="2"/>
-      <text x="100" y="22" text-anchor="middle" fill="#4facfe" font-size="12" font-weight="bold">Query utilisateur</text>
-      <text x="100" y="40" text-anchor="middle" fill="#e2e8f0" font-size="10">"Comment marche GrokAgent?"</text>
-    </g>
-
-    <!-- Arrow to embedding -->
-    <path d="M220 55 L220 85" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
-
-    <!-- Query Embedding -->
-    <g transform="translate(100, 90)" filter="url(#shadow)">
-      <rect x="0" y="0" width="240" height="60" rx="10" fill="url(#queryGrad)"/>
-      <text x="120" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">5. Query Embedding</text>
-      <text x="120" y="42" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Query → Vecteur</text>
-    </g>
-
-    <!-- Arrow to retrieval -->
-    <path d="M220 155 L220 185" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
-
-    <!-- Similarity Search -->
-    <g transform="translate(50, 190)" filter="url(#shadow)">
-      <rect x="0" y="0" width="340" height="90" rx="10" fill="url(#retrieveGrad)"/>
-      <text x="170" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">6. Recherche par Similarité</text>
-      <text x="170" y="42" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Cosine similarity dans la vector DB</text>
-      <g transform="translate(20, 55)">
-        <text x="0" y="0" fill="rgba(255,255,255,0.7)" font-size="9">grok-agent.ts (0.92)</text>
-        <text x="0" y="15" fill="rgba(255,255,255,0.7)" font-size="9">types.ts (0.78)</text>
-        <text x="120" y="0" fill="rgba(255,255,255,0.7)" font-size="9">tools.ts (0.75)</text>
-        <text x="120" y="15" fill="rgba(255,255,255,0.7)" font-size="9">client.ts (0.71)</text>
-      </g>
-    </g>
-
-    <!-- Arrow from Vector DB to similarity search -->
-    <path d="M280 470 L400 280" stroke="#764ba2" stroke-width="2" stroke-dasharray="5,3"/>
-
-    <!-- Arrow to reranking -->
-    <path d="M220 285 L220 315" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
-
-    <!-- Reranking -->
-    <g transform="translate(70, 320)" filter="url(#shadow)">
-      <rect x="0" y="0" width="300" height="60" rx="10" fill="#2d3748" stroke="#f5576c" stroke-width="2"/>
-      <text x="150" y="22" text-anchor="middle" fill="#f5576c" font-size="12" font-weight="bold">7. Reranking (optionnel)</text>
-      <text x="150" y="42" text-anchor="middle" fill="#a0aec0" font-size="10">Cross-encoder pour affiner les scores</text>
-    </g>
-
-    <!-- Arrow to augment -->
-    <path d="M220 385 L220 415" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
-
-    <!-- Augmentation -->
-    <g transform="translate(50, 420)" filter="url(#shadow)">
-      <rect x="0" y="0" width="340" height="80" rx="10" fill="url(#augmentGrad)"/>
-      <text x="170" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">8. Augmentation du Prompt</text>
-      <text x="170" y="42" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Query + Contexte récupéré</text>
-      <g transform="translate(20, 55)">
-        <text x="0" y="0" fill="rgba(255,255,255,0.7)" font-size="9">"Voici les fichiers pertinents: ..."</text>
-        <text x="0" y="12" fill="rgba(255,255,255,0.7)" font-size="9">"Maintenant réponds à: Comment..."</text>
-      </g>
-    </g>
-
-    <!-- Arrow to LLM -->
-    <path d="M220 505 L220 535" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowRAG)"/>
-
-    <!-- LLM Generation -->
-    <g transform="translate(70, 540)" filter="url(#glow)">
-      <rect x="0" y="0" width="300" height="70" rx="10" fill="url(#generateGrad2)"/>
-      <text x="150" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">9. Génération LLM</text>
-      <text x="150" y="42" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Réponse informée par le contexte</text>
-      <text x="150" y="58" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">"GrokAgent est la classe qui..."</text>
-    </g>
-  </g>
-
-  <!-- Legend -->
-  <g transform="translate(750, 100)">
-    <rect x="0" y="0" width="200" height="200" rx="10" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
-    <text x="100" y="25" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="bold">Améliorations RAG</text>
-
-    <g transform="translate(15, 45)">
-      <rect x="0" y="0" width="170" height="30" rx="5" fill="#2d3748"/>
-      <text x="10" y="20" fill="#48bb78" font-size="10">CodeRAG</text>
-      <text x="75" y="20" fill="#718096" font-size="9">+ dépendances</text>
-    </g>
-
-    <g transform="translate(15, 85)">
-      <rect x="0" y="0" width="170" height="30" rx="5" fill="#2d3748"/>
-      <text x="10" y="20" fill="#4facfe" font-size="10">Hybrid Search</text>
-      <text x="95" y="20" fill="#718096" font-size="9">+ BM25</text>
-    </g>
-
-    <g transform="translate(15, 125)">
-      <rect x="0" y="0" width="170" height="30" rx="5" fill="#2d3748"/>
-      <text x="10" y="20" fill="#f5576c" font-size="10">Reranking</text>
-      <text x="75" y="20" fill="#718096" font-size="9">+ précision</text>
-    </g>
-
-    <g transform="translate(15, 165)">
-      <rect x="0" y="0" width="170" height="25" rx="5" fill="#2d3748"/>
-      <text x="10" y="17" fill="#ed8936" font-size="10">Compression</text>
-      <text x="90" y="17" fill="#718096" font-size="9">- tokens</text>
-    </g>
-  </g>
-
-  <!-- Connection line from indexing to retrieval -->
-  <path d="M330 445 L400 260" stroke="#667eea" stroke-width="2" stroke-dasharray="8,4"/>
-  <text x="360" y="340" fill="#667eea" font-size="10" font-style="italic">Index utilisé</text>
+  <!-- Output -->
+  <line x1="90" y1="340" x2="90" y2="355" stroke="#2ecc71" stroke-width="2"/>
+  <text x="100" y="358" font-family="Arial, sans-serif" font-size="11" fill="#2ecc71">Context Enrichi</text>
 </svg>

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280">
+  <defs>
+    <linearGradient id="bgGradTR" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="280" fill="url(#bgGradTR)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e74c3c" text-anchor="middle">⚡ TOOL REGISTRY (41 outils)</text>
+
+  <!-- Main container -->
+  <rect x="40" y="50" width="720" height="215" rx="8" fill="#2d2d44" stroke="#e74c3c"/>
+
+  <!-- Row 1 -->
+  <rect x="60" y="70" width="210" height="80" rx="6" fill="#1e2a3a" stroke="#3498db"/>
+  <text x="80" y="95" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#3498db">📁 Fichiers</text>
+  <text x="80" y="115" font-family="monospace" font-size="9" fill="#cccccc">├─ Read, Write</text>
+  <text x="80" y="130" font-family="monospace" font-size="9" fill="#cccccc">├─ Edit, MultiEdit</text>
+  <text x="80" y="145" font-family="monospace" font-size="9" fill="#cccccc">└─ Delete, Move...</text>
+
+  <rect x="295" y="70" width="210" height="80" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="315" y="95" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">🔍 Recherche</text>
+  <text x="315" y="115" font-family="monospace" font-size="9" fill="#cccccc">├─ Glob, Grep</text>
+  <text x="315" y="130" font-family="monospace" font-size="9" fill="#cccccc">├─ SymbolSearch</text>
+  <text x="315" y="145" font-family="monospace" font-size="9" fill="#cccccc">└─ FindReferences...</text>
+
+  <rect x="530" y="70" width="210" height="80" rx="6" fill="#3a3a1e" stroke="#f39c12"/>
+  <text x="550" y="95" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f39c12">⚙️ Exécution</text>
+  <text x="550" y="115" font-family="monospace" font-size="9" fill="#cccccc">├─ Bash</text>
+  <text x="550" y="130" font-family="monospace" font-size="9" fill="#cccccc">├─ TestRunner</text>
+  <text x="550" y="145" font-family="monospace" font-size="9" fill="#cccccc">└─ Git, Npm...</text>
+
+  <!-- Row 2 -->
+  <rect x="60" y="165" width="210" height="80" rx="6" fill="#2a1e3a" stroke="#9b59b6"/>
+  <text x="80" y="190" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#9b59b6">📊 Analyse</text>
+  <text x="80" y="210" font-family="monospace" font-size="9" fill="#cccccc">├─ DependencyAnalyzer</text>
+  <text x="80" y="225" font-family="monospace" font-size="9" fill="#cccccc">├─ ASTParser</text>
+  <text x="80" y="240" font-family="monospace" font-size="9" fill="#cccccc">└─ TypeChecker...</text>
+
+  <rect x="295" y="165" width="210" height="80" rx="6" fill="#3a1e2a" stroke="#e74c3c"/>
+  <text x="315" y="190" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#e74c3c">🔌 Intégration</text>
+  <text x="315" y="210" font-family="monospace" font-size="9" fill="#cccccc">├─ MCPClient</text>
+  <text x="315" y="225" font-family="monospace" font-size="9" fill="#cccccc">├─ PluginLoader</text>
+  <text x="315" y="240" font-family="monospace" font-size="9" fill="#cccccc">└─ 12+ servers...</text>
+
+  <rect x="530" y="165" width="210" height="80" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="550" y="190" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">🛠️ Refactoring</text>
+  <text x="550" y="210" font-family="monospace" font-size="9" fill="#cccccc">├─ RenameSymbol</text>
+  <text x="550" y="225" font-family="monospace" font-size="9" fill="#cccccc">├─ ExtractMethod</text>
+  <text x="550" y="240" font-family="monospace" font-size="9" fill="#cccccc">└─ InlineVariable...</text>
+</svg>

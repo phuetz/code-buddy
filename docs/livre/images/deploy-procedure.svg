@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420">
+  <defs>
+    <linearGradient id="bgGradDP" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="420" fill="url(#bgGradDP)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#f39c12" text-anchor="middle">⚙️ PROCÉDURE : deploy_to_production</text>
+
+  <!-- Header info -->
+  <rect x="40" y="50" width="720" height="50" rx="8" fill="#3a3a1e" stroke="#f39c12"/>
+  <text x="80" y="75" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">📝 Trigger : "deploy", "mise en prod", "release"</text>
+  <text x="350" y="75" font-family="monospace" font-size="10" fill="#2ecc71">📊 Success: 94%</text>
+  <text x="500" y="75" font-family="monospace" font-size="10" fill="#3498db">⏱️ Avg: 4.2min</text>
+  <text x="650" y="75" font-family="monospace" font-size="10" fill="#9b59b6">📈 Uses: 47</text>
+
+  <!-- Steps container -->
+  <rect x="40" y="115" width="720" height="290" rx="8" fill="#2d2d44" stroke="#4a4a6a"/>
+  <text x="60" y="140" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">📋 Steps :</text>
+
+  <!-- Step 1 -->
+  <rect x="60" y="155" width="680" height="55" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <circle cx="90" cy="182" r="16" fill="#2ecc71"/>
+  <text x="90" y="187" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">1</text>
+  <text x="120" y="175" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2ecc71">🧪 Run tests</text>
+  <text x="120" y="193" font-family="monospace" font-size="9" fill="#888888">Tool: bash | Command: npm test</text>
+  <rect x="600" y="168" width="130" height="20" rx="3" fill="#3a1e2a"/>
+  <text x="665" y="182" font-family="Arial, sans-serif" font-size="9" fill="#e74c3c" text-anchor="middle">On Failure: ABORT</text>
+
+  <!-- Step 2 -->
+  <rect x="60" y="220" width="680" height="55" rx="6" fill="#1e3a3a" stroke="#3498db"/>
+  <circle cx="90" cy="247" r="16" fill="#3498db"/>
+  <text x="90" y="252" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">2</text>
+  <text x="120" y="240" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#3498db">🔨 Build production</text>
+  <text x="120" y="258" font-family="monospace" font-size="9" fill="#888888">Tool: bash | Command: npm run build</text>
+  <rect x="600" y="233" width="130" height="20" rx="3" fill="#3a1e2a"/>
+  <text x="665" y="247" font-family="Arial, sans-serif" font-size="9" fill="#e74c3c" text-anchor="middle">On Failure: ABORT</text>
+
+  <!-- Step 3 -->
+  <rect x="60" y="285" width="680" height="55" rx="6" fill="#2a1e3a" stroke="#f39c12"/>
+  <circle cx="90" cy="312" r="16" fill="#f39c12"/>
+  <text x="90" y="317" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">3</text>
+  <text x="120" y="305" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f39c12">📊 Check bundle size</text>
+  <text x="120" y="323" font-family="monospace" font-size="9" fill="#888888">Tool: bash | Command: npm run analyze</text>
+  <rect x="600" y="298" width="130" height="20" rx="3" fill="#3a3a1e"/>
+  <text x="665" y="312" font-family="Arial, sans-serif" font-size="9" fill="#f39c12" text-anchor="middle">On Failure: SKIP</text>
+
+  <!-- Step 4 -->
+  <rect x="60" y="350" width="680" height="55" rx="6" fill="#1e3a3a" stroke="#9b59b6"/>
+  <circle cx="90" cy="377" r="16" fill="#9b59b6"/>
+  <text x="90" y="382" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">4</text>
+  <text x="120" y="370" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#9b59b6">🚀 Deploy</text>
+  <text x="120" y="388" font-family="monospace" font-size="9" fill="#888888">Tool: bash | Command: npm run deploy</text>
+  <rect x="600" y="363" width="130" height="20" rx="3" fill="#2a1e3a"/>
+  <text x="665" y="377" font-family="Arial, sans-serif" font-size="9" fill="#9b59b6" text-anchor="middle">On Failure: RETRY(2)</text>
+</svg>

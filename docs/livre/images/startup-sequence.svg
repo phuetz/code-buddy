@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
+  <defs>
+    <linearGradient id="bgGradSS" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="300" fill="url(#bgGradSS)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#2ecc71" text-anchor="middle">🚀 STARTUP SEQUENCE</text>
+
+  <!-- Main container -->
+  <rect x="40" y="50" width="720" height="235" rx="8" fill="#2d2d44" stroke="#2ecc71"/>
+
+  <!-- Phase 1 -->
+  <rect x="60" y="75" width="300" height="25" rx="4" fill="#1e3a3a"/>
+  <text x="80" y="93" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Phase 1: Configuration</text>
+  <text x="340" y="93" font-family="monospace" font-size="10" fill="#2ecc71" text-anchor="end">~5ms</text>
+
+  <!-- Phase 2 -->
+  <rect x="60" y="108" width="300" height="25" rx="4" fill="#1e3a3a"/>
+  <text x="80" y="126" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Phase 2: Security Manager</text>
+  <text x="340" y="126" font-family="monospace" font-size="10" fill="#2ecc71" text-anchor="end">~10ms</text>
+
+  <!-- Phase 3 -->
+  <rect x="60" y="141" width="300" height="25" rx="4" fill="#1e3a3a"/>
+  <text x="80" y="159" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Phase 3: UI Minimal</text>
+  <text x="340" y="159" font-family="monospace" font-size="10" fill="#2ecc71" text-anchor="end">~20ms</text>
+
+  <!-- Phase 4 -->
+  <rect x="60" y="174" width="300" height="25" rx="4" fill="#1e3a3a"/>
+  <text x="80" y="192" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">Phase 4: Agent Init</text>
+  <text x="340" y="192" font-family="monospace" font-size="10" fill="#2ecc71" text-anchor="end">~5ms</text>
+
+  <!-- Separator -->
+  <line x1="60" y1="207" x2="360" y2="207" stroke="#4a4a6a" stroke-width="2" stroke-dasharray="5,5"/>
+
+  <!-- Total visible -->
+  <rect x="60" y="215" width="300" height="28" rx="4" fill="#2ecc71"/>
+  <text x="80" y="235" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Temps visible total</text>
+  <text x="340" y="235" font-family="monospace" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="end">~40ms</text>
+
+  <!-- Async section -->
+  <rect x="400" y="75" width="340" height="168" rx="6" fill="#3a3a1e" stroke="#f39c12"/>
+  <text x="420" y="100" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f39c12">Phase 5: Background Preload</text>
+  <text x="700" y="100" font-family="Arial, sans-serif" font-size="10" fill="#f39c12">async</text>
+  
+  <text x="420" y="130" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">• Heavy modules (RAG, MCTS, etc.)</text>
+  <text x="420" y="155" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">• Semantic cache warmup</text>
+  <text x="420" y="180" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">• Memory load</text>
+  <text x="420" y="205" font-family="Arial, sans-serif" font-size="10" fill="#cccccc">• Tool registry initialization</text>
+
+  <!-- Bottom note -->
+  <text x="400" y="270" font-family="Arial, sans-serif" font-size="10" fill="#888888" text-anchor="middle">L'utilisateur peut interagir immédiatement — les modules lourds chargent en arrière-plan</text>
+</svg>

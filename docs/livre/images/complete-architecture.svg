@@ -1,378 +1,91 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" font-family="'Segoe UI', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 750">
   <defs>
-    <linearGradient id="uiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#667eea"/>
-      <stop offset="100%" style="stop-color:#764ba2"/>
+    <linearGradient id="bgGradCA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
     </linearGradient>
-    <linearGradient id="agentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#11998e"/>
-      <stop offset="100%" style="stop-color:#38ef7d"/>
-    </linearGradient>
-    <linearGradient id="reasoningGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f093fb"/>
-      <stop offset="100%" style="stop-color:#f5576c"/>
-    </linearGradient>
-    <linearGradient id="toolsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4facfe"/>
-      <stop offset="100%" style="stop-color:#00f2fe"/>
-    </linearGradient>
-    <linearGradient id="contextGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ed8936"/>
-      <stop offset="100%" style="stop-color:#dd6b20"/>
-    </linearGradient>
-    <linearGradient id="securityGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#fc8181"/>
-      <stop offset="100%" style="stop-color:#c53030"/>
-    </linearGradient>
-    <linearGradient id="memoryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#48bb78"/>
-      <stop offset="100%" style="stop-color:#276749"/>
-    </linearGradient>
-    <linearGradient id="llmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ffd700"/>
-      <stop offset="100%" style="stop-color:#f6ad55"/>
-    </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
-    </filter>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <marker id="arrowCA" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
-    </marker>
-    <marker id="arrowGoldCA" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#ffd700"/>
-    </marker>
   </defs>
 
   <!-- Background -->
-  <rect width="1200" height="900" fill="#0f0f23"/>
+  <rect width="900" height="750" fill="url(#bgGradCA)"/>
 
   <!-- Title -->
-  <text x="600" y="40" text-anchor="middle" fill="white" font-size="28" font-weight="bold">
-    Architecture Complète Grok-CLI
-  </text>
-  <text x="600" y="68" text-anchor="middle" fill="#718096" font-size="14">
-    6 Couches + LLM Central — De l'Interface Utilisateur aux Actions Système
-  </text>
+  <text x="450" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">🏗️ GROK-CLI ARCHITECTURE COMPLETE</text>
 
-  <!-- Layer 1: User Interface -->
-  <g transform="translate(50, 95)" filter="url(#shadow)">
-    <rect x="0" y="0" width="1100" height="90" rx="15" fill="#1a1a3a" stroke="url(#uiGrad)" stroke-width="3"/>
-    <rect x="0" y="0" width="180" height="90" rx="15" fill="url(#uiGrad)"/>
-    <text x="90" y="35" text-anchor="middle" fill="white" font-size="12">COUCHE 1</text>
-    <text x="90" y="55" text-anchor="middle" fill="white" font-size="14" font-weight="bold">INTERFACE</text>
-    <text x="90" y="75" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10">UI/UX</text>
+  <!-- Layer 1: UI -->
+  <rect x="40" y="50" width="820" height="85" rx="8" fill="#2a1e3a" stroke="#9b59b6" stroke-width="2"/>
+  <text x="60" y="75" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#9b59b6">🖥️ USER INTERFACE</text>
+  <rect x="60" y="90" width="140" height="35" rx="4" fill="#2d2d44"/><text x="130" y="112" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Chat Interface</text>
+  <rect x="220" y="90" width="140" height="35" rx="4" fill="#2d2d44"/><text x="290" y="112" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Status Bar</text>
+  <rect x="380" y="90" width="140" height="35" rx="4" fill="#2d2d44"/><text x="450" y="112" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Tool Progress</text>
+  <rect x="540" y="90" width="140" height="35" rx="4" fill="#2d2d44"/><text x="610" y="112" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Error Boundary</text>
 
-    <g transform="translate(200, 15)">
-      <rect x="0" y="0" width="130" height="60" rx="8" fill="#2d3748"/>
-      <text x="65" y="25" text-anchor="middle" fill="#667eea" font-size="10" font-weight="bold">ChatInterface</text>
-      <text x="65" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">React 18 + Ink 4</text>
-      <text x="65" y="54" text-anchor="middle" fill="#718096" font-size="8">Terminal UI</text>
-    </g>
+  <line x1="450" y1="135" x2="450" y2="150" stroke="#4a4a6a" stroke-width="2"/>
 
-    <g transform="translate(345, 15)">
-      <rect x="0" y="0" width="130" height="60" rx="8" fill="#2d3748"/>
-      <text x="65" y="25" text-anchor="middle" fill="#667eea" font-size="10" font-weight="bold">RenderManager</text>
-      <text x="65" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Output formaté</text>
-      <text x="65" y="54" text-anchor="middle" fill="#718096" font-size="8">Tests, Code, Weather</text>
-    </g>
+  <!-- Layer 2: Orchestration -->
+  <rect x="40" y="155" width="820" height="120" rx="8" fill="#1e3a3a" stroke="#2ecc71" stroke-width="2"/>
+  <text x="60" y="178" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71">🎯 ORCHESTRATION</text>
+  
+  <rect x="60" y="190" width="370" height="35" rx="4" fill="#2d2d44" stroke="#2ecc71"/>
+  <text x="245" y="212" font-family="Arial, sans-serif" font-size="10" fill="#2ecc71" text-anchor="middle">GrokAgent: Process → Execute → Stream → Memory</text>
+  
+  <rect x="450" y="190" width="390" height="35" rx="4" fill="#2d2d44" stroke="#2ecc71"/>
+  <text x="645" y="212" font-family="Arial, sans-serif" font-size="10" fill="#2ecc71" text-anchor="middle">MultiAgent Coordinator: Code | Test | Review | Doc | Sec</text>
 
-    <g transform="translate(490, 15)">
-      <rect x="0" y="0" width="130" height="60" rx="8" fill="#2d3748"/>
-      <text x="65" y="25" text-anchor="middle" fill="#667eea" font-size="10" font-weight="bold">SlashCommands</text>
-      <text x="65" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">/help /model /mode</text>
-      <text x="65" y="54" text-anchor="middle" fill="#718096" font-size="8">Interactive CLI</text>
-    </g>
-
-    <g transform="translate(635, 15)">
-      <rect x="0" y="0" width="130" height="60" rx="8" fill="#2d3748"/>
-      <text x="65" y="25" text-anchor="middle" fill="#667eea" font-size="10" font-weight="bold">ErrorBoundary</text>
-      <text x="65" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Crash resilience</text>
-      <text x="65" y="54" text-anchor="middle" fill="#718096" font-size="8">Graceful recovery</text>
-    </g>
-
-    <g transform="translate(780, 15)">
-      <rect x="0" y="0" width="130" height="60" rx="8" fill="#2d3748"/>
-      <text x="65" y="25" text-anchor="middle" fill="#667eea" font-size="10" font-weight="bold">Streaming</text>
-      <text x="65" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Async iterators</text>
-      <text x="65" y="54" text-anchor="middle" fill="#718096" font-size="8">Real-time output</text>
-    </g>
-
-    <g transform="translate(925, 15)">
-      <rect x="0" y="0" width="130" height="60" rx="8" fill="#2d3748"/>
-      <text x="65" y="25" text-anchor="middle" fill="#667eea" font-size="10" font-weight="bold">Confirmation</text>
-      <text x="65" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">[y/N/edit]</text>
-      <text x="65" y="54" text-anchor="middle" fill="#718096" font-size="8">User approval</text>
-    </g>
-  </g>
-
-  <!-- Layer 2: Agent Core -->
-  <g transform="translate(50, 200)" filter="url(#shadow)">
-    <rect x="0" y="0" width="1100" height="90" rx="15" fill="#1a1a3a" stroke="url(#agentGrad)" stroke-width="3"/>
-    <rect x="0" y="0" width="180" height="90" rx="15" fill="url(#agentGrad)"/>
-    <text x="90" y="35" text-anchor="middle" fill="white" font-size="12">COUCHE 2</text>
-    <text x="90" y="55" text-anchor="middle" fill="white" font-size="14" font-weight="bold">AGENT CORE</text>
-    <text x="90" y="75" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10">Orchestration</text>
-
-    <g transform="translate(200, 15)">
-      <rect x="0" y="0" width="150" height="60" rx="8" fill="#2d3748"/>
-      <text x="75" y="25" text-anchor="middle" fill="#38ef7d" font-size="10" font-weight="bold">GrokAgent</text>
-      <text x="75" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Main orchestrator</text>
-      <text x="75" y="54" text-anchor="middle" fill="#718096" font-size="8">30 rounds max</text>
-    </g>
-
-    <g transform="translate(365, 15)">
-      <rect x="0" y="0" width="150" height="60" rx="8" fill="#2d3748"/>
-      <text x="75" y="25" text-anchor="middle" fill="#38ef7d" font-size="10" font-weight="bold">MultiAgent</text>
-      <text x="75" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Task coordination</text>
-      <text x="75" y="54" text-anchor="middle" fill="#718096" font-size="8">Parallel workers</text>
-    </g>
-
-    <g transform="translate(530, 15)">
-      <rect x="0" y="0" width="150" height="60" rx="8" fill="#2d3748"/>
-      <text x="75" y="25" text-anchor="middle" fill="#38ef7d" font-size="10" font-weight="bold">Specialized</text>
-      <text x="75" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">PDF, Excel, SQL</text>
-      <text x="75" y="54" text-anchor="middle" fill="#718096" font-size="8">Domain experts</text>
-    </g>
-
-    <g transform="translate(695, 15)">
-      <rect x="0" y="0" width="150" height="60" rx="8" fill="#2d3748"/>
-      <text x="75" y="25" text-anchor="middle" fill="#38ef7d" font-size="10" font-weight="bold">ModelRouter</text>
-      <text x="75" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">FrugalGPT tiers</text>
-      <text x="75" y="54" text-anchor="middle" fill="#718096" font-size="8">Cost optimization</text>
-    </g>
-
-    <g transform="translate(860, 15)">
-      <rect x="0" y="0" width="150" height="60" rx="8" fill="#2d3748"/>
-      <text x="75" y="25" text-anchor="middle" fill="#38ef7d" font-size="10" font-weight="bold">ThinkingModes</text>
-      <text x="75" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">think/mega/ultra</text>
-      <text x="75" y="54" text-anchor="middle" fill="#718096" font-size="8">4K/10K/32K tokens</text>
-    </g>
-  </g>
+  <line x1="450" y1="275" x2="450" y2="290" stroke="#4a4a6a" stroke-width="2"/>
 
   <!-- Layer 3: Reasoning -->
-  <g transform="translate(50, 305)" filter="url(#shadow)">
-    <rect x="0" y="0" width="1100" height="90" rx="15" fill="#1a1a3a" stroke="url(#reasoningGrad)" stroke-width="3"/>
-    <rect x="0" y="0" width="180" height="90" rx="15" fill="url(#reasoningGrad)"/>
-    <text x="90" y="35" text-anchor="middle" fill="white" font-size="12">COUCHE 3</text>
-    <text x="90" y="55" text-anchor="middle" fill="white" font-size="14" font-weight="bold">REASONING</text>
-    <text x="90" y="75" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10">Intelligence</text>
+  <rect x="40" y="295" width="820" height="70" rx="8" fill="#3a3a1e" stroke="#f39c12" stroke-width="2"/>
+  <text x="60" y="320" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#f39c12">🧠 REASONING</text>
+  <rect x="150" y="330" width="130" height="25" rx="4" fill="#2d2d44"/><text x="215" y="347" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Tree-of-Thought</text>
+  <rect x="300" y="330" width="130" height="25" rx="4" fill="#2d2d44"/><text x="365" y="347" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">MCTS Reasoner</text>
+  <rect x="450" y="330" width="130" height="25" rx="4" fill="#2d2d44"/><text x="515" y="347" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Iterative Repair</text>
+  <rect x="600" y="330" width="130" height="25" rx="4" fill="#2d2d44"/><text x="665" y="347" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Hybrid Reasoning</text>
 
-    <g transform="translate(200, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">TreeOfThought</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Multi-path reasoning</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">BFS/DFS exploration</text>
-    </g>
+  <line x1="450" y1="365" x2="450" y2="380" stroke="#4a4a6a" stroke-width="2"/>
 
-    <g transform="translate(355, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">MCTS</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Monte-Carlo search</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">UCB1 selection</text>
-    </g>
+  <!-- Layer 4: Context & Memory -->
+  <rect x="40" y="385" width="820" height="100" rx="8" fill="#1e2a3a" stroke="#3498db" stroke-width="2"/>
+  <text x="60" y="408" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#3498db">💾 CONTEXT & MEMORY</text>
+  <rect x="60" y="420" width="130" height="25" rx="4" fill="#2d2d44"/><text x="125" y="437" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Dep-Aware RAG</text>
+  <rect x="210" y="420" width="130" height="25" rx="4" fill="#2d2d44"/><text x="275" y="437" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Context Compressor</text>
+  <rect x="360" y="420" width="130" height="25" rx="4" fill="#2d2d44"/><text x="425" y="437" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Semantic Cache</text>
+  <rect x="510" y="420" width="130" height="25" rx="4" fill="#2d2d44"/><text x="575" y="437" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Unified Memory</text>
+  
+  <rect x="60" y="455" width="130" height="25" rx="4" fill="#1e3a3a"/><text x="125" y="472" font-family="Arial, sans-serif" font-size="9" fill="#9b59b6" text-anchor="middle">Episodic</text>
+  <rect x="210" y="455" width="130" height="25" rx="4" fill="#1e3a3a"/><text x="275" y="472" font-family="Arial, sans-serif" font-size="9" fill="#9b59b6" text-anchor="middle">Semantic</text>
+  <rect x="360" y="455" width="130" height="25" rx="4" fill="#1e3a3a"/><text x="425" y="472" font-family="Arial, sans-serif" font-size="9" fill="#9b59b6" text-anchor="middle">Procedural</text>
+  <rect x="510" y="455" width="130" height="25" rx="4" fill="#1e3a3a"/><text x="575" y="472" font-family="Arial, sans-serif" font-size="9" fill="#9b59b6" text-anchor="middle">Prospective</text>
 
-    <g transform="translate(510, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">IterativeRepair</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">ChatRepair loop</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">5 iterations max</text>
-    </g>
+  <line x1="450" y1="485" x2="450" y2="500" stroke="#4a4a6a" stroke-width="2"/>
 
-    <g transform="translate(665, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">Localization</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">SBFL Ochiai/DStar</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">Bug detection</text>
-    </g>
+  <!-- Layer 5: Actions -->
+  <rect x="40" y="505" width="820" height="90" rx="8" fill="#2d2d44" stroke="#e74c3c" stroke-width="2"/>
+  <text x="60" y="528" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e74c3c">⚡ ACTIONS</text>
+  <rect x="60" y="540" width="500" height="25" rx="4" fill="#1a1a2e" stroke="#e74c3c"/>
+  <text x="310" y="557" font-family="Arial, sans-serif" font-size="9" fill="#e74c3c" text-anchor="middle">Tool Registry (41 tools): Read | Write | Edit | Bash | Glob | Grep | Sym...</text>
+  
+  <rect x="60" y="570" width="160" height="20" rx="4" fill="#1e3a3a"/><text x="140" y="584" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">Parallel Executor</text>
+  <rect x="240" y="570" width="160" height="20" rx="4" fill="#1e3a3a"/><text x="320" y="584" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">MCP Client</text>
+  <rect x="420" y="570" width="160" height="20" rx="4" fill="#1e3a3a"/><text x="500" y="584" font-family="Arial, sans-serif" font-size="9" fill="#2ecc71" text-anchor="middle">Plugin Loader</text>
 
-    <g transform="translate(820, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">Verification</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Test execution</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">Regression check</text>
-    </g>
-  </g>
-
-  <!-- LLM Central (between layers 3 and 4) -->
-  <g transform="translate(450, 410)" filter="url(#glow)">
-    <rect x="0" y="0" width="300" height="80" rx="15" fill="url(#llmGrad)"/>
-    <text x="150" y="30" text-anchor="middle" fill="#1a1a3a" font-size="16" font-weight="bold">LLM ENGINE</text>
-    <text x="150" y="50" text-anchor="middle" fill="rgba(0,0,0,0.7)" font-size="11">Grok API (xAI) via OpenAI SDK</text>
-    <text x="150" y="68" text-anchor="middle" fill="rgba(0,0,0,0.6)" font-size="9">grok-3, grok-3-mini, grok-2-mini</text>
-  </g>
-
-  <!-- Arrows to/from LLM -->
-  <path d="M600 395 L600 405" stroke="#ffd700" stroke-width="3"/>
-  <path d="M600 490 L600 505" stroke="#ffd700" stroke-width="3"/>
-
-  <!-- Layer 4: Context Management -->
-  <g transform="translate(50, 510)" filter="url(#shadow)">
-    <rect x="0" y="0" width="1100" height="90" rx="15" fill="#1a1a3a" stroke="url(#contextGrad)" stroke-width="3"/>
-    <rect x="0" y="0" width="180" height="90" rx="15" fill="url(#contextGrad)"/>
-    <text x="90" y="35" text-anchor="middle" fill="white" font-size="12">COUCHE 4</text>
-    <text x="90" y="55" text-anchor="middle" fill="white" font-size="14" font-weight="bold">CONTEXTE</text>
-    <text x="90" y="75" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10">Mémoire</text>
-
-    <g transform="translate(200, 15)">
-      <rect x="0" y="0" width="135" height="60" rx="8" fill="#2d3748"/>
-      <text x="67" y="25" text-anchor="middle" fill="#ed8936" font-size="10" font-weight="bold">DependencyRAG</text>
-      <text x="67" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">CodeRAG deps</text>
-      <text x="67" y="54" text-anchor="middle" fill="#718096" font-size="8">Repo-level</text>
-    </g>
-
-    <g transform="translate(350, 15)">
-      <rect x="0" y="0" width="135" height="60" rx="8" fill="#2d3748"/>
-      <text x="67" y="25" text-anchor="middle" fill="#ed8936" font-size="10" font-weight="bold">Compressor</text>
-      <text x="67" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">JetBrains method</text>
-      <text x="67" y="54" text-anchor="middle" fill="#718096" font-size="8">Priority-based</text>
-    </g>
-
-    <g transform="translate(500, 15)">
-      <rect x="0" y="0" width="135" height="60" rx="8" fill="#2d3748"/>
-      <text x="67" y="25" text-anchor="middle" fill="#ed8936" font-size="10" font-weight="bold">SemanticCache</text>
-      <text x="67" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">68% API reduction</text>
-      <text x="67" y="54" text-anchor="middle" fill="#718096" font-size="8">Cosine ≥ 0.85</text>
-    </g>
-
-    <g transform="translate(650, 15)">
-      <rect x="0" y="0" width="135" height="60" rx="8" fill="#2d3748"/>
-      <text x="67" y="25" text-anchor="middle" fill="#ed8936" font-size="10" font-weight="bold">ObsMasking</text>
-      <text x="67" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Irrelevant filter</text>
-      <text x="67" y="54" text-anchor="middle" fill="#718096" font-size="8">Token savings</text>
-    </g>
-
-    <g transform="translate(800, 15)">
-      <rect x="0" y="0" width="135" height="60" rx="8" fill="#2d3748"/>
-      <text x="67" y="25" text-anchor="middle" fill="#ed8936" font-size="10" font-weight="bold">Memory4L</text>
-      <text x="67" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Epis/Sem/Proc/Pros</text>
-      <text x="67" y="54" text-anchor="middle" fill="#718096" font-size="8">Persistent</text>
-    </g>
-  </g>
-
-  <!-- Layer 5: Tools -->
-  <g transform="translate(50, 615)" filter="url(#shadow)">
-    <rect x="0" y="0" width="1100" height="90" rx="15" fill="#1a1a3a" stroke="url(#toolsGrad)" stroke-width="3"/>
-    <rect x="0" y="0" width="180" height="90" rx="15" fill="url(#toolsGrad)"/>
-    <text x="90" y="35" text-anchor="middle" fill="white" font-size="12">COUCHE 5</text>
-    <text x="90" y="55" text-anchor="middle" fill="white" font-size="14" font-weight="bold">OUTILS</text>
-    <text x="90" y="75" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10">Actions</text>
-
-    <g transform="translate(200, 15)">
-      <rect x="0" y="0" width="110" height="60" rx="8" fill="#2d3748"/>
-      <text x="55" y="25" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">FileOps</text>
-      <text x="55" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">read/write/edit</text>
-      <text x="55" y="54" text-anchor="middle" fill="#718096" font-size="8">multi-edit</text>
-    </g>
-
-    <g transform="translate(325, 15)">
-      <rect x="0" y="0" width="110" height="60" rx="8" fill="#2d3748"/>
-      <text x="55" y="25" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">Bash</text>
-      <text x="55" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Shell exec</text>
-      <text x="55" y="54" text-anchor="middle" fill="#718096" font-size="8">Sandboxed</text>
-    </g>
-
-    <g transform="translate(450, 15)">
-      <rect x="0" y="0" width="110" height="60" rx="8" fill="#2d3748"/>
-      <text x="55" y="25" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">Search</text>
-      <text x="55" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">ripgrep/glob</text>
-      <text x="55" y="54" text-anchor="middle" fill="#718096" font-size="8">Symbols</text>
-    </g>
-
-    <g transform="translate(575, 15)">
-      <rect x="0" y="0" width="110" height="60" rx="8" fill="#2d3748"/>
-      <text x="55" y="25" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">MCP</text>
-      <text x="55" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">External tools</text>
-      <text x="55" y="54" text-anchor="middle" fill="#718096" font-size="8">Extensible</text>
-    </g>
-
-    <g transform="translate(700, 15)">
-      <rect x="0" y="0" width="110" height="60" rx="8" fill="#2d3748"/>
-      <text x="55" y="25" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">Intelligence</text>
-      <text x="55" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">AST/Symbols</text>
-      <text x="55" y="54" text-anchor="middle" fill="#718096" font-size="8">Refactoring</text>
-    </g>
-
-    <g transform="translate(825, 15)">
-      <rect x="0" y="0" width="110" height="60" rx="8" fill="#2d3748"/>
-      <text x="55" y="25" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">Parallel</text>
-      <text x="55" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">LLMCompiler</text>
-      <text x="55" y="54" text-anchor="middle" fill="#718096" font-size="8">2.5-4.6x faster</text>
-    </g>
-
-    <g transform="translate(950, 15)">
-      <rect x="0" y="0" width="110" height="60" rx="8" fill="#2d3748"/>
-      <text x="55" y="25" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">WebFetch</text>
-      <text x="55" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">HTTP client</text>
-      <text x="55" y="54" text-anchor="middle" fill="#718096" font-size="8">HTML→MD</text>
-    </g>
-  </g>
+  <line x1="450" y1="595" x2="450" y2="610" stroke="#4a4a6a" stroke-width="2"/>
 
   <!-- Layer 6: Security -->
-  <g transform="translate(50, 720)" filter="url(#shadow)">
-    <rect x="0" y="0" width="1100" height="90" rx="15" fill="#1a1a3a" stroke="url(#securityGrad)" stroke-width="3"/>
-    <rect x="0" y="0" width="180" height="90" rx="15" fill="url(#securityGrad)"/>
-    <text x="90" y="35" text-anchor="middle" fill="white" font-size="12">COUCHE 6</text>
-    <text x="90" y="55" text-anchor="middle" fill="white" font-size="14" font-weight="bold">SÉCURITÉ</text>
-    <text x="90" y="75" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10">Protection</text>
+  <rect x="40" y="615" width="820" height="55" rx="8" fill="#3a1e2a" stroke="#e74c3c" stroke-width="2"/>
+  <text x="60" y="640" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e74c3c">🔒 SECURITY</text>
+  <rect x="180" y="630" width="130" height="30" rx="4" fill="#2d2d44"/><text x="245" y="650" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Approval Modes</text>
+  <rect x="330" y="630" width="130" height="30" rx="4" fill="#2d2d44"/><text x="395" y="650" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Sandbox Manager</text>
+  <rect x="480" y="630" width="130" height="30" rx="4" fill="#2d2d44"/><text x="545" y="650" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Data Redaction</text>
+  <rect x="630" y="630" width="130" height="30" rx="4" fill="#2d2d44"/><text x="695" y="650" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Audit Logger</text>
 
-    <g transform="translate(200, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#fc8181" font-size="10" font-weight="bold">ApprovalModes</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">read-only/auto/full</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">3-tier system</text>
-    </g>
+  <line x1="450" y1="670" x2="450" y2="685" stroke="#4a4a6a" stroke-width="2"/>
 
-    <g transform="translate(355, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#fc8181" font-size="10" font-weight="bold">Sandbox</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Path validation</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">Command filter</text>
-    </g>
-
-    <g transform="translate(510, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#fc8181" font-size="10" font-weight="bold">DataRedaction</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Secrets masking</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">API keys, tokens</text>
-    </g>
-
-    <g transform="translate(665, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#fc8181" font-size="10" font-weight="bold">AuditLog</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">All actions logged</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">Forensics ready</text>
-    </g>
-
-    <g transform="translate(820, 15)">
-      <rect x="0" y="0" width="140" height="60" rx="8" fill="#2d3748"/>
-      <text x="70" y="25" text-anchor="middle" fill="#fc8181" font-size="10" font-weight="bold">CostLimits</text>
-      <text x="70" y="42" text-anchor="middle" fill="#a0aec0" font-size="8">Budget tracking</text>
-      <text x="70" y="54" text-anchor="middle" fill="#718096" font-size="8">MAX_COST=$10</text>
-    </g>
-  </g>
-
-  <!-- Filesystem at bottom -->
-  <g transform="translate(200, 830)">
-    <rect x="0" y="0" width="800" height="50" rx="10" fill="#2d3748" stroke="#4a5568" stroke-width="2"/>
-    <text x="400" y="20" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="bold">SYSTÈME DE FICHIERS + EXTERNAL SERVICES</text>
-    <text x="100" y="40" fill="#718096" font-size="9">Codebase</text>
-    <text x="250" y="40" fill="#718096" font-size="9">Git repos</text>
-    <text x="400" y="40" fill="#718096" font-size="9">Databases</text>
-    <text x="550" y="40" fill="#718096" font-size="9">APIs</text>
-    <text x="700" y="40" fill="#718096" font-size="9">MCP Servers</text>
-  </g>
-
-  <!-- Side arrows showing data flow -->
-  <path d="M30 450 L30 150 L45 150" stroke="#4a5568" stroke-width="2" stroke-dasharray="5,3"/>
-  <path d="M1170 150 L1170 450 L1155 450" stroke="#4a5568" stroke-width="2" stroke-dasharray="5,3"/>
-  <text x="15" y="300" fill="#718096" font-size="10" transform="rotate(-90, 15, 300)">User Input</text>
-  <text x="1185" y="300" fill="#718096" font-size="10" transform="rotate(90, 1185, 300)">Actions</text>
+  <!-- Layer 7: Optimization -->
+  <rect x="40" y="690" width="820" height="50" rx="8" fill="#1e3a3a" stroke="#2ecc71" stroke-width="2"/>
+  <text x="60" y="720" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71">🚀 OPTIMIZATION</text>
+  <rect x="200" y="703" width="130" height="28" rx="4" fill="#2d2d44"/><text x="265" y="721" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Model Routing</text>
+  <rect x="350" y="703" width="130" height="28" rx="4" fill="#2d2d44"/><text x="415" y="721" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Lazy Loading</text>
+  <rect x="500" y="703" width="130" height="28" rx="4" fill="#2d2d44"/><text x="565" y="721" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Latency Optimizer</text>
+  <rect x="650" y="703" width="130" height="28" rx="4" fill="#2d2d44"/><text x="715" y="721" font-family="Arial, sans-serif" font-size="9" fill="#cccccc" text-anchor="middle">Request Batching</text>
 </svg>

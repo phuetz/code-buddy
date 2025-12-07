@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
+  <defs>
+    <linearGradient id="bgGradSM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="300" fill="url(#bgGradSM)"/>
+
+  <!-- Title -->
+  <text x="400" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e74c3c" text-anchor="middle">🔒 SECURITY MANAGER</text>
+
+  <!-- Main container -->
+  <rect x="40" y="50" width="720" height="235" rx="8" fill="#2d2d44" stroke="#e74c3c"/>
+
+  <!-- Three security components -->
+  <rect x="70" y="75" width="200" height="70" rx="6" fill="#3a1e2a" stroke="#e74c3c"/>
+  <text x="170" y="105" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#e74c3c" text-anchor="middle">🚦 Approval</text>
+  <text x="170" y="125" font-family="Arial, sans-serif" font-size="10" fill="#888888" text-anchor="middle">Modes</text>
+
+  <rect x="300" y="75" width="200" height="70" rx="6" fill="#3a3a1e" stroke="#f39c12"/>
+  <text x="400" y="105" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#f39c12" text-anchor="middle">📦 Sandbox</text>
+  <text x="400" y="125" font-family="Arial, sans-serif" font-size="10" fill="#888888" text-anchor="middle">Manager</text>
+
+  <rect x="530" y="75" width="200" height="70" rx="6" fill="#2a1e3a" stroke="#9b59b6"/>
+  <text x="630" y="105" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#9b59b6" text-anchor="middle">🔐 Data</text>
+  <text x="630" y="125" font-family="Arial, sans-serif" font-size="10" fill="#888888" text-anchor="middle">Redaction</text>
+
+  <!-- Arrows to Audit Logger -->
+  <line x1="170" y1="145" x2="170" y2="175" stroke="#4a4a6a" stroke-width="2"/>
+  <line x1="400" y1="145" x2="400" y2="175" stroke="#4a4a6a" stroke-width="2"/>
+  <line x1="630" y1="145" x2="630" y2="175" stroke="#4a4a6a" stroke-width="2"/>
+  <line x1="170" y1="175" x2="630" y2="175" stroke="#4a4a6a" stroke-width="2"/>
+  <line x1="400" y1="175" x2="400" y2="190" stroke="#4a4a6a" stroke-width="2"/>
+
+  <!-- Audit Logger -->
+  <rect x="70" y="195" width="660" height="75" rx="6" fill="#1e3a3a" stroke="#2ecc71"/>
+  <text x="400" y="220" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2ecc71" text-anchor="middle">📋 Audit Logger</text>
+  <text x="150" y="245" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Toutes les actions sont journalisées</text>
+  <text x="400" y="245" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Rétention configurable</text>
+  <text x="600" y="245" font-family="Arial, sans-serif" font-size="9" fill="#cccccc">• Export pour analyse</text>
+</svg>
