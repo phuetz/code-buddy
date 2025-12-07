@@ -165,6 +165,8 @@
 - **Pre-training** — [Ch.01](01-comprendre-les-llms.md)
 - **Priorité (contexte)** — [Ch.09](09-context-compression.md)
 - **Prompt engineering** — [Ch.01](01-comprendre-les-llms.md)
+- **Prompt hardening** — [Ch.16](16-system-prompts-securite.md)
+- **Prompt injection** — [Ch.16](16-system-prompts-securite.md)
 
 ## Q
 
@@ -190,13 +192,15 @@
 
 - **Sandbox** — [Ch.03](03-anatomie-agent.md), [Ch.10](10-tool-use.md)
 - **SBFL (Spectrum-Based Fault Localization)** — [Ch.06](06-repair-reflexion.md)
-- **Sécurité** — [Ch.03](03-anatomie-agent.md), [Ch.15](15-architecture-complete.md)
+- **Sécurité** — [Ch.03](03-anatomie-agent.md), [Ch.15](15-architecture-complete.md), [Ch.16](16-system-prompts-securite.md)
+- **Sécurité CLI** — [Ch.16](16-system-prompts-securite.md)
 - **Self-attention** — [Ch.01](01-comprendre-les-llms.md)
 - **Sélection (MCTS)** — [Ch.05](05-mcts.md)
 - **Simulation (MCTS)** — [Ch.05](05-mcts.md)
 - **Slash commands** — [Ch.11](11-plugins-mcp.md)
 - **Streaming** — [Ch.10](10-tool-use.md)
 - **Symbol search** — [Ch.10](10-tool-use.md)
+- **System prompt** — [Ch.16](16-system-prompts-securite.md)
 
 ## T
 
