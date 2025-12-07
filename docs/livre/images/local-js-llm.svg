@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 450">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="450" fill="url(#bgGrad)"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="20" font-weight="bold">LLM Local en JavaScript/TypeScript</text>
+
+  <!-- node-llama-cpp -->
+  <rect x="30" y="70" width="200" height="160" rx="10" fill="#1e3a5f" stroke="#2ecc71" stroke-width="2"/>
+  <text x="130" y="100" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="16" font-weight="bold">node-llama-cpp</text>
+  <text x="130" y="125" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11">Bindings natifs C++</text>
+  <text x="130" y="145" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="10">pour Node.js</text>
+  <rect x="50" y="160" width="160" height="55" rx="4" fill="#0a0a1a"/>
+  <text x="130" y="180" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="10">Performance: ⭐⭐⭐⭐</text>
+  <text x="130" y="195" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="10">Usage: Serveur Node.js</text>
+  <text x="130" y="210" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="10">GPU: CUDA / Metal</text>
+
+  <!-- WebLLM -->
+  <rect x="250" y="70" width="200" height="160" rx="10" fill="#1e3a5f" stroke="#3498db" stroke-width="2"/>
+  <text x="350" y="100" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="16" font-weight="bold">WebLLM</text>
+  <text x="350" y="125" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11">LLM dans le navigateur</text>
+  <text x="350" y="145" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="10">WebGPU powered</text>
+  <rect x="270" y="160" width="160" height="55" rx="4" fill="#0a0a1a"/>
+  <text x="350" y="180" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="10">Performance: ⭐⭐⭐</text>
+  <text x="350" y="195" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="10">Usage: Apps web, extensions</text>
+  <text x="350" y="210" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="10">GPU: WebGPU</text>
+
+  <!-- Transformers.js -->
+  <rect x="470" y="70" width="200" height="160" rx="10" fill="#1e3a5f" stroke="#f39c12" stroke-width="2"/>
+  <text x="570" y="100" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="16" font-weight="bold">Transformers.js</text>
+  <text x="570" y="125" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11">HuggingFace pour JS</text>
+  <text x="570" y="145" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="10">ONNX Runtime</text>
+  <rect x="490" y="160" width="160" height="55" rx="4" fill="#0a0a1a"/>
+  <text x="570" y="180" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="10">Performance: ⭐⭐⭐</text>
+  <text x="570" y="195" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="10">Usage: Embeddings, petits LLM</text>
+  <text x="570" y="210" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="10">GPU: WebGPU / WASM</text>
+
+  <!-- Ollama -->
+  <rect x="690" y="70" width="200" height="160" rx="10" fill="#1e3a5f" stroke="#9b59b6" stroke-width="2"/>
+  <text x="790" y="100" text-anchor="middle" fill="#9b59b6" font-family="Arial, sans-serif" font-size="16" font-weight="bold">Ollama API</text>
+  <text x="790" y="125" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11">Serveur local HTTP</text>
+  <text x="790" y="145" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="10">API OpenAI compatible</text>
+  <rect x="710" y="160" width="160" height="55" rx="4" fill="#0a0a1a"/>
+  <text x="790" y="180" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="10">Performance: ⭐⭐⭐⭐</text>
+  <text x="790" y="195" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="10">Usage: Universel</text>
+  <text x="790" y="210" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="10">GPU: CUDA / Metal / ROCm</text>
+
+  <!-- Architecture diagram -->
+  <text x="450" y="265" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Architecture Grok-CLI avec Provider Local</text>
+
+  <rect x="100" y="285" width="700" height="140" rx="8" fill="#0a0a1a" stroke="#3498db" stroke-width="1"/>
+
+  <!-- Grok-CLI box -->
+  <rect x="130" y="305" width="150" height="100" rx="6" fill="#1e3a5f" stroke="#2ecc71" stroke-width="2"/>
+  <text x="205" y="330" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Grok-CLI</text>
+  <text x="205" y="350" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9">LLMProvider</text>
+  <text x="205" y="370" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9">interface</text>
+  <text x="205" y="390" text-anchor="middle" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="8">Abstraction unifiée</text>
+
+  <!-- Arrow -->
+  <line x1="280" y1="355" x2="340" y2="355" stroke="#3498db" stroke-width="2"/>
+  <polygon points="340,350 350,355 340,360" fill="#3498db"/>
+
+  <!-- Provider selector -->
+  <rect x="350" y="295" width="140" height="120" rx="6" fill="#2a2a4a"/>
+  <text x="420" y="318" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Provider</text>
+  <text x="420" y="340" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="10">• grok-api</text>
+  <text x="420" y="358" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="10">• ollama</text>
+  <text x="420" y="376" text-anchor="middle" fill="#9b59b6" font-family="Arial, sans-serif" font-size="10">• local-llama</text>
+  <text x="420" y="394" text-anchor="middle" fill="#f39c12" font-family="Arial, sans-serif" font-size="10">• webllm</text>
+
+  <!-- Arrows to backends -->
+  <line x1="490" y1="320" x2="550" y2="310" stroke="#3498db" stroke-width="1.5"/>
+  <line x1="490" y1="355" x2="550" y2="355" stroke="#2ecc71" stroke-width="1.5"/>
+  <line x1="490" y1="390" x2="550" y2="395" stroke="#9b59b6" stroke-width="1.5"/>
+
+  <!-- Backend boxes -->
+  <rect x="555" y="295" width="110" height="30" rx="4" fill="#1e3a5f" stroke="#3498db" stroke-width="1"/>
+  <text x="610" y="315" text-anchor="middle" fill="#3498db" font-family="Arial, sans-serif" font-size="10">API Cloud</text>
+
+  <rect x="555" y="340" width="110" height="30" rx="4" fill="#1e4a3f" stroke="#2ecc71" stroke-width="1"/>
+  <text x="610" y="360" text-anchor="middle" fill="#2ecc71" font-family="Arial, sans-serif" font-size="10">localhost:11434</text>
+
+  <rect x="555" y="380" width="110" height="30" rx="4" fill="#1e4a3f" stroke="#9b59b6" stroke-width="1"/>
+  <text x="610" y="400" text-anchor="middle" fill="#9b59b6" font-family="Arial, sans-serif" font-size="10">llama.gguf</text>
+
+  <!-- Icons -->
+  <text x="700" y="315" fill="#3498db" font-family="Arial, sans-serif" font-size="16">☁️</text>
+  <text x="700" y="360" fill="#2ecc71" font-family="Arial, sans-serif" font-size="16">🏠</text>
+  <text x="700" y="400" fill="#9b59b6" font-family="Arial, sans-serif" font-size="16">💾</text>
+
+  <!-- Benefits -->
+  <text x="755" y="320" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">Internet</text>
+  <text x="755" y="360" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">Local</text>
+  <text x="755" y="400" fill="#a0a0a0" font-family="Arial, sans-serif" font-size="9">Embarqué</text>
+</svg>

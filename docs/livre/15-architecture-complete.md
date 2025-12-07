@@ -36,6 +36,8 @@ Marcus, l'un des nouveaux, leva la main.
 | 15.8 | 📊 Intégration Complète | Diagramme global, configuration |
 | 15.9 | 📈 Métriques & Monitoring | Dashboard, statistiques |
 | 15.10 | 📝 Points Clés | Synthèse du chapitre |
+| 15.11 | 🔬 De la Recherche à l'Implémentation | Mapping articles → code |
+| 15.12 | 🏠 LLM Local en JavaScript | WebLLM, Transformers.js, node-llama-cpp |
 
 ---
 
@@ -751,6 +753,244 @@ export class SecurityManager {
 | 🚀 Démarrage | 40ms visible, preload async | UX fluide |
 
 ![Récapitulatif Architecture](images/architecture-summary.svg)
+
+---
+
+## 🔬 15.11 De la Recherche à l'Implémentation
+
+Un aspect clé de Grok-CLI est son ancrage dans la **recherche académique récente**. Chaque optimisation majeure est inspirée d'un article scientifique.
+
+### 15.11.1 Tableau de Mapping Recherche → Code
+
+![Mapping Recherche](images/research-mapping.svg)
+
+| Technique | Article de Recherche | Fichier Grok-CLI | Amélioration |
+|-----------|---------------------|------------------|--------------|
+| **Context Compression** | JetBrains Research (2024) | `context-compressor.ts` | -7% coûts, +2.6% succès |
+| **Iterative Repair** | ChatRepair (ISSTA 2024, Distinguished Paper) | `iterative-repair.ts` | Boucle feedback tests |
+| **Dependency-Aware RAG** | CodeRAG (arXiv 2024) | `dependency-aware-rag.ts` | Graphe de dépendances |
+| **Observation Masking** | JetBrains / AgentCoder | `observation-masking.ts` | Filtrage sémantique |
+| **Semantic Caching** | API optimization research | `semantic-cache.ts` | 68% réduction API |
+| **Model Routing** | FrugalGPT (Stanford 2023) | `model-routing.ts` | 30-70% réduction coûts |
+| **Parallel Execution** | LLMCompiler (Berkeley 2023) | `parallel-executor.ts` | 2.5-4.6x speedup |
+| **MCTS Reasoning** | RethinkMCTS (arXiv 2024) | `mcts-reasoning.ts` | Correction d'erreurs |
+| **Tree-of-Thought** | Yao et al. (NeurIPS 2023) | `tot-reasoning.ts` | Exploration multi-chemins |
+| **ReAct Pattern** | Yao et al. (2022) | `grok-agent.ts` | Boucle Reason + Act |
+
+### 15.11.2 Comment Lire un Article et l'Implémenter
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│            PROCESSUS : Article → Implémentation                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. LECTURE CRITIQUE                                            │
+│     ├── Abstract : Problème résolu ?                           │
+│     ├── Results : Gains quantifiés ?                           │
+│     └── Method : Algorithme clair ?                            │
+│                                                                 │
+│  2. PROTOTYPE                                                   │
+│     ├── Implémenter le cas simple                              │
+│     ├── Tester sur exemples du paper                           │
+│     └── Valider les métriques                                  │
+│                                                                 │
+│  3. ADAPTATION                                                  │
+│     ├── Adapter au contexte Grok-CLI                           │
+│     ├── Gérer les cas edge                                     │
+│     └── Optimiser pour la production                           │
+│                                                                 │
+│  4. INTÉGRATION                                                 │
+│     ├── Interface TypeScript typée                             │
+│     ├── Tests unitaires et intégration                         │
+│     └── Documentation inline                                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 15.11.3 Exemple : Implémenter FrugalGPT
+
+L'article **FrugalGPT** (Chen et al., Stanford 2023) propose de router les requêtes vers le modèle le moins cher capable de les traiter.
+
+**Extrait de l'article :**
+> "FrugalGPT can match GPT-4's performance with up to 98% cost reduction by learning to route queries to appropriate LLMs."
+
+**Implémentation dans Grok-CLI :**
+
+```typescript
+// src/optimization/model-routing.ts
+
+interface ModelTier {
+  name: string;
+  cost: number;        // $ per 1M tokens
+  capability: number;  // 0-100 score
+  latency: number;     // ms average
+}
+
+const MODEL_TIERS: ModelTier[] = [
+  { name: 'grok-2-mini', cost: 0.5, capability: 70, latency: 200 },
+  { name: 'grok-2', cost: 2, capability: 85, latency: 500 },
+  { name: 'grok-3', cost: 10, capability: 95, latency: 1000 },
+];
+
+export function routeToOptimalModel(task: TaskAnalysis): string {
+  // Complexité estimée par heuristiques
+  const complexity = estimateComplexity(task);
+
+  // Sélectionner le modèle le moins cher suffisant
+  for (const tier of MODEL_TIERS) {
+    if (tier.capability >= complexity.requiredCapability) {
+      return tier.name;
+    }
+  }
+
+  return MODEL_TIERS[MODEL_TIERS.length - 1].name; // Fallback au meilleur
+}
+```
+
+---
+
+## 🏠 15.12 LLM Local en JavaScript/TypeScript
+
+Grok-CLI utilise principalement l'API Grok (cloud), mais peut également fonctionner avec des **LLM locaux** pour la confidentialité ou le mode hors-ligne.
+
+### 15.12.1 Solutions Disponibles
+
+![LLM Local JavaScript](images/local-js-llm.svg)
+
+| Solution | Type | Usage | Performance |
+|----------|------|-------|-------------|
+| **node-llama-cpp** | Node.js native | Production serveur | ⭐⭐⭐⭐ Excellente |
+| **Transformers.js** | ONNX/WASM | Embeddings, petits modèles | ⭐⭐⭐ Bonne |
+| **WebLLM** | WebGPU browser | Applications web | ⭐⭐⭐ Variable |
+| **Ollama + API** | HTTP localhost | Polyvalent | ⭐⭐⭐⭐ Excellente |
+
+### 15.12.2 node-llama-cpp : LLM Natif pour Node.js
+
+```bash
+# Installation
+npm install node-llama-cpp
+
+# Télécharger un modèle GGUF
+# https://huggingface.co/models?search=gguf
+```
+
+```typescript
+// src/providers/local-llm.ts
+
+import { LlamaModel, LlamaContext, LlamaChatSession } from 'node-llama-cpp';
+
+export class LocalLLMProvider {
+  private model: LlamaModel;
+  private context: LlamaContext;
+
+  async initialize(modelPath: string) {
+    this.model = new LlamaModel({ modelPath });
+    this.context = new LlamaContext({ model: this.model });
+  }
+
+  async chat(messages: Message[]): Promise<string> {
+    const session = new LlamaChatSession({ context: this.context });
+
+    // Convertir au format attendu
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        const response = await session.prompt(msg.content);
+        return response;
+      }
+    }
+
+    throw new Error('No user message found');
+  }
+
+  // API compatible OpenAI pour intégration facile
+  async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
+    const content = await this.chat(request.messages);
+    return {
+      choices: [{ message: { role: 'assistant', content } }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+    };
+  }
+}
+```
+
+### 15.12.3 WebLLM : LLM dans le Navigateur
+
+Pour les applications web, **WebLLM** permet d'exécuter des LLM directement dans le navigateur avec WebGPU.
+
+```typescript
+// Pour une extension ou app web
+import * as webllm from '@mlc-ai/web-llm';
+
+const engine = new webllm.MLCEngine();
+await engine.reload('Llama-3.1-8B-Instruct-q4f16_1-MLC');
+
+const response = await engine.chat.completions.create({
+  messages: [{ role: 'user', content: 'Hello!' }],
+  stream: true
+});
+
+for await (const chunk of response) {
+  console.log(chunk.choices[0]?.delta?.content || '');
+}
+```
+
+### 15.12.4 Configuration Hybride dans Grok-CLI
+
+```typescript
+// src/config/llm-provider.ts
+
+type ProviderType = 'grok-api' | 'ollama' | 'local-llama' | 'webllm';
+
+interface LLMConfig {
+  provider: ProviderType;
+  model: string;
+  endpoint?: string;
+  modelPath?: string;
+}
+
+export function createProvider(config: LLMConfig): LLMProvider {
+  switch (config.provider) {
+    case 'grok-api':
+      return new GrokAPIProvider(config.model);
+
+    case 'ollama':
+      return new OllamaProvider(config.endpoint || 'http://localhost:11434');
+
+    case 'local-llama':
+      return new LocalLLMProvider(config.modelPath!);
+
+    case 'webllm':
+      return new WebLLMProvider(config.model);
+
+    default:
+      throw new Error(`Unknown provider: ${config.provider}`);
+  }
+}
+```
+
+```json
+// .grok/settings.json - Configuration locale
+{
+  "provider": "local-llama",
+  "modelPath": "./models/llama-3.1-8b-q4_k_m.gguf",
+  "fallback": {
+    "provider": "grok-api",
+    "model": "grok-2"
+  }
+}
+```
+
+### 15.12.5 Comparaison des Approches
+
+| Critère | API Cloud (Grok) | Ollama | node-llama-cpp |
+|---------|------------------|--------|----------------|
+| **Setup** | 5 min | 15 min | 30 min |
+| **Qualité** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Latence** | 200-2000ms | 50-500ms | 50-300ms |
+| **Confidentialité** | ⚠️ Cloud | ✅ Local | ✅ Local |
+| **Coût** | $/token | Gratuit | Gratuit |
+| **GPU requis** | Non | Recommandé | Recommandé |
+| **Mode hors-ligne** | ❌ | ✅ | ✅ |
 
 ---
 
