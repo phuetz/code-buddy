@@ -103,12 +103,15 @@ export class LatencyOptimizer extends EventEmitter {
    * Start measuring an operation
    */
   startOperation(operation: string): string {
-    const id = `${operation}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const startTime = Date.now();
+    const randomPart = Math.random().toString(36).slice(2);
+    // Use :: as separator to avoid conflicts with operation names containing -
+    const id = `${operation}::${startTime}::${randomPart}`;
     const target = OPERATION_TARGETS[operation] || LATENCY_THRESHOLDS.ACCEPTABLE;
 
     const measurement: LatencyMeasurement = {
       operation,
-      startTime: Date.now(),
+      startTime,
       target,
       status: "pending",
     };
@@ -123,9 +126,30 @@ export class LatencyOptimizer extends EventEmitter {
    * End measuring an operation
    */
   endOperation(id: string): LatencyMeasurement | null {
-    const parts = id.split("-");
-    const operation = parts[0];
-    const startTimeStr = parts[1];
+    // Support both old format (with -) and new format (with ::)
+    const separator = id.includes("::") ? "::" : "-";
+    const parts = id.split(separator);
+
+    // For new format: operation::timestamp::random
+    // For old format with simple operation: operation-timestamp-random
+    let operation: string;
+    let startTimeStr: string;
+
+    if (separator === "::") {
+      operation = parts[0];
+      startTimeStr = parts[1];
+    } else {
+      // Old format - find the timestamp (13-digit number)
+      const timestampIndex = parts.findIndex(p => /^\d{13}$/.test(p));
+      if (timestampIndex === -1) {
+        // Fallback to old behavior for backward compatibility
+        operation = parts[0];
+        startTimeStr = parts[1];
+      } else {
+        operation = parts.slice(0, timestampIndex).join("-");
+        startTimeStr = parts[timestampIndex];
+      }
+    }
 
     const measurement = this.measurements.find(
       (m) => m.operation === operation && m.startTime.toString() === startTimeStr
