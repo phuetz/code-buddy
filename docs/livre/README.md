@@ -42,6 +42,7 @@
 
 ### Annexes
 - [📚 Glossaire](glossaire.md) — Définitions des termes techniques
+- [🔍 Index](index.md) — Index alphabétique des concepts
 - [📖 Bibliographie](bibliographie.md) — Références scientifiques et ressources
 
 ---
