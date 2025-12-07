@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 650" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="qGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="kGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="vGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="outputGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#718096"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="650" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="450" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
+    Mécanisme d'Attention : Query, Key, Value
+  </text>
+  <text x="450" y="65" text-anchor="middle" fill="#718096" font-size="14">
+    Attention(Q, K, V) = softmax(QK^T / √d_k) × V
+  </text>
+
+  <!-- Input tokens -->
+  <g transform="translate(50, 100)">
+    <text x="0" y="0" fill="#a0aec0" font-size="14" font-weight="bold">Entrée (Tokens)</text>
+    <rect x="0" y="15" width="80" height="40" rx="8" fill="#2d3748" stroke="#4a5568" stroke-width="2"/>
+    <text x="40" y="42" text-anchor="middle" fill="#e2e8f0" font-size="13">"Le"</text>
+    <rect x="90" y="15" width="80" height="40" rx="8" fill="#2d3748" stroke="#4a5568" stroke-width="2"/>
+    <text x="130" y="42" text-anchor="middle" fill="#e2e8f0" font-size="13">"chat"</text>
+    <rect x="180" y="15" width="80" height="40" rx="8" fill="#2d3748" stroke="#4a5568" stroke-width="2"/>
+    <text x="220" y="42" text-anchor="middle" fill="#e2e8f0" font-size="13">"dort"</text>
+  </g>
+
+  <!-- Q, K, V projections -->
+  <g transform="translate(100, 200)">
+    <!-- Query -->
+    <g>
+      <rect x="0" y="0" width="120" height="50" rx="10" fill="url(#qGrad)" filter="url(#shadow)"/>
+      <text x="60" y="23" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Query (Q)</text>
+      <text x="60" y="40" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="11">"Que cherche-t-on?"</text>
+    </g>
+
+    <!-- Key -->
+    <g transform="translate(180, 0)">
+      <rect x="0" y="0" width="120" height="50" rx="10" fill="url(#kGrad)" filter="url(#shadow)"/>
+      <text x="60" y="23" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Key (K)</text>
+      <text x="60" y="40" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="11">"Qu'avons-nous?"</text>
+    </g>
+
+    <!-- Value -->
+    <g transform="translate(360, 0)">
+      <rect x="0" y="0" width="120" height="50" rx="10" fill="url(#vGrad)" filter="url(#shadow)"/>
+      <text x="60" y="23" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Value (V)</text>
+      <text x="60" y="40" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="11">"Contenu à extraire"</text>
+    </g>
+  </g>
+
+  <!-- Attention computation -->
+  <g transform="translate(100, 300)">
+    <!-- MatMul Q×K^T -->
+    <rect x="80" y="0" width="160" height="45" rx="8" fill="#553c9a" filter="url(#shadow)"/>
+    <text x="160" y="28" text-anchor="middle" fill="white" font-size="14" font-weight="600">Q × K^T (MatMul)</text>
+
+    <!-- Scale -->
+    <rect x="80" y="60" width="160" height="45" rx="8" fill="#44337a" filter="url(#shadow)"/>
+    <text x="160" y="88" text-anchor="middle" fill="white" font-size="14" font-weight="600">÷ √d_k (Scale)</text>
+
+    <!-- Softmax -->
+    <rect x="80" y="120" width="160" height="45" rx="8" fill="#b794f4" filter="url(#shadow)"/>
+    <text x="160" y="148" text-anchor="middle" fill="white" font-size="14" font-weight="600">Softmax</text>
+
+    <!-- Arrows -->
+    <path d="M160 45 L160 60" stroke="#718096" stroke-width="2" fill="none"/>
+    <path d="M160 105 L160 120" stroke="#718096" stroke-width="2" fill="none"/>
+  </g>
+
+  <!-- Attention weights visualization -->
+  <g transform="translate(400, 300)">
+    <text x="150" y="-10" text-anchor="middle" fill="#a0aec0" font-size="14" font-weight="bold">Poids d'Attention</text>
+
+    <!-- Attention matrix -->
+    <rect x="0" y="10" width="300" height="150" rx="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+
+    <!-- Headers -->
+    <text x="80" y="35" text-anchor="middle" fill="#718096" font-size="11">Le</text>
+    <text x="150" y="35" text-anchor="middle" fill="#718096" font-size="11">chat</text>
+    <text x="220" y="35" text-anchor="middle" fill="#718096" font-size="11">dort</text>
+
+    <text x="30" y="70" text-anchor="middle" fill="#718096" font-size="11">Le</text>
+    <text x="30" y="105" text-anchor="middle" fill="#718096" font-size="11">chat</text>
+    <text x="30" y="140" text-anchor="middle" fill="#718096" font-size="11">dort</text>
+
+    <!-- Attention values (heatmap) -->
+    <rect x="55" y="50" width="50" height="30" rx="4" fill="#38a169" opacity="0.9"/>
+    <text x="80" y="70" text-anchor="middle" fill="white" font-size="12" font-weight="bold">0.7</text>
+
+    <rect x="125" y="50" width="50" height="30" rx="4" fill="#38a169" opacity="0.2"/>
+    <text x="150" y="70" text-anchor="middle" fill="white" font-size="12">0.2</text>
+
+    <rect x="195" y="50" width="50" height="30" rx="4" fill="#38a169" opacity="0.1"/>
+    <text x="220" y="70" text-anchor="middle" fill="white" font-size="12">0.1</text>
+
+    <rect x="55" y="85" width="50" height="30" rx="4" fill="#38a169" opacity="0.3"/>
+    <text x="80" y="105" text-anchor="middle" fill="white" font-size="12">0.3</text>
+
+    <rect x="125" y="85" width="50" height="30" rx="4" fill="#38a169" opacity="0.6"/>
+    <text x="150" y="105" text-anchor="middle" fill="white" font-size="12" font-weight="bold">0.5</text>
+
+    <rect x="195" y="85" width="50" height="30" rx="4" fill="#38a169" opacity="0.2"/>
+    <text x="220" y="105" text-anchor="middle" fill="white" font-size="12">0.2</text>
+
+    <rect x="55" y="120" width="50" height="30" rx="4" fill="#38a169" opacity="0.1"/>
+    <text x="80" y="140" text-anchor="middle" fill="white" font-size="12">0.1</text>
+
+    <rect x="125" y="120" width="50" height="30" rx="4" fill="#38a169" opacity="0.4"/>
+    <text x="150" y="140" text-anchor="middle" fill="white" font-size="12">0.4</text>
+
+    <rect x="195" y="120" width="50" height="30" rx="4" fill="#38a169" opacity="0.5"/>
+    <text x="220" y="140" text-anchor="middle" fill="white" font-size="12" font-weight="bold">0.5</text>
+  </g>
+
+  <!-- Final MatMul with V -->
+  <g transform="translate(280, 490)">
+    <rect x="0" y="0" width="180" height="50" rx="10" fill="#805ad5" filter="url(#shadow)"/>
+    <text x="90" y="30" text-anchor="middle" fill="white" font-size="14" font-weight="600">× V (MatMul)</text>
+  </g>
+
+  <!-- Output -->
+  <g transform="translate(260, 560)">
+    <rect x="0" y="0" width="220" height="55" rx="12" fill="url(#outputGrad)" filter="url(#shadow)"/>
+    <text x="110" y="25" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Sortie Contextuelle</text>
+    <text x="110" y="45" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="12">Représentation enrichie</text>
+  </g>
+
+  <!-- Explanation box -->
+  <g transform="translate(550, 470)">
+    <rect x="0" y="0" width="300" height="160" rx="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+    <text x="150" y="25" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="bold">Comment ça fonctionne</text>
+
+    <text x="15" y="50" fill="#a0aec0" font-size="11">1. Query demande : "Qui est pertinent ?"</text>
+    <text x="15" y="70" fill="#a0aec0" font-size="11">2. Keys répondent avec des scores</text>
+    <text x="15" y="90" fill="#a0aec0" font-size="11">3. Softmax normalise en probabilités</text>
+    <text x="15" y="110" fill="#a0aec0" font-size="11">4. Values sont pondérées par ces poids</text>
+    <text x="15" y="135" fill="#38ef7d" font-size="11" font-weight="bold">→ Chaque token "voit" tout le contexte</text>
+    <text x="15" y="152" fill="#38ef7d" font-size="11" font-weight="bold">   avec différents niveaux d'attention</text>
+  </g>
+</svg>

@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="routerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="tier1Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#276749"/>
+    </linearGradient>
+    <linearGradient id="tier2Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ecc94b"/>
+      <stop offset="100%" style="stop-color:#d69e2e"/>
+    </linearGradient>
+    <linearGradient id="tier3Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="cascadeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrowMR" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <marker id="arrowGreenMR" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#48bb78"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
+    FrugalGPT : Routage Intelligent Multi-Modèles
+  </text>
+  <text x="500" y="68" text-anchor="middle" fill="#718096" font-size="14">
+    30-70% réduction des coûts sans perte de qualité (Stanford 2023)
+  </text>
+
+  <!-- Input Query -->
+  <g transform="translate(380, 95)" filter="url(#shadow)">
+    <rect x="0" y="0" width="240" height="60" rx="12" fill="#2d3748" stroke="#667eea" stroke-width="2"/>
+    <text x="120" y="25" text-anchor="middle" fill="#667eea" font-size="12" font-weight="bold">Requête Entrante</text>
+    <text x="120" y="45" text-anchor="middle" fill="#e2e8f0" font-size="10">"Explique les closures en JS"</text>
+  </g>
+
+  <!-- Arrow to classifier -->
+  <path d="M500 160 L500 190" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowMR)"/>
+
+  <!-- Complexity Classifier -->
+  <g transform="translate(300, 200)" filter="url(#shadow)">
+    <rect x="0" y="0" width="400" height="100" rx="15" fill="#1a1a3a" stroke="url(#routerGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="400" height="40" rx="15" fill="url(#routerGrad)"/>
+    <text x="200" y="27" text-anchor="middle" fill="white" font-size="14" font-weight="bold">CLASSIFICATEUR DE COMPLEXITÉ</text>
+
+    <g transform="translate(20, 55)">
+      <text x="0" y="0" fill="#a0aec0" font-size="10">Analyse:</text>
+      <text x="0" y="18" fill="#e2e8f0" font-size="9">• Longueur requête</text>
+      <text x="100" y="18" fill="#e2e8f0" font-size="9">• Mots-clés techniques</text>
+      <text x="220" y="18" fill="#e2e8f0" font-size="9">• Historique conversation</text>
+      <text x="0" y="35" fill="#e2e8f0" font-size="9">• Domaine détecté</text>
+      <text x="100" y="35" fill="#e2e8f0" font-size="9">• Besoin multi-étapes</text>
+      <text x="220" y="35" fill="#e2e8f0" font-size="9">• Raisonnement requis</text>
+    </g>
+  </g>
+
+  <!-- Three branches -->
+  <!-- Arrow to Tier 1 -->
+  <path d="M400 305 L200 360" stroke="#48bb78" stroke-width="3" marker-end="url(#arrowGreenMR)"/>
+  <text x="280" y="320" fill="#48bb78" font-size="11" font-weight="bold">Simple (60%)</text>
+
+  <!-- Arrow to Tier 2 -->
+  <path d="M500 305 L500 360" stroke="#ecc94b" stroke-width="3" marker-end="url(#arrowMR)"/>
+  <text x="510" y="340" fill="#ecc94b" font-size="11" font-weight="bold">Moyen (30%)</text>
+
+  <!-- Arrow to Tier 3 -->
+  <path d="M600 305 L800 360" stroke="#f5576c" stroke-width="3" marker-end="url(#arrowMR)"/>
+  <text x="720" y="320" fill="#f5576c" font-size="11" font-weight="bold">Complexe (10%)</text>
+
+  <!-- Tier 1: Fast/Cheap Model -->
+  <g transform="translate(50, 370)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="150" rx="15" fill="#1a1a3a" stroke="url(#tier1Grad)" stroke-width="3"/>
+    <rect x="0" y="0" width="280" height="45" rx="15" fill="url(#tier1Grad)"/>
+    <text x="140" y="20" text-anchor="middle" fill="white" font-size="11">TIER 1</text>
+    <text x="140" y="36" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="13" font-weight="bold">Grok-2-mini / Haiku</text>
+
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="240" height="30" rx="6" fill="#2d3748"/>
+      <text x="10" y="12" fill="#48bb78" font-size="10">$0.10/M tokens</text>
+      <text x="120" y="12" fill="#a0aec0" font-size="10">|</text>
+      <text x="140" y="12" fill="#4facfe" font-size="10">~150ms latence</text>
+      <text x="120" y="25" text-anchor="middle" fill="#718096" font-size="9">Contexte: 32K</text>
+    </g>
+
+    <g transform="translate(20, 100)">
+      <text x="0" y="0" fill="#a0aec0" font-size="10">Cas d'usage:</text>
+      <text x="0" y="15" fill="#e2e8f0" font-size="9">• Questions factuelles</text>
+      <text x="0" y="28" fill="#e2e8f0" font-size="9">• Formatage simple</text>
+      <text x="0" y="41" fill="#e2e8f0" font-size="9">• Traduction basique</text>
+    </g>
+  </g>
+
+  <!-- Tier 2: Balanced Model -->
+  <g transform="translate(360, 370)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="150" rx="15" fill="#1a1a3a" stroke="url(#tier2Grad)" stroke-width="3"/>
+    <rect x="0" y="0" width="280" height="45" rx="15" fill="url(#tier2Grad)"/>
+    <text x="140" y="20" text-anchor="middle" fill="white" font-size="11">TIER 2</text>
+    <text x="140" y="36" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="13" font-weight="bold">Grok-3-mini / Sonnet</text>
+
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="240" height="30" rx="6" fill="#2d3748"/>
+      <text x="10" y="12" fill="#ecc94b" font-size="10">$3/M tokens</text>
+      <text x="100" y="12" fill="#a0aec0" font-size="10">|</text>
+      <text x="120" y="12" fill="#4facfe" font-size="10">~500ms latence</text>
+      <text x="120" y="25" text-anchor="middle" fill="#718096" font-size="9">Contexte: 128K</text>
+    </g>
+
+    <g transform="translate(20, 100)">
+      <text x="0" y="0" fill="#a0aec0" font-size="10">Cas d'usage:</text>
+      <text x="0" y="15" fill="#e2e8f0" font-size="9">• Code standard</text>
+      <text x="0" y="28" fill="#e2e8f0" font-size="9">• Analyse documents</text>
+      <text x="0" y="41" fill="#e2e8f0" font-size="9">• Résumés détaillés</text>
+    </g>
+  </g>
+
+  <!-- Tier 3: Premium Model -->
+  <g transform="translate(670, 370)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="150" rx="15" fill="#1a1a3a" stroke="url(#tier3Grad)" stroke-width="3"/>
+    <rect x="0" y="0" width="280" height="45" rx="15" fill="url(#tier3Grad)"/>
+    <text x="140" y="20" text-anchor="middle" fill="white" font-size="11">TIER 3</text>
+    <text x="140" y="36" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="13" font-weight="bold">Grok-3 / Opus</text>
+
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="240" height="30" rx="6" fill="#2d3748"/>
+      <text x="10" y="12" fill="#f5576c" font-size="10">$15/M tokens</text>
+      <text x="120" y="12" fill="#a0aec0" font-size="10">|</text>
+      <text x="140" y="12" fill="#4facfe" font-size="10">~2s latence</text>
+      <text x="120" y="25" text-anchor="middle" fill="#718096" font-size="9">Contexte: 200K+</text>
+    </g>
+
+    <g transform="translate(20, 100)">
+      <text x="0" y="0" fill="#a0aec0" font-size="10">Cas d'usage:</text>
+      <text x="0" y="15" fill="#e2e8f0" font-size="9">• Architecture complexe</text>
+      <text x="0" y="28" fill="#e2e8f0" font-size="9">• Raisonnement multi-étapes</text>
+      <text x="0" y="41" fill="#e2e8f0" font-size="9">• Code critique production</text>
+    </g>
+  </g>
+
+  <!-- Cascade Fallback -->
+  <g transform="translate(50, 550)">
+    <rect x="0" y="0" width="900" height="80" rx="12" fill="#1a1a3a" stroke="url(#cascadeGrad)" stroke-width="2"/>
+    <text x="450" y="25" text-anchor="middle" fill="#4facfe" font-size="14" font-weight="bold">CASCADE FALLBACK : Escalade automatique si confiance &lt; 0.7</text>
+
+    <g transform="translate(50, 40)">
+      <rect x="0" y="0" width="100" height="30" rx="6" fill="url(#tier1Grad)"/>
+      <text x="50" y="20" text-anchor="middle" fill="white" font-size="10">Tier 1</text>
+    </g>
+
+    <path d="M160 55 L200 55" stroke="#ffd700" stroke-width="2" marker-end="url(#arrowMR)"/>
+    <text x="180" y="48" fill="#ffd700" font-size="9">échec</text>
+
+    <g transform="translate(210, 40)">
+      <rect x="0" y="0" width="100" height="30" rx="6" fill="url(#tier2Grad)"/>
+      <text x="50" y="20" text-anchor="middle" fill="white" font-size="10">Tier 2</text>
+    </g>
+
+    <path d="M320 55 L360 55" stroke="#ffd700" stroke-width="2" marker-end="url(#arrowMR)"/>
+    <text x="340" y="48" fill="#ffd700" font-size="9">échec</text>
+
+    <g transform="translate(370, 40)">
+      <rect x="0" y="0" width="100" height="30" rx="6" fill="url(#tier3Grad)"/>
+      <text x="50" y="20" text-anchor="middle" fill="white" font-size="10">Tier 3</text>
+    </g>
+
+    <path d="M480 55 L520 55" stroke="#48bb78" stroke-width="2" marker-end="url(#arrowGreenMR)"/>
+
+    <g transform="translate(530, 40)">
+      <rect x="0" y="0" width="120" height="30" rx="6" fill="#2d3748" stroke="#48bb78" stroke-width="2"/>
+      <text x="60" y="20" text-anchor="middle" fill="#48bb78" font-size="10">Réponse OK</text>
+    </g>
+
+    <!-- Confidence scores -->
+    <g transform="translate(700, 35)">
+      <text x="0" y="12" fill="#a0aec0" font-size="9">Confiance: score logprobs</text>
+      <text x="0" y="28" fill="#718096" font-size="9">ou vérificateur dédié</text>
+    </g>
+  </g>
+
+  <!-- Cost Savings Panel -->
+  <g transform="translate(50, 200)">
+    <rect x="0" y="0" width="200" height="140" rx="12" fill="#1a1a3a" stroke="#ed8936" stroke-width="2"/>
+    <text x="100" y="25" text-anchor="middle" fill="#ed8936" font-size="13" font-weight="bold">Économies FrugalGPT</text>
+
+    <g transform="translate(15, 45)">
+      <text x="0" y="0" fill="#a0aec0" font-size="10">Sans routage:</text>
+      <text x="130" y="0" fill="#fc8181" font-size="10" font-weight="bold">$150/jour</text>
+
+      <text x="0" y="25" fill="#a0aec0" font-size="10">Avec routage:</text>
+      <text x="130" y="25" fill="#48bb78" font-size="10" font-weight="bold">$52/jour</text>
+
+      <rect x="0" y="40" width="170" height="2" fill="#4a5568"/>
+
+      <text x="0" y="60" fill="#ffd700" font-size="12" font-weight="bold">-65% coûts</text>
+      <text x="0" y="80" fill="#718096" font-size="9">Qualité maintenue à 98%</text>
+    </g>
+  </g>
+
+  <!-- Distribution pie visual -->
+  <g transform="translate(770, 200)">
+    <rect x="0" y="0" width="180" height="140" rx="12" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="90" y="25" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="bold">Distribution Requêtes</text>
+
+    <g transform="translate(20, 45)">
+      <rect x="0" y="0" width="90" height="15" rx="3" fill="url(#tier1Grad)"/>
+      <text x="100" y="12" fill="#48bb78" font-size="10">60% Tier 1</text>
+
+      <rect x="0" y="22" width="45" height="15" rx="3" fill="url(#tier2Grad)"/>
+      <text x="100" y="34" fill="#ecc94b" font-size="10">30% Tier 2</text>
+
+      <rect x="0" y="44" width="15" height="15" rx="3" fill="url(#tier3Grad)"/>
+      <text x="100" y="56" fill="#f5576c" font-size="10">10% Tier 3</text>
+
+      <text x="70" y="85" text-anchor="middle" fill="#718096" font-size="9" font-style="italic">Pareto: 90% requêtes</text>
+      <text x="70" y="98" text-anchor="middle" fill="#718096" font-size="9" font-style="italic">→ modèles économiques</text>
+    </g>
+  </g>
+</svg>

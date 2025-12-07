@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bpeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="stepGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="500" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" fill="white" font-size="24" font-weight="bold">
+    Tokenisation : Du Texte aux Nombres
+  </text>
+
+  <!-- Step 1: Raw Text -->
+  <g transform="translate(50, 80)">
+    <rect x="0" y="0" width="800" height="60" rx="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+    <circle cx="25" cy="30" r="18" fill="url(#stepGrad)"/>
+    <text x="25" y="36" text-anchor="middle" fill="white" font-size="14" font-weight="bold">1</text>
+    <text x="55" y="25" fill="#a0aec0" font-size="12" font-weight="bold">Texte brut</text>
+    <text x="55" y="45" fill="#e2e8f0" font-size="16" font-family="monospace">"Le développeur écrit du code Python efficace"</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M450 145 L450 165" stroke="#718096" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 2: Pre-tokenization -->
+  <g transform="translate(50, 170)">
+    <rect x="0" y="0" width="800" height="70" rx="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+    <circle cx="25" cy="35" r="18" fill="url(#stepGrad)"/>
+    <text x="25" y="41" text-anchor="middle" fill="white" font-size="14" font-weight="bold">2</text>
+    <text x="55" y="25" fill="#a0aec0" font-size="12" font-weight="bold">Pré-tokenisation (découpage par espaces)</text>
+
+    <g transform="translate(55, 35)">
+      <rect x="0" y="0" width="40" height="28" rx="5" fill="#2d3748"/>
+      <text x="20" y="19" text-anchor="middle" fill="#e2e8f0" font-size="11">Le</text>
+
+      <rect x="50" y="0" width="100" height="28" rx="5" fill="#2d3748"/>
+      <text x="100" y="19" text-anchor="middle" fill="#e2e8f0" font-size="11">développeur</text>
+
+      <rect x="160" y="0" width="50" height="28" rx="5" fill="#2d3748"/>
+      <text x="185" y="19" text-anchor="middle" fill="#e2e8f0" font-size="11">écrit</text>
+
+      <rect x="220" y="0" width="35" height="28" rx="5" fill="#2d3748"/>
+      <text x="237" y="19" text-anchor="middle" fill="#e2e8f0" font-size="11">du</text>
+
+      <rect x="265" y="0" width="50" height="28" rx="5" fill="#2d3748"/>
+      <text x="290" y="19" text-anchor="middle" fill="#e2e8f0" font-size="11">code</text>
+
+      <rect x="325" y="0" width="65" height="28" rx="5" fill="#2d3748"/>
+      <text x="357" y="19" text-anchor="middle" fill="#e2e8f0" font-size="11">Python</text>
+
+      <rect x="400" y="0" width="70" height="28" rx="5" fill="#2d3748"/>
+      <text x="435" y="19" text-anchor="middle" fill="#e2e8f0" font-size="11">efficace</text>
+    </g>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M450 245 L450 265" stroke="#718096" stroke-width="3" fill="none"/>
+
+  <!-- Step 3: BPE -->
+  <g transform="translate(50, 270)">
+    <rect x="0" y="0" width="800" height="90" rx="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+    <circle cx="25" cy="45" r="18" fill="url(#bpeGrad)"/>
+    <text x="25" y="51" text-anchor="middle" fill="white" font-size="14" font-weight="bold">3</text>
+    <text x="55" y="25" fill="#a0aec0" font-size="12" font-weight="bold">Byte-Pair Encoding (BPE) — Découpage en sous-mots</text>
+
+    <g transform="translate(55, 40)">
+      <!-- Le -->
+      <rect x="0" y="0" width="35" height="28" rx="5" fill="#38a169"/>
+      <text x="17" y="19" text-anchor="middle" fill="white" font-size="10" font-weight="bold">Le</text>
+
+      <!-- développeur = dé + velopp + eur -->
+      <rect x="45" y="0" width="30" height="28" rx="5" fill="#4299e1"/>
+      <text x="60" y="19" text-anchor="middle" fill="white" font-size="10">dé</text>
+
+      <rect x="80" y="0" width="55" height="28" rx="5" fill="#4299e1"/>
+      <text x="107" y="19" text-anchor="middle" fill="white" font-size="10">velopp</text>
+
+      <rect x="140" y="0" width="35" height="28" rx="5" fill="#4299e1"/>
+      <text x="157" y="19" text-anchor="middle" fill="white" font-size="10">eur</text>
+
+      <!-- écrit = éc + rit -->
+      <rect x="185" y="0" width="30" height="28" rx="5" fill="#ed8936"/>
+      <text x="200" y="19" text-anchor="middle" fill="white" font-size="10">éc</text>
+
+      <rect x="220" y="0" width="30" height="28" rx="5" fill="#ed8936"/>
+      <text x="235" y="19" text-anchor="middle" fill="white" font-size="10">rit</text>
+
+      <!-- du -->
+      <rect x="260" y="0" width="28" height="28" rx="5" fill="#38a169"/>
+      <text x="274" y="19" text-anchor="middle" fill="white" font-size="10" font-weight="bold">du</text>
+
+      <!-- code -->
+      <rect x="298" y="0" width="45" height="28" rx="5" fill="#38a169"/>
+      <text x="320" y="19" text-anchor="middle" fill="white" font-size="10" font-weight="bold">code</text>
+
+      <!-- Python -->
+      <rect x="353" y="0" width="55" height="28" rx="5" fill="#38a169"/>
+      <text x="380" y="19" text-anchor="middle" fill="white" font-size="10" font-weight="bold">Python</text>
+
+      <!-- efficace = eff + ic + ace -->
+      <rect x="418" y="0" width="32" height="28" rx="5" fill="#9f7aea"/>
+      <text x="434" y="19" text-anchor="middle" fill="white" font-size="10">eff</text>
+
+      <rect x="455" y="0" width="25" height="28" rx="5" fill="#9f7aea"/>
+      <text x="467" y="19" text-anchor="middle" fill="white" font-size="10">ic</text>
+
+      <rect x="485" y="0" width="35" height="28" rx="5" fill="#9f7aea"/>
+      <text x="502" y="19" text-anchor="middle" fill="white" font-size="10">ace</text>
+    </g>
+
+    <text x="680" y="60" fill="#718096" font-size="11" font-style="italic">12 tokens</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M450 365 L450 385" stroke="#718096" stroke-width="3" fill="none"/>
+
+  <!-- Step 4: Token IDs -->
+  <g transform="translate(50, 390)">
+    <rect x="0" y="0" width="800" height="90" rx="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+    <circle cx="25" cy="45" r="18" fill="url(#stepGrad)"/>
+    <text x="25" y="51" text-anchor="middle" fill="white" font-size="14" font-weight="bold">4</text>
+    <text x="55" y="25" fill="#a0aec0" font-size="12" font-weight="bold">Conversion en IDs numériques (vocabulaire)</text>
+
+    <g transform="translate(55, 40)">
+      <rect x="0" y="0" width="45" height="35" rx="5" fill="#553c9a"/>
+      <text x="22" y="15" text-anchor="middle" fill="#b794f4" font-size="9">Le</text>
+      <text x="22" y="30" text-anchor="middle" fill="white" font-size="12" font-weight="bold">453</text>
+
+      <rect x="55" y="0" width="45" height="35" rx="5" fill="#553c9a"/>
+      <text x="77" y="15" text-anchor="middle" fill="#b794f4" font-size="9">dé</text>
+      <text x="77" y="30" text-anchor="middle" fill="white" font-size="12" font-weight="bold">8721</text>
+
+      <rect x="110" y="0" width="55" height="35" rx="5" fill="#553c9a"/>
+      <text x="137" y="15" text-anchor="middle" fill="#b794f4" font-size="9">velopp</text>
+      <text x="137" y="30" text-anchor="middle" fill="white" font-size="12" font-weight="bold">34502</text>
+
+      <rect x="175" y="0" width="45" height="35" rx="5" fill="#553c9a"/>
+      <text x="197" y="15" text-anchor="middle" fill="#b794f4" font-size="9">eur</text>
+      <text x="197" y="30" text-anchor="middle" fill="white" font-size="12" font-weight="bold">2174</text>
+
+      <rect x="230" y="0" width="45" height="35" rx="5" fill="#553c9a"/>
+      <text x="252" y="15" text-anchor="middle" fill="#b794f4" font-size="9">éc</text>
+      <text x="252" y="30" text-anchor="middle" fill="white" font-size="12" font-weight="bold">912</text>
+
+      <rect x="285" y="0" width="45" height="35" rx="5" fill="#553c9a"/>
+      <text x="307" y="15" text-anchor="middle" fill="#b794f4" font-size="9">rit</text>
+      <text x="307" y="30" text-anchor="middle" fill="white" font-size="12" font-weight="bold">4521</text>
+
+      <text x="345" y="25" fill="#718096" font-size="20">...</text>
+    </g>
+
+    <text x="680" y="70" fill="#38ef7d" font-size="12" font-weight="bold">→ Prêt pour le modèle!</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(620, 285)">
+    <rect x="0" y="0" width="180" height="70" rx="8" fill="#1a202c" stroke="#2d3748"/>
+    <text x="90" y="18" text-anchor="middle" fill="#a0aec0" font-size="11" font-weight="bold">Légende</text>
+    <rect x="10" y="28" width="15" height="12" rx="3" fill="#38a169"/>
+    <text x="32" y="38" fill="#718096" font-size="10">Mot complet</text>
+    <rect x="95" y="28" width="15" height="12" rx="3" fill="#4299e1"/>
+    <text x="117" y="38" fill="#718096" font-size="10">Sous-mot</text>
+    <rect x="10" y="48" width="15" height="12" rx="3" fill="#9f7aea"/>
+    <text x="32" y="58" fill="#718096" font-size="10">Découpé</text>
+  </g>
+</svg>

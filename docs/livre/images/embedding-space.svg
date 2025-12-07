@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+
+  <!-- Grid lines -->
+  <g stroke="#2d3748" stroke-width="0.5" opacity="0.5">
+    <line x1="100" y1="50" x2="100" y2="500"/>
+    <line x1="200" y1="50" x2="200" y2="500"/>
+    <line x1="300" y1="50" x2="300" y2="500"/>
+    <line x1="400" y1="50" x2="400" y2="500"/>
+    <line x1="500" y1="50" x2="500" y2="500"/>
+    <line x1="600" y1="50" x2="600" y2="500"/>
+    <line x1="700" y1="50" x2="700" y2="500"/>
+    <line x1="50" y1="100" x2="750" y2="100"/>
+    <line x1="50" y1="200" x2="750" y2="200"/>
+    <line x1="50" y1="300" x2="750" y2="300"/>
+    <line x1="50" y1="400" x2="750" y2="400"/>
+  </g>
+
+  <!-- Title -->
+  <text x="400" y="35" text-anchor="middle" fill="white" font-size="22" font-weight="bold">
+    Espace Vectoriel des Embeddings
+  </text>
+
+  <!-- Cluster: Programming Languages -->
+  <g filter="url(#softGlow)">
+    <ellipse cx="180" cy="150" rx="100" ry="70" fill="#4299e1" opacity="0.15" stroke="#4299e1" stroke-width="2" stroke-dasharray="5,3"/>
+    <text x="180" y="85" text-anchor="middle" fill="#90cdf4" font-size="12" font-weight="bold">Langages</text>
+
+    <circle cx="140" cy="130" r="8" fill="#4299e1"/>
+    <text x="140" y="155" text-anchor="middle" fill="#90cdf4" font-size="11">Python</text>
+
+    <circle cx="200" cy="140" r="8" fill="#4299e1"/>
+    <text x="200" y="165" text-anchor="middle" fill="#90cdf4" font-size="11">JavaScript</text>
+
+    <circle cx="160" cy="180" r="8" fill="#4299e1"/>
+    <text x="160" y="205" text-anchor="middle" fill="#90cdf4" font-size="11">TypeScript</text>
+
+    <circle cx="220" cy="170" r="7" fill="#63b3ed"/>
+    <text x="235" y="165" fill="#90cdf4" font-size="10">Java</text>
+  </g>
+
+  <!-- Cluster: Animals -->
+  <g filter="url(#softGlow)">
+    <ellipse cx="550" cy="160" rx="110" ry="80" fill="#48bb78" opacity="0.15" stroke="#48bb78" stroke-width="2" stroke-dasharray="5,3"/>
+    <text x="550" y="90" text-anchor="middle" fill="#9ae6b4" font-size="12" font-weight="bold">Animaux</text>
+
+    <circle cx="500" cy="140" r="8" fill="#48bb78"/>
+    <text x="500" y="165" text-anchor="middle" fill="#9ae6b4" font-size="11">chat</text>
+
+    <circle cx="570" cy="130" r="8" fill="#48bb78"/>
+    <text x="570" y="155" text-anchor="middle" fill="#9ae6b4" font-size="11">chien</text>
+
+    <circle cx="540" cy="180" r="8" fill="#48bb78"/>
+    <text x="540" y="205" text-anchor="middle" fill="#9ae6b4" font-size="11">tigre</text>
+
+    <circle cx="610" cy="160" r="7" fill="#68d391"/>
+    <text x="625" y="165" fill="#9ae6b4" font-size="10">lion</text>
+  </g>
+
+  <!-- Cluster: Royalty/Gender analogy -->
+  <g filter="url(#softGlow)">
+    <ellipse cx="380" cy="350" rx="150" ry="100" fill="#ed8936" opacity="0.12" stroke="#ed8936" stroke-width="2" stroke-dasharray="5,3"/>
+    <text x="380" y="265" text-anchor="middle" fill="#fbd38d" font-size="12" font-weight="bold">Analogies Sémantiques</text>
+
+    <!-- King -->
+    <circle cx="280" cy="320" r="10" fill="#f6ad55" filter="url(#glow)"/>
+    <text x="280" y="345" text-anchor="middle" fill="#fbd38d" font-size="12" font-weight="bold">roi 👑</text>
+
+    <!-- Queen -->
+    <circle cx="480" cy="320" r="10" fill="#f6ad55" filter="url(#glow)"/>
+    <text x="480" y="345" text-anchor="middle" fill="#fbd38d" font-size="12" font-weight="bold">reine 👸</text>
+
+    <!-- Man -->
+    <circle cx="280" cy="400" r="9" fill="#ed8936"/>
+    <text x="280" y="425" text-anchor="middle" fill="#fbd38d" font-size="11">homme 👨</text>
+
+    <!-- Woman -->
+    <circle cx="480" cy="400" r="9" fill="#ed8936"/>
+    <text x="480" y="425" text-anchor="middle" fill="#fbd38d" font-size="11">femme 👩</text>
+
+    <!-- Arrows showing analogy -->
+    <path d="M295 320 L465 320" stroke="#f6ad55" stroke-width="2" stroke-dasharray="8,4" marker-end="url(#arrowOrange)"/>
+    <text x="380" y="310" text-anchor="middle" fill="#fbd38d" font-size="10">+ femme - homme</text>
+
+    <path d="M280 335 L280 385" stroke="#fbd38d" stroke-width="1.5" stroke-dasharray="4,2"/>
+    <path d="M480 335 L480 385" stroke="#fbd38d" stroke-width="1.5" stroke-dasharray="4,2"/>
+
+    <path d="M295 400 L465 400" stroke="#f6ad55" stroke-width="2" stroke-dasharray="8,4"/>
+  </g>
+
+  <!-- Cluster: Actions -->
+  <g filter="url(#softGlow)">
+    <ellipse cx="650" cy="380" rx="90" ry="70" fill="#9f7aea" opacity="0.15" stroke="#9f7aea" stroke-width="2" stroke-dasharray="5,3"/>
+    <text x="650" y="320" text-anchor="middle" fill="#d6bcfa" font-size="12" font-weight="bold">Actions</text>
+
+    <circle cx="620" cy="360" r="7" fill="#9f7aea"/>
+    <text x="620" y="385" text-anchor="middle" fill="#d6bcfa" font-size="10">courir</text>
+
+    <circle cx="680" cy="370" r="7" fill="#9f7aea"/>
+    <text x="680" y="395" text-anchor="middle" fill="#d6bcfa" font-size="10">marcher</text>
+
+    <circle cx="650" cy="420" r="7" fill="#9f7aea"/>
+    <text x="650" y="445" text-anchor="middle" fill="#d6bcfa" font-size="10">sprinter</text>
+  </g>
+
+  <!-- Formula box -->
+  <g transform="translate(50, 480)">
+    <rect x="0" y="0" width="700" height="100" rx="12" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+    <text x="350" y="28" text-anchor="middle" fill="white" font-size="14" font-weight="bold">
+      La Magie des Embeddings : Arithmétique Vectorielle
+    </text>
+
+    <text x="350" y="55" text-anchor="middle" fill="#fbd38d" font-size="16" font-family="monospace">
+      embedding("roi") - embedding("homme") + embedding("femme") ≈ embedding("reine")
+    </text>
+
+    <text x="350" y="82" text-anchor="middle" fill="#718096" font-size="12" font-style="italic">
+      Les relations sémantiques sont encodées comme des directions dans l'espace vectoriel
+    </text>
+  </g>
+
+  <!-- Dimension indicator -->
+  <g transform="translate(720, 200)">
+    <text x="0" y="0" fill="#718096" font-size="10" transform="rotate(90)">d = 4096 dimensions</text>
+  </g>
+</svg>

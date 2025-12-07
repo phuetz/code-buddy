@@ -4,21 +4,41 @@
 
 ## 🎬 Scène d'ouverture
 
-*Lina ouvre sa facture API du mois. Elle avale de travers son café.*
+*3h47 du matin. Le téléphone de Lina vibre. Un email de son service cloud : "Alerte budget : 90% de votre limite mensuelle atteinte."*
 
-**Lina** *(choquée)* : "847 dollars ?! Comment c'est possible ?"
+*Elle s'assoit dans son lit, le cœur battant. On n'est que le 12 du mois.*
 
-*Elle ouvre les logs de son agent. Le problème saute aux yeux : 50,000 tokens par requête en moyenne. Des fichiers entiers, des historiques de conversation interminables, des outputs de bash de 500 lignes...*
+*Le lendemain matin, elle ouvre sa facture API avec une boule au ventre.*
 
-**Lina** : "Je paie pour envoyer du bruit au modèle. Il n'a pas besoin des 500 lignes de logs npm — juste des 10 lignes d'erreurs."
+**Lina** *(blême)* : "847 dollars... en douze jours."
 
-**Marc** *(regardant par-dessus son épaule)* : "C'est le problème classique. Plus de contexte n'est pas toujours mieux. Un contexte long coûte cher, dilue l'attention, et ralentit tout."
+*Ses mains tremblent légèrement. C'est plus que son loyer. Elle plonge dans les logs, cherchant le coupable. Et elle le trouve : 50,000 tokens par requête en moyenne. Des fichiers entiers envoyés et renvoyés. Des outputs bash de 500 lignes reproduits dix fois. L'historique complet de chaque conversation, accumulé comme des couches géologiques.*
 
-**Lina** : "Mais comment savoir quoi garder et quoi supprimer ?"
+**Lina** *(la voix serrée)* : "Je paie pour envoyer les mêmes 500 lignes de logs npm à chaque requête. Le modèle n'en a besoin qu'une fois."
 
-**Marc** : "C'est un art. Ça s'appelle la **compression de contexte**. Et pour les résultats d'outils, on utilise l'**observation masking** — on cache ce qui n'est plus pertinent."
+*Marc arrive avec deux cafés. Il jette un œil à l'écran et grimace.*
 
-*Lina ferme sa facture et ouvre son éditeur, déterminée à réduire sa prochaine facture.*
+**Marc** : "Aïe. Le piège classique. Tu sais ce qui est ironique ?"
+
+**Lina** : "Quoi ?"
+
+**Marc** : "Les chercheurs de JetBrains ont découvert quelque chose de contre-intuitif l'année dernière. Ils pensaient qu'envoyer plus de contexte améliorerait les résultats de génération de code. Ils ont testé. Et ils ont trouvé l'inverse."
+
+**Lina** *(levant les yeux)* : "L'inverse ?"
+
+**Marc** : "Moins de contexte, mais mieux ciblé, donne de **meilleurs** résultats. Pas juste moins cher — plus précis. Le modèle se perd moins."
+
+*Lina pose sa tasse. Une lueur d'espoir.*
+
+**Lina** : "Donc si je compresse intelligemment... je peux économiser ET avoir de meilleures réponses ?"
+
+**Marc** *(souriant)* : "Exactement. Ça s'appelle la **compression de contexte**. Et pour les résultats d'outils qui traînent dans l'historique, on utilise l'**observation masking** — on cache ce qui n'est plus pertinent, tout en gardant une trace qu'il existe."
+
+*Lina ferme la facture. Dans ses yeux, la panique a cédé la place à la détermination.*
+
+**Lina** : "Montre-moi. Chaque technique. Je veux diviser cette facture par trois."
+
+**Marc** : "Par trois ? On va viser mieux que ça."
 
 ---
 
@@ -76,9 +96,23 @@ Chaque token envoyé à l'API coûte de l'argent. Quand votre agent envoie 50K t
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 9.1.2 Lost in the Middle
+### 9.1.2 Lost in the Middle — La Découverte qui a Tout Changé
 
-Le coût n'est pas le seul problème. Les recherches montrent que les LLMs ont du mal à utiliser l'information située **au milieu** de longs contextes. Ce phénomène s'appelle "Lost in the Middle".
+Le coût n'est pas le seul problème. Et ce qui suit est peut-être la découverte la plus importante sur les LLMs depuis les Transformers eux-mêmes.
+
+**Été 2023, Stanford University.** Nelson Liu, un doctorant, pose une question simple à son équipe : "Est-ce que la position d'une information dans le contexte affecte sa probabilité d'être utilisée ?"
+
+L'hypothèse semblait presque triviale. Après tout, les Transformers ont des mécanismes d'attention qui sont censés regarder partout dans le contexte, non ?
+
+Pour tester, ils ont créé une expérience élégante : cacher un "fait clé" à différentes positions dans un contexte de 128K tokens, puis poser une question dont la réponse nécessite ce fait.
+
+**Les résultats ont envoyé des ondes de choc dans la communauté IA.**
+
+Quand le fait clé était au **début** du contexte : 98% de réponses correctes.
+Quand il était à la **fin** : 95% de réponses correctes.
+Quand il était **au milieu** : **45% de réponses correctes**.
+
+Le modèle "oubliait" littéralement ce qu'il avait lu au milieu du contexte. Ce phénomène, qu'ils ont baptisé **"Lost in the Middle"**, affecte tous les LLMs — GPT-4, Claude, Llama, tous.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -158,9 +192,29 @@ Il existe plusieurs techniques pour réduire la taille du contexte, chacune avec
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 9.2.2 Résultats de la recherche (JetBrains 2024)
+### 9.2.2 La Découverte de JetBrains (2024) — L'Histoire
 
-L'étude de JetBrains Research montre que **moins de contexte = meilleurs résultats** :
+> *"On pensait que plus de contexte serait toujours mieux. On avait tort."*
+> — Équipe JetBrains Research, 2024
+
+**L'histoire commence à Saint-Pétersbourg**, dans les bureaux de JetBrains — les créateurs d'IntelliJ IDEA, PyCharm, et de Kotlin. Leur équipe de recherche en IA travaillait sur un problème apparemment simple : comment améliorer la génération de code assistée par LLM dans leurs IDE ?
+
+L'hypothèse initiale semblait évidente : **plus de contexte = meilleures suggestions**. Après tout, un développeur qui voit tout le projet fait de meilleures suggestions qu'un qui ne voit qu'un fichier, non ?
+
+Ils ont donc construit un système qui envoyait au LLM :
+- Le fichier actuel complet
+- Tous les fichiers importés
+- L'historique de la session
+- La documentation du projet
+- Les tests associés
+
+**Les résultats les ont stupéfiés.**
+
+Non seulement les coûts avaient explosé, mais la **qualité des suggestions avait diminué**. Le modèle se perdait dans la masse d'information. Il ignorait parfois le code juste avant le curseur pour citer de la documentation non pertinente située 50,000 tokens plus tôt.
+
+C'est alors qu'ils ont eu l'idée de **mesurer systématiquement** l'impact de chaque type de contexte. Ils ont créé un benchmark avec des centaines de tâches de complétion de code, et ont testé différentes stratégies de compression.
+
+**Les résultats publiés en 2024 :**
 
 | Technique | Réduction tokens | Impact succès | Coût relatif |
 |-----------|:----------------:|:-------------:|:------------:|
@@ -171,7 +225,15 @@ L'étude de JetBrains Research montre que **moins de contexte = meilleurs résul
 | Observation masking | -35% | +1.8% ✅ | 65% |
 | **Combiné** | **-70%** | **+2.6%** ✅ | **30%** |
 
-> 💡 **Conclusion contre-intuitive** : Envoyer moins de contexte améliore AUSSI la qualité des réponses, en plus de réduire les coûts.
+> 💡 **La conclusion qui a choqué la communauté** : Envoyer 70% de contexte en moins améliore la qualité de 2.6%. Ce n'est pas un compromis — c'est un gain sur les deux tableaux.
+
+**Pourquoi ?** L'étude identifie trois mécanismes :
+
+1. **Attention focalisée** : Avec moins de contexte, chaque token a plus de poids dans le calcul d'attention
+2. **Réduction du bruit** : Les informations non pertinentes ne peuvent plus "distraire" le modèle
+3. **Cohérence améliorée** : Le modèle ne se contredit plus en citant des parties obsolètes du contexte
+
+Cette découverte a depuis été confirmée par d'autres équipes (Google DeepMind, Anthropic), et a donné naissance à une nouvelle discipline : **l'ingénierie de contexte**.
 
 ---
 
@@ -1126,25 +1188,75 @@ const myMaskingRules: Record<string, ToolMaskingRule> = {
 
 ---
 
-## 🌅 Épilogue
+## 🌅 Épilogue — Le Prix de l'Attention
 
-*Un mois plus tard. Lina ouvre sa nouvelle facture API.*
+*Un mois plus tard. 23h45. Lina fixe sa nouvelle facture API.*
 
-**Lina** *(souriant)* : "253 dollars. Presque 70% de moins !"
+**Lina** *(un sourire se dessinant)* : "253 dollars."
 
-**Marc** : "Et les réponses ?"
+*Elle fait le calcul dans sa tête. 847 dollars le mois dernier. 253 maintenant. Presque 70% de moins.*
 
-**Lina** : "Meilleures. Le modèle ne se perd plus dans des pages de logs. Il va droit au but."
+**Marc** *(levant les yeux de son écran)* : "Et les réponses ?"
 
-**Marc** : "C'est le paradoxe de la compression. Moins de contexte, mais mieux ciblé = meilleure qualité."
+**Lina** : "C'est ça le plus fou. Elles sont meilleures. Vraiment meilleures."
 
-*Lina ferme la facture, satisfaite. Son agent est maintenant économe ET efficace.*
+*Elle pivote son écran vers lui. Un log de session, annoté.*
 
-**Marc** : "Prochaine étape : les outils. 41 outils dans Grok-CLI, et chacun a ses propres patterns. C'est le moment de plonger dans le **Tool-Use**."
+**Lina** : "Regarde. Avant, quand je demandais de corriger un bug, l'agent citait parfois de la documentation obsolète qu'il avait lue 20 messages plus tôt. Maintenant, il va droit au code pertinent."
+
+**Marc** : "Le paradoxe de JetBrains. Moins de contexte, mais mieux ciblé. Le modèle n'a plus à choisir où regarder parmi 150,000 tokens. On a fait ce choix pour lui."
+
+*Un silence. Lina se mord la lèvre, pensive.*
+
+**Lina** : "Marc... J'ai une question qui me trotte dans la tête depuis quelques jours."
+
+**Marc** : "Hmm ?"
+
+**Lina** : "On optimise le contexte. On optimise la mémoire. On a même un RAG avec dépendances. Mais... l'agent a 41 outils à sa disposition. 41. Comment il sait lequel utiliser ?"
+
+*Marc pose son café. Son expression change — un mélange de satisfaction et d'anticipation, comme un professeur dont l'élève vient de poser exactement la bonne question.*
+
+**Marc** : "Ah. Tu touches à quelque chose de fondamental là."
+
+**Lina** : "C'est juste que... parfois je le vois hésiter. Ou pire, utiliser `bash` pour quelque chose que `read_file` ferait mieux. Ou faire trois appels séquentiels quand il pourrait paralléliser."
+
+**Marc** : "Tu as remarqué ça ?"
+
+**Lina** : "Difficile de ne pas le remarquer quand on regarde la facture en détail."
+
+*Marc se lève, va au tableau blanc, et dessine un schéma.*
+
+**Marc** : "Les outils sont le **système nerveux** de l'agent. Tout ce qu'on a construit — le reasoning, la mémoire, le contexte — tout ça converge vers un moment critique : le **tool call**."
+
+*Il trace une flèche.*
+
+**Marc** : "C'est là que l'intention devient action. Et c'est là que la plupart des agents échouent."
+
+**Lina** *(intriguée)* : "Comment ça ?"
+
+**Marc** : "Un outil mal choisi, c'est du temps perdu et de l'argent gaspillé. Un outil mal paramétré, c'est une erreur à corriger. Un outil exécuté sans validation... c'est un risque de sécurité."
+
+*Il se retourne vers elle, une lueur dans les yeux.*
+
+**Marc** : "Tu veux vraiment comprendre comment fonctionne un agent LLM ?"
+
+**Lina** : "Évidemment."
+
+**Marc** : "Alors il est temps de plonger dans le **Tool-Use**. Le vrai. Pas juste 'appeler une fonction'. On va parler de validation de schéma, de permissions, de confirmation utilisateur, d'exécution parallèle... et de ce qui se passe quand un outil échoue."
+
+*Lina ferme la facture et ouvre un nouveau fichier.*
+
+**Lina** : "Je suis prête."
+
+**Marc** *(souriant)* : "Tu vas adorer. Et détester. Probablement les deux en même temps."
+
+*Il écrit au tableau : "41 outils. 1 décision. 0 marge d'erreur."*
 
 ---
 
 *Fin de la Partie III — Mémoire, RAG et Contexte*
+
+*Dans le prochain chapitre : Comment transformer une intention en action — sans casser quoi que ce soit.*
 
 ---
 

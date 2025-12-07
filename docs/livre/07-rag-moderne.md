@@ -4,21 +4,63 @@
 
 ## 🎬 Scène d'ouverture
 
-*Bureau de Lina, 10h du matin. Elle teste son agent sur un vrai projet.*
+*Mercredi, 10h du matin. Lina teste son agent sur le projet réel de son équipe — un système de paiement en production.*
 
 **Lina** : "Explique-moi comment fonctionne la fonction `processPayment`."
 
-*L'agent répond avec assurance, décrivant en détail une architecture de paiement... qui n'existe nulle part dans son code.*
+*L'agent répond immédiatement, avec assurance :*
 
-**Lina** *(fronçant les sourcils)* : "Mais... cette fonction n'existe pas dans mon projet. Il invente !"
+```
+La fonction processPayment utilise l'API Stripe pour traiter les paiements.
+Elle prend un objet PaymentIntent, vérifie le montant, et appelle
+stripe.paymentIntents.create() avec les paramètres appropriés...
+```
 
-**Marc** *(passant par là)* : "C'est normal. Le LLM ne connaît pas ton code. Il répond avec ce qu'il a vu pendant son entraînement — des millions de lignes de code, mais pas les tiennes."
+*Lina se fige.*
 
-**Lina** : "Alors comment les assistants de code comme Copilot font-ils ?"
+**Lina** *(relisant lentement)* : "Stripe... PaymentIntent... stripe.paymentIntents.create..."
 
-**Marc** : "Ils ne se contentent pas du LLM. Ils ajoutent une étape de **retrieval** — ils cherchent dans ton code les morceaux pertinents avant de répondre. C'est ce qu'on appelle **RAG** : Retrieval-Augmented Generation."
+*Elle ouvre le vrai fichier payment-processor.ts dans son projet.*
 
-*Lina ouvre son carnet et commence à schématiser le concept.*
+**Lina** : "On n'utilise PAS Stripe. On utilise Adyen. Et la fonction s'appelle `submitTransaction`, pas `processPayment`."
+
+*Elle se tourne vers Marc qui passe avec son café.*
+
+**Lina** : "Il a tout inventé. Pas un seul mot de sa réponse n'est vrai."
+
+**Marc** *(s'arrêtant)* : "Qu'est-ce que tu lui as demandé ?"
+
+**Lina** : "D'expliquer notre fonction de paiement. Et il m'a décrit une intégration Stripe complète — avec des détails très convaincants. Sauf que c'est de la fiction."
+
+**Marc** *(posant son café)* : "C'est normal. Le LLM ne connaît pas ton code."
+
+**Lina** : "Mais il a accès au projet. Je suis dans le répertoire du projet."
+
+**Marc** : "Non. Il a accès à son **entraînement** — des millions de repos GitHub, de la documentation, des tutoriels. Quand tu dis 'payment', il te donne ce qu'il a vu le plus souvent. Et c'est probablement Stripe."
+
+*Lina réalise l'ampleur du problème.*
+
+**Lina** : "Donc chaque fois qu'il parle de mon code... il invente ?"
+
+**Marc** : "Il **extrapole** à partir de ce qu'il connaît. C'est ce qu'on appelle l'hallucination. Pas méchant — juste... ignorant de ton contexte."
+
+**Lina** : "Alors comment les outils comme Cursor ou Copilot font ? Ils connaissent vraiment le code."
+
+**Marc** *(s'asseyant)* : "Ils ne se contentent pas du LLM. Avant de poser la question au modèle, ils **cherchent** dans ton code les morceaux pertinents. Puis ils injectent ces morceaux dans le prompt."
+
+**Lina** : "Donc le modèle voit mon vrai code ?"
+
+**Marc** : "Exactement. C'est ce qu'on appelle **RAG** — Retrieval-Augmented Generation. Tu récupères d'abord, tu génères ensuite."
+
+*Lina ouvre son carnet.*
+
+**Lina** : "Montre-moi comment ça marche."
+
+**Marc** : "C'est un rabbit hole. Embeddings, similarité cosinus, chunking, re-ranking... Tu veux vraiment plonger ?"
+
+**Lina** *(souriant)* : "On a bien plongé dans MCTS. Ça ne peut pas être pire."
+
+**Marc** : "Oh, tu serais surprise."
 
 ---
 
@@ -1242,11 +1284,37 @@ const myBenchmark: RAGBenchmark = {
 
 *Cette fois, l'agent récupère le vrai code du projet avant de répondre.*
 
-**Agent** : *"D'après `src/services/payment-service.ts` lignes 45-78, la fonction `processPayment` prend un objet `Order` et..."*
+**Agent** : *"D'après `src/services/payment-service.ts` lignes 45-78, la fonction `processPayment` prend un objet `Order` et retourne un `PaymentResult`..."*
 
 **Lina** *(souriant)* : "Il connaît vraiment mon code maintenant !"
 
-**Marc** : "C'est la magie du RAG. Mais attends de voir le chapitre suivant — on va ajouter la conscience des dépendances pour qu'il comprenne aussi les relations entre les fichiers."
+*Mais son sourire s'efface quand elle lit la suite.*
+
+**Agent** : *"...le type `PaymentResult` est défini dans ce fichier..."*
+
+**Lina** : "Attends. `PaymentResult` n'est PAS défini dans ce fichier. Il est importé de `types.ts`."
+
+*Elle vérifie.*
+
+**Lina** : "Le RAG a récupéré le bon fichier, mais il ne comprend pas les imports. Il ne sait pas que `PaymentResult` vient d'ailleurs."
+
+**Marc** *(arrivant avec son café)* : "C'est le problème classique. Le RAG récupère des morceaux pertinents, mais il ne comprend pas les **relations** entre eux."
+
+**Lina** : "Donc si je demande 'modifie le type de retour de processPayment', il ne saura pas où aller ?"
+
+**Marc** : "Exactement. Il faut lui donner la conscience du graphe de dépendances. Savoir que `payment-service.ts` importe de `types.ts`, qui importe de `common.ts`..."
+
+*Il pose sa tasse.*
+
+**Marc** : "C'est ce qu'on appelle le **Dependency-Aware RAG**. Le RAG nouvelle génération."
+
+**Lina** *(ouvrant son carnet)* : "Montre-moi comment ça marche."
+
+---
+
+**À suivre** : *Chapitre 8 — Dependency-Aware RAG*
+
+*Le RAG classique trouve les fichiers pertinents. Mais peut-il comprendre qu'un fichier A importe B qui dépend de C ? La réponse change tout pour les grandes codebases.*
 
 ---
 

@@ -1227,7 +1227,33 @@ class NetworkRecovery {
 
 **Lina** *(vérifiant)* : "Il existe vraiment ! Mon agent a des mains maintenant !"
 
-**Marc** : "41 mains, pour être précis. Mais attends de voir le chapitre suivant — on va lui permettre de charger des outils dynamiquement avec le **Model Context Protocol**."
+*Elle passe l'heure suivante à explorer. L'agent lit des fichiers, exécute des commandes, recherche dans le code. Puis une idée lui vient.*
+
+**Lina** : "Marc, et si quelqu'un veut ajouter des outils qu'on n'a pas prévus ?"
+
+**Marc** : "Genre ?"
+
+**Lina** : "Genre... notre API interne. Ou Jira. Ou le monitoring de prod. Chaque équipe a ses propres besoins."
+
+**Marc** *(souriant)* : "Tu viens de toucher au cœur du problème. 41 outils, c'est bien. Mais on ne peut pas prévoir tous les besoins de tous les utilisateurs."
+
+*Il ouvre son laptop.*
+
+**Marc** : "Anthropic a justement publié quelque chose là-dessus. Le **Model Context Protocol**. Un standard pour que n'importe qui puisse créer des outils et les brancher à n'importe quel agent."
+
+**Lina** : "Un système de plugins ?"
+
+**Marc** : "Mieux. Un **protocole universel**. Tu codes un serveur MCP une fois, et il marche avec Claude, avec GPT, avec n'importe quel agent compatible."
+
+*Lina sent l'excitation monter.*
+
+**Lina** : "Montre-moi."
+
+---
+
+**À suivre** : *Chapitre 11 — Plugins et MCP*
+
+*Comment transformer un agent fermé en plateforme ouverte ? Le Model Context Protocol change la donne — et soulève des questions de sécurité que Lina n'avait pas anticipées.*
 
 ---
 

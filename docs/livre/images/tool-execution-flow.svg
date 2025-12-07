@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 700" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="validateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="securityGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ed8936"/>
+      <stop offset="100%" style="stop-color:#dd6b20"/>
+    </linearGradient>
+    <linearGradient id="confirmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd700"/>
+      <stop offset="100%" style="stop-color:#f6ad55"/>
+    </linearGradient>
+    <linearGradient id="execGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="postGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4facfe"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f56565"/>
+    </marker>
+    <marker id="arrowGreen2" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#48bb78"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="700" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="450" y="40" text-anchor="middle" fill="white" font-size="24" font-weight="bold">
+    Flux d'Exécution d'un Outil
+  </text>
+  <text x="450" y="65" text-anchor="middle" fill="#718096" font-size="13">
+    5 étapes de validation avant qu'un outil puisse agir sur le système
+  </text>
+
+  <!-- Input: LLM Request -->
+  <g transform="translate(350, 90)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="60" rx="10" fill="#2d3748" stroke="#a0aec0" stroke-width="2"/>
+    <text x="100" y="22" text-anchor="middle" fill="#a0aec0" font-size="12">Requête LLM</text>
+    <text x="100" y="45" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="500">tool_call(bash, {cmd})</text>
+  </g>
+
+  <!-- Arrow to Step 1 -->
+  <path d="M450 155 L450 175" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowBlue)"/>
+
+  <!-- Step 1: Validation -->
+  <g transform="translate(200, 185)" filter="url(#shadow)">
+    <rect x="0" y="0" width="500" height="90" rx="12" fill="#1a1a3a" stroke="url(#validateGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="60" height="90" rx="12" fill="url(#validateGrad)"/>
+    <text x="30" y="50" text-anchor="middle" fill="white" font-size="20" font-weight="bold">1</text>
+
+    <text x="90" y="25" fill="#00f2fe" font-size="14" font-weight="bold">VALIDATION</text>
+    <text x="90" y="45" fill="#a0aec0" font-size="11">• Schéma JSON valide ?</text>
+    <text x="90" y="60" fill="#a0aec0" font-size="11">• Paramètres requis présents ?</text>
+    <text x="90" y="75" fill="#a0aec0" font-size="11">• Types corrects ?</text>
+
+    <g transform="translate(350, 30)">
+      <rect x="0" y="0" width="130" height="45" rx="6" fill="#2d3748"/>
+      <text x="65" y="18" text-anchor="middle" fill="#48bb78" font-size="10">✓ Valide → continue</text>
+      <text x="65" y="35" text-anchor="middle" fill="#f56565" font-size="10">✗ Invalide → erreur</text>
+    </g>
+  </g>
+
+  <!-- Arrow to Step 2 -->
+  <path d="M450 280 L450 300" stroke="#48bb78" stroke-width="3" marker-end="url(#arrowGreen2)"/>
+
+  <!-- Step 2: Security -->
+  <g transform="translate(200, 310)" filter="url(#shadow)">
+    <rect x="0" y="0" width="500" height="90" rx="12" fill="#1a1a3a" stroke="url(#securityGrad2)" stroke-width="3"/>
+    <rect x="0" y="0" width="60" height="90" rx="12" fill="url(#securityGrad2)"/>
+    <text x="30" y="50" text-anchor="middle" fill="white" font-size="20" font-weight="bold">2</text>
+
+    <text x="90" y="25" fill="#ed8936" font-size="14" font-weight="bold">SÉCURITÉ</text>
+    <text x="90" y="45" fill="#a0aec0" font-size="11">• Commande blacklistée ? (rm -rf, format...)</text>
+    <text x="90" y="60" fill="#a0aec0" font-size="11">• Path dans working directory ?</text>
+    <text x="90" y="75" fill="#a0aec0" font-size="11">• Permissions suffisantes ?</text>
+
+    <g transform="translate(350, 30)">
+      <rect x="0" y="0" width="130" height="45" rx="6" fill="#2d3748"/>
+      <text x="65" y="18" text-anchor="middle" fill="#48bb78" font-size="10">✓ Sûr → continue</text>
+      <text x="65" y="35" text-anchor="middle" fill="#f56565" font-size="10">✗ Dangereux → BLOQUÉ</text>
+    </g>
+  </g>
+
+  <!-- Arrow to Step 3 -->
+  <path d="M450 405 L450 425" stroke="#48bb78" stroke-width="3" marker-end="url(#arrowGreen2)"/>
+
+  <!-- Step 3: Confirmation -->
+  <g transform="translate(200, 435)" filter="url(#shadow)">
+    <rect x="0" y="0" width="500" height="75" rx="12" fill="#1a1a3a" stroke="url(#confirmGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="60" height="75" rx="12" fill="url(#confirmGrad)"/>
+    <text x="30" y="42" text-anchor="middle" fill="white" font-size="20" font-weight="bold">3</text>
+
+    <text x="90" y="25" fill="#ffd700" font-size="14" font-weight="bold">CONFIRMATION</text>
+    <text x="90" y="45" fill="#a0aec0" font-size="11">• Si requiresConfirmation = true → demande utilisateur</text>
+    <text x="90" y="62" fill="#a0aec0" font-size="11">• Mode auto-approve → passe directement</text>
+
+    <g transform="translate(380, 20)">
+      <rect x="0" y="0" width="100" height="40" rx="6" fill="#2d3748"/>
+      <text x="50" y="15" text-anchor="middle" fill="#48bb78" font-size="10">Approuvé ✓</text>
+      <text x="50" y="32" text-anchor="middle" fill="#f56565" font-size="10">Refusé ✗</text>
+    </g>
+  </g>
+
+  <!-- Arrow to Step 4 -->
+  <path d="M450 515 L450 535" stroke="#48bb78" stroke-width="3" marker-end="url(#arrowGreen2)"/>
+
+  <!-- Step 4: Execution -->
+  <g transform="translate(200, 545)" filter="url(#shadow)">
+    <rect x="0" y="0" width="500" height="65" rx="12" fill="#1a1a3a" stroke="url(#execGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="60" height="65" rx="12" fill="url(#execGrad)"/>
+    <text x="30" y="38" text-anchor="middle" fill="white" font-size="20" font-weight="bold">4</text>
+
+    <text x="90" y="22" fill="#38ef7d" font-size="14" font-weight="bold">EXÉCUTION</text>
+    <text x="90" y="42" fill="#a0aec0" font-size="11">• Sandbox (firejail) si nécessaire</text>
+    <text x="280" y="42" fill="#a0aec0" font-size="11">• Timeout (5 min max)</text>
+    <text x="90" y="57" fill="#a0aec0" font-size="11">• Capture stdout/stderr</text>
+  </g>
+
+  <!-- Arrow to Step 5 -->
+  <path d="M450 615 L450 635" stroke="#48bb78" stroke-width="3" marker-end="url(#arrowGreen2)"/>
+
+  <!-- Step 5: Post-processing -->
+  <g transform="translate(200, 645)" filter="url(#shadow)">
+    <rect x="0" y="0" width="500" height="45" rx="12" fill="#1a1a3a" stroke="url(#postGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="60" height="45" rx="12" fill="url(#postGrad)"/>
+    <text x="30" y="28" text-anchor="middle" fill="white" font-size="20" font-weight="bold">5</text>
+
+    <text x="90" y="20" fill="#764ba2" font-size="14" font-weight="bold">POST-TRAITEMENT</text>
+    <text x="90" y="36" fill="#a0aec0" font-size="11">Redaction secrets • Troncature • Logging audit</text>
+  </g>
+
+  <!-- Side annotations -->
+  <!-- Blocked path -->
+  <g transform="translate(720, 270)">
+    <rect x="0" y="0" width="150" height="100" rx="8" fill="#1a1a3a" stroke="#f56565" stroke-width="2"/>
+    <text x="75" y="22" text-anchor="middle" fill="#f56565" font-size="12" font-weight="bold">BLOQUÉ</text>
+    <text x="15" y="42" fill="#a0aec0" font-size="10">Exemples :</text>
+    <text x="15" y="57" fill="#f56565" font-size="9">• rm -rf /</text>
+    <text x="15" y="70" fill="#f56565" font-size="9">• format C:</text>
+    <text x="15" y="83" fill="#f56565" font-size="9">• :(){ :|:& };:</text>
+  </g>
+
+  <!-- Redaction example -->
+  <g transform="translate(720, 500)">
+    <rect x="0" y="0" width="150" height="80" rx="8" fill="#1a1a3a" stroke="#764ba2" stroke-width="2"/>
+    <text x="75" y="20" text-anchor="middle" fill="#764ba2" font-size="12" font-weight="bold">REDACTION</text>
+    <text x="15" y="40" fill="#a0aec0" font-size="9">api_key=sk-abc123</text>
+    <text x="75" y="52" text-anchor="middle" fill="#718096" font-size="10">↓</text>
+    <text x="15" y="68" fill="#48bb78" font-size="9">api_key=[REDACTED]</text>
+  </g>
+
+  <!-- Security modes indicator -->
+  <g transform="translate(30, 300)">
+    <rect x="0" y="0" width="150" height="110" rx="8" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="75" y="20" text-anchor="middle" fill="#e2e8f0" font-size="11" font-weight="bold">Modes d'approbation</text>
+    <rect x="10" y="30" width="130" height="22" rx="4" fill="#276749"/>
+    <text x="75" y="46" text-anchor="middle" fill="white" font-size="10">READ-ONLY</text>
+    <rect x="10" y="56" width="130" height="22" rx="4" fill="#ed8936"/>
+    <text x="75" y="72" text-anchor="middle" fill="white" font-size="10">AUTO-APPROVE</text>
+    <rect x="10" y="82" width="130" height="22" rx="4" fill="#c53030"/>
+    <text x="75" y="98" text-anchor="middle" fill="white" font-size="10">FULL-ACCESS</text>
+  </g>
+</svg>

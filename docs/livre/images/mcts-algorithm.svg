@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="selectGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="expandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="simulateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="backpropGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrowMCTS" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ffd700"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="750" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
+    Monte-Carlo Tree Search (MCTS)
+  </text>
+  <text x="500" y="68" text-anchor="middle" fill="#718096" font-size="14">
+    L'algorithme d'AlphaGo adapté aux agents LLM
+  </text>
+
+  <!-- Main cycle visualization -->
+  <g transform="translate(500, 400)">
+    <!-- Circular arrows for the cycle -->
+    <circle cx="0" cy="0" r="180" fill="none" stroke="#2d3748" stroke-width="3" stroke-dasharray="10,5"/>
+
+    <!-- Arrow paths around the circle -->
+    <path d="M0 -180 A180 180 0 0 1 180 0" fill="none" stroke="#ffd700" stroke-width="4" stroke-dasharray="15,5" marker-end="url(#arrowMCTS)"/>
+    <path d="M180 0 A180 180 0 0 1 0 180" fill="none" stroke="#ffd700" stroke-width="4" stroke-dasharray="15,5" marker-end="url(#arrowMCTS)"/>
+    <path d="M0 180 A180 180 0 0 1 -180 0" fill="none" stroke="#ffd700" stroke-width="4" stroke-dasharray="15,5" marker-end="url(#arrowMCTS)"/>
+    <path d="M-180 0 A180 180 0 0 1 0 -180" fill="none" stroke="#ffd700" stroke-width="4" stroke-dasharray="15,5" marker-end="url(#arrowMCTS)"/>
+
+    <!-- Phase 1: SELECT -->
+    <g transform="translate(0, -180)" filter="url(#shadow)">
+      <rect x="-80" y="-40" width="160" height="80" rx="15" fill="url(#selectGrad)"/>
+      <text x="0" y="-10" text-anchor="middle" fill="white" font-size="16" font-weight="bold">1. SELECT</text>
+      <text x="0" y="12" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">Descendre avec</text>
+      <text x="0" y="28" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">UCB1</text>
+    </g>
+
+    <!-- Phase 2: EXPAND -->
+    <g transform="translate(180, 0)" filter="url(#shadow)">
+      <rect x="-80" y="-40" width="160" height="80" rx="15" fill="url(#expandGrad)"/>
+      <text x="0" y="-10" text-anchor="middle" fill="white" font-size="16" font-weight="bold">2. EXPAND</text>
+      <text x="0" y="12" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">Ajouter un</text>
+      <text x="0" y="28" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">nouvel enfant</text>
+    </g>
+
+    <!-- Phase 3: SIMULATE -->
+    <g transform="translate(0, 180)" filter="url(#shadow)">
+      <rect x="-80" y="-40" width="160" height="80" rx="15" fill="url(#simulateGrad)"/>
+      <text x="0" y="-10" text-anchor="middle" fill="white" font-size="16" font-weight="bold">3. SIMULATE</text>
+      <text x="0" y="12" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">Rollout jusqu'à</text>
+      <text x="0" y="28" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">la fin</text>
+    </g>
+
+    <!-- Phase 4: BACKPROPAGATE -->
+    <g transform="translate(-180, 0)" filter="url(#shadow)">
+      <rect x="-80" y="-40" width="160" height="80" rx="15" fill="url(#backpropGrad)"/>
+      <text x="0" y="-10" text-anchor="middle" fill="white" font-size="16" font-weight="bold">4. BACKPROP</text>
+      <text x="0" y="12" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">Remonter le</text>
+      <text x="0" y="28" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">résultat</text>
+    </g>
+
+    <!-- Center text -->
+    <circle cx="0" cy="0" r="50" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="0" y="-5" text-anchor="middle" fill="#ffd700" font-size="14" font-weight="bold">Répéter</text>
+    <text x="0" y="15" text-anchor="middle" fill="#a0aec0" font-size="11">N fois</text>
+  </g>
+
+  <!-- UCB1 Formula Box -->
+  <g transform="translate(50, 100)">
+    <rect x="0" y="0" width="380" height="150" rx="15" fill="#1a1a3a" stroke="#667eea" stroke-width="3" filter="url(#shadow)"/>
+    <text x="190" y="30" text-anchor="middle" fill="#667eea" font-size="16" font-weight="bold">Formule UCB1</text>
+
+    <text x="190" y="60" text-anchor="middle" fill="#e2e8f0" font-size="18" font-family="monospace">
+      UCB1 = W/N + C × √(ln(P)/N)
+    </text>
+
+    <g transform="translate(20, 80)">
+      <text x="0" y="0" fill="#a0aec0" font-size="11">W = victoires (simulations réussies)</text>
+      <text x="0" y="18" fill="#a0aec0" font-size="11">N = visites du nœud</text>
+      <text x="0" y="36" fill="#a0aec0" font-size="11">P = visites du parent</text>
+      <text x="0" y="54" fill="#a0aec0" font-size="11">C = constante d'exploration (√2)</text>
+    </g>
+  </g>
+
+  <!-- Exploration vs Exploitation -->
+  <g transform="translate(570, 100)">
+    <rect x="0" y="0" width="380" height="150" rx="15" fill="#1a1a3a" stroke="#4a5568" stroke-width="2" filter="url(#shadow)"/>
+    <text x="190" y="30" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="bold">Balance Exploration/Exploitation</text>
+
+    <g transform="translate(20, 50)">
+      <rect x="0" y="0" width="160" height="40" rx="8" fill="url(#selectGrad)"/>
+      <text x="80" y="18" text-anchor="middle" fill="white" font-size="11" font-weight="bold">W/N</text>
+      <text x="80" y="34" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">EXPLOITATION</text>
+    </g>
+
+    <text x="190" y="80" text-anchor="middle" fill="#ffd700" font-size="20">+</text>
+
+    <g transform="translate(200, 50)">
+      <rect x="0" y="0" width="160" height="40" rx="8" fill="url(#expandGrad)"/>
+      <text x="80" y="18" text-anchor="middle" fill="white" font-size="11" font-weight="bold">C × √(ln(P)/N)</text>
+      <text x="80" y="34" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">EXPLORATION</text>
+    </g>
+
+    <g transform="translate(30, 105)">
+      <text x="0" y="0" fill="#a0aec0" font-size="10">Début: Explore beaucoup</text>
+      <text x="0" y="15" fill="#a0aec0" font-size="10">Milieu: Équilibre</text>
+      <text x="0" y="30" fill="#a0aec0" font-size="10">Fin: Exploite les meilleurs</text>
+    </g>
+  </g>
+
+  <!-- Tree example -->
+  <g transform="translate(50, 550)">
+    <rect x="0" y="0" width="350" height="150" rx="10" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="175" y="25" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="bold">Exemple d'arbre MCTS</text>
+
+    <!-- Mini tree -->
+    <g transform="translate(100, 50)">
+      <!-- Root -->
+      <circle cx="75" cy="0" r="15" fill="#667eea"/>
+      <text x="75" y="4" text-anchor="middle" fill="white" font-size="9">50v</text>
+
+      <!-- Level 1 -->
+      <line x1="65" y1="15" x2="25" y2="40" stroke="#4a5568" stroke-width="1"/>
+      <line x1="85" y1="15" x2="125" y2="40" stroke="#4a5568" stroke-width="1"/>
+
+      <circle cx="25" cy="50" r="12" fill="#48bb78"/>
+      <text x="25" y="53" text-anchor="middle" fill="white" font-size="8">35v</text>
+
+      <circle cx="125" cy="50" r="10" fill="#ed8936"/>
+      <text x="125" y="53" text-anchor="middle" fill="white" font-size="8">12v</text>
+
+      <!-- Level 2 -->
+      <line x1="20" y1="62" x2="0" y2="85" stroke="#4a5568" stroke-width="1"/>
+      <line x1="30" y1="62" x2="50" y2="85" stroke="#4a5568" stroke-width="1"/>
+
+      <circle cx="0" cy="92" r="10" fill="#38a169" filter="url(#glow)"/>
+      <text x="0" y="95" text-anchor="middle" fill="white" font-size="8">28v</text>
+      <text x="0" y="110" text-anchor="middle" fill="#48bb78" font-size="8" font-weight="bold">95%</text>
+
+      <circle cx="50" cy="92" r="8" fill="#718096"/>
+      <text x="50" y="95" text-anchor="middle" fill="white" font-size="7">7v</text>
+    </g>
+
+    <text x="280" y="80" text-anchor="start" fill="#a0aec0" font-size="10">v = visites</text>
+    <text x="280" y="95" text-anchor="start" fill="#48bb78" font-size="10">95% = reward</text>
+    <text x="280" y="110" text-anchor="start" fill="#a0aec0" font-size="10">Plus de visites</text>
+    <text x="280" y="125" text-anchor="start" fill="#a0aec0" font-size="10">= meilleure confiance</text>
+  </g>
+
+  <!-- Rollout types -->
+  <g transform="translate(430, 550)">
+    <rect x="0" y="0" width="280" height="150" rx="10" fill="#1a1a3a" stroke="#f5576c" stroke-width="2"/>
+    <text x="140" y="25" text-anchor="middle" fill="#f5576c" font-size="13" font-weight="bold">Types de Rollout</text>
+
+    <g transform="translate(15, 45)">
+      <rect x="0" y="0" width="250" height="28" rx="5" fill="#2d3748"/>
+      <text x="10" y="18" fill="#4facfe" font-size="11" font-weight="bold">LLM</text>
+      <text x="55" y="18" fill="#a0aec0" font-size="10">Rapide (~3s), approximatif</text>
+    </g>
+
+    <g transform="translate(15, 78)">
+      <rect x="0" y="0" width="250" height="28" rx="5" fill="#2d3748"/>
+      <text x="10" y="18" fill="#48bb78" font-size="11" font-weight="bold">Exécution</text>
+      <text x="75" y="18" fill="#a0aec0" font-size="10">Lent (~10s), objectif</text>
+    </g>
+
+    <g transform="translate(15, 111)">
+      <rect x="0" y="0" width="250" height="28" rx="5" fill="url(#solutionGrad)" opacity="0.3"/>
+      <text x="10" y="18" fill="#ffd700" font-size="11" font-weight="bold">Hybride</text>
+      <text x="70" y="18" fill="#a0aec0" font-size="10">LLM puis vérification</text>
+    </g>
+  </g>
+
+  <!-- Key insight -->
+  <g transform="translate(740, 550)">
+    <rect x="0" y="0" width="210" height="150" rx="10" fill="#1a1a3a" stroke="#ffd700" stroke-width="2"/>
+    <text x="105" y="25" text-anchor="middle" fill="#ffd700" font-size="13" font-weight="bold">AlphaGo Insight</text>
+
+    <text x="105" y="55" text-anchor="middle" fill="#e2e8f0" font-size="10">MCTS ne teste pas</text>
+    <text x="105" y="72" text-anchor="middle" fill="#e2e8f0" font-size="10">tout aveuglément.</text>
+
+    <text x="105" y="95" text-anchor="middle" fill="#48bb78" font-size="11" font-weight="bold">Il SIMULE</text>
+    <text x="105" y="112" text-anchor="middle" fill="#48bb78" font-size="11" font-weight="bold">jusqu'au bout</text>
+
+    <text x="105" y="135" text-anchor="middle" fill="#a0aec0" font-size="10">avant de juger.</text>
+  </g>
+</svg>

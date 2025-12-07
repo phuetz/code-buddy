@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="episodicGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="semanticGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="proceduralGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="prospectiveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ed8936"/>
+      <stop offset="100%" style="stop-color:#dd6b20"/>
+    </linearGradient>
+    <linearGradient id="consolidationGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrowPM" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <marker id="arrowBluePM" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4facfe"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
+    Mémoire Persistante Multi-Niveaux
+  </text>
+  <text x="500" y="68" text-anchor="middle" fill="#718096" font-size="14">
+    Architecture inspirée de la mémoire humaine (MemGPT/Letta)
+  </text>
+
+  <!-- Four Memory Types in a 2x2 grid -->
+
+  <!-- Episodic Memory (Top Left) -->
+  <g transform="translate(50, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="420" height="180" rx="15" fill="#1a1a3a" stroke="url(#episodicGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="420" height="45" rx="15" fill="url(#episodicGrad)"/>
+    <text x="210" y="20" text-anchor="middle" fill="white" font-size="11">ÉPISODIQUE</text>
+    <text x="210" y="36" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="13" font-weight="bold">Expériences Spécifiques</text>
+
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="380" height="30" rx="6" fill="#2d3748"/>
+      <text x="10" y="12" fill="#667eea" font-size="9">2024-12-05 14:32</text>
+      <text x="120" y="12" fill="#e2e8f0" font-size="9">"Débug du parser JSON - null check manquant"</text>
+      <text x="10" y="24" fill="#718096" font-size="8">Contexte: src/parser.ts | Durée: 45min | Succès: true</text>
+    </g>
+
+    <g transform="translate(20, 95)">
+      <rect x="0" y="0" width="380" height="30" rx="6" fill="#2d3748"/>
+      <text x="10" y="12" fill="#667eea" font-size="9">2024-12-04 09:15</text>
+      <text x="120" y="12" fill="#e2e8f0" font-size="9">"Refactoring du système de cache LRU"</text>
+      <text x="10" y="24" fill="#718096" font-size="8">Contexte: src/cache/ | Durée: 2h | Succès: true</text>
+    </g>
+
+    <g transform="translate(20, 130)">
+      <rect x="0" y="0" width="380" height="30" rx="6" fill="#2d3748"/>
+      <text x="10" y="12" fill="#667eea" font-size="9">2024-12-03 16:45</text>
+      <text x="120" y="12" fill="#e2e8f0" font-size="9">"Tentative migration TypeScript 5.3"</text>
+      <text x="10" y="24" fill="#718096" font-size="8">Contexte: tsconfig.json | Durée: 30min | Succès: false</text>
+    </g>
+
+    <g transform="translate(340, 160)">
+      <text x="0" y="0" fill="#667eea" font-size="9" font-style="italic">FIFO 1000 entrées</text>
+    </g>
+  </g>
+
+  <!-- Semantic Memory (Top Right) -->
+  <g transform="translate(530, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="420" height="180" rx="15" fill="#1a1a3a" stroke="url(#semanticGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="420" height="45" rx="15" fill="url(#semanticGrad)"/>
+    <text x="210" y="20" text-anchor="middle" fill="white" font-size="11">SÉMANTIQUE</text>
+    <text x="210" y="36" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="13" font-weight="bold">Connaissances Factuelles</text>
+
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="380" height="25" rx="6" fill="#2d3748"/>
+      <text x="10" y="16" fill="#38ef7d" font-size="10">projet.stack</text>
+      <text x="120" y="16" fill="#e2e8f0" font-size="9">TypeScript, React, Node.js, PostgreSQL</text>
+    </g>
+
+    <g transform="translate(20, 90)">
+      <rect x="0" y="0" width="380" height="25" rx="6" fill="#2d3748"/>
+      <text x="10" y="16" fill="#38ef7d" font-size="10">user.prefs</text>
+      <text x="120" y="16" fill="#e2e8f0" font-size="9">Style fonctionnel, tests Jest, commits conventionnels</text>
+    </g>
+
+    <g transform="translate(20, 120)">
+      <rect x="0" y="0" width="380" height="25" rx="6" fill="#2d3748"/>
+      <text x="10" y="16" fill="#38ef7d" font-size="10">codebase.patterns</text>
+      <text x="120" y="16" fill="#e2e8f0" font-size="9">Singleton services, Strategy tools, EventEmitter</text>
+    </g>
+
+    <g transform="translate(20, 150)">
+      <rect x="0" y="0" width="380" height="25" rx="6" fill="#2d3748"/>
+      <text x="10" y="16" fill="#38ef7d" font-size="10">context.files</text>
+      <text x="120" y="16" fill="#e2e8f0" font-size="9">Main: grok-agent.ts, tools/*.ts, ui/ChatInterface</text>
+    </g>
+  </g>
+
+  <!-- Procedural Memory (Bottom Left) -->
+  <g transform="translate(50, 310)" filter="url(#shadow)">
+    <rect x="0" y="0" width="420" height="180" rx="15" fill="#1a1a3a" stroke="url(#proceduralGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="420" height="45" rx="15" fill="url(#proceduralGrad)"/>
+    <text x="210" y="20" text-anchor="middle" fill="white" font-size="11">PROCÉDURALE</text>
+    <text x="210" y="36" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="13" font-weight="bold">Compétences Apprises</text>
+
+    <g transform="translate(20, 55)">
+      <rect x="0" y="0" width="180" height="55" rx="8" fill="#2d3748"/>
+      <text x="90" y="18" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">fix_null_check</text>
+      <text x="90" y="35" text-anchor="middle" fill="#a0aec0" font-size="9">Succès: 89%</text>
+      <text x="90" y="48" text-anchor="middle" fill="#718096" font-size="8">Utilisé: 47 fois</text>
+    </g>
+
+    <g transform="translate(210, 55)">
+      <rect x="0" y="0" width="180" height="55" rx="8" fill="#2d3748"/>
+      <text x="90" y="18" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">add_error_handler</text>
+      <text x="90" y="35" text-anchor="middle" fill="#a0aec0" font-size="9">Succès: 92%</text>
+      <text x="90" y="48" text-anchor="middle" fill="#718096" font-size="8">Utilisé: 31 fois</text>
+    </g>
+
+    <g transform="translate(20, 120)">
+      <rect x="0" y="0" width="180" height="55" rx="8" fill="#2d3748"/>
+      <text x="90" y="18" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">extract_function</text>
+      <text x="90" y="35" text-anchor="middle" fill="#a0aec0" font-size="9">Succès: 78%</text>
+      <text x="90" y="48" text-anchor="middle" fill="#718096" font-size="8">Utilisé: 23 fois</text>
+    </g>
+
+    <g transform="translate(210, 120)">
+      <rect x="0" y="0" width="180" height="55" rx="8" fill="#2d3748"/>
+      <text x="90" y="18" text-anchor="middle" fill="#f5576c" font-size="10" font-weight="bold">optimize_query</text>
+      <text x="90" y="35" text-anchor="middle" fill="#a0aec0" font-size="9">Succès: 85%</text>
+      <text x="90" y="48" text-anchor="middle" fill="#718096" font-size="8">Utilisé: 15 fois</text>
+    </g>
+  </g>
+
+  <!-- Prospective Memory (Bottom Right) -->
+  <g transform="translate(530, 310)" filter="url(#shadow)">
+    <rect x="0" y="0" width="420" height="180" rx="15" fill="#1a1a3a" stroke="url(#prospectiveGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="420" height="45" rx="15" fill="url(#prospectiveGrad)"/>
+    <text x="210" y="20" text-anchor="middle" fill="white" font-size="11">PROSPECTIVE</text>
+    <text x="210" y="36" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="13" font-weight="bold">Intentions Futures</text>
+
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="380" height="35" rx="6" fill="#2d3748"/>
+      <text x="10" y="14" fill="#ed8936" font-size="10" font-weight="bold">TODO</text>
+      <text x="50" y="14" fill="#e2e8f0" font-size="9">"Finir refactoring du module auth après merge PR #42"</text>
+      <text x="10" y="28" fill="#718096" font-size="8">Trigger: PR merged | Priority: HIGH</text>
+    </g>
+
+    <g transform="translate(20, 100)">
+      <rect x="0" y="0" width="380" height="35" rx="6" fill="#2d3748"/>
+      <text x="10" y="14" fill="#ed8936" font-size="10" font-weight="bold">REMIND</text>
+      <text x="60" y="14" fill="#e2e8f0" font-size="9">"Vérifier performance après déploiement staging"</text>
+      <text x="10" y="28" fill="#718096" font-size="8">Trigger: deploy staging | Priority: MEDIUM</text>
+    </g>
+
+    <g transform="translate(20, 140)">
+      <rect x="0" y="0" width="380" height="35" rx="6" fill="#2d3748"/>
+      <text x="10" y="14" fill="#ed8936" font-size="10" font-weight="bold">GOAL</text>
+      <text x="50" y="14" fill="#e2e8f0" font-size="9">"Migrer vers TypeScript 5.4 quand stable"</text>
+      <text x="10" y="28" fill="#718096" font-size="8">Trigger: TS 5.4 release | Priority: LOW</text>
+    </g>
+  </g>
+
+  <!-- Memory Consolidation Process -->
+  <g transform="translate(200, 510)" filter="url(#shadow)">
+    <rect x="0" y="0" width="600" height="120" rx="15" fill="#1a1a3a" stroke="url(#consolidationGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="600" height="40" rx="15" fill="url(#consolidationGrad)"/>
+    <text x="300" y="26" text-anchor="middle" fill="white" font-size="14" font-weight="bold">CONSOLIDATION MÉMOIRE (nightly)</text>
+
+    <g transform="translate(30, 55)">
+      <rect x="0" y="0" width="120" height="50" rx="8" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#e2e8f0" font-size="10">1. Analyse</text>
+      <text x="60" y="38" text-anchor="middle" fill="#718096" font-size="8">Patterns récurrents</text>
+    </g>
+
+    <path d="M160 80 L180 80" stroke="#4facfe" stroke-width="2" marker-end="url(#arrowBluePM)"/>
+
+    <g transform="translate(190, 55)">
+      <rect x="0" y="0" width="120" height="50" rx="8" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#e2e8f0" font-size="10">2. Extraction</text>
+      <text x="60" y="38" text-anchor="middle" fill="#718096" font-size="8">Épisodique → Procédural</text>
+    </g>
+
+    <path d="M320 80 L340 80" stroke="#4facfe" stroke-width="2" marker-end="url(#arrowBluePM)"/>
+
+    <g transform="translate(350, 55)">
+      <rect x="0" y="0" width="120" height="50" rx="8" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#e2e8f0" font-size="10">3. Nettoyage</text>
+      <text x="60" y="38" text-anchor="middle" fill="#718096" font-size="8">Oubli sélectif</text>
+    </g>
+
+    <path d="M480 80 L500 80" stroke="#4facfe" stroke-width="2" marker-end="url(#arrowBluePM)"/>
+
+    <g transform="translate(510, 55)">
+      <rect x="0" y="0" width="70" height="50" rx="8" fill="#2d3748" stroke="#48bb78" stroke-width="2"/>
+      <text x="35" y="30" text-anchor="middle" fill="#48bb78" font-size="10" font-weight="bold">Sync</text>
+    </g>
+  </g>
+
+  <!-- Storage info -->
+  <g transform="translate(50, 640)">
+    <rect x="0" y="0" width="900" height="45" rx="8" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="450" y="18" text-anchor="middle" fill="#e2e8f0" font-size="11" font-weight="bold">Stockage: ~/.grok/memory/</text>
+    <text x="150" y="35" fill="#667eea" font-size="9">episodic.json</text>
+    <text x="320" y="35" fill="#38ef7d" font-size="9">semantic.json</text>
+    <text x="490" y="35" fill="#f5576c" font-size="9">procedural.json</text>
+    <text x="660" y="35" fill="#ed8936" font-size="9">prospective.json</text>
+    <text x="820" y="35" fill="#718096" font-size="9">Format: JSON + embeddings</text>
+  </g>
+
+  <!-- Arrows connecting memories -->
+  <path d="M260 280 L260 305" stroke="#667eea" stroke-width="2" stroke-dasharray="5,3"/>
+  <path d="M740 280 L740 305" stroke="#38ef7d" stroke-width="2" stroke-dasharray="5,3"/>
+  <path d="M260 490 L260 505" stroke="#f5576c" stroke-width="2" stroke-dasharray="5,3"/>
+  <path d="M740 490 L740 505" stroke="#ed8936" stroke-width="2" stroke-dasharray="5,3"/>
+</svg>

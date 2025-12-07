@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="userGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="llmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="toolGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="validateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="confirmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ed8936"/>
+      <stop offset="100%" style="stop-color:#dd6b20"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrowFlow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#38ef7d"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
+    Tool-Calling : Le Flow Complet
+  </text>
+  <text x="500" y="68" text-anchor="middle" fill="#718096" font-size="14">
+    De la requête utilisateur à la réponse finale
+  </text>
+
+  <!-- Step 1: User Request -->
+  <g transform="translate(50, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="80" rx="15" fill="url(#userGrad)"/>
+    <circle cx="-10" cy="40" r="25" fill="white" fill-opacity="0.2"/>
+    <text x="22" y="35" fill="white" font-size="18">👤</text>
+    <text x="110" y="35" text-anchor="middle" fill="white" font-size="14" font-weight="bold">1. Requête User</text>
+    <text x="110" y="55" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="11">"Lis le fichier config.ts"</text>
+  </g>
+
+  <!-- Arrow 1 to 2 -->
+  <path d="M260 140 L310 140" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowFlow)"/>
+
+  <!-- Step 2: LLM Analysis -->
+  <g transform="translate(320, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="80" rx="15" fill="url(#llmGrad)"/>
+    <text x="140" y="30" text-anchor="middle" fill="white" font-size="14" font-weight="bold">2. LLM Analyse</text>
+    <text x="140" y="50" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="11">Choisit l'outil approprié</text>
+    <rect x="20" y="55" width="240" height="20" rx="5" fill="rgba(0,0,0,0.2)"/>
+    <text x="30" y="69" fill="rgba(255,255,255,0.7)" font-size="9">read_file({ path: "config.ts" })</text>
+  </g>
+
+  <!-- Arrow 2 to 3 -->
+  <path d="M610 140 L660 140" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowFlow)"/>
+
+  <!-- Step 3: Tool Call Response -->
+  <g transform="translate(670, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="80" rx="15" fill="#2d3748" stroke="#4a5568" stroke-width="2"/>
+    <text x="140" y="25" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="bold">3. Tool Call</text>
+    <rect x="10" y="35" width="260" height="38" rx="5" fill="#1a1a3a"/>
+    <text x="20" y="52" fill="#a0aec0" font-size="9">{</text>
+    <text x="30" y="63" fill="#48bb78" font-size="9">"id": "call_abc123", "name": "read_file"</text>
+    <text x="20" y="72" fill="#a0aec0" font-size="9">}</text>
+  </g>
+
+  <!-- Central Processing Box -->
+  <g transform="translate(200, 220)" filter="url(#shadow)">
+    <rect x="0" y="0" width="600" height="280" rx="20" fill="#1a1a3a" stroke="url(#toolGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="600" height="50" rx="20" fill="url(#toolGrad)"/>
+    <text x="300" y="32" text-anchor="middle" fill="white" font-size="16" font-weight="bold">4. TOOL EXECUTOR</text>
+
+    <!-- Sub-step A: Validation -->
+    <g transform="translate(20, 70)">
+      <rect x="0" y="0" width="170" height="90" rx="12" fill="url(#validateGrad)"/>
+      <text x="85" y="25" text-anchor="middle" fill="white" font-size="12" font-weight="bold">A. Validation</text>
+      <text x="85" y="45" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Parse JSON</text>
+      <text x="85" y="60" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Vérifier schema</text>
+      <text x="85" y="75" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Valider types</text>
+    </g>
+
+    <!-- Arrow A to B -->
+    <path d="M200 115 L210 115" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowFlow)"/>
+
+    <!-- Sub-step B: Permissions -->
+    <g transform="translate(215, 70)">
+      <rect x="0" y="0" width="170" height="90" rx="12" fill="#2d3748" stroke="#f56565" stroke-width="2"/>
+      <text x="85" y="25" text-anchor="middle" fill="#f56565" font-size="12" font-weight="bold">B. Permissions</text>
+      <text x="85" y="45" text-anchor="middle" fill="#a0aec0" font-size="10">read: ✅</text>
+      <text x="85" y="60" text-anchor="middle" fill="#a0aec0" font-size="10">write: ⚠️</text>
+      <text x="85" y="75" text-anchor="middle" fill="#a0aec0" font-size="10">execute: ❌</text>
+    </g>
+
+    <!-- Arrow B to C -->
+    <path d="M395 115 L405 115" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowFlow)"/>
+
+    <!-- Sub-step C: Confirmation -->
+    <g transform="translate(410, 70)">
+      <rect x="0" y="0" width="170" height="90" rx="12" fill="url(#confirmGrad)"/>
+      <text x="85" y="25" text-anchor="middle" fill="white" font-size="12" font-weight="bold">C. Confirmation</text>
+      <text x="85" y="50" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="10">[y/N/edit]</text>
+      <text x="85" y="70" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">Si requiresConfirmation</text>
+    </g>
+
+    <!-- Sub-step D: Execution -->
+    <g transform="translate(120, 175)">
+      <rect x="0" y="0" width="360" height="85" rx="12" fill="url(#toolGrad)" filter="url(#glow)"/>
+      <text x="180" y="25" text-anchor="middle" fill="white" font-size="14" font-weight="bold">D. Exécution</text>
+      <rect x="20" y="38" width="320" height="38" rx="6" fill="rgba(0,0,0,0.3)"/>
+      <text x="180" y="58" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">tool.execute(args) → Promise&lt;ToolResult&gt;</text>
+      <text x="180" y="72" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">avec timeout + error handling</text>
+    </g>
+  </g>
+
+  <!-- Step 5: Result -->
+  <g transform="translate(670, 520)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="100" rx="15" fill="#2d3748" stroke="#48bb78" stroke-width="3"/>
+    <text x="140" y="25" text-anchor="middle" fill="#48bb78" font-size="14" font-weight="bold">5. Tool Result</text>
+    <rect x="10" y="35" width="260" height="55" rx="5" fill="#1a1a3a"/>
+    <text x="20" y="52" fill="#a0aec0" font-size="9">{</text>
+    <text x="30" y="63" fill="#48bb78" font-size="9">"success": true,</text>
+    <text x="30" y="74" fill="#48bb78" font-size="9">"output": "export const config..."</text>
+    <text x="20" y="85" fill="#a0aec0" font-size="9">}</text>
+  </g>
+
+  <!-- Arrow 4 to 5 -->
+  <path d="M800 500 L810 500 L810 510" stroke="#48bb78" stroke-width="3" marker-end="url(#arrowGreen)"/>
+
+  <!-- Step 6: LLM Response -->
+  <g transform="translate(320, 520)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="100" rx="15" fill="url(#llmGrad)"/>
+    <text x="140" y="25" text-anchor="middle" fill="white" font-size="14" font-weight="bold">6. LLM Génère Réponse</text>
+    <text x="140" y="50" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">Avec le résultat de l'outil</text>
+    <rect x="15" y="60" width="250" height="30" rx="5" fill="rgba(0,0,0,0.2)"/>
+    <text x="140" y="80" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">"Le fichier config.ts contient..."</text>
+  </g>
+
+  <!-- Arrow 5 to 6 -->
+  <path d="M660 570 L610 570" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowFlow)"/>
+
+  <!-- Step 7: User Response -->
+  <g transform="translate(50, 520)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="100" rx="15" fill="url(#userGrad)"/>
+    <text x="100" y="30" text-anchor="middle" fill="white" font-size="14" font-weight="bold">7. Réponse User</text>
+    <circle cx="100" cy="65" r="25" fill="white" fill-opacity="0.2"/>
+    <text x="92" y="72" fill="white" font-size="20">🤖</text>
+  </g>
+
+  <!-- Arrow 6 to 7 -->
+  <path d="M310 570 L260 570" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowFlow)"/>
+
+  <!-- Parallel Execution Badge -->
+  <g transform="translate(50, 200)">
+    <rect x="0" y="0" width="130" height="90" rx="10" fill="#1a1a3a" stroke="#ffd700" stroke-width="2"/>
+    <text x="65" y="22" text-anchor="middle" fill="#ffd700" font-size="11" font-weight="bold">Parallel Calls</text>
+    <text x="15" y="42" fill="#a0aec0" font-size="9">call_1 ████░░ 500ms</text>
+    <text x="15" y="55" fill="#a0aec0" font-size="9">call_2 ████░░ 500ms</text>
+    <text x="15" y="68" fill="#a0aec0" font-size="9">call_3 ██████ 800ms</text>
+    <text x="15" y="82" fill="#48bb78" font-size="9" font-weight="bold">Total: 800ms ⚡</text>
+  </g>
+
+  <!-- Error Handling Badge -->
+  <g transform="translate(50, 310)">
+    <rect x="0" y="0" width="130" height="70" rx="10" fill="#1a1a3a" stroke="#f56565" stroke-width="2"/>
+    <text x="65" y="22" text-anchor="middle" fill="#f56565" font-size="11" font-weight="bold">Error Handling</text>
+    <text x="15" y="42" fill="#a0aec0" font-size="9">• Timeout</text>
+    <text x="15" y="54" fill="#a0aec0" font-size="9">• File not found</text>
+    <text x="15" y="66" fill="#a0aec0" font-size="9">• Permission denied</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(830, 200)">
+    <rect x="0" y="0" width="150" height="120" rx="10" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="75" y="22" text-anchor="middle" fill="#e2e8f0" font-size="11" font-weight="bold">Légende</text>
+
+    <rect x="10" y="35" width="30" height="15" rx="3" fill="url(#userGrad)"/>
+    <text x="50" y="46" fill="#a0aec0" font-size="9">User</text>
+
+    <rect x="10" y="55" width="30" height="15" rx="3" fill="url(#llmGrad)"/>
+    <text x="50" y="66" fill="#a0aec0" font-size="9">LLM</text>
+
+    <rect x="10" y="75" width="30" height="15" rx="3" fill="url(#toolGrad)"/>
+    <text x="50" y="86" fill="#a0aec0" font-size="9">Tool Executor</text>
+
+    <rect x="10" y="95" width="30" height="15" rx="3" fill="#2d3748" stroke="#4a5568"/>
+    <text x="50" y="106" fill="#a0aec0" font-size="9">Data</text>
+  </g>
+</svg>

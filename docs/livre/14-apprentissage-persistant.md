@@ -4,7 +4,85 @@
 
 ## 🎬 Scène d'ouverture
 
-*Un mardi matin ordinaire. Lina ouvre Grok-CLI pour la centième fois peut-être.*
+*Le lendemain de la découverte de Sophie. Bureau de Lina, 8h47.*
+
+*Sur son écran : le papier "MemGPT: Towards LLMs as Operating Systems". Elle n'a presque pas dormi.*
+
+**Marc** *(arrivant avec deux cafés)* : "T'es là depuis quand ?"
+
+**Lina** *(les yeux rouges mais brillants)* : "Cinq heures du mat'. Marc, ce papier... il change tout."
+
+*Elle lui tend une tasse sans même le regarder, absorbée par ses notes.*
+
+**Lina** : "Tu te souviens de la frustration principale avec les LLMs ? Chaque session repart de zéro. L'agent oublie tout. On répète les mêmes instructions, les mêmes préférences..."
+
+**Marc** : "C'est leur architecture. Fenêtre de contexte limitée."
+
+**Lina** : "Exactement ! C'est comme un humain qui n'aurait que sa mémoire de travail — pas de mémoire à long terme. Imagine quelqu'un qui oublie tout dès qu'il cligne des yeux."
+
+*Elle fait pivoter son écran.*
+
+**Lina** : "Mais regarde ce que Charles Packer et son équipe à Berkeley ont fait."
+
+### 💡 L'Histoire de MemGPT — Berkeley, 2023
+
+> *"Et si on traitait un LLM comme un système d'exploitation ?"*
+> — Charles Packer, UC Berkeley
+
+**L'idée est née d'une frustration personnelle.** Charles Packer, doctorant à Berkeley, essayait de créer un chatbot capable de conversations vraiment longues — des jours, des semaines. Mais les modèles oubliaient constamment ce qui s'était dit au début.
+
+**Le déclic est venu d'un cours sur les systèmes d'exploitation.** Dans les années 1960, les ordinateurs avaient le même problème : la RAM était trop petite pour tout garder en mémoire. La solution ? Une **hiérarchie de mémoire** avec de la mémoire virtuelle, des pages qui se chargent et se déchargent du disque.
+
+**L'analogie était parfaite** :
+- La **fenêtre de contexte** du LLM = la RAM de l'ordinateur
+- Le **stockage externe** (fichiers JSON, bases de données) = le disque dur
+- Un **système de gestion** intelligent = le gestionnaire de mémoire virtuelle de l'OS
+
+*Lina dessine sur son tableau blanc.*
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    🖥️ L'ANALOGIE MEMGPT/OS                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  SYSTÈME D'EXPLOITATION              │  AGENT LLM (MemGPT)                  │
+│  ─────────────────────────────       │  ─────────────────────────────       │
+│                                      │                                      │
+│  ┌──────────────────┐               │  ┌──────────────────┐                │
+│  │    CPU           │               │  │    LLM           │                │
+│  │  (traitement)    │               │  │  (raisonnement)  │                │
+│  └────────┬─────────┘               │  └────────┬─────────┘                │
+│           │                          │           │                          │
+│  ┌────────▼─────────┐               │  ┌────────▼─────────┐                │
+│  │    RAM           │               │  │ Fenêtre Contexte │                │
+│  │  (rapide, petit) │               │  │ (limité, actif)  │                │
+│  └────────┬─────────┘               │  └────────┬─────────┘                │
+│           │                          │           │                          │
+│  ┌────────▼─────────┐               │  ┌────────▼─────────┐                │
+│  │   Disque Dur     │               │  │ Stockage JSON    │                │
+│  │ (lent, illimité) │               │  │ (persistant)     │                │
+│  └──────────────────┘               │  └──────────────────┘                │
+│                                      │                                      │
+│  Le gestionnaire de mémoire         │  MemGPT décide quoi                  │
+│  décide quoi garder en RAM          │  garder dans le contexte             │
+│                                      │                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**La révolution MemGPT** : au lieu de simplement tronquer le contexte quand il devient trop long (comme font la plupart des systèmes), MemGPT donne au LLM des **outils pour gérer sa propre mémoire** :
+
+- `core_memory_append` — ajouter à la mémoire "RAM"
+- `core_memory_replace` — modifier la mémoire active
+- `archival_memory_insert` — sauvegarder sur "disque"
+- `archival_memory_search` — rechercher dans les archives
+
+**Le LLM devient son propre gestionnaire de mémoire.** Il décide ce qui est important, ce qu'il faut garder, ce qu'il faut archiver.
+
+**Marc** *(comprenant)* : "Donc l'agent peut se souvenir... indéfiniment ?"
+
+**Lina** : "En théorie, oui. Mais ce n'est pas juste du stockage. Regarde ce que Sophie a expérimenté hier."
+
+*Elle ouvre Grok-CLI avec la branche expérimentale.*
 
 ```
 grok> Bonjour !
@@ -14,13 +92,19 @@ cette semaine. Hier, tu as corrigé un bug dans la validation des cartes.
 Veux-tu que je te montre les tests qui pourraient encore échouer ?
 ```
 
-**Lina** : *(figée un instant)* « Comment... »
+**Lina** *(figée un instant)* : "Il se souvient. De la conversation d'hier. Du contexte de mon travail."
 
-L'agent se *souvenait*. Non seulement de la conversation d'hier, mais du contexte de son travail, de ses habitudes, de ses préférences.
+**Marc** : "Impressionnant. Mais comment il sait que c'est *important* de se souvenir de ça ?"
 
-**Lina** : *(tapant)* « Montre-moi l'évolution de mes patterns de travail »
+**Lina** : "C'est la partie brillante. L'agent apprend à distinguer l'éphémère du permanent. 'Bonjour' = éphémère. 'Tu préfères les commits atomiques' = permanent."
+
+*Elle tape une autre commande.*
+
+**Lina** : "Regarde ça."
 
 ```
+grok> Montre-moi l'évolution de mes patterns de travail
+
 Agent: Voici ton profil d'utilisation sur les 30 derniers jours :
 
 📊 Sessions       : 47 (moyenne 45 min)
@@ -35,7 +119,13 @@ Agent: Voici ton profil d'utilisation sur les 30 derniers jours :
 └── Tu utilises rarement la recherche fuzzy (préférence grep exact)
 ```
 
-**Lina** : *(souriant)* « C'est comme avoir un assistant qui apprend vraiment. »
+**Marc** *(émerveillé)* : "C'est... c'est comme avoir un assistant qui apprend vraiment."
+
+**Lina** : "Et ce n'est que le début. L'équipe Berkeley a depuis créé **Letta** — une entreprise entière autour de cette idée. Ils appellent ça le 'stateful AI'."
+
+*Elle se retourne vers son écran.*
+
+**Lina** : "Alors voilà le plan. On va implémenter quatre types de mémoire — comme le cerveau humain."
 
 ---
 
@@ -1531,6 +1621,8 @@ Créez un système de rappels contextuels intelligents :
 
 | Source | Description | Lien |
 |--------|-------------|------|
+| **MemGPT** | UC Berkeley, LLMs as Operating Systems | [arXiv](https://arxiv.org/abs/2310.08560) |
+| **Letta** | Stateful AI framework (MemGPT commercial) | [letta.com](https://letta.com) |
 | **Mem0** | Memory layer for AI applications | [GitHub](https://github.com/mem0ai/mem0) |
 | **LangChain Memory** | Memory patterns for LLM apps | [Docs](https://python.langchain.com/docs/modules/memory/) |
 | **Cognitive Science** | Human memory systems | [Wikipedia](https://en.wikipedia.org/wiki/Memory) |
@@ -1540,21 +1632,55 @@ Créez un système de rappels contextuels intelligents :
 
 ## 🌅 Épilogue
 
-*Un mois plus tard. Lina regarde ses statistiques avec satisfaction.*
+*Un mois plus tard. Bureau de Lina, fin de journée. Le soleil descend derrière les immeubles.*
 
-**Lina** : « Tu sais, avant je devais tout réexpliquer à chaque session. Maintenant... »
+**Lina** : "Tu sais, avant je devais tout réexpliquer à chaque session. Maintenant..."
 
-**Agent** : « Je me souviens que tu préfères les commits atomiques, que tu lances toujours les tests après les modifications majeures, et que tu travailles principalement sur le module de paiement cette semaine. »
+**Agent** : "Je me souviens que tu préfères les commits atomiques, que tu lances toujours les tests après les modifications majeures, et que tu travailles principalement sur le module de paiement cette semaine."
 
-**Lina** : *(souriant)* « Exactement. C'est comme avoir un assistant qui apprend vraiment. »
+**Lina** *(souriant)* : "Exactement. C'est comme avoir un assistant qui apprend vraiment."
 
-**Agent** : « Et je me souviens aussi de l'erreur de validation de carte de la semaine dernière. Si tu travailles sur des cas similaires, je peux te prévenir des pièges. »
+**Agent** : "Et je me souviens aussi de l'erreur de validation de carte de la semaine dernière. Si tu travailles sur des cas similaires, je peux te prévenir des pièges."
 
-**Lina** : « C'est ça, l'apprentissage persistant. Pas juste stocker des données — mais construire une vraie compréhension au fil du temps. »
+**Lina** : "C'est ça, l'apprentissage persistant. Pas juste stocker des données — mais construire une vraie compréhension au fil du temps."
 
-**Agent** : « D'ailleurs, tu m'avais demandé de te rappeler de faire les tests d'intégration quand tu modifies auth.ts. Tu viens de l'ouvrir... »
+**Agent** : "D'ailleurs, tu m'avais demandé de te rappeler de faire les tests d'intégration quand tu modifies auth.ts. Tu viens de l'ouvrir..."
 
-**Lina** : *(riant)* « Vas-y, lance-les. »
+**Lina** *(riant)* : "Vas-y, lance-les."
+
+*Quelques minutes plus tard. Marc entre dans le bureau, visiblement excité.*
+
+**Marc** : "Lina ! Tu as vu le message de Karim ?"
+
+*Elle secoue la tête, ouvre Slack.*
+
+**Karim** *(message)* : "@lina @marc Réunion demain 9h. Le board veut voir une démo complète de Grok-CLI. Tout le système. Architecture, features, performance. C'est notre chance de convaincre pour la série A."
+
+*Lina sent son cœur battre plus vite.*
+
+**Marc** : "On a tout. Les outils, le contexte intelligent, le raisonnement, les optimisations, la mémoire persistante... Mais on n'a jamais tout mis ensemble de manière cohérente."
+
+**Lina** *(réfléchissant)* : "On a construit les briques. Maintenant il faut montrer la maison."
+
+*Elle ouvre un nouveau fichier.*
+
+**Lina** : "OK. On va créer un diagramme d'architecture complète. Toutes les couches, tous les flux, toutes les interactions."
+
+**Marc** : "En une nuit ?"
+
+**Lina** *(souriant, avec la détermination qu'il connaît bien)* : "Pas en une nuit. On l'a déjà construite, on va juste la documenter."
+
+*Elle commence à taper.*
+
+**Lina** : "Couche 1 : Interface utilisateur. Couche 2 : Orchestration agent. Couche 3 : Raisonnement et outils..."
+
+**Agent** : "Voulez-vous que je génère automatiquement un squelette basé sur l'architecture actuelle ?"
+
+*Lina et Marc se regardent.*
+
+**Marc** : "Il apprend vraiment vite, ton agent."
+
+**Lina** : "C'est le but."
 
 ---
 
@@ -1566,4 +1692,6 @@ Créez un système de rappels contextuels intelligents :
 
 ---
 
-**Prochainement** : *Chapitre 15 — Architecture Complète* : L'assemblage final de Grok-CLI, les 6 couches architecturales, et la vision d'ensemble.
+**À suivre** : *Chapitre 15 — Architecture Complète*
+
+*Une nuit pour tout assembler. Six couches architecturales. Un agent qui peut expliquer sa propre structure. Lina et Marc vont découvrir que documenter un système, c'est aussi le comprendre vraiment — et que parfois, l'agent comprend mieux son architecture que ses créateurs.*

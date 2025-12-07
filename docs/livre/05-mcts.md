@@ -4,27 +4,47 @@
 
 ## 🎬 Scène d'ouverture : L'Algorithme d'AlphaGo
 
-*Lina observait les logs de son agent ToT. Les résultats étaient meilleurs qu'avant, mais quelque chose la dérangeait.*
+*Vendredi matin. Lina observait les logs de son agent ToT. Les résultats étaient meilleurs qu'avant, mais quelque chose la dérangeait.*
 
-— "Regarde ça," dit-elle à Marc en pointant l'écran. "Il explore 80 branches avant de trouver la bonne solution. Parfois, la bonne piste est évidente dès le départ, mais il continue à explorer des impasses."
+**Lina** *(pointant l'écran)* : "Regarde ça. 87 branches explorées avant de trouver la solution. Quatre-vingt-sept."
 
-Marc hocha la tête.
+**Marc** *(se penchant)* : "C'est beaucoup ?"
 
-— "C'est comme jouer aux échecs en testant tous les coups possibles."
+**Lina** : "La bonne piste était la troisième. Les 84 autres ? Du gaspillage. Temps, tokens, argent — tout ça pour explorer des impasses évidentes."
 
-Lina se figea. Cette phrase lui rappela quelque chose.
+*Elle fit défiler les logs.*
 
-— "Les échecs... et le Go."
+**Lina** : "Là, il explore 'vérifier si le fichier existe'. Le fichier existe, on le sait déjà, c'est dans le contexte. Mais l'agent ne fait pas le lien."
 
-Elle ouvrit un onglet et chercha "AlphaGo MCTS".
+**Marc** : "Il explore à l'aveugle."
 
-— "AlphaGo n'explorait pas tous les coups possibles. Il **simulait** des parties, apprenait quelles stratégies fonctionnaient, et concentrait son exploration sur les coups prometteurs."
+**Lina** : "Exactement. C'est comme jouer aux échecs en testant TOUS les coups possibles. Personne ne joue comme ça."
 
-Marc se pencha vers l'écran.
+*Elle se figea. Cette phrase venait de déclencher quelque chose.*
 
-— "C'est quoi ce MCTS ?"
+**Lina** *(lentement)* : "Personne... sauf les ordinateurs des années 90. Avant DeepBlue. Avant..."
 
-— "Monte-Carlo Tree Search. L'algorithme qui a battu les champions du monde. Et si on l'adaptait à notre agent ?"
+**Marc** : "AlphaGo ?"
+
+*Lina ouvrit un onglet et tapa "AlphaGo MCTS paper".*
+
+**Lina** : "AlphaGo n'explorait pas tous les coups possibles. Avec le Go, c'est impossible — il y a plus de positions que d'atomes dans l'univers."
+
+**Marc** : "Comment il faisait alors ?"
+
+**Lina** *(lisant rapidement)* : "Il **simulait** des parties complètes. À partir de chaque coup possible, il jouait une partie fictive jusqu'à la fin, comptait les victoires et les défaites, et apprenait quelles stratégies fonctionnaient vraiment."
+
+*Elle se retourna vers Marc, les yeux brillants.*
+
+**Lina** : "Tu vois la différence ? ToT évalue localement — 'cette pensée semble bonne'. MCTS évalue globalement — 'cette pensée MÈNE à une solution'."
+
+**Marc** : "C'est quoi MCTS exactement ?"
+
+**Lina** : "Monte-Carlo Tree Search. L'algorithme qui a battu Lee Sedol en 2016. Qui a révolutionné l'IA de jeu."
+
+*Elle ouvrit son IDE.*
+
+**Lina** : "Et qui pourrait révolutionner notre agent."
 
 ---
 

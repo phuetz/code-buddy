@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 750" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="orchestratorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="reasoningGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="memoryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="actionGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="learningGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fa709a"/>
+      <stop offset="100%" style="stop-color:#fee140"/>
+    </linearGradient>
+    <linearGradient id="securityGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ed8936"/>
+      <stop offset="100%" style="stop-color:#dd6b20"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="3" dy="3" stdDeviation="5" flood-opacity="0.4"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="750" fill="#0f0f23"/>
+
+  <!-- Grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1a3a" stroke-width="0.5"/>
+  </pattern>
+  <rect width="1100" height="750" fill="url(#grid)"/>
+
+  <!-- Title -->
+  <text x="550" y="45" text-anchor="middle" fill="white" font-size="28" font-weight="bold">
+    Architecture Cognitive d'un Agent Autonome
+  </text>
+  <text x="550" y="75" text-anchor="middle" fill="#718096" font-size="14">
+    Les Six Composants Essentiels et leurs Interactions
+  </text>
+
+  <!-- User Interface at top -->
+  <g transform="translate(400, 95)">
+    <rect x="0" y="0" width="300" height="50" rx="10" fill="#2d3748" stroke="#4a5568" stroke-width="2"/>
+    <text x="150" y="22" text-anchor="middle" fill="#a0aec0" font-size="12">Interface Utilisateur</text>
+    <text x="150" y="40" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="500">CLI / TUI / API / IDE</text>
+  </g>
+
+  <!-- Arrow from UI to Orchestrator -->
+  <path d="M550 145 L550 175" stroke="#667eea" stroke-width="3" marker-end="url(#arrowPurple)"/>
+
+  <!-- Central Orchestrator -->
+  <g transform="translate(350, 180)" filter="url(#shadow)">
+    <rect x="0" y="0" width="400" height="120" rx="20" fill="#1a1a3a" stroke="url(#orchestratorGrad)" stroke-width="4"/>
+    <rect x="0" y="0" width="400" height="45" rx="20" fill="url(#orchestratorGrad)"/>
+    <text x="200" y="30" text-anchor="middle" fill="white" font-size="18" font-weight="bold">ORCHESTRATEUR</text>
+
+    <g transform="translate(20, 60)">
+      <text x="0" y="0" fill="#a0aec0" font-size="12">Boucle agentique ReAct</text>
+      <text x="0" y="20" fill="#e2e8f0" font-size="13">Think → Act → Observe → Repeat</text>
+      <text x="0" y="40" fill="#718096" font-size="11">Coordination • Flux • État global</text>
+    </g>
+
+    <g transform="translate(250, 60)">
+      <circle cx="60" cy="25" r="30" fill="none" stroke="#667eea" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="60" y="30" text-anchor="middle" fill="#667eea" font-size="11" font-weight="bold">MAX</text>
+      <text x="60" y="45" text-anchor="middle" fill="#667eea" font-size="10">30 rounds</text>
+    </g>
+  </g>
+
+  <!-- Connection lines from Orchestrator -->
+  <g stroke="#4a5568" stroke-width="2" fill="none">
+    <path d="M450 300 L200 380"/>
+    <path d="M500 300 L400 380"/>
+    <path d="M600 300 L700 380"/>
+    <path d="M650 300 L900 380"/>
+
+    <!-- Vertical lines for middle components -->
+    <path d="M550 300 L550 380"/>
+  </g>
+
+  <!-- Five Components Row -->
+
+  <!-- 1. Reasoning -->
+  <g transform="translate(50, 380)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="220" rx="15" fill="#1a1a3a" stroke="url(#reasoningGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="200" height="45" rx="15" fill="url(#reasoningGrad)"/>
+    <text x="100" y="30" text-anchor="middle" fill="white" font-size="16" font-weight="bold">REASONING</text>
+
+    <g transform="translate(15, 60)">
+      <text x="0" y="0" fill="#e2e8f0" font-size="12" font-weight="bold">Niveaux de réflexion</text>
+
+      <rect x="0" y="15" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="32" fill="#48bb78" font-size="11">L0 Direct (0 tokens)</text>
+
+      <rect x="0" y="45" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="62" fill="#ffd700" font-size="11">L1 CoT (4K tokens)</text>
+
+      <rect x="0" y="75" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="92" fill="#ed8936" font-size="11">L2 ToT (10K tokens)</text>
+
+      <rect x="0" y="105" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="122" fill="#f56565" font-size="11">L3 MCTS (32K tokens)</text>
+
+      <text x="0" y="150" fill="#718096" font-size="10" font-style="italic">"Minimum nécessaire"</text>
+    </g>
+  </g>
+
+  <!-- 2. Memory -->
+  <g transform="translate(280, 380)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="220" rx="15" fill="#1a1a3a" stroke="url(#memoryGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="200" height="45" rx="15" fill="url(#memoryGrad)"/>
+    <text x="100" y="30" text-anchor="middle" fill="white" font-size="16" font-weight="bold">MEMORY</text>
+
+    <g transform="translate(15, 60)">
+      <text x="0" y="0" fill="#e2e8f0" font-size="12" font-weight="bold">Trois horizons</text>
+
+      <rect x="0" y="15" width="170" height="35" rx="5" fill="#2d3748"/>
+      <text x="10" y="30" fill="#4facfe" font-size="11">Court terme</text>
+      <text x="10" y="44" fill="#718096" font-size="9">Conversation active (RAM)</text>
+
+      <rect x="0" y="55" width="170" height="35" rx="5" fill="#2d3748"/>
+      <text x="10" y="70" fill="#4facfe" font-size="11">Moyen terme</text>
+      <text x="10" y="84" fill="#718096" font-size="9">Session (SQLite)</text>
+
+      <rect x="0" y="95" width="170" height="35" rx="5" fill="#2d3748"/>
+      <text x="10" y="110" fill="#4facfe" font-size="11">Long terme</text>
+      <text x="10" y="124" fill="#718096" font-size="9">RAG + Embeddings</text>
+
+      <text x="0" y="150" fill="#718096" font-size="10" font-style="italic">"Se souvenir pour mieux aider"</text>
+    </g>
+  </g>
+
+  <!-- 3. Action -->
+  <g transform="translate(510, 380)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="220" rx="15" fill="#1a1a3a" stroke="url(#actionGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="200" height="45" rx="15" fill="url(#actionGrad)"/>
+    <text x="100" y="30" text-anchor="middle" fill="white" font-size="16" font-weight="bold">ACTION</text>
+
+    <g transform="translate(15, 60)">
+      <text x="0" y="0" fill="#e2e8f0" font-size="12" font-weight="bold">41 outils disponibles</text>
+
+      <g transform="translate(0, 15)">
+        <rect x="0" y="0" width="80" height="22" rx="4" fill="#276749"/>
+        <text x="40" y="15" text-anchor="middle" fill="white" font-size="9">Fichiers (12)</text>
+
+        <rect x="85" y="0" width="80" height="22" rx="4" fill="#276749"/>
+        <text x="125" y="15" text-anchor="middle" fill="white" font-size="9">Shell (4)</text>
+
+        <rect x="0" y="27" width="80" height="22" rx="4" fill="#276749"/>
+        <text x="40" y="42" text-anchor="middle" fill="white" font-size="9">Git (5)</text>
+
+        <rect x="85" y="27" width="80" height="22" rx="4" fill="#276749"/>
+        <text x="125" y="42" text-anchor="middle" fill="white" font-size="9">Search (4)</text>
+
+        <rect x="0" y="54" width="80" height="22" rx="4" fill="#276749"/>
+        <text x="40" y="69" text-anchor="middle" fill="white" font-size="9">Media (5)</text>
+
+        <rect x="85" y="54" width="80" height="22" rx="4" fill="#276749"/>
+        <text x="125" y="69" text-anchor="middle" fill="white" font-size="9">System (6)</text>
+      </g>
+
+      <text x="0" y="115" fill="#718096" font-size="10" font-style="italic">"Agir sur le monde réel"</text>
+    </g>
+  </g>
+
+  <!-- 4. Learning -->
+  <g transform="translate(740, 380)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="220" rx="15" fill="#1a1a3a" stroke="url(#learningGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="200" height="45" rx="15" fill="url(#learningGrad)"/>
+    <text x="100" y="30" text-anchor="middle" fill="white" font-size="16" font-weight="bold">LEARNING</text>
+
+    <g transform="translate(15, 60)">
+      <text x="0" y="0" fill="#e2e8f0" font-size="12" font-weight="bold">Apprentissage continu</text>
+
+      <rect x="0" y="15" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="32" fill="#fee140" font-size="11">Patterns de réparation</text>
+
+      <rect x="0" y="45" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="62" fill="#fee140" font-size="11">Conventions de code</text>
+
+      <rect x="0" y="75" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="92" fill="#fee140" font-size="11">Stats des outils</text>
+
+      <rect x="0" y="105" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="122" fill="#fee140" font-size="11">Préférences utilisateur</text>
+
+      <text x="0" y="150" fill="#718096" font-size="10" font-style="italic">"Apprendre de l'expérience"</text>
+    </g>
+  </g>
+
+  <!-- Security Shield overlay -->
+  <g transform="translate(970, 380)" filter="url(#shadow)">
+    <rect x="0" y="0" width="100" height="220" rx="15" fill="#1a1a3a" stroke="url(#securityGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="100" height="45" rx="15" fill="url(#securityGrad)"/>
+    <text x="50" y="30" text-anchor="middle" fill="white" font-size="14" font-weight="bold">SECURITY</text>
+
+    <g transform="translate(10, 60)">
+      <!-- Shield icon -->
+      <path d="M40 10 L40 50 Q40 70 40 75 Q30 85 40 90 Q50 85 40 75 Q40 70 40 50 L40 10 Z"
+            fill="none" stroke="#ed8936" stroke-width="2"/>
+      <text x="40" y="50" text-anchor="middle" fill="#ed8936" font-size="20">🛡️</text>
+
+      <text x="40" y="100" text-anchor="middle" fill="#a0aec0" font-size="9">Read-only</text>
+      <text x="40" y="115" text-anchor="middle" fill="#a0aec0" font-size="9">Auto</text>
+      <text x="40" y="130" text-anchor="middle" fill="#a0aec0" font-size="9">Full</text>
+
+      <text x="40" y="155" text-anchor="middle" fill="#718096" font-size="8" font-style="italic">Garde-fou</text>
+    </g>
+  </g>
+
+  <!-- Persistence Layer at bottom -->
+  <g transform="translate(200, 630)">
+    <rect x="0" y="0" width="700" height="60" rx="10" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="350" y="25" text-anchor="middle" fill="#a0aec0" font-size="14" font-weight="bold">PERSISTANCE</text>
+    <text x="350" y="45" text-anchor="middle" fill="#718096" font-size="12">SQLite • Embeddings • Cache • Logs • Configuration</text>
+  </g>
+
+  <!-- Connection lines to persistence -->
+  <g stroke="#4a5568" stroke-width="1.5" stroke-dasharray="5,3" fill="none">
+    <path d="M150 600 L350 630"/>
+    <path d="M380 600 L450 630"/>
+    <path d="M610 600 L550 630"/>
+    <path d="M840 600 L650 630"/>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(30, 650)">
+    <text x="0" y="0" fill="#718096" font-size="11" font-weight="bold">Flux de données :</text>
+    <line x1="0" y1="15" x2="40" y2="15" stroke="#667eea" stroke-width="2"/>
+    <text x="50" y="19" fill="#718096" font-size="10">Contrôle</text>
+    <line x1="100" y1="15" x2="140" y2="15" stroke="#4a5568" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="150" y="19" fill="#718096" font-size="10">Persistance</text>
+  </g>
+
+  <!-- Arrow definitions -->
+  <defs>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#667eea"/>
+    </marker>
+  </defs>
+</svg>

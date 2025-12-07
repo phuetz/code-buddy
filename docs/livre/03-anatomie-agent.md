@@ -1,12 +1,30 @@
-# 🏗️ Chapitre 3 : Anatomie d'un Agent Autonome
+# Chapitre 3 : Anatomie d'un Agent Autonome
 
 ---
 
-## 🎬 Scène d'ouverture : Les Six Piliers
+## Table des matières
 
-*Le tableau blanc de Lina ressemblait à une toile d'araignée de concepts. Des flèches partaient dans tous les sens, reliant des boxes multicolores.*
+1. [Scène d'ouverture : Les Six Piliers](#scène-douverture--les-six-piliers)
+2. [Vue d'Ensemble : Les Six Composants](#31-vue-densemble--les-six-composants)
+3. [L'Orchestrateur : Le Chef d'Orchestre](#32-lorchestratuer--le-chef-dorchestre)
+4. [Reasoning : Le Moteur de Réflexion](#33-reasoning--le-moteur-de-réflexion)
+5. [Memory : La Mémoire Multi-Niveaux](#34-memory--la-mémoire-multi-niveaux)
+6. [Action : Les Outils de l'Agent](#35-action--les-outils-de-lagent)
+7. [Learning : L'Apprentissage Continu](#36-learning--lapprentissage-continu)
+8. [Security : La Protection Multi-Couches](#37-security--la-protection-multi-couches)
+9. [Persistance : La Fondation Stable](#38-persistance--la-fondation-stable)
+10. [Le Flux Complet : Un Exemple Détaillé](#39-le-flux-complet--un-exemple-détaillé)
+11. [Points Clés à Retenir](#310-points-clés-à-retenir)
+12. [Exercices](#311-exercices)
+13. [Références](#312-références)
 
-Marc observait le chaos organisé, essayant de comprendre la logique.
+---
+
+## Scène d'ouverture : Les Six Piliers
+
+*Le tableau blanc de Lina ressemblait à une toile d'araignée de concepts. Des flèches partaient dans tous les sens, reliant des boxes multicolores. Au centre, six mots encerclés rayonnaient comme un soleil conceptuel.*
+
+Marc s'approcha du tableau, ses yeux suivant les connexions entre les différentes boîtes. Il avait passé des mois à utiliser des chatbots, mais ce qu'il voyait là était d'un tout autre ordre. Ce n'était plus une simple interface de question-réponse — c'était une architecture complète, presque organique.
 
 — "OK, récapitulons," dit Lina en pointant le centre du tableau où elle avait écrit en grosses lettres :
 
@@ -14,809 +32,1651 @@ Marc observait le chaos organisé, essayant de comprendre la logique.
 
 — "Ces six composants. Si l'un manque, ce n'est pas vraiment un agent. C'est juste un chatbot amélioré."
 
-Marc s'approcha.
+Marc s'approcha encore, absorbant chaque connexion.
 
-— "Ça ressemble à... un cerveau humain, en fait."
+— "Ça ressemble à... un cerveau humain, en fait. Ou plutôt à ce qu'on sait du fonctionnement cognitif."
 
-Lina sourit.
+Lina sourit, manifestement satisfaite de la comparaison.
 
-— "Exactement. On essaie de reproduire ce que fait un développeur quand il résout un problème. Il réfléchit, se souvient, agit, apprend de ses erreurs, et — c'est important — il ne fait pas n'importe quoi. Il a du bon sens."
+— "Exactement. On essaie de reproduire ce que fait un développeur quand il résout un problème. Il *réfléchit* au problème, se *souvient* de bugs similaires, *agit* en éditant le code, *apprend* de ses erreurs pour la prochaine fois, et — c'est crucial — il ne fait pas n'importe quoi. Il a du bon sens, des garde-fous."
 
-Sophie, la PM, intervint :
+Sophie, la PM qui avait rejoint la discussion, intervint depuis son bureau :
 
-— "Et l'orchestrateur, c'est quoi ? La conscience ?"
+— "Et l'orchestrateur, c'est quoi exactement ? La conscience ?"
 
-— "En quelque sorte. C'est ce qui coordonne tout. Ce qui décide quand réfléchir, quand agir, quand s'arrêter. Sans lui, les autres composants seraient des pièces détachées."
+— "En quelque sorte. C'est ce qui coordonne tout. Ce qui décide quand réfléchir, quand agir, quand s'arrêter. Sans lui, les autres composants seraient des pièces détachées — brillantes individuellement, mais incapables de produire quoi que ce soit de cohérent."
 
-Elle prit un marqueur et commença à dessiner les connexions.
+Elle prit un marqueur rouge et commença à tracer les connexions entre les composants.
 
-— "Laissez-moi vous montrer comment tout ça s'assemble..."
-
----
-
-## 🔬 3.1 Vue d'Ensemble : Les Six Composants
-
-Un agent n'est pas simplement un LLM avec des outils. C'est une **architecture cognitive** où plusieurs systèmes spécialisés collaborent pour produire un comportement intelligent. Chaque composant a un rôle précis, et c'est leur interaction qui fait la magie.
-
-### 3.1.1 🏛️ Architecture Globale
-
-![Architecture Agent Cognitif générée par Nanobanana](images/architecture_globale.svg)
-
-### 3.1.2 📊 Rôle de Chaque Composant
-
-| 🔧 Composant | 🎯 Rôle Principal | 🧠 Analogie Humaine | 📁 Implémentation Grok-CLI |
-|:-------------|:------------------|:--------------------|:---------------------------|
-| **Orchestrateur** | Coordonne le flux, gère la boucle | Conscience, attention | `src/agent/grok-agent.ts` |
-| **Reasoning** | Résout les problèmes complexes | Réflexion, analyse | `src/agent/reasoning/` |
-| **Memory** | Stocke et retrouve l'information | Mémoire court/long terme | `src/context/`, `src/database/` |
-| **Action** | Interagit avec le monde externe | Corps, mains | `src/tools/` |
-| **Learning** | S'améliore avec l'expérience | Apprentissage | `src/learning/` |
-| **Security** | Protège contre les erreurs/abus | Prudence, bon sens | `src/security/` |
-
-> 💡 **Analogie du développeur** : Quand vous résolvez un bug, vous utilisez tous ces composants : vous *réfléchissez* au problème, vous *vous souvenez* de bugs similaires, vous *agissez* (éditez le code), vous *apprenez* pour la prochaine fois, et vous faites *attention* à ne pas introduire de nouvelles erreurs.
+— "Laissez-moi vous montrer comment tout ça s'assemble. C'est là que les choses deviennent vraiment intéressantes..."
 
 ---
 
-## 🎯 3.2 L'Orchestrateur : Le Chef d'Orchestre
+## 3.1 Vue d'Ensemble : Les Six Composants
 
-L'orchestrateur est le cœur de l'agent. C'est lui qui décide quand appeler le LLM, quand exécuter un outil, quand s'arrêter. Sans lui, les autres composants seraient comme des musiciens talentueux mais sans chef — capables individuellement, mais incapables de produire une symphonie.
+Un agent n'est pas simplement un LLM avec des outils. Cette vision réductrice passe à côté de l'essentiel. Un agent est une **architecture cognitive** où plusieurs systèmes spécialisés collaborent pour produire un comportement intelligent et autonome. Chaque composant a un rôle précis, et c'est leur interaction harmonieuse qui produit ce que nous percevons comme de l'intelligence artificielle appliquée.
 
-### 3.2.1 🔄 La Boucle Agentique (ReAct)
+Pour comprendre cette architecture, il faut d'abord abandonner l'idée que l'agent "est" le LLM. Le LLM n'est qu'un des composants — certes central, mais pas unique. L'agent, c'est l'ensemble du système, avec ses boucles de rétroaction, sa gestion d'état, et ses mécanismes de protection.
 
-Le pattern fondamental de tout agent est la boucle **ReAct** (Reasoning + Acting) :
+### 3.1.1 L'Architecture Cognitive
 
-![Boucle ReAct générée par Nanobanana](images/boucle_react.svg)
+L'illustration ci-dessous représente l'architecture complète d'un agent cognitif moderne. Remarquez comment l'orchestrateur occupe la position centrale, coordonnant les cinq autres composants spécialisés :
 
-### 3.2.2 💻 Implémentation Réelle
+![Architecture cognitive d'un agent autonome](images/agent-architecture.svg)
 
-Voici un extrait de la véritable implémentation de `GrokAgent` dans `src/agent/grok-agent.ts` :
+Cette architecture s'organise en couches logiques :
+
+**Couche supérieure : Interface utilisateur**
+L'agent doit communiquer avec le monde extérieur. Cette interface peut prendre de nombreuses formes : une ligne de commande (CLI), une interface textuelle riche (TUI), une API REST, une interface vocale, ou même un plugin d'IDE. Le choix de l'interface affecte l'expérience utilisateur mais pas la logique sous-jacente de l'agent.
+
+**Couche centrale : L'orchestrateur**
+Le chef d'orchestre coordonne tout. Il reçoit les messages de l'interface, décide quand appeler le LLM, gère l'exécution des outils, et détermine quand la tâche est terminée. C'est le "système nerveux central" de l'agent.
+
+**Couche fonctionnelle : Les cinq composants spécialisés**
+Chaque composant gère un aspect spécifique du comportement de l'agent :
+- **Reasoning** : Comment penser (niveaux de réflexion)
+- **Memory** : Ce qu'il faut retenir (contexte et apprentissage)
+- **Action** : Ce qu'il faut faire (exécution d'outils)
+- **Learning** : Ce qu'il faut améliorer (feedback et adaptation)
+- **Security** : Ce qu'il ne faut pas faire (protection et limites)
+
+**Couche inférieure : Persistance**
+Toutes les données permanentes — base de données, embeddings, caches, logs — résident dans cette couche. C'est la "mémoire à long terme" physique de l'agent.
+
+### 3.1.2 Rôle Détaillé de Chaque Composant
+
+Le tableau suivant résume le rôle de chaque composant, avec une analogie humaine pour faciliter la compréhension :
+
+| Composant        | Rôle Principal                           | Analogie Humaine          | Implémentation Grok-CLI      |
+|:-----------------|:-----------------------------------------|:--------------------------|:-----------------------------|
+| **Orchestrateur** | Coordonne le flux, gère la boucle agentique | Conscience, attention    | `src/agent/grok-agent.ts`    |
+| **Reasoning**     | Résout les problèmes complexes            | Réflexion, analyse        | `src/agent/reasoning/`       |
+| **Memory**        | Stocke et retrouve l'information          | Mémoire court/long terme  | `src/context/`, `src/database/` |
+| **Action**        | Interagit avec le monde externe           | Corps, mains, actions     | `src/tools/`                 |
+| **Learning**      | S'améliore avec l'expérience              | Apprentissage, habitudes  | `src/learning/`              |
+| **Security**      | Protège contre les erreurs/abus           | Prudence, bon sens        | `src/security/`              |
+
+L'analogie avec le développeur humain est particulièrement instructive. Quand vous résolvez un bug, vous utilisez instinctivement tous ces composants : vous *réfléchissez* au problème (reasoning), vous *vous souvenez* de bugs similaires (memory), vous *agissez* en éditant le code (action), vous *apprenez* pour la prochaine fois (learning), et vous faites *attention* à ne pas introduire de nouvelles erreurs (security). L'agent fait exactement la même chose, mais de manière explicite et structurée.
+
+### 3.1.3 Interdépendance des Composants
+
+Ce qui distingue une vraie architecture d'agent d'un simple assemblage de pièces, c'est l'**interdépendance** des composants. Ils ne fonctionnent pas en isolation — ils communiquent constamment :
+
+- Le **Reasoning** consulte la **Memory** pour récupérer le contexte pertinent
+- L'**Orchestrateur** surveille les résultats des **Actions** pour décider de la suite
+- Le **Learning** analyse les **Actions** réussies pour améliorer les futures réponses
+- La **Security** filtre toutes les **Actions** avant leur exécution
+- La **Memory** stocke les résultats de l'**Orchestrateur** pour maintenir la cohérence
+
+Cette interdépendance crée des boucles de rétroaction qui permettent à l'agent de s'adapter dynamiquement. Un chatbot statique ne peut pas faire ça — il traite chaque requête indépendamment, sans contexte ni apprentissage.
+
+---
+
+## 3.2 L'Orchestrateur : Le Chef d'Orchestre
+
+L'orchestrateur est le cœur battant de l'agent. C'est lui qui décide quand appeler le LLM, quand exécuter un outil, quand demander clarification à l'utilisateur, et quand s'arrêter. Sans lui, les autres composants seraient comme des musiciens talentueux mais sans chef — capables individuellement, mais incapables de produire une symphonie cohérente.
+
+### 3.2.1 La Boucle Agentique ReAct
+
+Le pattern fondamental de tout agent moderne est la boucle **ReAct** (Reasoning + Acting). Ce pattern, introduit par Yao et al. en 2022, unifie le raisonnement et l'action dans une boucle itérative qui permet à l'agent de progresser vers son objectif tout en s'adaptant aux résultats observés.
+
+![La boucle agentique ReAct](images/react-loop.svg)
+
+La boucle se décompose en cinq phases distinctes :
+
+**Phase 1 : PERCEIVE (Percevoir)**
+L'agent reçoit une entrée — soit un message de l'utilisateur, soit le résultat d'un outil précédemment exécuté. Cette entrée est ajoutée au contexte de conversation, enrichissant l'historique disponible pour les phases suivantes.
+
+**Phase 2 : THINK (Penser)**
+Le LLM est appelé avec le contexte complet : le prompt système, l'historique de conversation, les résultats d'outils récents, et les fichiers pertinents. C'est ici que le "raisonnement" se produit — le modèle analyse la situation et formule une réponse.
+
+**Phase 3 : DECIDE (Décider)**
+La réponse du LLM est analysée pour déterminer son type :
+- **Tool call** : Le LLM veut utiliser un outil (ex: `read_file`, `bash`)
+- **Text only** : Le LLM fournit une réponse textuelle finale
+
+Cette décision détermine le chemin à suivre.
+
+**Phase 4 : ACT (Agir) — si tool call**
+L'outil demandé est exécuté. Cette exécution passe par plusieurs étapes de validation (que nous détaillerons dans la section Security) avant d'être réellement effectuée. Le résultat — succès ou échec — est capturé.
+
+**Phase 5 : OBSERVE (Observer) — si tool call**
+Le résultat de l'outil est ajouté au contexte. L'agent "observe" ce qui s'est passé et peut maintenant raisonner sur ce résultat dans la prochaine itération de la boucle.
+
+**Condition de terminaison**
+La boucle continue jusqu'à ce que :
+- Le LLM réponde par du texte seul (sans tool call), indiquant qu'il a terminé
+- La limite de rounds soit atteinte (protection contre les boucles infinies)
+- Une erreur critique se produise (timeout, dépassement de budget)
+
+### 3.2.2 Implémentation Détaillée
+
+Voici une implémentation simplifiée mais complète de l'orchestrateur, montrant comment la boucle ReAct est traduite en code TypeScript :
 
 ```typescript
-// src/agent/grok-agent.ts
-export class GrokAgent extends EventEmitter {
-  private grokClient: GrokClient;
-  private contextManager: ContextManagerV2;
-  // Maximum history entries to prevent memory bloat
-  private static readonly MAX_HISTORY_SIZE = 1000;
-  private maxToolRounds: number;
-  private yoloMode: boolean = false;
-  private sessionCostLimit: number;
-  private sessionCost: number = 0;
+// src/agent/grok-agent.ts (structure simplifiée pour pédagogie)
+export class GrokAgent {
+  private maxRounds: number = 30;          // Limite anti-boucle infinie
+  private currentRound: number = 0;
+  private messages: Message[] = [];        // Historique de conversation
+  private client: GrokClient;              // Client API
+  private tools: Tool[];                   // Outils disponibles
 
-  constructor(
-    apiKey: string,
-    baseURL?: string,
-    model?: string,
-    maxToolRounds?: number,
-    useRAGToolSelection: boolean = true
-  ) {
-    super();
-    // ... initialisation ...
+  async run(userMessage: string): Promise<string> {
+    // Ajouter le message utilisateur à l'historique
+    this.addMessage({ role: 'user', content: userMessage });
 
-    // Mode YOLO : autonomie totale ou sécurité par défaut
-    this.yoloMode = process.env.YOLO_MODE === "true";
-    this.maxToolRounds = maxToolRounds || (this.yoloMode ? 400 : 50);
+    // Enrichir le contexte avec RAG
+    const relevantContext = await this.memory.retrieveRelevant(userMessage);
+    this.addContextToMessages(relevantContext);
 
-    // Initialisation du gestionnaire de contexte avec compression intelligente
-    this.contextManager = createContextManager(modelToUse, maxContextTokens);
+    // Boucle principale ReAct
+    while (this.currentRound < this.maxRounds) {
+      this.currentRound++;
+      this.emit('roundStart', this.currentRound);
+
+      // 1. THINK - Appeler le LLM avec le contexte complet
+      const response = await this.client.chat({
+        messages: this.messages,
+        tools: this.getAvailableTools(),
+        temperature: 0.7,
+        max_tokens: 4096
+      });
+
+      // 2. DECIDE - Analyser la réponse
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        // Le LLM veut utiliser des outils
+        this.addMessage({
+          role: 'assistant',
+          content: response.content,
+          tool_calls: response.tool_calls
+        });
+
+        // 3. ACT - Exécuter chaque outil demandé
+        for (const toolCall of response.tool_calls) {
+          try {
+            // Validation + Sécurité + Confirmation
+            const result = await this.executeToolSafely(toolCall);
+
+            // 4. OBSERVE - Ajouter le résultat au contexte
+            this.addToolResult(toolCall.id, result);
+
+            // Learning : enregistrer le pattern
+            await this.learning.recordSuccess(toolCall, result);
+
+          } catch (error) {
+            this.addToolError(toolCall.id, error);
+            await this.learning.recordFailure(toolCall, error);
+          }
+        }
+        // Continuer la boucle pour que le LLM traite les résultats
+
+      } else {
+        // Réponse textuelle = tâche terminée
+        this.emit('complete', response.content);
+        return response.content;
+      }
+    }
+
+    // Limite de rounds atteinte
+    throw new Error(`Max rounds (${this.maxRounds}) exceeded`);
   }
 
-  async processUserMessage(message: string): Promise<ChatEntry[]> {
-    // ... setup ...
+  private async executeToolSafely(toolCall: ToolCall): Promise<ToolResult> {
+    // Pipeline de sécurité (voir section 3.7)
+    await this.security.validate(toolCall);
+    await this.security.checkPermissions(toolCall);
 
-    try {
-      // Sélection d'outils via RAG pour réduire le contexte
-      const { tools } = await this.getToolsForQuery(message);
-
-      // Compression intelligente du contexte avant envoi
-      const preparedMessages = this.contextManager.prepareMessages(this.messages);
-
-      let currentResponse = await this.grokClient.chat(preparedMessages, tools, ...);
-
-      // Boucle principale (ReAct Loop)
-      while (toolRounds < maxToolRounds) {
-        // ... traitement réponse ...
-
-        if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-          toolRounds++;
-
-          // Exécution parallèle possible pour les outils en lecture seule
-          const results = await this._executeToolCallsParallel(assistantMessage.tool_calls);
-
-          // ... mise à jour historique ...
-
-          // Récursion : obtenir la prochaine action du LLM
-          currentResponse = await this.grokClient.chat(nextPreparedMessages, tools, ...);
-        } else {
-          break; // Fin de tâche
-        }
+    if (await this.security.requiresConfirmation(toolCall)) {
+      const approved = await this.confirmation.ask(toolCall);
+      if (!approved) {
+        throw new Error('User rejected tool execution');
       }
-
-      // ... gestion des coûts ...
-      this.recordSessionCost(inputTokens, totalOutputTokens);
-
-      return newEntries;
-    } catch (error) {
-      // ... gestion d'erreurs ...
     }
+
+    // Exécution avec timeout et sandbox
+    return await this.tools.execute(toolCall, {
+      timeout: 5 * 60 * 1000,  // 5 minutes
+      sandbox: this.security.shouldSandbox(toolCall)
+    });
   }
 }
 ```
 
-### 3.2.3 🚧 Gestion des Limites
+Ce code illustre plusieurs principes importants :
 
-L'orchestrateur doit protéger contre plusieurs risques :
+1. **Séparation des responsabilités** : Chaque phase de la boucle est clairement identifiable
+2. **Gestion d'erreurs** : Les exceptions sont capturées et enregistrées pour l'apprentissage
+3. **Extensibilité** : Les composants (memory, security, learning) sont injectables
+4. **Observabilité** : Des événements sont émis à chaque étape pour le monitoring
 
-| ⚠️ Risque | 🛡️ Protection | 📊 Valeur Typique |
-|:----------|:--------------|:------------------|
-| **Boucle infinie** | Limite de rounds | 30-400 rounds |
-| **Dépassement contexte** | Compression automatique | 128K tokens max |
-| **Coût excessif** | Budget par session | $10/session |
-| **Outil bloqué** | Timeout par outil | 5min/outil |
-| **Répétition** | Détection de patterns | Hash des 5 derniers messages |
+### 3.2.3 Gestion des Limites et Risques
+
+L'orchestrateur doit protéger contre plusieurs types de risques. Ces protections ne sont pas optionnelles — elles sont essentielles pour un agent de production :
+
+| Risque               | Protection                    | Valeur Typique      | Justification                                    |
+|:---------------------|:------------------------------|:--------------------|:-------------------------------------------------|
+| **Boucle infinie**   | Limite de rounds              | 30-400 rounds       | Empêche l'agent de tourner indéfiniment          |
+| **Dépassement contexte** | Compression automatique   | 128K tokens max     | Le modèle a une limite de context window         |
+| **Coût excessif**    | Budget par session            | $10/session         | Contrôle des coûts API                           |
+| **Outil bloqué**     | Timeout par outil             | 5min/outil          | Empêche un outil de bloquer tout le système      |
+| **Répétition**       | Détection de patterns         | Hash des 5 derniers | Détecte les boucles où l'agent répète les mêmes actions |
+
+La détection de boucle par répétition mérite une attention particulière. Parfois, un agent peut se retrouver coincé dans un pattern répétitif — par exemple, essayant la même commande qui échoue, encore et encore. La détection de patterns permet d'identifier cette situation :
 
 ```typescript
-// Détection de boucle par répétition
-if (this.detectLoop()) {
+private detectLoop(): boolean {
+  if (this.messages.length < 5) return false;
+
+  // Hasher les 5 dernières réponses assistant
+  const recentHashes = this.messages
+    .filter(m => m.role === 'assistant')
+    .slice(-5)
+    .map(m => this.hashContent(m));
+
+  // Si plus de 3 hashes identiques, c'est probablement une boucle
+  const uniqueHashes = new Set(recentHashes);
+  return uniqueHashes.size < 3;
+}
+
+private handleLoopDetected(): void {
   this.emit('warning', 'Possible boucle détectée');
+
   // Stratégies possibles :
   // 1. Demander clarification à l'utilisateur
-  // 2. Changer d'approche (élever le niveau de reasoning)
-  // 3. Résumer et repartir à zéro
+  // 2. Élever le niveau de reasoning (passer de CoT à ToT)
+  // 3. Résumer le contexte et repartir à zéro
+  // 4. Forcer une approche différente
+
+  this.reasoning.elevateLevel();
 }
 ```
 
 ---
 
-## 🧠 3.3 Reasoning : Le Moteur de Réflexion
+## 3.3 Reasoning : Le Moteur de Réflexion
 
-Le composant Reasoning détermine *comment* l'agent réfléchit à un problème. Tous les problèmes ne nécessitent pas la même profondeur de réflexion — demander l'heure est différent de debugger une race condition.
+Le composant Reasoning détermine *comment* l'agent réfléchit à un problème. Cette distinction est cruciale : tous les problèmes ne nécessitent pas la même profondeur de réflexion. Demander l'heure est différent de debugger une race condition dans un système distribué.
 
-### 3.3.1 📊 Les Quatre Niveaux de Raisonnement
+L'idée fondamentale est que la réflexion a un **coût** — en temps, en tokens, en argent. Un agent bien conçu adapte son niveau de réflexion à la complexité du problème, utilisant juste assez de ressources pour obtenir un bon résultat.
+
+### 3.3.1 Les Quatre Niveaux de Raisonnement
+
+L'agent dispose de quatre niveaux de raisonnement, chacun adapté à un type de problème différent :
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🧠 NIVEAUX DE REASONING                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  🟢 NIVEAU 0 : DIRECT                                               │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Question simple → Réponse directe                          │    │
-│  │  "Quelle heure est-il ?" → Appel tool datetime              │    │
-│  │  🎯 Tokens thinking : 0                                     │    │
-│  │  ⏱️ Latence : ~1s                                           │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  🟡 NIVEAU 1 : CHAIN-OF-THOUGHT (mot-clé: "think")                  │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Problème modéré → Raisonnement linéaire étape par étape    │    │
-│  │  "Refactor cette fonction" → Analyse → Plan → Exécution     │    │
-│  │  🎯 Tokens thinking : ~4,000                                │    │
-│  │  ⏱️ Latence : ~5-10s                                        │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  🟠 NIVEAU 2 : TREE-OF-THOUGHT (mot-clé: "megathink")               │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Problème complexe → Exploration multi-chemins              │    │
-│  │  "Debug ce crash aléatoire" → Hypothèses → Tests → Solution │    │
-│  │  🎯 Tokens thinking : ~10,000                               │    │
-│  │  ⏱️ Latence : ~20-30s                                       │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  🔴 NIVEAU 3 : MCTS (mot-clé: "ultrathink")                         │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Problème critique → Simulation et optimisation             │    │
-│  │  "Redesign l'architecture" → Variantes → Éval → Meilleur    │    │
-│  │  🎯 Tokens thinking : ~32,000                               │    │
-│  │  ⏱️ Latence : ~60-120s                                      │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         NIVEAUX DE REASONING                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─── NIVEAU 0 : DIRECT ───────────────────────────────────────────┐   │
+│  │                                                                  │   │
+│  │  Cas d'usage : Questions simples, commandes directes            │   │
+│  │  Exemples    : "Quelle heure est-il ?", "Liste les fichiers"    │   │
+│  │  Processus   : Question → Réponse directe (pas de réflexion)    │   │
+│  │  Tokens      : 0 tokens de thinking                             │   │
+│  │  Latence     : ~1 seconde                                       │   │
+│  │  Coût        : 1x (référence)                                   │   │
+│  │                                                                  │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─── NIVEAU 1 : CHAIN-OF-THOUGHT (mot-clé: "think") ──────────────┐   │
+│  │                                                                  │   │
+│  │  Cas d'usage : Problèmes modérés, refactoring, bugs simples     │   │
+│  │  Exemples    : "Refactor cette fonction", "Explique ce code"    │   │
+│  │  Processus   : Raisonnement linéaire étape par étape            │   │
+│  │  Tokens      : ~4,000 tokens de thinking                        │   │
+│  │  Latence     : ~5-10 secondes                                   │   │
+│  │  Coût        : 3x                                               │   │
+│  │                                                                  │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─── NIVEAU 2 : TREE-OF-THOUGHT (mot-clé: "megathink") ───────────┐   │
+│  │                                                                  │   │
+│  │  Cas d'usage : Problèmes complexes, bugs difficiles, design     │   │
+│  │  Exemples    : "Debug ce crash aléatoire", "Redesign ce module" │   │
+│  │  Processus   : Exploration multi-chemins, évaluation comparée   │   │
+│  │  Tokens      : ~10,000 tokens de thinking                       │   │
+│  │  Latence     : ~20-30 secondes                                  │   │
+│  │  Coût        : 8x                                               │   │
+│  │                                                                  │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─── NIVEAU 3 : MCTS (mot-clé: "ultrathink") ─────────────────────┐   │
+│  │                                                                  │   │
+│  │  Cas d'usage : Problèmes critiques, architecture, optimisation  │   │
+│  │  Exemples    : "Redesign l'architecture", "Optimise les perfs"  │   │
+│  │  Processus   : Simulation Monte-Carlo, exploration exhaustive   │   │
+│  │  Tokens      : ~32,000 tokens de thinking                       │   │
+│  │  Latence     : ~60-120 secondes                                 │   │
+│  │  Coût        : 20x                                              │   │
+│  │                                                                  │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.3.2 🎯 Détection Automatique du Niveau
+### 3.3.2 Fonctionnement de Chaque Niveau
+
+**Niveau 0 — Direct Response**
+
+Le niveau le plus simple. L'agent répond directement sans phase de réflexion explicite. C'est approprié pour des requêtes factuelles ou des commandes triviales.
+
+Exemple de flux :
+```
+User: "Lis le fichier config.json"
+Agent: [appelle read_file("config.json")]
+       [retourne le contenu]
+```
+
+Aucune réflexion complexe n'est nécessaire — l'agent sait exactement quoi faire.
+
+**Niveau 1 — Chain-of-Thought (CoT)**
+
+Le CoT introduit une phase de réflexion séquentielle. L'agent décompose le problème en étapes et les résout une par une. C'est efficace pour des problèmes qui ont une solution linéaire.
+
+Exemple de flux :
+```
+User: "Refactor cette fonction pour qu'elle soit plus lisible"
+
+Thinking (4K tokens):
+  1. Analyser la structure actuelle de la fonction
+  2. Identifier les sections qui pourraient être extraites
+  3. Vérifier les dépendances entre les parties
+  4. Proposer une nouvelle structure
+  5. Implémenter les changements
+
+Agent: [appelle read_file pour voir le code]
+       [analyse et planifie]
+       [appelle edit_file pour appliquer les changements]
+```
+
+**Niveau 2 — Tree-of-Thought (ToT)**
+
+Le ToT explore plusieurs chemins en parallèle. Au lieu de suivre une seule ligne de raisonnement, l'agent génère plusieurs hypothèses et les évalue pour choisir la meilleure.
+
+Exemple de flux :
+```
+User: "Debug ce crash qui se produit aléatoirement"
+
+Thinking (10K tokens):
+  Hypothèse A: Race condition dans le thread pool
+    - Indices: crash aléatoire, multi-threading
+    - Investigation: vérifier les mutex
+    - Probabilité: 40%
+
+  Hypothèse B: Memory corruption
+    - Indices: crash aléatoire, comportement imprévisible
+    - Investigation: vérifier les bounds checks
+    - Probabilité: 30%
+
+  Hypothèse C: Resource exhaustion
+    - Indices: crash après longue utilisation
+    - Investigation: vérifier les leaks
+    - Probabilité: 30%
+
+  Évaluation: Commencer par A (plus probable)
+  Fallback: Si A ne donne rien, tester B puis C
+
+Agent: [investigation méthodique de chaque hypothèse]
+```
+
+**Niveau 3 — Monte-Carlo Tree Search (MCTS)**
+
+Le niveau le plus puissant. MCTS simule de nombreuses variations possibles et utilise des statistiques pour converger vers la meilleure solution. C'est particulièrement utile pour des problèmes où l'espace de solutions est vaste.
+
+Exemple de flux :
+```
+User: "Redesign l'architecture de ce module pour améliorer les performances"
+
+Thinking (32K tokens):
+  Simulation 1: Architecture microservices
+    - Découpage: 5 services indépendants
+    - Avantages: scalabilité, isolation
+    - Inconvénients: complexité ops, latence réseau
+    - Score simulé: 72/100
+
+  Simulation 2: Architecture modulaire monolithique
+    - Découpage: 3 modules avec interfaces claires
+    - Avantages: simplicité, performance
+    - Inconvénients: moins scalable
+    - Score simulé: 81/100
+
+  Simulation 3: Architecture event-driven
+    - Découpage: event bus + handlers
+    - Avantages: découplage, extensibilité
+    - Inconvénients: debugging complexe
+    - Score simulé: 77/100
+
+  ... (100+ simulations)
+
+  Convergence: Architecture modulaire avec event bus local
+  Score final: 85/100
+
+Agent: [implémentation de la solution optimale]
+```
+
+### 3.3.3 Détection Automatique du Niveau
+
+L'agent peut détecter automatiquement le niveau de raisonnement approprié basé sur le contenu de la requête :
 
 ```typescript
-// src/agent/thinking-keywords.ts (logique de détection)
+// src/agent/thinking-keywords.ts
 export class ThinkingKeywordsManager {
+
+  // Mots-clés explicites pour forcer un niveau
+  private explicitKeywords = {
+    ultrathink: ThinkingLevel.MCTS,
+    'deep analysis': ThinkingLevel.MCTS,
+    megathink: ThinkingLevel.TREE_OF_THOUGHT,
+    'think hard': ThinkingLevel.TREE_OF_THOUGHT,
+    think: ThinkingLevel.CHAIN_OF_THOUGHT,
+  };
+
+  // Indicateurs de complexité implicite
+  private complexityIndicators = [
+    { pattern: /debug|investigate|why does/i, level: ThinkingLevel.TREE_OF_THOUGHT },
+    { pattern: /refactor|optimize|architect/i, level: ThinkingLevel.CHAIN_OF_THOUGHT },
+    { pattern: /race condition|memory leak|deadlock/i, level: ThinkingLevel.TREE_OF_THOUGHT },
+    { pattern: /redesign|migrate|rewrite/i, level: ThinkingLevel.MCTS },
+    { pattern: /performance|scalability|bottleneck/i, level: ThinkingLevel.TREE_OF_THOUGHT },
+  ];
+
   detectLevel(message: string): ThinkingLevel {
     const lowerMessage = message.toLowerCase();
 
-    // Mots-clés explicites
-    if (lowerMessage.includes('ultrathink') ||
-        lowerMessage.includes('deep analysis')) {
-      return ThinkingLevel.MCTS;
-    }
-    if (lowerMessage.includes('megathink') ||
-        lowerMessage.includes('think hard')) {
-      return ThinkingLevel.TREE_OF_THOUGHT;
-    }
-    if (lowerMessage.includes('think')) {
-      return ThinkingLevel.CHAIN_OF_THOUGHT;
+    // 1. Vérifier les mots-clés explicites
+    for (const [keyword, level] of Object.entries(this.explicitKeywords)) {
+      if (lowerMessage.includes(keyword)) {
+        return level;
+      }
     }
 
-    // Détection automatique basée sur la complexité
-    if (this.isComplexTask(message)) {
-      return ThinkingLevel.CHAIN_OF_THOUGHT;
+    // 2. Analyser la complexité implicite
+    for (const indicator of this.complexityIndicators) {
+      if (indicator.pattern.test(message)) {
+        return indicator.level;
+      }
     }
 
+    // 3. Par défaut : réponse directe
     return ThinkingLevel.DIRECT;
-  }
-
-  private isComplexTask(message: string): boolean {
-    const complexIndicators = [
-      'debug', 'refactor', 'optimize', 'architect',
-      'investigate', 'analyze', 'design', 'why does',
-      'race condition', 'memory leak', 'performance'
-    ];
-    return complexIndicators.some(ind =>
-      message.toLowerCase().includes(ind)
-    );
   }
 }
 ```
 
-### 3.3.3 📊 Comparaison des Niveaux
+### 3.3.4 Coût/Bénéfice de Chaque Niveau
 
-| 🎚️ Niveau | 🎯 Cas d'usage | ⏱️ Latence | 💰 Coût relatif | 📈 Qualité |
-|:----------|:---------------|:-----------|:----------------|:-----------|
-| Direct | Commandes simples | ~1s | 1x | Suffisante |
-| CoT | Refactoring, bugs simples | ~5-10s | 3x | Bonne |
-| ToT | Bugs complexes, design | ~20-30s | 8x | Très bonne |
-| MCTS | Architecture, problèmes critiques | ~60-120s | 20x | Optimale |
+Le choix du niveau de raisonnement est un compromis entre qualité et ressources :
 
-> 💡 **Principe** : Utiliser le minimum de reasoning nécessaire. Overkill = gaspillage de temps et d'argent.
+| Niveau   | Latence   | Coût API | Qualité Résultat | Cas d'usage optimal                          |
+|:---------|:----------|:---------|:-----------------|:---------------------------------------------|
+| Direct   | ~1s       | 1x       | Suffisante       | Commandes simples, requêtes factuelles       |
+| CoT      | ~5-10s    | 3x       | Bonne            | Refactoring, bugs simples, explications      |
+| ToT      | ~20-30s   | 8x       | Très bonne       | Bugs complexes, design, investigation        |
+| MCTS     | ~60-120s  | 20x      | Optimale         | Architecture, problèmes critiques            |
+
+**Principe directeur** : Utiliser le minimum de reasoning nécessaire. Overkill = gaspillage de temps et d'argent. Un bug trivial résolu avec MCTS coûte 20x plus cher pour un résultat identique.
 
 ---
 
-## 💾 3.4 Memory : La Mémoire Multi-Niveaux
+## 3.4 Memory : La Mémoire Multi-Niveaux
 
-La mémoire est ce qui distingue un agent d'un chatbot sans état. Sans mémoire, chaque interaction repart de zéro. Avec mémoire, l'agent peut apprendre, se souvenir du contexte, et s'améliorer.
+La mémoire est ce qui distingue fondamentalement un agent d'un chatbot sans état. Sans mémoire, chaque interaction repart de zéro — l'agent ne se souvient pas de ce qui a été dit, de ce qui a été fait, ni de ce qui a fonctionné. Avec mémoire, l'agent peut apprendre, maintenir un contexte cohérent, et s'améliorer au fil du temps.
 
-### 3.4.1 🏗️ Les Trois Horizons de Mémoire
+### 3.4.1 Les Trois Horizons de Mémoire
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    💾 ARCHITECTURE MÉMOIRE                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │           🧠 MÉMOIRE COURT TERME (Working Memory)           │    │
-│  │  ┌─────────────────────────────────────────────────────┐    │    │
-│  │  │  📝 Conversation courante                           │    │    │
-│  │  │     • Messages user/assistant                       │    │    │
-│  │  │     • Tool calls et résultats                      │    │    │
-│  │  │     • Fichiers récemment lus                       │    │    │
-│  │  │  ⏱️ Durée : session active (~minutes/heures)       │    │    │
-│  │  │  💿 Stockage : RAM                                 │    │    │
-│  │  └─────────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │           📋 MÉMOIRE MOYEN TERME (Session Memory)           │    │
-│  │  ┌─────────────────────────────────────────────────────┐    │    │
-│  │  │  📊 Contexte de session                             │    │    │
-│  │  │     • Résumé des conversations précédentes         │    │    │
-│  │  │     • Fichiers modifiés dans la session            │    │    │
-│  │  │     • Décisions et choix effectués                 │    │    │
-│  │  │  ⏱️ Durée : session (heures/jours)                 │    │    │
-│  │  │  💿 Stockage : SQLite (table sessions)             │    │    │
-│  │  └─────────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │           🏛️ MÉMOIRE LONG TERME (Persistent Memory)         │    │
-│  │  ┌─────────────────────────────────────────────────────┐    │    │
-│  │  │  📚 Connaissances persistantes                      │    │    │
-│  │  │     • Embeddings du codebase (RAG)                 │    │    │
-│  │  │     • Patterns de réparation appris                │    │    │
-│  │  │     • Conventions et style du projet               │    │    │
-│  │  │     • Préférences utilisateur                      │    │    │
-│  │  │  ⏱️ Durée : permanente                             │    │    │
-│  │  │  💿 Stockage : SQLite + fichiers embeddings        │    │    │
-│  │  └─────────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+L'architecture mémoire d'un agent s'organise en trois horizons temporels, chacun avec des caractéristiques et des usages distincts :
 
-### 3.4.2 🗄️ Schéma de Base de Données
+![Architecture mémoire multi-niveaux](images/memory-hierarchy.svg)
+
+**Horizon 1 : Mémoire Court Terme (Working Memory)**
+
+C'est la mémoire "vive" de l'agent — ce qui est actuellement actif dans son contexte. Elle contient :
+
+- Les messages de la conversation courante (user et assistant)
+- Les résultats des tool calls récents
+- Les fichiers récemment lus ou modifiés
+- Le contexte immédiat nécessaire pour la tâche en cours
+
+Cette mémoire est **volatile** — elle disparaît à la fin de la session. Elle est stockée en RAM et limitée par la taille du context window du modèle (typiquement 128K tokens pour les modèles modernes).
+
+La gestion de cette mémoire est critique car elle détermine directement ce que "voit" le LLM lors de chaque appel. Trop peu de contexte et l'agent manque d'information ; trop de contexte et il se perd dans le bruit.
+
+**Horizon 2 : Mémoire Moyen Terme (Session Memory)**
+
+C'est la mémoire de "session" — ce qui a été fait depuis le début de la session de travail, même si ce n'est plus dans le context window actif. Elle contient :
+
+- Des résumés des conversations précédentes de la session
+- La liste des fichiers modifiés avec leurs timestamps
+- Les décisions importantes et leur contexte
+- Les statistiques de la session (tokens consommés, outils utilisés, coût)
+
+Cette mémoire est **persistée** en base de données (SQLite) et survit aux redémarrages de l'agent pendant la session. Elle permet de reprendre là où on s'était arrêté.
+
+**Horizon 3 : Mémoire Long Terme (Persistent Memory)**
+
+C'est la "connaissance" permanente de l'agent — ce qu'il a appris et ce qu'il sait du projet. Elle contient :
+
+- Les embeddings du codebase complet (pour le RAG)
+- Les patterns de réparation appris (avec leurs scores de confiance)
+- Les conventions et le style du projet
+- Les préférences utilisateur persistantes
+
+Cette mémoire est **permanente** — elle persiste entre les sessions et s'enrichit avec le temps. C'est grâce à elle que l'agent peut dire "la dernière fois qu'on a eu cette erreur, on l'a résolue en..."
+
+### 3.4.2 Schéma de Base de Données
+
+La persistance de la mémoire repose sur un schéma SQLite bien structuré :
 
 ```sql
--- Mémoire long terme avec embeddings
+-- =============================================================================
+-- MÉMOIRE LONG TERME : Connaissances et faits persistants
+-- =============================================================================
 CREATE TABLE memories (
   id TEXT PRIMARY KEY,
-  content TEXT NOT NULL,
-  type TEXT NOT NULL,           -- 'fact', 'preference', 'convention'
-  embedding BLOB,               -- Vecteur 384/1536 dimensions
-  importance REAL DEFAULT 0.5,  -- Score 0-1
+  content TEXT NOT NULL,              -- Le contenu de la mémoire
+  type TEXT NOT NULL,                 -- Type: 'fact', 'preference', 'convention', 'pattern'
+  embedding BLOB,                     -- Vecteur d'embedding (384 ou 1536 dimensions)
+  importance REAL DEFAULT 0.5,        -- Score d'importance (0-1)
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  accessed_at DATETIME,
-  access_count INTEGER DEFAULT 0
+  accessed_at DATETIME,               -- Dernière utilisation
+  access_count INTEGER DEFAULT 0,     -- Fréquence d'accès
+  project_id TEXT,                    -- Association à un projet
+  metadata JSON                       -- Données supplémentaires flexibles
 );
 
--- Sessions (mémoire moyen terme)
+CREATE INDEX idx_memories_type ON memories(type);
+CREATE INDEX idx_memories_project ON memories(project_id);
+CREATE INDEX idx_memories_importance ON memories(importance DESC);
+
+-- =============================================================================
+-- MÉMOIRE MOYEN TERME : Sessions et historique
+-- =============================================================================
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY,
-  started_at DATETIME,
+  started_at DATETIME NOT NULL,
   ended_at DATETIME,
-  summary TEXT,                 -- Résumé auto-généré
-  metadata JSON                 -- Fichiers modifiés, stats, etc.
+  summary TEXT,                       -- Résumé auto-généré de la session
+  project_id TEXT,
+  total_tokens INTEGER DEFAULT 0,     -- Tokens consommés
+  total_cost REAL DEFAULT 0.0,        -- Coût en dollars
+  tools_used JSON,                    -- Compteur par outil utilisé
+  files_modified JSON,                -- Liste des fichiers touchés
+  metadata JSON
 );
 
--- Patterns de réparation appris
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT REFERENCES sessions(id),
+  role TEXT NOT NULL,                 -- 'user', 'assistant', 'tool'
+  content TEXT NOT NULL,
+  tool_calls JSON,                    -- Si role='assistant' avec tool calls
+  tool_call_id TEXT,                  -- Si role='tool'
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  token_count INTEGER
+);
+
+CREATE INDEX idx_messages_session ON messages(session_id);
+
+-- =============================================================================
+-- APPRENTISSAGE : Patterns de réparation
+-- =============================================================================
 CREATE TABLE repair_learning (
   id TEXT PRIMARY KEY,
-  error_pattern TEXT NOT NULL,
-  solution_pattern TEXT NOT NULL,
-  success_count INTEGER DEFAULT 0,
-  failure_count INTEGER DEFAULT 0,
-  -- Confidence calculée automatiquement
+  error_pattern TEXT NOT NULL,        -- Pattern d'erreur (regex ou hash)
+  error_example TEXT,                 -- Exemple concret d'erreur
+  solution_pattern TEXT NOT NULL,     -- Pattern de solution
+  solution_example TEXT,              -- Exemple concret de solution
+  success_count INTEGER DEFAULT 0,    -- Nombre de succès
+  failure_count INTEGER DEFAULT 0,    -- Nombre d'échecs
+  last_used_at DATETIME,
+  project_id TEXT,
+  -- Score de confiance calculé automatiquement
   confidence REAL GENERATED ALWAYS AS (
-    success_count * 1.0 / (success_count + failure_count + 1)
-  )
+    CASE
+      WHEN success_count + failure_count = 0 THEN 0.5
+      ELSE success_count * 1.0 / (success_count + failure_count + 1)
+    END
+  ) STORED
 );
+
+CREATE INDEX idx_repair_confidence ON repair_learning(confidence DESC);
+
+-- =============================================================================
+-- STATISTIQUES : Métriques d'utilisation des outils
+-- =============================================================================
+CREATE TABLE tool_stats (
+  id TEXT PRIMARY KEY,
+  tool_name TEXT NOT NULL,
+  project_id TEXT,
+  total_calls INTEGER DEFAULT 0,
+  successful_calls INTEGER DEFAULT 0,
+  failed_calls INTEGER DEFAULT 0,
+  total_duration_ms INTEGER DEFAULT 0,
+  avg_duration_ms REAL GENERATED ALWAYS AS (
+    CASE WHEN total_calls = 0 THEN 0 ELSE total_duration_ms * 1.0 / total_calls END
+  ) STORED,
+  success_rate REAL GENERATED ALWAYS AS (
+    CASE WHEN total_calls = 0 THEN 0 ELSE successful_calls * 1.0 / total_calls END
+  ) STORED
+);
+
+CREATE INDEX idx_tool_stats_name ON tool_stats(tool_name);
 ```
 
-### 3.4.3 🔍 RAG : Retrieval-Augmented Generation
+Ce schéma permet :
+- **Requêtes par pertinence** : Grâce aux embeddings, on peut trouver les mémoires sémantiquement proches d'une requête
+- **Priorisation automatique** : Le score de confiance et l'importance permettent de trier les résultats
+- **Analyse temporelle** : Les timestamps permettent de voir l'évolution
+- **Isolation par projet** : Chaque projet peut avoir sa propre mémoire
 
-Le RAG permet de retrouver les informations pertinentes dans la mémoire long terme :
+### 3.4.3 RAG : Retrieval-Augmented Generation
 
-![Pipeline RAG générée par Nanobanana](images/pipeline_rag.svg)
+Le RAG (Retrieval-Augmented Generation) est la technique qui permet à l'agent de retrouver les informations pertinentes dans sa mémoire long terme. C'est ce qui lui permet de "se souvenir" de fichiers qu'il n'a pas dans son contexte actuel.
 
-### 3.4.4 📦 Compression de Contexte
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         PIPELINE RAG COMPLET                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Query: "Comment fonctionne la classe GrokAgent ?"                      │
+│                            │                                            │
+│                            ▼                                            │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  ÉTAPE 1 : EMBEDDING                                              │   │
+│  │                                                                   │   │
+│  │  La query est convertie en vecteur numérique via un modèle       │   │
+│  │  d'embedding (ex: text-embedding-3-small de OpenAI)              │   │
+│  │                                                                   │   │
+│  │  "Comment fonctionne GrokAgent" → [0.23, -0.45, 0.12, ...]       │   │
+│  │                                   (384 ou 1536 dimensions)        │   │
+│  │                                                                   │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                            │                                            │
+│                            ▼                                            │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  ÉTAPE 2 : RECHERCHE VECTORIELLE                                  │   │
+│  │                                                                   │   │
+│  │  On cherche les chunks les plus similaires dans la base          │   │
+│  │  vectorielle via la similarité cosine :                          │   │
+│  │                                                                   │   │
+│  │  similarity(a, b) = (a · b) / (||a|| × ||b||)                    │   │
+│  │                                                                   │   │
+│  │  Résultats : [grok-agent.ts (0.92), types.ts (0.78), ...]        │   │
+│  │                                                                   │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                            │                                            │
+│                            ▼                                            │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  ÉTAPE 3 : EXPANSION DES DÉPENDANCES (CodeRAG)                   │   │
+│  │                                                                   │   │
+│  │  Pour chaque fichier trouvé, on ajoute ses dépendances :         │   │
+│  │                                                                   │   │
+│  │  grok-agent.ts                                                   │   │
+│  │    ├── imports types.ts        → ajouter                         │   │
+│  │    ├── imports tools.ts        → ajouter                         │   │
+│  │    ├── imports client.ts       → ajouter                         │   │
+│  │    └── extends EventEmitter    → déjà connu                      │   │
+│  │                                                                   │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                            │                                            │
+│                            ▼                                            │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  ÉTAPE 4 : RERANKING                                              │   │
+│  │                                                                   │   │
+│  │  Les résultats sont re-ordonnés par pertinence fine :            │   │
+│  │  - Cross-encoder neural pour scoring précis                      │   │
+│  │  - Heuristiques (récence, fréquence d'accès, importance)         │   │
+│  │  - Filtrage des duplications                                     │   │
+│  │                                                                   │   │
+│  │  Résultat final : [grok-agent.ts, types.ts, tools.ts]            │   │
+│  │                                                                   │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                            │                                            │
+│                            ▼                                            │
+│  Contexte enrichi injecté dans le prompt du LLM                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-Quand le contexte dépasse la limite du modèle :
+### 3.4.4 Compression de Contexte
 
-| 🎯 Priorité | 📝 Contenu | 🔧 Action |
-|:------------|:-----------|:----------|
-| 🔴 **Haute** | System prompt, message actuel, code en cours d'édition | Garder intégralement |
-| 🟡 **Moyenne** | Historique récent, imports, documentation | Résumer |
-| 🟢 **Basse** | Historique ancien, fichiers non liés | Supprimer |
+Quand le contexte dépasse la limite du modèle, l'agent doit **compresser** — décider ce qu'il garde, ce qu'il résume, et ce qu'il abandonne. Cette décision est basée sur un système de priorités :
+
+| Priorité | Contenu                                      | Action         | Justification                                    |
+|:---------|:---------------------------------------------|:---------------|:-------------------------------------------------|
+| **Haute**    | System prompt                            | Garder tel quel | Définit le comportement de base                  |
+| **Haute**    | Message utilisateur actuel               | Garder tel quel | C'est la requête en cours                        |
+| **Haute**    | Code en cours d'édition                  | Garder tel quel | Contexte immédiat nécessaire                     |
+| **Moyenne**  | Historique récent (5 derniers échanges)  | Garder/Résumer  | Contexte conversationnel                         |
+| **Moyenne**  | Imports et dépendances du fichier actuel | Résumer         | Nécessaire pour comprendre le code               |
+| **Basse**    | Documentation                            | Résumer fortement | Peut être re-fetchée si besoin                 |
+| **Basse**    | Historique ancien                        | Supprimer       | Moins pertinent pour la tâche actuelle           |
+| **Basse**    | Fichiers non liés à la requête           | Supprimer       | Bruit sans valeur                                |
+
+La compression utilise le LLM lui-même pour résumer les contenus de priorité moyenne :
+
+```typescript
+async compressContext(messages: Message[], maxTokens: number): Promise<Message[]> {
+  const totalTokens = this.countTokens(messages);
+  if (totalTokens <= maxTokens) return messages;
+
+  // 1. Identifier les messages par priorité
+  const highPriority = messages.filter(m => this.isHighPriority(m));
+  const mediumPriority = messages.filter(m => this.isMediumPriority(m));
+  const lowPriority = messages.filter(m => this.isLowPriority(m));
+
+  // 2. Garder les high priority
+  let result = [...highPriority];
+  let usedTokens = this.countTokens(result);
+
+  // 3. Résumer les medium priority si nécessaire
+  const remainingBudget = maxTokens - usedTokens;
+  const mediumSummary = await this.summarize(mediumPriority, remainingBudget * 0.7);
+  result.push({ role: 'system', content: `Context summary: ${mediumSummary}` });
+
+  // 4. Ignorer les low priority (ils seront supprimés)
+
+  return result;
+}
+```
 
 ---
 
-## 🔧 3.5 Action : Les Outils de l'Agent
+## 3.5 Action : Les Outils de l'Agent
 
-Le composant Action est ce qui distingue un agent d'un simple chatbot. C'est la capacité d'**agir** sur le monde — lire des fichiers, exécuter du code, modifier du texte.
+Le composant Action est ce qui distingue fondamentalement un agent d'un simple chatbot. C'est la capacité d'**agir** sur le monde — lire des fichiers, exécuter du code, modifier du texte, interagir avec des API. Sans cette capacité, l'agent ne serait qu'un oracle capable de parler mais incapable de faire.
 
-### 3.5.1 📐 Anatomie d'un Outil
+### 3.5.1 Anatomie d'un Outil
 
-Chaque outil suit une interface standard :
+Chaque outil suit une interface standardisée qui définit son identité, ses capacités, et ses contraintes :
 
 ```typescript
 export interface Tool {
-  name: string;                      // Identifiant unique
-  description: string;               // Description pour le LLM
-  inputSchema: JSONSchema;           // Paramètres acceptés
-  requiresConfirmation?: boolean;    // Demande approbation ?
-  timeout?: number;                  // Limite de temps
+  // Identification
+  name: string;                        // Identifiant unique (ex: "read_file")
+  description: string;                 // Description pour le LLM
+  category: ToolCategory;              // Classification (file, shell, git, etc.)
 
+  // Spécification des paramètres (JSON Schema)
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, JSONSchemaProperty>;
+    required?: string[];
+  };
+
+  // Sécurité
+  requiresConfirmation?: boolean;      // Demande approbation utilisateur ?
+  dangerLevel: 'safe' | 'moderate' | 'dangerous';
+  allowedInSandbox?: boolean;
+
+  // Limites
+  timeout?: number;                    // Temps max d'exécution (ms)
+  maxOutputSize?: number;              // Taille max du résultat
+
+  // Exécution
   execute(args: Record<string, unknown>): Promise<ToolResult>;
 }
 
 export interface ToolResult {
   success: boolean;
-  output?: string;                   // Résultat pour le LLM
-  error?: string;                    // Message d'erreur si échec
-  metadata?: Record<string, unknown>; // Infos supplémentaires
+  output?: string;                     // Résultat pour le LLM
+  error?: string;                      // Message d'erreur si échec
+  duration?: number;                   // Temps d'exécution (ms)
+  metadata?: Record<string, unknown>;  // Infos supplémentaires (bytes read, etc.)
 }
 ```
 
-### 3.5.2 🧰 Les 41 Outils de Grok-CLI
+Cette interface standardisée permet :
+- **Auto-documentation** : Le LLM comprend comment utiliser l'outil grâce à la description et au schema
+- **Validation automatique** : Les arguments sont validés contre le JSON Schema avant exécution
+- **Sécurité déclarative** : Les niveaux de danger et les besoins de confirmation sont explicites
+- **Observabilité** : Chaque exécution produit un résultat structuré avec métadonnées
+
+### 3.5.2 Le Catalogue des 41 Outils
+
+Grok-CLI dispose de 41 outils organisés en catégories fonctionnelles :
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🧰 CATALOGUE D'OUTILS (41)                       │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  📁 FICHIERS (12 outils)                                            │
-│  ├── read_file         📖 Lire un fichier                           │
-│  ├── write_file        ✏️ Écrire un fichier                         │
-│  ├── edit_file         🔧 Éditer une partie de fichier              │
-│  ├── multi_edit        ⚡ Éditions multiples atomiques              │
-│  ├── list_directory    📂 Lister un répertoire                      │
-│  ├── create_directory  📁 Créer un répertoire                       │
-│  ├── delete_file       🗑️ Supprimer un fichier                      │
-│  ├── move_file         🔄 Déplacer/renommer                         │
-│  ├── copy_file         📋 Copier un fichier                         │
-│  ├── file_info         ℹ️ Métadonnées d'un fichier                  │
-│  ├── find_files        🔍 Recherche par pattern glob                │
-│  └── search_content    🔎 Recherche dans le contenu                 │
-│                                                                      │
-│  💻 SHELL (4 outils)                                                │
-│  ├── bash              ⚡ Exécuter une commande                     │
-│  ├── interactive_bash  🖥️ Session shell interactive                 │
-│  ├── background_task   🔄 Tâche en arrière-plan                     │
-│  └── kill_process      ❌ Terminer un processus                     │
-│                                                                      │
-│  📊 GIT (5 outils)                                                  │
-│  ├── git_status        📋 État du repo                              │
-│  ├── git_diff          📝 Différences                               │
-│  ├── git_commit        💾 Créer un commit                           │
-│  ├── git_log           📜 Historique                                │
-│  └── git_branch        🌿 Gestion branches                          │
-│                                                                      │
-│  🔍 RECHERCHE (4 outils)                                            │
-│  ├── search_code       🎯 Recherche sémantique                      │
-│  ├── find_symbol       📍 Trouver définition                        │
-│  ├── find_references   🔗 Trouver utilisations                      │
-│  └── search_web        🌐 Recherche web                             │
-│                                                                      │
-│  🎨 MÉDIAS (5 outils)                                               │
-│  ├── screenshot        📸 Capture d'écran                           │
-│  ├── audio_transcribe  🎙️ Transcrire audio                          │
-│  ├── video_extract     🎬 Extraire frames                           │
-│  ├── image_analyze     🖼️ Analyser image                            │
-│  └── qr_code           📱 Générer/lire QR                           │
-│                                                                      │
-│  📄 DOCUMENTS (5 outils)                                            │
-│  ├── pdf_extract       📑 Extraire texte PDF                        │
-│  ├── excel_read        📊 Lire Excel/CSV                            │
-│  ├── excel_write       📈 Écrire Excel                              │
-│  ├── archive_extract   📦 Extraire archives                         │
-│  └── archive_create    🗜️ Créer archives                            │
-│                                                                      │
-│  ⚙️ SYSTÈME (6 outils)                                              │
-│  ├── memory_store      💾 Stocker en mémoire                        │
-│  ├── memory_recall     🧠 Rappeler de mémoire                       │
-│  ├── spawn_agent       🤖 Lancer sous-agent                         │
-│  ├── http_request      🌐 Requête HTTP                              │
-│  ├── database_query    🗄️ Query SQL                                 │
-│  └── thinking          💭 Réflexion approfondie                     │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    CATALOGUE D'OUTILS GROK-CLI (41)                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  📁 FICHIERS (12 outils)                                                │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  read_file         Lire le contenu d'un fichier                 │    │
+│  │  write_file        Écrire/créer un fichier complet              │    │
+│  │  edit_file         Modifier une section d'un fichier            │    │
+│  │  multi_edit        Éditions multiples atomiques                 │    │
+│  │  list_directory    Lister le contenu d'un répertoire            │    │
+│  │  create_directory  Créer un répertoire (avec parents)           │    │
+│  │  delete_file       Supprimer un fichier                         │    │
+│  │  move_file         Déplacer ou renommer                         │    │
+│  │  copy_file         Copier un fichier                            │    │
+│  │  file_info         Métadonnées (taille, dates, perms)           │    │
+│  │  find_files        Recherche par pattern glob                   │    │
+│  │  search_content    Recherche dans le contenu (ripgrep)          │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  💻 SHELL (4 outils)                                                    │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  bash              Exécuter une commande shell                  │    │
+│  │  interactive_bash  Session shell interactive (pty)              │    │
+│  │  background_task   Lancer une tâche en arrière-plan             │    │
+│  │  kill_process      Terminer un processus par PID                │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  📊 GIT (5 outils)                                                      │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  git_status        État du repository                           │    │
+│  │  git_diff          Différences (staged/unstaged)                │    │
+│  │  git_commit        Créer un commit                              │    │
+│  │  git_log           Historique des commits                       │    │
+│  │  git_branch        Gestion des branches                         │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  🔍 RECHERCHE (4 outils)                                                │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  search_code       Recherche sémantique dans le code            │    │
+│  │  find_symbol       Trouver la définition d'un symbole           │    │
+│  │  find_references   Trouver toutes les utilisations              │    │
+│  │  search_web        Recherche sur le web                         │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  🎨 MÉDIAS (5 outils)                                                   │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  screenshot        Capture d'écran                              │    │
+│  │  audio_transcribe  Transcrire un fichier audio                  │    │
+│  │  video_extract     Extraire frames d'une vidéo                  │    │
+│  │  image_analyze     Analyser une image (OCR, objets)             │    │
+│  │  qr_code           Générer ou lire un QR code                   │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  📄 DOCUMENTS (5 outils)                                                │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  pdf_extract       Extraire le texte d'un PDF                   │    │
+│  │  excel_read        Lire un fichier Excel ou CSV                 │    │
+│  │  excel_write       Écrire un fichier Excel                      │    │
+│  │  archive_extract   Extraire une archive (zip, tar, etc.)        │    │
+│  │  archive_create    Créer une archive                            │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  ⚙️ SYSTÈME (6 outils)                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  memory_store      Stocker une information en mémoire           │    │
+│  │  memory_recall     Rappeler une information de mémoire          │    │
+│  │  spawn_agent       Lancer un sous-agent spécialisé              │    │
+│  │  http_request      Effectuer une requête HTTP                   │    │
+│  │  database_query    Exécuter une requête SQL                     │    │
+│  │  thinking          Réflexion approfondie (sans action)          │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.5.3 🔄 Flux d'Exécution d'un Outil
+### 3.5.3 Flux d'Exécution Sécurisé
 
-![Flux Execution Outil généré par Nanobanana](images/flux_execution_outil.svg)
+Avant qu'un outil puisse s'exécuter, il doit passer par un pipeline de validation rigoureux. Ce pipeline garantit que seules les actions légitimes et approuvées sont effectuées :
 
----
+![Flux d'exécution sécurisé d'un outil](images/tool-execution-flow.svg)
 
-## 📚 3.6 Learning : L'Apprentissage Continu
+Le pipeline se décompose en 5 étapes :
 
-Un agent qui n'apprend pas répète les mêmes erreurs. Le composant Learning permet à l'agent de s'améliorer avec l'expérience.
+**Étape 1 : Validation des paramètres**
 
-### 3.6.1 📖 Ce que l'Agent Apprend
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    📚 TYPES D'APPRENTISSAGE                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  🔧 PATTERNS DE RÉPARATION                                          │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Erreur observée → Solution appliquée → Résultat             │    │
-│  │                                                              │    │
-│  │  Exemple :                                                   │    │
-│  │  "Cannot find module 'X'" → npm install X → ✓ résolu         │    │
-│  │  → Mémorisé avec confidence 0.95                             │    │
-│  │                                                              │    │
-│  │  Prochaine fois : suggère automatiquement "npm install X"    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  📝 CONVENTIONS DE CODE                                             │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Style observé dans le projet :                              │    │
-│  │     • Indentation : 2 spaces                                 │    │
-│  │     • Quotes : single                                        │    │
-│  │     • Semicolons : yes                                       │    │
-│  │     • Naming : camelCase                                     │    │
-│  │                                                              │    │
-│  │  → Appliqué automatiquement au code généré                   │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  📊 STATISTIQUES D'OUTILS                                           │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Outil       │ Temps moyen │ Taux succès │ Fréquence         │    │
-│  │  ─────────────────────────────────────────────────────────   │    │
-│  │  bash        │    1.2s     │    85%      │    45%            │    │
-│  │  read_file   │    0.1s     │    99%      │    30%            │    │
-│  │  edit_file   │    0.3s     │    92%      │    20%            │    │
-│  │                                                              │    │
-│  │  → Utilisé pour prédiction de temps et optimisation          │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  👤 PRÉFÉRENCES UTILISATEUR                                         │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Comportements observés :                                    │    │
-│  │     • Préfère explications détaillées                        │    │
-│  │     • Demande confirmation avant git push                    │    │
-│  │     • Utilise TypeScript strict                              │    │
-│  │                                                              │    │
-│  │  → Personnalise les réponses futures                         │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### 3.6.2 🔄 Boucle d'Apprentissage
-
-| Étape | Action | Exemple |
-|:------|:-------|:--------|
-| 1️⃣ **Observer** | Capturer erreur + tentative de solution | "TypeError: undefined" + "ajout de null check" |
-| 2️⃣ **Exécuter** | Tester la solution | Relancer les tests |
-| 3️⃣ **Évaluer** | Succès ou échec ? | Tests passent ✓ |
-| 4️⃣ **Mémoriser** | Stocker le pattern avec son score | Pattern + confidence 0.85 |
-| 5️⃣ **Réutiliser** | Suggérer pour erreurs similaires | Même erreur → même solution |
-
----
-
-## 🛡️ 3.7 Security : La Protection Multi-Couches
-
-Un agent qui peut modifier des fichiers et exécuter des commandes est puissant — et dangereux. Le composant Security est le garde-fou qui empêche les catastrophes.
-
-### 3.7.1 🎚️ Les Trois Modes d'Approbation
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🎚️ MODES D'APPROBATION                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  🟢 MODE 1 : READ-ONLY (Confiance minimale)                         │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  ✅ Autorisé : read_file, list_dir, git_status, search      │    │
-│  │  ❌ Bloqué  : write, edit, bash, delete, git_commit         │    │
-│  │  📋 Usage   : Exploration, audit, review de code            │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  🟡 MODE 2 : AUTO-APPROVE (Par défaut)                              │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  ✅ Auto   : read, write dans working dir, git add/commit   │    │
-│  │  ⚠️ Confirm: bash "dangereux", delete, git push             │    │
-│  │  ❌ Bloqué : rm -rf, format, credentials en clair           │    │
-│  │  📋 Usage  : Développement quotidien                        │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  🔴 MODE 3 : FULL-ACCESS (YOLO mode)                                │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  ✅ Auto   : Tout sauf blacklist absolue                    │    │
-│  │  ❌ Bloqué : rm -rf /, format, credentials en clair         │    │
-│  │  📋 Usage  : Scripts automatisés, CI/CD                     │    │
-│  │  ⚠️ DANGER : À utiliser avec grande précaution              │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### 3.7.2 🔒 Mesures de Sécurité
-
-| 🛡️ Protection | 📝 Description | 🎯 Contre quoi ? |
-|:--------------|:---------------|:-----------------|
-| **Blacklist** | Commandes interdites (rm -rf /, format) | Destruction système |
-| **Path validation** | Chemins restreints au working dir | Accès fichiers sensibles |
-| **Sandbox** | Firejail pour commandes à risque | Effets de bord |
-| **Redaction** | Masquage auto des secrets | Fuite de credentials |
-| **Audit log** | Journal de toutes les actions | Traçabilité |
-| **Timeout** | Limite de temps par outil | Blocage/boucle |
-
-### 3.7.3 🔐 Redaction Automatique
+Les arguments fournis par le LLM sont validés contre le JSON Schema de l'outil :
+- Types corrects (string, number, boolean, array, object)
+- Paramètres requis présents
+- Valeurs dans les plages autorisées
+- Formats respectés (paths, URLs, patterns)
 
 ```typescript
-// Patterns détectés et masqués automatiquement
+// Exemple de validation pour read_file
+const schema = {
+  type: 'object',
+  properties: {
+    path: { type: 'string', minLength: 1 },
+    encoding: { type: 'string', enum: ['utf8', 'base64'], default: 'utf8' }
+  },
+  required: ['path']
+};
+
+// Si le LLM appelle read_file({ path: 123 }), l'erreur est détectée ici
+```
+
+**Étape 2 : Vérification de sécurité**
+
+Le système de sécurité vérifie que l'opération est autorisée :
+- La commande n'est pas blacklistée (rm -rf, format, etc.)
+- Le path est dans le working directory autorisé
+- L'utilisateur a les permissions nécessaires
+- L'opération respecte le mode d'approbation actuel
+
+**Étape 3 : Confirmation utilisateur (conditionnelle)**
+
+Si l'outil est marqué comme nécessitant confirmation, l'utilisateur est sollicité :
+```
+┌─────────────────────────────────────────────────────┐
+│  L'agent veut exécuter :                            │
+│                                                      │
+│  bash: git push origin main                          │
+│                                                      │
+│  [Approuver] [Refuser] [Approuver toujours]         │
+└─────────────────────────────────────────────────────┘
+```
+
+**Étape 4 : Exécution**
+
+L'outil s'exécute dans un environnement contrôlé :
+- Sandbox (firejail) pour les commandes à risque
+- Timeout strict (5 minutes max par défaut)
+- Capture des sorties stdout et stderr
+- Isolation des variables d'environnement sensibles
+
+**Étape 5 : Post-traitement**
+
+Avant de retourner le résultat au LLM :
+- Les secrets sont automatiquement masqués (API keys, passwords)
+- Les sorties trop longues sont tronquées
+- L'exécution est loggée pour audit
+- Les statistiques sont mises à jour
+
+---
+
+## 3.6 Learning : L'Apprentissage Continu
+
+Un agent qui n'apprend pas répète inévitablement les mêmes erreurs. Le composant Learning permet à l'agent de s'améliorer avec l'expérience — de reconnaître des patterns, de mémoriser des solutions qui fonctionnent, et d'éviter les approches qui échouent.
+
+### 3.6.1 Les Quatre Types d'Apprentissage
+
+L'agent apprend de différentes manières, chacune capturant un aspect différent de l'expérience :
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      TYPES D'APPRENTISSAGE                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  🔧 PATTERNS DE RÉPARATION                                              │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │  Quand l'agent résout une erreur, il mémorise le pattern :      │    │
+│  │                                                                  │    │
+│  │  Erreur observée        Solution appliquée        Résultat      │    │
+│  │  ─────────────────────────────────────────────────────────       │    │
+│  │  "Cannot find module"   npm install <module>      ✓ Résolu      │    │
+│  │  "TypeError: undefined" Ajout de null check       ✓ Résolu      │    │
+│  │  "ENOENT: no such file" Créer le répertoire       ✓ Résolu      │    │
+│  │                                                                  │    │
+│  │  Chaque pattern a un score de confiance basé sur le ratio       │    │
+│  │  succès/échecs. Les patterns à haute confiance sont suggérés    │    │
+│  │  automatiquement lors d'erreurs similaires.                     │    │
+│  │                                                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  📝 CONVENTIONS DE CODE                                                 │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │  L'agent observe le style du projet et l'applique :             │    │
+│  │                                                                  │    │
+│  │  Aspect analysé          Valeur détectée                        │    │
+│  │  ───────────────────────────────────────────────                 │    │
+│  │  Indentation             2 espaces                              │    │
+│  │  Quotes                  Simples (')                            │    │
+│  │  Semicolons              Oui                                    │    │
+│  │  Naming conventions      camelCase                              │    │
+│  │  Import style            ES6 (import/export)                    │    │
+│  │  Max line length         100 caractères                         │    │
+│  │                                                                  │    │
+│  │  Ces conventions sont appliquées au code généré pour qu'il      │    │
+│  │  s'intègre naturellement au projet existant.                    │    │
+│  │                                                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  📊 STATISTIQUES D'OUTILS                                               │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │  L'agent track les performances de chaque outil :               │    │
+│  │                                                                  │    │
+│  │  Outil        Appels  Succès  Temps moyen  Fréquence            │    │
+│  │  ─────────────────────────────────────────────────               │    │
+│  │  bash         1,234   85%     1.2s         45%                  │    │
+│  │  read_file    2,456   99%     0.1s         30%                  │    │
+│  │  edit_file    876     92%     0.3s         20%                  │    │
+│  │  search_code  234     78%     2.1s         5%                   │    │
+│  │                                                                  │    │
+│  │  Ces stats permettent d'optimiser les choix (préférer les       │    │
+│  │  outils rapides et fiables) et de détecter les anomalies.       │    │
+│  │                                                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  👤 PRÉFÉRENCES UTILISATEUR                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │  L'agent apprend les préférences de l'utilisateur :             │    │
+│  │                                                                  │    │
+│  │  Comportement observé                   Adaptation              │    │
+│  │  ───────────────────────────────────────────────────             │    │
+│  │  Demande souvent des explications       Réponses détaillées     │    │
+│  │  Refuse les git push automatiques       Confirmation requise    │    │
+│  │  Utilise toujours TypeScript strict     Générer du TS strict    │    │
+│  │  Préfère les tests unitaires            Suggérer des tests      │    │
+│  │                                                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.6.2 La Boucle d'Apprentissage
+
+L'apprentissage suit un cycle en 5 étapes :
+
+| Étape         | Action                                  | Exemple concret                                        |
+|:--------------|:----------------------------------------|:-------------------------------------------------------|
+| **Observer**  | Capturer erreur + tentative de solution | "TypeError: Cannot read property 'x' of undefined"    |
+| **Exécuter**  | Appliquer la solution proposée          | Ajouter `if (obj) { ... }` avant l'accès              |
+| **Évaluer**   | Vérifier si ça a fonctionné             | Relancer les tests → tous passent ✓                   |
+| **Mémoriser** | Stocker le pattern avec son score       | Pattern sauvé avec confidence = 0.85                  |
+| **Réutiliser**| Suggérer pour erreurs similaires        | Prochaine TypeError → suggérer le même fix            |
+
+### 3.6.3 Calcul du Score de Confiance
+
+Le score de confiance d'un pattern évolue avec chaque utilisation :
+
+```typescript
+class RepairLearning {
+  async updateConfidence(patternId: string, success: boolean): Promise<void> {
+    const pattern = await this.db.getPattern(patternId);
+
+    if (success) {
+      pattern.successCount++;
+    } else {
+      pattern.failureCount++;
+    }
+
+    // La confiance est le ratio de succès, avec un lissage bayésien
+    // pour éviter les conclusions hâtives sur peu de données
+    pattern.confidence = (pattern.successCount + 1) /
+                         (pattern.successCount + pattern.failureCount + 2);
+
+    await this.db.savePattern(pattern);
+  }
+
+  async getSuggestion(errorMessage: string): Promise<RepairSuggestion | null> {
+    // Trouver les patterns similaires à l'erreur
+    const candidates = await this.db.findSimilarPatterns(errorMessage);
+
+    // Filtrer ceux avec une confiance suffisante
+    const reliable = candidates.filter(p => p.confidence >= 0.7);
+
+    if (reliable.length === 0) return null;
+
+    // Retourner le plus fiable
+    return reliable.sort((a, b) => b.confidence - a.confidence)[0];
+  }
+}
+```
+
+Ce système permet à l'agent de devenir progressivement plus efficace — les solutions qui fonctionnent sont suggérées plus souvent, tandis que celles qui échouent sont graduellement oubliées.
+
+---
+
+## 3.7 Security : La Protection Multi-Couches
+
+Un agent qui peut modifier des fichiers et exécuter des commandes est puissant — et potentiellement dangereux. Le composant Security est le garde-fou qui empêche les catastrophes, qu'elles soient accidentelles (bug dans le LLM) ou intentionnelles (prompt injection).
+
+### 3.7.1 Les Trois Modes d'Approbation
+
+L'agent peut fonctionner selon trois modes de sécurité, offrant un équilibre différent entre autonomie et contrôle :
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      MODES D'APPROBATION                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  🟢 MODE 1 : READ-ONLY (Confiance minimale)                            │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │  Ce mode est pour l'exploration et l'audit. L'agent peut        │    │
+│  │  lire et analyser, mais pas modifier quoi que ce soit.          │    │
+│  │                                                                  │    │
+│  │  ✅ Autorisé :                                                   │    │
+│  │     read_file, list_directory, git_status, git_diff,           │    │
+│  │     search_code, find_symbol, find_references                   │    │
+│  │                                                                  │    │
+│  │  ❌ Bloqué :                                                     │    │
+│  │     write_file, edit_file, delete_file, bash (écriture),       │    │
+│  │     git_commit, git_push                                        │    │
+│  │                                                                  │    │
+│  │  📋 Cas d'usage :                                                │    │
+│  │     - Audit de sécurité du code                                 │    │
+│  │     - Code review automatisée                                   │    │
+│  │     - Exploration d'un codebase inconnu                         │    │
+│  │                                                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  🟡 MODE 2 : AUTO-APPROVE (Mode par défaut)                            │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │  L'équilibre entre productivité et sécurité. Les opérations     │    │
+│  │  courantes sont automatiques, les opérations risquées           │    │
+│  │  demandent confirmation.                                        │    │
+│  │                                                                  │    │
+│  │  ✅ Auto-approuvé :                                              │    │
+│  │     read_file, write_file (dans working dir),                   │    │
+│  │     edit_file, git_add, git_commit                              │    │
+│  │                                                                  │    │
+│  │  ⚠️ Confirmation requise :                                       │    │
+│  │     bash avec commandes "dangereuses", delete_file,             │    │
+│  │     git_push, operations hors working dir                       │    │
+│  │                                                                  │    │
+│  │  ❌ Toujours bloqué :                                            │    │
+│  │     rm -rf /, format, credentials en clair dans le code        │    │
+│  │                                                                  │    │
+│  │  📋 Cas d'usage :                                                │    │
+│  │     - Développement quotidien                                   │    │
+│  │     - Refactoring assisté                                       │    │
+│  │     - Debugging                                                  │    │
+│  │                                                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  🔴 MODE 3 : FULL-ACCESS (YOLO mode)                                   │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │  ⚠️  DANGER : Autonomie maximale. À utiliser avec précaution.   │    │
+│  │                                                                  │    │
+│  │  ✅ Auto-approuvé :                                              │    │
+│  │     Presque tout — le maximum de rounds passe à 400,            │    │
+│  │     les limites de coût sont levées                             │    │
+│  │                                                                  │    │
+│  │  ❌ Toujours bloqué (blacklist absolue) :                        │    │
+│  │     rm -rf /, format disques, fork bombs,                       │    │
+│  │     envoi de credentials à des URLs externes                    │    │
+│  │                                                                  │    │
+│  │  📋 Cas d'usage :                                                │    │
+│  │     - Scripts CI/CD automatisés                                 │    │
+│  │     - Migration de grande envergure                             │    │
+│  │     - Quand vous savez vraiment ce que vous faites              │    │
+│  │                                                                  │    │
+│  │  ⚠️ Activé via : YOLO_MODE=true                                  │    │
+│  │                                                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.7.2 Les Six Couches de Protection
+
+La sécurité de l'agent est assurée par six mécanismes complémentaires :
+
+| Couche         | Mécanisme                            | Protection contre                                    |
+|:---------------|:-------------------------------------|:-----------------------------------------------------|
+| **Blacklist**  | Liste de commandes interdites        | Destruction système (`rm -rf /`, `format`)           |
+| **Path validation** | Vérification des chemins        | Accès à des fichiers hors du projet                  |
+| **Sandbox**    | Isolation firejail                   | Effets de bord sur le système                        |
+| **Redaction**  | Masquage automatique                 | Fuite de credentials dans les logs                   |
+| **Audit**      | Journal de toutes les actions        | Traçabilité et forensics                             |
+| **Timeout**    | Limite de temps par outil            | Blocage du système par un outil                      |
+
+### 3.7.3 Redaction Automatique des Secrets
+
+L'agent masque automatiquement les secrets avant qu'ils n'apparaissent dans les réponses ou les logs :
+
+```typescript
 const REDACTION_PATTERNS = [
-  // API Keys
-  { regex: /api[_-]?key[=:]\s*["']?([a-zA-Z0-9_-]{20,})/gi,
-    replace: 'api_key=[REDACTED]' },
+  // API Keys (format générique)
+  {
+    name: 'Generic API Key',
+    regex: /api[_-]?key[=:]\s*["']?([a-zA-Z0-9_-]{20,})["']?/gi,
+    replace: 'api_key=[REDACTED]'
+  },
 
-  // Passwords
-  { regex: /password[=:]\s*["']?([^"'\s]+)/gi,
-    replace: 'password=[REDACTED]' },
+  // Passwords dans les URLs ou configs
+  {
+    name: 'Password',
+    regex: /password[=:]\s*["']?([^"'\s]+)["']?/gi,
+    replace: 'password=[REDACTED]'
+  },
 
-  // AWS Keys
-  { regex: /AKIA[0-9A-Z]{16}/g,
-    replace: '[AWS_KEY_REDACTED]' },
+  // AWS Access Keys (pattern spécifique)
+  {
+    name: 'AWS Access Key',
+    regex: /AKIA[0-9A-Z]{16}/g,
+    replace: '[AWS_KEY_REDACTED]'
+  },
 
-  // Private keys
-  { regex: /-----BEGIN (?:RSA )?PRIVATE KEY-----/,
-    replace: '[PRIVATE_KEY_REDACTED]' }
+  // AWS Secret Keys
+  {
+    name: 'AWS Secret',
+    regex: /[A-Za-z0-9/+=]{40}/g,  // Heuristique pour les secrets AWS
+    replace: '[AWS_SECRET_REDACTED]'
+  },
+
+  // Private Keys (PEM)
+  {
+    name: 'Private Key',
+    regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END/gi,
+    replace: '[PRIVATE_KEY_REDACTED]'
+  },
+
+  // GitHub Personal Access Tokens
+  {
+    name: 'GitHub Token',
+    regex: /ghp_[a-zA-Z0-9]{36}/g,
+    replace: '[GITHUB_TOKEN_REDACTED]'
+  },
+
+  // Bearer Tokens
+  {
+    name: 'Bearer Token',
+    regex: /Bearer\s+[a-zA-Z0-9._-]+/gi,
+    replace: 'Bearer [TOKEN_REDACTED]'
+  }
 ];
+
+function redactSecrets(content: string): string {
+  let redacted = content;
+  for (const pattern of REDACTION_PATTERNS) {
+    redacted = redacted.replace(pattern.regex, pattern.replace);
+  }
+  return redacted;
+}
+```
+
+### 3.7.4 Blacklist Absolue
+
+Certaines commandes sont **toujours** bloquées, quel que soit le mode d'approbation :
+
+```typescript
+const ABSOLUTE_BLACKLIST = [
+  // Destruction système
+  'rm -rf /',
+  'rm -rf /*',
+  'rm -rf ~',
+  'rm -rf ~/*',
+
+  // Formatage disques
+  /mkfs\./,
+  /fdisk\s/,
+  'format c:',
+
+  // Fork bombs et DoS
+  /:\(\)\s*\{\s*:\|:&\s*\}\s*;/,  // :(){ :|:& };:
+  /while\s+true.*fork/i,
+
+  // Exfiltration de données
+  /curl\s+.*\s+(\/etc\/shadow|\/etc\/passwd)/,
+  /wget\s+.*\s+-O\s+-.*\|/,  // wget to pipe
+
+  // Modification des permissions système
+  'chmod -R 777 /',
+  'chown -R root /',
+
+  // Manipulation du bootloader
+  /dd\s+.*of=\/dev\/sd[a-z]$/,
+  /grub-install/,
+];
+
+function isAbsolutelyForbidden(command: string): boolean {
+  for (const pattern of ABSOLUTE_BLACKLIST) {
+    if (typeof pattern === 'string') {
+      if (command.includes(pattern)) return true;
+    } else {
+      if (pattern.test(command)) return true;
+    }
+  }
+  return false;
+}
 ```
 
 ---
 
-## 💿 3.8 Persistance : La Fondation Stable
+## 3.8 Persistance : La Fondation Stable
 
-Tous les composants reposent sur une couche de persistance qui stocke données, cache, et configuration.
+Tous les composants de l'agent reposent sur une couche de persistance qui stocke données, cache, et configuration. Cette couche est invisible pour l'utilisateur mais essentielle au bon fonctionnement.
 
-### 3.8.1 📁 Architecture de Stockage
+### 3.8.1 Architecture de Stockage
 
 ```
-~/.grok/                              📁 Répertoire utilisateur
-├── grok.db                           🗄️ SQLite principal
-│   ├── memories                      💾 Mémoire long terme
-│   ├── sessions                      📋 Historique sessions
-│   ├── messages                      💬 Messages conversation
-│   ├── repair_learning               🔧 Patterns de réparation
-│   └── tool_stats                    📊 Stats d'utilisation
+~/.grok/                              # Répertoire utilisateur global
+├── grok.db                           # Base SQLite principale
+│   ├── memories                      # Mémoire long terme
+│   ├── sessions                      # Historique des sessions
+│   ├── messages                      # Messages de conversation
+│   ├── repair_learning               # Patterns de réparation
+│   ├── tool_stats                    # Statistiques d'outils
+│   └── preferences                   # Préférences utilisateur
 │
-├── cache/                            ⚡ Caches
-│   ├── semantic-cache.json           🧠 Cache réponses API
-│   ├── tool-cache.json               🔧 Cache résultats outils
-│   └── embeddings/                   🔢 Embeddings calculés
+├── cache/                            # Caches pour performance
+│   ├── semantic-cache.json           # Cache des réponses API
+│   ├── tool-cache.json               # Cache des résultats d'outils
+│   └── embeddings/                   # Embeddings pré-calculés
+│       ├── <project-hash>/           # Par projet
+│       │   ├── index.bin             # Index FAISS/Annoy
+│       │   └── metadata.json         # Métadonnées des chunks
+│       └── ...
 │
-├── settings.json                     ⚙️ Configuration utilisateur
-└── logs/                             📜 Logs structurés
+├── settings.json                     # Configuration utilisateur globale
+├── credentials/                      # Credentials chiffrés
+│   └── .api-keys                     # Clés API (chiffré AES)
+└── logs/                             # Logs structurés
+    ├── agent.log                     # Log principal
+    └── audit.log                     # Journal d'audit sécurité
 
-.grok/ (dans chaque projet)           📁 Configuration projet
-├── project-settings.json             ⚙️ Settings du projet
-├── mcp.json                          🔌 Serveurs MCP
-├── hooks.json                        🪝 Hooks personnalisés
-└── approval-mode.json                🎚️ Mode d'approbation
+.grok/ (dans chaque projet)           # Configuration par projet
+├── project-settings.json             # Settings spécifiques au projet
+├── mcp.json                          # Serveurs MCP configurés
+├── hooks.json                        # Hooks personnalisés
+├── approval-mode.json                # Mode d'approbation du projet
+└── .cache/                           # Cache local au projet
+    └── context-summary.json          # Résumé du contexte courant
+```
+
+### 3.8.2 Synchronisation et Cohérence
+
+Les différentes couches de stockage sont synchronisées pour maintenir la cohérence :
+
+```typescript
+class PersistenceManager {
+  private db: Database;
+  private cache: CacheManager;
+  private settings: SettingsManager;
+
+  async sync(): Promise<void> {
+    // 1. Flush les caches volatils vers SQLite
+    await this.cache.flushToDatabase(this.db);
+
+    // 2. Compacter la base si nécessaire
+    const stats = await this.db.stats();
+    if (stats.fragmentationRatio > 0.3) {
+      await this.db.vacuum();
+    }
+
+    // 3. Nettoyer les caches expirés
+    await this.cache.pruneExpired();
+
+    // 4. Sauvegarder les settings modifiés
+    await this.settings.saveIfDirty();
+  }
+}
 ```
 
 ---
 
-## 🎬 3.9 Le Flux Complet : Un Exemple
+## 3.9 Le Flux Complet : Un Exemple Détaillé
 
-Voyons comment tous ces composants interagissent pour une vraie tâche.
+Voyons maintenant comment tous ces composants interagissent pour une tâche réelle. Suivons le parcours d'une requête de bout en bout.
 
-> 👩‍💻 *Lina tape :* `"Trouve et corrige le bug dans la fonction calculateTotal"`
+**Requête utilisateur :**
+> "Trouve et corrige le bug dans la fonction calculateTotal"
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│       🎬 FLUX COMPLET : "Corrige le bug dans calculateTotal"        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  1️⃣ ORCHESTRATEUR reçoit le message                                │
-│     └─► Ajoute à l'historique de conversation                       │
-│                                                                      │
-│  2️⃣ MEMORY rappelle le contexte                                    │
-│     └─► RAG trouve : calculateTotal dans src/utils/math.ts          │
-│     └─► Charge les dépendances : types.ts, constants.ts             │
-│                                                                      │
-│  3️⃣ REASONING évalue la complexité                                 │
-│     └─► "bug" + "debug" détectés → Chain-of-Thought activé          │
-│                                                                      │
-│  4️⃣ LLM appelé avec contexte enrichi                               │
-│     └─► Prompt : message + fichiers trouvés + instructions debug    │
-│                                                                      │
-│  5️⃣ LLM répond : tool_call(search_content, {pattern: "divide"})    │
-│                                                                      │
-│  6️⃣ SECURITY vérifie                                               │
-│     └─► search_content = lecture seule = ✅ auto-approved           │
-│                                                                      │
-│  7️⃣ ACTION exécute                                                 │
-│     └─► Recherche dans math.ts                                      │
-│     └─► Trouve : ligne 45, division potentielle par 0 !             │
-│                                                                      │
-│  8️⃣ ORCHESTRATEUR continue la boucle                               │
-│                                                                      │
-│  9️⃣ LLM analyse et propose : tool_call(edit_file, {...fix...})     │
-│                                                                      │
-│ 1️⃣0️⃣ SECURITY vérifie                                              │
-│     └─► edit_file dans working dir = ✅ auto-approved               │
-│                                                                      │
-│ 1️⃣1️⃣ ACTION exécute                                                │
-│     └─► Ajoute : if (divisor === 0) throw new Error(...)            │
-│                                                                      │
-│ 1️⃣2️⃣ LLM propose : tool_call(bash, {command: "npm test"})         │
-│                                                                      │
-│ 1️⃣3️⃣ ACTION exécute les tests                                      │
-│     └─► Tests passent ✅                                             │
-│                                                                      │
-│ 1️⃣4️⃣ LEARNING mémorise                                             │
-│     └─► Pattern : "division by zero" → "add guard check"            │
-│     └─► Confidence +1                                                │
-│                                                                      │
-│ 1️⃣5️⃣ LLM répond : "Bug corrigé ! J'ai ajouté une vérification..."  │
-│                                                                      │
-│ 1️⃣6️⃣ ORCHESTRATEUR termine                                         │
-│     └─► Affiche la réponse à l'utilisateur                          │
-│                                                                      │
-│  📊 Résultat : 5 rounds, 3 tool calls, ~15 secondes                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│              TRACE COMPLÈTE : "Corrige le bug dans calculateTotal"      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ROUND 1 : Réception et contextualisation                               │
+│  ────────────────────────────────────────                               │
+│                                                                         │
+│  1. ORCHESTRATEUR reçoit le message                                     │
+│     └─▶ Ajoute à l'historique : { role: 'user', content: '...' }       │
+│                                                                         │
+│  2. REASONING évalue la complexité                                      │
+│     └─▶ Détecte "bug", "debug" → Active Chain-of-Thought (L1)          │
+│                                                                         │
+│  3. MEMORY récupère le contexte                                         │
+│     └─▶ RAG search "calculateTotal"                                    │
+│     └─▶ Trouve : src/utils/math.ts (score: 0.94)                       │
+│     └─▶ Expansion : + types.ts, constants.ts (dépendances)             │
+│                                                                         │
+│  4. LLM appelé avec contexte enrichi                                    │
+│     └─▶ Tokens : 2,450 (prompt) + 4,000 (thinking)                     │
+│     └─▶ Réponse : tool_call(read_file, { path: "src/utils/math.ts" })  │
+│                                                                         │
+│  5. SECURITY vérifie                                                    │
+│     └─▶ read_file = lecture seule = ✅ auto-approved                   │
+│                                                                         │
+│  6. ACTION exécute                                                      │
+│     └─▶ Lit le fichier, retourne 145 lignes de code                    │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ROUND 2 : Analyse du code                                              │
+│  ─────────────────────────────                                          │
+│                                                                         │
+│  7. LLM analyse le code reçu                                            │
+│     └─▶ Thinking : "Je vois une fonction calculateTotal qui..."        │
+│     └─▶ Identifie un problème potentiel ligne 45                       │
+│     └─▶ Réponse : tool_call(search_content, { pattern: "divisor" })    │
+│                                                                         │
+│  8. ACTION exécute la recherche                                         │
+│     └─▶ Trouve : ligne 45, `total / divisor` sans vérification         │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ROUND 3 : Application du fix                                           │
+│  ─────────────────────────────                                          │
+│                                                                         │
+│  9. LLM confirme le bug et propose un fix                               │
+│     └─▶ Thinking : "Division par zéro possible quand divisor = 0"      │
+│     └─▶ Réponse : tool_call(edit_file, {                               │
+│           path: "src/utils/math.ts",                                    │
+│           search: "return total / divisor;",                           │
+│           replace: "if (divisor === 0) throw new Error('Division...');\n│
+│                     return total / divisor;"                           │
+│         })                                                              │
+│                                                                         │
+│  10. SECURITY vérifie                                                   │
+│      └─▶ edit_file dans working dir = ✅ auto-approved                 │
+│                                                                         │
+│  11. ACTION exécute l'édition                                           │
+│      └─▶ Fichier modifié avec succès                                   │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ROUND 4 : Vérification                                                 │
+│  ──────────────────────                                                 │
+│                                                                         │
+│  12. LLM propose de vérifier le fix                                     │
+│      └─▶ Réponse : tool_call(bash, { command: "npm test" })            │
+│                                                                         │
+│  13. SECURITY vérifie                                                   │
+│      └─▶ "npm test" = commande safe = ✅ auto-approved                 │
+│                                                                         │
+│  14. ACTION exécute les tests                                           │
+│      └─▶ Résultat : "23 tests passed, 0 failed" ✅                     │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ROUND 5 : Conclusion                                                   │
+│  ──────────────────                                                     │
+│                                                                         │
+│  15. LEARNING enregistre le pattern                                     │
+│      └─▶ Nouveau pattern : "division by zero" → "add guard check"      │
+│      └─▶ Confidence initiale : 0.7                                     │
+│                                                                         │
+│  16. LLM génère la réponse finale                                       │
+│      └─▶ Réponse textuelle (pas de tool_call)                          │
+│      └─▶ "J'ai trouvé et corrigé le bug ! Le problème était..."        │
+│                                                                         │
+│  17. ORCHESTRATEUR termine                                              │
+│      └─▶ Boucle terminée après 5 rounds                                │
+│      └─▶ Affiche la réponse à l'utilisateur                            │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  📊 STATISTIQUES DE LA REQUÊTE                                          │
+│  ─────────────────────────────                                          │
+│  Rounds          : 5                                                    │
+│  Tool calls      : 4 (read_file, search_content, edit_file, bash)      │
+│  Tokens utilisés : ~18,500 (prompt + thinking + output)                │
+│  Durée totale    : ~25 secondes                                         │
+│  Coût estimé     : ~$0.08                                               │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
+
+Cette trace illustre comment les six composants collaborent :
+- L'**Orchestrateur** gère le flux de bout en bout
+- Le **Reasoning** adapte la profondeur de réflexion (CoT activé)
+- La **Memory** fournit le contexte via RAG
+- L'**Action** exécute les outils demandés
+- La **Security** valide chaque opération
+- Le **Learning** capture le pattern pour le futur
 
 ---
 
-## 📝 3.10 Points Clés à Retenir
+## 3.10 Points Clés à Retenir
 
-### 🏗️ Sur l'Architecture
+### Sur l'Architecture Globale
 
-| Concept | Point clé |
-|:--------|:----------|
-| **6 composants** | Orchestrateur, Reasoning, Memory, Action, Learning, Security |
-| **Interdépendance** | Chaque composant dépend des autres |
-| **Boucle ReAct** | Think → Act → Observe → Repeat |
+| Concept              | Point essentiel                                              |
+|:---------------------|:-------------------------------------------------------------|
+| **6 composants**     | Orchestrateur, Reasoning, Memory, Action, Learning, Security |
+| **Interdépendance**  | Chaque composant dépend des autres pour fonctionner          |
+| **Boucle ReAct**     | Think → Act → Observe → Repeat jusqu'à complétion            |
+| **Pas un LLM seul**  | L'agent est l'ensemble du système, pas juste le modèle       |
 
-### 🧠 Sur le Reasoning
+### Sur le Reasoning
 
-| Concept | Point clé |
-|:--------|:----------|
-| **4 niveaux** | Direct → CoT → ToT → MCTS |
-| **Principe** | Minimum nécessaire pour la tâche |
-| **Mots-clés** | think, megathink, ultrathink |
+| Concept              | Point essentiel                                              |
+|:---------------------|:-------------------------------------------------------------|
+| **4 niveaux**        | Direct → Chain-of-Thought → Tree-of-Thought → MCTS           |
+| **Adaptation**       | Utiliser le minimum nécessaire pour la tâche                 |
+| **Mots-clés**        | think (CoT), megathink (ToT), ultrathink (MCTS)              |
+| **Coût/bénéfice**    | Plus de réflexion = meilleur résultat mais plus cher         |
 
-### 💾 Sur la Memory
+### Sur la Memory
 
-| Concept | Point clé |
-|:--------|:----------|
-| **3 horizons** | Court terme (session) → Moyen → Long terme (permanent) |
-| **RAG** | Retrouver l'info pertinente par embeddings |
-| **Compression** | Résumer/supprimer quand le contexte déborde |
+| Concept              | Point essentiel                                              |
+|:---------------------|:-------------------------------------------------------------|
+| **3 horizons**       | Court terme (RAM) → Moyen terme (session) → Long terme (DB)  |
+| **RAG**              | Retrouver l'info pertinente par similarité vectorielle       |
+| **Compression**      | Résumer/supprimer quand le contexte déborde                  |
+| **Embeddings**       | Représentation numérique permettant la recherche sémantique  |
 
-### 🛡️ Sur la Security
+### Sur la Security
 
-| Concept | Point clé |
-|:--------|:----------|
-| **3 modes** | Read-only → Auto-approve → Full-access |
-| **Défense en profondeur** | Validation → Sécurité → Confirmation → Exécution |
-| **Redaction** | Masquage automatique des secrets |
+| Concept              | Point essentiel                                              |
+|:---------------------|:-------------------------------------------------------------|
+| **3 modes**          | Read-only → Auto-approve → Full-access                       |
+| **Défense profonde** | Validation → Sécurité → Confirmation → Exécution             |
+| **Redaction**        | Masquage automatique des secrets                             |
+| **Blacklist**        | Certaines commandes toujours interdites                      |
 
 ---
 
-## 🏋️ 3.11 Exercices
+## 3.11 Exercices
 
 ### Exercice 1 : Dessiner un Flux (20 min)
 
-Dessinez le flux complet pour la commande :
+Dessinez le flux complet pour la commande suivante :
 > "Crée un fichier test.txt avec 'Hello World' dedans"
 
-Identifiez chaque composant impliqué et les étapes.
+Identifiez :
+- Chaque composant impliqué
+- Les étapes de la boucle ReAct
+- Les vérifications de sécurité
+- Le nombre de rounds attendu
 
 ### Exercice 2 : Implémenter un Outil (30 min)
 
 Implémentez un outil `word_count` qui compte les mots d'un fichier :
+
 ```typescript
-// Signature
-word_count(path: string) → { words: number, lines: number, chars: number }
+interface WordCountResult {
+  words: number;
+  lines: number;
+  chars: number;
+  avgWordLength: number;
+}
+
+// Implémentez cet outil en respectant l'interface Tool
 ```
+
+Bonus : Ajoutez la gestion des fichiers binaires (qui doivent être rejetés).
 
 ### Exercice 3 : Sécurité (15 min)
 
 Listez 10 commandes bash qui devraient être **bloquées** et expliquez pourquoi :
-1. `rm -rf /` — Destruction système
-2. `:(){ :|:& };:` — Fork bomb
+
+1. `rm -rf /` — Destruction complète du système de fichiers
+2. `:(){ :|:& };:` — Fork bomb, épuise les ressources système
 3. ... (8 autres)
 
-### Exercice 4 : Schema SQL (20 min)
+### Exercice 4 : Schema SQL pour Préférences (20 min)
 
 Concevez un schéma SQL pour stocker les préférences utilisateur avec :
 - Type de préférence (style, comportement, confirmation)
-- Valeur
+- Valeur (peut être string, number, boolean, ou JSON)
 - Date de dernière modification
 - Fréquence d'utilisation
 
+Le schéma doit permettre de requêter efficacement "les préférences les plus utilisées" et "les préférences récemment modifiées".
+
+### Exercice 5 : Calcul de Confiance (15 min)
+
+Un pattern de réparation a été utilisé 15 fois avec succès et 3 fois sans succès.
+1. Quel est son score de confiance avec la formule simple (succès/total) ?
+2. Quel est son score avec le lissage bayésien : (succès + 1) / (total + 2) ?
+3. Pourquoi le lissage est-il préférable ?
+
 ---
 
-## 📚 3.12 Pour Aller Plus Loin
+## 3.12 Références
 
 ### Code Source Grok-CLI
 
-- Orchestrateur : `src/agent/grok-agent.ts`
-- Reasoning : `src/agent/reasoning/`
-- Memory : `src/context/`, `src/database/`
-- Action : `src/tools/`
-- Learning : `src/learning/`
-- Security : `src/security/`
+| Composant    | Fichiers principaux                         |
+|:-------------|:--------------------------------------------|
+| Orchestrateur | `src/agent/grok-agent.ts`                  |
+| Reasoning    | `src/agent/reasoning/`, `src/agent/thinking-keywords.ts` |
+| Memory       | `src/context/`, `src/database/`, `src/memory/` |
+| Action       | `src/tools/`                                |
+| Learning     | `src/learning/`, `src/agent/repair/`        |
+| Security     | `src/security/`                             |
 
-### Références
+### Publications Académiques
 
-- ReAct: Synergizing Reasoning and Acting (Yao et al., 2022)
-- Cognitive Architectures for Language Agents (Sumers et al., 2023)
+- **ReAct: Synergizing Reasoning and Acting in Language Models**
+  Yao et al., 2022
+  *Le paper fondateur du pattern ReAct utilisé dans tous les agents modernes*
+
+- **Cognitive Architectures for Language Agents**
+  Sumers et al., 2023
+  *Une taxonomie des architectures d'agents avec analyses comparatives*
+
+- **Chain-of-Thought Prompting Elicits Reasoning in Large Language Models**
+  Wei et al., 2022
+  *L'introduction du Chain-of-Thought pour améliorer le raisonnement*
+
+- **Tree of Thoughts: Deliberate Problem Solving with Large Language Models**
+  Yao et al., 2023
+  *L'extension multi-chemin du CoT pour les problèmes complexes*
 
 ---
 
-## 🌅 Épilogue : La Vision Complète
+## Épilogue : La Vision Complète
 
-Marc recula pour observer le tableau blanc maintenant couvert de diagrammes.
+Marc recula pour observer le tableau blanc maintenant couvert de diagrammes, de flèches, et de notes. Ce qui avait commencé comme un chaos de concepts s'était transformé en une architecture cohérente — chaque pièce trouvant sa place dans le puzzle.
 
-— "Je comprends mieux maintenant. Ce n'est pas juste 'un LLM avec des outils'. C'est une vraie architecture avec des composants spécialisés qui collaborent."
+— "Je comprends mieux maintenant," dit-il, passant son doigt sur les connexions entre les composants. "Ce n'est pas juste 'un LLM avec des outils'. C'est une vraie architecture cognitive avec des composants spécialisés qui collaborent. Comme... comme un orchestre où chaque musicien a son rôle."
 
-Lina acquiesça.
+Lina acquiesça, un sourire satisfait aux lèvres.
 
-— "Exactement. Et le plus beau, c'est que chaque composant peut être amélioré indépendamment. Tu veux un meilleur reasoning ? Implémente MCTS. Tu veux une meilleure mémoire ? Améliore le RAG. Tu veux plus de sécurité ? Ajoute des règles."
+— "Exactement. Et le plus beau, c'est que chaque composant peut être amélioré indépendamment. Tu veux un meilleur reasoning ? Implémente MCTS. Tu veux une meilleure mémoire ? Améliore le RAG. Tu veux plus de sécurité ? Ajoute des règles. Le tout sans toucher aux autres parties."
 
-Sophie nota quelque chose.
+Sophie, qui avait pris des notes pendant toute la discussion, leva la tête :
 
 — "Et dans les prochains chapitres, on va voir chaque composant en détail ?"
 
-— "Oui. On commence par le Reasoning — Tree-of-Thought et MCTS. C'est là que la magie opère vraiment."
+— "Oui. On commence par le Reasoning — Tree-of-Thought et MCTS. C'est là que la magie opère vraiment. Quand un agent peut explorer plusieurs chemins de solution en parallèle et choisir le meilleur... c'est là qu'il dépasse les capacités d'un simple chatbot."
+
+Marc regarda le tableau une dernière fois.
+
+— "J'ai hâte de voir comment tout ça fonctionne en pratique."
+
+— "Alors, au travail. On a du code à écrire."
 
 ---
 
@@ -824,6 +1684,8 @@ Sophie nota quelque chose.
 
 ---
 
-| ⬅️ Précédent | 📖 Sommaire | ➡️ Suivant |
-|:-------------|:-----------:|:-----------|
-| [Le Rôle des Agents](02-role-des-agents.md) | [Index](README.md) | [Tree-of-Thought](04-tree-of-thought.md) |
+| Navigation |
+|:-----------|
+| [⬅️ Chapitre 2 : Le Rôle des Agents](02-role-des-agents.md) |
+| [📖 Table des matières](README.md) |
+| [➡️ Chapitre 4 : Tree-of-Thought](04-tree-of-thought.md) |

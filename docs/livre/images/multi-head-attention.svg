@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 550" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="head1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="head2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="head3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="head4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="concatGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ed8936"/>
+      <stop offset="100%" style="stop-color:#f6ad55"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="550" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" fill="white" font-size="24" font-weight="bold">
+    Multi-Head Attention : Plusieurs Perspectives
+  </text>
+  <text x="450" y="58" text-anchor="middle" fill="#718096" font-size="13">
+    "Différentes têtes apprennent différentes relations"
+  </text>
+
+  <!-- Input -->
+  <g transform="translate(350, 80)">
+    <rect x="0" y="0" width="200" height="45" rx="10" fill="#2d3748" stroke="#4a5568" stroke-width="2"/>
+    <text x="100" y="28" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="500">Entrée X</text>
+  </g>
+
+  <!-- Split arrows -->
+  <g stroke="#718096" stroke-width="2" fill="none">
+    <path d="M450 125 L150 180"/>
+    <path d="M450 125 L350 180"/>
+    <path d="M450 125 L550 180"/>
+    <path d="M450 125 L750 180"/>
+  </g>
+
+  <!-- Attention Heads -->
+  <g transform="translate(50, 180)">
+    <!-- Head 1 -->
+    <g>
+      <rect x="0" y="0" width="180" height="150" rx="12" fill="#1a202c" stroke="url(#head1)" stroke-width="3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="180" height="35" rx="12" fill="url(#head1)"/>
+      <text x="90" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Tête 1</text>
+
+      <text x="90" y="60" text-anchor="middle" fill="#a0aec0" font-size="11">Focus : Syntaxe</text>
+
+      <g transform="translate(20, 75)">
+        <rect x="0" y="0" width="40" height="25" rx="4" fill="#553c9a"/>
+        <text x="20" y="17" text-anchor="middle" fill="white" font-size="10">Q₁</text>
+        <rect x="50" y="0" width="40" height="25" rx="4" fill="#553c9a"/>
+        <text x="70" y="17" text-anchor="middle" fill="white" font-size="10">K₁</text>
+        <rect x="100" y="0" width="40" height="25" rx="4" fill="#553c9a"/>
+        <text x="120" y="17" text-anchor="middle" fill="white" font-size="10">V₁</text>
+      </g>
+
+      <text x="90" y="130" text-anchor="middle" fill="#667eea" font-size="10" font-style="italic">"sujet → verbe"</text>
+    </g>
+
+    <!-- Head 2 -->
+    <g transform="translate(200, 0)">
+      <rect x="0" y="0" width="180" height="150" rx="12" fill="#1a202c" stroke="url(#head2)" stroke-width="3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="180" height="35" rx="12" fill="url(#head2)"/>
+      <text x="90" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Tête 2</text>
+
+      <text x="90" y="60" text-anchor="middle" fill="#a0aec0" font-size="11">Focus : Coréférence</text>
+
+      <g transform="translate(20, 75)">
+        <rect x="0" y="0" width="40" height="25" rx="4" fill="#9b2c2c"/>
+        <text x="20" y="17" text-anchor="middle" fill="white" font-size="10">Q₂</text>
+        <rect x="50" y="0" width="40" height="25" rx="4" fill="#9b2c2c"/>
+        <text x="70" y="17" text-anchor="middle" fill="white" font-size="10">K₂</text>
+        <rect x="100" y="0" width="40" height="25" rx="4" fill="#9b2c2c"/>
+        <text x="120" y="17" text-anchor="middle" fill="white" font-size="10">V₂</text>
+      </g>
+
+      <text x="90" y="130" text-anchor="middle" fill="#f093fb" font-size="10" font-style="italic">"il → développeur"</text>
+    </g>
+
+    <!-- Head 3 -->
+    <g transform="translate(400, 0)">
+      <rect x="0" y="0" width="180" height="150" rx="12" fill="#1a202c" stroke="url(#head3)" stroke-width="3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="180" height="35" rx="12" fill="url(#head3)"/>
+      <text x="90" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Tête 3</text>
+
+      <text x="90" y="60" text-anchor="middle" fill="#a0aec0" font-size="11">Focus : Sémantique</text>
+
+      <g transform="translate(20, 75)">
+        <rect x="0" y="0" width="40" height="25" rx="4" fill="#2b6cb0"/>
+        <text x="20" y="17" text-anchor="middle" fill="white" font-size="10">Q₃</text>
+        <rect x="50" y="0" width="40" height="25" rx="4" fill="#2b6cb0"/>
+        <text x="70" y="17" text-anchor="middle" fill="white" font-size="10">K₃</text>
+        <rect x="100" y="0" width="40" height="25" rx="4" fill="#2b6cb0"/>
+        <text x="120" y="17" text-anchor="middle" fill="white" font-size="10">V₃</text>
+      </g>
+
+      <text x="90" y="130" text-anchor="middle" fill="#4facfe" font-size="10" font-style="italic">"code → Python"</text>
+    </g>
+
+    <!-- Head 4 (h=...) -->
+    <g transform="translate(600, 0)">
+      <rect x="0" y="0" width="180" height="150" rx="12" fill="#1a202c" stroke="url(#head4)" stroke-width="3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="180" height="35" rx="12" fill="url(#head4)"/>
+      <text x="90" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Tête h</text>
+
+      <text x="90" y="60" text-anchor="middle" fill="#a0aec0" font-size="11">Focus : Position</text>
+
+      <g transform="translate(20, 75)">
+        <rect x="0" y="0" width="40" height="25" rx="4" fill="#276749"/>
+        <text x="20" y="17" text-anchor="middle" fill="white" font-size="10">Qₕ</text>
+        <rect x="50" y="0" width="40" height="25" rx="4" fill="#276749"/>
+        <text x="70" y="17" text-anchor="middle" fill="white" font-size="10">Kₕ</text>
+        <rect x="100" y="0" width="40" height="25" rx="4" fill="#276749"/>
+        <text x="120" y="17" text-anchor="middle" fill="white" font-size="10">Vₕ</text>
+      </g>
+
+      <text x="90" y="130" text-anchor="middle" fill="#38ef7d" font-size="10" font-style="italic">"mot[i] → mot[i+1]"</text>
+    </g>
+  </g>
+
+  <!-- Dots between heads -->
+  <text x="590" y="260" fill="#718096" font-size="24">...</text>
+
+  <!-- Merge arrows -->
+  <g stroke="#718096" stroke-width="2" fill="none">
+    <path d="M140 330 L300 380"/>
+    <path d="M340 330 L400 380"/>
+    <path d="M540 330 L500 380"/>
+    <path d="M740 330 L600 380"/>
+  </g>
+
+  <!-- Concat -->
+  <g transform="translate(250, 380)">
+    <rect x="0" y="0" width="400" height="50" rx="12" fill="url(#concatGrad)" filter="url(#shadow)"/>
+    <text x="200" y="32" text-anchor="middle" fill="white" font-size="16" font-weight="bold">
+      Concat(head₁, head₂, ..., headₕ)
+    </text>
+  </g>
+
+  <!-- Linear projection -->
+  <g transform="translate(300, 450)">
+    <rect x="0" y="0" width="300" height="45" rx="10" fill="#553c9a" filter="url(#shadow)"/>
+    <text x="150" y="28" text-anchor="middle" fill="white" font-size="14" font-weight="600">
+      Linear(W^O) → Sortie
+    </text>
+  </g>
+
+  <!-- Arrow concat to linear -->
+  <path d="M450 430 L450 450" stroke="#718096" stroke-width="2" fill="none"/>
+
+  <!-- Info box -->
+  <g transform="translate(680, 380)">
+    <rect x="0" y="0" width="180" height="115" rx="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+    <text x="90" y="22" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="bold">GPT-4 Specs</text>
+    <text x="15" y="45" fill="#a0aec0" font-size="11">Têtes : 96-128</text>
+    <text x="15" y="63" fill="#a0aec0" font-size="11">d_model : 12288</text>
+    <text x="15" y="81" fill="#a0aec0" font-size="11">d_head : 128</text>
+    <text x="15" y="102" fill="#718096" font-size="10" font-style="italic">d_head = d_model / h</text>
+  </g>
+</svg>

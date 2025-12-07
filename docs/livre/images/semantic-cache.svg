@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 650" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="queryGradSC" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="cacheGradSC" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="embeddingGradSC" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="apiGradSC" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+    <linearGradient id="hitGradSC" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#276749"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrowSC" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <marker id="arrowGreenSC" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#48bb78"/>
+    </marker>
+    <marker id="arrowRedSC" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f56565"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="650" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
+    Semantic Cache : Réduction de 68% des Appels API
+  </text>
+  <text x="500" y="68" text-anchor="middle" fill="#718096" font-size="14">
+    Mise en cache intelligente basée sur la similarité sémantique
+  </text>
+
+  <!-- Input Query -->
+  <g transform="translate(50, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="250" height="80" rx="15" fill="url(#queryGradSC)"/>
+    <text x="125" y="30" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Nouvelle Requête</text>
+    <rect x="15" y="42" width="220" height="28" rx="5" fill="rgba(0,0,0,0.2)"/>
+    <text x="125" y="61" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="10">"Comment lire un fichier en Python?"</text>
+  </g>
+
+  <!-- Arrow to embedding -->
+  <path d="M310 140 L360 140" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowSC)"/>
+
+  <!-- Embedding Generation -->
+  <g transform="translate(370, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="80" rx="15" fill="url(#embeddingGradSC)"/>
+    <text x="100" y="25" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Embedding</text>
+    <text x="100" y="45" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Query → Vecteur 1536D</text>
+    <rect x="15" y="52" width="170" height="20" rx="4" fill="rgba(0,0,0,0.2)"/>
+    <text x="100" y="66" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">[0.23, -0.45, 0.12, ...]</text>
+  </g>
+
+  <!-- Arrow to cache lookup -->
+  <path d="M580 140 L630 140" stroke="#4a5568" stroke-width="3" marker-end="url(#arrowSC)"/>
+
+  <!-- Cache Lookup -->
+  <g transform="translate(640, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="80" rx="15" fill="#1a1a3a" stroke="url(#cacheGradSC)" stroke-width="3"/>
+    <text x="140" y="25" text-anchor="middle" fill="#38ef7d" font-size="13" font-weight="bold">Recherche Cache</text>
+    <text x="140" y="45" text-anchor="middle" fill="#a0aec0" font-size="10">Similarité Cosinus ≥ 0.85</text>
+    <rect x="20" y="52" width="240" height="20" rx="4" fill="#2d3748"/>
+    <text x="140" y="66" text-anchor="middle" fill="#718096" font-size="9">sim(query, cached) = cos(v1, v2)</text>
+  </g>
+
+  <!-- Semantic Cache Storage (Center) -->
+  <g transform="translate(300, 220)" filter="url(#shadow)">
+    <rect x="0" y="0" width="400" height="200" rx="20" fill="#1a1a3a" stroke="url(#cacheGradSC)" stroke-width="3"/>
+    <rect x="0" y="0" width="400" height="50" rx="20" fill="url(#cacheGradSC)"/>
+    <text x="200" y="32" text-anchor="middle" fill="white" font-size="16" font-weight="bold">SEMANTIC CACHE</text>
+
+    <!-- Cache entries -->
+    <g transform="translate(20, 65)">
+      <rect x="0" y="0" width="360" height="35" rx="6" fill="#2d3748"/>
+      <text x="10" y="15" fill="#a0aec0" font-size="9">Q:</text>
+      <text x="25" y="15" fill="#e2e8f0" font-size="9">"Lire fichier Python"</text>
+      <text x="280" y="15" fill="#48bb78" font-size="9" font-weight="bold">sim: 0.92</text>
+      <text x="10" y="28" fill="#718096" font-size="8">R: "Utilisez open() avec 'r'..."</text>
+    </g>
+
+    <g transform="translate(20, 105)">
+      <rect x="0" y="0" width="360" height="35" rx="6" fill="#2d3748"/>
+      <text x="10" y="15" fill="#a0aec0" font-size="9">Q:</text>
+      <text x="25" y="15" fill="#e2e8f0" font-size="9">"Écrire dans fichier JS"</text>
+      <text x="280" y="15" fill="#ecc94b" font-size="9" font-weight="bold">sim: 0.71</text>
+      <text x="10" y="28" fill="#718096" font-size="8">R: "En Node.js, fs.writeFile()..."</text>
+    </g>
+
+    <g transform="translate(20, 145)">
+      <rect x="0" y="0" width="360" height="35" rx="6" fill="#2d3748"/>
+      <text x="10" y="15" fill="#a0aec0" font-size="9">Q:</text>
+      <text x="25" y="15" fill="#e2e8f0" font-size="9">"Créer API REST"</text>
+      <text x="280" y="15" fill="#fc8181" font-size="9" font-weight="bold">sim: 0.34</text>
+      <text x="10" y="28" fill="#718096" font-size="8">R: "Express.js ou FastAPI..."</text>
+    </g>
+  </g>
+
+  <!-- Decision Diamond -->
+  <g transform="translate(420, 450)">
+    <polygon points="80,0 160,50 80,100 0,50" fill="#1a1a3a" stroke="#ffd700" stroke-width="3"/>
+    <text x="80" y="42" text-anchor="middle" fill="#ffd700" font-size="12" font-weight="bold">sim ≥</text>
+    <text x="80" y="58" text-anchor="middle" fill="#ffd700" font-size="12" font-weight="bold">0.85?</text>
+  </g>
+
+  <!-- Arrow from cache to decision -->
+  <path d="M500 420 L500 445" stroke="#4a5568" stroke-width="3"/>
+
+  <!-- Cache HIT path (left) -->
+  <path d="M420 500 L200 500 L200 560" stroke="#48bb78" stroke-width="3" marker-end="url(#arrowGreenSC)"/>
+  <text x="300" y="490" fill="#48bb78" font-size="12" font-weight="bold">OUI (HIT)</text>
+
+  <!-- Cache HIT result -->
+  <g transform="translate(80, 565)" filter="url(#glow)">
+    <rect x="0" y="0" width="240" height="70" rx="15" fill="url(#hitGradSC)"/>
+    <text x="120" y="25" text-anchor="middle" fill="white" font-size="14" font-weight="bold">CACHE HIT</text>
+    <text x="120" y="45" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11">Réponse instantanée</text>
+    <text x="120" y="60" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10">0ms latence, $0 coût</text>
+  </g>
+
+  <!-- Cache MISS path (right) -->
+  <path d="M580 500 L780 500 L780 400" stroke="#f56565" stroke-width="3" marker-end="url(#arrowRedSC)"/>
+  <text x="680" y="490" fill="#f56565" font-size="12" font-weight="bold">NON (MISS)</text>
+
+  <!-- API Call -->
+  <g transform="translate(700, 270)" filter="url(#shadow)">
+    <rect x="0" y="0" width="200" height="120" rx="15" fill="url(#apiGradSC)"/>
+    <text x="100" y="28" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Appel API</text>
+    <text x="100" y="48" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">Grok / OpenAI</text>
+
+    <rect x="15" y="60" width="170" height="45" rx="6" fill="rgba(0,0,0,0.2)"/>
+    <text x="100" y="78" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">Génération réponse</text>
+    <text x="100" y="93" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="8">+ Stockage dans cache</text>
+  </g>
+
+  <!-- Arrow from API to cache (store) -->
+  <path d="M700 330 L710 330 L710 320 L700 320" stroke="#f093fb" stroke-width="2" stroke-dasharray="5,3"/>
+
+  <!-- Stats Panel -->
+  <g transform="translate(50, 250)">
+    <rect x="0" y="0" width="200" height="160" rx="12" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="100" y="25" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="bold">Statistiques</text>
+
+    <g transform="translate(15, 45)">
+      <rect x="0" y="0" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="17" fill="#48bb78" font-size="11">Hit Rate:</text>
+      <text x="130" y="17" fill="#48bb78" font-size="11" font-weight="bold">68%</text>
+    </g>
+
+    <g transform="translate(15, 75)">
+      <rect x="0" y="0" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="17" fill="#4facfe" font-size="11">Latence Avg:</text>
+      <text x="120" y="17" fill="#4facfe" font-size="11" font-weight="bold">-340ms</text>
+    </g>
+
+    <g transform="translate(15, 105)">
+      <rect x="0" y="0" width="170" height="25" rx="5" fill="#2d3748"/>
+      <text x="10" y="17" fill="#ed8936" font-size="11">Économies:</text>
+      <text x="115" y="17" fill="#ed8936" font-size="11" font-weight="bold">$247/mois</text>
+    </g>
+
+    <g transform="translate(15, 135)">
+      <text x="85" y="12" text-anchor="middle" fill="#718096" font-size="9" font-style="italic">Seuil: cosine ≥ 0.85</text>
+    </g>
+  </g>
+
+  <!-- Formula box -->
+  <g transform="translate(50, 430)">
+    <rect x="0" y="0" width="200" height="100" rx="12" fill="#1a1a3a" stroke="#764ba2" stroke-width="2"/>
+    <text x="100" y="22" text-anchor="middle" fill="#764ba2" font-size="12" font-weight="bold">Similarité Cosinus</text>
+
+    <text x="100" y="50" text-anchor="middle" fill="#e2e8f0" font-size="11">cos(A,B) = A·B / |A||B|</text>
+
+    <g transform="translate(15, 65)">
+      <text x="0" y="12" fill="#48bb78" font-size="9">≥0.85 → Cache Hit</text>
+      <text x="0" y="26" fill="#fc8181" font-size="9">&lt;0.85 → API Call</text>
+    </g>
+  </g>
+
+  <!-- TTL indicator -->
+  <g transform="translate(720, 140)">
+    <rect x="0" y="0" width="80" height="40" rx="8" fill="#2d3748" stroke="#ed8936" stroke-width="2"/>
+    <text x="40" y="18" text-anchor="middle" fill="#ed8936" font-size="10" font-weight="bold">TTL</text>
+    <text x="40" y="32" text-anchor="middle" fill="#a0aec0" font-size="9">24h</text>
+  </g>
+
+  <!-- LRU indicator -->
+  <g transform="translate(810, 140)">
+    <rect x="0" y="0" width="80" height="40" rx="8" fill="#2d3748" stroke="#4facfe" stroke-width="2"/>
+    <text x="40" y="18" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">LRU</text>
+    <text x="40" y="32" text-anchor="middle" fill="#a0aec0" font-size="9">1000 max</text>
+  </g>
+</svg>

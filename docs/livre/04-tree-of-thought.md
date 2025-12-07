@@ -4,31 +4,71 @@
 
 ## 🎬 Scène d'ouverture : L'Impasse du Raisonnement Linéaire
 
-*Lina fixait son écran depuis une heure. Le test échouait de manière intermittente — parfois il passait, parfois non. Son chatbot avait déjà proposé trois solutions... qui n'avaient rien résolu.*
+*Mardi, 16h47. Lina fixait son écran depuis une heure. Le même test échouait de manière intermittente — parfois il passait, parfois non. Son agent avait déjà proposé trois solutions... qui n'avaient rien résolu.*
 
-— "C'est comme si tu tirais au hasard," soupira-t-elle en fermant la quatrième suggestion inutile.
+**Lina** *(fermant rageusement la quatrième suggestion)* : "C'est comme si tu tirais au hasard !"
 
-Elle se leva et alla au tableau blanc. Comment résoudrait-elle ce problème elle-même ?
+*Marc passa la tête par la porte, attiré par le bruit.*
 
-Elle commença à écrire :
+**Marc** : "Problème ?"
+
+**Lina** : "Le pire genre. Un test flaky. L'agent me propose des solutions, mais elles sont toutes... linéaires. Il essaie une chose, ça marche pas, il essaie autre chose. Comme un gamin qui appuie sur tous les boutons."
+
+**Marc** *(entrant)* : "Montre-moi."
+
+*Lina fit défiler l'historique des suggestions de l'agent. Chaque réponse suivait le même pattern : une hypothèse, une solution, un échec, une nouvelle hypothèse sans lien avec la précédente.*
+
+**Marc** : "Il ne construit pas sur ses erreurs. Il recommence à zéro à chaque fois."
+
+**Lina** : "Exactement !"
+
+*Elle se leva et alla au tableau blanc.*
+
+**Lina** : "Regarde comment MOI je résoudrais ce problème."
+
+*Elle commença à écrire, parlant en même temps :*
+
+**Lina** : "D'abord, je liste toutes les hypothèses possibles."
 - **Hypothèse 1** : Race condition ?
 - **Hypothèse 2** : État partagé corrompu ?
 - **Hypothèse 3** : Timing du mock ?
 - **Hypothèse 4** : Fuite de mémoire entre tests ?
 
-Puis elle nota des scores à côté de chaque hypothèse :
-- Race condition : **80%** (comportement aléatoire classique)
-- État partagé : **60%** (possible mais les tests sont isolés)
-- Timing mock : **40%** (peu probable, les mocks sont synchrones)
-- Fuite mémoire : **20%** (les tests sont courts)
+**Lina** : "Ensuite, je les ÉVALUE. Pas au hasard — avec mon expérience."
 
-Elle commença à explorer la piste de la race condition, généra des sous-hypothèses, en évalua certaines, en abandonna d'autres...
+*Elle nota des scores à côté de chaque hypothèse :*
+- Race condition : **80%** *(comportement aléatoire classique)*
+- État partagé : **60%** *(possible mais les tests sont isolés)*
+- Timing mock : **40%** *(peu probable, les mocks sont synchrones)*
+- Fuite mémoire : **20%** *(les tests sont courts)*
 
-— "C'est ça," réalisa-t-elle soudain. "Je ne pense pas en ligne droite. Je pense en **arbre**. J'explore plusieurs chemins, j'évalue lesquels sont prometteurs, et j'abandonne les impasses."
+**Marc** *(comprenant)* : "Tu explores en priorité les pistes les plus prometteuses."
 
-Elle retourna à son code.
+**Lina** : "Et je DESCENDS dans chaque piste. Race condition — OK, où ? Accès concurrent à une variable ? À un fichier ? À une connexion DB ?"
 
-— "Et si je t'apprenais à faire pareil ?"
+*Elle dessina des branches partant de "Race condition".*
+
+**Lina** : "Je génère des sous-hypothèses. J'en évalue certaines. J'en abandonne d'autres quand elles mènent nulle part."
+
+*Elle recula pour voir l'ensemble. Un arbre était apparu sur le tableau.*
+
+**Marc** *(lentement)* : "Tu ne penses pas en ligne droite."
+
+**Lina** *(les yeux brillants)* : "Je pense en **arbre**. J'explore plusieurs chemins en parallèle, j'évalue lesquels sont prometteurs, et j'abandonne les impasses. C'est ça, le raisonnement humain."
+
+*Elle se retourna vers son écran.*
+
+**Lina** : "Et si j'apprenais à mon agent à faire pareil ?"
+
+**Marc** : "Tree-of-Thought."
+
+**Lina** : "Tu connais ?"
+
+**Marc** *(souriant)* : "Shunyu Yao, Princeton, 2023. Le papier qui a changé la façon dont on fait raisonner les LLMs."
+
+*Lina attrapa son carnet.*
+
+**Lina** : "Raconte."
 
 ---
 

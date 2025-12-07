@@ -4,19 +4,53 @@
 
 ## 🎬 Scène d'ouverture
 
-*Bureau de Lina, vendredi après-midi. Elle examine ses métriques avec une expression perplexe.*
+*Vendredi soir, 19h30. La plupart des bureaux sont déjà vides. Lina, elle, fixe son écran avec une obsession croissante.*
 
-**Lina** : *(cliquant sur son tableau de bord)* « Marc, viens voir ça. Mon agent fonctionne bien, mais regarde ces chiffres... »
+*Sur son moniteur, un graphique en temps réel. Chaque seconde, une nouvelle requête apparaît. Elle a commencé à les colorer mentalement : bleu pour les nouvelles, orange pour les "déjà vues".*
 
-**Marc** : *(s'approchant)* « Qu'est-ce qu'il y a ? »
+*Orange. Orange. Bleu. Orange. Orange. Orange.*
 
-**Lina** : « 68% de mes appels API sont des questions similaires. Je demande 'comment lister les fichiers' cent fois par jour avec des variantes — 'ls', 'afficher le contenu du dossier', 'montrer les fichiers'... »
+**Lina** *(murmurant)* : "C'est pas possible..."
 
-**Marc** : *(calculant mentalement)* « À $0.03 par requête... ça fait $2 par jour gaspillés sur des questions déjà résolues. »
+*Elle attrape son carnet et commence à noter. Dix minutes plus tard, elle a son verdict.*
 
-**Lina** : « Exactement. J'ai besoin d'un cache intelligent. Pas juste un cache exact — un cache qui comprend que 'ls' et 'lister les fichiers', c'est la même chose. »
+**Lina** : "68%. 68% de mes requêtes API sont des variations de la même chose."
 
-**Marc** : *(souriant)* « Un cache sémantique. C'est élégant — tu remplaces les comparaisons de strings par des comparaisons de *signification*. »
+*Marc passe derrière elle, sa veste déjà sur l'épaule.*
+
+**Marc** : "Tu comptes rester tard un vendredi ?"
+
+**Lina** *(sans se retourner)* : "Regarde ça."
+
+*Elle lui montre son carnet. Une colonne de requêtes, avec des flèches reliant celles qui sont équivalentes.*
+
+```
+"Comment lister les fichiers ?"
+"ls"
+"Montre-moi le contenu du dossier"
+"Affiche les fichiers"
+"Que contient ce répertoire ?"
+```
+
+**Marc** *(posant sa veste)* : "Cinq façons de poser la même question."
+
+**Lina** : "Et mon agent appelle l'API cinq fois. À $0.03 par requête, ça fait $15 par jour perdus sur des questions dont il connaît déjà la réponse. $450 par mois. $5,400 par an."
+
+*Elle se retourne enfin.*
+
+**Lina** : "C'est plus que mon premier salaire de stage."
+
+**Marc** *(s'asseyant)* : "Tu sais ce qui est frustrant ? Le cerveau humain résout ce problème naturellement. Tu ne 're-réfléchis' pas à comment faire du café chaque matin."
+
+**Lina** : "Exactement ! J'ai besoin d'un cache. Mais pas un cache bête qui compare des strings caractère par caractère."
+
+**Marc** : "Un cache qui comprend que 'ls' et 'lister les fichiers' veulent dire la même chose..."
+
+**Lina** *(les yeux brillants)* : "Un cache **sémantique**. Qui compare le sens, pas les mots."
+
+*Marc sourit. Il retire sa veste.*
+
+**Marc** : "Ok. Je reste. On va construire quelque chose d'élégant."
 
 ---
 
@@ -1449,27 +1483,76 @@ Mesurez : coûts, latence, qualité des réponses.
 
 ---
 
-## 🌅 Épilogue
+## 🌅 Épilogue — La Mémoire de la Machine
 
-*Une semaine plus tard. Lina examine ses nouvelles métriques, un sourire aux lèvres.*
+*Une semaine plus tard. Vendredi soir, encore. Mais cette fois, Lina est déjà debout, manteau sur le dos, sac à l'épaule.*
 
-**Lina** : « Marc, regarde ça. »
+**Marc** *(surpris)* : "Tu pars à l'heure ?"
 
-**Marc** : *(se penchant)* « 68% de hit rate sur le cache sémantique. $330 économisés cette semaine. »
+**Lina** *(souriant)* : "Regarde."
 
-**Lina** : « Et le meilleur ? La latence moyenne est passée de 1.2 secondes à 420 millisecondes. L'expérience utilisateur est tellement plus fluide. »
+*Elle tourne son écran vers lui. Le dashboard de métriques.*
 
-**Marc** : « Le cache comprend vraiment que 'liste les fichiers' et 'ls' c'est pareil ? »
+```
+Hit Rate:       68.2%
+Économies:      $347.50 cette semaine
+Latence moy.:   420ms (vs 1,200ms avant)
+Cache entries:  12,847
+```
 
-**Lina** : « Similarité de 0.94. C'est presque magique — les embeddings capturent le sens, pas juste les mots. »
+**Marc** : "68% de hit rate. Ton agent se *souvient*."
 
-**Marc** : *(réfléchissant)* « Et les outils ? »
+**Lina** : "Le plus beau ? Quand je tape 'ls', il reconnaît que c'est la même question que 'liste les fichiers' de ce matin. Similarité 0.94."
 
-**Lina** : « Cache de read_file avec invalidation automatique. Quand je modifie un fichier, les entrées liées sont purgées. Plus de données périmées. »
+*Elle fait défiler les logs.*
 
-**Marc** : « C'est élégant. Tu optimises la cognition de l'agent — moins de calculs redondants, plus de réponses instantanées. »
+**Lina** : "Et regarde ici. Quand j'ai modifié `utils.ts` à 15h, le cache a automatiquement invalidé toutes les entrées qui référençaient ce fichier. Zéro donnée périmée."
 
-**Lina** : *(fermant son laptop)* « Exactement. Et maintenant, on attaque les optimisations système. Parallélisation, routing de modèles, lazy loading... »
+**Marc** : "Élégant. Tu as donné une mémoire à ton agent."
+
+*Un silence. Lina hésite.*
+
+**Lina** : "Marc... Il y a quelque chose qui me tracasse quand même."
+
+**Marc** : "Hmm ?"
+
+**Lina** : "Le cache, c'est pour la *sortie*. On évite de recalculer les mêmes réponses. Mais pour l'*entrée*..."
+
+*Elle fait défiler jusqu'aux logs de tool calls.*
+
+**Lina** : "Grok-CLI a 41 outils. À chaque requête, mon agent reçoit la description de ces 41 outils. Même quand la tâche est simple — genre lire un fichier — il doit traiter 41 descriptions avant de choisir."
+
+**Marc** *(fronçant les sourcils)* : "3,000 tokens juste pour la liste des outils..."
+
+**Lina** : "Exactement. Et j'ai lu un papier récemment. Des chercheurs de... attend..."
+
+*Elle cherche dans ses notes.*
+
+**Lina** : "'Less is More: Fewer Tool Descriptions Lead to Better LLM Reasoning'. Ils ont montré que donner **moins** d'outils au modèle améliore à la fois la précision ET la vitesse."
+
+**Marc** *(intéressé)* : "Counter-intuitif. Comme JetBrains avec le contexte."
+
+**Lina** : "Même principe ! Trop de choix = paralysie de l'analyse. Si je filtre dynamiquement les outils pour ne montrer que les pertinents..."
+
+*Elle note rapidement sur son carnet.*
+
+**Marc** : "Tu veux implémenter ça ce soir ?"
+
+**Lina** *(riant)* : "Non, je vais enfin profiter de mon vendredi. Mais lundi..."
+
+*Elle range son carnet.*
+
+**Lina** : "Lundi, on s'attaque aux optimisations système. Filtrage d'outils, routing de modèles, parallélisation..."
+
+**Marc** : "Le trio infernal de la performance."
+
+**Lina** : "FrugalGPT pour le routing. LLMCompiler pour la parallélisation. Et Less-is-More pour les outils."
+
+*Elle enfile son manteau.*
+
+**Lina** : "On a optimisé la mémoire. Maintenant, on optimise la réflexion elle-même."
+
+*Elle éteint son écran. La pièce devient silencieuse, mais quelque part dans le cloud, son agent continue de servir des réponses depuis son cache, se souvenant de chaque question déjà posée.*
 
 ---
 
@@ -1481,4 +1564,4 @@ Mesurez : coûts, latence, qualité des réponses.
 
 ---
 
-**Prochainement** : *Chapitre 13 — Optimisations Système* : Parallélisation LLMCompiler, routing de modèles FrugalGPT, et lazy loading pour des performances optimales.
+*Dans le prochain chapitre : Trois techniques qui ont révolutionné les agents LLM — FrugalGPT de Stanford, LLMCompiler de Berkeley, et le principe "Less is More" qui défie l'intuition. Préparez-vous à diviser vos coûts par trois.*

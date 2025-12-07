@@ -1307,9 +1307,9 @@ export class PluginVerifier {
 
 ## 🌅 Épilogue
 
-*Quelques semaines plus tard. L'équipe utilise maintenant Grok-CLI avec des plugins personnalisés.*
+*Quelques semaines plus tard. Standup du lundi matin.*
 
-**Marc** *(au standup)* : "J'ai publié un plugin pour notre API interne. Installez-le avec `grok plugin:install internal-api`."
+**Marc** : "J'ai publié un plugin pour notre API interne. Installez-le avec `grok plugin:install internal-api`."
 
 **Sophie** : "Le plugin Jira marche super bien. J'ai pu créer 20 tickets en 5 minutes."
 
@@ -1317,11 +1317,55 @@ export class PluginVerifier {
 
 **Lina** *(souriant)* : "Le système de plugins a changé la donne. Chacun peut étendre l'agent selon ses besoins."
 
-**Marc** : "Prochaine étape : les **optimisations**. On a parfois des latences de 2-3 secondes sur des requêtes simples. Il y a sûrement moyen de faire mieux."
+*Mais son sourire s'efface quand elle regarde les métriques de la semaine dernière.*
+
+**Lina** : "Par contre... regardez ça."
+
+*Elle affiche un graphique sur l'écran.*
+
+```
+📊 Métriques de la semaine :
+├── Requêtes totales     : 3,247
+├── Coût API             : $847.32
+├── Latence moyenne      : 2.8 secondes
+└── Requêtes identiques  : 41% (!!)
+```
+
+**Marc** *(fronçant les sourcils)* : "41% de requêtes identiques ?"
+
+**Lina** : "Les mêmes questions, encore et encore. 'Comment lancer les tests ?' — 156 fois. 'Où est le fichier de config ?' — 89 fois."
+
+**Thomas** : "Et on paye l'API à chaque fois ?"
+
+**Lina** : "À chaque fois. Même question, même réponse, même coût."
+
+*Un silence s'installe.*
+
+**Sophie** : "On ne peut pas... cacher les réponses ?"
+
+**Lina** *(les yeux brillants)* : "Si. Mais pas un cache bête. Un cache **sémantique**. Qui comprend que 'lance les tests' et 'run npm test' c'est la même question."
+
+*Elle ouvre son laptop.*
+
+**Lina** : "J'ai lu un papier là-dessus ce week-end. On peut réduire les appels API de 68% sans perdre en qualité. Avec le bon système de cache et quelques optimisations cognitives."
+
+**Marc** : "Cognitives ?"
+
+**Lina** : "Des optimisations qui touchent à **comment** le modèle réfléchit, pas juste à combien de fois on l'appelle."
+
+*Elle ferme le standup.*
+
+**Lina** : "On se retrouve cet après-midi. J'ai des choses à vous montrer."
 
 ---
 
 *Fin de la Partie IV — Action et Outils*
+
+---
+
+**À suivre** : *Chapitre 12 — Optimisations Cognitives*
+
+*$847 de coûts API en une semaine. 41% de requêtes redondantes. Lina découvre que la clé n'est pas de faire plus — mais de faire moins, plus intelligemment. Bienvenue dans le monde du cache sémantique.*
 
 ---
 

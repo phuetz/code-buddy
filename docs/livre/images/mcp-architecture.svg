@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 650" font-family="'Segoe UI', Arial, sans-serif">
+  <defs>
+    <linearGradient id="hostGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="mcpGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe"/>
+      <stop offset="100%" style="stop-color:#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="serverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#11998e"/>
+      <stop offset="100%" style="stop-color:#38ef7d"/>
+    </linearGradient>
+    <linearGradient id="resourceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ed8936"/>
+      <stop offset="100%" style="stop-color:#dd6b20"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrowMCP" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4facfe"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="650" fill="#0f0f23"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="white" font-size="26" font-weight="bold">
+    Model Context Protocol (MCP)
+  </text>
+  <text x="500" y="68" text-anchor="middle" fill="#718096" font-size="14">
+    Standard ouvert pour connecter les LLMs à des sources de données externes
+  </text>
+
+  <!-- Host Application (Grok-CLI) -->
+  <g transform="translate(50, 100)" filter="url(#shadow)">
+    <rect x="0" y="0" width="280" height="450" rx="15" fill="#1a1a3a" stroke="url(#hostGrad)" stroke-width="3"/>
+    <rect x="0" y="0" width="280" height="50" rx="15" fill="url(#hostGrad)"/>
+    <text x="140" y="32" text-anchor="middle" fill="white" font-size="16" font-weight="bold">HOST APPLICATION</text>
+
+    <g transform="translate(20, 70)">
+      <rect x="0" y="0" width="240" height="70" rx="10" fill="#2d3748"/>
+      <text x="120" y="25" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="bold">Grok-CLI</text>
+      <text x="120" y="45" text-anchor="middle" fill="#a0aec0" font-size="10">Agent LLM avec Grok API</text>
+      <text x="120" y="60" text-anchor="middle" fill="#718096" font-size="9">Orchestrateur principal</text>
+    </g>
+
+    <g transform="translate(20, 155)">
+      <rect x="0" y="0" width="240" height="50" rx="8" fill="url(#mcpGrad)"/>
+      <text x="120" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">MCP Client</text>
+      <text x="120" y="40" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="10">@modelcontextprotocol/sdk</text>
+    </g>
+
+    <g transform="translate(20, 220)">
+      <rect x="0" y="0" width="240" height="210" rx="10" fill="#2d3748"/>
+      <text x="120" y="22" text-anchor="middle" fill="#e2e8f0" font-size="11" font-weight="bold">Outils MCP disponibles</text>
+
+      <g transform="translate(15, 40)">
+        <rect x="0" y="0" width="210" height="25" rx="5" fill="#1a1a3a"/>
+        <text x="10" y="17" fill="#48bb78" font-size="10">filesystem_read</text>
+      </g>
+      <g transform="translate(15, 70)">
+        <rect x="0" y="0" width="210" height="25" rx="5" fill="#1a1a3a"/>
+        <text x="10" y="17" fill="#48bb78" font-size="10">database_query</text>
+      </g>
+      <g transform="translate(15, 100)">
+        <rect x="0" y="0" width="210" height="25" rx="5" fill="#1a1a3a"/>
+        <text x="10" y="17" fill="#48bb78" font-size="10">github_search</text>
+      </g>
+      <g transform="translate(15, 130)">
+        <rect x="0" y="0" width="210" height="25" rx="5" fill="#1a1a3a"/>
+        <text x="10" y="17" fill="#48bb78" font-size="10">web_fetch</text>
+      </g>
+      <g transform="translate(15, 160)">
+        <rect x="0" y="0" width="210" height="25" rx="5" fill="#1a1a3a"/>
+        <text x="10" y="17" fill="#718096" font-size="10">... + N serveurs MCP</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Protocol arrows -->
+  <g transform="translate(340, 280)">
+    <path d="M0 0 L100 0" stroke="url(#mcpGrad)" stroke-width="4" marker-end="url(#arrowMCP)"/>
+    <path d="M100 20 L0 20" stroke="url(#mcpGrad)" stroke-width="4" marker-end="url(#arrowMCP)"/>
+    <text x="50" y="-10" text-anchor="middle" fill="#4facfe" font-size="10" font-weight="bold">JSON-RPC</text>
+    <text x="50" y="45" text-anchor="middle" fill="#4facfe" font-size="10">stdio/SSE</text>
+  </g>
+
+  <!-- MCP Servers -->
+  <g transform="translate(460, 100)">
+    <text x="240" y="0" text-anchor="middle" fill="#38ef7d" font-size="16" font-weight="bold">MCP SERVERS</text>
+
+    <!-- Server 1: Filesystem -->
+    <g transform="translate(0, 25)" filter="url(#shadow)">
+      <rect x="0" y="0" width="200" height="120" rx="12" fill="#1a1a3a" stroke="url(#serverGrad)" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="35" rx="12" fill="url(#serverGrad)"/>
+      <text x="100" y="23" text-anchor="middle" fill="white" font-size="12" font-weight="bold">Filesystem Server</text>
+
+      <g transform="translate(15, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Tools:</text>
+        <text x="0" y="18" fill="#e2e8f0" font-size="9">• read_file</text>
+        <text x="0" y="33" fill="#e2e8f0" font-size="9">• write_file</text>
+        <text x="0" y="48" fill="#e2e8f0" font-size="9">• list_directory</text>
+      </g>
+
+      <g transform="translate(100, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Resources:</text>
+        <text x="0" y="18" fill="#ed8936" font-size="9">file://...</text>
+      </g>
+    </g>
+
+    <!-- Server 2: Database -->
+    <g transform="translate(220, 25)" filter="url(#shadow)">
+      <rect x="0" y="0" width="200" height="120" rx="12" fill="#1a1a3a" stroke="url(#serverGrad)" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="35" rx="12" fill="url(#serverGrad)"/>
+      <text x="100" y="23" text-anchor="middle" fill="white" font-size="12" font-weight="bold">PostgreSQL Server</text>
+
+      <g transform="translate(15, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Tools:</text>
+        <text x="0" y="18" fill="#e2e8f0" font-size="9">• query</text>
+        <text x="0" y="33" fill="#e2e8f0" font-size="9">• describe_table</text>
+      </g>
+
+      <g transform="translate(100, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Resources:</text>
+        <text x="0" y="18" fill="#ed8936" font-size="9">postgres://...</text>
+      </g>
+    </g>
+
+    <!-- Server 3: GitHub -->
+    <g transform="translate(0, 165)" filter="url(#shadow)">
+      <rect x="0" y="0" width="200" height="120" rx="12" fill="#1a1a3a" stroke="url(#serverGrad)" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="35" rx="12" fill="url(#serverGrad)"/>
+      <text x="100" y="23" text-anchor="middle" fill="white" font-size="12" font-weight="bold">GitHub Server</text>
+
+      <g transform="translate(15, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Tools:</text>
+        <text x="0" y="18" fill="#e2e8f0" font-size="9">• search_repos</text>
+        <text x="0" y="33" fill="#e2e8f0" font-size="9">• get_issue</text>
+        <text x="0" y="48" fill="#e2e8f0" font-size="9">• create_pr</text>
+      </g>
+
+      <g transform="translate(100, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Resources:</text>
+        <text x="0" y="18" fill="#ed8936" font-size="9">github://...</text>
+      </g>
+    </g>
+
+    <!-- Server 4: Web -->
+    <g transform="translate(220, 165)" filter="url(#shadow)">
+      <rect x="0" y="0" width="200" height="120" rx="12" fill="#1a1a3a" stroke="url(#serverGrad)" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="35" rx="12" fill="url(#serverGrad)"/>
+      <text x="100" y="23" text-anchor="middle" fill="white" font-size="12" font-weight="bold">Web Fetch Server</text>
+
+      <g transform="translate(15, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Tools:</text>
+        <text x="0" y="18" fill="#e2e8f0" font-size="9">• fetch_url</text>
+        <text x="0" y="33" fill="#e2e8f0" font-size="9">• extract_content</text>
+      </g>
+
+      <g transform="translate(100, 50)">
+        <text x="0" y="0" fill="#a0aec0" font-size="10">Resources:</text>
+        <text x="0" y="18" fill="#ed8936" font-size="9">https://...</text>
+      </g>
+    </g>
+
+    <!-- Add your own server box -->
+    <g transform="translate(110, 305)" filter="url(#shadow)">
+      <rect x="0" y="0" width="200" height="70" rx="12" fill="#1a1a3a" stroke="#ffd700" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="100" y="25" text-anchor="middle" fill="#ffd700" font-size="12" font-weight="bold">+ Your Custom Server</text>
+      <text x="100" y="45" text-anchor="middle" fill="#718096" font-size="10">Étendez avec vos outils</text>
+      <text x="100" y="60" text-anchor="middle" fill="#718096" font-size="9">npm: @modelcontextprotocol/sdk</text>
+    </g>
+  </g>
+
+  <!-- External Resources (Right side) -->
+  <g transform="translate(800, 150)">
+    <rect x="0" y="0" width="150" height="250" rx="10" fill="#1a1a3a" stroke="url(#resourceGrad)" stroke-width="2"/>
+    <text x="75" y="25" text-anchor="middle" fill="#ed8936" font-size="12" font-weight="bold">RESOURCES</text>
+
+    <g transform="translate(15, 45)">
+      <rect x="0" y="0" width="120" height="30" rx="5" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#a0aec0" font-size="10">Fichiers locaux</text>
+    </g>
+
+    <g transform="translate(15, 85)">
+      <rect x="0" y="0" width="120" height="30" rx="5" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#a0aec0" font-size="10">Databases</text>
+    </g>
+
+    <g transform="translate(15, 125)">
+      <rect x="0" y="0" width="120" height="30" rx="5" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#a0aec0" font-size="10">APIs</text>
+    </g>
+
+    <g transform="translate(15, 165)">
+      <rect x="0" y="0" width="120" height="30" rx="5" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#a0aec0" font-size="10">Git repos</text>
+    </g>
+
+    <g transform="translate(15, 205)">
+      <rect x="0" y="0" width="120" height="30" rx="5" fill="#2d3748"/>
+      <text x="60" y="20" text-anchor="middle" fill="#a0aec0" font-size="10">Web pages</text>
+    </g>
+  </g>
+
+  <!-- Benefits footer -->
+  <g transform="translate(50, 570)">
+    <rect x="0" y="0" width="900" height="60" rx="10" fill="#1a1a3a" stroke="#4a5568" stroke-width="2"/>
+    <text x="450" y="25" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="bold">Avantages MCP</text>
+    <g transform="translate(50, 40)">
+      <text x="0" y="0" fill="#48bb78" font-size="11">Standardisé</text>
+      <text x="150" y="0" fill="#4facfe" font-size="11">Extensible</text>
+      <text x="300" y="0" fill="#f5576c" font-size="11">Sécurisé</text>
+      <text x="450" y="0" fill="#ed8936" font-size="11">Multi-modèle</text>
+      <text x="600" y="0" fill="#764ba2" font-size="11">Open Source</text>
+    </g>
+  </g>
+</svg>

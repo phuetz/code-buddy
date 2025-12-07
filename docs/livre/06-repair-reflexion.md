@@ -4,19 +4,14 @@
 
 ## 🎬 Scène d'ouverture : La Cinquième Tentative Identique
 
-*Lina observait son terminal avec un mélange de frustration et de fascination.*
+*Lundi matin. Lina observait son terminal avec un mélange de frustration et de fascination morbide.*
 
-L'agent venait d'échouer pour la cinquième fois sur le même bug — et, plus frustrant encore, il avait généré essentiellement le même code incorrect à chaque tentative.
+*L'agent venait d'échouer pour la cinquième fois sur le même bug. Et, plus frustrant encore, il avait généré exactement le même code incorrect à chaque tentative.*
 
-— "C'est comme un étudiant qui refait exactement la même erreur à chaque examen," soupira-t-elle.
+**Lina** *(montrant l'écran)* : "Regarde. Regarde ça, Marc."
 
-Marc se pencha par-dessus son épaule.
+*Marc posa son café et se pencha.*
 
-— "Il ne lit pas les messages d'erreur ?"
-
-— "Techniquement, si. Mais il ne les **utilise** pas. Regarde..."
-
-Elle pointa l'écran où s'affichaient les cinq tentatives successives :
 ```
 Tentative 1: if (user) return user.name;  → FAIL: Cannot read property 'name'
 Tentative 2: if (user) return user.name;  → FAIL: Cannot read property 'name'
@@ -25,17 +20,45 @@ Tentative 4: if (user) return user.name;  → FAIL: Cannot read property 'name'
 Tentative 5: if (user) return user.name;  → FAIL: Cannot read property 'name'
 ```
 
-— "Cinq fois le même code. Cinq fois le même échec."
+**Marc** : "Il... il a généré exactement le même code ? Cinq fois ?"
 
-— "C'est comme ça que je debuggais quand j'avais 15 ans," rit Marc. "Refaire la même chose en espérant un résultat différent."
+**Lina** : "Cinq fois. Même code. Même erreur. Même résultat."
 
-Lina ouvrit un nouvel onglet.
+**Marc** : "Il ne lit pas les messages d'erreur ?"
 
-— "J'ai lu un papier là-dessus. ChatRepair. Ils ont exactement le même problème, et ils ont trouvé une solution : donner au modèle un **feedback structuré** de ses erreurs. Pas juste 'ça a échoué', mais 'voici pourquoi ça a échoué, et voici ce que tu as déjà essayé'."
+**Lina** : "Techniquement, si. Ils sont dans le contexte. Mais il ne les **utilise** pas. Il ne fait pas le lien entre 'Cannot read property name' et le fait que user pourrait être un objet vide."
 
-Elle commença à coder.
+*Elle se renversa dans sa chaise.*
 
-— "L'idée, c'est de créer une **boucle de réparation itérative**. Pas du réessai aveugle — de l'**apprentissage**."
+**Lina** : "C'est comme un étudiant qui refait exactement la même erreur à chaque examen. On lui montre la correction, il hoche la tête, et il refait la même erreur."
+
+**Marc** *(souriant)* : "C'est comme ça que je debuggais quand j'avais 15 ans. Recompiler en espérant que ça marche cette fois."
+
+**Lina** : "La définition de la folie selon Einstein — refaire la même chose en espérant un résultat différent."
+
+*Elle ouvrit un nouvel onglet.*
+
+**Lina** : "J'ai lu un papier là-dessus ce week-end. ChatRepair, publié à ISSTA 2024. Ils avaient exactement le même problème."
+
+**Marc** : "Et ?"
+
+**Lina** : "Ils ont trouvé que le problème n'est pas la capacité du modèle — c'est le **feedback**. Quand on dit juste 'ça a échoué', le modèle n'a aucune information pour s'améliorer."
+
+*Elle dessina un diagramme sur son carnet.*
+
+**Lina** : "Leur solution : donner un feedback structuré. Pas juste 'erreur', mais 'voici l'erreur exacte, voici ce que tu as déjà essayé, voici pourquoi chaque tentative a échoué, et voici ce qui est DIFFÉRENT cette fois'."
+
+**Marc** : "Forcer le modèle à ne pas répéter ses erreurs."
+
+**Lina** *(hochant la tête)* : "Une **boucle de réparation itérative**. Pas du réessai aveugle — de l'apprentissage."
+
+*Elle ouvrit son IDE.*
+
+**Lina** : "Et devine quoi ? Leur taux de succès est passé de 15% à 40%. Presque trois fois mieux."
+
+**Marc** : "Juste en changeant le feedback ?"
+
+**Lina** : "Juste en changeant le feedback. Le modèle était déjà capable — il lui manquait juste l'information pour apprendre de ses erreurs."
 
 ---
 

@@ -1312,7 +1312,41 @@ function getCallersStrategy(): ExpansionStrategy {
 
 **Lina** *(souriant)* : "Il comprend les relations entre les fichiers maintenant !"
 
-**Marc** : "Prochaine étape : compresser intelligemment ce contexte. Parce que suivre TOUTES les dépendances, ça peut vite exploser..."
+*Mais son sourire se fige quand elle regarde les statistiques.*
+
+**Lina** : "Attends... 47 000 tokens de contexte pour une seule question ?"
+
+*Elle vérifie. Le graphe de dépendances a explosé.*
+
+**Marc** *(regardant par-dessus son épaule)* : "Ah. Le problème de transitivité."
+
+**Lina** : "`processPayment` importe de `types.ts`. Qui importe de `common.ts`. Qui importe de `utils.ts`. Qui importe..."
+
+**Marc** : "...de la moitié du codebase. Oui. C'est le revers de la médaille."
+
+*Lina calcule mentalement.*
+
+**Lina** : "À ce rythme, on va exploser les coûts API. Et les limites de contexte."
+
+**Marc** : "Il y a une solution. Au lieu de tout garder, on compresse intelligemment. On garde les parties importantes, on résume le reste."
+
+*Il ouvre un papier de recherche sur son écran.*
+
+**Marc** : "JetBrains a publié quelque chose là-dessus. Leur équipe de Saint-Pétersbourg a trouvé comment réduire le contexte de 70% sans perdre en qualité."
+
+**Lina** *(intriguée)* : "70% ? Comment c'est possible ?"
+
+**Marc** : "En comprenant que tout le contexte n'a pas la même importance. Certaines parties sont critiques, d'autres sont du bruit."
+
+*Il ferme son laptop.*
+
+**Marc** : "Prochaine étape : la compression de contexte. L'art de dire beaucoup avec peu."
+
+---
+
+**À suivre** : *Chapitre 9 — Compression de Contexte*
+
+*47 000 tokens pour une question simple. Comment réduire ce contexte à 8 000 tokens sans perdre l'information critique ? La réponse vient d'une équipe de Saint-Pétersbourg — et d'une découverte sur ce que les LLMs "perdent" vraiment.*
 
 ---
 
