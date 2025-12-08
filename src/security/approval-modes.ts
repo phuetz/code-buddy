@@ -12,6 +12,7 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
+import { parseJSONSafe, ApprovalModeConfigSchema } from '../utils/json-validator.js';
 
 // ============================================================================
 // Types
@@ -171,14 +172,14 @@ export class ApprovalModeManager extends EventEmitter {
   }
 
   /**
-   * Load configuration from file
+   * Load configuration from file with schema validation
    */
   private loadConfig(): void {
     try {
       if (fs.existsSync(this.configPath)) {
         const content = fs.readFileSync(this.configPath, 'utf-8');
-        const config = JSON.parse(content);
-        if (config.mode && config.mode in APPROVAL_MODE_CONFIGS) {
+        const config = parseJSONSafe(content, ApprovalModeConfigSchema);
+        if (config && config.mode in APPROVAL_MODE_CONFIGS) {
           this.mode = config.mode;
         }
       }

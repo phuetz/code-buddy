@@ -303,3 +303,29 @@ export {
   getSlashCommands,
   getCliOptions,
 } from "./shell-completions.js";
+
+// JSON validation with Zod
+export {
+  parseJSON,
+  parseJSONSafe,
+  parseJSONStrict,
+  parseJSONUntyped,
+  validateObject as validateObjectWithZod,
+  formatZodError,
+  isValidJSON,
+  matchesSchema,
+  // Common schemas
+  ConfigFileSchema,
+  ApprovalModeConfigSchema,
+  SettingsSchema,
+  SessionSchema,
+  CacheEntrySchema,
+  ToolCallSchema,
+  LLMResponseSchema,
+  GitHubPRSchema,
+  HookConfigSchema,
+  // Re-export zod for convenience
+  z,
+  type ParseResult as ZodParseResult,
+  type ValidationOptions as ZodValidationOptions,
+} from "./json-validator.js";
