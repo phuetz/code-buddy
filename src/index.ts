@@ -413,6 +413,28 @@ program
     "--list-models",
     "list available models from the API endpoint and exit"
   )
+  .option(
+    "--continue",
+    "continue from the most recent saved session (like mistral-vibe)"
+  )
+  .option(
+    "--resume <sessionId>",
+    "resume a specific session by ID (supports partial matching)"
+  )
+  .option(
+    "--max-price <dollars>",
+    "maximum cost in dollars before stopping (like mistral-vibe)",
+    "10.0"
+  )
+  .option(
+    "--output <format>",
+    "output format for headless mode: text, json, streaming (like mistral-vibe)",
+    "json"
+  )
+  .option(
+    "--auto-approve",
+    "automatically approve all tool executions (like mistral-vibe)"
+  )
   .action(async (message, options) => {
     // Handle --init flag
     if (options.init) {
@@ -449,6 +471,44 @@ program
         process.exit(1);
       }
     }
+
+    // Handle --continue flag (resume last session, like mistral-vibe)
+    if (options.continue) {
+      const { getSessionStore } = await import("./persistence/session-store.js");
+      const sessionStore = getSessionStore();
+      const lastSession = sessionStore.getLastSession();
+
+      if (!lastSession) {
+        console.error("❌ No sessions found. Start a new session first.");
+        process.exit(1);
+      }
+
+      sessionStore.resumeSession(lastSession.id);
+      console.log(`📂 Resuming session: ${lastSession.name} (${lastSession.id.slice(0, 8)})`);
+      console.log(`   ${lastSession.messages.length} messages, last accessed: ${lastSession.lastAccessedAt.toLocaleString()}\n`);
+    }
+
+    // Handle --resume flag (resume specific session by ID, like mistral-vibe)
+    if (options.resume) {
+      const { getSessionStore } = await import("./persistence/session-store.js");
+      const sessionStore = getSessionStore();
+      const session = sessionStore.getSessionByPartialId(options.resume);
+
+      if (!session) {
+        console.error(`❌ Session not found: ${options.resume}`);
+        console.log("\n📋 Recent sessions:");
+        const recent = sessionStore.getRecentSessions(5);
+        recent.forEach(s => {
+          console.log(`   ${s.id.slice(0, 8)} - ${s.name} (${s.messages.length} messages)`);
+        });
+        process.exit(1);
+      }
+
+      sessionStore.resumeSession(session.id);
+      console.log(`📂 Resuming session: ${session.name} (${session.id.slice(0, 8)})`);
+      console.log(`   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}\n`);
+    }
+
     if (options.directory) {
       try {
         process.chdir(options.directory);
@@ -486,6 +546,18 @@ program
         process.env.GROK_FORCE_TOOLS = 'true';
         console.log("🔧 Force tools: ENABLED (function calling for local models)");
       }
+
+      // Handle auto-approve mode (like mistral-vibe)
+      if (options.autoApprove) {
+        const { ConfirmationService } = await import("./utils/confirmation-service.js");
+        const confirmationService = ConfirmationService.getInstance();
+        confirmationService.setSessionFlag("allOperations", true);
+        console.log("✅ Auto-approve: ENABLED (all tool executions will be approved)");
+      }
+
+      // Set max-price for cost limit (like mistral-vibe)
+      const maxPrice = parseFloat(options.maxPrice) || 10.0;
+      process.env.MAX_COST = maxPrice.toString();
 
       // Headless mode: process prompt and exit
       if (options.prompt) {
