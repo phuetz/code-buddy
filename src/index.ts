@@ -435,6 +435,14 @@ program
     "--auto-approve",
     "automatically approve all tool executions (like mistral-vibe)"
   )
+  .option(
+    "--system-prompt <id>",
+    "system prompt to use: default, minimal, secure, code-reviewer, architect (or custom from ~/.grok/prompts/)"
+  )
+  .option(
+    "--list-prompts",
+    "list available system prompts and exit"
+  )
   .action(async (message, options) => {
     // Handle --init flag
     if (options.init) {
@@ -470,6 +478,31 @@ program
         console.error("\n💡 Make sure the API server is running (LM Studio, Ollama, etc.)");
         process.exit(1);
       }
+    }
+
+    // Handle --list-prompts flag
+    if (options.listPrompts) {
+      const { getPromptManager } = await import("./prompts/prompt-manager.js");
+      const promptManager = getPromptManager();
+      const prompts = await promptManager.listPrompts();
+
+      console.log("📋 Available system prompts:\n");
+      console.log("  Built-in:");
+      prompts.filter(p => p.source === 'builtin').forEach(p => {
+        console.log(`    • ${p.id}`);
+      });
+
+      const userPrompts = prompts.filter(p => p.source === 'user');
+      if (userPrompts.length > 0) {
+        console.log("\n  User (~/.grok/prompts/):");
+        userPrompts.forEach(p => {
+          console.log(`    • ${p.id}`);
+        });
+      }
+
+      console.log("\n💡 Usage: grok --system-prompt <id>");
+      console.log("   Create custom prompts in ~/.grok/prompts/<name>.md");
+      process.exit(0);
     }
 
     // Handle --continue flag (resume last session, like mistral-vibe)
@@ -583,7 +616,8 @@ program
 
       // Interactive mode: launch UI (lazy load heavy modules)
       const GrokAgent = await lazyImport.GrokAgent();
-      const agent = new GrokAgent(apiKey, baseURL, model, maxToolRounds);
+      const systemPromptId = options.systemPrompt;  // New: external prompt support
+      const agent = new GrokAgent(apiKey, baseURL, model, maxToolRounds, true, systemPromptId);
 
       // Probe for tool support if requested
       if (options.probeTools) {

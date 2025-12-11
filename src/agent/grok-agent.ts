@@ -29,7 +29,7 @@ import { getAgentModeManager, AgentModeManager, AgentMode } from "./agent-mode.j
 import { getSandboxManager, SandboxManager } from "../security/sandbox.js";
 import { getMCPClient, MCPClient } from "../mcp/mcp-client.js";
 import { getSettingsManager } from "../utils/settings-manager.js";
-import { getSystemPromptForMode, getChatOnlySystemPrompt } from "../prompts/index.js";
+import { getSystemPromptForMode, getChatOnlySystemPrompt, getPromptManager, autoSelectPromptId } from "../prompts/index.js";
 import { getCostTracker, CostTracker } from "../utils/cost-tracker.js";
 import { getAutonomyManager } from "../utils/autonomy-manager.js";
 import { ContextManagerV2, createContextManager } from "../context/context-manager-v2.js";
@@ -157,7 +157,8 @@ export class GrokAgent extends EventEmitter {
     baseURL?: string,
     model?: string,
     maxToolRounds?: number,
-    useRAGToolSelection: boolean = true
+    useRAGToolSelection: boolean = true,
+    systemPromptId?: string  // New: external prompt ID (default, minimal, secure, etc.)
   ) {
     super();
     const manager = getSettingsManager();
@@ -222,18 +223,81 @@ export class GrokAgent extends EventEmitter {
 
     // Load custom instructions and generate system prompt
     const customInstructions = loadCustomInstructions();
-    const promptMode = this.yoloMode ? "yolo" : "default";
-    const systemPrompt = getSystemPromptForMode(
-      promptMode,
-      !!this.morphEditor,
-      process.cwd(),
-      customInstructions || undefined
-    );
 
-    // Initialize with system message
-    this.messages.push({
-      role: "system",
-      content: systemPrompt,
+    // Initialize system prompt (async operation, handled via IIFE)
+    this.initializeSystemPrompt(systemPromptId, modelToUse, customInstructions);
+  }
+
+  /**
+   * Initialize system prompt - supports external Markdown prompts (mistral-vibe style)
+   */
+  private initializeSystemPrompt(
+    systemPromptId: string | undefined,
+    modelName: string,
+    customInstructions: string | null
+  ): void {
+    // Use IIFE to handle async in constructor
+    (async () => {
+      let systemPrompt: string;
+
+      if (systemPromptId) {
+        // Use external prompt system (new)
+        const promptManager = getPromptManager();
+        systemPrompt = await promptManager.buildSystemPrompt({
+          promptId: systemPromptId,
+          includeModelInfo: true,
+          includeOsInfo: true,
+          includeProjectContext: false, // Don't include by default (expensive)
+          includeToolPrompts: true,
+          userInstructions: customInstructions || undefined,
+          cwd: process.cwd(),
+          modelName,
+          tools: ['view_file', 'str_replace_editor', 'create_file', 'search', 'bash', 'todo'],
+        });
+        console.log(`📝 Using system prompt: ${systemPromptId}`);
+      } else if (systemPromptId === 'auto') {
+        // Auto-select based on model alignment
+        const autoId = autoSelectPromptId(modelName);
+        const promptManager = getPromptManager();
+        systemPrompt = await promptManager.buildSystemPrompt({
+          promptId: autoId,
+          includeModelInfo: true,
+          includeOsInfo: true,
+          userInstructions: customInstructions || undefined,
+          cwd: process.cwd(),
+          modelName,
+        });
+        console.log(`📝 Auto-selected prompt: ${autoId} (based on ${modelName})`);
+      } else {
+        // Use legacy system (current behavior)
+        const promptMode = this.yoloMode ? "yolo" : "default";
+        systemPrompt = getSystemPromptForMode(
+          promptMode,
+          !!this.morphEditor,
+          process.cwd(),
+          customInstructions || undefined
+        );
+      }
+
+      // Initialize with system message
+      this.messages.push({
+        role: "system",
+        content: systemPrompt,
+      });
+    })().catch(error => {
+      // Fallback to legacy prompt on error
+      console.warn("⚠️ Failed to load custom prompt, using default:", error);
+      const promptMode = this.yoloMode ? "yolo" : "default";
+      const systemPrompt = getSystemPromptForMode(
+        promptMode,
+        !!this.morphEditor,
+        process.cwd(),
+        customInstructions || undefined
+      );
+      this.messages.push({
+        role: "system",
+        content: systemPrompt,
+      });
     });
   }
 
