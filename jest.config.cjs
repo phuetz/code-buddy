@@ -24,6 +24,10 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   verbose: true,
   testTimeout: 10000,
+  // Setup file for global test configuration and cleanup
+  setupFilesAfterEnv: ['<rootDir>/tests/jest.setup.ts'],
   // Force exit after tests complete to avoid hanging on async operations
   forceExit: true,
+  // Detect open handles to identify resource leaks
+  detectOpenHandles: false, // Set to true for debugging leaks
 };

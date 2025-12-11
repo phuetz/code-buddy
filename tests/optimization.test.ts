@@ -617,7 +617,7 @@ describe('Latency Optimizer', () => {
     });
 
     afterEach(() => {
-      optimizer.reset();
+      optimizer.dispose(); // Clear interval and cleanup resources
     });
 
     it('should start and end operations', () => {
