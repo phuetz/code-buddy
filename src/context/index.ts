@@ -1,5 +1,5 @@
 /**
- * Context module - RAG, compression, and context management
+ * Context module - RAG, compression, context management, and web search
  */
 
 export * from "./codebase-map.js";
@@ -19,3 +19,4 @@ export * from "./multi-path-retrieval.js";
 export * from "./observation-masking.js";
 export * from "./repository-map.js";
 export * from "./smart-preloader.js";
+export * from "./web-search-grounding.js";

@@ -20,7 +20,7 @@ function getTiktoken(): typeof import('tiktoken') | null {
   loadAttempted = true;
   try {
     // Dynamic require for lazy loading
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     tiktoken = require('tiktoken');
   } catch {
     // Tiktoken not available, will use estimation

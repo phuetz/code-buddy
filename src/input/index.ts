@@ -1,5 +1,5 @@
 /**
- * Input module - Voice input, text-to-speech, and context mentions
+ * Input module - Voice input, text-to-speech, context mentions, and multimodal
  */
 
 export * from "./context-mentions.js";
@@ -12,4 +12,5 @@ export {
   type VoiceInputConfig,
   type VoiceInputState,
 } from "./voice-input-enhanced.js";
+export * from "./multimodal-input.js";
 // Note: voice-input.js has overlapping types - import directly if needed

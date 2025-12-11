@@ -552,7 +552,7 @@ export class PluginMarketplace extends EventEmitter {
         };
       } else {
         // Non-sandboxed mode (for trusted plugins only)
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+         
         const pluginModule = require(modulePath);
 
         instance = {

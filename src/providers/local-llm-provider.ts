@@ -114,7 +114,7 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
 
     try {
       // Dynamic import of node-llama-cpp (optional dependency)
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const nodeLlamaCpp = await import('node-llama-cpp').catch(() => null);
 
       if (!nodeLlamaCpp) {

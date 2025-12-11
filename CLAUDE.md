@@ -52,7 +52,8 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
 - **src/agent/** - Core agent logic, multi-agent system, reasoning (Tree-of-Thought/MCTS), auto-repair engine
   - **src/agent/repair/** - Iterative repair engine with test feedback loop (ChatRepair-inspired)
   - **src/agent/multi-agent/** - Multi-agent coordination with adaptive task allocation
-  - **src/agent/specialized/** - Specialized agents for PDF, Excel, SQL, archives, data analysis
+  - **src/agent/specialized/** - Specialized agents for PDF, Excel, SQL, archives, data analysis, security
+    - **src/agent/specialized/security-review-agent.ts** - OWASP-based security scanning agent
   - **src/agent/thinking-keywords.ts** - Extended thinking triggers (think/megathink/ultrathink)
 - **src/tools/** - Tool implementations (file ops, bash, search, multi-edit) and code intelligence suite
   - **src/tools/enhanced-search.ts** - High-performance search with bundled ripgrep, symbol search, LRU caching
@@ -65,6 +66,7 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
   - **src/context/dependency-aware-rag.ts** - RAG with dependency graph integration (CodeRAG)
   - **src/context/observation-masking.ts** - Tool output masking for irrelevant results
   - **src/context/cross-encoder-reranker.ts** - Cross-encoder reranking for improved RAG precision
+  - **src/context/web-search-grounding.ts** - Web search integration (DuckDuckGo, Brave, Google)
 - **src/renderers/** - Specialized output renderers for structured data display
   - **src/renderers/render-manager.ts** - Central render orchestration with type detection
   - **src/renderers/specialized/** - Test results, weather, code structure renderers
@@ -111,9 +113,14 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
   - **src/checkpoints/checkpoint-manager.ts** - Snapshot management and rollback
 - **src/collaboration/** - Multi-user collaboration features
 - **src/config/** - Application configuration and constants
-- **src/input/** - User input handling and key bindings
+  - **src/config/grokrules.ts** - Project-specific AI behavior rules (.grokrules files)
+- **src/input/** - User input handling, voice, and multimodal
   - **src/input/input-handler.ts** - Keyboard input processing
+  - **src/input/voice-input.ts** - Voice input with speech-to-text (Whisper, Deepgram)
+  - **src/input/multimodal-input.ts** - Image/screenshot input with OCR support
 - **src/integrations/** - External service integrations (GitHub, IDE)
+  - **src/integrations/github-actions.ts** - GitHub Actions workflow management
+  - **src/integrations/ide-extensions.ts** - IDE extensions server (VS Code, Neovim, JetBrains)
 - **src/lsp/** - Language Server Protocol integration for IDE features
 - **src/modes/** - Agent operation modes (plan, code, ask, architect)
 - **src/observability/** - Monitoring and debugging dashboard
@@ -124,7 +131,10 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
 - **src/personas/** - AI personality customization
 - **src/plugins/** - Plugin system and marketplace
 - **src/providers/** - Model provider abstractions (Grok, OpenAI, local)
-- **src/sandbox/** - Docker-based sandboxed execution
+- **src/sandbox/** - Sandboxed execution environments
+  - **src/sandbox/os-sandbox.ts** - OS-level sandboxing (bubblewrap for Linux, seatbelt for macOS)
+  - **src/sandbox/execpolicy.ts** - Command authorization framework with rule-based policies
+  - **src/sandbox/docker-sandbox.ts** - Docker-based sandboxed execution
 - **src/services/** - Business logic services
   - **src/services/plan-generator.ts** - Plan mode implementation
 - **src/tasks/** - Background task management
@@ -169,6 +179,14 @@ User Input → ChatInterface (Ink/React) → GrokAgent → Grok API
 - `PersistentAnalytics` (src/analytics/persistent-analytics.ts) - Cost tracking with budget alerts
 - `ProspectiveMemory` (src/memory/prospective-memory.ts) - Goal-oriented task/reminder management
 - `CrossEncoderReranker` (src/context/cross-encoder-reranker.ts) - Cross-encoder reranking for RAG (+15% precision)
+- `OSSandbox` (src/sandbox/os-sandbox.ts) - OS-level sandboxing with bubblewrap/seatbelt backends
+- `ExecPolicy` (src/sandbox/execpolicy.ts) - Command authorization with rule-based policies
+- `SecurityReviewAgent` (src/agent/specialized/security-review-agent.ts) - OWASP-based security scanning
+- `GitHubActionsManager` (src/integrations/github-actions.ts) - GitHub Actions workflow management
+- `IDEExtensionsServer` (src/integrations/ide-extensions.ts) - IDE extensions TCP server
+- `MultimodalInputManager` (src/input/multimodal-input.ts) - Image/screenshot input handling
+- `WebSearchManager` (src/context/web-search-grounding.ts) - Web search grounding for context
+- `GrokRulesManager` (src/config/grokrules.ts) - Project-specific AI behavior configuration
 
 ### Research-Based Improvements
 
@@ -196,6 +214,12 @@ Based on recent scientific publications in AI-assisted software development:
 | Persistent Learning | ML best practices | Continuous improvement from feedback |
 | Cross-Encoder Reranking | Sentence-BERT research | +15% precision on RAG results |
 | Prospective Memory | MemGPT (UC Berkeley) | Goal/task management with triggers |
+| OS-Level Sandboxing | Codex CLI/Claude Code | Secure command execution (bubblewrap/seatbelt) |
+| Web Search Grounding | Gemini CLI patterns | Real-time web search for context |
+| Project Rules | Cursor .cursorrules | Project-specific AI behavior (.grokrules) |
+| Security Scanning | OWASP Top 10 | Automated vulnerability detection |
+| IDE Extensions | Continue/Cursor | VS Code, Neovim, JetBrains integration |
+| Multimodal Input | Claude Code patterns | Screenshot/image input with OCR |
 
 ### Database System
 
@@ -236,11 +260,15 @@ Key interactive commands available during sessions:
 | `/mode <plan\|code\|ask>` | Change agent mode |
 | `/stats [action]` | Performance statistics (summary/cache/requests/reset) |
 | `/security [action]` | Security dashboard (status/mode/events/reset) |
+| `/security-review [path]` | Run OWASP-based security scan on code |
 | `/cost [action]` | Cost tracking (status/budget/daily/export/reset) |
 | `/commit` | Generate and create git commit |
 | `/review` | Code review of current changes |
 | `/test` | Run and analyze tests |
 | `/explain [file]` | Explain code |
+| `/gha [action]` | GitHub Actions workflow management |
+| `/image [path]` | Load image for multimodal input |
+| `/search [query]` | Web search for grounding context |
 | `/clear` | Clear chat history |
 
 ### Configuration Files
@@ -254,6 +282,8 @@ Key interactive commands available during sessions:
 - `.grok/approval-mode.json` - Current approval mode
 - `.grok/cache/semantic-cache.json` - Cached API responses (legacy, migrated to DB)
 - `.grok/cache/tool-cache.json` - Cached tool results (legacy, migrated to DB)
+- `.grokrules` or `.grokrules.json` - Project-specific AI behavior rules (like .cursorrules)
+- `.grok/execpolicy.json` - Command authorization rules and policies
 
 ## Coding Conventions
 

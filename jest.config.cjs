@@ -8,10 +8,13 @@ module.exports = {
     '**/?(*.)+(spec|test).ts'
   ],
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }],
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }],
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // Mock ESM-only modules that Jest can't handle
+    '^string-width$': '<rootDir>/tests/__mocks__/string-width.js',
+    '^strip-ansi$': '<rootDir>/tests/__mocks__/strip-ansi.js',
   },
   collectCoverageFrom: [
     'src/**/*.ts',

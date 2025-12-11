@@ -1,10 +1,51 @@
-import { TextEditorTool, BashTool } from '../tools/index.js';
-import { ToolResult, AgentState } from '../types/index.js';
+/**
+ * Agent Module Exports
+ *
+ * This file exports all agent-related modules for easy importing.
+ * The agent has been refactored into smaller, focused modules:
+ *
+ * - GrokAgent: Main orchestrator (grok-agent.ts)
+ * - ToolExecutor: Tool execution logic (tool-executor.ts)
+ * - MessageProcessor: Message handling and history (message-processor.ts)
+ * - AgentState: State management (agent-state.ts)
+ */
 
+// Re-export new modules
+export {
+  ToolExecutor,
+  type ToolExecutorDependencies,
+  type ToolMetrics,
+} from "./tool-executor.js";
+
+export {
+  MessageProcessor,
+  sanitizeLLMOutput,
+  extractCommentaryToolCalls,
+  type ChatEntry as ProcessorChatEntry,
+  type Message,
+  type StreamEvent,
+  type ExtractedToolCalls,
+} from "./message-processor.js";
+
+export {
+  AgentState,
+  DEFAULT_AGENT_CONFIG,
+  YOLO_CONFIG,
+  type AgentConfig,
+} from "./agent-state.js";
+
+// Legacy imports
+import { TextEditorTool, BashTool } from '../tools/index.js';
+import { ToolResult, AgentState as LegacyAgentState } from '../types/index.js';
+
+/**
+ * Legacy Agent class - kept for backwards compatibility
+ * @deprecated Use GrokAgent for full agent functionality
+ */
 export class Agent {
   private textEditor: TextEditorTool;
   private bash: BashTool;
-  private state: AgentState;
+  private state: LegacyAgentState;
 
   constructor() {
     this.textEditor = new TextEditorTool();
@@ -149,7 +190,7 @@ export class Agent {
     };
   }
 
-  getCurrentState(): AgentState {
+  getCurrentState(): LegacyAgentState {
     return {
       ...this.state,
       currentDirectory: this.bash.getCurrentDirectory(),

@@ -2,6 +2,7 @@ import { ChatEntry } from "../../agent/grok-agent.js";
 import { getSecurityManager, ApprovalMode } from "../../security/index.js";
 import { getCodeGuardianAgent, CodeGuardianMode } from "../../agent/specialized/code-guardian-agent.js";
 import { ConfirmationService } from "../../utils/confirmation-service.js";
+import { SecurityReviewAgent, getSecurityReviewAgent } from "../../agent/specialized/security-review-agent.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -265,5 +266,219 @@ ${error instanceof Error ? error.message : String(error)}`,
         timestamp: new Date(),
       },
     };
+  }
+}
+
+/**
+ * Security Review - Comprehensive security analysis command
+ * Inspired by Claude Code's /security-review
+ */
+export async function handleSecurityReview(args: string[]): Promise<CommandHandlerResult> {
+  const reviewer = getSecurityReviewAgent();
+
+  // Initialize if needed
+  if (!reviewer.isReady()) {
+    await reviewer.initialize();
+  }
+
+  const action = args[0]?.toLowerCase() || 'scan';
+  const target = args.slice(1).join(' ') || process.cwd();
+
+  // Help command
+  if (action === 'help') {
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `🔒 Security Review - Comprehensive Security Analysis
+══════════════════════════════════════════════════════
+
+📋 Commands:
+  /security-review scan [path]       - Full security scan
+  /security-review quick [path]      - Quick vulnerability check
+  /security-review deps [path]       - Dependency vulnerability audit
+  /security-review secrets [path]    - Secret/credential detection
+  /security-review permissions       - File permission audit
+  /security-review network [file]    - Network security analysis
+  /security-review injection [file]  - SQL/Command injection check
+  /security-review xss [file]        - XSS vulnerability check
+  /security-review auth [path]       - Authentication flow review
+  /security-review report [format]   - Generate security report
+
+🎯 Scan Types:
+  • OWASP Top 10 vulnerabilities
+  • Hardcoded credentials/secrets
+  • Insecure dependencies (CVEs)
+  • Injection vulnerabilities (SQL, XSS, Command)
+  • Authentication/authorization issues
+  • Insecure file permissions
+  • Network security misconfigurations
+
+📊 Report Formats:
+  • text (default) - Human-readable
+  • json           - Machine-parseable
+  • sarif          - SARIF format for CI integration
+  • markdown       - Documentation-friendly`,
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  try {
+    let result;
+
+    switch (action) {
+      case 'scan':
+      case 'full':
+        result = await reviewer.fullScan(target);
+        break;
+
+      case 'quick':
+        result = await reviewer.quickScan(target);
+        break;
+
+      case 'deps':
+      case 'dependencies':
+        result = await reviewer.auditDependencies(target);
+        break;
+
+      case 'secrets':
+      case 'credentials':
+        result = await reviewer.detectSecrets(target);
+        break;
+
+      case 'permissions':
+      case 'perms':
+        result = await reviewer.auditPermissions(target);
+        break;
+
+      case 'network':
+        result = await reviewer.analyzeNetworkSecurity(target);
+        break;
+
+      case 'injection':
+        result = await reviewer.checkInjectionVulns(target);
+        break;
+
+      case 'xss':
+        result = await reviewer.checkXSSVulns(target);
+        break;
+
+      case 'auth':
+      case 'authentication':
+        result = await reviewer.reviewAuthFlow(target);
+        break;
+
+      case 'report':
+        const format = args[1]?.toLowerCase() || 'text';
+        result = await reviewer.generateReport(format as 'text' | 'json' | 'sarif' | 'markdown');
+        break;
+
+      default:
+        result = await reviewer.quickScan(target);
+        break;
+    }
+
+    if (result.success) {
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: result.output || formatSecurityResult(result),
+          timestamp: new Date(),
+        },
+      };
+    } else {
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: `❌ Security Review - Error
+
+${result.error || 'An unknown error occurred'}`,
+          timestamp: new Date(),
+        },
+      };
+    }
+  } catch (error) {
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `❌ Security Review - Error
+
+${error instanceof Error ? error.message : String(error)}`,
+        timestamp: new Date(),
+      },
+    };
+  }
+}
+
+/**
+ * Format security scan result
+ */
+function formatSecurityResult(result: any): string {
+  const lines: string[] = [
+    '🔒 Security Review Results',
+    '══════════════════════════════',
+    '',
+  ];
+
+  if (result.summary) {
+    lines.push(`📊 Summary`);
+    lines.push(`  Critical: ${result.summary.critical || 0}`);
+    lines.push(`  High: ${result.summary.high || 0}`);
+    lines.push(`  Medium: ${result.summary.medium || 0}`);
+    lines.push(`  Low: ${result.summary.low || 0}`);
+    lines.push(`  Info: ${result.summary.info || 0}`);
+    lines.push('');
+  }
+
+  if (result.findings && result.findings.length > 0) {
+    lines.push(`🔍 Findings (${result.findings.length})`);
+    lines.push('');
+
+    for (const finding of result.findings.slice(0, 10)) {
+      const icon = getSeverityIcon(finding.severity);
+      lines.push(`${icon} [${finding.severity.toUpperCase()}] ${finding.title}`);
+      if (finding.file) {
+        lines.push(`   📁 ${finding.file}${finding.line ? `:${finding.line}` : ''}`);
+      }
+      if (finding.description) {
+        lines.push(`   ${finding.description}`);
+      }
+      if (finding.recommendation) {
+        lines.push(`   💡 ${finding.recommendation}`);
+      }
+      lines.push('');
+    }
+
+    if (result.findings.length > 10) {
+      lines.push(`... and ${result.findings.length - 10} more findings`);
+      lines.push('');
+    }
+  } else {
+    lines.push('✅ No security issues found!');
+    lines.push('');
+  }
+
+  if (result.recommendations && result.recommendations.length > 0) {
+    lines.push('💡 Recommendations');
+    for (const rec of result.recommendations.slice(0, 5)) {
+      lines.push(`  • ${rec}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function getSeverityIcon(severity: string): string {
+  switch (severity?.toLowerCase()) {
+    case 'critical': return '🔴';
+    case 'high': return '🟠';
+    case 'medium': return '🟡';
+    case 'low': return '🟢';
+    case 'info': return '🔵';
+    default: return '⚪';
   }
 }

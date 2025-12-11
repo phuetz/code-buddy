@@ -16,8 +16,6 @@ import {
   GROK_MODELS,
   DEFAULT_ROUTING_CONFIG,
   type TaskClassification,
-  type RoutingDecision,
-  type ModelTier,
 } from '../src/optimization/model-routing.js';
 
 import {
@@ -29,8 +27,6 @@ import {
   detectFileOps,
   detectExecution,
   detectSearch,
-  type TaskContext,
-  type TaskType,
 } from '../src/optimization/tool-filtering.js';
 
 import {

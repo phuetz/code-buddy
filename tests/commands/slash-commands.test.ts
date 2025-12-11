@@ -25,7 +25,7 @@ jest.mock('fs', () => ({
   writeFileSync: jest.fn(),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const fs = require('fs');
 
 describe('SlashCommandManager', () => {
