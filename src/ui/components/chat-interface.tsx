@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
 import { GrokAgent, ChatEntry } from "../../agent/grok-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
 import { LoadingSpinner } from "./loading-spinner.js";
@@ -17,6 +17,9 @@ import ApiKeyInput from "./api-key-input.js";
 import { renderColorBanner } from "../../utils/ascii-banner.js";
 import { ThemeProvider, useTheme } from "../context/theme-context.js";
 import { getErrorMessage } from "../../types/index.js";
+import { MiniStatusBar } from "./status-bar.js";
+import { KeyboardHelp, useKeyboardHelp, KeyboardHelpButton } from "./keyboard-help.js";
+import { ToastProvider } from "./toast-notifications.js";
 
 interface ChatInterfaceProps {
   agent?: GrokAgent;
@@ -39,10 +42,19 @@ function ChatInterfaceWithAgent({
   const [isStreaming, setIsStreaming] = useState(false);
   const [confirmationOptions, setConfirmationOptions] =
     useState<ConfirmationOptions | null>(null);
+  const [sessionStartTime] = useState(new Date());
   const scrollRef = useRef<any>();
   const processingStartTime = useRef<number>(0);
 
   const confirmationService = ConfirmationService.getInstance();
+  const keyboardHelp = useKeyboardHelp();
+
+  // Handle keyboard shortcut for help overlay (?)
+  useInput((input) => {
+    if (input === '?' && !isProcessing && !confirmationOptions) {
+      keyboardHelp.toggle();
+    }
+  });
 
   // Optimized update functions to avoid O(n²) array spreading on each streaming chunk
   // These use indexed updates instead of mapping the entire array
@@ -316,6 +328,9 @@ function ChatInterfaceWithAgent({
             <Text color={colors.textMuted}>5. /help for more information.</Text>
             <Text color={colors.textMuted}>6. /theme to change the theme, /avatar to change avatars.</Text>
           </Box>
+          <Box marginTop={1}>
+            <KeyboardHelpButton />
+          </Box>
         </Box>
       )}
 
@@ -360,24 +375,29 @@ function ChatInterfaceWithAgent({
             isStreaming={isStreaming}
           />
 
-          <Box flexDirection="row" marginTop={1}>
-            <Box marginRight={2}>
-              <Text color={colors.primary}>
-                {autoEditEnabled ? "▶" : "⏸"} auto-edit:{" "}
-                {autoEditEnabled ? "on" : "off"}
-              </Text>
-              <Text color={colors.textMuted} dimColor>
-                {" "}
-                (shift + tab)
-              </Text>
+          <Box flexDirection="row" marginTop={1} justifyContent="space-between">
+            <Box flexDirection="row">
+              <Box marginRight={2}>
+                <Text color={colors.primary}>
+                  {autoEditEnabled ? "▶" : "⏸"} auto-edit:{" "}
+                  {autoEditEnabled ? "on" : "off"}
+                </Text>
+                <Text color={colors.textMuted} dimColor>
+                  {" "}
+                  (shift + tab)
+                </Text>
+              </Box>
+              <Box marginRight={2}>
+                <Text color={colors.secondary}>◐ {theme.name}</Text>
+              </Box>
+              <MCPStatus />
             </Box>
-            <Box marginRight={2}>
-              <Text color={colors.accent}>≋ {agent.getCurrentModel()}</Text>
+            <Box>
+              <MiniStatusBar
+                tokenCount={tokenCount}
+                modelName={agent.getCurrentModel()}
+              />
             </Box>
-            <Box marginRight={2}>
-              <Text color={colors.secondary}>◐ {theme.name}</Text>
-            </Box>
-            <MCPStatus />
           </Box>
 
           <CommandSuggestions
@@ -395,6 +415,12 @@ function ChatInterfaceWithAgent({
           />
         </>
       )}
+
+      {/* Keyboard Help Overlay - Toggle with ? */}
+      <KeyboardHelp
+        isVisible={keyboardHelp.isVisible}
+        onClose={keyboardHelp.hide}
+      />
     </Box>
   );
 }
@@ -424,14 +450,16 @@ function ChatInterfaceInner({
   );
 }
 
-// Main component wrapped with ThemeProvider
+// Main component wrapped with ThemeProvider and ToastProvider
 export default function ChatInterface({
   agent,
   initialMessage,
 }: ChatInterfaceProps) {
   return (
     <ThemeProvider>
-      <ChatInterfaceInner agent={agent} initialMessage={initialMessage} />
+      <ToastProvider>
+        <ChatInterfaceInner agent={agent} initialMessage={initialMessage} />
+      </ToastProvider>
     </ThemeProvider>
   );
 }
