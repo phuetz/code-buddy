@@ -85,3 +85,34 @@ export { ErrorBoundary, StreamingErrorBoundary } from "./error-boundary.js";
 
 // Markdown rendering
 export { MarkdownRenderer } from "../utils/markdown-renderer.js";
+
+// Status and metrics
+export {
+  StatusBar,
+  MiniStatusBar,
+} from "./status-bar.js";
+
+// Notifications
+export {
+  ToastNotifications,
+  ToastProvider,
+  useToast,
+  useToastManager,
+  type Toast,
+  type ToastType,
+} from "./toast-notifications.js";
+
+// Keyboard help
+export {
+  KeyboardHelp,
+  useKeyboardHelp,
+  KeyboardHelpButton,
+} from "./keyboard-help.js";
+
+// Enhanced tool results
+export {
+  EnhancedToolResult,
+  ToolResultsList,
+  ToolExecutionSummary,
+  type ToolResultData,
+} from "./enhanced-tool-results.js";
