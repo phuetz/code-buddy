@@ -466,6 +466,18 @@ program
     "--vim",
     "enable Vim keybindings for input"
   )
+  .option(
+    "--dangerously-skip-permissions",
+    "bypass all permission checks (use in trusted containers without network access)"
+  )
+  .option(
+    "--allowed-tools <patterns>",
+    "only enable tools matching patterns (like Claude Code --allowedTools)"
+  )
+  .option(
+    "--mcp-debug",
+    "enable MCP debugging output"
+  )
   .action(async (message, options) => {
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
@@ -643,6 +655,33 @@ program
         const confirmationService = ConfirmationService.getInstance();
         confirmationService.setSessionFlag("allOperations", true);
         console.log("✅ Auto-approve: ENABLED (all tool executions will be approved)");
+      }
+
+      // Handle --dangerously-skip-permissions (like Claude Code)
+      if (options.dangerouslySkipPermissions) {
+        const { ConfirmationService } = await import("./utils/confirmation-service.js");
+        const confirmationService = ConfirmationService.getInstance();
+        confirmationService.setSessionFlag("allOperations", true);
+        confirmationService.setSessionFlag("fileOperations", true);
+        confirmationService.setSessionFlag("bashCommands", true);
+        process.env.GROK_SKIP_PERMISSIONS = 'true';
+        console.log("⚠️  DANGEROUS: All permission checks BYPASSED");
+        console.log("   Only use this in trusted containers without network access!");
+      }
+
+      // Handle --allowed-tools (like Claude Code --allowedTools)
+      if (options.allowedTools) {
+        const { setToolFilter, createToolFilter } = await import("./utils/tool-filter.js");
+        setToolFilter(createToolFilter({
+          enabledTools: options.allowedTools,
+        }));
+        console.log(`🔧 Allowed tools: ${options.allowedTools}`);
+      }
+
+      // Handle --mcp-debug
+      if (options.mcpDebug) {
+        process.env.MCP_DEBUG = 'true';
+        console.log("🔍 MCP debug: ENABLED");
       }
 
       // Set max-price for cost limit (like mistral-vibe)

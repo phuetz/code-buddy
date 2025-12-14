@@ -94,5 +94,15 @@ export {
   handleVimMode,
 } from './vibe-handlers.js';
 
+// Permissions handlers (Claude Code-inspired)
+export {
+  handlePermissions,
+} from './permissions-handlers.js';
+
+// Worktree handlers (Claude Code-inspired)
+export {
+  handleWorktree,
+} from './worktree-handlers.js';
+
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';

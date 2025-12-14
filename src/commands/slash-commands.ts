@@ -716,6 +716,29 @@ Be systematic and thorough in your analysis.`,
         arguments: [
           { name: 'action', description: 'on, off, status', required: false }
         ]
+      },
+      // ==========================================
+      // Claude Code-inspired Commands
+      // ==========================================
+      {
+        name: 'permissions',
+        description: 'Manage tool permissions and allowlist (Claude Code-style)',
+        prompt: '__PERMISSIONS__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'action', description: 'list, add <tool>, remove <tool>, categories, save, reset', required: false }
+        ]
+      },
+      {
+        name: 'worktree',
+        description: 'Manage git worktrees for parallel instances (Claude Code-style)',
+        prompt: '__WORKTREE__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'action', description: 'list, add <path> [branch], remove <path>, prune, lock, unlock', required: false }
+        ]
       }
     ];
 

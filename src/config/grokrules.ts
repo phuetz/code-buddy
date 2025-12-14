@@ -165,7 +165,19 @@ export interface GrokRulesConfig {
 
 const DEFAULT_CONFIG: GrokRulesConfig = {
   searchPaths: ['.', '.grok', '.config'],
-  fileNames: ['.grokrules', '.grokrules.yaml', '.grokrules.yml', '.grokrules.json', 'grokrules.md'],
+  fileNames: [
+    '.grokrules',
+    '.grokrules.yaml',
+    '.grokrules.yml',
+    '.grokrules.json',
+    'grokrules.md',
+    // Local files (git-ignored, personal overrides) - Claude Code style
+    '.grokrules.local',
+    '.grokrules.local.yaml',
+    '.grokrules.local.yml',
+    '.grokrules.local.json',
+    '.grokrules.local.md',
+  ],
   inheritFromParent: true,
   enableGlobalRules: true,
 };

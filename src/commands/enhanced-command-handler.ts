@@ -59,6 +59,10 @@ import {
   handleCompact,
   handleTools,
   handleVimMode,
+  // Permissions handlers (Claude Code-inspired)
+  handlePermissions,
+  // Worktree handlers (Claude Code-inspired)
+  handleWorktree,
   // Type
   CommandHandlerResult,
 } from "./handlers/index.js";
@@ -232,6 +236,14 @@ export class EnhancedCommandHandler {
 
       case "__VIM_MODE__":
         return handleVimMode(args);
+
+      // Permissions (Claude Code-inspired)
+      case "__PERMISSIONS__":
+        return handlePermissions(args);
+
+      // Git worktrees (Claude Code-inspired)
+      case "__WORKTREE__":
+        return handleWorktree(args);
 
       default:
         return { handled: false };
