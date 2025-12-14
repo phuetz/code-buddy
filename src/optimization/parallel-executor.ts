@@ -87,19 +87,25 @@ export const DEFAULT_EXECUTION_OPTIONS: ExecutionOptions = {
 export function analyzeDependencies(calls: ToolCall[]): Map<string, string[]> {
   const dependencies = new Map<string, string[]>();
 
+  if (!calls || !Array.isArray(calls)) {
+    return dependencies;
+  }
+
   // Build a map of what each call produces/consumes
   const producers = new Map<string, string>(); // resource -> producer call ID
   const _consumers = new Map<string, string[]>(); // call ID -> resources it consumes (future use)
 
   for (const call of calls) {
+    if (!call || !call.id) continue;
+
     dependencies.set(call.id, []);
 
     // Analyze arguments for file paths or references to other outputs
-    const _args = JSON.stringify(call.arguments).toLowerCase();
+    const _args = JSON.stringify(call.arguments || {}).toLowerCase();
+    const callName = (call.name || "").toLowerCase();
 
     // Check for file operations - sequential file ops on same file need ordering
-    if (call.name.toLowerCase().includes("write") ||
-        call.name.toLowerCase().includes("edit")) {
+    if (callName.includes("write") || callName.includes("edit")) {
       const filePath = extractFilePath(call.arguments);
       if (filePath) {
         // Writing to a file - this produces the file state
@@ -112,7 +118,7 @@ export function analyzeDependencies(calls: ToolCall[]): Map<string, string[]> {
       }
     }
 
-    if (call.name.toLowerCase().includes("read")) {
+    if (callName.includes("read")) {
       const filePath = extractFilePath(call.arguments);
       if (filePath) {
         // Reading a file - might depend on a write
@@ -124,8 +130,8 @@ export function analyzeDependencies(calls: ToolCall[]): Map<string, string[]> {
     }
 
     // Bash commands might have implicit dependencies
-    if (call.name.toLowerCase() === "bash") {
-      const command = String(call.arguments.command || "").toLowerCase();
+    if (callName === "bash") {
+      const command = String(call.arguments?.command || "").toLowerCase();
 
       // Build/test commands should run after file modifications
       if (command.includes("npm test") ||

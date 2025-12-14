@@ -67,6 +67,7 @@ class FuzzyMatcher {
    * Calculate similarity score (0-1, higher is better)
    */
   private calculateScore(query: string, target: string): number {
+    if (!target || !query) return 0;
     const q = query.toLowerCase();
     const t = target.toLowerCase();
 
@@ -96,6 +97,7 @@ class FuzzyMatcher {
    */
   private findMatchIndices(query: string, target: string): [number, number][] {
     const indices: [number, number][] = [];
+    if (!target || !query) return indices;
     const q = query.toLowerCase();
     const t = target.toLowerCase();
 
@@ -333,12 +335,13 @@ export class SymbolSearch {
 
       results = candidates
         .filter((s) => {
+          if (!s.name) return false;
           const name = options.caseSensitive ? s.name : s.name.toLowerCase();
           return name.includes(query);
         })
         .map((s) => ({
           symbol: s,
-          score: s.name.toLowerCase() === query.toLowerCase() ? 1.0 : 0.8,
+          score: s.name?.toLowerCase() === query.toLowerCase() ? 1.0 : 0.8,
         }));
     }
 
