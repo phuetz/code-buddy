@@ -458,7 +458,7 @@ export function createBuiltins(config: GrokScriptConfig, print: PrintFn): Builti
       return '[AI integration pending]';
     },
 
-    complete: async (prompt: GrokValue, options?: GrokValue) => {
+    complete: async (prompt: GrokValue, _options?: GrokValue) => {
       if (!config.enableAI) throw new Error('AI operations disabled');
       if (config.dryRun) {
         print(`[DRY RUN] ai.complete: ${prompt}`);

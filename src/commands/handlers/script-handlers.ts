@@ -8,7 +8,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ChatEntry } from "../../agent/grok-agent.js";
 import {
-  executeScriptFile,
   validateScript,
   createScriptTemplate,
   getScriptManager,

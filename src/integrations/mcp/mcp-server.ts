@@ -244,7 +244,7 @@ export class McpServer {
   // Lifecycle Handlers
   // ============================================
 
-  private async handleInitialize(params: unknown): Promise<unknown> {
+  private async handleInitialize(_params: unknown): Promise<unknown> {
     this.initialized = true;
 
     return {
@@ -359,7 +359,7 @@ export class McpServer {
   // Completion Handler
   // ============================================
 
-  private async handleCompletion(params: unknown): Promise<unknown> {
+  private async handleCompletion(_params: unknown): Promise<unknown> {
     // Basic completion support
     return { completion: { values: [] } };
   }

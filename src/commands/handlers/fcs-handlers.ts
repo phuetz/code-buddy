@@ -8,7 +8,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ChatEntry } from "../../agent/grok-agent.js";
-import { executeFCS, executeFCSFile, parseFCS, FCSConfig } from "../../fcs/index.js";
+import { executeFCS, executeFCSFile, parseFCS } from "../../fcs/index.js";
+import type { FCSConfig as _FCSConfig } from "../../fcs/index.js"; // Type-only import for documentation
 
 export interface CommandHandlerResult {
   handled: boolean;

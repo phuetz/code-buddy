@@ -99,7 +99,8 @@ function sendIterm2Notification(options: NotificationOptions): void {
  * Send OSC 9 notification (Windows Terminal, Kitty, etc.)
  */
 function sendOsc9Notification(options: NotificationOptions): void {
-  const message = options.message.replace(/[\x00-\x1f]/g, '');
+  // eslint-disable-next-line no-control-regex -- Intentionally removing control characters
+  const message = options.message.replace(/[\u0000-\u001f]/g, '');
   process.stdout.write(`\x1b]9;${message}\x07`);
 }
 

@@ -11,15 +11,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Lexer, tokenize } from './lexer.js';
-import { Parser, parse } from './parser.js';
+import { tokenize } from './lexer.js';
+import { parse } from './parser.js';
 import { Runtime } from './runtime.js';
 import {
   GrokScriptConfig,
   DEFAULT_SCRIPT_CONFIG,
   ScriptResult,
-  ProgramNode,
-  Token,
 } from './types.js';
 
 export * from './types.js';

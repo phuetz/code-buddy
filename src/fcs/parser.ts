@@ -103,7 +103,7 @@ export class FCSParser {
       }
 
       return this.parseStatement();
-    } catch (error) {
+    } catch (_error) {
       this.synchronize();
       return null;
     }

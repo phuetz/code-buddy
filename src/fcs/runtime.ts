@@ -41,8 +41,6 @@ import {
   ImportStmt,
   TestDeclaration,
   AssertStmt,
-  Parameter,
-  CatchClause,
 } from './types.js';
 import { createFCSBuiltins } from './builtins.js';
 import { createGrokBindings } from './grok-bindings.js';
