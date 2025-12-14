@@ -8,7 +8,7 @@
 import { EventEmitter } from 'events';
 import { GrokClient, GrokMessage } from '../grok/client.js';
 import { BashTool } from './bash.js';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as path from 'path';
 
 export interface ReviewIssue {

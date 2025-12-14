@@ -13,7 +13,7 @@
  */
 
 import { EventEmitter } from 'events';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';

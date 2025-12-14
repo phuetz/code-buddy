@@ -13,7 +13,7 @@
 import { EventEmitter } from 'events';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as os from 'os';
 
 export interface BrowserConfig {

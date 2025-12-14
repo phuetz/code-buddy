@@ -14,7 +14,7 @@ import { spawn, SpawnOptions, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as os from 'os';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 
 export interface SandboxTerminalConfig {
   // Isolation settings
