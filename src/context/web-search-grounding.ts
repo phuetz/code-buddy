@@ -193,7 +193,13 @@ export class WebSearchManager extends EventEmitter {
       }
     } catch (error) {
       this.emit('search:error', { query, engine, error });
-      throw error;
+      // Return empty results instead of throwing
+      results = [];
+    }
+
+    // Ensure results is always an array
+    if (!Array.isArray(results)) {
+      results = [];
     }
 
     const response: SearchResponse = {

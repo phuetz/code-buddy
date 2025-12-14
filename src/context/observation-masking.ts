@@ -174,26 +174,33 @@ export class ObservationMasker extends EventEmitter {
    * Mask a single observation
    */
   maskObservation(obs: Observation): MaskedObservation {
+    // Handle null/undefined observation or output
+    const output = obs?.output ?? '';
+
     if (!this.config.enabled) {
       return {
         ...obs,
-        originalLength: obs.output.length,
-        maskedLength: obs.output.length,
+        output,
+        originalLength: output.length,
+        maskedLength: output.length,
         relevanceScore: 1,
         wasRetained: true,
       };
     }
 
-    const originalLength = obs.output.length;
-    const _originalTokens = this.estimateTokens(obs.output); // Reserved for metrics
+    const originalLength = output.length;
+    const _originalTokens = this.estimateTokens(output); // Reserved for metrics
+
+    // Create observation with guaranteed output
+    const safeObs = { ...obs, output };
 
     // Calculate relevance score
-    const relevanceScore = this.calculateRelevance(obs);
+    const relevanceScore = this.calculateRelevance(safeObs);
 
     // Check if observation should be fully retained
-    if (this.shouldRetainFully(obs, relevanceScore)) {
+    if (this.shouldRetainFully(safeObs, relevanceScore)) {
       // Still might need to truncate if too long
-      const truncatedOutput = this.truncateIfNeeded(obs.output, this.config.maxTokensPerObservation);
+      const truncatedOutput = this.truncateIfNeeded(output, this.config.maxTokensPerObservation);
 
       return {
         ...obs,
@@ -207,10 +214,10 @@ export class ObservationMasker extends EventEmitter {
 
     // Check if should be completely masked
     if (relevanceScore < this.config.minRelevanceThreshold) {
-      const maskedOutput = this.generateMaskSummary(obs, 'low_relevance');
+      const maskedOutput = this.generateMaskSummary(safeObs, 'low_relevance');
 
       return {
-        ...obs,
+        ...safeObs,
         output: maskedOutput,
         originalLength,
         maskedLength: maskedOutput.length,
@@ -221,10 +228,10 @@ export class ObservationMasker extends EventEmitter {
     }
 
     // Partial masking - keep important parts
-    const partialOutput = this.extractImportantContent(obs, relevanceScore);
+    const partialOutput = this.extractImportantContent(safeObs, relevanceScore);
 
     return {
-      ...obs,
+      ...safeObs,
       output: partialOutput,
       originalLength,
       maskedLength: partialOutput.length,
@@ -241,21 +248,27 @@ export class ObservationMasker extends EventEmitter {
     masked: MaskedObservation[];
     stats: MaskingStats;
   } {
-    if (!this.config.enabled || observations.length === 0) {
+    // Handle null/undefined observations array
+    const safeObservations = (observations || []).map(obs => ({
+      ...obs,
+      output: obs?.output ?? '',
+    }));
+
+    if (!this.config.enabled || safeObservations.length === 0) {
       return {
-        masked: observations.map(obs => ({
+        masked: safeObservations.map(obs => ({
           ...obs,
           originalLength: obs.output.length,
           maskedLength: obs.output.length,
           relevanceScore: 1,
           wasRetained: true,
         })),
-        stats: this.createEmptyStats(observations),
+        stats: this.createEmptyStats(safeObservations),
       };
     }
 
     // First pass: score all observations
-    const scored = observations.map(obs => ({
+    const scored = safeObservations.map(obs => ({
       obs,
       relevance: this.calculateRelevance(obs),
       tokens: this.estimateTokens(obs.output),
@@ -350,8 +363,8 @@ export class ObservationMasker extends EventEmitter {
    */
   private calculateRelevance(obs: Observation): number {
     let score = 0;
-    const content = obs.output.toLowerCase();
-    const input = obs.input.toLowerCase();
+    const content = (obs.output ?? '').toLowerCase();
+    const input = (obs.input ?? '').toLowerCase();
 
     // Base score from type priority
     score += this.config.typePriorities[obs.type] * 0.3;

@@ -128,13 +128,16 @@ export class ContextCompressor extends EventEmitter {
    * Compress context entries to fit within token budget
    */
   compress(entries: ContextEntry[]): CompressionResult {
+    // Ensure entries is an array
+    const safeEntries = Array.isArray(entries) ? entries : [];
+
     const startTime = Date.now();
-    const originalTokens = this.countTotalTokens(entries);
+    const originalTokens = this.countTotalTokens(safeEntries);
 
     // If already within budget, return as-is
     if (originalTokens <= this.config.maxTokens) {
       return {
-        entries,
+        entries: safeEntries,
         originalTokens,
         compressedTokens: originalTokens,
         savings: 0,
@@ -144,7 +147,7 @@ export class ContextCompressor extends EventEmitter {
       };
     }
 
-    let result = [...entries];
+    let result = [...safeEntries];
     let maskedCount = 0;
     let summarizedCount = 0;
     let deduplicatedCount = 0;
