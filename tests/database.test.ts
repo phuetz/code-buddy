@@ -5,7 +5,6 @@
  */
 
 import {
-  DatabaseManager,
   getDatabaseManager,
   resetDatabaseManager,
   initializeDatabase,

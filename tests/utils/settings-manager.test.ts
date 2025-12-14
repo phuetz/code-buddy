@@ -3,8 +3,6 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 
 // Mock fs before importing the module
 jest.mock('fs', () => ({
@@ -18,8 +16,6 @@ jest.mock('fs', () => ({
 import {
   SettingsManager,
   getSettingsManager,
-  UserSettings,
-  ProjectSettings,
 } from '../../src/utils/settings-manager.js';
 
 // Reset singleton between tests

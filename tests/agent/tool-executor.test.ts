@@ -2,7 +2,7 @@
  * Tests for ToolExecutor module
  */
 
-import { ToolExecutor, GrokToolCall, ToolMetrics } from "../../src/agent/tool-executor";
+import { ToolExecutor, GrokToolCall } from "../../src/agent/tool-executor";
 
 // Mock all dependencies
 jest.mock("../../src/tools/index.js", () => ({

@@ -28,7 +28,6 @@ import {
   getEnhancedSearch,
   resetEnhancedSearch,
   SearchMatch,
-  SymbolMatch,
   SearchStats,
 } from '../src/tools/enhanced-search.js';
 

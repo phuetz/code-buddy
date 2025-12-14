@@ -2,7 +2,7 @@
  * Tests for AgentState module
  */
 
-import { AgentState, DEFAULT_AGENT_CONFIG, YOLO_CONFIG, AgentConfig } from "../../src/agent/agent-state";
+import { AgentState, DEFAULT_AGENT_CONFIG, YOLO_CONFIG } from "../../src/agent/agent-state";
 
 // Mock all dependencies
 jest.mock("../../src/utils/cost-tracker.js", () => ({

@@ -6,7 +6,6 @@ import {
   EmbeddingProvider,
   getEmbeddingProvider,
   resetEmbeddingProvider,
-  type EmbeddingConfig,
   type EmbeddingProviderType,
 } from '../src/embeddings/embedding-provider.js';
 

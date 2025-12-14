@@ -85,8 +85,8 @@ describe("WebSearchManager", () => {
       const spy = jest.fn();
       manager.on("cache:hit", spy);
 
-      // Mock search result
-      const mockResults: SearchResult[] = [
+      // Mock search result (used to verify cache behavior)
+      const _mockResults: SearchResult[] = [
         {
           title: "Test Result",
           url: "https://example.com",

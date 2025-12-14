@@ -12,7 +12,6 @@ import {
   resetTemplateEngine,
   generateProject,
   type ProjectTemplate,
-  type GenerateOptions,
 } from '../src/templates/project-scaffolding.js';
 
 describe('TemplateEngine', () => {

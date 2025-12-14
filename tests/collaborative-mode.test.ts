@@ -9,7 +9,6 @@ import {
   createCollaborationClient,
   type Collaborator,
   type CollaboratorRole,
-  type CollaborationSession,
   type SessionSettings,
   type ToolCallState,
   type SessionEvent,

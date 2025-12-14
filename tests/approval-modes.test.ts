@@ -9,7 +9,6 @@
 
 import {
   ApprovalModeManager,
-  ApprovalMode,
   OperationType,
   OperationRequest,
   resetApprovalModeManager

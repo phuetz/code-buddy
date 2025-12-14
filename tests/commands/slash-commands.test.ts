@@ -14,7 +14,6 @@ import {
   getSlashCommandManager,
   resetSlashCommandManager,
 } from '../../src/commands/slash-commands';
-import path from 'path';
 
 // Mock fs module with explicit typing
 jest.mock('fs', () => ({

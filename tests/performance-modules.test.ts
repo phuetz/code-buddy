@@ -11,7 +11,6 @@ import {
   resetLazyLoader,
   registerCommonModules,
   initializeLazyLoader,
-  type LazyLoaderConfig,
 } from '../src/performance/lazy-loader.js';
 
 import {
@@ -19,15 +18,12 @@ import {
   getToolCache,
   resetToolCache,
   withCache,
-  type ToolCacheConfig,
 } from '../src/performance/tool-cache.js';
 
 import {
   RequestOptimizer,
   getRequestOptimizer,
   resetRequestOptimizer,
-  executeParallel,
-  type RequestConfig,
 } from '../src/performance/request-optimizer.js';
 
 // ============================================================================

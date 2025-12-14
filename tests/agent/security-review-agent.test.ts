@@ -9,7 +9,6 @@ import {
   SecurityReviewAgent,
   getSecurityReviewAgent,
   resetSecurityReviewAgent,
-  SecuritySeverity,
   SecurityFinding,
   SecurityScanResult,
 } from '../../src/agent/specialized/security-review-agent.js';

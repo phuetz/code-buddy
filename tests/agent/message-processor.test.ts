@@ -7,7 +7,6 @@ import {
   sanitizeLLMOutput,
   extractCommentaryToolCalls,
   ChatEntry,
-  Message,
 } from "../../src/agent/message-processor";
 
 describe("MessageProcessor", () => {
