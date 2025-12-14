@@ -739,6 +739,19 @@ Be systematic and thorough in your analysis.`,
         arguments: [
           { name: 'action', description: 'list, add <path> [branch], remove <path>, prune, lock, unlock', required: false }
         ]
+      },
+      // ==========================================
+      // FileCommander Enhanced-inspired Commands
+      // ==========================================
+      {
+        name: 'script',
+        description: 'Run Grok Script automation files (.gs)',
+        prompt: '__SCRIPT__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'action', description: 'run <file>, new <name>, validate <file>, list, history', required: false }
+        ]
       }
     ];
 

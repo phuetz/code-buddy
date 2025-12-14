@@ -63,6 +63,8 @@ import {
   handlePermissions,
   // Worktree handlers (Claude Code-inspired)
   handleWorktree,
+  // Script handlers (FileCommander Enhanced-inspired)
+  handleScript,
   // Type
   CommandHandlerResult,
 } from "./handlers/index.js";
@@ -244,6 +246,10 @@ export class EnhancedCommandHandler {
       // Git worktrees (Claude Code-inspired)
       case "__WORKTREE__":
         return handleWorktree(args);
+
+      // Script execution (FileCommander Enhanced-inspired)
+      case "__SCRIPT__":
+        return handleScript(args);
 
       default:
         return { handled: false };

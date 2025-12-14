@@ -104,5 +104,10 @@ export {
   handleWorktree,
 } from './worktree-handlers.js';
 
+// Script handlers (FileCommander Enhanced-inspired)
+export {
+  handleScript,
+} from './script-handlers.js';
+
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';
