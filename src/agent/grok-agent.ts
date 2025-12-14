@@ -1,40 +1,48 @@
-import { GrokClient, GrokMessage, GrokToolCall } from "../grok/client.js";
+import { GrokClient, GrokMessage, GrokToolCall, ProviderType } from "../grok/client.js";
 import {
   getAllGrokTools,
   getRelevantTools,
-  getMCPManager,
   initializeMCPServers,
   classifyQuery,
   ToolSelectionResult,
   getToolSelector,
 } from "../grok/tools.js";
+import {
+  MiddlewarePipeline,
+  createDefaultMiddlewares,
+  createYoloMiddlewares,
+  MiddlewareAction,
+  ConversationContext,
+} from "../middleware/index.js";
+import { getInteractionLogger, InteractionLogger } from "../logging/index.js";
 import { recordToolRequest, formatToolSelectionMetrics } from "../tools/tool-selector.js";
 import { loadMCPConfig } from "../mcp/config.js";
-import {
-  TextEditorTool,
-  MorphEditorTool,
-  BashTool,
-  TodoTool,
-  SearchTool,
-  WebSearchTool,
-  ImageTool,
-} from "../tools/index.js";
 import { ToolResult } from "../types/index.js";
 import { EventEmitter } from "events";
 import { createTokenCounter, TokenCounter } from "../utils/token-counter.js";
 import { loadCustomInstructions } from "../utils/custom-instructions.js";
 import { getCheckpointManager, CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import { getSessionStore, SessionStore } from "../persistence/session-store.js";
-import { getAgentModeManager, AgentModeManager, AgentMode } from "./agent-mode.js";
-import { getSandboxManager, SandboxManager } from "../security/sandbox.js";
+import { AgentMode } from "./agent-mode.js";
 import { getMCPClient, MCPClient } from "../mcp/mcp-client.js";
 import { getSettingsManager } from "../utils/settings-manager.js";
 import { getSystemPromptForMode, getChatOnlySystemPrompt, getPromptManager, autoSelectPromptId } from "../prompts/index.js";
-import { getCostTracker, CostTracker } from "../utils/cost-tracker.js";
 import { getAutonomyManager } from "../utils/autonomy-manager.js";
-import { ContextManagerV2, createContextManager } from "../context/context-manager-v2.js";
 import { sanitizeLLMOutput, extractCommentaryToolCalls } from "../utils/sanitize.js";
 import { getErrorMessage } from "../types/errors.js";
+
+// Import extracted modules
+import { ToolExecutor, ToolExecutorDependencies } from "./tool-executor.js";
+import { AgentState } from "./agent-state.js";
+import {
+  TextEditorTool,
+  BashTool,
+  TodoTool,
+  SearchTool,
+  WebSearchTool,
+  ImageTool,
+  MorphEditorTool,
+} from "../tools/index.js";
 
 // Re-export types for backwards compatibility
 export { ChatEntry, StreamingChunk } from "./types.js";
@@ -60,88 +68,35 @@ import type { ChatEntry, StreamingChunk } from "./types.js";
  */
 export class GrokAgent extends EventEmitter {
   private grokClient: GrokClient;
-  // Lazy-loaded tool instances (improves startup time)
-  private _textEditor: TextEditorTool | null = null;
-  private _morphEditor: MorphEditorTool | null | undefined = undefined; // undefined = not checked yet
-  private _bash: BashTool | null = null;
-  private _todoTool: TodoTool | null = null;
-  private _search: SearchTool | null = null;
-  private _webSearch: WebSearchTool | null = null;
-  private _imageTool: ImageTool | null = null;
   private chatHistory: ChatEntry[] = [];
-
-  // Lazy tool getters - only instantiate when first accessed
-  private get textEditor(): TextEditorTool {
-    if (!this._textEditor) {
-      this._textEditor = new TextEditorTool();
-    }
-    return this._textEditor;
-  }
-
-  private get morphEditor(): MorphEditorTool | null {
-    if (this._morphEditor === undefined) {
-      this._morphEditor = process.env.MORPH_API_KEY ? new MorphEditorTool() : null;
-    }
-    return this._morphEditor;
-  }
-
-  private get bash(): BashTool {
-    if (!this._bash) {
-      this._bash = new BashTool();
-    }
-    return this._bash;
-  }
-
-  private get todoTool(): TodoTool {
-    if (!this._todoTool) {
-      this._todoTool = new TodoTool();
-    }
-    return this._todoTool;
-  }
-
-  private get search(): SearchTool {
-    if (!this._search) {
-      this._search = new SearchTool();
-    }
-    return this._search;
-  }
-
-  private get webSearch(): WebSearchTool {
-    if (!this._webSearch) {
-      this._webSearch = new WebSearchTool();
-    }
-    return this._webSearch;
-  }
-
-  private get imageTool(): ImageTool {
-    if (!this._imageTool) {
-      this._imageTool = new ImageTool();
-    }
-    return this._imageTool;
-  }
   private messages: GrokMessage[] = [];
   private tokenCounter: TokenCounter;
+
   // Maximum history entries to prevent memory bloat (keep last N entries)
   private static readonly MAX_HISTORY_SIZE = 1000;
+
   // Cached tools from first round of tool selection
   private cachedSelectedTools: import("../grok/client.js").GrokTool[] | null = null;
-  private abortController: AbortController | null = null;
+
+  // Extracted modules for better modularity
+  private toolExecutor: ToolExecutor;
+  private agentState: AgentState;
+
+  // Managers
   private checkpointManager: CheckpointManager;
   private sessionStore: SessionStore;
-  private modeManager: AgentModeManager;
-  private sandboxManager: SandboxManager;
   private mcpClient: MCPClient;
-  private maxToolRounds: number;
-  private useRAGToolSelection: boolean;
+
+  // Middleware and logging (Mistral Vibe-style)
+  private middlewarePipeline: MiddlewarePipeline;
+  private interactionLogger: InteractionLogger;
+
+  // Tool selection state
   private lastToolSelection: ToolSelectionResult | null = null;
-  private parallelToolExecution: boolean = true;
   private lastSelectedToolNames: string[] = [];
   private lastQueryForToolSelection: string = '';
-  private yoloMode: boolean = false;
-  private sessionCostLimit: number;
-  private sessionCost: number = 0;
-  private costTracker: CostTracker;
-  private contextManager: ContextManagerV2;
+
+  private providerInitialized: boolean = false;
 
   /**
    * Create a new GrokAgent instance
@@ -158,73 +113,87 @@ export class GrokAgent extends EventEmitter {
     model?: string,
     maxToolRounds?: number,
     useRAGToolSelection: boolean = true,
-    systemPromptId?: string  // New: external prompt ID (default, minimal, secure, etc.)
+    systemPromptId?: string,  // New: external prompt ID (default, minimal, secure, etc.)
+    provider?: ProviderType   // New: provider type (grok, claude-max, etc.)
   ) {
     super();
     const manager = getSettingsManager();
     const savedModel = manager.getCurrentModel();
-    const modelToUse = model || savedModel || "grok-code-fast-1";
+    const defaultModel = provider === 'claude-max' ? 'claude-sonnet-4-20250514' : 'grok-code-fast-1';
 
-    // YOLO mode: requires BOTH env var AND explicit config confirmation
-    // This prevents accidental activation via env var alone
+    // For Claude Max, use Claude model unless explicitly specified
+    const modelToUse = provider === 'claude-max'
+      ? (model || defaultModel)
+      : (model || savedModel || defaultModel);
+
+    // Initialize AgentState with configuration
     const autonomyManager = getAutonomyManager();
-    const envYoloMode = process.env.YOLO_MODE === "true";
-    const configYoloMode = autonomyManager.isYOLOEnabled();
+    const yoloMode = autonomyManager.isYOLOEnabled();
 
-    // YOLO mode requires explicit enablement through autonomy manager
-    // Env var alone only triggers a warning, doesn't enable YOLO
-    if (envYoloMode && !configYoloMode) {
+    // Warn if env var is set but YOLO not explicitly enabled
+    if (process.env.YOLO_MODE === "true" && !yoloMode) {
       console.warn("⚠️  YOLO_MODE env var set but not enabled via /yolo command or config.");
       console.warn("   Use '/yolo on' to explicitly enable YOLO mode.");
-      this.yoloMode = false;
-    } else {
-      this.yoloMode = configYoloMode;
     }
 
-    this.maxToolRounds = maxToolRounds || (this.yoloMode ? 400 : 50);
+    // Initialize AgentState (handles YOLO mode, cost tracking, etc.)
+    this.agentState = new AgentState({
+      yoloMode,
+      maxToolRounds: maxToolRounds || (yoloMode ? 400 : 50),
+      ragToolSelection: useRAGToolSelection,
+    });
 
-    // Session cost limit: ALWAYS have a hard limit, even in YOLO mode
-    // Default $10, YOLO mode gets $100 max (prevents runaway costs)
-    const YOLO_HARD_LIMIT = 100; // $100 max even in YOLO mode
-    const maxCostEnv = process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : null;
-
-    if (this.yoloMode) {
-      // In YOLO mode, use env var if set, otherwise $100 hard limit
-      this.sessionCostLimit = maxCostEnv !== null
-        ? Math.min(maxCostEnv, YOLO_HARD_LIMIT * 10) // Allow up to $1000 if explicitly set
-        : YOLO_HARD_LIMIT;
-      console.warn(`🚀 YOLO MODE ACTIVE - Cost limit: $${this.sessionCostLimit}, Max rounds: ${this.maxToolRounds}`);
-    } else {
-      this.sessionCostLimit = maxCostEnv !== null ? maxCostEnv : 10;
+    if (yoloMode) {
+      const config = this.agentState.getConfig();
+      console.warn(`🚀 YOLO MODE ACTIVE - Cost limit: $${config.sessionCostLimit}, Max rounds: ${config.maxToolRounds}`);
     }
 
-    this.costTracker = getCostTracker();
-    this.useRAGToolSelection = useRAGToolSelection;
-    this.grokClient = new GrokClient(apiKey, modelToUse, baseURL);
-    // Tools are now lazy-loaded via getters (see lazy tool getters above)
+    // Initialize Grok client
+    this.grokClient = new GrokClient(apiKey, modelToUse, baseURL, provider);
+
+    // Initialize Claude Max provider if selected
+    if (provider === 'claude-max') {
+      this.initializeProvider();
+    }
+
     this.tokenCounter = createTokenCounter(modelToUse);
 
-    // Initialize context manager with model-specific limits
-    // Detect max tokens from environment or use model default
-    const envMaxContext = Number(process.env.GROK_MAX_CONTEXT);
-    const maxContextTokens = Number.isFinite(envMaxContext) && envMaxContext > 0
-      ? envMaxContext
-      : undefined;
-    this.contextManager = createContextManager(modelToUse, maxContextTokens);
-
+    // Initialize managers
     this.checkpointManager = getCheckpointManager();
     this.sessionStore = getSessionStore();
-    this.modeManager = getAgentModeManager();
-    this.sandboxManager = getSandboxManager();
     this.mcpClient = getMCPClient();
+
+    // Initialize middleware pipeline (Mistral Vibe-style conversation control)
+    const middlewares = yoloMode
+      ? createYoloMiddlewares()
+      : createDefaultMiddlewares();
+    this.middlewarePipeline = new MiddlewarePipeline(middlewares);
+
+    // Initialize interaction logger for session replay
+    this.interactionLogger = getInteractionLogger();
+    this.interactionLogger.startSession({
+      model: modelToUse,
+      provider: provider || 'grok',
+    });
+
+    // Initialize ToolExecutor with dependencies
+    const toolDeps: ToolExecutorDependencies = {
+      textEditor: new TextEditorTool(),
+      bash: new BashTool(),
+      search: new SearchTool(),
+      todoTool: new TodoTool(),
+      imageTool: new ImageTool(),
+      webSearch: new WebSearchTool(),
+      checkpointManager: this.checkpointManager,
+      morphEditor: process.env.MORPH_API_KEY ? new MorphEditorTool() : null,
+    };
+    this.toolExecutor = new ToolExecutor(toolDeps);
 
     // Initialize MCP servers if configured
     this.initializeMCP();
 
     // Load custom instructions and generate system prompt
     const customInstructions = loadCustomInstructions();
-
-    // Initialize system prompt (async operation, handled via IIFE)
     this.initializeSystemPrompt(systemPromptId, modelToUse, customInstructions);
   }
 
@@ -270,10 +239,10 @@ export class GrokAgent extends EventEmitter {
         console.log(`📝 Auto-selected prompt: ${autoId} (based on ${modelName})`);
       } else {
         // Use legacy system (current behavior)
-        const promptMode = this.yoloMode ? "yolo" : "default";
+        const promptMode = this.agentState.isYoloModeEnabled() ? "yolo" : "default";
         systemPrompt = getSystemPromptForMode(
           promptMode,
-          !!this.morphEditor,
+          process.env.MORPH_API_KEY !== undefined,
           process.cwd(),
           customInstructions || undefined
         );
@@ -287,10 +256,10 @@ export class GrokAgent extends EventEmitter {
     })().catch(error => {
       // Fallback to legacy prompt on error
       console.warn("⚠️ Failed to load custom prompt, using default:", error);
-      const promptMode = this.yoloMode ? "yolo" : "default";
+      const promptMode = this.agentState.isYoloModeEnabled() ? "yolo" : "default";
       const systemPrompt = getSystemPromptForMode(
         promptMode,
-        !!this.morphEditor,
+        process.env.MORPH_API_KEY !== undefined,
         process.cwd(),
         customInstructions || undefined
       );
@@ -299,6 +268,40 @@ export class GrokAgent extends EventEmitter {
         content: systemPrompt,
       });
     });
+  }
+
+  /**
+   * Initialize the LLM provider (Claude Max requires async OAuth)
+   */
+  private initializeProvider(): void {
+    (async () => {
+      try {
+        if (this.grokClient.isClaudeMax()) {
+          await this.grokClient.initializeClaudeMax();
+          this.providerInitialized = true;
+          console.log("✅ Claude Max provider initialized");
+        }
+      } catch (error) {
+        console.error("❌ Provider initialization failed:", error);
+        throw error;
+      }
+    })().catch((error) => {
+      console.error("Uncaught error in provider initialization:", error);
+    });
+  }
+
+  /**
+   * Ensure provider is initialized before making requests
+   */
+  async ensureProviderReady(): Promise<void> {
+    if (this.grokClient.isClaudeMax() && !this.providerInitialized) {
+      await this.grokClient.initializeClaudeMax();
+      this.providerInitialized = true;
+    }
+    if (this.grokClient.isClaudeSDK() && !this.providerInitialized) {
+      await this.grokClient.initializeClaudeSDK();
+      this.providerInitialized = true;
+    }
   }
 
   /**
@@ -357,119 +360,6 @@ export class GrokAgent extends EventEmitter {
   }
 
   /**
-   * Check if tool calls can be safely executed in parallel
-   *
-   * Tools that modify the same files or have side effects should not be parallelized.
-   * Read-only operations (view_file, search, web_search) are safe to parallelize.
-   */
-  private canParallelizeToolCalls(toolCalls: GrokToolCall[]): boolean {
-    if (!this.parallelToolExecution || toolCalls.length <= 1) {
-      return false;
-    }
-
-    // Tools that are safe to run in parallel (read-only)
-    const safeParallelTools = new Set([
-      'view_file',
-      'search',
-      'web_search',
-      'web_fetch',
-      'codebase_map',
-      'pdf',
-      'audio',
-      'video',
-      'document',
-      'ocr',
-      'qr',
-      'archive',
-      'clipboard' // read operations
-    ]);
-
-    // Tools that modify state (unsafe for parallel)
-    const writeTools = new Set([
-      'create_file',
-      'str_replace_editor',
-      'edit_file',
-      'multi_edit',
-      'bash',
-      'git',
-      'create_todo_list',
-      'update_todo_list',
-      'screenshot',
-      'export',
-      'diagram'
-    ]);
-
-    // Check if all tools are safe for parallel execution
-    const allSafe = toolCalls.every(tc => safeParallelTools.has(tc.function.name));
-    if (allSafe) return true;
-
-    // Check if any write tools target the same file
-    const writeToolCalls = toolCalls.filter(tc => writeTools.has(tc.function.name));
-    if (writeToolCalls.length > 1) {
-      // Extract file paths from arguments
-      const filePaths = new Set<string>();
-      for (const tc of writeToolCalls) {
-        try {
-          const args = JSON.parse(tc.function.arguments);
-          const path = args.path || args.target_file || args.file_path;
-          if (path) {
-            if (filePaths.has(path)) {
-              return false; // Same file targeted by multiple write tools
-            }
-            filePaths.add(path);
-          }
-        } catch {
-          return false; // Can't parse args, be safe
-        }
-      }
-    }
-
-    // If there's only one write tool, safe to parallelize with read tools
-    return writeToolCalls.length <= 1;
-  }
-
-  /**
-   * Execute multiple tool calls, potentially in parallel
-   */
-  private async _executeToolCallsParallel(
-    toolCalls: GrokToolCall[]
-  ): Promise<Map<string, ToolResult>> {
-    const results = new Map<string, ToolResult>();
-
-    if (this.canParallelizeToolCalls(toolCalls)) {
-      // Execute in parallel with proper error handling per tool
-      const promises = toolCalls.map(async (toolCall) => {
-        try {
-          const result = await this.executeTool(toolCall);
-          return { id: toolCall.id, result };
-        } catch (error) {
-          // Individual tool failure doesn't crash other parallel tools
-          return {
-            id: toolCall.id,
-            result: {
-              success: false,
-              error: `Tool execution failed: ${getErrorMessage(error)}`,
-            } as ToolResult,
-          };
-        }
-      });
-
-      const settled = await Promise.all(promises);
-      for (const { id, result } of settled) {
-        results.set(id, result);
-      }
-    } else {
-      // Execute sequentially
-      for (const toolCall of toolCalls) {
-        const result = await this.executeTool(toolCall);
-        results.set(toolCall.id, result);
-      }
-    }
-
-    return results;
-  }
-
-  /**
    * Get tools for a query using RAG selection if enabled
    */
   private async getToolsForQuery(query: string): Promise<{
@@ -478,7 +368,7 @@ export class GrokAgent extends EventEmitter {
   }> {
     this.lastQueryForToolSelection = query;
 
-    if (this.useRAGToolSelection) {
+    if (this.agentState.isRAGToolSelectionEnabled()) {
       const selection = await getRelevantTools(query, {
         maxTools: 15,
         useRAG: true,
@@ -498,7 +388,7 @@ export class GrokAgent extends EventEmitter {
    * Record tool request for metrics (called when LLM requests a tool)
    */
   private recordToolRequestMetric(toolName: string): void {
-    if (this.useRAGToolSelection && this.lastQueryForToolSelection) {
+    if (this.agentState.isRAGToolSelectionEnabled() && this.lastQueryForToolSelection) {
       recordToolRequest(
         toolName,
         this.lastSelectedToolNames,
@@ -524,22 +414,25 @@ export class GrokAgent extends EventEmitter {
     this.trimHistory();
 
     const newEntries: ChatEntry[] = [userEntry];
-    const maxToolRounds = this.maxToolRounds; // Prevent infinite loops
+    const maxToolRounds = this.agentState.getMaxToolRounds();
     let toolRounds = 0;
 
     // Track token usage for cost calculation
     const inputTokens = this.tokenCounter.countMessageTokens(this.messages as Array<{ role: string; content: string | null; [key: string]: unknown }>);
     let totalOutputTokens = 0;
 
+    // Get context manager for message preparation
+    const contextManager = this.agentState.getContextManager();
+
     try {
       // Use RAG-based tool selection for initial query
       const { tools } = await this.getToolsForQuery(message);
 
       // Apply context management - compress messages if approaching token limits
-      const preparedMessages = this.contextManager.prepareMessages(this.messages);
+      const preparedMessages = contextManager.prepareMessages(this.messages);
 
       // Check for context warnings
-      const contextWarning = this.contextManager.shouldWarn(preparedMessages);
+      const contextWarning = contextManager.shouldWarn(preparedMessages);
       if (contextWarning.warn) {
         console.warn(contextWarning.message);
       }
@@ -605,51 +498,42 @@ export class GrokAgent extends EventEmitter {
             newEntries.push(toolCallEntry);
           });
 
-          // Execute tool calls and update the entries
-          for (const toolCall of assistantMessage.tool_calls) {
-            const result = await this.executeTool(toolCall);
+          // Execute tool calls - parallel if enabled, sequential otherwise
+          if (this.agentState.isParallelToolExecutionEnabled()) {
+            // Parallel execution using ToolExecutor
+            const results = await this.toolExecutor.executeParallel(assistantMessage.tool_calls);
 
-            // Update the existing tool_call entry with the result
-            const entryIndex = this.chatHistory.findIndex(
-              (entry) =>
-                entry.type === "tool_call" && entry.toolCall?.id === toolCall.id
-            );
+            for (const toolCall of assistantMessage.tool_calls) {
+              const result = results.get(toolCall.id)!;
+              this.updateToolCallEntry(toolCall, result, newEntries);
 
-            if (entryIndex !== -1) {
-              const updatedEntry: ChatEntry = {
-                ...this.chatHistory[entryIndex],
-                type: "tool_result",
+              // Add tool result to messages
+              this.messages.push({
+                role: "tool",
+                content: result.success ? result.output || "Success" : result.error || "Error",
+                tool_call_id: toolCall.id,
+              });
+            }
+          } else {
+            // Sequential execution (original behavior)
+            for (const toolCall of assistantMessage.tool_calls) {
+              const result = await this.executeTool(toolCall);
+              this.updateToolCallEntry(toolCall, result, newEntries);
+
+              // Add tool result to messages with proper format (needed for AI context)
+              this.messages.push({
+                role: "tool",
                 content: result.success
                   ? result.output || "Success"
-                  : result.error || "Error occurred",
-                toolResult: result,
-              };
-              this.chatHistory[entryIndex] = updatedEntry;
-
-              // Also update in newEntries for return value
-              const newEntryIndex = newEntries.findIndex(
-                (entry) =>
-                  entry.type === "tool_call" &&
-                  entry.toolCall?.id === toolCall.id
-              );
-              if (newEntryIndex !== -1) {
-                newEntries[newEntryIndex] = updatedEntry;
-              }
+                  : result.error || "Error",
+                tool_call_id: toolCall.id,
+              });
             }
-
-            // Add tool result to messages with proper format (needed for AI context)
-            this.messages.push({
-              role: "tool",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error",
-              tool_call_id: toolCall.id,
-            });
           }
 
           // Get next response - this might contain more tool calls
           // Apply context management again for long tool chains
-          const nextPreparedMessages = this.contextManager.prepareMessages(this.messages);
+          const nextPreparedMessages = contextManager.prepareMessages(this.messages);
           currentResponse = await this.grokClient.chat(
             nextPreparedMessages,
             tools,
@@ -694,7 +578,7 @@ export class GrokAgent extends EventEmitter {
       if (this.isSessionCostLimitReached()) {
         const costEntry: ChatEntry = {
           type: "assistant",
-          content: `💸 Session cost limit reached ($${this.sessionCost.toFixed(2)} / $${this.sessionCostLimit.toFixed(2)}). Please start a new session.`,
+          content: `💸 Session cost limit reached ($${this.agentState.getSessionCost().toFixed(2)} / $${this.agentState.getSessionCostLimit().toFixed(2)}). Please start a new session.`,
           timestamp: new Date(),
         };
         this.chatHistory.push(costEntry);
@@ -786,7 +670,7 @@ export class GrokAgent extends EventEmitter {
     message: string
   ): AsyncGenerator<StreamingChunk, void, unknown> {
     // Create new abort controller for this request
-    this.abortController = new AbortController();
+    this.agentState.createAbortController();
 
     // Reset cached tools for new conversation turn
     this.cachedSelectedTools = null;
@@ -800,6 +684,12 @@ export class GrokAgent extends EventEmitter {
     this.chatHistory.push(userEntry);
     this.messages.push({ role: "user", content: message });
 
+    // Log user message for session replay
+    this.interactionLogger.logMessage({
+      role: 'user',
+      content: message,
+    });
+
     // Trim history to prevent memory bloat
     this.trimHistory();
 
@@ -812,16 +702,55 @@ export class GrokAgent extends EventEmitter {
       tokenCount: inputTokens,
     };
 
-    const maxToolRounds = this.maxToolRounds; // Prevent infinite loops
+    const maxToolRounds = this.agentState.getMaxToolRounds();
     let toolRounds = 0;
     let totalOutputTokens = 0;
     let lastTokenUpdate = 0;
 
+    // Build conversation context for middleware
+    const sessionStartTime = new Date();
+    const buildMiddlewareContext = (): ConversationContext => ({
+      messages: this.messages,
+      stats: {
+        turns: this.chatHistory.filter(e => e.type === 'user').length,
+        totalTokens: inputTokens + totalOutputTokens,
+        promptTokens: inputTokens,
+        completionTokens: totalOutputTokens,
+        sessionCost: this.agentState.getSessionCost(),
+        toolCalls: this.chatHistory.filter(e => e.type === 'tool_call').length,
+        successfulToolCalls: this.chatHistory.filter(e => e.type === 'tool_result' && e.toolResult?.success).length,
+        failedToolCalls: this.chatHistory.filter(e => e.type === 'tool_result' && !e.toolResult?.success).length,
+        startTime: sessionStartTime,
+        durationMs: Date.now() - sessionStartTime.getTime(),
+      },
+      model: {
+        name: this.grokClient.getCurrentModel(),
+        maxContextTokens: 131072, // Default for Grok
+        inputPricePerMillion: 5.0,
+        outputPricePerMillion: 15.0,
+      },
+      workingDirectory: process.cwd(),
+      sessionId: this.interactionLogger.getCurrentSessionId() || 'unknown',
+      autoApprove: this.agentState.getConfig().yoloMode,
+      metadata: {},
+    });
+
     try {
+      // Run middleware before turn
+      const beforeResult = await this.middlewarePipeline.runBefore(buildMiddlewareContext());
+      if (beforeResult.action === MiddlewareAction.STOP) {
+        yield { type: "content", content: `\n⚠️ ${beforeResult.message}\n` };
+        yield { type: "done" };
+        return;
+      }
+      if (beforeResult.action === MiddlewareAction.INJECT_MESSAGE && beforeResult.message) {
+        yield { type: "content", content: `\n💡 ${beforeResult.message}\n` };
+      }
+
       // Agent loop - continue until no more tool calls or max rounds reached
       while (toolRounds < maxToolRounds) {
         // Check if operation was cancelled
-        if (this.abortController?.signal.aborted) {
+        if (this.agentState.isAborted()) {
           yield {
             type: "content",
             content: "\n\n[Operation cancelled by user]",
@@ -844,10 +773,11 @@ export class GrokAgent extends EventEmitter {
         }
 
         // Apply context management - compress messages if approaching token limits
-        const preparedMessages = this.contextManager.prepareMessages(this.messages);
+        const contextManager = this.agentState.getContextManager();
+        const preparedMessages = contextManager.prepareMessages(this.messages);
 
         // Check for context warnings and emit to user
-        const contextWarning = this.contextManager.shouldWarn(preparedMessages);
+        const contextWarning = contextManager.shouldWarn(preparedMessages);
         if (contextWarning.warn) {
           yield {
             type: "content",
@@ -869,7 +799,7 @@ export class GrokAgent extends EventEmitter {
 
         for await (const chunk of stream) {
           // Check for cancellation in the streaming loop
-          if (this.abortController?.signal.aborted) {
+          if (this.agentState.isAborted()) {
             yield {
               type: "content",
               content: "\n\n[Operation cancelled by user]",
@@ -1004,45 +934,69 @@ export class GrokAgent extends EventEmitter {
             };
           }
 
-          // Execute tools
-          for (const toolCall of toolCalls) {
-            // Check for cancellation before executing each tool
-            if (this.abortController?.signal.aborted) {
-              yield {
-                type: "content",
-                content: "\n\n[Operation cancelled by user]",
-              };
+          // Execute tools - parallel if enabled, sequential otherwise
+          if (this.agentState.isParallelToolExecutionEnabled()) {
+            // Check for cancellation before parallel execution
+            if (this.agentState.isAborted()) {
+              yield { type: "content", content: "\n\n[Operation cancelled by user]" };
               yield { type: "done" };
               return;
             }
 
-            const result = await this.executeTool(toolCall);
+            // Parallel execution using ToolExecutor
+            const results = await this.toolExecutor.executeParallel(toolCalls);
 
-            const toolResultEntry: ChatEntry = {
-              type: "tool_result",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error occurred",
-              timestamp: new Date(),
-              toolCall: toolCall,
-              toolResult: result,
-            };
-            this.chatHistory.push(toolResultEntry);
+            // Yield results in order
+            for (const toolCall of toolCalls) {
+              const result = results.get(toolCall.id)!;
 
-            yield {
-              type: "tool_result",
-              toolCall,
-              toolResult: result,
-            };
+              const toolResultEntry: ChatEntry = {
+                type: "tool_result",
+                content: result.success ? result.output || "Success" : result.error || "Error occurred",
+                timestamp: new Date(),
+                toolCall: toolCall,
+                toolResult: result,
+              };
+              this.chatHistory.push(toolResultEntry);
 
-            // Add tool result with proper format (needed for AI context)
-            this.messages.push({
-              role: "tool",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error",
-              tool_call_id: toolCall.id,
-            });
+              yield { type: "tool_result", toolCall, toolResult: result };
+
+              this.messages.push({
+                role: "tool",
+                content: result.success ? result.output || "Success" : result.error || "Error",
+                tool_call_id: toolCall.id,
+              });
+            }
+          } else {
+            // Sequential execution (original behavior)
+            for (const toolCall of toolCalls) {
+              // Check for cancellation before executing each tool
+              if (this.agentState.isAborted()) {
+                yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+                yield { type: "done" };
+                return;
+              }
+
+              const result = await this.executeTool(toolCall);
+
+              const toolResultEntry: ChatEntry = {
+                type: "tool_result",
+                content: result.success ? result.output || "Success" : result.error || "Error occurred",
+                timestamp: new Date(),
+                toolCall: toolCall,
+                toolResult: result,
+              };
+              this.chatHistory.push(toolResultEntry);
+
+              yield { type: "tool_result", toolCall, toolResult: result };
+
+              // Add tool result with proper format (needed for AI context)
+              this.messages.push({
+                role: "tool",
+                content: result.success ? result.output || "Success" : result.error || "Error",
+                tool_call_id: toolCall.id,
+              });
+            }
           }
 
           // Update token count after processing all tool calls to include tool results
@@ -1060,7 +1014,7 @@ export class GrokAgent extends EventEmitter {
           if (this.isSessionCostLimitReached()) {
             yield {
               type: "content",
-              content: `\n\n💸 Session cost limit reached ($${this.sessionCost.toFixed(2)} / $${this.sessionCostLimit.toFixed(2)}). Use YOLO_MODE=true or set MAX_COST to increase the limit.`,
+              content: `\n\n💸 Session cost limit reached ($${this.agentState.getSessionCost().toFixed(2)} / $${this.agentState.getSessionCostLimit().toFixed(2)}). Use YOLO_MODE=true or set MAX_COST to increase the limit.`,
             };
             yield { type: "done" };
             return;
@@ -1081,10 +1035,16 @@ export class GrokAgent extends EventEmitter {
         };
       }
 
+      // Run middleware after turn completes
+      const afterResult = await this.middlewarePipeline.runAfter(buildMiddlewareContext());
+      if (afterResult.action === MiddlewareAction.INJECT_MESSAGE && afterResult.message) {
+        yield { type: "content", content: `\n💡 ${afterResult.message}\n` };
+      }
+
       yield { type: "done" };
     } catch (error: unknown) {
       // Check if this was a cancellation
-      if (this.abortController?.signal.aborted) {
+      if (this.agentState.isAborted()) {
         yield {
           type: "content",
           content: "\n\n[Operation cancelled by user]",
@@ -1111,160 +1071,41 @@ export class GrokAgent extends EventEmitter {
       yield { type: "done" };
     } finally {
       // Clean up abort controller
-      this.abortController = null;
+      this.agentState.clearAbortController();
     }
   }
 
+  /**
+   * Execute a tool call - delegates to ToolExecutor module
+   */
   private async executeTool(toolCall: GrokToolCall): Promise<ToolResult> {
-    // Record this tool request for metrics tracking
-    this.recordToolRequestMetric(toolCall.function.name);
-
-    try {
-      const args = JSON.parse(toolCall.function.arguments);
-
-      switch (toolCall.function.name) {
-        case "view_file":
-          const range: [number, number] | undefined =
-            args.start_line && args.end_line
-              ? [args.start_line, args.end_line]
-              : undefined;
-          return await this.textEditor.view(args.path, range);
-
-        case "create_file":
-          // Create checkpoint before creating file
-          this.checkpointManager.checkpointBeforeCreate(args.path);
-          return await this.textEditor.create(args.path, args.content);
-
-        case "str_replace_editor":
-          // Create checkpoint before editing file
-          this.checkpointManager.checkpointBeforeEdit(args.path);
-          return await this.textEditor.strReplace(
-            args.path,
-            args.old_str,
-            args.new_str,
-            args.replace_all
-          );
-
-        case "edit_file":
-          if (!this.morphEditor) {
-            return {
-              success: false,
-              error:
-                "Morph Fast Apply not available. Please set MORPH_API_KEY environment variable to use this feature.",
-            };
-          }
-          return await this.morphEditor.editFile(
-            args.target_file,
-            args.instructions,
-            args.code_edit
-          );
-
-        case "bash":
-          return await this.bash.execute(args.command);
-
-        case "create_todo_list":
-          return await this.todoTool.createTodoList(args.todos);
-
-        case "update_todo_list":
-          return await this.todoTool.updateTodoList(args.updates);
-
-        case "search":
-          return await this.search.search(args.query, {
-            searchType: args.search_type,
-            includePattern: args.include_pattern,
-            excludePattern: args.exclude_pattern,
-            caseSensitive: args.case_sensitive,
-            wholeWord: args.whole_word,
-            regex: args.regex,
-            maxResults: args.max_results,
-            fileTypes: args.file_types,
-            includeHidden: args.include_hidden,
-          });
-
-        case "find_symbols":
-          return await this.search.findSymbols(args.name, {
-            types: args.types,
-            exportedOnly: args.exported_only,
-          });
-
-        case "find_references":
-          return await this.search.findReferences(
-            args.symbol_name,
-            args.context_lines ?? 2
-          );
-
-        case "find_definition":
-          return await this.search.findDefinition(args.symbol_name);
-
-        case "search_multi":
-          return await this.search.searchMultiple(
-            args.patterns,
-            args.operator ?? "OR"
-          );
-
-        case "web_search":
-          return await this.webSearch.search(args.query, {
-            maxResults: args.max_results,
-          });
-
-        case "web_fetch":
-          return await this.webSearch.fetchPage(args.url);
-
-        default:
-          // Check if this is an MCP tool
-          if (toolCall.function.name.startsWith("mcp__")) {
-            return await this.executeMCPTool(toolCall);
-          }
-
-          return {
-            success: false,
-            error: `Unknown tool: ${toolCall.function.name}`,
-          };
-      }
-    } catch (error: unknown) {
-      return {
-        success: false,
-        error: `Tool execution error: ${getErrorMessage(error)}`,
-      };
-    }
+    return this.toolExecutor.execute(toolCall);
   }
 
-  private async executeMCPTool(toolCall: GrokToolCall): Promise<ToolResult> {
-    try {
-      const args = JSON.parse(toolCall.function.arguments);
-      const mcpManager = getMCPManager();
+  /**
+   * Update chat history entries with tool result
+   */
+  private updateToolCallEntry(toolCall: GrokToolCall, result: ToolResult, newEntries: ChatEntry[]): void {
+    const entryIndex = this.chatHistory.findIndex(
+      (entry) => entry.type === "tool_call" && entry.toolCall?.id === toolCall.id
+    );
 
-      const result = await mcpManager.callTool(toolCall.function.name, args);
+    if (entryIndex !== -1) {
+      const updatedEntry: ChatEntry = {
+        ...this.chatHistory[entryIndex],
+        type: "tool_result",
+        content: result.success ? result.output || "Success" : result.error || "Error occurred",
+        toolResult: result,
+      };
+      this.chatHistory[entryIndex] = updatedEntry;
 
-      if (result.isError) {
-        const errorContent = result.content[0] as { text?: string } | undefined;
-        return {
-          success: false,
-          error: errorContent?.text || "MCP tool error",
-        };
+      // Also update in newEntries for return value
+      const newEntryIndex = newEntries.findIndex(
+        (entry) => entry.type === "tool_call" && entry.toolCall?.id === toolCall.id
+      );
+      if (newEntryIndex !== -1) {
+        newEntries[newEntryIndex] = updatedEntry;
       }
-
-      // Extract content from result
-      const output = result.content
-        .map((item) => {
-          if (item.type === "text") {
-            return item.text;
-          } else if (item.type === "resource") {
-            return `Resource: ${item.resource?.uri || "Unknown"}`;
-          }
-          return String(item);
-        })
-        .join("\n");
-
-      return {
-        success: true,
-        output: output || "Success",
-      };
-    } catch (error: unknown) {
-      return {
-        success: false,
-        error: `MCP tool execution error: ${getErrorMessage(error)}`,
-      };
     }
   }
 
@@ -1273,11 +1114,11 @@ export class GrokAgent extends EventEmitter {
   }
 
   getCurrentDirectory(): string {
-    return this.bash.getCurrentDirectory();
+    return this.toolExecutor.getBashTool().getCurrentDirectory();
   }
 
   async executeBashCommand(command: string): Promise<ToolResult> {
-    return await this.bash.execute(command);
+    return await this.toolExecutor.getBashTool().execute(command);
   }
 
   getCurrentModel(): string {
@@ -1294,7 +1135,7 @@ export class GrokAgent extends EventEmitter {
     this.tokenCounter.dispose();
     this.tokenCounter = createTokenCounter(model);
     // Update context manager for new model limits
-    this.contextManager.updateConfig({ model });
+    this.agentState.updateContextConfig({ model });
   }
 
   /**
@@ -1326,9 +1167,7 @@ export class GrokAgent extends EventEmitter {
   }
 
   abortCurrentOperation(): void {
-    if (this.abortController) {
-      this.abortController.abort();
-    }
+    this.agentState.abortCurrentOperation();
   }
 
   // Checkpoint methods
@@ -1386,30 +1225,30 @@ export class GrokAgent extends EventEmitter {
     this.messages = this.messages.slice(0, 1);
   }
 
-  // Mode methods
+  // Mode methods - delegate to AgentState
   getMode(): AgentMode {
-    return this.modeManager.getMode();
+    return this.agentState.getMode();
   }
 
   setMode(mode: AgentMode): void {
-    this.modeManager.setMode(mode);
+    this.agentState.setMode(mode);
   }
 
   getModeStatus(): string {
-    return this.modeManager.formatModeStatus();
+    return this.agentState.getModeStatus();
   }
 
   isToolAllowedInCurrentMode(toolName: string): boolean {
-    return this.modeManager.isToolAllowed(toolName);
+    return this.agentState.isToolAllowedInCurrentMode(toolName);
   }
 
-  // Sandbox methods
+  // Sandbox methods - delegate to AgentState
   getSandboxStatus(): string {
-    return this.sandboxManager.formatStatus();
+    return this.agentState.getSandboxStatus();
   }
 
   validateCommand(command: string): { valid: boolean; reason?: string } {
-    return this.sandboxManager.validateCommand(command);
+    return this.agentState.validateCommand(command);
   }
 
   // MCP methods
@@ -1450,34 +1289,29 @@ export class GrokAgent extends EventEmitter {
     }
   }
 
-  // Image methods
+  // Image methods - delegate to ToolExecutor
   async processImage(imagePath: string): Promise<ToolResult> {
-    return this.imageTool.processImage({ type: 'file', data: imagePath });
+    return this.toolExecutor.getImageTool().processImage({ type: 'file', data: imagePath });
   }
 
   isImageFile(filePath: string): boolean {
-    return this.imageTool.isImage(filePath);
+    return this.toolExecutor.getImageTool().isImage(filePath);
   }
 
   // RAG Tool Selection methods
 
   /**
    * Enable or disable RAG-based tool selection
-   *
-   * When enabled, only semantically relevant tools are sent to the LLM,
-   * reducing prompt bloat and improving tool selection accuracy.
-   *
-   * @param enabled - Whether to enable RAG tool selection
    */
   setRAGToolSelection(enabled: boolean): void {
-    this.useRAGToolSelection = enabled;
+    this.agentState.setRAGToolSelection(enabled);
   }
 
   /**
    * Check if RAG tool selection is enabled
    */
   isRAGToolSelectionEnabled(): boolean {
-    return this.useRAGToolSelection;
+    return this.agentState.isRAGToolSelectionEnabled();
   }
 
   /**
@@ -1507,7 +1341,7 @@ export class GrokAgent extends EventEmitter {
     const lines = [
       '📊 Tool Selection Statistics',
       '─'.repeat(30),
-      `RAG Enabled: ${this.useRAGToolSelection ? '✅' : '❌'}`,
+      `RAG Enabled: ${this.agentState.isRAGToolSelectionEnabled() ? '✅' : '❌'}`,
       `Selected Tools: ${selectedTools.length}`,
       `Categories: ${classification.categories.join(', ')}`,
       `Confidence: ${Math.round(classification.confidence * 100)}%`,
@@ -1569,76 +1403,54 @@ export class GrokAgent extends EventEmitter {
     getToolSelector().clearAllCaches();
   }
 
-  // Parallel Tool Execution methods
+  // Parallel Tool Execution methods - delegate to AgentState
 
   /**
    * Enable or disable parallel tool execution
-   *
-   * When enabled, multiple read-only tool calls (view_file, search, web_search, etc.)
-   * will be executed in parallel for faster response times.
-   *
-   * Write operations are automatically serialized to prevent conflicts.
-   *
-   * @param enabled - Whether to enable parallel tool execution
    */
   setParallelToolExecution(enabled: boolean): void {
-    this.parallelToolExecution = enabled;
+    this.agentState.setParallelToolExecution(enabled);
   }
 
   /**
    * Enable or disable self-healing for bash commands
-   *
-   * When enabled, failed bash commands will attempt automatic remediation.
-   * When disabled (via --no-self-heal flag), commands fail without auto-fix attempts.
-   *
-   * @param enabled - Whether to enable self-healing
    */
   setSelfHealing(enabled: boolean): void {
-    this.bash.setSelfHealing(enabled);
+    this.toolExecutor.getBashTool().setSelfHealing(enabled);
   }
 
   /**
    * Check if self-healing is enabled for bash commands
    */
   isSelfHealingEnabled(): boolean {
-    return this.bash.isSelfHealingEnabled();
+    return this.toolExecutor.getBashTool().isSelfHealingEnabled();
   }
 
   /**
    * Check if parallel tool execution is enabled
    */
   isParallelToolExecutionEnabled(): boolean {
-    return this.parallelToolExecution;
+    return this.agentState.isParallelToolExecutionEnabled();
   }
 
-  // YOLO Mode methods
+  // YOLO Mode methods - delegate to AgentState
 
   /**
    * Enable or disable YOLO mode
-   *
-   * YOLO mode enables full autonomy with:
-   * - 400 max tool rounds (vs 50 in normal mode)
-   * - No session cost limit
-   * - Aggressive system prompt for autonomous operation
-   *
-   * @param enabled - Whether to enable YOLO mode
    */
   setYoloMode(enabled: boolean): void {
-    this.yoloMode = enabled;
-    this.maxToolRounds = enabled ? 400 : 50;
-    this.sessionCostLimit = enabled ? Infinity : 10;
+    this.agentState.setYoloMode(enabled);
 
     // Update system prompt for new mode
     const customInstructions = loadCustomInstructions();
     const promptMode = enabled ? "yolo" : "default";
     const systemPrompt = getSystemPromptForMode(
       promptMode,
-      !!this.morphEditor,
+      process.env.MORPH_API_KEY !== undefined,
       process.cwd(),
       customInstructions || undefined
     );
 
-    // Update the system message
     if (this.messages.length > 0 && this.messages[0].role === "system") {
       this.messages[0].content = systemPrompt;
     }
@@ -1648,84 +1460,70 @@ export class GrokAgent extends EventEmitter {
    * Check if YOLO mode is enabled
    */
   isYoloModeEnabled(): boolean {
-    return this.yoloMode;
+    return this.agentState.isYoloModeEnabled();
   }
 
   /**
    * Get current session cost
    */
   getSessionCost(): number {
-    return this.sessionCost;
+    return this.agentState.getSessionCost();
   }
 
   /**
    * Get session cost limit
    */
   getSessionCostLimit(): number {
-    return this.sessionCostLimit;
+    return this.agentState.getSessionCostLimit();
   }
 
   /**
    * Set session cost limit
-   * @param limit - Maximum cost in dollars (use Infinity for unlimited)
    */
   setSessionCostLimit(limit: number): void {
-    this.sessionCostLimit = limit;
+    this.agentState.setSessionCostLimit(limit);
   }
 
   /**
    * Check if session cost limit has been reached
    */
   isSessionCostLimitReached(): boolean {
-    return this.sessionCost >= this.sessionCostLimit;
+    return this.agentState.isSessionCostLimitReached();
   }
 
   /**
    * Record cost for current request
-   * @param inputTokens - Number of input tokens
-   * @param outputTokens - Number of output tokens
    */
   private recordSessionCost(inputTokens: number, outputTokens: number): void {
     const model = this.grokClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
-    this.sessionCost += cost;
-    this.costTracker.recordUsage(inputTokens, outputTokens, model);
+    this.agentState.recordSessionCost(inputTokens, outputTokens, model);
   }
 
   /**
    * Format cost status for display
    */
   formatCostStatus(): string {
-    const limitStr = this.sessionCostLimit === Infinity
-      ? "unlimited"
-      : `$${this.sessionCostLimit.toFixed(2)}`;
-    const modeStr = this.yoloMode ? "🔥 YOLO" : "🛡️ Safe";
-
-    return `${modeStr} | Session: $${this.sessionCost.toFixed(4)} / ${limitStr} | Rounds: ${this.maxToolRounds} max`;
+    return this.agentState.formatCostStatus();
   }
 
-  // Context Management methods
+  // Context Management methods - delegate to AgentState
 
   /**
    * Get current context statistics
    */
   getContextStats() {
-    return this.contextManager.getStats(this.messages);
+    return this.agentState.getContextStats(this.messages);
   }
 
   /**
    * Format context stats as a readable string
    */
   formatContextStats(): string {
-    const stats = this.contextManager.getStats(this.messages);
-    const status = stats.isCritical ? '🔴 Critical' :
-                   stats.isNearLimit ? '🟡 Warning' : '🟢 Normal';
-    return `Context: ${stats.totalTokens}/${stats.maxTokens} tokens (${stats.usagePercent.toFixed(1)}%) ${status} | Messages: ${stats.messageCount} | Summaries: ${stats.summarizedSessions}`;
+    return this.agentState.formatContextStats(this.messages);
   }
 
   /**
    * Update context manager configuration
-   * @param config - Partial configuration to update
    */
   updateContextConfig(config: {
     maxContextTokens?: number;
@@ -1734,12 +1532,11 @@ export class GrokAgent extends EventEmitter {
     enableSummarization?: boolean;
     compressionRatio?: number;
   }): void {
-    this.contextManager.updateConfig(config);
+    this.agentState.updateContextConfig(config);
   }
 
   /**
    * Clean up all resources
-   * Should be called when the agent is no longer needed
    */
   dispose(): void {
     // Clean up token counter
@@ -1747,16 +1544,8 @@ export class GrokAgent extends EventEmitter {
       this.tokenCounter.dispose();
     }
 
-    // Clean up context manager
-    if (this.contextManager) {
-      this.contextManager.dispose();
-    }
-
-    // Abort any ongoing operations
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
+    // Clean up agent state (includes context manager)
+    this.agentState.dispose();
 
     // Clear chat history and messages to free memory
     this.chatHistory = [];
