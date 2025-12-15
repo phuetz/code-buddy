@@ -64,19 +64,27 @@ export interface WorkflowJob {
   steps: WorkflowStep[];
   env?: Record<string, string>;
   strategy?: {
-    matrix?: Record<string, any[]>;
+    matrix?: Record<string, (string | number | boolean)[]>;
     'fail-fast'?: boolean;
     'max-parallel'?: number;
   };
   timeout?: number;
-  services?: Record<string, any>;
+  services?: Record<string, WorkflowService>;
+}
+
+interface WorkflowService {
+  image: string;
+  env?: Record<string, string>;
+  ports?: (string | number)[];
+  options?: string;
+  volumes?: string[];
 }
 
 export interface WorkflowStep {
   name?: string;
   uses?: string;
   run?: string;
-  with?: Record<string, any>;
+  with?: Record<string, string | number | boolean>;
   env?: Record<string, string>;
   if?: string;
   id?: string;
@@ -84,6 +92,21 @@ export interface WorkflowStep {
   shell?: string;
   'continue-on-error'?: boolean;
   'timeout-minutes'?: number;
+}
+
+// GitHub CLI response types
+interface GhWorkflowRunResponse {
+  databaseId: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+  workflowDatabaseId: number;
+  number: number;
+  headBranch: string;
+  headSha: string;
 }
 
 export interface WorkflowRun {
@@ -563,13 +586,13 @@ export class GitHubActionsManager extends EventEmitter {
       args.push('--limit', String(limit));
 
       const output = await this.execGh(args);
-      const runs = JSON.parse(output);
+      const runs = JSON.parse(output) as GhWorkflowRunResponse[];
 
-      return runs.map((run: any) => ({
+      return runs.map((run: GhWorkflowRunResponse) => ({
         id: run.databaseId,
         name: run.name,
-        status: run.status?.toLowerCase(),
-        conclusion: run.conclusion?.toLowerCase(),
+        status: run.status?.toLowerCase() as WorkflowRun['status'],
+        conclusion: run.conclusion?.toLowerCase() as WorkflowRun['conclusion'],
         created_at: run.createdAt,
         updated_at: run.updatedAt,
         html_url: run.url,

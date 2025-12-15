@@ -71,6 +71,41 @@ export interface GroundingContext {
   confidence: number;
 }
 
+// API Response Types
+interface BraveSearchResult {
+  title: string;
+  url: string;
+  description: string;
+  page_age?: string;
+}
+
+interface BraveApiResponse {
+  web?: {
+    results: BraveSearchResult[];
+  };
+}
+
+interface GoogleSearchResult {
+  title: string;
+  link: string;
+  snippet: string;
+}
+
+interface GoogleApiResponse {
+  items?: GoogleSearchResult[];
+}
+
+interface SearxSearchResult {
+  title: string;
+  url: string;
+  content: string;
+  publishedDate?: string;
+}
+
+interface SearxApiResponse {
+  results?: SearxSearchResult[];
+}
+
 // ============================================================================
 // Default Configuration
 // ============================================================================
@@ -405,7 +440,8 @@ export class WebSearchManager extends EventEmitter {
 
     const data = JSON.parse(response);
 
-    return (data.web?.results || []).slice(0, maxResults).map((r: any) => ({
+    const braveData = data as BraveApiResponse;
+    return (braveData.web?.results || []).slice(0, maxResults).map((r: BraveSearchResult) => ({
       title: r.title,
       url: r.url,
       snippet: r.description,
@@ -423,9 +459,9 @@ export class WebSearchManager extends EventEmitter {
     const url = `https://www.googleapis.com/customsearch/v1?key=${this.config.apiKeys.google}&cx=${this.config.apiKeys.googleCx}&q=${encodedQuery}&num=${maxResults}`;
 
     const response = await this.httpGet(url);
-    const data = JSON.parse(response);
+    const data = JSON.parse(response) as GoogleApiResponse;
 
-    return (data.items || []).slice(0, maxResults).map((r: any) => ({
+    return (data.items || []).slice(0, maxResults).map((r: GoogleSearchResult) => ({
       title: r.title,
       url: r.link,
       snippet: r.snippet,
@@ -442,9 +478,9 @@ export class WebSearchManager extends EventEmitter {
     const url = `${this.config.apiKeys.searxInstance}/search?q=${encodedQuery}&format=json`;
 
     const response = await this.httpGet(url);
-    const data = JSON.parse(response);
+    const data = JSON.parse(response) as SearxApiResponse;
 
-    return (data.results || []).slice(0, maxResults).map((r: any) => ({
+    return (data.results || []).slice(0, maxResults).map((r: SearxSearchResult) => ({
       title: r.title,
       url: r.url,
       snippet: r.content,

@@ -18,6 +18,7 @@ import {
   GrokScriptConfig,
   DEFAULT_SCRIPT_CONFIG,
   ScriptResult,
+  ProgramNode,
 } from './types.js';
 
 export * from './types.js';

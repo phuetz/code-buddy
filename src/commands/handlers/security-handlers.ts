@@ -414,10 +414,32 @@ ${error instanceof Error ? error.message : String(error)}`,
   }
 }
 
+// Security result types
+interface SecurityFinding {
+  severity: string;
+  title: string;
+  file?: string;
+  line?: number;
+  description?: string;
+  recommendation?: string;
+}
+
+interface SecurityResult {
+  summary?: {
+    critical?: number;
+    high?: number;
+    medium?: number;
+    low?: number;
+    info?: number;
+  };
+  findings?: SecurityFinding[];
+  recommendations?: string[];
+}
+
 /**
  * Format security scan result
  */
-function formatSecurityResult(result: any): string {
+function formatSecurityResult(result: SecurityResult): string {
   const lines: string[] = [
     '🔒 Security Review Results',
     '══════════════════════════════',
