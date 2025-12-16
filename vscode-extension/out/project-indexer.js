@@ -135,7 +135,7 @@ class ProjectIndexer {
     /**
      * Detect project type
      */
-    async detectProjectType(rootPath) {
+    async detectProjectType(_rootPath) {
         const indicators = {
             'package.json': 'nodejs',
             'pyproject.toml': 'python',
@@ -278,7 +278,7 @@ class ProjectIndexer {
      */
     extractSymbolsWithRegex(content, language) {
         const symbols = [];
-        const lines = content.split('\n');
+        const _lines = content.split('\n');
         const patterns = {
             typescript: [
                 { regex: /(?:export\s+)?(?:async\s+)?function\s+(\w+)/g, kind: 'function' },
@@ -416,7 +416,7 @@ class ProjectIndexer {
             return [];
         const results = [];
         const lowerQuery = query.toLowerCase();
-        for (const [key, symbol] of this.index.symbols) {
+        for (const [_key, symbol] of this.index.symbols) {
             if (symbol.name.toLowerCase().includes(lowerQuery)) {
                 results.push(symbol);
             }

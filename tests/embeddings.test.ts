@@ -243,7 +243,7 @@ describe('EmbeddingProvider', () => {
       const provider = new EmbeddingProvider({ provider: 'mock' });
 
       // Start multiple initializations concurrently
-      const [result1, result2, result3] = await Promise.all([
+      await Promise.all([
         provider.initialize(),
         provider.initialize(),
         provider.initialize(),

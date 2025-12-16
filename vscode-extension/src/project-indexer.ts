@@ -169,7 +169,7 @@ export class ProjectIndexer implements vscode.Disposable {
   /**
    * Detect project type
    */
-  private async detectProjectType(rootPath: string): Promise<ProjectType> {
+  private async detectProjectType(_rootPath: string): Promise<ProjectType> {
     const indicators: Record<string, ProjectType> = {
       'package.json': 'nodejs',
       'pyproject.toml': 'python',
@@ -337,7 +337,7 @@ export class ProjectIndexer implements vscode.Disposable {
    */
   private extractSymbolsWithRegex(content: string, language: string): ProjectSymbol[] {
     const symbols: ProjectSymbol[] = [];
-    const lines = content.split('\n');
+    const _lines = content.split('\n');
 
     const patterns: Record<string, { regex: RegExp; kind: ProjectSymbol['kind'] }[]> = {
       typescript: [
@@ -501,7 +501,7 @@ export class ProjectIndexer implements vscode.Disposable {
     const results: Array<ProjectSymbol & { file: string }> = [];
     const lowerQuery = query.toLowerCase();
 
-    for (const [key, symbol] of this.index.symbols) {
+    for (const [_key, symbol] of this.index.symbols) {
       if (symbol.name.toLowerCase().includes(lowerQuery)) {
         results.push(symbol);
       }

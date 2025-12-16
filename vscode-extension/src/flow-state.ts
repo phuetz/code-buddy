@@ -114,11 +114,11 @@ export class FlowStateDetector implements vscode.Disposable {
     this.scheduleFlowUpdate();
   }
 
-  private trackFileOpen(document: vscode.TextDocument): void {
+  private trackFileOpen(_document: vscode.TextDocument): void {
     this.scheduleFlowUpdate();
   }
 
-  private trackFileSave(document: vscode.TextDocument): void {
+  private trackFileSave(_document: vscode.TextDocument): void {
     this.scheduleFlowUpdate();
   }
 

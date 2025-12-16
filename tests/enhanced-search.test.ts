@@ -160,7 +160,7 @@ describe('EnhancedSearch', () => {
       mockSpawn.mockReturnValue(mockProcess);
 
       const matches: SearchMatch[] = [];
-      const rg = search.streamSearch('query', {
+      search.streamSearch('query', {
         onMatch: (match) => matches.push(match),
       });
 
@@ -471,9 +471,6 @@ describe('EnhancedSearch', () => {
       // First call
       const symbols1 = await search.findSymbols('cachedSymbol');
       expect(Array.isArray(symbols1)).toBe(true);
-
-      // Track calls after first findSymbols
-      const callCountAfterFirst = mockSpawn.mock.calls.length;
 
       // Second call should use cache (no new spawns for same query)
       const symbols2 = await search.findSymbols('cachedSymbol');
@@ -985,7 +982,6 @@ describe('Edge cases', () => {
     const mockProcess = createMockProcess();
     mockSpawn.mockReturnValue(mockProcess);
 
-    const matches: SearchMatch[] = [];
     search.on('complete', (results: SearchMatch[]) => {
       expect(results).toHaveLength(1);
       done();

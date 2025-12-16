@@ -166,8 +166,8 @@ describe('JSON-RPC Protocol', () => {
 });
 
 describe('JSON-RPC Server Integration', () => {
-  // Mock stdin/stdout for testing
-  class MockReadable extends Readable {
+  // Mock stdin/stdout for testing (available for future integration tests)
+  class _MockReadable extends Readable {
     private lines: string[] = [];
     private index = 0;
 
@@ -184,7 +184,7 @@ describe('JSON-RPC Server Integration', () => {
     }
   }
 
-  class MockWritable extends Writable {
+  class _MockWritable extends Writable {
     public output: string[] = [];
 
     _write(chunk: Buffer, encoding: string, callback: () => void) {

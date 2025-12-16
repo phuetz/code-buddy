@@ -38,7 +38,7 @@ describe('SlashCommandManager', () => {
     tempDir = '/tmp/test-grok';
 
     // Default mock: directories don't exist
-    fs.existsSync.mockImplementation((p: string) => false);
+    fs.existsSync.mockImplementation((_p: string) => false);
     fs.readdirSync.mockReturnValue([]);
     fs.readFileSync.mockReturnValue('');
     fs.mkdirSync.mockImplementation(() => undefined);

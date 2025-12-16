@@ -5,7 +5,6 @@
  */
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 
 export interface Memory {
   id: string;
@@ -337,7 +336,7 @@ export class KnowledgeBase implements vscode.Disposable {
     if (!this.knowledge) return;
 
     const content = document.getText();
-    const relativePath = vscode.workspace.asRelativePath(document.uri);
+    const _relativePath = vscode.workspace.asRelativePath(document.uri);
 
     // Learn import patterns
     const importPatterns = content.match(/import\s+.*?\s+from\s+['"]([^'"]+)['"]/g);

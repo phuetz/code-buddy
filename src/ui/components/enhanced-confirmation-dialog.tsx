@@ -114,7 +114,7 @@ export function EnhancedConfirmationDialog({
   showVSCodeOpen = false,
   content,
   originalContent: _originalContent,
-  newContent,
+  newContent: _newContent,
   timeout,
   showFileInfo = true,
   fileSize,

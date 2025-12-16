@@ -105,10 +105,10 @@ class FlowStateDetector {
         }
         this.scheduleFlowUpdate();
     }
-    trackFileOpen(document) {
+    trackFileOpen(_document) {
         this.scheduleFlowUpdate();
     }
-    trackFileSave(document) {
+    trackFileSave(_document) {
         this.scheduleFlowUpdate();
     }
     scheduleFlowUpdate() {

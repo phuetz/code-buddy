@@ -4,15 +4,17 @@
 
 import {
   ToolSelector,
-  ToolCategory,
-  QueryClassification,
-  ToolSelectionResult,
-  ToolSelectionMetrics,
   getToolSelector,
   selectRelevantTools,
   recordToolRequest,
   getToolSelectionMetrics,
   formatToolSelectionMetrics,
+} from "../../src/tools/tool-selector";
+import type {
+  ToolCategory,
+  QueryClassification,
+  ToolSelectionResult,
+  ToolSelectionMetrics,
 } from "../../src/tools/tool-selector";
 import { CodeBuddyTool } from "../../src/codebuddy/client";
 

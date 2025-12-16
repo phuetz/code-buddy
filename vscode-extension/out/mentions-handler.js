@@ -48,7 +48,7 @@ class MentionsHandler {
     }
     setupTerminalListener() {
         // Listen to terminal data
-        vscode.window.onDidOpenTerminal(terminal => {
+        vscode.window.onDidOpenTerminal(_terminal => {
             // Note: VSCode doesn't expose terminal output directly
             // We'll capture it when user explicitly references @terminal
         });
@@ -335,7 +335,7 @@ class MentionsHandler {
             }
             return info.join('\n');
         }
-        catch (error) {
+        catch (_error) {
             return 'Error getting git info';
         }
     }

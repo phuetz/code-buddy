@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import { useTheme } from "../context/theme-context.js";
 
 /**
@@ -53,7 +53,7 @@ function tokenizeInput(text: string): Token[] {
 
   const tokens: Token[] = [];
   let remaining = text;
-  let position = 0;
+  let _position = 0;
 
   // Patterns to match
   const patterns: Array<{
@@ -91,7 +91,7 @@ function tokenizeInput(text: string): Token[] {
           color: pattern.color,
         });
         remaining = remaining.slice(match[0].length);
-        position += match[0].length;
+        _position += match[0].length;
         matched = true;
         break;
       }
@@ -118,7 +118,7 @@ function tokenizeInput(text: string): Token[] {
         }
       }
       remaining = remaining.slice(nextSpecial);
-      position += nextSpecial;
+      _position += nextSpecial;
     }
   }
 
@@ -191,8 +191,8 @@ function HistorySearch({
   history,
   query,
   selectedIndex,
-  onSelect,
-  onClose,
+  onSelect: _onSelect,
+  onClose: _onClose,
 }: {
   history: string[];
   query: string;
@@ -282,7 +282,7 @@ export function EnhancedChatInput({
   const { colors } = useTheme();
   const [historySearchMode, setHistorySearchMode] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
-  const [historyIndex, setHistoryIndex] = useState(0);
+  const [historyIndex, _setHistoryIndex] = useState(0);
 
   // Tokenize input
   const tokens = useMemo(() => tokenizeInput(input), [input]);

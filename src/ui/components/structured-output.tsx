@@ -55,7 +55,7 @@ export function StructuredOutput({
   }, [data, context, manager]);
 
   // Check if we have a specialized renderer for this data
-  const hasSpecialRenderer = useMemo(() => {
+  const _hasSpecialRenderer = useMemo(() => {
     return manager.canRender(data);
   }, [data, manager]);
 
