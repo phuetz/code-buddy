@@ -10,7 +10,6 @@ import {
   CommandHandlerResult,
 } from '../../src/commands/handlers/security-handlers.js';
 import { resetSecurityManager } from '../../src/security/index.js';
-import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 describe('Security Handlers', () => {
   beforeEach(() => {

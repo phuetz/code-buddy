@@ -24,17 +24,11 @@ import type {
   ParameterNode,
   Literal,
   Identifier,
-  BinaryExpression,
-  UnaryExpression,
   CallExpression,
   MemberExpression,
   ArrayExpression,
   ObjectExpression,
-  AssignmentExpression,
-  LogicalExpression,
-  ConditionalExpression,
   ArrowFunction,
-  AwaitExpression,
 } from './types.js';
 import { TokenType } from './types.js';
 

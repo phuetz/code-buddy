@@ -3,7 +3,7 @@
  */
 
 import { handlePermissions } from '../../src/commands/handlers/permissions-handlers';
-import { resetToolFilter, getToolFilter, setToolFilter, createToolFilter } from '../../src/utils/tool-filter';
+import { resetToolFilter, getToolFilter } from '../../src/utils/tool-filter';
 
 describe('Permissions Handlers', () => {
   beforeEach(() => {

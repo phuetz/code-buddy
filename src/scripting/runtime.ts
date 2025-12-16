@@ -23,7 +23,6 @@ import {
   ReturnStatement,
   TryStatement,
   ThrowStatement,
-  ExpressionStatement,
   Literal,
   Identifier,
   BinaryExpression,

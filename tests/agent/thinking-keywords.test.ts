@@ -4,8 +4,6 @@
 
 import {
   ThinkingKeywordsManager,
-  ThinkingLevel,
-  ThinkingKeywordConfig,
   ThinkingKeywordResult,
   getThinkingKeywordsManager,
   resetThinkingKeywordsManager,

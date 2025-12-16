@@ -10,11 +10,9 @@
 import {
   ApprovalModeManager,
   OperationType,
-  OperationRequest,
   resetApprovalModeManager
 } from '../src/security/approval-modes.js';
 import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock fs module
 jest.mock('fs');
