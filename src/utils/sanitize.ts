@@ -282,7 +282,7 @@ export function removeControlCharacters(str: string): string {
  * @returns Parsed JSON object
  * @throws ValidationError if JSON is invalid
  */
-export function sanitizeJSON<T = any>(jsonString: string): T {
+export function sanitizeJSON<T = unknown>(jsonString: string): T {
   if (!jsonString || typeof jsonString !== 'string') {
     throw new ValidationError('JSON must be a non-empty string', 'json', jsonString);
   }

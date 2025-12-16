@@ -304,7 +304,7 @@ export class OCRTool {
         data: result
       };
     } catch (error) {
-      const errorMsg = (error as any).response?.data?.error?.message || getErrorMessage(error);
+      const errorMsg = (error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message || getErrorMessage(error);
       return {
         success: false,
         error: `Vision OCR failed: ${errorMsg}`

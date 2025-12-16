@@ -14,6 +14,11 @@ interface CodeIssue {
   suggestion?: string;
 }
 
+/** Extended diagnostic with suggestion property */
+interface DiagnosticWithSuggestion extends vscode.Diagnostic {
+  suggestion?: string;
+}
+
 export class ReviewDiagnosticsProvider implements vscode.Disposable {
   private diagnosticCollection: vscode.DiagnosticCollection;
   private disposables: vscode.Disposable[] = [];
@@ -57,7 +62,7 @@ export class ReviewDiagnosticsProvider implements vscode.Disposable {
 
         // Store suggestion for quick fix
         if (issue.suggestion) {
-          (diagnostic as any).suggestion = issue.suggestion;
+          (diagnostic as DiagnosticWithSuggestion).suggestion = issue.suggestion;
         }
 
         return diagnostic;
@@ -105,7 +110,7 @@ Return ONLY the JSON array, no explanations.`,
     document: vscode.TextDocument,
     diagnostic: vscode.Diagnostic
   ): Promise<void> {
-    const suggestion = (diagnostic as any).suggestion;
+    const suggestion = (diagnostic as DiagnosticWithSuggestion).suggestion;
 
     if (!suggestion) {
       // No direct suggestion, ask AI to fix

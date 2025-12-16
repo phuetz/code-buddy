@@ -19,7 +19,7 @@ export interface UserSettings {
  */
 export interface ProjectSettings {
   model?: string; // Current model for this project
-  mcpServers?: Record<string, any>; // MCP server configurations
+  mcpServers?: Record<string, unknown>; // MCP server configurations
 }
 
 /**

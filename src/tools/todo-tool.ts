@@ -286,9 +286,9 @@ export class TodoTool {
           };
         }
 
-        if (update.status) todo.status = update.status as any;
+        if (update.status) todo.status = update.status as TodoItem['status'];
         if (update.content) todo.content = update.content;
-        if (update.priority) todo.priority = update.priority as any;
+        if (update.priority) todo.priority = update.priority as TodoItem['priority'];
 
         updatedIds.push(update.id);
       }

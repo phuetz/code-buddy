@@ -6,6 +6,18 @@
 import * as vscode from 'vscode';
 import { AIClient } from './ai-client';
 
+/** VS Code Git extension repository interface (partial) */
+interface GitRepository {
+  getBranches(options: { remote: boolean }): Promise<Array<{ name: string }>>;
+  state: {
+    HEAD?: { name?: string };
+    indexChanges: Array<{ uri: vscode.Uri }>;
+  };
+  inputBox: { value: string };
+  log(options: { range: string; maxEntries: number }): Promise<Array<{ message: string }>>;
+  diffIndexWithHEAD(path: string): Promise<string | undefined>;
+}
+
 export class GitIntegration {
   constructor(private readonly aiClient: AIClient) {}
 
@@ -151,7 +163,7 @@ Rules:
     }
   }
 
-  private async getBaseBranch(repo: any): Promise<string> {
+  private async getBaseBranch(repo: GitRepository): Promise<string> {
     try {
       // Try common base branches
       const branches = await repo.getBranches({ remote: true });

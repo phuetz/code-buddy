@@ -422,10 +422,10 @@ export class WorkspaceDetector extends EventEmitter {
   /**
    * Generate recommended .codebuddy/settings.json
    */
-  async generateRecommendedSettings(config?: WorkspaceConfig): Promise<Record<string, any>> {
+  async generateRecommendedSettings(config?: WorkspaceConfig): Promise<Record<string, unknown>> {
     const detected = config || await this.detect();
 
-    const settings: Record<string, any> = {
+    const settings: Record<string, unknown> = {
       projectType: detected.type,
       language: detected.language,
       frameworks: detected.frameworks,

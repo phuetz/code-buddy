@@ -20,7 +20,7 @@ export interface HeadlessMessage {
   toolCall?: {
     id: string;
     name: string;
-    arguments: Record<string, any>;
+    arguments: Record<string, unknown>;
   };
   toolResult?: {
     success: boolean;
