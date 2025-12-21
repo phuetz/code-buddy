@@ -125,5 +125,10 @@ export {
   handleModelRouter as handleModelRouterCommand,
 } from './research-handlers.js';
 
+// Track handlers (Conductor-inspired)
+export {
+  handleTrack,
+} from './track-handlers.js';
+
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';

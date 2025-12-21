@@ -816,6 +816,20 @@ Be systematic and thorough in your analysis.`,
         arguments: [
           { name: 'action', description: 'status, on, off, models, compare [tokens], sensitivity <level>, stats', required: false }
         ]
+      },
+      // ==========================================
+      // Track System (Conductor-inspired)
+      // Context-driven development: spec → plan → implement
+      // ==========================================
+      {
+        name: 'track',
+        description: 'Manage development tracks (features, bugs) with spec-driven workflow',
+        prompt: '__TRACK__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'action', description: 'new, implement, status, list, complete, setup, context, update', required: false }
+        ]
       }
     ];
 
