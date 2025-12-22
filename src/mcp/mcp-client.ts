@@ -157,6 +157,14 @@ export class MCPClient extends EventEmitter {
   }
 
   /**
+   * Dispose and cleanup all resources
+   */
+  async dispose(): Promise<void> {
+    await this.disconnectAll();
+    this.removeAllListeners();
+  }
+
+  /**
    * Get all available tools from connected servers
    */
   async getAllTools(): Promise<Map<string, MCPTool[]>> {
@@ -420,9 +428,9 @@ export function getMCPClient(): MCPClient {
   return mcpClientInstance;
 }
 
-export function resetMCPClient(): void {
+export async function resetMCPClient(): Promise<void> {
   if (mcpClientInstance) {
-    mcpClientInstance.disconnectAll();
+    await mcpClientInstance.dispose();
   }
   mcpClientInstance = null;
 }

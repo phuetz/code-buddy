@@ -301,6 +301,14 @@ export class CheckpointManager extends EventEmitter {
       newestTimestamp: this.checkpoints[this.checkpoints.length - 1]?.timestamp
     };
   }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    this.checkpoints = [];
+    this.removeAllListeners();
+  }
 }
 
 // Singleton instance
@@ -314,5 +322,8 @@ export function getCheckpointManager(options?: CheckpointManagerOptions): Checkp
 }
 
 export function resetCheckpointManager(): void {
+  if (checkpointManagerInstance) {
+    checkpointManagerInstance.dispose();
+  }
   checkpointManagerInstance = null;
 }

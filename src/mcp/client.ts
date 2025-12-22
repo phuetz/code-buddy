@@ -142,6 +142,14 @@ export class MCPManager extends EventEmitter {
     await Promise.all(serverNames.map(name => this.removeServer(name)));
   }
 
+  /**
+   * Dispose and cleanup all resources
+   */
+  async dispose(): Promise<void> {
+    await this.shutdown();
+    this.removeAllListeners();
+  }
+
   getTransportType(serverName: string): TransportType | undefined {
     const transport = this.transports.get(serverName);
     return transport?.getType();

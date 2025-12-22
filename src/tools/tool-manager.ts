@@ -376,6 +376,26 @@ export class ToolManager extends EventEmitter {
       byPermission,
     };
   }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    // Dispose tool instances that have dispose methods
+    for (const [_name, instance] of this.instances) {
+      if ('dispose' in instance && typeof instance.dispose === 'function') {
+        try {
+          instance.dispose();
+        } catch {
+          // Ignore disposal errors
+        }
+      }
+    }
+    this.instances.clear();
+    this.registrations.clear();
+    this.permissionCache.clear();
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -519,4 +539,14 @@ export function getToolManager(): ToolManager {
  */
 export function createToolManager(): ToolManager {
   return new ToolManager();
+}
+
+/**
+ * Reset the tool manager singleton (for testing)
+ */
+export function resetToolManager(): void {
+  if (toolManagerInstance) {
+    toolManagerInstance.dispose();
+  }
+  toolManagerInstance = null;
 }
