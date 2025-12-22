@@ -14,6 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import TOML from '@iarna/toml';
 import { getAgentsDir } from '../utils/codebuddy-home.js';
+import { logger } from '../utils/logger.js';
 
 // ============================================================================
 // Types
@@ -197,7 +198,7 @@ export class CustomAgentLoader {
           this.cache.set(config.id, agentFile);
         }
       } catch (error) {
-        console.error(`Failed to load agent from ${file}:`, error);
+        logger.error(`Failed to load agent from ${file}`, { error });
       }
     }
 
@@ -230,7 +231,7 @@ export class CustomAgentLoader {
 
     // Validate required fields
     if (!parsed.name || !parsed.systemPrompt) {
-      console.error(`Agent ${fileName} missing required fields (name, systemPrompt)`);
+      logger.error(`Agent ${fileName} missing required fields (name, systemPrompt)`);
       return null;
     }
 

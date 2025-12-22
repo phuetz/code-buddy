@@ -4,6 +4,7 @@ import { writeFile as writeFilePromise } from "fs/promises";
 import { ToolResult, EditorCommand, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { Disposable, registerDisposable } from "../utils/disposable.js";
+import { logger } from "../utils/logger.js";
 import {
   findBestFuzzyMatch,
   generateFuzzyDiff,
@@ -164,7 +165,7 @@ export class TextEditorTool implements Disposable {
         if (fuzzyResult) {
           // Found a fuzzy match - show diff and use it
           const fuzzyDiff = generateFuzzyDiff(oldStr, fuzzyResult.match, filePath, fuzzyResult);
-          console.log(fuzzyDiff);
+          logger.debug("Fuzzy match applied", { diff: fuzzyDiff });
 
           // Use the actual match from the file
           oldStr = fuzzyResult.match;

@@ -3,6 +3,7 @@ import * as path from "path";
 import axios from "axios";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
+import { logger } from "../utils/logger.js";
 
 export class MorphEditorTool {
   private confirmationService = ConfirmationService.getInstance();
@@ -12,7 +13,7 @@ export class MorphEditorTool {
   constructor(apiKey?: string) {
     this.morphApiKey = apiKey || process.env.MORPH_API_KEY || "";
     if (!this.morphApiKey) {
-      console.warn("MORPH_API_KEY not found. Morph editor functionality will be limited.");
+      logger.warn("MORPH_API_KEY not found. Morph editor functionality will be limited.");
     }
   }
 

@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import * as yaml from 'js-yaml';
 import { CodeBuddyAgent, ChatEntry } from "../agent/codebuddy-agent.js";
+import type { AgentMode } from "../agent/agent-mode.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { useEnhancedInput, Key } from "./use-enhanced-input.js";
 import { getErrorMessage } from "../types/index.js";
@@ -596,9 +597,8 @@ export function useInputHandler({
 
         if (result.prompt === "__CHANGE_MODE__") {
           const args = trimmedInput.split(" ").slice(1);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mode string from user input
-          const mode = args[0] as any;
-          if (["plan", "code", "ask"].includes(mode)) {
+          const mode = args[0] as AgentMode | undefined;
+          if (mode && ["plan", "code", "ask"].includes(mode)) {
             agent.setMode(mode);
             const entry: ChatEntry = {
               type: "assistant",

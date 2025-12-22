@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, DOMElement } from "ink";
 import { CodeBuddyAgent, ChatEntry } from "../../agent/codebuddy-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
 import { LoadingSpinner } from "./loading-spinner.js";
@@ -49,8 +49,7 @@ function ChatInterfaceWithAgent({
   const [confirmationOptions, setConfirmationOptions] =
     useState<ConfirmationOptions | null>(null);
   const [_sessionStartTime] = useState(new Date());
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const scrollRef = useRef<any>();
+  const scrollRef = useRef<DOMElement>(null);
   const processingStartTime = useRef<number>(0);
 
   const confirmationService = ConfirmationService.getInstance();

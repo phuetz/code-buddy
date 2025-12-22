@@ -15,6 +15,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { rgPath } from '@vscode/ripgrep';
+import { logger } from '../utils/logger.js';
 
 // ============================================================================
 // Types
@@ -421,9 +422,7 @@ export class EnhancedSearch extends EventEmitter {
             }
           }).catch((err) => {
             // Log search errors for debugging but continue with other patterns
-            if (process.env.DEBUG) {
-              console.error(`Symbol search pattern error: ${err.message || String(err)}`);
-            }
+            logger.debug(`Symbol search pattern error: ${err.message || String(err)}`);
           })
         );
       }
@@ -449,9 +448,7 @@ export class EnhancedSearch extends EventEmitter {
         }
       }).catch((err) => {
         // Log search errors for debugging but continue
-        if (process.env.DEBUG) {
-          console.error(`General symbol search error: ${err.message || String(err)}`);
-        }
+        logger.debug(`General symbol search error: ${err.message || String(err)}`);
       })
     );
 

@@ -10,6 +10,7 @@
 import * as fs from "fs/promises";
 import { existsSync } from "fs";
 import * as path from "path";
+import { logger } from "../../utils/logger.js";
 import {
   FileOperation,
   EditOperation,
@@ -521,7 +522,7 @@ export class MultiFileEditor {
         }
       } catch (error) {
         // Log but continue rollback
-        console.error(`Rollback error for ${rollback.filePath}:`, error);
+        logger.error(`Rollback error for ${rollback.filePath}`, { error });
       }
     }
   }

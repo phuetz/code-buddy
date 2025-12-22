@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventEmitter } from "events";
 import { createTransport, MCPTransport, TransportType, TransportConfig } from "./transports.js";
+import { logger } from "../utils/logger.js";
 
 export interface MCPServerConfig {
   name: string;
@@ -159,7 +160,7 @@ export class MCPManager extends EventEmitter {
       try {
         await this.addServer(serverConfig);
       } catch (error) {
-        console.warn(`Failed to initialize MCP server ${serverConfig.name}:`, error);
+        logger.warn(`Failed to initialize MCP server ${serverConfig.name}`, { error });
       }
     });
     

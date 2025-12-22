@@ -10,6 +10,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { logger } from "../../utils/logger.js";
 import {
   HistoryEntry,
   FileSnapshot,
@@ -367,7 +368,7 @@ export class OperationHistory {
       };
       fs.writeFileSync(this.persistPath, JSON.stringify(data, null, 2));
     } catch (error) {
-      console.error("Failed to save operation history:", error);
+      logger.error("Failed to save operation history", { error });
     }
   }
 
@@ -387,7 +388,7 @@ export class OperationHistory {
         }
       }
     } catch (error) {
-      console.error("Failed to load operation history:", error);
+      logger.error("Failed to load operation history", { error });
       this.history = [];
       this.currentPosition = -1;
     }
