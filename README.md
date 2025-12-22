@@ -120,25 +120,7 @@ grok --model llama3.2
 </td>
 <td width="50%">
 
-```
-┌─────────────────────────────────┐
-│      🎼 ORCHESTRATEUR           │
-│   (planification & décisions)   │
-└──────────────┬──────────────────┘
-               │
-    ┌──────────┼──────────┐
-    ▼          ▼          ▼
-┌──────┐  ┌──────┐  ┌──────┐
-│💻    │  │🔍    │  │🧪    │
-│Codeur│  │Review│  │Test  │
-└──────┘  └──────┘  └──────┘
-    │          │          │
-    └──────────┼──────────┘
-               ▼
-         ┌──────────┐
-         │ 🚀 VOUS  │
-         └──────────┘
-```
+<img src="assets/diagrams/multi-agent-orchestrator.svg" alt="Multi-Agent Orchestrator" width="400"/>
 
 </td>
 </tr>
@@ -216,29 +198,7 @@ L'IA ne se contente pas de répondre. Elle :
 </td>
 <td width="40%">
 
-```
-   🐛 Bug détecté
-        │
-        ▼
-   ┌────────────┐
-   │ 📍 Localiser│
-   └─────┬──────┘
-         │
-   ┌─────▼──────┐
-   │ 🔬 Analyser │
-   └─────┬──────┘
-         │
-   ┌─────▼──────┐
-   │ 💊 Réparer  │
-   └─────┬──────┘
-         │
-   ┌─────▼──────┐
-   │ ✅ Valider  │
-   └─────┬──────┘
-         │
-        ▼
-   🎉 Code réparé!
-```
+<img src="assets/diagrams/apr-engine.svg" alt="APR Engine Flow" width="200"/>
 
 </td>
 </tr>
@@ -343,23 +303,7 @@ const similar = await searchSimilar(queryEmbedding);
 
 **📈 Dashboard intégré :**
 
-```
-📊 Analytics Dashboard
-════════════════════════════════════════
-
-💰 Budget Status
-  Session:  $0.42 / $5.00 (8%)
-  Daily:    $2.15 / $10.00 (22%)
-  Weekly:   $12.50 / $50.00 (25%)
-  Monthly:  $45.00 / $150.00 (30%)
-
-📈 Last 30 Days
-  Total Cost: $45.00
-  Requests: 1,234
-  Tokens: 2.5M
-  Cache Hit Rate: 68%
-  Trend: stable ➡️
-```
+<img src="assets/diagrams/analytics-dashboard.svg" alt="Analytics Dashboard" width="350"/>
 
 </td>
 <td>
@@ -406,23 +350,7 @@ const similar = await searchSimilar(queryEmbedding);
 
 **📊 Insights générés :**
 
-```
-📚 Learning Statistics
-════════════════════════════════════════
-
-🔧 Repair Learning
-  Patterns learned: 42
-  Avg success rate: 78%
-  Top strategy: null_check (92%)
-
-📋 Conventions
-  Detected: 15
-  Confidence: 85%
-
-🛠️ Tool Usage
-  Most used: search (89% success)
-  Cache hit rate: 72%
-```
+<img src="assets/diagrams/learning-statistics.svg" alt="Learning Statistics" width="350"/>
 
 </td>
 </tr>

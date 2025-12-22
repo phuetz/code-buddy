@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 280">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#60a5fa;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#34d399;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="350" height="280" fill="#0f172a" rx="12"/>
+
+  <!-- Header -->
+  <rect x="15" y="15" width="320" height="35" rx="6" fill="url(#headerGrad)"/>
+  <text x="30" y="38" fill="white" font-family="system-ui" font-size="14" font-weight="bold">📊 Analytics Dashboard</text>
+
+  <!-- Budget Status Section -->
+  <text x="25" y="75" fill="#f59e0b" font-family="system-ui" font-size="12" font-weight="bold">💰 Budget Status</text>
+
+  <!-- Session Bar -->
+  <text x="35" y="95" fill="#94a3b8" font-family="system-ui" font-size="10">Session</text>
+  <rect x="95" y="86" width="180" height="12" rx="3" fill="#1e293b"/>
+  <rect x="95" y="86" width="14" height="12" rx="3" fill="url(#greenGrad)"/>
+  <text x="285" y="95" fill="#94a3b8" font-family="system-ui" font-size="9">$0.42 / $5.00</text>
+
+  <!-- Daily Bar -->
+  <text x="35" y="115" fill="#94a3b8" font-family="system-ui" font-size="10">Daily</text>
+  <rect x="95" y="106" width="180" height="12" rx="3" fill="#1e293b"/>
+  <rect x="95" y="106" width="40" height="12" rx="3" fill="url(#greenGrad)"/>
+  <text x="285" y="115" fill="#94a3b8" font-family="system-ui" font-size="9">$2.15 / $10</text>
+
+  <!-- Weekly Bar -->
+  <text x="35" y="135" fill="#94a3b8" font-family="system-ui" font-size="10">Weekly</text>
+  <rect x="95" y="126" width="180" height="12" rx="3" fill="#1e293b"/>
+  <rect x="95" y="126" width="45" height="12" rx="3" fill="url(#barGrad)"/>
+  <text x="285" y="135" fill="#94a3b8" font-family="system-ui" font-size="9">$12.50 / $50</text>
+
+  <!-- Monthly Bar -->
+  <text x="35" y="155" fill="#94a3b8" font-family="system-ui" font-size="10">Monthly</text>
+  <rect x="95" y="146" width="180" height="12" rx="3" fill="#1e293b"/>
+  <rect x="95" y="146" width="54" height="12" rx="3" fill="url(#barGrad)"/>
+  <text x="285" y="155" fill="#94a3b8" font-family="system-ui" font-size="9">$45 / $150</text>
+
+  <!-- Last 30 Days Section -->
+  <text x="25" y="185" fill="#3b82f6" font-family="system-ui" font-size="12" font-weight="bold">📈 Last 30 Days</text>
+
+  <!-- Stats Grid -->
+  <rect x="25" y="195" width="75" height="35" rx="6" fill="#1e293b"/>
+  <text x="35" y="212" fill="#94a3b8" font-family="system-ui" font-size="9">Total Cost</text>
+  <text x="35" y="225" fill="#10b981" font-family="system-ui" font-size="12" font-weight="bold">$45.00</text>
+
+  <rect x="108" y="195" width="75" height="35" rx="6" fill="#1e293b"/>
+  <text x="118" y="212" fill="#94a3b8" font-family="system-ui" font-size="9">Requests</text>
+  <text x="118" y="225" fill="#3b82f6" font-family="system-ui" font-size="12" font-weight="bold">1,234</text>
+
+  <rect x="191" y="195" width="75" height="35" rx="6" fill="#1e293b"/>
+  <text x="201" y="212" fill="#94a3b8" font-family="system-ui" font-size="9">Tokens</text>
+  <text x="201" y="225" fill="#8b5cf6" font-family="system-ui" font-size="12" font-weight="bold">2.5M</text>
+
+  <rect x="274" y="195" width="60" height="35" rx="6" fill="#1e293b"/>
+  <text x="284" y="212" fill="#94a3b8" font-family="system-ui" font-size="9">Cache</text>
+  <text x="284" y="225" fill="#f59e0b" font-family="system-ui" font-size="12" font-weight="bold">68%</text>
+
+  <!-- Trend -->
+  <rect x="25" y="240" width="308" height="28" rx="6" fill="#1e293b"/>
+  <text x="40" y="258" fill="#94a3b8" font-family="system-ui" font-size="10">Trend:</text>
+  <text x="80" y="258" fill="#10b981" font-family="system-ui" font-size="11" font-weight="bold">stable ➡️</text>
+  <text x="200" y="258" fill="#64748b" font-family="system-ui" font-size="9">Cache hit rate improved +5%</text>
+</svg>
