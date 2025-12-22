@@ -504,6 +504,13 @@ Control what operations the agent can perform:
 - System commands (docker, kubectl, etc.)
 `.trim();
   }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -522,5 +529,8 @@ export function getApprovalModeManager(
 }
 
 export function resetApprovalModeManager(): void {
+  if (approvalModeInstance) {
+    approvalModeInstance.dispose();
+  }
   approvalModeInstance = null;
 }

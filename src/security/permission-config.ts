@@ -488,6 +488,13 @@ export class PermissionManager extends EventEmitter {
   isDryRun(): boolean {
     return this.config.safety.dryRunMode;
   }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -504,5 +511,8 @@ export function getPermissionManager(configPath?: string): PermissionManager {
 }
 
 export function resetPermissionManager(): void {
+  if (permissionManagerInstance) {
+    permissionManagerInstance.dispose();
+  }
   permissionManagerInstance = null;
 }

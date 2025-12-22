@@ -614,6 +614,14 @@ export class CrossEncoderReranker extends EventEmitter {
 
     return lines.join('\n');
   }
+
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    this.clearCache();
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -630,5 +638,8 @@ export function getCrossEncoderReranker(config?: Partial<RerankerConfig>): Cross
 }
 
 export function resetCrossEncoderReranker(): void {
+  if (rerankerInstance) {
+    rerankerInstance.dispose();
+  }
   rerankerInstance = null;
 }

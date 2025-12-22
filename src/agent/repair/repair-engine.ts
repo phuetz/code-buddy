@@ -792,6 +792,14 @@ Please provide an improved fix that addresses the issues with the previous attem
   updateConfig(config: Partial<RepairConfig>): void {
     this.config = { ...this.config, ...config };
   }
+
+  /**
+   * Dispose and cleanup
+   */
+  dispose(): void {
+    this.clearHistory();
+    this.removeAllListeners();
+  }
 }
 
 /**
@@ -819,5 +827,8 @@ export function getRepairEngine(
 }
 
 export function resetRepairEngine(): void {
+  if (repairEngineInstance) {
+    repairEngineInstance.dispose();
+  }
   repairEngineInstance = null;
 }

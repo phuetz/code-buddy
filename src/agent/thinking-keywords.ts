@@ -316,6 +316,13 @@ Add these keywords to your prompt to enable deeper reasoning:
   getDefaultLevel(): ThinkingLevel {
     return this.defaultLevel;
   }
+
+  /**
+   * Dispose and cleanup
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -334,6 +341,9 @@ export function getThinkingKeywordsManager(
 }
 
 export function resetThinkingKeywordsManager(): void {
+  if (thinkingKeywordsInstance) {
+    thinkingKeywordsInstance.dispose();
+  }
   thinkingKeywordsInstance = null;
 }
 

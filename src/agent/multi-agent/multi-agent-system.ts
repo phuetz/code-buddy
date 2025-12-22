@@ -723,6 +723,14 @@ export class MultiAgentSystem extends EventEmitter {
   }
 
   /**
+   * Dispose and cleanup
+   */
+  dispose(): void {
+    this.reset();
+    this.removeAllListeners();
+  }
+
+  /**
    * Format workflow result for display
    */
   formatResult(result: WorkflowResult): string {
@@ -812,7 +820,7 @@ export function getMultiAgentSystem(
 
 export function resetMultiAgentSystem(): void {
   if (multiAgentSystemInstance) {
-    multiAgentSystemInstance.reset();
+    multiAgentSystemInstance.dispose();
   }
   multiAgentSystemInstance = null;
 }

@@ -535,6 +535,13 @@ export class SecurityModeManager extends EventEmitter {
 
     return output;
   }
+
+  /**
+   * Dispose and cleanup resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // Singleton instance
@@ -548,5 +555,8 @@ export function getSecurityModeManager(workingDirectory?: string, initialMode?: 
 }
 
 export function resetSecurityModeManager(): void {
+  if (securityModeManagerInstance) {
+    securityModeManagerInstance.dispose();
+  }
   securityModeManagerInstance = null;
 }

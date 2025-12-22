@@ -367,6 +367,13 @@ export class OperatingModeManager extends EventEmitter {
       this.currentMode = previousMode;
     }
   }
+
+  /**
+   * Dispose and clean up resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -385,5 +392,8 @@ export function getOperatingModeManager(
 }
 
 export function resetOperatingModeManager(): void {
+  if (operatingModeInstance) {
+    operatingModeInstance.dispose();
+  }
   operatingModeInstance = null;
 }

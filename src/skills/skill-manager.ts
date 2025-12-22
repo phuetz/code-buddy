@@ -465,6 +465,13 @@ Provide clear, actionable guidance.
 
     return skillFile;
   }
+
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // Singleton instance
@@ -475,6 +482,13 @@ export function getSkillManager(projectRoot?: string): SkillManager {
     skillManagerInstance = new SkillManager(projectRoot);
   }
   return skillManagerInstance;
+}
+
+export function resetSkillManager(): void {
+  if (skillManagerInstance) {
+    skillManagerInstance.dispose();
+  }
+  skillManagerInstance = null;
 }
 
 export async function initializeSkills(projectRoot?: string): Promise<SkillManager> {

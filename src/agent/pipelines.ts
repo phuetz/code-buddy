@@ -519,6 +519,14 @@ export class PipelineRunner extends EventEmitter {
 
     return output;
   }
+
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    this.stop();
+    this.removeAllListeners();
+  }
 }
 
 // Singleton instance
@@ -529,4 +537,11 @@ export function getPipelineRunner(apiKey: string, baseURL?: string): PipelineRun
     pipelineRunnerInstance = new PipelineRunner(apiKey, baseURL);
   }
   return pipelineRunnerInstance;
+}
+
+export function resetPipelineRunner(): void {
+  if (pipelineRunnerInstance) {
+    pipelineRunnerInstance.dispose();
+  }
+  pipelineRunnerInstance = null;
 }

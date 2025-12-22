@@ -712,6 +712,14 @@ export class EnhancedCoordinator extends EventEmitter {
     this.taskHistory = [];
     this.emit('coordinator:reset');
   }
+
+  /**
+   * Dispose and cleanup
+   */
+  dispose(): void {
+    this.reset();
+    this.removeAllListeners();
+  }
 }
 
 /**
@@ -737,7 +745,7 @@ export function getEnhancedCoordinator(
 
 export function resetEnhancedCoordinator(): void {
   if (coordinatorInstance) {
-    coordinatorInstance.reset();
+    coordinatorInstance.dispose();
   }
   coordinatorInstance = null;
 }

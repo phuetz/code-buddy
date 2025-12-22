@@ -428,6 +428,13 @@ export class TokenBudgetReasoning extends EventEmitter {
   clearHistory(): void {
     this.history = [];
   }
+
+  /**
+   * Dispose and clean up resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -446,5 +453,8 @@ export function getTokenBudgetReasoning(
 }
 
 export function resetTokenBudgetReasoning(): void {
+  if (tokenBudgetInstance) {
+    tokenBudgetInstance.dispose();
+  }
   tokenBudgetInstance = null;
 }

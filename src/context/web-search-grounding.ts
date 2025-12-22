@@ -357,6 +357,14 @@ export class WebSearchManager extends EventEmitter {
     return lines.join('\n');
   }
 
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    this.clearCache();
+    this.removeAllListeners();
+  }
+
   // ============================================================================
   // Private Methods - Search Engines
   // ============================================================================
@@ -639,7 +647,7 @@ export function getWebSearchManager(config?: Partial<WebSearchConfig>): WebSearc
 
 export function resetWebSearchManager(): void {
   if (managerInstance) {
-    managerInstance.clearCache();
+    managerInstance.dispose();
   }
   managerInstance = null;
 }

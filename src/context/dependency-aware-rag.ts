@@ -701,6 +701,13 @@ export class DependencyAwareRAG extends EventEmitter {
       graphStats: this.currentAnalysis?.stats || null,
     };
   }
+
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 /**
@@ -726,7 +733,7 @@ export function getDependencyAwareRAG(
 
 export function resetDependencyAwareRAG(): void {
   if (dependencyRAGInstance) {
-    dependencyRAGInstance.clearCache();
+    dependencyRAGInstance.dispose();
   }
   dependencyRAGInstance = null;
 }

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useInput } from "ink";
-import fs from "fs";
+import { promises as fsPromises } from "fs";
 import path from "path";
 import * as yaml from 'js-yaml';
 import { CodeBuddyAgent, ChatEntry } from "../agent/codebuddy-agent.js";
@@ -81,15 +81,16 @@ export function useInputHandler({
   /**
    * Save instruction to .codebuddyrules file (Claude Code-style # capture)
    */
-  const saveInstructionToCodeBuddyRules = (instruction: string): string => {
+  const saveInstructionToCodeBuddyRules = async (instruction: string): Promise<string> => {
     const codebuddyrulesPath = path.join(process.cwd(), '.codebuddyrules');
 
     try {
       let rules: { instructions?: string[] } = {};
 
       // Load existing rules if file exists
-      if (fs.existsSync(codebuddyrulesPath)) {
-        const content = fs.readFileSync(codebuddyrulesPath, 'utf-8');
+      const exists = await fsPromises.access(codebuddyrulesPath).then(() => true).catch(() => false);
+      if (exists) {
+        const content = await fsPromises.readFile(codebuddyrulesPath, 'utf-8');
         try {
           rules = yaml.load(content) as { instructions?: string[] } || {};
         } catch {
@@ -109,7 +110,7 @@ export function useInputHandler({
       }
 
       // Write back to file
-      fs.writeFileSync(codebuddyrulesPath, yaml.dump(rules, { lineWidth: -1 }));
+      await fsPromises.writeFile(codebuddyrulesPath, yaml.dump(rules, { lineWidth: -1 }));
 
       return `Instruction saved to .codebuddyrules:\n  "${instruction}"`;
     } catch (error) {
@@ -349,7 +350,7 @@ export function useInputHandler({
       if (userInput.startsWith("#")) {
         const instruction = userInput.slice(1).trim();
         if (instruction) {
-          const result = saveInstructionToCodeBuddyRules(instruction);
+          const result = await saveInstructionToCodeBuddyRules(instruction);
           const entry: ChatEntry = {
             type: "assistant",
             content: result,
@@ -465,22 +466,23 @@ export function useInputHandler({
           ? filePath
           : path.resolve(process.cwd(), filePath);
 
-        if (fs.existsSync(resolvedPath)) {
-          const stats = fs.statSync(resolvedPath);
+        const exists = await fsPromises.access(resolvedPath).then(() => true).catch(() => false);
+        if (exists) {
+          const stats = await fsPromises.stat(resolvedPath);
 
           if (stats.isDirectory()) {
             // For directories, list contents
-            const entries = fs.readdirSync(resolvedPath);
+            const entries = await fsPromises.readdir(resolvedPath);
             const listing = entries.slice(0, 50).join('\n');
             fileContents.push(`📁 Directory: ${filePath}\n${listing}${entries.length > 50 ? '\n... and more files' : ''}`);
           } else if (stats.isFile()) {
             // For files, read content (with size limit)
             const maxSize = 100 * 1024; // 100KB limit
             if (stats.size > maxSize) {
-              const content = fs.readFileSync(resolvedPath, 'utf-8').slice(0, maxSize);
+              const content = (await fsPromises.readFile(resolvedPath, 'utf-8')).slice(0, maxSize);
               fileContents.push(`📄 File: ${filePath} (truncated to 100KB)\n\`\`\`\n${content}\n\`\`\``);
             } else {
-              const content = fs.readFileSync(resolvedPath, 'utf-8');
+              const content = await fsPromises.readFile(resolvedPath, 'utf-8');
               const ext = path.extname(filePath).slice(1) || 'txt';
               fileContents.push(`📄 File: ${filePath}\n\`\`\`${ext}\n${content}\n\`\`\``);
             }

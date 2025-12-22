@@ -13,7 +13,7 @@
  * 4. Prioritizing relevant code based on current task
  */
 
-import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
 
@@ -85,7 +85,7 @@ export class RepositoryMap {
     await this.scanDirectory(this.config.rootDir);
 
     // Build symbol graph
-    this.buildSymbolGraph();
+    await this.buildSymbolGraph();
 
     // Calculate PageRank scores
     this.calculateRanks();
@@ -172,7 +172,8 @@ export class RepositoryMap {
   async updateFile(filePath: string): Promise<void> {
     const absolutePath = path.resolve(this.config.rootDir, filePath);
 
-    if (!fs.existsSync(absolutePath)) {
+    const exists = await fsPromises.access(absolutePath).then(() => true).catch(() => false);
+    if (!exists) {
       // File deleted
       this.files.delete(absolutePath);
       this.symbols.forEach((symbol, key) => {
@@ -195,7 +196,7 @@ export class RepositoryMap {
   // Private methods
 
   private async scanDirectory(dir: string): Promise<void> {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = await fsPromises.readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
@@ -237,12 +238,12 @@ export class RepositoryMap {
 
   private async processFile(filePath: string): Promise<void> {
     try {
-      const stats = fs.statSync(filePath);
+      const stats = await fsPromises.stat(filePath);
 
       // Skip large files
       if (stats.size > this.config.maxFileSize) return;
 
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = await fsPromises.readFile(filePath, 'utf-8');
       const relativePath = path.relative(this.config.rootDir, filePath);
 
       const fileInfo: FileInfo = {
@@ -373,10 +374,10 @@ export class RepositoryMap {
     return signature;
   }
 
-  private buildSymbolGraph(): void {
+  private async buildSymbolGraph(): Promise<void> {
     // Build reference graph by scanning for symbol usage
     for (const [, file] of this.files) {
-      const content = fs.readFileSync(file.path, 'utf-8');
+      const content = await fsPromises.readFile(file.path, 'utf-8');
 
       for (const [, symbol] of this.symbols) {
         // Skip if same file (self-reference)
@@ -540,6 +541,17 @@ export class RepositoryMap {
     // Rough estimation: ~4 characters per token
     return Math.ceil(text.length / 4);
   }
+
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    // RepositoryMap doesn't extend EventEmitter, no need to call removeAllListeners
+    this.files.clear();
+    this.symbols.clear();
+    this.referenceGraph.clear();
+    this.cache.clear();
+  }
 }
 
 // Singleton instance
@@ -556,5 +568,8 @@ export function getRepositoryMap(rootDir?: string): RepositoryMap {
 }
 
 export function resetRepositoryMap(): void {
+  if (repoMapInstance) {
+    repoMapInstance.dispose();
+  }
   repoMapInstance = null;
 }

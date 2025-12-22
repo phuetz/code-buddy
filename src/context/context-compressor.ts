@@ -567,6 +567,13 @@ export class ContextCompressor extends EventEmitter {
       '\n[... ' + (lines.length - maxLines) + ' lines omitted ...]\n' +
       lines.slice(-half).join('\n');
   }
+
+  /**
+   * Dispose and clean up resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -583,5 +590,8 @@ export function getContextCompressor(config?: Partial<CompressionConfig>): Conte
 }
 
 export function resetContextCompressor(): void {
+  if (compressorInstance) {
+    compressorInstance.dispose();
+  }
   compressorInstance = null;
 }

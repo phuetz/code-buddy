@@ -329,6 +329,14 @@ export class AgentRegistry extends EventEmitter {
     this.agents.clear();
     this.emit('cleanup');
   }
+
+  /**
+   * Dispose and cleanup
+   */
+  async dispose(): Promise<void> {
+    await this.cleanup();
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -361,9 +369,9 @@ export async function initializeAgentRegistry(): Promise<AgentRegistry> {
  */
 export async function resetAgentRegistry(): Promise<void> {
   if (registryInstance) {
-    await registryInstance.cleanup();
-    registryInstance = null;
+    await registryInstance.dispose();
   }
+  registryInstance = null;
 }
 
 // ============================================================================

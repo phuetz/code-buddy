@@ -10,7 +10,7 @@
  * - RAG Comprehensive Survey (arXiv 2506.00054)
  */
 
-import fs from "fs";
+import { promises as fsPromises } from "fs";
 import path from "path";
 import { EventEmitter } from "events";
 import { logger } from "../../utils/logger.js";
@@ -140,7 +140,7 @@ export class CodebaseRAG extends EventEmitter {
 
     try {
       // Read file content
-      const content = fs.readFileSync(filePath, "utf-8");
+      const content = await fsPromises.readFile(filePath, "utf-8");
 
       // Skip binary files
       if (this.isBinaryContent(content)) {
@@ -678,8 +678,8 @@ export class CodebaseRAG extends EventEmitter {
     const files: string[] = [];
     const excludePatterns = options.excludePatterns || [];
 
-    const walk = (dir: string) => {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const walk = async (dir: string): Promise<void> => {
+      const entries = await fsPromises.readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -691,7 +691,7 @@ export class CodebaseRAG extends EventEmitter {
         }
 
         if (entry.isDirectory()) {
-          walk(fullPath);
+          await walk(fullPath);
         } else if (entry.isFile()) {
           // Check if it's a code file
           const lang = detectLanguage(fullPath);
@@ -702,7 +702,7 @@ export class CodebaseRAG extends EventEmitter {
       }
     };
 
-    walk(rootPath);
+    await walk(rootPath);
     return files;
   }
 
@@ -770,8 +770,9 @@ export class CodebaseRAG extends EventEmitter {
     if (!this.config.indexPath) return;
 
     const dir = this.config.indexPath;
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    const exists = await fsPromises.access(dir).then(() => true).catch(() => false);
+    if (!exists) {
+      await fsPromises.mkdir(dir, { recursive: true });
     }
 
     // Save chunks
@@ -780,21 +781,21 @@ export class CodebaseRAG extends EventEmitter {
       embedding: undefined, // Don't save embeddings to chunk file
     }));
 
-    fs.writeFileSync(
+    await fsPromises.writeFile(
       path.join(dir, "chunks.json"),
       JSON.stringify(chunks),
       "utf-8"
     );
 
     // Save file index
-    fs.writeFileSync(
+    await fsPromises.writeFile(
       path.join(dir, "file-index.json"),
       JSON.stringify(Object.fromEntries(this.fileIndex)),
       "utf-8"
     );
 
     // Save stats
-    fs.writeFileSync(
+    await fsPromises.writeFile(
       path.join(dir, "stats.json"),
       JSON.stringify(this.indexStats),
       "utf-8"
@@ -813,13 +814,15 @@ export class CodebaseRAG extends EventEmitter {
     if (!this.config.indexPath) return false;
 
     const dir = this.config.indexPath;
-    if (!fs.existsSync(dir)) return false;
+    const dirExists = await fsPromises.access(dir).then(() => true).catch(() => false);
+    if (!dirExists) return false;
 
     try {
       // Load chunks
       const chunksPath = path.join(dir, "chunks.json");
-      if (fs.existsSync(chunksPath)) {
-        const chunks = JSON.parse(fs.readFileSync(chunksPath, "utf-8"));
+      const chunksExists = await fsPromises.access(chunksPath).then(() => true).catch(() => false);
+      if (chunksExists) {
+        const chunks = JSON.parse(await fsPromises.readFile(chunksPath, "utf-8"));
         for (const chunk of chunks) {
           this.chunkStore.set(chunk.id, chunk);
         }
@@ -827,15 +830,17 @@ export class CodebaseRAG extends EventEmitter {
 
       // Load file index
       const fileIndexPath = path.join(dir, "file-index.json");
-      if (fs.existsSync(fileIndexPath)) {
-        const fileIndex = JSON.parse(fs.readFileSync(fileIndexPath, "utf-8"));
+      const fileIndexExists = await fsPromises.access(fileIndexPath).then(() => true).catch(() => false);
+      if (fileIndexExists) {
+        const fileIndex = JSON.parse(await fsPromises.readFile(fileIndexPath, "utf-8"));
         this.fileIndex = new Map(Object.entries(fileIndex));
       }
 
       // Load stats
       const statsPath = path.join(dir, "stats.json");
-      if (fs.existsSync(statsPath)) {
-        this.indexStats = JSON.parse(fs.readFileSync(statsPath, "utf-8"));
+      const statsExists = await fsPromises.access(statsPath).then(() => true).catch(() => false);
+      if (statsExists) {
+        this.indexStats = JSON.parse(await fsPromises.readFile(statsPath, "utf-8"));
         this.indexStats.lastUpdated = new Date(this.indexStats.lastUpdated);
       }
 

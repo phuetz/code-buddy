@@ -671,6 +671,14 @@ export class IterativeRepairEngine extends EventEmitter {
   }
 
   /**
+   * Dispose and cleanup
+   */
+  dispose(): void {
+    this.clearLearning();
+    this.removeAllListeners();
+  }
+
+  /**
    * ChatRepair-style conversational repair with full context
    *
    * Implements the key insight from ChatRepair (ISSTA 2024):
@@ -970,5 +978,8 @@ export function getIterativeRepairEngine(config?: Partial<RepairConfig>): Iterat
 }
 
 export function resetIterativeRepairEngine(): void {
+  if (repairEngineInstance) {
+    repairEngineInstance.dispose();
+  }
   repairEngineInstance = null;
 }

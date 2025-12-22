@@ -645,6 +645,13 @@ export class MultiPathRetrieval extends EventEmitter {
       totalTokens,
     };
   }
+
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -663,5 +670,8 @@ export function getMultiPathRetrieval(
 }
 
 export function resetMultiPathRetrieval(): void {
+  if (multiPathInstance) {
+    multiPathInstance.dispose();
+  }
   multiPathInstance = null;
 }

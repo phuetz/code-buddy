@@ -472,5 +472,8 @@ export function getHookSystem(workingDirectory?: string): HookSystem {
 }
 
 export function resetHookSystem(): void {
+  if (hookSystemInstance) {
+    hookSystemInstance.dispose();
+  }
   hookSystemInstance = null;
 }

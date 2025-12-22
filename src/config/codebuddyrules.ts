@@ -694,6 +694,13 @@ ignore:
 
     return merged;
   }
+
+  /**
+   * Dispose and clean up resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -716,5 +723,8 @@ export async function initializeCodeBuddyRules(workingDir?: string): Promise<Cod
 }
 
 export function resetCodeBuddyRulesManager(): void {
+  if (managerInstance) {
+    managerInstance.dispose();
+  }
   managerInstance = null;
 }

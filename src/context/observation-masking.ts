@@ -839,6 +839,13 @@ export class ObservationMasker extends EventEmitter {
   getConfig(): MaskingConfig {
     return { ...this.config };
   }
+
+  /**
+   * Dispose resources and cleanup
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 /**
@@ -863,5 +870,8 @@ export function getObservationMasker(
 }
 
 export function resetObservationMasker(): void {
+  if (observationMaskerInstance) {
+    observationMaskerInstance.dispose();
+  }
   observationMaskerInstance = null;
 }

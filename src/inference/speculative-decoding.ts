@@ -397,6 +397,13 @@ export class SpeculativeDecoder extends EventEmitter {
 
     return lines.join('\n');
   }
+
+  /**
+   * Dispose and clean up resources
+   */
+  dispose(): void {
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -476,5 +483,8 @@ export function getSpeculativeDecoder(
 }
 
 export function resetSpeculativeDecoder(): void {
+  if (speculativeDecoderInstance) {
+    speculativeDecoderInstance.dispose();
+  }
   speculativeDecoderInstance = null;
 }

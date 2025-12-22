@@ -13,7 +13,7 @@
  * 3. Users can't easily verify line numbers
  */
 
-import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 
 // Types for unified diff operations
@@ -84,8 +84,9 @@ export class UnifiedDiffEditor {
       let content: string;
       const absolutePath = path.resolve(operation.filePath);
 
-      if (fs.existsSync(absolutePath)) {
-        content = fs.readFileSync(absolutePath, 'utf-8');
+      const exists = await fsPromises.access(absolutePath).then(() => true).catch(() => false);
+      if (exists) {
+        content = await fsPromises.readFile(absolutePath, 'utf-8');
       } else if (operation.createIfMissing) {
         content = '';
       } else {
@@ -115,8 +116,8 @@ export class UnifiedDiffEditor {
 
       // Write the result
       if (result.hunksApplied > 0) {
-        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
-        fs.writeFileSync(absolutePath, content, 'utf-8');
+        await fsPromises.mkdir(path.dirname(absolutePath), { recursive: true });
+        await fsPromises.writeFile(absolutePath, content, 'utf-8');
         result.success = true;
 
         // Generate diff for display
@@ -340,8 +341,8 @@ export class UnifiedDiffEditor {
     const fileName = path.basename(filePath);
     const backupPath = path.join(this.backupDir, `${fileName}.${timestamp}.bak`);
 
-    fs.mkdirSync(this.backupDir, { recursive: true });
-    fs.writeFileSync(backupPath, content, 'utf-8');
+    await fsPromises.mkdir(this.backupDir, { recursive: true });
+    await fsPromises.writeFile(backupPath, content, 'utf-8');
 
     return backupPath;
   }
@@ -473,12 +474,13 @@ export class UnifiedDiffEditor {
    */
   async restoreBackup(backupPath: string, originalPath: string): Promise<boolean> {
     try {
-      if (!fs.existsSync(backupPath)) {
+      const exists = await fsPromises.access(backupPath).then(() => true).catch(() => false);
+      if (!exists) {
         return false;
       }
 
-      const content = fs.readFileSync(backupPath, 'utf-8');
-      fs.writeFileSync(originalPath, content, 'utf-8');
+      const content = await fsPromises.readFile(backupPath, 'utf-8');
+      await fsPromises.writeFile(originalPath, content, 'utf-8');
       return true;
     } catch {
       return false;
@@ -488,16 +490,18 @@ export class UnifiedDiffEditor {
   /**
    * List available backups for a file
    */
-  listBackups(filePath: string): string[] {
+  async listBackups(filePath: string): Promise<string[]> {
     const fileName = path.basename(filePath);
     const pattern = new RegExp(`^${fileName}\\..*\\.bak$`);
 
     try {
-      if (!fs.existsSync(this.backupDir)) {
+      const exists = await fsPromises.access(this.backupDir).then(() => true).catch(() => false);
+      if (!exists) {
         return [];
       }
 
-      return fs.readdirSync(this.backupDir)
+      const files = await fsPromises.readdir(this.backupDir);
+      return files
         .filter(f => pattern.test(f))
         .map(f => path.join(this.backupDir, f))
         .sort()

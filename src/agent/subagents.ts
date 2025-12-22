@@ -664,6 +664,7 @@ export function getParallelSubagentRunner(
 export function resetParallelRunner(): void {
   if (parallelRunnerInstance) {
     parallelRunnerInstance.stop();
+    parallelRunnerInstance.removeAllListeners();
   }
   parallelRunnerInstance = null;
 }
