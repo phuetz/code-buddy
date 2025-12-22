@@ -1,9 +1,10 @@
-import { spawn, SpawnOptions } from 'child_process';
+import { spawn, SpawnOptions, ChildProcess } from 'child_process';
 import { ToolResult } from '../types/index.js';
 import { ConfirmationService } from '../utils/confirmation-service.js';
 import { getSandboxManager } from '../security/sandbox.js';
 import { getSelfHealingEngine, SelfHealingEngine } from '../utils/self-healing.js';
 import { parseTestOutput, isLikelyTestOutput } from '../utils/test-output-parser.js';
+import { Disposable, registerDisposable } from '../utils/disposable.js';
 import {
   bashToolSchemas,
   validateWithSchema,
@@ -50,12 +51,31 @@ const BLOCKED_PATHS: string[] = [
   '/etc/sudoers',
 ];
 
-export class BashTool {
+export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
   private confirmationService = ConfirmationService.getInstance();
   private sandboxManager = getSandboxManager();
   private selfHealingEngine: SelfHealingEngine = getSelfHealingEngine();
   private selfHealingEnabled: boolean = true;
+  private runningProcesses: Set<ChildProcess> = new Set();
+
+  constructor() {
+    registerDisposable(this);
+  }
+
+  /**
+   * Clean up resources - kill any running processes
+   */
+  dispose(): void {
+    for (const proc of this.runningProcesses) {
+      try {
+        proc.kill('SIGTERM');
+      } catch {
+        // Process may already be dead
+      }
+    }
+    this.runningProcesses.clear();
+  }
 
   /**
    * Validate command for dangerous patterns

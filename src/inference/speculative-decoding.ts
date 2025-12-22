@@ -406,7 +406,7 @@ export class SpeculativeDecoder extends EventEmitter {
 /**
  * Create a mock draft callback for testing
  */
-export function createMockDraftCallback(acceptanceRate = 0.7): DraftModelCallback {
+export function createMockDraftCallback(_acceptanceRate = 0.7): DraftModelCallback {
   return async (_prompt: string, numTokens: number): Promise<DraftProposal> => {
     // Simulate draft model latency (~10ms per token)
     await new Promise((resolve) => setTimeout(resolve, numTokens * 10));

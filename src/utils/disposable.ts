@@ -5,6 +5,8 @@
  * for singleton instances and other long-lived resources.
  */
 
+import { logger } from './logger.js';
+
 /**
  * Interface for objects that need cleanup
  */
@@ -40,7 +42,7 @@ export class DisposableManager {
    */
   register(disposable: Disposable): void {
     if (this.disposed) {
-      console.warn('DisposableManager: Cannot register after disposal');
+      logger.warn('DisposableManager: Cannot register after disposal');
       return;
     }
     this.disposables.add(disposable);
@@ -74,7 +76,7 @@ export class DisposableManager {
           await result;
         }
       } catch (error) {
-        console.error('Error disposing resource:', error);
+        logger.error('Error disposing resource', { error });
       }
     }
 

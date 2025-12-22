@@ -10,6 +10,7 @@ import { VectorStore } from "./types.js";
 import { cosineSimilarity } from "./embeddings.js";
 import fs from "fs";
 import path from "path";
+import { logger } from "../../utils/logger.js";
 
 interface VectorEntry {
   id: string;
@@ -208,7 +209,7 @@ export class InMemoryVectorStore implements VectorStore {
         }
       }
     } catch (error) {
-      console.warn("Failed to load vector store from disk:", error);
+      logger.warn("Failed to load vector store from disk:", { error });
     }
   }
 
@@ -220,7 +221,7 @@ export class InMemoryVectorStore implements VectorStore {
 
     this.autoSaveInterval = setInterval(() => {
       if (this.dirty) {
-        this.saveToDisk().catch(console.error);
+        this.saveToDisk().catch(err => logger.error("Failed to save vector store", { error: err }));
       }
     }, 30000); // Save every 30 seconds if dirty
   }

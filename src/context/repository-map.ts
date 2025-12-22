@@ -15,6 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from '../utils/logger.js';
 
 // Symbol types for the repository map
 type SymbolKind = 'class' | 'function' | 'method' | 'interface' | 'type' | 'variable' | 'import' | 'export';
@@ -92,7 +93,7 @@ export class RepositoryMap {
     this.initialized = true;
 
     const elapsed = Date.now() - startTime;
-    console.error(`[RepoMap] Initialized in ${elapsed}ms with ${this.files.size} files and ${this.symbols.size} symbols`);
+    logger.debug(`[RepoMap] Initialized in ${elapsed}ms with ${this.files.size} files and ${this.symbols.size} symbols`);
   }
 
   /**

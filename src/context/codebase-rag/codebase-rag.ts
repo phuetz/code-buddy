@@ -13,6 +13,7 @@
 import fs from "fs";
 import path from "path";
 import { EventEmitter } from "events";
+import { logger } from "../../utils/logger.js";
 import {
   CodeChunk,
   ScoredChunk,
@@ -840,7 +841,7 @@ export class CodebaseRAG extends EventEmitter {
 
       return true;
     } catch (error) {
-      console.warn("Failed to load index:", error);
+      logger.warn("Failed to load index", { error });
       return false;
     }
   }

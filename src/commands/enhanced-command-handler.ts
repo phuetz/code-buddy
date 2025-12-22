@@ -72,7 +72,6 @@ import {
   handleWorkflow,
   handleHooks,
   handlePromptCache,
-  handleModelRouterCommand,
   // Track handlers (Conductor-inspired)
   handleTrack,
   // Type

@@ -9,9 +9,7 @@ import {
   getBenchmarkSuite,
   resetBenchmarkSuite,
   DEFAULT_PROMPTS,
-  type BenchmarkConfig,
   type BenchmarkCallback,
-  type BenchmarkResults,
 } from '../src/performance/benchmark-suite.js';
 
 // ============================================================================

@@ -10,7 +10,7 @@
  */
 
 import { TrackManager } from './track-manager.js';
-import { TrackType, TrackStatus, Track, TrackMetadata } from './types.js';
+import { TrackType, TrackStatus, Track, TrackMetadata, TrackPhase, TrackTask } from './types.js';
 
 export interface TrackCommandResult {
   success: boolean;
@@ -479,7 +479,7 @@ Read the project context files first:
 This ensures the plan aligns with existing conventions.`;
   }
 
-  private getImplementPrompt(track: Track, phase: any, task: any): string {
+  private getImplementPrompt(track: Track, phase: TrackPhase, task: TrackTask): string {
     return `You are implementing a task from the development plan.
 
 ## Current Track
@@ -509,7 +509,7 @@ Implement this task following the project workflow:
 ${track.spec.overview}
 
 ## Remaining Tasks in Phase
-${phase.tasks.filter((t: any) => t.status !== 'completed').map((t: any) =>
+${phase.tasks.filter((t: TrackTask) => t.status !== 'completed').map((t: TrackTask) =>
   `- ${t.status === 'in_progress' ? '[~]' : '[ ]'} ${t.title}`
 ).join('\n')}
 

@@ -10,6 +10,7 @@
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
 import { createTokenCounter, TokenCounter } from '../utils/token-counter.js';
+import { logger } from '../utils/logger.js';
 
 export interface ContextManagerConfig {
   /** Maximum tokens for the context window */
@@ -153,7 +154,7 @@ export class ContextManagerV2 {
     const newStats = this.getStats(optimizedMsgs);
     const tokensReduced = stats.totalTokens - newStats.totalTokens;
     if (tokensReduced > 0) {
-      console.log(`📦 Auto-compact: Reduced ${tokensReduced.toLocaleString()} tokens (${stats.totalTokens.toLocaleString()} → ${newStats.totalTokens.toLocaleString()})`);
+      logger.info(`Auto-compact: Reduced ${tokensReduced.toLocaleString()} tokens (${stats.totalTokens.toLocaleString()} → ${newStats.totalTokens.toLocaleString()})`);
     }
 
     this.lastTokenCount = newStats.totalTokens;

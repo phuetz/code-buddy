@@ -12,7 +12,6 @@ import {
   ACTION_PLAN_SCHEMA,
   CODE_EDIT_SCHEMA,
   type JSONSchema,
-  type ValidationResult,
 } from '../src/utils/schema-validator.js';
 
 // ============================================================================

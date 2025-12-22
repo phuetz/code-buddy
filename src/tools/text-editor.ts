@@ -3,16 +3,28 @@ import * as path from "path";
 import { writeFile as writeFilePromise } from "fs/promises";
 import { ToolResult, EditorCommand, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
+import { Disposable, registerDisposable } from "../utils/disposable.js";
 import {
   findBestFuzzyMatch,
   generateFuzzyDiff,
   suggestWhitespaceFixes,
 } from "../utils/fuzzy-match.js";
 
-export class TextEditorTool {
+export class TextEditorTool implements Disposable {
   private editHistory: EditorCommand[] = [];
   private confirmationService = ConfirmationService.getInstance();
   private baseDirectory: string = process.cwd();
+
+  constructor() {
+    registerDisposable(this);
+  }
+
+  /**
+   * Clean up resources
+   */
+  dispose(): void {
+    this.editHistory = [];
+  }
 
   /**
    * Validate path is within allowed directory (prevent path traversal)

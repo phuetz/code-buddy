@@ -14,7 +14,6 @@ import {
   TrackPlan,
   TrackPhase,
   TrackTask,
-  TrackType,
   TrackStatus,
   TaskStatus,
   TrackCreateOptions,
@@ -327,7 +326,6 @@ export class TrackManager {
       const filePath = path.join(this.contextDir, file);
       if (await fs.pathExists(filePath)) {
         const content = await fs.readFile(filePath, 'utf-8');
-        const key = file.replace('.md', '').replace('-', '') as keyof ProjectContext;
 
         if (file === 'product.md') context.product = content;
         else if (file === 'tech-stack.md') context.techStack = content;

@@ -10,10 +10,6 @@ import {
   initializeGPUMonitor,
   resetGPUMonitor,
   DEFAULT_GPU_MONITOR_CONFIG,
-  type GPUVendor,
-  type GPUInfo,
-  type VRAMStats,
-  type OffloadRecommendation,
 } from '../src/hardware/gpu-monitor.js';
 
 // ============================================================================

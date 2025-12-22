@@ -484,9 +484,6 @@ export class GPUMonitor extends EventEmitter {
    * Get recommended GPU layers for common model sizes
    */
   async getRecommendedLayers(modelSize: "3b" | "7b" | "13b" | "30b" | "70b"): Promise<number> {
-    const stats = await this.getStats();
-    const freeVRAM = stats.freeVRAM - this.config.safeBuffer;
-
     // Approximate model sizes in MB (Q4 quantization)
     const modelSizes: Record<string, number> = {
       "3b": 2000,

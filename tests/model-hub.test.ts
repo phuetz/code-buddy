@@ -14,10 +14,6 @@ import {
   RECOMMENDED_MODELS,
   QUANTIZATION_TYPES,
   DEFAULT_MODEL_HUB_CONFIG,
-  type ModelInfo,
-  type ModelSize,
-  type DownloadedModel,
-  type ModelHubConfig,
 } from '../src/models/model-hub.js';
 
 // ============================================================================

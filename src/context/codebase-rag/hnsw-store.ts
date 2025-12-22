@@ -267,7 +267,6 @@ export class HNSWVectorStore extends EventEmitter {
 
     // Search for entry point at top level
     let currentNodeId = this.entryPoint;
-    const entryNode = this.nodes.get(currentNodeId)!;
 
     // Traverse from top to insertion level
     for (let l = this.maxLevel; l > level; l--) {

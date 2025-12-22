@@ -10,7 +10,6 @@ import {
   resetKVCacheManager,
   MODEL_ARCHITECTURES,
   DEFAULT_KV_CACHE_CONFIG,
-  type KVCacheConfig,
   type ModelArchitecture,
 } from '../src/inference/kv-cache-config.js';
 
@@ -361,7 +360,7 @@ describe('MODEL_ARCHITECTURES', () => {
   });
 
   it('should have valid architecture structure', () => {
-    for (const [name, arch] of Object.entries(MODEL_ARCHITECTURES)) {
+    for (const [_name, arch] of Object.entries(MODEL_ARCHITECTURES)) {
       expect(arch.nLayers).toBeGreaterThan(0);
       expect(arch.nEmbed).toBeGreaterThan(0);
       expect(arch.nHead).toBeGreaterThan(0);

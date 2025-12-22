@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from "events";
+import { logger } from "../../utils/logger.js";
 import { CodeBuddyClient, CodeBuddyMessage } from "../../codebuddy/client.js";
 import { ToolResult, getErrorMessage } from "../../types/index.js";
 import {
@@ -91,8 +92,8 @@ export class TreeOfThoughtReasoner extends EventEmitter {
     this.emit("reasoning:complete", { result });
 
     if (this.config.verbose) {
-      console.log("\n=== Reasoning Tree ===\n");
-      console.log(mcts.formatTree());
+      logger.debug("=== Reasoning Tree ===");
+      logger.debug(mcts.formatTree());
     }
 
     return result;

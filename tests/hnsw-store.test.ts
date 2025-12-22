@@ -14,8 +14,6 @@ import {
   resetHNSWStore,
   DEFAULT_HNSW_CONFIG,
   type VectorEntry,
-  type SearchResult,
-  type HNSWConfig,
 } from '../src/context/codebase-rag/hnsw-store.js';
 
 // ============================================================================
@@ -38,18 +36,6 @@ function similarVector(base: number[], noise: number = 0.1): number[] {
   const vector = base.map((v) => v + (Math.random() - 0.5) * noise);
   const norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
   return vector.map((v) => v / norm);
-}
-
-/**
- * Calculate Euclidean distance
- */
-function euclideanDistance(a: number[], b: number[]): number {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    const diff = a[i] - b[i];
-    sum += diff * diff;
-  }
-  return Math.sqrt(sum);
 }
 
 // ============================================================================

@@ -17,7 +17,7 @@
 
 import { EventEmitter } from "events";
 import { logger } from "../../utils/logger.js";
-import type { EmbeddingProvider, CodeChunk } from "./types.js";
+import type { CodeChunk } from "./types.js";
 
 /**
  * Ollama embedding configuration
@@ -246,7 +246,7 @@ export class OllamaEmbeddingProvider extends EventEmitter {
 
         const data: OllamaEmbeddingResponse = await response.json();
         return data.embedding;
-      } catch (error) {
+      } catch (_error) {
         if (attempt < this.config.retryAttempts - 1) {
           await this.delay(this.config.retryDelay);
         } else {

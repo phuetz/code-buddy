@@ -12,9 +12,6 @@ import {
   DEFAULT_SPECULATIVE_CONFIG,
   createMockDraftCallback,
   createMockTargetCallback,
-  type SpeculativeConfig,
-  type DraftModelCallback,
-  type TargetModelCallback,
 } from '../src/inference/speculative-decoding.js';
 
 // ============================================================================

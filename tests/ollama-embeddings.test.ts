@@ -11,8 +11,6 @@ import {
   resetOllamaEmbeddings,
   EMBEDDING_MODELS,
   DEFAULT_OLLAMA_EMBEDDING_CONFIG,
-  type OllamaEmbeddingConfig,
-  type EmbeddingModelInfo,
 } from '../src/context/codebase-rag/ollama-embeddings.js';
 import type { CodeChunk } from '../src/context/codebase-rag/types.js';
 
