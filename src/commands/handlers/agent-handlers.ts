@@ -8,7 +8,7 @@
  * - /agent info <id> - Show agent details
  */
 
-import { getCustomAgentLoader } from '../../agents/custom-agent-loader.js';
+import { getCustomAgentLoader } from '../../agent/custom/custom-agent-loader.js';
 
 export interface CommandHandlerResult {
   handled: boolean;

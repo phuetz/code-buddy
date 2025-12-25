@@ -1,0 +1,94 @@
+{
+  "app": {
+    "name": "Code Buddy",
+    "version": "Version {{version}}",
+    "starting": "Demarrage de l'assistant conversationnel Code Buddy...",
+    "goodbye": "Au revoir !"
+  },
+  "errors": {
+    "apiKeyRequired": "Cle API requise. Definissez GROK_API_KEY, utilisez --api-key, ou enregistrez dans ~/.codebuddy/user-settings.json",
+    "fileNotFound": "Fichier introuvable : {{path}}",
+    "directoryNotFound": "Repertoire introuvable : {{path}}",
+    "permissionDenied": "Permission refusee : {{path}}",
+    "networkError": "Erreur reseau : {{message}}",
+    "timeout": "Delai d'attente depasse apres {{seconds}} secondes",
+    "invalidInput": "Entree invalide : {{message}}",
+    "commandFailed": "Commande echouee : {{command}}"
+  },
+  "git": {
+    "noChanges": "Aucun changement a valider. Le repertoire de travail est propre.",
+    "changesDetected": "Changements detectes",
+    "changesStaged": "Changements indexes",
+    "generatingCommit": "Generation du message de commit...",
+    "commitSuccess": "Commit reussi",
+    "commitFailed": "Commit echoue : {{error}}",
+    "pushSuccess": "Push reussi",
+    "pushFailed": "Push echoue : {{error}}",
+    "settingUpstream": "Configuration de l'upstream et push..."
+  },
+  "tools": {
+    "executing": "Execution de {{tool}}...",
+    "success": "{{tool}} termine avec succes",
+    "failed": "{{tool}} echoue : {{error}}",
+    "confirmPrompt": "Autoriser {{tool}} ?",
+    "approved": "Approuve",
+    "denied": "Refuse"
+  },
+  "session": {
+    "resuming": "Reprise de la session : {{name}} ({{id}})",
+    "messages": "{{count}} messages",
+    "lastAccessed": "Dernier acces : {{date}}",
+    "notFound": "Session introuvable : {{id}}",
+    "noSessions": "Aucune session trouvee. Demarrez une nouvelle session d'abord.",
+    "recentSessions": "Sessions recentes :"
+  },
+  "models": {
+    "available": "Modeles disponibles :",
+    "total": "Total : {{count}} modele(s)",
+    "notFound": "(aucun modele trouve)",
+    "fetchError": "Erreur lors de la recuperation des modeles depuis {{url}}"
+  },
+  "prompts": {
+    "available": "Prompts systeme disponibles :",
+    "builtin": "Integres :",
+    "user": "Utilisateur (~/.codebuddy/prompts/) :",
+    "usage": "Utilisation : codebuddy --system-prompt <id>"
+  },
+  "agents": {
+    "available": "Agents personnalises disponibles :",
+    "notFound": "(aucun agent personnalise trouve)",
+    "createHint": "Creez des agents dans ~/.codebuddy/agents/",
+    "using": "Utilisation de l'agent : {{name}}",
+    "usage": "Utilisation : codebuddy --agent <id>"
+  },
+  "modes": {
+    "vimEnabled": "Mode Vim : ACTIVE",
+    "forceTools": "Forcer les outils : ACTIVE (appels de fonction pour modeles locaux)",
+    "autoApprove": "Approbation auto : ACTIVE (toutes les executions d'outils seront approuvees)",
+    "dryRun": "Mode simulation : ACTIVE (les changements seront previsualises, non appliques)",
+    "cacheDisabled": "Cache de reponses : DESACTIVE",
+    "selfHealDisabled": "Auto-correction : DESACTIVE",
+    "dangerousMode": "DANGEREUX : Toutes les verifications de permissions IGNOREES"
+  },
+  "status": {
+    "requestsRemaining": "Requetes restantes : {{count}}",
+    "tokensRemaining": "Tokens restants : {{count}}",
+    "queueLength": "File d'attente : {{count}}",
+    "costSoFar": "Cout jusqu'ici : {{amount}} $"
+  },
+  "files": {
+    "zero": "Aucun fichier",
+    "one": "1 fichier",
+    "other": "{{count}} fichiers"
+  },
+  "lines": {
+    "zero": "Aucune ligne",
+    "one": "1 ligne",
+    "other": "{{count}} lignes"
+  },
+  "tokens": {
+    "zero": "Aucun token",
+    "one": "1 token",
+    "other": "{{count}} tokens"
+  }
+}

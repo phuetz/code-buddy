@@ -36,7 +36,7 @@ export async function handleReload(): Promise<CommandHandlerResult> {
 
     // Reload custom agents
     try {
-      const { resetCustomAgentLoader } = await import('../../agents/custom-agent-loader.js');
+      const { resetCustomAgentLoader } = await import('../../agent/custom/custom-agent-loader.js');
       resetCustomAgentLoader();
       lines.push('  [OK] Custom agents reloaded');
     } catch {

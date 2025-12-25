@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ChatCompletionMessageParam, ChatCompletionChunk } from "openai/resources/chat";
+import type { ChatCompletionMessageParam, ChatCompletionChunk, ChatCompletionCreateParamsNonStreaming, ChatCompletionCreateParamsStreaming } from "openai/resources/chat";
 import { validateModel, getModelInfo } from "../utils/model-utils.js";
 import { logger } from "../utils/logger.js";
 
@@ -29,15 +29,17 @@ export interface CodeBuddyTool {
   };
 }
 
-/** Chat completion request payload */
-interface ChatRequestPayload {
-  model: string;
-  messages: CodeBuddyMessage[];
-  tools: CodeBuddyTool[];
+/** Chat completion request payload - extends OpenAI types with Grok-specific fields */
+interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming, 'tools' | 'tool_choice'> {
+  tools?: CodeBuddyTool[];
   tool_choice?: "auto" | "none" | "required";
-  temperature: number;
-  max_tokens: number;
-  stream?: boolean;
+  search_parameters?: SearchParameters;
+}
+
+/** Streaming chat completion request payload */
+interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStreaming, 'tools' | 'tool_choice'> {
+  tools?: CodeBuddyTool[];
+  tool_choice?: "auto" | "none" | "required";
   search_parameters?: SearchParameters;
 }
 
@@ -344,10 +346,12 @@ export class CodeBuddyClient {
         requestPayload.search_parameters = searchOpts.search_parameters;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await this.client.chat.completions.create(requestPayload as any);
+      // Cast to OpenAI params - our extended payload is compatible
+      const response = await this.client.chat.completions.create(
+        requestPayload as unknown as ChatCompletionCreateParamsNonStreaming
+      );
 
-      return response as CodeBuddyResponse;
+      return response as unknown as CodeBuddyResponse;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`CodeBuddy API error: ${message}`);
@@ -409,29 +413,33 @@ export class CodeBuddyClient {
       // Convert tool messages for local models that don't support tool role
       const processedMessages = this.convertToolMessagesForLocalModels(messages);
 
-      const requestPayload: ChatRequestPayload = {
+      const requestPayload = {
         model: opts.model || this.currentModel,
         messages: processedMessages,
         tools: useTools ? tools : [],
-        tool_choice: useTools ? "auto" : undefined,
+        tool_choice: useTools ? "auto" as const : undefined,
         temperature: opts.temperature ?? 0.7,
         max_tokens: this.defaultMaxTokens,
-        stream: true,
       };
 
       // Add search parameters if specified (skip for local inference)
       const searchOpts = opts.searchOptions || searchOptions;
-      if (searchOpts?.search_parameters && !this.isLocalInference()) {
-        requestPayload.search_parameters = searchOpts.search_parameters;
-      }
+      const searchParams = (searchOpts?.search_parameters && !this.isLocalInference())
+        ? { search_parameters: searchOpts.search_parameters }
+        : {};
 
-      const stream = await this.client.chat.completions.create({
+      // Create streaming request payload
+      const streamingPayload: ChatRequestPayloadStreaming = {
         ...requestPayload,
+        ...searchParams,
         stream: true,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      };
 
-      for await (const chunk of stream as unknown as AsyncIterable<ChatCompletionChunk>) {
+      const stream = await this.client.chat.completions.create(
+        streamingPayload as unknown as ChatCompletionCreateParamsStreaming
+      );
+
+      for await (const chunk of stream) {
         yield chunk;
       }
     } catch (error: unknown) {

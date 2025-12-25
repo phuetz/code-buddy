@@ -28,27 +28,44 @@ dotenv.config();
 // Disable default SIGINT handling to let Ink handle Ctrl+C
 // We'll handle exit through the input system instead
 
-process.on("SIGTERM", () => {
-  // Restore terminal to normal mode before exit
-  if (process.stdin.isTTY && process.stdin.setRawMode) {
-    try {
-      process.stdin.setRawMode(false);
-    } catch (_e) {
-      // Ignore errors when setting raw mode
-    }
-  }
+// Import crash handler
+import { getCrashHandler } from './errors/crash-handler.js';
+import { disposeAll } from './utils/disposable.js';
+const crashHandler = getCrashHandler();
+crashHandler.initialize();
+
+process.on("SIGTERM", async () => {
+  crashHandler.restoreTerminal();
   console.log("\nGracefully shutting down...");
+  await disposeAll();
   process.exit(0);
 });
 
-// Handle uncaught exceptions to prevent hanging
+process.on("SIGINT", async () => {
+  crashHandler.restoreTerminal();
+  await disposeAll();
+  process.exit(0);
+});
+
+// Handle uncaught exceptions with crash recovery
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught exception:", error);
+  const crashFile = crashHandler.handleCrash(error, "Uncaught exception");
+  console.error("\nUnexpected error occurred:", error.message);
+  if (crashFile) {
+    console.error(`\nCrash context saved to: ${crashFile}`);
+    console.error("You can resume your session with: grok --resume");
+  }
   process.exit(1);
 });
 
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled rejection at:", promise, "reason:", reason);
+process.on("unhandledRejection", (reason, _promise) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  const crashFile = crashHandler.handleCrash(error, "Unhandled rejection");
+  console.error("\nUnhandled promise rejection:", error.message);
+  if (crashFile) {
+    console.error(`\nCrash context saved to: ${crashFile}`);
+    console.error("You can resume your session with: grok --resume");
+  }
   process.exit(1);
 });
 
@@ -549,7 +566,7 @@ program
 
     // Handle --list-agents flag
     if (options.listAgents) {
-      const { getCustomAgentLoader } = await import("./agents/custom-agent-loader.js");
+      const { getCustomAgentLoader } = await import("./agent/custom/custom-agent-loader.js");
       const loader = getCustomAgentLoader();
       const agents = loader.listAgents();
 
@@ -756,7 +773,7 @@ program
 
       // Handle --agent flag: load custom agent configuration
       if (options.agent) {
-        const { getCustomAgentLoader } = await import("./agents/custom-agent-loader.js");
+        const { getCustomAgentLoader } = await import("./agent/custom/custom-agent-loader.js");
         const loader = getCustomAgentLoader();
         const agentConfig = loader.getAgent(options.agent);
 

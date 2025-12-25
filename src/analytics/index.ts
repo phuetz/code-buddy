@@ -20,3 +20,15 @@ export {
   getPersistentAnalytics,
   resetPersistentAnalytics,
 } from './persistent-analytics.js';
+
+export {
+  MetricsDashboard,
+  getMetricsDashboard,
+  resetMetricsDashboard,
+  type DashboardMetrics,
+  type TokenMetrics,
+  type CostMetrics,
+  type ToolMetrics,
+  type SessionMetrics,
+  type PerformanceMetrics,
+} from './metrics-dashboard.js';

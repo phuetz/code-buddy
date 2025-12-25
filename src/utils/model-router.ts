@@ -28,6 +28,17 @@ export interface ModelRouterConfig {
   costThreshold?: number;     // Switch to cheaper model after $X spent
   autoSwitch: boolean;        // Auto-switch based on task
   preferSpeed: boolean;       // Prefer faster models
+  fallbackChain?: string[];   // Fallback models when primary fails
+  enableFallback: boolean;    // Enable automatic fallback on errors
+}
+
+export interface ModelHealth {
+  modelId: string;
+  available: boolean;
+  lastSuccess: Date | null;
+  lastFailure: Date | null;
+  consecutiveFailures: number;
+  cooldownUntil: Date | null;
 }
 
 // Available Grok models
@@ -84,7 +95,14 @@ const DEFAULT_ROUTER_CONFIG: ModelRouterConfig = {
   },
   autoSwitch: true,
   preferSpeed: false,
+  fallbackChain: ["grok-3-fast", "grok-2-latest", "grok-code-fast-1"],
+  enableFallback: true,
 };
+
+/** Cooldown period after consecutive failures (in ms) */
+const FAILURE_COOLDOWN_MS = 60000; // 1 minute
+/** Max consecutive failures before cooldown */
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
  * Model Router - Dynamic model selection based on task type
@@ -95,12 +113,30 @@ export class ModelRouter extends EventEmitter {
   private currentModel: string;
   private sessionCost: number = 0;
   private switchHistory: Array<{ from: string; to: string; reason: string; timestamp: Date }> = [];
+  private modelHealth: Map<string, ModelHealth> = new Map();
 
   constructor(projectRoot: string = process.cwd()) {
     super();
     this.configPath = path.join(projectRoot, ".codebuddy", "model-router.json");
     this.config = this.loadConfig();
     this.currentModel = this.config.defaultModel;
+    this.initializeModelHealth();
+  }
+
+  /**
+   * Initialize health tracking for all known models
+   */
+  private initializeModelHealth(): void {
+    for (const modelId of Object.keys(GROK_MODELS)) {
+      this.modelHealth.set(modelId, {
+        modelId,
+        available: true,
+        lastSuccess: null,
+        lastFailure: null,
+        consecutiveFailures: 0,
+        cooldownUntil: null,
+      });
+    }
   }
 
   private loadConfig(): ModelRouterConfig {
@@ -300,6 +336,144 @@ export class ModelRouter extends EventEmitter {
     this.emit("usage:recorded", { inputTokens, outputTokens, cost, totalCost: this.sessionCost });
 
     return cost;
+  }
+
+  /**
+   * Record successful API call for a model
+   */
+  recordSuccess(modelId?: string): void {
+    const id = modelId || this.currentModel;
+    const health = this.modelHealth.get(id);
+    if (health) {
+      health.available = true;
+      health.lastSuccess = new Date();
+      health.consecutiveFailures = 0;
+      health.cooldownUntil = null;
+      this.modelHealth.set(id, health);
+    }
+  }
+
+  /**
+   * Record failed API call for a model
+   */
+  recordFailure(modelId?: string, error?: unknown): void {
+    const id = modelId || this.currentModel;
+    const health = this.modelHealth.get(id);
+    if (health) {
+      health.lastFailure = new Date();
+      health.consecutiveFailures++;
+
+      // Put model in cooldown if too many failures
+      if (health.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        health.available = false;
+        health.cooldownUntil = new Date(Date.now() + FAILURE_COOLDOWN_MS);
+        this.emit("model:cooldown", { modelId: id, until: health.cooldownUntil, error });
+      }
+
+      this.modelHealth.set(id, health);
+    }
+  }
+
+  /**
+   * Check if a model is available (not in cooldown)
+   */
+  isModelAvailable(modelId: string): boolean {
+    const health = this.modelHealth.get(modelId);
+    if (!health) return false;
+
+    // Check if cooldown has expired
+    if (health.cooldownUntil && new Date() >= health.cooldownUntil) {
+      health.available = true;
+      health.cooldownUntil = null;
+      this.modelHealth.set(modelId, health);
+    }
+
+    return health.available;
+  }
+
+  /**
+   * Get next available fallback model
+   */
+  getNextFallback(): string | null {
+    if (!this.config.enableFallback) return null;
+
+    const fallbackChain = this.config.fallbackChain || [];
+
+    // First try the configured fallback chain
+    for (const modelId of fallbackChain) {
+      if (modelId !== this.currentModel && this.isModelAvailable(modelId)) {
+        return modelId;
+      }
+    }
+
+    // Then try any available model
+    for (const modelId of Object.keys(GROK_MODELS)) {
+      if (modelId !== this.currentModel && this.isModelAvailable(modelId)) {
+        return modelId;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Switch to fallback model after failure
+   */
+  switchToFallback(error?: unknown): string | null {
+    if (!this.config.enableFallback) {
+      this.emit("fallback:disabled", { currentModel: this.currentModel });
+      return null;
+    }
+
+    this.recordFailure(this.currentModel, error);
+
+    const fallbackModel = this.getNextFallback();
+    if (fallbackModel) {
+      const previousModel = this.currentModel;
+      this.switchModel(fallbackModel, `Fallback after ${previousModel} failure`);
+      this.emit("fallback:activated", { from: previousModel, to: fallbackModel, error });
+      return fallbackModel;
+    }
+
+    this.emit("fallback:exhausted", { currentModel: this.currentModel, error });
+    return null;
+  }
+
+  /**
+   * Get health status for all models
+   */
+  getModelHealthStatus(): ModelHealth[] {
+    // Refresh cooldown states
+    for (const [modelId, health] of this.modelHealth) {
+      if (health.cooldownUntil && new Date() >= health.cooldownUntil) {
+        health.available = true;
+        health.cooldownUntil = null;
+        this.modelHealth.set(modelId, health);
+      }
+    }
+    return Array.from(this.modelHealth.values());
+  }
+
+  /**
+   * Reset health for a specific model (force it out of cooldown)
+   */
+  resetModelHealth(modelId: string): void {
+    const health = this.modelHealth.get(modelId);
+    if (health) {
+      health.available = true;
+      health.consecutiveFailures = 0;
+      health.cooldownUntil = null;
+      this.modelHealth.set(modelId, health);
+      this.emit("model:health-reset", { modelId });
+    }
+  }
+
+  /**
+   * Reset all model health states
+   */
+  resetAllModelHealth(): void {
+    this.initializeModelHealth();
+    this.emit("model:health-reset-all");
   }
 
   /**

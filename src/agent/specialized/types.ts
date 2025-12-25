@@ -218,6 +218,34 @@ export interface DataColumn {
   sampleValues?: unknown[];
 }
 
+/** Statistics for a numeric column */
+export interface NumericColumnStats {
+  count: number;
+  mean: number;
+  std: number;
+  min: number;
+  '25%'?: number;
+  '50%'?: number;
+  '75%'?: number;
+  max: number;
+}
+
+/** Statistics for a categorical column */
+export interface CategoricalColumnStats {
+  count: number;
+  unique: number;
+  top: unknown;
+  type?: 'categorical';
+  freq?: number;
+  missingCount?: number;
+}
+
+/** Column description - either numeric or categorical */
+export type ColumnDescriptionStats = NumericColumnStats | CategoricalColumnStats;
+
+/** Data description keyed by column name */
+export type DataDescription = Record<string, ColumnDescriptionStats>;
+
 export interface DataStats {
   rowCount: number;
   columnCount: number;

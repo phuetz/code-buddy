@@ -262,6 +262,106 @@ export class HistoryManager {
   get count(): number {
     return this.history.length;
   }
+
+  /**
+   * Get auto-completion suggestions based on input prefix
+   * @param prefix - The current input to complete
+   * @param limit - Maximum number of suggestions
+   * @returns Array of matching history entries, scored by relevance
+   */
+  getSuggestions(prefix: string, limit: number = 5): string[] {
+    if (!prefix || prefix.length < 2) {
+      return [];
+    }
+
+    const lowerPrefix = prefix.toLowerCase();
+    const scored: Array<{ text: string; score: number }> = [];
+
+    for (const entry of this.history) {
+      const lowerText = entry.text.toLowerCase();
+
+      // Exact prefix match gets highest score
+      if (lowerText.startsWith(lowerPrefix)) {
+        scored.push({
+          text: entry.text,
+          score: 100 + (1000 - entry.text.length), // Prefer shorter matches
+        });
+      }
+      // Word boundary match gets medium score
+      else if (lowerText.includes(' ' + lowerPrefix) || lowerText.includes('\n' + lowerPrefix)) {
+        scored.push({
+          text: entry.text,
+          score: 50,
+        });
+      }
+      // Contains match gets lower score
+      else if (lowerText.includes(lowerPrefix)) {
+        scored.push({
+          text: entry.text,
+          score: 25,
+        });
+      }
+    }
+
+    // Sort by score descending, then by recency
+    scored.sort((a, b) => b.score - a.score);
+
+    // Remove duplicates and return top matches
+    const seen = new Set<string>();
+    const results: string[] = [];
+
+    for (const item of scored) {
+      if (!seen.has(item.text)) {
+        seen.add(item.text);
+        results.push(item.text);
+        if (results.length >= limit) break;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Get the best single completion for inline suggestion
+   * @param prefix - The current input
+   * @returns The best matching completion or null
+   */
+  getInlineCompletion(prefix: string): string | null {
+    if (!prefix || prefix.length < 3) {
+      return null;
+    }
+
+    const lowerPrefix = prefix.toLowerCase();
+
+    // Look for exact prefix matches, preferring recent entries
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      const entry = this.history[i];
+      if (entry.text.toLowerCase().startsWith(lowerPrefix) && entry.text.length > prefix.length) {
+        return entry.text;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get frequently used commands
+   * @param limit - Maximum number of results
+   * @returns Most frequently used commands
+   */
+  getFrequent(limit: number = 10): Array<{ text: string; count: number }> {
+    const counts = new Map<string, number>();
+
+    for (const entry of this.history) {
+      const count = counts.get(entry.text) || 0;
+      counts.set(entry.text, count + 1);
+    }
+
+    return Array.from(counts.entries())
+      .map(([text, count]) => ({ text, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+  }
 }
 
 // Singleton instance

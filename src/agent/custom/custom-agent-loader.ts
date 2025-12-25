@@ -13,8 +13,8 @@
 import fs from 'fs';
 import path from 'path';
 import TOML from '@iarna/toml';
-import { getAgentsDir } from '../utils/codebuddy-home.js';
-import { logger } from '../utils/logger.js';
+import { getAgentsDir } from '../../utils/codebuddy-home.js';
+import { logger } from '../../utils/logger.js';
 
 // ============================================================================
 // Types

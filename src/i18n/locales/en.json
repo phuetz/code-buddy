@@ -1,0 +1,94 @@
+{
+  "app": {
+    "name": "Code Buddy",
+    "version": "Version {{version}}",
+    "starting": "Starting Code Buddy Conversational Assistant...",
+    "goodbye": "Goodbye!"
+  },
+  "errors": {
+    "apiKeyRequired": "API key required. Set GROK_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json",
+    "fileNotFound": "File not found: {{path}}",
+    "directoryNotFound": "Directory not found: {{path}}",
+    "permissionDenied": "Permission denied: {{path}}",
+    "networkError": "Network error: {{message}}",
+    "timeout": "Operation timed out after {{seconds}} seconds",
+    "invalidInput": "Invalid input: {{message}}",
+    "commandFailed": "Command failed: {{command}}"
+  },
+  "git": {
+    "noChanges": "No changes to commit. Working directory is clean.",
+    "changesDetected": "Changes detected",
+    "changesStaged": "Changes staged",
+    "generatingCommit": "Generating commit message...",
+    "commitSuccess": "Commit successful",
+    "commitFailed": "Commit failed: {{error}}",
+    "pushSuccess": "Push successful",
+    "pushFailed": "Push failed: {{error}}",
+    "settingUpstream": "Setting upstream and pushing..."
+  },
+  "tools": {
+    "executing": "Executing {{tool}}...",
+    "success": "{{tool}} completed successfully",
+    "failed": "{{tool}} failed: {{error}}",
+    "confirmPrompt": "Allow {{tool}}?",
+    "approved": "Approved",
+    "denied": "Denied"
+  },
+  "session": {
+    "resuming": "Resuming session: {{name}} ({{id}})",
+    "messages": "{{count}} messages",
+    "lastAccessed": "Last accessed: {{date}}",
+    "notFound": "Session not found: {{id}}",
+    "noSessions": "No sessions found. Start a new session first.",
+    "recentSessions": "Recent sessions:"
+  },
+  "models": {
+    "available": "Available models:",
+    "total": "Total: {{count}} model(s)",
+    "notFound": "(no models found)",
+    "fetchError": "Error fetching models from {{url}}"
+  },
+  "prompts": {
+    "available": "Available system prompts:",
+    "builtin": "Built-in:",
+    "user": "User (~/.codebuddy/prompts/):",
+    "usage": "Usage: codebuddy --system-prompt <id>"
+  },
+  "agents": {
+    "available": "Available custom agents:",
+    "notFound": "(no custom agents found)",
+    "createHint": "Create agents in ~/.codebuddy/agents/",
+    "using": "Using agent: {{name}}",
+    "usage": "Usage: codebuddy --agent <id>"
+  },
+  "modes": {
+    "vimEnabled": "Vim mode: ENABLED",
+    "forceTools": "Force tools: ENABLED (function calling for local models)",
+    "autoApprove": "Auto-approve: ENABLED (all tool executions will be approved)",
+    "dryRun": "Dry-run mode: ENABLED (changes will be previewed, not applied)",
+    "cacheDisabled": "Response cache: DISABLED",
+    "selfHealDisabled": "Self-healing: DISABLED",
+    "dangerousMode": "DANGEROUS: All permission checks BYPASSED"
+  },
+  "status": {
+    "requestsRemaining": "Requests remaining: {{count}}",
+    "tokensRemaining": "Tokens remaining: {{count}}",
+    "queueLength": "Queue length: {{count}}",
+    "costSoFar": "Cost so far: ${{amount}}"
+  },
+  "files": {
+    "zero": "No files",
+    "one": "1 file",
+    "other": "{{count}} files"
+  },
+  "lines": {
+    "zero": "No lines",
+    "one": "1 line",
+    "other": "{{count}} lines"
+  },
+  "tokens": {
+    "zero": "No tokens",
+    "one": "1 token",
+    "other": "{{count}} tokens"
+  }
+}

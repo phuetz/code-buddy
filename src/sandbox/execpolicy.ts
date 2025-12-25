@@ -250,17 +250,64 @@ const BUILTIN_RULES: PolicyRule[] = [
 // ============================================================================
 
 const DANGEROUS_PATTERNS = [
+  // Filesystem destruction
   { pattern: /rm\s+(-rf?|--recursive)\s+\/$/, severity: 'critical', description: 'Delete root filesystem' },
   { pattern: /rm\s+(-rf?|--recursive)\s+~\/?$/, severity: 'critical', description: 'Delete home directory' },
+  { pattern: /rm\s+(-rf?|--recursive)\s+\/home\/?$/, severity: 'critical', description: 'Delete all home directories' },
+  { pattern: /rm\s+(-rf?|--recursive)\s+\*\s*$/, severity: 'high', description: 'Recursive delete with wildcard' },
+  { pattern: /rm\s+(-rf?|--recursive)\s+\.\s*$/, severity: 'high', description: 'Delete current directory recursively' },
+
+  // Disk operations
   { pattern: /dd\s+.*of=\/dev\/sd[a-z]/, severity: 'critical', description: 'Overwrite disk device' },
+  { pattern: /dd\s+.*of=\/dev\/nvme/, severity: 'critical', description: 'Overwrite NVMe device' },
   { pattern: /mkfs\s+/, severity: 'critical', description: 'Format filesystem' },
-  { pattern: /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, severity: 'critical', description: 'Fork bomb' },
-  { pattern: /chmod\s+(-R\s+)?777\s+\//, severity: 'high', description: 'Insecure permissions on root' },
-  { pattern: /curl.*\|\s*(bash|sh)/, severity: 'high', description: 'Pipe curl to shell' },
-  { pattern: /wget.*\|\s*(bash|sh)/, severity: 'high', description: 'Pipe wget to shell' },
   { pattern: />\s*\/dev\/sd[a-z]/, severity: 'high', description: 'Write to disk device' },
+  { pattern: />\s*\/dev\/nvme/, severity: 'high', description: 'Write to NVMe device' },
+
+  // Fork bombs and resource exhaustion (multiple variants)
+  { pattern: /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, severity: 'critical', description: 'Fork bomb (classic)' },
+  { pattern: /bomb\(\)\s*\{.*bomb\s*\|\s*bomb.*\}/, severity: 'critical', description: 'Fork bomb (named)' },
+  { pattern: /\.\(\)\s*\{\s*\.\s*\|\s*\.\s*&\s*\}/, severity: 'critical', description: 'Fork bomb (dot)' },
+  { pattern: /while\s+true.*fork/, severity: 'critical', description: 'Fork loop' },
+  { pattern: /while\s*:\s*;\s*do.*&.*done/, severity: 'critical', description: 'Background loop bomb' },
+  { pattern: /for\s+\(\s*;\s*;\s*\)\s*.*fork/, severity: 'critical', description: 'Infinite fork loop' },
+  { pattern: /\$0\s*\|\s*\$0\s*&/, severity: 'critical', description: 'Self-replicating fork' },
+  { pattern: /\$\{0\}.*\|\s*\$\{0\}.*&/, severity: 'critical', description: 'Self-replicating fork (braces)' },
+
+  // Memory/resource exhaustion
+  { pattern: /perl\s+-e\s*['"].*x.*\*.*['"]/, severity: 'high', description: 'Perl memory bomb' },
+  { pattern: /python.*\*\*\s*\d{10,}/, severity: 'high', description: 'Python memory exhaustion' },
+  { pattern: /yes\s*\|.*>\s*\/dev\//, severity: 'high', description: 'Infinite write to device' },
+
+  // Permissions
+  { pattern: /chmod\s+(-R\s+)?777\s+\//, severity: 'high', description: 'Insecure permissions on root' },
+  { pattern: /chmod\s+(-R\s+)?777\s+~/, severity: 'high', description: 'Insecure permissions on home' },
+  { pattern: /chown\s+(-R\s+)?root.*\//, severity: 'high', description: 'Change ownership to root' },
+
+  // Remote code execution
+  { pattern: /curl.*\|\s*(bash|sh|zsh|python|perl|ruby)/, severity: 'high', description: 'Pipe curl to interpreter' },
+  { pattern: /wget.*\|\s*(bash|sh|zsh|python|perl|ruby)/, severity: 'high', description: 'Pipe wget to interpreter' },
+  { pattern: /curl.*-o-.*\|/, severity: 'high', description: 'Curl output to pipe' },
+  { pattern: /eval\s+"\$\(curl/, severity: 'critical', description: 'Eval curl output' },
+  { pattern: /eval\s+"\$\(wget/, severity: 'critical', description: 'Eval wget output' },
   { pattern: /eval\s+"\$\(/, severity: 'medium', description: 'Eval command substitution' },
   { pattern: /base64\s+-d.*\|\s*(bash|sh)/, severity: 'high', description: 'Decode and execute' },
+
+  // Credential/data exfiltration
+  { pattern: /cat\s+.*\.ssh.*\|\s*(curl|wget|nc)/, severity: 'critical', description: 'Exfiltrate SSH keys' },
+  { pattern: /cat\s+\/etc\/passwd.*\|/, severity: 'high', description: 'Exfiltrate passwd file' },
+  { pattern: /cat\s+\/etc\/shadow/, severity: 'critical', description: 'Read shadow file' },
+  { pattern: /history\s*\|\s*(curl|wget|nc)/, severity: 'high', description: 'Exfiltrate shell history' },
+
+  // Network backdoors
+  { pattern: /nc\s+-[le].*\|\s*(bash|sh)/, severity: 'critical', description: 'Netcat reverse shell' },
+  { pattern: /bash\s+-i\s*>&\s*\/dev\/tcp/, severity: 'critical', description: 'Bash reverse shell' },
+  { pattern: /\/dev\/tcp\/[0-9.]+\/[0-9]+/, severity: 'high', description: 'Bash TCP connection' },
+  { pattern: /mkfifo.*nc.*\/bin\/(ba)?sh/, severity: 'critical', description: 'Named pipe reverse shell' },
+
+  // Cron/persistence
+  { pattern: /crontab\s+-r/, severity: 'high', description: 'Remove all cron jobs' },
+  { pattern: /echo.*>\s*\/etc\/cron/, severity: 'high', description: 'Modify system cron' },
 ];
 
 // ============================================================================

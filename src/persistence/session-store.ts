@@ -5,6 +5,18 @@ import { ChatEntry } from '../agent/codebuddy-agent.js';
 import { getSessionRepository, SessionRepository } from '../database/repositories/session-repository.js';
 import type { Message as DBMessage } from '../database/schema.js';
 
+/** Metadata for chat sessions */
+export interface SessionMetadata {
+  description?: string;
+  tags?: string[];
+  securityMode?: 'suggest' | 'auto-edit' | 'full-auto';
+  agentMode?: 'plan' | 'code' | 'ask' | 'architect';
+  tokenCount?: number;
+  totalCost?: number;
+  toolCallCount?: number;
+  [key: string]: string | string[] | number | boolean | undefined;
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -13,8 +25,7 @@ export interface Session {
   messages: SessionMessage[];
   createdAt: Date;
   lastAccessedAt: Date;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- flexible metadata structure
-  metadata?: Record<string, any>;
+  metadata?: SessionMetadata;
 }
 
 export interface SessionMessage {

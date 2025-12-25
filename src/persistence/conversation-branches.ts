@@ -4,6 +4,17 @@ import * as os from "os";
 import { EventEmitter } from "events";
 import { CodeBuddyMessage } from "../codebuddy/client.js";
 
+/** Metadata for conversation branches */
+export interface BranchMetadata {
+  description?: string;
+  tags?: string[];
+  model?: string;
+  temperature?: number;
+  tokenCount?: number;
+  costEstimate?: number;
+  [key: string]: string | string[] | number | boolean | undefined;
+}
+
 export interface ConversationBranch {
   id: string;
   name: string;
@@ -12,8 +23,7 @@ export interface ConversationBranch {
   messages: CodeBuddyMessage[];
   createdAt: Date;
   updatedAt: Date;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- flexible metadata structure
-  metadata?: Record<string, any>;
+  metadata?: BranchMetadata;
 }
 
 export interface BranchTree {
