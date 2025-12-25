@@ -122,7 +122,7 @@
 - [x] 77. Semantic release automatisé ✅ (.releaserc.json + release.yml)
 - [x] 78. Docker image officielle ✅ (Dockerfile existe déjà)
 - [x] 79. Homebrew formula pour macOS ✅ (homebrew/code-buddy.rb)
-- [ ] 80. Package AUR pour Arch Linux
+- [x] 80. Package AUR pour Arch Linux ✅ (packaging/aur/PKGBUILD)
 - [ ] 81. Snap/Flatpak pour Linux
 - [ ] 82. Windows installer (MSI/exe)
 
@@ -137,7 +137,7 @@
 - [ ] 87. Tests de snapshot pour l'UI
 - [ ] 88. Fuzzing des inputs utilisateur
 - [ ] 89. Tests de charge pour le multi-agent
-- [ ] 90. Analyse de complexité cyclomatique automatique
+- [x] 90. Analyse de complexité cyclomatique automatique ✅ (complexity-analyzer.ts)
 
 ---
 
@@ -154,10 +154,10 @@
 
 - [ ] 95. GitHub/GitLab integration native
 - [ ] 96. Jira/Linear pour gestion de tâches
-- [ ] 97. Slack/Discord notifications
+- [x] 97. Slack/Discord notifications ✅ (notification-integrations.ts)
 - [ ] 98. Notion/Obsidian export
-- [ ] 99. Sentry pour error tracking production
-- [ ] 100. OpenTelemetry pour observabilité
+- [x] 99. Sentry pour error tracking production ✅ (sentry-integration.ts)
+- [x] 100. OpenTelemetry pour observabilité ✅ (opentelemetry-integration.ts)
 
 ---
 

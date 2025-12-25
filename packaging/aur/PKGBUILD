@@ -1,0 +1,75 @@
+# Maintainer: Patrice Huetz <ton-email@example.com>
+# Contributor: Code Buddy Team
+
+pkgname=code-buddy
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="An AI-powered coding agent that brings AI power directly into your terminal"
+arch=('x86_64' 'aarch64')
+url="https://github.com/phuetz/code-buddy"
+license=('MIT')
+depends=('nodejs>=18.0.0')
+makedepends=('npm' 'git')
+optdepends=(
+    'ripgrep: fast file searching'
+    'git: version control integration'
+    'fzf: fuzzy file finder'
+)
+provides=('code-buddy' 'buddy')
+conflicts=('code-buddy-git')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/phuetz/code-buddy/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    # Install dependencies
+    npm ci --ignore-scripts
+
+    # Build the project
+    npm run build
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    # Create installation directories
+    install -dm755 "$pkgdir/usr/lib/$pkgname"
+    install -dm755 "$pkgdir/usr/bin"
+    install -dm755 "$pkgdir/usr/share/licenses/$pkgname"
+    install -dm755 "$pkgdir/usr/share/doc/$pkgname"
+
+    # Copy built files
+    cp -r dist "$pkgdir/usr/lib/$pkgname/"
+    cp -r node_modules "$pkgdir/usr/lib/$pkgname/"
+    cp package.json "$pkgdir/usr/lib/$pkgname/"
+
+    # Create executable wrapper
+    cat > "$pkgdir/usr/bin/buddy" << 'EOF'
+#!/bin/bash
+exec node /usr/lib/code-buddy/dist/index.js "$@"
+EOF
+    chmod 755 "$pkgdir/usr/bin/buddy"
+
+    # Create symlink for alternative name
+    ln -s buddy "$pkgdir/usr/bin/code-buddy"
+
+    # Install license
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 CONTRIBUTING.md "$pkgdir/usr/share/doc/$pkgname/CONTRIBUTING.md" 2>/dev/null || true
+    install -Dm644 CHANGELOG.md "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md" 2>/dev/null || true
+}
+
+post_install() {
+    echo "==> Code Buddy has been installed!"
+    echo "==> Run 'buddy' or 'code-buddy' to start"
+    echo "==> Set GROK_API_KEY environment variable before use"
+    echo "==> See /usr/share/doc/code-buddy/README.md for more information"
+}
+
+post_upgrade() {
+    post_install
+}
