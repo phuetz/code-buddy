@@ -1,448 +1,50 @@
 {
   "name": "code-buddy-vscode",
   "displayName": "Code Buddy",
-  "description": "AI-powered coding assistant - bring the power of Code Buddy to VS Code with Grok, Claude, and more",
-  "version": "0.1.0",
-  "publisher": "phuetz",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": [
-    "Programming Languages",
-    "Machine Learning",
-    "Other"
-  ],
-  "keywords": [
-    "ai",
-    "grok",
-    "claude",
-    "copilot",
-    "assistant",
-    "code generation",
-    "code review",
-    "refactoring",
-    "agentic",
-    "cascade"
-  ],
-  "activationEvents": [
-    "onStartupFinished"
-  ],
+  "description": "AI-powered terminal assistant for VS Code",
+  "version": "1.0.0",
+  "publisher": "code-buddy",
+  "repository": {"type": "git", "url": "https://github.com/phuetz/code-buddy"},
+  "engines": {"vscode": "^1.85.0"},
+  "categories": ["Programming Languages", "Machine Learning"],
+  "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "codebuddy.chat",
-        "title": "Code Buddy: Open Chat",
-        "icon": "$(comment-discussion)"
-      },
-      {
-        "command": "codebuddy.explain",
-        "title": "Code Buddy: Explain Selection"
-      },
-      {
-        "command": "codebuddy.refactor",
-        "title": "Code Buddy: Refactor Selection"
-      },
-      {
-        "command": "codebuddy.fix",
-        "title": "Code Buddy: Fix Selection"
-      },
-      {
-        "command": "codebuddy.generateTests",
-        "title": "Code Buddy: Generate Tests"
-      },
-      {
-        "command": "codebuddy.review",
-        "title": "Code Buddy: Review Code"
-      },
-      {
-        "command": "codebuddy.terminal",
-        "title": "Code Buddy: Open Terminal"
-      },
-      {
-        "command": "codebuddy.inlineEdit",
-        "title": "Code Buddy: Inline Edit (Cmd+K)",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "codebuddy.composer",
-        "title": "Code Buddy: Open Composer",
-        "icon": "$(files)"
-      },
-      {
-        "command": "codebuddy.cascade",
-        "title": "Code Buddy: Start Cascade (Agentic Mode)",
-        "icon": "$(rocket)"
-      },
-      {
-        "command": "codebuddy.generateCommit",
-        "title": "Code Buddy: Generate Commit Message"
-      },
-      {
-        "command": "codebuddy.acceptDiff",
-        "title": "Code Buddy: Accept Changes"
-      },
-      {
-        "command": "codebuddy.rejectDiff",
-        "title": "Code Buddy: Reject Changes"
-      },
-      {
-        "command": "codebuddy.addContext",
-        "title": "Code Buddy: Add File to Context"
-      },
-      {
-        "command": "codebuddy.suggestCommand",
-        "title": "Code Buddy: Suggest Terminal Command",
-        "icon": "$(terminal)"
-      },
-      {
-        "command": "codebuddy.explainTerminal",
-        "title": "Code Buddy: Explain Terminal Output"
-      },
-      {
-        "command": "codebuddy.generateCommand",
-        "title": "Code Buddy: Generate Command from Description"
-      },
-      {
-        "command": "codebuddy.addDocs",
-        "title": "Code Buddy: Add Documentation"
-      },
-      {
-        "command": "codebuddy.optimize",
-        "title": "Code Buddy: Optimize Code"
-      },
-      {
-        "command": "codebuddy.writeMode",
-        "title": "Code Buddy: Open Write Mode",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "codebuddy.showActionBar",
-        "title": "Code Buddy: Show Quick Actions"
-      },
-      {
-        "command": "codebuddy.quickExplain",
-        "title": "Code Buddy: Quick Explain"
-      },
-      {
-        "command": "codebuddy.quickRefactor",
-        "title": "Code Buddy: Quick Refactor"
-      },
-      {
-        "command": "codebuddy.quickFix",
-        "title": "Code Buddy: Quick Fix"
-      },
-      {
-        "command": "codebuddy.quickTests",
-        "title": "Code Buddy: Quick Generate Tests"
-      },
-      {
-        "command": "codebuddy.quickDoc",
-        "title": "Code Buddy: Quick Add Documentation"
-      }
+      {"command": "codeBuddy.start", "title": "Start Code Buddy", "category": "Code Buddy"},
+      {"command": "codeBuddy.askQuestion", "title": "Ask Code Buddy", "category": "Code Buddy"},
+      {"command": "codeBuddy.explainCode", "title": "Explain Selected Code", "category": "Code Buddy"},
+      {"command": "codeBuddy.refactorCode", "title": "Refactor Selected Code", "category": "Code Buddy"},
+      {"command": "codeBuddy.generateTests", "title": "Generate Tests", "category": "Code Buddy"},
+      {"command": "codeBuddy.fixError", "title": "Fix Error at Cursor", "category": "Code Buddy"},
+      {"command": "codeBuddy.commitChanges", "title": "Generate Commit Message", "category": "Code Buddy"}
     ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "codebuddy.inlineEdit",
-          "when": "editorTextFocus",
-          "group": "codebuddy@0"
-        },
-        {
-          "command": "codebuddy.explain",
-          "when": "editorHasSelection",
-          "group": "codebuddy@1"
-        },
-        {
-          "command": "codebuddy.refactor",
-          "when": "editorHasSelection",
-          "group": "codebuddy@2"
-        },
-        {
-          "command": "codebuddy.fix",
-          "when": "editorHasSelection",
-          "group": "codebuddy@3"
-        },
-        {
-          "command": "codebuddy.generateTests",
-          "when": "editorHasSelection",
-          "group": "codebuddy@4"
-        },
-        {
-          "command": "codebuddy.addContext",
-          "group": "codebuddy@5"
-        }
-      ],
-      "editor/title": [
-        {
-          "command": "codebuddy.review",
-          "group": "navigation"
-        },
-        {
-          "command": "codebuddy.cascade",
-          "group": "navigation"
-        }
-      ],
-      "scm/title": [
-        {
-          "command": "codebuddy.generateCommit",
-          "group": "navigation"
-        }
-      ],
-      "terminal/context": [
-        {
-          "command": "codebuddy.explainTerminal",
-          "group": "codebuddy"
-        },
-        {
-          "command": "codebuddy.suggestCommand",
-          "group": "codebuddy"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "codebuddy.suggestCommand"
-        },
-        {
-          "command": "codebuddy.generateCommand"
-        },
-        {
-          "command": "codebuddy.explainTerminal"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "codebuddy-sidebar",
-          "title": "Code Buddy",
-          "icon": "resources/codebuddy-icon.svg"
-        }
-      ],
-      "panel": [
-        {
-          "id": "codebuddy-panel",
-          "title": "Code Buddy",
-          "icon": "$(robot)"
-        }
-      ]
-    },
-    "views": {
-      "codebuddy-sidebar": [
-        {
-          "type": "webview",
-          "id": "codebuddy.chatView",
-          "name": "Chat"
-        },
-        {
-          "type": "webview",
-          "id": "codebuddy.composerView",
-          "name": "Composer"
-        },
-        {
-          "type": "webview",
-          "id": "codebuddy.writeMode",
-          "name": "Write"
-        },
-        {
-          "id": "codebuddy.contextView",
-          "name": "Context Files"
-        },
-        {
-          "id": "codebuddy.historyView",
-          "name": "History"
-        },
-        {
-          "id": "codebuddy.issuesView",
-          "name": "Code Issues"
-        }
-      ],
-      "codebuddy-panel": [
-        {
-          "type": "webview",
-          "id": "codebuddy.cascadeView",
-          "name": "Cascade"
-        }
-      ]
-    },
+    "keybindings": [
+      {"command": "codeBuddy.askQuestion", "key": "ctrl+shift+a", "mac": "cmd+shift+a"},
+      {"command": "codeBuddy.explainCode", "key": "ctrl+shift+e", "mac": "cmd+shift+e", "when": "editorHasSelection"}
+    ],
     "configuration": {
       "title": "Code Buddy",
       "properties": {
-        "codebuddy.provider": {
-          "type": "string",
-          "default": "grok",
-          "enum": ["grok", "claude", "openai", "ollama"],
-          "enumDescriptions": [
-            "Use Grok (xAI) - Fast and capable",
-            "Use Claude (Anthropic) - Best for complex reasoning",
-            "Use OpenAI GPT models",
-            "Use local Ollama models"
-          ],
-          "description": "AI provider to use"
-        },
-        "codebuddy.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "API key for the selected provider (or use environment variables)"
-        },
-        "codebuddy.model": {
-          "type": "string",
-          "default": "grok-3-latest",
-          "description": "Model to use (depends on provider)"
-        },
-        "codebuddy.baseUrl": {
-          "type": "string",
-          "default": "",
-          "description": "Custom API base URL (for Ollama, LM Studio, etc.)"
-        },
-        "codebuddy.autoReview": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically review code on save"
-        },
-        "codebuddy.inlineCompletions": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable inline code completions (ghost text)"
-        },
-        "codebuddy.inlineEditStyle": {
-          "type": "string",
-          "default": "inline",
-          "enum": ["inline", "diff", "sideBySide"],
-          "description": "How to show inline edit changes"
-        },
-        "codebuddy.maxTokens": {
-          "type": "number",
-          "default": 4096,
-          "description": "Maximum tokens per request"
-        },
-        "codebuddy.autonomyLevel": {
-          "type": "string",
-          "default": "confirm",
-          "enum": ["suggest", "confirm", "auto", "full"],
-          "enumDescriptions": [
-            "Always ask before making changes",
-            "Confirm destructive changes only",
-            "Auto-apply safe changes",
-            "Full autonomy (YOLO mode)"
-          ],
-          "description": "Level of autonomous operation for Cascade"
-        },
-        "codebuddy.contextFiles": {
-          "type": "array",
-          "default": [],
-          "description": "Files to always include in context"
-        },
-        "codebuddy.showCodeLens": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show AI action buttons above functions"
-        },
-        "codebuddy.cascadeMaxSteps": {
-          "type": "number",
-          "default": 20,
-          "description": "Maximum steps for Cascade agentic mode"
-        }
+        "codeBuddy.apiKey": {"type": "string", "default": "", "description": "Grok API key"},
+        "codeBuddy.model": {"type": "string", "default": "grok-3-latest", "description": "AI model to use"},
+        "codeBuddy.autoApprove": {"type": "boolean", "default": false, "description": "Auto-approve safe operations"},
+        "codeBuddy.showInStatusBar": {"type": "boolean", "default": true, "description": "Show in status bar"}
       }
     },
-    "keybindings": [
-      {
-        "command": "codebuddy.chat",
-        "key": "ctrl+shift+l",
-        "mac": "cmd+shift+l"
-      },
-      {
-        "command": "codebuddy.inlineEdit",
-        "key": "ctrl+k",
-        "mac": "cmd+k",
-        "when": "editorTextFocus"
-      },
-      {
-        "command": "codebuddy.explain",
-        "key": "ctrl+shift+e",
-        "mac": "cmd+shift+e",
-        "when": "editorHasSelection"
-      },
-      {
-        "command": "codebuddy.cascade",
-        "key": "ctrl+shift+i",
-        "mac": "cmd+shift+i"
-      },
-      {
-        "command": "codebuddy.composer",
-        "key": "ctrl+i",
-        "mac": "cmd+i"
-      },
-      {
-        "command": "codebuddy.acceptDiff",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "codebuddy.diffVisible"
-      },
-      {
-        "command": "codebuddy.rejectDiff",
-        "key": "escape",
-        "when": "codebuddy.diffVisible"
-      },
-      {
-        "command": "codebuddy.generateCommit",
-        "key": "ctrl+shift+g",
-        "mac": "cmd+shift+g",
-        "when": "scmInputIsInLastPosition"
-      },
-      {
-        "command": "codebuddy.suggestCommand",
-        "key": "ctrl+shift+t",
-        "mac": "cmd+shift+t"
-      },
-      {
-        "command": "codebuddy.review",
-        "key": "ctrl+shift+r",
-        "mac": "cmd+shift+r",
-        "when": "editorTextFocus"
-      },
-      {
-        "command": "codebuddy.writeMode",
-        "key": "ctrl+shift+w",
-        "mac": "cmd+shift+w"
-      },
-      {
-        "command": "codebuddy.showActionBar",
-        "key": "ctrl+.",
-        "mac": "cmd+.",
-        "when": "editorHasSelection"
-      }
-    ]
+    "viewsContainers": {"activitybar": [{"id": "codeBuddy", "title": "Code Buddy", "icon": "images/icon.svg"}]},
+    "views": {"codeBuddy": [{"id": "codeBuddy.chat", "name": "Chat", "type": "webview"}]}
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile",
-    "test": "node ./out/test/runTest.js",
-    "lint": "eslint src --ext ts",
     "package": "vsce package"
   },
   "devDependencies": {
-    "@types/glob": "^8.1.0",
-    "@types/mocha": "^10.0.0",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "@vscode/test-electron": "^2.3.0",
-    "eslint": "^8.0.0",
-    "glob": "^10.0.0",
-    "mocha": "^10.0.0",
-    "typescript": "^5.3.0",
-    "vsce": "^2.15.0"
+    "typescript": "^5.3.2",
+    "@vscode/vsce": "^2.22.0"
   },
-  "dependencies": {
-    "openai": "^4.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/phuetz/code-buddy.git"
-  },
-  "license": "MIT"
+  "dependencies": {"openai": "^4.20.0"}
 }

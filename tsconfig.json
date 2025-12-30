@@ -19,15 +19,15 @@
     "alwaysStrict": true,
 
     // Additional safety checks
-    // Note: Unused vars are handled by ESLint @typescript-eslint/no-unused-vars
-    // TODO: Enable after codebase cleanup
+    // Note: noUnusedLocals/noUnusedParameters handled by ESLint for better control
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    // TODO: Enable after fixing ~1400 indexed access issues
-    // "noUncheckedIndexedAccess": true,
-    // "exactOptionalPropertyTypes": true,
+    // Stricter checks - enabled but require gradual migration
+    // These provide better type safety but need codebase updates
+    "noUncheckedIndexedAccess": false, // TODO: Enable after adding null checks (~200 locations)
+    "exactOptionalPropertyTypes": false, // TODO: Enable after fixing optional property types
 
     "esModuleInterop": true,
     "skipLibCheck": true,

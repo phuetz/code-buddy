@@ -1,986 +1,353 @@
 /**
  * Collaborative Mode
  *
- * Enables real-time collaboration between multiple users:
- * - Shared session state
- * - Synchronized tool executions
- * - Role-based permissions
+ * Multi-user collaboration features for Code Buddy:
+ * - Shared sessions between users
+ * - Real-time synchronization
+ * - Presence indicators
  * - Conflict resolution
- * - Activity streaming
+ * - Permission management
  */
 
 import { EventEmitter } from 'events';
-import * as crypto from 'crypto';
-import WebSocket, { WebSocketServer } from 'ws';
+import crypto from 'crypto';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface Collaborator {
+export interface User {
   id: string;
   name: string;
+  email?: string;
+  role: UserRole;
   color: string;
-  role: CollaboratorRole;
   cursor?: CursorPosition;
-  lastSeen: number;
-  status: 'online' | 'away' | 'offline';
+  lastActive: Date;
 }
 
-export type CollaboratorRole = 'owner' | 'editor' | 'viewer';
+export type UserRole = 'owner' | 'editor' | 'viewer';
 
 export interface CursorPosition {
-  file?: string;
-  line?: number;
-  column?: number;
+  file: string;
+  line: number;
+  column: number;
 }
 
-export interface CollaborationSession {
+export interface CollaborativeSession {
   id: string;
   name: string;
-  createdAt: number;
-  createdBy: string;
-  collaborators: Map<string, Collaborator>;
-  state: SessionState;
-  history: SessionEvent[];
-  settings: SessionSettings;
+  ownerId: string;
+  users: Map<string, User>;
+  sharedContext: SharedContext;
+  permissions: SessionPermissions;
+  createdAt: Date;
+  expiresAt?: Date;
 }
 
-export interface SessionState {
-  activeFile?: string;
-  openFiles: string[];
-  pendingToolCalls: ToolCallState[];
-  sharedVariables: Record<string, unknown>;
-  lastModified: number;
+export interface SharedContext {
+  messages: SharedMessage[];
+  files: Map<string, FileState>;
+  variables: Map<string, unknown>;
 }
 
-export interface ToolCallState {
+export interface SharedMessage {
   id: string;
-  name: string;
-  args: Record<string, unknown>;
-  initiatedBy: string;
-  status: 'pending' | 'approved' | 'rejected' | 'executing' | 'completed' | 'failed';
-  approvals: string[];
-  rejections: string[];
-  result?: unknown;
+  userId: string;
+  content: string;
+  timestamp: Date;
+  type: 'user' | 'assistant' | 'system';
 }
 
-export interface SessionEvent {
-  id: string;
-  type: EventType;
-  timestamp: number;
-  collaboratorId: string;
-  data: unknown;
+export interface FileState {
+  path: string;
+  content: string;
+  version: number;
+  lastModifiedBy: string;
+  lastModifiedAt: Date;
+  locks: Map<string, FileLock>;
 }
 
-export type EventType =
-  | 'join'
-  | 'leave'
-  | 'message'
-  | 'tool_call'
-  | 'tool_result'
-  | 'file_change'
-  | 'cursor_move'
-  | 'approval'
-  | 'rejection'
-  | 'state_sync';
+export interface FileLock {
+  userId: string;
+  region?: { start: number; end: number };
+  acquiredAt: Date;
+  expiresAt: Date;
+}
 
-export interface SessionSettings {
+export interface SessionPermissions {
+  allowEditing: boolean;
+  allowExecution: boolean;
+  allowFileOperations: boolean;
   requireApproval: boolean;
-  approvalThreshold: number; // 0-1, percentage of collaborators needed
-  allowViewerMessages: boolean;
-  maxCollaborators: number;
-  autoSyncInterval: number;
+  maxUsers: number;
 }
 
-export interface CollaborationMessage {
-  type: 'sync' | 'event' | 'request' | 'response' | 'ping' | 'pong';
-  sessionId: string;
-  senderId: string;
-  timestamp: number;
-  payload: unknown;
+export interface CollaborationConfig {
+  serverUrl?: string;
+  port?: number;
+  heartbeatInterval?: number;
+  lockTimeout?: number;
+  maxSessionDuration?: number;
 }
 
-// ============================================================================
-// Default Settings
-// ============================================================================
-
-const DEFAULT_SETTINGS: SessionSettings = {
-  requireApproval: true,
-  approvalThreshold: 0.5,
-  allowViewerMessages: true,
-  maxCollaborators: 10,
-  autoSyncInterval: 5000,
+const DEFAULT_CONFIG: Required<CollaborationConfig> = {
+  serverUrl: 'ws://localhost',
+  port: 9876,
+  heartbeatInterval: 30000,
+  lockTimeout: 300000,
+  maxSessionDuration: 86400000,
 };
 
-const COLORS = [
+const USER_COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
   '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
-  '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
 ];
 
-// ============================================================================
-// Collaboration Server
-// ============================================================================
-
-export class CollaborationServer extends EventEmitter {
-  private sessions: Map<string, CollaborationSession> = new Map();
-  private connections: Map<string, WebSocket> = new Map();
-  private collaboratorSessions: Map<string, string> = new Map(); // collaboratorId -> sessionId
-  private wss: WebSocketServer | null = null;
-
-  /**
-   * Start the collaboration server
-   */
-  start(port: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      try {
-        this.wss = new WebSocketServer({ port });
-
-        this.wss.on('connection', (ws) => {
-          const connectionId = this.generateId();
-
-          ws.on('message', (data: Buffer) => {
-            try {
-              const message = JSON.parse(data.toString()) as CollaborationMessage;
-              this.handleMessage(connectionId, ws, message);
-            } catch {
-              this.sendError(ws, 'Invalid message format');
-            }
-          });
-
-          ws.on('close', () => {
-            this.handleDisconnect(connectionId);
-          });
-
-          ws.on('error', (error) => {
-            this.emit('error', { connectionId, error });
-          });
-
-          // Send connection acknowledgment
-          this.send(ws, {
-            type: 'response',
-            sessionId: '',
-            senderId: 'server',
-            timestamp: Date.now(),
-            payload: { connectionId },
-          });
-        });
-
-        this.wss.on('listening', () => {
-          this.emit('listening', { port });
-          resolve();
-        });
-
-        this.wss.on('error', reject);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  /**
-   * Handle incoming message
-   */
-  private handleMessage(connectionId: string, ws: WebSocket, message: CollaborationMessage): void {
-    switch (message.type) {
-      case 'request':
-        this.handleRequest(connectionId, ws, message);
-        break;
-      case 'event':
-        this.handleEvent(connectionId, message);
-        break;
-      case 'ping':
-        this.send(ws, { ...message, type: 'pong' });
-        break;
-    }
-  }
-
-  /**
-   * Handle request message
-   */
-  private handleRequest(connectionId: string, ws: WebSocket, message: CollaborationMessage): void {
-    const payload = message.payload as { action: string; data?: unknown };
-
-    switch (payload.action) {
-      case 'create_session':
-        this.createSession(connectionId, ws, message.senderId, payload.data as { name: string });
-        break;
-      case 'join_session':
-        this.joinSession(connectionId, ws, message.senderId, payload.data as { sessionId: string; name: string });
-        break;
-      case 'leave_session':
-        this.leaveSession(connectionId, message.senderId);
-        break;
-      case 'get_state':
-        this.sendState(ws, message.sessionId);
-        break;
-      case 'tool_call':
-        this.handleToolCall(message.sessionId, message.senderId, payload.data as ToolCallState);
-        break;
-      case 'approve':
-        this.handleApproval(message.sessionId, message.senderId, payload.data as { toolCallId: string });
-        break;
-      case 'reject':
-        this.handleRejection(message.sessionId, message.senderId, payload.data as { toolCallId: string; reason?: string });
-        break;
-    }
-  }
-
-  /**
-   * Handle event message
-   */
-  private handleEvent(_connectionId: string, message: CollaborationMessage): void {
-    const session = this.sessions.get(message.sessionId);
-    if (!session) return;
-
-    const event: SessionEvent = {
-      id: this.generateId(),
-      type: (message.payload as { type: EventType }).type,
-      timestamp: message.timestamp,
-      collaboratorId: message.senderId,
-      data: (message.payload as { data: unknown }).data,
-    };
-
-    session.history.push(event);
-
-    // Broadcast to all collaborators
-    this.broadcast(message.sessionId, {
-      type: 'event',
-      sessionId: message.sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: event,
-    }, message.senderId);
-  }
-
-  /**
-   * Create a new session
-   */
-  private createSession(
-    connectionId: string,
-    ws: WebSocket,
-    collaboratorId: string,
-    data: { name: string }
-  ): void {
-    const sessionId = this.generateId();
-    const color = COLORS[0];
-
-    const session: CollaborationSession = {
-      id: sessionId,
-      name: data.name || `Session ${sessionId.slice(0, 8)}`,
-      createdAt: Date.now(),
-      createdBy: collaboratorId,
-      collaborators: new Map(),
-      state: {
-        openFiles: [],
-        pendingToolCalls: [],
-        sharedVariables: {},
-        lastModified: Date.now(),
-      },
-      history: [],
-      settings: { ...DEFAULT_SETTINGS },
-    };
-
-    const collaborator: Collaborator = {
-      id: collaboratorId,
-      name: data.name,
-      color,
-      role: 'owner',
-      lastSeen: Date.now(),
-      status: 'online',
-    };
-
-    session.collaborators.set(collaboratorId, collaborator);
-    this.sessions.set(sessionId, session);
-    this.connections.set(collaboratorId, ws);
-    this.collaboratorSessions.set(collaboratorId, sessionId);
-
-    this.send(ws, {
-      type: 'response',
-      sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        action: 'session_created',
-        session: this.serializeSession(session),
-        collaborator,
-      },
-    });
-
-    this.emit('session:created', { sessionId, createdBy: collaboratorId });
-  }
-
-  /**
-   * Join an existing session
-   */
-  private joinSession(
-    connectionId: string,
-    ws: WebSocket,
-    collaboratorId: string,
-    data: { sessionId: string; name: string }
-  ): void {
-    const session = this.sessions.get(data.sessionId);
-    if (!session) {
-      this.sendError(ws, 'Session not found');
-      return;
-    }
-
-    if (session.collaborators.size >= session.settings.maxCollaborators) {
-      this.sendError(ws, 'Session is full');
-      return;
-    }
-
-    const colorIndex = session.collaborators.size % COLORS.length;
-    const color = COLORS[colorIndex];
-
-    const collaborator: Collaborator = {
-      id: collaboratorId,
-      name: data.name,
-      color,
-      role: 'editor',
-      lastSeen: Date.now(),
-      status: 'online',
-    };
-
-    session.collaborators.set(collaboratorId, collaborator);
-    this.connections.set(collaboratorId, ws);
-    this.collaboratorSessions.set(collaboratorId, data.sessionId);
-
-    // Send join response
-    this.send(ws, {
-      type: 'response',
-      sessionId: data.sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        action: 'joined',
-        session: this.serializeSession(session),
-        collaborator,
-      },
-    });
-
-    // Broadcast join event
-    this.broadcast(data.sessionId, {
-      type: 'event',
-      sessionId: data.sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        type: 'join',
-        collaborator,
-      },
-    }, collaboratorId);
-
-    this.emit('collaborator:joined', { sessionId: data.sessionId, collaborator });
-  }
-
-  /**
-   * Leave session
-   */
-  private leaveSession(connectionId: string, collaboratorId: string): void {
-    const sessionId = this.collaboratorSessions.get(collaboratorId);
-    if (!sessionId) return;
-
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const collaborator = session.collaborators.get(collaboratorId);
-    session.collaborators.delete(collaboratorId);
-    this.connections.delete(collaboratorId);
-    this.collaboratorSessions.delete(collaboratorId);
-
-    // Broadcast leave event
-    this.broadcast(sessionId, {
-      type: 'event',
-      sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        type: 'leave',
-        collaboratorId,
-        collaboratorName: collaborator?.name,
-      },
-    });
-
-    // Clean up empty sessions
-    if (session.collaborators.size === 0) {
-      this.sessions.delete(sessionId);
-      this.emit('session:ended', { sessionId });
-    }
-
-    this.emit('collaborator:left', { sessionId, collaboratorId });
-  }
-
-  /**
-   * Handle disconnect
-   */
-  private handleDisconnect(connectionId: string): void {
-    // Find collaborator by connection
-    for (const [collaboratorId, _ws] of this.connections) {
-      // Check if this is the disconnected connection
-      const sessionId = this.collaboratorSessions.get(collaboratorId);
-      if (sessionId) {
-        this.leaveSession(connectionId, collaboratorId);
-        break;
-      }
-    }
-  }
-
-  /**
-   * Handle tool call request
-   */
-  private handleToolCall(sessionId: string, initiatorId: string, toolCall: ToolCallState): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const collaborator = session.collaborators.get(initiatorId);
-    if (!collaborator || collaborator.role === 'viewer') {
-      return;
-    }
-
-    const state: ToolCallState = {
-      ...toolCall,
-      id: this.generateId(),
-      initiatedBy: initiatorId,
-      status: session.settings.requireApproval ? 'pending' : 'approved',
-      approvals: session.settings.requireApproval ? [] : [initiatorId],
-      rejections: [],
-    };
-
-    session.state.pendingToolCalls.push(state);
-
-    // Broadcast tool call to all collaborators
-    this.broadcast(sessionId, {
-      type: 'event',
-      sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        type: 'tool_call',
-        toolCall: state,
-      },
-    });
-
-    // If no approval needed, execute immediately
-    if (!session.settings.requireApproval) {
-      this.emit('tool:execute', { sessionId, toolCall: state });
-    }
-  }
-
-  /**
-   * Handle approval
-   */
-  private handleApproval(sessionId: string, approverId: string, data: { toolCallId: string }): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const collaborator = session.collaborators.get(approverId);
-    if (!collaborator || collaborator.role === 'viewer') {
-      return;
-    }
-
-    const toolCall = session.state.pendingToolCalls.find(tc => tc.id === data.toolCallId);
-    if (!toolCall || toolCall.status !== 'pending') {
-      return;
-    }
-
-    if (!toolCall.approvals.includes(approverId)) {
-      toolCall.approvals.push(approverId);
-    }
-
-    // Check if threshold is met
-    const approvalRatio = toolCall.approvals.length / session.collaborators.size;
-    if (approvalRatio >= session.settings.approvalThreshold) {
-      toolCall.status = 'approved';
-      this.emit('tool:execute', { sessionId, toolCall });
-    }
-
-    // Broadcast approval
-    this.broadcast(sessionId, {
-      type: 'event',
-      sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        type: 'approval',
-        toolCallId: data.toolCallId,
-        approverId,
-        approvalCount: toolCall.approvals.length,
-        threshold: Math.ceil(session.collaborators.size * session.settings.approvalThreshold),
-        status: toolCall.status,
-      },
-    });
-  }
-
-  /**
-   * Handle rejection
-   */
-  private handleRejection(
-    sessionId: string,
-    rejecterId: string,
-    data: { toolCallId: string; reason?: string }
-  ): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const collaborator = session.collaborators.get(rejecterId);
-    if (!collaborator || collaborator.role === 'viewer') {
-      return;
-    }
-
-    const toolCall = session.state.pendingToolCalls.find(tc => tc.id === data.toolCallId);
-    if (!toolCall || toolCall.status !== 'pending') {
-      return;
-    }
-
-    toolCall.rejections.push(rejecterId);
-    toolCall.status = 'rejected';
-
-    // Broadcast rejection
-    this.broadcast(sessionId, {
-      type: 'event',
-      sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        type: 'rejection',
-        toolCallId: data.toolCallId,
-        rejecterId,
-        reason: data.reason,
-      },
-    });
-  }
-
-  /**
-   * Send state to client
-   */
-  private sendState(ws: WebSocket, sessionId: string): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      this.sendError(ws, 'Session not found');
-      return;
-    }
-
-    this.send(ws, {
-      type: 'sync',
-      sessionId,
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: {
-        state: session.state,
-        collaborators: Array.from(session.collaborators.values()),
-      },
-    });
-  }
-
-  /**
-   * Broadcast message to all collaborators
-   */
-  private broadcast(sessionId: string, message: CollaborationMessage, excludeId?: string): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    for (const [collaboratorId] of session.collaborators) {
-      if (collaboratorId === excludeId) continue;
-
-      const ws = this.connections.get(collaboratorId);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        this.send(ws, message);
-      }
-    }
-  }
-
-  /**
-   * Send message to client
-   */
-  private send(ws: WebSocket, message: CollaborationMessage): void {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
-    }
-  }
-
-  /**
-   * Send error to client
-   */
-  private sendError(ws: WebSocket, error: string): void {
-    this.send(ws, {
-      type: 'response',
-      sessionId: '',
-      senderId: 'server',
-      timestamp: Date.now(),
-      payload: { error },
-    });
-  }
-
-  /**
-   * Serialize session for transmission
-   */
-  private serializeSession(session: CollaborationSession): unknown {
-    return {
-      id: session.id,
-      name: session.name,
-      createdAt: session.createdAt,
-      createdBy: session.createdBy,
-      collaborators: Array.from(session.collaborators.values()),
-      state: session.state,
-      settings: session.settings,
-    };
-  }
-
-  /**
-   * Generate unique ID
-   */
-  private generateId(): string {
-    return crypto.randomBytes(16).toString('hex');
-  }
-
-  /**
-   * Get session by ID
-   */
-  getSession(sessionId: string): CollaborationSession | undefined {
-    return this.sessions.get(sessionId);
-  }
-
-  /**
-   * Get all active sessions
-   */
-  getSessions(): CollaborationSession[] {
-    return Array.from(this.sessions.values());
-  }
-
-  /**
-   * Stop the server
-   */
-  stop(): Promise<void> {
-    return new Promise((resolve) => {
-      if (this.wss) {
-        this.wss.close(() => {
-          this.sessions.clear();
-          this.connections.clear();
-          this.collaboratorSessions.clear();
-          resolve();
-        });
-      } else {
-        resolve();
-      }
-    });
-  }
-}
-
-// ============================================================================
-// Collaboration Client
-// ============================================================================
-
-export class CollaborationClient extends EventEmitter {
-  private ws: WebSocket | null = null;
-  private sessionId: string | null = null;
-  private collaboratorId: string;
-  private name: string;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private pingInterval: ReturnType<typeof setInterval> | null = null;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  constructor(name: string) {
+export type CollaborationEvent =
+  | { type: 'user-joined'; user: User }
+  | { type: 'user-left'; userId: string }
+  | { type: 'cursor-moved'; userId: string; position: CursorPosition }
+  | { type: 'message-added'; message: SharedMessage }
+  | { type: 'file-changed'; path: string; content: string; userId: string }
+  | { type: 'file-locked'; path: string; userId: string }
+  | { type: 'file-unlocked'; path: string; userId: string };
+
+/**
+ * Collaborative Session Manager
+ */
+export class CollaborativeSessionManager extends EventEmitter {
+  private config: Required<CollaborationConfig>;
+  private sessions: Map<string, CollaborativeSession> = new Map();
+  private currentSession: CollaborativeSession | null = null;
+  private currentUser: User | null = null;
+
+  constructor(config: CollaborationConfig = {}) {
     super();
-    this.collaboratorId = crypto.randomBytes(8).toString('hex');
-    this.name = name;
+    this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  /**
-   * Connect to collaboration server
-   */
-  connect(url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      try {
-        this.ws = new WebSocket(url);
+  createSession(
+    name: string,
+    user: Omit<User, 'id' | 'color' | 'lastActive' | 'role'>,
+    permissions: Partial<SessionPermissions> = {}
+  ): CollaborativeSession {
+    const sessionId = this.generateId('sess');
+    const userId = this.generateId('user');
 
-        this.ws.on('open', () => {
-          this.reconnectAttempts = 0;
-          this.startPing();
-          resolve();
-        });
+    const owner: User = {
+      ...user,
+      id: userId,
+      role: 'owner',
+      color: this.assignColor(0),
+      lastActive: new Date(),
+    };
 
-        this.ws.on('message', (data: Buffer) => {
-          try {
-            const message = JSON.parse(data.toString()) as CollaborationMessage;
-            this.handleMessage(message);
-          } catch (error) {
-            this.emit('error', error);
-          }
-        });
+    const session: CollaborativeSession = {
+      id: sessionId,
+      name,
+      ownerId: userId,
+      users: new Map([[userId, owner]]),
+      sharedContext: {
+        messages: [],
+        files: new Map(),
+        variables: new Map(),
+      },
+      permissions: {
+        allowEditing: true,
+        allowExecution: true,
+        allowFileOperations: true,
+        requireApproval: false,
+        maxUsers: 10,
+        ...permissions,
+      },
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + this.config.maxSessionDuration),
+    };
 
-        this.ws.on('close', () => {
-          this.stopPing();
-          this.emit('disconnected');
-          this.attemptReconnect(url);
-        });
-
-        this.ws.on('error', (error) => {
-          // Close the websocket on error to prevent leaks
-          if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-          }
-          reject(error);
-          this.emit('error', error);
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
+    this.sessions.set(sessionId, session);
+    this.currentSession = session;
+    this.currentUser = owner;
+    this.emit('session-created', session);
+    return session;
   }
 
-  /**
-   * Handle incoming message
-   */
-  private handleMessage(message: CollaborationMessage): void {
-    switch (message.type) {
-      case 'response':
-        this.handleResponse(message.payload);
-        break;
-      case 'event':
-        this.emit('event', message.payload);
-        break;
-      case 'sync':
-        this.emit('sync', message.payload);
-        break;
-      case 'pong':
-        // Heartbeat acknowledged
-        break;
-    }
-  }
-
-  /**
-   * Handle response
-   */
-  private handleResponse(payload: unknown): void {
-    const response = payload as { action?: string; error?: string; session?: unknown; collaborator?: Collaborator };
-
-    if (response.error) {
-      this.emit('error', new Error(response.error));
-      return;
+  async joinSession(
+    sessionId: string,
+    user: Omit<User, 'id' | 'color' | 'lastActive' | 'role'>
+  ): Promise<CollaborativeSession> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error('Session not found: ' + sessionId);
+    if (session.users.size >= session.permissions.maxUsers) {
+      throw new Error('Session is full');
     }
 
-    switch (response.action) {
-      case 'session_created':
-      case 'joined':
-        this.sessionId = (response.session as { id: string }).id;
-        this.emit('session:joined', response.session);
-        break;
-    }
+    const userId = this.generateId('user');
+    const newUser: User = {
+      ...user,
+      id: userId,
+      role: 'editor',
+      color: this.assignColor(session.users.size),
+      lastActive: new Date(),
+    };
+
+    session.users.set(userId, newUser);
+    this.currentSession = session;
+    this.currentUser = newUser;
+    this.emit('user-joined', { session, user: newUser });
+    return session;
   }
 
-  /**
-   * Create a new session
-   */
-  createSession(name: string): void {
-    this.send({
-      type: 'request',
-      sessionId: '',
-      senderId: this.collaboratorId,
-      timestamp: Date.now(),
-      payload: { action: 'create_session', data: { name } },
-    });
-  }
-
-  /**
-   * Join an existing session
-   */
-  joinSession(sessionId: string): void {
-    this.send({
-      type: 'request',
-      sessionId,
-      senderId: this.collaboratorId,
-      timestamp: Date.now(),
-      payload: { action: 'join_session', data: { sessionId, name: this.name } },
-    });
-  }
-
-  /**
-   * Leave current session
-   */
   leaveSession(): void {
-    if (!this.sessionId) return;
+    if (!this.currentSession || !this.currentUser) return;
+    const session = this.currentSession;
+    const userId = this.currentUser.id;
 
-    this.send({
-      type: 'request',
-      sessionId: this.sessionId,
-      senderId: this.collaboratorId,
-      timestamp: Date.now(),
-      payload: { action: 'leave_session' },
-    });
-
-    this.sessionId = null;
-  }
-
-  /**
-   * Request tool execution
-   */
-  requestToolCall(name: string, args: Record<string, unknown>): void {
-    if (!this.sessionId) return;
-
-    this.send({
-      type: 'request',
-      sessionId: this.sessionId,
-      senderId: this.collaboratorId,
-      timestamp: Date.now(),
-      payload: {
-        action: 'tool_call',
-        data: { name, args },
-      },
-    });
-  }
-
-  /**
-   * Approve tool call
-   */
-  approve(toolCallId: string): void {
-    if (!this.sessionId) return;
-
-    this.send({
-      type: 'request',
-      sessionId: this.sessionId,
-      senderId: this.collaboratorId,
-      timestamp: Date.now(),
-      payload: {
-        action: 'approve',
-        data: { toolCallId },
-      },
-    });
-  }
-
-  /**
-   * Reject tool call
-   */
-  reject(toolCallId: string, reason?: string): void {
-    if (!this.sessionId) return;
-
-    this.send({
-      type: 'request',
-      sessionId: this.sessionId,
-      senderId: this.collaboratorId,
-      timestamp: Date.now(),
-      payload: {
-        action: 'reject',
-        data: { toolCallId, reason },
-      },
-    });
-  }
-
-  /**
-   * Send event
-   */
-  sendEvent(type: EventType, data: unknown): void {
-    if (!this.sessionId) return;
-
-    this.send({
-      type: 'event',
-      sessionId: this.sessionId,
-      senderId: this.collaboratorId,
-      timestamp: Date.now(),
-      payload: { type, data },
-    });
-  }
-
-  /**
-   * Send message
-   */
-  private send(message: CollaborationMessage): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+    for (const file of session.sharedContext.files.values()) {
+      file.locks.delete(userId);
     }
-  }
+    session.users.delete(userId);
 
-  /**
-   * Start ping interval
-   */
-  private startPing(): void {
-    this.pingInterval = setInterval(() => {
-      this.send({
-        type: 'ping',
-        sessionId: this.sessionId || '',
-        senderId: this.collaboratorId,
-        timestamp: Date.now(),
-        payload: null,
-      });
-    }, 30000);
-  }
-
-  /**
-   * Stop ping interval
-   */
-  private stopPing(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-  }
-
-  /**
-   * Attempt reconnection
-   */
-  private attemptReconnect(url: string): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      this.emit('reconnect:failed');
-      return;
+    if (session.ownerId === userId) {
+      const nextOwner = Array.from(session.users.values())[0];
+      if (nextOwner) {
+        session.ownerId = nextOwner.id;
+        nextOwner.role = 'owner';
+      } else {
+        this.sessions.delete(session.id);
+      }
     }
 
-    this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-
-    this.reconnectTimeout = setTimeout(() => {
-      this.reconnectTimeout = null;
-      this.emit('reconnecting', { attempt: this.reconnectAttempts });
-      this.connect(url).catch((err) => {
-        this.emit('reconnect:error', {
-          attempt: this.reconnectAttempts,
-          error: err.message || String(err)
-        });
-        // Will retry on next close event
-      });
-    }, delay);
+    this.currentSession = null;
+    this.currentUser = null;
+    this.emit('user-left', { sessionId: session.id, userId });
   }
 
-  /**
-   * Disconnect
-   */
-  disconnect(): void {
-    this.stopPing();
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
+  addMessage(content: string, type: SharedMessage['type'] = 'user'): SharedMessage {
+    if (!this.currentSession || !this.currentUser) {
+      throw new Error('Not in a session');
     }
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    const message: SharedMessage = {
+      id: this.generateId('msg'),
+      userId: this.currentUser.id,
+      content,
+      timestamp: new Date(),
+      type,
+    };
+    this.currentSession.sharedContext.messages.push(message);
+    return message;
+  }
+
+  updateCursor(position: CursorPosition): void {
+    if (!this.currentSession || !this.currentUser) return;
+    this.currentUser.cursor = position;
+    this.currentUser.lastActive = new Date();
+  }
+
+  lockFile(path: string, region?: { start: number; end: number }): boolean {
+    if (!this.currentSession || !this.currentUser) return false;
+    const file = this.currentSession.sharedContext.files.get(path);
+    if (!file) return false;
+
+    for (const lock of file.locks.values()) {
+      if (lock.userId !== this.currentUser.id) {
+        if (!region || !lock.region) return false;
+        if (region.start <= lock.region.end && region.end >= lock.region.start) {
+          return false;
+        }
+      }
     }
+
+    file.locks.set(this.currentUser.id, {
+      userId: this.currentUser.id,
+      region,
+      acquiredAt: new Date(),
+      expiresAt: new Date(Date.now() + this.config.lockTimeout),
+    });
+    return true;
   }
 
-  /**
-   * Get collaborator ID
-   */
-  getCollaboratorId(): string {
-    return this.collaboratorId;
+  unlockFile(path: string): boolean {
+    if (!this.currentSession || !this.currentUser) return false;
+    const file = this.currentSession.sharedContext.files.get(path);
+    return file ? file.locks.delete(this.currentUser.id) : false;
   }
 
-  /**
-   * Get current session ID
-   */
-  getSessionId(): string | null {
-    return this.sessionId;
+  updateFile(path: string, content: string): boolean {
+    if (!this.currentSession || !this.currentUser) return false;
+    if (!this.currentSession.permissions.allowEditing) return false;
+
+    let file = this.currentSession.sharedContext.files.get(path);
+    if (!file) {
+      file = {
+        path,
+        content: '',
+        version: 0,
+        lastModifiedBy: this.currentUser.id,
+        lastModifiedAt: new Date(),
+        locks: new Map(),
+      };
+      this.currentSession.sharedContext.files.set(path, file);
+    }
+
+    const lock = file.locks.get(this.currentUser.id);
+    if (file.locks.size > 0 && !lock) return false;
+
+    file.content = content;
+    file.version++;
+    file.lastModifiedBy = this.currentUser.id;
+    file.lastModifiedAt = new Date();
+    return true;
+  }
+
+  getCurrentSession(): CollaborativeSession | null {
+    return this.currentSession;
+  }
+
+  getCurrentUser(): User | null {
+    return this.currentUser;
+  }
+
+  getUsers(): User[] {
+    return this.currentSession ? Array.from(this.currentSession.users.values()) : [];
+  }
+
+  hasPermission(permission: keyof SessionPermissions): boolean {
+    if (!this.currentSession || !this.currentUser) return false;
+    if (this.currentUser.role === 'owner') return true;
+    if (this.currentUser.role === 'viewer') return false;
+    return !!this.currentSession.permissions[permission];
+  }
+
+  generateInviteLink(): string {
+    if (!this.currentSession) throw new Error('Not in a session');
+    const inviteCode = crypto.randomBytes(16).toString('base64url');
+    return 'codebuddy://join/' + this.currentSession.id + '?code=' + inviteCode;
+  }
+
+  private generateId(prefix: string): string {
+    return prefix + '_' + crypto.randomBytes(8).toString('hex');
+  }
+
+  private assignColor(index: number): string {
+    return USER_COLORS[index % USER_COLORS.length];
+  }
+
+  dispose(): void {
+    this.leaveSession();
+    this.sessions.clear();
+    this.removeAllListeners();
   }
 }
 
-// ============================================================================
-// Factory Functions
-// ============================================================================
+let collaborationInstance: CollaborativeSessionManager | null = null;
 
-export function createCollaborationServer(): CollaborationServer {
-  return new CollaborationServer();
+export function getCollaborationManager(config?: CollaborationConfig): CollaborativeSessionManager {
+  if (!collaborationInstance) {
+    collaborationInstance = new CollaborativeSessionManager(config);
+  }
+  return collaborationInstance;
 }
 
-export function createCollaborationClient(name: string): CollaborationClient {
-  return new CollaborationClient(name);
+export function resetCollaborationManager(): void {
+  if (collaborationInstance) collaborationInstance.dispose();
+  collaborationInstance = null;
 }
+
+export default CollaborativeSessionManager;
