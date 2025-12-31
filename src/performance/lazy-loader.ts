@@ -294,15 +294,13 @@ export function registerCommonModules(loader: LazyLoader): void {
 
   // Archive handling
   loader.register('jszip', async () => {
-    // @ts-expect-error - Optional dependency
     const module = await import('jszip');
     return module.default || module;
   });
 
   loader.register('tar', async () => {
-    // @ts-expect-error - Optional dependency
     const module = await import('tar');
-    return module.default || module;
+    return module;
   });
 
   // SQL engines
@@ -312,7 +310,6 @@ export function registerCommonModules(loader: LazyLoader): void {
   });
 
   loader.register('alasql', async () => {
-    // @ts-expect-error - Optional dependency
     const module = await import('alasql');
     return module.default || module;
   });

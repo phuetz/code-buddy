@@ -51,7 +51,6 @@ export class ArchiveAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     // Try to load archiving libraries
     try {
-      // @ts-expect-error - Optional dependency
       const jszipModule = await import('jszip');
       this.jszip = jszipModule.default || jszipModule;
     } catch (_error) {
@@ -59,9 +58,8 @@ export class ArchiveAgent extends SpecializedAgent {
     }
 
     try {
-      // @ts-expect-error - Optional dependency
       const tarModule = await import('tar');
-      this.tar = tarModule.default || tarModule;
+      this.tar = tarModule;
     } catch (_error) {
       // tar not available
     }

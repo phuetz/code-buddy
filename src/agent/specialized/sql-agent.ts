@@ -60,7 +60,6 @@ export class SQLAgent extends SpecializedAgent {
 
     // Fallback to alasql
     try {
-      // @ts-expect-error - Optional dependency
       const alasqlModule = await import('alasql');
       this.alasql = alasqlModule.default || alasqlModule;
       this.isInitialized = true;

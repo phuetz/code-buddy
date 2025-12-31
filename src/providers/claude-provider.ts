@@ -29,7 +29,6 @@ export class ClaudeProvider extends BaseLLMProvider {
 
     // Dynamic import - SDK is optional
     try {
-      // @ts-expect-error - Optional dependency may not be installed
       const module = await import('@anthropic-ai/sdk');
       const Anthropic = module.default;
       this.client = new Anthropic({

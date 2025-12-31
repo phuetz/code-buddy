@@ -98,7 +98,7 @@ export class ProjectStyleLearner extends EventEmitter {
 
     // Detect indentation
     const tabs = (content.match(/^\t/gm) || []).length;
-    const spaces = (content.match(/^  /gm) || []).length;
+    const spaces = (content.match(/^ {2}/gm) || []).length;
     style.preferences.set('indent', tabs > spaces ? 'tabs' : 'spaces');
   }
 

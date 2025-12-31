@@ -7,6 +7,7 @@ import { describe, it, expect } from '@jest/globals';
 const sanitizeInput = (input: string): string => {
   if (typeof input !== 'string') return '';
   return input
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1F\x7F]/g, '')
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .trim()
@@ -28,6 +29,7 @@ describe('Input Fuzzing Tests', () => {
     });
 
     it('should handle control characters', () => {
+      // eslint-disable-next-line no-control-regex
       expect(sanitizeInput('test\x1B[31m')).not.toMatch(/\x1B/);
     });
 

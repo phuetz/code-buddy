@@ -82,7 +82,7 @@ const DECISION_PATTERNS = [
   /\bcase\s+[^:]+:/g,
   /\bcatch\s*\(/g,
   /\?\s*[^:]+\s*:/g, // Ternary
-  /\&\&/g,
+  /&&/g,
   /\|\|/g,
   /\?\?/g, // Nullish coalescing
 ];
@@ -97,7 +97,7 @@ const COGNITIVE_PATTERNS = [
   { pattern: /\bdo\s*\{/g, weight: 1, nesting: true },
   { pattern: /\bswitch\s*\(/g, weight: 1, nesting: true },
   { pattern: /\bcatch\s*\(/g, weight: 1, nesting: true },
-  { pattern: /\&\&/g, weight: 1, nesting: false },
+  { pattern: /&&/g, weight: 1, nesting: false },
   { pattern: /\|\|/g, weight: 1, nesting: false },
   { pattern: /\bbreak\s+\w+/g, weight: 1, nesting: false }, // Labeled break
   { pattern: /\bcontinue\s+\w+/g, weight: 1, nesting: false }, // Labeled continue

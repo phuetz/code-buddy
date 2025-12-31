@@ -335,7 +335,7 @@ export class ClipboardManager {
       /^(def|class|import|from|if|for|while)\s/m,
       /^(package|import|public|private|class)\s/m,
       /\{[\s\S]*\}/,
-      /=>|->|\|\||\&\&/,
+      /=>|->|\|\||&&/,
       /;\s*$/m,
       /^\s*(\/\/|#|\/\*)/m,
     ];
