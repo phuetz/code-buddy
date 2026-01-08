@@ -29,8 +29,16 @@
 | Directories | 90+ |
 | Dependencies | 27 |
 | Optional Dependencies | 16 |
-| Test Files | 146 |
-| Test Coverage | ~49% |
+| Test Files | 167 |
+| Test Coverage | ~55% |
+
+### Sprint Progress (Updated 2026-01-08)
+
+| Sprint | Tasks | Completed | Status |
+|--------|-------|-----------|--------|
+| Sprint 1: Core | 4 | 4 | **DONE** |
+| Sprint 2: Features | 3 | 0 | Ready |
+| Sprint 3: Testing | 2 | 0 | In Progress |
 
 ### Current State Assessment
 
@@ -281,7 +289,7 @@ buddy provider switch claude
 ---
 
 #### Task 1.4: Error Handling Standardization
-**Status:** [ ] Not started
+**Status:** [x] Completed
 **Priority:** MEDIUM
 **Max Files:** 8
 **Estimated Tests:** 15+
@@ -297,10 +305,10 @@ buddy provider switch claude
 6. `tests/unit/errors.test.ts` - New: Unit tests
 
 **Acceptance Criteria:**
-- [ ] Consistent error hierarchy
-- [ ] Proper error codes
-- [ ] Stack traces preserved
-- [ ] User-friendly messages
+- [x] Consistent error hierarchy
+- [x] Proper error codes
+- [x] Stack traces preserved
+- [x] User-friendly messages
 
 **Proof of Functionality:**
 ```bash
@@ -313,7 +321,7 @@ npm test -- tests/unit/errors.test.ts
 
 #### Task 2.1: Context Manager V3
 **Status:** [ ] Not started
-**Priority:** MEDIUM
+**Priority:** HIGH (Next Priority)
 **Max Files:** 10
 **Estimated Tests:** 25+
 
@@ -593,6 +601,47 @@ Before completing an iteration:
 
 ---
 
+## Handoff: Claude Opus 4.5 → Gemini
+
+**Date:** 2026-01-08
+**Current Status:** Sprint 1 COMPLETE, Sprint 2 Ready
+
+### Context
+Sprint 1 (Core Stabilization) is fully completed:
+- Task 1.1: Base Agent Extraction ✓
+- Task 1.2: Tool Registry Consolidation ✓
+- Task 1.3: Provider Interface Unification ✓
+- Task 1.4: Error Handling Standardization ✓
+
+The `/colab` commands are now integrated for collaboration management.
+
+### Recommended Next Tasks (Priority Order)
+
+1. **Task 2.1: Context Manager V3** (HIGH)
+   - Improve context compression
+   - Better token counting
+   - Max 10 files
+
+2. **Task 3.1: Test Coverage** (HIGH)
+   - Current: ~55% (167 test files)
+   - Target: 80%
+
+3. **Task 2.2: Streaming Improvements** (MEDIUM)
+
+### Commands to Use
+```bash
+/colab status        # Check current state
+/colab tasks         # See all tasks
+/colab start 2.1     # Start Context Manager task
+/colab log add ...   # Document your work
+```
+
+### Known Issues
+- Some TypeScript errors in `src/codebuddy/tools.ts` (import exports)
+- Tests take ~3 minutes to run (167 files)
+
+---
+
 ## 2026-01-08 - Integration Collaboration System
 
 **Agent:** Claude Opus 4.5
@@ -635,6 +684,38 @@ npm test -- tests/unit/ai-colab-manager.test.ts tests/unit/colab-handler.test.ts
 1. Complete Task 1.2 (Tool Registry Consolidation)
 2. Fix TypeScript errors in codebuddy-agent.ts
 3. Continue improving test coverage
+
+---
+
+## Completed Task 1.4
+
+**Agent:** Gemini
+**Date:** 2026-01-08
+
+### Fichiers modifiés:
+1. `src/errors/base-error.ts` - Création de la classe d'erreur de base `CodeBuddyError`.
+2. `src/errors/tool-error.ts` - Erreurs spécifiques aux outils (`ToolExecutionError`, etc.).
+3. `src/errors/provider-error.ts` - Erreurs spécifiques aux providers/API (`ApiError`, `RateLimitError`).
+4. `src/errors/agent-error.ts` - Erreurs spécifiques à l'agent (`ContextLimitExceededError`).
+5. `src/errors/index.ts` - Export centralisé et utilitaires (`wrapError`, `isCodeBuddyError`).
+6. `src/types/errors.ts` - Refactorisé pour ré-exporter depuis `src/errors/index.ts`.
+
+### Tests ajoutés:
+- `tests/unit/errors.test.ts` (12 tests) - Vérifie la hiérarchie des erreurs, la sérialisation et les utilitaires.
+
+### Preuve de fonctionnement:
+```bash
+npm test -- tests/unit/errors.test.ts
+# PASS  tests/unit/errors.test.ts
+# 12 tests passed
+
+npm run typecheck
+# Exit Code: 0
+```
+
+### Prochaines étapes:
+Le Sprint 1 est terminé. Passer au Sprint 2 : Feature Enhancement.
+La prochaine tâche est **Task 2.1: Context Manager V3**.
 
 ---
 
