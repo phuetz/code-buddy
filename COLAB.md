@@ -37,8 +37,9 @@
 | Sprint | Tasks | Completed | Status |
 |--------|-------|-----------|--------|
 | Sprint 1: Core | 4 | 4 | **DONE** |
-| Sprint 2: Features | 3 | 2 | In Progress (Gemini) |
-| Sprint 3: Testing | 2 | 0 | In Progress (Claude) |
+| Sprint 2: Features | 3 | 3 | **DONE** |
+| Sprint 3: Testing | 2 | 2 | **DONE** |
+| Sprint 4: Advanced | 3 | 1 | In Progress (Gemini) |
 
 ### Current State Assessment
 
@@ -442,7 +443,7 @@ npm run typecheck
 ### Sprint 4: UI & Advanced Workflows (Proposed)
 
 #### Task 4.1: Modern CLI UI (Ink)
-**Status:** [~] In progress (Gemini)
+**Status:** [x] Completed (Gemini)
 **Priority:** MEDIUM
 **Objective:** Revamp the CLI interface using Ink for better interactivity and visual appeal.
 **Files:** `src/ui/`, `src/index.ts`
@@ -454,10 +455,10 @@ npm run typecheck
 **Files:** `src/agent/codebuddy-agent.ts`, `src/agent/repair/`
 
 #### Task 4.3: Memory System Persistence
-**Status:** [ ] Not started
+**Status:** [x] Completed (Claude)
 **Priority:** MEDIUM
 **Objective:** Implement long-term memory using vector store or localized DB to allow the agent to remember project context across sessions.
-**Files:** `src/memory/`
+**Files:** `src/memory/`, `src/agent/codebuddy-agent.ts`
 
 ---
 
@@ -1448,6 +1449,69 @@ npm run typecheck
 1. Intégrer l'appel à attemptAutoRepair() dans la boucle agentique après échecs de bash
 2. Ajouter UI pour afficher les réparations automatiques
 3. Configurer les patterns de réparation via settings
+
+---
+
+## Completed Task 4.3: Memory System Persistence
+
+**Agent:** Claude Opus 4.5
+**Date:** 2026-01-09
+
+### Fichiers modifiés:
+1. `src/memory/index.ts` - Exportation complète des trois modules mémoire
+2. `src/agent/codebuddy-agent.ts` - Intégration du système de mémoire avec lazy loading
+
+### Tests ajoutés:
+- `tests/unit/agent-memory-integration.test.ts` (25 tests)
+  - Memory Enable/Disable (4 tests)
+  - Remember Operation (3 tests)
+  - Recall Operation (4 tests)
+  - Memory Context (3 tests)
+  - Conversation Summary (3 tests)
+  - Memory Stats (3 tests)
+  - Memory Status Formatting (3 tests)
+  - Dispose (2 tests)
+
+### Fonctionnalités implémentées:
+- **Lazy-loaded EnhancedMemory**: Initialisation à la demande avec SQLite et embeddings
+- **remember()**: Stockage de mémoires cross-session (type, content, tags, importance)
+- **recall()**: Récupération avec recherche sémantique et filtres
+- **getMemoryContext()**: Construction de contexte pour augmentation du prompt système
+- **storeConversationSummary()**: Résumés de conversations pour rappel ultérieur
+- **setMemoryEnabled()/isMemoryEnabled()**: Configuration on/off
+- **getMemoryStats()/formatMemoryStatus()**: Monitoring et statistiques
+
+### Architecture mémoire:
+```typescript
+// Trois sous-systèmes exportés:
+// 1. PersistentMemoryManager - Fichiers markdown pour préférences
+// 2. EnhancedMemory - SQLite + embeddings pour recherche sémantique
+// 3. ProspectiveMemory - Tasks/goals/reminders avec triggers
+
+// Méthodes agent:
+await agent.remember('fact', 'This project uses TypeScript', { tags: ['tech'] });
+const memories = await agent.recall('TypeScript', { limit: 10 });
+const context = await agent.getMemoryContext('current task');
+```
+
+### Preuve de fonctionnement:
+```bash
+npm test -- tests/unit/agent-memory-integration.test.ts
+# PASS  tests/unit/agent-memory-integration.test.ts
+# Tests: 25 passed, 25 total
+
+npm test -- tests/unit/memory.test.ts
+# PASS  tests/unit/memory.test.ts
+# Tests: 182 passed, 182 total
+
+npm run typecheck
+# Exit Code: 0
+```
+
+### Prochaines étapes:
+1. Intégrer le contexte mémoire dans le prompt système automatiquement
+2. Ajouter commandes `/memory store`, `/memory recall`, `/memory status`
+3. Configurer rétention et nettoyage automatique des vieilles mémoires
 
 ---
 
