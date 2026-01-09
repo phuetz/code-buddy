@@ -42,6 +42,12 @@ import { getModelRouter, ModelRouter, type RoutingDecision } from "../optimizati
 
 import { BaseAgent } from "./base-agent.js";
 import { RepairEngine, getRepairEngine } from "./repair/index.js";
+import {
+  EnhancedMemory,
+  getEnhancedMemory,
+  type MemoryEntry,
+  type MemoryType,
+} from "../memory/index.js";
 
 // Re-export types for backwards compatibility
 export { ChatEntry, StreamingChunk } from "./types.js";
@@ -76,6 +82,10 @@ export class CodeBuddyAgent extends BaseAgent {
   private _webSearch: WebSearchTool | null = null;
   private _imageTool: ImageTool | null = null;
   private _repairEngine: RepairEngine | null = null;
+  private _memory: EnhancedMemory | null = null;
+
+  // Memory system configuration
+  private memoryEnabled = true;
 
   // Auto-repair configuration
   private autoRepairEnabled = true;
@@ -167,6 +177,30 @@ export class CodeBuddyAgent extends BaseAgent {
       });
     }
     return this._repairEngine;
+  }
+
+  /**
+   * Lazy-loaded memory system for cross-session context persistence
+   */
+  private get memory(): EnhancedMemory {
+    if (!this._memory) {
+      this._memory = getEnhancedMemory({
+        enabled: this.memoryEnabled,
+        embeddingEnabled: true,
+        useSQLite: true,
+        maxMemories: 10000,
+        autoSummarize: true,
+      });
+
+      // Set project context if we have a working directory
+      const cwd = process.cwd();
+      if (cwd) {
+        this._memory.setProjectContext(cwd).catch(err => {
+          logger.warn('Failed to set project context for memory', { error: getErrorMessage(err) });
+        });
+      }
+    }
+    return this._memory;
   }
 
   // Maximum history entries to prevent memory bloat (keep last N entries)
@@ -2084,11 +2118,156 @@ export class CodeBuddyAgent extends BaseAgent {
     return lines.join('\n');
   }
 
+  // ============================================================================
+  // Memory System Methods
+  // ============================================================================
+
+  /**
+   * Store a memory for cross-session persistence
+   *
+   * @param type - Type of memory (fact, preference, decision, pattern, etc.)
+   * @param content - Content to remember
+   * @param options - Additional options (tags, importance, etc.)
+   * @returns The stored memory entry
+   */
+  async remember(
+    type: MemoryType,
+    content: string,
+    options: {
+      summary?: string;
+      importance?: number;
+      tags?: string[];
+      metadata?: Record<string, unknown>;
+    } = {}
+  ): Promise<MemoryEntry> {
+    if (!this.memoryEnabled) {
+      throw new Error('Memory system is disabled');
+    }
+    return this.memory.store({
+      type,
+      content,
+      ...options,
+    });
+  }
+
+  /**
+   * Recall memories matching a query
+   *
+   * @param query - Search query
+   * @param options - Filter options
+   * @returns Matching memories
+   */
+  async recall(
+    query?: string,
+    options: {
+      types?: MemoryType[];
+      tags?: string[];
+      limit?: number;
+      minImportance?: number;
+    } = {}
+  ): Promise<MemoryEntry[]> {
+    if (!this.memoryEnabled) {
+      return [];
+    }
+    return this.memory.recall({
+      query,
+      ...options,
+    });
+  }
+
+  /**
+   * Build memory context for system prompt augmentation
+   *
+   * @param query - Optional query to find relevant memories
+   * @returns Context string to add to system prompt
+   */
+  async getMemoryContext(query?: string): Promise<string> {
+    if (!this.memoryEnabled) {
+      return '';
+    }
+    return this.memory.buildContext({
+      query,
+      includePreferences: true,
+      includeProject: true,
+      includeRecentSummaries: true,
+    });
+  }
+
+  /**
+   * Store a conversation summary for later recall
+   *
+   * @param summary - Summary text
+   * @param topics - Key topics discussed
+   * @param decisions - Decisions made
+   */
+  async storeConversationSummary(
+    summary: string,
+    topics: string[],
+    decisions?: string[]
+  ): Promise<void> {
+    if (!this.memoryEnabled) return;
+
+    const sessionId = this.sessionStore.getCurrentSessionId?.() || `session-${Date.now()}`;
+    await this.memory.storeSummary({
+      sessionId,
+      summary,
+      topics,
+      decisions,
+      messageCount: this.messages.length,
+    });
+  }
+
+  /**
+   * Enable or disable memory system
+   */
+  setMemoryEnabled(enabled: boolean): void {
+    this.memoryEnabled = enabled;
+    if (!enabled && this._memory) {
+      this._memory.dispose();
+      this._memory = null;
+    }
+  }
+
+  /**
+   * Check if memory system is enabled
+   */
+  isMemoryEnabled(): boolean {
+    return this.memoryEnabled;
+  }
+
+  /**
+   * Get memory system statistics
+   */
+  getMemoryStats(): { totalMemories: number; byType: Record<string, number>; projects: number; summaries: number } | null {
+    if (!this.memoryEnabled || !this._memory) {
+      return null;
+    }
+    return this.memory.getStats();
+  }
+
+  /**
+   * Format memory status for display
+   */
+  formatMemoryStatus(): string {
+    if (!this.memoryEnabled) {
+      return '🧠 Memory: Disabled';
+    }
+    if (!this._memory) {
+      return '🧠 Memory: Not initialized';
+    }
+    return this.memory.formatStatus();
+  }
+
   /**
    * Clean up all resources
    * Should be called when the agent is no longer needed
    */
   dispose(): void {
+    // Dispose memory system
+    if (this._memory) {
+      this._memory.dispose();
+      this._memory = null;
+    }
     super.dispose();
   }
 }
