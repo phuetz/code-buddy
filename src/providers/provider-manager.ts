@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { LLMProvider } from './base-provider.js';
+import type { AIProvider } from './base-provider.js';
 import type {
   ProviderType,
   ProviderConfig,
@@ -24,7 +24,7 @@ import { GeminiProvider } from './gemini-provider.js';
 // ============================================================================
 
 export class ProviderManager extends EventEmitter {
-  private providers: Map<ProviderType, LLMProvider> = new Map();
+  private providers: Map<ProviderType, AIProvider> = new Map();
   private activeProvider: ProviderType = 'grok';
   private configs: Map<ProviderType, ProviderConfig> = new Map();
 
@@ -44,7 +44,7 @@ export class ProviderManager extends EventEmitter {
   /**
    * Create provider instance
    */
-  private createProvider(type: ProviderType): LLMProvider {
+  private createProvider(type: ProviderType): AIProvider {
     switch (type) {
       case 'grok':
         return new GrokProvider();
@@ -73,7 +73,7 @@ export class ProviderManager extends EventEmitter {
   /**
    * Get active provider
    */
-  getActiveProvider(): LLMProvider {
+  getActiveProvider(): AIProvider {
     const provider = this.providers.get(this.activeProvider);
     if (!provider) {
       throw new Error(`No active provider. Register a provider first.`);
@@ -84,7 +84,7 @@ export class ProviderManager extends EventEmitter {
   /**
    * Get specific provider
    */
-  getProvider(type: ProviderType): LLMProvider | undefined {
+  getProvider(type: ProviderType): AIProvider | undefined {
     return this.providers.get(type);
   }
 

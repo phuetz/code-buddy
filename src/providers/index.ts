@@ -17,10 +17,15 @@ export type {
   CompletionOptions,
   AnthropicResponse,
   AnthropicStreamEvent,
+  ProviderFeature,
 } from './types.js';
 
 // Base provider
-export { LLMProvider, BaseLLMProvider } from './base-provider.js';
+export { AIProvider, BaseProvider } from './base-provider.js';
+
+// Legacy exports for backward compatibility
+export { BaseProvider as BaseLLMProvider } from './base-provider.js';
+export type { AIProvider as LLMProvider } from './base-provider.js';
 
 // Individual providers
 export { GrokProvider } from './grok-provider.js';

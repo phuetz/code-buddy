@@ -11,7 +11,13 @@ export interface MCPServerConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  /** Optional: Auto-reconnect if connection is lost */
+  autoReconnect?: boolean;
+  /** Optional: Max reconnection attempts */
+  maxRetries?: number;
 }
+
+export type ServerStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export interface MCPTool {
   name: string;
@@ -24,8 +30,15 @@ export class MCPManager extends EventEmitter {
   private clients: Map<string, Client> = new Map();
   private transports: Map<string, MCPTransport> = new Map();
   private tools: Map<string, MCPTool> = new Map();
+  private serverConfigs: Map<string, MCPServerConfig> = new Map();
+  private serverStatuses: Map<string, ServerStatus> = new Map();
+  private retryCounts: Map<string, number> = new Map();
+  private healthCheckIntervals: Map<string, NodeJS.Timeout> = new Map();
 
   async addServer(config: MCPServerConfig): Promise<void> {
+    this.serverConfigs.set(config.name, config);
+    this.serverStatuses.set(config.name, 'connecting');
+    
     try {
       // Handle legacy stdio-only configuration
       let transportConfig = config.transport;
@@ -77,14 +90,88 @@ export class MCPManager extends EventEmitter {
         this.tools.set(mcpTool.name, mcpTool);
       }
 
+      this.serverStatuses.set(config.name, 'connected');
+      this.retryCounts.set(config.name, 0);
+      this.startHealthCheck(config.name);
+
       this.emit('serverAdded', config.name, toolsResult.tools.length);
     } catch (error) {
-      this.emit('serverError', config.name, error);
+      this.serverStatuses.set(config.name, 'error');
+      this.handleServerError(config.name, error);
       throw error;
     }
   }
 
+  private startHealthCheck(serverName: string): void {
+    // Clear existing interval if any
+    if (this.healthCheckIntervals.has(serverName)) {
+      clearInterval(this.healthCheckIntervals.get(serverName)!);
+    }
+
+    // Ping every 30 seconds
+    const interval = setInterval(async () => {
+      const client = this.clients.get(serverName);
+      if (!client) {
+        this.stopHealthCheck(serverName);
+        return;
+      }
+
+      try {
+        await client.listTools(); // Simple heartbeat
+      } catch (error) {
+        logger.debug(`Health check failed for ${serverName}`, { error });
+        this.handleServerError(serverName, error);
+      }
+    }, 30000);
+
+    this.healthCheckIntervals.set(serverName, interval);
+  }
+
+  private stopHealthCheck(serverName: string): void {
+    const interval = this.healthCheckIntervals.get(serverName);
+    if (interval) {
+      clearInterval(interval);
+      this.healthCheckIntervals.delete(serverName);
+    }
+  }
+
+  private async handleServerError(serverName: string, error: unknown): Promise<void> {
+    this.emit('serverError', serverName, error);
+    
+    const config = this.serverConfigs.get(serverName);
+    if (!config || !config.autoReconnect) return;
+
+    const retryCount = this.retryCounts.get(serverName) || 0;
+    const maxRetries = config.maxRetries ?? 5;
+
+    if (retryCount < maxRetries) {
+      this.retryCounts.set(serverName, retryCount + 1);
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+      
+      logger.info(`Attempting to reconnect to ${serverName} in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+      
+      setTimeout(async () => {
+        try {
+          await this.removeServer(serverName);
+          await this.addServer(config);
+        } catch (reconnectError) {
+          logger.debug(`Reconnection attempt failed for ${serverName}`, { reconnectError });
+        }
+      }, delay);
+    } else {
+      logger.error(`Max reconnection attempts reached for ${serverName}`);
+      this.serverStatuses.set(serverName, 'error');
+    }
+  }
+
+  getServerStatus(serverName: string): ServerStatus | undefined {
+    return this.serverStatuses.get(serverName);
+  }
+
   async removeServer(serverName: string): Promise<void> {
+    this.stopHealthCheck(serverName);
+    this.serverStatuses.set(serverName, 'disconnected');
+
     // Remove tools
     for (const [toolName, tool] of this.tools.entries()) {
       if (tool.serverName === serverName) {
@@ -95,14 +182,22 @@ export class MCPManager extends EventEmitter {
     // Disconnect client
     const client = this.clients.get(serverName);
     if (client) {
-      await client.close();
+      try {
+        await client.close();
+      } catch (e) {
+        // Ignore close errors
+      }
       this.clients.delete(serverName);
     }
 
     // Close transport
     const transport = this.transports.get(serverName);
     if (transport) {
-      await transport.disconnect();
+      try {
+        await transport.disconnect();
+      } catch (e) {
+        // Ignore disconnect errors
+      }
       this.transports.delete(serverName);
     }
 

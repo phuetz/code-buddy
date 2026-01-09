@@ -4,7 +4,7 @@
  * LLM provider implementation for OpenAI API.
  */
 
-import { BaseLLMProvider } from './base-provider.js';
+import { BaseProvider } from './base-provider.js';
 import type {
   ProviderType,
   ProviderConfig,
@@ -13,9 +13,10 @@ import type {
   StreamChunk,
   ToolCall,
   ToolDefinition,
+  ProviderFeature,
 } from './types.js';
 
-export class OpenAIProvider extends BaseLLMProvider {
+export class OpenAIProvider extends BaseProvider {
   readonly type: ProviderType = 'openai';
   readonly name = 'GPT (OpenAI)';
   readonly defaultModel = 'gpt-4o';
@@ -133,6 +134,17 @@ export class OpenAIProvider extends BaseLLMProvider {
   getPricing(): { input: number; output: number } {
     // GPT-4o pricing per 1M tokens
     return { input: 2.5, output: 10 };
+  }
+
+  supports(feature: ProviderFeature): boolean {
+    switch (feature) {
+      case 'vision':
+        return true; // GPT-4o supports vision
+      case 'json_mode':
+        return true;
+      default:
+        return super.supports(feature);
+    }
   }
 
   private formatMessages(options: CompletionOptions): Array<{

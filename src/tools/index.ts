@@ -1,5 +1,9 @@
 // Types
 export type { ToolResult } from "../types/index.js";
+export * from "./types.js";
+
+// Registry
+export { ToolRegistry, getToolRegistry } from "./registry.js";
 
 // Core tools
 export { BashTool } from "./bash.js";

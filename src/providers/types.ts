@@ -4,7 +4,9 @@
  * Type definitions for the multi-LLM provider system.
  */
 
-export type ProviderType = 'grok' | 'claude' | 'openai' | 'gemini';
+export type ProviderType = 'grok' | 'claude' | 'openai' | 'gemini' | 'ollama' | 'lm-studio';
+
+export type ProviderFeature = 'streaming' | 'tools' | 'vision' | 'json_mode' | 'function_calling';
 
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

@@ -4,7 +4,7 @@
  * LLM provider implementation for Grok API (xAI).
  */
 
-import { BaseLLMProvider } from './base-provider.js';
+import { BaseProvider } from './base-provider.js';
 import type {
   ProviderType,
   ProviderConfig,
@@ -13,9 +13,10 @@ import type {
   StreamChunk,
   ToolCall,
   ToolDefinition,
+  ProviderFeature,
 } from './types.js';
 
-export class GrokProvider extends BaseLLMProvider {
+export class GrokProvider extends BaseProvider {
   readonly type: ProviderType = 'grok';
   readonly name = 'Grok (xAI)';
   readonly defaultModel = 'grok-3-latest';
@@ -134,6 +135,15 @@ export class GrokProvider extends BaseLLMProvider {
   getPricing(): { input: number; output: number } {
     // Grok pricing per 1M tokens
     return { input: 3, output: 15 };
+  }
+
+  supports(feature: ProviderFeature): boolean {
+    switch (feature) {
+      case 'vision':
+        return this.config?.model?.includes('vision') || false;
+      default:
+        return super.supports(feature);
+    }
   }
 
   private formatMessages(options: CompletionOptions): Array<{

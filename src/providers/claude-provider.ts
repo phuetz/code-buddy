@@ -4,7 +4,7 @@
  * LLM provider implementation for Claude API.
  */
 
-import { BaseLLMProvider } from './base-provider.js';
+import { BaseProvider } from './base-provider.js';
 import type {
   ProviderType,
   ProviderConfig,
@@ -15,9 +15,10 @@ import type {
   ToolDefinition,
   AnthropicResponse,
   AnthropicStreamEvent,
+  ProviderFeature,
 } from './types.js';
 
-export class ClaudeProvider extends BaseLLMProvider {
+export class ClaudeProvider extends BaseProvider {
   readonly type: ProviderType = 'claude';
   readonly name = 'Claude (Anthropic)';
   readonly defaultModel = 'claude-sonnet-4-20250514';
@@ -136,6 +137,17 @@ export class ClaudeProvider extends BaseLLMProvider {
   getPricing(): { input: number; output: number } {
     // Claude Sonnet 4 pricing per 1M tokens
     return { input: 3, output: 15 };
+  }
+
+  supports(feature: ProviderFeature): boolean {
+    switch (feature) {
+      case 'vision':
+        return true; // Claude 3 models support vision
+      case 'json_mode':
+        return true; // Supports prefill for JSON
+      default:
+        return super.supports(feature);
+    }
   }
 
   private formatMessages(options: CompletionOptions): {

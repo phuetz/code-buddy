@@ -40,6 +40,8 @@ import { getPromptCacheManager, PromptCacheManager } from "../optimization/promp
 import { getHooksManager, HooksManager } from "../hooks/lifecycle-hooks.js";
 import { getModelRouter, ModelRouter, type RoutingDecision } from "../optimization/model-routing.js";
 
+import { BaseAgent } from "./base-agent.js";
+
 // Re-export types for backwards compatibility
 export { ChatEntry, StreamingChunk } from "./types.js";
 import type { ChatEntry, StreamingChunk } from "./types.js";
@@ -62,7 +64,7 @@ import type { ChatEntry, StreamingChunk } from "./types.js";
  * agent.dispose();
  * ```
  */
-export class CodeBuddyAgent extends EventEmitter {
+export class CodeBuddyAgent extends BaseAgent {
   private codebuddyClient: CodeBuddyClient;
   // Lazy-loaded tool instances (improves startup time)
   private _textEditor: TextEditorTool | null = null;
@@ -72,7 +74,6 @@ export class CodeBuddyAgent extends EventEmitter {
   private _search: SearchTool | null = null;
   private _webSearch: WebSearchTool | null = null;
   private _imageTool: ImageTool | null = null;
-  private chatHistory: ChatEntry[] = [];
 
   // Lazy tool getters - only instantiate when first accessed
   private get textEditor(): TextEditorTool {
@@ -123,34 +124,15 @@ export class CodeBuddyAgent extends EventEmitter {
     }
     return this._imageTool;
   }
-  private messages: CodeBuddyMessage[] = [];
-  private tokenCounter: TokenCounter;
+  
   // Maximum history entries to prevent memory bloat (keep last N entries)
   private static readonly MAX_HISTORY_SIZE = 1000;
   // Cached tools from first round of tool selection
   private cachedSelectedTools: import("../codebuddy/client.js").CodeBuddyTool[] | null = null;
-  private abortController: AbortController | null = null;
-  private checkpointManager: CheckpointManager;
-  private sessionStore: SessionStore;
-  private modeManager: AgentModeManager;
-  private sandboxManager: SandboxManager;
-  private mcpClient: MCPClient;
-  private maxToolRounds: number;
-  private useRAGToolSelection: boolean;
+  
   private lastToolSelection: ToolSelectionResult | null = null;
-  private parallelToolExecution: boolean = true;
   private lastSelectedToolNames: string[] = [];
   private lastQueryForToolSelection: string = '';
-  private yoloMode: boolean = false;
-  private sessionCostLimit: number;
-  private sessionCost: number = 0;
-  private costTracker: CostTracker;
-  private contextManager: ContextManagerV2;
-  private promptCacheManager: PromptCacheManager;
-  private hooksManager: HooksManager;
-  private modelRouter: ModelRouter;
-  private useModelRouting: boolean = false;
-  private lastRoutingDecision: RoutingDecision | null = null;
 
   /**
    * Create a new CodeBuddyAgent instance
@@ -1175,7 +1157,7 @@ export class CodeBuddyAgent extends EventEmitter {
     }
   }
 
-  private async executeTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
+  protected async executeTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
     // Record this tool request for metrics tracking
     this.recordToolRequestMetric(toolCall.function.name);
 
@@ -1378,7 +1360,7 @@ export class CodeBuddyAgent extends EventEmitter {
   }
 
   getChatHistory(): ChatEntry[] {
-    return [...this.chatHistory];
+    return super.getChatHistory();
   }
 
   getCurrentDirectory(): string {
@@ -1490,18 +1472,16 @@ export class CodeBuddyAgent extends EventEmitter {
 
   // Clear chat and reset
   clearChat(): void {
-    this.chatHistory = [];
-    // Keep only the system message
-    this.messages = this.messages.slice(0, 1);
+    super.clearChat();
   }
 
   // Mode methods
   getMode(): AgentMode {
-    return this.modeManager.getMode();
+    return super.getMode();
   }
 
   setMode(mode: AgentMode): void {
-    this.modeManager.setMode(mode);
+    super.setMode(mode);
   }
 
   getModeStatus(): string {
@@ -1538,26 +1518,6 @@ export class CodeBuddyAgent extends EventEmitter {
     return this.mcpClient;
   }
 
-  // History management methods
-
-  /**
-   * Trim chat history and messages to prevent unbounded memory growth
-   * Keeps the most recent entries up to MAX_HISTORY_SIZE
-   */
-  private trimHistory(): void {
-    if (this.chatHistory.length > CodeBuddyAgent.MAX_HISTORY_SIZE) {
-      // Keep the last MAX_HISTORY_SIZE entries
-      this.chatHistory = this.chatHistory.slice(-CodeBuddyAgent.MAX_HISTORY_SIZE);
-    }
-
-    // Also trim messages, keeping system message (first) and last N messages
-    const maxMessages = CodeBuddyAgent.MAX_HISTORY_SIZE + 1; // +1 for system message
-    if (this.messages.length > maxMessages) {
-      const systemMessage = this.messages[0];
-      const recentMessages = this.messages.slice(-CodeBuddyAgent.MAX_HISTORY_SIZE);
-      this.messages = [systemMessage, ...recentMessages];
-    }
-  }
 
   // Image methods
   async processImage(imagePath: string): Promise<ToolResult> {
@@ -1787,21 +1747,21 @@ export class CodeBuddyAgent extends EventEmitter {
    * Check if YOLO mode is enabled
    */
   isYoloModeEnabled(): boolean {
-    return this.yoloMode;
+    return super.isYoloModeEnabled();
   }
 
   /**
    * Get current session cost
    */
   getSessionCost(): number {
-    return this.sessionCost;
+    return super.getSessionCost();
   }
 
   /**
    * Get session cost limit
    */
   getSessionCostLimit(): number {
-    return this.sessionCostLimit;
+    return super.getSessionCostLimit();
   }
 
   /**
@@ -1809,14 +1769,14 @@ export class CodeBuddyAgent extends EventEmitter {
    * @param limit - Maximum cost in dollars (use Infinity for unlimited)
    */
   setSessionCostLimit(limit: number): void {
-    this.sessionCostLimit = limit;
+    super.setSessionCostLimit(limit);
   }
 
   /**
    * Check if session cost limit has been reached
    */
   isSessionCostLimitReached(): boolean {
-    return this.sessionCost >= this.sessionCostLimit;
+    return super.isSessionCostLimitReached();
   }
 
   /**
@@ -1996,24 +1956,6 @@ export class CodeBuddyAgent extends EventEmitter {
    * Should be called when the agent is no longer needed
    */
   dispose(): void {
-    // Clean up token counter
-    if (this.tokenCounter) {
-      this.tokenCounter.dispose();
-    }
-
-    // Clean up context manager
-    if (this.contextManager) {
-      this.contextManager.dispose();
-    }
-
-    // Abort any ongoing operations
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-
-    // Clear chat history and messages to free memory
-    this.chatHistory = [];
-    this.messages = [];
+    super.dispose();
   }
 }

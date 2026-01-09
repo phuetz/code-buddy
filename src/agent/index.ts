@@ -11,6 +11,7 @@
  */
 
 // Re-export new modules
+export { BaseAgent } from "./base-agent.js";
 export {
   ToolExecutor,
   type ToolExecutorDependencies,

@@ -193,15 +193,22 @@ export class Subagent extends EventEmitter {
 
     try {
       while (this.isRunning && rounds < this.config.maxRounds!) {
-        // Check timeout
-        if (Date.now() - this.startTime > this.config.timeout!) {
+        const remainingTime = this.config.timeout! - (Date.now() - this.startTime);
+        if (remainingTime <= 0) {
           throw new Error("Subagent timed out");
         }
 
         rounds++;
         this.emit("subagent:round", { round: rounds });
 
-        const response = await this.client.chat(messages, filteredTools);
+        // Add timeout to chat call
+        const response = await Promise.race([
+          this.client.chat(messages, filteredTools),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error("Subagent timed out")), remainingTime)
+          )
+        ]);
+        
         const assistantMessage = response.choices[0]?.message;
 
         if (!assistantMessage) {
@@ -256,14 +263,14 @@ export class Subagent extends EventEmitter {
       }
 
       // Max rounds reached
-      const lastMessage = messages[messages.length - 1];
+      const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
       const duration = Date.now() - this.startTime;
 
       return {
         success: false,
         output:
-          (typeof lastMessage === 'object' && lastMessage && 'content' in lastMessage && typeof lastMessage.content === 'string')
-            ? lastMessage.content
+          (lastAssistantMessage && typeof lastAssistantMessage.content === 'string' && lastAssistantMessage.content)
+            ? lastAssistantMessage.content
             : "Maximum rounds reached without completion",
         toolsUsed: [...new Set(toolsUsed)],
         rounds,

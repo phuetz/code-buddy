@@ -4,7 +4,7 @@
  * LLM provider implementation for Google Gemini API.
  */
 
-import { BaseLLMProvider } from './base-provider.js';
+import { BaseProvider } from './base-provider.js';
 import type {
   ProviderType,
   ProviderConfig,
@@ -12,9 +12,10 @@ import type {
   LLMResponse,
   StreamChunk,
   ToolCall,
+  ProviderFeature,
 } from './types.js';
 
-export class GeminiProvider extends BaseLLMProvider {
+export class GeminiProvider extends BaseProvider {
   readonly type: ProviderType = 'gemini';
   readonly name = 'Gemini (Google)';
   readonly defaultModel = 'gemini-2.0-flash';
@@ -196,6 +197,17 @@ export class GeminiProvider extends BaseLLMProvider {
   getPricing(): { input: number; output: number } {
     // Gemini 2.0 Flash pricing per 1M tokens
     return { input: 0.075, output: 0.30 };
+  }
+
+  supports(feature: ProviderFeature): boolean {
+    switch (feature) {
+      case 'vision':
+        return true; // Gemini is multimodal
+      case 'json_mode':
+        return true;
+      default:
+        return super.supports(feature);
+    }
   }
 
   private formatRequest(options: CompletionOptions): Record<string, unknown> {
