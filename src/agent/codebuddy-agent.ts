@@ -41,6 +41,7 @@ import { getHooksManager, HooksManager } from "../hooks/lifecycle-hooks.js";
 import { getModelRouter, ModelRouter, type RoutingDecision } from "../optimization/model-routing.js";
 
 import { BaseAgent } from "./base-agent.js";
+import { RepairEngine, getRepairEngine } from "./repair/index.js";
 
 // Re-export types for backwards compatibility
 export { ChatEntry, StreamingChunk } from "./types.js";
@@ -74,6 +75,20 @@ export class CodeBuddyAgent extends BaseAgent {
   private _search: SearchTool | null = null;
   private _webSearch: WebSearchTool | null = null;
   private _imageTool: ImageTool | null = null;
+  private _repairEngine: RepairEngine | null = null;
+
+  // Auto-repair configuration
+  private autoRepairEnabled = true;
+  private autoRepairPatterns = [
+    /error TS\d+:/i,           // TypeScript errors
+    /SyntaxError:/i,           // Syntax errors
+    /ReferenceError:/i,        // Reference errors
+    /TypeError:/i,             // Type errors
+    /eslint.*error/i,          // ESLint errors
+    /FAIL.*test/i,             // Test failures
+    /npm ERR!/i,               // npm errors
+    /Build failed/i,           // Build failures
+  ];
 
   // Lazy tool getters - only instantiate when first accessed
   private get textEditor(): TextEditorTool {
@@ -124,7 +139,36 @@ export class CodeBuddyAgent extends BaseAgent {
     }
     return this._imageTool;
   }
-  
+
+  private get repairEngine(): RepairEngine {
+    if (!this._repairEngine) {
+      // Get API key from environment (same as used by agent)
+      const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
+      const baseURL = process.env.GROK_BASE_URL;
+      this._repairEngine = getRepairEngine(apiKey, baseURL);
+      // Set up executors for the repair engine
+      this._repairEngine.setExecutors({
+        commandExecutor: async (cmd: string) => {
+          const result = await this.bash.execute(cmd);
+          return {
+            success: result.success,
+            output: result.output || '',
+            error: result.error,
+          };
+        },
+        fileReader: async (path: string) => {
+          const result = await this.textEditor.view(path);
+          return result.output || '';
+        },
+        fileWriter: async (path: string, content: string) => {
+          // Use edit to write file content
+          await this.textEditor.create(path, content);
+        },
+      });
+    }
+    return this._repairEngine;
+  }
+
   // Maximum history entries to prevent memory bloat (keep last N entries)
   private static readonly MAX_HISTORY_SIZE = 1000;
   // Cached tools from first round of tool selection
@@ -1357,6 +1401,95 @@ export class CodeBuddyAgent extends BaseAgent {
         error: `MCP tool execution error: ${getErrorMessage(error)}`,
       };
     }
+  }
+
+  /**
+   * Check if an error output is repairable
+   */
+  private isRepairableError(output: string): boolean {
+    if (!this.autoRepairEnabled) return false;
+    return this.autoRepairPatterns.some(pattern => pattern.test(output));
+  }
+
+  /**
+   * Attempt autonomous repair of errors
+   * @returns Repair result with success status and any fixes applied
+   */
+  async attemptAutoRepair(errorOutput: string, command?: string): Promise<{
+    attempted: boolean;
+    success: boolean;
+    fixes: string[];
+    message: string;
+  }> {
+    if (!this.isRepairableError(errorOutput)) {
+      return {
+        attempted: false,
+        success: false,
+        fixes: [],
+        message: 'Error not recognized as repairable',
+      };
+    }
+
+    this.emit('repair:start', { errorOutput, command });
+    logger.info('Attempting auto-repair', { command });
+
+    try {
+      const results = await this.repairEngine.repair(errorOutput, command);
+
+      const successfulFixes = results.filter(r => r.success);
+      const fixDescriptions = successfulFixes.map(r =>
+        r.appliedPatch?.explanation || 'Fix applied'
+      );
+
+      if (successfulFixes.length > 0) {
+        this.emit('repair:success', { fixes: fixDescriptions });
+        logger.info('Auto-repair successful', {
+          fixCount: successfulFixes.length,
+          fixes: fixDescriptions
+        });
+
+        return {
+          attempted: true,
+          success: true,
+          fixes: fixDescriptions,
+          message: `Successfully applied ${successfulFixes.length} fix(es)`,
+        };
+      }
+
+      this.emit('repair:failed', { reason: 'No successful fixes found' });
+      return {
+        attempted: true,
+        success: false,
+        fixes: [],
+        message: 'Auto-repair attempted but no fixes were successful',
+      };
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      this.emit('repair:error', { error: errorMessage });
+      logger.warn('Auto-repair failed', { error: errorMessage });
+
+      return {
+        attempted: true,
+        success: false,
+        fixes: [],
+        message: `Auto-repair error: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Enable or disable auto-repair
+   */
+  setAutoRepair(enabled: boolean): void {
+    this.autoRepairEnabled = enabled;
+    logger.info('Auto-repair setting changed', { enabled });
+  }
+
+  /**
+   * Check if auto-repair is enabled
+   */
+  isAutoRepairEnabled(): boolean {
+    return this.autoRepairEnabled;
   }
 
   getChatHistory(): ChatEntry[] {
