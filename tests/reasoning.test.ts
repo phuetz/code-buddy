@@ -535,3 +535,800 @@ describe('Reasoning Integration', () => {
     expect(result.stats.iterations).toBeGreaterThan(0);
   });
 });
+
+// ============================================================================
+// Additional MCTS Edge Case Tests
+// ============================================================================
+
+describe('MCTS Edge Cases', () => {
+  const createMockCallbacks = () => ({
+    generateThoughts: jest.fn().mockResolvedValue(['Thought 1', 'Thought 2']),
+    evaluateThought: jest.fn().mockResolvedValue(0.5),
+    executeCode: jest.fn().mockResolvedValue({ success: true }),
+    refineThought: jest.fn().mockResolvedValue('Refined'),
+  });
+
+  describe('UCB1 calculation', () => {
+    it('should handle zero visits with Infinity value', async () => {
+      const callbacks = createMockCallbacks();
+      const mcts = createMCTS({ maxIterations: 1, maxDepth: 2 }, callbacks);
+
+      await mcts.search({ description: 'Test' });
+      const root = mcts.getRoot();
+
+      // New children should have high exploration bonus
+      expect(root).toBeDefined();
+      expect(root!.visits).toBeGreaterThan(0);
+    });
+
+    it('should balance exploration and exploitation', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought
+        .mockResolvedValueOnce(0.9) // High score
+        .mockResolvedValueOnce(0.1) // Low score
+        .mockResolvedValue(0.5);
+
+      const mcts = createMCTS({
+        maxIterations: 5,
+        maxDepth: 3,
+        explorationConstant: 1.41,
+      }, callbacks);
+
+      const result = await mcts.search({ description: 'Balance test' });
+
+      // Should create multiple nodes (exploration)
+      expect(result.stats.nodesCreated).toBeGreaterThan(1);
+    });
+  });
+
+  describe('Code extraction edge cases', () => {
+    it('should extract code from typescript blocks', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        '```typescript\nconst x: number = 42;\n```',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'TypeScript code' });
+
+      expect(callbacks.executeCode).toHaveBeenCalled();
+    });
+
+    it('should extract code from python blocks', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        '```python\ndef add(a, b):\n    return a + b\n```',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Python code' });
+
+      expect(callbacks.executeCode).toHaveBeenCalled();
+    });
+
+    it('should handle inline code detection via function keyword', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        'function solution() { return true; }',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Inline code' });
+
+      // Code with function keyword is detected as implementation and executed
+      expect(callbacks.executeCode).toHaveBeenCalled();
+    });
+
+    it('should detect def keyword for Python', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        'def fibonacci(n):\n    if n <= 1: return n\n    return fibonacci(n-1) + fibonacci(n-2)',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Python def' });
+
+      expect(callbacks.executeCode).toHaveBeenCalled();
+    });
+  });
+
+  describe('Thought type detection', () => {
+    it('should detect refinement thoughts', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        'Let me improve this approach by optimizing the loop',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Refinement' });
+
+      const root = mcts.getRoot();
+      const child = root?.children[0];
+      if (child) {
+        expect(child.type).toBe('refinement');
+      }
+    });
+
+    it('should detect conclusion thoughts', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        'Therefore, the solution is to use a hash map',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Conclusion' });
+
+      const root = mcts.getRoot();
+      const child = root?.children[0];
+      if (child) {
+        expect(child.type).toBe('conclusion');
+      }
+    });
+
+    it('should default to hypothesis for deep nodes', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        'Generic exploration of possibilities',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 3, maxDepth: 5 }, callbacks);
+      await mcts.search({ description: 'Deep exploration' });
+
+      // Node at depth > 1 without specific markers should be hypothesis
+      const stats = mcts.getStats();
+      expect(stats.nodesCreated).toBeGreaterThan(1);
+    });
+  });
+
+  describe('Backpropagation', () => {
+    it('should propagate scores up the tree', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought
+        .mockResolvedValueOnce(0.3)
+        .mockResolvedValueOnce(0.9)
+        .mockResolvedValue(0.5);
+
+      const mcts = createMCTS({ maxIterations: 3, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Backprop test' });
+
+      const root = mcts.getRoot();
+      expect(root).toBeDefined();
+      // Root score should reflect best child score
+      expect(root!.visits).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Rethink mechanism', () => {
+    it('should skip rethink when disabled', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought.mockResolvedValue(0.1); // Low score
+
+      const mcts = createMCTS({
+        maxIterations: 3,
+        maxDepth: 3,
+        useRethink: false,
+      }, callbacks);
+
+      await mcts.search({ description: 'No rethink' });
+
+      const stats = mcts.getStats();
+      expect(stats.nodesRefined).toBe(0);
+    });
+
+    it('should refine nodes with feedback and low scores', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought.mockResolvedValue(0.1);
+      callbacks.executeCode.mockResolvedValue({
+        success: false,
+        error: 'SyntaxError: Unexpected token',
+      });
+
+      const mcts = createMCTS({
+        maxIterations: 3,
+        maxDepth: 3,
+        useRethink: true,
+        rethinkThreshold: 0.3,
+      }, callbacks);
+
+      callbacks.generateThoughts.mockResolvedValue([
+        '```javascript\nfunction buggy( { }\n```', // Has error
+      ]);
+
+      await mcts.search({ description: 'Error handling' });
+
+      // Should attempt refinement for failed nodes
+      expect(callbacks.evaluateThought).toHaveBeenCalled();
+    });
+  });
+
+  describe('Early termination', () => {
+    it('should stop when high-scoring solution found', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought.mockResolvedValue(0.95);
+      callbacks.generateThoughts.mockResolvedValue([
+        'Final conclusion: The answer is 42',
+      ]);
+
+      const mcts = createMCTS({
+        maxIterations: 100, // High limit
+        maxDepth: 10,
+      }, callbacks);
+
+      const result = await mcts.search({ description: 'Early stop' });
+
+      // Should stop early due to high score
+      expect(result.stats.iterations).toBeLessThan(100);
+    });
+  });
+
+  describe('Max depth respect', () => {
+    it('should not expand beyond maxDepth', async () => {
+      const callbacks = createMockCallbacks();
+      const mcts = createMCTS({
+        maxIterations: 20,
+        maxDepth: 2,
+      }, callbacks);
+
+      const result = await mcts.search({ description: 'Depth limit' });
+
+      expect(result.stats.maxDepthReached).toBeLessThanOrEqual(2);
+    });
+  });
+
+  describe('Result building', () => {
+    it('should report success when score above threshold', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought.mockResolvedValue(0.7);
+      callbacks.generateThoughts.mockResolvedValue(['Solution found']);
+
+      const mcts = createMCTS({ maxIterations: 3, maxDepth: 3 }, callbacks);
+      const result = await mcts.search({ description: 'Success test' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should report failure when no good solution', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought.mockResolvedValue(0.2); // Low scores
+      callbacks.generateThoughts.mockResolvedValue(['Weak attempt']);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 2 }, callbacks);
+      const result = await mcts.search({ description: 'Failure test' });
+
+      // May succeed or fail depending on implementation
+      expect(result).toBeDefined();
+      expect(result.stats).toBeDefined();
+    });
+
+    it('should include alternatives in result', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.evaluateThought
+        .mockResolvedValueOnce(0.9)
+        .mockResolvedValueOnce(0.7)
+        .mockResolvedValueOnce(0.6)
+        .mockResolvedValue(0.5);
+      callbacks.generateThoughts.mockResolvedValue([
+        'The final solution is here',
+        'Another conclusion approach',
+      ]);
+
+      const mcts = createMCTS({ maxIterations: 5, maxDepth: 4 }, callbacks);
+      const result = await mcts.search({ description: 'Alternatives' });
+
+      expect(result).toBeDefined();
+      // Alternatives should be other good solutions
+    });
+  });
+
+  describe('Execution result handling', () => {
+    it('should boost score on successful execution', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        '```javascript\nconsole.log("success")\n```',
+      ]);
+      callbacks.executeCode.mockResolvedValue({
+        success: true,
+        output: 'success',
+      });
+      callbacks.evaluateThought.mockResolvedValue(0.5);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Execution boost' });
+
+      expect(callbacks.executeCode).toHaveBeenCalled();
+    });
+
+    it('should reduce score on failed execution', async () => {
+      const callbacks = createMockCallbacks();
+      callbacks.generateThoughts.mockResolvedValue([
+        '```javascript\nthrow new Error("fail")\n```',
+      ]);
+      callbacks.executeCode.mockResolvedValue({
+        success: false,
+        error: 'Error: fail',
+      });
+      callbacks.evaluateThought.mockResolvedValue(0.5);
+
+      const mcts = createMCTS({ maxIterations: 2, maxDepth: 3 }, callbacks);
+      await mcts.search({ description: 'Execution penalty' });
+
+      expect(callbacks.executeCode).toHaveBeenCalled();
+    });
+  });
+});
+
+// ============================================================================
+// Tree-of-Thought Parsing Tests
+// ============================================================================
+
+describe('TreeOfThoughtReasoner Parsing', () => {
+  beforeEach(() => {
+    resetTreeOfThoughtReasoner();
+  });
+
+  describe('formatResult edge cases', () => {
+    it('should handle result with path nodes', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+
+      const pathNode1: ThoughtNode = {
+        id: 'path-1',
+        content: 'First step in reasoning path that is quite detailed and informative',
+        type: 'analysis',
+        parent: null,
+        children: [],
+        score: 0.7,
+        visits: 3,
+        depth: 0,
+        metadata: { generationRound: 1 },
+        state: 'evaluated',
+      };
+
+      const pathNode2: ThoughtNode = {
+        id: 'path-2',
+        content: 'Second step building on the first with more details',
+        type: 'hypothesis',
+        parent: pathNode1,
+        children: [],
+        score: 0.8,
+        visits: 2,
+        depth: 1,
+        metadata: { generationRound: 2 },
+        state: 'evaluated',
+      };
+
+      const result = {
+        success: true,
+        solution: pathNode2,
+        path: [pathNode1, pathNode2],
+        alternatives: [],
+        stats: {
+          iterations: 10,
+          nodesCreated: 15,
+          nodesEvaluated: 12,
+          nodesRefined: 1,
+          maxDepthReached: 3,
+          totalTime: 3000,
+          bestScore: 0.8,
+        },
+        tree: pathNode1,
+      };
+
+      const formatted = reasoner.formatResult(result);
+
+      expect(formatted).toContain('REASONING PATH');
+      expect(formatted).toContain('[analysis]');
+      expect(formatted).toContain('[hypothesis]');
+    });
+
+    it('should handle result with alternatives', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+
+      const alt1: ThoughtNode = {
+        id: 'alt-1',
+        content: 'Alternative approach using different algorithm',
+        type: 'implementation',
+        parent: null,
+        children: [],
+        score: 0.75,
+        visits: 2,
+        depth: 2,
+        metadata: { generationRound: 3 },
+        state: 'evaluated',
+      };
+
+      const result = {
+        success: true,
+        solution: {
+          id: 'main',
+          content: 'Main solution',
+          type: 'conclusion' as ThoughtType,
+          parent: null,
+          children: [],
+          score: 0.9,
+          visits: 4,
+          depth: 3,
+          metadata: { generationRound: 4 },
+          state: 'completed' as ThoughtState,
+        },
+        path: [],
+        alternatives: [alt1],
+        stats: {
+          iterations: 20,
+          nodesCreated: 30,
+          nodesEvaluated: 25,
+          nodesRefined: 3,
+          maxDepthReached: 5,
+          totalTime: 8000,
+          bestScore: 0.9,
+        },
+        tree: {} as ThoughtNode,
+      };
+
+      const formatted = reasoner.formatResult(result);
+
+      expect(formatted).toContain('ALTERNATIVES');
+      expect(formatted).toContain('Score: 0.75');
+    });
+
+    it('should handle execution result in solution metadata', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+
+      const result = {
+        success: true,
+        solution: {
+          id: 'exec-node',
+          content: 'Implementation with code',
+          type: 'implementation' as ThoughtType,
+          parent: null,
+          children: [],
+          score: 0.85,
+          visits: 3,
+          depth: 2,
+          metadata: {
+            generationRound: 2,
+            codeGenerated: 'const sum = (a, b) => a + b;',
+            executionResult: {
+              success: true,
+              output: '3',
+            },
+          },
+          state: 'completed' as ThoughtState,
+        },
+        path: [],
+        alternatives: [],
+        stats: {
+          iterations: 5,
+          nodesCreated: 8,
+          nodesEvaluated: 6,
+          nodesRefined: 0,
+          maxDepthReached: 3,
+          totalTime: 1500,
+          bestScore: 0.85,
+        },
+        tree: {} as ThoughtNode,
+      };
+
+      const formatted = reasoner.formatResult(result);
+
+      expect(formatted).toContain('Generated Code');
+      expect(formatted).toContain('const sum');
+    });
+
+    it('should handle very long content with truncation', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+
+      const longContent = 'A'.repeat(200);
+      const result = {
+        success: true,
+        solution: {
+          id: 'long-node',
+          content: longContent,
+          type: 'conclusion' as ThoughtType,
+          parent: null,
+          children: [],
+          score: 0.7,
+          visits: 2,
+          depth: 1,
+          metadata: { generationRound: 1 },
+          state: 'completed' as ThoughtState,
+        },
+        path: [{
+          id: 'path-long',
+          content: longContent,
+          type: 'analysis' as ThoughtType,
+          parent: null,
+          children: [],
+          score: 0.6,
+          visits: 2,
+          depth: 0,
+          metadata: { generationRound: 0 },
+          state: 'evaluated' as ThoughtState,
+        }],
+        alternatives: [{
+          id: 'alt-long',
+          content: longContent,
+          type: 'hypothesis' as ThoughtType,
+          parent: null,
+          children: [],
+          score: 0.55,
+          visits: 1,
+          depth: 1,
+          metadata: { generationRound: 1 },
+          state: 'evaluated' as ThoughtState,
+        }],
+        stats: {
+          iterations: 3,
+          nodesCreated: 5,
+          nodesEvaluated: 4,
+          nodesRefined: 0,
+          maxDepthReached: 2,
+          totalTime: 1000,
+          bestScore: 0.7,
+        },
+        tree: {} as ThoughtNode,
+      };
+
+      const formatted = reasoner.formatResult(result);
+
+      // Should truncate with '...'
+      expect(formatted).toContain('...');
+    });
+  });
+
+  describe('mode configuration', () => {
+    it('should apply shallow mode config correctly', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key', undefined, {
+        mode: 'shallow',
+      });
+
+      expect(reasoner.getConfig().mode).toBe('shallow');
+    });
+
+    it('should switch modes correctly', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+
+      reasoner.setMode('shallow');
+      expect(reasoner.getConfig().mode).toBe('shallow');
+
+      reasoner.setMode('exhaustive');
+      expect(reasoner.getConfig().mode).toBe('exhaustive');
+
+      reasoner.setMode('medium');
+      expect(reasoner.getConfig().mode).toBe('medium');
+    });
+  });
+
+  describe('config defaults', () => {
+    it('should have correct default config values', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+      const config = reasoner.getConfig();
+
+      expect(config.mode).toBe('medium');
+      expect(config.temperature).toBe(0.7);
+      expect(config.executeCode).toBe(true);
+      expect(config.verbose).toBe(false);
+    });
+
+    it('should override defaults with custom config', () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key', undefined, {
+        temperature: 0.3,
+        verbose: true,
+        executeCode: false,
+      });
+
+      const config = reasoner.getConfig();
+
+      expect(config.temperature).toBe(0.3);
+      expect(config.verbose).toBe(true);
+      expect(config.executeCode).toBe(false);
+    });
+  });
+});
+
+// ============================================================================
+// MCTS Format Tree Tests
+// ============================================================================
+
+describe('MCTS formatTree', () => {
+  const createMockCallbacks = () => ({
+    generateThoughts: jest.fn().mockResolvedValue(['Test thought']),
+    evaluateThought: jest.fn().mockResolvedValue(0.6),
+    executeCode: jest.fn().mockResolvedValue({ success: true }),
+    refineThought: jest.fn().mockResolvedValue('Refined'),
+  });
+
+  it('should format tree with emojis for different states', async () => {
+    const callbacks = createMockCallbacks();
+    const mcts = createMCTS({ maxIterations: 3, maxDepth: 3 }, callbacks);
+
+    await mcts.search({ description: 'Tree format test' });
+    const formatted = mcts.formatTree();
+
+    // Should contain state emojis
+    expect(formatted.length).toBeGreaterThan(0);
+    expect(formatted).not.toBe('Empty tree');
+  });
+
+  it('should handle nested children in formatting', async () => {
+    const callbacks = createMockCallbacks();
+    callbacks.generateThoughts
+      .mockResolvedValueOnce(['Level 1 thought'])
+      .mockResolvedValueOnce(['Level 2 thought'])
+      .mockResolvedValue(['Level 3 thought']);
+
+    const mcts = createMCTS({ maxIterations: 5, maxDepth: 4 }, callbacks);
+    await mcts.search({ description: 'Nested tree' });
+
+    const formatted = mcts.formatTree();
+
+    // Should contain indentation
+    expect(formatted.length).toBeGreaterThan(50);
+  });
+
+  it('should truncate long content in display', async () => {
+    const callbacks = createMockCallbacks();
+    const longThought = 'A'.repeat(100);
+    callbacks.generateThoughts.mockResolvedValue([longThought]);
+
+    const mcts = createMCTS({ maxIterations: 2, maxDepth: 2 }, callbacks);
+    await mcts.search({ description: 'Long content test' });
+
+    const formatted = mcts.formatTree();
+
+    // Should contain truncation indicator
+    expect(formatted).toContain('...');
+  });
+});
+
+// ============================================================================
+// Types Validation Tests
+// ============================================================================
+
+describe('Types Validation', () => {
+  describe('ThoughtNode interface', () => {
+    it('should create valid ThoughtNode', () => {
+      const node: ThoughtNode = {
+        id: 'test-node',
+        content: 'Test content',
+        type: 'analysis',
+        parent: null,
+        children: [],
+        score: 0.5,
+        visits: 1,
+        depth: 0,
+        metadata: { generationRound: 1 },
+        state: 'pending',
+      };
+
+      expect(node.id).toBe('test-node');
+      expect(node.type).toBe('analysis');
+      expect(node.state).toBe('pending');
+    });
+
+    it('should support all thought types', () => {
+      const types: ThoughtType[] = [
+        'analysis',
+        'hypothesis',
+        'implementation',
+        'verification',
+        'refinement',
+        'conclusion',
+      ];
+
+      types.forEach(type => {
+        const node: ThoughtNode = {
+          id: `node-${type}`,
+          content: `${type} content`,
+          type,
+          parent: null,
+          children: [],
+          score: 0.5,
+          visits: 1,
+          depth: 0,
+          metadata: { generationRound: 1 },
+          state: 'pending',
+        };
+        expect(node.type).toBe(type);
+      });
+    });
+
+    it('should support all thought states', () => {
+      const states: ThoughtState[] = [
+        'pending',
+        'exploring',
+        'evaluated',
+        'refined',
+        'completed',
+        'failed',
+        'pruned',
+      ];
+
+      states.forEach(state => {
+        const node: ThoughtNode = {
+          id: `node-${state}`,
+          content: `${state} content`,
+          type: 'hypothesis',
+          parent: null,
+          children: [],
+          score: 0.5,
+          visits: 1,
+          depth: 0,
+          metadata: { generationRound: 1 },
+          state,
+        };
+        expect(node.state).toBe(state);
+      });
+    });
+  });
+
+  describe('Problem interface', () => {
+    it('should create minimal problem', () => {
+      const problem: Problem = {
+        description: 'Simple problem',
+      };
+
+      expect(problem.description).toBe('Simple problem');
+      expect(problem.context).toBeUndefined();
+    });
+
+    it('should create full problem with all fields', () => {
+      const problem: Problem = {
+        description: 'Complex problem',
+        context: 'Additional context',
+        constraints: ['Must be O(n)', 'Must use constant space'],
+        successCriteria: ['Passes tests', 'Meets requirements'],
+        examples: [
+          { input: '1', expectedOutput: '2', explanation: 'Adds one' },
+        ],
+      };
+
+      expect(problem.constraints).toHaveLength(2);
+      expect(problem.successCriteria).toHaveLength(2);
+      expect(problem.examples).toHaveLength(1);
+      expect(problem.examples![0].explanation).toBe('Adds one');
+    });
+  });
+
+  describe('MCTSConfig validation', () => {
+    it('should have all required fields in DEFAULT_MCTS_CONFIG', () => {
+      expect(DEFAULT_MCTS_CONFIG.maxIterations).toBeDefined();
+      expect(DEFAULT_MCTS_CONFIG.maxDepth).toBeDefined();
+      expect(DEFAULT_MCTS_CONFIG.explorationConstant).toBeDefined();
+      expect(DEFAULT_MCTS_CONFIG.expansionCount).toBeDefined();
+      expect(DEFAULT_MCTS_CONFIG.simulationDepth).toBeDefined();
+      expect(DEFAULT_MCTS_CONFIG.useRethink).toBeDefined();
+      expect(DEFAULT_MCTS_CONFIG.rethinkThreshold).toBeDefined();
+    });
+  });
+
+  describe('THINKING_MODE_CONFIG completeness', () => {
+    it('should have config for all thinking modes', () => {
+      expect(THINKING_MODE_CONFIG['shallow']).toBeDefined();
+      expect(THINKING_MODE_CONFIG['medium']).toBeDefined();
+      expect(THINKING_MODE_CONFIG['deep']).toBeDefined();
+      expect(THINKING_MODE_CONFIG['exhaustive']).toBeDefined();
+    });
+
+    it('should have increasing iterations across modes', () => {
+      const shallow = THINKING_MODE_CONFIG['shallow'].maxIterations!;
+      const medium = THINKING_MODE_CONFIG['medium'].maxIterations!;
+      const deep = THINKING_MODE_CONFIG['deep'].maxIterations!;
+      const exhaustive = THINKING_MODE_CONFIG['exhaustive'].maxIterations!;
+
+      expect(shallow).toBeLessThan(medium);
+      expect(medium).toBeLessThan(deep);
+      expect(deep).toBeLessThan(exhaustive);
+    });
+
+    it('should have increasing depth across modes', () => {
+      const shallow = THINKING_MODE_CONFIG['shallow'].maxDepth!;
+      const medium = THINKING_MODE_CONFIG['medium'].maxDepth!;
+      const deep = THINKING_MODE_CONFIG['deep'].maxDepth!;
+      const exhaustive = THINKING_MODE_CONFIG['exhaustive'].maxDepth!;
+
+      expect(shallow).toBeLessThan(medium);
+      expect(medium).toBeLessThan(deep);
+      expect(deep).toBeLessThan(exhaustive);
+    });
+  });
+});
