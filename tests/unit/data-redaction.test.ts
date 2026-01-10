@@ -213,11 +213,13 @@ describe('DataRedactionEngine', () => {
       });
 
       it('should redact Twilio API key', () => {
-        const text = 'TWILIO_KEY=SKFAKE_TEST_KEY_000000000000000000';
+        // Twilio pattern expects SK followed by 32 hex characters
+        // Using obviously fake all-zeros pattern to avoid GitHub secret scanning
+        const text = 'TWILIO_KEY=SK00000000000000000000000000000000';
         const result = engine.redact(text);
 
         expect(result.redacted).toContain('[REDACTED:TWILIO_KEY]');
-        expect(result.redacted).not.toContain('SKFAKE_TEST');
+        expect(result.redacted).not.toContain('SK00000000');
       });
 
       it('should redact NPM token', () => {
@@ -264,7 +266,8 @@ describe('DataRedactionEngine', () => {
 
     describe('Slack Tokens', () => {
       it('should redact Slack bot token', () => {
-        const text = 'SLACK_TOKEN=xoxb-FAKE-TEST-TOKEN-000000000000';
+        // Slack pattern expects xoxb- followed by numeric segments
+        const text = 'SLACK_TOKEN=xoxb-1234567890-1234567890123-abcdefghij';
         const result = engine.redact(text);
 
         expect(result.redacted).toContain('[REDACTED:SLACK_TOKEN]');
@@ -272,6 +275,7 @@ describe('DataRedactionEngine', () => {
       });
 
       it('should redact Slack user token', () => {
+        // Slack pattern expects xoxp- followed by numeric segments
         const text = 'slack_user=xoxp-1234567890-1234567890123-abc123';
         const result = engine.redact(text);
 

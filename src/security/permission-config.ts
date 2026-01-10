@@ -219,7 +219,8 @@ export class PermissionManager extends EventEmitter {
     } catch (error) {
       console.error(`Error loading permission config: ${error}`);
     }
-    return { ...DEFAULT_PERMISSION_CONFIG };
+    // Return a deep copy of defaults to prevent mutation of the original
+    return this.mergeWithDefaults({});
   }
 
   /**

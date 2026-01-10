@@ -18,29 +18,40 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import { watch, type FSWatcher } from 'fs';
 
+/**
+ * Represents an AI trigger comment found in the code.
+ */
 export interface AIComment {
+  /** The type of trigger: action (!) or question (?). */
   type: 'action' | 'question';
+  /** The content of the comment (instruction). */
   content: string;
+  /** File where the comment was found. */
   filePath: string;
+  /** Line number where the comment starts. */
   lineNumber: number;
-  context: string; // Surrounding code
+  /** Surrounding code context. */
+  context: string;
 }
 
+/**
+ * Configuration for Watch Mode.
+ */
 export interface WatchConfig {
-  /** Directories to watch */
+  /** Directories to watch. */
   paths: string[];
-  /** File patterns to include */
+  /** File patterns to include (optional). */
   include?: string[];
-  /** File patterns to exclude */
+  /** File patterns to exclude (optional). */
   exclude?: string[];
-  /** Debounce delay in ms */
+  /** Debounce delay in ms (default: 500). */
   debounce?: number;
-  /** Process existing comments on start */
+  /** Process existing comments on start (default: false). */
   processExisting?: boolean;
 }
 
 /**
- * Comment patterns for different languages
+ * Comment patterns for different languages.
  */
 const COMMENT_PATTERNS = [
   // Hash comments (Python, Ruby, Shell, YAML)
@@ -61,7 +72,12 @@ const COMMENT_PATTERNS = [
 ];
 
 /**
- * Extract AI comments from file content
+ * Extracts AI comments from file content.
+ * Scans for patterns like `# AI!`, `// AI?`, etc.
+ *
+ * @param content - File content.
+ * @param filePath - File path (for location info).
+ * @returns Array of found AI comments.
  */
 export function extractAIComments(content: string, filePath: string): AIComment[] {
   const comments: AIComment[] = [];
@@ -95,7 +111,11 @@ export function extractAIComments(content: string, filePath: string): AIComment[
 }
 
 /**
- * Remove processed AI comment from file
+ * Removes a processed AI comment from the file.
+ * Preserves the rest of the line if the comment was inline.
+ *
+ * @param filePath - Path to the file.
+ * @param lineNumber - Line number of the comment.
  */
 export async function removeAIComment(
   filePath: string,
@@ -125,7 +145,8 @@ export async function removeAIComment(
 }
 
 /**
- * Watch Mode Manager
+ * Manages watching files for AI triggers.
+ * Emits 'comment' events when AI instructions are found.
  */
 export class WatchModeManager extends EventEmitter {
   private watchers: FSWatcher[] = [];
@@ -143,7 +164,7 @@ export class WatchModeManager extends EventEmitter {
   }
 
   /**
-   * Start watching for AI comments
+   * Starts watching configured paths.
    */
   async start(): Promise<void> {
     const watchPaths = this.config.paths.length > 0
@@ -171,7 +192,7 @@ export class WatchModeManager extends EventEmitter {
   }
 
   /**
-   * Check if file should be watched
+   * Checks if a file path should be watched (not ignored).
    */
   private shouldWatch(filePath: string): boolean {
     const ignored = [
@@ -181,7 +202,7 @@ export class WatchModeManager extends EventEmitter {
   }
 
   /**
-   * Stop watching
+   * Stops watching all paths and clears timers.
    */
   async stop(): Promise<void> {
     for (const watcher of this.watchers) {
@@ -199,7 +220,7 @@ export class WatchModeManager extends EventEmitter {
   }
 
   /**
-   * Handle file change
+   * Handles a file change event with debouncing.
    */
   private handleFileChange(filePath: string): void {
     // Debounce changes
@@ -217,7 +238,7 @@ export class WatchModeManager extends EventEmitter {
   }
 
   /**
-   * Process file for AI comments
+   * Processes a modified file to find and emit new AI comments.
    */
   private async processFile(filePath: string): Promise<void> {
     try {
@@ -242,7 +263,10 @@ export class WatchModeManager extends EventEmitter {
   }
 
   /**
-   * Mark comment as processed and optionally remove it
+   * Marks a comment as complete and optionally removes it from the file.
+   *
+   * @param comment - The processed comment.
+   * @param removeComment - Whether to remove it from source (default: true).
    */
   async completeComment(comment: AIComment, removeComment: boolean = true): Promise<void> {
     if (removeComment) {
@@ -252,7 +276,10 @@ export class WatchModeManager extends EventEmitter {
 }
 
 /**
- * Format AI comment for display
+ * Formats an AI comment for display in the chat.
+ *
+ * @param comment - The AI comment.
+ * @returns Formatted string.
  */
 export function formatAIComment(comment: AIComment): string {
   const icon = comment.type === 'action' ? '!' : '?';
@@ -264,11 +291,15 @@ ${comment.content}
 Context:
 \`\`\`
 ${comment.context}
-\`\`\``;
+\`\`\`
+`;
 }
 
 /**
- * Create watch mode with default config
+ * Creates a WatchModeManager instance with default settings.
+ *
+ * @param paths - Directories to watch.
+ * @returns New WatchModeManager instance.
  */
 export function createWatchMode(paths: string[] = [process.cwd()]): WatchModeManager {
   return new WatchModeManager({ paths });

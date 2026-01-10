@@ -18,6 +18,7 @@ import {
   SearchTool,
   WebSearchTool,
   ImageTool,
+  ReasoningTool,
 } from "../tools/index.js";
 import { ToolResult } from "../types/index.js";
 import { EventEmitter } from "events";
@@ -39,6 +40,7 @@ import { logger } from "../utils/logger.js";
 import { getPromptCacheManager, PromptCacheManager } from "../optimization/prompt-cache.js";
 import { getHooksManager, HooksManager } from "../hooks/lifecycle-hooks.js";
 import { getModelRouter, ModelRouter, type RoutingDecision } from "../optimization/model-routing.js";
+import { getPluginMarketplace, PluginMarketplace } from "../plugins/marketplace.js";
 
 import { BaseAgent } from "./base-agent.js";
 import { RepairEngine, getRepairEngine } from "./repair/index.js";
@@ -81,6 +83,7 @@ export class CodeBuddyAgent extends BaseAgent {
   private _search: SearchTool | null = null;
   private _webSearch: WebSearchTool | null = null;
   private _imageTool: ImageTool | null = null;
+  private _reasoningTool: ReasoningTool | null = null;
   private _repairEngine: RepairEngine | null = null;
   private _memory: EnhancedMemory | null = null;
 
@@ -148,6 +151,13 @@ export class CodeBuddyAgent extends BaseAgent {
       this._imageTool = new ImageTool();
     }
     return this._imageTool;
+  }
+
+  private get reasoningTool(): ReasoningTool {
+    if (!this._reasoningTool) {
+      this._reasoningTool = new ReasoningTool();
+    }
+    return this._reasoningTool;
   }
 
   private get repairEngine(): RepairEngine {
@@ -288,6 +298,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.promptCacheManager = getPromptCacheManager();
     this.hooksManager = getHooksManager(process.cwd());
     this.modelRouter = getModelRouter();
+    this.marketplace = getPluginMarketplace();
 
     // Initialize MCP servers if configured
     this.initializeMCP();
@@ -323,7 +334,7 @@ export class CodeBuddyAgent extends BaseAgent {
           userInstructions: customInstructions || undefined,
           cwd: process.cwd(),
           modelName,
-          tools: ['view_file', 'str_replace_editor', 'create_file', 'search', 'bash', 'todo'],
+          tools: ['view_file', 'str_replace_editor', 'create_file', 'search', 'bash', 'todo', 'reason'],
         });
         logger.debug(`Using system prompt: ${systemPromptId}`);
       } else if (systemPromptId === 'auto') {
@@ -496,6 +507,8 @@ export class CodeBuddyAgent extends BaseAgent {
           return false; // Can't parse args, be safe
         }
       }
+      // Multiple write tools to different files - can parallelize
+      return true;
     }
 
     // If there's only one write tool, safe to parallelize with read tools
@@ -1186,6 +1199,15 @@ export class CodeBuddyAgent extends BaseAgent {
         };
       }
 
+      // Record final session cost (for cases without tool calls)
+      this.recordSessionCost(inputTokens, totalOutputTokens);
+      if (this.isSessionCostLimitReached()) {
+        yield {
+          type: "content",
+          content: `\n\n💸 Session cost limit reached ($${this.sessionCost.toFixed(2)} / $${this.sessionCostLimit.toFixed(2)}). Use YOLO_MODE=true or set MAX_COST to increase the limit.`,
+        };
+      }
+
       yield { type: "done" };
     } catch (error: unknown) {
       // Check if this was a cancellation
@@ -1314,19 +1336,48 @@ export class CodeBuddyAgent extends BaseAgent {
           );
 
         case "bash": {
-          // Execute pre-bash hooks
-          await this.hooksManager.executeHooks("pre-bash", {
-            command: args.command,
-          });
+          // Execute pre-bash hooks (gracefully handle failures)
+          try {
+            await this.hooksManager.executeHooks("pre-bash", {
+              command: args.command,
+            });
+          } catch (hookError) {
+            logger.warn("Pre-bash hook failed, continuing with execution", { error: getErrorMessage(hookError) });
+          }
 
-          const bashResult = await this.bash.execute(args.command);
+          let bashResult = await this.bash.execute(args.command);
 
-          // Execute post-bash hooks
-          await this.hooksManager.executeHooks("post-bash", {
-            command: args.command,
-            output: bashResult.output,
-            error: bashResult.error,
-          });
+          // INTEGRATION: Auto-repair on failure
+          if (!bashResult.success && bashResult.error && this.autoRepairEnabled) {
+            const repairResult = await this.attemptAutoRepair(bashResult.error, args.command);
+            
+            if (repairResult.success) {
+              // If repair succeeded, retry the command once
+              logger.info(`Retrying command after successful repair: ${args.command}`);
+              const retryResult = await this.bash.execute(args.command);
+              
+              if (retryResult.success) {
+                bashResult = {
+                  ...retryResult,
+                  output: `[Auto-repaired: ${repairResult.fixes.join(', ')}]\n\n${retryResult.output}`
+                };
+              } else {
+                bashResult.output = (bashResult.output || '') + 
+                  `\n\n[Auto-repair applied but command still fails: ${repairResult.fixes.join(', ')}]`;
+              }
+            }
+          }
+
+          // Execute post-bash hooks (gracefully handle failures)
+          try {
+            await this.hooksManager.executeHooks("post-bash", {
+              command: args.command,
+              output: bashResult.output,
+              error: bashResult.error,
+            });
+          } catch (hookError) {
+            logger.warn("Post-bash hook failed", { error: getErrorMessage(hookError) });
+          }
 
           return bashResult;
         }
@@ -1379,10 +1430,23 @@ export class CodeBuddyAgent extends BaseAgent {
         case "web_fetch":
           return await this.webSearch.fetchPage(args.url);
 
+        case "reason":
+          return await this.reasoningTool.execute({
+            problem: args.problem,
+            context: args.context,
+            mode: args.mode,
+            constraints: args.constraints,
+          });
+
         default:
           // Check if this is an MCP tool
           if (toolCall.function.name.startsWith("mcp__")) {
             return await this.executeMCPTool(toolCall);
+          }
+
+          // Check if this is a plugin tool
+          if (toolCall.function.name.startsWith("plugin__")) {
+            return await this.executePluginTool(toolCall);
           }
 
           return {
@@ -1433,6 +1497,25 @@ export class CodeBuddyAgent extends BaseAgent {
       return {
         success: false,
         error: `MCP tool execution error: ${getErrorMessage(error)}`,
+      };
+    }
+  }
+
+  private async executePluginTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
+    try {
+      const args = JSON.parse(toolCall.function.arguments);
+      const toolName = toolCall.function.name.replace("plugin__", "");
+      
+      const result = await this.marketplace.executeTool(toolName, args);
+
+      return {
+        success: true,
+        output: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+      };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: `Plugin tool execution error: ${getErrorMessage(error)}`,
       };
     }
   }
