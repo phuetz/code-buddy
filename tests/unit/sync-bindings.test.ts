@@ -216,12 +216,12 @@ describe('FCS Sync Bindings', () => {
   let bindings: Record<string, unknown>;
   const logs: string[] = [];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetSyncManager();
     resetWorkspaceTracker();
     logs.length = 0;
 
-    bindings = createSyncBindings(
+    bindings = await createSyncBindings(
       { sessionId: 'test-session' },
       (msg: string) => logs.push(msg)
     );
@@ -320,16 +320,16 @@ describe('Singleton Behavior', () => {
     resetWorkspaceTracker();
   });
 
-  it('should return same tracker instance', () => {
-    const tracker1 = getWorkspaceTracker('session1');
-    const tracker2 = getWorkspaceTracker('session2');
+  it('should return same tracker instance', async () => {
+    const tracker1 = await getWorkspaceTracker('session1');
+    const tracker2 = await getWorkspaceTracker('session2');
     expect(tracker1).toBe(tracker2);
   });
 
-  it('should create new instance after reset', () => {
-    const before = getWorkspaceTracker('session1');
+  it('should create new instance after reset', async () => {
+    const before = await getWorkspaceTracker('session1');
     resetWorkspaceTracker();
-    const after = getWorkspaceTracker('session2');
+    const after = await getWorkspaceTracker('session2');
     expect(before).not.toBe(after);
   });
 });
