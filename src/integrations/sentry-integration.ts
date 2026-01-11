@@ -153,7 +153,9 @@ export class SentryIntegration extends EventEmitter {
 
     // Start flush interval
     this.flushInterval = setInterval(() => {
-      this.flush().catch(() => {});
+      this.flush().catch((err) => {
+        logger.debug('Failed to flush Sentry events', { error: err instanceof Error ? err.message : String(err) });
+      });
     }, 10000);
 
     this.initialized = true;
@@ -504,7 +506,9 @@ let sentryInstance: SentryIntegration | null = null;
 export function initSentry(config: SentryConfig): SentryIntegration {
   if (!sentryInstance) {
     sentryInstance = new SentryIntegration(config);
-    sentryInstance.init().catch(() => {});
+    sentryInstance.init().catch((err) => {
+      logger.warn('Failed to initialize Sentry', { error: err instanceof Error ? err.message : String(err) });
+    });
   }
   return sentryInstance;
 }

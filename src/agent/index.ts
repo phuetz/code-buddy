@@ -1,13 +1,14 @@
 /**
- * Agent Module Exports
- *
- * This file exports all agent-related modules for easy importing.
- * The agent has been refactored into smaller, focused modules:
- *
- * - CodeBuddyAgent: Main orchestrator (codebuddy-agent.ts)
- * - ToolExecutor: Tool execution logic (tool-executor.ts)
- * - MessageProcessor: Message handling and history (message-processor.ts)
- * - AgentState: State management (agent-state.ts)
+ * Agent Module
+ * 
+ * The core intelligence of the application. This module contains:
+ * 
+ * - `CodeBuddyAgent`: The main agent implementation that orchestrates the LLM loop.
+ * - `BaseAgent`: The abstract base class providing common infrastructure.
+ * - `AgentState`: Management of agent configuration and runtime state.
+ * - `MessageProcessor`: Handling of chat history and message formatting.
+ * 
+ * @module agent
  */
 
 // Re-export new modules
@@ -35,13 +36,27 @@ export {
   type AgentConfig,
 } from "./agent-state.js";
 
+export { CodeBuddyAgent } from "./codebuddy-agent.js";
+export type * from "./types.js";
+
+// Streaming Module
+export * from "./streaming/index.js";
+
+// Execution Module
+export * from "./execution/index.js";
+
+// Context Module
+export * from "./context/index.js";
+
 // Legacy imports
 import { TextEditorTool, BashTool } from '../tools/index.js';
 import { ToolResult, AgentState as LegacyAgentState } from '../types/index.js';
 
 /**
- * Legacy Agent class - kept for backwards compatibility
- * @deprecated Use CodeBuddyAgent for full agent functionality
+ * Legacy Agent class - kept for backwards compatibility.
+ * Implements a simple command-pattern agent without LLM integration.
+ * 
+ * @deprecated Use `CodeBuddyAgent` for full AI capabilities.
  */
 export class Agent {
   private textEditor: TextEditorTool;

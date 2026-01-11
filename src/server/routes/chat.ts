@@ -10,18 +10,33 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { ChatRequest, ChatResponse, ChatStreamChunk } from '../types.js';
 
+// Agent interface for server routes (subset of CodeBuddyAgent methods used)
+interface AgentAPI {
+  processUserInput(input: string, options?: Record<string, unknown>): Promise<{
+    content?: string;
+    finishReason?: string;
+    usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+    toolCalls?: Array<{ name: string; id: string; success?: boolean; output?: string; error?: string; executionTime?: number }>;
+    cost?: number;
+  }>;
+  streamResponse(input: string, options?: Record<string, unknown>): AsyncIterable<{
+    choices?: Array<{ delta?: { content?: string } }>;
+  }>;
+  getModel(): string;
+}
+
 // Lazy load the agent
-let agentInstance: any = null;
-async function getAgent() {
+let agentInstance: AgentAPI | null = null;
+async function getAgent(): Promise<AgentAPI> {
   if (!agentInstance) {
     const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
     agentInstance = new CodeBuddyAgent(
       process.env.GROK_API_KEY || '',
       process.env.GROK_BASE_URL,
       process.env.GROK_MODEL || 'grok-3-latest'
-    );
+    ) as unknown as AgentAPI;
   }
-  return agentInstance;
+  return agentInstance!;
 }
 
 const router = Router();
@@ -85,13 +100,13 @@ router.post(
         id: requestId,
         content: result.content || '',
         model: body.model || agent.getModel(),
-        finishReason: result.finishReason || 'stop',
+        finishReason: (result.finishReason as ChatResponse['finishReason']) || 'stop',
         usage: {
           promptTokens: result.usage?.prompt_tokens || 0,
           completionTokens: result.usage?.completion_tokens || 0,
           totalTokens: result.usage?.total_tokens || 0,
         },
-        toolCalls: result.toolCalls?.map((tc: any) => ({
+        toolCalls: result.toolCalls?.map((tc: { name: string; id: string; success?: boolean; output?: string; error?: string; executionTime?: number }) => ({
           name: tc.name,
           callId: tc.id,
           success: tc.success ?? true,
@@ -105,8 +120,9 @@ router.post(
       };
 
       res.json(response);
-    } catch (error: any) {
-      throw ApiServerError.internal(error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw ApiServerError.internal(message);
     }
   })
 );
@@ -193,14 +209,15 @@ async function handleStreamingChat(
     }
 
     res.end();
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown stream error';
     const errorChunk = {
       id: requestId,
       delta: '',
       done: true,
       error: {
         code: 'STREAM_ERROR',
-        message: error.message,
+        message,
       },
     };
 

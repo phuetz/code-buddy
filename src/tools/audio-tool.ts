@@ -1,6 +1,6 @@
-import fs from 'fs';
-import { promises as fsPromises } from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
+import { Readable } from 'stream';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export interface AudioInfo {
@@ -33,6 +33,7 @@ export interface TranscriptionSegment {
 export class AudioTool {
   private readonly supportedFormats = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac', '.wma', '.webm'];
   private readonly maxFileSizeMB = 100; // 100MB max
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Get audio file information
@@ -41,9 +42,7 @@ export class AudioTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      try {
-        await fsPromises.access(resolvedPath, fs.constants.R_OK);
-      } catch {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Audio file not found: ${filePath}`
@@ -58,8 +57,8 @@ export class AudioTool {
         };
       }
 
-      const stats = await fsPromises.stat(resolvedPath);
-      const buffer = await fsPromises.readFile(resolvedPath);
+      const stats = await this.vfs.stat(resolvedPath);
+      const buffer = await this.vfs.readFileBuffer(resolvedPath);
 
       const info: AudioInfo = {
         filename: path.basename(filePath),
@@ -168,7 +167,7 @@ export class AudioTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Audio file not found: ${filePath}`
@@ -183,7 +182,7 @@ export class AudioTool {
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
+      const stats = await this.vfs.stat(resolvedPath);
       const fileSizeMB = stats.size / (1024 * 1024);
       if (fileSizeMB > this.maxFileSizeMB) {
         return {
@@ -233,7 +232,8 @@ export class AudioTool {
     const axios = (await import('axios')).default;
 
     const form = new FormData();
-    form.append('file', fs.createReadStream(filePath));
+    const buffer = await this.vfs.readFileBuffer(filePath);
+    form.append('file', Readable.from(buffer), { filename: path.basename(filePath) });
     form.append('model', 'whisper-1');
 
     if (options.language) {
@@ -291,9 +291,7 @@ export class AudioTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      try {
-        await fsPromises.access(resolvedPath, fs.constants.R_OK);
-      } catch {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Audio file not found: ${filePath}`
@@ -301,7 +299,7 @@ export class AudioTool {
       }
 
       const ext = path.extname(resolvedPath).toLowerCase();
-      const buffer = await fsPromises.readFile(resolvedPath);
+      const buffer = await this.vfs.readFileBuffer(resolvedPath);
       const base64 = buffer.toString('base64');
 
       const mimeTypes: Record<string, string> = {
@@ -335,20 +333,21 @@ export class AudioTool {
   /**
    * List audio files in directory
    */
-  listAudioFiles(dirPath: string = '.'): ToolResult {
+  async listAudioFiles(dirPath: string = '.'): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), dirPath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Directory not found: ${dirPath}`
         };
       }
 
-      const files = fs.readdirSync(resolvedPath);
-      const audioFiles = files.filter(f => {
-        const ext = path.extname(f).toLowerCase();
+      const entries = await this.vfs.readDirectory(resolvedPath);
+      const audioFiles = entries.filter(e => {
+        if (!e.isFile) return false;
+        const ext = path.extname(e.name).toLowerCase();
         return this.supportedFormats.includes(ext);
       });
 
@@ -359,11 +358,13 @@ export class AudioTool {
         };
       }
 
-      const audioList = audioFiles.map(file => {
-        const fullPath = path.join(resolvedPath, file);
-        const stats = fs.statSync(fullPath);
-        return `  🎵 ${file} (${this.formatSize(stats.size)})`;
-      }).join('\n');
+      const audioListPromises = audioFiles.map(async entry => {
+        const fullPath = path.join(resolvedPath, entry.name);
+        const stats = await this.vfs.stat(fullPath);
+        return `  🎵 ${entry.name} (${this.formatSize(stats.size)})`;
+      });
+      
+      const audioList = (await Promise.all(audioListPromises)).join('\n');
 
       return {
         success: true,

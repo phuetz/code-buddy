@@ -124,6 +124,9 @@ jest.mock("../../src/tools/index.js", () => ({
     processImage: jest.fn().mockResolvedValue({ success: true, output: "Image processed" }),
     isImage: jest.fn().mockImplementation((path: string) => /\.(png|jpg|jpeg|gif|webp)$/i.test(path)),
   })),
+  ReasoningTool: jest.fn().mockImplementation(() => ({
+    execute: jest.fn().mockResolvedValue({ success: true, output: "Reasoning result" }),
+  })),
 }));
 
 // Mock token counter
@@ -808,15 +811,21 @@ describe("CodeBuddyAgent", () => {
     });
 
     it("should return error when edit_file used without morph editor", async () => {
-      const result = await (agent as any).executeTool({
-        id: "call_morph",
+      // Mock morphEditor getter to return null (simulating no API key)
+      const agentWithoutMorph = new CodeBuddyAgent("test-api-key");
+      Object.defineProperty(agentWithoutMorph, "morphEditor", {
+        get: jest.fn().mockReturnValue(null),
+      });
+
+      const result = await (agentWithoutMorph as any).executeTool({
+        id: "call-1",
         type: "function",
         function: {
           name: "edit_file",
           arguments: JSON.stringify({
-            target_file: "/test/file.ts",
-            instructions: "Add type",
-            code_edit: "const x: number = 1;",
+            target_file: "file.ts",
+            instructions: "fix",
+            code_edit: "code",
           }),
         },
       });
@@ -824,11 +833,25 @@ describe("CodeBuddyAgent", () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain("Morph Fast Apply not available");
     });
+
+    it("should execute reason tool", async () => {
+      const result = await (agent as any).executeTool({
+        id: "call-1",
+        type: "function",
+        function: {
+          name: "reason",
+          arguments: JSON.stringify({
+            problem: "Complex problem",
+            mode: "deep"
+          }),
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Reasoning result");
+    });
   });
 
-  // =============================================================================
-  // MCP TOOL EXECUTION TESTS
-  // =============================================================================
   describe("MCP Tool Execution", () => {
     beforeEach(() => {
       agent = new CodeBuddyAgent("test-api-key");

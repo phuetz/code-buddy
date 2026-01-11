@@ -392,16 +392,12 @@ export class PlanGenerator {
   }
 
   /**
-   * Validate the plan for issues
+   * Detect circular dependencies in the plan
    */
-  validate(): { valid: boolean; issues: string[] } {
+  private detectCycles(): string[] {
     const issues: string[] = [];
+    if (!this.currentPlan) return issues;
 
-    if (!this.currentPlan) {
-      return { valid: false, issues: ["No active plan"] };
-    }
-
-    // Check for circular dependencies
     const visited = new Set<string>();
     const recursionStack = new Set<string>();
 
@@ -430,10 +426,31 @@ export class PlanGenerator {
     };
 
     for (const step of this.currentPlan.steps) {
+      // We need to clear recursion stack for each new search if we want to be safe,
+      // but standard DFS uses one recursion stack per active path.
+      // The issue with the original code is that 'visited' prevents re-entering nodes.
+      // If a node was visited and is not in recursion stack, it's safe (DAG part).
+      // So the logic holds.
       if (hasCycle(step.id)) {
         issues.push(`Circular dependency detected involving step: ${step.title}`);
       }
     }
+
+    return issues;
+  }
+
+  /**
+   * Validate the plan for issues
+   */
+  validate(): { valid: boolean; issues: string[] } {
+    const issues: string[] = [];
+
+    if (!this.currentPlan) {
+      return { valid: false, issues: ["No active plan"] };
+    }
+
+    // Check for circular dependencies
+    issues.push(...this.detectCycles());
 
     // Check for missing dependencies
     const stepIds = new Set(this.currentPlan.steps.map((s) => s.id));

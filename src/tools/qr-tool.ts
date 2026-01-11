@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
@@ -24,6 +24,7 @@ export interface QRDecodeResult {
  */
 export class QRTool {
   private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'qrcodes');
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Generate a QR code
@@ -44,7 +45,7 @@ export class QRTool {
       }
 
       // For image formats, try to use external library or return ASCII
-      fs.mkdirSync(this.outputDir, { recursive: true });
+      await this.vfs.ensureDir(this.outputDir);
 
       const timestamp = Date.now();
       const filename = `qr_${timestamp}.${format}`;
@@ -52,7 +53,7 @@ export class QRTool {
 
       if (format === 'svg') {
         const svg = await this.generateSVG(data, options);
-        fs.writeFileSync(outputPath, svg, 'utf8');
+        await this.vfs.writeFile(outputPath, svg, 'utf8');
 
         return {
           success: true,
@@ -259,7 +260,7 @@ export class QRTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), imagePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Image not found: ${imagePath}`
@@ -486,17 +487,17 @@ export class QRTool {
   /**
    * List generated QR codes
    */
-  listQRCodes(): ToolResult {
+  async listQRCodes(): Promise<ToolResult> {
     try {
-      if (!fs.existsSync(this.outputDir)) {
+      if (!await this.vfs.exists(this.outputDir)) {
         return {
           success: true,
           output: 'No QR codes generated yet'
         };
       }
 
-      const files = fs.readdirSync(this.outputDir);
-      const qrFiles = files.filter(f => /\.(png|svg)$/i.test(f));
+      const entries = await this.vfs.readDirectory(this.outputDir);
+      const qrFiles = entries.filter(e => e.isFile && /\.(png|svg)$/i.test(e.name));
 
       if (qrFiles.length === 0) {
         return {
@@ -505,11 +506,13 @@ export class QRTool {
         };
       }
 
-      const list = qrFiles.map(f => {
-        const fullPath = path.join(this.outputDir, f);
-        const stats = fs.statSync(fullPath);
-        return `  📱 ${f} (${this.formatSize(stats.size)})`;
-      }).join('\n');
+      const listPromises = qrFiles.map(async q => {
+        const fullPath = path.join(this.outputDir, q.name);
+        const stats = await this.vfs.stat(fullPath);
+        return `  📱 ${q.name} (${this.formatSize(stats.size)})`;
+      });
+
+      const list = (await Promise.all(listPromises)).join('\n');
 
       return {
         success: true,

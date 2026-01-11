@@ -6,6 +6,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import type { ServerConfig } from '../types.js';
+import { logger } from '../../utils/logger.js';
 
 interface LogEntry {
   timestamp: string;
@@ -121,7 +122,7 @@ export function createLoggingMiddleware(config: ServerConfig) {
       }
 
       // Log to console
-      console.log(formatLogEntry(entry));
+      logger.info(formatLogEntry(entry));
     });
 
     next();
@@ -199,7 +200,7 @@ export function createJsonLoggingMiddleware(config: ServerConfig) {
         } : undefined,
       };
 
-      console.log(JSON.stringify(entry));
+      logger.debug('API Request', entry);
     });
 
     next();

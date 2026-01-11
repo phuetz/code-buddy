@@ -8,6 +8,7 @@ import type { Request, Response, NextFunction, ErrorRequestHandler } from 'expre
 import { randomBytes } from 'crypto';
 import type { ApiError } from '../types.js';
 import { API_ERRORS } from '../types.js';
+import { logger } from '../../utils/logger.js';
 
 /**
  * Custom API Error class
@@ -114,7 +115,7 @@ export const errorHandler: ErrorRequestHandler = (
 ) => {
   // Log error
   const requestId = req.headers['x-request-id'] as string;
-  console.error(`[${requestId}] Error:`, err);
+  logger.error(`[${requestId}] API Error`, err instanceof Error ? err : new Error(String(err)), { requestId });
 
   // Handle ApiServerError
   if (err instanceof ApiServerError) {

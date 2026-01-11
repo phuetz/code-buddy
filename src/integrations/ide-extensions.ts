@@ -466,8 +466,8 @@ async function askQuestion() {
       {}
     );
     panel.webview.html = '<pre>' + result.answer + '</pre>';
-  } catch (err: any) {
-    vscode.window.showErrorMessage('Code Buddy: ' + err.message);
+  } catch (err) {
+    vscode.window.showErrorMessage('Code Buddy: ' + (err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -490,8 +490,8 @@ async function explainCode() {
     });
 
     vscode.window.showInformationMessage(result.explanation, { modal: true });
-  } catch (err: any) {
-    vscode.window.showErrorMessage('Code Buddy: ' + err.message);
+  } catch (err) {
+    vscode.window.showErrorMessage('Code Buddy: ' + (err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -527,8 +527,8 @@ async function suggestFix() {
       edit.replace(editor.document.uri, result.range, result.fix);
       await vscode.workspace.applyEdit(edit);
     }
-  } catch (err: any) {
-    vscode.window.showErrorMessage('Code Buddy: ' + err.message);
+  } catch (err) {
+    vscode.window.showErrorMessage('Code Buddy: ' + (err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -563,8 +563,8 @@ async function refactorSelection() {
       edit.replace(editor.document.uri, selection, result.refactored);
       await vscode.workspace.applyEdit(edit);
     }
-  } catch (err: any) {
-    vscode.window.showErrorMessage('Code Buddy: ' + err.message);
+  } catch (err) {
+    vscode.window.showErrorMessage('Code Buddy: ' + (err instanceof Error ? err.message : String(err)));
   }
 }
 

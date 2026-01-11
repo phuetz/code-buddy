@@ -9,7 +9,7 @@
  * - Dependency graph
  */
 
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 import { execSync } from 'child_process';
 
@@ -77,11 +77,12 @@ export async function analyzeDependencies(
 
   // Read package.json
   const packageJsonPath = path.join(rootDir, 'package.json');
-  if (!fs.existsSync(packageJsonPath)) {
+  if (!await UnifiedVfsRouter.Instance.exists(packageJsonPath)) {
     throw new Error('package.json not found');
   }
 
-  const packageJson = await fs.readJson(packageJsonPath);
+  const packageJsonContent = await UnifiedVfsRouter.Instance.readFile(packageJsonPath);
+  const packageJson = JSON.parse(packageJsonContent);
   const dependencies: PackageDependency[] = [];
 
   // Collect all dependencies
@@ -147,7 +148,7 @@ export async function analyzeDependencies(
   // Build dependency graph
   const graph = new Map<string, DependencyNode>();
   if (opts.buildGraph) {
-    buildDependencyGraph(rootDir, dependencies, graph);
+    await buildDependencyGraph(rootDir, dependencies, graph);
   }
 
   return {
@@ -228,12 +229,12 @@ async function findUnusedDependencies(
   const usedPackages = new Set<string>();
 
   // Get all source files
-  const sourceFiles = getSourceFiles(rootDir);
+  const sourceFiles = await getSourceFiles(rootDir);
 
   // Scan each file for imports
   for (const file of sourceFiles) {
     try {
-      const content = await fs.readFile(file, 'utf-8');
+      const content = await UnifiedVfsRouter.Instance.readFile(file, 'utf-8');
 
       // Match import statements
       const importMatches = content.matchAll(
@@ -280,21 +281,21 @@ async function findUnusedDependencies(
 /**
  * Get source files to scan
  */
-function getSourceFiles(rootDir: string): string[] {
+async function getSourceFiles(rootDir: string): Promise<string[]> {
   const files: string[] = [];
   const srcDir = path.join(rootDir, 'src');
 
-  function scanDir(dir: string): void {
-    if (!fs.existsSync(dir)) return;
+  async function scanDir(dir: string): Promise<void> {
+    if (!await UnifiedVfsRouter.Instance.exists(dir)) return;
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = await UnifiedVfsRouter.Instance.readDirectory(dir);
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
+      if (entry.isDirectory) {
         if (!['node_modules', 'dist', '.git'].includes(entry.name)) {
-          scanDir(fullPath);
+          await scanDir(fullPath);
         }
-      } else if (entry.isFile()) {
+      } else if (entry.isFile) {
         if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) {
           files.push(fullPath);
         }
@@ -302,12 +303,14 @@ function getSourceFiles(rootDir: string): string[] {
     }
   }
 
-  scanDir(srcDir);
+  await scanDir(srcDir);
   // Also scan root level files
-  const rootFiles = fs.readdirSync(rootDir, { withFileTypes: true });
-  for (const entry of rootFiles) {
-    if (entry.isFile() && /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) {
-      files.push(path.join(rootDir, entry.name));
+  if (await UnifiedVfsRouter.Instance.exists(rootDir)) {
+    const rootEntries = await UnifiedVfsRouter.Instance.readDirectory(rootDir);
+    for (const entry of rootEntries) {
+      if (entry.isFile && /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) {
+        files.push(path.join(rootDir, entry.name));
+      }
     }
   }
 
@@ -340,11 +343,11 @@ function findCircularDependencies(rootDir: string): string[][] {
 /**
  * Build a dependency graph
  */
-function buildDependencyGraph(
+async function buildDependencyGraph(
   rootDir: string,
   dependencies: PackageDependency[],
   graph: Map<string, DependencyNode>
-): void {
+): Promise<void> {
   // Initialize nodes for direct dependencies
   for (const dep of dependencies) {
     graph.set(dep.name, {
@@ -358,9 +361,10 @@ function buildDependencyGraph(
 
   // Read package-lock.json for dependency tree
   const lockPath = path.join(rootDir, 'package-lock.json');
-  if (fs.existsSync(lockPath)) {
+  if (await UnifiedVfsRouter.Instance.exists(lockPath)) {
     try {
-      const lock = fs.readJsonSync(lockPath);
+      const lockContent = await UnifiedVfsRouter.Instance.readFile(lockPath);
+      const lock = JSON.parse(lockContent);
       const packages = lock.packages || {};
 
       // Build relationships

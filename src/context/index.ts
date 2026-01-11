@@ -3,7 +3,6 @@
  */
 
 export * from "./codebase-map.js";
-export * from "./context-compressor.js";
 export {
   loadContext,
   formatContextForPrompt,

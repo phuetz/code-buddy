@@ -8,17 +8,44 @@ import { Router, Request, Response } from 'express';
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { SessionInfo, SessionListResponse } from '../types.js';
 
+// Session interface for server routes
+interface SessionData {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+  messages?: Array<{ role: string; content: string; timestamp?: string; metadata?: unknown }>;
+  tokenCount?: number;
+  model?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface SessionStoreAPI {
+  listSessions(): Promise<SessionData[]>;
+  loadSession(id: string): Promise<SessionData | null>;
+  createSession(data: Record<string, unknown>): Promise<SessionData>;
+  updateSession(id: string, data: Record<string, unknown>): Promise<SessionData>;
+  deleteSession(id: string): Promise<void>;
+  addMessage(id: string, message: Record<string, unknown>): Promise<void>;
+}
+
 // Lazy load the session store
-let sessionStoreInstance: any = null;
-async function getSessionStore() {
+let sessionStoreInstance: SessionStoreAPI | null = null;
+async function getSessionStore(): Promise<SessionStoreAPI> {
   if (!sessionStoreInstance) {
     const { SessionStore } = await import('../../persistence/session-store.js');
-    sessionStoreInstance = new SessionStore();
+    sessionStoreInstance = new SessionStore() as unknown as SessionStoreAPI;
   }
-  return sessionStoreInstance;
+  return sessionStoreInstance!;
 }
 
 const router = Router();
+
+// Helper to extract string param (Express params can be string | string[])
+function getStringParam(param: string | string[] | undefined): string {
+  return Array.isArray(param) ? param[0] : param || '';
+}
 
 /**
  * GET /api/sessions
@@ -37,7 +64,7 @@ router.get(
     // Apply search filter if provided
     if (search && typeof search === 'string') {
       const searchLower = search.toLowerCase();
-      sessions = sessions.filter((s: any) =>
+      sessions = sessions.filter((s: SessionData) =>
         s.name?.toLowerCase().includes(searchLower) ||
         s.description?.toLowerCase().includes(searchLower) ||
         s.id?.toLowerCase().includes(searchLower)
@@ -51,7 +78,7 @@ router.get(
       Number(offset) + Number(limit)
     );
 
-    const sessionInfos: SessionInfo[] = paginatedSessions.map((s: any) => ({
+    const sessionInfos: SessionInfo[] = paginatedSessions.map((s: SessionData) => ({
       id: s.id,
       name: s.name,
       description: s.description,
@@ -81,7 +108,7 @@ router.get(
   '/:id',
   requireScope('sessions'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const store = await getSessionStore();
 
     const session = await store.loadSession(id);
@@ -140,7 +167,7 @@ router.put(
   '/:id',
   requireScope('sessions:write'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const store = await getSessionStore();
 
     const session = await store.loadSession(id);
@@ -173,7 +200,7 @@ router.delete(
   '/:id',
   requireScope('sessions:write'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const store = await getSessionStore();
 
     const session = await store.loadSession(id);
@@ -195,7 +222,7 @@ router.get(
   '/:id/messages',
   requireScope('sessions'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const { limit = 100, offset = 0 } = req.query;
     const store = await getSessionStore();
 
@@ -228,7 +255,7 @@ router.post(
   '/:id/messages',
   requireScope('sessions:write'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const store = await getSessionStore();
 
     const session = await store.loadSession(id);
@@ -264,7 +291,7 @@ router.post(
   '/:id/fork',
   requireScope('sessions:write'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const store = await getSessionStore();
 
     const session = await store.loadSession(id);
@@ -311,7 +338,7 @@ router.post(
   '/:id/export',
   requireScope('sessions'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const { format = 'json' } = req.body;
     const store = await getSessionStore();
 
@@ -359,7 +386,7 @@ router.get(
     }
 
     // Sort by updatedAt or createdAt
-    const sorted = sessions.sort((a: any, b: any) => {
+    const sorted = sessions.sort((a: SessionData, b: SessionData) => {
       const dateA = new Date(a.updatedAt || a.createdAt).getTime();
       const dateB = new Date(b.updatedAt || b.createdAt).getTime();
       return dateB - dateA;

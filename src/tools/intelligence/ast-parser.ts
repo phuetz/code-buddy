@@ -7,8 +7,8 @@
  * Inspired by hurry-mode's AST parsing capabilities.
  */
 
-import * as fs from "fs";
 import * as path from "path";
+import { UnifiedVfsRouter } from "../../services/vfs/unified-vfs-router.js";
 import {
   SupportedLanguage,
   SymbolVisibility,
@@ -180,6 +180,7 @@ function getPatternsForLanguage(language: SupportedLanguage): LanguagePatterns {
 export class ASTParser {
   private cache: Map<string, { result: ASTParseResult; mtime: number }> = new Map();
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Parse a file and extract symbols
@@ -192,8 +193,8 @@ export class ASTParser {
       const cached = this.cache.get(filePath);
       if (cached) {
         try {
-          const stats = fs.statSync(filePath);
-          if (stats.mtimeMs <= cached.mtime && Date.now() - cached.mtime < this.cacheTimeout) {
+          const stats = await this.vfs.stat(filePath);
+          if (stats.mtime.getTime() <= cached.mtime && Date.now() - cached.mtime < this.cacheTimeout) {
             return cached.result;
           }
         } catch {
@@ -208,7 +209,7 @@ export class ASTParser {
     // Read file content
     let content: string;
     try {
-      content = fs.readFileSync(filePath, "utf-8");
+      content = await this.vfs.readFile(filePath, "utf-8");
     } catch (error) {
       return {
         filePath,
@@ -229,8 +230,8 @@ export class ASTParser {
     // Update cache
     if (useCache) {
       try {
-        const stats = fs.statSync(filePath);
-        this.cache.set(filePath, { result, mtime: stats.mtimeMs });
+        const stats = await this.vfs.stat(filePath);
+        this.cache.set(filePath, { result, mtime: stats.mtime.getTime() });
       } catch {
         // Ignore cache update errors
       }

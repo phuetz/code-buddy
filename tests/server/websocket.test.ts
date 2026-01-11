@@ -179,7 +179,7 @@ describe('WebSocket Handler', () => {
 
     it('should support streaming by default', () => {
       const payload = { message: 'Hello' };
-      const stream = payload.hasOwnProperty('stream') ? (payload as any).stream : true;
+      const stream = Object.prototype.hasOwnProperty.call(payload, 'stream') ? (payload as any).stream : true;
 
       expect(stream).toBe(true);
     });

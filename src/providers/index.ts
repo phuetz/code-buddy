@@ -43,3 +43,15 @@ export {
 
 // Local LLM provider
 export * from './local-llm-provider.js';
+
+// Fallback chain
+export {
+  ProviderFallbackChain,
+  getFallbackChain,
+  resetFallbackChain,
+} from './fallback-chain.js';
+export type {
+  FallbackConfig,
+  ProviderHealth,
+  FallbackChainEvents,
+} from './fallback-chain.js';

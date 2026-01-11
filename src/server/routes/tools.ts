@@ -8,28 +8,51 @@ import { Router, Request, Response } from 'express';
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { ToolExecutionRequest, ToolExecutionResponse, ToolInfo } from '../types.js';
 
+// Tool interface for server routes
+interface ToolDefinition {
+  name: string;
+  description?: string;
+  category?: string;
+  parameters?: Record<string, unknown>;
+  requiresConfirmation?: boolean;
+  isDestructive?: boolean;
+}
+
+interface ToolRegistryAPI {
+  getAllTools(): ToolDefinition[];
+  getTool(name: string): ToolDefinition | undefined;
+}
+
+interface AgentAPI {
+  executeTool(name: string, params: Record<string, unknown>): Promise<{
+    success: boolean;
+    output?: string;
+    error?: string;
+  }>;
+}
+
 // Lazy load the tool registry
-let toolRegistryInstance: any = null;
-async function getToolRegistry() {
+let toolRegistryInstance: ToolRegistryAPI | null = null;
+async function getToolRegistry(): Promise<ToolRegistryAPI> {
   if (!toolRegistryInstance) {
     const { ToolRegistry } = await import('../../tools/registry.js');
-    toolRegistryInstance = ToolRegistry.getInstance();
+    toolRegistryInstance = ToolRegistry.getInstance() as unknown as ToolRegistryAPI;
   }
-  return toolRegistryInstance;
+  return toolRegistryInstance!;
 }
 
 // Lazy load the agent for tool execution
-let agentInstance: any = null;
-async function getAgent() {
+let agentInstance: AgentAPI | null = null;
+async function getAgent(): Promise<AgentAPI> {
   if (!agentInstance) {
     const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
     agentInstance = new CodeBuddyAgent(
       process.env.GROK_API_KEY || '',
       process.env.GROK_BASE_URL,
       process.env.GROK_MODEL || 'grok-3-latest'
-    );
+    ) as unknown as AgentAPI;
   }
-  return agentInstance;
+  return agentInstance!;
 }
 
 const router = Router();
@@ -45,9 +68,9 @@ router.get(
     const registry = await getToolRegistry();
     const tools = registry.getAllTools();
 
-    const toolInfos: ToolInfo[] = tools.map((tool: any) => ({
+    const toolInfos: ToolInfo[] = tools.map((tool: ToolDefinition) => ({
       name: tool.name,
-      description: tool.description,
+      description: tool.description || '',
       category: tool.category || 'general',
       parameters: tool.parameters || {},
       requiresConfirmation: tool.requiresConfirmation || false,
@@ -79,7 +102,7 @@ router.get(
 
     const toolInfo: ToolInfo = {
       name: tool.name,
-      description: tool.description,
+      description: tool.description || '',
       category: tool.category || 'general',
       parameters: tool.parameters || {},
       requiresConfirmation: tool.requiresConfirmation || false,
@@ -139,11 +162,12 @@ router.post(
       };
 
       res.json(response);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
       const response: ToolExecutionResponse = {
         toolName: name,
         success: false,
-        error: error.message,
+        error: message,
         executionTime: Date.now() - startTime,
       };
 
@@ -233,11 +257,12 @@ router.post(
           error: result.error,
           executionTime: Date.now() - toolStartTime,
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({
           toolName: toolRequest.name,
           success: false,
-          error: error.message,
+          error: message,
           executionTime: Date.now() - toolStartTime,
         });
       }

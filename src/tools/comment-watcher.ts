@@ -1,4 +1,4 @@
-import * as fs from "fs-extra";
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -84,6 +84,7 @@ export class CommentWatcher extends EventEmitter {
   private config: CommentWatcherConfig;
   private projectRoot: string;
   private detectedComments: DetectedComment[] = [];
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(projectRoot: string = process.cwd(), config: Partial<CommentWatcherConfig> = {}) {
     super();
@@ -105,7 +106,7 @@ export class CommentWatcher extends EventEmitter {
     const comments: DetectedComment[] = [];
 
     try {
-      const content = await fs.readFile(filePath, "utf-8");
+      const content = await this.vfs.readFile(filePath, "utf-8");
       const lines = content.split("\n");
 
       for (let i = 0; i < lines.length; i++) {
@@ -202,16 +203,16 @@ export class CommentWatcher extends EventEmitter {
    * Manual scan fallback (slower but works without ripgrep)
    */
   private async manualScan(dir: string = this.projectRoot): Promise<void> {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const entries = await this.vfs.readDirectory(dir);
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory) {
         if (!this.config.ignoreDirs.includes(entry.name)) {
           await this.manualScan(fullPath);
         }
-      } else if (entry.isFile()) {
+      } else if (entry.isFile) {
         const ext = path.extname(entry.name);
         if (this.config.fileExtensions.includes(ext)) {
           const comments = await this.scanFile(fullPath);
@@ -265,7 +266,7 @@ export class CommentWatcher extends EventEmitter {
    */
   async resolveComment(comment: DetectedComment): Promise<boolean> {
     try {
-      const content = await fs.readFile(comment.file, "utf-8");
+      const content = await this.vfs.readFile(comment.file, "utf-8");
       const lines = content.split("\n");
 
       // Remove or modify the comment line
@@ -288,7 +289,7 @@ export class CommentWatcher extends EventEmitter {
           }
         }
 
-        await fs.writeFile(comment.file, lines.join("\n"));
+        await this.vfs.writeFile(comment.file, lines.join("\n"));
 
         // Remove from detected list
         const index = this.detectedComments.indexOf(comment);

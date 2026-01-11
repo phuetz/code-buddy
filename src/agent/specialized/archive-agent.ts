@@ -21,6 +21,37 @@ import {
 import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
+// Lazy-loaded library types
+// ============================================================================
+
+/**
+ * Type aliases for optional archive libraries.
+ * These are dynamically imported and may not be available at runtime.
+ * Using explicit type aliases to document the intentional use of flexible types.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JSZipModule = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TarModule = any;
+
+/** Archive entry from zip forEach callback */
+interface JSZipFileEntry {
+  name: string;
+  dir: boolean;
+  date?: Date;
+  _data?: { uncompressedSize?: number; compressedSize?: number };
+}
+
+/** Archive entry from tar list callback */
+interface TarEntry {
+  path: string;
+  size: number;
+  mode?: number;
+  mtime: Date;
+  type: string;
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -39,10 +70,8 @@ const ARCHIVE_AGENT_CONFIG: SpecializedAgentConfig = {
 // ============================================================================
 
 export class ArchiveAgent extends SpecializedAgent {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private jszip: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private tar: any = null;
+  private jszip: JSZipModule = null;
+  private tar: TarModule = null;
 
   constructor() {
     super(ARCHIVE_AGENT_CONFIG);
@@ -406,8 +435,7 @@ export class ArchiveAgent extends SpecializedAgent {
     const zip = await this.jszip.loadAsync(buffer);
 
     const entries: ArchiveEntry[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    zip.forEach((path: string, file: any) => {
+    zip.forEach((path: string, file: JSZipFileEntry) => {
       entries.push({
         path,
         name: basename(path),
@@ -508,8 +536,7 @@ export class ArchiveAgent extends SpecializedAgent {
     await this.tar.list({
       file: archivePath,
       gzip: gzipped,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      onentry: (entry: any) => {
+      onentry: (entry: TarEntry) => {
         entries.push({
           path: entry.path,
           name: basename(entry.path),

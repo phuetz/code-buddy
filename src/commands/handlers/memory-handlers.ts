@@ -1,73 +1,129 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
-import { getMemoryManager } from "../../memory/persistent-memory.js";
+import { getEnhancedMemory } from "../../memory/index.js";
 import { getCommentWatcher } from "../../tools/comment-watcher.js";
+import { getErrorMessage } from "../../types/errors.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
+  message?: string; // Add message support for newer handler interface
 }
 
 /**
- * Memory - Manage persistent memory
+ * Memory - Manage persistent memory using EnhancedMemory (SQLite/Vector)
  */
 export async function handleMemory(args: string[]): Promise<CommandHandlerResult> {
-  const memoryManager = getMemoryManager();
-  await memoryManager.initialize();
+  const memory = getEnhancedMemory();
+  const action = args[0]?.toLowerCase() || 'list';
 
-  const action = args[0]?.toLowerCase();
+  try {
+    let content: string;
 
-  let content: string;
+    switch (action) {
+      case "recall":
+      case "find":
+        if (args[1]) {
+          const query = args.slice(1).join(" ");
+          const results = await memory.recall({ query, limit: 5 });
+          
+          if (results.length === 0) {
+            content = "No matching memories found.";
+          } else {
+            const formatted = results.map(r => {
+              const date = new Date(r.createdAt).toLocaleDateString();
+              return `- [${r.type}] ${r.content} (score: ${r.importance.toFixed(2)}, ${date})`;
+            }).join('\n');
+            content = `🔍 **Recall Results**:\n${formatted}`;
+          }
+        } else {
+          content = `Usage: /memory recall <query>`;
+        }
+        break;
 
-  switch (action) {
-    case "recall":
-      if (args[1]) {
-        const value = memoryManager.recall(args[1]);
-        content = value
-          ? `📝 ${args[1]}: ${value}`
-          : `❌ Memory not found: ${args[1]}`;
-      } else {
-        content = `Usage: /memory recall <key>`;
-      }
-      break;
+      case "forget":
+        // TODO: Enhance to support forgetting by query or last added
+        if (args[1]) {
+           const tag = args[1];
+           // Try to forget by tag for now as we don't expose IDs easily
+           const mems = await memory.recall({ tags: [tag] });
+           if (mems.length > 0) {
+             let count = 0;
+             for (const m of mems) {
+               await memory.forget(m.id);
+               count++;
+             }
+             content = `🗑️ Forgot ${count} memories with tag "${tag}"`;
+           } else {
+             content = `No memories found with tag "${tag}"`;
+           }
+        } else {
+          content = `Usage: /memory forget <tag>`;
+        }
+        break;
 
-    case "forget":
-      if (args[1]) {
-        await memoryManager.forget(args[1]);
-        content = `🗑️ Forgot: ${args[1]}`;
-      } else {
-        content = `Usage: /memory forget <key>`;
-      }
-      break;
+      case "remember":
+      case "store":
+        if (args.length >= 3) {
+          const key = args[1];
+          const value = args.slice(2).join(" ");
+          await memory.store({
+            type: 'fact',
+            content: value,
+            tags: [key],
+            importance: 0.8
+          });
+          content = `✅ Remembered: "${value}" (tag: ${key})`;
+        } else {
+          content = `Usage: /memory remember <key/tag> <content>`;
+        }
+        break;
 
-    case "list":
-    default:
-      content = memoryManager.formatMemories();
-      break;
+      case "context":
+        content = await memory.buildContext({
+          includeProject: true,
+          includePreferences: true,
+          includeRecentSummaries: true
+        });
+        content = `🧠 **Current Context Injection**:\n\n${content}`;
+        break;
+
+      case "status":
+      case "list":
+      default:
+        content = memory.formatStatus();
+        break;
+    }
+
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content,
+        timestamp: new Date(),
+      },
+      message: content // Compatibility with newer interface
+    };
+  } catch (error) {
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `Error accessing memory: ${getErrorMessage(error)}`,
+        timestamp: new Date(),
+      },
+    };
   }
-
-  return {
-    handled: true,
-    entry: {
-      type: "assistant",
-      content,
-      timestamp: new Date(),
-    },
-  };
 }
 
 /**
- * Remember - Quick memory store
+ * Remember - Quick memory store using EnhancedMemory
  */
 export async function handleRemember(args: string[]): Promise<CommandHandlerResult> {
-  const memoryManager = getMemoryManager();
-  await memoryManager.initialize();
+  const memory = getEnhancedMemory();
 
-  const key = args[0];
-  const value = args.slice(1).join(" ");
-
-  if (!key || !value) {
+  if (args.length < 2) {
     return {
       handled: true,
       entry: {
@@ -78,16 +134,35 @@ export async function handleRemember(args: string[]): Promise<CommandHandlerResu
     };
   }
 
-  await memoryManager.remember(key, value);
+  const key = args[0];
+  const value = args.slice(1).join(" ");
 
-  return {
-    handled: true,
-    entry: {
-      type: "assistant",
-      content: `✅ Remembered: ${key} = ${value}`,
-      timestamp: new Date(),
-    },
-  };
+  try {
+    await memory.store({
+      type: 'fact',
+      content: value,
+      tags: [key],
+      importance: 0.8
+    });
+
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `✅ Remembered: "${value}" (tag: ${key})`,
+        timestamp: new Date(),
+      },
+    };
+  } catch (error) {
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `Error storing memory: ${getErrorMessage(error)}`,
+        timestamp: new Date(),
+      },
+    };
+  }
 }
 
 /**

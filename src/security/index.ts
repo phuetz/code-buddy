@@ -11,20 +11,37 @@
 
 // Export specific items from approval-modes to avoid conflicts
 export {
-  ApprovalMode,
-  OperationType,
-  OperationRequest,
-  ApprovalResult,
-  ApprovalModeConfig,
   ApprovalModeManager,
   getApprovalModeManager,
   resetApprovalModeManager
 } from './approval-modes.js';
 
+export type {
+  ApprovalMode,
+  OperationType,
+  OperationRequest,
+  ApprovalResult,
+  ApprovalModeConfig
+} from './approval-modes.js';
+
 export * from './sandbox.js';
 
+// Credential management
+export {
+  CredentialManager,
+  getCredentialManager,
+  getApiKey,
+  setApiKey
+} from './credential-manager.js';
+
+export type {
+  CredentialConfig,
+  StoredCredentials
+} from './credential-manager.js';
+
 // Export security-modes with renamed ApprovalResult to avoid conflict
-export { SecurityMode, getSecurityModeManager, SecurityModeManager } from './security-modes.js';
+export { getSecurityModeManager, SecurityModeManager } from './security-modes.js';
+export type { SecurityMode } from './security-modes.js';
 
 export * from './permission-config.js';
 export * from './data-redaction.js';

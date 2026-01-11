@@ -21,14 +21,34 @@ import {
   errorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import {
-  chatRoutes,
-  toolsRoutes,
-  sessionsRoutes,
-  memoryRoutes,
-  healthRoutes,
-} from './routes/index.js';
+import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes } from './routes/index.js';
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
+import { logger } from '../utils/logger.js';
+
+/**
+ * Generate a secure random secret for development use only
+ * In production, JWT_SECRET environment variable MUST be set
+ */
+function getJwtSecret(): string {
+  if (process.env.JWT_SECRET) {
+    return process.env.JWT_SECRET;
+  }
+
+  // In production, require explicit JWT_SECRET
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SECURITY ERROR: JWT_SECRET environment variable must be set in production. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"'
+    );
+  }
+
+  // Development only: generate ephemeral secret (warning: tokens won't persist across restarts)
+  logger.warn(
+    'No JWT_SECRET set. Using ephemeral secret for development. ' +
+    'Set JWT_SECRET environment variable for production use.'
+  );
+  return require('crypto').randomBytes(64).toString('hex');
+}
 
 // Default configuration
 const DEFAULT_CONFIG: ServerConfig = {
@@ -40,7 +60,7 @@ const DEFAULT_CONFIG: ServerConfig = {
   rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
   rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW || '60000', 10),
   authEnabled: process.env.AUTH_ENABLED !== 'false',
-  jwtSecret: process.env.JWT_SECRET || 'codebuddy-secret',
+  jwtSecret: getJwtSecret(),
   jwtExpiration: process.env.JWT_EXPIRATION || '24h',
   websocketEnabled: process.env.WS_ENABLED !== 'false',
   logging: process.env.LOGGING !== 'false',
@@ -178,23 +198,17 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
   // Setup WebSocket if enabled
   if (config.websocketEnabled) {
     await setupWebSocket(server, config);
-    console.log('WebSocket server enabled at /ws');
+    logger.info('WebSocket server enabled at /ws');
   }
 
   return new Promise((resolve, reject) => {
     server.listen(config.port, config.host, () => {
-      console.log(`
-╔════════════════════════════════════════════════════════════════╗
-║                     Code Buddy API Server                      ║
-╠════════════════════════════════════════════════════════════════╣
-║  URL:        http://${config.host}:${config.port}${' '.repeat(Math.max(0, 37 - config.host.length - config.port.toString().length))}║
-║  Health:     http://${config.host}:${config.port}/api/health${' '.repeat(Math.max(0, 26 - config.host.length - config.port.toString().length))}║
-║  Docs:       http://${config.host}:${config.port}/api/docs${' '.repeat(Math.max(0, 28 - config.host.length - config.port.toString().length))}║
-║  WebSocket:  ${config.websocketEnabled ? 'Enabled (/ws)' : 'Disabled'}${' '.repeat(config.websocketEnabled ? 23 : 24)}║
-║  Auth:       ${config.authEnabled ? 'Enabled' : 'Disabled'}${' '.repeat(config.authEnabled ? 29 : 28)}║
-║  Rate Limit: ${config.rateLimit ? `${config.rateLimitMax} req/${config.rateLimitWindow / 1000}s` : 'Disabled'}${' '.repeat(config.rateLimit ? 23 : 28)}║
-╚════════════════════════════════════════════════════════════════╝
-`);
+      logger.info(`API Server started on http://${config.host}:${config.port}`);
+      logger.info(`Health: http://${config.host}:${config.port}/api/health`);
+      logger.info(`Docs: http://${config.host}:${config.port}/api/docs`);
+      logger.info(`WebSocket: ${config.websocketEnabled ? 'Enabled (/ws)' : 'Disabled'}`);
+      logger.info(`Auth: ${config.authEnabled ? 'Enabled' : 'Disabled'}`);
+      logger.info(`Rate Limit: ${config.rateLimit ? `${config.rateLimitMax} req/${config.rateLimitWindow / 1000}s` : 'Disabled'}`);
 
       resolve({ app, server, config });
     });
@@ -216,7 +230,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
       if (err) {
         reject(err);
       } else {
-        console.log('Server stopped');
+        logger.info('Server stopped');
         resolve();
       }
     });
@@ -239,7 +253,7 @@ export function getServerStats(server: HttpServer): {
 // CLI entry point
 if (import.meta.url === `file://${process.argv[1]}`) {
   startServer().catch((error) => {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server', error as Error);
     process.exit(1);
   });
 }

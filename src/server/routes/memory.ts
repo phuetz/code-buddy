@@ -8,14 +8,27 @@ import { Router, Request, Response } from 'express';
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { MemoryEntry, MemoryStats } from '../types.js';
 
+// Context manager interface for server routes
+interface ContextManagerAPI {
+  getStats?(): {
+    currentTokens?: number;
+    maxTokens?: number;
+    utilization?: number;
+    compressionEnabled?: boolean;
+    lastCompression?: string;
+  };
+  getContextWindow?(): unknown[];
+  compress?(): Promise<void>;
+}
+
 // Lazy load the context manager
-let contextManagerInstance: any = null;
-async function getContextManager() {
+let contextManagerInstance: ContextManagerAPI | null = null;
+async function getContextManager(): Promise<ContextManagerAPI> {
   if (!contextManagerInstance) {
     const { ContextManagerV3 } = await import('../../context/context-manager-v3.js');
-    contextManagerInstance = new ContextManagerV3();
+    contextManagerInstance = new ContextManagerV3() as unknown as ContextManagerAPI;
   }
-  return contextManagerInstance;
+  return contextManagerInstance!;
 }
 
 // In-memory storage for API memory entries

@@ -18,6 +18,19 @@ import {
 import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
+// Lazy-loaded library types
+// ============================================================================
+
+/**
+ * Type aliases for optional SQL libraries.
+ * These are dynamically imported and may not be available at runtime.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type BetterSqlite3Module = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AlasqlModule = any;
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -36,10 +49,8 @@ const SQL_AGENT_CONFIG: SpecializedAgentConfig = {
 // ============================================================================
 
 export class SQLAgent extends SpecializedAgent {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private sqlite: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private alasql: any = null;
+  private sqlite: BetterSqlite3Module = null;
+  private alasql: AlasqlModule = null;
   private tempDir: string | null = null;
 
   constructor() {
@@ -406,13 +417,12 @@ export class SQLAgent extends SpecializedAgent {
       const isSelect = query.trim().toUpperCase().startsWith('SELECT');
 
       if (isSelect) {
-        const rows = stmt.all();
+        const rows = stmt.all() as Record<string, unknown>[];
         const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
         return {
           columns,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          rows: rows.map((r: any) => columns.map(c => (r as Record<string, unknown>)[c])),
+          rows: rows.map(r => columns.map(c => r[c])),
           rowCount: rows.length,
           duration: Date.now() - startTime,
         };

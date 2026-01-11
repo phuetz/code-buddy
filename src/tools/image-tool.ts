@@ -1,5 +1,4 @@
-import fs from 'fs';
-import { promises as fsPromises } from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
@@ -21,6 +20,7 @@ export interface ProcessedImage {
 export class ImageTool {
   private readonly supportedExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
   private readonly maxFileSizeMB = 20; // 20MB max
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Process an image from various sources
@@ -66,9 +66,7 @@ export class ImageTool {
     const resolvedPath = path.resolve(process.cwd(), filePath);
 
     // Check file existence asynchronously
-    try {
-      await fsPromises.access(resolvedPath, fs.constants.R_OK);
-    } catch {
+    if (!await this.vfs.exists(resolvedPath)) {
       throw new Error(`Image file not found: ${filePath}`);
     }
 
@@ -77,13 +75,13 @@ export class ImageTool {
       throw new Error(`Unsupported image format: ${ext}. Supported: ${this.supportedExtensions.join(', ')}`);
     }
 
-    const stats = await fsPromises.stat(resolvedPath);
+    const stats = await this.vfs.stat(resolvedPath);
     const fileSizeMB = stats.size / (1024 * 1024);
     if (fileSizeMB > this.maxFileSizeMB) {
       throw new Error(`Image file too large: ${fileSizeMB.toFixed(2)}MB. Max: ${this.maxFileSizeMB}MB`);
     }
 
-    const buffer = await fsPromises.readFile(resolvedPath);
+    const buffer = await this.vfs.readFileBuffer(resolvedPath);
     const base64 = buffer.toString('base64');
     const mediaType = this.getMediaType(ext);
 
@@ -154,20 +152,21 @@ export class ImageTool {
   /**
    * List images in a directory
    */
-  listImages(dirPath: string = '.'): ToolResult {
+  async listImages(dirPath: string = '.'): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), dirPath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Directory not found: ${dirPath}`
         };
       }
 
-      const files = fs.readdirSync(resolvedPath);
-      const images = files.filter(f => {
-        const ext = path.extname(f).toLowerCase();
+      const entries = await this.vfs.readDirectory(resolvedPath);
+      const images = entries.filter(e => {
+        if (!e.isFile) return false;
+        const ext = path.extname(e.name).toLowerCase();
         return this.supportedExtensions.includes(ext);
       });
 
@@ -178,12 +177,14 @@ export class ImageTool {
         };
       }
 
-      const imageList = images.map(img => {
-        const fullPath = path.join(resolvedPath, img);
-        const stats = fs.statSync(fullPath);
+      const imageListPromises = images.map(async img => {
+        const fullPath = path.join(resolvedPath, img.name);
+        const stats = await this.vfs.stat(fullPath);
         const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);
-        return `  ${img} (${sizeMB}MB)`;
-      }).join('\n');
+        return `  ${img.name} (${sizeMB}MB)`;
+      });
+
+      const imageList = (await Promise.all(imageListPromises)).join('\n');
 
       return {
         success: true,

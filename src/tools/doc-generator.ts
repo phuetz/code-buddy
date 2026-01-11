@@ -8,7 +8,7 @@
  * - Markdown output
  */
 
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 import fg from 'fast-glob';
 
@@ -95,7 +95,7 @@ export async function generateDocs(
 
   for (const file of files) {
     const relativePath = path.relative(rootDir, file);
-    const content = await fs.readFile(file, 'utf-8');
+    const content = await UnifiedVfsRouter.Instance.readFile(file, 'utf-8');
     const entries = parseFile(content, relativePath, opts);
 
     if (entries.length > 0) {
@@ -505,8 +505,8 @@ export async function generateDocsToFile(
   const content =
     format === 'markdown' ? formatDocsAsMarkdown(docs) : formatDocsAsJson(docs);
 
-  await fs.ensureDir(path.dirname(outputPath));
-  await fs.writeFile(outputPath, content, 'utf-8');
+  await UnifiedVfsRouter.Instance.ensureDir(path.dirname(outputPath));
+  await UnifiedVfsRouter.Instance.writeFile(outputPath, content, 'utf-8');
 }
 
 export default generateDocs;

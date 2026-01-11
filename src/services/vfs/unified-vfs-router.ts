@@ -20,6 +20,7 @@ export interface IVfsProvider {
   readFile(path: string, encoding?: string): Promise<string>;
   readFileBuffer(path: string): Promise<Buffer>;
   writeFile(path: string, content: string, encoding?: string): Promise<void>;
+  writeFileBuffer(path: string, content: Buffer): Promise<void>;
   exists(path: string): Promise<boolean>;
   stat(path: string): Promise<IFileStat>;
   readdir(path: string): Promise<string[]>;
@@ -67,6 +68,12 @@ export class UnifiedVfsRouter implements IVfsProvider {
   async writeFile(filePath: string, content: string, encoding: string = "utf-8"): Promise<void> {
     await measureLatency('file_write', () =>
       fs.writeFile(filePath, content, encoding as BufferEncoding)
+    );
+  }
+
+  async writeFileBuffer(filePath: string, content: Buffer): Promise<void> {
+    await measureLatency('file_write_buffer', () =>
+      fs.writeFile(filePath, content)
     );
   }
 

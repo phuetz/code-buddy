@@ -10,6 +10,11 @@ import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types
 import { validateApiKey } from '../auth/api-keys.js';
 import { verifyToken } from '../auth/jwt.js';
 
+// Agent interface for WebSocket handler
+// Note: These methods don't exist in CodeBuddyAgent - this is a placeholder for future API alignment
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AgentInstance = any;
+
 // Connection state
 interface ConnectionState {
   id: string;
@@ -18,21 +23,26 @@ interface ConnectionState {
   keyId?: string;
   scopes: string[];
   lastActivity: number;
-  agent?: any;
+  agent?: AgentInstance;
   streaming: boolean;
 }
 
 // Active connections
 const connections = new Map<WebSocket, ConnectionState>();
 
-// Message handlers
+// Message handlers - payload typed as unknown for flexibility
 type MessageHandler = (
   ws: WebSocket,
   state: ConnectionState,
-  payload: any
+  payload: unknown
 ) => Promise<void>;
 
 const messageHandlers = new Map<string, MessageHandler>();
+
+// Payload interfaces for type-safe access
+interface AuthPayload { token?: string; apiKey?: string }
+interface ChatPayload { message?: string; model?: string; stream?: boolean; sessionId?: string }
+interface ToolPayload { name?: string; parameters?: Record<string, unknown> }
 
 /**
  * Generate connection ID
@@ -66,7 +76,7 @@ function sendError(ws: WebSocket, code: string, message: string, id?: string): v
  * Handle authentication message
  */
 messageHandlers.set('authenticate', async (ws, state, payload) => {
-  const { token, apiKey } = payload;
+  const { token, apiKey } = payload as AuthPayload;
 
   if (apiKey) {
     const key = validateApiKey(apiKey);
@@ -84,7 +94,13 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   }
 
   if (token) {
-    const decoded = verifyToken(token, process.env.JWT_SECRET || 'codebuddy-secret');
+    // JWT_SECRET is required - if not set, authentication will fail (secure by default)
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      sendError(ws, 'CONFIG_ERROR', 'Server JWT configuration missing');
+      return;
+    }
+    const decoded = verifyToken(token, jwtSecret);
     if (decoded) {
       state.authenticated = true;
       state.userId = decoded.userId;
@@ -115,7 +131,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     return;
   }
 
-  const { message, model, stream = true, sessionId } = payload;
+  const { message, model, stream = true, sessionId } = payload as ChatPayload;
 
   if (!message) {
     sendError(ws, 'INVALID_REQUEST', 'Message is required');
@@ -182,9 +198,9 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         timestamp: new Date().toISOString(),
       });
     }
-  } catch (error: any) {
+  } catch (error) {
     state.streaming = false;
-    sendError(ws, 'CHAT_ERROR', error.message);
+    sendError(ws, 'CHAT_ERROR', error instanceof Error ? error.message : String(error));
   }
 });
 
@@ -215,7 +231,7 @@ messageHandlers.set('execute_tool', async (ws, state, payload) => {
     return;
   }
 
-  const { name, parameters } = payload;
+  const { name, parameters } = payload as ToolPayload;
 
   if (!name) {
     sendError(ws, 'INVALID_REQUEST', 'Tool name is required');
@@ -244,8 +260,8 @@ messageHandlers.set('execute_tool', async (ws, state, payload) => {
       },
       timestamp: new Date().toISOString(),
     });
-  } catch (error: any) {
-    sendError(ws, 'TOOL_ERROR', error.message);
+  } catch (error) {
+    sendError(ws, 'TOOL_ERROR', error instanceof Error ? error.message : String(error));
   }
 });
 
@@ -308,8 +324,8 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
 
   try {
     await handler(ws, state, payload || {});
-  } catch (error: any) {
-    sendError(ws, 'HANDLER_ERROR', error.message, id);
+  } catch (error) {
+    sendError(ws, 'HANDLER_ERROR', error instanceof Error ? error.message : String(error), id);
   }
 }
 

@@ -19,6 +19,17 @@ import {
 import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
+// Lazy-loaded library types
+// ============================================================================
+
+/**
+ * Type alias for optional xlsx library.
+ * Dynamically imported and may not be available at runtime.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type XLSXModule = any;
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -99,8 +110,7 @@ function formatCSV(data: unknown[][], delimiter: string = ','): string {
 // ============================================================================
 
 export class ExcelAgent extends SpecializedAgent {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private xlsx: any = null;
+  private xlsx: XLSXModule = null;
 
   constructor() {
     super(EXCEL_AGENT_CONFIG);

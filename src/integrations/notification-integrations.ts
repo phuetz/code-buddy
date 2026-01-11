@@ -169,7 +169,9 @@ export class NotificationManager extends EventEmitter {
 
     if (!this.batchTimer) {
       this.batchTimer = setTimeout(() => {
-        this.flushNotifications().catch(() => {});
+        this.flushNotifications().catch((err) => {
+          logger.debug('Failed to flush notifications', { error: err instanceof Error ? err.message : String(err) });
+        });
         this.batchTimer = null;
       }, this.config.batchInterval);
     }
@@ -462,7 +464,9 @@ export class NotificationManager extends EventEmitter {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;
     }
-    this.flushNotifications().catch(() => {});
+    this.flushNotifications().catch((err) => {
+      logger.debug('Failed to flush notifications on close', { error: err instanceof Error ? err.message : String(err) });
+    });
   }
 }
 

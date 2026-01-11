@@ -92,6 +92,8 @@ export {
 export {
   SettingsManager,
   getSettingsManager,
+} from "./settings-manager.js";
+export type {
   UserSettings,
   ProjectSettings,
 } from "./settings-manager.js";

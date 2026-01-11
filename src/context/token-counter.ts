@@ -1,24 +1,48 @@
-import { encoding_for_model, TiktokenModel, get_encoding } from 'tiktoken';
+/**
+ * Token Counter
+ * 
+ * Provides utilities for counting tokens in strings and messages.
+ * Uses tiktoken for accuracy, with character-based fallback for robustness.
+ */
+
+import { encoding_for_model, TiktokenModel, get_encoding, Tiktoken } from 'tiktoken';
 import { logger } from '../utils/logger.js';
 
+/**
+ * Simplified message structure for token counting.
+ */
 export interface TokenCounterMessage {
+  /** Role of the message (system, user, assistant, tool). */
   role: string;
+  /** Content of the message. Can be a string, null, or array of parts. */
   content: string | null | unknown[];
+  /** Optional tool calls within the message. */
   tool_calls?: unknown[];
 }
 
+/**
+ * Interface for token counting implementations.
+ */
 export interface TokenCounter {
+  /** Counts tokens in a plain text string. */
   countTokens(text: string): number;
+  /** Counts tokens in a list of conversation messages. */
   countMessageTokens(messages: TokenCounterMessage[]): number;
+  /** Estimates token count for a streaming chunk. */
   estimateStreamingTokens(chunk: string): number;
+  /** Releases resources used by the counter. */
   dispose(): void;
 }
 
 /**
- * Creates a token counter instance for a specific model
+ * Creates a token counter instance for a specific model.
+ * Automatically handles fallbacks if tiktoken or specific model encodings are unavailable.
+ * 
+ * @param model - The model name (e.g., 'gpt-4', 'gpt-3.5-turbo').
+ * @returns A TokenCounter implementation.
  */
 export function createTokenCounter(model: string = 'gpt-4'): TokenCounter {
-  let encoder: any;
+  let encoder: Tiktoken;
 
   try {
     // Try to get encoding for specific model
@@ -39,12 +63,12 @@ export function createTokenCounter(model: string = 'gpt-4'): TokenCounter {
 }
 
 /**
- * Token counter implementation using tiktoken
+ * Token counter implementation using the tiktoken library.
  */
 class TiktokenCounter implements TokenCounter {
-  private encoder: any;
+  private encoder: Tiktoken;
 
-  constructor(encoder: any) {
+  constructor(encoder: Tiktoken) {
     this.encoder = encoder;
   }
 
@@ -109,7 +133,8 @@ class TiktokenCounter implements TokenCounter {
 }
 
 /**
- * Fallback estimator when tiktoken is unavailable
+ * Fallback estimator when tiktoken is unavailable (e.g., in environments
+ * where WASM or the library cannot load).
  */
 class EstimatingTokenCounter implements TokenCounter {
   countTokens(text: string): number {

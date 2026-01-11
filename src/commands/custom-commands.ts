@@ -1,13 +1,24 @@
 import * as fs from "fs-extra";
 import * as path from "path";
 
+/**
+ * Represents a user-defined custom command loaded from a file.
+ */
 export interface CustomCommand {
+  /** The command name (without slash). */
   name: string;
+  /** Optional description of the command. */
   description?: string;
+  /** The command prompt content. */
   prompt: string;
+  /** Path to the defining file. */
   filePath: string;
 }
 
+/**
+ * Loads and manages custom commands from .codebuddy/commands directories.
+ * Scans both project-specific and global (user home) directories.
+ */
 export class CustomCommandLoader {
   private projectCommandsDir: string;
   private globalCommandsDir: string;
@@ -24,6 +35,9 @@ export class CustomCommandLoader {
     );
   }
 
+  /**
+   * Scans directories for command files if the cache is stale.
+   */
   private async scanCommands(): Promise<void> {
     const now = Date.now();
     if (now - this.lastScanTime < this.scanInterval) {
@@ -41,6 +55,11 @@ export class CustomCommandLoader {
     this.lastScanTime = now;
   }
 
+  /**
+   * Scans a specific directory for .md command files.
+   *
+   * @param dir - Directory path to scan.
+   */
   private async scanDirectory(dir: string): Promise<void> {
     if (!(await fs.pathExists(dir))) {
       return;
@@ -70,6 +89,14 @@ export class CustomCommandLoader {
     }
   }
 
+  /**
+   * Parses the content of a command file.
+   *
+   * @param name - Command name.
+   * @param content - File content.
+   * @param filePath - Path to file.
+   * @returns Parsed CustomCommand object.
+   */
   private parseCommandFile(
     name: string,
     content: string,
@@ -99,16 +126,34 @@ export class CustomCommandLoader {
     };
   }
 
+  /**
+   * Retrieves a command by name.
+   *
+   * @param name - Command name.
+   * @returns The custom command or null if not found.
+   */
   async getCommand(name: string): Promise<CustomCommand | null> {
     await this.scanCommands();
     return this.commandCache.get(name) || null;
   }
 
+  /**
+   * Retrieves all available custom commands.
+   *
+   * @returns Array of custom commands.
+   */
   async getAllCommands(): Promise<CustomCommand[]> {
     await this.scanCommands();
     return Array.from(this.commandCache.values());
   }
 
+  /**
+   * Expands a command prompt with provided arguments and environment variables.
+   *
+   * @param name - Command name.
+   * @param args - Arguments string.
+   * @returns The expanded prompt string or null if command not found.
+   */
   async expandCommand(name: string, args?: string): Promise<string | null> {
     const command = await this.getCommand(name);
     if (!command) {
@@ -171,6 +216,15 @@ export class CustomCommandLoader {
     return expandedPrompt;
   }
 
+  /**
+   * Creates a new custom command file.
+   *
+   * @param name - Command name.
+   * @param prompt - Command prompt content.
+   * @param description - Optional description.
+   * @param global - Whether to create in global directory (default: false).
+   * @returns Path to the created file.
+   */
   async createCommand(
     name: string,
     prompt: string,
@@ -196,6 +250,12 @@ export class CustomCommandLoader {
     return filePath;
   }
 
+  /**
+   * Deletes a custom command.
+   *
+   * @param name - Command name.
+   * @returns True if deleted, false if not found.
+   */
   async deleteCommand(name: string): Promise<boolean> {
     // Try project first, then global
     const projectPath = path.join(this.projectCommandsDir, `${name}.md`);
@@ -216,6 +276,11 @@ export class CustomCommandLoader {
     return false;
   }
 
+  /**
+   * Formats a list of commands for display.
+   *
+   * @returns Formatted string.
+   */
   formatCommandList(): string {
     if (this.commandCache.size === 0) {
       return "No custom commands found.\n\nCreate commands in:\n  Project: .codebuddy/commands/<name>.md\n  Global: ~/.codebuddy/commands/<name>.md";
@@ -238,6 +303,11 @@ export class CustomCommandLoader {
     return output;
   }
 
+  /**
+   * Returns help text explaining the custom command system.
+   *
+   * @returns Help text string.
+   */
   formatHelp(): string {
     return `
 Custom Commands System
@@ -286,6 +356,11 @@ Commands:
 // Singleton instance
 let customCommandLoaderInstance: CustomCommandLoader | null = null;
 
+/**
+ * Gets the singleton instance of CustomCommandLoader.
+ *
+ * @returns The singleton instance.
+ */
 export function getCustomCommandLoader(): CustomCommandLoader {
   if (!customCommandLoaderInstance) {
     customCommandLoaderInstance = new CustomCommandLoader();

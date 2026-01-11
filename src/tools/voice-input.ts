@@ -10,7 +10,7 @@
 
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
-import fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import os from 'os';
 
@@ -111,7 +111,7 @@ export async function recordAudio(
         });
       }
 
-      if (await fs.pathExists(tempFile)) {
+      if (await UnifiedVfsRouter.Instance.exists(tempFile)) {
         return tempFile;
       }
     } catch {
@@ -133,7 +133,8 @@ export async function transcribeWithWhisperAPI(
   const FormData = (await import('form-data')).default;
   const form = new FormData();
 
-  form.append('file', fs.createReadStream(audioPath));
+  const buffer = await UnifiedVfsRouter.Instance.readFileBuffer(audioPath);
+  form.append('file', buffer, { filename: path.basename(audioPath) });
   form.append('model', 'whisper-1');
   if (language) {
     form.append('language', language);
@@ -232,7 +233,7 @@ export async function getVoiceInput(config: VoiceConfig = {}): Promise<VoiceResu
     }
 
     // Clean up temp file
-    await fs.remove(audioPath);
+    await UnifiedVfsRouter.Instance.remove(audioPath);
 
     return {
       success: true,

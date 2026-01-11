@@ -1,5 +1,8 @@
 /**
- * Advanced Context Manager for LLM conversations
+ * Advanced Context Manager for LLM conversations (Primary)
+ *
+ * This is the main context manager used by all agents (CodeBuddyAgent, BaseAgent).
+ * For the server API routes, see context-manager-v3.ts.
  *
  * Implements multiple strategies based on research:
  * - Recurrent Context Compression (arxiv:2406.06110)

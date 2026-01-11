@@ -15,6 +15,7 @@ import type {
   CloudProvider,
   VersionInfo,
 } from './types.js';
+import { logger } from '../../utils/logger.js';
 
 // ============================================================================
 // Storage Interface
@@ -167,9 +168,13 @@ export class LocalStorage extends CloudStorage {
     const path = this.getLocalPath(key);
     try {
       await unlink(path);
-      await unlink(`${path}.meta`).catch(() => {}); // Ignore meta file errors
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') throw error;
+      await unlink(`${path}.meta`).catch((err) => {
+        // Meta file may not exist, log at trace level only
+        logger.debug('Meta file cleanup failed (may not exist)', { path: `${path}.meta`, error: err instanceof Error ? err.message : String(err) });
+      });
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : undefined;
+      if (code !== 'ENOENT') throw error;
     }
   }
 
@@ -181,8 +186,9 @@ export class LocalStorage extends CloudStorage {
 
     try {
       await this.listRecursive(basePath, prefix, objects, options.maxKeys || 1000);
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') throw error;
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : undefined;
+      if (code !== 'ENOENT') throw error;
     }
 
     return {

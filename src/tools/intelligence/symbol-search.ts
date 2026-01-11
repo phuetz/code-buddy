@@ -7,7 +7,7 @@
  * Inspired by hurry-mode's symbol search capabilities.
  */
 
-import * as fs from "fs";
+import { UnifiedVfsRouter } from "../../services/vfs/unified-vfs-router.js";
 import * as path from "path";
 import {
   CodeSymbol,
@@ -172,6 +172,7 @@ export class SymbolSearch {
   private index: SymbolIndex | null = null;
   private indexedPaths: Set<string> = new Set();
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
+  private vfs = UnifiedVfsRouter.Instance;
 
   private excludePatterns = [
     "node_modules",
@@ -379,7 +380,7 @@ export class SymbolSearch {
       if (filePath === symbol.filePath) continue;
 
       try {
-        const content = fs.readFileSync(filePath, "utf-8");
+        const content = await this.vfs.readFile(filePath, "utf-8");
         const lines = content.split("\n");
 
         // Simple text-based search for the symbol name
@@ -527,19 +528,19 @@ export class SymbolSearch {
   private async discoverFiles(rootPath: string): Promise<string[]> {
     const files: string[] = [];
 
-    const walk = (dir: string) => {
+    const walk = async (dir: string) => {
       try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        const entries = await this.vfs.readDirectory(dir);
 
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
 
           // Skip excluded directories
-          if (entry.isDirectory()) {
+          if (entry.isDirectory) {
             if (!this.excludePatterns.some((p) => entry.name.includes(p))) {
-              walk(fullPath);
+              await walk(fullPath);
             }
-          } else if (entry.isFile()) {
+          } else if (entry.isFile) {
             const ext = path.extname(entry.name).toLowerCase();
             if (this.includeExtensions.includes(ext)) {
               files.push(fullPath);
@@ -551,7 +552,7 @@ export class SymbolSearch {
       }
     };
 
-    walk(rootPath);
+    await walk(rootPath);
     return files;
   }
 

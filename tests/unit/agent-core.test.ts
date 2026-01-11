@@ -1134,13 +1134,30 @@ describe("Agent Core Module Tests", () => {
         agent.setSessionCostLimit(0.0001);
         mockCalculateCost.mockReturnValue(0.001);
 
-        // First call to set up cost
+        // Mock a response with tool calls to trigger cost tracking
+        mockChatStreamResponse.mockImplementationOnce(async function* () {
+          yield { choices: [{ delta: { content: "Let me check that" } }] };
+          yield {
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  id: "call_1",
+                  type: "function",
+                  function: { name: "view_file", arguments: '{"path": "/a.ts"}' }
+                }]
+              }
+            }]
+          };
+        });
+
+        // First call with tool to set up cost
         const chunks1: StreamingChunk[] = [];
         for await (const chunk of agent.processUserMessageStream("Hello")) {
           chunks1.push(chunk);
         }
 
-        // Second call should yield cost warning
+        // Second call should yield cost warning (cost already exceeded from first call)
         const chunks2: StreamingChunk[] = [];
         for await (const chunk of agent.processUserMessageStream("Hello again")) {
           chunks2.push(chunk);

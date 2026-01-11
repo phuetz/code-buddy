@@ -8,7 +8,7 @@
 import { EventEmitter } from 'events';
 import { CodeBuddyClient, CodeBuddyMessage } from '../codebuddy/client.js';
 import { BashTool } from './bash.js';
-import fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 
 export interface ReviewIssue {
@@ -130,6 +130,7 @@ export class CodeReviewTool extends EventEmitter {
   private client: CodeBuddyClient | null = null;
   private bash: BashTool;
   private issueIdCounter: number = 0;
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(config: Partial<ReviewConfig> = {}) {
     super();
@@ -218,9 +219,9 @@ export class CodeReviewTool extends EventEmitter {
 
     for (const filePath of filePaths) {
       if (this.shouldExclude(filePath)) continue;
-      if (!await fs.pathExists(filePath)) continue;
+      if (!await this.vfs.exists(filePath)) continue;
 
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await this.vfs.readFile(filePath, 'utf-8');
       files.push(filePath);
 
       this.emit('review:file', { file: filePath });
@@ -367,8 +368,8 @@ Provide your analysis in JSON format as specified.`;
       // Get full file content
       let content = '';
       try {
-        if (await fs.pathExists(filePath)) {
-          content = await fs.readFile(filePath, 'utf-8');
+        if (await this.vfs.exists(filePath)) {
+          content = await this.vfs.readFile(filePath, 'utf-8');
         }
       } catch {
         // File might be deleted

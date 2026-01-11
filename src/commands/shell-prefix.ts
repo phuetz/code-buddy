@@ -12,30 +12,51 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+/**
+ * Result of a shell command execution.
+ */
 export interface ShellResult {
+  /** Whether the command succeeded (exit code 0). */
   success: boolean;
+  /** Standard output content. */
   stdout: string;
+  /** Standard error content. */
   stderr: string;
+  /** Command exit code. */
   exitCode: number;
+  /** Execution duration in milliseconds. */
   duration: number;
 }
 
 /**
- * Check if input is a shell command (starts with !)
+ * Checks if input is a shell command (starts with !).
+ *
+ * @param input - The user input string.
+ * @returns True if it's a shell command.
  */
 export function isShellCommand(input: string): boolean {
   return input.trim().startsWith('!');
 }
 
 /**
- * Extract command from shell prefix input
+ * Extracts the command string from shell prefix input.
+ * Removes the '!' prefix and trims whitespace.
+ *
+ * @param input - The user input (e.g., "!ls").
+ * @returns The command to execute (e.g., "ls").
  */
 export function extractCommand(input: string): string {
   return input.trim().slice(1).trim();
 }
 
 /**
- * Execute a shell command directly
+ * Executes a shell command directly.
+ * Captures stdout and stderr.
+ *
+ * @param command - The shell command to execute.
+ * @param cwd - Working directory (defaults to process.cwd()).
+ * @param timeout - Timeout in milliseconds (default: 30000).
+ * @returns Promise resolving to ShellResult.
  */
 export async function executeShellCommand(
   command: string,
@@ -83,7 +104,12 @@ export async function executeShellCommand(
 }
 
 /**
- * Execute an interactive shell command (for commands like vim, top, etc.)
+ * Executes an interactive shell command (for commands like vim, top, etc.).
+ * Spawns a child process inheriting stdio.
+ *
+ * @param command - The command to execute.
+ * @param cwd - Working directory.
+ * @returns Promise resolving to exit code.
  */
 export function executeInteractiveCommand(
   command: string,
@@ -107,7 +133,12 @@ export function executeInteractiveCommand(
 }
 
 /**
- * Format shell result for display
+ * Formats shell execution result for display.
+ * Includes command, output, error, exit code, and duration.
+ *
+ * @param command - The executed command.
+ * @param result - The execution result.
+ * @returns Formatted string.
  */
 export function formatShellResult(command: string, result: ShellResult): string {
   const lines: string[] = [];
@@ -119,20 +150,27 @@ export function formatShellResult(command: string, result: ShellResult): string 
   }
 
   if (result.stderr && !result.success) {
-    lines.push(`\nError: ${result.stderr.trimEnd()}`);
+    lines.push(`
+Error: ${result.stderr.trimEnd()}`);
   }
 
   if (!result.success) {
-    lines.push(`\nExit code: ${result.exitCode}`);
+    lines.push(`
+Exit code: ${result.exitCode}`);
   }
 
-  lines.push(`\n(${result.duration}ms)`);
+  lines.push(`
+(${result.duration}ms)`);
 
   return lines.join('\n');
 }
 
 /**
- * Check if command is interactive (needs PTY)
+ * Checks if a command is interactive (needs PTY/inherit stdio).
+ * Includes common interactive tools like editors, pagers, etc.
+ *
+ * @param command - The command to check.
+ * @returns True if the command is known to be interactive.
  */
 export function isInteractiveCommand(command: string): boolean {
   const interactiveCommands = [

@@ -9,7 +9,7 @@
  * - Unreachable code
  */
 
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 import fg from 'fast-glob';
 
@@ -107,7 +107,7 @@ export async function detectDeadCode(options: Partial<DeadCodeOptions> = {}): Pr
 
   // First pass: collect all exports and identifiers
   for (const file of files) {
-    const content = await fs.readFile(file, 'utf-8');
+    const content = await UnifiedVfsRouter.Instance.readFile(file, 'utf-8');
     const lines = content.split('\n');
 
     // Collect exports
@@ -162,7 +162,7 @@ export async function detectDeadCode(options: Partial<DeadCodeOptions> = {}): Pr
   // Check for unused imports in each file
   if (opts.checkImports) {
     for (const file of files) {
-      const content = await fs.readFile(file, 'utf-8');
+      const content = await UnifiedVfsRouter.Instance.readFile(file, 'utf-8');
       const fileIssues = checkUnusedImports(file, content);
       issues.push(...fileIssues.filter(i => shouldReport(i.confidence, opts.minConfidence)));
     }

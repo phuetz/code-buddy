@@ -7,7 +7,7 @@
  * Inspired by hurry-mode's operation history capabilities.
  */
 
-import * as fs from "fs";
+import { UnifiedVfsRouter } from '../../services/vfs/unified-vfs-router.js';
 import * as path from "path";
 import * as os from "os";
 import { logger } from "../../utils/logger.js";
@@ -29,29 +29,33 @@ export class OperationHistory {
   private history: HistoryEntry[] = [];
   private currentPosition: number = -1;
   private persistPath: string;
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(config: Partial<HistoryConfig> = {}) {
     this.config = { ...DEFAULT_HISTORY_CONFIG, ...config };
     this.persistPath = this.config.persistPath.replace("~", os.homedir());
+  }
 
+  /**
+   * Initialize history (load from disk)
+   */
+  async initialize(): Promise<void> {
     // Ensure directory exists
     const dir = path.dirname(this.persistPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    await this.vfs.ensureDir(dir);
 
     // Load existing history
-    this.load();
+    await this.load();
   }
 
   /**
    * Record a new operation
    */
-  record(
+  async record(
     description: string,
     operations: FileOperation[],
     rollbackData: RollbackData[]
-  ): string {
+  ): Promise<string> {
     // Remove any entries after current position (for redo)
     if (this.currentPosition < this.history.length - 1) {
       this.history = this.history.slice(0, this.currentPosition + 1);
@@ -74,7 +78,7 @@ export class OperationHistory {
     this.enforceMaxEntries();
 
     // Persist
-    this.save();
+    await this.save();
 
     return entry.id;
   }
@@ -82,10 +86,10 @@ export class OperationHistory {
   /**
    * Record a file snapshot before modification
    */
-  recordSnapshot(filePath: string): FileSnapshot | null {
+  async recordSnapshot(filePath: string): Promise<FileSnapshot | null> {
     // Check file size
     try {
-      const stats = fs.statSync(filePath);
+      const stats = await this.vfs.stat(filePath);
       if (stats.size > this.config.maxFileSize) {
         return null; // Too large to snapshot
       }
@@ -103,9 +107,9 @@ export class OperationHistory {
 
       return {
         filePath,
-        content: fs.readFileSync(filePath, "utf-8"),
+        content: await this.vfs.readFile(filePath, "utf-8"),
         exists: true,
-        modifiedAt: stats.mtimeMs,
+        modifiedAt: stats.mtime.getTime(),
       };
     } catch {
       return {
@@ -137,7 +141,7 @@ export class OperationHistory {
       }
 
       this.currentPosition--;
-      this.save();
+      await this.save();
 
       return { success: true, entry };
     } catch (error) {
@@ -162,7 +166,7 @@ export class OperationHistory {
       }
 
       this.currentPosition++;
-      this.save();
+      await this.save();
 
       return { success: true, entry };
     } catch (error) {
@@ -248,10 +252,10 @@ export class OperationHistory {
   /**
    * Clear all history
    */
-  clear(): void {
+  async clear(): Promise<void> {
     this.history = [];
     this.currentPosition = -1;
-    this.save();
+    await this.save();
   }
 
   /**
@@ -262,22 +266,20 @@ export class OperationHistory {
       if (rollback.originalContent !== undefined) {
         // Ensure directory exists
         const dir = path.dirname(rollback.filePath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(rollback.filePath, rollback.originalContent);
+        await this.vfs.ensureDir(dir);
+        await this.vfs.writeFile(rollback.filePath, rollback.originalContent);
       }
     } else {
       // File didn't exist before, delete it
-      if (fs.existsSync(rollback.filePath)) {
-        fs.unlinkSync(rollback.filePath);
+      if (await this.vfs.exists(rollback.filePath)) {
+        await this.vfs.remove(rollback.filePath);
       }
     }
 
     // Handle renames
     if (rollback.originalPath && rollback.originalPath !== rollback.filePath) {
-      if (fs.existsSync(rollback.filePath)) {
-        fs.renameSync(rollback.filePath, rollback.originalPath);
+      if (await this.vfs.exists(rollback.filePath)) {
+        await this.vfs.rename(rollback.filePath, rollback.originalPath);
       }
     }
   }
@@ -289,15 +291,13 @@ export class OperationHistory {
     switch (op.type) {
       case "create":
         const dir = path.dirname(op.filePath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(op.filePath, op.content || "");
+        await this.vfs.ensureDir(dir);
+        await this.vfs.writeFile(op.filePath, op.content || "");
         break;
 
       case "edit":
         if (op.edits) {
-          let content = fs.readFileSync(op.filePath, "utf-8");
+          let content = await this.vfs.readFile(op.filePath, "utf-8");
           for (const edit of op.edits) {
             if (edit.type === "replace" && edit.oldText) {
               content = content.replace(edit.oldText, edit.newText);
@@ -311,13 +311,13 @@ export class OperationHistory {
               content = lines.join("\n");
             }
           }
-          fs.writeFileSync(op.filePath, content);
+          await this.vfs.writeFile(op.filePath, content);
         }
         break;
 
       case "delete":
-        if (fs.existsSync(op.filePath)) {
-          fs.unlinkSync(op.filePath);
+        if (await this.vfs.exists(op.filePath)) {
+          await this.vfs.remove(op.filePath);
         }
         break;
 
@@ -325,10 +325,8 @@ export class OperationHistory {
       case "move":
         if (op.newPath) {
           const targetDir = path.dirname(op.newPath);
-          if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir, { recursive: true });
-          }
-          fs.renameSync(op.filePath, op.newPath);
+          await this.vfs.ensureDir(targetDir);
+          await this.vfs.rename(op.filePath, op.newPath);
         }
         break;
     }
@@ -359,14 +357,14 @@ export class OperationHistory {
   /**
    * Save history to disk
    */
-  private save(): void {
+  private async save(): Promise<void> {
     try {
       const data = {
         version: 1,
         currentPosition: this.currentPosition,
         history: this.history,
       };
-      fs.writeFileSync(this.persistPath, JSON.stringify(data, null, 2));
+      await this.vfs.writeFile(this.persistPath, JSON.stringify(data, null, 2));
     } catch (error) {
       logger.error("Failed to save operation history", { error });
     }
@@ -375,10 +373,11 @@ export class OperationHistory {
   /**
    * Load history from disk
    */
-  private load(): void {
+  private async load(): Promise<void> {
     try {
-      if (fs.existsSync(this.persistPath)) {
-        const data = JSON.parse(fs.readFileSync(this.persistPath, "utf-8"));
+      if (await this.vfs.exists(this.persistPath)) {
+        const content = await this.vfs.readFile(this.persistPath, "utf-8");
+        const data = JSON.parse(content);
         if (data.version === 1) {
           this.history = data.history || [];
           this.currentPosition = data.currentPosition ?? -1;

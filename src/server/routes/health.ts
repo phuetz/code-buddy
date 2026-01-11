@@ -274,11 +274,11 @@ router.get(
         status: response.ok ? 'healthy' : 'degraded',
         latency: Date.now() - grokStart,
       };
-    } catch (error: any) {
+    } catch (error) {
       checks.grokApi = {
         status: 'unhealthy',
         latency: Date.now() - grokStart,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
 

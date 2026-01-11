@@ -19,6 +19,7 @@ import { logger } from "../utils/logger.js";
 
 import { getToolRegistry } from "../tools/registry.js";
 import { TOOL_METADATA } from "../tools/metadata.js";
+import { getPluginMarketplace } from "../plugins/marketplace.js";
 
 // Import modular tool definitions
 import {
@@ -31,6 +32,18 @@ import {
   ADVANCED_TOOLS,
   MULTIMODAL_TOOLS,
 } from "./tool-definitions/index.js";
+
+/**
+ * Plugin tool definition interface
+ */
+export interface PluginToolDefinition {
+  description: string;
+  parameters?: {
+    type: "object";
+    properties: Record<string, JsonSchemaProperty>;
+    required?: string[];
+  };
+}
 
 // Re-export types and individual tools for backwards compatibility
 export type { CodeBuddyTool, JsonSchemaProperty };
@@ -194,6 +207,44 @@ export function addMCPToolsToCodeBuddyTools(baseTools: CodeBuddyTool[]): CodeBud
   return [...baseTools, ...codebuddyMCPTools];
 }
 
+/**
+ * Convert a plugin tool definition to CodeBuddy format
+ */
+export function convertPluginToolToCodeBuddyTool(name: string, tool: PluginToolDefinition): CodeBuddyTool {
+  return {
+    type: "function",
+    function: {
+      name: `plugin__${name}`,
+      description: tool.description,
+      parameters: {
+        type: "object",
+        properties: tool.parameters?.properties || {},
+        required: tool.parameters?.required || []
+      }
+    }
+  };
+}
+
+/**
+ * Collect all tools from the plugin marketplace
+ */
+export function addPluginToolsToCodeBuddyTools(baseTools: CodeBuddyTool[]): CodeBuddyTool[] {
+  const marketplace = getPluginMarketplace();
+  const pluginTools = marketplace.getTools();
+  
+  const convertedTools = pluginTools.map(name => {
+    // This is a bit hacky as we need the tool definition from the marketplace
+    // In a real implementation, marketplace would return the definitions
+    const toolDef = (marketplace as any).tools.get(name)?.tool;
+    if (toolDef) {
+      return convertPluginToolToCodeBuddyTool(name, toolDef);
+    }
+    return null;
+  }).filter((t): t is CodeBuddyTool => t !== null);
+
+  return [...baseTools, ...convertedTools];
+}
+
 export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
   // Ensure registry is initialized with built-in tools
   initializeToolRegistry();
@@ -210,13 +261,14 @@ export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
   const registry = getToolRegistry();
   const builtInTools = registry.getEnabledTools();
   
-  const allTools = addMCPToolsToCodeBuddyTools(builtInTools);
+  let allTools = addMCPToolsToCodeBuddyTools(builtInTools);
+  allTools = addPluginToolsToCodeBuddyTools(allTools);
 
-  // Register MCP tools in the tool selector for better RAG matching
+  // Register MCP and Plugin tools in the tool selector for better RAG matching
   const selector = getToolSelector();
   for (const tool of allTools) {
-    if (tool.function.name.startsWith('mcp__')) {
-      selector.registerMCPTool(tool);
+    if (tool.function.name.startsWith('mcp__') || tool.function.name.startsWith('plugin__')) {
+      selector.registerMCPTool(tool); // Reusing registerMCPTool for external tools
     }
   }
 

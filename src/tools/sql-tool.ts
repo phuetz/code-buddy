@@ -6,8 +6,34 @@
  */
 
 import * as path from 'path';
+import * as os from 'os';
 import type { ToolResult } from '../types/index.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
+import { logger } from '../utils/logger.js';
+
+// Blocked paths for security
+const BLOCKED_PATHS = [
+  '/etc',
+  '/var',
+  '/usr',
+  '/bin',
+  '/sbin',
+  '/root',
+  '/System',
+  '/Library',
+  'C:\\Windows',
+  'C:\\Program Files',
+];
+
+// Sensitive directories in home that should be blocked
+const BLOCKED_HOME_DIRS = [
+  '.ssh',
+  '.gnupg',
+  '.aws',
+  '.kube',
+  '.docker',
+  '.config/gcloud',
+];
 
 // ============================================================================
 // Types
@@ -20,6 +46,23 @@ interface SQLParams {
   table?: string;
   params?: unknown[];
 }
+
+/**
+ * Minimal type definitions for better-sqlite3
+ * (avoids dependency on @types/better-sqlite3)
+ */
+interface BetterSqlite3Statement {
+  all(...params: unknown[]): unknown[];
+  get(...params: unknown[]): unknown;
+  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
+}
+
+interface BetterSqlite3Database {
+  prepare(sql: string): BetterSqlite3Statement;
+  close(): void;
+}
+
+type BetterSqlite3Constructor = new (filename: string, options?: { readonly?: boolean }) => BetterSqlite3Database;
 
 // ============================================================================
 // SQL Tool
@@ -60,29 +103,75 @@ export class SQLTool {
   };
 
   /**
+   * Validate that the database path is safe (no path traversal attacks)
+   */
+  private validateDatabasePath(dbPath: string): { valid: boolean; error?: string } {
+    const resolvedPath = path.resolve(dbPath);
+    const cwd = process.cwd();
+    const homeDir = os.homedir();
+
+    // Check for path traversal (resolved path should be within cwd or explicitly allowed)
+    const relativeToCwd = path.relative(cwd, resolvedPath);
+    const isWithinCwd = !relativeToCwd.startsWith('..') && !path.isAbsolute(relativeToCwd);
+
+    // Check blocked system paths
+    for (const blocked of BLOCKED_PATHS) {
+      if (resolvedPath.toLowerCase().startsWith(blocked.toLowerCase())) {
+        logger.warn('SQL tool: blocked access to system path', { path: resolvedPath, blocked });
+        return { valid: false, error: `Access denied: cannot access system path ${blocked}` };
+      }
+    }
+
+    // Check blocked home directories
+    for (const blockedDir of BLOCKED_HOME_DIRS) {
+      const blockedPath = path.join(homeDir, blockedDir);
+      if (resolvedPath.startsWith(blockedPath)) {
+        logger.warn('SQL tool: blocked access to sensitive home directory', { path: resolvedPath, blockedDir });
+        return { valid: false, error: `Access denied: cannot access sensitive directory ~/${blockedDir}` };
+      }
+    }
+
+    // If path escapes cwd, warn but still allow if it's a .db or .sqlite file
+    // This allows accessing databases in other project directories
+    if (!isWithinCwd) {
+      const ext = path.extname(resolvedPath).toLowerCase();
+      if (ext !== '.db' && ext !== '.sqlite' && ext !== '.sqlite3') {
+        logger.warn('SQL tool: path outside cwd with non-database extension', { path: resolvedPath, ext });
+        return { valid: false, error: `Access denied: database file must have .db, .sqlite, or .sqlite3 extension when outside project directory` };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  /**
    * Execute SQL operation
    */
   async execute(params: SQLParams): Promise<ToolResult> {
     try {
       const { action, database } = params;
 
-      // Validate database path
+      // Validate database path for path traversal attacks
       const dbPath = path.resolve(database);
+      const pathValidation = this.validateDatabasePath(database);
+      if (!pathValidation.valid) {
+        return { success: false, error: pathValidation.error };
+      }
+
       if (!await this.vfs.exists(dbPath)) {
         return { success: false, error: `Database not found: ${dbPath}` };
       }
 
       // Dynamically import better-sqlite3
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let Database: any;
+      let Database: BetterSqlite3Constructor;
       try {
-        const sqliteModule = await import('better-sqlite3');
-        Database = sqliteModule.default || sqliteModule;
+        const { default: DatabaseConstructor } = await import('better-sqlite3');
+        Database = DatabaseConstructor as BetterSqlite3Constructor;
       } catch {
         return { success: false, error: 'SQLite driver not available. Install better-sqlite3.' };
       }
 
-      const db = Database(dbPath, { readonly: action !== 'execute' });
+      const db: BetterSqlite3Database = new Database(dbPath, { readonly: action !== 'execute' });
 
       try {
         switch (action) {
@@ -113,8 +202,7 @@ export class SQLTool {
   /**
    * List all tables
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private listTables(db: any): ToolResult {
+  private listTables(db: BetterSqlite3Database): ToolResult {
     const tables = db.prepare(`
       SELECT name, type
       FROM sqlite_master
@@ -135,8 +223,7 @@ export class SQLTool {
   /**
    * Get full schema
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private getSchema(db: any): ToolResult {
+  private getSchema(db: BetterSqlite3Database): ToolResult {
     const objects = db.prepare(`
       SELECT name, type, sql
       FROM sqlite_master
@@ -160,8 +247,7 @@ export class SQLTool {
   /**
    * Describe a specific table
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private describeTable(db: any, table: string): ToolResult {
+  private describeTable(db: BetterSqlite3Database, table: string): ToolResult {
     if (!table) {
       return { success: false, error: 'Table name required' };
     }
@@ -233,8 +319,7 @@ export class SQLTool {
   /**
    * Run SELECT query
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private runQuery(db: any, query: string, params?: unknown[]): ToolResult {
+  private runQuery(db: BetterSqlite3Database, query: string, params?: unknown[]): ToolResult {
     if (!query) {
       return { success: false, error: 'Query required' };
     }
@@ -288,8 +373,7 @@ export class SQLTool {
   /**
    * Execute modification statement (INSERT, UPDATE, DELETE)
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private executeStatement(db: any, query: string, params?: unknown[]): ToolResult {
+  private executeStatement(db: BetterSqlite3Database, query: string, params?: unknown[]): ToolResult {
     if (!query) {
       return { success: false, error: 'Query required' };
     }

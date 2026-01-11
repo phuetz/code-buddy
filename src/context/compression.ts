@@ -1,22 +1,47 @@
+/**
+ * Context Compression
+ * 
+ * Provides various strategies to reduce the token count of a conversation
+ * while maintaining its coherence and essential instructions.
+ */
+
 import { CodeBuddyMessage } from '../codebuddy/client.js';
 import { TokenCounter } from './token-counter.js';
 import { CompressionResult } from './types.js';
 
+/**
+ * Options to control the compression process.
+ */
 export interface CompressionOptions {
+  /** Target ratio to compress the older parts of the conversation. */
   targetRatio?: number;
+  /** Whether to ensure the system prompt is never removed. */
   preserveSystemPrompt?: boolean;
+  /** Number of most recent messages to protect from any compression. */
   preserveRecentMessages?: number;
 }
 
 /**
- * Context Compression Engine
- * Implements sophisticated compression strategies
+ * Context Compression Engine.
+ * Implements a multi-stage approach to context reduction:
+ * 1. Tool Truncation: Shortens long tool outputs (logs, file contents).
+ * 2. Sliding Window: Removes the oldest non-system messages.
+ * 3. Hard Truncation: Emergency strategy to force-fit into the limit.
  */
 export class ContextCompressor {
+  /**
+   * Creates a new ContextCompressor.
+   * @param tokenCounter - Implementation used to measure the impact of compression.
+   */
   constructor(private tokenCounter: TokenCounter) {}
 
   /**
-   * Compress messages to meet token target
+   * Compresses a list of messages to fit within a specific token limit.
+   * 
+   * @param messages - The messages to compress.
+   * @param tokenLimit - The maximum allowed tokens.
+   * @param options - Compression constraints.
+   * @returns A result object containing the new message list and compression stats.
    */
   compress(
     messages: CodeBuddyMessage[], 
@@ -68,23 +93,26 @@ export class ContextCompressor {
       };
     }
 
-    // Strategy 2: Summarize older conversation
-    // In a real implementation, this would call an LLM. Here we simulate/use heuristic summarization.
-    // For now, we'll use a sliding window approach which is a form of lossy compression/summarization
-    // by dropping middle messages.
-    
-    // Strategy 3: Sliding Window (Aggressive)
-    // Keep removing oldest messages from 'olderMessages' until we fit
-    while (olderMessages.length > 0 && currentTokens > tokenLimit) {
-      olderMessages.shift(); // Remove oldest
-      
+    // Strategy 2: Sliding Window (Aggressive) - O(n) optimization
+    // Pre-calculate token counts for older messages to enable O(1) updates
+    // Instead of rebuilding array and recounting on each iteration
+    const olderMessageTokens = olderMessages.map(msg => this.countSingleMessageTokens(msg));
+    let olderStartIndex = 0;
+
+    while (olderStartIndex < olderMessages.length && currentTokens > tokenLimit) {
+      // Subtract tokens of removed message instead of recounting all
+      currentTokens -= olderMessageTokens[olderStartIndex];
+      olderStartIndex++;
+    }
+
+    // Build final array only once after we know which messages to keep
+    if (olderStartIndex > 0) {
+      olderMessages = olderMessages.slice(olderStartIndex);
       currentSet = [];
       if (systemMessage) {
         currentSet.push(systemMessage as CodeBuddyMessage);
       }
       currentSet.push(...olderMessages, ...recentMessages);
-      
-      currentTokens = this.countTotalTokens(currentSet);
     }
 
     // If still over limit (extreme case where recent messages are huge), truncate recent messages content
@@ -106,6 +134,9 @@ export class ContextCompressor {
     };
   }
 
+  /**
+   * Helper to count tokens for a list of messages.
+   */
   private countTotalTokens(messages: CodeBuddyMessage[]): number {
     const tokenMessages = messages.map(msg => ({
       role: msg.role,
@@ -115,6 +146,20 @@ export class ContextCompressor {
     return this.tokenCounter.countMessageTokens(tokenMessages);
   }
 
+  /**
+   * Helper to count tokens for a single message (for incremental calculations).
+   */
+  private countSingleMessageTokens(msg: CodeBuddyMessage): number {
+    return this.tokenCounter.countMessageTokens([{
+      role: msg.role,
+      content: typeof msg.content === 'string' ? msg.content : null,
+      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
+    }]);
+  }
+
+  /**
+   * Strategy: Truncate long content from tool messages.
+   */
   private truncateToolOutputs(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
     const MAX_TOOL_OUTPUT = 500;
     return messages.map(msg => {
@@ -128,6 +173,10 @@ export class ContextCompressor {
     });
   }
 
+  /**
+   * Emergency strategy: remove messages from the middle/end until limit is met.
+   * Prioritizes keeping the system prompt and the very latest messages.
+   */
   private hardTruncate(messages: CodeBuddyMessage[], limit: number): CodeBuddyMessage[] {
     // Basic implementation: just return what fits, priority to system then recent
     // This is a "save the ship" strategy

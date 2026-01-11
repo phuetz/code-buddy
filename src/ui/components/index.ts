@@ -5,15 +5,15 @@
  */
 
 // Core components
-export { default as ChatInterface } from "./chat-interface.js";
-export { ChatInput } from "./chat-input.js";
-export { ChatHistory } from "./chat-history.js";
-export { default as ConfirmationDialog } from "./confirmation-dialog.js";
-export { LoadingSpinner } from "./loading-spinner.js";
-export { DiffRenderer } from "./diff-renderer.js";
-export { default as ApiKeyInput } from "./api-key-input.js";
-export { ModelSelection } from "./model-selection.js";
-export { CommandSuggestions } from "./command-suggestions.js";
+export { default as ChatInterface } from "./ChatInterface.js";
+export { ChatInput } from "./ChatInput.js";
+export { ChatHistory } from "./ChatHistory.js";
+export { default as ConfirmationDialog } from "./ConfirmationDialog.js";
+export { LoadingSpinner } from "./LoadingSpinner.js";
+export { DiffRenderer } from "./DiffRenderer.js";
+export { default as ApiKeyInput } from "./ApiKeyInput.js";
+export { ModelSelection } from "./ModelSelection.js";
+export { CommandSuggestions } from "./CommandSuggestions.js";
 
 // Enhanced components
 export {
@@ -21,23 +21,23 @@ export {
   useStepProgress,
   type ProgressStep,
   type StepStatus,
-} from "./multi-step-progress.js";
+} from "./MultiStepProgress.js";
 
 export {
   FuzzyPicker,
   MultiSelectPicker,
   type PickerItem,
-} from "./fuzzy-picker.js";
+} from "./FuzzyPicker.js";
 
 export {
   EnhancedConfirmationDialog,
   type OperationType,
-} from "./enhanced-confirmation-dialog.js";
+} from "./EnhancedConfirmationDialog.js";
 
 export {
   EnhancedChatInput,
   useInputHistory,
-} from "./enhanced-chat-input.js";
+} from "./EnhancedChatInput.js";
 
 export {
   HelpSystem,
@@ -46,7 +46,7 @@ export {
   type CommandCategory,
   type CommandHelp,
   type KeyboardShortcut,
-} from "./help-system.js";
+} from "./HelpSystem.js";
 
 // Accessibility components
 export {
@@ -63,7 +63,7 @@ export {
   AccessibleTable,
   AccessibleCodeBlock,
   Divider,
-} from "./accessible-output.js";
+} from "./AccessibleOutput.js";
 
 // Progress and spinners
 export {
@@ -78,10 +78,10 @@ export {
   Badge,
   Divider as DividerLine,
   type SpinnerStyle,
-} from "./enhanced-spinners.js";
+} from "./EnhancedSpinners.js";
 
 // Error handling
-export { ErrorBoundary, StreamingErrorBoundary } from "./error-boundary.js";
+export { ErrorBoundary, StreamingErrorBoundary } from "./ErrorBoundary.js";
 
 // Markdown rendering
 export { MarkdownRenderer } from "../utils/markdown-renderer.js";
@@ -90,7 +90,7 @@ export { MarkdownRenderer } from "../utils/markdown-renderer.js";
 export {
   StatusBar,
   MiniStatusBar,
-} from "./status-bar.js";
+} from "./StatusBar.js";
 
 // Notifications
 export {
@@ -100,14 +100,14 @@ export {
   useToastManager,
   type Toast,
   type ToastType,
-} from "./toast-notifications.js";
+} from "./ToastNotifications.js";
 
 // Keyboard help
 export {
   KeyboardHelp,
   useKeyboardHelp,
   KeyboardHelpButton,
-} from "./keyboard-help.js";
+} from "./KeyboardHelp.js";
 
 // Enhanced tool results
 export {
@@ -115,4 +115,4 @@ export {
   ToolResultsList,
   ToolExecutionSummary,
   type ToolResultData,
-} from "./enhanced-tool-results.js";
+} from "./EnhancedToolResults.js";

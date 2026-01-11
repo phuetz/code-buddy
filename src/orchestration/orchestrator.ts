@@ -487,12 +487,13 @@ export class Orchestrator extends EventEmitter {
       instance.completedAt = new Date();
       this.emit('workflow_completed', { type: 'workflow_completed', instanceId, output });
       this.log('info', `Workflow completed: ${instanceId}`);
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       instance.status = 'failed';
-      instance.error = error.message;
+      instance.error = errorMessage;
       instance.completedAt = new Date();
-      this.emit('workflow_failed', { type: 'workflow_failed', instanceId, error: error.message });
-      this.log('error', `Workflow failed: ${instanceId} - ${error.message}`);
+      this.emit('workflow_failed', { type: 'workflow_failed', instanceId, error: errorMessage });
+      this.log('error', `Workflow failed: ${instanceId} - ${errorMessage}`);
     }
 
     return instance;

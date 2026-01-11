@@ -7,17 +7,29 @@
 
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 
+/**
+ * Result of a context compression operation.
+ */
 export interface CompressResult {
+  /** Whether compression was performed. */
   success: boolean;
+  /** Number of tokens before compression. */
   originalTokens: number;
+  /** Number of tokens after compression. */
   compressedTokens: number;
+  /** Number of tokens saved. */
   savedTokens: number;
+  /** Percentage of tokens saved. */
   savingsPercent: number;
+  /** The generated summary of the conversation. */
   summary: string;
 }
 
 /**
- * Generate a summary prompt for the LLM
+ * Generates a prompt for the LLM to summarize the conversation.
+ *
+ * @param messages - The conversation history.
+ * @returns The prompt string.
  */
 function buildSummaryPrompt(messages: ChatCompletionMessageParam[]): string {
   // Filter out system message and format conversation
@@ -55,7 +67,12 @@ Provide a structured summary in this format:
 }
 
 /**
- * Compress messages by summarizing the conversation
+ * Compresses messages by summarizing the conversation using an LLM.
+ *
+ * @param messages - The conversation history to compress.
+ * @param llmCall - Function to call the LLM for summarization.
+ * @param estimateTokens - Function to estimate token count.
+ * @returns Promise resolving to compression result.
  */
 export async function compressContext(
   messages: ChatCompletionMessageParam[],
@@ -100,7 +117,12 @@ export async function compressContext(
 }
 
 /**
- * Create compressed messages array
+ * Creates a new message array with the compressed summary.
+ * Preserves the system message and appends the summary as an assistant message.
+ *
+ * @param systemMessage - The original system message.
+ * @param summary - The generated conversation summary.
+ * @returns New array of messages.
  */
 export function createCompressedMessages(
   systemMessage: ChatCompletionMessageParam,
@@ -116,7 +138,10 @@ export function createCompressedMessages(
 }
 
 /**
- * Format compression result for display
+ * Formats the compression result for user display.
+ *
+ * @param result - The compression result.
+ * @returns Formatted string.
  */
 export function formatCompressResult(result: CompressResult): string {
   if (!result.success) {

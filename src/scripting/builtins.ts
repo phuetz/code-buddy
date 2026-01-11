@@ -7,12 +7,53 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, spawn } from 'child_process';
-import { CodeBuddyScriptConfig, CodeBuddyValue, CodeBuddyFunction } from './types.js';
+import { CodeBuddyScriptConfig, CodeBuddyValue, CodeBuddyFunction, ScriptAgentInterface } from './types.js';
+import { logger } from '../utils/logger.js';
 
 type PrintFn = (msg: string) => void;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type BuiltinFunctions = Record<string, any>;
+
+// Lazy-loaded agent instance for AI operations
+let cachedAgent: ScriptAgentInterface | null = null;
+
+/**
+ * Get or create the AI agent for script execution
+ */
+async function getOrCreateAgent(config: CodeBuddyScriptConfig): Promise<ScriptAgentInterface | null> {
+  // Use provided agent if available
+  if (config.agent) {
+    return config.agent;
+  }
+
+  // Return cached agent if already created
+  if (cachedAgent) {
+    return cachedAgent;
+  }
+
+  // Try to create a new agent with lazy loading
+  const apiKey = process.env.GROK_API_KEY;
+  if (!apiKey) {
+    logger.warn('GROK_API_KEY not set, AI operations will not be available');
+    return null;
+  }
+
+  try {
+    const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
+    cachedAgent = new CodeBuddyAgent(
+      apiKey,
+      process.env.GROK_BASE_URL,
+      process.env.GROK_MODEL || 'grok-3-latest'
+    ) as unknown as ScriptAgentInterface;
+    return cachedAgent;
+  } catch (error) {
+    logger.error('Failed to create AI agent for scripting', {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return null;
+  }
+}
 
 /**
  * Create all built-in functions for the Buddy Script runtime
@@ -442,9 +483,12 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
         print(`[DRY RUN] ai.ask: ${prompt}`);
         return '[AI Response Placeholder]';
       }
-      // TODO: Integrate with actual CodeBuddyAgent
-      print(`[AI] Prompt: ${prompt}`);
-      return '[AI integration pending]';
+      const agent = await getOrCreateAgent(config);
+      if (!agent) {
+        throw new Error('AI agent not available. Ensure GROK_API_KEY is set.');
+      }
+      const result = await agent.processUserInput(String(prompt));
+      return result.content || '';
     },
 
     chat: async (message: CodeBuddyValue) => {
@@ -453,19 +497,27 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
         print(`[DRY RUN] ai.chat: ${message}`);
         return '[AI Response Placeholder]';
       }
-      // TODO: Integrate with actual CodeBuddyAgent
-      print(`[AI] Message: ${message}`);
-      return '[AI integration pending]';
+      const agent = await getOrCreateAgent(config);
+      if (!agent) {
+        throw new Error('AI agent not available. Ensure GROK_API_KEY is set.');
+      }
+      const result = await agent.processUserInput(String(message));
+      return result.content || '';
     },
 
-    complete: async (prompt: CodeBuddyValue, _options?: CodeBuddyValue) => {
+    complete: async (prompt: CodeBuddyValue, options?: CodeBuddyValue) => {
       if (!config.enableAI) throw new Error('AI operations disabled');
       if (config.dryRun) {
         print(`[DRY RUN] ai.complete: ${prompt}`);
         return '[AI Response Placeholder]';
       }
-      // TODO: Integrate with actual CodeBuddyAgent
-      return '[AI integration pending]';
+      const agent = await getOrCreateAgent(config);
+      if (!agent) {
+        throw new Error('AI agent not available. Ensure GROK_API_KEY is set.');
+      }
+      const opts = typeof options === 'object' && options !== null ? options as Record<string, unknown> : {};
+      const result = await agent.processUserInput(String(prompt), opts);
+      return result.content || '';
     },
   };
 

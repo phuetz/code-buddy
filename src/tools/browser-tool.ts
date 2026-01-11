@@ -12,10 +12,10 @@
  * the tool will provide installation instructions.
  */
 
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as os from 'os';
-import fs from 'fs-extra';
 import type { ToolResult } from '../types/index.js';
 
 // ============================================================================
@@ -291,7 +291,7 @@ export class BrowserTool extends EventEmitter {
    * Ensure screenshot directory exists
    */
   private async ensureScreenshotDir(): Promise<void> {
-    await fs.ensureDir(this.config.screenshotDir);
+    await UnifiedVfsRouter.Instance.ensureDir(this.config.screenshotDir);
   }
 
   /**

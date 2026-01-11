@@ -3,7 +3,8 @@ import { Text, Box } from 'ink';
 import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
 import { highlight } from 'cli-highlight';
-import { InkTable } from '../components/ink-table.js';
+import { InkTable } from '../components/InkTable.js';
+import { logger } from '../../utils/logger.js';
 
 // ============================================================================
 // CONFIGURATION
@@ -551,7 +552,7 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
     );
   } catch (error) {
     // Fallback to plain text on error
-    console.error('Markdown rendering error:', error);
+    logger.error('Markdown rendering error', error as Error);
     return <Text>{content}</Text>;
   }
 });

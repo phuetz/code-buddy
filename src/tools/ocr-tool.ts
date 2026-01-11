@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -38,6 +38,7 @@ export class OCRTool {
   private readonly supportedFormats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.tif', '.webp'];
   private readonly maxFileSizeMB = 50;
   private tesseractAvailable: boolean | null = null;
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Perform OCR on an image file
@@ -46,7 +47,7 @@ export class OCRTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Image file not found: ${filePath}`
@@ -61,7 +62,7 @@ export class OCRTool {
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
+      const stats = await this.vfs.stat(resolvedPath);
       const fileSizeMB = stats.size / (1024 * 1024);
       if (fileSizeMB > this.maxFileSizeMB) {
         return {
@@ -250,7 +251,7 @@ export class OCRTool {
     const axios = (await import('axios')).default;
 
     // Read image and convert to base64
-    const buffer = fs.readFileSync(imagePath);
+    const buffer = await this.vfs.readFileBuffer(imagePath);
     const base64 = buffer.toString('base64');
     const ext = path.extname(imagePath).toLowerCase();
     const mediaType = ext === '.png' ? 'image/png' : 'image/jpeg';
@@ -384,7 +385,7 @@ export class OCRTool {
     }
 
     const resolvedPath = path.resolve(process.cwd(), filePath);
-    if (!fs.existsSync(resolvedPath)) {
+    if (!await this.vfs.exists(resolvedPath)) {
       return {
         success: false,
         error: `Image not found: ${filePath}`
@@ -392,7 +393,7 @@ export class OCRTool {
     }
 
     const tempPath = path.join(process.cwd(), '.codebuddy', 'temp', `ocr_region_${Date.now()}.png`);
-    fs.mkdirSync(path.dirname(tempPath), { recursive: true });
+    await this.vfs.ensureDir(path.dirname(tempPath));
 
     try {
       // Crop the region using ImageMagick
@@ -403,14 +404,14 @@ export class OCRTool {
       const result = await this.extractText(tempPath, options);
 
       // Clean up temp file
-      if (fs.existsSync(tempPath)) {
-        fs.unlinkSync(tempPath);
+      if (await this.vfs.exists(tempPath)) {
+        await this.vfs.remove(tempPath);
       }
 
       return result;
     } catch (error) {
-      if (fs.existsSync(tempPath)) {
-        fs.unlinkSync(tempPath);
+      if (await this.vfs.exists(tempPath)) {
+        await this.vfs.remove(tempPath);
       }
       return {
         success: false,

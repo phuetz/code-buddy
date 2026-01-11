@@ -123,8 +123,9 @@ export class BackupManager extends EventEmitter {
             totalSize += item.size;
             offset += item.data.length;
           }
-        } catch (error: any) {
-          if (error.code !== 'ENOENT') {
+        } catch (error) {
+          const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : undefined;
+          if (code !== 'ENOENT') {
             throw error;
           }
           // Skip missing paths

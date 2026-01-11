@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -28,13 +28,14 @@ export interface DiagramResult {
  */
 export class DiagramTool {
   private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'diagrams');
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Generate a diagram from Mermaid code
    */
   async generateFromMermaid(mermaidCode: string, options: Partial<DiagramOptions> = {}): Promise<ToolResult> {
     try {
-      fs.mkdirSync(this.outputDir, { recursive: true });
+      await this.vfs.ensureDir(this.outputDir);
 
       const outputFormat = options.outputFormat || 'svg';
       const timestamp = Date.now();
@@ -505,55 +506,62 @@ export class DiagramTool {
     options: Partial<DiagramOptions>
   ): Promise<ToolResult> {
     return new Promise((resolve) => {
-      const tempFile = path.join(this.outputDir, `temp_${Date.now()}.mmd`);
-      fs.writeFileSync(tempFile, mermaidCode);
+      (async () => {
+        const tempFile = path.join(this.outputDir, `temp_${Date.now()}.mmd`);
+        await this.vfs.writeFile(tempFile, mermaidCode);
 
-      const args = ['-i', tempFile, '-o', outputPath];
+        const args = ['-i', tempFile, '-o', outputPath];
 
-      if (options.theme) {
-        args.push('-t', options.theme);
-      }
-      if (options.width) {
-        args.push('-w', options.width.toString());
-      }
-      if (options.height) {
-        args.push('-H', options.height.toString());
-      }
-
-      const mmdc = spawn('mmdc', args);
-
-      mmdc.on('close', (code) => {
-        // Clean up temp file
-        if (fs.existsSync(tempFile)) {
-          fs.unlinkSync(tempFile);
+        if (options.theme) {
+          args.push('-t', options.theme);
+        }
+        if (options.width) {
+          args.push('-w', options.width.toString());
+        }
+        if (options.height) {
+          args.push('-H', options.height.toString());
         }
 
-        if (code === 0 && fs.existsSync(outputPath)) {
-          resolve({
-            success: true,
-            output: `Diagram generated: ${outputPath}`,
-            data: {
-              content: fs.readFileSync(outputPath, 'utf8'),
-              format: path.extname(outputPath).slice(1),
-              path: outputPath,
-              mermaidCode
-            }
-          });
-        } else {
+        const mmdc = spawn('mmdc', args);
+
+        mmdc.on('close', async (code) => {
+          // Clean up temp file
+          if (await this.vfs.exists(tempFile)) {
+            await this.vfs.remove(tempFile);
+          }
+
+          if (code === 0 && await this.vfs.exists(outputPath)) {
+            resolve({
+              success: true,
+              output: `Diagram generated: ${outputPath}`,
+              data: {
+                content: await this.vfs.readFile(outputPath, 'utf8'),
+                format: path.extname(outputPath).slice(1),
+                path: outputPath,
+                mermaidCode
+              }
+            });
+          } else {
+            resolve({
+              success: false,
+              error: `Mermaid CLI failed with code ${code}`
+            });
+          }
+        });
+
+        mmdc.on('error', async (err) => {
+          if (await this.vfs.exists(tempFile)) {
+            await this.vfs.remove(tempFile);
+          }
           resolve({
             success: false,
-            error: `Mermaid CLI failed with code ${code}`
+            error: `Mermaid CLI error: ${err.message}`
           });
-        }
-      });
-
-      mmdc.on('error', (err) => {
-        if (fs.existsSync(tempFile)) {
-          fs.unlinkSync(tempFile);
-        }
+        });
+      })().catch(err => {
         resolve({
           success: false,
-          error: `Mermaid CLI error: ${err.message}`
+          error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}`
         });
       });
     });
@@ -562,17 +570,17 @@ export class DiagramTool {
   /**
    * List generated diagrams
    */
-  listDiagrams(): ToolResult {
+  async listDiagrams(): Promise<ToolResult> {
     try {
-      if (!fs.existsSync(this.outputDir)) {
+      if (!await this.vfs.exists(this.outputDir)) {
         return {
           success: true,
           output: 'No diagrams generated yet'
         };
       }
 
-      const files = fs.readdirSync(this.outputDir);
-      const diagrams = files.filter(f => /\.(svg|png|mmd)$/i.test(f));
+      const entries = await this.vfs.readDirectory(this.outputDir);
+      const diagrams = entries.filter(e => e.isFile && /\.(svg|png|mmd)$/i.test(e.name));
 
       if (diagrams.length === 0) {
         return {
@@ -581,11 +589,13 @@ export class DiagramTool {
         };
       }
 
-      const list = diagrams.map(f => {
-        const fullPath = path.join(this.outputDir, f);
-        const stats = fs.statSync(fullPath);
-        return `  📊 ${f} (${this.formatSize(stats.size)})`;
-      }).join('\n');
+      const listPromises = diagrams.map(async d => {
+        const fullPath = path.join(this.outputDir, d.name);
+        const stats = await this.vfs.stat(fullPath);
+        return `  📊 ${d.name} (${this.formatSize(stats.size)})`;
+      });
+
+      const list = (await Promise.all(listPromises)).join('\n');
 
       return {
         success: true,

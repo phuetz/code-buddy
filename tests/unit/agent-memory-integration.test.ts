@@ -461,11 +461,16 @@ describe('Agent Memory Integration', () => {
       });
     });
 
-    it('should return null when memory is not initialized', () => {
-      // Don't trigger initialization
+    it('should return memory stats (initialized on startup)', async () => {
+      // Memory is now initialized on startup for system prompt injection
       const stats = agent.getMemoryStats();
 
-      expect(stats).toBeNull();
+      expect(stats).toEqual({
+        totalMemories: 10,
+        byType: { fact: 5, decision: 3, preference: 2 },
+        projects: 1,
+        summaries: 2,
+      });
     });
 
     it('should return null when memory is disabled', () => {
@@ -488,11 +493,12 @@ describe('Agent Memory Integration', () => {
       expect(status).toBe('Memory Status: 10 memories');
     });
 
-    it('should show not initialized status', () => {
-      // Don't trigger initialization
+    it('should show initialized status by default', () => {
+      // Memory is initialized on startup
       const status = agent.formatMemoryStatus();
 
-      expect(status).toContain('Not initialized');
+      expect(mockMemory.formatStatus).toHaveBeenCalled();
+      expect(status).toBe('Memory Status: 10 memories');
     });
 
     it('should show disabled status', () => {

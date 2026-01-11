@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { PriorityQueue, PriorityItem, PriorityQueueOptions, PriorityLevel } from './priority-queue';
+import { logger } from '../utils/logger.js';
 
 export interface PersistentQueueOptions extends PriorityQueueOptions {
   /** Directory to store queue data */
@@ -115,7 +116,7 @@ export class PersistentQueue<T = unknown> extends PriorityQueue<T> {
 
       if (data.version !== QUEUE_VERSION) {
         // Handle migration in future if needed
-        console.warn(`Queue version mismatch: expected ${QUEUE_VERSION}, got ${data.version}`);
+        logger.warn(`Queue version mismatch: expected ${QUEUE_VERSION}, got ${data.version}`);
       }
 
       // Restore items

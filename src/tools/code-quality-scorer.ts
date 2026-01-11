@@ -8,7 +8,7 @@
  * - Maintainability index
  */
 
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 
 export interface QualityMetrics {
@@ -74,7 +74,7 @@ export interface QualityReport {
  * Analyze code quality for a file
  */
 export async function analyzeCodeQuality(filePath: string): Promise<QualityReport> {
-  const content = await fs.readFile(filePath, 'utf-8');
+  const content = await UnifiedVfsRouter.Instance.readFile(filePath, 'utf-8');
   const language = detectLanguage(filePath);
 
   const metrics = calculateMetrics(content, language);

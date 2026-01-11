@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
@@ -39,6 +39,7 @@ export interface ExportOptions {
  */
 export class ExportTool {
   private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'exports');
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Export conversation to specified format
@@ -48,7 +49,7 @@ export class ExportTool {
     options: ExportOptions
   ): Promise<ToolResult> {
     try {
-      fs.mkdirSync(this.outputDir, { recursive: true });
+      await this.vfs.ensureDir(this.outputDir);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const title = options.title || `conversation_${timestamp}`;
@@ -86,7 +87,7 @@ export class ExportTool {
           };
       }
 
-      fs.writeFileSync(outputPath, content, 'utf8');
+      await this.vfs.writeFile(outputPath, content, 'utf8');
 
       return {
         success: true,
@@ -406,7 +407,7 @@ export class ExportTool {
     const htmlContent = this.toHTML(conversation, options);
     const htmlPath = outputPath.replace('.pdf', '.html');
 
-    fs.writeFileSync(htmlPath, htmlContent, 'utf8');
+    await this.vfs.writeFile(htmlPath, htmlContent, 'utf8');
 
     // Try to use wkhtmltopdf or puppeteer
     try {
@@ -415,7 +416,7 @@ export class ExportTool {
       // Try wkhtmltopdf first
       try {
         execSync(`wkhtmltopdf "${htmlPath}" "${outputPath}"`, { stdio: 'ignore' });
-        fs.unlinkSync(htmlPath);
+        await this.vfs.remove(htmlPath);
 
         return {
           success: true,
@@ -455,7 +456,7 @@ export class ExportTool {
         };
       }
 
-      fs.mkdirSync(this.outputDir, { recursive: true });
+      await this.vfs.ensureDir(this.outputDir);
 
       const timestamp = Date.now();
       const filePath = outputPath || path.join(this.outputDir, `export_${timestamp}.csv`);
@@ -477,7 +478,7 @@ export class ExportTool {
         lines.push(values.join(','));
       }
 
-      fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
+      await this.vfs.writeFile(filePath, lines.join('\n'), 'utf8');
 
       return {
         success: true,
@@ -501,7 +502,7 @@ export class ExportTool {
   ): Promise<ToolResult> {
     try {
       const snippetDir = options.outputDir || path.join(this.outputDir, 'snippets');
-      fs.mkdirSync(snippetDir, { recursive: true });
+      await this.vfs.ensureDir(snippetDir);
 
       const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
       const snippets: Array<{ language: string; code: string; file: string }> = [];
@@ -521,7 +522,7 @@ export class ExportTool {
           const filename = `snippet_${snippetCount}.${ext}`;
           const filePath = path.join(snippetDir, filename);
 
-          fs.writeFileSync(filePath, code, 'utf8');
+          await this.vfs.writeFile(filePath, code, 'utf8');
           snippets.push({ language, code, file: filePath });
         }
       }
@@ -551,16 +552,16 @@ export class ExportTool {
   /**
    * List exported files
    */
-  listExports(): ToolResult {
+  async listExports(): Promise<ToolResult> {
     try {
-      if (!fs.existsSync(this.outputDir)) {
+      if (!await this.vfs.exists(this.outputDir)) {
         return {
           success: true,
           output: 'No exports found'
         };
       }
 
-      const files = this.getAllFiles(this.outputDir);
+      const files = await this.getAllFiles(this.outputDir);
 
       if (files.length === 0) {
         return {
@@ -569,11 +570,13 @@ export class ExportTool {
         };
       }
 
-      const list = files.map(f => {
-        const stats = fs.statSync(f);
+      const listPromises = files.map(async f => {
+        const stats = await this.vfs.stat(f);
         const relPath = path.relative(this.outputDir, f);
         return `  📄 ${relPath} (${this.formatSize(stats.size)})`;
-      }).join('\n');
+      });
+
+      const list = (await Promise.all(listPromises)).join('\n');
 
       return {
         success: true,
@@ -590,16 +593,15 @@ export class ExportTool {
   /**
    * Get all files recursively
    */
-  private getAllFiles(dir: string): string[] {
+  private async getAllFiles(dir: string): Promise<string[]> {
     const files: string[] = [];
-    const items = fs.readdirSync(dir);
+    const entries = await this.vfs.readDirectory(dir);
 
-    for (const item of items) {
-      const fullPath = path.join(dir, item);
-      const stats = fs.statSync(fullPath);
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
 
-      if (stats.isDirectory()) {
-        files.push(...this.getAllFiles(fullPath));
+      if (entry.isDirectory) {
+        files.push(...await this.getAllFiles(fullPath));
       } else {
         files.push(fullPath);
       }

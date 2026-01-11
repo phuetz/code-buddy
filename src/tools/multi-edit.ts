@@ -1,9 +1,8 @@
-import * as fs from "fs-extra";
-import { writeFile as writeFilePromise } from "fs/promises";
 import { ToolResult } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { getCheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import { PathValidator } from "../utils/path-validator.js";
+import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 
 export interface EditOperation {
   file_path: string;
@@ -27,6 +26,7 @@ export class MultiEditTool {
   private confirmationService = ConfirmationService.getInstance();
   private checkpointManager = getCheckpointManager();
   private pathValidator = new PathValidator();
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Set the base directory for path validation
@@ -54,7 +54,7 @@ export class MultiEditTool {
       }
 
       // Existence check
-      if (!(await fs.pathExists(pathResult.resolved))) {
+      if (!(await this.vfs.exists(pathResult.resolved))) {
         validationErrors.push(`File not found: ${edit.file_path}`);
       }
     }
@@ -142,7 +142,7 @@ export class MultiEditTool {
     }
 
     const resolvedPath = pathResult.resolved;
-    const content = await fs.readFile(resolvedPath, "utf-8");
+    const content = await this.vfs.readFile(resolvedPath, "utf-8");
 
     if (!content.includes(edit.old_str)) {
       return {
@@ -155,7 +155,7 @@ export class MultiEditTool {
       ? content.split(edit.old_str).join(edit.new_str)
       : content.replace(edit.old_str, edit.new_str);
 
-    await writeFilePromise(resolvedPath, newContent, "utf-8");
+    await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
 
     // Calculate diff stats
     const oldLines = content.split("\n").length;

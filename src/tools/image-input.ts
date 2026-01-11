@@ -9,7 +9,7 @@
  * - Base64 encoded images
  */
 
-import fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import https from 'https';
 import http from 'http';
@@ -88,12 +88,12 @@ export function isBase64(input: string): boolean {
 export async function loadImageFromFile(filePath: string): Promise<ImageInput> {
   const absolutePath = path.resolve(filePath);
 
-  if (!(await fs.pathExists(absolutePath))) {
+  if (!(await UnifiedVfsRouter.Instance.exists(absolutePath))) {
     throw new Error(`Image file not found: ${filePath}`);
   }
 
   const mimeType = getMimeType(absolutePath);
-  const buffer = await fs.readFile(absolutePath);
+  const buffer = await UnifiedVfsRouter.Instance.readFileBuffer(absolutePath);
   const base64 = buffer.toString('base64');
 
   return {

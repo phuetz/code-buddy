@@ -3,7 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { Agent } from '../agent/index.js';
 import { ToolResult } from '../types/index.js';
 import { ConfirmationService, ConfirmationOptions } from '../utils/confirmation-service.js';
-import ConfirmationDialog from './components/confirmation-dialog.js';
+import ConfirmationDialog from './components/ConfirmationDialog.js';
 
 interface Props {
   agent: Agent;

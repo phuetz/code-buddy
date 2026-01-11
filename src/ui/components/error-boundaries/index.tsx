@@ -34,7 +34,7 @@ export { NetworkErrorBoundary, withNetworkErrorBoundary, NetworkErrorType, Conne
 export { FileErrorBoundary, withFileErrorBoundary, FileErrorType };
 
 // Re-export base error boundary for convenience
-export { ErrorBoundary, withErrorBoundary, StreamingErrorBoundary } from '../error-boundary';
+export { ErrorBoundary, withErrorBoundary, StreamingErrorBoundary } from '../ErrorBoundary';
 
 /**
  * Composite error boundary that combines all specialized boundaries

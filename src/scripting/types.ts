@@ -355,6 +355,11 @@ export interface ScriptResult {
 // Script Configuration
 // ============================================
 
+/** Interface for AI agent used by scripts */
+export interface ScriptAgentInterface {
+  processUserInput(prompt: string, options?: Record<string, unknown>): Promise<{ content?: string }>;
+}
+
 export interface CodeBuddyScriptConfig {
   /** Working directory for file operations */
   workdir: string;
@@ -372,6 +377,8 @@ export interface CodeBuddyScriptConfig {
   dryRun: boolean;
   /** Variables to inject into script */
   variables?: Record<string, CodeBuddyValue>;
+  /** AI agent instance for AI operations */
+  agent?: ScriptAgentInterface;
 }
 
 export const DEFAULT_SCRIPT_CONFIG: CodeBuddyScriptConfig = {

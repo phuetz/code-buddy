@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -27,6 +27,7 @@ export interface ScreenshotResult {
  */
 export class ScreenshotTool {
   private readonly defaultOutputDir = path.join(process.cwd(), '.codebuddy', 'screenshots');
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Capture a screenshot
@@ -34,7 +35,7 @@ export class ScreenshotTool {
   async capture(options: ScreenshotOptions = {}): Promise<ToolResult> {
     try {
       // Ensure output directory exists
-      fs.mkdirSync(this.defaultOutputDir, { recursive: true });
+      await this.vfs.ensureDir(this.defaultOutputDir);
 
       const format = options.format || 'png';
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -99,9 +100,9 @@ export class ScreenshotTool {
 
       const screencapture = spawn('screencapture', args);
 
-      screencapture.on('close', (code) => {
-        if (code === 0 && fs.existsSync(outputPath)) {
-          const stats = fs.statSync(outputPath);
+      screencapture.on('close', async (code) => {
+        if (code === 0 && await this.vfs.exists(outputPath)) {
+          const stats = await this.vfs.stat(outputPath);
           resolve({
             path: outputPath,
             size: this.formatSize(stats.size),
@@ -176,9 +177,9 @@ export class ScreenshotTool {
 
       const screenshot = spawn(availableTool, args);
 
-      screenshot.on('close', (code) => {
-        if (code === 0 && fs.existsSync(outputPath)) {
-          const stats = fs.statSync(outputPath);
+      screenshot.on('close', async (code) => {
+        if (code === 0 && await this.vfs.exists(outputPath)) {
+          const stats = await this.vfs.stat(outputPath);
           resolve({
             path: outputPath,
             size: this.formatSize(stats.size),
@@ -216,9 +217,9 @@ $bitmap.Dispose()
 
       const powershell = spawn('powershell', ['-Command', script]);
 
-      powershell.on('close', (code) => {
-        if (code === 0 && fs.existsSync(outputPath)) {
-          const stats = fs.statSync(outputPath);
+      powershell.on('close', async (code) => {
+        if (code === 0 && await this.vfs.exists(outputPath)) {
+          const stats = await this.vfs.stat(outputPath);
           resolve({
             path: outputPath,
             size: this.formatSize(stats.size),
@@ -259,17 +260,17 @@ $bitmap.Dispose()
   /**
    * List saved screenshots
    */
-  listScreenshots(): ToolResult {
+  async listScreenshots(): Promise<ToolResult> {
     try {
-      if (!fs.existsSync(this.defaultOutputDir)) {
+      if (!await this.vfs.exists(this.defaultOutputDir)) {
         return {
           success: true,
           output: 'No screenshots found'
         };
       }
 
-      const files = fs.readdirSync(this.defaultOutputDir);
-      const screenshots = files.filter(f => /\.(png|jpg|jpeg)$/i.test(f));
+      const entries = await this.vfs.readDirectory(this.defaultOutputDir);
+      const screenshots = entries.filter(e => e.isFile && /\.(png|jpg|jpeg)$/i.test(e.name));
 
       if (screenshots.length === 0) {
         return {
@@ -278,12 +279,14 @@ $bitmap.Dispose()
         };
       }
 
-      const screenshotList = screenshots.map(file => {
-        const fullPath = path.join(this.defaultOutputDir, file);
-        const stats = fs.statSync(fullPath);
+      const listPromises = screenshots.map(async s => {
+        const fullPath = path.join(this.defaultOutputDir, s.name);
+        const stats = await this.vfs.stat(fullPath);
         const time = stats.mtime.toLocaleString();
-        return `  📸 ${file} (${this.formatSize(stats.size)}) - ${time}`;
-      }).join('\n');
+        return `  📸 ${s.name} (${this.formatSize(stats.size)}) - ${time}`;
+      });
+
+      const screenshotList = (await Promise.all(listPromises)).join('\n');
 
       return {
         success: true,
@@ -304,14 +307,14 @@ $bitmap.Dispose()
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Screenshot not found: ${filePath}`
         };
       }
 
-      const buffer = fs.readFileSync(resolvedPath);
+      const buffer = await this.vfs.readFileBuffer(resolvedPath);
       const base64 = buffer.toString('base64');
       const ext = path.extname(resolvedPath).toLowerCase();
       const mediaType = ext === '.png' ? 'image/png' : 'image/jpeg';
@@ -336,20 +339,20 @@ $bitmap.Dispose()
   /**
    * Delete a screenshot
    */
-  deleteScreenshot(filePath: string): ToolResult {
+  async deleteScreenshot(filePath: string): Promise<ToolResult> {
     try {
       const resolvedPath = filePath.startsWith('/')
         ? filePath
         : path.join(this.defaultOutputDir, filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Screenshot not found: ${filePath}`
         };
       }
 
-      fs.unlinkSync(resolvedPath);
+      await this.vfs.remove(resolvedPath);
 
       return {
         success: true,
@@ -366,21 +369,21 @@ $bitmap.Dispose()
   /**
    * Clear all screenshots
    */
-  clearScreenshots(): ToolResult {
+  async clearScreenshots(): Promise<ToolResult> {
     try {
-      if (!fs.existsSync(this.defaultOutputDir)) {
+      if (!await this.vfs.exists(this.defaultOutputDir)) {
         return {
           success: true,
           output: 'No screenshots to clear'
         };
       }
 
-      const files = fs.readdirSync(this.defaultOutputDir);
+      const entries = await this.vfs.readDirectory(this.defaultOutputDir);
       let deleted = 0;
 
-      for (const file of files) {
-        if (/\.(png|jpg|jpeg)$/i.test(file)) {
-          fs.unlinkSync(path.join(this.defaultOutputDir, file));
+      for (const entry of entries) {
+        if (entry.isFile && /\.(png|jpg|jpeg)$/i.test(entry.name)) {
+          await this.vfs.remove(path.join(this.defaultOutputDir, entry.name));
           deleted++;
         }
       }

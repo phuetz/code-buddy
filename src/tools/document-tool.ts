@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
@@ -43,6 +43,7 @@ export interface SlideContent {
 export class DocumentTool {
   private readonly supportedFormats = ['.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp', '.rtf', '.csv', '.tsv'];
   private readonly maxFileSizeMB = 100;
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Read document content
@@ -51,7 +52,7 @@ export class DocumentTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Document not found: ${filePath}`
@@ -66,7 +67,7 @@ export class DocumentTool {
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
+      const stats = await this.vfs.stat(resolvedPath);
       const fileSizeMB = stats.size / (1024 * 1024);
       if (fileSizeMB > this.maxFileSizeMB) {
         return {
@@ -119,7 +120,8 @@ export class DocumentTool {
    */
   private async readDocx(filePath: string): Promise<DocumentContent> {
     const AdmZip = (await import('adm-zip')).default;
-    const zip = new AdmZip(filePath);
+    const buffer = await this.vfs.readFileBuffer(filePath);
+    const zip = new AdmZip(buffer);
 
     // Read document.xml
     const documentXml = zip.readAsText('word/document.xml');
@@ -145,7 +147,8 @@ export class DocumentTool {
    */
   private async readXlsx(filePath: string): Promise<DocumentContent> {
     const AdmZip = (await import('adm-zip')).default;
-    const zip = new AdmZip(filePath);
+    const buffer = await this.vfs.readFileBuffer(filePath);
+    const zip = new AdmZip(buffer);
 
     // Read shared strings
     const sharedStrings: string[] = [];
@@ -276,7 +279,8 @@ export class DocumentTool {
    */
   private async readPptx(filePath: string): Promise<DocumentContent> {
     const AdmZip = (await import('adm-zip')).default;
-    const zip = new AdmZip(filePath);
+    const buffer = await this.vfs.readFileBuffer(filePath);
+    const zip = new AdmZip(buffer);
 
     const slides: SlideContent[] = [];
     let slideIndex = 1;
@@ -320,7 +324,7 @@ export class DocumentTool {
    * Read CSV/TSV file
    */
   private async readCsv(filePath: string, delimiter: string): Promise<DocumentContent> {
-    const content = fs.readFileSync(filePath, 'utf8');
+    const content = await this.vfs.readFile(filePath, 'utf8');
     const lines = content.split(/\r?\n/);
     const data: string[][] = [];
 
@@ -379,7 +383,7 @@ export class DocumentTool {
    * Read RTF file
    */
   private async readRtf(filePath: string): Promise<DocumentContent> {
-    const content = fs.readFileSync(filePath, 'utf8');
+    const content = await this.vfs.readFile(filePath, 'utf8');
 
     // Basic RTF to text conversion
     let text = content
@@ -500,20 +504,21 @@ export class DocumentTool {
   /**
    * List supported documents in directory
    */
-  listDocuments(dirPath: string = '.'): ToolResult {
+  async listDocuments(dirPath: string = '.'): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), dirPath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Directory not found: ${dirPath}`
         };
       }
 
-      const files = fs.readdirSync(resolvedPath);
-      const docs = files.filter(f => {
-        const ext = path.extname(f).toLowerCase();
+      const entries = await this.vfs.readDirectory(resolvedPath);
+      const docs = entries.filter(e => {
+        if (!e.isFile) return false;
+        const ext = path.extname(e.name).toLowerCase();
         return this.supportedFormats.includes(ext);
       });
 
@@ -524,13 +529,15 @@ export class DocumentTool {
         };
       }
 
-      const docList = docs.map(doc => {
-        const fullPath = path.join(resolvedPath, doc);
-        const stats = fs.statSync(fullPath);
-        const ext = path.extname(doc).toLowerCase();
+      const docListPromises = docs.map(async doc => {
+        const fullPath = path.join(resolvedPath, doc.name);
+        const stats = await this.vfs.stat(fullPath);
+        const ext = path.extname(doc.name).toLowerCase();
         const emoji = ext.includes('doc') ? '📝' : ext.includes('xls') || ext === '.csv' ? '📊' : '📽️';
-        return `  ${emoji} ${doc} (${this.formatSize(stats.size)})`;
-      }).join('\n');
+        return `  ${emoji} ${doc.name} (${this.formatSize(stats.size)})`;
+      });
+
+      const docList = (await Promise.all(docListPromises)).join('\n');
 
       return {
         success: true,

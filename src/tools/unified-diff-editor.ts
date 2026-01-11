@@ -13,8 +13,8 @@
  * 3. Users can't easily verify line numbers
  */
 
-import { promises as fsPromises } from 'fs';
 import * as path from 'path';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 
 // Types for unified diff operations
 export interface DiffHunk {
@@ -56,6 +56,7 @@ export class UnifiedDiffEditor {
   private backupDir: string;
   private enableBackups: boolean;
   private fuzzyMatchThreshold: number;
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(options: {
     backupDir?: string;
@@ -84,9 +85,9 @@ export class UnifiedDiffEditor {
       let content: string;
       const absolutePath = path.resolve(operation.filePath);
 
-      const exists = await fsPromises.access(absolutePath).then(() => true).catch(() => false);
+      const exists = await this.vfs.exists(absolutePath);
       if (exists) {
-        content = await fsPromises.readFile(absolutePath, 'utf-8');
+        content = await this.vfs.readFile(absolutePath, 'utf-8');
       } else if (operation.createIfMissing) {
         content = '';
       } else {
@@ -116,8 +117,8 @@ export class UnifiedDiffEditor {
 
       // Write the result
       if (result.hunksApplied > 0) {
-        await fsPromises.mkdir(path.dirname(absolutePath), { recursive: true });
-        await fsPromises.writeFile(absolutePath, content, 'utf-8');
+        await this.vfs.ensureDir(path.dirname(absolutePath));
+        await this.vfs.writeFile(absolutePath, content, 'utf-8');
         result.success = true;
 
         // Generate diff for display
@@ -274,10 +275,12 @@ export class UnifiedDiffEditor {
    */
   private normalizeWhitespace(text: string): string {
     return text
+      .replace(/\r\n/g, '\n')
       .split('\n')
       .map(line => line.trim())
-      .join('\n')
-      .replace(/\n+/g, '\n')
+      .filter(line => line.length > 0)
+      .join(' ')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 
@@ -297,9 +300,10 @@ export class UnifiedDiffEditor {
         origPos++;
         normPos++;
       } else if (/\s/.test(origChar)) {
-        origPos++; // Skip whitespace in original
+        origPos++; // Skip whitespace/newline in original
       } else {
-        normPos++; // Skip in normalized
+        // This should not happen if normalization is correct
+        normPos++;
       }
     }
 
@@ -341,8 +345,8 @@ export class UnifiedDiffEditor {
     const fileName = path.basename(filePath);
     const backupPath = path.join(this.backupDir, `${fileName}.${timestamp}.bak`);
 
-    await fsPromises.mkdir(this.backupDir, { recursive: true });
-    await fsPromises.writeFile(backupPath, content, 'utf-8');
+    await this.vfs.ensureDir(this.backupDir);
+    await this.vfs.writeFile(backupPath, content, 'utf-8');
 
     return backupPath;
   }
@@ -415,31 +419,36 @@ export class UnifiedDiffEditor {
    */
   static parseDiff(diffString: string): DiffOperation[] {
     const operations: DiffOperation[] = [];
-    const fileRegex = /^diff --git a\/(.+) b\/(.+)$/gm;
-    const hunkRegex = /^@@[^@]+@@\n([\s\S]*?)(?=^@@|^diff|$)/gm;
+    const lines = diffString.split('\n');
+    let currentOp: DiffOperation | null = null;
+    let currentHunkLines: string[] = [];
 
-    let match;
-    while ((match = fileRegex.exec(diffString)) !== null) {
-      const filePath = match[2];
-      const hunks: DiffHunk[] = [];
-
-      // Find hunks for this file
-      const fileContent = diffString.substring(match.index);
-      let hunkMatch;
-      while ((hunkMatch = hunkRegex.exec(fileContent)) !== null) {
-        const hunkContent = hunkMatch[1];
-        const { searchText, replaceText } = this.parseHunkContent(hunkContent);
-
+    const flushHunk = () => {
+      if (currentOp && currentHunkLines.length > 0) {
+        const { searchText, replaceText } = this.parseHunkContent(currentHunkLines.join('\n'));
         if (searchText || replaceText) {
-          hunks.push({ searchText, replaceText });
+          currentOp.hunks.push({ searchText, replaceText });
         }
+        currentHunkLines = [];
       }
+    };
 
-      if (hunks.length > 0) {
-        operations.push({ filePath, hunks });
+    for (const line of lines) {
+      if (line.startsWith('diff --git')) {
+        flushHunk();
+        const match = line.match(/ b\/(.+)$/);
+        if (match) {
+          currentOp = { filePath: match[1], hunks: [] };
+          operations.push(currentOp);
+        }
+      } else if (line.startsWith('@@')) {
+        flushHunk();
+      } else if (currentOp && (line.startsWith('+') || line.startsWith('-') || line.startsWith(' '))) {
+        currentHunkLines.push(line);
       }
     }
 
+    flushHunk();
     return operations;
   }
 
@@ -464,8 +473,8 @@ export class UnifiedDiffEditor {
     }
 
     return {
-      searchText: searchLines.join('\n'),
-      replaceText: replaceLines.join('\n'),
+      searchText: searchLines.join('\n').trim(),
+      replaceText: replaceLines.join('\n').trim(),
     };
   }
 
@@ -474,13 +483,13 @@ export class UnifiedDiffEditor {
    */
   async restoreBackup(backupPath: string, originalPath: string): Promise<boolean> {
     try {
-      const exists = await fsPromises.access(backupPath).then(() => true).catch(() => false);
+      const exists = await this.vfs.exists(backupPath);
       if (!exists) {
         return false;
       }
 
-      const content = await fsPromises.readFile(backupPath, 'utf-8');
-      await fsPromises.writeFile(originalPath, content, 'utf-8');
+      const content = await this.vfs.readFile(backupPath, 'utf-8');
+      await this.vfs.writeFile(originalPath, content, 'utf-8');
       return true;
     } catch {
       return false;
@@ -495,12 +504,12 @@ export class UnifiedDiffEditor {
     const pattern = new RegExp(`^${fileName}\\..*\\.bak$`);
 
     try {
-      const exists = await fsPromises.access(this.backupDir).then(() => true).catch(() => false);
+      const exists = await this.vfs.exists(this.backupDir);
       if (!exists) {
         return [];
       }
 
-      const files = await fsPromises.readdir(this.backupDir);
+      const files = await this.vfs.readdir(this.backupDir);
       return files
         .filter(f => pattern.test(f))
         .map(f => path.join(this.backupDir, f))

@@ -610,7 +610,9 @@ let gitPlatform: GitPlatformIntegration | null = null;
 export function getGitPlatform(config?: GitPlatformConfig): GitPlatformIntegration {
   if (!gitPlatform) {
     gitPlatform = new GitPlatformIntegration(config || { platform: 'auto' });
-    gitPlatform.init().catch(() => {});
+    gitPlatform.init().catch((err) => {
+      logger.debug('Failed to initialize git platform', { error: err instanceof Error ? err.message : String(err) });
+    });
   }
   return gitPlatform;
 }

@@ -12,6 +12,7 @@ import { exec } from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import { logger } from '../utils/logger.js';
 
 export type NotificationSound =
   | 'success'
@@ -280,7 +281,7 @@ export class SoundNotificationManager {
     ];
 
     for (const sound of sounds) {
-      console.log(`Playing: ${sound}`);
+      logger.info(`Playing: ${sound}`);
       await this.play(sound);
       await new Promise(resolve => setTimeout(resolve, 500));
     }

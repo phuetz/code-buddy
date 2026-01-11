@@ -10,7 +10,7 @@
  * Inspired by hurry-mode's refactoring capabilities.
  */
 
-import * as fs from "fs";
+import { UnifiedVfsRouter } from "../../services/vfs/unified-vfs-router.js";
 import {
   RefactoringType,
   RefactoringRequest,
@@ -31,6 +31,7 @@ import { getErrorMessage } from "../../types/index.js";
 export class RefactoringAssistant {
   private parser: ASTParser;
   private symbolSearch: SymbolSearch;
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(parser?: ASTParser, symbolSearch?: SymbolSearch) {
     this.parser = parser || getASTParser();
@@ -131,7 +132,7 @@ export class RefactoringAssistant {
 
       // Generate changes for each file
       for (const [filePath, fileUsages] of usagesByFile) {
-        const content = fs.readFileSync(filePath, "utf-8");
+        const content = await this.vfs.readFile(filePath, "utf-8");
         const edits: TextEdit[] = [];
 
         // Sort usages by position (reverse order for safe replacement)
@@ -185,7 +186,7 @@ export class RefactoringAssistant {
     }
 
     try {
-      const content = fs.readFileSync(request.filePath, "utf-8");
+      const content = await this.vfs.readFile(request.filePath, "utf-8");
       const lines = content.split("\n");
 
       // Extract selected code
@@ -282,7 +283,7 @@ export class RefactoringAssistant {
     }
 
     try {
-      const content = fs.readFileSync(request.filePath, "utf-8");
+      const content = await this.vfs.readFile(request.filePath, "utf-8");
       const lines = content.split("\n");
 
       // Extract selected expression
@@ -355,7 +356,7 @@ export class RefactoringAssistant {
 
     try {
       const parseResult = await this.parser.parseFile(request.filePath);
-      const content = fs.readFileSync(request.filePath, "utf-8");
+      const content = await this.vfs.readFile(request.filePath, "utf-8");
 
       // Find target class
       let targetClass: CodeSymbol | undefined;
@@ -460,7 +461,7 @@ export class RefactoringAssistant {
       }
 
       // Read function file
-      const functionContent = fs.readFileSync(targetFunction.filePath, "utf-8");
+      const functionContent = await this.vfs.readFile(targetFunction.filePath, "utf-8");
       const functionLines = functionContent.split("\n");
 
       // Extract function body
@@ -492,7 +493,7 @@ export class RefactoringAssistant {
         if (processedFiles.has(usage.filePath)) continue;
         processedFiles.add(usage.filePath);
 
-        const fileContent = fs.readFileSync(usage.filePath, "utf-8");
+        const fileContent = await this.vfs.readFile(usage.filePath, "utf-8");
         const fileLines = fileContent.split("\n");
 
         // Find and replace calls in this file
@@ -572,7 +573,7 @@ export class RefactoringAssistant {
     }
 
     try {
-      const sourceContent = fs.readFileSync(request.filePath, "utf-8");
+      const sourceContent = await this.vfs.readFile(request.filePath, "utf-8");
       const parseResult = await this.parser.parseFile(request.filePath);
 
       // Find symbol to move
@@ -597,7 +598,7 @@ export class RefactoringAssistant {
       // Add to target
       let targetContent = "";
       try {
-        targetContent = fs.readFileSync(request.targetPath, "utf-8");
+        targetContent = await this.vfs.readFile(request.targetPath, "utf-8");
       } catch {
         // Target doesn't exist, will be created
       }

@@ -213,6 +213,9 @@ export class PromptCacheManager extends EventEmitter {
       });
       this.stats.misses++;
       this.emit("cache:miss", { hash, tokens, type });
+      
+      // Check limits after adding
+      this.evictLRU();
     }
 
     this.stats.entries = this.cache.size;

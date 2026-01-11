@@ -5,6 +5,8 @@
  * Provides basic ASCII art text rendering without GPL license concerns.
  */
 
+import { logger } from './logger.js';
+
 export interface BannerOptions {
   font?: 'simple' | 'block' | 'slant';
   color?: string;
@@ -282,6 +284,6 @@ export function renderColorBanner(text: string, colors: string[] = ['cyan', 'blu
 export default {
   render: renderBanner,
   say: (text: string, options?: BannerOptions) => {
-    console.log(renderBanner(text, options));
+    logger.info(renderBanner(text, options));
   },
 };

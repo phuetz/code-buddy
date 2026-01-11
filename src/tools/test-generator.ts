@@ -1,4 +1,4 @@
-import * as fs from "fs-extra";
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -155,8 +155,9 @@ export class TestGeneratorTool {
   async detectFramework(): Promise<string> {
     const packageJsonPath = path.join(this.projectRoot, "package.json");
 
-    if (await fs.pathExists(packageJsonPath)) {
-      const packageJson = await fs.readJson(packageJsonPath);
+    if (await UnifiedVfsRouter.Instance.exists(packageJsonPath)) {
+      const content = await UnifiedVfsRouter.Instance.readFile(packageJsonPath);
+      const packageJson = JSON.parse(content);
       const devDeps = packageJson.devDependencies || {};
       const deps = packageJson.dependencies || {};
       const allDeps = { ...deps, ...devDeps };
@@ -170,7 +171,7 @@ export class TestGeneratorTool {
     const requirementsPath = path.join(this.projectRoot, "requirements.txt");
     const pyprojectPath = path.join(this.projectRoot, "pyproject.toml");
 
-    if (await fs.pathExists(requirementsPath) || await fs.pathExists(pyprojectPath)) {
+    if (await UnifiedVfsRouter.Instance.exists(requirementsPath) || await UnifiedVfsRouter.Instance.exists(pyprojectPath)) {
       return "pytest";
     }
 
@@ -195,7 +196,7 @@ export class TestGeneratorTool {
   /**
    * Generate test file path
    */
-  getTestFilePath(sourceFile: string, framework: string): string {
+  async getTestFilePath(sourceFile: string, framework: string): Promise<string> {
     const parsed = path.parse(sourceFile);
     const ext = parsed.ext;
 
@@ -205,14 +206,15 @@ export class TestGeneratorTool {
 
     // Check for __tests__ directory convention
     const testsDir = path.join(parsed.dir, "__tests__");
+    const hasTestsDir = await UnifiedVfsRouter.Instance.exists(testsDir);
 
     if (ext === ".ts" || ext === ".tsx") {
-      return fs.existsSync(testsDir)
+      return hasTestsDir
         ? path.join(testsDir, `${parsed.name}.test.ts`)
         : path.join(parsed.dir, `${parsed.name}.test.ts`);
     }
 
-    return fs.existsSync(testsDir)
+    return hasTestsDir
       ? path.join(testsDir, `${parsed.name}.test.js`)
       : path.join(parsed.dir, `${parsed.name}.test.js`);
   }
@@ -225,7 +227,7 @@ export class TestGeneratorTool {
     functions: string[];
     classes: string[];
   }> {
-    const content = await fs.readFile(filePath, "utf-8");
+    const content = await UnifiedVfsRouter.Instance.readFile(filePath, "utf-8");
 
     const exports: string[] = [];
     const functions: string[] = [];
@@ -281,7 +283,7 @@ export class TestGeneratorTool {
       : config.framework;
 
     const analysis = await this.analyzeSourceFile(sourceFile);
-    const testFile = this.getTestFilePath(sourceFile, framework);
+    const testFile = await this.getTestFilePath(sourceFile, framework);
     const relativePath = path.relative(path.dirname(testFile), sourceFile)
       .replace(/\\/g, "/")
       .replace(/\.[^.]+$/, "");
@@ -443,7 +445,7 @@ export class TestGeneratorTool {
   async getCoverageReport(): Promise<ToolResult> {
     const coverageDir = path.join(this.projectRoot, "coverage");
 
-    if (!(await fs.pathExists(coverageDir))) {
+    if (!(await UnifiedVfsRouter.Instance.exists(coverageDir))) {
       return {
         success: false,
         error: "No coverage report found. Run tests with --coverage first.",
@@ -453,8 +455,9 @@ export class TestGeneratorTool {
     // Try to read lcov or summary
     const summaryPath = path.join(coverageDir, "coverage-summary.json");
 
-    if (await fs.pathExists(summaryPath)) {
-      const summary = await fs.readJson(summaryPath);
+    if (await UnifiedVfsRouter.Instance.exists(summaryPath)) {
+      const content = await UnifiedVfsRouter.Instance.readFile(summaryPath);
+      const summary = JSON.parse(content);
       const total = summary.total;
 
       let output = "📊 Coverage Summary\n";

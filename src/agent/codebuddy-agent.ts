@@ -1,14 +1,9 @@
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../codebuddy/client.js";
 import {
-  getAllCodeBuddyTools,
-  getRelevantTools,
   getMCPManager,
   initializeMCPServers,
-  classifyQuery,
   ToolSelectionResult,
-  getToolSelector,
 } from "../codebuddy/tools.js";
-import { recordToolRequest, formatToolSelectionMetrics } from "../tools/tool-selector.js";
 import { loadMCPConfig } from "../mcp/config.js";
 import {
   TextEditorTool,
@@ -42,32 +37,26 @@ import { getPromptCacheManager, PromptCacheManager } from "../optimization/promp
 import { getHooksManager, HooksManager } from "../hooks/lifecycle-hooks.js";
 import { getModelRouter, ModelRouter, type RoutingDecision } from "../optimization/model-routing.js";
 import { getPluginMarketplace, PluginMarketplace } from "../plugins/marketplace.js";
+import { getToolSelectionStrategy, ToolSelectionStrategy } from "./execution/tool-selection-strategy.js";
+import { PromptBuilder } from "../services/prompt-builder.js";
+import { reduceStreamChunk } from "./streaming/message-reducer.js";
 
+import { ToolHandler } from "./tool-handler.js";
 import { BaseAgent } from "./base-agent.js";
 import { RepairEngine, getRepairEngine } from "./repair/index.js";
-import {
-  EnhancedMemory,
-  getEnhancedMemory,
-  type MemoryEntry,
-  type MemoryType,
-} from "../memory/index.js";
 
 // Re-export types for backwards compatibility
-export { ChatEntry, StreamingChunk } from "./types.js";
+export type { ChatEntry, StreamingChunk } from "./types.js";
 import type { ChatEntry, StreamingChunk } from "./types.js";
 
 /**
  * Main agent class that orchestrates conversation with CodeBuddy AI and tool execution
  *
- * @example
+ * Usage:
  * ```typescript
- * const agent = new CodeBuddyAgent(apiKey, baseURL, model);
- *
- * // Process a message with streaming
- * for await (const chunk of agent.processUserMessageStream("Show me package.json")) {
- *   if (chunk.type === "content") {
- *     console.log(chunk.content);
- *   }
+ * const agent = new CodeBuddyAgent(apiKey);
+ * for await (const chunk of agent.processUserMessageStream("Hello")) {
+ *   console.log(chunk);
  * }
  *
  * // Clean up when done
@@ -76,21 +65,10 @@ import type { ChatEntry, StreamingChunk } from "./types.js";
  */
 export class CodeBuddyAgent extends BaseAgent {
   private codebuddyClient: CodeBuddyClient;
-  // Lazy-loaded tool instances (improves startup time)
-  private _textEditor: TextEditorTool | null = null;
-  private _morphEditor: MorphEditorTool | null | undefined = undefined; // undefined = not checked yet
-  private _bash: BashTool | null = null;
-  private _todoTool: TodoTool | null = null;
-  private _search: SearchTool | null = null;
-  private _webSearch: WebSearchTool | null = null;
-  private _imageTool: ImageTool | null = null;
-  private _reasoningTool: ReasoningTool | null = null;
-  private _browserTool: BrowserTool | null = null;
+  private toolHandler: ToolHandler;
+  private promptBuilder: PromptBuilder;
+  
   private _repairEngine: RepairEngine | null = null;
-  private _memory: EnhancedMemory | null = null;
-
-  // Memory system configuration
-  private memoryEnabled = true;
 
   // Auto-repair configuration
   private autoRepairEnabled = true;
@@ -105,70 +83,6 @@ export class CodeBuddyAgent extends BaseAgent {
     /Build failed/i,           // Build failures
   ];
 
-  // Lazy tool getters - only instantiate when first accessed
-  private get textEditor(): TextEditorTool {
-    if (!this._textEditor) {
-      this._textEditor = new TextEditorTool();
-    }
-    return this._textEditor;
-  }
-
-  private get morphEditor(): MorphEditorTool | null {
-    if (this._morphEditor === undefined) {
-      this._morphEditor = process.env.MORPH_API_KEY ? new MorphEditorTool() : null;
-    }
-    return this._morphEditor;
-  }
-
-  private get bash(): BashTool {
-    if (!this._bash) {
-      this._bash = new BashTool();
-    }
-    return this._bash;
-  }
-
-  private get todoTool(): TodoTool {
-    if (!this._todoTool) {
-      this._todoTool = new TodoTool();
-    }
-    return this._todoTool;
-  }
-
-  private get search(): SearchTool {
-    if (!this._search) {
-      this._search = new SearchTool();
-    }
-    return this._search;
-  }
-
-  private get webSearch(): WebSearchTool {
-    if (!this._webSearch) {
-      this._webSearch = new WebSearchTool();
-    }
-    return this._webSearch;
-  }
-
-  private get imageTool(): ImageTool {
-    if (!this._imageTool) {
-      this._imageTool = new ImageTool();
-    }
-    return this._imageTool;
-  }
-
-  private get reasoningTool(): ReasoningTool {
-    if (!this._reasoningTool) {
-      this._reasoningTool = new ReasoningTool();
-    }
-    return this._reasoningTool;
-  }
-
-  private get browserTool(): BrowserTool {
-    if (!this._browserTool) {
-      this._browserTool = new BrowserTool();
-    }
-    return this._browserTool;
-  }
-
   private get repairEngine(): RepairEngine {
     if (!this._repairEngine) {
       // Get API key from environment (same as used by agent)
@@ -178,7 +92,7 @@ export class CodeBuddyAgent extends BaseAgent {
       // Set up executors for the repair engine
       this._repairEngine.setExecutors({
         commandExecutor: async (cmd: string) => {
-          const result = await this.bash.execute(cmd);
+          const result = await this.toolHandler.bash.execute(cmd);
           return {
             success: result.success,
             output: result.output || '',
@@ -186,50 +100,22 @@ export class CodeBuddyAgent extends BaseAgent {
           };
         },
         fileReader: async (path: string) => {
-          const result = await this.textEditor.view(path);
+          const result = await this.toolHandler.textEditor.view(path);
           return result.output || '';
         },
         fileWriter: async (path: string, content: string) => {
           // Use edit to write file content
-          await this.textEditor.create(path, content);
+          await this.toolHandler.textEditor.create(path, content);
         },
       });
     }
     return this._repairEngine;
   }
 
-  /**
-   * Lazy-loaded memory system for cross-session context persistence
-   */
-  private get memory(): EnhancedMemory {
-    if (!this._memory) {
-      this._memory = getEnhancedMemory({
-        enabled: this.memoryEnabled,
-        embeddingEnabled: true,
-        useSQLite: true,
-        maxMemories: 10000,
-        autoSummarize: true,
-      });
-
-      // Set project context if we have a working directory
-      const cwd = process.cwd();
-      if (cwd) {
-        this._memory.setProjectContext(cwd).catch(err => {
-          logger.warn('Failed to set project context for memory', { error: getErrorMessage(err) });
-        });
-      }
-    }
-    return this._memory;
-  }
-
   // Maximum history entries to prevent memory bloat (keep last N entries)
   private static readonly MAX_HISTORY_SIZE = 1000;
-  // Cached tools from first round of tool selection
-  private cachedSelectedTools: import("../codebuddy/client.js").CodeBuddyTool[] | null = null;
   
-  private lastToolSelection: ToolSelectionResult | null = null;
-  private lastSelectedToolNames: string[] = [];
-  private lastQueryForToolSelection: string = '';
+  private toolSelectionStrategy: ToolSelectionStrategy;
 
   /**
    * Create a new CodeBuddyAgent instance
@@ -287,6 +173,9 @@ export class CodeBuddyAgent extends BaseAgent {
 
     this.costTracker = getCostTracker();
     this.useRAGToolSelection = useRAGToolSelection;
+    this.toolSelectionStrategy = getToolSelectionStrategy({
+      useRAG: useRAGToolSelection
+    });
     this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
     // Tools are now lazy-loaded via getters (see lazy tool getters above)
     this.tokenCounter = createTokenCounter(modelToUse);
@@ -309,6 +198,23 @@ export class CodeBuddyAgent extends BaseAgent {
     this.modelRouter = getModelRouter();
     this.marketplace = getPluginMarketplace();
 
+    // Initialize ToolHandler
+    this.toolHandler = new ToolHandler({
+      checkpointManager: this.checkpointManager,
+      hooksManager: this.hooksManager,
+      marketplace: this.marketplace,
+      autoRepairCallback: this.attemptAutoRepair.bind(this),
+      autoRepairEnabled: this.autoRepairEnabled
+    });
+
+    // Initialize PromptBuilder
+    this.promptBuilder = new PromptBuilder({
+      yoloMode: this.yoloMode,
+      memoryEnabled: this.memoryEnabled,
+      morphEditorEnabled: !!this.toolHandler.morphEditor,
+      cwd: process.cwd()
+    }, this.promptCacheManager, this.memory);
+
     // Initialize MCP servers if configured
     this.initializeMCP();
 
@@ -316,82 +222,14 @@ export class CodeBuddyAgent extends BaseAgent {
     const customInstructions = loadCustomInstructions();
 
     // Initialize system prompt (async operation, handled via IIFE)
-    this.initializeSystemPrompt(systemPromptId, modelToUse, customInstructions);
-  }
-
-  /**
-   * Initialize system prompt - supports external Markdown prompts (mistral-vibe style)
-   */
-  private initializeSystemPrompt(
-    systemPromptId: string | undefined,
-    modelName: string,
-    customInstructions: string | null
-  ): void {
-    // Use IIFE to handle async in constructor
     (async () => {
-      let systemPrompt: string;
-
-      if (systemPromptId) {
-        // Use external prompt system (new)
-        const promptManager = getPromptManager();
-        systemPrompt = await promptManager.buildSystemPrompt({
-          promptId: systemPromptId,
-          includeModelInfo: true,
-          includeOsInfo: true,
-          includeProjectContext: false, // Don't include by default (expensive)
-          includeToolPrompts: true,
-          userInstructions: customInstructions || undefined,
-          cwd: process.cwd(),
-          modelName,
-          tools: ['view_file', 'str_replace_editor', 'create_file', 'search', 'bash', 'todo', 'reason'],
-        });
-        logger.debug(`Using system prompt: ${systemPromptId}`);
-      } else if (systemPromptId === 'auto') {
-        // Auto-select based on model alignment
-        const autoId = autoSelectPromptId(modelName);
-        const promptManager = getPromptManager();
-        systemPrompt = await promptManager.buildSystemPrompt({
-          promptId: autoId,
-          includeModelInfo: true,
-          includeOsInfo: true,
-          userInstructions: customInstructions || undefined,
-          cwd: process.cwd(),
-          modelName,
-        });
-        logger.debug(`Auto-selected prompt: ${autoId} (based on ${modelName})`);
-      } else {
-        // Use legacy system (current behavior)
-        const promptMode = this.yoloMode ? "yolo" : "default";
-        systemPrompt = getSystemPromptForMode(
-          promptMode,
-          !!this.morphEditor,
-          process.cwd(),
-          customInstructions || undefined
-        );
-      }
-
-      // Cache system prompt for optimization
-      this.promptCacheManager.cacheSystemPrompt(systemPrompt);
-
-      // Initialize with system message
+      const systemPrompt = await this.promptBuilder.buildSystemPrompt(systemPromptId, modelToUse, customInstructions);
       this.messages.push({
         role: "system",
         content: systemPrompt,
       });
     })().catch(error => {
-      // Fallback to legacy prompt on error
-      logger.warn("Failed to load custom prompt, using default", { error: getErrorMessage(error) });
-      const promptMode = this.yoloMode ? "yolo" : "default";
-      const systemPrompt = getSystemPromptForMode(
-        promptMode,
-        !!this.morphEditor,
-        process.cwd(),
-        customInstructions || undefined
-      );
-      this.messages.push({
-        role: "system",
-        content: systemPrompt,
-      });
+      logger.error("Failed to initialize system prompt", error as Error);
     });
   }
 
@@ -422,198 +260,9 @@ export class CodeBuddyAgent extends BaseAgent {
     return currentModel.toLowerCase().includes("codebuddy");
   }
 
-  // Heuristic: enable web search only when likely needed
-  private shouldUseSearchFor(message: string): boolean {
-    const q = message.toLowerCase();
-    const keywords = [
-      "today",
-      "latest",
-      "news",
-      "trending",
-      "breaking",
-      "current",
-      "now",
-      "recent",
-      "x.com",
-      "twitter",
-      "tweet",
-      "what happened",
-      "as of",
-      "update on",
-      "release notes",
-      "changelog",
-      "price",
-    ];
-    if (keywords.some((k) => q.includes(k))) return true;
-    // crude date pattern (e.g., 2024/2025) may imply recency
-    if (/(20\d{2})/.test(q)) return true;
-    return false;
-  }
-
-  /**
-   * Check if tool calls can be safely executed in parallel
-   *
-   * Tools that modify the same files or have side effects should not be parallelized.
-   * Read-only operations (view_file, search, web_search) are safe to parallelize.
-   */
-  private canParallelizeToolCalls(toolCalls: CodeBuddyToolCall[]): boolean {
-    if (!this.parallelToolExecution || toolCalls.length <= 1) {
-      return false;
-    }
-
-    // Tools that are safe to run in parallel (read-only)
-    const safeParallelTools = new Set([
-      'view_file',
-      'search',
-      'web_search',
-      'web_fetch',
-      'codebase_map',
-      'pdf',
-      'audio',
-      'video',
-      'document',
-      'ocr',
-      'qr',
-      'archive',
-      'clipboard' // read operations
-    ]);
-
-    // Tools that modify state (unsafe for parallel)
-    const writeTools = new Set([
-      'create_file',
-      'str_replace_editor',
-      'edit_file',
-      'multi_edit',
-      'bash',
-      'git',
-      'create_todo_list',
-      'update_todo_list',
-      'screenshot',
-      'export',
-      'diagram'
-    ]);
-
-    // Check if all tools are safe for parallel execution
-    const allSafe = toolCalls.every(tc => safeParallelTools.has(tc.function.name));
-    if (allSafe) return true;
-
-    // Check if any write tools target the same file
-    const writeToolCalls = toolCalls.filter(tc => writeTools.has(tc.function.name));
-    if (writeToolCalls.length > 1) {
-      // Extract file paths from arguments
-      const filePaths = new Set<string>();
-      for (const tc of writeToolCalls) {
-        try {
-          const args = JSON.parse(tc.function.arguments);
-          const path = args.path || args.target_file || args.file_path;
-          if (path) {
-            if (filePaths.has(path)) {
-              return false; // Same file targeted by multiple write tools
-            }
-            filePaths.add(path);
-          }
-        } catch {
-          return false; // Can't parse args, be safe
-        }
-      }
-      // Multiple write tools to different files - can parallelize
-      return true;
-    }
-
-    // If there's only one write tool, safe to parallelize with read tools
-    return writeToolCalls.length <= 1;
-  }
-
-  /**
-   * Execute multiple tool calls, potentially in parallel
-   */
-  private async _executeToolCallsParallel(
-    toolCalls: CodeBuddyToolCall[]
-  ): Promise<Map<string, ToolResult>> {
-    const results = new Map<string, ToolResult>();
-
-    if (this.canParallelizeToolCalls(toolCalls)) {
-      // Execute in parallel with proper error handling per tool
-      const promises = toolCalls.map(async (toolCall) => {
-        try {
-          const result = await this.executeTool(toolCall);
-          return { id: toolCall.id, result };
-        } catch (error) {
-          // Individual tool failure doesn't crash other parallel tools
-          return {
-            id: toolCall.id,
-            result: {
-              success: false,
-              error: `Tool execution failed: ${getErrorMessage(error)}`,
-            } as ToolResult,
-          };
-        }
-      });
-
-      const settled = await Promise.all(promises);
-      for (const { id, result } of settled) {
-        results.set(id, result);
-      }
-    } else {
-      // Execute sequentially
-      for (const toolCall of toolCalls) {
-        const result = await this.executeTool(toolCall);
-        results.set(toolCall.id, result);
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Get tools for a query using RAG selection if enabled
-   */
-  private async getToolsForQuery(query: string): Promise<{
-    tools: import("../codebuddy/client.js").CodeBuddyTool[];
-    selection: ToolSelectionResult | null;
-  }> {
-    this.lastQueryForToolSelection = query;
-
-    if (this.useRAGToolSelection) {
-      const selection = await getRelevantTools(query, {
-        maxTools: 15,
-        useRAG: true,
-        alwaysInclude: ['view_file', 'bash', 'search', 'str_replace_editor']
-      });
-      this.lastToolSelection = selection;
-      this.lastSelectedToolNames = selection.selectedTools.map(t => t.function.name);
-
-      // Cache tools for prompt caching optimization
-      this.promptCacheManager.cacheTools(selection.selectedTools);
-
-      return { tools: selection.selectedTools, selection };
-    } else {
-      const tools = await getAllCodeBuddyTools();
-      this.lastSelectedToolNames = tools.map(t => t.function.name);
-
-      // Cache tools for prompt caching optimization
-      this.promptCacheManager.cacheTools(tools);
-
-      return { tools, selection: null };
-    }
-  }
-
-  /**
-   * Record tool request for metrics (called when LLM requests a tool)
-   */
-  private recordToolRequestMetric(toolName: string): void {
-    if (this.useRAGToolSelection && this.lastQueryForToolSelection) {
-      recordToolRequest(
-        toolName,
-        this.lastSelectedToolNames,
-        this.lastQueryForToolSelection
-      );
-    }
-  }
-
   async processUserMessage(message: string): Promise<ChatEntry[]> {
     // Reset cached tools for new conversation turn
-    this.cachedSelectedTools = null;
+    this.toolSelectionStrategy.clearCache();
 
     // Add user message to conversation
     const userEntry: ChatEntry = {
@@ -637,7 +286,10 @@ export class CodeBuddyAgent extends BaseAgent {
 
     try {
       // Use RAG-based tool selection for initial query
-      const { tools } = await this.getToolsForQuery(message);
+      // Strategy handles caching internally
+      const selectionResult = await this.toolSelectionStrategy.selectToolsForQuery(message);
+      const tools = selectionResult.tools;
+      this.toolSelectionStrategy.cacheTools(tools);
 
       // Apply context management - compress messages if approaching token limits
       const preparedMessages = this.contextManager.prepareMessages(this.messages);
@@ -652,7 +304,7 @@ export class CodeBuddyAgent extends BaseAgent {
         preparedMessages,
         tools,
         undefined,
-        this.isGrokModel() && this.shouldUseSearchFor(message)
+        this.isGrokModel() && this.toolSelectionStrategy.shouldUseSearchFor(message)
           ? { search_parameters: { mode: "auto" } }
           : { search_parameters: { mode: "off" } }
       );
@@ -698,6 +350,10 @@ export class CodeBuddyAgent extends BaseAgent {
           });
 
           // Create initial tool call entries to show tools are being executed
+          // Use Maps for O(1) lookups instead of O(n) findIndex
+          const toolCallHistoryIndices = new Map<string, number>();
+          const toolCallNewEntryIndices = new Map<string, number>();
+
           assistantMessage.tool_calls.forEach((toolCall) => {
             const toolCallEntry: ChatEntry = {
               type: "tool_call",
@@ -705,21 +361,21 @@ export class CodeBuddyAgent extends BaseAgent {
               timestamp: new Date(),
               toolCall: toolCall,
             };
+            // Record indices before pushing for O(1) lookup later
+            toolCallHistoryIndices.set(toolCall.id, this.chatHistory.length);
+            toolCallNewEntryIndices.set(toolCall.id, newEntries.length);
             this.chatHistory.push(toolCallEntry);
             newEntries.push(toolCallEntry);
           });
 
           // Execute tool calls and update the entries
           for (const toolCall of assistantMessage.tool_calls) {
-            const result = await this.executeTool(toolCall);
+            const result = await this.toolHandler.executeTool(toolCall);
 
-            // Update the existing tool_call entry with the result
-            const entryIndex = this.chatHistory.findIndex(
-              (entry) =>
-                entry.type === "tool_call" && entry.toolCall?.id === toolCall.id
-            );
+            // Update the existing tool_call entry with the result using O(1) Map lookup
+            const entryIndex = toolCallHistoryIndices.get(toolCall.id);
 
-            if (entryIndex !== -1) {
+            if (entryIndex !== undefined) {
               const updatedEntry: ChatEntry = {
                 ...this.chatHistory[entryIndex],
                 type: "tool_result",
@@ -730,13 +386,9 @@ export class CodeBuddyAgent extends BaseAgent {
               };
               this.chatHistory[entryIndex] = updatedEntry;
 
-              // Also update in newEntries for return value
-              const newEntryIndex = newEntries.findIndex(
-                (entry) =>
-                  entry.type === "tool_call" &&
-                  entry.toolCall?.id === toolCall.id
-              );
-              if (newEntryIndex !== -1) {
+              // Also update in newEntries for return value using O(1) Map lookup
+              const newEntryIndex = toolCallNewEntryIndices.get(toolCall.id);
+              if (newEntryIndex !== undefined) {
                 newEntries[newEntryIndex] = updatedEntry;
               }
             }
@@ -758,7 +410,7 @@ export class CodeBuddyAgent extends BaseAgent {
             nextPreparedMessages,
             tools,
             undefined,
-            this.isGrokModel() && this.shouldUseSearchFor(message)
+            this.isGrokModel() && this.toolSelectionStrategy.shouldUseSearchFor(message)
               ? { search_parameters: { mode: "auto" } }
               : { search_parameters: { mode: "off" } }
           );
@@ -823,69 +475,6 @@ export class CodeBuddyAgent extends BaseAgent {
     }
   }
 
-  private messageReducer(previous: Record<string, unknown>, item: unknown): Record<string, unknown> {
-    const reduce = (acc: Record<string, unknown>, delta: unknown): Record<string, unknown> => {
-      if (!delta || typeof delta !== 'object') {
-        return acc;
-      }
-      acc = { ...acc };
-      for (const [key, value] of Object.entries(delta)) {
-        if (acc[key] === undefined || acc[key] === null) {
-          acc[key] = value;
-          // Clean up index properties from tool calls
-          if (Array.isArray(acc[key])) {
-            for (const arr of acc[key]) {
-              if (arr && typeof arr === 'object' && 'index' in arr) {
-                delete arr.index;
-              }
-            }
-          }
-        } else if (typeof acc[key] === "string" && typeof value === "string") {
-          (acc[key] as string) += value;
-        } else if (Array.isArray(acc[key]) && Array.isArray(value)) {
-          const accArray = acc[key] as Array<Record<string, unknown>>;
-          for (let i = 0; i < value.length; i++) {
-            if (!accArray[i]) accArray[i] = {};
-            accArray[i] = reduce(accArray[i], value[i]);
-          }
-        } else if (typeof acc[key] === "object" && typeof value === "object" && acc[key] !== null && value !== null) {
-          acc[key] = reduce(acc[key] as Record<string, unknown>, value);
-        }
-      }
-      return acc;
-    };
-
-    const itemObj = item as { choices?: Array<{ delta?: unknown }> };
-    return reduce(previous, itemObj.choices?.[0]?.delta || {});
-  }
-
-  /**
-   * Process a user message with streaming response
-   *
-   * This method runs an agentic loop that can execute multiple tool rounds.
-   * It yields chunks as they arrive, including content, tool calls, and results.
-   *
-   * @param message - The user's message to process
-   * @yields StreamingChunk objects containing different types of data
-   * @throws Error if processing fails
-   *
-   * @example
-   * ```typescript
-   * for await (const chunk of agent.processUserMessageStream("List files")) {
-   *   switch (chunk.type) {
-   *     case "content":
-   *       console.log(chunk.content);
-   *       break;
-   *     case "tool_calls":
-   *       console.log("Tools:", chunk.toolCalls);
-   *       break;
-   *     case "done":
-   *       console.log("Completed");
-   *       break;
-   *   }
-   * }
-   * ```
-   */
   async *processUserMessageStream(
     message: string
   ): AsyncGenerator<StreamingChunk, void, unknown> {
@@ -893,7 +482,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.abortController = new AbortController();
 
     // Reset cached tools for new conversation turn
-    this.cachedSelectedTools = null;
+    this.toolSelectionStrategy.clearCache();
 
     // Add user message to conversation
     const userEntry: ChatEntry = {
@@ -960,14 +549,12 @@ export class CodeBuddyAgent extends BaseAgent {
         // Stream response and accumulate
         // Use RAG-based tool selection on first round, then cache and reuse tools for consistency
         // This saves ~9000 tokens on multi-round queries
-        let tools: import("../codebuddy/client.js").CodeBuddyTool[];
+        const selectionResult = await this.toolSelectionStrategy.selectToolsForQuery(message);
+        const tools = selectionResult.tools;
+
+        // Cache tools for subsequent rounds in this turn
         if (toolRounds === 0) {
-          const selection = await this.getToolsForQuery(message);
-          tools = selection.tools;
-          this.cachedSelectedTools = tools; // Cache for subsequent rounds
-        } else {
-          // Use cached tools from first round instead of ALL tools
-          tools = this.cachedSelectedTools || await getAllCodeBuddyTools();
+          this.toolSelectionStrategy.cacheTools(tools);
         }
 
         // Apply context management - compress messages if approaching token limits
@@ -986,7 +573,7 @@ export class CodeBuddyAgent extends BaseAgent {
           preparedMessages,
           tools,
           undefined,
-          this.isGrokModel() && this.shouldUseSearchFor(message)
+          this.isGrokModel() && this.toolSelectionStrategy.shouldUseSearchFor(message)
             ? { search_parameters: { mode: "auto" } }
             : { search_parameters: { mode: "off" } }
         );
@@ -1008,7 +595,7 @@ export class CodeBuddyAgent extends BaseAgent {
           if (!chunk.choices?.[0]) continue;
 
           // Accumulate the message using reducer
-          accumulatedMessage = this.messageReducer(accumulatedMessage, chunk);
+          accumulatedMessage = reduceStreamChunk(accumulatedMessage, chunk);
 
           // Check for tool calls - yield when we have complete tool calls with function names
           const toolCalls = accumulatedMessage.tool_calls;
@@ -1039,25 +626,23 @@ export class CodeBuddyAgent extends BaseAgent {
 
             // Only display sanitized content
             if (sanitizedContent) {
-
-              // Update token count in real-time including accumulated content and any tool calls
-              const currentOutputTokens =
-                this.tokenCounter.estimateStreamingTokens(accumulatedContent) +
-                (accumulatedMessage.tool_calls
-                  ? this.tokenCounter.countTokens(
-                      JSON.stringify(accumulatedMessage.tool_calls)
-                    )
-                  : 0);
-              totalOutputTokens = currentOutputTokens;
-
               yield {
                 type: "content",
                 content: sanitizedContent,
               };
 
-              // Emit token count update
+              // Throttle token count updates to avoid expensive recounting on every chunk
               const now = Date.now();
               if (now - lastTokenUpdate > 500) {
+                // Only compute token count when we're about to emit an update
+                const currentOutputTokens =
+                  this.tokenCounter.estimateStreamingTokens(accumulatedContent) +
+                  (accumulatedMessage.tool_calls
+                    ? this.tokenCounter.countTokens(
+                        JSON.stringify(accumulatedMessage.tool_calls)
+                      )
+                    : 0);
+                totalOutputTokens = currentOutputTokens;
                 lastTokenUpdate = now;
                 yield {
                   type: "token_count",
@@ -1143,7 +728,7 @@ export class CodeBuddyAgent extends BaseAgent {
               return;
             }
 
-            const result = await this.executeTool(toolCall);
+            const result = await this.toolHandler.executeTool(toolCall);
 
             const toolResultEntry: ChatEntry = {
               type: "tool_result",
@@ -1267,278 +852,7 @@ export class CodeBuddyAgent extends BaseAgent {
   }
 
   protected async executeTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
-    // Record this tool request for metrics tracking
-    this.recordToolRequestMetric(toolCall.function.name);
-
-    try {
-      const args = JSON.parse(toolCall.function.arguments);
-
-      switch (toolCall.function.name) {
-        case "view_file":
-          const range: [number, number] | undefined =
-            args.start_line && args.end_line
-              ? [args.start_line, args.end_line]
-              : undefined;
-          return await this.textEditor.view(args.path, range);
-
-        case "create_file": {
-          // Create checkpoint before creating file
-          this.checkpointManager.checkpointBeforeCreate(args.path);
-
-          // Execute pre-edit hooks
-          await this.hooksManager.executeHooks("pre-edit", {
-            file: args.path,
-            content: args.content,
-          });
-
-          const createResult = await this.textEditor.create(args.path, args.content);
-
-          // Execute post-edit hooks
-          await this.hooksManager.executeHooks("post-edit", {
-            file: args.path,
-            content: args.content,
-            output: createResult.output,
-          });
-
-          return createResult;
-        }
-
-        case "str_replace_editor": {
-          // Create checkpoint before editing file
-          this.checkpointManager.checkpointBeforeEdit(args.path);
-
-          // Execute pre-edit hooks
-          await this.hooksManager.executeHooks("pre-edit", {
-            file: args.path,
-            content: args.new_str,
-          });
-
-          const editResult = await this.textEditor.strReplace(
-            args.path,
-            args.old_str,
-            args.new_str,
-            args.replace_all
-          );
-
-          // Execute post-edit hooks
-          await this.hooksManager.executeHooks("post-edit", {
-            file: args.path,
-            content: args.new_str,
-            output: editResult.output,
-          });
-
-          return editResult;
-        }
-
-        case "edit_file":
-          if (!this.morphEditor) {
-            return {
-              success: false,
-              error:
-                "Morph Fast Apply not available. Please set MORPH_API_KEY environment variable to use this feature.",
-            };
-          }
-          return await this.morphEditor.editFile(
-            args.target_file,
-            args.instructions,
-            args.code_edit
-          );
-
-        case "bash": {
-          // Execute pre-bash hooks (gracefully handle failures)
-          try {
-            await this.hooksManager.executeHooks("pre-bash", {
-              command: args.command,
-            });
-          } catch (hookError) {
-            logger.warn("Pre-bash hook failed, continuing with execution", { error: getErrorMessage(hookError) });
-          }
-
-          let bashResult = await this.bash.execute(args.command);
-
-          // INTEGRATION: Auto-repair on failure
-          if (!bashResult.success && bashResult.error && this.autoRepairEnabled) {
-            const repairResult = await this.attemptAutoRepair(bashResult.error, args.command);
-            
-            if (repairResult.success) {
-              // If repair succeeded, retry the command once
-              logger.info(`Retrying command after successful repair: ${args.command}`);
-              const retryResult = await this.bash.execute(args.command);
-              
-              if (retryResult.success) {
-                bashResult = {
-                  ...retryResult,
-                  output: `[Auto-repaired: ${repairResult.fixes.join(', ')}]\n\n${retryResult.output}`
-                };
-              } else {
-                bashResult.output = (bashResult.output || '') + 
-                  `\n\n[Auto-repair applied but command still fails: ${repairResult.fixes.join(', ')}]`;
-              }
-            }
-          }
-
-          // Execute post-bash hooks (gracefully handle failures)
-          try {
-            await this.hooksManager.executeHooks("post-bash", {
-              command: args.command,
-              output: bashResult.output,
-              error: bashResult.error,
-            });
-          } catch (hookError) {
-            logger.warn("Post-bash hook failed", { error: getErrorMessage(hookError) });
-          }
-
-          return bashResult;
-        }
-
-        case "create_todo_list":
-          return await this.todoTool.createTodoList(args.todos);
-
-        case "update_todo_list":
-          return await this.todoTool.updateTodoList(args.updates);
-
-        case "search":
-          return await this.search.search(args.query, {
-            searchType: args.search_type,
-            includePattern: args.include_pattern,
-            excludePattern: args.exclude_pattern,
-            caseSensitive: args.case_sensitive,
-            wholeWord: args.whole_word,
-            regex: args.regex,
-            maxResults: args.max_results,
-            fileTypes: args.file_types,
-            includeHidden: args.include_hidden,
-          });
-
-        case "find_symbols":
-          return await this.search.findSymbols(args.name, {
-            types: args.types,
-            exportedOnly: args.exported_only,
-          });
-
-        case "find_references":
-          return await this.search.findReferences(
-            args.symbol_name,
-            args.context_lines ?? 2
-          );
-
-        case "find_definition":
-          return await this.search.findDefinition(args.symbol_name);
-
-        case "search_multi":
-          return await this.search.searchMultiple(
-            args.patterns,
-            args.operator ?? "OR"
-          );
-
-        case "web_search":
-          return await this.webSearch.search(args.query, {
-            maxResults: args.max_results,
-          });
-
-        case "web_fetch":
-          return await this.webSearch.fetchPage(args.url);
-
-        case "browser":
-          return await this.browserTool.execute({
-            action: args.action,
-            url: args.url,
-            selector: args.selector,
-            value: args.value,
-            script: args.script,
-            timeout: args.timeout,
-            screenshotOptions: args.screenshotOptions,
-            scrollOptions: args.scrollOptions,
-          });
-
-        case "reason":
-          return await this.reasoningTool.execute({
-            problem: args.problem,
-            context: args.context,
-            mode: args.mode,
-            constraints: args.constraints,
-          });
-
-        default:
-          // Check if this is an MCP tool
-          if (toolCall.function.name.startsWith("mcp__")) {
-            return await this.executeMCPTool(toolCall);
-          }
-
-          // Check if this is a plugin tool
-          if (toolCall.function.name.startsWith("plugin__")) {
-            return await this.executePluginTool(toolCall);
-          }
-
-          return {
-            success: false,
-            error: `Unknown tool: ${toolCall.function.name}`,
-          };
-      }
-    } catch (error: unknown) {
-      return {
-        success: false,
-        error: `Tool execution error: ${getErrorMessage(error)}`,
-      };
-    }
-  }
-
-  private async executeMCPTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
-    try {
-      const args = JSON.parse(toolCall.function.arguments);
-      const mcpManager = getMCPManager();
-
-      const result = await mcpManager.callTool(toolCall.function.name, args);
-
-      if (result.isError) {
-        const errorContent = result.content[0] as { text?: string } | undefined;
-        return {
-          success: false,
-          error: errorContent?.text || "MCP tool error",
-        };
-      }
-
-      // Extract content from result
-      const output = result.content
-        .map((item) => {
-          if (item.type === "text") {
-            return item.text;
-          } else if (item.type === "resource") {
-            return `Resource: ${item.resource?.uri || "Unknown"}`;
-          }
-          return String(item);
-        })
-        .join("\n");
-
-      return {
-        success: true,
-        output: output || "Success",
-      };
-    } catch (error: unknown) {
-      return {
-        success: false,
-        error: `MCP tool execution error: ${getErrorMessage(error)}`,
-      };
-    }
-  }
-
-  private async executePluginTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
-    try {
-      const args = JSON.parse(toolCall.function.arguments);
-      const toolName = toolCall.function.name.replace("plugin__", "");
-      
-      const result = await this.marketplace.executeTool(toolName, args);
-
-      return {
-        success: true,
-        output: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
-      };
-    } catch (error: unknown) {
-      return {
-        success: false,
-        error: `Plugin tool execution error: ${getErrorMessage(error)}`,
-      };
-    }
+    return this.toolHandler.executeTool(toolCall);
   }
 
   /**
@@ -1635,11 +949,11 @@ export class CodeBuddyAgent extends BaseAgent {
   }
 
   getCurrentDirectory(): string {
-    return this.bash.getCurrentDirectory();
+    return this.toolHandler.bash.getCurrentDirectory();
   }
 
   async executeBashCommand(command: string): Promise<ToolResult> {
-    return await this.bash.execute(command);
+    return await this.toolHandler.bash.execute(command);
   }
 
   getCurrentModel(): string {
@@ -1667,10 +981,6 @@ export class CodeBuddyAgent extends BaseAgent {
     return this.codebuddyClient.probeToolSupport();
   }
 
-  /**
-   * Switch to chat-only mode (no tools)
-   * Updates the system prompt to a simpler version suitable for models without tool support
-   */
   switchToChatOnlyMode(): void {
     const customInstructions = loadCustomInstructions();
     const chatOnlyPrompt = getChatOnlySystemPrompt(process.cwd(), customInstructions || undefined);
@@ -1693,110 +1003,18 @@ export class CodeBuddyAgent extends BaseAgent {
     }
   }
 
-  // Checkpoint methods
-  createCheckpoint(description: string): void {
-    this.checkpointManager.createCheckpoint(description);
-  }
-
-  rewindToLastCheckpoint(): { success: boolean; message: string } {
-    const result = this.checkpointManager.rewindToLast();
-    if (result.success) {
-      return {
-        success: true,
-        message: result.checkpoint
-          ? `Rewound to: ${result.checkpoint.description}\nRestored: ${result.restored.join(', ')}`
-          : 'No checkpoint found'
-      };
-    }
-    return {
-      success: false,
-      message: result.errors.join('\n') || 'Failed to rewind'
-    };
-  }
-
-  getCheckpointList(): string {
-    return this.checkpointManager.formatCheckpointList();
-  }
-
-  getCheckpointManager(): CheckpointManager {
-    return this.checkpointManager;
-  }
-
-  // Session methods
-  getSessionStore(): SessionStore {
-    return this.sessionStore;
-  }
-
-  saveCurrentSession(): void {
-    this.sessionStore.updateCurrentSession(this.chatHistory);
-  }
-
-  getSessionList(): string {
-    return this.sessionStore.formatSessionList();
-  }
-
-  exportCurrentSession(outputPath?: string): string | null {
-    const currentId = this.sessionStore.getCurrentSessionId();
-    if (!currentId) return null;
-    return this.sessionStore.exportSessionToFile(currentId, outputPath);
-  }
-
   // Clear chat and reset
   clearChat(): void {
     super.clearChat();
   }
 
-  // Mode methods
-  getMode(): AgentMode {
-    return super.getMode();
-  }
-
-  setMode(mode: AgentMode): void {
-    super.setMode(mode);
-  }
-
-  getModeStatus(): string {
-    return this.modeManager.formatModeStatus();
-  }
-
-  isToolAllowedInCurrentMode(toolName: string): boolean {
-    return this.modeManager.isToolAllowed(toolName);
-  }
-
-  // Sandbox methods
-  getSandboxStatus(): string {
-    return this.sandboxManager.formatStatus();
-  }
-
-  validateCommand(command: string): { valid: boolean; reason?: string } {
-    return this.sandboxManager.validateCommand(command);
-  }
-
-  // MCP methods
-  async connectMCPServers(): Promise<void> {
-    await this.mcpClient.connectAll();
-  }
-
-  getMCPStatus(): string {
-    return this.mcpClient.formatStatus();
-  }
-
-  async getMCPTools(): Promise<Map<string, unknown[]>> {
-    return this.mcpClient.getAllTools();
-  }
-
-  getMCPClient(): MCPClient {
-    return this.mcpClient;
-  }
-
-
   // Image methods
   async processImage(imagePath: string): Promise<ToolResult> {
-    return this.imageTool.processImage({ type: 'file', data: imagePath });
+    return this.toolHandler.imageTool.processImage({ type: 'file', data: imagePath });
   }
 
   isImageFile(filePath: string): boolean {
-    return this.imageTool.isImage(filePath);
+    return this.toolHandler.imageTool.isImage(filePath);
   }
 
   // RAG Tool Selection methods
@@ -1811,6 +1029,7 @@ export class CodeBuddyAgent extends BaseAgent {
    */
   setRAGToolSelection(enabled: boolean): void {
     this.useRAGToolSelection = enabled;
+    this.toolSelectionStrategy.updateConfig({ useRAG: enabled });
   }
 
   /**
@@ -1827,86 +1046,63 @@ export class CodeBuddyAgent extends BaseAgent {
    * their scores, and token savings.
    */
   getLastToolSelection(): ToolSelectionResult | null {
-    return this.lastToolSelection;
+    return this.toolSelectionStrategy.getLastSelection();
   }
 
   /**
    * Get a formatted summary of the last tool selection
    */
   formatToolSelectionStats(): string {
-    const selection = this.lastToolSelection;
-    if (!selection) {
-      return 'No tool selection data available';
-    }
-
-    const { selectedTools, classification, reducedTokens, originalTokens } = selection;
-    const tokenSavings = originalTokens > 0
-      ? Math.round((1 - reducedTokens / originalTokens) * 100)
-      : 0;
-
-    const lines = [
-      '📊 Tool Selection Statistics',
-      '─'.repeat(30),
-      `RAG Enabled: ${this.useRAGToolSelection ? '✅' : '❌'}`,
-      `Selected Tools: ${selectedTools.length}`,
-      `Categories: ${classification.categories.join(', ')}`,
-      `Confidence: ${Math.round(classification.confidence * 100)}%`,
-      `Token Savings: ~${tokenSavings}% (${originalTokens} → ${reducedTokens})`,
-      '',
-      'Selected Tools:',
-      ...selectedTools.map(t => `  • ${t.function.name}`)
-    ];
-
-    return lines.join('\n');
+    return this.toolSelectionStrategy.formatLastSelectionStats();
   }
 
   /**
    * Classify a query to understand what types of tools might be needed
    */
   classifyUserQuery(query: string) {
-    return classifyQuery(query);
+    return this.toolSelectionStrategy.classifyQuery(query);
   }
 
   /**
    * Get tool selection metrics (success rates, missed tools, etc.)
    */
   getToolSelectionMetrics() {
-    return getToolSelector().getMetrics();
+    return this.toolSelectionStrategy.getSelectionMetrics();
   }
 
   /**
    * Format tool selection metrics as a readable string
    */
   formatToolSelectionMetrics(): string {
-    return formatToolSelectionMetrics();
+    return this.toolSelectionStrategy.formatSelectionMetrics();
   }
 
   /**
    * Get most frequently missed tools for debugging
    */
   getMostMissedTools(limit: number = 10) {
-    return getToolSelector().getMostMissedTools(limit);
+    return this.toolSelectionStrategy.getMostMissedTools(limit);
   }
 
   /**
    * Reset tool selection metrics
    */
   resetToolSelectionMetrics(): void {
-    getToolSelector().resetMetrics();
+    this.toolSelectionStrategy.resetMetrics();
   }
 
   /**
    * Get cache statistics
    */
   getCacheStats() {
-    return getToolSelector().getCacheStats();
+    return this.toolSelectionStrategy.getCacheStats();
   }
 
   /**
    * Clear all caches
    */
   clearCaches(): void {
-    getToolSelector().clearAllCaches();
+    this.toolSelectionStrategy.clearAllCaches();
   }
 
   // Parallel Tool Execution methods
@@ -1934,14 +1130,14 @@ export class CodeBuddyAgent extends BaseAgent {
    * @param enabled - Whether to enable self-healing
    */
   setSelfHealing(enabled: boolean): void {
-    this.bash.setSelfHealing(enabled);
+    this.toolHandler.bash.setSelfHealing(enabled);
   }
 
   /**
    * Check if self-healing is enabled for bash commands
    */
   isSelfHealingEnabled(): boolean {
-    return this.bash.isSelfHealingEnabled();
+    return this.toolHandler.bash.isSelfHealingEnabled();
   }
 
   /**
@@ -1998,56 +1194,22 @@ export class CodeBuddyAgent extends BaseAgent {
     this.maxToolRounds = enabled ? 400 : 50;
     this.sessionCostLimit = enabled ? Infinity : 10;
 
+    // Update prompt builder config
+    this.promptBuilder.updateConfig({ yoloMode: enabled });
+
     // Update system prompt for new mode
     const customInstructions = loadCustomInstructions();
-    const promptMode = enabled ? "yolo" : "default";
-    const systemPrompt = getSystemPromptForMode(
-      promptMode,
-      !!this.morphEditor,
-      process.cwd(),
-      customInstructions || undefined
-    );
-
-    // Update the system message
-    if (this.messages.length > 0 && this.messages[0].role === "system") {
-      this.messages[0].content = systemPrompt;
-    }
-  }
-
-  /**
-   * Check if YOLO mode is enabled
-   */
-  isYoloModeEnabled(): boolean {
-    return super.isYoloModeEnabled();
-  }
-
-  /**
-   * Get current session cost
-   */
-  getSessionCost(): number {
-    return super.getSessionCost();
-  }
-
-  /**
-   * Get session cost limit
-   */
-  getSessionCostLimit(): number {
-    return super.getSessionCostLimit();
-  }
-
-  /**
-   * Set session cost limit
-   * @param limit - Maximum cost in dollars (use Infinity for unlimited)
-   */
-  setSessionCostLimit(limit: number): void {
-    super.setSessionCostLimit(limit);
-  }
-
-  /**
-   * Check if session cost limit has been reached
-   */
-  isSessionCostLimitReached(): boolean {
-    return super.isSessionCostLimitReached();
+    
+    (async () => {
+      const systemPrompt = await this.promptBuilder.buildSystemPrompt(undefined, this.getCurrentModel(), customInstructions);
+      
+      // Update the system message
+      if (this.messages.length > 0 && this.messages[0].role === "system") {
+        this.messages[0].content = systemPrompt;
+      }
+    })().catch(error => {
+      logger.error("Failed to update system prompt for YOLO mode", error as Error);
+    });
   }
 
   /**
@@ -2074,304 +1236,11 @@ export class CodeBuddyAgent extends BaseAgent {
     return `${modeStr} | Session: $${this.sessionCost.toFixed(4)} / ${limitStr} | Rounds: ${this.maxToolRounds} max`;
   }
 
-  // Context Management methods
-
-  /**
-   * Get current context statistics
-   */
-  getContextStats() {
-    return this.contextManager.getStats(this.messages);
-  }
-
-  /**
-   * Format context stats as a readable string
-   */
-  formatContextStats(): string {
-    const stats = this.contextManager.getStats(this.messages);
-    const status = stats.isCritical ? '🔴 Critical' :
-                   stats.isNearLimit ? '🟡 Warning' : '🟢 Normal';
-    return `Context: ${stats.totalTokens}/${stats.maxTokens} tokens (${stats.usagePercent.toFixed(1)}%) ${status} | Messages: ${stats.messageCount} | Summaries: ${stats.summarizedSessions}`;
-  }
-
-  /**
-   * Update context manager configuration
-   * @param config - Partial configuration to update
-   */
-  updateContextConfig(config: {
-    maxContextTokens?: number;
-    responseReserveTokens?: number;
-    recentMessagesCount?: number;
-    enableSummarization?: boolean;
-    compressionRatio?: number;
-  }): void {
-    this.contextManager.updateConfig(config);
-  }
-
-  // Prompt Cache methods
-
-  /**
-   * Get prompt cache manager
-   */
-  getPromptCacheManager(): PromptCacheManager {
-    return this.promptCacheManager;
-  }
-
-  /**
-   * Get prompt cache statistics
-   */
-  getPromptCacheStats() {
-    return this.promptCacheManager.getStats();
-  }
-
-  /**
-   * Format prompt cache stats for display
-   */
-  formatPromptCacheStats(): string {
-    return this.promptCacheManager.formatStats();
-  }
-
-  // Lifecycle Hooks methods
-
-  /**
-   * Get hooks manager
-   */
-  getHooksManager(): HooksManager {
-    return this.hooksManager;
-  }
-
-  /**
-   * Get hooks status
-   */
-  getHooksStatus(): string {
-    return this.hooksManager.formatStatus();
-  }
-
-  // Model Routing methods
-
-  /**
-   * Enable or disable automatic model routing
-   *
-   * When enabled, requests are routed to optimal models based on task complexity:
-   * - Simple tasks → mini model (cost-effective)
-   * - Complex tasks → standard model (balanced)
-   * - Reasoning tasks → reasoning model (deep analysis)
-   * - Vision tasks → vision model (image understanding)
-   *
-   * Research: FrugalGPT shows 30-70% cost reduction with routing
-   *
-   * @param enabled - Whether to enable model routing
-   */
-  setModelRouting(enabled: boolean): void {
-    this.useModelRouting = enabled;
-    logger.debug(`Model routing ${enabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Check if model routing is enabled
-   */
-  isModelRoutingEnabled(): boolean {
-    return this.useModelRouting;
-  }
-
-  /**
-   * Get the model router instance
-   */
-  getModelRouter(): ModelRouter {
-    return this.modelRouter;
-  }
-
-  /**
-   * Get the last routing decision
-   */
-  getLastRoutingDecision(): RoutingDecision | null {
-    return this.lastRoutingDecision;
-  }
-
-  /**
-   * Get model routing statistics
-   */
-  getModelRoutingStats() {
-    return {
-      enabled: this.useModelRouting,
-      totalCost: this.modelRouter.getTotalCost(),
-      savings: this.modelRouter.getEstimatedSavings(),
-      usageByModel: Object.fromEntries(this.modelRouter.getUsageStats()),
-      lastDecision: this.lastRoutingDecision,
-    };
-  }
-
-  /**
-   * Format model routing stats for display
-   */
-  formatModelRoutingStats(): string {
-    const stats = this.getModelRoutingStats();
-    const lines = [
-      '🧭 Model Routing Statistics',
-      `├─ Enabled: ${stats.enabled ? '✅' : '❌'}`,
-      `├─ Total Cost: $${stats.totalCost.toFixed(4)}`,
-      `├─ Savings: $${stats.savings.saved.toFixed(4)} (${stats.savings.percentage.toFixed(1)}%)`,
-    ];
-
-    if (stats.lastDecision) {
-      lines.push(`├─ Last Model: ${stats.lastDecision.recommendedModel}`);
-      lines.push(`└─ Reason: ${stats.lastDecision.reason}`);
-    } else {
-      lines.push('└─ No routing decisions yet');
-    }
-
-    return lines.join('\n');
-  }
-
-  // ============================================================================
-  // Memory System Methods
-  // ============================================================================
-
-  /**
-   * Store a memory for cross-session persistence
-   *
-   * @param type - Type of memory (fact, preference, decision, pattern, etc.)
-   * @param content - Content to remember
-   * @param options - Additional options (tags, importance, etc.)
-   * @returns The stored memory entry
-   */
-  async remember(
-    type: MemoryType,
-    content: string,
-    options: {
-      summary?: string;
-      importance?: number;
-      tags?: string[];
-      metadata?: Record<string, unknown>;
-    } = {}
-  ): Promise<MemoryEntry> {
-    if (!this.memoryEnabled) {
-      throw new Error('Memory system is disabled');
-    }
-    return this.memory.store({
-      type,
-      content,
-      ...options,
-    });
-  }
-
-  /**
-   * Recall memories matching a query
-   *
-   * @param query - Search query
-   * @param options - Filter options
-   * @returns Matching memories
-   */
-  async recall(
-    query?: string,
-    options: {
-      types?: MemoryType[];
-      tags?: string[];
-      limit?: number;
-      minImportance?: number;
-    } = {}
-  ): Promise<MemoryEntry[]> {
-    if (!this.memoryEnabled) {
-      return [];
-    }
-    return this.memory.recall({
-      query,
-      ...options,
-    });
-  }
-
-  /**
-   * Build memory context for system prompt augmentation
-   *
-   * @param query - Optional query to find relevant memories
-   * @returns Context string to add to system prompt
-   */
-  async getMemoryContext(query?: string): Promise<string> {
-    if (!this.memoryEnabled) {
-      return '';
-    }
-    return this.memory.buildContext({
-      query,
-      includePreferences: true,
-      includeProject: true,
-      includeRecentSummaries: true,
-    });
-  }
-
-  /**
-   * Store a conversation summary for later recall
-   *
-   * @param summary - Summary text
-   * @param topics - Key topics discussed
-   * @param decisions - Decisions made
-   */
-  async storeConversationSummary(
-    summary: string,
-    topics: string[],
-    decisions?: string[]
-  ): Promise<void> {
-    if (!this.memoryEnabled) return;
-
-    const sessionId = this.sessionStore.getCurrentSessionId?.() || `session-${Date.now()}`;
-    await this.memory.storeSummary({
-      sessionId,
-      summary,
-      topics,
-      decisions,
-      messageCount: this.messages.length,
-    });
-  }
-
-  /**
-   * Enable or disable memory system
-   */
-  setMemoryEnabled(enabled: boolean): void {
-    this.memoryEnabled = enabled;
-    if (!enabled && this._memory) {
-      this._memory.dispose();
-      this._memory = null;
-    }
-  }
-
-  /**
-   * Check if memory system is enabled
-   */
-  isMemoryEnabled(): boolean {
-    return this.memoryEnabled;
-  }
-
-  /**
-   * Get memory system statistics
-   */
-  getMemoryStats(): { totalMemories: number; byType: Record<string, number>; projects: number; summaries: number } | null {
-    if (!this.memoryEnabled || !this._memory) {
-      return null;
-    }
-    return this.memory.getStats();
-  }
-
-  /**
-   * Format memory status for display
-   */
-  formatMemoryStatus(): string {
-    if (!this.memoryEnabled) {
-      return '🧠 Memory: Disabled';
-    }
-    if (!this._memory) {
-      return '🧠 Memory: Not initialized';
-    }
-    return this.memory.formatStatus();
-  }
-
   /**
    * Clean up all resources
    * Should be called when the agent is no longer needed
    */
   dispose(): void {
-    // Dispose memory system
-    if (this._memory) {
-      this._memory.dispose();
-      this._memory = null;
-    }
     super.dispose();
   }
 }

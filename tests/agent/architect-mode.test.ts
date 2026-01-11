@@ -345,4 +345,95 @@ describe("ArchitectMode Integration", () => {
     expect((architect as any).currentProposal).toBeNull();
     /* eslint-enable @typescript-eslint/no-explicit-any */
   });
+
+  describe("Analysis and Implementation", () => {
+    it("should analyze request and return proposal", async () => {
+      const architect = new ArchitectMode("test-api-key");
+      const proposal = await architect.analyze("Create a test file");
+
+      expect(proposal.summary).toBe("Test proposal");
+      expect(proposal.steps).toHaveLength(1);
+      expect(proposal.steps[0].type).toBe("create");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((architect as any).currentProposal).toBe(proposal);
+    });
+
+    it("should implement a proposal", async () => {
+      const architect = new ArchitectMode("test-api-key");
+      const proposal: ArchitectProposal = {
+        summary: "Test",
+        steps: [{ order: 1, description: "Test", type: "create", target: "test.ts" }],
+        files: ["test.ts"],
+        risks: [],
+        estimatedChanges: 10,
+      };
+
+      // Mock editor client response
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (architect as any).editorClient.chat.mockResolvedValue({
+        choices: [{ message: { content: "Done" } }],
+      });
+
+      const { success, results } = await architect.implement(proposal);
+
+      expect(success).toBe(true);
+      expect(results).toHaveLength(1);
+      expect(results[0].step).toBe(proposal.steps[0]);
+    });
+
+    it("should run full workflow with analyzeAndImplement", async () => {
+      const architect = new ArchitectMode("test-api-key");
+      
+      // Mock editor client
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (architect as any).editorClient.chat.mockResolvedValue({
+        choices: [{ message: { content: "Done" } }],
+      });
+
+      const onApproval = jest.fn().mockResolvedValue(true);
+
+      const { proposal, results } = await architect.analyzeAndImplement(
+        "Create a test file",
+        undefined,
+        undefined,
+        onApproval
+      );
+
+      expect(proposal).toBeDefined();
+      expect(results).toHaveLength(1);
+      expect(onApproval).toHaveBeenCalledWith(proposal);
+    });
+
+    it("should handle unapproved proposals", async () => {
+      const architect = new ArchitectMode("test-api-key");
+      const onApproval = jest.fn().mockResolvedValue(false);
+
+      await expect(
+        architect.analyzeAndImplement("request", undefined, undefined, onApproval)
+      ).rejects.toThrow("Implementation not approved");
+    });
+
+    it("should format proposal correctly", () => {
+      const architect = new ArchitectMode("test-api-key");
+      const proposal: ArchitectProposal = {
+        summary: "Summary",
+        steps: [
+          { order: 1, description: "Step 1", type: "create", target: "file.ts" },
+          { order: 2, description: "Step 2", type: "command", target: "npm install" }
+        ],
+        files: ["file.ts"],
+        risks: ["Risk 1"],
+        estimatedChanges: 10,
+      };
+
+      const formatted = architect.formatProposal(proposal);
+
+      expect(formatted).toContain("ARCHITECT PROPOSAL");
+      expect(formatted).toContain("Summary");
+      expect(formatted).toContain("file.ts");
+      expect(formatted).toContain("➕ Step 1");
+      expect(formatted).toContain("⚡ Step 2");
+      expect(formatted).toContain("Risk 1");
+    });
+  });
 });

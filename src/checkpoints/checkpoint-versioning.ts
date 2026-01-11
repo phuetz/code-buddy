@@ -14,6 +14,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { Checkpoint, FileSnapshot } from './checkpoint-manager.js';
+import { logger } from '../utils/logger.js';
 
 export interface Version {
   id: string;
@@ -144,7 +145,9 @@ export class CheckpointVersioning extends EventEmitter {
 
     // Auto-save if enabled
     if (this.config.autoSave) {
-      this.save().catch(() => {});
+      this.save().catch((err) => {
+        logger.debug('Failed to auto-save checkpoint version', { error: err instanceof Error ? err.message : String(err) });
+      });
     }
 
     this.emit('version-created', version);
@@ -646,7 +649,9 @@ export class CheckpointVersioning extends EventEmitter {
     }
 
     if (pruned > 0 && this.config.autoSave) {
-      this.save().catch(() => {});
+      this.save().catch((err) => {
+        logger.debug('Failed to save after pruning', { error: err instanceof Error ? err.message : String(err) });
+      });
     }
 
     return pruned;

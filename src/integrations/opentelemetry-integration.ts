@@ -123,7 +123,9 @@ export class OpenTelemetryIntegration extends EventEmitter {
 
     // Start export interval
     this.exportInterval = setInterval(() => {
-      this.exportMetrics().catch(() => {});
+      this.exportMetrics().catch((err) => {
+        logger.debug('Failed to export metrics', { error: err instanceof Error ? err.message : String(err) });
+      });
     }, this.config.exportInterval);
 
     this.initialized = true;
@@ -239,7 +241,9 @@ export class OpenTelemetryIntegration extends EventEmitter {
     this.emit('span:end', { span });
 
     // Export span
-    this.exportSpan(span).catch(() => {});
+    this.exportSpan(span).catch((err) => {
+      logger.debug('Failed to export span', { spanId, error: err instanceof Error ? err.message : String(err) });
+    });
 
     this.activeSpans.delete(spanId);
   }
@@ -642,7 +646,9 @@ let otelInstance: OpenTelemetryIntegration | null = null;
 export function initOpenTelemetry(config: OTelConfig): OpenTelemetryIntegration {
   if (!otelInstance) {
     otelInstance = new OpenTelemetryIntegration(config);
-    otelInstance.init().catch(() => {});
+    otelInstance.init().catch((err) => {
+      logger.warn('Failed to initialize OpenTelemetry', { error: err instanceof Error ? err.message : String(err) });
+    });
   }
   return otelInstance;
 }

@@ -9,7 +9,7 @@
  * - Export to multiple formats
  */
 
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 
 export interface ReportData {
@@ -400,8 +400,8 @@ export async function saveReport(
   }
 
   const content = generateReport(data, format);
-  await fs.ensureDir(path.dirname(outputPath));
-  await fs.writeFile(outputPath, content, 'utf-8');
+  await UnifiedVfsRouter.Instance.ensureDir(path.dirname(outputPath));
+  await UnifiedVfsRouter.Instance.writeFile(outputPath, content, 'utf-8');
 }
 
 /**

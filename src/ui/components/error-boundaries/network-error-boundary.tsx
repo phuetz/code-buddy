@@ -7,6 +7,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Box, Text } from 'ink';
+import { logger } from '../../../utils/logger.js';
 
 interface NetworkErrorBoundaryProps {
   children: ReactNode;
@@ -165,13 +166,13 @@ export class NetworkErrorBoundary extends Component<
     const endpoint = this.props.apiEndpoint || 'Unknown endpoint';
     const errorCode = (error as { code?: string }).code;
 
-    console.error('[NetworkErrorBoundary] Network/API error:');
-    console.error(`  Endpoint: ${endpoint}`);
-    console.error(`  Error Type: ${errorType}`);
-    console.error(`  Error Code: ${errorCode || 'N/A'}`);
-    console.error(`  Connection Status: ${this.state.connectionStatus}`);
-    console.error(`  Message: ${error.message}`);
-    console.error(`  Stack: ${error.stack}`);
+    logger.error('[NetworkErrorBoundary] Network/API error', error, {
+      endpoint,
+      errorType,
+      errorCode: errorCode || 'N/A',
+      connectionStatus: this.state.connectionStatus,
+      componentStack: errorInfo.componentStack
+    });
 
     // Call custom error handler if provided
     if (this.props.onError) {

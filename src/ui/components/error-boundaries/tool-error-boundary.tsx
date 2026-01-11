@@ -7,6 +7,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Box, Text } from 'ink';
+import { logger } from '../../../utils/logger.js';
 
 interface ToolErrorBoundaryProps {
   children: ReactNode;
@@ -93,11 +94,11 @@ export class ToolErrorBoundary extends Component<
     const toolName = this.props.toolName || 'Unknown Tool';
     const errorType = detectToolErrorType(error);
 
-    console.error(`[ToolErrorBoundary] Tool execution error in ${toolName}:`);
-    console.error(`  Error Type: ${errorType}`);
-    console.error(`  Message: ${error.message}`);
-    console.error(`  Stack: ${error.stack}`);
-    console.error(`  Component Stack: ${errorInfo.componentStack}`);
+    logger.error(`[ToolErrorBoundary] Tool execution error in ${toolName}`, error, {
+      toolName,
+      errorType,
+      componentStack: errorInfo.componentStack
+    });
 
     // Call custom error handler if provided
     if (this.props.onError) {

@@ -29,16 +29,20 @@ jest.mock('../../src/codebuddy/client.js', () => ({
   })),
 }));
 
+const mockBashInstance = {
+  execute: jest.fn().mockResolvedValue({ success: true, output: '' }),
+  getCurrentDirectory: jest.fn().mockReturnValue('/test'),
+  setSelfHealing: jest.fn(),
+  isSelfHealingEnabled: jest.fn().mockReturnValue(true),
+};
+
 jest.mock('../../src/tools/index.js', () => ({
   TextEditorTool: jest.fn().mockImplementation(() => ({
     view: jest.fn().mockResolvedValue({ success: true, output: '' }),
     create: jest.fn().mockResolvedValue({ success: true }),
     strReplace: jest.fn().mockResolvedValue({ success: true }),
   })),
-  BashTool: jest.fn().mockImplementation(() => ({
-    execute: jest.fn().mockResolvedValue({ success: true, output: '' }),
-    getCurrentDirectory: jest.fn().mockReturnValue('/test'),
-  })),
+  BashTool: jest.fn().mockImplementation(() => mockBashInstance),
   TodoTool: jest.fn().mockImplementation(() => ({})),
   SearchTool: jest.fn().mockImplementation(() => ({})),
   WebSearchTool: jest.fn().mockImplementation(() => ({})),
@@ -380,6 +384,69 @@ describe('Agent Repair Integration', () => {
       await agent.attemptAutoRepair('error TS2339: test');
 
       expect(listener).toHaveBeenCalled();
+    });
+  });
+
+  describe('Bash Tool Integration', () => {
+    it('should trigger auto-repair when a bash command fails', async () => {
+      // Simulate bash failure
+      mockBashInstance.execute
+        .mockResolvedValueOnce({ success: false, error: 'error TS2339: test failure' }) // First try fails
+        .mockResolvedValueOnce({ success: true, output: 'success after fix' }); // Second try (retry) succeeds
+
+      // Mock successful repair
+      mockRepairEngine.repair.mockResolvedValue([
+        {
+          success: true,
+          appliedPatch: { explanation: 'Fixed type error' },
+          fault: {},
+          candidatesGenerated: 1,
+          candidatesTested: 1,
+          allPatches: [],
+          iterations: 1,
+          duration: 100,
+        },
+      ]);
+
+      // Access protected executeTool via any
+      const result = await (agent as any).executeTool({
+        id: 'call-1',
+        type: 'function',
+        function: {
+          name: 'bash',
+          arguments: JSON.stringify({ command: 'npm run build' }),
+        },
+      });
+
+      expect(mockRepairEngine.repair).toHaveBeenCalled();
+      expect(mockBashInstance.execute).toHaveBeenCalledTimes(2); // Initial + Retry
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('Auto-repaired: Fixed type error');
+    });
+
+    it('should return original failure if auto-repair fails', async () => {
+      // Simulate bash failure
+      mockBashInstance.execute.mockResolvedValue({ 
+        success: false, 
+        error: 'error TS2339: unfixable',
+        output: 'original output'
+      });
+
+      // Mock failed repair
+      mockRepairEngine.repair.mockResolvedValue([]);
+
+      const result = await (agent as any).executeTool({
+        id: 'call-2',
+        type: 'function',
+        function: {
+          name: 'bash',
+          arguments: JSON.stringify({ command: 'npm test' }),
+        },
+      });
+
+      expect(mockRepairEngine.repair).toHaveBeenCalled();
+      expect(mockBashInstance.execute).toHaveBeenCalledTimes(1); // No retry if repair failed
+      expect(result.success).toBe(false);
     });
   });
 });

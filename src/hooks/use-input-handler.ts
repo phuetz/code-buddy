@@ -9,7 +9,7 @@ import { ConfirmationService } from "../utils/confirmation-service.js";
 import { useEnhancedInput, Key } from "./use-enhanced-input.js";
 import { getErrorMessage } from "../types/index.js";
 
-import { filterCommandSuggestions } from "../ui/components/command-suggestions.js";
+import { filterCommandSuggestions } from "../ui/components/CommandSuggestions.js";
 import { loadModelConfig, updateCurrentModel } from "../utils/model-config.js";
 
 // Import enhanced features
@@ -23,7 +23,7 @@ import { getEnhancedCommandHandler } from "../commands/enhanced-command-handler.
 import { getTTSManager } from "../input/text-to-speech.js";
 
 // Import file autocomplete
-import { extractFileReference, getFileSuggestions, FileSuggestion } from "../ui/components/file-autocomplete.js";
+import { extractFileReference, getFileSuggestions, FileSuggestion } from "../ui/components/FileAutocomplete.js";
 
 interface UseInputHandlerProps {
   agent: CodeBuddyAgent;
@@ -130,164 +130,142 @@ export function useInputHandler({
     return null;
   };
 
-  const handleSpecialKey = (key: Key): boolean => {
-    // Don't handle input if confirmation dialog is active
-    if (isConfirmationActive) {
-      return true; // Prevent default handling
-    }
-
-    // Handle shift+tab to toggle auto-edit mode
-    if (key.shift && key.tab) {
-      const newAutoEditState = !autoEditEnabled;
-      setAutoEditEnabled(newAutoEditState);
-
-      const confirmationService = ConfirmationService.getInstance();
-      if (newAutoEditState) {
-        // Enable auto-edit: set all operations to be accepted
-        confirmationService.setSessionFlag("allOperations", true);
-      } else {
-        // Disable auto-edit: reset session flags
-        confirmationService.resetSession();
-      }
-      return true; // Handled
-    }
-
-    // Handle escape key for closing menus and double-escape for history edit
-    if (key.escape) {
-      if (showCommandSuggestions) {
-        setShowCommandSuggestions(false);
-        setSelectedCommandIndex(0);
-        return true;
-      }
-      if (showModelSelection) {
-        setShowModelSelection(false);
-        setSelectedModelIndex(0);
-        return true;
-      }
-      if (showFileAutocomplete) {
-        setShowFileAutocomplete(false);
-        setSelectedFileIndex(0);
-        return true;
-      }
-      if (isProcessing || isStreaming) {
-        agent.abortCurrentOperation();
-        setIsProcessing(false);
-        setIsStreaming(false);
-        setTokenCount(0);
-        setProcessingTime(0);
-        processingStartTime.current = 0;
-        return true;
-      }
-
-      // Double-escape detection for editing previous prompt
-      const now = Date.now();
-      const timeSinceLastEscape = now - lastEscapeTimeRef.current;
-      lastEscapeTimeRef.current = now;
-
-      if (timeSinceLastEscape < DOUBLE_ESCAPE_THRESHOLD && input.trim() === '') {
-        // Double escape with empty input - load last user message for editing
-        const lastMessage = getLastUserMessage();
-        if (lastMessage) {
-          setInput(lastMessage);
-          setCursorPosition(lastMessage.length);
-          return true;
-        }
-      }
-
-      return false; // Let default escape handling work
-    }
-
-    // Handle command suggestions navigation
+  // Helper functions for handleSpecialKey
+  const handleEscapeKey = (key: Key): boolean => {
     if (showCommandSuggestions) {
-      const filteredSuggestions = filterCommandSuggestions(
-        commandSuggestions,
-        input
-      );
+      setShowCommandSuggestions(false);
+      setSelectedCommandIndex(0);
+      return true;
+    }
+    if (showModelSelection) {
+      setShowModelSelection(false);
+      setSelectedModelIndex(0);
+      return true;
+    }
+    if (showFileAutocomplete) {
+      setShowFileAutocomplete(false);
+      setSelectedFileIndex(0);
+      return true;
+    }
+    if (isProcessing || isStreaming) {
+      agent.abortCurrentOperation();
+      setIsProcessing(false);
+      setIsStreaming(false);
+      setTokenCount(0);
+      setProcessingTime(0);
+      processingStartTime.current = 0;
+      return true;
+    }
 
-      if (filteredSuggestions.length === 0) {
-        setShowCommandSuggestions(false);
-        setSelectedCommandIndex(0);
-        return false; // Continue processing
-      } else {
-        if (key.upArrow) {
-          setSelectedCommandIndex((prev) =>
-            prev === 0 ? filteredSuggestions.length - 1 : prev - 1
-          );
-          return true;
-        }
-        if (key.downArrow) {
-          setSelectedCommandIndex(
-            (prev) => (prev + 1) % filteredSuggestions.length
-          );
-          return true;
-        }
-        if (key.tab || key.return) {
-          const safeIndex = Math.min(
-            selectedCommandIndex,
-            filteredSuggestions.length - 1
-          );
-          const selectedSuggestion = filteredSuggestions[safeIndex] as { command: string; isArgument?: boolean };
+    // Double-escape detection for editing previous prompt
+    const now = Date.now();
+    const timeSinceLastEscape = now - lastEscapeTimeRef.current;
+    lastEscapeTimeRef.current = now;
 
-          let newInput: string;
-          if (selectedSuggestion.isArgument) {
-            // For arguments, keep the command and add the argument
-            const parts = input.trim().split(/\s+/);
-            const baseCommand = parts[0]; // e.g., "/ai-test"
-            newInput = `${baseCommand} ${selectedSuggestion.command}`;
-
-            // If Enter was pressed, execute the command directly
-            if (key.return) {
-              setShowCommandSuggestions(false);
-              setSelectedCommandIndex(0);
-              clearInput();
-              // Execute the full command directly
-              handleDirectCommand(newInput);
-              return true;
-            }
-          } else {
-            // For commands, just use the command
-            newInput = selectedSuggestion.command + " ";
-          }
-
-          setInput(newInput);
-          setCursorPosition(newInput.length);
-          setShowCommandSuggestions(false);
-          setSelectedCommandIndex(0);
-          return true;
-        }
+    if (timeSinceLastEscape < DOUBLE_ESCAPE_THRESHOLD && input.trim() === '') {
+      // Double escape with empty input - load last user message for editing
+      const lastMessage = getLastUserMessage();
+      if (lastMessage) {
+        setInput(lastMessage);
+        setCursorPosition(lastMessage.length);
+        return true;
       }
     }
 
-    // Handle model selection navigation
-    if (showModelSelection) {
+    return false; // Let default escape handling work
+  };
+
+  const handleCommandSuggestionsNav = (key: Key): boolean => {
+    const filteredSuggestions = filterCommandSuggestions(
+      commandSuggestions,
+      input
+    );
+
+    if (filteredSuggestions.length === 0) {
+      setShowCommandSuggestions(false);
+      setSelectedCommandIndex(0);
+      return false; // Continue processing
+    } else {
       if (key.upArrow) {
-        setSelectedModelIndex((prev) =>
-          prev === 0 ? availableModels.length - 1 : prev - 1
+        setSelectedCommandIndex((prev) =>
+          prev === 0 ? filteredSuggestions.length - 1 : prev - 1
         );
         return true;
       }
       if (key.downArrow) {
-        setSelectedModelIndex((prev) => (prev + 1) % availableModels.length);
+        setSelectedCommandIndex(
+          (prev) => (prev + 1) % filteredSuggestions.length
+        );
         return true;
       }
       if (key.tab || key.return) {
-        const selectedModel = availableModels[selectedModelIndex];
-        agent.setModel(selectedModel.model);
-        updateCurrentModel(selectedModel.model);
-        const confirmEntry: ChatEntry = {
-          type: "assistant",
-          content: `✓ Switched to model: ${selectedModel.model}`,
-          timestamp: new Date(),
-        };
-        setChatHistory((prev) => [...prev, confirmEntry]);
-        setShowModelSelection(false);
-        setSelectedModelIndex(0);
+        const safeIndex = Math.min(
+          selectedCommandIndex,
+          filteredSuggestions.length - 1
+        );
+        const selectedSuggestion = filteredSuggestions[safeIndex] as { command: string; isArgument?: boolean };
+
+        let newInput: string;
+        if (selectedSuggestion.isArgument) {
+          // For arguments, keep the command and add the argument
+          const parts = input.trim().split(/\s+/);
+          const baseCommand = parts[0]; // e.g., "/ai-test"
+          newInput = `${baseCommand} ${selectedSuggestion.command}`;
+
+          // If Enter was pressed, execute the full command directly
+          if (key.return) {
+            setShowCommandSuggestions(false);
+            setSelectedCommandIndex(0);
+            clearInput();
+            // Execute the full command directly
+            handleDirectCommand(newInput);
+            return true;
+          }
+        } else {
+          // For commands, just use the command
+          newInput = selectedSuggestion.command + " ";
+        }
+
+        setInput(newInput);
+        setCursorPosition(newInput.length);
+        setShowCommandSuggestions(false);
+        setSelectedCommandIndex(0);
         return true;
       }
     }
+    return false;
+  };
 
-    // Handle file autocomplete navigation (@ file references)
-    if (showFileAutocomplete && fileSuggestions.length > 0) {
+  const handleModelSelectionNav = (key: Key): boolean => {
+    if (key.upArrow) {
+      setSelectedModelIndex((prev) =>
+        prev === 0 ? availableModels.length - 1 : prev - 1
+      );
+      return true;
+    }
+    if (key.downArrow) {
+      setSelectedModelIndex((prev) => (prev + 1) % availableModels.length);
+      return true;
+    }
+    if (key.tab || key.return) {
+      const selectedModel = availableModels[selectedModelIndex];
+      agent.setModel(selectedModel.model);
+      updateCurrentModel(selectedModel.model);
+      const confirmEntry: ChatEntry = {
+        type: "assistant",
+        content: `✓ Switched to model: ${selectedModel.model}`,
+        timestamp: new Date(),
+      };
+      setChatHistory((prev) => [...prev, confirmEntry]);
+      setShowModelSelection(false);
+      setSelectedModelIndex(0);
+      return true;
+    }
+    return false;
+  };
+
+  const handleFileAutocompleteNav = (key: Key): boolean => {
+    if (fileSuggestions.length > 0) {
       if (key.upArrow) {
         setSelectedFileIndex((prev) =>
           prev === 0 ? fileSuggestions.length - 1 : prev - 1
@@ -334,6 +312,74 @@ export function useInputHandler({
         setSelectedFileIndex(0);
         return true;
       }
+    }
+    return false;
+  };
+
+  const handleSpecialKey = (key: Key): boolean => {
+    // Don't handle input if confirmation dialog is active
+    if (isConfirmationActive) {
+      return true; // Prevent default handling
+    }
+
+    // Handle shift+tab to toggle auto-edit mode
+    if (key.shift && key.tab) {
+      const newAutoEditState = !autoEditEnabled;
+      setAutoEditEnabled(newAutoEditState);
+
+      const confirmationService = ConfirmationService.getInstance();
+      if (newAutoEditState) {
+        // Enable auto-edit: set all operations to be accepted
+        confirmationService.setSessionFlag("allOperations", true);
+      } else {
+        // Disable auto-edit: reset session flags
+        confirmationService.resetSession();
+      }
+      return true; // Handled
+    }
+
+    // Handle escape key
+    if (key.escape) {
+      return handleEscapeKey(key);
+    }
+
+    // Handle command suggestions navigation
+    if (showCommandSuggestions) {
+      const handled = handleCommandSuggestionsNav(key);
+      if (handled) return true;
+      // If suggestions are still shown but not handled, we might want to return false to let typing continue, 
+      // but usually navigation keys are handled. 
+      // If we return false here, up/down arrows might do something else (like history nav) which we don't want when suggestions are open.
+      // But wait, the original logic for up/down returned true.
+      // If it wasn't up/down/tab/enter, it returned false.
+      // My helper returns false if it wasn't handled.
+      // If it returns false, it means it wasn't a navigation key.
+      // So we should return false to let handleInput handle it (typing).
+      // However, check original logic: 
+      // if (showCommandSuggestions) { ... if (key.upArrow) ... return true; ... } 
+      // If filteredSuggestions is empty, it hides and returns false.
+      
+      // Let's match original logic:
+      // If filteredSuggestions length == 0: hides and returns false.
+      // If length > 0:
+      //   Up/Down/Tab/Return -> handled -> returns true.
+      //   Other keys -> returns false.
+      
+      // My helper handleCommandSuggestionsNav follows this.
+      // So:
+      return handled;
+    }
+
+    // Handle model selection navigation
+    if (showModelSelection) {
+      const handled = handleModelSelectionNav(key);
+      if (handled) return true;
+    }
+
+    // Handle file autocomplete navigation
+    if (showFileAutocomplete) {
+      const handled = handleFileAutocompleteNav(key);
+      if (handled) return true;
     }
 
     return false; // Let default handling proceed

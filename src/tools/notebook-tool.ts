@@ -5,9 +5,9 @@
  * Supports cell manipulation, execution output parsing, and code extraction.
  */
 
-import fs from 'fs-extra';
 import * as path from 'path';
-import type { ToolResult } from './index.js';
+import type { ToolResult } from '../types/index.js';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 
 // ============================================================================
 // Types
@@ -56,6 +56,7 @@ export class NotebookTool {
   name = 'notebook';
   description = 'Read, analyze, and edit Jupyter notebooks (.ipynb files)';
   dangerLevel: 'safe' | 'low' | 'medium' | 'high' = 'low';
+  private vfs = UnifiedVfsRouter.Instance;
 
   inputSchema = {
     type: 'object' as const,
@@ -354,7 +355,7 @@ export class NotebookTool {
    * Load notebook from file
    */
   private async loadNotebook(filePath: string): Promise<Notebook> {
-    const content = await fs.readFile(filePath, 'utf-8');
+    const content = await this.vfs.readFile(filePath, 'utf-8');
     return JSON.parse(content) as Notebook;
   }
 
@@ -362,7 +363,7 @@ export class NotebookTool {
    * Save notebook to file
    */
   private async saveNotebook(filePath: string, notebook: Notebook): Promise<void> {
-    await fs.writeFile(filePath, JSON.stringify(notebook, null, 1));
+    await this.vfs.writeFile(filePath, JSON.stringify(notebook, null, 1));
   }
 
   /**

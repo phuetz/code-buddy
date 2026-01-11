@@ -6,6 +6,7 @@
 
 import { createHash, randomBytes } from 'crypto';
 import type { ApiKey, ApiScope } from '../types.js';
+import { logger } from '../../utils/logger.js';
 
 // In-memory store (should be replaced with database in production)
 const apiKeys = new Map<string, ApiKey>();
@@ -209,5 +210,5 @@ if (process.env.NODE_ENV === 'development') {
     userId: 'dev-admin',
     scopes: ['admin'],
   });
-  console.log(`[DEV] Admin API Key: ${key}`);
+  logger.debug(`[DEV] Admin API Key: ${key}`);
 }

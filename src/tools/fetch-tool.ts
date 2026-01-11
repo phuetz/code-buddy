@@ -5,7 +5,7 @@
  * Supports GET, POST, PUT, DELETE with JSON handling.
  */
 
-import type { ToolResult } from './index.js';
+import type { ToolResult } from '../types/index.js';
 
 // ============================================================================
 // Types

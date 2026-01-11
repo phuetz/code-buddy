@@ -9,7 +9,7 @@
  * - Result aggregation
  */
 
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 import fg from 'fast-glob';
 
@@ -141,7 +141,7 @@ export class BatchProcessor {
    * Add tasks from a batch file (JSON or text)
    */
   async addTasksFromFile(filePath: string): Promise<number> {
-    const content = await fs.readFile(filePath, 'utf-8');
+    const content = await UnifiedVfsRouter.Instance.readFile(filePath, 'utf-8');
     const ext = path.extname(filePath).toLowerCase();
 
     if (ext === '.json') {

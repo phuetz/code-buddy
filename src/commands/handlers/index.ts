@@ -130,6 +130,11 @@ export {
   handleTrack,
 } from './track-handlers.js';
 
+// Plugin handlers
+export {
+  handlePlugins,
+} from './plugin-handlers.js';
+
 // Colab handlers (AI Collaboration)
 export {
   handleColabCommand,

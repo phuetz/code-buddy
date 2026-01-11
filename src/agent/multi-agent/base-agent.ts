@@ -18,6 +18,7 @@ import {
   TaskArtifact,
   SharedContext,
   ToolExecutor,
+  AgentCapability,
 } from "./types.js";
 
 /**
@@ -257,8 +258,7 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
         role: "assistant",
         content: assistantMessage.content || "",
         tool_calls: assistantMessage.tool_calls,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- OpenAI tool_calls type compatibility
-      } as any);
+      } as CodeBuddyMessage);
 
       // Accumulate output
       if (assistantMessage.content) {
@@ -397,8 +397,7 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
    * Check if agent has a specific capability
    */
   hasCapability(capability: string): boolean {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- capability string comparison
-    return this.config.capabilities.includes(capability as any);
+    return this.config.capabilities.includes(capability as AgentCapability);
   }
 
   /**

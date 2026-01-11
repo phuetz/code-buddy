@@ -2,6 +2,8 @@
 import { program } from "commander";
 import * as dotenv from "dotenv";
 import { getSettingsManager } from "./utils/settings-manager.js";
+import { getCredentialManager } from "./security/credential-manager.js";
+import { logger } from "./utils/logger.js";
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 
 // Types for dynamically imported modules
@@ -12,7 +14,7 @@ const lazyImport = {
   React: () => import("react"),
   ink: () => import("ink"),
   CodeBuddyAgent: () => import("./agent/codebuddy-agent.js").then(m => m.CodeBuddyAgent),
-  ChatInterface: () => import("./ui/components/chat-interface.js").then(m => m.default),
+  ChatInterface: () => import("./ui/components/ChatInterface.js").then(m => m.default),
   ConfirmationService: () => import("./utils/confirmation-service.js").then(m => m.ConfirmationService),
   createMCPCommand: () => import("./commands/mcp.js").then(m => m.createMCPCommand),
   initProject: () => import("./utils/init-project.js"),
@@ -80,10 +82,19 @@ function ensureUserSettingsDirectory(): void {
   }
 }
 
-// Load API key from user settings if not in environment
+// Load API key from environment, secure storage, or legacy settings
 function loadApiKey(): string | undefined {
-  const manager = getSettingsManager();
-  return manager.getApiKey();
+  // Priority: environment > secure credential storage > legacy settings file
+  const credManager = getCredentialManager();
+  const apiKey = credManager.getApiKey();
+
+  if (apiKey) {
+    return apiKey;
+  }
+
+  // Fall back to legacy settings manager
+  const settingsManager = getSettingsManager();
+  return settingsManager.getApiKey();
 }
 
 // Load base URL from user settings if not in environment
@@ -98,15 +109,24 @@ async function saveCommandLineSettings(
   baseURL?: string
 ): Promise<void> {
   try {
-    const manager = getSettingsManager();
+    const settingsManager = getSettingsManager();
+    const credManager = getCredentialManager();
 
-    // Update with command line values
+    // Save API key to secure encrypted storage
     if (apiKey) {
-      manager.updateUserSetting("apiKey", apiKey);
-      console.log("✅ API key saved to ~/.codebuddy/user-settings.json");
+      credManager.setApiKey(apiKey);
+      const status = credManager.getSecurityStatus();
+      if (status.encryptionEnabled) {
+        console.log("✅ API key saved securely (encrypted) to ~/.codebuddy/credentials.enc");
+      } else {
+        console.log("✅ API key saved to ~/.codebuddy/credentials.enc");
+        console.log("⚠️ Consider enabling encryption for better security");
+      }
     }
+
+    // Save base URL to settings (not sensitive)
     if (baseURL) {
-      manager.updateUserSetting("baseURL", baseURL);
+      settingsManager.updateUserSetting("baseURL", baseURL);
       console.log("✅ Base URL saved to ~/.codebuddy/user-settings.json");
     }
   } catch (error) {
@@ -883,7 +903,8 @@ program
       render(React.createElement(ChatInterface, { agent, initialMessage }));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("❌ Error initializing Code Buddy:", errorMessage);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      logger.error("Error initializing Code Buddy:", errorObj);
       process.exit(1);
     }
   });
@@ -947,7 +968,8 @@ gitCommand
       await handleCommitAndPushHeadless(apiKey, baseURL, model, maxToolRounds);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("❌ Error during git commit-and-push:", errorMessage);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      logger.error("Error during git commit-and-push:", errorObj);
       process.exit(1);
     }
   });

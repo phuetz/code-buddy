@@ -1,0 +1,83 @@
+{
+  "level": "confirm",
+  "dangerousOperations": [
+    "rm",
+    "rm -rf",
+    "delete",
+    "DROP",
+    "TRUNCATE",
+    "git push --force",
+    "git reset --hard",
+    "chmod 777",
+    "sudo",
+    "curl | bash",
+    "wget | sh"
+  ],
+  "safeOperations": [
+    "view_file",
+    "search",
+    "git status",
+    "git log",
+    "git diff",
+    "ls",
+    "cat",
+    "pwd",
+    "echo"
+  ],
+  "sessionOverrides": {},
+  "yolo": {
+    "enabled": false,
+    "allowList": [
+      "npm test",
+      "npm run lint",
+      "npm run build",
+      "npm run typecheck",
+      "git status",
+      "git diff",
+      "git log",
+      "yarn test",
+      "pnpm test",
+      "cargo test",
+      "go test",
+      "pytest",
+      "jest",
+      "vitest",
+      "npm-install"
+    ],
+    "denyList": [
+      "rm -rf /",
+      "rm -rf ~",
+      "rm -rf *",
+      "git push --force origin main",
+      "git push --force origin master",
+      "DROP DATABASE",
+      "DROP TABLE",
+      "TRUNCATE",
+      "format c:",
+      "mkfs",
+      "> /dev/sda",
+      "rm-rf"
+    ],
+    "maxAutoEdits": 50,
+    "maxAutoCommands": 100,
+    "safeMode": false,
+    "allowedPaths": [
+      "src/",
+      "test/",
+      "tests/"
+    ],
+    "blockedPaths": [
+      "node_modules",
+      ".git",
+      ".env",
+      ".env.local",
+      ".env.production",
+      "credentials",
+      "secrets",
+      "*.pem",
+      "*.key"
+    ],
+    "sessionEditCount": 0,
+    "sessionCommandCount": 0
+  }
+}

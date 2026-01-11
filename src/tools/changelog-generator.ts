@@ -9,7 +9,7 @@
  */
 
 import { execSync } from 'child_process';
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 
 export type CommitType =
@@ -469,7 +469,7 @@ export class ChangelogGenerator {
    */
   async writeToFile(filePath: string): Promise<void> {
     const content = await this.generate();
-    await fs.writeFile(filePath, content, 'utf-8');
+    await UnifiedVfsRouter.Instance.writeFile(filePath, content, 'utf-8');
   }
 
   /**
@@ -478,7 +478,7 @@ export class ChangelogGenerator {
   async updateChangelog(changelogPath: string = 'CHANGELOG.md'): Promise<void> {
     const content = await this.generate();
     const fullPath = path.join(this.options.repoPath, changelogPath);
-    await fs.writeFile(fullPath, content, 'utf-8');
+    await UnifiedVfsRouter.Instance.writeFile(fullPath, content, 'utf-8');
   }
 }
 

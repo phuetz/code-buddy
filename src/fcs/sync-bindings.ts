@@ -89,6 +89,34 @@ export class WorkspaceStateTracker {
     });
   }
 
+  async initialize(): Promise<void> {
+    // Wait for SyncManager to potentially load data if it was just created
+    // But since load() is async in constructor, we might need to wait for an event or sleep
+    // Ideally SyncManager should expose a promise for loading.
+    
+    // For now, let's just check if there are states.
+    // If SyncManager has states, we can hydrate.
+    
+    const states = this.syncManager.getAllStates();
+    if (states.length > 0) {
+      // Sort by timestamp descending
+      states.sort((a, b) => b.timestamp - a.timestamp);
+      const latest = states[0];
+      
+      // Restore latest snapshot
+      if (latest.data) {
+        this.restoreSnapshotFromData(latest.data);
+      }
+    }
+  }
+
+  private restoreSnapshotFromData(snapshot: WorkspaceSnapshot): void {
+    this.files = new Map(snapshot.files);
+    this.sessionContext = { ...snapshot.context };
+    // Also populate snapshots map
+    this.snapshots.set(snapshot.id, snapshot);
+  }
+
   // File tracking
   trackFile(path: string, content: string, isOpen = false): void {
     const hash = this.computeHash(content);
@@ -298,9 +326,10 @@ export interface FileDiff {
 
 let workspaceTracker: WorkspaceStateTracker | null = null;
 
-export function getWorkspaceTracker(sessionId?: string): WorkspaceStateTracker {
+export async function getWorkspaceTracker(sessionId?: string): Promise<WorkspaceStateTracker> {
   if (!workspaceTracker) {
     workspaceTracker = new WorkspaceStateTracker(sessionId || 'default');
+    await workspaceTracker.initialize();
   }
   return workspaceTracker;
 }
@@ -315,11 +344,11 @@ export function resetWorkspaceTracker(): void {
 /**
  * Create sync bindings for FCS runtime
  */
-export function createSyncBindings(
+export async function createSyncBindings(
   config: SyncBindingsConfig,
   print: (msg: string) => void
-): Record<string, FCSValue> {
-  const tracker = getWorkspaceTracker(config.sessionId);
+): Promise<Record<string, FCSValue>> {
+  const tracker = await getWorkspaceTracker(config.sessionId);
 
   const sync: Record<string, FCSFunction | FCSValue> = {};
 

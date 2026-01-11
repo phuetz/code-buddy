@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -50,6 +50,7 @@ export interface ExtractedFrame {
 export class VideoTool {
   private readonly supportedFormats = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv', '.m4v', '.mpeg', '.mpg'];
   private readonly _maxFileSizeMB = 500; // 500MB max
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Get video file information
@@ -58,7 +59,7 @@ export class VideoTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Video file not found: ${filePath}`
@@ -73,7 +74,7 @@ export class VideoTool {
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
+      const stats = await this.vfs.stat(resolvedPath);
 
       // Try to get detailed info with ffprobe
       const ffprobeInfo = await this.getFFProbeInfo(resolvedPath);
@@ -188,7 +189,7 @@ export class VideoTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Video file not found: ${filePath}`
@@ -213,7 +214,7 @@ export class VideoTool {
       }
 
       const outputDir = options.outputDir || path.join(process.cwd(), '.codebuddy', 'frames', path.basename(filePath, ext));
-      fs.mkdirSync(outputDir, { recursive: true });
+      await this.vfs.ensureDir(outputDir);
 
       const format = options.format || 'jpg';
       const frames: ExtractedFrame[] = [];
@@ -314,7 +315,7 @@ export class VideoTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Video file not found: ${filePath}`
@@ -354,7 +355,7 @@ export class VideoTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Video file not found: ${filePath}`
@@ -432,20 +433,21 @@ export class VideoTool {
   /**
    * List video files in directory
    */
-  listVideos(dirPath: string = '.'): ToolResult {
+  async listVideos(dirPath: string = '.'): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), dirPath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Directory not found: ${dirPath}`
         };
       }
 
-      const files = fs.readdirSync(resolvedPath);
-      const videos = files.filter(f => {
-        const ext = path.extname(f).toLowerCase();
+      const entries = await this.vfs.readDirectory(resolvedPath);
+      const videos = entries.filter(e => {
+        if (!e.isFile) return false;
+        const ext = path.extname(e.name).toLowerCase();
         return this.supportedFormats.includes(ext);
       });
 
@@ -456,11 +458,13 @@ export class VideoTool {
         };
       }
 
-      const videoList = videos.map(video => {
-        const fullPath = path.join(resolvedPath, video);
-        const stats = fs.statSync(fullPath);
-        return `  🎬 ${video} (${this.formatSize(stats.size)})`;
-      }).join('\n');
+      const listPromises = videos.map(async video => {
+        const fullPath = path.join(resolvedPath, video.name);
+        const stats = await this.vfs.stat(fullPath);
+        return `  🎬 ${video.name} (${this.formatSize(stats.size)})`;
+      });
+
+      const videoList = (await Promise.all(listPromises)).join('\n');
 
       return {
         success: true,

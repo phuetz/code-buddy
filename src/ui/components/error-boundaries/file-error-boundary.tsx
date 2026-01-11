@@ -10,6 +10,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from '../../../utils/logger.js';
 
 interface FileErrorBoundaryProps {
   children: ReactNode;
@@ -202,12 +203,11 @@ export class FileErrorBoundary extends Component<
     this.setState({ errorInfo, suggestedAction });
 
     // Log error details
-    console.error('[FileErrorBoundary] File system error:');
-    console.error(`  File Path: ${filePath || 'Unknown'}`);
-    console.error(`  Error Type: ${fileErrorType}`);
-    console.error(`  Error Code: ${(error as { code?: string }).code || 'N/A'}`);
-    console.error(`  Message: ${error.message}`);
-    console.error(`  Stack: ${error.stack}`);
+    logger.error('[FileErrorBoundary] File system error', error, {
+      filePath: filePath || 'Unknown',
+      errorType: fileErrorType,
+      errorCode: (error as { code?: string }).code || 'N/A'
+    });
 
     // Call custom error handler if provided
     if (this.props.onError) {
@@ -233,7 +233,7 @@ export class FileErrorBoundary extends Component<
       // Check if directory already exists
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
-        console.log(`[FileErrorBoundary] Created directory: ${dir}`);
+        logger.info(`[FileErrorBoundary] Created directory: ${dir}`);
 
         // Notify callback
         if (this.props.onCreateDirectory) {
@@ -255,7 +255,7 @@ export class FileErrorBoundary extends Component<
         }, 1000);
       }
     } catch (recoveryError) {
-      console.error('[FileErrorBoundary] Failed to create directory:', recoveryError);
+      logger.error('[FileErrorBoundary] Failed to create directory', recoveryError as Error);
       this.setState({ isRecovering: false });
     }
   };

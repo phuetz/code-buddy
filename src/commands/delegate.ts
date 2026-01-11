@@ -17,31 +17,46 @@ import crypto from 'crypto';
 
 const execAsync = promisify(exec);
 
+/**
+ * Configuration for a delegation task.
+ */
 export interface DelegateConfig {
-  /** Task description */
+  /** Description of the task to perform. */
   task: string;
-  /** Base branch (default: current branch) */
+  /** Base branch to target (defaults to current branch). */
   baseBranch?: string;
-  /** Create draft PR */
+  /** Whether to create a draft PR (default: true). */
   draft?: boolean;
-  /** Assign reviewers */
+  /** List of GitHub usernames to request review from. */
   reviewers?: string[];
-  /** PR labels */
+  /** Labels to apply to the PR. */
   labels?: string[];
-  /** Auto-merge when checks pass */
+  /** Whether to enable auto-merge (if supported). */
   autoMerge?: boolean;
 }
 
+/**
+ * Result of a delegation operation.
+ */
 export interface DelegateResult {
+  /** Whether the delegation started successfully. */
   success: boolean;
+  /** The name of the created branch. */
   branchName?: string;
+  /** The URL of the created Pull Request. */
   prUrl?: string;
+  /** The number of the created Pull Request. */
   prNumber?: number;
+  /** Error message if failed. */
   error?: string;
 }
 
 /**
- * Generate branch name from task description
+ * Generates a unique branch name based on the task description.
+ * Format: grok/<slugged-task>-<random-hash>
+ *
+ * @param task - The task description.
+ * @returns The generated branch name.
  */
 export function generateBranchName(task: string): string {
   const slug = task
@@ -55,7 +70,9 @@ export function generateBranchName(task: string): string {
 }
 
 /**
- * Check if we're in a git repository
+ * Checks if the current directory is inside a git repository.
+ *
+ * @returns True if in a git repo.
  */
 export async function isGitRepo(): Promise<boolean> {
   try {
@@ -67,7 +84,9 @@ export async function isGitRepo(): Promise<boolean> {
 }
 
 /**
- * Get current branch name
+ * Gets the name of the current git branch.
+ *
+ * @returns The current branch name.
  */
 export async function getCurrentBranch(): Promise<string> {
   const { stdout } = await execAsync('git branch --show-current');
@@ -75,7 +94,9 @@ export async function getCurrentBranch(): Promise<string> {
 }
 
 /**
- * Check if there are uncommitted changes
+ * Checks if there are any uncommitted changes (staged or unstaged).
+ *
+ * @returns True if changes exist.
  */
 export async function hasUncommittedChanges(): Promise<boolean> {
   const { stdout } = await execAsync('git status --porcelain');
@@ -83,29 +104,39 @@ export async function hasUncommittedChanges(): Promise<boolean> {
 }
 
 /**
- * Create a new branch
+ * Creates a new git branch.
+ *
+ * @param branchName - Name of the new branch.
  */
 export async function createBranch(branchName: string): Promise<void> {
   await execAsync(`git checkout -b ${branchName}`);
 }
 
 /**
- * Commit all changes
+ * Commits all changes (staged and unstaged) with a message.
+ *
+ * @param message - The commit message.
  */
 export async function commitChanges(message: string): Promise<void> {
   await execAsync('git add -A');
-  await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`);
+  // Escape double quotes in message for shell safety
+  const safeMessage = message.replace(/"/g, '\\"');
+  await execAsync(`git commit -m "${safeMessage}"`);
 }
 
 /**
- * Push branch to remote
+ * Pushes the specified branch to the remote origin.
+ *
+ * @param branchName - The branch to push.
  */
 export async function pushBranch(branchName: string): Promise<void> {
   await execAsync(`git push -u origin ${branchName}`);
 }
 
 /**
- * Check if gh CLI is available
+ * Checks if the GitHub CLI (gh) is installed and available.
+ *
+ * @returns True if gh is available.
  */
 export async function hasGhCli(): Promise<boolean> {
   try {
@@ -117,7 +148,15 @@ export async function hasGhCli(): Promise<boolean> {
 }
 
 /**
- * Create a pull request using gh CLI
+ * Creates a Pull Request using the GitHub CLI.
+ *
+ * @param title - PR title.
+ * @param body - PR description.
+ * @param baseBranch - Base branch to merge into.
+ * @param draft - Whether to create as draft.
+ * @param labels - Labels to apply.
+ * @param reviewers - Reviewers to request.
+ * @returns Object containing PR URL and number.
  */
 export async function createPullRequest(
   title: string,
@@ -127,7 +166,11 @@ export async function createPullRequest(
   labels: string[] = [],
   reviewers: string[] = []
 ): Promise<{ url: string; number: number }> {
-  let cmd = `gh pr create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" --base ${baseBranch}`;
+  // Escape inputs for shell safety
+  const safeTitle = title.replace(/"/g, '\\"');
+  const safeBody = body.replace(/"/g, '\\"');
+  
+  let cmd = `gh pr create --title "${safeTitle}" --body "${safeBody}" --base ${baseBranch}`;
 
   if (draft) {
     cmd += ' --draft';
@@ -156,14 +199,21 @@ export async function createPullRequest(
 }
 
 /**
- * Add comment to PR
+ * Adds a comment to an existing Pull Request.
+ *
+ * @param prNumber - The PR number.
+ * @param comment - The comment text.
  */
 export async function addPRComment(prNumber: number, comment: string): Promise<void> {
-  await execAsync(`gh pr comment ${prNumber} --body "${comment.replace(/"/g, '\\"')}"`);
+  const safeComment = comment.replace(/"/g, '\\"');
+  await execAsync(`gh pr comment ${prNumber} --body "${safeComment}"`);
 }
 
 /**
- * Request review on PR
+ * Requests review from specified users on a Pull Request.
+ *
+ * @param prNumber - The PR number.
+ * @param reviewers - Array of GitHub usernames.
  */
 export async function requestReview(prNumber: number, reviewers: string[]): Promise<void> {
   if (reviewers.length > 0) {
@@ -172,14 +222,20 @@ export async function requestReview(prNumber: number, reviewers: string[]): Prom
 }
 
 /**
- * Mark PR as ready for review (remove draft status)
+ * Marks a Pull Request as ready for review (removes draft status).
+ *
+ * @param prNumber - The PR number.
  */
 export async function markReady(prNumber: number): Promise<void> {
   await execAsync(`gh pr ready ${prNumber}`);
 }
 
 /**
- * Main delegate function
+ * Main entry point for delegating a task.
+ * Orchestrates branch creation, committing, pushing, and PR creation.
+ *
+ * @param config - Delegation configuration.
+ * @returns Result of the delegation process.
  */
 export async function delegate(config: DelegateConfig): Promise<DelegateResult> {
   try {
@@ -254,7 +310,12 @@ Generated with [Grok CLI](https://github.com/phuetz/code-buddy)`;
 }
 
 /**
- * Complete delegation - mark PR ready and request review
+ * Completes a delegation task.
+ * Marks the PR as ready and requests review.
+ *
+ * @param prNumber - The PR number.
+ * @param summary - Summary of work completed.
+ * @param reviewers - Optional list of reviewers to request.
  */
 export async function completeDelegate(
   prNumber: number,
@@ -280,7 +341,11 @@ Ready for review.`);
 }
 
 /**
- * Abort delegation - close PR and delete branch
+ * Aborts a delegation task.
+ * Adds a comment explaining why, closes the PR, and deletes the branch.
+ *
+ * @param prNumber - The PR number.
+ * @param reason - Reason for abortion.
  */
 export async function abortDelegate(
   prNumber: number,

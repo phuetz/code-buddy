@@ -2,38 +2,69 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+/**
+ * Definition of a slash command.
+ */
 export interface SlashCommand {
+  /** The name of the command (without the slash). */
   name: string;
+  /** A brief description of what the command does. */
   description: string;
+  /** The prompt text or special token associated with the command. */
   prompt: string;
+  /** The file path where the command is defined (empty for built-ins). */
   filePath: string;
+  /** Whether the command is built-in or custom. */
   isBuiltin: boolean;
+  /** List of arguments accepted by the command. */
   arguments?: SlashCommandArgument[];
 }
 
+/**
+ * Definition of an argument for a slash command.
+ */
 export interface SlashCommandArgument {
+  /** The name of the argument. */
   name: string;
+  /** Description of the argument. */
   description: string;
+  /** Whether the argument is required. */
   required: boolean;
+  /** Default value for the argument if not provided. */
   default?: string;
 }
 
+/**
+ * Result of executing or parsing a slash command.
+ */
 export interface SlashCommandResult {
+  /** Whether the command execution/parsing was successful. */
   success: boolean;
+  /** The generated prompt or context to be sent to the AI (if applicable). */
   prompt?: string;
+  /** Error message if the command failed. */
   error?: string;
+  /** The command definition that was matched. */
   command?: SlashCommand;
 }
 
 /**
- * Slash Commands Manager - Inspired by Claude Code
- * Supports custom commands from .codebuddy/commands/*.md files
+ * Slash Commands Manager - Inspired by Claude Code.
+ *
+ * Manages the registration, parsing, and execution of slash commands.
+ * Supports both built-in commands and custom commands loaded from
+ * `.codebuddy/commands/*.md` files in the project or home directory.
  */
 export class SlashCommandManager {
   private commands: Map<string, SlashCommand> = new Map();
   private workingDirectory: string;
   private commandsDirs: string[];
 
+  /**
+   * Creates a new instance of SlashCommandManager.
+   *
+   * @param workingDirectory - The current working directory (defaults to process.cwd()).
+   */
   constructor(workingDirectory: string = process.cwd()) {
     this.workingDirectory = workingDirectory;
     this.commandsDirs = [
@@ -46,7 +77,8 @@ export class SlashCommandManager {
   }
 
   /**
-   * Load built-in slash commands
+   * Loads the set of built-in slash commands.
+   * These commands are hardcoded and always available.
    */
   private loadBuiltinCommands(): void {
     const builtinCommands: SlashCommand[] = [
@@ -117,8 +149,8 @@ export class SlashCommandManager {
         description: 'Review code changes before commit',
         prompt: `You are a code reviewer. Analyze the current git changes and provide a detailed code review.
 
-1. First, run \`git diff\` to see all unstaged changes
-2. Run \`git diff --cached\` to see staged changes
+1. First, run git diff to see all unstaged changes
+2. Run git diff --cached to see staged changes
 3. Analyze the changes for:
    - Code quality and best practices
    - Potential bugs or issues
@@ -140,15 +172,15 @@ Provide a structured review with:
         description: 'Generate commit message and commit changes',
         prompt: `Analyze the current git changes and create an appropriate commit:
 
-1. Run \`git status\` to see all changes
-2. Run \`git diff --cached\` to see staged changes (or \`git diff\` if nothing staged)
+1. Run git status to see all changes
+2. Run git diff --cached to see staged changes (or git diff if nothing staged)
 3. Generate a conventional commit message following the format:
    - type(scope): description
    - Types: feat, fix, docs, style, refactor, test, chore
-4. Stage relevant files with \`git add\`
+4. Stage relevant files with git add
 5. Create the commit with the generated message
 
-Keep the commit message concise but descriptive.`,
+Keep the commit message concise but descriptive.`, 
         filePath: '',
         isBuiltin: true
       },
@@ -227,7 +259,7 @@ Keep the commit message concise but descriptive.`,
 4. Suggest debugging steps
 5. Propose solutions
 
-Be systematic and thorough in your analysis.`,
+Be systematic and thorough in your analysis.`, 
         filePath: '',
         isBuiltin: true
       },
@@ -844,6 +876,16 @@ Be systematic and thorough in your analysis.`,
         arguments: [
           { name: 'action', description: 'status, tasks, start <id>, complete, log, handoff, init, instructions', required: false }
         ]
+      },
+      {
+        name: 'plugins',
+        description: 'Manage plugin marketplace and installed plugins',
+        prompt: '__PLUGINS__',
+        filePath: '',
+        isBuiltin: true,
+        arguments: [
+          { name: 'action', description: 'list, search <query>, install <id>, uninstall <id>, update <id>, status', required: false }
+        ]
       }
     ];
 
@@ -853,7 +895,8 @@ Be systematic and thorough in your analysis.`,
   }
 
   /**
-   * Load custom commands from .codebuddy/commands/*.md files
+   * Loads custom commands from `.codebuddy/commands/*.md` files.
+   * Scans both the project directory and the user's home directory.
    */
   private loadCustomCommands(): void {
     for (const commandsDir of this.commandsDirs) {
@@ -894,7 +937,11 @@ Be systematic and thorough in your analysis.`,
   }
 
   /**
-   * Parse a command markdown file
+   * Parses the content of a command markdown file.
+   * Extracts YAML frontmatter for metadata and uses the rest as the prompt.
+   *
+   * @param content - The raw content of the markdown file.
+   * @returns An object containing description, prompt, and optional arguments.
    */
   private parseCommandFile(content: string): {
     description: string;
@@ -961,28 +1008,40 @@ Be systematic and thorough in your analysis.`,
   }
 
   /**
-   * Get all available commands
+   * Retrieves all available slash commands.
+   *
+   * @returns An array of all registered commands.
    */
   getCommands(): SlashCommand[] {
     return Array.from(this.commands.values());
   }
 
   /**
-   * Get a specific command
+   * Retrieves a specific command by name.
+   *
+   * @param name - The name of the command to retrieve.
+   * @returns The command definition or undefined if not found.
    */
   getCommand(name: string): SlashCommand | undefined {
     return this.commands.get(name);
   }
 
   /**
-   * Get all registered commands
+   * Retrieves all registered commands.
+   * Alias for `getCommands()`.
+   *
+   * @returns An array of all registered commands.
    */
   getAllCommands(): SlashCommand[] {
     return Array.from(this.commands.values());
   }
 
   /**
-   * Execute a slash command
+   * Executes a slash command string.
+   * Handles argument substitution and checks for command existence.
+   *
+   * @param input - The full command string (e.g., "/help", "/mode code").
+   * @returns The result of the execution, including the prompt to send or an error.
    */
   execute(input: string): SlashCommandResult {
     // Parse command and arguments
@@ -1042,7 +1101,10 @@ Be systematic and thorough in your analysis.`,
   }
 
   /**
-   * Format commands list for display
+   * Formats a user-friendly list of all available commands.
+   * Separates built-in commands from custom commands.
+   *
+   * @returns A formatted string ready for display.
    */
   formatCommandsList(): string {
     const builtinCmds = Array.from(this.commands.values())
@@ -1079,7 +1141,8 @@ Be systematic and thorough in your analysis.`,
   }
 
   /**
-   * Reload commands (useful after editing command files)
+   * Reloads all commands from disk.
+   * Useful after adding or editing custom command files.
    */
   reload(): void {
     this.commands.clear();
@@ -1088,7 +1151,11 @@ Be systematic and thorough in your analysis.`,
   }
 
   /**
-   * Create a new custom command template
+   * Creates a new custom command template file.
+   *
+   * @param name - The name of the new command.
+   * @param description - The description of the new command.
+   * @returns The file path of the created command template.
    */
   createCommandTemplate(name: string, description: string): string {
     const commandsDir = path.join(this.workingDirectory, '.codebuddy', 'commands');
@@ -1100,7 +1167,7 @@ Be systematic and thorough in your analysis.`,
 
     const filePath = path.join(commandsDir, `${name}.md`);
 
-    const template = `---
+    const template = `--- 
 description: ${description}
 ---
 
@@ -1123,6 +1190,12 @@ Example usage: /${name} argument1 argument2
 // Singleton instance
 let slashCommandManagerInstance: SlashCommandManager | null = null;
 
+/**
+ * Gets the singleton instance of SlashCommandManager.
+ *
+ * @param workingDirectory - Optional working directory to initialize with.
+ * @returns The singleton instance.
+ */
 export function getSlashCommandManager(workingDirectory?: string): SlashCommandManager {
   if (!slashCommandManagerInstance || workingDirectory) {
     slashCommandManagerInstance = new SlashCommandManager(workingDirectory);
@@ -1130,6 +1203,10 @@ export function getSlashCommandManager(workingDirectory?: string): SlashCommandM
   return slashCommandManagerInstance;
 }
 
+/**
+ * Resets the singleton instance of SlashCommandManager.
+ * Primarily used for testing.
+ */
 export function resetSlashCommandManager(): void {
   slashCommandManagerInstance = null;
 }

@@ -35,6 +35,16 @@ export function getErrorMessage(error: unknown): string {
 }
 
 /**
+ * Extract error code from unknown error (for filesystem errors like ENOENT)
+ */
+export function getErrorCode(error: unknown): string | undefined {
+  if (error && typeof error === 'object' && 'code' in error) {
+    return (error as { code?: string }).code;
+  }
+  return undefined;
+}
+
+/**
  * Type for generic record with unknown values
  */
 export type UnknownRecord = Record<string, unknown>;

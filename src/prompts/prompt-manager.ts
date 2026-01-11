@@ -64,6 +64,10 @@ export interface PromptConfig {
   modelName?: string;
   /** Available tools */
   tools?: string[];
+  /** Include memory context */
+  includeMemory?: boolean;
+  /** Memory context content */
+  memoryContext?: string;
 }
 
 export interface PromptSection {
@@ -198,6 +202,8 @@ export class PromptManager {
       cwd = process.cwd(),
       modelName,
       tools = [],
+      includeMemory = false,
+      memoryContext,
     } = config;
 
     const sections: PromptSection[] = [];
@@ -220,6 +226,15 @@ export class PromptManager {
       }
       contextLines.push('</context>');
       sections.push({ id: 'context', content: contextLines.join('\n'), priority: 10 });
+    }
+
+    // 2.5 Memory section (High priority context)
+    if (includeMemory && memoryContext) {
+      sections.push({ 
+        id: 'memory', 
+        content: `<memory_context>\n${memoryContext}\n</memory_context>`, 
+        priority: 15 
+      });
     }
 
     // 3. Tool prompts

@@ -48,7 +48,7 @@ const FEATURES: Feature[] = [
   {
     category: 'Contexte',
     name: 'Context Compression',
-    file: 'src/context/context-compressor.ts',
+    file: 'src/context/compression.ts',
     basedOn: 'JetBrains Research',
     status: 'implemented'
   },

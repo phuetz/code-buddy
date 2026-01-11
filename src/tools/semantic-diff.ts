@@ -8,7 +8,7 @@
  * - Highlights structural changes
  */
 
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 
 export type ChangeType =
   | 'added'
@@ -194,8 +194,8 @@ export async function semanticDiffFiles(
   newFile: string,
   options: DiffOptions = {}
 ): Promise<SemanticDiffResult> {
-  const oldCode = await fs.readFile(oldFile, 'utf-8');
-  const newCode = await fs.readFile(newFile, 'utf-8');
+  const oldCode = await UnifiedVfsRouter.Instance.readFile(oldFile, 'utf-8');
+  const newCode = await UnifiedVfsRouter.Instance.readFile(newFile, 'utf-8');
 
   const result = semanticDiff(oldCode, newCode, options);
 

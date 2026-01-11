@@ -10,6 +10,7 @@ import { readFile, writeFile, mkdir, readdir, stat } from 'fs/promises';
 import { join, dirname, relative } from 'path';
 import { createGzip, createGunzip } from 'zlib';
 import { promisify } from 'util';
+import { logger } from '../../utils/logger.js';
 import type {
   SyncConfig,
   SyncState,
@@ -110,7 +111,9 @@ export class CloudSyncManager extends EventEmitter {
     }, this.config.sync.syncInterval);
 
     // Initial sync
-    this.sync().catch(() => {});
+    this.sync().catch((err) => {
+      logger.debug('Initial sync failed', { error: err instanceof Error ? err.message : String(err) });
+    });
   }
 
   /**
@@ -334,8 +337,9 @@ export class CloudSyncManager extends EventEmitter {
 
     try {
       await this.scanDirectory(basePath, basePath, files);
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') throw error;
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : undefined;
+      if (code !== 'ENOENT') throw error;
     }
 
     return files;

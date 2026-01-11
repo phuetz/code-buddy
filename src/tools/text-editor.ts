@@ -1,6 +1,4 @@
-import * as fs from "fs-extra";
 import * as path from "path";
-import { writeFile as writeFilePromise } from "fs/promises";
 import { ToolResult, EditorCommand, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { Disposable, registerDisposable } from "../utils/disposable.js";
@@ -10,11 +8,13 @@ import {
   generateFuzzyDiff,
   suggestWhitespaceFixes,
 } from "../utils/fuzzy-match.js";
+import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 
 export class TextEditorTool implements Disposable {
   private editHistory: EditorCommand[] = [];
   private confirmationService = ConfirmationService.getInstance();
   private baseDirectory: string = process.cwd();
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor() {
     registerDisposable(this);
@@ -25,44 +25,6 @@ export class TextEditorTool implements Disposable {
    */
   dispose(): void {
     this.editHistory = [];
-  }
-
-  /**
-   * Validate path is within allowed directory (prevent path traversal)
-   * Uses realpath to resolve symlinks and prevent symlink-based traversal attacks
-   */
-  private validatePath(filePath: string): { valid: boolean; resolved: string; error?: string } {
-    const resolved = path.resolve(filePath);
-    const normalizedBase = path.normalize(this.baseDirectory);
-    const normalizedResolved = path.normalize(resolved);
-
-    // First check: normalized path must be within base directory
-    if (!normalizedResolved.startsWith(normalizedBase)) {
-      return {
-        valid: false,
-        resolved,
-        error: `Path traversal not allowed: ${filePath} resolves outside project directory`
-      };
-    }
-
-    // Second check: if file exists, resolve symlinks and verify real path
-    try {
-      if (fs.existsSync(resolved)) {
-        const realPath = fs.realpathSync(resolved);
-        const realBase = fs.realpathSync(this.baseDirectory);
-        if (!realPath.startsWith(realBase)) {
-          return {
-            valid: false,
-            resolved,
-            error: `Symlink traversal not allowed: ${filePath} points outside project directory`
-          };
-        }
-      }
-    } catch (_err) {
-      // If realpath fails, allow the operation (file may not exist yet)
-    }
-
-    return { valid: true, resolved };
   }
 
   /**
@@ -77,24 +39,24 @@ export class TextEditorTool implements Disposable {
     viewRange?: [number, number]
   ): Promise<ToolResult> {
     try {
-      const pathValidation = this.validatePath(filePath);
+      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
       const resolvedPath = pathValidation.resolved;
 
-      if (await fs.pathExists(resolvedPath)) {
-        const stats = await fs.stat(resolvedPath);
+      if (await this.vfs.exists(resolvedPath)) {
+        const stats = await this.vfs.stat(resolvedPath);
 
         if (stats.isDirectory()) {
-          const files = await fs.readdir(resolvedPath);
+          const files = await this.vfs.readdir(resolvedPath);
           return {
             success: true,
             output: `Directory contents of ${filePath}:\n${files.join("\n")}`,
           };
         }
 
-        const content = await fs.readFile(resolvedPath, "utf-8");
+        const content = await this.vfs.readFile(resolvedPath, "utf-8");
         const lines = content.split("\n");
 
         if (viewRange) {
@@ -143,20 +105,20 @@ export class TextEditorTool implements Disposable {
     replaceAll: boolean = false
   ): Promise<ToolResult> {
     try {
-      const pathValidation = this.validatePath(filePath);
+      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
       const resolvedPath = pathValidation.resolved;
 
-      if (!(await fs.pathExists(resolvedPath))) {
+      if (!(await this.vfs.exists(resolvedPath))) {
         return {
           success: false,
           error: `File not found: ${filePath}`,
         };
       }
 
-      const content = await fs.readFile(resolvedPath, "utf-8");
+      const content = await this.vfs.readFile(resolvedPath, "utf-8");
 
       if (!content.includes(oldStr)) {
         // Try fuzzy matching with 90% similarity threshold (like mistral-vibe)
@@ -222,7 +184,7 @@ export class TextEditorTool implements Disposable {
       const newContent = replaceAll
         ? content.split(oldStr).join(newStr)
         : content.replace(oldStr, newStr);
-      await writeFilePromise(resolvedPath, newContent, "utf-8");
+      await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
 
       this.editHistory.push({
         command: "str_replace",
@@ -249,15 +211,15 @@ export class TextEditorTool implements Disposable {
 
   async create(filePath: string, content: string): Promise<ToolResult> {
     try {
-      const pathValidation = this.validatePath(filePath);
+      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
       const resolvedPath = pathValidation.resolved;
 
       // Check if file already exists - prevent accidental overwrite
-      if (await fs.pathExists(resolvedPath)) {
-        const stats = await fs.stat(resolvedPath);
+      if (await this.vfs.exists(resolvedPath)) {
+        const stats = await this.vfs.stat(resolvedPath);
         if (stats.isFile()) {
           return {
             success: false,
@@ -300,8 +262,8 @@ export class TextEditorTool implements Disposable {
       }
 
       const dir = path.dirname(resolvedPath);
-      await fs.ensureDir(dir);
-      await writeFilePromise(resolvedPath, content, "utf-8");
+      await this.vfs.ensureDir(dir);
+      await this.vfs.writeFile(resolvedPath, content, "utf-8");
 
       this.editHistory.push({
         command: "create",
@@ -333,20 +295,20 @@ export class TextEditorTool implements Disposable {
     newContent: string
   ): Promise<ToolResult> {
     try {
-      const pathValidation = this.validatePath(filePath);
+      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
       const resolvedPath = pathValidation.resolved;
 
-      if (!(await fs.pathExists(resolvedPath))) {
+      if (!(await this.vfs.exists(resolvedPath))) {
         return {
           success: false,
           error: `File not found: ${filePath}`,
         };
       }
 
-      const fileContent = await fs.readFile(resolvedPath, "utf-8");
+      const fileContent = await this.vfs.readFile(resolvedPath, "utf-8");
       const lines = fileContent.split("\n");
       
       if (startLine < 1 || startLine > lines.length) {
@@ -394,7 +356,7 @@ export class TextEditorTool implements Disposable {
       lines.splice(startLine - 1, endLine - startLine + 1, ...replacementLines);
       const newFileContent = lines.join("\n");
 
-      await writeFilePromise(resolvedPath, newFileContent, "utf-8");
+      await this.vfs.writeFile(resolvedPath, newFileContent, "utf-8");
 
       this.editHistory.push({
         command: "str_replace",
@@ -424,20 +386,20 @@ export class TextEditorTool implements Disposable {
     content: string
   ): Promise<ToolResult> {
     try {
-      const pathValidation = this.validatePath(filePath);
+      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
       const resolvedPath = pathValidation.resolved;
 
-      if (!(await fs.pathExists(resolvedPath))) {
+      if (!(await this.vfs.exists(resolvedPath))) {
         return {
           success: false,
           error: `File not found: ${filePath}`,
         };
       }
 
-      const fileContent = await fs.readFile(resolvedPath, "utf-8");
+      const fileContent = await this.vfs.readFile(resolvedPath, "utf-8");
       const lines = fileContent.split("\n");
 
       // Validate insert line
@@ -477,7 +439,7 @@ export class TextEditorTool implements Disposable {
       lines.splice(insertLine - 1, 0, content);
       const newContent = lines.join("\n");
 
-      await writeFilePromise(resolvedPath, newContent, "utf-8");
+      await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
 
       this.editHistory.push({
         command: "insert",
@@ -512,25 +474,25 @@ export class TextEditorTool implements Disposable {
       switch (lastEdit.command) {
         case "str_replace":
           if (lastEdit.path && lastEdit.old_str && lastEdit.new_str) {
-            const content = await fs.readFile(lastEdit.path, "utf-8");
+            const content = await this.vfs.readFile(lastEdit.path, "utf-8");
             // Use split/join to replace ALL occurrences (replaceAll equivalent)
             const revertedContent = content.split(lastEdit.new_str).join(lastEdit.old_str);
-            await writeFilePromise(lastEdit.path, revertedContent, "utf-8");
+            await this.vfs.writeFile(lastEdit.path, revertedContent, "utf-8");
           }
           break;
 
         case "create":
           if (lastEdit.path) {
-            await fs.remove(lastEdit.path);
+            await this.vfs.remove(lastEdit.path);
           }
           break;
 
         case "insert":
           if (lastEdit.path && lastEdit.insert_line) {
-            const content = await fs.readFile(lastEdit.path, "utf-8");
+            const content = await this.vfs.readFile(lastEdit.path, "utf-8");
             const lines = content.split("\n");
             lines.splice(lastEdit.insert_line - 1, 1);
-            await writeFilePromise(lastEdit.path, lines.join("\n"), "utf-8");
+            await this.vfs.writeFile(lastEdit.path, lines.join("\n"), "utf-8");
           }
           break;
       }

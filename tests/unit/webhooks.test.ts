@@ -49,7 +49,7 @@ class MockClientRequest {
   private errorHandler?: (error: Error) => void;
   private timeoutHandler?: () => void;
 
-  on = jest.fn((event: string, handler: Function) => {
+  on = jest.fn((event: string, handler: (...args: unknown[]) => void) => {
     if (event === 'error') {
       this.errorHandler = handler as (error: Error) => void;
     } else if (event === 'timeout') {
@@ -86,7 +86,7 @@ class MockIncomingMessage {
     this.data = data;
   }
 
-  on = jest.fn((event: string, handler: Function) => {
+  on = jest.fn((event: string, handler: (...args: unknown[]) => void) => {
     if (event === 'data') {
       this.dataHandler = handler as (chunk: string) => void;
     } else if (event === 'end') {

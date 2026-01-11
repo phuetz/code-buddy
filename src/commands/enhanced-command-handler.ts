@@ -74,31 +74,57 @@ import {
   handlePromptCache,
   // Track handlers (Conductor-inspired)
   handleTrack,
-  // Type
-  CommandHandlerResult,
+  // Plugin handlers
+  handlePlugins,
 } from "./handlers/index.js";
 
+import type { CommandHandlerResult } from "./handlers/index.js";
+
 // Re-export CommandHandlerResult for external consumers
-export { CommandHandlerResult };
+export type { CommandHandlerResult };
 
 /**
- * Enhanced Command Handler - Processes special command tokens
- * Returns the chat entry to display, or null if command should be passed to AI
+ * Enhanced Command Handler.
+ *
+ * Processes special command tokens (starting with `__`) that are mapped from
+ * slash commands. This class acts as the central dispatcher, delegating
+ * specific command logic to modular handlers in `src/commands/handlers/`.
+ *
+ * It maintains references to conversation history and the CodeBuddy client
+ * to enable context-aware command execution.
  */
 export class EnhancedCommandHandler {
   private conversationHistory: ChatEntry[] = [];
   private codebuddyClient: CodeBuddyClient | null = null;
 
+  /**
+   * Sets the conversation history for context-aware commands (e.g., save, compact).
+   *
+   * @param history - Array of chat entries.
+   */
   setConversationHistory(history: ChatEntry[]): void {
     this.conversationHistory = history;
   }
 
+  /**
+   * Sets the CodeBuddy client instance for commands that require client access
+   * (e.g., ai-test, certain agent commands).
+   *
+   * @param client - The CodeBuddy client instance.
+   */
   setCodeBuddyClient(client: CodeBuddyClient): void {
     this.codebuddyClient = client;
   }
 
   /**
-   * Handle a special command token
+   * Handles a special command token.
+   * Dispatches the command to the appropriate handler function.
+   *
+   * @param token - The command token (e.g., `__HELP__`, `__YOLO_MODE__`).
+   * @param args - Arguments passed to the command.
+   * @param _fullInput - The full input string (unused in most cases but available).
+   * @returns A promise resolving to the command result, which may include
+   *          a message to display or instruction to pass to the AI.
    */
   async handleCommand(
     token: string,
@@ -281,6 +307,9 @@ export class EnhancedCommandHandler {
       case "__TRACK__":
         return handleTrack(args);
 
+      case "__PLUGINS__":
+        return handlePlugins(args);
+
       default:
         return { handled: false };
     }
@@ -290,6 +319,11 @@ export class EnhancedCommandHandler {
 // Singleton instance
 let enhancedCommandHandlerInstance: EnhancedCommandHandler | null = null;
 
+/**
+ * Gets the singleton instance of EnhancedCommandHandler.
+ *
+ * @returns The singleton instance.
+ */
 export function getEnhancedCommandHandler(): EnhancedCommandHandler {
   if (!enhancedCommandHandlerInstance) {
     enhancedCommandHandlerInstance = new EnhancedCommandHandler();
@@ -297,6 +331,10 @@ export function getEnhancedCommandHandler(): EnhancedCommandHandler {
   return enhancedCommandHandlerInstance;
 }
 
+/**
+ * Resets the singleton instance of EnhancedCommandHandler.
+ * Primarily used for testing.
+ */
 export function resetEnhancedCommandHandler(): void {
   enhancedCommandHandlerInstance = null;
 }

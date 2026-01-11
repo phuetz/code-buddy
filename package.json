@@ -108,7 +108,9 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
     "@types/diff-match-patch": "^1.0.36",
+    "@types/express": "^5.0.6",
     "@types/fs-extra": "^11.0.4",
     "@types/jest": "^29.5.14",
     "@types/js-yaml": "^4.0.9",

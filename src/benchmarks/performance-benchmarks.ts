@@ -12,6 +12,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { logger } from '../utils/logger.js';
 
 export interface BenchmarkResult {
   name: string;
@@ -150,10 +151,10 @@ export class BenchmarkRunner {
     const results: BenchmarkResult[] = [];
 
     for (const { name: benchName, fn } of benchmarks) {
-      console.log(`Running: ${benchName}...`);
+      logger.info(`Running: ${benchName}...`);
       const result = await this.benchmark(benchName, fn);
       results.push(result);
-      console.log(`  ${result.avgTime.toFixed(2)}ms avg (${result.opsPerSecond.toFixed(2)} ops/s)`);
+      logger.info(`  ${result.avgTime.toFixed(2)}ms avg (${result.opsPerSecond.toFixed(2)} ops/s)`);
     }
 
     const suite: BenchmarkSuite = {
@@ -411,7 +412,7 @@ export async function runAllBenchmarks(options?: BenchmarkOptions): Promise<Benc
   const runner = new BenchmarkRunner(options);
   const suites: BenchmarkSuite[] = [];
 
-  console.log('Running Core Engine Benchmarks...');
+  logger.info('Running Core Engine Benchmarks...');
   suites.push(await runCoreEngineBenchmarks(runner));
 
   return suites;

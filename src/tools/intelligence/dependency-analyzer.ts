@@ -7,7 +7,7 @@
  * Inspired by hurry-mode's dependency analysis capabilities.
  */
 
-import * as fs from "fs";
+import { UnifiedVfsRouter } from "../../services/vfs/unified-vfs-router.js";
 import * as path from "path";
 import {
   DependencyGraph,
@@ -67,6 +67,7 @@ export class DependencyAnalyzer {
   private parser: ASTParser;
   private graph: Map<string, DependencyNode> = new Map();
   private edges: DependencyEdge[] = [];
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(config: Partial<DependencyAnalyzerConfig> = {}, parser?: ASTParser) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -164,7 +165,7 @@ export class DependencyAnalyzer {
 
       // Process imports
       for (const imp of result.imports) {
-        const resolvedPath = this.resolveImport(imp.source, filePath, rootPath);
+        const resolvedPath = await this.resolveImport(imp.source, filePath, rootPath);
 
         if (resolvedPath) {
           // Internal dependency
@@ -209,11 +210,11 @@ export class DependencyAnalyzer {
   /**
    * Resolve an import to a file path
    */
-  private resolveImport(
+  private async resolveImport(
     source: string,
     fromFile: string,
     _rootPath: string
-  ): string | null {
+  ): Promise<string | null> {
     // Skip external packages
     if (!source.startsWith(".") && !source.startsWith("/")) {
       return null;
@@ -225,25 +226,25 @@ export class DependencyAnalyzer {
     // Try different extensions
     for (const ext of this.config.resolveExtensions) {
       // Direct file
-      if (fs.existsSync(targetPath + ext)) {
+      if (await this.vfs.exists(targetPath + ext)) {
         return targetPath + ext;
       }
 
       // Index file
       const indexPath = path.join(targetPath, `index${ext}`);
-      if (fs.existsSync(indexPath)) {
+      if (await this.vfs.exists(indexPath)) {
         return indexPath;
       }
     }
 
     // Check if it's already a valid path
-    if (fs.existsSync(targetPath)) {
-      const stat = fs.statSync(targetPath);
+    if (await this.vfs.exists(targetPath)) {
+      const stat = await this.vfs.stat(targetPath);
       if (stat.isDirectory()) {
         // Try index files
         for (const ext of this.config.resolveExtensions) {
           const indexPath = path.join(targetPath, `index${ext}`);
-          if (fs.existsSync(indexPath)) {
+          if (await this.vfs.exists(indexPath)) {
             return indexPath;
           }
         }
@@ -478,18 +479,18 @@ export class DependencyAnalyzer {
     const files: string[] = [];
     const extensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 
-    const walk = (dir: string) => {
+    const walk = async (dir: string) => {
       try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        const entries = await this.vfs.readDirectory(dir);
 
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
 
-          if (entry.isDirectory()) {
+          if (entry.isDirectory) {
             if (!this.config.excludePatterns.some((p) => entry.name.includes(p))) {
-              walk(fullPath);
+              await walk(fullPath);
             }
-          } else if (entry.isFile()) {
+          } else if (entry.isFile) {
             const ext = path.extname(entry.name).toLowerCase();
             if (extensions.includes(ext)) {
               files.push(fullPath);
@@ -501,7 +502,7 @@ export class DependencyAnalyzer {
       }
     };
 
-    walk(rootPath);
+    await walk(rootPath);
     return files;
   }
 

@@ -6,16 +6,16 @@
 export * from "./app.js";
 
 // Components
-export * from "./components/accessible-output.js";
-export * from "./components/api-key-input.js";
-export * from "./components/chat-history.js";
-export * from "./components/chat-input.js";
-export * from "./components/chat-interface.js";
-export * from "./components/command-suggestions.js";
-export * from "./components/confirmation-dialog.js";
-export * from "./components/diff-renderer.js";
-export * from "./components/enhanced-chat-input.js";
-export * from "./components/enhanced-confirmation-dialog.js";
+export * from "./components/AccessibleOutput.js";
+export * from "./components/ApiKeyInput.js";
+export * from "./components/ChatHistory.js";
+export * from "./components/ChatInput.js";
+export * from "./components/ChatInterface.js";
+export * from "./components/CommandSuggestions.js";
+export * from "./components/ConfirmationDialog.js";
+export * from "./components/DiffRenderer.js";
+export * from "./components/EnhancedChatInput.js";
+export * from "./components/EnhancedConfirmationDialog.js";
 // enhanced-spinners has overlapping Divider - export selectively
 export {
   EnhancedSpinner,
@@ -28,16 +28,16 @@ export {
   DataTable,
   Badge,
   type SpinnerStyle,
-} from "./components/enhanced-spinners.js";
-export * from "./components/error-boundary.js";
-export * from "./components/fuzzy-picker.js";
+} from "./components/EnhancedSpinners.js";
+export * from "./components/ErrorBoundary.js";
+export * from "./components/FuzzyPicker.js";
 // Note: help-system has some overlapping types - import directly if needed
-export * from "./components/ink-table.js";
-export * from "./components/loading-spinner.js";
-export * from "./components/mcp-status.js";
-export * from "./components/model-selection.js";
-export * from "./components/multi-step-progress.js";
-export * from "./components/structured-output.js";
+export * from "./components/InkTable.js";
+export * from "./components/LoadingSpinner.js";
+export * from "./components/McpStatus.js";
+export * from "./components/ModelSelection.js";
+export * from "./components/MultiStepProgress.js";
+export * from "./components/StructuredOutput.js";
 
 // HTTP Server
 export * from "./http-server/server.js";

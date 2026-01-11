@@ -7,7 +7,7 @@
  * Inspired by hurry-mode's code context capabilities.
  */
 
-import * as fs from "fs";
+import { UnifiedVfsRouter } from "../../services/vfs/unified-vfs-router.js";
 import * as path from "path";
 import {
   CodeContext,
@@ -30,6 +30,7 @@ export class CodeContextBuilder {
   private parser: ASTParser;
   private symbolSearch: SymbolSearch;
   private dependencyAnalyzer: DependencyAnalyzer;
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(
     parser?: ASTParser,
@@ -61,7 +62,7 @@ export class CodeContextBuilder {
     const semantics = this.buildSemanticContext(filePath, contextualSymbols);
 
     // Calculate quality metrics
-    const content = fs.readFileSync(filePath, "utf-8");
+    const content = await this.vfs.readFile(filePath, "utf-8");
     const quality = this.calculateQualityMetrics(content, contextualSymbols);
 
     return {

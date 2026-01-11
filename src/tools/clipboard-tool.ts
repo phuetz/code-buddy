@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn, execSync, spawnSync } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -27,6 +27,7 @@ export interface ClipboardContent {
  */
 export class ClipboardTool {
   private readonly imageOutputDir = path.join(process.cwd(), '.codebuddy', 'clipboard');
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Read text from clipboard
@@ -100,7 +101,11 @@ export class ClipboardTool {
           await this.waitForProcess(proc);
         }
       } else if (platform === 'win32') {
-        const proc = spawn('powershell', ['-command', `Set-Clipboard -Value '${text.replace(/'/g, "''")}'`]);
+        // SECURITY: Use stdin to pass text instead of embedding in command string
+        // This prevents PowerShell injection attacks from malicious text content
+        const proc = spawn('powershell', ['-command', '$input | Set-Clipboard']);
+        proc.stdin.write(text);
+        proc.stdin.end();
         await this.waitForProcess(proc);
       } else {
         return {
@@ -126,7 +131,7 @@ export class ClipboardTool {
    */
   async readImage(outputPath?: string): Promise<ToolResult> {
     try {
-      fs.mkdirSync(this.imageOutputDir, { recursive: true });
+      await this.vfs.ensureDir(this.imageOutputDir);
 
       const platform = process.platform;
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -152,12 +157,11 @@ end try`;
           spawnSync('osascript', ['-e', script], { stdio: 'ignore' });
         }
       } else if (platform === 'linux') {
-        // Linux: Use xclip to get image - pipe output to file safely
+        // Linux: Use xclip to get image - capture output and write to file
         try {
-          const result = spawnSync('xclip', ['-selection', 'clipboard', '-t', 'image/png', '-o'], {
-            stdio: ['ignore', fs.openSync(imagePath, 'w'), 'ignore']
-          });
+          const result = spawnSync('xclip', ['-selection', 'clipboard', '-t', 'image/png', '-o']);
           if (result.status !== 0) throw new Error('xclip failed');
+          await this.vfs.writeFileBuffer(imagePath, result.stdout);
         } catch {
           return {
             success: false,
@@ -175,10 +179,10 @@ end try`;
         };
       }
 
-      if (!fs.existsSync(imagePath) || fs.statSync(imagePath).size === 0) {
+      if (!await this.vfs.exists(imagePath) || (await this.vfs.stat(imagePath)).size === 0) {
         // Clean up empty file if created
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
+        if (await this.vfs.exists(imagePath)) {
+          await this.vfs.remove(imagePath);
         }
         return {
           success: false,
@@ -186,7 +190,7 @@ end try`;
         };
       }
 
-      const stats = fs.statSync(imagePath);
+      const stats = await this.vfs.stat(imagePath);
 
       return {
         success: true,
@@ -208,7 +212,7 @@ end try`;
     try {
       const resolvedPath = path.resolve(process.cwd(), imagePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Image file not found: ${imagePath}`
@@ -307,7 +311,7 @@ end try`;
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `File not found: ${filePath}`
@@ -330,14 +334,14 @@ end try`;
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `File not found: ${filePath}`
         };
       }
 
-      const content = fs.readFileSync(resolvedPath, 'utf8');
+      const content = await this.vfs.readFile(resolvedPath, 'utf8');
       return await this.writeText(content);
     } catch (error: unknown) {
       return {

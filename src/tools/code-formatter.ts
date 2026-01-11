@@ -10,7 +10,7 @@
  */
 
 import { execSync } from 'child_process';
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 
 export type Language =
@@ -500,11 +500,11 @@ export async function formatFile(
     };
   }
 
-  const content = await fs.readFile(filePath, 'utf-8');
+  const content = await UnifiedVfsRouter.Instance.readFile(filePath, 'utf-8');
   const result = formatCode(content, language, options);
 
   if (result.success && result.formatted) {
-    await fs.writeFile(filePath, result.formatted, 'utf-8');
+    await UnifiedVfsRouter.Instance.writeFile(filePath, result.formatted, 'utf-8');
   }
 
   return result;

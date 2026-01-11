@@ -24,6 +24,9 @@ const mockExistsSync = jest.fn();
 const mockRealpathSync = jest.fn();
 const mockEnsureDir = jest.fn();
 const mockRemove = jest.fn();
+// UnifiedVfsRouter uses fs-extra writeFile, so we need to mock it here too using the same mock function
+// to maintain test compatibility
+const mockWriteFile = jest.fn();
 
 jest.mock('fs-extra', () => ({
   pathExists: (...args: unknown[]) => mockPathExists(...args),
@@ -34,11 +37,11 @@ jest.mock('fs-extra', () => ({
   realpathSync: (...args: unknown[]) => mockRealpathSync(...args),
   ensureDir: (...args: unknown[]) => mockEnsureDir(...args),
   remove: (...args: unknown[]) => mockRemove(...args),
+  writeFile: (...args: unknown[]) => mockWriteFile(...args),
 }));
 
 // Mock fs/promises module
-const mockWriteFile = jest.fn();
-
+// Kept for compatibility if other modules use it, but TextEditorTool now goes through VFS -> fs-extra
 jest.mock('fs/promises', () => ({
   writeFile: (...args: unknown[]) => mockWriteFile(...args),
 }));

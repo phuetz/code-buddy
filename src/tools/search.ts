@@ -2,11 +2,11 @@ import { spawn } from "child_process";
 import { rgPath } from "@vscode/ripgrep";
 import { ToolResult } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
-import * as fs from "fs-extra";
 import * as path from "path";
 import { SEARCH_CONFIG } from "../config/constants.js";
 import { Cache, createCacheKey } from "../utils/cache.js";
 import { getEnhancedSearch, SearchMatch, SymbolMatch } from "./enhanced-search.js";
+import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 
 export interface SearchResult {
   file: string;
@@ -36,6 +36,7 @@ export class SearchTool {
   private _confirmationService = ConfirmationService.getInstance();
   private currentDirectory: string = process.cwd();
   private searchCache = new Cache<UnifiedSearchResult[]>(SEARCH_CONFIG.CACHE_TTL);
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * Unified search method that can search for text content or find files
@@ -326,7 +327,7 @@ export class SearchTool {
       if (depth > SEARCH_CONFIG.MAX_DEPTH || files.length >= maxResults) return; // Prevent infinite recursion and limit results
 
       try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const entries = await this.vfs.readDirectory(dir);
 
         for (const entry of entries) {
           if (files.length >= maxResults) break;
@@ -341,7 +342,7 @@ export class SearchTool {
 
           // Skip common directories
           if (
-            entry.isDirectory() &&
+            entry.isDirectory &&
             [
               "node_modules",
               ".git",
@@ -364,7 +365,7 @@ export class SearchTool {
             continue;
           }
 
-          if (entry.isFile()) {
+          if (entry.isFile) {
             const score = this.calculateFileScore(
               entry.name,
               relativePath,
@@ -377,7 +378,7 @@ export class SearchTool {
                 score,
               });
             }
-          } else if (entry.isDirectory()) {
+          } else if (entry.isDirectory) {
             await walkDir(fullPath, depth + 1);
           }
         }

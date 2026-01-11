@@ -123,7 +123,17 @@ class LRUCache<K, V> {
 import { TOOL_METADATA, CATEGORY_KEYWORDS } from "./metadata.js";
 
 /**
- * TF-IDF based Tool Selector with metrics tracking and adaptive thresholds
+ * RAG-based Tool Selector.
+ * 
+ * Selects the most relevant tools for a given query to reduce context window usage
+ * and improve LLM adherence to tool definitions.
+ * 
+ * Uses a hybrid approach:
+ * 1. **TF-IDF Scoring**: Matches query terms against tool keywords and descriptions.
+ * 2. **Category Classification**: Classifies intent (e.g., "edit file" -> `file_write`) and boosts relevant tools.
+ * 3. **Adaptive Thresholding**: Adjusts inclusion threshold based on success metrics to balance precision/recall.
+ * 
+ * Includes LRU caching for performance.
  */
 export class ToolSelector {
   private toolIndex: Map<string, ToolMetadata>;
@@ -326,17 +336,28 @@ export class ToolSelector {
   }
 
   /**
-   * Select the most relevant tools for a query
+   * Select the most relevant tools for a given query.
+   * 
+   * @param query - The user's natural language query
+   * @param allTools - List of all available tools
+   * @param options - Configuration options
+   * @returns Selection result containing the filtered list of tools
    */
   selectTools(
     query: string,
     allTools: CodeBuddyTool[],
     options: {
+      /** Maximum number of tools to return (default: 10) */
       maxTools?: number;
+      /** Minimum relevance score (0-1) to include a tool */
       minScore?: number;
+      /** Only include tools in these categories */
       includeCategories?: ToolCategory[];
+      /** Exclude tools in these categories */
       excludeCategories?: ToolCategory[];
+      /** List of tool names to always include regardless of score */
       alwaysInclude?: string[];
+      /** Whether to use dynamic thresholding based on success rate */
       useAdaptiveThreshold?: boolean;
     } = {}
   ): ToolSelectionResult {

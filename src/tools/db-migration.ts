@@ -9,7 +9,7 @@
  */
 
 import Database from 'better-sqlite3';
-import * as fs from 'fs-extra';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -185,6 +185,7 @@ export class MigrationManager {
   private config: Required<MigrationConfig>;
   private db: Database.Database | null = null;
   private migrations: Migration[] = [];
+  private vfs = UnifiedVfsRouter.Instance;
 
   constructor(config: MigrationConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -196,7 +197,7 @@ export class MigrationManager {
    */
   async initialize(): Promise<void> {
     // Ensure database directory exists
-    await fs.ensureDir(path.dirname(this.config.dbPath));
+    await this.vfs.ensureDir(path.dirname(this.config.dbPath));
 
     // Open database
     this.db = new Database(this.config.dbPath);
@@ -219,16 +220,17 @@ export class MigrationManager {
    * Load migrations from file system
    */
   private async loadMigrationsFromDir(): Promise<void> {
-    if (!await fs.pathExists(this.config.migrationsDir)) {
+    if (!await this.vfs.exists(this.config.migrationsDir)) {
       return;
     }
 
-    const files = await fs.readdir(this.config.migrationsDir);
-    const migrationFiles = files.filter(f => f.endsWith('.json'));
+    const entries = await this.vfs.readDirectory(this.config.migrationsDir);
+    const migrationFiles = entries.filter(e => e.isFile && e.name.endsWith('.json')).map(e => e.name);
 
     for (const file of migrationFiles) {
       try {
-        const content = await fs.readJson(path.join(this.config.migrationsDir, file));
+        const contentStr = await this.vfs.readFile(path.join(this.config.migrationsDir, file));
+        const content = JSON.parse(contentStr);
         if (content.version && content.name && content.up) {
           // Don't add if version already exists
           if (!this.migrations.find(m => m.version === content.version)) {
@@ -422,8 +424,8 @@ export class MigrationManager {
       down: '-- Add your DOWN migration SQL here',
     };
 
-    await fs.ensureDir(this.config.migrationsDir);
-    await fs.writeJson(filepath, migration, { spaces: 2 });
+    await this.vfs.ensureDir(this.config.migrationsDir);
+    await this.vfs.writeFile(filepath, JSON.stringify(migration, null, 2));
 
     return filepath;
   }

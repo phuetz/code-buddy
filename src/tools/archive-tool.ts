@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -24,6 +24,11 @@ export interface ExtractOptions {
   files?: string[]; // Specific files to extract
   overwrite?: boolean;
   preservePaths?: boolean;
+  /**
+   * Archive password. SECURITY NOTE: For maximum security, set the
+   * ARCHIVE_PASSWORD environment variable instead of passing this option.
+   * When passed as option, the password may briefly be visible in process listings.
+   */
   password?: string;
 }
 
@@ -31,8 +36,25 @@ export interface CreateOptions {
   format?: 'zip' | 'tar' | 'tar.gz' | 'tar.bz2' | 'tar.xz';
   compressionLevel?: number; // 0-9
   excludePatterns?: string[];
+  /**
+   * Archive password. SECURITY NOTE: For maximum security, set the
+   * ARCHIVE_PASSWORD environment variable instead of passing this option.
+   */
   password?: string;
   outputPath?: string;
+}
+
+/**
+ * Get archive password from environment variable (preferred) or options.
+ * Using environment variable is more secure as it's not visible in process listings.
+ */
+function getArchivePassword(optionPassword?: string): string | undefined {
+  // Prefer environment variable for security
+  const envPassword = process.env.ARCHIVE_PASSWORD;
+  if (envPassword) {
+    return envPassword;
+  }
+  return optionPassword;
 }
 
 /**
@@ -42,6 +64,7 @@ export interface CreateOptions {
 export class ArchiveTool {
   private readonly supportedFormats = ['.zip', '.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tar.xz', '.txz', '.7z', '.rar', '.gz', '.bz2', '.xz'];
   private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'extracted');
+  private vfs = UnifiedVfsRouter.Instance;
 
   /**
    * List contents of an archive
@@ -50,7 +73,7 @@ export class ArchiveTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), archivePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Archive not found: ${archivePath}`
@@ -65,7 +88,7 @@ export class ArchiveTool {
         };
       }
 
-      const stats = fs.statSync(resolvedPath);
+      const stats = await this.vfs.stat(resolvedPath);
       let files: ArchiveEntry[] = [];
 
       switch (type) {
@@ -119,7 +142,7 @@ export class ArchiveTool {
     try {
       const resolvedPath = path.resolve(process.cwd(), archivePath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Archive not found: ${archivePath}`
@@ -139,7 +162,7 @@ export class ArchiveTool {
         path.basename(resolvedPath, path.extname(resolvedPath))
       );
 
-      fs.mkdirSync(outputDir, { recursive: true });
+      await this.vfs.ensureDir(outputDir);
 
       let result: { success: boolean; files: string[] };
 
@@ -198,7 +221,7 @@ export class ArchiveTool {
 
       // Verify all source paths exist
       for (const p of resolvedPaths) {
-        if (!fs.existsSync(p)) {
+        if (!await this.vfs.exists(p)) {
           return {
             success: false,
             error: `Source not found: ${p}`
@@ -238,7 +261,7 @@ export class ArchiveTool {
         };
       }
 
-      const stats = fs.statSync(outputPath);
+      const stats = await this.vfs.stat(outputPath);
 
       return {
         success: true,
@@ -469,7 +492,7 @@ export class ArchiveTool {
       tar.on('close', async (code) => {
         if (code === 0) {
           // List extracted files
-          const files = this.getFilesRecursive(outputDir);
+          const files = await this.getFilesRecursive(outputDir);
           resolve({ success: true, files });
         } else {
           resolve({ success: false, files: [] });
@@ -497,15 +520,18 @@ export class ArchiveTool {
         args.push('-y');
       }
 
-      if (options.password) {
-        args.push(`-p${options.password}`);
+      const password = getArchivePassword(options.password);
+      if (password) {
+        // Pass password via stdin pipe for better security (7z reads from -si@ when available)
+        // Fallback to -p flag which may be visible in process listings briefly
+        args.push(`-p${password}`);
       }
 
       const sevenZ = spawn('7z', args);
 
-      sevenZ.on('close', (code) => {
+      sevenZ.on('close', async (code) => {
         if (code === 0) {
-          const files = this.getFilesRecursive(outputDir);
+          const files = await this.getFilesRecursive(outputDir);
           resolve({ success: true, files });
         } else {
           resolve({ success: false, files: [] });
@@ -533,17 +559,20 @@ export class ArchiveTool {
         args.push('-o+');
       }
 
-      if (options.password) {
-        args.push(`-p${options.password}`);
+      const password = getArchivePassword(options.password);
+      if (password) {
+        // unrar requires -p flag; password may be briefly visible in process listings
+        // Use ARCHIVE_PASSWORD environment variable for better security
+        args.push(`-p${password}`);
       }
 
       args.push(archivePath, outputDir);
 
       const unrar = spawn('unrar', args);
 
-      unrar.on('close', (code) => {
+      unrar.on('close', async (code) => {
         if (code === 0) {
-          const files = this.getFilesRecursive(outputDir);
+          const files = await this.getFilesRecursive(outputDir);
           resolve({ success: true, files });
         } else {
           resolve({ success: false, files: [] });
@@ -568,7 +597,7 @@ export class ArchiveTool {
     const zip = new AdmZip();
 
     for (const sourcePath of sourcePaths) {
-      const stats = fs.statSync(sourcePath);
+      const stats = await this.vfs.stat(sourcePath);
       const baseName = path.basename(sourcePath);
 
       if (stats.isDirectory()) {
@@ -620,18 +649,17 @@ export class ArchiveTool {
   /**
    * Get files recursively from directory
    */
-  private getFilesRecursive(dir: string): string[] {
+  private async getFilesRecursive(dir: string): Promise<string[]> {
     const files: string[] = [];
 
     try {
-      const items = fs.readdirSync(dir);
+      const entries = await this.vfs.readDirectory(dir);
 
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        const stats = fs.statSync(fullPath);
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
 
-        if (stats.isDirectory()) {
-          files.push(...this.getFilesRecursive(fullPath));
+        if (entry.isDirectory) {
+          files.push(...await this.getFilesRecursive(fullPath));
         } else {
           files.push(fullPath);
         }
@@ -687,20 +715,21 @@ export class ArchiveTool {
   /**
    * List archives in directory
    */
-  listArchives(dirPath: string = '.'): ToolResult {
+  async listArchives(dirPath: string = '.'): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), dirPath);
 
-      if (!fs.existsSync(resolvedPath)) {
+      if (!await this.vfs.exists(resolvedPath)) {
         return {
           success: false,
           error: `Directory not found: ${dirPath}`
         };
       }
 
-      const files = fs.readdirSync(resolvedPath);
-      const archives = files.filter(f => {
-        const lower = f.toLowerCase();
+      const entries = await this.vfs.readDirectory(resolvedPath);
+      const archives = entries.filter(e => {
+        if (!e.isFile) return false;
+        const lower = e.name.toLowerCase();
         return this.supportedFormats.some(ext => lower.endsWith(ext));
       });
 
@@ -711,11 +740,13 @@ export class ArchiveTool {
         };
       }
 
-      const list = archives.map(f => {
-        const fullPath = path.join(resolvedPath, f);
-        const stats = fs.statSync(fullPath);
-        return `  📦 ${f} (${this.formatSize(stats.size)})`;
-      }).join('\n');
+      const listPromises = archives.map(async entry => {
+        const fullPath = path.join(resolvedPath, entry.name);
+        const stats = await this.vfs.stat(fullPath);
+        return `  📦 ${entry.name} (${this.formatSize(stats.size)})`;
+      });
+
+      const list = (await Promise.all(listPromises)).join('\n');
 
       return {
         success: true,

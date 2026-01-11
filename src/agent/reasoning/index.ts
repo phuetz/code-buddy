@@ -14,8 +14,9 @@ export { MCTS, createMCTS } from "./mcts.js";
 // Tree-of-Thought Reasoner
 export {
   TreeOfThoughtReasoner,
-  ToTConfig,
   createTreeOfThoughtReasoner,
   getTreeOfThoughtReasoner,
   resetTreeOfThoughtReasoner,
 } from "./tree-of-thought.js";
+
+export type { ToTConfig } from "./tree-of-thought.js";
