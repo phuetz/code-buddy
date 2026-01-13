@@ -11,6 +11,7 @@
 import { CodeBuddyToolCall } from '../../codebuddy/client.js';
 import { TokenCounter, createTokenCounter } from '../../context/token-counter.js';
 import { sanitizeLLMOutput, extractCommentaryToolCalls, ExtractedToolCall } from '../../utils/sanitize.js';
+import { reduceStreamChunk } from './message-reducer.js';
 
 /**
  * Configuration options for the StreamingHandler.
@@ -204,73 +205,6 @@ export class StreamingHandler {
   }
 
   /**
-   * Reduces a streaming chunk into the accumulated message.
-   * This implements the messageReducer pattern from the original codebuddy-agent.
-   *
-   * The reducer handles:
-   * - String concatenation for content fields
-   * - Array merging for tool_calls with index-based updates
-   * - Object merging for nested structures
-   * - Cleanup of 'index' properties from tool calls
-   *
-   * @param previous - The current accumulated state
-   * @param item - The new chunk to reduce
-   * @returns The updated accumulated state
-   */
-  private messageReducer(
-    previous: Record<string, unknown>,
-    item: unknown
-  ): Record<string, unknown> {
-    const reduce = (
-      acc: Record<string, unknown>,
-      delta: unknown
-    ): Record<string, unknown> => {
-      if (!delta || typeof delta !== 'object') {
-        return acc;
-      }
-
-      acc = { ...acc };
-
-      for (const [key, value] of Object.entries(delta)) {
-        if (acc[key] === undefined || acc[key] === null) {
-          acc[key] = value;
-          // Clean up index properties from tool calls
-          if (Array.isArray(acc[key])) {
-            for (const arr of acc[key]) {
-              if (arr && typeof arr === 'object' && 'index' in arr) {
-                delete arr.index;
-              }
-            }
-          }
-        } else if (typeof acc[key] === 'string' && typeof value === 'string') {
-          // Concatenate string values (for content accumulation)
-          (acc[key] as string) += value;
-        } else if (Array.isArray(acc[key]) && Array.isArray(value)) {
-          // Merge arrays by index (for tool_calls accumulation)
-          const accArray = acc[key] as Array<Record<string, unknown>>;
-          for (let i = 0; i < value.length; i++) {
-            if (!accArray[i]) accArray[i] = {};
-            accArray[i] = reduce(accArray[i], value[i]);
-          }
-        } else if (
-          typeof acc[key] === 'object' &&
-          typeof value === 'object' &&
-          acc[key] !== null &&
-          value !== null
-        ) {
-          // Recursively merge objects
-          acc[key] = reduce(acc[key] as Record<string, unknown>, value);
-        }
-      }
-
-      return acc;
-    };
-
-    const itemObj = item as { choices?: Array<{ delta?: unknown }> };
-    return reduce(previous, itemObj.choices?.[0]?.delta || {});
-  }
-
-  /**
    * Processes a streaming chunk and accumulates it into the message.
    *
    * @param chunk - The streaming chunk from the API
@@ -288,7 +222,7 @@ export class StreamingHandler {
     }
 
     // Accumulate the message using reducer
-    this.accumulatedMessage = this.messageReducer(
+    this.accumulatedMessage = reduceStreamChunk(
       this.accumulatedMessage,
       chunk
     ) as AccumulatedMessage;

@@ -22,13 +22,13 @@ import { PluginMarketplace } from "../plugins/marketplace.js";
 import { getMCPManager } from "../codebuddy/tools.js";
 import { getErrorMessage } from "../types/errors.js";
 import { logger } from "../utils/logger.js";
+import { RepairCoordinator } from "./execution/repair-coordinator.js";
 
 export interface ToolHandlerDependencies {
   checkpointManager: CheckpointManager;
   hooksManager: HooksManager;
   marketplace: PluginMarketplace;
-  autoRepairCallback?: (error: string, command: string) => Promise<{ success: boolean; fixes: string[]; message: string }>;
-  autoRepairEnabled?: boolean;
+  repairCoordinator: RepairCoordinator;
 }
 
 export class ToolHandler {
@@ -196,8 +196,8 @@ export class ToolHandler {
           let bashResult = await this.bash.execute(args.command);
 
           // INTEGRATION: Auto-repair on failure
-          if (!bashResult.success && bashResult.error && this.deps.autoRepairEnabled && this.deps.autoRepairCallback) {
-            const repairResult = await this.deps.autoRepairCallback(bashResult.error, args.command);
+          if (!bashResult.success && bashResult.error && this.deps.repairCoordinator.isRepairEnabled()) {
+            const repairResult = await this.deps.repairCoordinator.attemptRepair(bashResult.error, args.command);
             
             if (repairResult.success) {
               logger.info(`Retrying command after successful repair: ${args.command}`);

@@ -15,7 +15,7 @@ import { EventEmitter } from 'events';
 // Types
 // ============================================================================
 
-export type OperatingMode = 'quality' | 'balanced' | 'fast' | 'custom';
+export type OperatingMode = 'quality' | 'balanced' | 'fast' | 'plan' | 'ask' | 'custom';
 
 export interface ModeConfig {
   name: string;
@@ -37,6 +37,7 @@ export interface ModeConfig {
   // Tool settings
   maxToolRounds: number;
   parallelToolCalls: boolean;
+  allowedTools: string[] | 'all' | 'none';
 
   // Quality settings
   enableSelfReview: boolean;
@@ -55,6 +56,9 @@ export interface ModeConfig {
   // Speed settings
   streamResponse: boolean;
   eagerExecution: boolean;  // Start executing before full plan
+
+  // Prompt settings
+  systemPromptAddition?: string;
 }
 
 // ============================================================================
@@ -77,6 +81,7 @@ const QUALITY_MODE: ModeConfig = {
 
   maxToolRounds: 30,
   parallelToolCalls: false, // Sequential for accuracy
+  allowedTools: 'all',
 
   enableSelfReview: true,
   enableIterativeRefinement: true,
@@ -109,6 +114,7 @@ const BALANCED_MODE: ModeConfig = {
 
   maxToolRounds: 20,
   parallelToolCalls: true,
+  allowedTools: 'all',
 
   enableSelfReview: false,
   enableIterativeRefinement: true,
@@ -141,6 +147,7 @@ const FAST_MODE: ModeConfig = {
 
   maxToolRounds: 10,
   parallelToolCalls: true,
+  allowedTools: 'all',
 
   enableSelfReview: false,
   enableIterativeRefinement: false,
@@ -157,10 +164,43 @@ const FAST_MODE: ModeConfig = {
   eagerExecution: true,
 };
 
+const PLAN_MODE: ModeConfig = {
+  ...BALANCED_MODE,
+  name: 'Plan',
+  description: 'Planning mode - AI explains approach without making changes',
+  allowedTools: ['view_file', 'search', 'web_search', 'web_fetch'],
+  systemPromptAddition: `
+CURRENT MODE: PLANNING MODE
+In this mode, you should:
+- Analyze the request and create a detailed plan
+- Explain your approach step by step
+- List all files that would need to be modified
+- Describe the changes you would make
+- DO NOT execute any file modifications or bash commands
+- Only use view_file and search to understand the codebase
+- When ready to implement, tell the user to switch to /code mode`
+};
+
+const ASK_MODE: ModeConfig = {
+  ...BALANCED_MODE,
+  name: 'Ask',
+  description: 'Ask mode - AI only answers questions, no tool usage',
+  allowedTools: 'none',
+  systemPromptAddition: `
+CURRENT MODE: ASK MODE
+In this mode, you should:
+- Only answer questions based on your knowledge
+- DO NOT use any tools
+- If the user asks to make changes, tell them to switch to /code mode
+- Provide explanations, suggestions, and guidance without executing actions`
+};
+
 const MODE_CONFIGS: Record<OperatingMode, ModeConfig> = {
   quality: QUALITY_MODE,
   balanced: BALANCED_MODE,
   fast: FAST_MODE,
+  plan: PLAN_MODE,
+  ask: ASK_MODE,
   custom: BALANCED_MODE, // Default for custom, will be overridden
 };
 
@@ -229,6 +269,25 @@ export class OperatingModeManager extends EventEmitter {
     if (this.currentMode === 'custom') {
       this.emit('config:updated', this.getModeConfig());
     }
+  }
+
+  /**
+   * Check if a tool is allowed in the current mode
+   */
+  isToolAllowed(toolName: string): boolean {
+    const config = this.getModeConfig();
+
+    if (config.allowedTools === 'all') return true;
+    if (config.allowedTools === 'none') return false;
+
+    return config.allowedTools.includes(toolName);
+  }
+
+  /**
+   * Get system prompt addition for the current mode
+   */
+  getSystemPromptAddition(): string {
+    return this.getModeConfig().systemPromptAddition || '';
   }
 
   /**
@@ -311,6 +370,8 @@ export class OperatingModeManager extends EventEmitter {
       { mode: 'quality' as OperatingMode, name: MODE_CONFIGS.quality.name, description: MODE_CONFIGS.quality.description },
       { mode: 'balanced' as OperatingMode, name: MODE_CONFIGS.balanced.name, description: MODE_CONFIGS.balanced.description },
       { mode: 'fast' as OperatingMode, name: MODE_CONFIGS.fast.name, description: MODE_CONFIGS.fast.description },
+      { mode: 'plan' as OperatingMode, name: MODE_CONFIGS.plan.name, description: MODE_CONFIGS.plan.description },
+      { mode: 'ask' as OperatingMode, name: MODE_CONFIGS.ask.name, description: MODE_CONFIGS.ask.description },
       { mode: 'custom' as OperatingMode, name: 'Custom', description: 'User-defined configuration' },
     ];
   }
@@ -330,6 +391,8 @@ export class OperatingModeManager extends EventEmitter {
       quality: 0,
       balanced: 0,
       fast: 0,
+      plan: 0,
+      ask: 0,
       custom: 0,
     };
 
@@ -338,6 +401,35 @@ export class OperatingModeManager extends EventEmitter {
     }
 
     return stats;
+  }
+
+  /**
+   * Format mode status for display
+   */
+  formatModeStatus(): string {
+    const config = this.getModeConfig();
+    const modeEmojis: Record<OperatingMode, string> = {
+      quality: '💎',
+      balanced: '⚖️',
+      fast: '⚡',
+      plan: '📋',
+      ask: '❓',
+      custom: '⚙️'
+    };
+    return `${modeEmojis[this.currentMode] || '🔄'} Mode: ${this.currentMode} - ${config.description}`;
+  }
+
+  /**
+   * Get help text for modes
+   */
+  static getModeHelp(): string {
+    return [
+      '  /quality - Best quality, thorough analysis',
+      '  /balanced - Good balance of quality/speed/cost',
+      '  /fast - Speed optimized for simple tasks',
+      '  /plan - Planning mode (no changes)',
+      '  /ask - Chat only mode (no tools)',
+    ].join('\n');
   }
 
   /**

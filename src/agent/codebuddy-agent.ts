@@ -1,49 +1,30 @@
-import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../codebuddy/client.js";
-import {
-  getMCPManager,
-  initializeMCPServers,
-  ToolSelectionResult,
-} from "../codebuddy/tools.js";
-import { loadMCPConfig } from "../mcp/config.js";
-import {
-  TextEditorTool,
-  MorphEditorTool,
-  BashTool,
-  TodoTool,
-  SearchTool,
-  WebSearchTool,
-  ImageTool,
-  ReasoningTool,
-  BrowserTool,
-} from "../tools/index.js";
+import { CodeBuddyClient, CodeBuddyToolCall } from "../codebuddy/client.js";
+import { ToolSelectionResult } from "../codebuddy/tools.js";
 import { ToolResult } from "../types/index.js";
-import { EventEmitter } from "events";
-import { createTokenCounter, TokenCounter } from "../utils/token-counter.js";
+import { createTokenCounter } from "../utils/token-counter.js";
 import { loadCustomInstructions } from "../utils/custom-instructions.js";
-import { getCheckpointManager, CheckpointManager } from "../checkpoints/checkpoint-manager.js";
-import { getSessionStore, SessionStore } from "../persistence/session-store.js";
-import { getAgentModeManager, AgentModeManager, AgentMode } from "./agent-mode.js";
-import { getSandboxManager, SandboxManager } from "../security/sandbox.js";
-import { getMCPClient, MCPClient } from "../mcp/mcp-client.js";
+import { getCheckpointManager } from "../checkpoints/checkpoint-manager.js";
+import { getSessionStore } from "../persistence/session-store.js";
+import { getAgentModeManager } from "./agent-mode.js";
+import { getSandboxManager } from "../security/sandbox.js";
+import { getMCPClient } from "../mcp/mcp-client.js";
 import { getSettingsManager } from "../utils/settings-manager.js";
-import { getSystemPromptForMode, getChatOnlySystemPrompt, getPromptManager, autoSelectPromptId } from "../prompts/index.js";
-import { getCostTracker, CostTracker } from "../utils/cost-tracker.js";
+import { getChatOnlySystemPrompt } from "../prompts/index.js";
+import { getCostTracker } from "../utils/cost-tracker.js";
 import { getAutonomyManager } from "../utils/autonomy-manager.js";
-import { ContextManagerV2, createContextManager } from "../context/context-manager-v2.js";
-import { sanitizeLLMOutput, extractCommentaryToolCalls } from "../utils/sanitize.js";
-import { getErrorMessage } from "../types/errors.js";
+import { createContextManager } from "../context/context-manager-v2.js";
 import { logger } from "../utils/logger.js";
-import { getPromptCacheManager, PromptCacheManager } from "../optimization/prompt-cache.js";
-import { getHooksManager, HooksManager } from "../hooks/lifecycle-hooks.js";
-import { getModelRouter, ModelRouter, type RoutingDecision } from "../optimization/model-routing.js";
-import { getPluginMarketplace, PluginMarketplace } from "../plugins/marketplace.js";
+import { getPromptCacheManager } from "../optimization/prompt-cache.js";
+import { getHooksManager } from "../hooks/lifecycle-hooks.js";
+import { getModelRouter } from "../optimization/model-routing.js";
+import { getPluginMarketplace } from "../plugins/marketplace.js";
 import { getToolSelectionStrategy, ToolSelectionStrategy } from "./execution/tool-selection-strategy.js";
+import { getRepairCoordinator } from "./execution/repair-coordinator.js";
 import { PromptBuilder } from "../services/prompt-builder.js";
-import { reduceStreamChunk } from "./streaming/message-reducer.js";
-
+import { StreamingHandler } from "./streaming/index.js";
+import { AgentExecutor } from "./execution/agent-executor.js";
 import { ToolHandler } from "./tool-handler.js";
 import { BaseAgent } from "./base-agent.js";
-import { RepairEngine, getRepairEngine } from "./repair/index.js";
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -67,51 +48,9 @@ export class CodeBuddyAgent extends BaseAgent {
   private codebuddyClient: CodeBuddyClient;
   private toolHandler: ToolHandler;
   private promptBuilder: PromptBuilder;
+  private streamingHandler: StreamingHandler;
+  private executor: AgentExecutor;
   
-  private _repairEngine: RepairEngine | null = null;
-
-  // Auto-repair configuration
-  private autoRepairEnabled = true;
-  private autoRepairPatterns = [
-    /error TS\d+:/i,           // TypeScript errors
-    /SyntaxError:/i,           // Syntax errors
-    /ReferenceError:/i,        // Reference errors
-    /TypeError:/i,             // Type errors
-    /eslint.*error/i,          // ESLint errors
-    /FAIL.*test/i,             // Test failures
-    /npm ERR!/i,               // npm errors
-    /Build failed/i,           // Build failures
-  ];
-
-  private get repairEngine(): RepairEngine {
-    if (!this._repairEngine) {
-      // Get API key from environment (same as used by agent)
-      const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
-      const baseURL = process.env.GROK_BASE_URL;
-      this._repairEngine = getRepairEngine(apiKey, baseURL);
-      // Set up executors for the repair engine
-      this._repairEngine.setExecutors({
-        commandExecutor: async (cmd: string) => {
-          const result = await this.toolHandler.bash.execute(cmd);
-          return {
-            success: result.success,
-            output: result.output || '',
-            error: result.error,
-          };
-        },
-        fileReader: async (path: string) => {
-          const result = await this.toolHandler.textEditor.view(path);
-          return result.output || '';
-        },
-        fileWriter: async (path: string, content: string) => {
-          // Use edit to write file content
-          await this.toolHandler.textEditor.create(path, content);
-        },
-      });
-    }
-    return this._repairEngine;
-  }
-
   // Maximum history entries to prevent memory bloat (keep last N entries)
   private static readonly MAX_HISTORY_SIZE = 1000;
   
@@ -197,14 +136,44 @@ export class CodeBuddyAgent extends BaseAgent {
     this.hooksManager = getHooksManager(process.cwd());
     this.modelRouter = getModelRouter();
     this.marketplace = getPluginMarketplace();
+    this.repairCoordinator = getRepairCoordinator(apiKey, baseURL);
+
+    // Forward repair events from RepairCoordinator
+    this.repairCoordinator.on('repair:start', (data) => this.emit('repair:start', data));
+    this.repairCoordinator.on('repair:success', (data) => this.emit('repair:success', data));
+    this.repairCoordinator.on('repair:failed', (data) => this.emit('repair:failed', data));
+    this.repairCoordinator.on('repair:error', (data) => this.emit('repair:error', data));
+
+    // Initialize StreamingHandler
+    this.streamingHandler = new StreamingHandler({
+      model: modelToUse,
+      trackTokens: true,
+      sanitizeOutput: true
+    });
 
     // Initialize ToolHandler
     this.toolHandler = new ToolHandler({
       checkpointManager: this.checkpointManager,
       hooksManager: this.hooksManager,
       marketplace: this.marketplace,
-      autoRepairCallback: this.attemptAutoRepair.bind(this),
-      autoRepairEnabled: this.autoRepairEnabled
+      repairCoordinator: this.repairCoordinator
+    });
+
+    // Initialize Executor
+    this.executor = new AgentExecutor({
+      client: this.codebuddyClient,
+      toolHandler: this.toolHandler,
+      toolSelectionStrategy: this.toolSelectionStrategy,
+      streamingHandler: this.streamingHandler,
+      contextManager: this.contextManager,
+      tokenCounter: this.tokenCounter,
+    }, {
+      maxToolRounds: this.maxToolRounds,
+      isGrokModel: this.isGrokModel.bind(this),
+      recordSessionCost: this.recordSessionCost.bind(this),
+      isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
+      sessionCost: this.sessionCost,
+      sessionCostLimit: this.sessionCostLimit,
     });
 
     // Initialize PromptBuilder
@@ -215,44 +184,50 @@ export class CodeBuddyAgent extends BaseAgent {
       cwd: process.cwd()
     }, this.promptCacheManager, this.memory);
 
+    // Set up executors for the repair coordinator
+    this.repairCoordinator.setExecutors({
+      commandExecutor: async (cmd: string) => {
+        const result = await this.toolHandler.bash.execute(cmd);
+        return {
+          success: result.success,
+          output: result.output || '',
+          error: result.error,
+        };
+      },
+      fileReader: async (path: string) => {
+        const result = await this.toolHandler.textEditor.view(path);
+        return result.output || '';
+      },
+      fileWriter: async (path: string, content: string) => {
+        // Use edit to write file content
+        await this.toolHandler.textEditor.create(path, content);
+      },
+    });
+
     // Initialize MCP servers if configured
     this.initializeMCP();
 
     // Load custom instructions and generate system prompt
     const customInstructions = loadCustomInstructions();
 
-    // Initialize system prompt (async operation, handled via IIFE)
-    (async () => {
-      const systemPrompt = await this.promptBuilder.buildSystemPrompt(systemPromptId, modelToUse, customInstructions);
+    // Initialize system prompt (async operation)
+    this.initializeAgentSystemPrompt(systemPromptId, modelToUse, customInstructions);
+  }
+
+  private async initializeAgentSystemPrompt(
+    systemPromptId: string | undefined,
+    modelName: string,
+    customInstructions: string | null
+  ): Promise<void> {
+    try {
+      const systemPrompt = await this.promptBuilder.buildSystemPrompt(systemPromptId, modelName, customInstructions);
       this.messages.push({
         role: "system",
         content: systemPrompt,
       });
-    })().catch(error => {
+    } catch (error) {
       logger.error("Failed to initialize system prompt", error as Error);
-    });
-  }
-
-  /**
-   * Initialize MCP servers in the background
-   * Properly handles errors and doesn't create unhandled promise rejections
-   */
-  private initializeMCP(): void {
-    // Initialize MCP in the background without blocking
-    // Using IIFE with .catch() to properly handle any errors
-    (async () => {
-      try {
-        const config = loadMCPConfig();
-        if (config.servers.length > 0) {
-          await initializeMCPServers();
-        }
-      } catch (error) {
-        logger.warn("MCP initialization failed", { error: getErrorMessage(error) });
-      }
-    })().catch((error) => {
-      // This catch handles any uncaught errors from the IIFE
-      logger.warn("Uncaught error in MCP initialization", { error: getErrorMessage(error) });
-    });
+    }
   }
 
   private isGrokModel(): boolean {
@@ -276,203 +251,13 @@ export class CodeBuddyAgent extends BaseAgent {
     // Trim history to prevent memory bloat
     this.trimHistory();
 
-    const newEntries: ChatEntry[] = [userEntry];
-    const maxToolRounds = this.maxToolRounds; // Prevent infinite loops
-    let toolRounds = 0;
+    const newEntries = await this.executor.processUserMessage(
+      message,
+      this.chatHistory,
+      this.messages
+    );
 
-    // Track token usage for cost calculation
-    const inputTokens = this.tokenCounter.countMessageTokens(this.messages as Array<{ role: string; content: string | null; [key: string]: unknown }>);
-    let totalOutputTokens = 0;
-
-    try {
-      // Use RAG-based tool selection for initial query
-      // Strategy handles caching internally
-      const selectionResult = await this.toolSelectionStrategy.selectToolsForQuery(message);
-      const tools = selectionResult.tools;
-      this.toolSelectionStrategy.cacheTools(tools);
-
-      // Apply context management - compress messages if approaching token limits
-      const preparedMessages = this.contextManager.prepareMessages(this.messages);
-
-      // Check for context warnings
-      const contextWarning = this.contextManager.shouldWarn(preparedMessages);
-      if (contextWarning.warn) {
-        logger.warn(contextWarning.message);
-      }
-
-      let currentResponse = await this.codebuddyClient.chat(
-        preparedMessages,
-        tools,
-        undefined,
-        this.isGrokModel() && this.toolSelectionStrategy.shouldUseSearchFor(message)
-          ? { search_parameters: { mode: "auto" } }
-          : { search_parameters: { mode: "off" } }
-      );
-
-      // Agent loop - continue until no more tool calls or max rounds reached
-      while (toolRounds < maxToolRounds) {
-        const assistantMessage = currentResponse.choices[0]?.message;
-
-        if (!assistantMessage) {
-          throw new Error("No response from Grok");
-        }
-
-        // Track output tokens from response
-        if (currentResponse.usage) {
-          totalOutputTokens += currentResponse.usage.completion_tokens || 0;
-        } else if (assistantMessage.content) {
-          // Estimate if usage not provided
-          totalOutputTokens += this.tokenCounter.countTokens(assistantMessage.content);
-        }
-
-        // Handle tool calls
-        if (
-          assistantMessage.tool_calls &&
-          assistantMessage.tool_calls.length > 0
-        ) {
-          toolRounds++;
-
-          // Add assistant message with tool calls
-          const assistantEntry: ChatEntry = {
-            type: "assistant",
-            content: assistantMessage.content || "Using tools to help you...",
-            timestamp: new Date(),
-            toolCalls: assistantMessage.tool_calls,
-          };
-          this.chatHistory.push(assistantEntry);
-          newEntries.push(assistantEntry);
-
-          // Add assistant message to conversation
-          this.messages.push({
-            role: "assistant",
-            content: assistantMessage.content || "",
-            tool_calls: assistantMessage.tool_calls,
-          });
-
-          // Create initial tool call entries to show tools are being executed
-          // Use Maps for O(1) lookups instead of O(n) findIndex
-          const toolCallHistoryIndices = new Map<string, number>();
-          const toolCallNewEntryIndices = new Map<string, number>();
-
-          assistantMessage.tool_calls.forEach((toolCall) => {
-            const toolCallEntry: ChatEntry = {
-              type: "tool_call",
-              content: "Executing...",
-              timestamp: new Date(),
-              toolCall: toolCall,
-            };
-            // Record indices before pushing for O(1) lookup later
-            toolCallHistoryIndices.set(toolCall.id, this.chatHistory.length);
-            toolCallNewEntryIndices.set(toolCall.id, newEntries.length);
-            this.chatHistory.push(toolCallEntry);
-            newEntries.push(toolCallEntry);
-          });
-
-          // Execute tool calls and update the entries
-          for (const toolCall of assistantMessage.tool_calls) {
-            const result = await this.toolHandler.executeTool(toolCall);
-
-            // Update the existing tool_call entry with the result using O(1) Map lookup
-            const entryIndex = toolCallHistoryIndices.get(toolCall.id);
-
-            if (entryIndex !== undefined) {
-              const updatedEntry: ChatEntry = {
-                ...this.chatHistory[entryIndex],
-                type: "tool_result",
-                content: result.success
-                  ? result.output || "Success"
-                  : result.error || "Error occurred",
-                toolResult: result,
-              };
-              this.chatHistory[entryIndex] = updatedEntry;
-
-              // Also update in newEntries for return value using O(1) Map lookup
-              const newEntryIndex = toolCallNewEntryIndices.get(toolCall.id);
-              if (newEntryIndex !== undefined) {
-                newEntries[newEntryIndex] = updatedEntry;
-              }
-            }
-
-            // Add tool result to messages with proper format (needed for AI context)
-            this.messages.push({
-              role: "tool",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error",
-              tool_call_id: toolCall.id,
-            });
-          }
-
-          // Get next response - this might contain more tool calls
-          // Apply context management again for long tool chains
-          const nextPreparedMessages = this.contextManager.prepareMessages(this.messages);
-          currentResponse = await this.codebuddyClient.chat(
-            nextPreparedMessages,
-            tools,
-            undefined,
-            this.isGrokModel() && this.toolSelectionStrategy.shouldUseSearchFor(message)
-              ? { search_parameters: { mode: "auto" } }
-              : { search_parameters: { mode: "off" } }
-          );
-        } else {
-          // No more tool calls, add final response
-          const finalEntry: ChatEntry = {
-            type: "assistant",
-            content:
-              assistantMessage.content ||
-              "I understand, but I don't have a specific response.",
-            timestamp: new Date(),
-          };
-          this.chatHistory.push(finalEntry);
-          this.messages.push({
-            role: "assistant",
-            content: assistantMessage.content || "",
-          });
-          newEntries.push(finalEntry);
-          break; // Exit the loop
-        }
-      }
-
-      if (toolRounds >= maxToolRounds) {
-        const warningEntry: ChatEntry = {
-          type: "assistant",
-          content:
-            "Maximum tool execution rounds reached. Stopping to prevent infinite loops.",
-          timestamp: new Date(),
-        };
-        this.chatHistory.push(warningEntry);
-        this.messages.push({ role: "assistant", content: warningEntry.content });
-        newEntries.push(warningEntry);
-      }
-
-      // Record session cost and check limit
-      this.recordSessionCost(inputTokens, totalOutputTokens);
-      if (this.isSessionCostLimitReached()) {
-        const costEntry: ChatEntry = {
-          type: "assistant",
-          content: `💸 Session cost limit reached ($${this.sessionCost.toFixed(2)} / $${this.sessionCostLimit.toFixed(2)}). Please start a new session.`,
-          timestamp: new Date(),
-        };
-        this.chatHistory.push(costEntry);
-        this.messages.push({ role: "assistant", content: costEntry.content });
-        newEntries.push(costEntry);
-      }
-
-      return newEntries;
-    } catch (error: unknown) {
-      const errorEntry: ChatEntry = {
-        type: "assistant",
-        content: `Sorry, I encountered an error: ${getErrorMessage(error)}`,
-        timestamp: new Date(),
-      };
-      this.chatHistory.push(errorEntry);
-      // Add error response to messages to maintain valid conversation structure
-      this.messages.push({
-        role: "assistant",
-        content: errorEntry.content,
-      });
-      return [userEntry, errorEntry];
-    }
+    return [userEntry, ...newEntries];
   }
 
   async *processUserMessageStream(
@@ -519,317 +304,13 @@ export class CodeBuddyAgent extends BaseAgent {
       }
     }
 
-    // Calculate input tokens
-    let inputTokens = this.tokenCounter.countMessageTokens(
-      this.messages as Array<{ role: string; content: string | null; [key: string]: unknown }>
-    );
-    yield {
-      type: "token_count",
-      tokenCount: inputTokens,
-    };
-
-    const maxToolRounds = this.maxToolRounds; // Prevent infinite loops
-    let toolRounds = 0;
-    let totalOutputTokens = 0;
-    let lastTokenUpdate = 0;
-
     try {
-      // Agent loop - continue until no more tool calls or max rounds reached
-      while (toolRounds < maxToolRounds) {
-        // Check if operation was cancelled
-        if (this.abortController?.signal.aborted) {
-          yield {
-            type: "content",
-            content: "\n\n[Operation cancelled by user]",
-          };
-          yield { type: "done" };
-          return;
-        }
-
-        // Stream response and accumulate
-        // Use RAG-based tool selection on first round, then cache and reuse tools for consistency
-        // This saves ~9000 tokens on multi-round queries
-        const selectionResult = await this.toolSelectionStrategy.selectToolsForQuery(message);
-        const tools = selectionResult.tools;
-
-        // Cache tools for subsequent rounds in this turn
-        if (toolRounds === 0) {
-          this.toolSelectionStrategy.cacheTools(tools);
-        }
-
-        // Apply context management - compress messages if approaching token limits
-        const preparedMessages = this.contextManager.prepareMessages(this.messages);
-
-        // Check for context warnings and emit to user
-        const contextWarning = this.contextManager.shouldWarn(preparedMessages);
-        if (contextWarning.warn) {
-          yield {
-            type: "content",
-            content: `\n${contextWarning.message}\n`,
-          };
-        }
-
-        const stream = this.codebuddyClient.chatStream(
-          preparedMessages,
-          tools,
-          undefined,
-          this.isGrokModel() && this.toolSelectionStrategy.shouldUseSearchFor(message)
-            ? { search_parameters: { mode: "auto" } }
-            : { search_parameters: { mode: "off" } }
-        );
-        let accumulatedMessage: Record<string, unknown> = {};
-        let accumulatedContent = "";
-        let toolCallsYielded = false;
-
-        for await (const chunk of stream) {
-          // Check for cancellation in the streaming loop
-          if (this.abortController?.signal.aborted) {
-            yield {
-              type: "content",
-              content: "\n\n[Operation cancelled by user]",
-            };
-            yield { type: "done" };
-            return;
-          }
-
-          if (!chunk.choices?.[0]) continue;
-
-          // Accumulate the message using reducer
-          accumulatedMessage = reduceStreamChunk(accumulatedMessage, chunk);
-
-          // Check for tool calls - yield when we have complete tool calls with function names
-          const toolCalls = accumulatedMessage.tool_calls;
-          if (!toolCallsYielded && Array.isArray(toolCalls) && toolCalls.length > 0) {
-            // Check if we have at least one complete tool call with a function name
-            const hasCompleteTool = toolCalls.some(
-              (tc: unknown) => typeof tc === 'object' && tc !== null && 'function' in tc && typeof tc.function === 'object' && tc.function !== null && 'name' in tc.function
-            );
-            if (hasCompleteTool) {
-              yield {
-                type: "tool_calls",
-                toolCalls: toolCalls as CodeBuddyToolCall[],
-              };
-              toolCallsYielded = true;
-            }
-          }
-
-          // Stream content as it comes
-          if (chunk.choices[0].delta?.content) {
-            // Keep raw content for tool call extraction (commentary patterns)
-            const rawContent = chunk.choices[0].delta.content;
-            // Sanitize content to remove LLM control tokens (e.g., <|channel|>, <|message|>)
-            const sanitizedContent = sanitizeLLMOutput(rawContent);
-
-            // Accumulate raw content for potential tool call extraction later
-            // (sanitization removes "commentary to=" patterns that we need)
-            accumulatedContent += rawContent;
-
-            // Only display sanitized content
-            if (sanitizedContent) {
-              yield {
-                type: "content",
-                content: sanitizedContent,
-              };
-
-              // Throttle token count updates to avoid expensive recounting on every chunk
-              const now = Date.now();
-              if (now - lastTokenUpdate > 500) {
-                // Only compute token count when we're about to emit an update
-                const currentOutputTokens =
-                  this.tokenCounter.estimateStreamingTokens(accumulatedContent) +
-                  (accumulatedMessage.tool_calls
-                    ? this.tokenCounter.countTokens(
-                        JSON.stringify(accumulatedMessage.tool_calls)
-                      )
-                    : 0);
-                totalOutputTokens = currentOutputTokens;
-                lastTokenUpdate = now;
-                yield {
-                  type: "token_count",
-                  tokenCount: inputTokens + totalOutputTokens,
-                };
-              }
-            }
-          }
-        }
-
-        // Check for "commentary" style tool calls in content (for models without native tool call support)
-        // This handles patterns like: "commentary to=web_search {"query":"..."}"
-        const existingToolCalls = accumulatedMessage.tool_calls;
-        const hasToolCalls = Array.isArray(existingToolCalls) && existingToolCalls.length > 0;
-        if (!hasToolCalls && accumulatedContent) {
-          const { toolCalls: extractedCalls, remainingContent } = extractCommentaryToolCalls(accumulatedContent);
-
-          if (extractedCalls.length > 0) {
-            // Convert extracted calls to OpenAI tool call format
-            const convertedCalls = extractedCalls.map((tc, index) => ({
-              id: `commentary_${Date.now()}_${index}`,
-              type: 'function' as const,
-              function: {
-                name: tc.name,
-                arguments: JSON.stringify(tc.arguments),
-              },
-            }));
-            accumulatedMessage.tool_calls = convertedCalls;
-
-            // Update content to remove the tool call text
-            accumulatedMessage.content = remainingContent;
-            accumulatedContent = remainingContent;
-
-            // Yield the extracted tool calls
-            yield {
-              type: "tool_calls",
-              toolCalls: convertedCalls,
-            };
-            toolCallsYielded = true;
-          }
-        }
-
-        // Add assistant entry to history
-        const content = typeof accumulatedMessage.content === 'string' ? accumulatedMessage.content : "Using tools to help you...";
-        const toolCalls = Array.isArray(accumulatedMessage.tool_calls) ? accumulatedMessage.tool_calls as CodeBuddyToolCall[] : undefined;
-
-        const assistantEntry: ChatEntry = {
-          type: "assistant",
-          content: content,
-          timestamp: new Date(),
-          toolCalls: toolCalls,
-        };
-        this.chatHistory.push(assistantEntry);
-
-        // Add accumulated message to conversation
-        this.messages.push({
-          role: "assistant",
-          content: content,
-          tool_calls: toolCalls,
-        });
-
-        // Handle tool calls if present
-        if (toolCalls && toolCalls.length > 0) {
-          toolRounds++;
-
-          // Only yield tool_calls if we haven't already yielded them during streaming
-          if (!toolCallsYielded) {
-            yield {
-              type: "tool_calls",
-              toolCalls: toolCalls,
-            };
-          }
-
-          // Execute tools
-          for (const toolCall of toolCalls) {
-            // Check for cancellation before executing each tool
-            if (this.abortController?.signal.aborted) {
-              yield {
-                type: "content",
-                content: "\n\n[Operation cancelled by user]",
-              };
-              yield { type: "done" };
-              return;
-            }
-
-            const result = await this.toolHandler.executeTool(toolCall);
-
-            const toolResultEntry: ChatEntry = {
-              type: "tool_result",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error occurred",
-              timestamp: new Date(),
-              toolCall: toolCall,
-              toolResult: result,
-            };
-            this.chatHistory.push(toolResultEntry);
-
-            yield {
-              type: "tool_result",
-              toolCall,
-              toolResult: result,
-            };
-
-            // Add tool result with proper format (needed for AI context)
-            this.messages.push({
-              role: "tool",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error",
-              tool_call_id: toolCall.id,
-            });
-          }
-
-          // Update token count after processing all tool calls to include tool results
-          inputTokens = this.tokenCounter.countMessageTokens(
-            this.messages as Array<{ role: string; content: string | null; [key: string]: unknown }>
-          );
-          // Final token update after tools processed
-          yield {
-            type: "token_count",
-            tokenCount: inputTokens + totalOutputTokens,
-          };
-
-          // Record session cost and check limit
-          this.recordSessionCost(inputTokens, totalOutputTokens);
-          if (this.isSessionCostLimitReached()) {
-            yield {
-              type: "content",
-              content: `\n\n💸 Session cost limit reached ($${this.sessionCost.toFixed(2)} / $${this.sessionCostLimit.toFixed(2)}). Use YOLO_MODE=true or set MAX_COST to increase the limit.`,
-            };
-            yield { type: "done" };
-            return;
-          }
-
-          // Continue the loop to get the next response (which might have more tool calls)
-        } else {
-          // No tool calls, we're done
-          break;
-        }
-      }
-
-      if (toolRounds >= maxToolRounds) {
-        yield {
-          type: "content",
-          content:
-            "\n\nMaximum tool execution rounds reached. Stopping to prevent infinite loops.",
-        };
-      }
-
-      // Record final session cost (for cases without tool calls)
-      this.recordSessionCost(inputTokens, totalOutputTokens);
-      if (this.isSessionCostLimitReached()) {
-        yield {
-          type: "content",
-          content: `\n\n💸 Session cost limit reached ($${this.sessionCost.toFixed(2)} / $${this.sessionCostLimit.toFixed(2)}). Use YOLO_MODE=true or set MAX_COST to increase the limit.`,
-        };
-      }
-
-      yield { type: "done" };
-    } catch (error: unknown) {
-      // Check if this was a cancellation
-      if (this.abortController?.signal.aborted) {
-        yield {
-          type: "content",
-          content: "\n\n[Operation cancelled by user]",
-        };
-        yield { type: "done" };
-        return;
-      }
-
-      const errorEntry: ChatEntry = {
-        type: "assistant",
-        content: `Sorry, I encountered an error: ${getErrorMessage(error)}`,
-        timestamp: new Date(),
-      };
-      this.chatHistory.push(errorEntry);
-      // Add error response to messages to maintain valid conversation structure
-      this.messages.push({
-        role: "assistant",
-        content: errorEntry.content,
-      });
-      yield {
-        type: "content",
-        content: errorEntry.content,
-      };
-      yield { type: "done" };
+      yield* this.executor.processUserMessageStream(
+        message,
+        this.chatHistory,
+        this.messages,
+        this.abortController
+      );
     } finally {
       // Restore original model if it was changed by routing
       if (originalModel) {
@@ -839,6 +320,9 @@ export class CodeBuddyAgent extends BaseAgent {
 
       // Record usage with model router for cost tracking
       if (this.useModelRouting && this.lastRoutingDecision) {
+        const inputTokens = this.tokenCounter.countMessageTokens(this.messages as any);
+        const totalOutputTokens = this.streamingHandler.getTokenCount() || 0;
+        
         this.modelRouter.recordUsage(
           this.lastRoutingDecision.recommendedModel,
           inputTokens + totalOutputTokens,
@@ -855,93 +339,21 @@ export class CodeBuddyAgent extends BaseAgent {
     return this.toolHandler.executeTool(toolCall);
   }
 
-  /**
-   * Check if an error output is repairable
-   */
-  private isRepairableError(output: string): boolean {
-    if (!this.autoRepairEnabled) return false;
-    return this.autoRepairPatterns.some(pattern => pattern.test(output));
+  isAutoRepairEnabled(): boolean {
+    return this.repairCoordinator.isRepairEnabled();
   }
 
-  /**
-   * Attempt autonomous repair of errors
-   * @returns Repair result with success status and any fixes applied
-   */
+  setAutoRepair(enabled: boolean): void {
+    this.repairCoordinator.setRepairEnabled(enabled);
+  }
+
   async attemptAutoRepair(errorOutput: string, command?: string): Promise<{
     attempted: boolean;
     success: boolean;
-    fixes: string[];
-    message: string;
+    fixes: unknown[];
+    message?: string;
   }> {
-    if (!this.isRepairableError(errorOutput)) {
-      return {
-        attempted: false,
-        success: false,
-        fixes: [],
-        message: 'Error not recognized as repairable',
-      };
-    }
-
-    this.emit('repair:start', { errorOutput, command });
-    logger.info('Attempting auto-repair', { command });
-
-    try {
-      const results = await this.repairEngine.repair(errorOutput, command);
-
-      const successfulFixes = results.filter(r => r.success);
-      const fixDescriptions = successfulFixes.map(r =>
-        r.appliedPatch?.explanation || 'Fix applied'
-      );
-
-      if (successfulFixes.length > 0) {
-        this.emit('repair:success', { fixes: fixDescriptions });
-        logger.info('Auto-repair successful', {
-          fixCount: successfulFixes.length,
-          fixes: fixDescriptions
-        });
-
-        return {
-          attempted: true,
-          success: true,
-          fixes: fixDescriptions,
-          message: `Successfully applied ${successfulFixes.length} fix(es)`,
-        };
-      }
-
-      this.emit('repair:failed', { reason: 'No successful fixes found' });
-      return {
-        attempted: true,
-        success: false,
-        fixes: [],
-        message: 'Auto-repair attempted but no fixes were successful',
-      };
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      this.emit('repair:error', { error: errorMessage });
-      logger.warn('Auto-repair failed', { error: errorMessage });
-
-      return {
-        attempted: true,
-        success: false,
-        fixes: [],
-        message: `Auto-repair error: ${errorMessage}`,
-      };
-    }
-  }
-
-  /**
-   * Enable or disable auto-repair
-   */
-  setAutoRepair(enabled: boolean): void {
-    this.autoRepairEnabled = enabled;
-    logger.info('Auto-repair setting changed', { enabled });
-  }
-
-  /**
-   * Check if auto-repair is enabled
-   */
-  isAutoRepairEnabled(): boolean {
-    return this.autoRepairEnabled;
+    return this.repairCoordinator.attemptRepair(errorOutput, command);
   }
 
   getChatHistory(): ChatEntry[] {

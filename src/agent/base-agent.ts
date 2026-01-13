@@ -17,7 +17,10 @@ import { ModelRouter, RoutingDecision } from "../optimization/model-routing.js";
 import { PluginMarketplace } from "../plugins/marketplace.js";
 import { getErrorMessage } from "../types/errors.js";
 import { logger } from "../utils/logger.js";
+import { loadMCPConfig } from "../mcp/config.js";
+import { initializeMCPServers } from "../codebuddy/tools.js";
 import { getEnhancedMemory, EnhancedMemory, type MemoryEntry, type MemoryType } from "../memory/index.js";
+import { RepairCoordinator } from "./execution/repair-coordinator.js";
 
 /**
  * Abstract base class for all agents in the CodeBuddy system.
@@ -59,6 +62,7 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
   protected hooksManager!: HooksManager;
   protected modelRouter!: ModelRouter;
   protected marketplace!: PluginMarketplace;
+  protected repairCoordinator!: RepairCoordinator;
 
   // Memory system
   protected _memory: EnhancedMemory | null = null;
@@ -200,6 +204,13 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
     if (this.contextManager) {
       this.contextManager.dispose();
     }
+    if (this.repairCoordinator) {
+      this.repairCoordinator.dispose();
+    }
+    if (this._memory) {
+      this._memory.dispose();
+      this._memory = null;
+    }
     this.abortCurrentOperation();
     this.chatHistory = [];
     this.messages = [];
@@ -317,6 +328,28 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
 
   getMCPClient(): MCPClient {
     return this.mcpClient;
+  }
+
+  /**
+   * Initialize MCP servers in the background
+   * Properly handles errors and doesn't create unhandled promise rejections
+   */
+  protected initializeMCP(): void {
+    // Initialize MCP in the background without blocking
+    // Using IIFE with .catch() to properly handle any errors
+    (async () => {
+      try {
+        const config = loadMCPConfig();
+        if (config.servers.length > 0) {
+          await initializeMCPServers();
+        }
+      } catch (error) {
+        logger.warn("MCP initialization failed", { error: getErrorMessage(error) });
+      }
+    })().catch((error) => {
+      // This catch handles any uncaught errors from the IIFE
+      logger.warn("Uncaught error in MCP initialization", { error: getErrorMessage(error) });
+    });
   }
 
   // Context Management methods
