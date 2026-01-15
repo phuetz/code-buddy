@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { asyncHandler, ApiServerError } from '../middleware/index.js';
+import { asyncHandler } from '../middleware/index.js';
 import { getRequestStats } from '../middleware/logging.js';
 import type { HealthResponse, ServerStats } from '../types.js';
 

@@ -8,7 +8,6 @@ import {
   FileAnalysis,
   CodeIssue,
   FileDependency,
-  IssueSeverity,
 } from './types.js';
 
 // ============================================================================ 

@@ -126,7 +126,7 @@ class TiktokenCounter implements TokenCounter {
   dispose(): void {
     try {
       this.encoder.free();
-    } catch (e) {
+    } catch {
       // Ignore cleanup errors
     }
   }

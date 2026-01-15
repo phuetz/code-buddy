@@ -902,7 +902,6 @@ program
       const ChatInterface = await lazyImport.ChatInterface();
       render(React.createElement(ChatInterface, { agent, initialMessage }));
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       logger.error("Error initializing Code Buddy:", errorObj);
       process.exit(1);
@@ -967,7 +966,6 @@ gitCommand
 
       await handleCommitAndPushHeadless(apiKey, baseURL, model, maxToolRounds);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       logger.error("Error during git commit-and-push:", errorObj);
       process.exit(1);

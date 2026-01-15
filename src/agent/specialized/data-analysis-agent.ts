@@ -16,8 +16,6 @@ import {
   DataStats,
   DataTransformOperation,
   DataDescription,
-  NumericColumnStats,
-  CategoricalColumnStats,
 } from './types.js';
 import { getErrorMessage } from '../../types/index.js';
 

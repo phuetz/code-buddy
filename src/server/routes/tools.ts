@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
+import { requireScope, asyncHandler, ApiServerError } from '../middleware/index.js';
 import type { ToolExecutionRequest, ToolExecutionResponse, ToolInfo } from '../types.js';
 
 // Tool interface for server routes
