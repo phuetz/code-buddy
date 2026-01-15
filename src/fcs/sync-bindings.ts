@@ -522,7 +522,7 @@ export async function createSyncBindings(
     resolution: 'local' | 'remote' | 'merge'
   ): boolean => {
     const manager = tracker.getSyncManager();
-    const resolutionMap: Record<string, ConflictResolution> = {
+    const _resolutionMap: Record<string, ConflictResolution> = {
       local: 'local-wins',
       remote: 'remote-wins',
       merge: 'merge',

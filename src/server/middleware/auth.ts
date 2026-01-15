@@ -14,7 +14,6 @@ import { API_ERRORS } from '../types.js';
 export const hasScope = _hasScope;
 
 // Extend Express Request type
-// eslint-disable-next-line @typescript-eslint/no-namespace
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {

@@ -304,7 +304,6 @@ export class BrowserTool extends EventEmitter {
 
     try {
       // Dynamic import of playwright using Function to avoid TypeScript module resolution
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
       const dynamicImport = new Function('specifier', 'return import(specifier)');
       this.playwright = await dynamicImport('playwright');
       this.isPlaywrightAvailable = true;

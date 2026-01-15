@@ -129,7 +129,7 @@ export class ChangelogGenerator {
     const versions: VersionEntry[] = [];
 
     // Group commits by version
-    let currentVersion: VersionEntry | null = null;
+    let _currentVersion: VersionEntry | null = null;
     let tagIndex = 0;
 
     // Add unreleased if requested

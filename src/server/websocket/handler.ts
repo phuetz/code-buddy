@@ -131,7 +131,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
     return;
   }
 
-  const { message, model, stream = true, sessionId } = payload as ChatPayload;
+  const { message, model, stream = true, sessionId: _sessionId } = payload as ChatPayload;
 
   if (!message) {
     sendError(ws, 'INVALID_REQUEST', 'Message is required');

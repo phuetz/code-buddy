@@ -69,7 +69,7 @@ export function jsonToXml(
 
     if (Array.isArray(value)) {
       return value
-        .map((item, index) => convert(item, `item`, level))
+        .map((item, _index) => convert(item, `item`, level))
         .join('');
     }
 
@@ -514,7 +514,7 @@ export function jsonToYaml(json: unknown, indent: string = '  '): string {
         return '[]';
       }
 
-      const items = value.map((item, index) => {
+      const items = value.map((item, _index) => {
         if (typeof item === 'object' && item !== null) {
           const lines = convert(item, level + 1).split('\n');
           return `${prefix}- ${lines[0]}\n${lines.slice(1).map(l => `${prefix}  ${l}`).join('\n')}`;

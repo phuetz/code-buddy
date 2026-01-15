@@ -315,7 +315,7 @@ function collectImports(
  */
 function checkUnusedImports(file: string, content: string): DeadCodeResult[] {
   const issues: DeadCodeResult[] = [];
-  const lines = content.split('\n');
+  const _lines = content.split('\n');
 
   // Find all imported symbols
   const imports: Array<{ name: string; line: number; alias?: string }> = [];

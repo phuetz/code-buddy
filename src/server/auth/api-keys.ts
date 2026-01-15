@@ -113,7 +113,7 @@ export function hasAnyScope(apiKey: ApiKey, scopes: ApiScope[]): boolean {
  * Revoke an API key
  */
 export function revokeApiKey(keyId: string): boolean {
-  for (const [hash, apiKey] of apiKeys.entries()) {
+  for (const [_hash, apiKey] of apiKeys.entries()) {
     if (apiKey.id === keyId) {
       apiKey.active = false;
       return true;
@@ -130,7 +130,7 @@ export function listApiKeys(userId: string): Omit<ApiKey, 'keyHash'>[] {
 
   for (const apiKey of apiKeys.values()) {
     if (apiKey.userId === userId) {
-      const { keyHash, ...rest } = apiKey;
+      const { keyHash: _keyHash, ...rest } = apiKey;
       keys.push(rest);
     }
   }

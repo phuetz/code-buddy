@@ -535,7 +535,7 @@ export class ToolDependencyGraph {
    * Calculate execution levels using topological sort
    */
   private calculateLevels(): void {
-    const visited = new Set<string>();
+    const _visited = new Set<string>();
     const levels = new Map<string, number>();
 
     const visit = (nodeId: string): number => {

@@ -254,7 +254,7 @@ export class CircuitBreaker extends EventEmitter {
    */
   formatStats(): string {
     const stats = this.getStats();
-    const stateColor =
+    const _stateColor =
       stats.state === 'CLOSED' ? 'green' : stats.state === 'OPEN' ? 'red' : 'yellow';
 
     const lines = [

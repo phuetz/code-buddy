@@ -120,7 +120,7 @@ export class ConversationBranchManager extends EventEmitter {
     const mergedMessages: Message[] = [...target.messages];
 
     // Find common ancestor
-    const sourceIds = new Set(source.messages.map(m => m.id));
+    const _sourceIds = new Set(source.messages.map(m => m.id));
     const targetIds = new Set(target.messages.map(m => m.id));
 
     // Add unique messages from source

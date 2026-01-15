@@ -111,7 +111,7 @@ export const errorHandler: ErrorRequestHandler = (
   err: Error | ApiServerError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) => {
   // Log error
   const requestId = req.headers['x-request-id'] as string;

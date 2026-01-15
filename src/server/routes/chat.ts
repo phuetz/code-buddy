@@ -134,7 +134,7 @@ async function handleStreamingChat(
   req: Request,
   res: Response,
   body: ChatRequest,
-  startTime: number
+  _startTime: number
 ): Promise<void> {
   const requestId = randomBytes(8).toString('hex');
 

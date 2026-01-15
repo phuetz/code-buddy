@@ -131,7 +131,7 @@ export function useInputHandler({
   };
 
   // Helper functions for handleSpecialKey
-  const handleEscapeKey = (key: Key): boolean => {
+  const handleEscapeKey = (_key: Key): boolean => {
     if (showCommandSuggestions) {
       setShowCommandSuggestions(false);
       setSelectedCommandIndex(0);
