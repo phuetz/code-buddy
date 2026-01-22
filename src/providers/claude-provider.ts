@@ -54,7 +54,7 @@ export class ClaudeProvider extends BaseProvider {
         maxRetries: config.maxRetries || 3,
       });
     } catch {
-      throw new Error('Anthropic SDK not installed. Run: npm install @anthropic-ai/sdk');
+      throw new Error('Anthropic SDK not installed. To use Claude, install the SDK with: npm install @anthropic-ai/sdk');
     }
   }
 
@@ -65,7 +65,7 @@ export class ClaudeProvider extends BaseProvider {
    */
   async complete(options: CompletionOptions): Promise<LLMResponse> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('Claude provider not initialized. Call initialize() with a valid ANTHROPIC_API_KEY before making requests.');
     }
 
     // Client is typed as unknown, cast to expected interface
@@ -127,7 +127,7 @@ export class ClaudeProvider extends BaseProvider {
    */
   private async *streamInternal(options: CompletionOptions): AsyncIterable<StreamChunk> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('Claude provider not initialized. Call initialize() with a valid ANTHROPIC_API_KEY before making requests.');
     }
 
     // Client is typed as unknown, cast to expected interface

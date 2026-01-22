@@ -8,18 +8,20 @@
  * For new code, prefer MCPManager as it uses the official SDK.
  */
 
-// SDK-based client (recommended)
-export {
-  MCPManager,
+// Shared types (no circular dependencies)
+export type {
   MCPServerConfig,
   MCPTool,
-} from "./client.js";
+  ServerStatus,
+  MCPConfig,
+} from "./types.js";
+
+// SDK-based client (recommended)
+export { MCPManager } from "./client.js";
 
 // Legacy manual client (used by codebuddy-agent)
 export {
   MCPClient,
-  MCPServerConfig as LegacyMCPServerConfig,
-  MCPTool as LegacyMCPTool,
   MCPResource,
   getMCPClient,
   resetMCPClient,
@@ -39,7 +41,6 @@ export {
 
 // Configuration management
 export {
-  MCPConfig,
   loadMCPConfig,
   saveMCPConfig,
   addMCPServer,

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 import fg from 'fast-glob';
 import ignore, { Ignore } from 'ignore';
@@ -119,25 +120,30 @@ export class ContextLoader {
   private options: Required<ContextLoaderOptions>;
   private gitignore: Ignore | null = null;
 
+  private gitignoreLoaded = false;
+
   constructor(workingDirectory: string = process.cwd(), options: ContextLoaderOptions = {}) {
     this.workingDirectory = workingDirectory;
     this.options = { ...DEFAULT_OPTIONS, ...options } as Required<ContextLoaderOptions>;
+    // gitignore will be loaded lazily on first loadFiles() call
+  }
 
-    if (this.options.respectGitignore) {
-      this.loadGitignore();
+  private async ensureGitignoreLoaded(): Promise<void> {
+    if (!this.gitignoreLoaded && this.options.respectGitignore) {
+      await this.loadGitignore();
+      this.gitignoreLoaded = true;
     }
   }
 
-  private loadGitignore(): void {
+  private async loadGitignore(): Promise<void> {
     const gitignorePath = path.join(this.workingDirectory, '.gitignore');
 
     try {
-      if (fs.existsSync(gitignorePath)) {
-        const content = fs.readFileSync(gitignorePath, 'utf-8');
-        this.gitignore = ignore().add(content);
-      }
+      await fsPromises.access(gitignorePath);
+      const content = await fsPromises.readFile(gitignorePath, 'utf-8');
+      this.gitignore = ignore().add(content);
     } catch (_error) {
-      // Ignore errors
+      // Ignore errors - file doesn't exist or not readable
     }
   }
 
@@ -179,6 +185,9 @@ export class ContextLoader {
   }
 
   async loadFiles(patterns?: string[]): Promise<ContextFile[]> {
+    // Ensure gitignore is loaded before processing files
+    await this.ensureGitignoreLoaded();
+
     const searchPatterns = patterns || this.options.patterns || ['**/*'];
     const files: ContextFile[] = [];
     let totalSize = 0;
@@ -200,7 +209,7 @@ export class ContextLoader {
         const absolutePath = path.join(this.workingDirectory, relativePath);
 
         try {
-          const stats = fs.statSync(absolutePath);
+          const stats = await fsPromises.stat(absolutePath);
 
           if (stats.size > this.options.maxFileSize) {
             continue;
@@ -210,7 +219,7 @@ export class ContextLoader {
             continue;
           }
 
-          let content = fs.readFileSync(absolutePath, 'utf-8');
+          let content = await fsPromises.readFile(absolutePath, 'utf-8');
 
           if (this.options.compressWhitespace) {
             content = this.compressWhitespace(content);

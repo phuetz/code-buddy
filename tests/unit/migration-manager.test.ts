@@ -19,12 +19,31 @@ const mockEnsureDir = jest.fn().mockResolvedValue(undefined);
 const mockPathExists = jest.fn().mockResolvedValue(false);
 const mockReadJson = jest.fn().mockResolvedValue({ history: [] });
 const mockWriteJson = jest.fn().mockResolvedValue(undefined);
+const mockUnlink = jest.fn().mockResolvedValue(undefined);
+const mockReadFile = jest.fn().mockResolvedValue(Buffer.from(''));
+const mockWriteFile = jest.fn().mockResolvedValue(undefined);
+const mockOpenSync = jest.fn().mockReturnValue(42); // Mock file descriptor
+const mockWriteSync = jest.fn();
+const mockCloseSync = jest.fn();
+const mockUnlinkSync = jest.fn();
 
 jest.mock('fs-extra', () => ({
   ensureDir: mockEnsureDir,
   pathExists: mockPathExists,
   readJson: mockReadJson,
   writeJson: mockWriteJson,
+  unlink: mockUnlink,
+  readFile: mockReadFile,
+  writeFile: mockWriteFile,
+  openSync: mockOpenSync,
+  writeSync: mockWriteSync,
+  closeSync: mockCloseSync,
+  unlinkSync: mockUnlinkSync,
+  constants: {
+    O_CREAT: 64,
+    O_EXCL: 128,
+    O_WRONLY: 1,
+  },
 }));
 
 // Helper function to parse version
@@ -73,6 +92,8 @@ describe('MigrationManager', () => {
 
     mockPathExists.mockResolvedValue(false);
     mockReadJson.mockResolvedValue({ history: [] });
+    mockOpenSync.mockReturnValue(42); // Reset file descriptor
+    mockUnlink.mockResolvedValue(undefined);
 
     manager = new MigrationManager({
       dataDir: '/test/data',

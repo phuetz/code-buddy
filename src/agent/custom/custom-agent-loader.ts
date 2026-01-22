@@ -11,6 +11,7 @@
  */
 
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 import TOML from '@iarna/toml';
 import { getAgentsDir } from '../../utils/codebuddy-home.js';
@@ -137,6 +138,21 @@ export class CustomAgentLoader {
   /**
    * Ensure the agents directory exists and has example
    */
+  private async ensureAgentsDirectoryAsync(): Promise<void> {
+    try {
+      await fsPromises.access(this.agentsDir);
+    } catch {
+      await fsPromises.mkdir(this.agentsDir, { recursive: true });
+
+      // Create example agent file
+      const examplePath = path.join(this.agentsDir, '_example.toml');
+      await fsPromises.writeFile(examplePath, EXAMPLE_AGENT_TOML);
+    }
+  }
+
+  /**
+   * Ensure the agents directory exists and has example (sync for constructor)
+   */
   private ensureAgentsDirectory(): void {
     if (!fs.existsSync(this.agentsDir)) {
       fs.mkdirSync(this.agentsDir, { recursive: true });
@@ -148,7 +164,67 @@ export class CustomAgentLoader {
   }
 
   /**
-   * Load all agents from the agents directory
+   * Load all agents from the agents directory (async version)
+   */
+  async loadAgentsAsync(): Promise<CustomAgentFile[]> {
+    const now = Date.now();
+
+    // Use cache if recent
+    if (now - this.lastScan < this.scanInterval && this.cache.size > 0) {
+      return Array.from(this.cache.values());
+    }
+
+    this.cache.clear();
+    this.lastScan = now;
+
+    try {
+      await fsPromises.access(this.agentsDir);
+    } catch {
+      return [];
+    }
+
+    const files = await fsPromises.readdir(this.agentsDir);
+    const agents: CustomAgentFile[] = [];
+
+    for (const file of files) {
+      // Skip example files
+      if (file.startsWith('_')) continue;
+
+      const filePath = path.join(this.agentsDir, file);
+      const stats = await fsPromises.stat(filePath);
+
+      if (!stats.isFile()) continue;
+
+      const ext = path.extname(file).toLowerCase();
+      let format: 'toml' | 'yaml' | 'json' | null = null;
+
+      if (ext === '.toml') format = 'toml';
+      else if (ext === '.yaml' || ext === '.yml') format = 'yaml';
+      else if (ext === '.json') format = 'json';
+      else continue;
+
+      try {
+        const config = await this.parseAgentFileAsync(filePath, format);
+        if (config) {
+          const agentFile: CustomAgentFile = {
+            path: filePath,
+            format,
+            config,
+            modifiedAt: stats.mtime,
+          };
+          agents.push(agentFile);
+          this.cache.set(config.id, agentFile);
+        }
+      } catch (error) {
+        logger.error(`Failed to load agent from ${file}`, { error });
+      }
+    }
+
+    return agents;
+  }
+
+  /**
+   * Load all agents from the agents directory (sync version for backwards compatibility)
    */
   loadAgents(): CustomAgentFile[] {
     const now = Date.now();
@@ -206,10 +282,25 @@ export class CustomAgentLoader {
   }
 
   /**
-   * Parse an agent configuration file
+   * Parse an agent configuration file (async version)
+   */
+  private async parseAgentFileAsync(filePath: string, format: 'toml' | 'yaml' | 'json'): Promise<CustomAgentConfig | null> {
+    const content = await fsPromises.readFile(filePath, 'utf-8');
+    return this.parseAgentContent(content, filePath, format);
+  }
+
+  /**
+   * Parse an agent configuration file (sync version)
    */
   private parseAgentFile(filePath: string, format: 'toml' | 'yaml' | 'json'): CustomAgentConfig | null {
     const content = fs.readFileSync(filePath, 'utf-8');
+    return this.parseAgentContent(content, filePath, format);
+  }
+
+  /**
+   * Parse agent content (shared logic)
+   */
+  private parseAgentContent(content: string, filePath: string, format: 'toml' | 'yaml' | 'json'): CustomAgentConfig | null {
     const fileName = path.basename(filePath, path.extname(filePath));
 
     let parsed: Record<string, unknown>;

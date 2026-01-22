@@ -4,13 +4,15 @@
  * Distributed tracing and observability:
  * - Trace context propagation
  * - Span creation and management
- * - Metrics collection
+ * - Metrics collection (integrated with MetricsCollector)
  * - Log correlation
+ * - Multiple export targets (Console, File, OTLP)
  */
 
 import { EventEmitter } from 'events';
 import * as os from 'os';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/logger.js';
+import { getMetrics, type MetricsCollector, type MetricLabels } from '../metrics/metrics-collector.js';
 
 export interface OTelConfig {
   /** Service name */
@@ -98,6 +100,7 @@ export class OpenTelemetryIntegration extends EventEmitter {
   private metrics: Metric[] = [];
   private exportInterval: NodeJS.Timeout | null = null;
   private initialized: boolean = false;
+  private metricsCollector: MetricsCollector | null = null;
 
   constructor(config: OTelConfig) {
     super();
@@ -113,6 +116,7 @@ export class OpenTelemetryIntegration extends EventEmitter {
     };
 
     this.resource = this.createResource();
+    this.metricsCollector = getMetrics();
   }
 
   /**
@@ -332,8 +336,19 @@ export class OpenTelemetryIntegration extends EventEmitter {
 
   /**
    * Record a counter metric
+   * Uses MetricsCollector if available, falls back to internal storage
    */
   recordCounter(name: string, value: number = 1, attributes?: Record<string, string>): void {
+    // Try to use MetricsCollector first
+    if (this.metricsCollector) {
+      const counter = this.metricsCollector.getCounter(name);
+      if (counter) {
+        counter.inc(attributes as MetricLabels || {}, value);
+        return;
+      }
+    }
+
+    // Fallback to internal metrics
     this.metrics.push({
       name,
       type: 'counter',
@@ -346,8 +361,19 @@ export class OpenTelemetryIntegration extends EventEmitter {
 
   /**
    * Record a gauge metric
+   * Uses MetricsCollector if available, falls back to internal storage
    */
   recordGauge(name: string, value: number, attributes?: Record<string, string>): void {
+    // Try to use MetricsCollector first
+    if (this.metricsCollector) {
+      const gauge = this.metricsCollector.getGauge(name);
+      if (gauge) {
+        gauge.set(value, attributes as MetricLabels || {});
+        return;
+      }
+    }
+
+    // Fallback to internal metrics
     this.metrics.push({
       name,
       type: 'gauge',
@@ -360,8 +386,19 @@ export class OpenTelemetryIntegration extends EventEmitter {
 
   /**
    * Record a histogram metric
+   * Uses MetricsCollector if available, falls back to internal storage
    */
   recordHistogram(name: string, value: number, attributes?: Record<string, string>): void {
+    // Try to use MetricsCollector first
+    if (this.metricsCollector) {
+      const histogram = this.metricsCollector.getHistogram(name);
+      if (histogram) {
+        histogram.observe(value, attributes as MetricLabels || {});
+        return;
+      }
+    }
+
+    // Fallback to internal metrics
     this.metrics.push({
       name,
       type: 'histogram',
@@ -396,7 +433,7 @@ export class OpenTelemetryIntegration extends EventEmitter {
    */
   private async exportSpan(span: SpanContext): Promise<void> {
     if (this.config.consoleExport) {
-      console.log('[OTEL SPAN]', JSON.stringify(span, null, 2));
+      logger.debug('[OTEL SPAN]', { span });
     }
 
     const payload = {
@@ -504,7 +541,7 @@ export class OpenTelemetryIntegration extends EventEmitter {
     this.metrics = [];
 
     if (this.config.consoleExport) {
-      console.log('[OTEL METRICS]', JSON.stringify(metricsToExport, null, 2));
+      logger.debug('[OTEL METRICS]', { metrics: metricsToExport });
     }
 
     // Group metrics by name

@@ -51,7 +51,7 @@ export class GrokProvider extends BaseProvider {
    */
   async complete(options: CompletionOptions): Promise<LLMResponse> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('Grok provider not initialized. Call initialize() with a valid GROK_API_KEY before making requests.');
     }
 
     const openai = this.client as import('openai').default;
@@ -106,7 +106,7 @@ export class GrokProvider extends BaseProvider {
    */
   private async *streamInternal(options: CompletionOptions): AsyncIterable<StreamChunk> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('Grok provider not initialized. Call initialize() with a valid GROK_API_KEY before making requests.');
     }
 
     const openai = this.client as import('openai').default;

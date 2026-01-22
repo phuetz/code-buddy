@@ -109,15 +109,18 @@ export class MCPClient extends EventEmitter {
   async connectAll(): Promise<void> {
     const configs = this.loadConfig();
 
-    for (const config of configs) {
-      if (config.enabled !== false) {
-        try {
-          await this.connect(config);
-        } catch (error: unknown) {
-          logger.error(`Failed to connect to MCP server ${config.name}: ${getErrorMessage(error)}`);
-        }
+    // Connect to all enabled servers in parallel for faster startup
+    const enabledConfigs = configs.filter(config => config.enabled !== false);
+    const results = await Promise.allSettled(
+      enabledConfigs.map(config => this.connect(config))
+    );
+
+    // Log connection failures
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        logger.error(`Failed to connect to MCP server ${enabledConfigs[index].name}: ${getErrorMessage(result.reason)}`);
       }
-    }
+    });
   }
 
   /**
@@ -125,7 +128,7 @@ export class MCPClient extends EventEmitter {
    */
   async connect(config: MCPServerConfig): Promise<void> {
     if (this.servers.has(config.name)) {
-      throw new Error(`Server ${config.name} is already connected`);
+      throw new Error(`MCP server "${config.name}" is already connected. Disconnect it first with disconnect("${config.name}") before reconnecting.`);
     }
 
     const connection = new MCPServerConnection(config);
@@ -151,9 +154,11 @@ export class MCPClient extends EventEmitter {
    * Disconnect from all servers
    */
   async disconnectAll(): Promise<void> {
-    for (const [name] of this.servers) {
-      await this.disconnect(name);
-    }
+    // Disconnect from all servers in parallel for faster shutdown
+    const serverNames = Array.from(this.servers.keys());
+    await Promise.allSettled(
+      serverNames.map(name => this.disconnect(name))
+    );
   }
 
   /**
@@ -169,13 +174,24 @@ export class MCPClient extends EventEmitter {
    */
   async getAllTools(): Promise<Map<string, MCPTool[]>> {
     const allTools = new Map<string, MCPTool[]>();
+    const serverEntries = Array.from(this.servers.entries());
 
-    for (const [name, server] of this.servers) {
-      try {
+    // Fetch tools from all servers in parallel for better performance
+    const results = await Promise.allSettled(
+      serverEntries.map(async ([name, server]) => {
         const tools = await server.listTools();
-        allTools.set(name, tools);
-      } catch (error) {
-        logger.error(`Failed to get tools from ${name}: ${error instanceof Error ? error.message : String(error)}`);
+        return { name, tools };
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        allTools.set(result.value.name, result.value.tools);
+      } else {
+        // Find the server name for error logging
+        const index = results.indexOf(result);
+        const serverName = serverEntries[index]?.[0] || 'unknown';
+        logger.error(`Failed to get tools from ${serverName}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
       }
     }
 
@@ -187,13 +203,24 @@ export class MCPClient extends EventEmitter {
    */
   async getAllResources(): Promise<Map<string, MCPResource[]>> {
     const allResources = new Map<string, MCPResource[]>();
+    const serverEntries = Array.from(this.servers.entries());
 
-    for (const [name, server] of this.servers) {
-      try {
+    // Fetch resources from all servers in parallel for better performance
+    const results = await Promise.allSettled(
+      serverEntries.map(async ([name, server]) => {
         const resources = await server.listResources();
-        allResources.set(name, resources);
-      } catch (error) {
-        logger.error(`Failed to get resources from ${name}: ${error instanceof Error ? error.message : String(error)}`);
+        return { name, resources };
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        allResources.set(result.value.name, result.value.resources);
+      } else {
+        // Find the server name for error logging
+        const index = results.indexOf(result);
+        const serverName = serverEntries[index]?.[0] || 'unknown';
+        logger.error(`Failed to get resources from ${serverName}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
       }
     }
 
@@ -206,7 +233,7 @@ export class MCPClient extends EventEmitter {
   async callTool(serverName: string, toolName: string, args: object): Promise<unknown> {
     const server = this.servers.get(serverName);
     if (!server) {
-      throw new Error(`Server ${serverName} is not connected`);
+      throw new Error(`MCP server "${serverName}" is not connected. Use connect() to establish a connection first, or check getConnectedServers() for available servers.`);
     }
 
     return server.callTool(toolName, args);
@@ -218,7 +245,7 @@ export class MCPClient extends EventEmitter {
   async readResource(serverName: string, uri: string): Promise<unknown> {
     const server = this.servers.get(serverName);
     if (!server) {
-      throw new Error(`Server ${serverName} is not connected`);
+      throw new Error(`MCP server "${serverName}" is not connected. Use connect() to establish a connection first, or check getConnectedServers() for available servers.`);
     }
 
     return server.readResource(uri);
@@ -369,14 +396,14 @@ class MCPServerConnection extends EventEmitter {
       if (this.process?.stdin) {
         this.process.stdin.write(JSON.stringify(request) + '\n');
       } else {
-        reject(new Error('Process not started'));
+        reject(new Error('MCP server process not started. The server command may have failed to launch or exited unexpectedly.'));
       }
 
       // Timeout after 30 seconds
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          reject(new Error('Request timed out'));
+          reject(new Error('MCP request timed out after 30 seconds. The server may be unresponsive or processing a long operation.'));
         }
       }, 30000);
     });

@@ -64,8 +64,7 @@ export class CodebaseRAG extends EventEmitter {
       indexSize: 0,
       lastUpdated: new Date(),
       languages: {},
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- empty stats object initialization
-      chunkTypes: {} as any,
+      chunkTypes: {},
     };
   }
 
@@ -657,10 +656,15 @@ export class CodebaseRAG extends EventEmitter {
   private async removeFileChunks(filePath: string): Promise<void> {
     const chunkIds = this.fileIndex.get(filePath) || [];
 
+    // Delete from chunk store (synchronous)
     for (const id of chunkIds) {
       this.chunkStore.delete(id);
-      await this.vectorStore.delete(id);
     }
+
+    // Delete from vector store in parallel for better performance
+    await Promise.allSettled(
+      chunkIds.map(id => this.vectorStore.delete(id))
+    );
 
     this.fileIndex.delete(filePath);
   }
@@ -890,8 +894,7 @@ export class CodebaseRAG extends EventEmitter {
       indexSize: 0,
       lastUpdated: new Date(),
       languages: {},
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- empty stats object initialization
-      chunkTypes: {} as any,
+      chunkTypes: {},
     };
   }
 

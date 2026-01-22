@@ -14,6 +14,7 @@
 
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 // ============================================================================
@@ -407,7 +408,7 @@ export class MultiPathRetrieval extends EventEmitter {
    */
   async indexFile(filePath: string): Promise<void> {
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = await fsPromises.readFile(filePath, 'utf-8');
       const chunks = this.extractChunks(filePath, content);
 
       for (const chunk of chunks) {
@@ -424,7 +425,7 @@ export class MultiPathRetrieval extends EventEmitter {
    * Index a directory
    */
   async indexDirectory(dirPath: string, patterns: string[] = ['**/*.ts', '**/*.js']): Promise<void> {
-    const files = this.findFiles(dirPath, patterns);
+    const files = await this.findFiles(dirPath, patterns);
 
     for (const file of files) {
       await this.indexFile(file);
@@ -550,17 +551,17 @@ export class MultiPathRetrieval extends EventEmitter {
   /**
    * Find files matching patterns
    */
-  private findFiles(dirPath: string, patterns: string[]): string[] {
+  private async findFiles(dirPath: string, patterns: string[]): Promise<string[]> {
     const files: string[] = [];
 
-    const walkDir = (dir: string) => {
+    const walkDir = async (dir: string) => {
       try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
 
           if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
-            walkDir(fullPath);
+            await walkDir(fullPath);
           } else if (entry.isFile()) {
             for (const pattern of patterns) {
               if (this.matchGlob(fullPath, pattern)) {
@@ -575,7 +576,7 @@ export class MultiPathRetrieval extends EventEmitter {
       }
     };
 
-    walkDir(dirPath);
+    await walkDir(dirPath);
     return files;
   }
 

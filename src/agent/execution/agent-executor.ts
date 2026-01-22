@@ -18,24 +18,55 @@ import { TokenCounter } from "../../utils/token-counter.js";
 import { logger } from "../../utils/logger.js";
 import { getErrorMessage } from "../../types/errors.js";
 
+/**
+ * Dependencies injected into the AgentExecutor
+ */
 export interface ExecutorDependencies {
+  /** API client for LLM communication */
   client: CodeBuddyClient;
+  /** Dispatcher for tool execution */
   toolHandler: ToolHandler;
+  /** RAG-based tool selection for query optimization */
   toolSelectionStrategy: ToolSelectionStrategy;
+  /** Handles streaming response accumulation */
   streamingHandler: StreamingHandler;
+  /** Manages context window and message compression */
   contextManager: ContextManagerV2;
+  /** Counts tokens for cost calculation */
   tokenCounter: TokenCounter;
 }
 
+/**
+ * Runtime configuration for the AgentExecutor
+ */
 export interface ExecutorConfig {
+  /** Maximum tool execution rounds before stopping (prevents infinite loops) */
   maxToolRounds: number;
+  /** Returns true if current model is a Grok model (enables web search) */
   isGrokModel: () => boolean;
+  /** Records token usage for cost tracking */
   recordSessionCost: (input: number, output: number) => void;
+  /** Returns true if session cost limit has been reached */
   isSessionCostLimitReached: () => boolean;
+  /** Current accumulated session cost in USD */
   sessionCost: number;
+  /** Maximum allowed session cost in USD */
   sessionCostLimit: number;
 }
 
+/**
+ * AgentExecutor implements the core agentic loop
+ *
+ * The agentic loop follows this pattern:
+ * 1. Select relevant tools for the query (RAG-based)
+ * 2. Send message to LLM with selected tools
+ * 3. If LLM requests tool calls, execute them
+ * 4. Send tool results back to LLM
+ * 5. Repeat until LLM responds without tool calls or max rounds reached
+ *
+ * Supports both sequential (processUserMessage) and streaming
+ * (processUserMessageStream) execution modes.
+ */
 export class AgentExecutor {
   constructor(
     private deps: ExecutorDependencies,
@@ -43,7 +74,12 @@ export class AgentExecutor {
   ) {}
 
   /**
-   * Process a user message sequentially
+   * Process a user message sequentially (non-streaming)
+   *
+   * @param message - The user's input message
+   * @param history - Chat history array (modified in place)
+   * @param messages - LLM message array (modified in place)
+   * @returns Array of new chat entries created during this turn
    */
   async processUserMessage(
     message: string,
@@ -87,7 +123,7 @@ export class AgentExecutor {
         const assistantMessage = currentResponse.choices[0]?.message;
 
         if (!assistantMessage) {
-          throw new Error("No response from AI");
+          throw new Error("No response received from AI. The API may be unavailable or the request was incomplete. Please try again.");
         }
 
         // Track output tokens
@@ -220,6 +256,15 @@ export class AgentExecutor {
 
   /**
    * Process a user message with streaming response
+   *
+   * Yields chunks as they arrive from the LLM, enabling real-time UI updates.
+   * Chunk types: 'content', 'tool_calls', 'tool_result', 'token_count', 'done'
+   *
+   * @param message - The user's input message
+   * @param history - Chat history array (modified in place)
+   * @param messages - LLM message array (modified in place)
+   * @param abortController - Controller to cancel the operation
+   * @yields Streaming chunks for UI consumption
    */
   async *processUserMessageStream(
     message: string,

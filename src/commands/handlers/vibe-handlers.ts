@@ -7,6 +7,7 @@
  * - /compact - Compact conversation history
  * - /tools - List and filter tools
  * - /vim - Toggle vim mode
+ * - /config - Validate configuration files
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
@@ -326,6 +327,167 @@ export async function handleVimMode(args: string[]): Promise<CommandHandlerResul
       lines.push('  /vim toggle - Toggle vim mode');
       lines.push('');
       lines.push('You can also use --vim flag when starting grok.');
+  }
+
+  return {
+    handled: true,
+    entry: {
+      type: 'assistant',
+      content: lines.join('\n'),
+      timestamp: new Date(),
+    },
+  };
+}
+
+// ============================================================================
+// /config - Configuration Validation
+// ============================================================================
+
+export async function handleConfig(args: string[]): Promise<CommandHandlerResult> {
+  const action = args[0]?.toLowerCase() || 'validate';
+  const lines: string[] = [];
+
+  try {
+    const {
+      handleConfigValidateCommand,
+      getZodConfigValidator,
+      ZOD_SCHEMAS,
+    } = await import('../../utils/config-validator.js');
+
+    switch (action) {
+      case 'validate': {
+        // Run full validation
+        const report = await handleConfigValidateCommand();
+        return {
+          handled: true,
+          entry: {
+            type: 'assistant',
+            content: report,
+            timestamp: new Date(),
+          },
+        };
+      }
+
+      case 'show': {
+        // Show current configuration values
+        const { getSettingsManager } = await import('../../utils/settings-manager.js');
+        const settingsManager = getSettingsManager();
+
+        lines.push('Current Configuration');
+        lines.push('='.repeat(50));
+        lines.push('');
+
+        // User settings
+        const userSettings = settingsManager.loadUserSettings();
+        lines.push('--- User Settings (~/.codebuddy/user-settings.json) ---');
+        lines.push(`  provider: ${userSettings.provider || 'grok'}`);
+        lines.push(`  defaultModel: ${userSettings.defaultModel || 'grok-code-fast-1'}`);
+        lines.push(`  baseURL: ${userSettings.baseURL || 'https://api.x.ai/v1'}`);
+        lines.push(`  apiKey: ${userSettings.apiKey ? '[SET]' : '[NOT SET]'}`);
+        lines.push(`  models: ${userSettings.models?.length || 0} configured`);
+        lines.push('');
+
+        // Project settings
+        const projectSettings = settingsManager.loadProjectSettings();
+        lines.push('--- Project Settings (.codebuddy/settings.json) ---');
+        lines.push(`  model: ${projectSettings.model || '(using default)'}`);
+        lines.push('');
+
+        // Environment variables
+        lines.push('--- Environment Variables ---');
+        const envVars = [
+          'GROK_API_KEY',
+          'GROK_BASE_URL',
+          'GROK_MODEL',
+          'MORPH_API_KEY',
+          'YOLO_MODE',
+          'MAX_COST',
+          'DEBUG',
+        ];
+        for (const key of envVars) {
+          const value = process.env[key];
+          if (value) {
+            // Mask sensitive values
+            if (key.includes('KEY') || key.includes('SECRET')) {
+              lines.push(`  ${key}: [SET]`);
+            } else {
+              lines.push(`  ${key}: ${value}`);
+            }
+          }
+        }
+        lines.push('');
+        break;
+      }
+
+      case 'defaults': {
+        // Show default values for a schema
+        const schemaName = args[1] || 'settings.json';
+        const validator = getZodConfigValidator();
+        const defaults = validator.getDefaults(schemaName);
+
+        if (defaults) {
+          lines.push(`Default Values for ${schemaName}`);
+          lines.push('='.repeat(50));
+          lines.push('');
+          lines.push(JSON.stringify(defaults, null, 2));
+        } else {
+          lines.push(`Unknown schema: ${schemaName}`);
+          lines.push('');
+          lines.push('Available schemas:');
+          for (const name of Object.keys(ZOD_SCHEMAS)) {
+            lines.push(`  - ${name}`);
+          }
+        }
+        break;
+      }
+
+      case 'docs': {
+        // Generate documentation for a schema
+        const schemaName = args[1] || 'settings.json';
+        const validator = getZodConfigValidator();
+        const docs = validator.generateDocs(schemaName);
+        lines.push(docs);
+        break;
+      }
+
+      case 'schemas': {
+        // List available schemas
+        lines.push('Available Configuration Schemas');
+        lines.push('='.repeat(50));
+        lines.push('');
+        for (const name of Object.keys(ZOD_SCHEMAS)) {
+          lines.push(`  - ${name}`);
+        }
+        lines.push('');
+        lines.push('Use "/config defaults <schema>" to see default values');
+        lines.push('Use "/config docs <schema>" to see documentation');
+        break;
+      }
+
+      default:
+        lines.push('Configuration Management');
+        lines.push('='.repeat(50));
+        lines.push('');
+        lines.push('Usage: /config <action> [options]');
+        lines.push('');
+        lines.push('Actions:');
+        lines.push('  validate         - Validate all configuration files');
+        lines.push('  show             - Show current configuration values');
+        lines.push('  defaults <name>  - Show default values for a schema');
+        lines.push('  docs <name>      - Show documentation for a schema');
+        lines.push('  schemas          - List available configuration schemas');
+        lines.push('');
+        lines.push('Examples:');
+        lines.push('  /config validate');
+        lines.push('  /config show');
+        lines.push('  /config defaults settings.json');
+        lines.push('  /config docs user-settings.json');
+    }
+
+  } catch (error) {
+    lines.push('Configuration Error');
+    lines.push('='.repeat(50));
+    lines.push(`Error: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   return {

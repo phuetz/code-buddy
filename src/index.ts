@@ -1,79 +1,162 @@
 #!/usr/bin/env node
 import { program } from "commander";
-import * as dotenv from "dotenv";
-import { getSettingsManager } from "./utils/settings-manager.js";
-import { getCredentialManager } from "./security/credential-manager.js";
-import { logger } from "./utils/logger.js";
-import type { ChatCompletionMessageParam } from "openai/resources/chat";
 
 // Types for dynamically imported modules
+import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
+
+// Import logger statically since it's used throughout the file synchronously
+import { logger } from "./utils/logger.js";
+// Import graceful shutdown for clean application termination
+import {
+  initializeGracefulShutdown,
+  getShutdownManager,
+} from "./utils/graceful-shutdown.js";
+
+// ============================================================================
+// Lazy Import System - Defer heavy modules until needed
+// ============================================================================
+
+// Cached lazy imports - only loaded once when first accessed
+const lazyModuleCache: Map<string, unknown> = new Map();
+
+async function lazyLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
+  if (lazyModuleCache.has(key)) {
+    return lazyModuleCache.get(key) as T;
+  }
+  const module = await loader();
+  lazyModuleCache.set(key, module);
+  return module;
+}
 
 // Lazy imports for heavy modules - only loaded when needed
 const lazyImport = {
-  React: () => import("react"),
-  ink: () => import("ink"),
-  CodeBuddyAgent: () => import("./agent/codebuddy-agent.js").then(m => m.CodeBuddyAgent),
-  ChatInterface: () => import("./ui/components/ChatInterface.js").then(m => m.default),
-  ConfirmationService: () => import("./utils/confirmation-service.js").then(m => m.ConfirmationService),
-  createMCPCommand: () => import("./commands/mcp.js").then(m => m.createMCPCommand),
-  initProject: () => import("./utils/init-project.js"),
-  securityModes: () => import("./security/security-modes.js"),
-  contextLoader: () => import("./context/context-loader.js"),
-  renderers: () => import("./renderers/index.js"),
-  performance: () => import("./performance/index.js"),
+  // UI modules - heavy, only needed for interactive mode
+  React: () => lazyLoad('react', () => import("react")),
+  ink: () => lazyLoad('ink', () => import("ink")),
+  ChatInterface: () => lazyLoad('ChatInterface', () => import("./ui/components/ChatInterface.js").then(m => m.default)),
+
+  // Core agent - heavy, needed for all operations
+  CodeBuddyAgent: () => lazyLoad('CodeBuddyAgent', () => import("./agent/codebuddy-agent.js").then(m => m.CodeBuddyAgent)),
+
+  // Utilities - medium weight
+  ConfirmationService: () => lazyLoad('ConfirmationService', () => import("./utils/confirmation-service.js").then(m => m.ConfirmationService)),
+  settingsManager: () => lazyLoad('settingsManager', () => import("./utils/settings-manager.js").then(m => m.getSettingsManager)),
+  credentialManager: () => lazyLoad('credentialManager', () => import("./security/credential-manager.js").then(m => m.getCredentialManager)),
+
+  // Commands - only loaded when their command is run
+  createMCPCommand: () => lazyLoad('createMCPCommand', () => import("./commands/mcp.js").then(m => m.createMCPCommand)),
+  initProject: () => lazyLoad('initProject', () => import("./utils/init-project.js")),
+  securityModes: () => lazyLoad('securityModes', () => import("./security/security-modes.js")),
+  contextLoader: () => lazyLoad('contextLoader', () => import("./context/context-loader.js")),
+  renderers: () => lazyLoad('renderers', () => import("./renderers/index.js")),
+  performance: () => lazyLoad('performance', () => import("./performance/index.js")),
+  pluginManager: () => lazyLoad('pluginManager', () => import("./plugins/plugin-manager.js")),
+  lazyLoader: () => lazyLoad('lazyLoader', () => import("./performance/lazy-loader.js")),
+
+  // Error handling - deferred until needed
+  crashHandler: () => lazyLoad('crashHandler', () => import('./errors/crash-handler.js').then(m => m.getCrashHandler())),
+  disposable: () => lazyLoad('disposable', () => import('./utils/disposable.js')),
+
+  // Environment - load early but still lazy
+  dotenv: () => lazyLoad('dotenv', () => import('dotenv')),
 };
 
-// Load environment variables
-dotenv.config();
+// ============================================================================
+// Minimal startup - defer everything possible
+// ============================================================================
 
-// Disable default SIGINT handling to let Ink handle Ctrl+C
-// We'll handle exit through the input system instead
+// Load environment variables lazily (but early)
+let envLoaded = false;
+async function ensureEnvLoaded(): Promise<void> {
+  if (!envLoaded) {
+    const dotenv = await lazyImport.dotenv();
+    dotenv.config();
+    envLoaded = true;
+  }
+}
 
-// Import crash handler
-import { getCrashHandler } from './errors/crash-handler.js';
-import { disposeAll } from './utils/disposable.js';
-const crashHandler = getCrashHandler();
-crashHandler.initialize();
+// Minimal logger for startup errors (no chalk dependency)
+const startupLogger = {
+  error: (msg: string, err?: unknown) => {
+    console.error(msg, err instanceof Error ? err.message : err);
+  },
+  warn: (msg: string) => console.warn(msg),
+};
 
-process.on("SIGTERM", async () => {
-  crashHandler.restoreTerminal();
-  console.log("\nGracefully shutting down...");
-  await disposeAll();
-  process.exit(0);
+// ============================================================================
+// Process Signal Handlers - Using Graceful Shutdown Manager
+// ============================================================================
+
+// Initialize graceful shutdown system with 30s timeout
+const _shutdownManager = initializeGracefulShutdown({
+  timeoutMs: 30000, // 30 seconds max before force exit
+  forceExitOnTimeout: true,
+  showProgress: true,
 });
 
-process.on("SIGINT", async () => {
-  crashHandler.restoreTerminal();
-  await disposeAll();
-  process.exit(0);
-});
+// Note: SIGINT, SIGTERM, SIGHUP are now handled by GracefulShutdownManager
+// The manager will:
+// 1. Wait for pending operations to complete
+// 2. Save session state
+// 3. Restore terminal
+// 4. Close MCP connections
+// 5. Close database connections
+// 6. Flush logs
+// 7. Exit cleanly (or force exit after timeout)
 
 // Handle uncaught exceptions with crash recovery
-process.on("uncaughtException", (error) => {
-  const crashFile = crashHandler.handleCrash(error, "Uncaught exception");
-  console.error("\nUnexpected error occurred:", error.message);
+process.on("uncaughtException", async (error) => {
+  let crashFile: string | null = null;
+  try {
+    const crashHandler = await lazyImport.crashHandler();
+    crashFile = crashHandler.handleCrash(error, "Uncaught exception");
+  } catch { /* ignore */ }
+
+  startupLogger.error("\nUnexpected error occurred:", error);
   if (crashFile) {
-    console.error(`\nCrash context saved to: ${crashFile}`);
-    console.error("You can resume your session with: grok --resume");
+    startupLogger.error(`\nCrash context saved to: ${crashFile}`);
+    startupLogger.error("You can resume your session with: grok --resume");
   }
-  process.exit(1);
+
+  // Use graceful shutdown with error exit code
+  try {
+    await getShutdownManager().shutdown({ exitCode: 1, showProgress: false });
+  } catch {
+    process.exit(1);
+  }
 });
 
-process.on("unhandledRejection", (reason, _promise) => {
+process.on("unhandledRejection", async (reason, _promise) => {
   const error = reason instanceof Error ? reason : new Error(String(reason));
-  const crashFile = crashHandler.handleCrash(error, "Unhandled rejection");
-  console.error("\nUnhandled promise rejection:", error.message);
+  let crashFile: string | null = null;
+  try {
+    const crashHandler = await lazyImport.crashHandler();
+    crashFile = crashHandler.handleCrash(error, "Unhandled rejection");
+  } catch { /* ignore */ }
+
+  startupLogger.error("\nUnhandled promise rejection:", error);
   if (crashFile) {
-    console.error(`\nCrash context saved to: ${crashFile}`);
-    console.error("You can resume your session with: grok --resume");
+    startupLogger.error(`\nCrash context saved to: ${crashFile}`);
+    startupLogger.error("You can resume your session with: grok --resume");
   }
-  process.exit(1);
+
+  // Use graceful shutdown with error exit code
+  try {
+    await getShutdownManager().shutdown({ exitCode: 1, showProgress: false });
+  } catch {
+    process.exit(1);
+  }
 });
+
+// ============================================================================
+// Settings and Credential Loading - Now async with lazy imports
+// ============================================================================
 
 // Ensure user settings are initialized
-function ensureUserSettingsDirectory(): void {
+async function ensureUserSettingsDirectory(): Promise<void> {
   try {
+    const getSettingsManager = await lazyImport.settingsManager();
     const manager = getSettingsManager();
     // This will create default settings if they don't exist
     manager.loadUserSettings();
@@ -83,8 +166,15 @@ function ensureUserSettingsDirectory(): void {
 }
 
 // Load API key from environment, secure storage, or legacy settings
-function loadApiKey(): string | undefined {
-  // Priority: environment > secure credential storage > legacy settings file
+async function loadApiKey(): Promise<string | undefined> {
+  await ensureEnvLoaded();
+
+  // Check environment first (fastest path)
+  const envApiKey = process.env.GROK_API_KEY;
+  if (envApiKey) return envApiKey;
+
+  // Priority: secure credential storage > legacy settings file
+  const getCredentialManager = await lazyImport.credentialManager();
   const credManager = getCredentialManager();
   const apiKey = credManager.getApiKey();
 
@@ -93,12 +183,20 @@ function loadApiKey(): string | undefined {
   }
 
   // Fall back to legacy settings manager
+  const getSettingsManager = await lazyImport.settingsManager();
   const settingsManager = getSettingsManager();
   return settingsManager.getApiKey();
 }
 
 // Load base URL from user settings if not in environment
-function loadBaseURL(): string {
+async function loadBaseURL(): Promise<string> {
+  await ensureEnvLoaded();
+
+  // Check environment first
+  const envBaseURL = process.env.GROK_BASE_URL;
+  if (envBaseURL) return envBaseURL;
+
+  const getSettingsManager = await lazyImport.settingsManager();
   const manager = getSettingsManager();
   return manager.getBaseURL();
 }
@@ -109,7 +207,9 @@ async function saveCommandLineSettings(
   baseURL?: string
 ): Promise<void> {
   try {
+    const getSettingsManager = await lazyImport.settingsManager();
     const settingsManager = getSettingsManager();
+    const getCredentialManager = await lazyImport.credentialManager();
     const credManager = getCredentialManager();
 
     // Save API key to secure encrypted storage
@@ -138,13 +238,16 @@ async function saveCommandLineSettings(
 }
 
 // Load model from user settings if not in environment
-function loadModel(): string | undefined {
+async function loadModel(): Promise<string | undefined> {
+  await ensureEnvLoaded();
+
   // First check environment variables
   let model = process.env.GROK_MODEL;
 
   if (!model) {
     // Use the unified model loading from settings manager
     try {
+      const getSettingsManager = await lazyImport.settingsManager();
       const manager = getSettingsManager();
       model = manager.getCurrentModel();
     } catch (_error) {
@@ -273,8 +376,7 @@ Respond with ONLY the commit message, no additional text.`;
       process.exit(1);
     }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("❌ Error during commit and push:", errorMessage);
+    logger.error("Error during commit and push:", error as Error);
     process.exit(1);
   }
 }
@@ -515,6 +617,10 @@ program
     "--mcp-debug",
     "enable MCP debugging output"
   )
+  .option(
+    "--allow-outside",
+    "allow file operations outside the workspace directory (disables workspace isolation)"
+  )
   .action(async (message, options) => {
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
@@ -533,7 +639,7 @@ program
 
     // Handle --list-models flag
     if (options.listModels) {
-      const baseURL = options.baseUrl || loadBaseURL();
+      const baseURL = options.baseUrl || await loadBaseURL();
       try {
         const response = await fetch(`${baseURL}/models`);
         if (!response.ok) {
@@ -552,9 +658,9 @@ program
         }
         process.exit(0);
       } catch (error) {
-        console.error(`❌ Error fetching models from ${baseURL}/models:`);
-        console.error(`   ${error instanceof Error ? error.message : String(error)}`);
-        console.error("\n💡 Make sure the API server is running (LM Studio, Ollama, etc.)");
+        logger.error(`❌ Error fetching models from ${baseURL}/models:`);
+        logger.error(`   ${error instanceof Error ? error.message : String(error)}`);
+        logger.error("\n💡 Make sure the API server is running (LM Studio, Ollama, etc.)");
         process.exit(1);
       }
     }
@@ -615,14 +721,14 @@ program
     if (options.continue) {
       const { getSessionStore } = await import("./persistence/session-store.js");
       const sessionStore = getSessionStore();
-      const lastSession = sessionStore.getLastSession();
+      const lastSession = await sessionStore.getLastSession();
 
       if (!lastSession) {
-        console.error("❌ No sessions found. Start a new session first.");
+        logger.error("❌ No sessions found. Start a new session first.");
         process.exit(1);
       }
 
-      sessionStore.resumeSession(lastSession.id);
+      await sessionStore.resumeSession(lastSession.id);
       console.log(`📂 Resuming session: ${lastSession.name} (${lastSession.id.slice(0, 8)})`);
       console.log(`   ${lastSession.messages.length} messages, last accessed: ${lastSession.lastAccessedAt.toLocaleString()}\n`);
     }
@@ -631,19 +737,19 @@ program
     if (options.resume) {
       const { getSessionStore } = await import("./persistence/session-store.js");
       const sessionStore = getSessionStore();
-      const session = sessionStore.getSessionByPartialId(options.resume);
+      const session = await sessionStore.getSessionByPartialId(options.resume);
 
       if (!session) {
-        console.error(`❌ Session not found: ${options.resume}`);
+        logger.error(`❌ Session not found: ${options.resume}`);
         console.log("\n📋 Recent sessions:");
-        const recent = sessionStore.getRecentSessions(5);
+        const recent = await sessionStore.getRecentSessions(5);
         recent.forEach(s => {
           console.log(`   ${s.id.slice(0, 8)} - ${s.name} (${s.messages.length} messages)`);
         });
         process.exit(1);
       }
 
-      sessionStore.resumeSession(session.id);
+      await sessionStore.resumeSession(session.id);
       console.log(`📂 Resuming session: ${session.name} (${session.id.slice(0, 8)})`);
       console.log(`   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}\n`);
     }
@@ -652,24 +758,34 @@ program
       try {
         process.chdir(options.directory);
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(
+        logger.error(
           `Error changing directory to ${options.directory}:`,
-          errorMessage
+          error as Error
         );
         process.exit(1);
       }
     }
 
+    // Initialize workspace isolation
+    const { initializeWorkspaceIsolation } = await import("./workspace/workspace-isolation.js");
+    const _workspaceIsolation = initializeWorkspaceIsolation({
+      allowOutside: options.allowOutside,
+      directory: process.cwd(),
+    });
+
+    if (options.allowOutside) {
+      console.log("Warning: Workspace isolation DISABLED - file access is unrestricted");
+    }
+
     try {
       // Get API key from options, environment, or user settings
-      const apiKey = options.apiKey || loadApiKey();
-      const baseURL = options.baseUrl || loadBaseURL();
-      let model = options.model || loadModel();  // let: can be overridden by --agent
+      const apiKey = options.apiKey || await loadApiKey();
+      const baseURL = options.baseUrl || await loadBaseURL();
+      let model = options.model || await loadModel();  // let: can be overridden by --agent
       const maxToolRounds = parseInt(options.maxToolRounds) || 400;
 
       if (!apiKey) {
-        console.error(
+        logger.error(
           "❌ Error: API key required. Set GROK_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
         );
         process.exit(1);
@@ -798,7 +914,7 @@ program
         const agentConfig = loader.getAgent(options.agent);
 
         if (!agentConfig) {
-          console.error(`❌ Agent not found: ${options.agent}`);
+          logger.error(`❌ Agent not found: ${options.agent}`);
           const agents = loader.listAgents();
           if (agents.length > 0) {
             console.log("\n📋 Available agents:");
@@ -887,9 +1003,18 @@ program
         console.log("🔧 Self-healing: DISABLED");
       }
 
+      // Initialize Plugin System
+      try {
+        const { getPluginManager } = await lazyImport.pluginManager();
+        const pluginManager = getPluginManager();
+        await pluginManager.discover();
+      } catch (error) {
+        logger.warn("Failed to initialize plugin system:", { error: String(error) });
+      }
+
       console.log("🤖 Starting Code Buddy Conversational Assistant...\n");
 
-      ensureUserSettingsDirectory();
+      await ensureUserSettingsDirectory();
 
       // Support variadic positional arguments for multi-word initial message
       const initialMessage = Array.isArray(message)
@@ -901,6 +1026,16 @@ program
       const { render } = await lazyImport.ink();
       const ChatInterface = await lazyImport.ChatInterface();
       render(React.createElement(ChatInterface, { agent, initialMessage }));
+
+      // Start background preloading of common modules after UI renders
+      setImmediate(async () => {
+        try {
+          const { initializeCLILazyLoader } = await lazyImport.lazyLoader();
+          initializeCLILazyLoader();
+        } catch {
+          // Ignore preloading errors
+        }
+      });
     } catch (error: unknown) {
       const errorObj = error instanceof Error ? error : new Error(String(error));
       logger.error("Error initializing Code Buddy:", errorObj);
@@ -936,10 +1071,9 @@ gitCommand
       try {
         process.chdir(options.directory);
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(
+        logger.error(
           `Error changing directory to ${options.directory}:`,
-          errorMessage
+          error as Error
         );
         process.exit(1);
       }
@@ -947,13 +1081,13 @@ gitCommand
 
     try {
       // Get API key from options, environment, or user settings
-      const apiKey = options.apiKey || loadApiKey();
-      const baseURL = options.baseUrl || loadBaseURL();
-      const model = options.model || loadModel();
+      const apiKey = options.apiKey || await loadApiKey();
+      const baseURL = options.baseUrl || await loadBaseURL();
+      const model = options.model || await loadModel();
       const maxToolRounds = parseInt(options.maxToolRounds) || 400;
 
       if (!apiKey) {
-        console.error(
+        logger.error(
           "❌ Error: API key required. Set GROK_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
         );
         process.exit(1);

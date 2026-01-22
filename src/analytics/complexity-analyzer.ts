@@ -115,18 +115,16 @@ export async function analyzeComplexity(options: AnalyzerOptions = {}): Promise<
     absolute: true,
   });
 
-  const fileComplexities: FileComplexity[] = [];
+  // Analyze files in parallel for better performance
+  const analysisResults = await Promise.allSettled(
+    files.map(filePath => analyzeFile(filePath))
+  );
 
-  for (const filePath of files) {
-    try {
-      const complexity = await analyzeFile(filePath);
-      if (complexity.functions.length > 0) {
-        fileComplexities.push(complexity);
-      }
-    } catch {
-      // Skip files that can't be analyzed
-    }
-  }
+  const fileComplexities: FileComplexity[] = analysisResults
+    .filter((result): result is PromiseFulfilledResult<FileComplexity> =>
+      result.status === 'fulfilled' && result.value.functions.length > 0
+    )
+    .map(result => result.value);
 
   const summary = calculateSummary(fileComplexities, opts.complexityThreshold);
   const hotspots = findHotspots(fileComplexities, opts.maxHotspots);

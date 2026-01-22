@@ -7,7 +7,9 @@
  */
 
 import { EventEmitter } from 'events';
-import { initializeDatabase, getDatabaseManager, needsMigration, runMigration } from './index.js';
+// Import directly from source modules to avoid circular dependency with index.ts
+import { initializeDatabase, getDatabaseManager } from './database-manager.js';
+import { needsMigration, runMigration } from './migration.js';
 import { getMemoryRepository, type MemoryFilter } from './repositories/memory-repository.js';
 import { getSessionRepository } from './repositories/session-repository.js';
 import { getEmbeddingRepository } from './repositories/embedding-repository.js';

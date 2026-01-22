@@ -520,7 +520,7 @@ export class WebSearchManager extends EventEmitter {
       }
     }
 
-    throw new Error('All search engines failed');
+    throw new Error('All search engines failed to return results. Check your internet connection or try again later.');
   }
 
   private async searchByEngine(engine: SearchEngine, query: string, maxResults: number): Promise<SearchResult[]> {

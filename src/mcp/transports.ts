@@ -29,7 +29,7 @@ export class StdioTransport implements MCPTransport {
 
   constructor(private config: TransportConfig) {
     if (!config.command) {
-      throw new Error('Command is required for stdio transport');
+      throw new Error('Command is required for stdio MCP transport. Specify the executable path in your MCP server configuration.');
     }
   }
 
@@ -78,7 +78,7 @@ export class HttpTransport extends EventEmitter implements MCPTransport {
   constructor(private config: TransportConfig) {
     super();
     if (!config.url) {
-      throw new Error('URL is required for HTTP transport');
+      throw new Error('URL is required for HTTP MCP transport. Specify the server URL in your MCP configuration.');
     }
   }
 
@@ -119,7 +119,7 @@ export class SSETransport extends EventEmitter implements MCPTransport {
   constructor(private config: TransportConfig) {
     super();
     if (!config.url) {
-      throw new Error('URL is required for SSE transport');
+      throw new Error('URL is required for SSE MCP transport. Specify the server URL in your MCP configuration.');
     }
   }
 

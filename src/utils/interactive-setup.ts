@@ -9,6 +9,7 @@
  */
 
 import fs from 'fs';
+import { logger } from "./logger.js";
 import path from 'path';
 import readline from 'readline';
 import { getCodeBuddyHome, ensureCodeBuddyHome } from './codebuddy-home.js';
@@ -294,7 +295,7 @@ async function saveConfig(config: SetupConfig): Promise<void> {
     console.log('  Model: ' + (config.model || 'grok-3-latest'));
     console.log('  Theme: ' + (config.theme || 'default'));
   } catch (error) {
-    console.error('Failed to save configuration:', error);
+    logger.error('Failed to save configuration:', error as Error);
   }
 }
 

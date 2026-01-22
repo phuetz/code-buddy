@@ -1,14 +1,7 @@
 import { spawn } from "child_process";
 import * as path from "path";
-import { ToolResult } from "../types/index.js";
+import { ToolResult, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
-
-/**
- * Extract error message from unknown error type
- */
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * Execute a command safely using spawn with array arguments
@@ -81,8 +74,11 @@ export class GitTool {
   }
 
   async getStatus(): Promise<GitStatus> {
-    const { stdout: porcelain } = await this.execGit(['status', '--porcelain=v1']);
-    const { stdout: branchInfo } = await this.execGit(['status', '--branch', '--porcelain=v2']);
+    // Execute both git status commands in parallel
+    const [{ stdout: porcelain }, { stdout: branchInfo }] = await Promise.all([
+      this.execGit(['status', '--porcelain=v1']),
+      this.execGit(['status', '--branch', '--porcelain=v2']),
+    ]);
 
     const staged: string[] = [];
     const unstaged: string[] = [];
@@ -293,8 +289,11 @@ export class GitTool {
   }
 
   private async generateCommitMessage(): Promise<string> {
-    const status = await this.getStatus();
-    const diff = await this.getDiff(true);
+    // Get status and diff in parallel
+    const [status, diff] = await Promise.all([
+      this.getStatus(),
+      this.getDiff(true),
+    ]);
 
     // Analyze changes to generate appropriate message
     const allFiles = [...status.staged, ...status.unstaged, ...status.untracked];

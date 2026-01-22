@@ -8,114 +8,17 @@
  */
 
 import * as fs from "fs";
+import * as fsPromises from "fs/promises";
 import * as path from "path";
+import { 
+  ExecutionPlan, 
+  PlanStep, 
+  PlanPhase
+} from "./plan-types.js";
+import { PlanAnalyzer } from "./analysis/plan-analysis.js";
 
-/**
- * Plan phase types
- */
-export type PlanPhase =
-  | "analysis"      // Analyzing the task and codebase
-  | "strategy"      // Developing the approach
-  | "presentation"  // Presenting the plan to user
-  | "approval"      // Waiting for user approval
-  | "execution"     // Executing the plan
-  | "completed"     // Plan fully executed
-  | "cancelled";    // Plan cancelled by user
-
-/**
- * Priority levels for plan items
- */
-export type PriorityLevel = "critical" | "high" | "medium" | "low";
-
-/**
- * Risk levels for plan items
- */
-export type RiskLevel = "high" | "medium" | "low" | "none";
-
-/**
- * A single step in the plan
- */
-export interface PlanStep {
-  id: string;
-  title: string;
-  description: string;
-  priority: PriorityLevel;
-  risk: RiskLevel;
-  estimatedComplexity: 1 | 2 | 3 | 4 | 5; // Fibonacci-like
-  dependencies: string[]; // Other step IDs
-  affectedFiles: string[];
-  actions: PlanAction[];
-  status: "pending" | "in_progress" | "completed" | "skipped" | "failed";
-  notes?: string;
-}
-
-/**
- * An action within a plan step
- */
-export interface PlanAction {
-  type: ActionType;
-  target: string; // File path or identifier
-  description: string;
-  details?: Record<string, unknown>;
-}
-
-/**
- * Types of actions in a plan
- */
-export type ActionType =
-  | "create_file"
-  | "modify_file"
-  | "delete_file"
-  | "rename_file"
-  | "move_file"
-  | "add_dependency"
-  | "remove_dependency"
-  | "run_command"
-  | "run_tests"
-  | "refactor"
-  | "document"
-  | "review";
-
-/**
- * Complete execution plan
- */
-export interface ExecutionPlan {
-  id: string;
-  title: string;
-  description: string;
-  goal: string;
-  phase: PlanPhase;
-  steps: PlanStep[];
-  metadata: PlanMetadata;
-  analysis: PlanAnalysis;
-  createdAt: Date;
-  updatedAt: Date;
-  approvedAt?: Date;
-  completedAt?: Date;
-}
-
-/**
- * Plan metadata
- */
-export interface PlanMetadata {
-  version: number;
-  author: string;
-  tags: string[];
-  context: Record<string, unknown>;
-}
-
-/**
- * Analysis results for the plan
- */
-export interface PlanAnalysis {
-  totalSteps: number;
-  totalFiles: number;
-  estimatedComplexity: number;
-  riskAssessment: RiskLevel;
-  criticalPath: string[]; // Step IDs in order
-  parallelizableGroups: string[][]; // Groups of steps that can run in parallel
-  rollbackPoints: string[]; // Step IDs that are safe rollback points
-}
+// Re-export types
+export * from "./plan-types.js";
 
 /**
  * Plan generation options
@@ -392,54 +295,6 @@ export class PlanGenerator {
   }
 
   /**
-   * Detect circular dependencies in the plan
-   */
-  private detectCycles(): string[] {
-    const issues: string[] = [];
-    if (!this.currentPlan) return issues;
-
-    const visited = new Set<string>();
-    const recursionStack = new Set<string>();
-
-    const hasCycle = (stepId: string): boolean => {
-      if (recursionStack.has(stepId)) {
-        return true;
-      }
-      if (visited.has(stepId)) {
-        return false;
-      }
-
-      visited.add(stepId);
-      recursionStack.add(stepId);
-
-      const step = this.currentPlan!.steps.find((s) => s.id === stepId);
-      if (step) {
-        for (const depId of step.dependencies) {
-          if (hasCycle(depId)) {
-            return true;
-          }
-        }
-      }
-
-      recursionStack.delete(stepId);
-      return false;
-    };
-
-    for (const step of this.currentPlan.steps) {
-      // We need to clear recursion stack for each new search if we want to be safe,
-      // but standard DFS uses one recursion stack per active path.
-      // The issue with the original code is that 'visited' prevents re-entering nodes.
-      // If a node was visited and is not in recursion stack, it's safe (DAG part).
-      // So the logic holds.
-      if (hasCycle(step.id)) {
-        issues.push(`Circular dependency detected involving step: ${step.title}`);
-      }
-    }
-
-    return issues;
-  }
-
-  /**
    * Validate the plan for issues
    */
   validate(): { valid: boolean; issues: string[] } {
@@ -450,7 +305,7 @@ export class PlanGenerator {
     }
 
     // Check for circular dependencies
-    issues.push(...this.detectCycles());
+    issues.push(...PlanAnalyzer.detectCycles(this.currentPlan));
 
     // Check for missing dependencies
     const stepIds = new Set(this.currentPlan.steps.map((s) => s.id));
@@ -518,24 +373,26 @@ export class PlanGenerator {
   /**
    * Save the plan to a file
    */
-  savePlan(filePath: string): void {
+  async savePlan(filePath: string): Promise<void> {
     if (!this.currentPlan) {
       throw new Error("No active plan to save");
     }
 
     const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    try {
+      await fsPromises.access(dir);
+    } catch {
+      await fsPromises.mkdir(dir, { recursive: true });
     }
 
-    fs.writeFileSync(filePath, this.exportPlan());
+    await fsPromises.writeFile(filePath, this.exportPlan());
   }
 
   /**
    * Load a plan from a file
    */
-  loadPlanFromFile(filePath: string): ExecutionPlan {
-    const content = fs.readFileSync(filePath, "utf-8");
+  async loadPlanFromFile(filePath: string): Promise<ExecutionPlan> {
+    const content = await fsPromises.readFile(filePath, "utf-8");
     return this.loadPlan(content);
   }
 
@@ -685,156 +542,7 @@ export class PlanGenerator {
     if (!this.currentPlan) {
       return;
     }
-
-    const plan = this.currentPlan;
-    const allFiles = new Set<string>();
-    let totalComplexity = 0;
-    let maxRisk: RiskLevel = "none";
-
-    for (const step of plan.steps) {
-      for (const file of step.affectedFiles) {
-        allFiles.add(file);
-      }
-      totalComplexity += step.estimatedComplexity;
-
-      // Update max risk
-      const riskOrder: RiskLevel[] = ["none", "low", "medium", "high"];
-      if (riskOrder.indexOf(step.risk) > riskOrder.indexOf(maxRisk)) {
-        maxRisk = step.risk;
-      }
-    }
-
-    // Calculate critical path (simplified - longest dependency chain)
-    const criticalPath = this.calculateCriticalPath();
-
-    // Find parallelizable groups
-    const parallelGroups = this.findParallelGroups();
-
-    // Identify rollback points (steps with no dependents that are low risk)
-    const rollbackPoints = plan.steps
-      .filter((step) => {
-        const hasDependents = plan.steps.some((s) =>
-          s.dependencies.includes(step.id)
-        );
-        return !hasDependents && step.risk !== "high";
-      })
-      .map((s) => s.id);
-
-    plan.analysis = {
-      totalSteps: plan.steps.length,
-      totalFiles: allFiles.size,
-      estimatedComplexity: totalComplexity,
-      riskAssessment: maxRisk,
-      criticalPath,
-      parallelizableGroups: parallelGroups,
-      rollbackPoints,
-    };
-  }
-
-  /**
-   * Calculate the critical path through the plan
-   */
-  private calculateCriticalPath(): string[] {
-    if (!this.currentPlan || this.currentPlan.steps.length === 0) {
-      return [];
-    }
-
-    const plan = this.currentPlan;
-    const memo = new Map<string, string[]>();
-
-    const getLongestPath = (stepId: string): string[] => {
-      if (memo.has(stepId)) {
-        return memo.get(stepId)!;
-      }
-
-      const step = plan.steps.find((s) => s.id === stepId);
-      if (!step || step.dependencies.length === 0) {
-        const path = [stepId];
-        memo.set(stepId, path);
-        return path;
-      }
-
-      let longestDepPath: string[] = [];
-      for (const depId of step.dependencies) {
-        const depPath = getLongestPath(depId);
-        if (depPath.length > longestDepPath.length) {
-          longestDepPath = depPath;
-        }
-      }
-
-      const path = [...longestDepPath, stepId];
-      memo.set(stepId, path);
-      return path;
-    };
-
-    // Find the longest path from any leaf node
-    let criticalPath: string[] = [];
-    for (const step of plan.steps) {
-      const path = getLongestPath(step.id);
-      if (path.length > criticalPath.length) {
-        criticalPath = path;
-      }
-    }
-
-    return criticalPath;
-  }
-
-  /**
-   * Find groups of steps that can run in parallel
-   */
-  private findParallelGroups(): string[][] {
-    if (!this.currentPlan || this.currentPlan.steps.length === 0) {
-      return [];
-    }
-
-    const plan = this.currentPlan;
-    const groups: string[][] = [];
-    const assigned = new Set<string>();
-
-    // Group by depth level
-    const depths = new Map<string, number>();
-
-    const calculateDepth = (stepId: string): number => {
-      if (depths.has(stepId)) {
-        return depths.get(stepId)!;
-      }
-
-      const step = plan.steps.find((s) => s.id === stepId);
-      if (!step || step.dependencies.length === 0) {
-        depths.set(stepId, 0);
-        return 0;
-      }
-
-      let maxDepDepth = 0;
-      for (const depId of step.dependencies) {
-        maxDepDepth = Math.max(maxDepDepth, calculateDepth(depId));
-      }
-
-      const depth = maxDepDepth + 1;
-      depths.set(stepId, depth);
-      return depth;
-    };
-
-    for (const step of plan.steps) {
-      calculateDepth(step.id);
-    }
-
-    // Group by depth
-    const maxDepth = Math.max(...Array.from(depths.values()));
-    for (let d = 0; d <= maxDepth; d++) {
-      const group: string[] = [];
-      for (const step of plan.steps) {
-        if (depths.get(step.id) === d && !assigned.has(step.id)) {
-          group.push(step.id);
-          assigned.add(step.id);
-        }
-      }
-      if (group.length > 1) {
-        groups.push(group);
-      }
-    }
-
-    return groups;
+    PlanAnalyzer.analyze(this.currentPlan);
   }
 
   /**

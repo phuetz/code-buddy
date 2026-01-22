@@ -231,8 +231,10 @@ export class FCSRuntime {
       };
 
       // Bind parameters (with named args support)
-      const namedArgs = args.length > 0 && typeof args[args.length - 1] === 'object' && args[args.length - 1]?.__namedArgs
-        ? args.pop().__namedArgs as Record<string, FCSValue>
+      const lastArg = args.length > 0 ? args[args.length - 1] : null;
+      const hasNamedArgs = lastArg !== null && typeof lastArg === 'object' && lastArg !== null && '__namedArgs' in (lastArg as object);
+      const namedArgs = hasNamedArgs
+        ? (args.pop() as { __namedArgs: Record<string, FCSValue> }).__namedArgs
         : {};
 
       for (let i = 0; i < node.parameters.length; i++) {
@@ -501,7 +503,7 @@ export class FCSRuntime {
   private async evaluate(node: AstNode, ctx: FCSContext): Promise<FCSValue> {
     switch (node.type) {
       case 'Literal':
-        return (node as LiteralExpr).value;
+        return (node as LiteralExpr).value as FCSValue;
 
       case 'Identifier':
         return this.lookupVariable((node as IdentifierExpr).name, ctx);

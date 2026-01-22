@@ -47,6 +47,12 @@ export interface SharedContext {
   variables: Map<string, unknown>;
 }
 
+/**
+ * Maximum number of messages to keep in shared context.
+ * Older messages are trimmed to prevent memory leaks in long sessions.
+ */
+const MAX_SHARED_MESSAGES = 500;
+
 export interface SharedMessage {
   id: string;
   userId: string;
@@ -175,7 +181,7 @@ export class CollaborativeSessionManager extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error('Session not found: ' + sessionId);
     if (session.users.size >= session.permissions.maxUsers) {
-      throw new Error('Session is full');
+      throw new Error(`Session is full (${session.permissions.maxUsers} users maximum). Wait for someone to leave or ask the owner to increase the limit.`);
     }
 
     const userId = this.generateId('user');
@@ -221,7 +227,7 @@ export class CollaborativeSessionManager extends EventEmitter {
 
   addMessage(content: string, type: SharedMessage['type'] = 'user'): SharedMessage {
     if (!this.currentSession || !this.currentUser) {
-      throw new Error('Not in a session');
+      throw new Error('Not currently in a collaborative session. Join or create a session first.');
     }
     const message: SharedMessage = {
       id: this.generateId('msg'),
@@ -231,7 +237,36 @@ export class CollaborativeSessionManager extends EventEmitter {
       type,
     };
     this.currentSession.sharedContext.messages.push(message);
+
+    // Trim old messages to prevent memory leaks
+    this.trimMessages();
+
     return message;
+  }
+
+  /**
+   * Trim old messages from shared context to prevent memory leaks.
+   * Uses a sliding window approach, keeping the most recent messages.
+   */
+  private trimMessages(): void {
+    if (!this.currentSession) return;
+
+    const messages = this.currentSession.sharedContext.messages;
+    if (messages.length > MAX_SHARED_MESSAGES) {
+      const trimCount = messages.length - MAX_SHARED_MESSAGES;
+      this.currentSession.sharedContext.messages = messages.slice(trimCount);
+    }
+  }
+
+  /**
+   * Get current message count and limit for monitoring
+   */
+  getMessageStats(): { count: number; max: number } | null {
+    if (!this.currentSession) return null;
+    return {
+      count: this.currentSession.sharedContext.messages.length,
+      max: MAX_SHARED_MESSAGES,
+    };
   }
 
   updateCursor(position: CursorPosition): void {
@@ -316,7 +351,7 @@ export class CollaborativeSessionManager extends EventEmitter {
   }
 
   generateInviteLink(): string {
-    if (!this.currentSession) throw new Error('Not in a session');
+    if (!this.currentSession) throw new Error('Not currently in a collaborative session. Join or create a session first.');
     const inviteCode = crypto.randomBytes(16).toString('base64url');
     return 'codebuddy://join/' + this.currentSession.id + '?code=' + inviteCode;
   }

@@ -119,7 +119,6 @@ export class ExcelAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     try {
       // Dynamic import of xlsx
-      // @ts-expect-error - Optional dependency
       const xlsxModule = await import('xlsx');
       this.xlsx = xlsxModule.default || xlsxModule;
       this.isInitialized = true;

@@ -7,6 +7,7 @@
  * - State reconciliation
  * - Version tracking and vector clocks
  */
+import { logger } from "../utils/logger.js";
 
 import { EventEmitter } from 'events';
 import crypto from 'crypto';
@@ -374,7 +375,7 @@ export class SyncManager<T = unknown> extends EventEmitter {
     this.conflictStrategy = this.createStrategy(this.config.conflictStrategy);
 
     // Load initial state
-    this.load().catch(err => console.error('Failed to load sync state:', err));
+    this.load().catch(err => logger.error('Failed to load sync state:', err));
 
     if (this.config.autoSync) {
       this.startAutoSync();

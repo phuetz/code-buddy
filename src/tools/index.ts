@@ -8,6 +8,8 @@ export * from "./image-tool.js";
 export * from "./morph-editor.js";
 export * from "./reasoning-tool.js";
 export * from "./browser-tool.js";
+export * from "./docker-tool.js";
+export * from "./kubernetes-tool.js";
 
 // Export types used by tools
 export type { ToolResult } from '../types/index.js';

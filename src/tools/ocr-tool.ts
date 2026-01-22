@@ -345,16 +345,27 @@ export class OCRTool {
    * Batch OCR multiple images
    */
   async batchOCR(filePaths: string[], options: OCROptions = {}): Promise<ToolResult> {
-    const results: { file: string; text?: string; error?: string }[] = [];
+    // Process OCR in parallel for better performance
+    const ocrResults = await Promise.allSettled(
+      filePaths.map(async filePath => {
+        const result = await this.extractText(filePath, options);
+        return { filePath, result };
+      })
+    );
 
-    for (const filePath of filePaths) {
-      const result = await this.extractText(filePath, options);
-      if (result.success) {
-        results.push({ file: filePath, text: (result.data as { text?: string })?.text });
+    const results: { file: string; text?: string; error?: string }[] = ocrResults.map((outcome, index) => {
+      const filePath = filePaths[index];
+      if (outcome.status === 'fulfilled') {
+        const { result } = outcome.value;
+        if (result.success) {
+          return { file: filePath, text: (result.data as { text?: string })?.text };
+        } else {
+          return { file: filePath, error: result.error };
+        }
       } else {
-        results.push({ file: filePath, error: result.error });
+        return { file: filePath, error: String(outcome.reason) };
       }
-    }
+    });
 
     const successCount = results.filter(r => r.text).length;
 

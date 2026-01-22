@@ -12,6 +12,21 @@
 
 import { EventEmitter } from 'events';
 
+// Define MockAgent interface to avoid 'any' usage
+interface MockAgent {
+  getId: jest.Mock;
+  getName: jest.Mock;
+  getConfig: jest.Mock;
+  canHandleExtension: jest.Mock;
+  hasCapability: jest.Mock;
+  getSupportedActions: jest.Mock;
+  getActionHelp: jest.Mock;
+  isReady: jest.Mock;
+  initialize: jest.Mock;
+  execute: jest.Mock;
+  cleanup: jest.Mock;
+}
+
 // Mock the specialized agent modules
 const mockPDFAgent = {
   getId: jest.fn().mockReturnValue('pdf-agent'),
@@ -249,7 +264,7 @@ describe('AgentRegistry', () => {
 
   describe('register()', () => {
     it('should register an agent', () => {
-      registry.register(mockPDFAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
       expect(registry.get('pdf-agent')).toBe(mockPDFAgent);
     });
 
@@ -257,7 +272,7 @@ describe('AgentRegistry', () => {
       const handler = jest.fn();
       registry.on('agent:registered', handler);
 
-      registry.register(mockPDFAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
 
       expect(handler).toHaveBeenCalledWith({
         id: 'pdf-agent',
@@ -266,9 +281,9 @@ describe('AgentRegistry', () => {
     });
 
     it('should allow registering multiple agents', () => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
-      registry.register(mockSQLAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
+      registry.register(mockSQLAgent as unknown as any);
 
       expect(registry.getAll()).toHaveLength(3);
     });
@@ -279,8 +294,8 @@ describe('AgentRegistry', () => {
         getName: jest.fn().mockReturnValue('Updated PDF Agent'),
       };
 
-      registry.register(mockPDFAgent as any);
-      registry.register(updatedAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(updatedAgent as unknown as any);
 
       expect(registry.getAll()).toHaveLength(1);
       expect(registry.get('pdf-agent')?.getName()).toBe('Updated PDF Agent');
@@ -289,8 +304,8 @@ describe('AgentRegistry', () => {
 
   describe('unregister()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
     });
 
     it('should unregister an agent', () => {
@@ -326,8 +341,8 @@ describe('AgentRegistry', () => {
 
   describe('get()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
     });
 
     it('should return agent by ID', () => {
@@ -347,9 +362,9 @@ describe('AgentRegistry', () => {
     });
 
     it('should return all registered agents', () => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
-      registry.register(mockSQLAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
+      registry.register(mockSQLAgent as unknown as any);
 
       const agents = registry.getAll();
       expect(agents).toHaveLength(3);
@@ -359,7 +374,7 @@ describe('AgentRegistry', () => {
     });
 
     it('should return a new array each time', () => {
-      registry.register(mockPDFAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
 
       const agents1 = registry.getAll();
       const agents2 = registry.getAll();
@@ -388,9 +403,9 @@ describe('AgentRegistry', () => {
 
   describe('findAgentForFile()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
-      registry.register(mockArchiveAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
+      registry.register(mockArchiveAgent as unknown as any);
     });
 
     it('should find agent for PDF file', () => {
@@ -444,9 +459,9 @@ describe('AgentRegistry', () => {
 
   describe('findAgentsWithCapability()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
-      registry.register(mockCodeGuardianAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
+      registry.register(mockCodeGuardianAgent as unknown as any);
     });
 
     it('should find agents with pdf-extract capability', () => {
@@ -471,15 +486,15 @@ describe('AgentRegistry', () => {
     });
 
     it('should return empty array for unknown capability', () => {
-      const agents = registry.findAgentsWithCapability('unknown-capability' as any);
+      const agents = registry.findAgentsWithCapability('unknown-capability' as unknown as any);
       expect(agents).toHaveLength(0);
     });
   });
 
   describe('findAgentForTask()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
     });
 
     it('should find agent by input file', () => {
@@ -522,8 +537,8 @@ describe('AgentRegistry', () => {
 
   describe('execute()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
     });
 
     it('should execute task on matching agent', async () => {
@@ -624,8 +639,8 @@ describe('AgentRegistry', () => {
 
   describe('executeOn()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
     });
 
     it('should execute task on specific agent', async () => {
@@ -662,9 +677,9 @@ describe('AgentRegistry', () => {
 
   describe('initializeAll()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
-      registry.register(mockSQLAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
+      registry.register(mockSQLAgent as unknown as any);
     });
 
     it('should initialize all agents', async () => {
@@ -687,8 +702,8 @@ describe('AgentRegistry', () => {
 
   describe('getSummary()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
     });
 
     it('should return formatted summary', () => {
@@ -712,7 +727,7 @@ describe('AgentRegistry', () => {
 
   describe('getAgentHelp()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
     });
 
     it('should return help for existing agent', () => {
@@ -732,8 +747,8 @@ describe('AgentRegistry', () => {
 
   describe('cleanup()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
-      registry.register(mockExcelAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
+      registry.register(mockExcelAgent as unknown as any);
     });
 
     it('should cleanup all agents', async () => {
@@ -760,7 +775,7 @@ describe('AgentRegistry', () => {
 
   describe('dispose()', () => {
     beforeEach(() => {
-      registry.register(mockPDFAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
     });
 
     it('should cleanup and remove all listeners', async () => {
@@ -825,7 +840,7 @@ describe('Singleton Functions', () => {
 
     it('should dispose existing registry', async () => {
       const registry = getAgentRegistry();
-      registry.register(mockPDFAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
 
       await resetAgentRegistry();
 
@@ -928,7 +943,7 @@ describe('Event Handling', () => {
     registry.on('agent:registered', handler1);
     registry.on('agent:registered', handler2);
 
-    registry.register(mockPDFAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
 
     expect(handler1).toHaveBeenCalled();
     expect(handler2).toHaveBeenCalled();
@@ -940,7 +955,7 @@ describe('Event Handling', () => {
     registry.on('agent:registered', handler);
     registry.off('agent:registered', handler);
 
-    registry.register(mockPDFAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
 
     expect(handler).not.toHaveBeenCalled();
   });
@@ -950,8 +965,8 @@ describe('Event Handling', () => {
 
     registry.once('agent:registered', handler);
 
-    registry.register(mockPDFAgent as any);
-    registry.register(mockExcelAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
+    registry.register(mockExcelAgent as unknown as any);
 
     expect(handler).toHaveBeenCalledTimes(1);
   });
@@ -971,14 +986,14 @@ describe('Edge Cases', () => {
   });
 
   it('should handle empty file path', () => {
-    registry.register(mockPDFAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
 
     const match = registry.findAgentForFile('');
     expect(match).toBeNull();
   });
 
   it('should handle path with multiple dots', () => {
-    registry.register(mockArchiveAgent as any);
+    registry.register(mockArchiveAgent as unknown as any);
 
     const match = registry.findAgentForFile('/path/to/file.backup.tar.gz');
     // Should match based on last extension 'gz'
@@ -987,7 +1002,7 @@ describe('Edge Cases', () => {
   });
 
   it('should handle agent with execution error', async () => {
-    registry.register(mockPDFAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
     mockPDFAgent.isReady.mockReturnValue(true);
     mockPDFAgent.execute.mockRejectedValueOnce(new Error('Processing failed'));
 
@@ -1002,7 +1017,7 @@ describe('Edge Cases', () => {
 
   it('should handle rapid registration and unregistration', () => {
     for (let i = 0; i < 100; i++) {
-      registry.register(mockPDFAgent as any);
+      registry.register(mockPDFAgent as unknown as any);
       registry.unregister('pdf-agent');
     }
 
@@ -1010,7 +1025,7 @@ describe('Edge Cases', () => {
   });
 
   it('should handle task with empty inputFiles array', () => {
-    registry.register(mockPDFAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
 
     const match = registry.findAgentForTask({
       action: 'extract',
@@ -1023,7 +1038,7 @@ describe('Edge Cases', () => {
   });
 
   it('should handle concurrent task executions', async () => {
-    registry.register(mockExcelAgent as any);
+    registry.register(mockExcelAgent as unknown as any);
     mockExcelAgent.isReady.mockReturnValue(true);
 
     const tasks = Array(10).fill(null).map((_, i) =>
@@ -1046,7 +1061,7 @@ describe('Edge Cases', () => {
       getSupportedActions: () => [],
     };
 
-    registry.register(emptyAgent as any);
+    registry.register(emptyAgent as unknown as any);
 
     const match = registry.findAgentForTask({
       action: 'some-action',
@@ -1059,7 +1074,7 @@ describe('Edge Cases', () => {
 describe('Configuration Options', () => {
   it('should respect autoInitialize: false', async () => {
     const registry = new AgentRegistry({ autoInitialize: false });
-    registry.register(mockPDFAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
     mockPDFAgent.isReady.mockReturnValue(false);
 
     const result = await registry.execute({
@@ -1076,7 +1091,7 @@ describe('Configuration Options', () => {
 
   it('should auto-initialize with default config', async () => {
     const registry = new AgentRegistry(); // Default config
-    registry.register(mockPDFAgent as any);
+    registry.register(mockPDFAgent as unknown as any);
     mockPDFAgent.isReady.mockReturnValue(false);
 
     await registry.execute({

@@ -4,6 +4,7 @@
  * Handles --list-* commands that display available resources
  */
 
+import { logger } from "../utils/logger.js";
 import { loadBaseURL } from './config-loader.js';
 
 /**
@@ -32,9 +33,9 @@ export async function listModels(baseURL?: string): Promise<void> {
     }
     process.exit(0);
   } catch (error) {
-    console.error(`Error fetching models from ${url}/models:`);
-    console.error(`   ${error instanceof Error ? error.message : String(error)}`);
-    console.error('\nMake sure the API server is running (LM Studio, Ollama, etc.)');
+    logger.error(`Error fetching models from ${url}/models:`);
+    logger.error(`   ${error instanceof Error ? error.message : String(error)}`);
+    logger.error('\nMake sure the API server is running (LM Studio, Ollama, etc.)');
     process.exit(1);
   }
 }

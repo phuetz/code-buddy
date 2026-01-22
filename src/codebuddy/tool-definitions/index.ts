@@ -49,6 +49,8 @@ export {
   GIT_TOOL,
   CODEBASE_MAP_TOOL,
   SUBAGENT_TOOL,
+  DOCKER_TOOL,
+  KUBERNETES_TOOL,
   ADVANCED_TOOLS,
 } from './advanced-tools.js';
 

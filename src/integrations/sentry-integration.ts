@@ -364,12 +364,16 @@ export class SentryIntegration extends EventEmitter {
     const events = [...this.eventQueue];
     this.eventQueue = [];
 
-    for (const event of events) {
-      try {
-        await this.sendEvent(event);
-      } catch (error) {
-        if (this.config.debug) {
-          logger.error('Failed to send event to Sentry', { error });
+    // Send events in parallel for better performance
+    const results = await Promise.allSettled(
+      events.map(event => this.sendEvent(event))
+    );
+
+    // Log failures if debug mode is enabled
+    if (this.config.debug) {
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          logger.error('Failed to send event to Sentry', { error: result.reason });
         }
       }
     }

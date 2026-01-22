@@ -4,26 +4,23 @@ import { promises as fsPromises } from "fs";
 import path from "path";
 import * as yaml from 'js-yaml';
 import { CodeBuddyAgent, ChatEntry } from "../agent/codebuddy-agent.js";
-import type { AgentMode } from "../agent/agent-mode.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { useEnhancedInput, Key } from "./use-enhanced-input.js";
 import { getErrorMessage } from "../types/index.js";
 
 import { filterCommandSuggestions } from "../ui/components/CommandSuggestions.js";
-import { loadModelConfig, updateCurrentModel } from "../utils/model-config.js";
+import { loadModelConfig } from "../utils/model-config.js";
 
 // Import enhanced features
 import { getSlashCommandManager } from "../commands/slash-commands.js";
-import { getPersistentCheckpointManager } from "../checkpoints/persistent-checkpoint-manager.js";
-import { getHookSystem } from "../hooks/hook-system.js";
-import { getSecurityModeManager, SecurityMode } from "../security/security-modes.js";
-import { initCodeBuddyProject, formatInitResult } from "../utils/init-project.js";
-import { getBackgroundTaskManager } from "../tasks/background-tasks.js";
-import { getEnhancedCommandHandler } from "../commands/enhanced-command-handler.js";
 import { getTTSManager } from "../input/text-to-speech.js";
+import { ClientCommandDispatcher, ClientCommandContext } from "../commands/client-dispatcher.js";
 
 // Import file autocomplete
 import { extractFileReference, getFileSuggestions, FileSuggestion } from "../ui/components/FileAutocomplete.js";
+
+// Import history manager for persistent command history
+import { getHistoryManager } from "../utils/history-manager.js";
 
 interface UseInputHandlerProps {
   agent: CodeBuddyAgent;
@@ -249,14 +246,19 @@ export function useInputHandler({
     }
     if (key.tab || key.return) {
       const selectedModel = availableModels[selectedModelIndex];
-      agent.setModel(selectedModel.model);
-      updateCurrentModel(selectedModel.model);
-      const confirmEntry: ChatEntry = {
-        type: "assistant",
-        content: `✓ Switched to model: ${selectedModel.model}`,
-        timestamp: new Date(),
-      };
-      setChatHistory((prev) => [...prev, confirmEntry]);
+      // Delegate to Dispatcher implicitly via handleDirectCommand? 
+      // No, UI navigation logic remains here, but the action can be manual.
+      // Or we can construct a command string and let dispatcher handle it.
+      // But we have state setters here.
+      // Let's keep UI state manipulation here for selection, but action execution via command if possible.
+      // Actually, standard behavior:
+      // agent.setModel(selectedModel.model);
+      // updateCurrentModel(selectedModel.model);
+      // ...
+      
+      // We can use a helper, but for now let's leave this UI logic as is, or use handleDirectCommand("/models " + model)
+      handleDirectCommand(`/models ${selectedModel.model}`);
+      
       setShowModelSelection(false);
       setSelectedModelIndex(0);
       return true;
@@ -347,26 +349,6 @@ export function useInputHandler({
     if (showCommandSuggestions) {
       const handled = handleCommandSuggestionsNav(key);
       if (handled) return true;
-      // If suggestions are still shown but not handled, we might want to return false to let typing continue, 
-      // but usually navigation keys are handled. 
-      // If we return false here, up/down arrows might do something else (like history nav) which we don't want when suggestions are open.
-      // But wait, the original logic for up/down returned true.
-      // If it wasn't up/down/tab/enter, it returned false.
-      // My helper returns false if it wasn't handled.
-      // If it returns false, it means it wasn't a navigation key.
-      // So we should return false to let handleInput handle it (typing).
-      // However, check original logic: 
-      // if (showCommandSuggestions) { ... if (key.upArrow) ... return true; ... } 
-      // If filteredSuggestions is empty, it hides and returns false.
-      
-      // Let's match original logic:
-      // If filteredSuggestions length == 0: hides and returns false.
-      // If length > 0:
-      //   Up/Down/Tab/Return -> handled -> returns true.
-      //   Other keys -> returns false.
-      
-      // My helper handleCommandSuggestionsNav follows this.
-      // So:
       return handled;
     }
 
@@ -392,6 +374,10 @@ export function useInputHandler({
     }
 
     if (userInput.trim()) {
+      // Add to persistent history (for Ctrl+R and /history command)
+      const historyManager = getHistoryManager();
+      historyManager.add(userInput);
+
       // Handle # instruction capture - save to .codebuddyrules (Claude Code-style)
       if (userInput.startsWith("#")) {
         const instruction = userInput.slice(1).trim();
@@ -417,7 +403,9 @@ export function useInputHandler({
 
       // Handle ! shell bypass prefix - execute command directly without AI
       if (userInput.startsWith("!")) {
-        await handleShellBypass(userInput.slice(1).trim());
+        // Delegate to dispatcher for consistency?
+        // Or keep direct call? Dispatcher handles it too.
+        await handleDirectCommand(userInput);
         return;
       }
 
@@ -433,59 +421,7 @@ export function useInputHandler({
     }
   };
 
-  /**
-   * Handle ! shell bypass - execute shell command directly without AI
-   */
-  const handleShellBypass = async (command: string) => {
-    if (!command) {
-      const errorEntry: ChatEntry = {
-        type: "assistant",
-        content: "Usage: !<command> - Execute shell command directly\nExample: !ls -la",
-        timestamp: new Date(),
-      };
-      setChatHistory((prev) => [...prev, errorEntry]);
-      clearInput();
-      return;
-    }
-
-    const userEntry: ChatEntry = {
-      type: "user",
-      content: `!${command}`,
-      timestamp: new Date(),
-    };
-    setChatHistory((prev) => [...prev, userEntry]);
-
-    try {
-      const result = await agent.executeBashCommand(command);
-
-      const commandEntry: ChatEntry = {
-        type: "tool_result",
-        content: result.success
-          ? result.output || "Command completed"
-          : result.error || "Command failed",
-        timestamp: new Date(),
-        toolCall: {
-          id: `shell_bypass_${Date.now()}`,
-          type: "function",
-          function: {
-            name: "bash",
-            arguments: JSON.stringify({ command }),
-          },
-        },
-        toolResult: result,
-      };
-      setChatHistory((prev) => [...prev, commandEntry]);
-    } catch (error) {
-      const errorEntry: ChatEntry = {
-        type: "assistant",
-        content: `Error executing command: ${getErrorMessage(error)}`,
-        timestamp: new Date(),
-      };
-      setChatHistory((prev) => [...prev, errorEntry]);
-    }
-
-    clearInput();
-  };
+  // Removed handleShellBypass as it's now in ClientCommandDispatcher
 
   /**
    * Process @ file references in input
@@ -613,541 +549,25 @@ export function useInputHandler({
   }, []);
 
   const handleDirectCommand = async (input: string): Promise<boolean> => {
-    const trimmedInput = input.trim();
+    const context: ClientCommandContext = {
+      agent,
+      chatHistory,
+      setChatHistory,
+      setIsProcessing,
+      setIsStreaming,
+      setTokenCount,
+      setProcessingTime,
+      processingStartTime,
+      setInput,
+      clearInput,
+      resetHistory,
+      setShowModelSelection,
+      setSelectedModelIndex,
+      availableModels,
+      processUserMessage: processUserMessage // Using the function defined below
+    };
 
-    // Handle slash commands via SlashCommandManager
-    if (trimmedInput.startsWith("/")) {
-      const slashManager = getSlashCommandManager();
-      const result = slashManager.execute(trimmedInput);
-
-      if (result.success && result.prompt) {
-        // Handle special built-in commands
-        if (result.prompt === "__CLEAR_CHAT__") {
-          setChatHistory([]);
-          setIsProcessing(false);
-          setIsStreaming(false);
-          setTokenCount(0);
-          setProcessingTime(0);
-          processingStartTime.current = 0;
-          const confirmationService = ConfirmationService.getInstance();
-          confirmationService.resetSession();
-          clearInput();
-          resetHistory();
-          return true;
-        }
-
-        if (result.prompt === "__CHANGE_MODEL__") {
-          setShowModelSelection(true);
-          setSelectedModelIndex(0);
-          clearInput();
-          return true;
-        }
-
-        if (result.prompt === "__CHANGE_MODE__") {
-          const args = trimmedInput.split(" ").slice(1);
-          const mode = args[0] as AgentMode | undefined;
-          if (mode && ["plan", "code", "ask"].includes(mode)) {
-            agent.setMode(mode);
-            const entry: ChatEntry = {
-              type: "assistant",
-              content: `✓ Switched to ${mode} mode`,
-              timestamp: new Date(),
-            };
-            setChatHistory((prev) => [...prev, entry]);
-          } else {
-            const entry: ChatEntry = {
-              type: "assistant",
-              content: `Invalid mode. Available: plan, code, ask`,
-              timestamp: new Date(),
-            };
-            setChatHistory((prev) => [...prev, entry]);
-          }
-          clearInput();
-          return true;
-        }
-
-        if (result.prompt === "__LIST_CHECKPOINTS__") {
-          const checkpointManager = getPersistentCheckpointManager();
-          const entry: ChatEntry = {
-            type: "assistant",
-            content: checkpointManager.formatCheckpointList(),
-            timestamp: new Date(),
-          };
-          setChatHistory((prev) => [...prev, entry]);
-          clearInput();
-          return true;
-        }
-
-        if (result.prompt === "__RESTORE_CHECKPOINT__") {
-          const checkpointManager = getPersistentCheckpointManager();
-          const args = trimmedInput.split(" ").slice(1);
-
-          if (args.length === 0) {
-            // Show checkpoints list
-            const entry: ChatEntry = {
-              type: "assistant",
-              content: checkpointManager.formatCheckpointList(),
-              timestamp: new Date(),
-            };
-            setChatHistory((prev) => [...prev, entry]);
-          } else {
-            // Restore specific checkpoint
-            const checkpoints = checkpointManager.getCheckpoints();
-            const arg = args[0];
-            let checkpointId = arg;
-
-            // If arg is a number, use it as index
-            const index = parseInt(arg, 10);
-            if (!isNaN(index) && index > 0 && index <= checkpoints.length) {
-              checkpointId = checkpoints[index - 1].id;
-            }
-
-            const restoreResult = checkpointManager.restore(checkpointId);
-            const entry: ChatEntry = {
-              type: "assistant",
-              content: restoreResult.success
-                ? `✅ Restored checkpoint!\n\nFiles restored:\n${restoreResult.restored.map(f => `  • ${f}`).join('\n')}`
-                : `❌ Failed to restore: ${restoreResult.errors.join(', ')}`,
-              timestamp: new Date(),
-            };
-            setChatHistory((prev) => [...prev, entry]);
-          }
-          clearInput();
-          return true;
-        }
-
-        if (result.prompt === "__INIT_GROK__") {
-          const initResult = initCodeBuddyProject();
-          const entry: ChatEntry = {
-            type: "assistant",
-            content: formatInitResult(initResult),
-            timestamp: new Date(),
-          };
-          setChatHistory((prev) => [...prev, entry]);
-          clearInput();
-          return true;
-        }
-
-        if (result.prompt === "__FEATURES__") {
-          const { handleFeaturesCommand } = await import("../commands/features.js");
-          const entry: ChatEntry = {
-            type: "assistant",
-            content: handleFeaturesCommand(),
-            timestamp: new Date(),
-          };
-          setChatHistory((prev) => [...prev, entry]);
-          clearInput();
-          return true;
-        }
-
-        // Handle enhanced commands with special tokens
-        if (result.prompt.startsWith("__") && result.prompt.endsWith("__")) {
-          const enhancedHandler = getEnhancedCommandHandler();
-          enhancedHandler.setConversationHistory(chatHistory);
-          enhancedHandler.setCodeBuddyClient(agent.getClient());
-
-          const args = trimmedInput.split(" ").slice(1);
-          const handlerResult = await enhancedHandler.handleCommand(
-            result.prompt,
-            args,
-            trimmedInput
-          );
-
-          if (handlerResult.handled) {
-            if (handlerResult.entry) {
-              setChatHistory((prev) => [...prev, handlerResult.entry!]);
-            }
-
-            if (handlerResult.passToAI && handlerResult.prompt) {
-              // Pass the generated prompt to the AI
-              await processUserMessage(handlerResult.prompt);
-            }
-
-            clearInput();
-            return true;
-          }
-        }
-
-        // Handle /security command
-        if (trimmedInput.startsWith("/security")) {
-          const securityManager = getSecurityModeManager();
-          const args = trimmedInput.split(" ").slice(1);
-
-          if (args.length === 0) {
-            const entry: ChatEntry = {
-              type: "assistant",
-              content: securityManager.formatStatus(),
-              timestamp: new Date(),
-            };
-            setChatHistory((prev) => [...prev, entry]);
-          } else {
-            const mode = args[0] as SecurityMode;
-            if (["suggest", "auto-edit", "full-auto"].includes(mode)) {
-              securityManager.setMode(mode);
-              const entry: ChatEntry = {
-                type: "assistant",
-                content: `✅ Security mode changed to: ${mode.toUpperCase()}\n\n${securityManager.formatStatus()}`,
-                timestamp: new Date(),
-              };
-              setChatHistory((prev) => [...prev, entry]);
-            } else {
-              const entry: ChatEntry = {
-                type: "assistant",
-                content: `Invalid security mode. Available: suggest, auto-edit, full-auto`,
-                timestamp: new Date(),
-              };
-              setChatHistory((prev) => [...prev, entry]);
-            }
-          }
-          clearInput();
-          return true;
-        }
-
-        // Handle /hooks command
-        if (trimmedInput.startsWith("/hooks")) {
-          const hookSystem = getHookSystem();
-          const entry: ChatEntry = {
-            type: "assistant",
-            content: hookSystem.formatStatus(),
-            timestamp: new Date(),
-          };
-          setChatHistory((prev) => [...prev, entry]);
-          clearInput();
-          return true;
-        }
-
-        // Handle /tasks command
-        if (trimmedInput.startsWith("/tasks")) {
-          const taskManager = getBackgroundTaskManager();
-          const entry: ChatEntry = {
-            type: "assistant",
-            content: taskManager.formatTasksList(),
-            timestamp: new Date(),
-          };
-          setChatHistory((prev) => [...prev, entry]);
-          clearInput();
-          return true;
-        }
-
-        // For other slash commands, send the prompt to the AI
-        if (!result.prompt.startsWith("__")) {
-          await processUserMessage(result.prompt);
-          clearInput();
-          return true;
-        }
-      } else if (!result.success) {
-        const entry: ChatEntry = {
-          type: "assistant",
-          content: result.error || "Unknown command",
-          timestamp: new Date(),
-        };
-        setChatHistory((prev) => [...prev, entry]);
-        clearInput();
-        return true;
-      }
-    }
-
-    // Legacy command handling for backwards compatibility
-    if (trimmedInput === "/exit") {
-      process.exit(0);
-      return true;
-    }
-
-    if (trimmedInput === "/models") {
-      setShowModelSelection(true);
-      setSelectedModelIndex(0);
-      clearInput();
-      return true;
-    }
-
-    if (trimmedInput.startsWith("/models ")) {
-      const modelArg = trimmedInput.split(" ")[1];
-      const modelNames = availableModels.map((m) => m.model);
-
-      if (modelNames.includes(modelArg)) {
-        agent.setModel(modelArg);
-        updateCurrentModel(modelArg);
-        const confirmEntry: ChatEntry = {
-          type: "assistant",
-          content: `✓ Switched to model: ${modelArg}`,
-          timestamp: new Date(),
-        };
-        setChatHistory((prev) => [...prev, confirmEntry]);
-      } else {
-        const errorEntry: ChatEntry = {
-          type: "assistant",
-          content: `Invalid model: ${modelArg}\n\nAvailable models: ${modelNames.join(", ")}`,
-          timestamp: new Date(),
-        };
-        setChatHistory((prev) => [...prev, errorEntry]);
-      }
-
-      clearInput();
-      return true;
-    }
-
-
-    if (trimmedInput === "/commit-and-push") {
-      const userEntry: ChatEntry = {
-        type: "user",
-        content: "/commit-and-push",
-        timestamp: new Date(),
-      };
-      setChatHistory((prev) => [...prev, userEntry]);
-
-      setIsProcessing(true);
-      setIsStreaming(true);
-
-      try {
-        // First check if there are any changes at all
-        const initialStatusResult = await agent.executeBashCommand(
-          "git status --porcelain"
-        );
-
-        if (
-          !initialStatusResult.success ||
-          !initialStatusResult.output?.trim()
-        ) {
-          const noChangesEntry: ChatEntry = {
-            type: "assistant",
-            content: "No changes to commit. Working directory is clean.",
-            timestamp: new Date(),
-          };
-          setChatHistory((prev) => [...prev, noChangesEntry]);
-          setIsProcessing(false);
-          setIsStreaming(false);
-          setInput("");
-          return true;
-        }
-
-        // Add all changes
-        const addResult = await agent.executeBashCommand("git add .");
-
-        if (!addResult.success) {
-          const addErrorEntry: ChatEntry = {
-            type: "assistant",
-            content: `Failed to stage changes: ${
-              addResult.error || "Unknown error"
-            }`,
-            timestamp: new Date(),
-          };
-          setChatHistory((prev) => [...prev, addErrorEntry]);
-          setIsProcessing(false);
-          setIsStreaming(false);
-          setInput("");
-          return true;
-        }
-
-        // Show that changes were staged
-        const addEntry: ChatEntry = {
-          type: "tool_result",
-          content: "Changes staged successfully",
-          timestamp: new Date(),
-          toolCall: {
-            id: `git_add_${Date.now()}`,
-            type: "function",
-            function: {
-              name: "bash",
-              arguments: JSON.stringify({ command: "git add ." }),
-            },
-          },
-          toolResult: addResult,
-        };
-        setChatHistory((prev) => [...prev, addEntry]);
-
-        // Get staged changes for commit message generation
-        const diffResult = await agent.executeBashCommand("git diff --cached");
-
-        // Generate commit message using AI
-        const commitPrompt = `Generate a concise, professional git commit message for these changes:
-
-Git Status:
-${initialStatusResult.output}
-
-Git Diff (staged changes):
-${diffResult.output || "No staged changes shown"}
-
-Follow conventional commit format (feat:, fix:, docs:, etc.) and keep it under 72 characters.
-Respond with ONLY the commit message, no additional text.`;
-
-        let commitMessage = "";
-        let streamingEntry: ChatEntry | null = null;
-
-        for await (const chunk of agent.processUserMessageStream(
-          commitPrompt
-        )) {
-          if (chunk.type === "content" && chunk.content) {
-            if (!streamingEntry) {
-              const newEntry = {
-                type: "assistant" as const,
-                content: `Generating commit message...\n\n${chunk.content}`,
-                timestamp: new Date(),
-                isStreaming: true,
-              };
-              setChatHistory((prev) => [...prev, newEntry]);
-              streamingEntry = newEntry;
-              commitMessage = chunk.content;
-            } else {
-              commitMessage += chunk.content;
-              setChatHistory((prev) =>
-                prev.map((entry, idx) =>
-                  idx === prev.length - 1 && entry.isStreaming
-                    ? {
-                        ...entry,
-                        content: `Generating commit message...\n\n${commitMessage}`,
-                      }
-                    : entry
-                )
-              );
-            }
-          } else if (chunk.type === "done") {
-            if (streamingEntry) {
-              setChatHistory((prev) =>
-                prev.map((entry) =>
-                  entry.isStreaming
-                    ? {
-                        ...entry,
-                        content: `Generated commit message: "${commitMessage.trim()}"`,
-                        isStreaming: false,
-                      }
-                    : entry
-                )
-              );
-            }
-            break;
-          }
-        }
-
-        // Execute the commit
-        const cleanCommitMessage = commitMessage
-          .trim()
-          .replace(/^["']|["']$/g, "");
-        const commitCommand = `git commit -m "${cleanCommitMessage}"`;
-        const commitResult = await agent.executeBashCommand(commitCommand);
-
-        const commitEntry: ChatEntry = {
-          type: "tool_result",
-          content: commitResult.success
-            ? commitResult.output || "Commit successful"
-            : commitResult.error || "Commit failed",
-          timestamp: new Date(),
-          toolCall: {
-            id: `git_commit_${Date.now()}`,
-            type: "function",
-            function: {
-              name: "bash",
-              arguments: JSON.stringify({ command: commitCommand }),
-            },
-          },
-          toolResult: commitResult,
-        };
-        setChatHistory((prev) => [...prev, commitEntry]);
-
-        // If commit was successful, push to remote
-        if (commitResult.success) {
-          // First try regular push, if it fails try with upstream setup
-          let pushResult = await agent.executeBashCommand("git push");
-          let pushCommand = "git push";
-
-          if (
-            !pushResult.success &&
-            pushResult.error?.includes("no upstream branch")
-          ) {
-            pushCommand = "git push -u origin HEAD";
-            pushResult = await agent.executeBashCommand(pushCommand);
-          }
-
-          const pushEntry: ChatEntry = {
-            type: "tool_result",
-            content: pushResult.success
-              ? pushResult.output || "Push successful"
-              : pushResult.error || "Push failed",
-            timestamp: new Date(),
-            toolCall: {
-              id: `git_push_${Date.now()}`,
-              type: "function",
-              function: {
-                name: "bash",
-                arguments: JSON.stringify({ command: pushCommand }),
-              },
-            },
-            toolResult: pushResult,
-          };
-          setChatHistory((prev) => [...prev, pushEntry]);
-        }
-      } catch (error) {
-        const errorEntry: ChatEntry = {
-          type: "assistant",
-          content: `Error during commit and push: ${getErrorMessage(error)}`,
-          timestamp: new Date(),
-        };
-        setChatHistory((prev) => [...prev, errorEntry]);
-      }
-
-      setIsProcessing(false);
-      setIsStreaming(false);
-      clearInput();
-      return true;
-    }
-
-    const directBashCommands = [
-      "ls",
-      "pwd",
-      "cd",
-      "cat",
-      "mkdir",
-      "touch",
-      "echo",
-      "grep",
-      "find",
-      "cp",
-      "mv",
-      "rm",
-    ];
-    const firstWord = trimmedInput.split(" ")[0];
-
-    if (directBashCommands.includes(firstWord)) {
-      const userEntry: ChatEntry = {
-        type: "user",
-        content: trimmedInput,
-        timestamp: new Date(),
-      };
-      setChatHistory((prev) => [...prev, userEntry]);
-
-      try {
-        const result = await agent.executeBashCommand(trimmedInput);
-
-        const commandEntry: ChatEntry = {
-          type: "tool_result",
-          content: result.success
-            ? result.output || "Command completed"
-            : result.error || "Command failed",
-          timestamp: new Date(),
-          toolCall: {
-            id: `bash_${Date.now()}`,
-            type: "function",
-            function: {
-              name: "bash",
-              arguments: JSON.stringify({ command: trimmedInput }),
-            },
-          },
-          toolResult: result,
-        };
-        setChatHistory((prev) => [...prev, commandEntry]);
-      } catch (error) {
-        const errorEntry: ChatEntry = {
-          type: "assistant",
-          content: `Error executing command: ${getErrorMessage(error)}`,
-          timestamp: new Date(),
-        };
-        setChatHistory((prev) => [...prev, errorEntry]);
-      }
-
-      clearInput();
-      return true;
-    }
-
-    return false;
+    return await ClientCommandDispatcher.dispatch(input, context);
   };
 
   const processUserMessage = async (userInput: string) => {

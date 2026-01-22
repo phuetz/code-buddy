@@ -79,6 +79,11 @@ export {
   handleSessions,
 } from './session-handlers.js';
 
+// History handlers
+export {
+  handleHistory,
+} from './history-handlers.js';
+
 // Agent handlers
 export {
   handleAgent,
@@ -92,6 +97,7 @@ export {
   handleCompact,
   handleTools,
   handleVimMode,
+  handleConfig,
 } from './vibe-handlers.js';
 
 // Permissions handlers (Claude Code-inspired)
@@ -139,6 +145,24 @@ export {
 export {
   handleColabCommand,
 } from './colab-handler.js';
+
+// Missing handlers (model, mode, clear, colab, diff, features, init, checkpoints, restore)
+export {
+  handleChangeModel,
+  handleChangeMode,
+  handleClearChat,
+  handleColab,
+  handleDiffCheckpoints,
+  handleFeatures,
+  handleInitGrok,
+  handleListCheckpoints,
+  handleRestoreCheckpoint,
+} from './missing-handlers.js';
+
+// Debug handlers (enhanced debug mode)
+export {
+  handleDebugMode,
+} from './debug-handlers.js';
 
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';

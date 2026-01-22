@@ -524,8 +524,171 @@ describe('HistoryManager', () => {
 
   describe('Default Config', () => {
     it('should have expected default values', () => {
-      expect(HistoryManager.DEFAULT_CONFIG.maxEntries).toBe(100);
-      expect(HistoryManager.DEFAULT_CONFIG.excludePrefixes).toContain('/');
+      expect(HistoryManager.DEFAULT_CONFIG.maxEntries).toBe(1000);
+      expect(HistoryManager.DEFAULT_CONFIG.excludePrefixes).toEqual([]);
+      expect(HistoryManager.DEFAULT_CONFIG.includeSlashCommands).toBe(true);
+    });
+  });
+
+  describe('Reverse Search (Ctrl+R)', () => {
+    beforeEach(() => {
+      manager.add('npm install express');
+      manager.add('npm run dev');
+      manager.add('git status');
+      manager.add('npm test');
+      manager.add('git push origin main');
+    });
+
+    it('should start reverse search mode', () => {
+      manager.startReverseSearch('current input');
+      expect(manager.isReverseSearchActive()).toBe(true);
+    });
+
+    it('should save original input when starting search', () => {
+      manager.startReverseSearch('my original input');
+      const state = manager.getReverseSearchState();
+      expect(state.originalInput).toBe('my original input');
+    });
+
+    it('should find matching entries', () => {
+      manager.startReverseSearch('');
+      const match = manager.updateReverseSearch('npm');
+
+      expect(match).not.toBeNull();
+      expect(match?.text).toContain('npm');
+    });
+
+    it('should return most recent match first', () => {
+      manager.startReverseSearch('');
+      const match = manager.updateReverseSearch('git');
+
+      expect(match?.text).toBe('git push origin main');
+    });
+
+    it('should navigate to next (older) match', () => {
+      manager.startReverseSearch('');
+      manager.updateReverseSearch('git');
+
+      const nextMatch = manager.reverseSearchNext();
+      expect(nextMatch?.text).toBe('git status');
+    });
+
+    it('should navigate to previous (newer) match', () => {
+      manager.startReverseSearch('');
+      manager.updateReverseSearch('git');
+      manager.reverseSearchNext(); // Go to older
+
+      const prevMatch = manager.reverseSearchPrev();
+      expect(prevMatch?.text).toBe('git push origin main');
+    });
+
+    it('should stay at oldest match when navigating past it', () => {
+      manager.startReverseSearch('');
+      manager.updateReverseSearch('git');
+      manager.reverseSearchNext();
+      manager.reverseSearchNext(); // Try to go past oldest
+
+      const state = manager.getReverseSearchState();
+      expect(state.matchIndex).toBe(1); // Should stay at last index
+    });
+
+    it('should accept current match', () => {
+      manager.startReverseSearch('original');
+      manager.updateReverseSearch('npm');
+
+      const accepted = manager.acceptReverseSearch();
+      expect(accepted).toContain('npm');
+      expect(manager.isReverseSearchActive()).toBe(false);
+    });
+
+    it('should return original input when accepting with no match', () => {
+      manager.startReverseSearch('my input');
+      manager.updateReverseSearch('nonexistent');
+
+      const accepted = manager.acceptReverseSearch();
+      expect(accepted).toBe('my input');
+    });
+
+    it('should cancel search and restore original input', () => {
+      manager.startReverseSearch('original text');
+      manager.updateReverseSearch('npm');
+
+      const restored = manager.cancelReverseSearch();
+      expect(restored).toBe('original text');
+      expect(manager.isReverseSearchActive()).toBe(false);
+    });
+
+    it('should format search prompt correctly', () => {
+      manager.startReverseSearch('');
+
+      // Empty query
+      let prompt = manager.formatReverseSearchPrompt();
+      expect(prompt).toContain('reverse-i-search');
+
+      // With query
+      manager.updateReverseSearch('npm');
+      prompt = manager.formatReverseSearchPrompt();
+      expect(prompt).toContain('npm');
+
+      // With match position
+      manager.reverseSearchNext();
+      prompt = manager.formatReverseSearchPrompt();
+      expect(prompt).toContain('[2/');
+    });
+
+    it('should handle no matches gracefully', () => {
+      manager.startReverseSearch('');
+      const match = manager.updateReverseSearch('zzz_nonexistent_zzz');
+
+      expect(match).toBeNull();
+      const prompt = manager.formatReverseSearchPrompt();
+      expect(prompt).toContain('no match');
+    });
+
+    it('should clear matches when query is emptied', () => {
+      manager.startReverseSearch('');
+      manager.updateReverseSearch('npm');
+      manager.updateReverseSearch('');
+
+      const state = manager.getReverseSearchState();
+      expect(state.matches).toHaveLength(0);
+    });
+  });
+
+  describe('History Formatting and Limits', () => {
+    beforeEach(() => {
+      for (let i = 1; i <= 5; i++) {
+        manager.add(`command ${i}`);
+      }
+    });
+
+    it('should format history list', () => {
+      const formatted = manager.formatHistoryList(3);
+      expect(formatted).toContain('Command History');
+      expect(formatted).toContain('command');
+    });
+
+    it('should format history with timestamps', () => {
+      const formatted = manager.formatHistoryList(3, true);
+      expect(formatted).toContain('/'); // Date separator
+    });
+
+    it('should return no history message when empty', () => {
+      const emptyManager = new HistoryManager({
+        historyFile: '/tmp/empty.json',
+      });
+      const formatted = emptyManager.formatHistoryList();
+      expect(formatted).toContain('No command history');
+    });
+
+    it('should get max entries', () => {
+      expect(manager.getMaxEntries()).toBe(10);
+    });
+
+    it('should set max entries and trim if needed', () => {
+      manager.setMaxEntries(3);
+      expect(manager.getMaxEntries()).toBe(3);
+      expect(manager.count).toBe(3); // Trimmed from 5
     });
   });
 

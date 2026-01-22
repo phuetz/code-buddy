@@ -250,7 +250,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async createSession(name: string, settings: Partial<SessionSettings> = {}): Promise<SharedSession> {
     if (!this.currentMember) {
-      throw new Error('Member profile not initialized');
+      throw new Error('Member profile not initialized. Create or load a profile before starting or joining sessions.');
     }
 
     const session: SharedSession = {
@@ -292,7 +292,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async joinSession(sessionId: string, _shareCode?: string): Promise<SharedSession | null> {
     if (!this.currentMember) {
-      throw new Error('Member profile not initialized');
+      throw new Error('Member profile not initialized. Create or load a profile before starting or joining sessions.');
     }
 
     // Load session
@@ -399,11 +399,11 @@ export class TeamSessionManager extends EventEmitter {
    */
   async inviteMember(email: string, role: TeamMember['role'] = 'viewer'): Promise<string> {
     if (!this.currentSession) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     if (!this.hasPermission('share')) {
-      throw new Error('No permission to invite members');
+      throw new Error('Permission denied: you do not have permission to invite members. Only owners and admins can invite.');
     }
 
     const inviteCode = this.generateShareCode();
@@ -432,22 +432,22 @@ export class TeamSessionManager extends EventEmitter {
    */
   async updateMemberRole(memberId: string, newRole: TeamMember['role']): Promise<void> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     // Only owner and admins can change roles
     if (this.currentMember.role !== 'owner' && this.currentMember.role !== 'admin') {
-      throw new Error('Insufficient permissions');
+      throw new Error('Permission denied: only owners and admins can perform this action.');
     }
 
     // Can't change owner's role
     if (memberId === this.currentSession.owner) {
-      throw new Error("Cannot change owner's role");
+      throw new Error("Cannot change the session owner's role. Transfer ownership first if needed.");
     }
 
     const member = this.currentSession.members.find(m => m.id === memberId);
     if (!member) {
-      throw new Error('Member not found');
+      throw new Error('Member not found in this session. They may have left or been removed.');
     }
 
     const oldRole = member.role;
@@ -470,20 +470,20 @@ export class TeamSessionManager extends EventEmitter {
    */
   async removeMember(memberId: string): Promise<void> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     if (this.currentMember.role !== 'owner' && this.currentMember.role !== 'admin') {
-      throw new Error('Insufficient permissions');
+      throw new Error('Permission denied: only owners and admins can perform this action.');
     }
 
     if (memberId === this.currentSession.owner) {
-      throw new Error('Cannot remove session owner');
+      throw new Error('Cannot remove the session owner. Transfer ownership to another member first.');
     }
 
     const memberIndex = this.currentSession.members.findIndex(m => m.id === memberId);
     if (memberIndex === -1) {
-      throw new Error('Member not found');
+      throw new Error('Member not found in this session. They may have left or been removed.');
     }
 
     const member = this.currentSession.members[memberIndex];
@@ -505,7 +505,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async shareMessage(content: string, type: 'user' | 'assistant' = 'user'): Promise<void> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     const message: ConversationMessage = {
@@ -531,7 +531,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async shareFile(filePath: string): Promise<void> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     if (!this.currentSession.state.sharedContext.sharedFiles.includes(filePath)) {
@@ -555,7 +555,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async addAnnotation(file: string, line: number, content: string): Promise<Annotation> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     const annotation: Annotation = {
@@ -607,7 +607,7 @@ export class TeamSessionManager extends EventEmitter {
     content?: string
   ): Promise<PendingChange> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     const change: PendingChange = {
@@ -642,7 +642,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async approveChange(changeId: string): Promise<void> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     if (this.currentMember.role === 'viewer') {
@@ -674,7 +674,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async rejectChange(changeId: string, reason?: string): Promise<void> {
     if (!this.currentSession || !this.currentMember) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     if (this.currentMember.role === 'viewer') {
@@ -1033,7 +1033,7 @@ export class TeamSessionManager extends EventEmitter {
    */
   async exportSession(format: 'json' | 'markdown' = 'json'): Promise<string> {
     if (!this.currentSession) {
-      throw new Error('No active session');
+      throw new Error('No active session. Create or join a session first.');
     }
 
     if (format === 'json') {

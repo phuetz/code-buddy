@@ -101,10 +101,10 @@ export class DependencyAnalyzer {
       });
     }
 
-    // Parse files and extract dependencies
-    for (const file of files) {
-      await this.analyzeFile(file, effectiveRoot);
-    }
+    // Parse files and extract dependencies in parallel for better performance
+    await Promise.all(
+      files.map(file => this.analyzeFile(file, effectiveRoot))
+    );
 
     // Detect entry points
     const entryPoints = this.config.entryPoints || this.detectEntryPoints();

@@ -70,6 +70,30 @@ export class ArchiveTool {
    * List contents of an archive
    */
   async list(archivePath: string): Promise<ToolResult> {
+    // Validate input
+    if (!archivePath || typeof archivePath !== 'string') {
+      return {
+        success: false,
+        error: 'Archive path is required and must be a non-empty string'
+      };
+    }
+    if (archivePath.trim().length === 0) {
+      return {
+        success: false,
+        error: 'Archive path cannot be empty or whitespace only'
+      };
+    }
+    // Check for path traversal attempts
+    if (archivePath.includes('..') && !path.isAbsolute(archivePath)) {
+      const resolved = path.resolve(process.cwd(), archivePath);
+      if (!resolved.startsWith(process.cwd())) {
+        return {
+          success: false,
+          error: 'Path traversal detected: archive path must be within working directory'
+        };
+      }
+    }
+
     try {
       const resolvedPath = path.resolve(process.cwd(), archivePath);
 
@@ -139,6 +163,64 @@ export class ArchiveTool {
    * Extract archive contents
    */
   async extract(archivePath: string, options: ExtractOptions = {}): Promise<ToolResult> {
+    // Validate archive path
+    if (!archivePath || typeof archivePath !== 'string') {
+      return {
+        success: false,
+        error: 'Archive path is required and must be a non-empty string'
+      };
+    }
+    if (archivePath.trim().length === 0) {
+      return {
+        success: false,
+        error: 'Archive path cannot be empty or whitespace only'
+      };
+    }
+
+    // Validate options
+    if (options !== null && typeof options !== 'object') {
+      return {
+        success: false,
+        error: 'Options must be an object if provided'
+      };
+    }
+
+    // Validate output directory if provided
+    if (options.outputDir !== undefined) {
+      if (typeof options.outputDir !== 'string') {
+        return {
+          success: false,
+          error: 'Output directory must be a string'
+        };
+      }
+      // Check for path traversal in output directory
+      const resolvedOutput = path.resolve(process.cwd(), options.outputDir);
+      if (!resolvedOutput.startsWith(process.cwd()) && !path.isAbsolute(options.outputDir)) {
+        return {
+          success: false,
+          error: 'Path traversal detected: output directory must be within working directory'
+        };
+      }
+    }
+
+    // Validate files array if provided
+    if (options.files !== undefined) {
+      if (!Array.isArray(options.files)) {
+        return {
+          success: false,
+          error: 'Files must be an array if provided'
+        };
+      }
+      for (const file of options.files) {
+        if (typeof file !== 'string') {
+          return {
+            success: false,
+            error: 'Each file entry must be a string'
+          };
+        }
+      }
+    }
+
     try {
       const resolvedPath = path.resolve(process.cwd(), archivePath);
 
@@ -216,6 +298,81 @@ export class ArchiveTool {
     sourcePaths: string[],
     options: CreateOptions = {}
   ): Promise<ToolResult> {
+    // Validate source paths
+    if (!sourcePaths || !Array.isArray(sourcePaths)) {
+      return {
+        success: false,
+        error: 'Source paths must be a non-empty array'
+      };
+    }
+    if (sourcePaths.length === 0) {
+      return {
+        success: false,
+        error: 'At least one source path is required'
+      };
+    }
+    for (let i = 0; i < sourcePaths.length; i++) {
+      const p = sourcePaths[i];
+      if (!p || typeof p !== 'string') {
+        return {
+          success: false,
+          error: `Source path at index ${i} must be a non-empty string`
+        };
+      }
+      if (p.trim().length === 0) {
+        return {
+          success: false,
+          error: `Source path at index ${i} cannot be empty or whitespace only`
+        };
+      }
+    }
+
+    // Validate options
+    if (options !== null && typeof options !== 'object') {
+      return {
+        success: false,
+        error: 'Options must be an object if provided'
+      };
+    }
+
+    // Validate format if provided
+    const validFormats = ['zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz'];
+    if (options.format !== undefined && !validFormats.includes(options.format)) {
+      return {
+        success: false,
+        error: `Invalid format '${options.format}'. Must be one of: ${validFormats.join(', ')}`
+      };
+    }
+
+    // Validate compression level if provided
+    if (options.compressionLevel !== undefined) {
+      const level = Number(options.compressionLevel);
+      if (!Number.isInteger(level) || level < 0 || level > 9) {
+        return {
+          success: false,
+          error: 'Compression level must be an integer between 0 and 9'
+        };
+      }
+    }
+
+    // Validate exclude patterns if provided
+    if (options.excludePatterns !== undefined) {
+      if (!Array.isArray(options.excludePatterns)) {
+        return {
+          success: false,
+          error: 'Exclude patterns must be an array if provided'
+        };
+      }
+      for (const pattern of options.excludePatterns) {
+        if (typeof pattern !== 'string') {
+          return {
+            success: false,
+            error: 'Each exclude pattern must be a string'
+          };
+        }
+      }
+    }
+
     try {
       const resolvedPaths = sourcePaths.map(p => path.resolve(process.cwd(), p));
 
@@ -455,7 +612,7 @@ export class ArchiveTool {
       for (const file of options.files) {
         const entry = zip.getEntry(file);
         if (entry) {
-          zip.extractEntryTo(entry, outputDir, options.preservePaths !== false, options.overwrite !== false);
+          zip.extractEntryTo(entry.entryName, outputDir, options.preservePaths !== false, options.overwrite !== false);
           files.push(file);
         }
       }

@@ -17,13 +17,15 @@ import {
   createAuthMiddleware,
   createRateLimitMiddleware,
   createLoggingMiddleware,
+  createSecurityHeadersMiddleware,
   requestIdMiddleware,
   errorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes } from './routes/index.js';
+import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes } from './routes/index.js';
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
 import { logger } from '../utils/logger.js';
+import { initMetrics, getMetrics } from '../metrics/index.js';
 
 /**
  * Generate a secure random secret for development use only
@@ -65,6 +67,14 @@ const DEFAULT_CONFIG: ServerConfig = {
   websocketEnabled: process.env.WS_ENABLED !== 'false',
   logging: process.env.LOGGING !== 'false',
   maxRequestSize: process.env.MAX_REQUEST_SIZE || '10mb',
+  // Security headers: enabled by default, can be disabled via SECURITY_HEADERS=false
+  securityHeaders: {
+    enabled: process.env.SECURITY_HEADERS !== 'false',
+    enableCSP: true,
+    enableHSTS: process.env.NODE_ENV === 'production',
+    frameOptions: 'DENY',
+    referrerPolicy: 'strict-origin-when-cross-origin',
+  },
 };
 
 /**
@@ -78,6 +88,9 @@ function createApp(config: ServerConfig): Application {
 
   // Request ID middleware
   app.use(requestIdMiddleware);
+
+  // Security headers middleware (CSP, X-Frame-Options, HSTS, etc.)
+  app.use(createSecurityHeadersMiddleware(config));
 
   // Logging middleware
   if (config.logging) {
@@ -111,6 +124,12 @@ function createApp(config: ServerConfig): Application {
   // Health routes (no auth required)
   app.use('/api/health', healthRoutes);
 
+  // Metrics routes (no auth required for monitoring)
+  app.use('/api/metrics', metricsRoutes);
+
+  // Also expose at /metrics for Prometheus compatibility
+  app.use('/metrics', metricsRoutes);
+
   // API routes
   app.use('/api/chat', chatRoutes);
   app.use('/api/tools', toolsRoutes);
@@ -121,12 +140,14 @@ function createApp(config: ServerConfig): Application {
   app.use('/v1/chat', chatRoutes);
 
   // Root endpoint
-  app.get('/', (req, res) => {
+  app.get('/', (_req, res) => {
     res.json({
       name: 'Code Buddy API',
       version: process.env.npm_package_version || '1.0.0',
       docs: '/api/docs',
       health: '/api/health',
+      metrics: '/api/metrics',
+      dashboard: '/api/metrics/dashboard',
     });
   });
 
@@ -148,6 +169,21 @@ function createApp(config: ServerConfig): Application {
       paths: {
         '/api/health': {
           get: { summary: 'Health check', tags: ['Health'] },
+        },
+        '/api/metrics': {
+          get: { summary: 'Prometheus-compatible metrics', tags: ['Metrics'] },
+        },
+        '/api/metrics/json': {
+          get: { summary: 'JSON format metrics', tags: ['Metrics'] },
+        },
+        '/api/metrics/dashboard': {
+          get: { summary: 'HTML metrics dashboard', tags: ['Metrics'] },
+        },
+        '/api/metrics/snapshot': {
+          get: { summary: 'Current metrics snapshot', tags: ['Metrics'] },
+        },
+        '/api/metrics/history': {
+          get: { summary: 'Historical metrics data', tags: ['Metrics'] },
         },
         '/api/chat': {
           post: { summary: 'Send chat message', tags: ['Chat'] },
@@ -192,6 +228,14 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
 }> {
   const config: ServerConfig = { ...DEFAULT_CONFIG, ...userConfig };
 
+  // Initialize metrics collector
+  initMetrics({
+    consoleExport: process.env.METRICS_CONSOLE === 'true',
+    fileExport: process.env.METRICS_FILE === 'true',
+    filePath: process.env.METRICS_PATH,
+    exportInterval: parseInt(process.env.METRICS_INTERVAL || '60000', 10),
+  });
+
   const app = createApp(config);
   const server = createServer(app);
 
@@ -205,10 +249,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     server.listen(config.port, config.host, () => {
       logger.info(`API Server started on http://${config.host}:${config.port}`);
       logger.info(`Health: http://${config.host}:${config.port}/api/health`);
+      logger.info(`Metrics: http://${config.host}:${config.port}/api/metrics`);
+      logger.info(`Dashboard: http://${config.host}:${config.port}/api/metrics/dashboard`);
       logger.info(`Docs: http://${config.host}:${config.port}/api/docs`);
       logger.info(`WebSocket: ${config.websocketEnabled ? 'Enabled (/ws)' : 'Disabled'}`);
       logger.info(`Auth: ${config.authEnabled ? 'Enabled' : 'Disabled'}`);
       logger.info(`Rate Limit: ${config.rateLimit ? `${config.rateLimitMax} req/${config.rateLimitWindow / 1000}s` : 'Disabled'}`);
+      logger.info(`Security Headers: ${config.securityHeaders?.enabled !== false ? 'Enabled (CSP, X-Frame-Options, HSTS, etc.)' : 'Disabled'}`);
 
       resolve({ app, server, config });
     });

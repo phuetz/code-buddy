@@ -20,14 +20,15 @@ export function createFCSBuiltins(
   // Core I/O
   // ============================================
 
-  builtins.print = (...args: FCSValue[]) => {
+  const printFn = (...args: FCSValue[]) => {
     const message = args.map((a) => stringify(a)).join(' ');
     print(message);
     return null;
   };
+  builtins.print = printFn;
 
   builtins.println = (...args: FCSValue[]) => {
-    builtins.print(...args);
+    printFn(...args);
     return null;
   };
 

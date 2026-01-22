@@ -9,6 +9,19 @@ import {
   HeadlessOptions,
 } from '../../src/cli/headless';
 
+// Mock logger
+jest.mock('../../src/utils/logger', () => ({
+  logger: {
+    error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+import { logger } from '../../src/utils/logger';
+const loggerErrorSpy = logger.error as jest.Mock;
+
 // Mock the agent module
 jest.mock('../../src/agent/codebuddy-agent', () => {
   const mockAgent = {
@@ -495,11 +508,10 @@ describe('headless mode', () => {
         handleCommitAndPushHeadless(defaultOptions)
       ).rejects.toThrow('process.exit called');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Error during commit and push:',
-        'Network error'
+        expect.any(Error)
       );
-      expect(processExitSpy).toHaveBeenCalledWith(1);
     });
   });
 

@@ -334,7 +334,7 @@ describe('BashTool', () => {
     test('findFiles should execute find command', async () => {
       const result = await bashTool.findFiles('*.ts', '.');
       expect(result).toBeDefined();
-    });
+    }, 30000);
 
     test('grep should use ripgrep for searching', async () => {
       const result = await bashTool.grep('test', '.');

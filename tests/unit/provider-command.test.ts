@@ -5,6 +5,19 @@
 import { createProviderCommand } from '../../src/commands/provider';
 import { Command } from 'commander';
 
+// Mock logger
+jest.mock('../../src/utils/logger', () => ({
+  logger: {
+    error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+import { logger } from '../../src/utils/logger';
+const loggerErrorSpy = logger.error as jest.Mock;
+
 // Mock settings manager
 jest.mock('../../src/utils/settings-manager', () => ({
   getSettingsManager: jest.fn(() => ({
@@ -107,8 +120,8 @@ describe('Provider Command', () => {
         command.parse(['set', 'unknown-provider'], { from: 'user' });
       }).toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalled();
-      const errorOutput = consoleErrorSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(loggerErrorSpy).toHaveBeenCalled();
+      const errorOutput = loggerErrorSpy.mock.calls.map((c) => c.join(' ')).join('\n');
       expect(errorOutput).toContain('Unknown provider');
     });
 
@@ -151,7 +164,7 @@ describe('Provider Command', () => {
         command.parse(['models', 'unknown'], { from: 'user' });
       }).toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(loggerErrorSpy).toHaveBeenCalled();
     });
   });
 

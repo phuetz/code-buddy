@@ -3,28 +3,20 @@ import { ToolSelectionResult } from "../codebuddy/tools.js";
 import { ToolResult } from "../types/index.js";
 import { createTokenCounter } from "../utils/token-counter.js";
 import { loadCustomInstructions } from "../utils/custom-instructions.js";
-import { getCheckpointManager } from "../checkpoints/checkpoint-manager.js";
-import { getSessionStore } from "../persistence/session-store.js";
-import { getAgentModeManager } from "./agent-mode.js";
-import { getSandboxManager } from "../security/sandbox.js";
-import { getMCPClient } from "../mcp/mcp-client.js";
 import { getSettingsManager } from "../utils/settings-manager.js";
 import { getChatOnlySystemPrompt } from "../prompts/index.js";
-import { getCostTracker } from "../utils/cost-tracker.js";
 import { getAutonomyManager } from "../utils/autonomy-manager.js";
-import { createContextManager } from "../context/context-manager-v2.js";
 import { logger } from "../utils/logger.js";
-import { getPromptCacheManager } from "../optimization/prompt-cache.js";
-import { getHooksManager } from "../hooks/lifecycle-hooks.js";
-import { getModelRouter } from "../optimization/model-routing.js";
-import { getPluginMarketplace } from "../plugins/marketplace.js";
 import { getToolSelectionStrategy, ToolSelectionStrategy } from "./execution/tool-selection-strategy.js";
-import { getRepairCoordinator } from "./execution/repair-coordinator.js";
 import { PromptBuilder } from "../services/prompt-builder.js";
 import { StreamingHandler } from "./streaming/index.js";
 import { AgentExecutor } from "./execution/agent-executor.js";
 import { ToolHandler } from "./tool-handler.js";
 import { BaseAgent } from "./base-agent.js";
+import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
+import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
+import type { SessionStore } from "../persistence/session-store.js";
+import type { CostTracker } from "../utils/cost-tracker.js";
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -45,15 +37,15 @@ import type { ChatEntry, StreamingChunk } from "./types.js";
  * ```
  */
 export class CodeBuddyAgent extends BaseAgent {
+  /** Encapsulated infrastructure dependencies */
+  private readonly infrastructure: AgentInfrastructure;
+
   private codebuddyClient: CodeBuddyClient;
   private toolHandler: ToolHandler;
   private promptBuilder: PromptBuilder;
   private streamingHandler: StreamingHandler;
   private executor: AgentExecutor;
-  
-  // Maximum history entries to prevent memory bloat (keep last N entries)
-  private static readonly MAX_HISTORY_SIZE = 1000;
-  
+
   private toolSelectionStrategy: ToolSelectionStrategy;
 
   /**
@@ -74,18 +66,17 @@ export class CodeBuddyAgent extends BaseAgent {
     systemPromptId?: string  // New: external prompt ID (default, minimal, secure, etc.)
   ) {
     super();
+
+    // Determine model to use
     const manager = getSettingsManager();
     const savedModel = manager.getCurrentModel();
     const modelToUse = model || savedModel || "grok-code-fast-1";
 
     // YOLO mode: requires BOTH env var AND explicit config confirmation
-    // This prevents accidental activation via env var alone
     const autonomyManager = getAutonomyManager();
     const envYoloMode = process.env.YOLO_MODE === "true";
     const configYoloMode = autonomyManager.isYOLOEnabled();
 
-    // YOLO mode requires explicit enablement through autonomy manager
-    // Env var alone only triggers a warning, doesn't enable YOLO
     if (envYoloMode && !configYoloMode) {
       logger.warn("YOLO_MODE env var set but not enabled via /yolo command or config. Use '/yolo on' to explicitly enable YOLO mode.");
       this.yoloMode = false;
@@ -95,48 +86,54 @@ export class CodeBuddyAgent extends BaseAgent {
 
     this.maxToolRounds = maxToolRounds || (this.yoloMode ? 400 : 50);
 
-    // Session cost limit: ALWAYS have a hard limit, even in YOLO mode
-    // Default $10, YOLO mode gets $100 max (prevents runaway costs)
-    const YOLO_HARD_LIMIT = 100; // $100 max even in YOLO mode
+    // Session cost limit with YOLO mode handling
+    const YOLO_HARD_LIMIT = 100;
     const maxCostEnv = process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : null;
 
     if (this.yoloMode) {
-      // In YOLO mode, use env var if set, otherwise $100 hard limit
       this.sessionCostLimit = maxCostEnv !== null
-        ? Math.min(maxCostEnv, YOLO_HARD_LIMIT * 10) // Allow up to $1000 if explicitly set
+        ? Math.min(maxCostEnv, YOLO_HARD_LIMIT * 10)
         : YOLO_HARD_LIMIT;
       logger.warn(`YOLO MODE ACTIVE - Cost limit: $${this.sessionCostLimit}, Max rounds: ${this.maxToolRounds}`);
     } else {
       this.sessionCostLimit = maxCostEnv !== null ? maxCostEnv : 10;
     }
 
-    this.costTracker = getCostTracker();
-    this.useRAGToolSelection = useRAGToolSelection;
-    this.toolSelectionStrategy = getToolSelectionStrategy({
-      useRAG: useRAGToolSelection
-    });
-    this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
-    // Tools are now lazy-loaded via getters (see lazy tool getters above)
-    this.tokenCounter = createTokenCounter(modelToUse);
-
-    // Initialize context manager with model-specific limits
-    // Detect max tokens from environment or use model default
+    // Detect max context from environment
     const envMaxContext = Number(process.env.CODEBUDDY_MAX_CONTEXT);
     const maxContextTokens = Number.isFinite(envMaxContext) && envMaxContext > 0
       ? envMaxContext
       : undefined;
-    this.contextManager = createContextManager(modelToUse, maxContextTokens);
 
-    this.checkpointManager = getCheckpointManager();
-    this.sessionStore = getSessionStore();
-    this.modeManager = getAgentModeManager();
-    this.sandboxManager = getSandboxManager();
-    this.mcpClient = getMCPClient();
-    this.promptCacheManager = getPromptCacheManager();
-    this.hooksManager = getHooksManager(process.cwd());
-    this.modelRouter = getModelRouter();
-    this.marketplace = getPluginMarketplace();
-    this.repairCoordinator = getRepairCoordinator(apiKey, baseURL);
+    // Create infrastructure - encapsulates all manager dependencies
+    this.infrastructure = createAgentInfrastructureSync(
+      { apiKey, model: modelToUse, baseURL, maxContextTokens },
+      { memoryEnabled: this.memoryEnabled, useModelRouting: this.useModelRouting }
+    );
+
+    // Bridge to BaseAgent properties for backwards compatibility
+    // Note: We cast interface types to concrete types since BaseAgent uses concrete types
+    // This is safe because the singletons returned by getters are the concrete implementations
+    this.tokenCounter = this.infrastructure.tokenCounter;
+    this.contextManager = this.infrastructure.contextManager;
+    this.checkpointManager = this.infrastructure.checkpoints as unknown as CheckpointManager;
+    this.sessionStore = this.infrastructure.sessions as unknown as SessionStore;
+    this.modeManager = this.infrastructure.modeManager;
+    this.sandboxManager = this.infrastructure.sandboxManager;
+    this.mcpClient = this.infrastructure.mcpClient;
+    this.costTracker = this.infrastructure.costs as unknown as CostTracker;
+    this.promptCacheManager = this.infrastructure.promptCacheManager;
+    this.hooksManager = this.infrastructure.hooksManager;
+    this.modelRouter = this.infrastructure.modelRouter;
+    this.marketplace = this.infrastructure.marketplace;
+    this.repairCoordinator = this.infrastructure.repairCoordinator;
+
+    // Initialize tool selection
+    this.useRAGToolSelection = useRAGToolSelection;
+    this.toolSelectionStrategy = getToolSelectionStrategy({ useRAG: useRAGToolSelection });
+
+    // Initialize client
+    this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
 
     // Forward repair events from RepairCoordinator
     this.repairCoordinator.on('repair:start', (data) => this.emit('repair:start', data));
@@ -320,7 +317,7 @@ export class CodeBuddyAgent extends BaseAgent {
 
       // Record usage with model router for cost tracking
       if (this.useModelRouting && this.lastRoutingDecision) {
-        const inputTokens = this.tokenCounter.countMessageTokens(this.messages as any);
+        const inputTokens = this.tokenCounter.countMessageTokens(this.messages as Parameters<typeof this.tokenCounter.countMessageTokens>[0]);
         const totalOutputTokens = this.streamingHandler.getTokenCount() || 0;
         
         this.modelRouter.recordUsage(

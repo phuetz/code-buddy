@@ -1,10 +1,42 @@
 import React, { useMemo } from 'react';
 import { Text, Box } from 'ink';
-import { marked } from 'marked';
+import { marked, type Renderer } from 'marked';
 import TerminalRenderer from 'marked-terminal';
 import { highlight } from 'cli-highlight';
 import { InkTable } from '../components/InkTable.js';
 import { logger } from '../../utils/logger.js';
+
+/**
+ * marked-terminal renderer configuration options
+ * The library doesn't export proper types, so we define what we use
+ */
+interface TerminalRendererOptions {
+  tableOptions?: {
+    chars?: Record<string, string>;
+    style?: {
+      head?: string[];
+      border?: string[];
+      'padding-left'?: number;
+      'padding-right'?: number;
+    };
+    wordWrap?: boolean;
+  };
+  code?: (code: string, lang?: string) => string;
+  codespan?: (text: string) => string;
+  heading?: (text: string, level: number) => string;
+  link?: (href: string, title: string | null, text: string) => string;
+  list?: (body: string, ordered: boolean) => string;
+  listitem?: (text: string) => string;
+  blockquote?: (quote: string) => string;
+  strong?: (text: string) => string;
+  em?: (text: string) => string;
+  hr?: () => string;
+}
+
+/**
+ * Constructor type for marked-terminal's TerminalRenderer
+ */
+type TerminalRendererConstructor = new (options: TerminalRendererOptions) => Renderer;
 
 // ============================================================================
 // CONFIGURATION
@@ -48,8 +80,7 @@ const ANSI = {
 
 // Configure marked with terminal renderer
 marked.setOptions({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TerminalRenderer has incompatible types with marked's Renderer
-  renderer: new (TerminalRenderer as any)({
+  renderer: new (TerminalRenderer as unknown as TerminalRendererConstructor)({
     // Table options passed to cli-table3
     tableOptions: {
       chars: TABLE_CHARS,

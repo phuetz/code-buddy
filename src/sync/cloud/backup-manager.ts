@@ -34,10 +34,7 @@ export interface BackupManagerConfig {
   appVersion?: string;
 }
 
-interface BackupArchive {
-  manifest: BackupManifest;
-  items: Map<string, Buffer>;
-}
+// BackupArchive interface reserved for future streaming backup implementation
 
 export class BackupManager extends EventEmitter {
   private storage: CloudStorage;
@@ -89,7 +86,7 @@ export class BackupManager extends EventEmitter {
    */
   async createBackup(description?: string): Promise<BackupManifest> {
     if (this.isBackingUp) {
-      throw new Error('Backup already in progress');
+      throw new Error('A backup is already in progress. Please wait for it to complete before starting a new backup.');
     }
 
     this.isBackingUp = true;
@@ -241,18 +238,18 @@ export class BackupManager extends EventEmitter {
     const backupKey = `${this.config.backupPath}/${backupId}/backup.dat`;
     const manifestKey = `${this.config.backupPath}/${backupId}/manifest.json`;
 
-    // Upload data
-    await this.storage.upload(backupKey, data, {
-      type: 'backup',
-      checksum: manifest.checksum,
-    });
-
-    // Upload manifest
-    await this.storage.upload(
-      manifestKey,
-      Buffer.from(JSON.stringify(manifest, null, 2)),
-      { type: 'manifest' }
-    );
+    // Upload data and manifest in parallel
+    await Promise.all([
+      this.storage.upload(backupKey, data, {
+        type: 'backup',
+        checksum: manifest.checksum,
+      }),
+      this.storage.upload(
+        manifestKey,
+        Buffer.from(JSON.stringify(manifest, null, 2)),
+        { type: 'manifest' }
+      ),
+    ]);
   }
 
   /**
@@ -302,8 +299,6 @@ export class BackupManager extends EventEmitter {
    * List available backups
    */
   async listBackups(): Promise<BackupListEntry[]> {
-    const entries: BackupListEntry[] = [];
-
     try {
       const result = await this.storage.list({ prefix: this.config.backupPath });
 
@@ -312,29 +307,34 @@ export class BackupManager extends EventEmitter {
         .filter((obj) => obj.key.endsWith('manifest.json'))
         .map((obj) => obj.key);
 
-      for (const key of manifestKeys) {
-        try {
-          const manifestData = await this.storage.download(key);
-          const manifest: BackupManifest = JSON.parse(manifestData.toString());
+      // Download and parse all manifests in parallel
+      const manifestResults = await Promise.all(
+        manifestKeys.map(async (key) => {
+          try {
+            const manifestData = await this.storage.download(key);
+            const manifest: BackupManifest = JSON.parse(manifestData.toString());
+            return {
+              id: manifest.id,
+              createdAt: new Date(manifest.createdAt),
+              size: manifest.compressedSize,
+              itemCount: manifest.items.length,
+            };
+          } catch {
+            // Skip invalid manifests
+            return null;
+          }
+        })
+      );
 
-          entries.push({
-            id: manifest.id,
-            createdAt: new Date(manifest.createdAt),
-            size: manifest.compressedSize,
-            itemCount: manifest.items.length,
-          });
-        } catch (error) {
-          // Skip invalid manifests
-        }
-      }
-
-      // Sort by creation date descending
+      // Filter out failed manifests and sort by creation date descending
+      const entries = manifestResults.filter((entry): entry is BackupListEntry => entry !== null);
       entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    } catch (error) {
-      // No backups found
-    }
 
-    return entries;
+      return entries;
+    } catch {
+      // No backups found
+      return [];
+    }
   }
 
   /**
@@ -361,7 +361,7 @@ export class BackupManager extends EventEmitter {
     const manifest = await this.getBackupManifest(backupId);
 
     if (!manifest) {
-      throw new Error(`Backup not found: ${backupId}`);
+      throw new Error(`Backup "${backupId}" not found. Use listBackups() to see available backups.`);
     }
 
     this.emit('restore_started', { backupId, manifest });
@@ -377,20 +377,18 @@ export class BackupManager extends EventEmitter {
       let backupData: Buffer;
 
       if (manifest.parts) {
-        // Download and combine split parts
-        const parts: Buffer[] = [];
-
-        for (let i = 0; i < manifest.parts; i++) {
+        // Download all parts in parallel for faster restore
+        const partPromises = Array.from({ length: manifest.parts }, (_, i) => {
           const partKey = `${this.config.backupPath}/${backupId}/part-${String(i).padStart(4, '0')}.dat`;
-          const partData = await this.storage.download(partKey);
-          parts.push(partData);
+          return this.storage.download(partKey);
+        });
+        const parts = await Promise.all(partPromises);
 
-          this.emit('restore_progress', {
-            type: 'restore_progress',
-            progress: Math.round(((i + 1) / manifest.parts) * 50),
-            phase: 'download',
-          });
-        }
+        this.emit('restore_progress', {
+          type: 'restore_progress',
+          progress: 50,
+          phase: 'download',
+        });
 
         backupData = Buffer.concat(parts);
       } else {
@@ -401,7 +399,7 @@ export class BackupManager extends EventEmitter {
       // Verify checksum
       const checksum = this.calculateChecksum(backupData);
       if (checksum !== manifest.checksum) {
-        throw new Error('Backup data checksum mismatch');
+        throw new Error('Backup data integrity check failed: checksum mismatch. The backup file may be corrupted or incomplete.');
       }
 
       // Decompress
@@ -435,7 +433,7 @@ export class BackupManager extends EventEmitter {
           // Verify item checksum
           const itemChecksum = this.calculateChecksum(itemData);
           if (itemChecksum !== item.checksum) {
-            throw new Error(`Item checksum mismatch: ${item.path}`);
+            throw new Error(`File integrity check failed for "${item.path}": checksum mismatch. The backup may be corrupted.`);
           }
 
           // Create directory
@@ -489,20 +487,25 @@ export class BackupManager extends EventEmitter {
         return false;
       }
 
-      // Delete all backup files
+      // Delete all backup files in parallel
       if (manifest.parts) {
-        for (let i = 0; i < manifest.parts; i++) {
+        const deletePromises = Array.from({ length: manifest.parts }, (_, i) => {
           const partKey = `${this.config.backupPath}/${backupId}/part-${String(i).padStart(4, '0')}.dat`;
-          await this.storage.delete(partKey);
-        }
+          return this.storage.delete(partKey);
+        });
+        // Also delete the manifest in the same batch
+        const manifestKey = `${this.config.backupPath}/${backupId}/manifest.json`;
+        deletePromises.push(this.storage.delete(manifestKey));
+        await Promise.all(deletePromises);
       } else {
+        // Delete backup data and manifest in parallel
         const backupKey = `${this.config.backupPath}/${backupId}/backup.dat`;
-        await this.storage.delete(backupKey);
+        const manifestKey = `${this.config.backupPath}/${backupId}/manifest.json`;
+        await Promise.all([
+          this.storage.delete(backupKey),
+          this.storage.delete(manifestKey),
+        ]);
       }
-
-      // Delete manifest
-      const manifestKey = `${this.config.backupPath}/${backupId}/manifest.json`;
-      await this.storage.delete(manifestKey);
 
       this.emit('backup_deleted', { backupId });
 
@@ -551,12 +554,19 @@ export class BackupManager extends EventEmitter {
 
       // Check backup data exists and checksum matches
       if (manifest.parts) {
-        for (let i = 0; i < manifest.parts; i++) {
-          const partKey = `${this.config.backupPath}/${backupId}/part-${String(i).padStart(4, '0')}.dat`;
-          const exists = await this.storage.exists(partKey);
+        // Check all parts existence in parallel
+        const partChecks = await Promise.allSettled(
+          Array.from({ length: manifest.parts }, (_, i) => {
+            const partKey = `${this.config.backupPath}/${backupId}/part-${String(i).padStart(4, '0')}.dat`;
+            return this.storage.exists(partKey).then(exists => ({ part: i, exists }));
+          })
+        );
 
-          if (!exists) {
-            errors.push(`Missing part: ${i}`);
+        for (const result of partChecks) {
+          if (result.status === 'rejected') {
+            errors.push(`Error checking part: ${result.reason}`);
+          } else if (!result.value.exists) {
+            errors.push(`Missing part: ${result.value.part}`);
           }
         }
       } else {
@@ -584,34 +594,34 @@ export class BackupManager extends EventEmitter {
     const manifest = await this.getBackupManifest(backupId);
 
     if (!manifest) {
-      throw new Error(`Backup not found: ${backupId}`);
+      throw new Error(`Backup "${backupId}" not found. Use listBackups() to see available backups.`);
     }
 
     // Download backup data
     let backupData: Buffer;
 
     if (manifest.parts) {
-      const parts: Buffer[] = [];
-
-      for (let i = 0; i < manifest.parts; i++) {
+      // Download all parts in parallel
+      const partPromises = Array.from({ length: manifest.parts }, (_, i) => {
         const partKey = `${this.config.backupPath}/${backupId}/part-${String(i).padStart(4, '0')}.dat`;
-        const partData = await this.storage.download(partKey);
-        parts.push(partData);
-      }
-
+        return this.storage.download(partKey);
+      });
+      const parts = await Promise.all(partPromises);
       backupData = Buffer.concat(parts);
     } else {
       const backupKey = `${this.config.backupPath}/${backupId}/backup.dat`;
       backupData = await this.storage.download(backupKey);
     }
 
-    // Write to local file
+    // Write to local files in parallel
     await mkdir(dirname(outputPath), { recursive: true });
-    await writeFile(outputPath, backupData);
-    await writeFile(
-      outputPath.replace(/\.dat$/, '.manifest.json'),
-      JSON.stringify(manifest, null, 2)
-    );
+    await Promise.all([
+      writeFile(outputPath, backupData),
+      writeFile(
+        outputPath.replace(/\.dat$/, '.manifest.json'),
+        JSON.stringify(manifest, null, 2)
+      ),
+    ]);
   }
 
   /**
@@ -629,7 +639,7 @@ export class BackupManager extends EventEmitter {
     // Verify checksum
     const checksum = this.calculateChecksum(backupData);
     if (checksum !== manifest.checksum) {
-      throw new Error('Backup data checksum mismatch');
+      throw new Error('Backup data integrity check failed: checksum mismatch. The backup file may be corrupted or incomplete.');
     }
 
     // Upload to cloud

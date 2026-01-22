@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { logger } from "./logger.js";
 
 export interface CustomCommand {
   name: string;
@@ -87,8 +88,7 @@ function loadCommandsFromDirectory(dir: string, source: 'project' | 'user'): Cus
           filePath
         });
       } catch (error) {
-        // Skip files that can't be read
-        console.error(`Failed to load command ${file}:`, error);
+        logger.error(`Failed to load command ${file}:`, error as Error);
       }
     }
   } catch (_error) {

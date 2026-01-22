@@ -227,31 +227,38 @@ export class SymbolSearch {
     const byType = new Map<SymbolType, CodeSymbol[]>();
     const byFile = new Map<string, CodeSymbol[]>();
 
-    for (const filePath of files) {
-      try {
+    // Parse files in parallel for better performance
+    const parseResults = await Promise.allSettled(
+      files.map(async filePath => {
         const result = await this.parser.parseFile(filePath);
-        allSymbols.push(...result.symbols);
+        return { filePath, result };
+      })
+    );
 
-        // Index by file
-        byFile.set(filePath, result.symbols);
+    // Process parse results (synchronous operations)
+    for (const outcome of parseResults) {
+      if (outcome.status === 'rejected') continue;
 
-        // Index by name and type
-        for (const symbol of result.symbols) {
-          // By name
-          const nameSymbols = byName.get(symbol.name) || [];
-          nameSymbols.push(symbol);
-          byName.set(symbol.name, nameSymbols);
+      const { filePath, result } = outcome.value;
+      allSymbols.push(...result.symbols);
 
-          // By type
-          const typeSymbols = byType.get(symbol.type) || [];
-          typeSymbols.push(symbol);
-          byType.set(symbol.type, typeSymbols);
-        }
+      // Index by file
+      byFile.set(filePath, result.symbols);
 
-        this.indexedPaths.add(filePath);
-      } catch (_error) {
-        // Skip files that can't be parsed
+      // Index by name and type
+      for (const symbol of result.symbols) {
+        // By name
+        const nameSymbols = byName.get(symbol.name) || [];
+        nameSymbols.push(symbol);
+        byName.set(symbol.name, nameSymbols);
+
+        // By type
+        const typeSymbols = byType.get(symbol.type) || [];
+        typeSymbols.push(symbol);
+        byType.set(symbol.type, typeSymbols);
       }
+
+      this.indexedPaths.add(filePath);
     }
 
     this.index = {

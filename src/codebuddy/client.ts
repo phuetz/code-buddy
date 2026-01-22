@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionChunk, ChatCompletionCreateParamsNonStreaming, ChatCompletionCreateParamsStreaming } from "openai/resources/chat";
 import { validateModel, getModelInfo } from "../utils/model-utils.js";
 import { logger } from "../utils/logger.js";
+import { retry, RetryStrategies, RetryPredicates } from "../utils/retry.js";
 
 export type CodeBuddyMessage = ChatCompletionMessageParam;
 
@@ -105,6 +106,24 @@ export class CodeBuddyClient {
   private probePromise: Promise<boolean> | null = null;
 
   constructor(apiKey: string, model?: string, baseURL?: string) {
+    // Validate API key
+    if (!apiKey || typeof apiKey !== 'string') {
+      throw new Error('API key is required and must be a non-empty string');
+    }
+    if (apiKey.trim().length === 0) {
+      throw new Error('API key cannot be empty or whitespace only');
+    }
+
+    // Validate baseURL if provided
+    if (baseURL !== undefined && baseURL !== null) {
+      if (typeof baseURL !== 'string') {
+        throw new Error('Base URL must be a string');
+      }
+      if (baseURL.trim().length > 0 && !baseURL.match(/^https?:\/\//i)) {
+        throw new Error('Base URL must start with http:// or https://');
+      }
+    }
+
     this.baseURL = baseURL || process.env.GROK_BASE_URL || "https://api.x.ai/v1";
     this.client = new OpenAI({
       apiKey,
@@ -114,6 +133,10 @@ export class CodeBuddyClient {
     const envMax = Number(process.env.CODEBUDDY_MAX_TOKENS);
     this.defaultMaxTokens = Number.isFinite(envMax) && envMax > 0 ? envMax : 1536;
     if (model) {
+      // Validate model type
+      if (typeof model !== 'string') {
+        throw new Error('Model name must be a string');
+      }
       // Validate model (non-strict to allow custom models)
       validateModel(model, false);
       this.currentModel = model;
@@ -295,6 +318,13 @@ export class CodeBuddyClient {
   }
 
   setModel(model: string): void {
+    // Validate model input
+    if (!model || typeof model !== 'string') {
+      throw new Error('Model name is required and must be a non-empty string');
+    }
+    if (model.trim().length === 0) {
+      throw new Error('Model name cannot be empty or whitespace only');
+    }
     // Validate model (non-strict to allow custom models)
     validateModel(model, false);
 
@@ -322,6 +352,27 @@ export class CodeBuddyClient {
     options?: string | ChatOptions,
     searchOptions?: SearchOptions
   ): Promise<CodeBuddyResponse> {
+    // Validate messages
+    if (!messages || !Array.isArray(messages)) {
+      throw new Error('Messages must be a non-empty array');
+    }
+    if (messages.length === 0) {
+      throw new Error('Messages array cannot be empty');
+    }
+    // Validate each message has required fields
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (!msg || typeof msg !== 'object') {
+        throw new Error(`Message at index ${i} must be an object`);
+      }
+      if (!msg.role || typeof msg.role !== 'string') {
+        throw new Error(`Message at index ${i} must have a valid 'role' field`);
+      }
+      if (!['system', 'user', 'assistant', 'tool'].includes(msg.role)) {
+        throw new Error(`Message at index ${i} has invalid role '${msg.role}'. Must be one of: system, user, assistant, tool`);
+      }
+    }
+
     try {
       // Support both old signature (model as string) and new signature (options object)
       const opts: ChatOptions = typeof options === "string"
@@ -346,9 +397,23 @@ export class CodeBuddyClient {
         requestPayload.search_parameters = searchOpts.search_parameters;
       }
 
-      // Cast to OpenAI params - our extended payload is compatible
-      const response = await this.client.chat.completions.create(
-        requestPayload as unknown as ChatCompletionCreateParamsNonStreaming
+      // Use retry with exponential backoff for API calls
+      const response = await retry(
+        async () => {
+          return await this.client.chat.completions.create(
+            requestPayload as unknown as ChatCompletionCreateParamsNonStreaming
+          );
+        },
+        {
+          ...RetryStrategies.llmApi,
+          isRetryable: RetryPredicates.llmApiError,
+          onRetry: (error, attempt, delay) => {
+            logger.warn(`API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
+              source: 'CodeBuddyClient',
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        }
       );
 
       return response as unknown as CodeBuddyResponse;
@@ -435,8 +500,23 @@ export class CodeBuddyClient {
         stream: true,
       };
 
-      const stream = await this.client.chat.completions.create(
-        streamingPayload as unknown as ChatCompletionCreateParamsStreaming
+      // Use retry with exponential backoff for stream initialization
+      const stream = await retry(
+        async () => {
+          return await this.client.chat.completions.create(
+            streamingPayload as unknown as ChatCompletionCreateParamsStreaming
+          );
+        },
+        {
+          ...RetryStrategies.llmApi,
+          isRetryable: RetryPredicates.llmApiError,
+          onRetry: (error, attempt, delay) => {
+            logger.warn(`Stream initialization failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
+              source: 'CodeBuddyClient',
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        }
       );
 
       for await (const chunk of stream) {

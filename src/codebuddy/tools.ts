@@ -225,19 +225,42 @@ export function convertPluginToolToCodeBuddyTool(name: string, tool: PluginToolD
   };
 }
 
+/** Marketplace tool definition type */
+interface MarketplaceToolDefinition {
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (params: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
+ * Convert marketplace tool definition to plugin tool definition
+ */
+function convertMarketplaceToolToPluginTool(tool: MarketplaceToolDefinition): PluginToolDefinition {
+  // Marketplace tools use a simpler parameters format
+  // Convert to JSON Schema format expected by PluginToolDefinition
+  const parameters = tool.parameters as { type?: string; properties?: Record<string, JsonSchemaProperty>; required?: string[] } | undefined;
+  return {
+    description: tool.description,
+    parameters: parameters?.type === 'object' ? {
+      type: 'object',
+      properties: (parameters.properties || {}) as Record<string, JsonSchemaProperty>,
+      required: parameters.required
+    } : undefined
+  };
+}
+
 /**
  * Collect all tools from the plugin marketplace
  */
 export function addPluginToolsToCodeBuddyTools(baseTools: CodeBuddyTool[]): CodeBuddyTool[] {
   const marketplace = getPluginMarketplace();
   const pluginTools = marketplace.getTools();
-  
+
   const convertedTools = pluginTools.map(name => {
-    // This is a bit hacky as we need the tool definition from the marketplace
-    // In a real implementation, marketplace would return the definitions
-    const toolDef = (marketplace as any).tools.get(name)?.tool;
+    const toolDef = marketplace.getToolDefinition(name);
     if (toolDef) {
-      return convertPluginToolToCodeBuddyTool(name, toolDef);
+      const pluginToolDef = convertMarketplaceToolToPluginTool(toolDef);
+      return convertPluginToolToCodeBuddyTool(name, pluginToolDef);
     }
     return null;
   }).filter((t): t is CodeBuddyTool => t !== null);

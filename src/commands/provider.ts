@@ -5,6 +5,7 @@
  */
 
 import { Command } from 'commander';
+import { logger } from "../utils/logger.js";
 import { getSettingsManager } from '../utils/settings-manager.js';
 
 interface ProviderInfo {
@@ -146,8 +147,8 @@ export function createProviderCommand(): Command {
       const key = providerKey.toLowerCase();
 
       if (!PROVIDERS[key]) {
-        console.error(`❌ Unknown provider: ${providerKey}`);
-        console.error(`   Available: ${Object.keys(PROVIDERS).join(', ')}`);
+        logger.error(`❌ Unknown provider: ${providerKey}`);
+        logger.error(`   Available: ${Object.keys(PROVIDERS).join(', ')}`);
         process.exit(1);
       }
 
@@ -178,7 +179,7 @@ export function createProviderCommand(): Command {
       const key = (providerKey || getCurrentProvider()).toLowerCase();
 
       if (!PROVIDERS[key]) {
-        console.error(`❌ Unknown provider: ${providerKey}`);
+        logger.error(`❌ Unknown provider: ${providerKey}`);
         process.exit(1);
       }
 
@@ -216,7 +217,7 @@ export function createProviderCommand(): Command {
       const key = (providerKey || getCurrentProvider()).toLowerCase();
 
       if (!PROVIDERS[key]) {
-        console.error(`❌ Unknown provider: ${providerKey}`);
+        logger.error(`❌ Unknown provider: ${providerKey}`);
         process.exit(1);
       }
 
@@ -225,7 +226,7 @@ export function createProviderCommand(): Command {
 
       const configured = getConfiguredProviders();
       if (!configured.includes(key)) {
-        console.error(`❌ ${info.envVar} not set`);
+        logger.error(`❌ ${info.envVar} not set`);
         process.exit(1);
       }
 
@@ -266,7 +267,7 @@ export function createProviderCommand(): Command {
           throw new Error('Empty response');
         }
       } catch (error) {
-        console.error(`❌ Connection failed: ${error instanceof Error ? error.message : error}`);
+        logger.error(`❌ Connection failed: ${error instanceof Error ? error.message : error}`);
         process.exit(1);
       }
     });

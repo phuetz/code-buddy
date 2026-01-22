@@ -39,6 +39,22 @@ export interface CacheConfig {
   cachePath: string;
   ngramSize: number;
   embeddingDim: number;
+  /** Enable adaptive similarity threshold based on context */
+  adaptiveThreshold: boolean;
+  /** Minimum similarity threshold (used with adaptive) */
+  minSimilarityThreshold: number;
+  /** Maximum similarity threshold (used with adaptive) */
+  maxSimilarityThreshold: number;
+  /** Enable locality-sensitive hashing for faster lookup */
+  enableLSH: boolean;
+  /** Number of LSH hash tables */
+  lshTables: number;
+  /** Number of LSH hash functions per table */
+  lshHashFunctions: number;
+  /** Enable query clustering for better cache organization */
+  enableClustering: boolean;
+  /** Number of clusters for query organization */
+  numClusters: number;
 }
 
 export interface CacheStats {
@@ -50,6 +66,16 @@ export interface CacheStats {
   exactHits: number;
   evictions: number;
   avgSimilarity: number;
+  /** Number of LSH lookups performed */
+  lshLookups: number;
+  /** Number of LSH candidates found */
+  lshCandidates: number;
+  /** Average lookup time in ms */
+  avgLookupTimeMs: number;
+  /** Memory estimation in bytes */
+  memoryEstimateBytes: number;
+  /** Number of clusters (if enabled) */
+  clusters: number;
 }
 
 export interface CacheLookupResult<T = unknown> {
@@ -71,6 +97,14 @@ const DEFAULT_CONFIG: CacheConfig = {
   cachePath: '.codebuddy/cache/semantic-cache.json',
   ngramSize: 3,
   embeddingDim: 128,
+  adaptiveThreshold: true,
+  minSimilarityThreshold: 0.75,
+  maxSimilarityThreshold: 0.95,
+  enableLSH: true,
+  lshTables: 5,
+  lshHashFunctions: 8,
+  enableClustering: false,
+  numClusters: 10,
 };
 
 // ============================================================================
@@ -89,15 +123,161 @@ export class SemanticCache<T = unknown> extends EventEmitter {
     exactHits: 0,
     evictions: 0,
     avgSimilarity: 0,
+    lshLookups: 0,
+    lshCandidates: 0,
+    avgLookupTimeMs: 0,
+    memoryEstimateBytes: 0,
+    clusters: 0,
   };
   private similarityScores: number[] = [];
+  private lookupTimes: number[] = [];
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private saveDebounceMs: number = 1000;
+
+  // LSH structures for fast approximate nearest neighbor search
+  private lshTables: Map<string, Set<string>>[] = [];
+  private lshHyperplanes: number[][][] = [];
+
+  // Query clusters for better organization
+  private clusters: Map<number, Set<string>> = new Map();
+  private clusterCentroids: number[][] = [];
 
   constructor(config: Partial<CacheConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
+
+    // Initialize LSH if enabled
+    if (this.config.enableLSH) {
+      this.initializeLSH();
+    }
+
     this.loadFromDisk();
+  }
+
+  /**
+   * Initialize LSH hash tables and hyperplanes
+   */
+  private initializeLSH(): void {
+    this.lshTables = [];
+    this.lshHyperplanes = [];
+
+    for (let t = 0; t < this.config.lshTables; t++) {
+      this.lshTables.push(new Map());
+      const tableHyperplanes: number[][] = [];
+
+      for (let h = 0; h < this.config.lshHashFunctions; h++) {
+        // Generate random hyperplane
+        const hyperplane: number[] = [];
+        for (let d = 0; d < this.config.embeddingDim; d++) {
+          hyperplane.push(Math.random() * 2 - 1);
+        }
+        // Normalize
+        const magnitude = Math.sqrt(hyperplane.reduce((sum, v) => sum + v * v, 0));
+        tableHyperplanes.push(hyperplane.map(v => v / magnitude));
+      }
+
+      this.lshHyperplanes.push(tableHyperplanes);
+    }
+  }
+
+  /**
+   * Compute LSH hash for an embedding
+   */
+  private computeLSHHash(embedding: number[], tableIndex: number): string {
+    const hyperplanes = this.lshHyperplanes[tableIndex];
+    let hash = '';
+
+    for (const hyperplane of hyperplanes) {
+      const dotProduct = embedding.reduce((sum, v, i) => sum + v * hyperplane[i], 0);
+      hash += dotProduct >= 0 ? '1' : '0';
+    }
+
+    return hash;
+  }
+
+  /**
+   * Add entry to LSH tables
+   */
+  private addToLSH(key: string, embedding: number[]): void {
+    if (!this.config.enableLSH) return;
+
+    for (let t = 0; t < this.lshTables.length; t++) {
+      const hash = this.computeLSHHash(embedding, t);
+      if (!this.lshTables[t].has(hash)) {
+        this.lshTables[t].set(hash, new Set());
+      }
+      this.lshTables[t].get(hash)!.add(key);
+    }
+  }
+
+  /**
+   * Remove entry from LSH tables
+   */
+  private removeFromLSH(key: string, embedding: number[]): void {
+    if (!this.config.enableLSH) return;
+
+    for (let t = 0; t < this.lshTables.length; t++) {
+      const hash = this.computeLSHHash(embedding, t);
+      const bucket = this.lshTables[t].get(hash);
+      if (bucket) {
+        bucket.delete(key);
+        if (bucket.size === 0) {
+          this.lshTables[t].delete(hash);
+        }
+      }
+    }
+  }
+
+  /**
+   * Find LSH candidates for a query embedding
+   */
+  private findLSHCandidates(embedding: number[]): Set<string> {
+    if (!this.config.enableLSH) {
+      return new Set(this.cache.keys());
+    }
+
+    this.stats.lshLookups++;
+    const candidates = new Set<string>();
+
+    for (let t = 0; t < this.lshTables.length; t++) {
+      const hash = this.computeLSHHash(embedding, t);
+      const bucket = this.lshTables[t].get(hash);
+      if (bucket) {
+        for (const key of bucket) {
+          candidates.add(key);
+        }
+      }
+    }
+
+    this.stats.lshCandidates += candidates.size;
+    return candidates;
+  }
+
+  /**
+   * Get adaptive similarity threshold based on query characteristics
+   */
+  private getAdaptiveThreshold(query: string): number {
+    if (!this.config.adaptiveThreshold) {
+      return this.config.similarityThreshold;
+    }
+
+    // Shorter queries need higher similarity (more specific)
+    // Longer queries can have lower similarity (more context)
+    const queryLength = query.length;
+    const normalizedLength = Math.min(queryLength / 500, 1); // Normalize to 0-1
+
+    // Interpolate between min and max threshold
+    const range = this.config.maxSimilarityThreshold - this.config.minSimilarityThreshold;
+    const threshold = this.config.maxSimilarityThreshold - (normalizedLength * range * 0.5);
+
+    // Also consider average similarity of recent hits
+    if (this.similarityScores.length > 10) {
+      const recentAvg = this.similarityScores.slice(-10).reduce((a, b) => a + b, 0) / 10;
+      // Adjust threshold based on recent hit quality
+      return Math.max(threshold * 0.95, Math.min(threshold, recentAvg - 0.05));
+    }
+
+    return threshold;
   }
 
   /**
@@ -137,6 +317,8 @@ export class SemanticCache<T = unknown> extends EventEmitter {
    * Look up a query in the cache
    */
   lookup(query: string): CacheLookupResult<T> {
+    const startTime = performance.now();
+
     // Try exact match first
     const exactKey = this.hashQuery(query);
     if (this.cache.has(exactKey)) {
@@ -145,24 +327,43 @@ export class SemanticCache<T = unknown> extends EventEmitter {
         this.stats.hits++;
         this.stats.exactHits++;
         this.updateHitRate();
+        this.recordLookupTime(startTime);
         return { hit: true, entry, similarity: 1.0, isExactMatch: true };
       }
       // Remove expired entry
-      this.cache.delete(exactKey);
+      this.removeEntry(exactKey);
     }
 
-    // Try semantic match
+    // Try semantic match using LSH for candidate selection
     const queryEmbedding = this.computeEmbedding(query);
+    const threshold = this.getAdaptiveThreshold(query);
     let bestMatch: CacheEntry<T> | null = null;
     let bestSimilarity = 0;
 
-    for (const entry of this.cache.values()) {
-      if (this.isExpired(entry)) continue;
+    // Get candidates from LSH or all entries if LSH disabled
+    const candidates = this.findLSHCandidates(queryEmbedding);
+
+    for (const key of candidates) {
+      const entry = this.cache.get(key);
+      if (!entry || this.isExpired(entry)) continue;
 
       const similarity = this.cosineSimilarity(queryEmbedding, entry.embedding);
-      if (similarity > bestSimilarity && similarity >= this.config.similarityThreshold) {
+      if (similarity > bestSimilarity && similarity >= threshold) {
         bestSimilarity = similarity;
         bestMatch = entry;
+      }
+    }
+
+    // If LSH didn't find good candidates, fall back to full scan for high-value queries
+    if (!bestMatch && this.config.enableLSH && candidates.size < this.cache.size * 0.1) {
+      for (const entry of this.cache.values()) {
+        if (this.isExpired(entry)) continue;
+
+        const similarity = this.cosineSimilarity(queryEmbedding, entry.embedding);
+        if (similarity > bestSimilarity && similarity >= threshold) {
+          bestSimilarity = similarity;
+          bestMatch = entry;
+        }
       }
     }
 
@@ -172,10 +373,35 @@ export class SemanticCache<T = unknown> extends EventEmitter {
       this.similarityScores.push(bestSimilarity);
       this.updateHitRate();
       this.updateAvgSimilarity();
+      this.recordLookupTime(startTime);
       return { hit: true, entry: bestMatch, similarity: bestSimilarity, isExactMatch: false };
     }
 
+    this.recordLookupTime(startTime);
     return { hit: false };
+  }
+
+  /**
+   * Record lookup time for metrics
+   */
+  private recordLookupTime(startTime: number): void {
+    const elapsed = performance.now() - startTime;
+    this.lookupTimes.push(elapsed);
+    if (this.lookupTimes.length > 1000) {
+      this.lookupTimes.shift();
+    }
+    this.stats.avgLookupTimeMs = this.lookupTimes.reduce((a, b) => a + b, 0) / this.lookupTimes.length;
+  }
+
+  /**
+   * Remove entry and clean up LSH
+   */
+  private removeEntry(key: string): void {
+    const entry = this.cache.get(key);
+    if (entry) {
+      this.removeFromLSH(key, entry.embedding);
+      this.cache.delete(key);
+    }
   }
 
   /**
@@ -188,11 +414,18 @@ export class SemanticCache<T = unknown> extends EventEmitter {
     }
 
     const key = this.hashQuery(query);
+    const embedding = this.computeEmbedding(query);
+
+    // Remove old entry if exists
+    if (this.cache.has(key)) {
+      this.removeEntry(key);
+    }
+
     const entry: CacheEntry<T> = {
       key,
       query,
       response,
-      embedding: this.computeEmbedding(query),
+      embedding,
       timestamp: Date.now(),
       expiresAt: Date.now() + this.config.ttlMs,
       hits: 0,
@@ -200,13 +433,33 @@ export class SemanticCache<T = unknown> extends EventEmitter {
     };
 
     this.cache.set(key, entry);
+
+    // Add to LSH index
+    this.addToLSH(key, embedding);
+
     this.stats.totalEntries = this.cache.size;
+    this.updateMemoryEstimate();
     this.emit('cache:set', { key, query });
 
     // Persist if enabled (debounced)
     if (this.config.persistToDisk) {
       this.scheduleSave();
     }
+  }
+
+  /**
+   * Update memory estimate
+   */
+  private updateMemoryEstimate(): void {
+    // Rough estimate: entry overhead + query string + embedding + response estimate
+    let estimate = 0;
+    for (const entry of this.cache.values()) {
+      estimate += 200; // Object overhead
+      estimate += entry.query.length * 2; // Query string (2 bytes per char)
+      estimate += entry.embedding.length * 8; // Embedding (float64)
+      estimate += JSON.stringify(entry.response).length * 2; // Response estimate
+    }
+    this.stats.memoryEstimateBytes = estimate;
   }
 
   /**
@@ -340,23 +593,27 @@ export class SemanticCache<T = unknown> extends EventEmitter {
   }
 
   /**
-   * Evict least recently used entry
+   * Evict least recently used entry (with frequency weighting)
    */
   private evictLRU(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
+    let lowestScore = Infinity;
+    let lowestKey: string | null = null;
 
     for (const [key, entry] of this.cache.entries()) {
-      if (entry.timestamp < oldestTime) {
-        oldestTime = entry.timestamp;
-        oldestKey = key;
+      // Score based on recency and frequency
+      const age = Date.now() - entry.timestamp;
+      const score = entry.hits + 1 / (age / 1000 + 1);
+
+      if (score < lowestScore) {
+        lowestScore = score;
+        lowestKey = key;
       }
     }
 
-    if (oldestKey) {
-      this.cache.delete(oldestKey);
+    if (lowestKey) {
+      this.removeEntry(lowestKey);
       this.stats.evictions++;
-      this.emit('cache:evict', { key: oldestKey });
+      this.emit('cache:evict', { key: lowestKey });
     }
   }
 

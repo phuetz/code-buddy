@@ -14,6 +14,8 @@ import type {
   ToolCall,
   ProviderFeature,
 } from './types.js';
+import { retry, RetryStrategies, RetryPredicates } from '../utils/retry.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Implementation of the Google Gemini provider.
@@ -49,7 +51,7 @@ export class GeminiProvider extends BaseProvider {
    */
   async complete(options: CompletionOptions): Promise<LLMResponse> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('Gemini provider not initialized. Call initialize() with a valid GOOGLE_API_KEY before making requests.');
     }
 
     const client = this.client as { apiKey: string; baseUrl: string; model: string };
@@ -57,15 +59,35 @@ export class GeminiProvider extends BaseProvider {
     const url = `${client.baseUrl}/models/${model}:generateContent?key=${client.apiKey}`;
 
     const body = this.formatRequest(options);
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
-    }
+    // Use retry with exponential backoff for API calls
+    const response = await retry(
+      async () => {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const error = new Error(`Gemini API request failed with status ${res.status}. ${res.status === 401 ? 'Check your GOOGLE_API_KEY.' : res.status === 403 ? 'API access forbidden - verify your API key permissions.' : res.status === 429 ? 'Rate limit exceeded, please try again later.' : res.statusText}`);
+          (error as Error & { status: number }).status = res.status;
+          throw error;
+        }
+
+        return res;
+      },
+      {
+        ...RetryStrategies.llmApi,
+        isRetryable: RetryPredicates.llmApiError,
+        onRetry: (error, attempt, delay) => {
+          logger.warn(`Gemini API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
+            source: 'GeminiProvider',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      }
+    );
 
     const data = await response.json() as {
       candidates: Array<{
@@ -128,7 +150,7 @@ export class GeminiProvider extends BaseProvider {
    */
   private async *streamInternal(options: CompletionOptions): AsyncIterable<StreamChunk> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('Gemini provider not initialized. Call initialize() with a valid GOOGLE_API_KEY before making requests.');
     }
 
     const client = this.client as { apiKey: string; baseUrl: string; model: string };
@@ -136,19 +158,39 @@ export class GeminiProvider extends BaseProvider {
     const url = `${client.baseUrl}/models/${model}:streamGenerateContent?key=${client.apiKey}&alt=sse`;
 
     const body = this.formatRequest(options);
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
-    }
+    // Use retry with exponential backoff for stream initialization
+    const response = await retry(
+      async () => {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const error = new Error(`Gemini API request failed with status ${res.status}. ${res.status === 401 ? 'Check your GOOGLE_API_KEY.' : res.status === 403 ? 'API access forbidden - verify your API key permissions.' : res.status === 429 ? 'Rate limit exceeded, please try again later.' : res.statusText}`);
+          (error as Error & { status: number }).status = res.status;
+          throw error;
+        }
+
+        return res;
+      },
+      {
+        ...RetryStrategies.llmApi,
+        isRetryable: RetryPredicates.llmApiError,
+        onRetry: (error, attempt, delay) => {
+          logger.warn(`Gemini stream initialization failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
+            source: 'GeminiProvider',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      }
+    );
 
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error('No response body');
+      throw new Error('Gemini API returned empty response body. The request may have been interrupted or the service is unavailable.');
     }
 
     const decoder = new TextDecoder();

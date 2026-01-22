@@ -19,6 +19,22 @@ export interface HistoryManagerConfig {
   historyFile: string;
   /** Prefixes to exclude from history (e.g., '/') */
   excludePrefixes: string[];
+  /** Whether to include slash commands in history */
+  includeSlashCommands: boolean;
+}
+
+/** State for reverse search (Ctrl+R) */
+export interface ReverseSearchState {
+  /** Whether reverse search mode is active */
+  active: boolean;
+  /** Current search query */
+  query: string;
+  /** Current match index (0 = most recent match) */
+  matchIndex: number;
+  /** Cached matching entries */
+  matches: HistoryEntry[];
+  /** Original input before entering search mode */
+  originalInput: string;
 }
 
 export interface HistoryEntry {
@@ -37,11 +53,19 @@ export class HistoryManager {
   private navigationIndex: number = -1;
   private temporaryInput: string = '';
   private currentPrefix: string = '';
+  private reverseSearchState: ReverseSearchState = {
+    active: false,
+    query: '',
+    matchIndex: 0,
+    matches: [],
+    originalInput: '',
+  };
 
   static readonly DEFAULT_CONFIG: HistoryManagerConfig = {
-    maxEntries: 100,
+    maxEntries: 1000, // Increased default limit
     historyFile: path.join(os.homedir(), '.codebuddy', 'history.json'),
-    excludePrefixes: ['/'], // Don't save slash commands by default
+    excludePrefixes: [], // Include all commands by default
+    includeSlashCommands: true, // Include slash commands
   };
 
   constructor(config: Partial<HistoryManagerConfig> = {}) {
@@ -361,6 +385,192 @@ export class HistoryManager {
       .map(([text, count]) => ({ text, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, limit);
+  }
+
+  // ============================================================================
+  // Reverse Search (Ctrl+R) Methods
+  // ============================================================================
+
+  /**
+   * Start reverse search mode
+   * @param currentInput - Current input to save for restoration
+   */
+  startReverseSearch(currentInput: string): void {
+    this.reverseSearchState = {
+      active: true,
+      query: '',
+      matchIndex: 0,
+      matches: [],
+      originalInput: currentInput,
+    };
+  }
+
+  /**
+   * Check if reverse search is active
+   */
+  isReverseSearchActive(): boolean {
+    return this.reverseSearchState.active;
+  }
+
+  /**
+   * Get the current reverse search state
+   */
+  getReverseSearchState(): ReverseSearchState {
+    return { ...this.reverseSearchState };
+  }
+
+  /**
+   * Update the reverse search query and find matches
+   * @param query - The search query
+   * @returns The best matching entry or null
+   */
+  updateReverseSearch(query: string): HistoryEntry | null {
+    this.reverseSearchState.query = query;
+
+    if (!query) {
+      this.reverseSearchState.matches = [];
+      this.reverseSearchState.matchIndex = 0;
+      return null;
+    }
+
+    // Find all matching entries (most recent first)
+    const lowerQuery = query.toLowerCase();
+    this.reverseSearchState.matches = this.history
+      .filter(entry => entry.text.toLowerCase().includes(lowerQuery))
+      .reverse();
+
+    this.reverseSearchState.matchIndex = 0;
+
+    return this.reverseSearchState.matches[0] || null;
+  }
+
+  /**
+   * Navigate to the next match in reverse search (older)
+   * @returns The next matching entry or null
+   */
+  reverseSearchNext(): HistoryEntry | null {
+    const { matches, matchIndex } = this.reverseSearchState;
+
+    if (matches.length === 0) return null;
+
+    const newIndex = Math.min(matchIndex + 1, matches.length - 1);
+    this.reverseSearchState.matchIndex = newIndex;
+
+    return matches[newIndex] || null;
+  }
+
+  /**
+   * Navigate to the previous match in reverse search (newer)
+   * @returns The previous matching entry or null
+   */
+  reverseSearchPrev(): HistoryEntry | null {
+    const { matches, matchIndex } = this.reverseSearchState;
+
+    if (matches.length === 0) return null;
+
+    const newIndex = Math.max(matchIndex - 1, 0);
+    this.reverseSearchState.matchIndex = newIndex;
+
+    return matches[newIndex] || null;
+  }
+
+  /**
+   * Accept the current reverse search match
+   * @returns The selected entry text or original input if no match
+   */
+  acceptReverseSearch(): string {
+    const { matches, matchIndex, originalInput } = this.reverseSearchState;
+    const result = matches[matchIndex]?.text || originalInput;
+    this.cancelReverseSearch();
+    return result;
+  }
+
+  /**
+   * Cancel reverse search and restore original input
+   * @returns The original input before search started
+   */
+  cancelReverseSearch(): string {
+    const originalInput = this.reverseSearchState.originalInput;
+    this.reverseSearchState = {
+      active: false,
+      query: '',
+      matchIndex: 0,
+      matches: [],
+      originalInput: '',
+    };
+    return originalInput;
+  }
+
+  /**
+   * Get formatted display for reverse search prompt
+   * @returns Formatted string showing search state
+   */
+  formatReverseSearchPrompt(): string {
+    const { query, matches, matchIndex } = this.reverseSearchState;
+    const matchCount = matches.length;
+    const currentMatch = matches[matchIndex];
+
+    if (!query) {
+      return '(reverse-i-search)`\': ';
+    }
+
+    if (matchCount === 0) {
+      return `(reverse-i-search)\`${query}': [no match]`;
+    }
+
+    const position = matchCount > 1 ? ` [${matchIndex + 1}/${matchCount}]` : '';
+    return `(reverse-i-search)\`${query}'${position}: ${currentMatch?.text || ''}`;
+  }
+
+  /**
+   * Format history list for display
+   * @param limit - Maximum entries to show
+   * @param showTimestamp - Whether to show timestamps
+   * @returns Formatted history string
+   */
+  formatHistoryList(limit: number = 20, showTimestamp: boolean = false): string {
+    const entries = this.getRecent(limit);
+
+    if (entries.length === 0) {
+      return 'No command history.';
+    }
+
+    const lines: string[] = ['Command History:', ''];
+
+    entries.forEach((entry, index) => {
+      const num = String(entries.length - index).padStart(4, ' ');
+      if (showTimestamp) {
+        const date = new Date(entry.timestamp);
+        const timeStr = date.toLocaleString();
+        lines.push(`${num}  ${timeStr}  ${entry.text}`);
+      } else {
+        lines.push(`${num}  ${entry.text}`);
+      }
+    });
+
+    lines.push('');
+    lines.push(`Total: ${this.count} entries (showing ${entries.length})`);
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Get the configured maximum entries
+   */
+  getMaxEntries(): number {
+    return this.config.maxEntries;
+  }
+
+  /**
+   * Set the maximum number of entries
+   * @param max - New maximum (will trim history if needed)
+   */
+  setMaxEntries(max: number): void {
+    this.config.maxEntries = max;
+    if (this.history.length > max) {
+      this.history = this.history.slice(-max);
+      this.saveHistory();
+    }
   }
 }
 

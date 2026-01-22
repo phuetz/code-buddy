@@ -8,7 +8,7 @@
 import { mkdir, readdir, stat, unlink, readFile, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypto';
-import { pipeline } from 'stream/promises';
+// Note: pipeline reserved for streaming operations (future use)
 import type {
   CloudConfig,
   CloudProvider,
@@ -275,7 +275,7 @@ export class S3Storage extends CloudStorage {
     }
 
     // Mock S3 upload - in production, use S3 SDK
-    console.log(`[S3] Uploading ${fullKey} (${processedData.length} bytes)`);
+    logger.debug(`[S3] Uploading ${fullKey}`, { bytes: processedData.length });
 
     // Simulate network latency
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -285,7 +285,7 @@ export class S3Storage extends CloudStorage {
     const fullKey = this.getFullKey(key);
 
     // Mock S3 download - in production, use S3 SDK
-    console.log(`[S3] Downloading ${fullKey}`);
+    logger.debug(`[S3] Downloading ${fullKey}`);
 
     // Simulate network latency
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -296,12 +296,12 @@ export class S3Storage extends CloudStorage {
 
   async delete(key: string): Promise<void> {
     const fullKey = this.getFullKey(key);
-    console.log(`[S3] Deleting ${fullKey}`);
+    logger.debug(`[S3] Deleting ${fullKey}`);
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   async list(options: ListOptions = {}): Promise<ListResult> {
-    console.log(`[S3] Listing objects with prefix: ${options.prefix}`);
+    logger.debug(`[S3] Listing objects`, { prefix: options.prefix });
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     return {
@@ -312,13 +312,13 @@ export class S3Storage extends CloudStorage {
 
   async exists(key: string): Promise<boolean> {
     const fullKey = this.getFullKey(key);
-    console.log(`[S3] Checking existence: ${fullKey}`);
+    logger.debug(`[S3] Checking existence: ${fullKey}`);
     return false;
   }
 
   async getMetadata(key: string): Promise<StorageObject | null> {
     const fullKey = this.getFullKey(key);
-    console.log(`[S3] Getting metadata: ${fullKey}`);
+    logger.debug(`[S3] Getting metadata: ${fullKey}`);
     return null;
   }
 }

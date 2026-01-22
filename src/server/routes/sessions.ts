@@ -58,6 +58,25 @@ router.get(
     const store = await getSessionStore();
     const { limit = 50, offset = 0, search } = req.query;
 
+    // Validate pagination parameters
+    const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
+
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 1000) {
+      throw ApiServerError.badRequest('Limit must be an integer between 1 and 1000');
+    }
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+      throw ApiServerError.badRequest('Offset must be a non-negative integer');
+    }
+
+    // Validate search parameter if provided
+    if (search !== undefined && search !== null && typeof search !== 'string') {
+      throw ApiServerError.badRequest('Search must be a string');
+    }
+    if (typeof search === 'string' && search.length > 500) {
+      throw ApiServerError.badRequest('Search query must not exceed 500 characters');
+    }
+
     const allSessions = await store.listSessions();
     let sessions = allSessions;
 
@@ -74,8 +93,8 @@ router.get(
     // Apply pagination
     const total = sessions.length;
     const paginatedSessions = sessions.slice(
-      Number(offset),
-      Number(offset) + Number(limit)
+      parsedOffset,
+      parsedOffset + parsedLimit
     );
 
     const sessionInfos: SessionInfo[] = paginatedSessions.map((s: SessionData) => ({
@@ -92,8 +111,8 @@ router.get(
     const response: SessionListResponse = {
       sessions: sessionInfos,
       total,
-      limit: Number(limit),
-      offset: Number(offset),
+      limit: parsedLimit,
+      offset: parsedOffset,
     };
 
     res.json(response);
@@ -141,6 +160,34 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const store = await getSessionStore();
     const { name, description, model, metadata } = req.body;
+
+    // Validate optional fields
+    if (name !== undefined && name !== null) {
+      if (typeof name !== 'string') {
+        throw ApiServerError.badRequest('Session name must be a string');
+      }
+      if (name.length > 200) {
+        throw ApiServerError.badRequest('Session name must not exceed 200 characters');
+      }
+    }
+    if (description !== undefined && description !== null) {
+      if (typeof description !== 'string') {
+        throw ApiServerError.badRequest('Session description must be a string');
+      }
+      if (description.length > 2000) {
+        throw ApiServerError.badRequest('Session description must not exceed 2000 characters');
+      }
+    }
+    if (model !== undefined && model !== null) {
+      if (typeof model !== 'string' || model.trim().length === 0) {
+        throw ApiServerError.badRequest('Model must be a non-empty string if provided');
+      }
+    }
+    if (metadata !== undefined && metadata !== null) {
+      if (typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw ApiServerError.badRequest('Metadata must be an object if provided');
+      }
+    }
 
     const session = await store.createSession({
       name: name || `Session ${Date.now()}`,

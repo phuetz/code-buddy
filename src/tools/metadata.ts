@@ -70,6 +70,24 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Git version control operations'
   },
 
+  // Docker operations
+  {
+    name: 'docker',
+    category: 'system',
+    keywords: ['docker', 'container', 'image', 'build', 'run', 'stop', 'logs', 'exec', 'compose', 'pull', 'push', 'prune', 'volume', 'network', 'dockerfile'],
+    priority: 7,
+    description: 'Docker container management operations'
+  },
+
+  // Kubernetes operations
+  {
+    name: 'kubernetes',
+    category: 'system',
+    keywords: ['kubernetes', 'k8s', 'kubectl', 'pod', 'deployment', 'service', 'namespace', 'cluster', 'node', 'scale', 'rollout', 'configmap', 'secret', 'ingress', 'helm'],
+    priority: 7,
+    description: 'Kubernetes cluster management operations'
+  },
+
   // Web operations
   {
     name: 'web_search',
@@ -216,7 +234,7 @@ export const CATEGORY_KEYWORDS: Record<ToolCategory, string[]> = {
   file_read: ['read', 'view', 'show', 'display', 'content', 'open', 'look', 'see', 'check', 'what is in', 'contents of'],
   file_write: ['create', 'edit', 'modify', 'change', 'update', 'write', 'add', 'fix', 'refactor', 'replace', 'delete', 'remove'],
   file_search: ['search', 'find', 'locate', 'where', 'grep', 'look for', 'which file', 'contains'],
-  system: ['run', 'execute', 'install', 'build', 'test', 'compile', 'npm', 'yarn', 'pip', 'command', 'terminal'],
+  system: ['run', 'execute', 'install', 'build', 'test', 'compile', 'npm', 'yarn', 'pip', 'command', 'terminal', 'docker', 'container', 'kubernetes', 'k8s', 'kubectl', 'pod', 'deployment', 'compose'],
   git: ['git', 'commit', 'push', 'pull', 'branch', 'merge', 'diff', 'status', 'version control'],
   web: ['search online', 'google', 'web', 'internet', 'fetch url', 'website', 'documentation', 'latest', 'news', 'browser', 'automate', 'click', 'fill form', 'screenshot', 'scrape', 'headless', 'ui test'],
   planning: ['plan', 'todo', 'task', 'organize', 'steps', 'breakdown'],

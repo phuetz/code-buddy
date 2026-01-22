@@ -12,6 +12,7 @@
  */
 
 import * as fs from "fs";
+import * as fsPromises from "fs/promises";
 import * as path from "path";
 
 /**
@@ -195,7 +196,7 @@ export class CodebaseExplorer {
     }
 
     try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
       let fileCount = 0;
       let directoryCount = 0;
       let totalSize = 0;
@@ -250,7 +251,7 @@ export class CodebaseExplorer {
     relativePath: string
   ): Promise<FileInfo | null> {
     try {
-      const stats = fs.statSync(fullPath);
+      const stats = await fsPromises.stat(fullPath);
       const ext = path.extname(fullPath).toLowerCase();
       const name = path.basename(fullPath);
 
@@ -260,7 +261,7 @@ export class CodebaseExplorer {
       let lines = 0;
       if (this.options.countLines && this.isTextFile(ext)) {
         try {
-          const content = fs.readFileSync(fullPath, "utf-8");
+          const content = await fsPromises.readFile(fullPath, "utf-8");
           lines = content.split("\n").length;
         } catch {
           // Binary file or encoding issue
@@ -410,6 +411,18 @@ export class CodebaseExplorer {
   }
 
   /**
+   * Helper to check if a file exists asynchronously
+   */
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fsPromises.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Detect project type and information
    */
   private async detectProject(): Promise<ProjectInfo> {
@@ -424,9 +437,10 @@ export class CodebaseExplorer {
 
     // Check for Node.js project
     const packageJsonPath = path.join(this.rootPath, "package.json");
-    if (fs.existsSync(packageJsonPath)) {
+    if (await this.fileExists(packageJsonPath)) {
       try {
-        const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+        const content = await fsPromises.readFile(packageJsonPath, "utf-8");
+        const pkg = JSON.parse(content);
         info.type = "nodejs";
         info.name = pkg.name || info.name;
         info.version = pkg.version;
@@ -443,18 +457,19 @@ export class CodebaseExplorer {
     }
 
     // Check for Python project
-    if (fs.existsSync(path.join(this.rootPath, "setup.py")) ||
-        fs.existsSync(path.join(this.rootPath, "pyproject.toml"))) {
+    if (await this.fileExists(path.join(this.rootPath, "setup.py")) ||
+        await this.fileExists(path.join(this.rootPath, "pyproject.toml"))) {
       info.type = "python";
       info.configFiles.push("setup.py", "pyproject.toml");
     }
 
     // Check for Go project
-    if (fs.existsSync(path.join(this.rootPath, "go.mod"))) {
+    const goModPath = path.join(this.rootPath, "go.mod");
+    if (await this.fileExists(goModPath)) {
       info.type = "go";
       info.configFiles.push("go.mod");
       try {
-        const goMod = fs.readFileSync(path.join(this.rootPath, "go.mod"), "utf-8");
+        const goMod = await fsPromises.readFile(goModPath, "utf-8");
         const moduleMatch = goMod.match(/module\s+(.+)/);
         if (moduleMatch) {
           info.name = moduleMatch[1].trim();
@@ -465,14 +480,14 @@ export class CodebaseExplorer {
     }
 
     // Check for Rust project
-    if (fs.existsSync(path.join(this.rootPath, "Cargo.toml"))) {
+    if (await this.fileExists(path.join(this.rootPath, "Cargo.toml"))) {
       info.type = "rust";
       info.configFiles.push("Cargo.toml");
     }
 
     // Check for Java project
-    if (fs.existsSync(path.join(this.rootPath, "pom.xml")) ||
-        fs.existsSync(path.join(this.rootPath, "build.gradle"))) {
+    if (await this.fileExists(path.join(this.rootPath, "pom.xml")) ||
+        await this.fileExists(path.join(this.rootPath, "build.gradle"))) {
       info.type = "java";
       info.configFiles.push("pom.xml", "build.gradle");
     }
@@ -645,22 +660,22 @@ export class CodebaseExplorer {
   /**
    * Generate a tree view of the codebase
    */
-  generateTree(maxDepth = 3): string {
+  async generateTree(maxDepth = 3): Promise<string> {
     const lines: string[] = [];
     lines.push(path.basename(this.rootPath));
 
-    const addEntry = (
+    const addEntry = async (
       dirPath: string,
       prefix: string,
       depth: number
-    ): void => {
+    ): Promise<void> => {
       if (depth > maxDepth) {
         return;
       }
 
       try {
         const fullPath = path.join(this.rootPath, dirPath);
-        const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+        const entries = await fsPromises.readdir(fullPath, { withFileTypes: true });
 
         // Sort: directories first, then files
         const sorted = entries.sort((a, b) => {
@@ -684,7 +699,7 @@ export class CodebaseExplorer {
 
           if (entry.isDirectory()) {
             lines.push(`${prefix}${connector}${entry.name}/`);
-            addEntry(
+            await addEntry(
               path.join(dirPath, entry.name),
               prefix + childPrefix,
               depth + 1
@@ -698,7 +713,7 @@ export class CodebaseExplorer {
       }
     };
 
-    addEntry("", "", 0);
+    await addEntry("", "", 0);
     return lines.join("\n");
   }
 
@@ -826,7 +841,7 @@ export async function exploreCodebase(
   return {
     stats,
     project: explorer.getProjectInfo(),
-    tree: explorer.generateTree(),
+    tree: await explorer.generateTree(),
     report: explorer.generateReport(),
   };
 }

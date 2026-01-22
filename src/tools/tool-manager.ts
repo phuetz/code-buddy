@@ -3,10 +3,19 @@
  *
  * Centralized tool management with permissions and configuration (mistral-vibe style).
  * Handles tool discovery, lazy instantiation, and permission checks.
+ *
+ * Uses TypedEventEmitterAdapter for type-safe events with backward compatibility.
  */
 
 import { getConfigManager, ToolConfig, ToolPermission } from '../config/toml-config.js';
-import { EventEmitter } from 'events';
+import {
+  TypedEventEmitterAdapter,
+  ToolEvents,
+  ToolRegisteredEvent,
+  ToolInstantiatedEvent,
+  ToolEvent,
+  BaseEvent,
+} from '../events/index.js';
 
 // ============================================================================
 // Types
@@ -61,19 +70,36 @@ export interface PermissionCheckResult {
 }
 
 // ============================================================================
+// Tool Manager Events (Extended for local use)
+// ============================================================================
+
+/**
+ * Extended tool events including execution events
+ */
+interface ToolManagerEvents extends ToolEvents {
+  'tool:executed': ToolEvent;
+}
+
+// ============================================================================
 // Tool Manager
 // ============================================================================
 
 /**
- * Centralized tool manager
+ * Centralized tool manager with type-safe events.
+ *
+ * Emits the following events:
+ * - 'tool:registered' - When a tool is registered
+ * - 'tool:instantiated' - When a tool instance is created (lazy)
+ * - 'tool:executed' - When a tool is successfully executed
+ * - 'tool:error' - When a tool execution fails
  */
-export class ToolManager extends EventEmitter {
+export class ToolManager extends TypedEventEmitterAdapter<ToolManagerEvents> {
   private registrations: Map<string, ToolRegistration> = new Map();
   private instances: Map<string, Tool> = new Map();
   private permissionCache: Map<string, ToolPermission> = new Map();
 
   constructor() {
-    super();
+    super({ maxHistorySize: 100 });
   }
 
   /**
@@ -81,7 +107,10 @@ export class ToolManager extends EventEmitter {
    */
   register(registration: ToolRegistration): void {
     this.registrations.set(registration.name, registration);
-    this.emit('tool:registered', registration.name);
+    this.emitTyped('tool:registered', {
+      toolName: registration.name,
+      description: registration.description,
+    });
   }
 
   /**
@@ -111,7 +140,9 @@ export class ToolManager extends EventEmitter {
     // Instantiate and cache
     const instance = registration.factory();
     this.instances.set(name, instance);
-    this.emit('tool:instantiated', name);
+    this.emitTyped('tool:instantiated', {
+      toolName: name,
+    });
 
     return instance;
   }
@@ -311,18 +342,25 @@ export class ToolManager extends EventEmitter {
       ]);
 
       const duration = Date.now() - startTime;
-      this.emit('tool:executed', {
-        name: toolName,
-        success: result.success,
+      this.emitTyped('tool:executed', {
+        toolName,
+        result: {
+          success: result.success,
+          output: result.output,
+          error: result.error,
+        },
         duration,
       });
 
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.emit('tool:error', {
-        name: toolName,
-        error: error instanceof Error ? error.message : String(error),
+      this.emitTyped('tool:error', {
+        toolName,
+        result: {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
         duration,
       });
 

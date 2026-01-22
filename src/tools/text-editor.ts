@@ -9,7 +9,21 @@ import {
   suggestWhitespaceFixes,
 } from "../utils/fuzzy-match.js";
 import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
+import { generateDiff as sharedGenerateDiff } from "../utils/diff-generator.js";
 
+/**
+ * Text Editor Tool
+ *
+ * Provides safe file viewing and editing operations with:
+ * - Path validation and resolution via VFS router
+ * - User confirmation for write operations
+ * - Fuzzy matching for string replacements (90% similarity threshold)
+ * - Edit history with undo capability
+ * - Unified diff output for all modifications
+ *
+ * All write operations (create, strReplace, insert, replaceLines) require
+ * user confirmation unless session-level file operation approval is granted.
+ */
 export class TextEditorTool implements Disposable {
   private editHistory: EditorCommand[] = [];
   private confirmationService = ConfirmationService.getInstance();
@@ -34,6 +48,20 @@ export class TextEditorTool implements Disposable {
     this.baseDirectory = path.resolve(dir);
   }
 
+  /**
+   * View file contents or directory listing
+   *
+   * @param filePath - Absolute or relative path to file/directory
+   * @param viewRange - Optional [startLine, endLine] tuple for partial view (1-indexed)
+   * @returns File contents with line numbers, or directory listing, or error
+   *
+   * @example
+   * // View entire file (first 10 lines shown, rest summarized)
+   * await editor.view('src/index.ts');
+   *
+   * // View specific line range
+   * await editor.view('src/index.ts', [10, 25]);
+   */
   async view(
     filePath: string,
     viewRange?: [number, number]
@@ -98,6 +126,25 @@ export class TextEditorTool implements Disposable {
     }
   }
 
+  /**
+   * Replace text in a file using exact or fuzzy matching
+   *
+   * Uses a 90% similarity threshold for fuzzy matching when exact match fails,
+   * allowing tolerance for minor whitespace differences.
+   *
+   * @param filePath - Path to the file to edit
+   * @param oldStr - Text to find and replace
+   * @param newStr - Replacement text
+   * @param replaceAll - If true, replaces all occurrences; otherwise only first
+   * @returns Unified diff showing the changes, or error with suggestions
+   *
+   * @example
+   * // Replace single occurrence
+   * await editor.strReplace('file.ts', 'oldText', 'newText');
+   *
+   * // Replace all occurrences
+   * await editor.strReplace('file.ts', 'oldText', 'newText', true);
+   */
   async strReplace(
     filePath: string,
     oldStr: string,
@@ -209,6 +256,16 @@ export class TextEditorTool implements Disposable {
     }
   }
 
+  /**
+   * Create a new file with the specified content
+   *
+   * Will fail if the file already exists (use strReplace to modify existing files).
+   * Creates parent directories if they don't exist.
+   *
+   * @param filePath - Path where the new file should be created
+   * @param content - Content to write to the file
+   * @returns Unified diff showing the file creation, or error
+   */
   async create(filePath: string, content: string): Promise<ToolResult> {
     try {
       const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
@@ -288,6 +345,15 @@ export class TextEditorTool implements Disposable {
     }
   }
 
+  /**
+   * Replace a range of lines in a file
+   *
+   * @param filePath - Path to the file to edit
+   * @param startLine - First line to replace (1-indexed, inclusive)
+   * @param endLine - Last line to replace (1-indexed, inclusive)
+   * @param newContent - Content to insert (can be multiple lines)
+   * @returns Unified diff showing the changes, or error
+   */
   async replaceLines(
     filePath: string,
     startLine: number,
@@ -380,6 +446,14 @@ export class TextEditorTool implements Disposable {
     }
   }
 
+  /**
+   * Insert content at a specific line in a file
+   *
+   * @param filePath - Path to the file to edit
+   * @param insertLine - Line number where content will be inserted (1-indexed)
+   * @param content - Content to insert (can be multiple lines)
+   * @returns Success message or error
+   */
   async insert(
     filePath: string,
     insertLine: number,
@@ -460,6 +534,14 @@ export class TextEditorTool implements Disposable {
     }
   }
 
+  /**
+   * Undo the last edit operation
+   *
+   * Supports undoing: str_replace, create, and insert operations.
+   * Note: Undo is best-effort and may fail if the file was modified externally.
+   *
+   * @returns Success message or error if no edits to undo
+   */
   async undoEdit(): Promise<ToolResult> {
     if (this.editHistory.length === 0) {
       return {
@@ -513,185 +595,16 @@ export class TextEditorTool implements Disposable {
   // have been replaced by the improved fuzzy-match.ts utility which uses
   // LCS-based similarity matching like mistral-vibe's difflib.SequenceMatcher
 
+  /**
+   * Generate unified diff between old and new content
+   * Uses shared diff-generator utility for consistent diff output across tools
+   */
   private generateDiff(
     oldLines: string[],
     newLines: string[],
     filePath: string
   ): string {
-    const CONTEXT_LINES = 3;
-    
-    const changes: Array<{
-      oldStart: number;
-      oldEnd: number;
-      newStart: number;
-      newEnd: number;
-    }> = [];
-    
-    let i = 0, j = 0;
-    
-    while (i < oldLines.length || j < newLines.length) {
-      while (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
-        i++;
-        j++;
-      }
-      
-      if (i < oldLines.length || j < newLines.length) {
-        const changeStart = { old: i, new: j };
-        
-        let oldEnd = i;
-        let newEnd = j;
-        
-        while (oldEnd < oldLines.length || newEnd < newLines.length) {
-          let matchFound = false;
-          let matchLength = 0;
-          
-          for (let k = 0; k < Math.min(2, oldLines.length - oldEnd, newLines.length - newEnd); k++) {
-            if (oldEnd + k < oldLines.length && 
-                newEnd + k < newLines.length && 
-                oldLines[oldEnd + k] === newLines[newEnd + k]) {
-              matchLength++;
-            } else {
-              break;
-            }
-          }
-          
-          if (matchLength >= 2 || (oldEnd >= oldLines.length && newEnd >= newLines.length)) {
-            matchFound = true;
-          }
-          
-          if (matchFound) {
-            break;
-          }
-          
-          if (oldEnd < oldLines.length) oldEnd++;
-          if (newEnd < newLines.length) newEnd++;
-        }
-        
-        changes.push({
-          oldStart: changeStart.old,
-          oldEnd: oldEnd,
-          newStart: changeStart.new,
-          newEnd: newEnd
-        });
-        
-        i = oldEnd;
-        j = newEnd;
-      }
-    }
-    
-    const hunks: Array<{
-      oldStart: number;
-      oldCount: number;
-      newStart: number;
-      newCount: number;
-      lines: Array<{ type: '+' | '-' | ' '; content: string }>;
-    }> = [];
-    
-    let accumulatedOffset = 0;
-    
-    for (let changeIdx = 0; changeIdx < changes.length; changeIdx++) {
-      const change = changes[changeIdx];
-      
-      let contextStart = Math.max(0, change.oldStart - CONTEXT_LINES);
-      let contextEnd = Math.min(oldLines.length, change.oldEnd + CONTEXT_LINES);
-      
-      if (hunks.length > 0) {
-        const lastHunk = hunks[hunks.length - 1];
-        const lastHunkEnd = lastHunk.oldStart + lastHunk.oldCount;
-        
-        if (lastHunkEnd >= contextStart) {
-          const oldHunkEnd = lastHunk.oldStart + lastHunk.oldCount;
-          const newContextEnd = Math.min(oldLines.length, change.oldEnd + CONTEXT_LINES);
-          
-          for (let idx = oldHunkEnd; idx < change.oldStart; idx++) {
-            lastHunk.lines.push({ type: ' ', content: oldLines[idx] });
-          }
-          
-          for (let idx = change.oldStart; idx < change.oldEnd; idx++) {
-            lastHunk.lines.push({ type: '-', content: oldLines[idx] });
-          }
-          for (let idx = change.newStart; idx < change.newEnd; idx++) {
-            lastHunk.lines.push({ type: '+', content: newLines[idx] });
-          }
-          
-          for (let idx = change.oldEnd; idx < newContextEnd && idx < oldLines.length; idx++) {
-            lastHunk.lines.push({ type: ' ', content: oldLines[idx] });
-          }
-          
-          lastHunk.oldCount = newContextEnd - lastHunk.oldStart;
-          lastHunk.newCount = lastHunk.oldCount + (change.newEnd - change.newStart) - (change.oldEnd - change.oldStart);
-          
-          continue;
-        }
-      }
-      
-      const hunk: typeof hunks[0] = {
-        oldStart: contextStart + 1,
-        oldCount: contextEnd - contextStart,
-        newStart: contextStart + 1 + accumulatedOffset,
-        newCount: contextEnd - contextStart + (change.newEnd - change.newStart) - (change.oldEnd - change.oldStart),
-        lines: []
-      };
-      
-      for (let idx = contextStart; idx < change.oldStart; idx++) {
-        hunk.lines.push({ type: ' ', content: oldLines[idx] });
-      }
-      
-      for (let idx = change.oldStart; idx < change.oldEnd; idx++) {
-        hunk.lines.push({ type: '-', content: oldLines[idx] });
-      }
-      
-      for (let idx = change.newStart; idx < change.newEnd; idx++) {
-        hunk.lines.push({ type: '+', content: newLines[idx] });
-      }
-      
-      for (let idx = change.oldEnd; idx < contextEnd && idx < oldLines.length; idx++) {
-        hunk.lines.push({ type: ' ', content: oldLines[idx] });
-      }
-      
-      hunks.push(hunk);
-      
-      accumulatedOffset += (change.newEnd - change.newStart) - (change.oldEnd - change.oldStart);
-    }
-    
-    let addedLines = 0;
-    let removedLines = 0;
-    
-    for (const hunk of hunks) {
-      for (const line of hunk.lines) {
-        if (line.type === '+') addedLines++;
-        if (line.type === '-') removedLines++;
-      }
-    }
-    
-    let summary = `Updated ${filePath}`;
-    if (addedLines > 0 && removedLines > 0) {
-      summary += ` with ${addedLines} addition${
-        addedLines !== 1 ? "s" : ""
-      } and ${removedLines} removal${removedLines !== 1 ? "s" : ""}`;
-    } else if (addedLines > 0) {
-      summary += ` with ${addedLines} addition${addedLines !== 1 ? "s" : ""}`;
-    } else if (removedLines > 0) {
-      summary += ` with ${removedLines} removal${
-        removedLines !== 1 ? "s" : ""
-      }`;
-    } else if (changes.length === 0) {
-      return `No changes in ${filePath}`;
-    }
-    
-    let diff = summary + "\n";
-    diff += `--- a/${filePath}\n`;
-    diff += `+++ b/${filePath}\n`;
-    
-    for (const hunk of hunks) {
-      diff += `@@ -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} @@\n`;
-      
-      for (const line of hunk.lines) {
-        diff += `${line.type}${line.content}\n`;
-      }
-    }
-    
-    return diff.trim();
+    return sharedGenerateDiff(oldLines, newLines, filePath).diff;
   }
 
   getEditHistory(): EditorCommand[] {

@@ -274,15 +274,20 @@ export class EnhancedMemory extends EventEmitter {
 
     const files = await fs.readdir(projectsDir);
 
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        try {
-          const project = await fs.readJSON(path.join(projectsDir, file));
-          this.projects.set(project.projectId, project);
-        } catch {
-          // Skip invalid files
-        }
+    // Load project files in parallel for better performance
+    const jsonFiles = files.filter(file => file.endsWith('.json'));
+    const loadResults = await Promise.allSettled(
+      jsonFiles.map(async file => {
+        const project = await fs.readJSON(path.join(projectsDir, file));
+        return project;
+      })
+    );
+
+    for (const result of loadResults) {
+      if (result.status === 'fulfilled') {
+        this.projects.set(result.value.projectId, result.value);
       }
+      // Skip rejected promises (invalid files)
     }
   }
 
@@ -320,28 +325,34 @@ export class EnhancedMemory extends EventEmitter {
    * Save all data
    */
   private async saveAll(): Promise<void> {
-    // Save memory index
-    await fs.writeJSON(
-      path.join(this.dataDir, 'memory-index.json'),
-      Array.from(this.memories.values()),
-      { spaces: 2 }
-    );
-
-    // Save user profile
-    if (this.userProfile) {
-      await fs.writeJSON(
-        path.join(this.dataDir, 'user-profile.json'),
-        this.userProfile,
+    // Save all data files in parallel for better performance
+    const saveOperations: Promise<void>[] = [
+      // Save memory index
+      fs.writeJSON(
+        path.join(this.dataDir, 'memory-index.json'),
+        Array.from(this.memories.values()),
         { spaces: 2 }
+      ),
+      // Save summaries
+      fs.writeJSON(
+        path.join(this.dataDir, 'summaries.json'),
+        this.summaries,
+        { spaces: 2 }
+      ),
+    ];
+
+    // Save user profile if exists
+    if (this.userProfile) {
+      saveOperations.push(
+        fs.writeJSON(
+          path.join(this.dataDir, 'user-profile.json'),
+          this.userProfile,
+          { spaces: 2 }
+        )
       );
     }
 
-    // Save summaries
-    await fs.writeJSON(
-      path.join(this.dataDir, 'summaries.json'),
-      this.summaries,
-      { spaces: 2 }
-    );
+    await Promise.all(saveOperations);
   }
 
   /**

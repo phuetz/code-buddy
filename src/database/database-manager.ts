@@ -9,9 +9,9 @@ import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { EventEmitter } from 'events';
 import { SCHEMA_VERSION, MIGRATIONS } from './schema.js';
 import { logger } from '../utils/logger.js';
+import { TypedEventEmitter, DatabaseEvents } from '../events/index.js';
 
 // ============================================================================
 // Types
@@ -49,7 +49,14 @@ const DEFAULT_CONFIG: DatabaseConfig = {
 // Database Manager
 // ============================================================================
 
-export class DatabaseManager extends EventEmitter {
+/**
+ * Database Manager
+ *
+ * Uses TypedEventEmitter for type-safe event handling.
+ * Emits events: db:initialized, db:error, db:migration, db:vacuum,
+ * db:backup, db:closed, db:cleared
+ */
+export class DatabaseManager extends TypedEventEmitter<DatabaseEvents> {
   private db: Database.Database | null = null;
   private config: DatabaseConfig;
   private initialized: boolean = false;
@@ -94,10 +101,10 @@ export class DatabaseManager extends EventEmitter {
       await this.runMigrations();
 
       this.initialized = true;
-      this.emit('initialized');
+      this.emit('db:initialized', {});
 
     } catch (error) {
-      this.emit('error', error);
+      this.emit('db:error', { error: error instanceof Error ? error : new Error(String(error)) });
       throw error;
     }
   }
@@ -106,7 +113,7 @@ export class DatabaseManager extends EventEmitter {
    * Run database migrations
    */
   private async runMigrations(): Promise<void> {
-    if (!this.db) throw new Error('Database not connected');
+    if (!this.db) throw new Error('Database connection not established. Ensure initialize() was called and completed successfully.');
 
     // Check current version
     let currentVersion = 0;
@@ -127,7 +134,7 @@ export class DatabaseManager extends EventEmitter {
         this.db.prepare(
           'INSERT INTO schema_version (version) VALUES (?)'
         ).run(version);
-        this.emit('migration', { version, applied: true });
+        this.emit('db:migration', { version, applied: true });
       }
     }
   }
@@ -152,8 +159,8 @@ export class DatabaseManager extends EventEmitter {
   /**
    * Get database statistics
    */
-  getStats(): DatabaseStats {
-    if (!this.db) throw new Error('Database not initialized');
+  getDatabaseStats(): DatabaseStats {
+    if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
 
     const version = (this.db.prepare(
       'SELECT version FROM schema_version ORDER BY version DESC LIMIT 1'
@@ -200,7 +207,7 @@ export class DatabaseManager extends EventEmitter {
    * Format stats for display
    */
   formatStats(): string {
-    const stats = this.getStats();
+    const stats = this.getDatabaseStats();
     const sizeKB = (stats.size / 1024).toFixed(1);
     const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
 
@@ -227,7 +234,7 @@ Data:
    * Execute a raw SQL query
    */
   exec(sql: string): void {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
     this.db.exec(sql);
   }
 
@@ -235,7 +242,7 @@ Data:
    * Prepare a statement
    */
   prepare(sql: string): Database.Statement {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
     return this.db.prepare(sql);
   }
 
@@ -243,7 +250,7 @@ Data:
    * Run in a transaction
    */
   transaction<T>(fn: () => T): T {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
     return this.db.transaction(fn)();
   }
 
@@ -251,21 +258,21 @@ Data:
    * Vacuum the database to reclaim space
    */
   vacuum(): void {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
     this.db.exec('VACUUM');
-    this.emit('vacuum');
+    this.emit('db:vacuum', {});
   }
 
   /**
    * Backup the database to a file
    */
   async backup(destPath: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
 
     return new Promise((resolve, reject) => {
       this.db!.backup(destPath)
         .then(() => {
-          this.emit('backup', { path: destPath });
+          this.emit('db:backup', { path: destPath });
           resolve();
         })
         .catch(reject);
@@ -280,7 +287,7 @@ Data:
       this.db.close();
       this.db = null;
       this.initialized = false;
-      this.emit('closed');
+      this.emit('db:closed', {});
     }
   }
 
@@ -288,7 +295,7 @@ Data:
    * Clear all data (dangerous!)
    */
   clearAll(): void {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
 
     const tables = [
       'memories', 'messages', 'sessions', 'code_embeddings',
@@ -302,7 +309,7 @@ Data:
       }
     });
 
-    this.emit('cleared');
+    this.emit('db:cleared', {});
   }
 }
 

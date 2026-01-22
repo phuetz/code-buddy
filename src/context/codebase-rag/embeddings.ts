@@ -426,3 +426,100 @@ export function createEmbeddingProvider(
       return new CodeEmbeddingProvider(dimension);
   }
 }
+
+/**
+ * Cached Embedding Provider Wrapper
+ *
+ * Wraps any embedding provider with caching support to avoid
+ * recomputing embeddings for previously seen content.
+ */
+export class CachedEmbeddingProvider implements EmbeddingProvider {
+  private baseProvider: EmbeddingProvider;
+  private cache: import('../../cache/embedding-cache.js').EmbeddingCache | null = null;
+
+  constructor(baseProvider: EmbeddingProvider) {
+    this.baseProvider = baseProvider;
+  }
+
+  /**
+   * Initialize the cache (lazy initialization)
+   */
+  private async getCache(): Promise<import('../../cache/embedding-cache.js').EmbeddingCache> {
+    if (!this.cache) {
+      const { getEmbeddingCache } = await import('../../cache/embedding-cache.js');
+      this.cache = getEmbeddingCache({
+        dimension: this.getDimension(),
+        modelName: this.getModelName(),
+      });
+    }
+    return this.cache;
+  }
+
+  /**
+   * Embed with caching
+   */
+  async embed(text: string): Promise<number[]> {
+    const cache = await this.getCache();
+    const cached = cache.get(text, this.getModelName());
+
+    if (cached) {
+      return cached;
+    }
+
+    const embedding = await this.baseProvider.embed(text);
+    cache.set(text, embedding);
+    return embedding;
+  }
+
+  /**
+   * Batch embed with caching
+   */
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    const cache = await this.getCache();
+    const results: number[][] = [];
+    const toCompute: { index: number; text: string }[] = [];
+
+    // Check cache for each text
+    for (let i = 0; i < texts.length; i++) {
+      const cached = cache.get(texts[i], this.getModelName());
+      if (cached) {
+        results[i] = cached;
+      } else {
+        toCompute.push({ index: i, text: texts[i] });
+      }
+    }
+
+    // Compute missing embeddings
+    if (toCompute.length > 0) {
+      const textsToCompute = toCompute.map(t => t.text);
+      const computed = await this.baseProvider.embedBatch(textsToCompute);
+
+      for (let i = 0; i < toCompute.length; i++) {
+        const { index, text } = toCompute[i];
+        results[index] = computed[i];
+        cache.set(text, computed[i]);
+      }
+    }
+
+    return results;
+  }
+
+  getDimension(): number {
+    return this.baseProvider.getDimension();
+  }
+
+  getModelName(): string {
+    return `cached-${this.baseProvider.getModelName()}`;
+  }
+}
+
+/**
+ * Create a cached embedding provider
+ */
+export function createCachedEmbeddingProvider(
+  type: "local" | "semantic" | "code" = "code",
+  dimension: number = 384
+): EmbeddingProvider {
+  const baseProvider = createEmbeddingProvider(type, dimension);
+  return new CachedEmbeddingProvider(baseProvider);
+}

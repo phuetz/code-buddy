@@ -1,30 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { EventEmitter } from "events";
-import { createTransport, MCPTransport, TransportType, TransportConfig } from "./transports.js";
+import { createTransport, MCPTransport, TransportType } from "./transports.js";
 import { logger } from "../utils/logger.js";
+import type { MCPServerConfig, MCPTool, ServerStatus } from "./types.js";
 
-export interface MCPServerConfig {
-  name: string;
-  transport: TransportConfig;
-  // Legacy support for stdio-only configs
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  /** Optional: Auto-reconnect if connection is lost */
-  autoReconnect?: boolean;
-  /** Optional: Max reconnection attempts */
-  maxRetries?: number;
-}
-
-export type ServerStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
-
-export interface MCPTool {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  serverName: string;
-}
+// Re-export types for backwards compatibility
+export type { MCPServerConfig, MCPTool, ServerStatus } from "./types.js";
 
 export class MCPManager extends EventEmitter {
   private clients: Map<string, Client> = new Map();

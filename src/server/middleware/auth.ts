@@ -48,10 +48,13 @@ function extractToken(req: Request): string | null {
     return apiKeyHeader;
   }
 
-  // Check query parameter (less secure, for debugging)
-  if (req.query.api_key && typeof req.query.api_key === 'string') {
-    return req.query.api_key;
-  }
+  // SECURITY: Query parameter authentication is intentionally NOT supported.
+  // API keys in query strings are a security vulnerability because they:
+  // - Get logged in server access logs and proxy logs
+  // - Can be cached by intermediate proxies and CDNs
+  // - Appear in browser history and can be leaked via Referer headers
+  // - Are visible in network monitoring tools
+  // Use Authorization header (Bearer or Basic) or X-API-Key header instead.
 
   return null;
 }

@@ -65,7 +65,6 @@
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@resvg/resvg-js": "^2.6.2",
-    "adm-zip": "^0.5.16",
     "axios": "^1.13.2",
     "better-sqlite3": "^11.10.0",
     "chalk": "^5.6.2",
@@ -93,20 +92,17 @@
     "@mlc-ai/web-llm": "^0.2.80",
     "@vscode/ripgrep": "^1.17.0",
     "@xenova/transformers": "^2.17.2",
-    "alasql": "^4.5.1",
     "d3": "^7.9.0",
     "d3-node": "^4.0.1",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
     "node-llama-cpp": "^3.14.5",
     "node-pty": "^1.0.0",
-    "pdf-parse": "^1.1.1",
     "string-width": "^7.2.0",
-    "tar": "^7.4.3",
+    "tar": "^7.5.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
     "@types/diff-match-patch": "^1.0.36",
@@ -134,6 +130,7 @@
     "node": ">=18.0.0"
   },
   "overrides": {
+    "hono": "^4.11.4",
     "jimp": "1.6.0",
     "phin": "^3.7.1",
     "qs": "^6.13.0"

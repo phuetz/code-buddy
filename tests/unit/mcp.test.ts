@@ -32,14 +32,25 @@ jest.mock('chalk', () => ({
   bold: jest.fn((s: string) => s),
 }));
 
+jest.mock('../../src/utils/logger.js', () => ({
+  logger: {
+    error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 import { createMCPCommand } from '../../src/commands/mcp';
 import * as mcpConfig from '../../src/mcp/config';
 import * as tools from '../../src/codebuddy/tools';
+import { logger } from '../../src/utils/logger.js';
 
 const mockAddMCPServer = mcpConfig.addMCPServer as jest.Mock;
 const mockRemoveMCPServer = mcpConfig.removeMCPServer as jest.Mock;
 const mockLoadMCPConfig = mcpConfig.loadMCPConfig as jest.Mock;
 const mockGetMCPManager = tools.getMCPManager as jest.Mock;
+const loggerErrorSpy = logger.error as jest.Mock;
 
 describe('MCP Command', () => {
   let command: Command;
@@ -138,7 +149,7 @@ describe('MCP Command', () => {
         addCmd?.parseAsync(['node', 'test', 'test-server', '-t', 'stdio'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('--command is required')
       );
     });
@@ -190,7 +201,7 @@ describe('MCP Command', () => {
         addCmd?.parseAsync(['node', 'test', 'http-server', '-t', 'http'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('--url is required')
       );
     });
@@ -202,7 +213,7 @@ describe('MCP Command', () => {
         addCmd?.parseAsync(['node', 'test', 'bad-server', '-t', 'invalid'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Transport type must be')
       );
     });
@@ -254,7 +265,7 @@ describe('MCP Command', () => {
         addCmd?.parseAsync(['node', 'test', 'fail-server', '-c', 'bad-cmd'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Error adding MCP server')
       );
     });
@@ -305,7 +316,7 @@ describe('MCP Command', () => {
         addJsonCmd?.parseAsync(['node', 'test', 'bad-json', '{invalid json}'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Invalid JSON')
       );
     });
@@ -373,7 +384,7 @@ describe('MCP Command', () => {
         removeCmd?.parseAsync(['node', 'test', 'missing-server'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Error removing MCP server')
       );
     });
@@ -548,7 +559,7 @@ describe('MCP Command', () => {
         testCmd?.parseAsync(['node', 'test', 'nonexistent'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('not found')
       );
     });
@@ -586,7 +597,7 @@ describe('MCP Command', () => {
         testCmd?.parseAsync(['node', 'test', 'fail-server'])
       ).rejects.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to connect')
       );
     });

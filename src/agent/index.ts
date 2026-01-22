@@ -1,15 +1,41 @@
 /**
  * Agent Module
- * 
+ *
  * The core intelligence of the application. This module contains:
- * 
+ *
  * - `CodeBuddyAgent`: The main agent implementation that orchestrates the LLM loop.
  * - `BaseAgent`: The abstract base class providing common infrastructure.
  * - `AgentState`: Management of agent configuration and runtime state.
  * - `MessageProcessor`: Handling of chat history and message formatting.
- * 
+ *
  * @module agent
  */
+
+// Agent Interfaces
+export type {
+  // Chat types
+  ChatEntryType,
+  IChatEntry,
+  StreamingChunkType,
+  IStreamingChunk,
+  // Tool types
+  IToolCall,
+  IParsedToolCall,
+  // Core agent
+  IAgent,
+  // Extended agent
+  AgentModeType,
+  IExtendedAgent,
+  // Specialized agent
+  AgentCapabilityType,
+  IAgentTask,
+  IAgentResult,
+  ISpecializedAgentConfig,
+  ISpecializedAgent,
+  // Factory
+  IAgentOptions,
+  IAgentFactory,
+} from './interfaces/index.js';
 
 // Re-export new modules
 export { BaseAgent } from "./base-agent.js";

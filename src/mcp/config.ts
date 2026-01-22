@@ -2,12 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { getSettingsManager } from "../utils/settings-manager.js";
-import { MCPServerConfig } from "./client.js";
 import { logger } from '../utils/logger.js';
+import type { MCPServerConfig, MCPConfig } from "./types.js";
 
-export interface MCPConfig {
-  servers: MCPServerConfig[];
-}
+// Re-export types for backwards compatibility
+export type { MCPConfig } from "./types.js";
 
 /**
  * Load MCP configuration from multiple sources (inspired by Claude Code)

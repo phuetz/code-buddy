@@ -3,7 +3,17 @@
  *
  * Centralized input validation for CLI arguments, tool inputs, and API parameters.
  * Provides type-safe validation with clear error messages.
+ *
+ * Features:
+ * - Zod-based schema validation for tool inputs
+ * - Path sanitization and traversal prevention
+ * - URL validation with protocol restrictions
+ * - String size limits to prevent resource exhaustion
+ * - Descriptive error messages for debugging
  */
+
+import { z, ZodError, ZodSchema } from 'zod';
+import * as path from 'path';
 
 export interface ValidationResult<T = unknown> {
   valid: boolean;
@@ -634,18 +644,52 @@ export function validateWithSchema(
 
 /**
  * Dangerous command patterns for validation
+ * These patterns detect various command injection and dangerous operation attempts
  */
 const DANGEROUS_PATTERNS: RegExp[] = [
-  /rm\s+(-rf?|--recursive)\s+[/~]/i,
-  /rm\s+.*\/\s*$/i,
-  />\s*\/dev\/sd[a-z]/i,
-  /dd\s+.*if=.*of=\/dev/i,
-  /mkfs/i,
-  /:\(\)\s*\{\s*:\|:&\s*\};:/,
-  /chmod\s+-R\s+777\s+\//i,
-  /wget.*\|\s*(ba)?sh/i,
-  /curl.*\|\s*(ba)?sh/i,
+  // Filesystem destruction
+  /rm\s+(-rf?|--recursive)\s+[/~]/i,          // rm -rf / or ~
+  /rm\s+.*\/\s*$/i,                            // rm something/
+  />\s*\/dev\/sd[a-z]/i,                       // Write to disk device
+  /dd\s+.*if=.*of=\/dev/i,                     // dd to device
+  /mkfs/i,                                      // Format filesystem
+  /:\(\)\s*\{\s*:\|:&\s*\};:/,                 // Fork bomb :(){ :|:& };:
+  /chmod\s+-R\s+777\s+\//i,                    // chmod 777 /
+
+  // Remote code execution via pipe to shell
+  /wget.*\|\s*(ba)?sh/i,                       // wget | sh
+  /curl.*\|\s*(ba)?sh/i,                       // curl | sh
+  /base64\s+(-d|--decode).*\|\s*(ba)?sh/i,    // base64 -d | sh
+
+  // Sudo with dangerous commands
   /sudo\s+(rm|dd|mkfs)/i,
+
+  // Command injection via command substitution
+  /\$\([^)]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i,  // $(dangerous_cmd)
+  /`[^`]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i,     // `dangerous_cmd`
+
+  // Dangerous variable expansion that could leak secrets
+  /\$\{?(?:GROK_API_KEY|AWS_SECRET|AWS_ACCESS_KEY|GITHUB_TOKEN|NPM_TOKEN|MORPH_API_KEY|DATABASE_URL|DB_PASSWORD|SECRET_KEY|PRIVATE_KEY|API_KEY|API_SECRET|AUTH_TOKEN|ACCESS_TOKEN)\}?/i,
+
+  // Eval and exec injection
+  /\beval\s+.*\$/i,                            // eval with variable expansion
+  /\bexec\s+\d*[<>]/i,                         // exec with redirections
+
+  // Hex/octal encoded commands (potential obfuscation)
+  /\\x[0-9a-f]{2}/i,                           // Hex escape sequences
+  /\\[0-7]{3}/,                                // Octal escape sequences
+  /\$'\\x/i,                                   // ANSI-C quoting with hex
+
+  // Network exfiltration and reverse shells
+  /\|\s*(nc|netcat|curl|wget)\s+[^|]*(>|>>)/i, // pipe to network tool with redirect
+  />\s*\/dev\/(tcp|udp)\//i,                   // bash network redirection
+  /\bnc\s+-[elp]/i,                            // netcat listen/exec modes
+  /\bbash\s+-i\s+>&?\s*\/dev\/(tcp|udp)/i,    // bash reverse shell
+
+  // Python/Perl/Ruby one-liners that could be dangerous
+  /python[23]?\s+-c\s+['"].*(?:socket|subprocess|os\.system|eval|exec)/i,
+  /perl\s+-e\s+['"].*(?:socket|system|exec)/i,
+  /ruby\s+-e\s+['"].*(?:socket|system|exec)/i,
 ];
 
 /**
@@ -676,4 +720,436 @@ export function sanitizeForShell(input: string): string {
 
   // Wrap in single quotes for safety
   return `'${escaped}'`;
+}
+
+// ============================================================================
+// Zod-based Tool Input Schemas
+// ============================================================================
+
+/**
+ * Configuration for input validation
+ */
+export const VALIDATION_LIMITS = {
+  /** Maximum file path length */
+  MAX_PATH_LENGTH: 4096,
+  /** Maximum content size for file creation (10MB) */
+  MAX_CONTENT_SIZE: 10 * 1024 * 1024,
+  /** Maximum command length */
+  MAX_COMMAND_LENGTH: 100000,
+  /** Maximum URL length */
+  MAX_URL_LENGTH: 2048,
+  /** Maximum search query length */
+  MAX_QUERY_LENGTH: 10000,
+  /** Maximum code edit size (5MB) */
+  MAX_CODE_EDIT_SIZE: 5 * 1024 * 1024,
+  /** Maximum number of lines for file view */
+  MAX_VIEW_LINES: 10000,
+} as const;
+
+/**
+ * Custom Zod refinement for safe file paths
+ * Prevents directory traversal attacks and validates path structure
+ */
+const safePathSchema = z.string()
+  .min(1, 'Path cannot be empty')
+  .max(VALIDATION_LIMITS.MAX_PATH_LENGTH, `Path exceeds maximum length of ${VALIDATION_LIMITS.MAX_PATH_LENGTH}`)
+  .refine((p) => !p.includes('\0'), 'Path contains null bytes')
+  .refine((p) => !p.includes('..'), 'Path traversal (..) is not allowed')
+  .refine((p) => !p.startsWith('~root'), 'Access to root home directory is not allowed')
+  .transform((p) => path.normalize(p));
+
+/**
+ * Relaxed path schema that allows relative paths with ..
+ * Use for read-only operations where traversal is less dangerous
+ */
+const relaxedPathSchema = z.string()
+  .min(1, 'Path cannot be empty')
+  .max(VALIDATION_LIMITS.MAX_PATH_LENGTH, `Path exceeds maximum length of ${VALIDATION_LIMITS.MAX_PATH_LENGTH}`)
+  .refine((p) => !p.includes('\0'), 'Path contains null bytes');
+
+/**
+ * URL schema with protocol restrictions
+ */
+const safeUrlSchema = z.string()
+  .min(1, 'URL cannot be empty')
+  .max(VALIDATION_LIMITS.MAX_URL_LENGTH, `URL exceeds maximum length of ${VALIDATION_LIMITS.MAX_URL_LENGTH}`)
+  .refine((url) => {
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  }, 'Invalid URL or unsupported protocol (only http/https allowed)');
+
+/**
+ * Line number schema (positive integer within reasonable range)
+ */
+const lineNumberSchema = z.number()
+  .int('Line number must be an integer')
+  .min(1, 'Line number must be at least 1')
+  .max(VALIDATION_LIMITS.MAX_VIEW_LINES, `Line number exceeds maximum of ${VALIDATION_LIMITS.MAX_VIEW_LINES}`);
+
+// ============================================================================
+// Tool Input Schemas
+// ============================================================================
+
+/**
+ * Schema for view_file tool
+ */
+export const viewFileSchema = z.object({
+  path: relaxedPathSchema,
+  start_line: lineNumberSchema.optional(),
+  end_line: lineNumberSchema.optional(),
+}).refine(
+  (data) => {
+    if (data.start_line && data.end_line) {
+      return data.end_line >= data.start_line;
+    }
+    return true;
+  },
+  { message: 'end_line must be greater than or equal to start_line' }
+);
+
+/**
+ * Schema for create_file tool
+ */
+export const createFileSchema = z.object({
+  path: safePathSchema,
+  content: z.string()
+    .max(VALIDATION_LIMITS.MAX_CONTENT_SIZE, `Content exceeds maximum size of ${VALIDATION_LIMITS.MAX_CONTENT_SIZE} bytes`),
+});
+
+/**
+ * Schema for str_replace_editor tool
+ */
+export const strReplaceEditorSchema = z.object({
+  path: safePathSchema,
+  old_str: z.string()
+    .min(1, 'old_str cannot be empty')
+    .max(VALIDATION_LIMITS.MAX_CONTENT_SIZE, 'old_str exceeds maximum size'),
+  new_str: z.string()
+    .max(VALIDATION_LIMITS.MAX_CONTENT_SIZE, 'new_str exceeds maximum size'),
+  replace_all: z.boolean().optional(),
+});
+
+/**
+ * Schema for edit_file (Morph) tool
+ */
+export const editFileSchema = z.object({
+  target_file: safePathSchema,
+  instructions: z.string()
+    .min(1, 'Instructions cannot be empty')
+    .max(VALIDATION_LIMITS.MAX_QUERY_LENGTH, 'Instructions exceed maximum length'),
+  code_edit: z.string()
+    .min(1, 'code_edit cannot be empty')
+    .max(VALIDATION_LIMITS.MAX_CODE_EDIT_SIZE, 'code_edit exceeds maximum size'),
+});
+
+/**
+ * Schema for bash tool
+ */
+export const bashSchema = z.object({
+  command: z.string()
+    .min(1, 'Command cannot be empty')
+    .max(VALIDATION_LIMITS.MAX_COMMAND_LENGTH, `Command exceeds maximum length of ${VALIDATION_LIMITS.MAX_COMMAND_LENGTH}`)
+    .refine((cmd) => {
+      const result = validateCommand(cmd);
+      return result.valid;
+    }, 'Command contains dangerous patterns'),
+});
+
+/**
+ * Schema for search tool
+ */
+export const searchSchema = z.object({
+  query: z.string()
+    .min(1, 'Search query cannot be empty')
+    .max(VALIDATION_LIMITS.MAX_QUERY_LENGTH, 'Search query exceeds maximum length'),
+  include_pattern: z.string().max(1000).optional(),
+  exclude_pattern: z.string().max(1000).optional(),
+  case_sensitive: z.boolean().optional(),
+  regex: z.boolean().optional(),
+  max_results: z.number().int().min(1).max(1000).optional(),
+});
+
+/**
+ * Schema for web_search tool
+ */
+export const webSearchSchema = z.object({
+  query: z.string()
+    .min(1, 'Search query cannot be empty')
+    .max(VALIDATION_LIMITS.MAX_QUERY_LENGTH, 'Search query exceeds maximum length'),
+  max_results: z.number().int().min(1).max(100).optional(),
+});
+
+/**
+ * Schema for web_fetch tool
+ */
+export const webFetchSchema = z.object({
+  url: safeUrlSchema,
+});
+
+/**
+ * Schema for create_todo_list tool
+ */
+export const createTodoListSchema = z.object({
+  todos: z.array(z.object({
+    id: z.string().min(1, 'Todo id cannot be empty'),
+    content: z.string().min(1, 'Todo content cannot be empty').max(10000),
+    status: z.enum(['pending', 'in_progress', 'completed', 'blocked']),
+    priority: z.enum(['low', 'medium', 'high']).optional().default('medium'),
+  })).min(1, 'At least one todo is required').max(100, 'Maximum 100 todos allowed'),
+});
+
+/**
+ * Schema for update_todo_list tool
+ */
+export const updateTodoListSchema = z.object({
+  updates: z.array(z.object({
+    id: z.string().min(1, 'Todo id cannot be empty'),
+    status: z.enum(['pending', 'in_progress', 'completed', 'blocked']).optional(),
+    content: z.string().min(1).max(10000).optional(),
+    priority: z.enum(['low', 'medium', 'high']).optional(),
+  })).min(1, 'At least one update is required').max(100, 'Maximum 100 updates allowed'),
+});
+
+// ============================================================================
+// Tool Schema Registry
+// ============================================================================
+
+/**
+ * Registry mapping tool names to their validation schemas
+ */
+export const TOOL_SCHEMAS: Record<string, ZodSchema> = {
+  view_file: viewFileSchema,
+  create_file: createFileSchema,
+  str_replace_editor: strReplaceEditorSchema,
+  edit_file: editFileSchema,
+  bash: bashSchema,
+  search: searchSchema,
+  web_search: webSearchSchema,
+  web_fetch: webFetchSchema,
+  create_todo_list: createTodoListSchema,
+  update_todo_list: updateTodoListSchema,
+};
+
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/**
+ * Validation error with structured details
+ */
+export class ToolValidationError extends Error {
+  public readonly toolName: string;
+  public readonly issues: Array<{ path: string; message: string }>;
+
+  constructor(toolName: string, issues: Array<{ path: string; message: string }>) {
+    const issueMessages = issues.map(i => `  - ${i.path}: ${i.message}`).join('\n');
+    super(`Validation failed for tool "${toolName}":\n${issueMessages}`);
+    this.name = 'ToolValidationError';
+    this.toolName = toolName;
+    this.issues = issues;
+  }
+}
+
+/**
+ * Format Zod errors into readable messages
+ */
+function formatZodError(error: ZodError): Array<{ path: string; message: string }> {
+  return error.issues.map((issue) => ({
+    path: issue.path.length > 0 ? issue.path.join('.') : 'input',
+    message: issue.message,
+  }));
+}
+
+/**
+ * Validate tool arguments using the appropriate schema
+ *
+ * @param toolName - Name of the tool being called
+ * @param args - Arguments to validate
+ * @returns Validated and transformed arguments
+ * @throws ToolValidationError if validation fails
+ */
+export function validateToolArgs<T = Record<string, unknown>>(
+  toolName: string,
+  args: unknown
+): T {
+  const schema = TOOL_SCHEMAS[toolName];
+
+  // If no schema is registered, allow the args through with basic object check
+  if (!schema) {
+    if (typeof args !== 'object' || args === null) {
+      throw new ToolValidationError(toolName, [
+        { path: 'input', message: 'Arguments must be an object' }
+      ]);
+    }
+    return args as T;
+  }
+
+  try {
+    return schema.parse(args) as T;
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new ToolValidationError(toolName, formatZodError(error));
+    }
+    throw error;
+  }
+}
+
+/**
+ * Safe validation that returns a result object instead of throwing
+ */
+export function safeValidateToolArgs<T = Record<string, unknown>>(
+  toolName: string,
+  args: unknown
+): ValidationResult<T> {
+  try {
+    const validated = validateToolArgs<T>(toolName, args);
+    return { valid: true, value: validated };
+  } catch (error) {
+    if (error instanceof ToolValidationError) {
+      return {
+        valid: false,
+        error: error.message,
+      };
+    }
+    return {
+      valid: false,
+      error: `Unexpected validation error: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+// ============================================================================
+// Path Sanitization
+// ============================================================================
+
+/**
+ * Dangerous path patterns that should be blocked
+ */
+const DANGEROUS_PATH_PATTERNS = [
+  /^\/etc\/(passwd|shadow|sudoers)/i,
+  /^\/root\//,
+  /\.ssh\/(id_rsa|id_ed25519|authorized_keys)/i,
+  /\.(env|credentials|secrets?)(\.local)?$/i,
+  /\/\.git\/config$/,
+];
+
+/**
+ * Sanitize and validate a file path for write operations
+ *
+ * @param inputPath - The path to sanitize
+ * @param basePath - Optional base path to resolve relative paths against
+ * @returns Sanitized absolute path
+ * @throws Error if path is dangerous or invalid
+ */
+export function sanitizeFilePath(inputPath: string, basePath?: string): string {
+  if (!inputPath || typeof inputPath !== 'string') {
+    throw new Error('Path must be a non-empty string');
+  }
+
+  // Check for null bytes
+  if (inputPath.includes('\0')) {
+    throw new Error('Path contains null bytes');
+  }
+
+  // Normalize the path
+  let normalizedPath = path.normalize(inputPath);
+
+  // Resolve to absolute path if base path provided
+  if (basePath && !path.isAbsolute(normalizedPath)) {
+    normalizedPath = path.resolve(basePath, normalizedPath);
+  }
+
+  // Check for dangerous patterns
+  for (const pattern of DANGEROUS_PATH_PATTERNS) {
+    if (pattern.test(normalizedPath)) {
+      throw new Error(`Access to sensitive path is not allowed: ${inputPath}`);
+    }
+  }
+
+  return normalizedPath;
+}
+
+/**
+ * Check if a path is safe for write operations (doesn't throw, returns boolean)
+ */
+export function isPathSafeForWrite(inputPath: string, basePath?: string): boolean {
+  try {
+    sanitizeFilePath(inputPath, basePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
+// URL Sanitization
+// ============================================================================
+
+/**
+ * Blocked URL patterns for security
+ */
+const BLOCKED_URL_PATTERNS = [
+  /^file:\/\//i,                           // Local file access
+  /^javascript:/i,                         // JavaScript injection
+  /^data:/i,                               // Data URIs (potential XSS)
+  /localhost|127\.0\.0\.1|0\.0\.0\.0/i,   // Localhost access
+  /\[::1\]/,                               // IPv6 localhost
+  /169\.254\.\d+\.\d+/,                    // Link-local addresses
+  /10\.\d+\.\d+\.\d+/,                     // Private IP range
+  /172\.(1[6-9]|2\d|3[01])\.\d+\.\d+/,    // Private IP range
+  /192\.168\.\d+\.\d+/,                    // Private IP range
+];
+
+/**
+ * Sanitize and validate a URL for fetching
+ *
+ * @param url - The URL to sanitize
+ * @returns The validated URL
+ * @throws Error if URL is invalid or blocked
+ */
+export function sanitizeUrl(url: string): string {
+  if (!url || typeof url !== 'string') {
+    throw new Error('URL must be a non-empty string');
+  }
+
+  if (url.length > VALIDATION_LIMITS.MAX_URL_LENGTH) {
+    throw new Error(`URL exceeds maximum length of ${VALIDATION_LIMITS.MAX_URL_LENGTH}`);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid URL format');
+  }
+
+  // Only allow http and https
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error(`Unsupported protocol: ${parsed.protocol}. Only http and https are allowed.`);
+  }
+
+  // Check against blocked patterns
+  for (const pattern of BLOCKED_URL_PATTERNS) {
+    if (pattern.test(url)) {
+      throw new Error('Access to internal/local URLs is not allowed');
+    }
+  }
+
+  return url;
+}
+
+/**
+ * Check if a URL is safe for fetching (doesn't throw, returns boolean)
+ */
+export function isUrlSafe(url: string): boolean {
+  try {
+    sanitizeUrl(url);
+    return true;
+  } catch {
+    return false;
+  }
 }

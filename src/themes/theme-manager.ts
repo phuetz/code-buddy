@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import {
   Theme,
+  ThemeColor,
   ThemeColors,
   AvatarConfig,
   ThemePreferences,
@@ -267,9 +268,8 @@ export class ThemeManager {
   /**
    * Set a single custom color
    */
-  public setCustomColor(key: keyof ThemeColors, value: string): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic property assignment
-    (this.customColors as any)[key] = value;
+  public setCustomColor(key: keyof ThemeColors, value: ThemeColor): void {
+    this.customColors = { ...this.customColors, [key]: value };
     this.savePreferences();
   }
 

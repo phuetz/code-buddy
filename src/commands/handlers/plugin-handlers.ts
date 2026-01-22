@@ -1,11 +1,13 @@
 import { CommandHandlerResult } from './branch-handlers.js';
 import { getPluginMarketplace } from '../../plugins/marketplace.js';
+import { getPluginManager } from '../../plugins/plugin-manager.js';
 
 /**
- * Plugins - Manage plugin marketplace
+ * Plugins - Manage plugin marketplace and local plugins
  */
 export async function handlePlugins(args: string[]): Promise<CommandHandlerResult> {
   const marketplace = getPluginMarketplace();
+  const pluginManager = getPluginManager();
   const action = args[0] || 'status';
   const param = args.slice(1).join(' ');
 
@@ -14,15 +16,31 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
   try {
     switch (action) {
       case 'list':
+        // Get plugins from both systems (legacy marketplace and new plugin manager)
         const installed = marketplace.getInstalled();
-        if (installed.length === 0) {
-          content = 'No plugins installed. Use /plugins search <query> to find plugins.';
+        const loaded = pluginManager.getAllPlugins();
+        
+        if (installed.length === 0 && loaded.length === 0) {
+          content = 'No plugins installed or loaded. Use /plugins search <query> to find plugins.';
         } else {
           content = '📦 Installed Plugins:\n\n';
-          installed.forEach(p => {
-            const status = p.enabled ? '✅' : '❌';
-            content += `${status} ${p.id} v${p.version} - ${p.description}\n`;
-          });
+          
+          if (loaded.length > 0) {
+            content += 'Running (New System):\n';
+            loaded.forEach(p => {
+              const statusIcon = p.status === 'active' ? '🟢' : p.status === 'error' ? '🔴' : '⚪';
+              content += `${statusIcon} ${p.manifest.name} (v${p.manifest.version}) - ${p.manifest.description}\n`;
+            });
+            content += '\n';
+          }
+
+          if (installed.length > 0) {
+            content += 'Installed (Legacy):\n';
+            installed.forEach(p => {
+              const status = p.enabled ? '✅' : '❌';
+              content += `${status} ${p.id} v${p.version} - ${p.description}\n`;
+            });
+          }
         }
         break;
 
@@ -81,10 +99,56 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
         await marketplace.uninstall(param);
         content = `✅ Successfully uninstalled ${param}`;
         break;
+        
+      case 'enable':
+        if (!param) {
+          return {
+            handled: true,
+            entry: { type: 'assistant', content: 'Usage: /plugins enable <id>', timestamp: new Date() }
+          };
+        }
+        const activated = await pluginManager.activatePlugin(param);
+        if (activated) {
+          content = `✅ Plugin ${param} activated`;
+        } else {
+          content = `❌ Failed to activate plugin ${param} (or not found)`;
+        }
+        break;
+
+      case 'disable':
+        if (!param) {
+          return {
+            handled: true,
+            entry: { type: 'assistant', content: 'Usage: /plugins disable <id>', timestamp: new Date() }
+          };
+        }
+        const deactivated = await pluginManager.deactivatePlugin(param);
+        if (deactivated) {
+          content = `✅ Plugin ${param} deactivated`;
+        } else {
+          content = `❌ Failed to deactivate plugin ${param}`;
+        }
+        break;
 
       case 'status':
       default:
-        content = marketplace.formatStatus();
+        // Combine status from both
+        const legacyStatus = marketplace.formatStatus();
+        const loadedPlugins = pluginManager.getAllPlugins();
+        
+        content = `🔌 Plugin System Status\n${'='.repeat(30)}\n\n`;
+        content += `Active Plugins: ${loadedPlugins.filter(p => p.status === 'active').length}\n`;
+        content += `Loaded Plugins: ${loadedPlugins.length}\n\n`;
+        
+        if (loadedPlugins.length > 0) {
+          content += `Running:\n`;
+          loadedPlugins.forEach(p => {
+            content += `  • ${p.manifest.name}: ${p.status.toUpperCase()}\n`;
+          });
+          content += '\n';
+        }
+        
+        content += `Legacy Marketplace:\n${legacyStatus}`;
         break;
     }
 

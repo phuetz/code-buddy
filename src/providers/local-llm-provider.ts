@@ -14,6 +14,7 @@ import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
+import { retry, RetryStrategies, RetryPredicates } from '../utils/retry.js';
 
 // ============================================================================
 // Types
@@ -59,6 +60,52 @@ export interface LocalLLMProvider {
   // EventEmitter methods
   on(event: string, listener: (...args: unknown[]) => void): this;
   emit(event: string, ...args: unknown[]): boolean;
+}
+
+/**
+ * OpenAI-compatible chat completion interface for WebLLM and similar engines
+ */
+interface ChatCompletionEngine {
+  chat: {
+    completions: {
+      create(params: {
+        messages: Array<{ role: string; content: string }>;
+        max_tokens?: number;
+        temperature?: number;
+        stream: boolean;
+      }): Promise<ChatCompletionResponse | AsyncIterable<ChatCompletionChunk>>;
+    };
+  };
+  /** WebLLM-specific method to load a model */
+  reload?(model: string, opts: { initProgressCallback: (progress: { progress: number; text: string }) => void }): Promise<void>;
+}
+
+interface ChatCompletionResponse {
+  choices: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  usage?: {
+    total_tokens?: number;
+  };
+}
+
+interface ChatCompletionChunk {
+  choices: Array<{
+    delta?: {
+      content?: string;
+    };
+  }>;
+}
+
+/**
+ * WebGPU navigator interface (browser-only API)
+ */
+interface NavigatorWithGPU extends Navigator {
+  gpu?: {
+    requestAdapter(): Promise<unknown | null>;
+  };
 }
 
 // ============================================================================
@@ -166,14 +213,14 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
     options?: Partial<LocalProviderConfig>
   ): Promise<LocalLLMResponse> {
     if (!this.ready || !this.context) {
-      throw new Error('Provider not initialized');
+      throw new Error('Local LLM provider not initialized. Call initialize() with a valid model path first.');
     }
 
     const startTime = Date.now();
     const nodeLlamaCpp = await import('node-llama-cpp').catch(() => null);
 
     if (!nodeLlamaCpp) {
-      throw new Error('node-llama-cpp is not installed');
+      throw new Error('node-llama-cpp is not installed. Install it with: npm install node-llama-cpp');
     }
 
     const { LlamaChatSession } = nodeLlamaCpp;
@@ -208,13 +255,13 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
     options?: Partial<LocalProviderConfig>
   ): AsyncIterable<string> {
     if (!this.ready || !this.context) {
-      throw new Error('Provider not initialized');
+      throw new Error('Local LLM provider not initialized. Call initialize() with a valid model path first.');
     }
 
     const nodeLlamaCpp = await import('node-llama-cpp').catch(() => null);
 
     if (!nodeLlamaCpp) {
-      throw new Error('node-llama-cpp is not installed');
+      throw new Error('node-llama-cpp is not installed. Install it with: npm install node-llama-cpp');
     }
 
     const { LlamaChatSession } = nodeLlamaCpp;
@@ -226,7 +273,7 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
 
     const userMessage = messages.filter(m => m.role === 'user').pop();
     if (!userMessage) {
-      throw new Error('No user message found');
+      throw new Error('No user message found in the conversation. Include at least one message with role "user".');
     }
 
     // Use streaming API
@@ -300,7 +347,7 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
   readonly name = 'WebLLM';
 
   private config: LocalProviderConfig | null = null;
-  private engine: unknown = null;
+  private engine: ChatCompletionEngine | null = null;
   private ready = false;
 
   async initialize(config: LocalProviderConfig): Promise<void> {
@@ -320,14 +367,16 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
 
       const model = config.model || 'Llama-3.1-8B-Instruct-q4f16_1-MLC';
 
-      this.engine = new webllm.MLCEngine();
+      this.engine = new webllm.MLCEngine() as ChatCompletionEngine;
 
       // Progress callback
       const initProgress = (progress: { progress: number; text: string }) => {
         this.emit('progress', progress);
       };
 
-      await (this.engine as { reload: (model: string, opts: { initProgressCallback: typeof initProgress }) => Promise<void> }).reload(model, { initProgressCallback: initProgress });
+      if (this.engine.reload) {
+        await this.engine.reload(model, { initProgressCallback: initProgress });
+      }
 
       this.ready = true;
       this.emit('ready', { model });
@@ -347,8 +396,8 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
     try {
       // Check if WebGPU is available
       if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGPU API not fully typed
-        const adapter = await (navigator as any).gpu.requestAdapter();
+        const navWithGPU = navigator as NavigatorWithGPU;
+        const adapter = await navWithGPU.gpu?.requestAdapter();
         return adapter !== null;
       }
       return false;
@@ -362,18 +411,17 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
     options?: Partial<LocalProviderConfig>
   ): Promise<LocalLLMResponse> {
     if (!this.ready || !this.engine) {
-      throw new Error('Provider not initialized');
+      throw new Error('Local LLM provider not initialized. Call initialize() with a valid model path first.');
     }
 
     const startTime = Date.now();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- engine type varies by provider
-    const response = await (this.engine as any).chat.completions.create({
+    const response = await this.engine.chat.completions.create({
       messages: messages.map(m => ({ role: m.role, content: m.content })),
       max_tokens: options?.maxTokens ?? this.config?.maxTokens ?? 2048,
       temperature: options?.temperature ?? this.config?.temperature ?? 0.7,
       stream: false,
-    });
+    }) as ChatCompletionResponse;
 
     const content = response.choices[0]?.message?.content || '';
 
@@ -391,16 +439,15 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
     options?: Partial<LocalProviderConfig>
   ): AsyncIterable<string> {
     if (!this.ready || !this.engine) {
-      throw new Error('Provider not initialized');
+      throw new Error('Local LLM provider not initialized. Call initialize() with a valid model path first.');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- engine type varies by provider
-    const response = await (this.engine as any).chat.completions.create({
+    const response = await this.engine.chat.completions.create({
       messages: messages.map(m => ({ role: m.role, content: m.content })),
       max_tokens: options?.maxTokens ?? this.config?.maxTokens ?? 2048,
       temperature: options?.temperature ?? this.config?.temperature ?? 0.7,
       stream: true,
-    });
+    }) as AsyncIterable<ChatCompletionChunk>;
 
     for await (const chunk of response) {
       const content = chunk.choices[0]?.delta?.content;
@@ -542,29 +589,48 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     options?: Partial<LocalProviderConfig>
   ): Promise<LocalLLMResponse> {
     if (!this.ready) {
-      throw new Error('Provider not initialized');
+      throw new Error('Local LLM provider not initialized. Call initialize() with a valid model path first.');
     }
 
     const startTime = Date.now();
     const model = options?.model || this.config?.model || 'llama3.1';
 
-    const response = await fetch(`${this.endpoint}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        stream: false,
-        options: {
-          num_predict: options?.maxTokens ?? this.config?.maxTokens ?? 2048,
-          temperature: options?.temperature ?? this.config?.temperature ?? 0.7,
-        },
-      }),
-    });
+    // Use retry with exponential backoff for Ollama API calls
+    const response = await retry(
+      async () => {
+        const res = await fetch(`${this.endpoint}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: messages.map(m => ({ role: m.role, content: m.content })),
+            stream: false,
+            options: {
+              num_predict: options?.maxTokens ?? this.config?.maxTokens ?? 2048,
+              temperature: options?.temperature ?? this.config?.temperature ?? 0.7,
+            },
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
-    }
+        if (!res.ok) {
+          const error = new Error(`Ollama API error: ${res.statusText}`);
+          (error as Error & { status: number }).status = res.status;
+          throw error;
+        }
+
+        return res;
+      },
+      {
+        ...RetryStrategies.llmApi,
+        isRetryable: RetryPredicates.transientError,
+        onRetry: (error, attempt, delay) => {
+          logger.warn(`Ollama API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
+            source: 'OllamaProvider',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      }
+    );
 
     const data = await response.json() as {
       message: { content: string };
@@ -586,32 +652,51 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     options?: Partial<LocalProviderConfig>
   ): AsyncIterable<string> {
     if (!this.ready) {
-      throw new Error('Provider not initialized');
+      throw new Error('Local LLM provider not initialized. Call initialize() with a valid model path first.');
     }
 
     const model = options?.model || this.config?.model || 'llama3.1';
 
-    const response = await fetch(`${this.endpoint}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        stream: true,
-        options: {
-          num_predict: options?.maxTokens ?? this.config?.maxTokens ?? 2048,
-          temperature: options?.temperature ?? this.config?.temperature ?? 0.7,
-        },
-      }),
-    });
+    // Use retry with exponential backoff for stream initialization
+    const response = await retry(
+      async () => {
+        const res = await fetch(`${this.endpoint}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: messages.map(m => ({ role: m.role, content: m.content })),
+            stream: true,
+            options: {
+              num_predict: options?.maxTokens ?? this.config?.maxTokens ?? 2048,
+              temperature: options?.temperature ?? this.config?.temperature ?? 0.7,
+            },
+          }),
+        });
 
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
-    }
+        if (!res.ok) {
+          const error = new Error(`Ollama API error: ${res.statusText}`);
+          (error as Error & { status: number }).status = res.status;
+          throw error;
+        }
+
+        return res;
+      },
+      {
+        ...RetryStrategies.llmApi,
+        isRetryable: RetryPredicates.transientError,
+        onRetry: (error, attempt, delay) => {
+          logger.warn(`Ollama stream initialization failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
+            source: 'OllamaProvider',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      }
+    );
 
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error('No response body');
+      throw new Error('Ollama returned an empty response body. Check if the Ollama server is running correctly.');
     }
 
     const decoder = new TextDecoder();

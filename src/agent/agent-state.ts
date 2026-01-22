@@ -329,24 +329,24 @@ export class AgentState extends EventEmitter {
   /**
    * Save current session
    */
-  saveCurrentSession(chatHistory: ChatEntry[]): void {
-    this.sessionStore.updateCurrentSession(chatHistory);
+  async saveCurrentSession(chatHistory: ChatEntry[]): Promise<void> {
+    await this.sessionStore.updateCurrentSession(chatHistory);
   }
 
   /**
    * Get session list
    */
-  getSessionList(): string {
-    return this.sessionStore.formatSessionList();
+  async getSessionList(): Promise<string> {
+    return await this.sessionStore.formatSessionList();
   }
 
   /**
    * Export current session
    */
-  exportCurrentSession(outputPath?: string): string | null {
+  async exportCurrentSession(outputPath?: string): Promise<string | null> {
     const currentId = this.sessionStore.getCurrentSessionId();
     if (!currentId) return null;
-    return this.sessionStore.exportSessionToFile(currentId, outputPath);
+    return await this.sessionStore.exportSessionToFile(currentId, outputPath);
   }
 
   /**

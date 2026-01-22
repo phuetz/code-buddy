@@ -344,15 +344,29 @@ export class PluginManager extends EventEmitter {
    */
   async loadAllPlugins(): Promise<{ loaded: string[]; failed: string[] }> {
     const manifests = await this.discoverPlugins();
+
+    // Load all plugins in parallel for faster startup
+    const results = await Promise.allSettled(
+      manifests.map(async manifest => {
+        const success = await this.loadPlugin(manifest.name);
+        return { name: manifest.name, success };
+      })
+    );
+
     const loaded: string[] = [];
     const failed: string[] = [];
 
-    for (const manifest of manifests) {
-      const success = await this.loadPlugin(manifest.name);
-      if (success) {
-        loaded.push(manifest.name);
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        if (result.value.success) {
+          loaded.push(result.value.name);
+        } else {
+          failed.push(result.value.name);
+        }
       } else {
-        failed.push(manifest.name);
+        // Find the corresponding manifest name for rejected promises
+        const index = results.indexOf(result);
+        failed.push(manifests[index]?.name || 'unknown');
       }
     }
 
@@ -363,9 +377,11 @@ export class PluginManager extends EventEmitter {
    * Unload all plugins
    */
   async unloadAllPlugins(): Promise<void> {
-    for (const name of this.plugins.keys()) {
-      await this.unloadPlugin(name);
-    }
+    // Unload all plugins in parallel for faster shutdown
+    const pluginNames = Array.from(this.plugins.keys());
+    await Promise.allSettled(
+      pluginNames.map(name => this.unloadPlugin(name))
+    );
   }
 
   /**

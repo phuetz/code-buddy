@@ -158,7 +158,7 @@ describe('DatabaseManager', () => {
       await dbManager.initialize();
 
       const migrationCalls = mockExec.mock.calls.filter(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('CREATE TABLE')
+        (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('CREATE TABLE')
       );
       expect(migrationCalls.length).toBe(0);
     });
@@ -188,7 +188,7 @@ describe('DatabaseManager', () => {
 });
 
 describe('SessionRepository', () => {
-  let SessionRepository: any;
+  let SessionRepository: any; // Keep as any for constructor usage
 
   beforeAll(async () => {
     const module = await import('../../src/database/repositories/session-repository.js');
@@ -228,7 +228,7 @@ describe('SessionRepository', () => {
 
       mockGet.mockReturnValueOnce(mockSession);
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const result = repo.createSession({
         id: 'test-session-1',
         project_id: 'project-1',
@@ -254,7 +254,7 @@ describe('SessionRepository', () => {
 
       mockGet.mockReturnValueOnce(mockSession);
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const result = repo.getSessionById('test-session-1');
 
       expect(result).toBeDefined();
@@ -264,7 +264,7 @@ describe('SessionRepository', () => {
     it('should return null if session not found', () => {
       mockGet.mockReturnValueOnce(undefined);
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const result = repo.getSessionById('nonexistent');
 
       expect(result).toBeNull();
@@ -280,7 +280,7 @@ describe('SessionRepository', () => {
 
       mockAll.mockReturnValueOnce(mockSessions);
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const results = repo.findSessions({
         projectId: 'project-1',
         limit: 10,
@@ -292,7 +292,7 @@ describe('SessionRepository', () => {
     it('should apply order and limit', () => {
       mockAll.mockReturnValueOnce([]);
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       repo.findSessions({
         orderBy: 'updated_at',
         order: 'DESC',
@@ -308,7 +308,7 @@ describe('SessionRepository', () => {
     it('should archive a session', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const result = repo.setArchived('test-session-1', true);
 
       expect(result).toBe(true);
@@ -317,7 +317,7 @@ describe('SessionRepository', () => {
     it('should return false if session not found', () => {
       mockRun.mockReturnValueOnce({ changes: 0 });
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const result = repo.setArchived('nonexistent', true);
 
       expect(result).toBe(false);
@@ -328,7 +328,7 @@ describe('SessionRepository', () => {
     it('should delete session and return true', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const result = repo.deleteSession('test-session-1');
 
       expect(result).toBe(true);
@@ -337,7 +337,7 @@ describe('SessionRepository', () => {
     it('should return false if session not found', () => {
       mockRun.mockReturnValueOnce({ changes: 0 });
 
-      const repo = new SessionRepository(mockDatabase as any);
+      const repo = new SessionRepository(mockDatabase);
       const result = repo.deleteSession('nonexistent');
 
       expect(result).toBe(false);
@@ -378,7 +378,7 @@ describe('MemoryRepository', () => {
 
       mockGet.mockReturnValueOnce(mockMemory);
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const result = repo.create({
         id: 'memory-1',
         type: 'fact',
@@ -407,7 +407,7 @@ describe('MemoryRepository', () => {
       mockGet.mockReturnValueOnce(mockMemory);
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const result = repo.getById('memory-1');
 
       expect(result).toBeDefined();
@@ -417,7 +417,7 @@ describe('MemoryRepository', () => {
     it('should return null if memory not found', () => {
       mockGet.mockReturnValueOnce(undefined);
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const result = repo.getById('nonexistent');
 
       expect(result).toBeNull();
@@ -433,7 +433,7 @@ describe('MemoryRepository', () => {
 
       mockAll.mockReturnValueOnce(mockMemories);
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const results = repo.find({
         type: 'fact',
         limit: 10,
@@ -445,7 +445,7 @@ describe('MemoryRepository', () => {
     it('should filter by project scope', () => {
       mockAll.mockReturnValueOnce([]);
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       repo.find({
         scope: 'project',
         projectId: 'project-1',
@@ -457,7 +457,7 @@ describe('MemoryRepository', () => {
     it('should filter by importance threshold', () => {
       mockAll.mockReturnValueOnce([]);
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       repo.find({
         minImportance: 0.7,
       });
@@ -468,7 +468,7 @@ describe('MemoryRepository', () => {
     it('should filter by multiple types', () => {
       mockAll.mockReturnValueOnce([]);
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       repo.find({
         type: ['fact', 'decision'],
       });
@@ -481,7 +481,7 @@ describe('MemoryRepository', () => {
     it('should delete memory entry', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const result = repo.delete('memory-1');
 
       expect(result).toBe(true);
@@ -490,7 +490,7 @@ describe('MemoryRepository', () => {
     it('should return false if memory not found', () => {
       mockRun.mockReturnValueOnce({ changes: 0 });
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const result = repo.delete('nonexistent');
 
       expect(result).toBe(false);
@@ -501,7 +501,7 @@ describe('MemoryRepository', () => {
     it('should delete expired memories', () => {
       mockRun.mockReturnValueOnce({ changes: 5 });
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const count = repo.deleteExpired();
 
       expect(count).toBe(5);
@@ -524,7 +524,7 @@ describe('MemoryRepository', () => {
           { scope: 'user', count: 20 },
         ]); // byScope
 
-      const repo = new MemoryRepository(mockDatabase as any);
+      const repo = new MemoryRepository(mockDatabase);
       const stats = repo.getStats();
 
       expect(stats).toBeDefined();
@@ -558,7 +558,7 @@ describe('CacheRepository', () => {
       });
       mockRun.mockReturnValueOnce({ changes: 1 }); // For hit count update
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const result = repo.get('test-key');
 
       expect(result).toEqual({ data: 'test' });
@@ -567,7 +567,7 @@ describe('CacheRepository', () => {
     it('should return null for missing key', () => {
       mockGet.mockReturnValueOnce(undefined);
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const result = repo.get('nonexistent');
 
       expect(result).toBeNull();
@@ -583,7 +583,7 @@ describe('CacheRepository', () => {
         .mockReturnValueOnce({ changes: 1 }) // For hit count update
         .mockReturnValueOnce({ changes: 1 }); // For delete
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const result = repo.get('test-key');
 
       expect(result).toBeNull();
@@ -594,7 +594,7 @@ describe('CacheRepository', () => {
     it('should set cache value with TTL', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       repo.set('test-key', { data: 'test' }, { ttlMs: 3600000 });
 
       expect(mockPrepare).toHaveBeenCalled();
@@ -604,7 +604,7 @@ describe('CacheRepository', () => {
     it('should set cache value without TTL', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       repo.set('test-key', { data: 'test' });
 
       expect(mockRun).toHaveBeenCalled();
@@ -613,7 +613,7 @@ describe('CacheRepository', () => {
     it('should set cache value with category', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       repo.set('test-key', { data: 'test' }, { category: 'embeddings' });
 
       expect(mockRun).toHaveBeenCalled();
@@ -624,7 +624,7 @@ describe('CacheRepository', () => {
     it('should delete cache entry', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const result = repo.delete('test-key');
 
       expect(result).toBe(true);
@@ -633,7 +633,7 @@ describe('CacheRepository', () => {
     it('should return false if entry not found', () => {
       mockRun.mockReturnValueOnce({ changes: 0 });
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const result = repo.delete('nonexistent');
 
       expect(result).toBe(false);
@@ -642,7 +642,7 @@ describe('CacheRepository', () => {
 
   describe('clear', () => {
     it('should clear all cache entries', () => {
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       // clear() returns void and calls exec('DELETE FROM cache')
       repo.clear();
 
@@ -652,7 +652,7 @@ describe('CacheRepository', () => {
     it('should clear cache entries by category using deleteByCategory', () => {
       mockRun.mockReturnValueOnce({ changes: 5 });
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const count = repo.deleteByCategory('embeddings');
 
       expect(count).toBe(5);
@@ -663,7 +663,7 @@ describe('CacheRepository', () => {
     it('should remove expired entries', () => {
       mockRun.mockReturnValueOnce({ changes: 3 });
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const count = repo.deleteExpired();
 
       expect(count).toBe(3);
@@ -682,7 +682,7 @@ describe('CacheRepository', () => {
         { category: 'responses', count: 50 },
       ]); // byCategory
 
-      const repo = new CacheRepository(mockDatabase as any);
+      const repo = new CacheRepository(mockDatabase);
       const stats = repo.getStats();
 
       expect(stats).toBeDefined();
@@ -787,7 +787,7 @@ describe('EmbeddingRepository', () => {
         updated_at: '2024-01-01',
       });
 
-      const repo = new EmbeddingRepository(mockDatabase as any);
+      const repo = new EmbeddingRepository(mockDatabase);
       const result = repo.upsert({
         project_id: 'project-1',
         file_path: '/src/index.ts',
@@ -811,7 +811,7 @@ describe('EmbeddingRepository', () => {
         { file_path: '/src/utils.ts', embedding: embeddingBuffer },
       ]);
 
-      const repo = new EmbeddingRepository(mockDatabase as any);
+      const repo = new EmbeddingRepository(mockDatabase);
       const results = repo.find({ projectId: 'project-1' });
 
       expect(results).toHaveLength(2);
@@ -826,7 +826,7 @@ describe('EmbeddingRepository', () => {
         { chunk_index: 1, embedding: embeddingBuffer },
       ]);
 
-      const repo = new EmbeddingRepository(mockDatabase as any);
+      const repo = new EmbeddingRepository(mockDatabase);
       const results = repo.find({ projectId: 'project-1', filePath: '/src/index.ts' });
 
       expect(results).toHaveLength(2);
@@ -837,7 +837,7 @@ describe('EmbeddingRepository', () => {
     it('should delete embeddings for a file', () => {
       mockRun.mockReturnValueOnce({ changes: 5 });
 
-      const repo = new EmbeddingRepository(mockDatabase as any);
+      const repo = new EmbeddingRepository(mockDatabase);
       const count = repo.deleteForFile('project-1', '/src/index.ts');
 
       expect(count).toBe(5);
@@ -848,7 +848,7 @@ describe('EmbeddingRepository', () => {
     it('should delete all embeddings for a project', () => {
       mockRun.mockReturnValueOnce({ changes: 100 });
 
-      const repo = new EmbeddingRepository(mockDatabase as any);
+      const repo = new EmbeddingRepository(mockDatabase);
       const count = repo.deleteForProject('project-1');
 
       expect(count).toBe(100);
@@ -875,7 +875,7 @@ describe('AnalyticsRepository', () => {
     it('should record tool usage statistics', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new AnalyticsRepository(mockDatabase as any);
+      const repo = new AnalyticsRepository(mockDatabase);
       // Signature: recordToolUsage(toolName, success, timeMs, cacheHit, projectId?)
       repo.recordToolUsage('bash', true, 150, false, 'project-1');
 
@@ -886,7 +886,7 @@ describe('AnalyticsRepository', () => {
     it('should record failed tool usage', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new AnalyticsRepository(mockDatabase as any);
+      const repo = new AnalyticsRepository(mockDatabase);
       repo.recordToolUsage('bash', false, 50, false);
 
       expect(mockRun).toHaveBeenCalled();
@@ -900,7 +900,7 @@ describe('AnalyticsRepository', () => {
         { tool_name: 'view_file', success_count: 200, failure_count: 2 },
       ]);
 
-      const repo = new AnalyticsRepository(mockDatabase as any);
+      const repo = new AnalyticsRepository(mockDatabase);
       const stats = repo.getToolStats();
 
       expect(stats).toHaveLength(2);
@@ -909,7 +909,7 @@ describe('AnalyticsRepository', () => {
     it('should filter by project', () => {
       mockAll.mockReturnValueOnce([]);
 
-      const repo = new AnalyticsRepository(mockDatabase as any);
+      const repo = new AnalyticsRepository(mockDatabase);
       repo.getToolStats('project-1');
 
       expect(mockPrepare).toHaveBeenCalled();
@@ -920,7 +920,7 @@ describe('AnalyticsRepository', () => {
     it('should record daily analytics with cost', () => {
       mockRun.mockReturnValueOnce({ changes: 1 });
 
-      const repo = new AnalyticsRepository(mockDatabase as any);
+      const repo = new AnalyticsRepository(mockDatabase);
       repo.recordAnalytics({
         date: '2024-01-01',
         project_id: 'project-1',

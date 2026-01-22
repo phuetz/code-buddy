@@ -302,7 +302,7 @@ export class PluginMarketplace extends EventEmitter {
       // Get plugin info
       const plugin = await this.getPluginDetails(pluginId);
       if (!plugin) {
-        throw new Error('Plugin not found');
+        throw new Error(`Plugin "${pluginId}" not found in the registry. Check the plugin ID or try refreshing the plugin list.`);
       }
 
       // Check version compatibility
@@ -325,7 +325,7 @@ export class PluginMarketplace extends EventEmitter {
       if (checksum) {
         const hash = crypto.createHash('sha256').update(response.data).digest('hex');
         if (hash !== checksum) {
-          throw new Error('Plugin checksum verification failed');
+          throw new Error('Plugin checksum verification failed. The download may be corrupted. Please try again.');
         }
       }
 
@@ -390,7 +390,7 @@ export class PluginMarketplace extends EventEmitter {
   async uninstall(pluginId: string): Promise<void> {
     const plugin = this.installedPlugins.get(pluginId);
     if (!plugin) {
-      throw new Error('Plugin not installed');
+      throw new Error('Plugin is not installed. Use "plugins list" to see installed plugins.');
     }
 
     this.emit('uninstall:start', { pluginId });
@@ -419,7 +419,7 @@ export class PluginMarketplace extends EventEmitter {
   async update(pluginId: string): Promise<InstalledPlugin | null> {
     const installed = this.installedPlugins.get(pluginId);
     if (!installed) {
-      throw new Error('Plugin not installed');
+      throw new Error('Plugin is not installed. Use "plugins list" to see installed plugins.');
     }
 
     const latest = await this.getPluginDetails(pluginId);
@@ -497,7 +497,7 @@ export class PluginMarketplace extends EventEmitter {
   async loadPlugin(pluginId: string): Promise<void> {
     const plugin = this.installedPlugins.get(pluginId);
     if (!plugin) {
-      throw new Error('Plugin not installed');
+      throw new Error('Plugin is not installed. Use "plugins list" to see installed plugins.');
     }
 
     if (this.loadedPlugins.has(pluginId)) {
@@ -791,7 +791,7 @@ export class PluginMarketplace extends EventEmitter {
   async enable(pluginId: string): Promise<void> {
     const plugin = this.installedPlugins.get(pluginId);
     if (!plugin) {
-      throw new Error('Plugin not installed');
+      throw new Error('Plugin is not installed. Use "plugins list" to see installed plugins.');
     }
 
     plugin.enabled = true;
@@ -807,7 +807,7 @@ export class PluginMarketplace extends EventEmitter {
   async disable(pluginId: string): Promise<void> {
     const plugin = this.installedPlugins.get(pluginId);
     if (!plugin) {
-      throw new Error('Plugin not installed');
+      throw new Error('Plugin is not installed. Use "plugins list" to see installed plugins.');
     }
 
     await this.unloadPlugin(pluginId);
@@ -843,6 +843,13 @@ export class PluginMarketplace extends EventEmitter {
    */
   getTools(): string[] {
     return Array.from(this.tools.keys());
+  }
+
+  /**
+   * Get tool definition by name
+   */
+  getToolDefinition(name: string): ToolDefinition | undefined {
+    return this.tools.get(name)?.tool;
   }
 
   /**

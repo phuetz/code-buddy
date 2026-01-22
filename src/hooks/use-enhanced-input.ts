@@ -11,6 +11,7 @@ import {
   moveToNextWord,
 } from "../utils/text-utils.js";
 import { useInputHistory } from "./use-input-history.js";
+import { getHistoryManager } from "../utils/history-manager.js";
 
 export interface Key {
   name?: string;
@@ -34,6 +35,8 @@ export interface EnhancedInputHook {
   input: string;
   cursorPosition: number;
   isMultiline: boolean;
+  isReverseSearchActive: boolean;
+  reverseSearchPrompt: string;
   setInput: (text: string) => void;
   setCursorPosition: (position: number) => void;
   clearInput: () => void;
@@ -59,8 +62,11 @@ export function useEnhancedInput({
 }: UseEnhancedInputProps = {}): EnhancedInputHook {
   const [input, setInputState] = useState("");
   const [cursorPosition, setCursorPositionState] = useState(0);
+  const [isReverseSearchActive, setIsReverseSearchActive] = useState(false);
+  const [reverseSearchPrompt, setReverseSearchPrompt] = useState("");
   const isMultilineRef = useRef(multiline);
-  
+  const historyManager = getHistoryManager();
+
   const {
     addToHistory,
     navigateHistory,
@@ -275,6 +281,101 @@ export function useEnhancedInput({
       return;
     }
 
+    // Handle Ctrl+R: Reverse search (bash-like)
+    if (key.ctrl && inputChar === "r") {
+      if (isReverseSearchActive) {
+        // Already in search mode - go to next match
+        const nextMatch = historyManager.reverseSearchNext();
+        if (nextMatch) {
+          setInputState(nextMatch.text);
+          setCursorPositionState(nextMatch.text.length);
+        }
+        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+      } else {
+        // Start reverse search mode
+        historyManager.startReverseSearch(input);
+        setIsReverseSearchActive(true);
+        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+      }
+      return;
+    }
+
+    // Handle Ctrl+S: Forward search (when in reverse search mode)
+    if (key.ctrl && inputChar === "s" && isReverseSearchActive) {
+      const prevMatch = historyManager.reverseSearchPrev();
+      if (prevMatch) {
+        setInputState(prevMatch.text);
+        setCursorPositionState(prevMatch.text.length);
+      }
+      setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+      return;
+    }
+
+    // Handle input during reverse search mode
+    if (isReverseSearchActive) {
+      // Escape cancels search
+      if (key.escape) {
+        const originalInput = historyManager.cancelReverseSearch();
+        setInputState(originalInput);
+        setCursorPositionState(originalInput.length);
+        setIsReverseSearchActive(false);
+        setReverseSearchPrompt("");
+        return;
+      }
+
+      // Enter accepts the match
+      if (key.return) {
+        const selectedText = historyManager.acceptReverseSearch();
+        setInputState(selectedText);
+        setCursorPositionState(selectedText.length);
+        setIsReverseSearchActive(false);
+        setReverseSearchPrompt("");
+        return;
+      }
+
+      // Backspace removes last char from search query
+      const isBackspaceInSearch = key.backspace ||
+                                  key.name === 'backspace' ||
+                                  inputChar === '\b' ||
+                                  inputChar === '\x7f';
+      if (isBackspaceInSearch) {
+        const state = historyManager.getReverseSearchState();
+        if (state.query.length > 0) {
+          const newQuery = state.query.slice(0, -1);
+          const match = historyManager.updateReverseSearch(newQuery);
+          if (match) {
+            setInputState(match.text);
+            setCursorPositionState(match.text.length);
+          }
+          setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+        }
+        return;
+      }
+
+      // Regular characters update the search query
+      if (inputChar && !key.ctrl && !key.meta && inputChar.length === 1) {
+        const state = historyManager.getReverseSearchState();
+        const newQuery = state.query + inputChar;
+        const match = historyManager.updateReverseSearch(newQuery);
+        if (match) {
+          setInputState(match.text);
+          setCursorPositionState(match.text.length);
+        }
+        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+        return;
+      }
+
+      // Any other key exits search mode but keeps the match
+      if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) {
+        const selectedText = historyManager.acceptReverseSearch();
+        setInputState(selectedText);
+        setCursorPositionState(selectedText.length);
+        setIsReverseSearchActive(false);
+        setReverseSearchPrompt("");
+        // Continue to handle the key normally
+      }
+    }
+
     // Handle regular character input
     if (inputChar && !key.ctrl && !key.meta) {
       const result = insertText(input, cursorPosition, inputChar);
@@ -282,12 +383,14 @@ export function useEnhancedInput({
       setCursorPositionState(result.position);
       setOriginalInput(result.text);
     }
-  }, [disabled, onSpecialKey, input, cursorPosition, multiline, handleSubmit, navigateHistory, setOriginalInput]);
+  }, [disabled, onSpecialKey, input, cursorPosition, multiline, handleSubmit, navigateHistory, setOriginalInput, isReverseSearchActive, historyManager]);
 
   return {
     input,
     cursorPosition,
     isMultiline: isMultilineRef.current,
+    isReverseSearchActive,
+    reverseSearchPrompt,
     setInput,
     setCursorPosition,
     clearInput,

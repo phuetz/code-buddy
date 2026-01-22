@@ -7,6 +7,7 @@
  * - Piped input handling
  */
 
+import { logger } from "../utils/logger.js";
 import type { ChatCompletionMessageParam } from 'openai/resources/chat';
 
 // Lazy imports for heavy modules
@@ -159,8 +160,9 @@ export async function handleCommitAndPushHeadless(
 
     console.log('git add: Changes staged');
 
-    // Get staged changes for commit message generation
+    // Get staged changes for commit message generation (status is already known)
     const diffResult = await agent.executeBashCommand('git diff --cached');
+    // Note: We already have initialStatusResult, so we reuse it for the commit prompt
 
     // Generate commit message using AI
     const commitPrompt = `Generate a concise, professional git commit message for these changes:
@@ -227,8 +229,7 @@ Respond with ONLY the commit message, no additional text.`;
       process.exit(1);
     }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error during commit and push:', errorMessage);
+    logger.error('Error during commit and push:', error as Error);
     process.exit(1);
   }
 }

@@ -351,11 +351,25 @@ export interface EditorCommand extends AstNode {
 // Runtime Types
 // ============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FCSValue = any;
+/**
+ * Primitive types that can be stored in FCS variables
+ */
+export type FCSPrimitive = string | number | boolean | null | undefined;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * Function type for the FCS runtime.
+ * Note: Uses flexible typing to support dynamic scripting scenarios.
+ * Implementations should validate arguments at runtime.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Required for dynamic scripting runtime
 export type FCSFunction = (...args: any[]) => any;
+
+/**
+ * Dynamic value type for the FCS runtime.
+ * Uses a union of known types for better type safety.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Required for dynamic scripting where types are determined at runtime
+export type FCSValue = FCSPrimitive | FCSFunction | Record<string, any> | any[];
 
 export interface FCSContext {
   variables: Map<string, FCSValue>;

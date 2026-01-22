@@ -94,7 +94,7 @@ describe('Local LLM Providers', () => {
       });
 
       it('should throw if model file not found', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(false);
 
@@ -103,7 +103,7 @@ describe('Local LLM Providers', () => {
       });
 
       it('should ensure models directory exists', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(true);
 
@@ -113,7 +113,7 @@ describe('Local LLM Providers', () => {
       });
 
       it('should emit ready event after initialization', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(true);
 
@@ -135,7 +135,7 @@ describe('Local LLM Providers', () => {
 
     describe('Complete Method', () => {
       beforeEach(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(true);
         await provider.initialize({ modelPath: '/path/to/model.gguf' });
@@ -171,7 +171,7 @@ describe('Local LLM Providers', () => {
 
     describe('Streaming', () => {
       beforeEach(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(true);
         await provider.initialize({ modelPath: '/path/to/model.gguf' });
@@ -206,7 +206,7 @@ describe('Local LLM Providers', () => {
 
     describe('getModels', () => {
       it('should return GGUF files from models directory', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(true);
         fs.readdir.mockResolvedValueOnce([
@@ -221,7 +221,7 @@ describe('Local LLM Providers', () => {
       });
 
       it('should return empty array if models directory does not exist', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(false);
 
@@ -233,7 +233,7 @@ describe('Local LLM Providers', () => {
 
     describe('dispose', () => {
       it('should set ready to false', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fs = require('fs-extra');
         fs.pathExists.mockResolvedValueOnce(true);
         await provider.initialize({ modelPath: '/path/to/model.gguf' });

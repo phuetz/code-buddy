@@ -43,19 +43,34 @@ export class MultiEditTool {
       };
     }
 
-    // Validate all files: path security AND existence
+    // Validate all files: path security AND existence (parallel)
     const validationErrors: string[] = [];
-    for (const edit of edits) {
-      // Security check: prevent path traversal
-      const pathResult = this.pathValidator.validate(edit.file_path);
+
+    // First pass: synchronous path validation
+    const pathResults = edits.map(edit => ({
+      edit,
+      pathResult: this.pathValidator.validate(edit.file_path),
+    }));
+
+    for (const { edit, pathResult } of pathResults) {
       if (!pathResult.valid) {
         validationErrors.push(pathResult.error || `Invalid path: ${edit.file_path}`);
-        continue;
       }
+    }
 
-      // Existence check
-      if (!(await this.vfs.exists(pathResult.resolved))) {
-        validationErrors.push(`File not found: ${edit.file_path}`);
+    // Second pass: parallel existence checks for valid paths
+    const existenceChecks = await Promise.all(
+      pathResults
+        .filter(({ pathResult }) => pathResult.valid)
+        .map(async ({ edit, pathResult }) => ({
+          file_path: edit.file_path,
+          exists: await this.vfs.exists(pathResult.resolved),
+        }))
+    );
+
+    for (const { file_path, exists } of existenceChecks) {
+      if (!exists) {
+        validationErrors.push(`File not found: ${file_path}`);
       }
     }
 

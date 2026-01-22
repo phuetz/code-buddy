@@ -53,7 +53,7 @@ jest.mock('fs-extra', () => ({
   writeFile: jest.fn(),
   ensureDir: jest.fn(),
 }));
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const mockFsExtra = require('fs-extra') as {
   pathExists: jest.Mock;
   readFile: jest.Mock;

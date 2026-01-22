@@ -13,6 +13,7 @@ import { promisify } from 'util';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import os from 'os';
+import { logger } from '../utils/logger.js';
 
 const execAsync = promisify(exec);
 
@@ -93,7 +94,7 @@ export async function recordAudio(
       } else {
         // Manual stop recording - run in background
         return new Promise((resolve, reject) => {
-          console.log('Recording... Press Enter to stop.');
+          logger.info('Recording... Press Enter to stop.');
 
           const child = spawn('sh', ['-c', cmd.replace(durationSeconds.toString(), '30')], {
             stdio: ['ignore', 'ignore', 'ignore'],
@@ -204,24 +205,24 @@ export async function getVoiceInput(config: VoiceConfig = {}): Promise<VoiceResu
     }
 
     // Record audio
-    console.log('Press Enter when ready to record...');
+    logger.info('Press Enter when ready to record...');
     await new Promise(resolve => process.stdin.once('data', resolve));
 
-    console.log('Recording... Press Enter to stop.');
+    logger.info('Recording... Press Enter to stop.');
     const audioPath = await recordAudio(config.duration || 0);
 
     // Transcribe
     let text: string;
 
     if (config.useLocal && await hasLocalWhisper()) {
-      console.log('Transcribing with local whisper...');
+      logger.info('Transcribing with local whisper...');
       text = await transcribeWithLocalWhisper(
         audioPath,
         config.modelSize || 'base',
         config.language
       );
     } else if (config.apiKey) {
-      console.log('Transcribing with Whisper API...');
+      logger.info('Transcribing with Whisper API...');
       text = await transcribeWithWhisperAPI(audioPath, config.apiKey, config.language);
     } else {
       // Try local first, then fail

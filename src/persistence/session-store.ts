@@ -1,7 +1,8 @@
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { ChatEntry } from '../agent/codebuddy-agent.js';
+import type { ChatEntry } from '../agent/types.js';
 import { getSessionRepository, SessionRepository } from '../database/repositories/session-repository.js';
 import type { Message as DBMessage } from '../database/schema.js';
 
@@ -69,23 +70,24 @@ export class SessionStore {
         this.config.useSQLite = false;
       }
     }
-
-    this.ensureSessionsDirectory();
+    // Directory will be ensured lazily on first file operation
   }
 
   /**
    * Ensure the sessions directory exists
    */
-  private ensureSessionsDirectory(): void {
-    if (!fs.existsSync(SESSIONS_DIR)) {
-      fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+  private async ensureSessionsDirectory(): Promise<void> {
+    try {
+      await fsPromises.access(SESSIONS_DIR);
+    } catch {
+      await fsPromises.mkdir(SESSIONS_DIR, { recursive: true });
     }
   }
 
   /**
    * Create a new session
    */
-  createSession(name?: string, model?: string): Session {
+  async createSession(name?: string, model?: string): Promise<Session> {
     const session: Session = {
       id: this.generateSessionId(),
       name: name || `Session ${new Date().toLocaleDateString()}`,
@@ -106,7 +108,7 @@ export class SessionStore {
       });
     }
 
-    this.saveSession(session);
+    await this.saveSession(session);
     this.currentSessionId = session.id;
 
     return session;
@@ -115,8 +117,8 @@ export class SessionStore {
   /**
    * Save a session to disk
    */
-  saveSession(session: Session): void {
-    this.ensureSessionsDirectory();
+  async saveSession(session: Session): Promise<void> {
+    await this.ensureSessionsDirectory();
     const filePath = this.getSessionFilePath(session.id);
 
     const data = {
@@ -125,21 +127,19 @@ export class SessionStore {
       lastAccessedAt: new Date().toISOString()
     };
 
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    await fsPromises.writeFile(filePath, JSON.stringify(data, null, 2));
   }
 
   /**
    * Load a session from disk
    */
-  loadSession(sessionId: string): Session | null {
+  async loadSession(sessionId: string): Promise<Session | null> {
     const filePath = this.getSessionFilePath(sessionId);
 
-    if (!fs.existsSync(filePath)) {
-      return null;
-    }
-
     try {
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      await fsPromises.access(filePath);
+      const content = await fsPromises.readFile(filePath, 'utf-8');
+      const data = JSON.parse(content);
       return {
         ...data,
         createdAt: new Date(data.createdAt),
@@ -153,25 +153,25 @@ export class SessionStore {
   /**
    * Update the current session with new messages
    */
-  updateCurrentSession(chatHistory: ChatEntry[]): void {
+  async updateCurrentSession(chatHistory: ChatEntry[]): Promise<void> {
     if (!this.currentSessionId || !this.autoSave) return;
 
-    const session = this.loadSession(this.currentSessionId);
+    const session = await this.loadSession(this.currentSessionId);
     if (!session) return;
 
     session.messages = this.convertChatEntriesToMessages(chatHistory);
     session.lastAccessedAt = new Date();
 
-    this.saveSession(session);
+    await this.saveSession(session);
   }
 
   /**
    * Add a message to the current session
    */
-  addMessageToCurrentSession(entry: ChatEntry): void {
+  async addMessageToCurrentSession(entry: ChatEntry): Promise<void> {
     if (!this.currentSessionId || !this.autoSave) return;
 
-    const session = this.loadSession(this.currentSessionId);
+    const session = await this.loadSession(this.currentSessionId);
     if (!session) return;
 
     const message = this.convertChatEntryToMessage(entry);
@@ -190,7 +190,7 @@ export class SessionStore {
       this.dbRepository.addMessage(dbMessage);
     }
 
-    this.saveSession(session);
+    await this.saveSession(session);
   }
 
   /**
@@ -218,8 +218,7 @@ export class SessionStore {
    */
   convertMessagesToChatEntries(messages: SessionMessage[]): ChatEntry[] {
     return messages.map(msg => ({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SessionMessage type maps to ChatEntry type
-      type: msg.type as any,
+      type: msg.type,
       content: msg.content,
       timestamp: new Date(msg.timestamp),
       toolCall: msg.toolCallName ? {
@@ -239,59 +238,64 @@ export class SessionStore {
   /**
    * List all saved sessions
    */
-  listSessions(): Session[] {
-    this.ensureSessionsDirectory();
+  async listSessions(): Promise<Session[]> {
+    await this.ensureSessionsDirectory();
 
-    const files = fs.readdirSync(SESSIONS_DIR)
-      .filter(f => f.endsWith('.json'))
-      .map(f => {
-        const sessionId = f.replace('.json', '');
-        return this.loadSession(sessionId);
-      })
-      .filter((s): s is Session => s !== null)
-      .sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime());
+    const fileNames = await fsPromises.readdir(SESSIONS_DIR);
+    const jsonFiles = fileNames.filter(f => f.endsWith('.json'));
 
-    return files;
+    const sessions: Session[] = [];
+    for (const f of jsonFiles) {
+      const sessionId = f.replace('.json', '');
+      const session = await this.loadSession(sessionId);
+      if (session) {
+        sessions.push(session);
+      }
+    }
+
+    return sessions.sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime());
   }
 
   /**
    * Get recent sessions
    */
-  getRecentSessions(count: number = 10): Session[] {
-    return this.listSessions().slice(0, count);
+  async getRecentSessions(count: number = 10): Promise<Session[]> {
+    const sessions = await this.listSessions();
+    return sessions.slice(0, count);
   }
 
   /**
    * Delete a session
    */
-  deleteSession(sessionId: string): boolean {
+  async deleteSession(sessionId: string): Promise<boolean> {
     const filePath = this.getSessionFilePath(sessionId);
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    try {
+      await fsPromises.access(filePath);
+      await fsPromises.unlink(filePath);
 
       if (this.currentSessionId === sessionId) {
         this.currentSessionId = null;
       }
 
       return true;
+    } catch {
+      return false;
     }
-
-    return false;
   }
 
   /**
    * Clean up old sessions (keep only MAX_SESSIONS most recent)
    */
-  cleanupOldSessions(): number {
-    const sessions = this.listSessions();
+  async cleanupOldSessions(): Promise<number> {
+    const sessions = await this.listSessions();
     let deleted = 0;
 
     if (sessions.length > MAX_SESSIONS) {
       const sessionsToDelete = sessions.slice(MAX_SESSIONS);
 
       for (const session of sessionsToDelete) {
-        if (this.deleteSession(session.id)) {
+        if (await this.deleteSession(session.id)) {
           deleted++;
         }
       }
@@ -303,8 +307,8 @@ export class SessionStore {
   /**
    * Export session to Markdown
    */
-  exportToMarkdown(sessionId: string): string | null {
-    const session = this.loadSession(sessionId);
+  async exportToMarkdown(sessionId: string): Promise<string | null> {
+    const session = await this.loadSession(sessionId);
     if (!session) return null;
 
     const lines: string[] = [
@@ -352,29 +356,29 @@ export class SessionStore {
   /**
    * Save session export to file
    */
-  exportSessionToFile(sessionId: string, outputPath?: string): string | null {
-    const markdown = this.exportToMarkdown(sessionId);
+  async exportSessionToFile(sessionId: string, outputPath?: string): Promise<string | null> {
+    const markdown = await this.exportToMarkdown(sessionId);
     if (!markdown) return null;
 
-    const session = this.loadSession(sessionId);
+    const session = await this.loadSession(sessionId);
     if (!session) return null;
 
     const fileName = outputPath || `codebuddy-session-${session.id.slice(0, 8)}.md`;
     const fullPath = path.resolve(process.cwd(), fileName);
 
-    fs.writeFileSync(fullPath, markdown);
+    await fsPromises.writeFile(fullPath, markdown);
     return fullPath;
   }
 
   /**
    * Resume a session (set as current)
    */
-  resumeSession(sessionId: string): Session | null {
-    const session = this.loadSession(sessionId);
+  async resumeSession(sessionId: string): Promise<Session | null> {
+    const session = await this.loadSession(sessionId);
     if (session) {
       this.currentSessionId = sessionId;
       session.lastAccessedAt = new Date();
-      this.saveSession(session);
+      await this.saveSession(session);
     }
     return session;
   }
@@ -389,7 +393,7 @@ export class SessionStore {
   /**
    * Get the current session
    */
-  getCurrentSession(): Session | null {
+  async getCurrentSession(): Promise<Session | null> {
     if (!this.currentSessionId) return null;
     return this.loadSession(this.currentSessionId);
   }
@@ -421,8 +425,8 @@ export class SessionStore {
   /**
    * Format session list for display
    */
-  formatSessionList(): string {
-    const sessions = this.getRecentSessions(10);
+  async formatSessionList(): Promise<string> {
+    const sessions = await this.getRecentSessions(10);
 
     if (sessions.length === 0) {
       return 'No saved sessions.';
@@ -455,8 +459,8 @@ export class SessionStore {
   /**
    * Search sessions by content
    */
-  searchSessions(query: string): Session[] {
-    const sessions = this.listSessions();
+  async searchSessions(query: string): Promise<Session[]> {
+    const sessions = await this.listSessions();
     const lowerQuery = query.toLowerCase();
 
     return sessions.filter(session => {
@@ -473,16 +477,16 @@ export class SessionStore {
   /**
    * Get the most recent session
    */
-  getLastSession(): Session | null {
-    const sessions = this.listSessions();
+  async getLastSession(): Promise<Session | null> {
+    const sessions = await this.listSessions();
     return sessions.length > 0 ? sessions[0] : null;
   }
 
   /**
    * Resume the last session
    */
-  resumeLastSession(): Session | null {
-    const lastSession = this.getLastSession();
+  async resumeLastSession(): Promise<Session | null> {
+    const lastSession = await this.getLastSession();
     if (lastSession) {
       return this.resumeSession(lastSession.id);
     }
@@ -492,8 +496,8 @@ export class SessionStore {
   /**
    * Continue from last response (get last session and last message)
    */
-  continueLastSession(): { session: Session; lastUserMessage: string } | null {
-    const session = this.resumeLastSession();
+  async continueLastSession(): Promise<{ session: Session; lastUserMessage: string } | null> {
+    const session = await this.resumeLastSession();
     if (!session) return null;
 
     // Find the last user message
@@ -510,8 +514,8 @@ export class SessionStore {
   /**
    * Get session by partial ID match
    */
-  getSessionByPartialId(partialId: string): Session | null {
-    const sessions = this.listSessions();
+  async getSessionByPartialId(partialId: string): Promise<Session | null> {
+    const sessions = await this.listSessions();
     const match = sessions.find(s =>
       s.id.includes(partialId) || s.id.startsWith(partialId)
     );
@@ -521,8 +525,8 @@ export class SessionStore {
   /**
    * Clone a session (for branching conversations)
    */
-  cloneSession(sessionId: string, newName?: string): Session | null {
-    const original = this.loadSession(sessionId);
+  async cloneSession(sessionId: string, newName?: string): Promise<Session | null> {
+    const original = await this.loadSession(sessionId);
     if (!original) return null;
 
     const cloned: Session = {
@@ -534,15 +538,15 @@ export class SessionStore {
       messages: [...original.messages]
     };
 
-    this.saveSession(cloned);
+    await this.saveSession(cloned);
     return cloned;
   }
 
   /**
    * Branch session at a specific message index
    */
-  branchSession(sessionId: string, atMessageIndex: number, newName?: string): Session | null {
-    const original = this.loadSession(sessionId);
+  async branchSession(sessionId: string, atMessageIndex: number, newName?: string): Promise<Session | null> {
+    const original = await this.loadSession(sessionId);
     if (!original) return null;
 
     const branchedMessages = original.messages.slice(0, atMessageIndex + 1);
@@ -561,7 +565,7 @@ export class SessionStore {
       }
     };
 
-    this.saveSession(branched);
+    await this.saveSession(branched);
     return branched;
   }
 

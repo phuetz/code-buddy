@@ -5,6 +5,30 @@ import path from 'path';
 import os from 'os';
 import { getErrorMessage } from '../types/index.js';
 
+/**
+ * Axios-like error response structure
+ */
+interface AxiosErrorResponse {
+  response?: {
+    data?: {
+      error?: {
+        message?: string;
+      };
+    };
+  };
+}
+
+/**
+ * Type guard to check if error is an Axios-like error with response data
+ */
+function isAxiosError(error: unknown): error is AxiosErrorResponse {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'response' in error
+  );
+}
+
 export interface VoiceInputConfig {
   enabled: boolean;
   provider: 'whisper-local' | 'whisper-api' | 'system';
@@ -367,9 +391,8 @@ export class VoiceInputManager extends EventEmitter {
         language: response.data.language
       };
     } catch (error) {
-      const errorMsg = error && typeof error === 'object' && 'response' in error
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- axios error response structure
-        ? (error as any).response?.data?.error?.message || getErrorMessage(error)
+      const errorMsg = isAxiosError(error)
+        ? error.response?.data?.error?.message || getErrorMessage(error)
         : getErrorMessage(error);
       return {
         success: false,

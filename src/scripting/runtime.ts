@@ -112,7 +112,7 @@ export class Runtime {
   private async executeStatement(stmt: StatementNode, ctx: RuntimeContext): Promise<CodeBuddyValue | ReturnValue | BreakSignal | ContinueSignal> {
     // Check timeout
     if (Date.now() - this.startTime > this.config.timeout) {
-      throw new Error(`Script timeout after ${this.config.timeout}ms`);
+      throw new Error(`Script execution timed out after ${this.config.timeout}ms. Consider breaking the script into smaller parts or increasing the timeout limit.`);
     }
 
     switch (stmt.type) {
@@ -160,7 +160,7 @@ export class Runtime {
         return null;
 
       default:
-        throw new Error(`Unknown statement type: ${(stmt as StatementNode).type}`);
+        throw new Error(`Unsupported statement type "${(stmt as StatementNode).type}". This may be a syntax error or an unsupported feature.`);
     }
   }
 
@@ -274,7 +274,7 @@ export class Runtime {
     const iterable = await this.evaluateExpression(stmt.iterable, ctx);
 
     if (!Array.isArray(iterable) && typeof iterable !== 'object') {
-      throw new Error('for-in requires an iterable (array or object)');
+      throw new Error('for-in loop requires an array or object to iterate over. Got: ' + (typeof iterable));
     }
 
     const items = Array.isArray(iterable) ? iterable : Object.entries(iterable as Record<string, CodeBuddyValue>);
@@ -394,7 +394,7 @@ export class Runtime {
         return this.createArrowFunction(expr, ctx);
 
       default:
-        throw new Error(`Unknown expression type: ${(expr as ExpressionNode).type}`);
+        throw new Error(`Unsupported expression type "${(expr as ExpressionNode).type}". Check syntax or upgrade to a newer version.`);
     }
   }
 
@@ -408,7 +408,7 @@ export class Runtime {
     if (ctx.parent) {
       return this.lookupVariable(name, ctx.parent);
     }
-    throw new Error(`Undefined variable: ${name}`);
+    throw new Error(`Variable "${name}" is not defined. Check the variable name or define it before use.`);
   }
 
   private async evaluateBinaryExpression(expr: BinaryExpression, ctx: RuntimeContext): Promise<CodeBuddyValue> {
@@ -440,7 +440,7 @@ export class Runtime {
       case '>': return (left as number) > (right as number);
       case '>=': return (left as number) >= (right as number);
       default:
-        throw new Error(`Unknown binary operator: ${expr.operator}`);
+        throw new Error(`Unsupported binary operator "${expr.operator}". Valid operators: +, -, *, /, %, **, ==, !=, <, <=, >, >=`);
     }
   }
 
@@ -451,7 +451,7 @@ export class Runtime {
       case '-': return -(argument as number);
       case '!': return !this.isTruthy(argument);
       default:
-        throw new Error(`Unknown unary operator: ${expr.operator}`);
+        throw new Error(`Unsupported unary operator "${expr.operator}". Valid operators: -, !`);
     }
   }
 
@@ -515,7 +515,7 @@ export class Runtime {
     const callee = await this.evaluateExpression(expr.callee, ctx);
 
     if (typeof callee !== 'function') {
-      throw new Error(`${JSON.stringify(callee)} is not a function`);
+      throw new Error(`Cannot call ${JSON.stringify(callee)}: it is not a function. Check if the function name is correct.`);
     }
 
     const args: CodeBuddyValue[] = [];
@@ -530,7 +530,7 @@ export class Runtime {
     const object = await this.evaluateExpression(expr.object, ctx);
 
     if (object === null || object === undefined) {
-      throw new Error('Cannot read property of null or undefined');
+      throw new Error('Cannot read property of null or undefined. Ensure the object exists before accessing its properties.');
     }
 
     const property = expr.computed

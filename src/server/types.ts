@@ -43,6 +43,46 @@ export interface ServerConfig {
   logging: boolean;
   /** Enable OpenAPI docs */
   docsEnabled?: boolean;
+  /** Security headers configuration */
+  securityHeaders?: SecurityHeadersServerConfig;
+  /** Route-specific rate limit configurations */
+  routeRateLimits?: Record<string, RouteRateLimitConfig>;
+}
+
+/**
+ * Security headers configuration for the server
+ */
+export interface SecurityHeadersServerConfig {
+  /** Enable security headers (default: true in production, false in development) */
+  enabled?: boolean;
+  /** Enable Content-Security-Policy header */
+  enableCSP?: boolean;
+  /** Enable HSTS header (should only be enabled for HTTPS) */
+  enableHSTS?: boolean;
+  /** HSTS max-age in seconds (default: 31536000 = 1 year) */
+  hstsMaxAge?: number;
+  /** X-Frame-Options value (default: 'DENY') */
+  frameOptions?: 'DENY' | 'SAMEORIGIN';
+  /** Referrer-Policy value (default: 'strict-origin-when-cross-origin') */
+  referrerPolicy?: string;
+  /** Custom CSP directives to override defaults */
+  cspDirectives?: Record<string, string[]>;
+  /** Routes to exclude from security headers (e.g., static assets) */
+  excludeRoutes?: string[];
+  /** Use report-only mode for CSP (useful for testing) */
+  cspReportOnly?: boolean;
+  /** CSP report URI for violation reports */
+  cspReportUri?: string;
+}
+
+/**
+ * Route-specific rate limit configuration
+ */
+export interface RouteRateLimitConfig {
+  /** Maximum requests allowed in the window */
+  maxRequests: number;
+  /** Time window in milliseconds */
+  windowMs: number;
 }
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {

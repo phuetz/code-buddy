@@ -19,6 +19,32 @@ import {
 import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
+// Types
+// ============================================================================
+
+/** PDF info fields from pdf-parse library */
+interface PdfInfo {
+  Title?: string;
+  Author?: string;
+  Subject?: string;
+  Keywords?: string;
+  Creator?: string;
+  Producer?: string;
+  CreationDate?: string;
+  ModDate?: string;
+  [key: string]: unknown;
+}
+
+/** Result from pdf-parse library */
+interface PdfParseResult {
+  numpages: number;
+  numrender: number;
+  info: PdfInfo;
+  metadata: unknown;
+  text: string;
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -37,8 +63,7 @@ const PDF_AGENT_CONFIG: SpecializedAgentConfig = {
 // ============================================================================
 
 export class PDFAgent extends SpecializedAgent {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private pdfParse: ((buffer: Buffer) => Promise<any>) | null = null;
+  private pdfParse: ((buffer: Buffer) => Promise<PdfParseResult>) | null = null;
 
   constructor() {
     super(PDF_AGENT_CONFIG);
@@ -47,7 +72,6 @@ export class PDFAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     try {
       // Dynamic import of pdf-parse
-      // @ts-expect-error - Optional dependency
       const pdfParseModule = await import('pdf-parse');
       this.pdfParse = pdfParseModule.default || pdfParseModule;
       this.isInitialized = true;

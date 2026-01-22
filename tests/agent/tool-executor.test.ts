@@ -249,7 +249,7 @@ describe("ToolExecutor", () => {
       const result = await executor.execute(toolCall);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Tool execution error");
+      expect(result.error).toContain("Invalid JSON arguments");
     });
   });
 

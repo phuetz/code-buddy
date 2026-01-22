@@ -65,7 +65,7 @@ export function createGrokBindings(
   /**
    * Ask Grok a question (single prompt)
    */
-  grok.ask = async (prompt: string): Promise<string> => {
+  const askFn = async (prompt: string): Promise<string> => {
     if (!codebuddyClientInstance) {
       print('[grok.ask] No Grok client available - returning mock response');
       return `[Mock AI Response to: ${prompt}]`;
@@ -78,11 +78,12 @@ export function createGrokBindings(
       throw new Error(`CodeBuddy API error: ${(error as Error).message}`);
     }
   };
+  grok.ask = askFn;
 
   /**
    * Chat with Grok (maintains conversation history)
    */
-  grok.chat = async (message: string): Promise<string> => {
+  const chatFn = async (message: string): Promise<string> => {
     conversationHistory.push({ role: 'user', content: message });
 
     if (!codebuddyClientInstance) {
@@ -99,6 +100,7 @@ export function createGrokBindings(
       throw new Error(`Grok chat error: ${(error as Error).message}`);
     }
   };
+  grok.chat = chatFn;
 
   /**
    * Generate code with Grok
@@ -108,21 +110,21 @@ export function createGrokBindings(
       ? `Generate ${language} code for: ${prompt}\n\nOnly output the code, no explanations.`
       : `Generate code for: ${prompt}\n\nOnly output the code, no explanations.`;
 
-    return grok.ask(fullPrompt) as Promise<string>;
+    return askFn(fullPrompt);
   };
 
   /**
    * Explain code with Grok
    */
   grok.explain = async (code: string): Promise<string> => {
-    return grok.ask(`Explain this code:\n\n${code}`) as Promise<string>;
+    return askFn(`Explain this code:\n\n${code}`);
   };
 
   /**
    * Review code with Grok
    */
   grok.review = async (code: string): Promise<string> => {
-    return grok.ask(`Review this code for bugs, security issues, and improvements:\n\n${code}`) as Promise<string>;
+    return askFn(`Review this code for bugs, security issues, and improvements:\n\n${code}`);
   };
 
   /**
@@ -438,10 +440,10 @@ export function createGrokBindings(
   /**
    * Run a task with an agent
    */
-  agent.run = async (task: string): Promise<string> => {
+  const runTaskFn = async (task: string): Promise<string> => {
     print(`[Agent] Running task: ${task}`);
 
-    // Use grok.ask with agent-style prompt
+    // Use askFn with agent-style prompt
     const agentPrompt = `You are an autonomous agent. Complete this task step by step:
 
 Task: ${task}
@@ -449,8 +451,9 @@ Task: ${task}
 Available tools: read files, edit files, search code, run shell commands.
 Think through the problem and execute the necessary steps.`;
 
-    return grok.ask(agentPrompt) as Promise<string>;
+    return askFn(agentPrompt);
   };
+  agent.run = runTaskFn;
 
   /**
    * Run multiple tasks in parallel
@@ -458,7 +461,7 @@ Think through the problem and execute the necessary steps.`;
   agent.parallel = async (tasks: string[]): Promise<string[]> => {
     print(`[Agent] Running ${tasks.length} tasks in parallel`);
 
-    const promises = tasks.map(task => agent.run(task));
+    const promises = tasks.map(task => runTaskFn(task));
     return Promise.all(promises);
   };
 
@@ -467,14 +470,14 @@ Think through the problem and execute the necessary steps.`;
    */
   agent.securityReview = async (targetPath?: string): Promise<string> => {
     const target = targetPath || '.';
-    return grok.ask(`Perform a security review of the code in ${target}. Check for:
+    return askFn(`Perform a security review of the code in ${target}. Check for:
 - SQL injection
 - XSS vulnerabilities
 - Command injection
 - Path traversal
 - Insecure dependencies
 - Authentication issues
-- Data exposure`) as Promise<string>;
+- Data exposure`);
   };
 
   /**
@@ -494,7 +497,7 @@ Think through the problem and execute the necessary steps.`;
       }
     }
 
-    return grok.ask(`Review this code for quality, bugs, and improvements:\n\n${content}`) as Promise<string>;
+    return askFn(`Review this code for quality, bugs, and improvements:\n\n${content}`);
   };
 
   /**
@@ -502,7 +505,7 @@ Think through the problem and execute the necessary steps.`;
    */
   agent.generateTests = async (filePath: string): Promise<string> => {
     const content = tool.read(filePath);
-    return grok.ask(`Generate comprehensive unit tests for this code:\n\n${content}`) as Promise<string>;
+    return askFn(`Generate comprehensive unit tests for this code:\n\n${content}`);
   };
 
   /**
@@ -510,7 +513,7 @@ Think through the problem and execute the necessary steps.`;
    */
   agent.refactor = async (filePath: string, instructions: string): Promise<string> => {
     const content = tool.read(filePath);
-    return grok.ask(`Refactor this code according to these instructions: ${instructions}\n\nCode:\n${content}`) as Promise<string>;
+    return askFn(`Refactor this code according to these instructions: ${instructions}\n\nCode:\n${content}`);
   };
 
   bindings.agent = agent;

@@ -105,11 +105,16 @@ export async function detectDeadCode(options: Partial<DeadCodeOptions> = {}): Pr
   const importUsage = new Map<string, Set<string>>(); // symbol -> files that import it
   const allIdentifiers = new Map<string, Set<string>>(); // symbol -> files that use it
 
-  // First pass: collect all exports and identifiers
-  for (const file of files) {
-    const content = await UnifiedVfsRouter.Instance.readFile(file, 'utf-8');
-    const lines = content.split('\n');
+  // First pass: read all files in parallel for better performance
+  const fileContents = await Promise.all(
+    files.map(async file => {
+      const content = await UnifiedVfsRouter.Instance.readFile(file, 'utf-8');
+      return { file, content, lines: content.split('\n') };
+    })
+  );
 
+  // Process file contents (synchronous operations)
+  for (const { file, content, lines } of fileContents) {
     // Collect exports
     if (opts.checkExports) {
       collectExports(file, content, lines, exportMap);
@@ -159,10 +164,9 @@ export async function detectDeadCode(options: Partial<DeadCodeOptions> = {}): Pr
     }
   }
 
-  // Check for unused imports in each file
+  // Check for unused imports in each file (reuse already loaded content)
   if (opts.checkImports) {
-    for (const file of files) {
-      const content = await UnifiedVfsRouter.Instance.readFile(file, 'utf-8');
+    for (const { file, content } of fileContents) {
       const fileIssues = checkUnusedImports(file, content);
       issues.push(...fileIssues.filter(i => shouldReport(i.confidence, opts.minConfidence)));
     }

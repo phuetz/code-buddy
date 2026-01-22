@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import { Theme, ThemeColors, AvatarConfig, AvatarPreset } from '../../themes/theme.js';
+import { Theme, ThemeColor, ThemeColors, AvatarConfig, AvatarPreset } from '../../themes/theme.js';
 import { getThemeManager, ThemeManager } from '../../themes/theme-manager.js';
 
 /**
@@ -27,7 +27,7 @@ interface ThemeContextValue {
   getAvatarPresets: () => AvatarPreset[];
 
   // Color management
-  setCustomColor: (key: keyof ThemeColors, value: string) => void;
+  setCustomColor: (key: keyof ThemeColors, value: ThemeColor) => void;
   clearCustomColors: () => void;
 
   // Force re-render
@@ -100,7 +100,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [themeManager]);
 
   // Color management functions
-  const setCustomColor = useCallback((key: keyof ThemeColors, value: string): void => {
+  const setCustomColor = useCallback((key: keyof ThemeColors, value: ThemeColor): void => {
     themeManager.setCustomColor(key, value);
     refreshTheme();
   }, [themeManager, refreshTheme]);

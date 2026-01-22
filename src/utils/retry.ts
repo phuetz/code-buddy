@@ -251,13 +251,22 @@ export const RetryPredicates = {
       message.includes('timeout') ||
       message.includes('econnreset') ||
       message.includes('econnrefused') ||
-      message.includes('socket')
+      message.includes('enotfound') ||
+      message.includes('etimedout') ||
+      message.includes('epipe') ||
+      message.includes('econnaborted') ||
+      message.includes('socket') ||
+      message.includes('fetch failed')
     );
   },
 
   /** Retry on HTTP 5xx errors */
   serverError: (error: unknown): boolean => {
     const message = error instanceof Error ? error.message.toLowerCase() : '';
+    // Check for status code in error object
+    const status = (error as { status?: number })?.status;
+    if (status && status >= 500 && status < 600) return true;
+
     return (
       message.includes('500') ||
       message.includes('502') ||
@@ -273,11 +282,57 @@ export const RetryPredicates = {
   /** Retry on rate limit errors (429) */
   rateLimitError: (error: unknown): boolean => {
     const message = error instanceof Error ? error.message.toLowerCase() : '';
+    // Check for status code in error object
+    const status = (error as { status?: number })?.status;
+    if (status === 429) return true;
+
     return (
       message.includes('429') ||
       message.includes('rate limit') ||
       message.includes('too many requests') ||
-      message.includes('throttl')
+      message.includes('throttl') ||
+      message.includes('quota exceeded')
+    );
+  },
+
+  /** Retry on OpenAI/LLM API specific errors */
+  llmApiError: (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const status = (error as { status?: number })?.status;
+
+    // Retryable status codes for LLM APIs
+    if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
+      return true;
+    }
+
+    return (
+      RetryPredicates.networkError(error) ||
+      RetryPredicates.serverError(error) ||
+      RetryPredicates.rateLimitError(error) ||
+      message.includes('overloaded') ||
+      message.includes('capacity') ||
+      message.includes('temporarily unavailable') ||
+      message.includes('api error') ||
+      message.includes('request failed')
+    );
+  },
+
+  /** Retry on cloud storage errors */
+  cloudStorageError: (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const status = (error as { status?: number })?.status;
+
+    // Retryable status codes for cloud storage
+    if (status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
+      return true;
+    }
+
+    return (
+      RetryPredicates.networkError(error) ||
+      RetryPredicates.serverError(error) ||
+      message.includes('request timeout') ||
+      message.includes('slow down') ||
+      message.includes('service unavailable')
     );
   },
 
@@ -334,6 +389,36 @@ export const RetryStrategies = {
     maxDelay: 60000,
     backoffFactor: 2,
     isRetryable: RetryPredicates.rateLimitError,
+  } as RetryOptions,
+
+  /** LLM API retries (Grok, OpenAI, Anthropic, etc.) */
+  llmApi: {
+    maxRetries: 3,
+    baseDelay: 1000,
+    maxDelay: 30000,
+    backoffFactor: 2,
+    jitter: true,
+    isRetryable: RetryPredicates.llmApiError,
+  } as RetryOptions,
+
+  /** Cloud storage retries (S3, GCS, Azure) */
+  cloudStorage: {
+    maxRetries: 5,
+    baseDelay: 500,
+    maxDelay: 15000,
+    backoffFactor: 2,
+    jitter: true,
+    isRetryable: RetryPredicates.cloudStorageError,
+  } as RetryOptions,
+
+  /** Web search/fetch retries */
+  webRequest: {
+    maxRetries: 3,
+    baseDelay: 500,
+    maxDelay: 5000,
+    backoffFactor: 2,
+    jitter: true,
+    isRetryable: RetryPredicates.transientError,
   } as RetryOptions,
 
   /** No retries */

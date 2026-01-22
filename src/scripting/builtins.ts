@@ -140,21 +140,21 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
       arr.push(...items);
       return arr; // Return array for chaining
     }
-    throw new Error('push requires an array');
+    throw new Error('push() requires an array as first argument. Got: ' + (typeof arr));
   };
 
   builtins.pop = (arr: CodeBuddyValue) => {
     if (Array.isArray(arr)) {
       return arr.pop();
     }
-    throw new Error('pop requires an array');
+    throw new Error('pop() requires an array as argument. Got: ' + (typeof arr));
   };
 
   builtins.join = (arr: CodeBuddyValue, separator?: CodeBuddyValue) => {
     if (Array.isArray(arr)) {
       return arr.map(stringify).join(separator !== undefined ? String(separator) : ',');
     }
-    throw new Error('join requires an array');
+    throw new Error('join() requires an array as first argument. Got: ' + (typeof arr));
   };
 
   builtins.split = (str: CodeBuddyValue, separator?: CodeBuddyValue) => {
@@ -168,12 +168,12 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
         end !== undefined ? Number(end) : undefined
       );
     }
-    throw new Error('slice requires an array or string');
+    throw new Error('slice() requires an array or string as first argument. Got: ' + (typeof arr));
   };
 
   builtins.map = async (arr: CodeBuddyValue, fn: CodeBuddyValue) => {
-    if (!Array.isArray(arr)) throw new Error('map requires an array');
-    if (typeof fn !== 'function') throw new Error('map requires a function');
+    if (!Array.isArray(arr)) throw new Error('map() requires an array as first argument. Got: ' + (typeof arr));
+    if (typeof fn !== 'function') throw new Error('map() requires a function as second argument. Got: ' + (typeof fn));
 
     const results: CodeBuddyValue[] = [];
     for (let i = 0; i < arr.length; i++) {
@@ -183,8 +183,8 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
   };
 
   builtins.filter = async (arr: CodeBuddyValue, fn: CodeBuddyValue) => {
-    if (!Array.isArray(arr)) throw new Error('filter requires an array');
-    if (typeof fn !== 'function') throw new Error('filter requires a function');
+    if (!Array.isArray(arr)) throw new Error('filter() requires an array as first argument. Got: ' + (typeof arr));
+    if (typeof fn !== 'function') throw new Error('filter() requires a function as second argument. Got: ' + (typeof fn));
 
     const results: CodeBuddyValue[] = [];
     for (let i = 0; i < arr.length; i++) {
@@ -196,8 +196,8 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
   };
 
   builtins.find = async (arr: CodeBuddyValue, fn: CodeBuddyValue) => {
-    if (!Array.isArray(arr)) throw new Error('find requires an array');
-    if (typeof fn !== 'function') throw new Error('find requires a function');
+    if (!Array.isArray(arr)) throw new Error('find() requires an array as first argument. Got: ' + (typeof arr));
+    if (typeof fn !== 'function') throw new Error('find() requires a function as second argument. Got: ' + (typeof fn));
 
     for (let i = 0; i < arr.length; i++) {
       if (await (fn as CodeBuddyFunction)(arr[i], i)) {
@@ -278,7 +278,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
 
   const file = {
     read: (filePath: CodeBuddyValue) => {
-      if (!config.enableFileOps) throw new Error('File operations disabled');
+      if (!config.enableFileOps) throw new Error('File operations are disabled in the current script configuration. Enable them with { enableFileOps: true }.');
       const fullPath = resolvePath(String(filePath), config.workdir);
       if (config.dryRun) {
         print(`[DRY RUN] file.read: ${fullPath}`);
@@ -288,7 +288,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     write: (filePath: CodeBuddyValue, content: CodeBuddyValue) => {
-      if (!config.enableFileOps) throw new Error('File operations disabled');
+      if (!config.enableFileOps) throw new Error('File operations are disabled in the current script configuration. Enable them with { enableFileOps: true }.');
       const fullPath = resolvePath(String(filePath), config.workdir);
       if (config.dryRun) {
         print(`[DRY RUN] file.write: ${fullPath}`);
@@ -299,7 +299,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     append: (filePath: CodeBuddyValue, content: CodeBuddyValue) => {
-      if (!config.enableFileOps) throw new Error('File operations disabled');
+      if (!config.enableFileOps) throw new Error('File operations are disabled in the current script configuration. Enable them with { enableFileOps: true }.');
       const fullPath = resolvePath(String(filePath), config.workdir);
       if (config.dryRun) {
         print(`[DRY RUN] file.append: ${fullPath}`);
@@ -315,7 +315,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     delete: (filePath: CodeBuddyValue) => {
-      if (!config.enableFileOps) throw new Error('File operations disabled');
+      if (!config.enableFileOps) throw new Error('File operations are disabled in the current script configuration. Enable them with { enableFileOps: true }.');
       const fullPath = resolvePath(String(filePath), config.workdir);
       if (config.dryRun) {
         print(`[DRY RUN] file.delete: ${fullPath}`);
@@ -326,7 +326,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     copy: (src: CodeBuddyValue, dest: CodeBuddyValue) => {
-      if (!config.enableFileOps) throw new Error('File operations disabled');
+      if (!config.enableFileOps) throw new Error('File operations are disabled in the current script configuration. Enable them with { enableFileOps: true }.');
       const srcPath = resolvePath(String(src), config.workdir);
       const destPath = resolvePath(String(dest), config.workdir);
       if (config.dryRun) {
@@ -338,7 +338,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     move: (src: CodeBuddyValue, dest: CodeBuddyValue) => {
-      if (!config.enableFileOps) throw new Error('File operations disabled');
+      if (!config.enableFileOps) throw new Error('File operations are disabled in the current script configuration. Enable them with { enableFileOps: true }.');
       const srcPath = resolvePath(String(src), config.workdir);
       const destPath = resolvePath(String(dest), config.workdir);
       if (config.dryRun) {
@@ -355,7 +355,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     mkdir: (dirPath: CodeBuddyValue) => {
-      if (!config.enableFileOps) throw new Error('File operations disabled');
+      if (!config.enableFileOps) throw new Error('File operations are disabled in the current script configuration. Enable them with { enableFileOps: true }.');
       const fullPath = resolvePath(String(dirPath), config.workdir);
       if (config.dryRun) {
         print(`[DRY RUN] file.mkdir: ${fullPath}`);
@@ -399,7 +399,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
 
   const bash = {
     run: (command: CodeBuddyValue, options?: CodeBuddyValue) => {
-      if (!config.enableBash) throw new Error('Bash commands disabled');
+      if (!config.enableBash) throw new Error('Bash/shell commands are disabled in the current script configuration. Enable them with { enableBash: true }.');
       const opts = (options as Record<string, CodeBuddyValue>) || {};
 
       if (config.dryRun) {
@@ -439,7 +439,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     spawn: async (command: CodeBuddyValue, args?: CodeBuddyValue) => {
-      if (!config.enableBash) throw new Error('Bash commands disabled');
+      if (!config.enableBash) throw new Error('Bash/shell commands are disabled in the current script configuration. Enable them with { enableBash: true }.');
 
       const argList = Array.isArray(args) ? args.map(String) : [];
 
@@ -478,7 +478,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
 
   const ai = {
     ask: async (prompt: CodeBuddyValue) => {
-      if (!config.enableAI) throw new Error('AI operations disabled');
+      if (!config.enableAI) throw new Error('AI operations are disabled in the current script configuration. Enable them with { enableAI: true }.');
       if (config.dryRun) {
         print(`[DRY RUN] ai.ask: ${prompt}`);
         return '[AI Response Placeholder]';
@@ -492,7 +492,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     chat: async (message: CodeBuddyValue) => {
-      if (!config.enableAI) throw new Error('AI operations disabled');
+      if (!config.enableAI) throw new Error('AI operations are disabled in the current script configuration. Enable them with { enableAI: true }.');
       if (config.dryRun) {
         print(`[DRY RUN] ai.chat: ${message}`);
         return '[AI Response Placeholder]';
@@ -506,7 +506,7 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     },
 
     complete: async (prompt: CodeBuddyValue, options?: CodeBuddyValue) => {
-      if (!config.enableAI) throw new Error('AI operations disabled');
+      if (!config.enableAI) throw new Error('AI operations are disabled in the current script configuration. Enable them with { enableAI: true }.');
       if (config.dryRun) {
         print(`[DRY RUN] ai.complete: ${prompt}`);
         return '[AI Response Placeholder]';

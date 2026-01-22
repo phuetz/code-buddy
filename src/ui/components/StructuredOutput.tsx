@@ -9,6 +9,13 @@ import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { getRenderManager, RenderContext } from '../../renderers/index.js';
 import { useTheme } from '../context/theme-context.js';
+import type { WeatherCondition } from '../../renderers/types.js';
+
+/** Export kind for code structure */
+type ExportKind = 'function' | 'class' | 'variable' | 'type' | 'default';
+
+/** Variable kind for code structure */
+type VariableKind = 'const' | 'let' | 'var';
 
 // ============================================================================
 // Props
@@ -149,7 +156,7 @@ export function Weather({
   location: string;
   current: {
     temperature: number;
-    condition: string;
+    condition: WeatherCondition;
     humidity?: number;
     windSpeed?: number;
   };
@@ -157,24 +164,22 @@ export function Weather({
     date: string;
     high: number;
     low: number;
-    condition: string;
+    condition: WeatherCondition;
   }>;
   units?: 'metric' | 'imperial';
   plain?: boolean;
 }): React.ReactElement {
-  /* eslint-disable @typescript-eslint/no-explicit-any -- weather condition type conversion */
   const data = {
     type: 'weather' as const,
     location,
     current: {
       ...current,
-      condition: current.condition as any,
+      condition: current.condition,
     },
     forecast: forecast?.map((f) => ({
       ...f,
-      condition: f.condition as any,
+      condition: f.condition,
     })),
-    /* eslint-enable @typescript-eslint/no-explicit-any */
     units,
   };
 
@@ -199,8 +204,8 @@ export function CodeStructure({
   classes?: Array<{ name: string; methods: string[]; properties: string[] }>;
   functions?: Array<{ name: string; params: string[]; async?: boolean }>;
   imports?: Array<{ source: string; names: string[] }>;
-  exports?: Array<{ name: string; kind: string }>;
-  variables?: Array<{ name: string; kind: string }>;
+  exports?: Array<{ name: string; kind: ExportKind }>;
+  variables?: Array<{ name: string; kind: VariableKind }>;
   plain?: boolean;
 }): React.ReactElement {
   const data = {
@@ -221,14 +226,12 @@ export function CodeStructure({
     })),
     exports: (exports || []).map((e) => ({
       ...e,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- export kind type conversion
-      kind: e.kind as any,
+      kind: e.kind,
       line: undefined,
     })),
     variables: (variables || []).map((v) => ({
       ...v,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variable kind type conversion
-      kind: v.kind as any,
+      kind: v.kind,
       type: undefined,
       line: undefined,
       exported: false,

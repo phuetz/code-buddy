@@ -3,53 +3,133 @@ import { ChatEntry, StreamingChunk } from "./types.js";
 import { Agent } from "../types/agent.js";
 import { CodeBuddyMessage, CodeBuddyToolCall } from "../codebuddy/client.js";
 import { ToolResult } from "../types/index.js";
-import { TokenCounter } from "../utils/token-counter.js";
-import { ContextManagerV2 } from "../context/context-manager-v2.js";
-import { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
-import { SessionStore } from "../persistence/session-store.js";
+import type { TokenCounter } from "../utils/token-counter.js";
+import type { ContextManagerV2, ContextMemoryMetrics } from "../context/context-manager-v2.js";
+import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
+import type { SessionStore } from "../persistence/session-store.js";
 import { AgentModeManager, AgentMode } from "./agent-mode.js";
-import { SandboxManager } from "../security/sandbox.js";
-import { MCPClient } from "../mcp/mcp-client.js";
-import { CostTracker } from "../utils/cost-tracker.js";
-import { PromptCacheManager } from "../optimization/prompt-cache.js";
-import { HooksManager } from "../hooks/lifecycle-hooks.js";
+import type { SandboxManager } from "../security/sandbox.js";
+import type { MCPClient } from "../mcp/mcp-client.js";
+import type { CostTracker } from "../utils/cost-tracker.js";
+import type { PromptCacheManager } from "../optimization/prompt-cache.js";
+import type { HooksManager } from "../hooks/lifecycle-hooks.js";
 import { ModelRouter, RoutingDecision } from "../optimization/model-routing.js";
-import { PluginMarketplace } from "../plugins/marketplace.js";
-import { getErrorMessage } from "../types/errors.js";
-import { logger } from "../utils/logger.js";
-import { loadMCPConfig } from "../mcp/config.js";
-import { initializeMCPServers } from "../codebuddy/tools.js";
+import type { PluginMarketplace } from "../plugins/marketplace.js";
 import { getEnhancedMemory, EnhancedMemory, type MemoryEntry, type MemoryType } from "../memory/index.js";
-import { RepairCoordinator } from "./execution/repair-coordinator.js";
+import { getErrorMessage } from "../types/errors.js";
+import type { RepairCoordinator } from "./execution/repair-coordinator.js";
+import { logger } from "../utils/logger.js";
+
+// Import facades
+import { AgentContextFacade, type ContextConfig } from "./facades/agent-context-facade.js";
+import { SessionFacade, type RewindResult } from "./facades/session-facade.js";
+import { ModelRoutingFacade, type ModelRoutingStats } from "./facades/model-routing-facade.js";
+import { InfrastructureFacade } from "./facades/infrastructure-facade.js";
+import { MessageHistoryManager, type HistoryStats } from "./facades/message-history-manager.js";
+
+/**
+ * Comprehensive memory metrics for the agent
+ */
+export interface AgentMemoryMetrics {
+  /** Chat history size */
+  chatHistorySize: number;
+  /** LLM messages size */
+  messagesSize: number;
+  /** Maximum chat history allowed */
+  maxHistory: number;
+  /** Maximum LLM messages allowed */
+  maxMessages: number;
+  /** Context manager metrics (if available) */
+  contextMetrics?: ContextMemoryMetrics;
+  /** Estimated memory usage in bytes (rough estimate) */
+  estimatedMemoryBytes: number;
+  /** Large tool results currently cached */
+  cachedToolResults: number;
+  /** Whether garbage collection has been triggered this session */
+  gcTriggered: boolean;
+}
 
 /**
  * Abstract base class for all agents in the CodeBuddy system.
- * 
- * Provides the foundational infrastructure for:
- * - Message history management (`chatHistory`, `messages`)
- * - Tool execution abstraction
- * - State management (cost, mode, token counting)
- * - Resource disposal
- * 
+ *
+ * This class acts as a lightweight orchestrator that delegates to specialized facades:
+ * - AgentContextFacade: Context and memory management
+ * - SessionFacade: Session persistence and checkpoints
+ * - ModelRoutingFacade: Model routing and cost tracking
+ * - InfrastructureFacade: MCP, sandbox, hooks, plugins
+ * - MessageHistoryManager: Chat history operations
+ *
  * Concrete implementations (like `CodeBuddyAgent`) must implement:
  * - `processUserMessage`: For single-turn interactions
  * - `processUserMessageStream`: For streaming interactions
  * - `executeTool`: For handling tool calls
  */
 export abstract class BaseAgent extends EventEmitter implements Agent {
-  /** Full history of the current chat session including tool results */
-  protected chatHistory: ChatEntry[] = [];
-  
-  /** 
-   * Messages in the format expected by the LLM provider.
-   * Includes system prompt, user messages, and tool call/result chains.
+  /**
+   * Maximum number of chat history entries to keep in memory.
+   * @deprecated Use MessageHistoryManager config instead
    */
-  protected messages: CodeBuddyMessage[] = [];
-  
+  protected static readonly MAX_HISTORY_SIZE = 1000;
+
+  /**
+   * Maximum number of LLM messages to keep in memory.
+   * @deprecated Use MessageHistoryManager config instead
+   */
+  protected static readonly MAX_MESSAGES_SIZE = 500;
+
+  /** Threshold for considering a tool result "large" (in characters) */
+  protected static readonly LARGE_RESULT_THRESHOLD = 5000;
+
+  // ============================================================================
+  // Facades (initialized by subclasses via initializeFacades)
+  // ============================================================================
+
+  /** Context and memory management facade */
+  protected contextFacade!: AgentContextFacade;
+
+  /** Session and checkpoint management facade */
+  protected sessionFacade!: SessionFacade;
+
+  /** Model routing and cost management facade */
+  protected routingFacade!: ModelRoutingFacade;
+
+  /** Infrastructure services facade */
+  protected infrastructureFacade!: InfrastructureFacade;
+
+  /** Message history manager */
+  protected historyManager: MessageHistoryManager;
+
+  // ============================================================================
+  // Legacy Properties (for backward compatibility with subclasses)
+  // ============================================================================
+
+  /**
+   * @deprecated Use historyManager.getChatHistoryRef() instead
+   */
+  protected get chatHistory(): ChatEntry[] {
+    return this.historyManager.getChatHistoryRef();
+  }
+  protected set chatHistory(value: ChatEntry[]) {
+    this.historyManager.setChatHistory(value);
+  }
+
+  /**
+   * @deprecated Use historyManager.getMessagesRef() instead
+   */
+  protected get messages(): CodeBuddyMessage[] {
+    return this.historyManager.getMessagesRef();
+  }
+  protected set messages(value: CodeBuddyMessage[]) {
+    this.historyManager.setMessages(value);
+  }
+
   /** Controller for aborting ongoing operations */
   protected abortController: AbortController | null = null;
-  
-  // Infrastructure
+
+  /** Whether garbage collection has been explicitly triggered this session */
+  protected gcTriggered: boolean = false;
+
+  // Infrastructure managers (kept for backward compatibility with subclasses)
   protected tokenCounter!: TokenCounter;
   protected contextManager!: ContextManagerV2;
   protected checkpointManager!: CheckpointManager;
@@ -64,38 +144,36 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
   protected marketplace!: PluginMarketplace;
   protected repairCoordinator!: RepairCoordinator;
 
-  // Memory system
-  protected _memory: EnhancedMemory | null = null;
-  protected memoryEnabled = true;
-
   // Configuration & State
   /** Maximum number of tool rounds allowed per user request */
   protected maxToolRounds: number = 50;
-  
+
   /** Whether "YOLO mode" (fully autonomous) is enabled */
   protected yoloMode: boolean = false;
-  
-  /** Cost limit for the current session in USD */
-  protected sessionCostLimit: number = 10;
-  
-  /** Current accumulated cost of the session in USD */
-  protected sessionCost: number = 0;
-  
+
   /** Whether to use RAG for selecting relevant tools */
   protected useRAGToolSelection: boolean = true;
-  
+
   /** Whether to execute independent tool calls in parallel */
   protected parallelToolExecution: boolean = true;
-  
+
+  /** Cost limit for the current session in USD */
+  protected sessionCostLimit: number = 10;
+
+  /** Current accumulated cost of the session in USD */
+  protected sessionCost: number = 0;
+
   /** Whether to use model routing optimization */
   protected useModelRouting: boolean = false;
-  
+
   /** Result of the last model routing decision */
   protected lastRoutingDecision: RoutingDecision | null = null;
 
-  constructor() {
-    super();
-  }
+  /** Whether memory system is enabled */
+  protected memoryEnabled: boolean = true;
+
+  /** Memory system instance (lazy-loaded) */
+  protected _memory: EnhancedMemory | null = null;
 
   /**
    * Lazy-loaded memory system for cross-session context persistence
@@ -110,7 +188,6 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
         autoSummarize: true,
       });
 
-      // Set project context if we have a working directory
       const cwd = process.cwd();
       if (cwd) {
         this._memory.setProjectContext(cwd).catch(err => {
@@ -121,29 +198,60 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
     return this._memory;
   }
 
+  constructor() {
+    super();
+    // Initialize history manager with default config
+    this.historyManager = new MessageHistoryManager({
+      maxHistorySize: BaseAgent.MAX_HISTORY_SIZE,
+      maxMessagesSize: BaseAgent.MAX_MESSAGES_SIZE,
+    });
+  }
+
+  /**
+   * Initialize all facades after managers are set up.
+   * Should be called by subclass constructors after setting up managers.
+   */
+  protected initializeFacades(): void {
+    // Context facade
+    this.contextFacade = new AgentContextFacade({
+      tokenCounter: this.tokenCounter,
+      contextManager: this.contextManager,
+      getSessionId: () => this.sessionStore?.getCurrentSessionId() ?? undefined,
+    });
+
+    // Session facade
+    this.sessionFacade = new SessionFacade({
+      checkpointManager: this.checkpointManager,
+      sessionStore: this.sessionStore,
+    });
+
+    // Routing facade
+    this.routingFacade = new ModelRoutingFacade({
+      modelRouter: this.modelRouter,
+      costTracker: this.costTracker,
+    });
+
+    // Infrastructure facade
+    this.infrastructureFacade = new InfrastructureFacade({
+      mcpClient: this.mcpClient,
+      sandboxManager: this.sandboxManager,
+      hooksManager: this.hooksManager,
+      promptCacheManager: this.promptCacheManager,
+      marketplace: this.marketplace,
+    });
+  }
+
+  // ============================================================================
+  // Abstract Methods
+  // ============================================================================
+
   /**
    * Process a user message and return the response entries.
-   * 
-   * This method handles the entire agentic loop:
-   * 1. Sending the user message to the LLM
-   * 2. Receiving tool calls
-   * 3. Executing tools
-   * 4. Feeding results back to the LLM
-   * 5. Repeating until completion or max rounds
-   * 
-   * @param message - The user's input message
-   * @returns A promise resolving to an array of chat entries generated during the turn
    */
   abstract processUserMessage(message: string): Promise<ChatEntry[]>;
 
   /**
    * Process a user message with streaming response.
-   * 
-   * Yields chunks of data as they become available, allowing for real-time UI updates.
-   * Handles tool execution and multi-turn logic internally while streaming updates.
-   * 
-   * @param message - The user's input message
-   * @returns An async generator yielding `StreamingChunk` objects
    */
   abstract processUserMessageStream(
     message: string
@@ -151,42 +259,22 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
 
   /**
    * Execute a single tool call requested by the LLM.
-   * 
-   * @param toolCall - The tool call object from the LLM
-   * @returns A promise resolving to the result of the tool execution
    */
   protected abstract executeTool(toolCall: CodeBuddyToolCall): Promise<ToolResult>;
 
-  /**
-   * Get the full chat history of the current session.
-   * 
-   * @returns A shallow copy of the chat history array
-   */
+  // ============================================================================
+  // Core Methods
+  // ============================================================================
+
   getChatHistory(): ChatEntry[] {
-    return [...this.chatHistory];
+    return this.historyManager.getChatHistory();
   }
 
-  /**
-   * Clear the current conversation history.
-   * 
-   * Resets `chatHistory` and `messages`.
-   * Preserves the system prompt if present.
-   * Emits `chat:cleared` event.
-   */
   clearChat(): void {
-    this.chatHistory = [];
-    // Keep only the system message if it exists
-    if (this.messages.length > 0 && this.messages[0].role === 'system') {
-      this.messages = [this.messages[0]];
-    } else {
-      this.messages = [];
-    }
+    this.historyManager.clearAll(true);
     this.emit("chat:cleared");
   }
 
-  /**
-   * Abort the current operation
-   */
   abortCurrentOperation(): void {
     if (this.abortController) {
       this.abortController.abort();
@@ -194,30 +282,20 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
     }
   }
 
-  /**
-   * Clean up resources
-   */
   dispose(): void {
-    if (this.tokenCounter) {
-      this.tokenCounter.dispose();
-    }
-    if (this.contextManager) {
-      this.contextManager.dispose();
-    }
-    if (this.repairCoordinator) {
-      this.repairCoordinator.dispose();
-    }
-    if (this._memory) {
-      this._memory.dispose();
-      this._memory = null;
-    }
+    // Dispose facades
+    if (this.contextFacade) this.contextFacade.dispose();
+    if (this.repairCoordinator) this.repairCoordinator.dispose();
+    if (this.historyManager) this.historyManager.dispose();
+
     this.abortCurrentOperation();
-    this.chatHistory = [];
-    this.messages = [];
     this.emit("disposed");
   }
 
-  // Common getters for infrastructure
+  // ============================================================================
+  // Mode Management (delegates to modeManager directly)
+  // ============================================================================
+
   getMode(): AgentMode {
     return this.modeManager.getMode();
   }
@@ -227,75 +305,6 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
     this.emit("mode:changed", mode);
   }
 
-  isYoloModeEnabled(): boolean {
-    return this.yoloMode;
-  }
-
-  getSessionCost(): number {
-    return this.sessionCost;
-  }
-
-  getSessionCostLimit(): number {
-    return this.sessionCostLimit;
-  }
-
-  setSessionCostLimit(limit: number): void {
-    this.sessionCostLimit = limit;
-  }
-
-  isSessionCostLimitReached(): boolean {
-    return this.sessionCost >= this.sessionCostLimit;
-  }
-
-  // Checkpoint methods
-  createCheckpoint(description: string): void {
-    this.checkpointManager.createCheckpoint(description);
-  }
-
-  rewindToLastCheckpoint(): { success: boolean; message: string } {
-    const result = this.checkpointManager.rewindToLast();
-    if (result.success) {
-      return {
-        success: true,
-        message: result.checkpoint
-          ? `Rewound to: ${result.checkpoint.description}\nRestored: ${result.restored.join(', ')}`
-          : 'No checkpoint found'
-      };
-    }
-    return {
-      success: false,
-      message: result.errors.join('\n') || 'Failed to rewind'
-    };
-  }
-
-  getCheckpointList(): string {
-    return this.checkpointManager.formatCheckpointList();
-  }
-
-  getCheckpointManager(): CheckpointManager {
-    return this.checkpointManager;
-  }
-
-  // Session methods
-  getSessionStore(): SessionStore {
-    return this.sessionStore;
-  }
-
-  saveCurrentSession(): void {
-    this.sessionStore.updateCurrentSession(this.chatHistory);
-  }
-
-  getSessionList(): string {
-    return this.sessionStore.formatSessionList();
-  }
-
-  exportCurrentSession(outputPath?: string): string | null {
-    const currentId = this.sessionStore.getCurrentSessionId();
-    if (!currentId) return null;
-    return this.sessionStore.exportSessionToFile(currentId, outputPath);
-  }
-
-  // Mode methods
   getModeStatus(): string {
     return this.modeManager.formatModeStatus();
   }
@@ -304,207 +313,184 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
     return this.modeManager.isToolAllowed(toolName);
   }
 
-  // Sandbox methods
+  // ============================================================================
+  // Cost & Session State (delegates to routingFacade)
+  // ============================================================================
+
+  isYoloModeEnabled(): boolean {
+    return this.yoloMode;
+  }
+
+  getSessionCost(): number {
+    return this.routingFacade?.getSessionCost() ?? 0;
+  }
+
+  getSessionCostLimit(): number {
+    return this.routingFacade?.getSessionCostLimit() ?? 10;
+  }
+
+  setSessionCostLimit(limit: number): void {
+    if (this.routingFacade) {
+      this.routingFacade.setSessionCostLimit(limit);
+    }
+  }
+
+  isSessionCostLimitReached(): boolean {
+    return this.routingFacade?.isSessionCostLimitReached() ?? false;
+  }
+
+  // ============================================================================
+  // Checkpoint Management (delegates to sessionFacade)
+  // ============================================================================
+
+  createCheckpoint(description: string): void {
+    this.sessionFacade.createCheckpoint(description);
+  }
+
+  rewindToLastCheckpoint(): RewindResult {
+    return this.sessionFacade.rewindToLastCheckpoint();
+  }
+
+  getCheckpointList(): string {
+    return this.sessionFacade.getCheckpointList();
+  }
+
+  getCheckpointManager(): CheckpointManager {
+    return this.sessionFacade.getCheckpointManager();
+  }
+
+  // ============================================================================
+  // Session Management (delegates to sessionFacade)
+  // ============================================================================
+
+  getSessionStore(): SessionStore {
+    return this.sessionFacade.getSessionStore();
+  }
+
+  async saveCurrentSession(): Promise<void> {
+    await this.sessionFacade.saveCurrentSession(this.historyManager.getChatHistory());
+  }
+
+  async getSessionList(): Promise<string> {
+    return this.sessionFacade.getSessionList();
+  }
+
+  async exportCurrentSession(outputPath?: string): Promise<string | null> {
+    return this.sessionFacade.exportCurrentSession(outputPath);
+  }
+
+  // ============================================================================
+  // Sandbox Management (delegates to infrastructureFacade)
+  // ============================================================================
+
   getSandboxStatus(): string {
-    return this.sandboxManager.formatStatus();
+    return this.infrastructureFacade.getSandboxStatus();
   }
 
   validateCommand(command: string): { valid: boolean; reason?: string } {
-    return this.sandboxManager.validateCommand(command);
+    return this.infrastructureFacade.validateCommand(command);
   }
 
-  // MCP methods
+  // ============================================================================
+  // MCP Management (delegates to infrastructureFacade)
+  // ============================================================================
+
   async connectMCPServers(): Promise<void> {
-    await this.mcpClient.connectAll();
+    await this.infrastructureFacade.connectMCPServers();
   }
 
   getMCPStatus(): string {
-    return this.mcpClient.formatStatus();
+    return this.infrastructureFacade.getMCPStatus();
   }
 
   async getMCPTools(): Promise<Map<string, unknown[]>> {
-    return this.mcpClient.getAllTools();
+    return this.infrastructureFacade.getMCPTools();
   }
 
   getMCPClient(): MCPClient {
-    return this.mcpClient;
+    return this.infrastructureFacade.getMCPClient();
   }
 
-  /**
-   * Initialize MCP servers in the background
-   * Properly handles errors and doesn't create unhandled promise rejections
-   */
   protected initializeMCP(): void {
-    // Initialize MCP in the background without blocking
-    // Using IIFE with .catch() to properly handle any errors
-    (async () => {
-      try {
-        const config = loadMCPConfig();
-        if (config.servers.length > 0) {
-          await initializeMCPServers();
-        }
-      } catch (error) {
-        logger.warn("MCP initialization failed", { error: getErrorMessage(error) });
-      }
-    })().catch((error) => {
-      // This catch handles any uncaught errors from the IIFE
-      logger.warn("Uncaught error in MCP initialization", { error: getErrorMessage(error) });
-    });
+    this.infrastructureFacade.initializeMCP();
   }
 
-  // Context Management methods
+  // ============================================================================
+  // Context Management (delegates to contextFacade)
+  // ============================================================================
 
-  /**
-   * Get current context statistics
-   */
   getContextStats() {
-    return this.contextManager.getStats(this.messages);
+    return this.contextFacade.getStats(this.historyManager.getMessages());
   }
 
-  /**
-   * Format context stats as a readable string
-   */
   formatContextStats(): string {
-    const stats = this.contextManager.getStats(this.messages);
-    const status = stats.isCritical ? '🔴 Critical' :
-                   stats.isNearLimit ? '🟡 Warning' : '🟢 Normal';
-    return `Context: ${stats.totalTokens}/${stats.maxTokens} tokens (${stats.usagePercent.toFixed(1)}%) ${status} | Messages: ${stats.messageCount} | Summaries: ${stats.summarizedSessions}`;
+    return this.contextFacade.formatStats(this.historyManager.getMessages());
   }
 
-  /**
-   * Update context manager configuration
-   * @param config - Partial configuration to update
-   */
-  updateContextConfig(config: {
-    maxContextTokens?: number;
-    responseReserveTokens?: number;
-    recentMessagesCount?: number;
-    enableSummarization?: boolean;
-    compressionRatio?: number;
-  }): void {
-    this.contextManager.updateConfig(config);
+  updateContextConfig(config: ContextConfig): void {
+    this.contextFacade.updateConfig(config);
   }
 
-  // Prompt Cache methods
+  // ============================================================================
+  // Prompt Cache (delegates to infrastructureFacade)
+  // ============================================================================
 
-  /**
-   * Get prompt cache manager
-   */
   getPromptCacheManager(): PromptCacheManager {
-    return this.promptCacheManager;
+    return this.infrastructureFacade.getPromptCacheManager();
   }
 
-  /**
-   * Get prompt cache statistics
-   */
   getPromptCacheStats() {
-    return this.promptCacheManager.getStats();
+    return this.infrastructureFacade.getPromptCacheStats();
   }
 
-  /**
-   * Format prompt cache stats for display
-   */
   formatPromptCacheStats(): string {
-    return this.promptCacheManager.formatStats();
+    return this.infrastructureFacade.formatPromptCacheStats();
   }
 
-  // Lifecycle Hooks methods
+  // ============================================================================
+  // Lifecycle Hooks (delegates to infrastructureFacade)
+  // ============================================================================
 
-  /**
-   * Get hooks manager
-   */
   getHooksManager(): HooksManager {
-    return this.hooksManager;
+    return this.infrastructureFacade.getHooksManager();
   }
 
-  /**
-   * Get hooks status
-   */
   getHooksStatus(): string {
-    return this.hooksManager.formatStatus();
+    return this.infrastructureFacade.getHooksStatus();
   }
 
-  // Model Routing methods
+  // ============================================================================
+  // Model Routing (delegates to routingFacade)
+  // ============================================================================
 
-  /**
-   * Enable or disable automatic model routing
-   *
-   * When enabled, requests are routed to optimal models based on task complexity
-   *
-   * @param enabled - Whether to enable model routing
-   */
   setModelRouting(enabled: boolean): void {
-    this.useModelRouting = enabled;
+    this.routingFacade.setModelRouting(enabled);
   }
 
-  /**
-   * Check if model routing is enabled
-   */
   isModelRoutingEnabled(): boolean {
-    return this.useModelRouting;
+    return this.routingFacade.isModelRoutingEnabled();
   }
 
-  /**
-   * Get the model router instance
-   */
   getModelRouter(): ModelRouter {
-    return this.modelRouter;
+    return this.routingFacade.getModelRouter();
   }
 
-  /**
-   * Get the last routing decision
-   */
   getLastRoutingDecision(): RoutingDecision | null {
-    return this.lastRoutingDecision;
+    return this.routingFacade.getLastRoutingDecision();
   }
 
-  /**
-   * Get model routing statistics
-   */
-  getModelRoutingStats() {
-    return {
-      enabled: this.useModelRouting,
-      totalCost: this.modelRouter.getTotalCost(),
-      savings: this.modelRouter.getEstimatedSavings(),
-      usageByModel: Object.fromEntries(this.modelRouter.getUsageStats()),
-      lastDecision: this.lastRoutingDecision,
-    };
+  getModelRoutingStats(): ModelRoutingStats {
+    return this.routingFacade.getStats();
   }
 
-  /**
-   * Format model routing stats for display
-   */
   formatModelRoutingStats(): string {
-    const stats = this.getModelRoutingStats();
-    const lines = [
-      '🧭 Model Routing Statistics',
-      `├─ Enabled: ${stats.enabled ? '✅' : '❌'}`,
-      `├─ Total Cost: $${stats.totalCost.toFixed(4)}`,
-      `├─ Savings: $${stats.savings.saved.toFixed(4)} (${stats.savings.percentage.toFixed(1)}%)`,
-    ];
-
-    if (stats.lastDecision) {
-      lines.push(`├─ Last Model: ${stats.lastDecision.recommendedModel}`);
-      lines.push(`└─ Reason: ${stats.lastDecision.reason}`);
-    } else {
-      lines.push('└─ No routing decisions yet');
-    }
-
-    return lines.join('\n');
+    return this.routingFacade.formatStats();
   }
 
   // ============================================================================
-  // Memory System Methods
+  // Memory System (delegates to contextFacade)
   // ============================================================================
 
-  /**
-   * Store a memory for cross-session persistence
-   *
-   * @param type - Type of memory (fact, preference, decision, pattern, etc.)
-   * @param content - Content to remember
-   * @param options - Additional options (tags, importance, etc.)
-   * @returns The stored memory entry
-   */
   async remember(
     type: MemoryType,
     content: string,
@@ -515,23 +501,9 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
       metadata?: Record<string, unknown>;
     } = {}
   ): Promise<MemoryEntry> {
-    if (!this.memoryEnabled) {
-      throw new Error('Memory system is disabled');
-    }
-    return this.memory.store({
-      type,
-      content,
-      ...options,
-    });
+    return this.contextFacade.remember(type, content, options);
   }
 
-  /**
-   * Recall memories matching a query
-   *
-   * @param query - Search query
-   * @param options - Filter options
-   * @returns Matching memories
-   */
   async recall(
     query?: string,
     options: {
@@ -541,111 +513,201 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
       minImportance?: number;
     } = {}
   ): Promise<MemoryEntry[]> {
-    if (!this.memoryEnabled) {
-      return [];
-    }
-    return this.memory.recall({
-      query,
-      ...options,
-    });
+    return this.contextFacade.recall(query, options);
   }
 
-  /**
-   * Build memory context for system prompt augmentation
-   *
-   * @param query - Optional query to find relevant memories
-   * @returns Context string to add to system prompt
-   */
   async getMemoryContext(query?: string): Promise<string> {
-    if (!this.memoryEnabled) {
-      return '';
-    }
-    return this.memory.buildContext({
-      query,
-      includePreferences: true,
-      includeProject: true,
-      includeRecentSummaries: true,
-    });
+    return this.contextFacade.getMemoryContext(query);
   }
 
-  /**
-   * Store a conversation summary for later recall
-   *
-   * @param summary - Summary text
-   * @param topics - Key topics discussed
-   * @param decisions - Decisions made
-   */
   async storeConversationSummary(
     summary: string,
     topics: string[],
     decisions?: string[]
   ): Promise<void> {
-    if (!this.memoryEnabled) return;
-
-    const sessionId = this.sessionStore.getCurrentSessionId?.() || `session-${Date.now()}`;
-    await this.memory.storeSummary({
-      sessionId,
+    await this.contextFacade.storeConversationSummary(
       summary,
       topics,
       decisions,
-      messageCount: this.messages.length,
-    });
+      this.historyManager.getMessages().length
+    );
   }
 
-  /**
-   * Enable or disable memory system
-   */
   setMemoryEnabled(enabled: boolean): void {
-    this.memoryEnabled = enabled;
-    if (!enabled && this._memory) {
-      this._memory.dispose();
-      this._memory = null;
-    }
+    this.contextFacade.setMemoryEnabled(enabled);
   }
 
-  /**
-   * Check if memory system is enabled
-   */
   isMemoryEnabled(): boolean {
-    return this.memoryEnabled;
+    return this.contextFacade.isMemoryEnabled();
   }
 
-  /**
-   * Get memory system statistics
-   */
   getMemoryStats(): { totalMemories: number; byType: Record<string, number>; projects: number; summaries: number } | null {
-    if (!this.memoryEnabled || !this._memory) {
-      return null;
-    }
-    return this.memory.getStats();
+    return this.contextFacade.getMemoryStats();
   }
 
-  /**
-   * Format memory status for display
-   */
   formatMemoryStatus(): string {
-    if (!this.memoryEnabled) {
-      return '🧠 Memory: Disabled';
-    }
-    if (!this._memory) {
-      return '🧠 Memory: Not initialized';
-    }
-    return this.memory.formatStatus();
+    return this.contextFacade.formatMemoryStatus();
+  }
+
+  // ============================================================================
+  // Utility (delegates to historyManager)
+  // ============================================================================
+
+  /**
+   * @deprecated Trimming is now automatic via MessageHistoryManager
+   */
+  protected trimHistory(
+    _maxHistorySize?: number,
+    _maxMessagesSize?: number
+  ): void {
+    // No-op: MessageHistoryManager handles trimming automatically
+    // This method is kept for backward compatibility
   }
 
   /**
-   * Trim history to prevent memory bloat
+   * Get current history statistics for debugging
    */
-  protected trimHistory(maxSize: number = 1000): void {
-    if (this.chatHistory.length > maxSize) {
-      this.chatHistory = this.chatHistory.slice(-maxSize);
+  getHistoryStats(): HistoryStats {
+    return this.historyManager.getStats();
+  }
+
+  /**
+   * Get comprehensive memory metrics for monitoring and debugging.
+   * Includes history sizes, context manager metrics, and estimated memory usage.
+   */
+  getAgentMemoryMetrics(): AgentMemoryMetrics {
+    const stats = this.historyManager.getStats();
+    let estimatedBytes = 0;
+
+    // Estimate chat history size
+    for (const entry of this.historyManager.getChatHistoryRef()) {
+      estimatedBytes += (entry.content?.length || 0) * 2; // UTF-16 chars
+      estimatedBytes += (entry.toolResult?.output?.length || 0) * 2;
+      estimatedBytes += 100; // Object overhead
     }
 
-    const maxMessages = maxSize + 1;
-    if (this.messages.length > maxMessages) {
-      const systemMessage = this.messages[0];
-      const recentMessages = this.messages.slice(-maxSize);
-      this.messages = [systemMessage, ...recentMessages];
+    // Estimate messages size
+    for (const msg of this.historyManager.getMessagesRef()) {
+      if (typeof msg.content === 'string') {
+        estimatedBytes += msg.content.length * 2;
+      }
+      estimatedBytes += 50; // Object overhead
     }
+
+    // Get context manager metrics if available
+    let contextMetrics: ContextMemoryMetrics | undefined;
+    if (this.contextManager && typeof this.contextManager.getMemoryMetrics === 'function') {
+      contextMetrics = this.contextManager.getMemoryMetrics();
+    }
+
+    return {
+      chatHistorySize: stats.chatHistorySize,
+      messagesSize: stats.messagesSize,
+      maxHistory: stats.maxHistory,
+      maxMessages: stats.maxMessages,
+      contextMetrics,
+      estimatedMemoryBytes: estimatedBytes,
+      cachedToolResults: 0, // Managed by historyManager now
+      gcTriggered: this.gcTriggered,
+    };
+  }
+
+  /**
+   * Format memory metrics as a human-readable string.
+   * Useful for /memory or /debug commands.
+   */
+  formatMemoryMetrics(): string {
+    const metrics = this.getAgentMemoryMetrics();
+    const memoryMB = (metrics.estimatedMemoryBytes / (1024 * 1024)).toFixed(2);
+
+    const lines = [
+      '=== Agent Memory Metrics ===',
+      '',
+      'History:',
+      `  Chat entries: ${metrics.chatHistorySize}/${metrics.maxHistory}`,
+      `  LLM messages: ${metrics.messagesSize}/${metrics.maxMessages}`,
+      `  Estimated size: ${memoryMB} MB`,
+      `  GC triggered: ${metrics.gcTriggered ? 'Yes' : 'No'}`,
+    ];
+
+    if (metrics.contextMetrics) {
+      lines.push('');
+      lines.push('Context Manager:');
+      lines.push(`  Summaries: ${metrics.contextMetrics.summaryCount}`);
+      lines.push(`  Summary tokens: ${metrics.contextMetrics.summaryTokens.toLocaleString()}`);
+      lines.push(`  Peak messages: ${metrics.contextMetrics.peakMessageCount}`);
+      lines.push(`  Compressions: ${metrics.contextMetrics.compressionCount}`);
+      lines.push(`  Tokens saved: ${metrics.contextMetrics.totalTokensSaved.toLocaleString()}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Force garbage collection and cleanup of agent memory.
+   * Should be called during long sessions or when memory pressure is detected.
+   *
+   * @returns Object with cleanup statistics
+   */
+  forceMemoryCleanup(): {
+    entriesTrimmed: number;
+    messagesTrimmed: number;
+    contextCleanup?: { summariesRemoved: number; tokensFreed: number };
+  } {
+    const beforeStats = this.historyManager.getStats();
+
+    // More aggressive trimming - keep only 50% of max
+    const aggressiveHistoryLimit = Math.floor(BaseAgent.MAX_HISTORY_SIZE / 2);
+    const aggressiveMessagesLimit = Math.floor(BaseAgent.MAX_MESSAGES_SIZE / 2);
+
+    // Temporarily create a new history manager with aggressive limits
+    const aggressiveManager = new MessageHistoryManager({
+      maxHistorySize: aggressiveHistoryLimit,
+      maxMessagesSize: aggressiveMessagesLimit,
+    });
+
+    // Transfer data (will auto-trim)
+    const currentHistory = this.historyManager.getChatHistory();
+    const currentMessages = this.historyManager.getMessages();
+    aggressiveManager.setChatHistory(currentHistory);
+    aggressiveManager.setMessages(currentMessages);
+
+    // Copy back trimmed data
+    this.historyManager.setChatHistory(aggressiveManager.getChatHistory());
+    this.historyManager.setMessages(aggressiveManager.getMessages());
+    aggressiveManager.dispose();
+
+    // Force context manager cleanup if available
+    let contextCleanup: { summariesRemoved: number; tokensFreed: number } | undefined;
+    if (this.contextManager && typeof this.contextManager.forceCleanup === 'function') {
+      contextCleanup = this.contextManager.forceCleanup();
+    }
+
+    this.gcTriggered = true;
+
+    const afterStats = this.historyManager.getStats();
+    const result = {
+      entriesTrimmed: beforeStats.chatHistorySize - afterStats.chatHistorySize,
+      messagesTrimmed: beforeStats.messagesSize - afterStats.messagesSize,
+      contextCleanup,
+    };
+
+    logger.info('Forced memory cleanup', result);
+    this.emit('memory:cleanup', result);
+
+    return result;
+  }
+
+  /**
+   * Check if memory usage is high and cleanup should be triggered.
+   * Returns true if memory pressure is detected.
+   */
+  isMemoryPressureHigh(): boolean {
+    const stats = this.historyManager.getStats();
+    const historyUsage = stats.chatHistorySize / stats.maxHistory;
+    const messagesUsage = stats.messagesSize / stats.maxMessages;
+
+    // Memory pressure if either is above 80%
+    return historyUsage > 0.8 || messagesUsage > 0.8;
   }
 }

@@ -46,10 +46,8 @@ const TABS: Array<{ id: DashboardTab; label: string; key: string; icon: string }
  */
 function DashboardHeader({
   activeTab,
-  onTabChange,
 }: {
   activeTab: DashboardTab;
-  onTabChange: (tab: DashboardTab) => void;
 }) {
   const { colors } = useTheme();
 
@@ -70,7 +68,7 @@ function DashboardHeader({
 
       {/* Tabs */}
       <Box marginTop={1}>
-        {TABS.map((tab, index) => {
+        {TABS.map((tab) => {
           const isActive = tab.id === activeTab;
           return (
             <Box key={tab.id} marginRight={2}>
@@ -172,7 +170,7 @@ function DashboardContent({
   return (
     <Box flexDirection="column" width="100%">
       {/* Header with tabs */}
-      <DashboardHeader activeTab={activeTab} onTabChange={setActiveTab} />
+      <DashboardHeader activeTab={activeTab} />
 
       {/* Connection status */}
       {!data.isConnected && (

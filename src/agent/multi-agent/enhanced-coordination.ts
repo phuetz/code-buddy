@@ -105,18 +105,36 @@ const DEFAULT_CONFIG: CoordinationConfig = {
 };
 
 /**
+ * Resource value types for type-safe resource sharing
+ */
+export type CodeSnippetResource = { code: string; source: AgentRole; relevance: number };
+export type FileModificationResource = { agent: AgentRole; timestamp: Date; type: 'create' | 'modify' | 'delete' };
+export type InsightResource = { insight: string; source: AgentRole; confidence: number };
+export type TestResultResource = { passed: boolean; output: string; timestamp: Date };
+
+/**
  * Shared resource pool
  */
 export interface ResourcePool {
   // Code snippets indexed by purpose
-  codeSnippets: Map<string, { code: string; source: AgentRole; relevance: number }>;
+  codeSnippets: Map<string, CodeSnippetResource>;
   // File modifications tracking
-  fileModifications: Map<string, { agent: AgentRole; timestamp: Date; type: 'create' | 'modify' | 'delete' }>;
+  fileModifications: Map<string, FileModificationResource>;
   // Shared insights from analysis
-  insights: Map<string, { insight: string; source: AgentRole; confidence: number }>;
+  insights: Map<string, InsightResource>;
   // Test results cache
-  testResults: Map<string, { passed: boolean; output: string; timestamp: Date }>;
+  testResults: Map<string, TestResultResource>;
 }
+
+/**
+ * Maps resource pool keys to their value types
+ */
+export type ResourceValueType<K extends keyof ResourcePool> =
+  K extends 'codeSnippets' ? CodeSnippetResource :
+  K extends 'fileModifications' ? FileModificationResource :
+  K extends 'insights' ? InsightResource :
+  K extends 'testResults' ? TestResultResource :
+  never;
 
 /**
  * Checkpoint for recovery
@@ -493,28 +511,26 @@ export class EnhancedCoordinator extends EventEmitter {
   /**
    * Share a resource with the pool
    */
-  shareResource(
-    type: keyof ResourcePool,
+  shareResource<K extends keyof ResourcePool>(
+    type: K,
     key: string,
-    value: unknown,
+    value: ResourceValueType<K>,
     source: AgentRole
   ): void {
-    /* eslint-disable @typescript-eslint/no-explicit-any -- value is unknown, cast needed for type-specific Maps */
     switch (type) {
       case 'codeSnippets':
-        this.resourcePool.codeSnippets.set(key, value as any);
+        this.resourcePool.codeSnippets.set(key, value as CodeSnippetResource);
         break;
       case 'fileModifications':
-        this.resourcePool.fileModifications.set(key, value as any);
+        this.resourcePool.fileModifications.set(key, value as FileModificationResource);
         break;
       case 'insights':
-        this.resourcePool.insights.set(key, value as any);
+        this.resourcePool.insights.set(key, value as InsightResource);
         break;
       case 'testResults':
-        this.resourcePool.testResults.set(key, value as any);
+        this.resourcePool.testResults.set(key, value as TestResultResource);
         break;
     }
-    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     this.emit('resource:shared', { type, key, source });
   }

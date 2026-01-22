@@ -4,20 +4,22 @@
  * Handles session continuation and resumption
  */
 
+import { logger } from "../utils/logger.js";
+
 /**
  * Resume the last session (--continue flag)
  */
 export async function resumeLastSession(): Promise<void> {
   const { getSessionStore } = await import('../persistence/session-store.js');
   const sessionStore = getSessionStore();
-  const lastSession = sessionStore.getLastSession();
+  const lastSession = await sessionStore.getLastSession();
 
   if (!lastSession) {
-    console.error('No sessions found. Start a new session first.');
+    logger.error('No sessions found. Start a new session first.');
     process.exit(1);
   }
 
-  sessionStore.resumeSession(lastSession.id);
+  await sessionStore.resumeSession(lastSession.id);
   console.log(`Resuming session: ${lastSession.name} (${lastSession.id.slice(0, 8)})`);
   console.log(
     `   ${lastSession.messages.length} messages, last accessed: ${lastSession.lastAccessedAt.toLocaleString()}\n`
@@ -30,19 +32,19 @@ export async function resumeLastSession(): Promise<void> {
 export async function resumeSessionById(sessionId: string): Promise<void> {
   const { getSessionStore } = await import('../persistence/session-store.js');
   const sessionStore = getSessionStore();
-  const session = sessionStore.getSessionByPartialId(sessionId);
+  const session = await sessionStore.getSessionByPartialId(sessionId);
 
   if (!session) {
-    console.error(`Session not found: ${sessionId}`);
+    logger.error(`Session not found: ${sessionId}`);
     console.log('\nRecent sessions:');
-    const recent = sessionStore.getRecentSessions(5);
+    const recent = await sessionStore.getRecentSessions(5);
     recent.forEach((s) => {
       console.log(`   ${s.id.slice(0, 8)} - ${s.name} (${s.messages.length} messages)`);
     });
     process.exit(1);
   }
 
-  sessionStore.resumeSession(session.id);
+  await sessionStore.resumeSession(session.id);
   console.log(`Resuming session: ${session.name} (${session.id.slice(0, 8)})`);
   console.log(
     `   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}\n`
@@ -55,7 +57,7 @@ export async function resumeSessionById(sessionId: string): Promise<void> {
 export async function listSessions(count: number = 10): Promise<void> {
   const { getSessionStore } = await import('../persistence/session-store.js');
   const sessionStore = getSessionStore();
-  const sessions = sessionStore.getRecentSessions(count);
+  const sessions = await sessionStore.getRecentSessions(count);
 
   if (sessions.length === 0) {
     console.log('No sessions found.');

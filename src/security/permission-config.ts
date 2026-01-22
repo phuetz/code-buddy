@@ -14,6 +14,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { logger } from "../utils/logger.js";
 
 // ============================================================================
 // Types
@@ -217,7 +218,7 @@ export class PermissionManager extends EventEmitter {
         return this.mergeWithDefaults(loaded);
       }
     } catch (error) {
-      console.error(`Error loading permission config: ${error}`);
+      logger.error(`Error loading permission config: ${error}`);
     }
     // Return a deep copy of defaults to prevent mutation of the original
     return this.mergeWithDefaults({});

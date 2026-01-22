@@ -411,16 +411,13 @@ export class AutoLintManager extends EventEmitter {
    * Lint multiple files
    */
   async lintFiles(files: string[], autoFix: boolean = false): Promise<LintResult[]> {
-    const results: LintResult[] = [];
+    // Lint files in parallel for better performance
+    const lintResults = await Promise.all(
+      files.map(file => this.lintFile(file, autoFix))
+    );
 
-    for (const file of files) {
-      const result = await this.lintFile(file, autoFix);
-      if (result) {
-        results.push(result);
-      }
-    }
-
-    return results;
+    // Filter out null results
+    return lintResults.filter((result): result is LintResult => result !== null);
   }
 
   /**

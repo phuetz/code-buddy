@@ -254,12 +254,16 @@ export class EmbeddingProvider extends EventEmitter {
     const embeddings: Float32Array[] = [];
     const batchSize = this.config.batchSize || 32;
 
-    // Process in batches
+    // Process in batches with parallel embedding within each batch
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
 
-      for (const text of batch) {
-        const result = await this.embedLocal(text);
+      // Process batch items in parallel for better performance
+      const batchResults = await Promise.all(
+        batch.map(text => this.embedLocal(text))
+      );
+
+      for (const result of batchResults) {
         embeddings.push(result.embedding);
       }
 

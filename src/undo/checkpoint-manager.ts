@@ -12,7 +12,6 @@
  * Allows reverting changes made by Grok CLI.
  */
 
-import { EventEmitter } from 'events';
 import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
@@ -20,6 +19,7 @@ import * as crypto from 'crypto';
 import { spawn } from 'child_process';
 import { diff_match_patch } from 'diff-match-patch';
 import { getErrorMessage } from '../types/index.js';
+import { TypedEventEmitter, CheckpointEvents } from '../events/index.js';
 
 export interface Checkpoint {
   id: string;
@@ -115,8 +115,12 @@ const DANGEROUS_OPERATIONS = [
 
 /**
  * Checkpoint Manager
+ *
+ * Uses TypedEventEmitter for type-safe event handling.
+ * Emits events: checkpoint:created, checkpoint:deleted, undo:noop, redo:noop,
+ * undo:complete, redo:complete, restore:complete
  */
-export class CheckpointManager extends EventEmitter {
+export class CheckpointManager extends TypedEventEmitter<CheckpointEvents> {
   private config: CheckpointConfig;
   private dataDir: string;
   private checkpointsDir: string;
@@ -205,7 +209,7 @@ export class CheckpointManager extends EventEmitter {
     automatic?: boolean;
   }): Promise<Checkpoint> {
     if (!this.config.enabled) {
-      throw new Error('Checkpoints are disabled');
+      throw new Error('Checkpoint system is disabled. Enable it in settings with: codebuddy config set checkpoints.enabled true');
     }
 
     const id = crypto.randomBytes(8).toString('hex');
@@ -214,14 +218,16 @@ export class CheckpointManager extends EventEmitter {
     // Get files to checkpoint
     const filesToCheckpoint = options.files || await this.getTrackedFiles();
 
-    // Create file snapshots
-    const files: CheckpointFile[] = [];
-    for (const filePath of filesToCheckpoint) {
-      const file = await this.snapshotFile(filePath, id);
-      if (file) {
-        files.push(file);
-      }
-    }
+    // Create file snapshots in parallel for better performance
+    const snapshotResults = await Promise.allSettled(
+      filesToCheckpoint.map(filePath => this.snapshotFile(filePath, id))
+    );
+
+    const files: CheckpointFile[] = snapshotResults
+      .filter((result): result is PromiseFulfilledResult<CheckpointFile | null> =>
+        result.status === 'fulfilled' && result.value !== null
+      )
+      .map(result => result.value as CheckpointFile);
 
     // Get git info (async)
     const gitInfo = await this.getGitInfoAsync();
@@ -249,9 +255,10 @@ export class CheckpointManager extends EventEmitter {
     // Remove any checkpoints after current index (for redo clearing)
     if (this.currentIndex < this.checkpoints.length - 1) {
       const removed = this.checkpoints.splice(this.currentIndex + 1);
-      for (const cp of removed) {
-        await this.deleteCheckpointFiles(cp);
-      }
+      // Delete checkpoint files in parallel for better performance
+      await Promise.allSettled(
+        removed.map(cp => this.deleteCheckpointFiles(cp))
+      );
     }
 
     this.checkpoints.push(checkpoint);
@@ -261,7 +268,14 @@ export class CheckpointManager extends EventEmitter {
     await this.enforceMaxCheckpoints();
 
     await this.saveIndex();
-    this.emit('checkpoint:created', { checkpoint });
+    this.emit('checkpoint:created', {
+      checkpoint: {
+        id: checkpoint.id,
+        name: checkpoint.name,
+        timestamp: checkpoint.timestamp,
+        files: checkpoint.files.map(f => ({ relativePath: f.relativePath })),
+      },
+    });
 
     return checkpoint;
   }
@@ -525,7 +539,21 @@ export class CheckpointManager extends EventEmitter {
       errors,
     };
 
-    this.emit(`${operation}:complete`, result);
+    // Emit typed event based on operation
+    const eventPayload = {
+      success: result.success,
+      checkpoint: { id: checkpoint.id, name: checkpoint.name },
+      restoredFiles: result.restoredFiles,
+      errors: result.errors,
+    };
+
+    if (operation === 'undo') {
+      this.emit('undo:complete', eventPayload);
+    } else if (operation === 'redo') {
+      this.emit('redo:complete', eventPayload);
+    } else {
+      this.emit('restore:complete', eventPayload);
+    }
 
     return result;
   }
@@ -538,7 +566,7 @@ export class CheckpointManager extends EventEmitter {
     const toCheckpoint = this.checkpoints.find(c => c.id === toId);
 
     if (!fromCheckpoint || !toCheckpoint) {
-      throw new Error('Checkpoint not found');
+      throw new Error('Checkpoint not found. Use listCheckpoints() to see available checkpoints.');
     }
 
     const changes: FileChange[] = [];
@@ -718,7 +746,7 @@ export class CheckpointManager extends EventEmitter {
   async tagCheckpoint(id: string, tag: string): Promise<void> {
     const checkpoint = this.checkpoints.find(c => c.id === id);
     if (!checkpoint) {
-      throw new Error('Checkpoint not found');
+      throw new Error('Checkpoint not found. Use listCheckpoints() to see available checkpoints.');
     }
 
     if (!checkpoint.tags.includes(tag)) {
@@ -733,7 +761,7 @@ export class CheckpointManager extends EventEmitter {
   async renameCheckpoint(id: string, name: string): Promise<void> {
     const checkpoint = this.checkpoints.find(c => c.id === id);
     if (!checkpoint) {
-      throw new Error('Checkpoint not found');
+      throw new Error('Checkpoint not found. Use listCheckpoints() to see available checkpoints.');
     }
 
     checkpoint.name = name;
@@ -746,7 +774,7 @@ export class CheckpointManager extends EventEmitter {
   async deleteCheckpoint(id: string): Promise<void> {
     const index = this.checkpoints.findIndex(c => c.id === id);
     if (index === -1) {
-      throw new Error('Checkpoint not found');
+      throw new Error('Checkpoint not found. Use listCheckpoints() to see available checkpoints.');
     }
 
     const checkpoint = this.checkpoints[index];
@@ -821,12 +849,13 @@ export class CheckpointManager extends EventEmitter {
   }
 
   /**
-   * Dispose
+   * Dispose and clean up resources
    */
   dispose(): void {
     this.stopAutoCheckpoint();
     this.saveIndex();
-    this.removeAllListeners();
+    // Use TypedEventEmitter's dispose method to clean up listeners and history
+    super.dispose();
   }
 }
 

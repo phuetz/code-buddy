@@ -1,6 +1,15 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { logger } from "./logger.js";
+import {
+  getZodConfigValidator,
+  UserSettingsSchema,
+  SettingsSchema,
+  AI_PROVIDERS,
+  type UserSettings as ZodUserSettings,
+  type Settings as ZodSettings,
+} from "./config-validator.js";
 
 /**
  * User-level settings stored in ~/.codebuddy/user-settings.json
@@ -93,6 +102,7 @@ export class SettingsManager {
 
   /**
    * Load user settings from ~/.codebuddy/user-settings.json
+   * Uses Zod validation for type safety and defaults
    */
   public loadUserSettings(): UserSettings {
     try {
@@ -103,14 +113,46 @@ export class SettingsManager {
       }
 
       const content = fs.readFileSync(this.userSettingsPath, "utf-8");
-      const settings = JSON.parse(content);
+      let rawSettings: unknown;
+
+      try {
+        rawSettings = JSON.parse(content);
+      } catch (parseError) {
+        logger.error("Invalid JSON in user settings file", {
+          path: this.userSettingsPath,
+          error: parseError instanceof Error ? parseError.message : "Parse error"
+        });
+        return { ...DEFAULT_USER_SETTINGS };
+      }
+
+      // Validate with Zod schema
+      const validator = getZodConfigValidator();
+      const result = validator.validate<ZodUserSettings>(rawSettings, 'user-settings.json');
+
+      if (result.valid && result.data) {
+        // Zod applies defaults, convert to our interface
+        return {
+          apiKey: result.data.apiKey,
+          baseURL: result.data.baseURL,
+          defaultModel: result.data.defaultModel,
+          models: result.data.models,
+          provider: result.data.provider,
+          model: result.data.model,
+        };
+      }
+
+      // Log validation errors but still use the file with defaults
+      for (const err of result.errors) {
+        logger.warn(`User settings validation: ${err.path}: ${err.message}`);
+      }
 
       // Merge with defaults to ensure all required fields exist
-      return { ...DEFAULT_USER_SETTINGS, ...settings };
+      const merged = { ...DEFAULT_USER_SETTINGS, ...(rawSettings as object) };
+      return merged as UserSettings;
     } catch (error) {
-      console.warn(
-        "Failed to load user settings:",
-        error instanceof Error ? error.message : "Unknown error"
+      logger.warn(
+        "Failed to load user settings",
+        { error: error instanceof Error ? error.message : "Unknown error" }
       );
       return { ...DEFAULT_USER_SETTINGS };
     }
@@ -132,7 +174,7 @@ export class SettingsManager {
           existingSettings = { ...DEFAULT_USER_SETTINGS, ...parsed };
         } catch (_error) {
           // If file is corrupted, use defaults
-          console.warn("Corrupted user settings file, using defaults");
+          logger.warn("Corrupted user settings file, using defaults");
         }
       }
 
@@ -144,9 +186,9 @@ export class SettingsManager {
         { mode: 0o600 } // Secure permissions for API key
       );
     } catch (error) {
-      console.error(
+      logger.error(
         "Failed to save user settings:",
-        error instanceof Error ? error.message : "Unknown error"
+        error as Error
       );
       throw error;
     }
@@ -159,6 +201,54 @@ export class SettingsManager {
     key: K,
     value: UserSettings[K]
   ): void {
+    // Validate key
+    if (!key || typeof key !== 'string') {
+      throw new Error('Setting key is required and must be a non-empty string');
+    }
+    const validKeys: (keyof UserSettings)[] = ['apiKey', 'baseURL', 'defaultModel', 'models', 'provider', 'model'];
+    if (!validKeys.includes(key)) {
+      throw new Error(`Invalid setting key '${key}'. Valid keys are: ${validKeys.join(', ')}`);
+    }
+
+    // Type-specific validation
+    if (key === 'apiKey' && value !== undefined && value !== null) {
+      if (typeof value !== 'string') {
+        throw new Error('API key must be a string. Got: ' + (typeof value));
+      }
+    }
+    if (key === 'baseURL' && value !== undefined && value !== null) {
+      if (typeof value !== 'string') {
+        throw new Error('Base URL must be a string. Got: ' + (typeof value));
+      }
+      if ((value as string).trim().length > 0 && !(value as string).match(/^https?:\/\//i)) {
+        throw new Error('Base URL must start with http:// or https://');
+      }
+    }
+    if ((key === 'defaultModel' || key === 'model') && value !== undefined && value !== null) {
+      if (typeof value !== 'string') {
+        throw new Error('Model name must be a string');
+      }
+    }
+    if (key === 'models' && value !== undefined && value !== null) {
+      if (!Array.isArray(value)) {
+        throw new Error('Models must be an array of strings');
+      }
+      for (const model of value as string[]) {
+        if (typeof model !== 'string') {
+          throw new Error('Each model in the models array must be a string');
+        }
+      }
+    }
+    if (key === 'provider' && value !== undefined && value !== null) {
+      if (typeof value !== 'string') {
+        throw new Error('Provider must be a string. Got: ' + (typeof value));
+      }
+      // Use the validated provider list from config-validator
+      if (!AI_PROVIDERS.includes(value as typeof AI_PROVIDERS[number])) {
+        throw new Error(`Invalid provider '${value}'. Valid providers are: ${AI_PROVIDERS.join(', ')}`);
+      }
+    }
+
     const settings = { [key]: value } as Partial<UserSettings>;
     this.saveUserSettings(settings);
   }
@@ -173,6 +263,7 @@ export class SettingsManager {
 
   /**
    * Load project settings from .codebuddy/settings.json
+   * Uses Zod validation for type safety and defaults
    */
   public loadProjectSettings(): ProjectSettings {
     try {
@@ -183,14 +274,42 @@ export class SettingsManager {
       }
 
       const content = fs.readFileSync(this.projectSettingsPath, "utf-8");
-      const settings = JSON.parse(content);
+      let rawSettings: unknown;
+
+      try {
+        rawSettings = JSON.parse(content);
+      } catch (parseError) {
+        logger.error("Invalid JSON in project settings file", {
+          path: this.projectSettingsPath,
+          error: parseError instanceof Error ? parseError.message : "Parse error"
+        });
+        return { ...DEFAULT_PROJECT_SETTINGS };
+      }
+
+      // Validate with Zod schema
+      const validator = getZodConfigValidator();
+      const result = validator.validate<ZodSettings>(rawSettings, 'settings.json');
+
+      if (result.valid && result.data) {
+        // Zod applies defaults
+        return {
+          model: result.data.model,
+          // Include any additional fields from raw settings not in Zod schema
+          ...(rawSettings as object),
+        };
+      }
+
+      // Log validation errors but still use the file with defaults
+      for (const err of result.errors) {
+        logger.warn(`Project settings validation: ${err.path}: ${err.message}`);
+      }
 
       // Merge with defaults
-      return { ...DEFAULT_PROJECT_SETTINGS, ...settings };
+      return { ...DEFAULT_PROJECT_SETTINGS, ...(rawSettings as object) };
     } catch (error) {
-      console.warn(
-        "Failed to load project settings:",
-        error instanceof Error ? error.message : "Unknown error"
+      logger.warn(
+        "Failed to load project settings",
+        { error: error instanceof Error ? error.message : "Unknown error" }
       );
       return { ...DEFAULT_PROJECT_SETTINGS };
     }
@@ -212,7 +331,7 @@ export class SettingsManager {
           existingSettings = { ...DEFAULT_PROJECT_SETTINGS, ...parsed };
         } catch (_error) {
           // If file is corrupted, use defaults
-          console.warn("Corrupted project settings file, using defaults");
+          logger.warn("Corrupted project settings file, using defaults");
         }
       }
 
@@ -223,9 +342,9 @@ export class SettingsManager {
         JSON.stringify(mergedSettings, null, 2)
       );
     } catch (error) {
-      console.error(
+      logger.error(
         "Failed to save project settings:",
-        error instanceof Error ? error.message : "Unknown error"
+        error as Error
       );
       throw error;
     }
@@ -276,6 +395,16 @@ export class SettingsManager {
    * Set the current model for the project
    */
   public setCurrentModel(model: string): void {
+    // Validate model
+    if (!model || typeof model !== 'string') {
+      throw new Error('Model name is required and must be a non-empty string');
+    }
+    if (model.trim().length === 0) {
+      throw new Error('Model name cannot be empty or whitespace only');
+    }
+    if (model.length > 100) {
+      throw new Error('Model name must not exceed 100 characters');
+    }
     this.updateProjectSetting("model", model);
   }
 

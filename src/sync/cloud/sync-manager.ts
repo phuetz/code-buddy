@@ -2,10 +2,14 @@
  * Cloud Sync Manager
  *
  * Manages synchronization of local data with cloud storage.
+ * Uses TypedEventEmitterAdapter for type-safe events with backward compatibility.
  */
 
-import { EventEmitter } from 'events';
 import { createHash } from 'crypto';
+import {
+  TypedEventEmitterAdapter,
+  CloudSyncEvents,
+} from '../../events/index.js';
 import { readFile, writeFile, mkdir, readdir, stat } from 'fs/promises';
 import { join, dirname, relative } from 'path';
 // Note: createGzip, createGunzip reserved for streaming compression (future use)
@@ -17,14 +21,12 @@ import type {
   SyncResult,
   SyncConflict,
   SyncItem,
-  SyncDirection,
-  ConflictResolution,
   SyncEvent,
   SyncEventHandler,
   VersionInfo,
+  CloudConfig,
 } from './types.js';
-import { CloudStorage, createCloudStorage, type ListOptions } from './storage.js';
-import type { CloudConfig } from './types.js';
+import { CloudStorage, createCloudStorage } from './storage.js';
 
 const gzip = promisify(require('zlib').gzip);
 const gunzip = promisify(require('zlib').gunzip);
@@ -61,7 +63,20 @@ interface SyncDelta {
   toDelete: { local: string[]; remote: string[] };
 }
 
-export class CloudSyncManager extends EventEmitter {
+/**
+ * Cloud Sync Manager with type-safe events.
+ *
+ * Emits the following events:
+ * - 'sync:started' - When sync begins
+ * - 'sync:completed' - When sync finishes successfully
+ * - 'sync:failed' - When sync fails
+ * - 'sync:progress' - Progress updates during sync
+ * - 'sync:item_uploaded' - When an item is uploaded
+ * - 'sync:item_downloaded' - When an item is downloaded
+ * - 'sync:conflict_detected' - When a conflict is detected
+ * - 'sync:conflict_resolved' - When a conflict is resolved
+ */
+export class CloudSyncManager extends TypedEventEmitterAdapter<CloudSyncEvents> {
   private storage: CloudStorage;
   private config: SyncManagerConfig;
   private state: SyncState;
@@ -70,7 +85,45 @@ export class CloudSyncManager extends EventEmitter {
   private versionCache: Map<string, VersionInfo[]> = new Map();
 
   constructor(config: SyncManagerConfig) {
-    super();
+    super({ maxHistorySize: 50 });
+
+    // Validate config
+    if (!config || typeof config !== 'object') {
+      throw new Error('Sync manager configuration is required and must be an object');
+    }
+
+    // Validate cloud config
+    if (!config.cloud || typeof config.cloud !== 'object') {
+      throw new Error('Cloud configuration is required and must be an object');
+    }
+    if (!config.cloud.provider || typeof config.cloud.provider !== 'string') {
+      throw new Error('Cloud provider is required and must be a string');
+    }
+    const validProviders = ['s3', 'gcs', 'azure', 'local'];
+    if (!validProviders.includes(config.cloud.provider)) {
+      throw new Error(`Invalid cloud provider '${config.cloud.provider}'. Must be one of: ${validProviders.join(', ')}`);
+    }
+
+    // Validate sync config
+    if (!config.sync || typeof config.sync !== 'object') {
+      throw new Error('Sync configuration is required and must be an object');
+    }
+    if (config.sync.direction !== undefined) {
+      const validDirections = ['push', 'pull', 'bidirectional'];
+      if (!validDirections.includes(config.sync.direction)) {
+        throw new Error(`Invalid sync direction '${config.sync.direction}'. Must be one of: ${validDirections.join(', ')}`);
+      }
+    }
+    if (config.sync.syncInterval !== undefined) {
+      const interval = Number(config.sync.syncInterval);
+      if (!Number.isFinite(interval) || interval < 1000 || interval > 86400000) {
+        throw new Error('Sync interval must be between 1000ms (1 second) and 86400000ms (24 hours)');
+      }
+    }
+    if (config.sync.items !== undefined && !Array.isArray(config.sync.items)) {
+      throw new Error('Sync items must be an array');
+    }
+
     this.config = config;
     this.storage = createCloudStorage(config.cloud);
     this.state = {
@@ -130,7 +183,7 @@ export class CloudSyncManager extends EventEmitter {
    */
   async sync(): Promise<SyncResult> {
     if (this.isSyncing) {
-      throw new Error('Sync already in progress');
+      throw new Error('A sync operation is already in progress. Please wait for it to complete before starting a new sync.');
     }
 
     this.isSyncing = true;
@@ -241,7 +294,7 @@ export class CloudSyncManager extends EventEmitter {
         break;
 
       case 'pull':
-        await this.downloadFiles(delta.toDownload, item.localPath, result);
+        await this.downloadFiles(delta.toDownload, item.localPath, item.remotePath, result);
         break;
 
       case 'bidirectional':
@@ -253,9 +306,11 @@ export class CloudSyncManager extends EventEmitter {
           }
         }
 
-        // Then sync changes
-        await this.uploadFiles(delta.toUpload, item.remotePath, result);
-        await this.downloadFiles(delta.toDownload, item.localPath, result);
+        // Then sync changes in parallel (upload and download are independent)
+        await Promise.all([
+          this.uploadFiles(delta.toUpload, item.remotePath, result),
+          this.downloadFiles(delta.toDownload, item.localPath, item.remotePath, result),
+        ]);
         break;
     }
 
@@ -276,11 +331,11 @@ export class CloudSyncManager extends EventEmitter {
       toDelete: { local: [], remote: [] },
     };
 
-    // Get local files
-    const localFiles = await this.scanLocalFiles(item.localPath);
-
-    // Get remote files
-    const remoteFiles = await this.scanRemoteFiles(item.remotePath);
+    // Get local and remote files in parallel
+    const [localFiles, remoteFiles] = await Promise.all([
+      this.scanLocalFiles(item.localPath),
+      this.scanRemoteFiles(item.remotePath),
+    ]);
 
     // Build maps for comparison
     const localMap = new Map(localFiles.map((f) => [f.relativePath, f]));
@@ -364,8 +419,11 @@ export class CloudSyncManager extends EventEmitter {
       if (entry.isDirectory()) {
         await this.scanDirectory(fullPath, basePath, files);
       } else if (entry.isFile()) {
-        const stats = await stat(fullPath);
-        const content = await readFile(fullPath);
+        // Read stats and content in parallel
+        const [stats, content] = await Promise.all([
+          stat(fullPath),
+          readFile(fullPath),
+        ]);
         const checksum = this.calculateChecksum(content);
 
         files.push({
@@ -383,28 +441,28 @@ export class CloudSyncManager extends EventEmitter {
    * Scan remote files
    */
   private async scanRemoteFiles(remotePath: string): Promise<RemoteFileInfo[]> {
-    const files: RemoteFileInfo[] = [];
-
     try {
       const result = await this.storage.list({ prefix: remotePath });
 
-      for (const obj of result.objects) {
-        // Get checksum from metadata if available
-        const metadata = await this.storage.getMetadata(obj.key);
+      // Fetch metadata for all objects in parallel
+      const filesWithMetadata = await Promise.all(
+        result.objects.map(async (obj) => {
+          const metadata = await this.storage.getMetadata(obj.key);
+          return {
+            key: obj.key.replace(new RegExp(`^${remotePath}/?`), ''),
+            size: obj.size,
+            modifiedAt: obj.lastModified,
+            checksum: metadata?.metadata?.checksum,
+            version: metadata?.metadata?.version,
+          };
+        })
+      );
 
-        files.push({
-          key: obj.key.replace(new RegExp(`^${remotePath}/?`), ''),
-          size: obj.size,
-          modifiedAt: obj.lastModified,
-          checksum: metadata?.metadata?.checksum,
-          version: metadata?.metadata?.version,
-        });
-      }
-    } catch (error) {
+      return filesWithMetadata;
+    } catch {
       // Remote path may not exist yet
+      return [];
     }
-
-    return files;
   }
 
   /**
@@ -461,6 +519,7 @@ export class CloudSyncManager extends EventEmitter {
   private async downloadFiles(
     files: RemoteFileInfo[],
     localPath: string,
+    remotePath: string,
     result: SyncResult
   ): Promise<void> {
     for (const file of files) {
@@ -468,14 +527,11 @@ export class CloudSyncManager extends EventEmitter {
         const localFilePath = join(localPath, file.key);
         this.updateState({ currentItems: [localFilePath] });
 
-        let content = await this.storage.download(
-          join(this.config.sync.items[0]?.remotePath || '', file.key)
-        );
+        const remoteKey = join(remotePath, file.key);
+        let content = await this.storage.download(remoteKey);
 
         // Decompress if needed
-        const metadata = await this.storage.getMetadata(
-          join(this.config.sync.items[0]?.remotePath || '', file.key)
-        );
+        const metadata = await this.storage.getMetadata(remoteKey);
         if (metadata?.metadata?.compressed === 'true') {
           content = await gunzip(content);
         }
@@ -557,36 +613,40 @@ export class CloudSyncManager extends EventEmitter {
     const cached = this.versionCache.get(path);
     if (cached) return cached;
 
-    const versions: VersionInfo[] = [];
     const versionKey = `${path}/.versions`;
 
     try {
       const result = await this.storage.list({ prefix: versionKey });
 
-      for (const obj of result.objects) {
-        const metadata = await this.storage.getMetadata(obj.key);
-        if (metadata) {
-          versions.push({
-            id: obj.key.split('/').pop() || '',
-            path,
-            timestamp: obj.lastModified,
-            size: obj.size,
-            checksum: metadata.metadata?.checksum || '',
-            author: metadata.metadata?.author,
-            parent: metadata.metadata?.parent,
-          });
-        }
-      }
+      // Fetch all metadata in parallel
+      const versionsWithMetadata = await Promise.all(
+        result.objects.map(async (obj): Promise<VersionInfo | null> => {
+          const metadata = await this.storage.getMetadata(obj.key);
+          if (metadata) {
+            return {
+              id: obj.key.split('/').pop() || '',
+              path,
+              timestamp: obj.lastModified,
+              size: obj.size,
+              checksum: metadata.metadata?.checksum || '',
+              author: metadata.metadata?.author,
+              parent: metadata.metadata?.parent,
+            };
+          }
+          return null;
+        })
+      );
 
-      // Sort by timestamp descending
+      // Filter out null values and sort by timestamp descending
+      const versions: VersionInfo[] = versionsWithMetadata.filter((v): v is VersionInfo => v !== null);
       versions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
       this.versionCache.set(path, versions);
-    } catch (error) {
+      return versions;
+    } catch {
       // No version history
+      return [];
     }
-
-    return versions;
   }
 
   /**
@@ -670,25 +730,105 @@ export class CloudSyncManager extends EventEmitter {
   }
 
   /**
-   * Emit sync event
+   * Emit sync event (maps legacy events to typed events)
    */
   private emitEvent(event: SyncEvent): void {
+    // Backward compatibility: emit through native EventEmitter
     this.emit('sync-event', event);
     this.emit(event.type, event);
+
+    // Type-safe emission based on event type
+    switch (event.type) {
+      case 'sync_started':
+        this.emitTyped('sync:started', {
+          direction: event.direction as 'push' | 'pull' | 'bidirectional',
+        });
+        break;
+      case 'sync_completed':
+        if (event.result) {
+          this.emitTyped('sync:completed', {
+            result: {
+              success: event.result.success,
+              itemsSynced: event.result.itemsSynced,
+              bytesUploaded: event.result.bytesUploaded,
+              bytesDownloaded: event.result.bytesDownloaded,
+              duration: event.result.duration,
+            },
+          });
+        }
+        break;
+      case 'sync_failed':
+        this.emitTyped('sync:failed', {
+          error: event.error || 'Unknown error',
+        });
+        break;
+      case 'sync_progress':
+        this.emitTyped('sync:progress', {
+          progress: event.progress || 0,
+        });
+        break;
+      case 'item_uploaded':
+        if (event.path !== undefined && event.size !== undefined) {
+          this.emitTyped('sync:item_uploaded', {
+            path: event.path,
+            size: event.size,
+          });
+        }
+        break;
+      case 'item_downloaded':
+        if (event.path !== undefined && event.size !== undefined) {
+          this.emitTyped('sync:item_downloaded', {
+            path: event.path,
+            size: event.size,
+          });
+        }
+        break;
+      case 'conflict_detected':
+        if (event.conflict) {
+          this.emitTyped('sync:conflict_detected', {
+            conflict: {
+              path: event.conflict.path,
+              local: event.conflict.local,
+              remote: event.conflict.remote,
+            },
+          });
+        }
+        break;
+      case 'conflict_resolved':
+        if (event.conflict) {
+          this.emitTyped('sync:conflict_resolved', {
+            conflict: {
+              path: event.conflict.path,
+              resolution: event.conflict.resolution,
+            },
+          });
+        }
+        break;
+    }
   }
 
   /**
-   * Add event handler
+   * Add event handler (legacy API)
    */
   onSyncEvent(handler: SyncEventHandler): void {
     this.on('sync-event', handler);
   }
 
   /**
-   * Remove event handler
+   * Remove event handler (legacy API)
    */
   offSyncEvent(handler: SyncEventHandler): void {
     this.off('sync-event', handler);
+  }
+
+  /**
+   * Add typed event handler (new API)
+   */
+  onTypedSyncEvent<K extends keyof CloudSyncEvents>(
+    type: K,
+    handler: (event: CloudSyncEvents[K]) => void
+  ): string {
+    return this.onTyped(type, handler);
   }
 
   /**

@@ -50,7 +50,7 @@ export class OpenAIProvider extends BaseProvider {
    */
   async complete(options: CompletionOptions): Promise<LLMResponse> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('OpenAI provider not initialized. Call initialize() with a valid API key before making requests.');
     }
 
     const openai = this.client as import('openai').default;
@@ -105,7 +105,7 @@ export class OpenAIProvider extends BaseProvider {
    */
   private async *streamInternal(options: CompletionOptions): AsyncIterable<StreamChunk> {
     if (!this.client || !this.config) {
-      throw new Error('Provider not initialized');
+      throw new Error('OpenAI provider not initialized. Call initialize() with a valid API key before making requests.');
     }
 
     const openai = this.client as import('openai').default;

@@ -1,6 +1,7 @@
 import * as fs from "fs-extra";
 import * as path from "path";
 import { measureLatency } from "../../optimization/latency-optimizer.js";
+import { getWorkspaceIsolation, type PathValidationResult } from "../../workspace/workspace-isolation.js";
 
 export interface IFileStat {
   isDirectory(): boolean;
@@ -110,15 +111,45 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   /**
-   * Validates path traversal prevention
+   * Validates path traversal prevention using workspace isolation.
+   * Delegates to WorkspaceIsolation for comprehensive security checks:
+   * - Workspace boundary validation
+   * - Path traversal prevention
+   * - Symlink escape detection
+   * - Blocked path enforcement
+   * - System whitelist support
    */
   resolvePath(filePath: string, baseDir: string): { valid: boolean; resolved: string; error?: string } {
+    const isolation = getWorkspaceIsolation();
+
+    // If isolation is disabled or baseDir differs from workspace root,
+    // fall back to basic path validation
+    if (!isolation.getConfig().enabled) {
+      return this.basicResolvePath(filePath, baseDir);
+    }
+
+    // Use workspace isolation for comprehensive validation
+    const result = isolation.validatePath(filePath, 'vfs_resolve');
+
+    return {
+      valid: result.valid,
+      resolved: result.resolved,
+      error: result.error,
+    };
+  }
+
+  /**
+   * Basic path resolution without workspace isolation.
+   * Used as fallback when isolation is disabled.
+   */
+  private basicResolvePath(filePath: string, baseDir: string): { valid: boolean; resolved: string; error?: string } {
     const resolved = path.resolve(filePath);
     const normalizedBase = path.normalize(baseDir);
     const normalizedResolved = path.normalize(resolved);
 
     // First check: normalized path must be within base directory
-    if (!normalizedResolved.startsWith(normalizedBase)) {
+    if (!normalizedResolved.startsWith(normalizedBase + path.sep) &&
+        normalizedResolved !== normalizedBase) {
       return {
         valid: false,
         resolved,
@@ -132,7 +163,7 @@ export class UnifiedVfsRouter implements IVfsProvider {
       if (fs.existsSync(resolved)) {
         const realPath = fs.realpathSync(resolved);
         const realBase = fs.realpathSync(baseDir);
-        if (!realPath.startsWith(realBase)) {
+        if (!realPath.startsWith(realBase + path.sep) && realPath !== realBase) {
           return {
             valid: false,
             resolved,
@@ -145,5 +176,13 @@ export class UnifiedVfsRouter implements IVfsProvider {
     }
 
     return { valid: true, resolved };
+  }
+
+  /**
+   * Validate a path using workspace isolation
+   * Returns the full PathValidationResult for detailed error handling
+   */
+  validateWithIsolation(filePath: string, operation?: string): PathValidationResult {
+    return getWorkspaceIsolation().validatePath(filePath, operation);
   }
 }

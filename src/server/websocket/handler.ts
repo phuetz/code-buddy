@@ -8,6 +8,7 @@ import type { Server as HttpServer } from 'http';
 import type { WebSocket, WebSocketServer, RawData } from 'ws';
 import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types.js';
 import { validateApiKey } from '../auth/api-keys.js';
+import { logger } from "../../utils/logger.js";
 import { verifyToken } from '../auth/jwt.js';
 
 // Agent interface for WebSocket handler
@@ -133,9 +134,30 @@ messageHandlers.set('chat', async (ws, state, payload) => {
 
   const { message, model, stream = true, sessionId: _sessionId } = payload as ChatPayload;
 
+  // Validate message
   if (!message) {
     sendError(ws, 'INVALID_REQUEST', 'Message is required');
     return;
+  }
+  if (typeof message !== 'string') {
+    sendError(ws, 'INVALID_REQUEST', 'Message must be a string');
+    return;
+  }
+  if (message.trim().length === 0) {
+    sendError(ws, 'INVALID_REQUEST', 'Message cannot be empty or whitespace only');
+    return;
+  }
+  if (message.length > 100000) {
+    sendError(ws, 'INVALID_REQUEST', 'Message exceeds maximum length of 100000 characters');
+    return;
+  }
+
+  // Validate model if provided
+  if (model !== undefined && model !== null) {
+    if (typeof model !== 'string' || model.trim().length === 0) {
+      sendError(ws, 'INVALID_REQUEST', 'Model must be a non-empty string if provided');
+      return;
+    }
   }
 
   try {
@@ -207,7 +229,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
 /**
  * Handle stop streaming
  */
-messageHandlers.set('stop', async (ws, state, payload) => {
+messageHandlers.set('stop', async (ws, state, _payload) => {
   if (state.streaming) {
     state.streaming = false;
     send(ws, {
@@ -233,9 +255,31 @@ messageHandlers.set('execute_tool', async (ws, state, payload) => {
 
   const { name, parameters } = payload as ToolPayload;
 
+  // Validate tool name
   if (!name) {
     sendError(ws, 'INVALID_REQUEST', 'Tool name is required');
     return;
+  }
+  if (typeof name !== 'string') {
+    sendError(ws, 'INVALID_REQUEST', 'Tool name must be a string');
+    return;
+  }
+  if (name.trim().length === 0) {
+    sendError(ws, 'INVALID_REQUEST', 'Tool name cannot be empty');
+    return;
+  }
+  // Validate tool name format (alphanumeric, underscores, hyphens)
+  if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) {
+    sendError(ws, 'INVALID_REQUEST', 'Tool name must start with a letter and contain only letters, numbers, underscores, or hyphens');
+    return;
+  }
+
+  // Validate parameters if provided
+  if (parameters !== undefined && parameters !== null) {
+    if (typeof parameters !== 'object' || Array.isArray(parameters)) {
+      sendError(ws, 'INVALID_REQUEST', 'Parameters must be an object if provided');
+      return;
+    }
   }
 
   try {
@@ -374,7 +418,7 @@ export async function setupWebSocket(
     });
 
     ws.on('error', (error) => {
-      console.error(`WebSocket error [${state.id}]:`, error);
+      logger.error(`WebSocket error [${state.id}]:`, error);
       connections.delete(ws);
     });
   });

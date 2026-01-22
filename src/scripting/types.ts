@@ -322,20 +322,30 @@ export interface TemplateLiteral {
 // Runtime Types
 // ============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CodeBuddyValue = any;
+/**
+ * Primitive types that can be stored in scripting variables
+ */
+export type CodeBuddyPrimitive = string | number | boolean | null | undefined;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CodeBuddyArray = any[];
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CodeBuddyObject = Record<string, any>;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * Function type for the scripting runtime.
+ * Note: Uses flexible typing to support dynamic scripting scenarios.
+ * Implementations should validate arguments at runtime.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Required for dynamic scripting runtime
 export type CodeBuddyFunction = (...args: any[]) => any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CodeBuddyPromise = Promise<any>;
+/**
+ * Dynamic value type for the scripting runtime.
+ * Uses a union of known types for better type safety.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Required for dynamic scripting where types are determined at runtime
+export type CodeBuddyValue = CodeBuddyPrimitive | CodeBuddyFunction | Record<string, any> | any[];
+
+/**
+ * Promise wrapping a scripting value
+ */
+export type CodeBuddyPromise = Promise<CodeBuddyValue>;
 
 export interface RuntimeContext {
   variables: Map<string, CodeBuddyValue>;

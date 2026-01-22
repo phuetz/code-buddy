@@ -4,6 +4,7 @@ import { getMCPManager } from '../codebuddy/tools.js';
 import { MCPServerConfig } from '../mcp/client.js';
 import { getErrorMessage } from '../types/index.js';
 import chalk from 'chalk';
+import { logger } from "../utils/logger.js";
 
 export function createMCPCommand(): Command {
   const mcpCommand = new Command('mcp');
@@ -43,16 +44,16 @@ export function createMCPCommand(): Command {
         
         if (transportType === 'stdio') {
           if (!options.command) {
-            console.error(chalk.red('Error: --command is required for stdio transport'));
+            logger.error(chalk.red('Error: --command is required for stdio transport'));
             process.exit(1);
           }
         } else if (transportType === 'http' || transportType === 'sse' || transportType === 'streamable_http') {
           if (!options.url) {
-            console.error(chalk.red(`Error: --url is required for ${transportType} transport`));
+            logger.error(chalk.red(`Error: --url is required for ${transportType} transport`));
             process.exit(1);
           }
         } else {
-          console.error(chalk.red('Error: Transport type must be stdio, http, sse, or streamable_http'));
+          logger.error(chalk.red('Error: Transport type must be stdio, http, sse, or streamable_http'));
           process.exit(1);
         }
 
@@ -98,7 +99,7 @@ export function createMCPCommand(): Command {
         console.log(chalk.blue(`  Available tools: ${tools.length}`));
 
       } catch (error: unknown) {
-        console.error(chalk.red(`Error adding MCP server: ${getErrorMessage(error)}`));
+        logger.error(chalk.red(`Error adding MCP server: ${getErrorMessage(error)}`));
         process.exit(1);
       }
     });
@@ -113,7 +114,7 @@ export function createMCPCommand(): Command {
         try {
           config = JSON.parse(jsonConfig);
         } catch (_error) {
-          console.error(chalk.red('Error: Invalid JSON configuration'));
+          logger.error(chalk.red('Error: Invalid JSON configuration'));
           process.exit(1);
         }
 
@@ -150,7 +151,7 @@ export function createMCPCommand(): Command {
         console.log(chalk.blue(`  Available tools: ${tools.length}`));
 
       } catch (error: unknown) {
-        console.error(chalk.red(`Error adding MCP server: ${getErrorMessage(error)}`));
+        logger.error(chalk.red(`Error adding MCP server: ${getErrorMessage(error)}`));
         process.exit(1);
       }
     });
@@ -166,7 +167,7 @@ export function createMCPCommand(): Command {
         removeMCPServer(name);
         console.log(chalk.green(`✓ Removed MCP server: ${name}`));
       } catch (error: unknown) {
-        console.error(chalk.red(`Error removing MCP server: ${getErrorMessage(error)}`));
+        logger.error(chalk.red(`Error removing MCP server: ${getErrorMessage(error)}`));
         process.exit(1);
       }
     });
@@ -238,7 +239,7 @@ export function createMCPCommand(): Command {
         const serverConfig = config.servers.find(s => s.name === name);
         
         if (!serverConfig) {
-          console.error(chalk.red(`Server ${name} not found`));
+          logger.error(chalk.red(`Server ${name} not found`));
           process.exit(1);
         }
 
@@ -260,7 +261,7 @@ export function createMCPCommand(): Command {
         }
 
       } catch (error: unknown) {
-        console.error(chalk.red(`✗ Failed to connect to ${name}: ${getErrorMessage(error)}`));
+        logger.error(chalk.red(`✗ Failed to connect to ${name}: ${getErrorMessage(error)}`));
         process.exit(1);
       }
     });

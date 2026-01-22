@@ -59,6 +59,40 @@ router.post(
       throw ApiServerError.badRequest('Messages must be a non-empty array');
     }
 
+    // Validate each message structure
+    for (let i = 0; i < body.messages.length; i++) {
+      const msg = body.messages[i];
+      if (!msg || typeof msg !== 'object') {
+        throw ApiServerError.badRequest(`Message at index ${i} must be an object`);
+      }
+      if (!msg.role || typeof msg.role !== 'string') {
+        throw ApiServerError.badRequest(`Message at index ${i} must have a valid 'role' field`);
+      }
+      if (!['system', 'user', 'assistant', 'tool'].includes(msg.role)) {
+        throw ApiServerError.badRequest(`Message at index ${i} has invalid role '${msg.role}'. Must be one of: system, user, assistant, tool`);
+      }
+      if (msg.content !== undefined && msg.content !== null && typeof msg.content !== 'string') {
+        throw ApiServerError.badRequest(`Message at index ${i} has invalid content type. Must be a string or null`);
+      }
+    }
+
+    // Validate optional parameters
+    if (body.model !== undefined && (typeof body.model !== 'string' || body.model.trim().length === 0)) {
+      throw ApiServerError.badRequest('Model must be a non-empty string if provided');
+    }
+    if (body.temperature !== undefined) {
+      const temp = Number(body.temperature);
+      if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
+        throw ApiServerError.badRequest('Temperature must be a number between 0 and 2');
+      }
+    }
+    if (body.maxTokens !== undefined) {
+      const maxTok = Number(body.maxTokens);
+      if (!Number.isInteger(maxTok) || maxTok < 1 || maxTok > 200000) {
+        throw ApiServerError.badRequest('maxTokens must be an integer between 1 and 200000');
+      }
+    }
+
     // Check for streaming
     if (body.stream) {
       // Require stream scope for streaming
@@ -163,7 +197,7 @@ async function handleStreamingChat(
     }
 
     // Stream the response
-    let totalContent = '';
+    let _totalContent = '';
     let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     const stream = await agent.streamResponse(
@@ -179,7 +213,7 @@ async function handleStreamingChat(
       if (!isConnected) break;
 
       const delta = chunk.choices?.[0]?.delta?.content || '';
-      totalContent += delta;
+      _totalContent += delta;
 
       const streamChunk: ChatStreamChunk = {
         id: requestId,

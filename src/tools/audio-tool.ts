@@ -275,8 +275,9 @@ export class AudioTool {
         data: result
       };
     } catch (error) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- axios error response structure
-      const errorMsg = (error as any).response?.data?.error?.message || getErrorMessage(error);
+      // Handle axios error response structure
+      const axiosError = error as { response?: { data?: { error?: { message?: string } } } };
+      const errorMsg = axiosError.response?.data?.error?.message || getErrorMessage(error);
       return {
         success: false,
         error: `Whisper transcription failed: ${errorMsg}`

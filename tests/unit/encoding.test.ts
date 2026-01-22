@@ -54,7 +54,6 @@ import {
 
 // Unicode test strings - using explicit escape sequences
 const CAFE_ACCENT = 'caf\u00e9'; // cafe with e-acute
-const HELLO_EMOJI = 'Hello \u{1F600}'; // Hello with smiley
 
 describe('Encoding Module', () => {
   describe('Text Encoder', () => {
@@ -338,7 +337,7 @@ describe('Encoding Module', () => {
         });
 
         it('should throw on unsupported encoding', () => {
-          expect(() => stringToBytes('test', 'invalid' as any)).toThrow(EncodingError);
+          expect(() => stringToBytes('test', 'invalid' as unknown as BufferEncoding)).toThrow(EncodingError);
         });
       });
 
@@ -478,20 +477,20 @@ describe('Encoding Module', () => {
         const xml = '<root><name>John</name><age>30</age></root>';
         const json = xmlToJson(xml);
         expect(json).toHaveProperty('root');
-        expect((json.root as any).name).toBe('John');
-        expect((json.root as any).age).toBe('30');
+        expect((json.root as Record<string, unknown>).name).toBe('John');
+        expect((json.root as Record<string, unknown>).age).toBe('30');
       });
 
       it('should handle XML declaration', () => {
         const xml = '<?xml version="1.0"?><root><test>value</test></root>';
         const json = xmlToJson(xml);
-        expect((json.root as any).test).toBe('value');
+        expect((json.root as Record<string, unknown>).test).toBe('value');
       });
 
       it('should preserve attributes when enabled', () => {
         const xml = '<root id="123"><item attr="val">content</item></root>';
         const json = xmlToJson(xml, { preserveAttributes: true });
-        expect((json.root as any)['@attributes']).toHaveProperty('id', '123');
+        expect((json.root as Record<string, unknown>)['@attributes']).toHaveProperty('id', '123');
       });
 
       it('should handle self-closing tags', () => {
@@ -606,7 +605,7 @@ describe('Encoding Module', () => {
       });
 
       it('should throw on non-array input', () => {
-        expect(() => jsonToCsv({ not: 'array' } as any)).toThrow(EncodingError);
+        expect(() => jsonToCsv({ not: 'array' } as unknown as any[])).toThrow(EncodingError);
       });
 
       it('should throw on null input', () => {
@@ -703,7 +702,7 @@ describe('Encoding Module', () => {
       });
 
       it('should throw on null input', () => {
-        expect(() => jsonToYaml(null as unknown as any)).toThrow(EncodingError);
+        expect(() => jsonToYaml(null as unknown as object)).toThrow(EncodingError);
       });
     });
 
@@ -769,7 +768,7 @@ describe('Encoding Module', () => {
         });
 
         it('should skip null and undefined values', () => {
-          const result = jsonToQueryString({ a: '1', b: null, c: undefined } as any);
+          const result = jsonToQueryString({ a: '1', b: null, c: undefined } as unknown as Record<string, string>);
           expect(result).toBe('a=1');
         });
 
@@ -778,11 +777,11 @@ describe('Encoding Module', () => {
         });
 
         it('should throw on null input', () => {
-          expect(() => jsonToQueryString(null as unknown as any)).toThrow(EncodingError);
+          expect(() => jsonToQueryString(null as unknown as object)).toThrow(EncodingError);
         });
 
         it('should throw on array input', () => {
-          expect(() => jsonToQueryString([] as unknown as any)).toThrow(EncodingError);
+          expect(() => jsonToQueryString([] as unknown as object)).toThrow(EncodingError);
         });
       });
     });
@@ -1008,7 +1007,7 @@ describe('Encoding Module', () => {
         });
 
         it('should throw on invalid format', () => {
-          expect(() => normalizeLineEndings('test', 'invalid' as any)).toThrow(EncodingError);
+          expect(() => normalizeLineEndings('test', 'invalid' as unknown as any)).toThrow(EncodingError);
         });
 
         it('should throw on null input', () => {
@@ -1096,7 +1095,7 @@ describe('Encoding Module', () => {
         });
 
         it('should throw on unsupported charset', () => {
-          expect(() => getByteLength('test', 'invalid' as any)).toThrow(EncodingError);
+          expect(() => getByteLength('test', 'invalid' as unknown as any)).toThrow(EncodingError);
         });
 
         it('should throw on null input', () => {
@@ -1132,7 +1131,7 @@ describe('Encoding Module', () => {
         });
 
         it('should throw on non-string replacement', () => {
-          expect(() => sanitizeForCharset('test', 'ascii', 123 as any)).toThrow(EncodingError);
+          expect(() => sanitizeForCharset('test', 'ascii', 123 as unknown as string)).toThrow(EncodingError);
         });
       });
     });

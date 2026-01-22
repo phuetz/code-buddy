@@ -51,6 +51,8 @@ import {
   handleExportFormats,
   // Session handlers
   handleSessions,
+  // History handlers
+  handleHistory,
   // Agent handlers
   handleAgent,
   // Vibe handlers
@@ -59,6 +61,7 @@ import {
   handleCompact,
   handleTools,
   handleVimMode,
+  handleConfig,
   // Permissions handlers (Claude Code-inspired)
   handlePermissions,
   // Worktree handlers (Claude Code-inspired)
@@ -76,6 +79,9 @@ import {
   handleTrack,
   // Plugin handlers
   handlePlugins,
+  // Missing handlers (colab, diff)
+  handleColab,
+  handleDiffCheckpoints,
 } from "./handlers/index.js";
 
 import type { CommandHandlerResult } from "./handlers/index.js";
@@ -254,6 +260,10 @@ export class EnhancedCommandHandler {
       case "__SESSIONS__":
         return handleSessions(args);
 
+      // History
+      case "__HISTORY__":
+        return handleHistory(args);
+
       // Custom Agents
       case "__AGENT__":
         return handleAgent(args);
@@ -273,6 +283,9 @@ export class EnhancedCommandHandler {
 
       case "__VIM_MODE__":
         return handleVimMode(args);
+
+      case "__CONFIG__":
+        return handleConfig(args);
 
       // Permissions (Claude Code-inspired)
       case "__PERMISSIONS__":
@@ -309,6 +322,14 @@ export class EnhancedCommandHandler {
 
       case "__PLUGINS__":
         return handlePlugins(args);
+
+      // Colab (AI Collaboration)
+      case "__COLAB__":
+        return handleColab(args);
+
+      // Diff Checkpoints
+      case "__DIFF_CHECKPOINTS__":
+        return handleDiffCheckpoints(args);
 
       default:
         return { handled: false };

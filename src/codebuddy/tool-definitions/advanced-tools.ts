@@ -154,6 +154,294 @@ export const SUBAGENT_TOOL: CodeBuddyTool = {
   }
 };
 
+// Docker tool for container management
+export const DOCKER_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "docker",
+    description: "Manage Docker containers and images: list, run, stop, build, logs, exec, compose, and more",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: [
+            "list_containers",
+            "list_images",
+            "run",
+            "stop",
+            "start",
+            "remove_container",
+            "remove_image",
+            "logs",
+            "exec",
+            "build",
+            "pull",
+            "push",
+            "inspect",
+            "compose_up",
+            "compose_down",
+            "system_info",
+            "prune"
+          ],
+          description: "The Docker operation to perform"
+        },
+        args: {
+          type: "object",
+          description: "Operation-specific arguments",
+          properties: {
+            // Common args
+            container: {
+              type: "string",
+              description: "Container ID or name"
+            },
+            image: {
+              type: "string",
+              description: "Image name or ID"
+            },
+            all: {
+              type: "boolean",
+              description: "Include stopped containers (for list_containers)"
+            },
+            // Run args
+            name: {
+              type: "string",
+              description: "Container name (for run)"
+            },
+            ports: {
+              type: "array",
+              items: { type: "string" },
+              description: "Port mappings (e.g., ['8080:80', '443:443'])"
+            },
+            volumes: {
+              type: "array",
+              items: { type: "string" },
+              description: "Volume mappings (e.g., ['/host/path:/container/path'])"
+            },
+            env: {
+              type: "object",
+              description: "Environment variables"
+            },
+            detach: {
+              type: "boolean",
+              description: "Run in background (for run)"
+            },
+            command: {
+              type: "string",
+              description: "Command to execute (for run/exec)"
+            },
+            // Build args
+            context: {
+              type: "string",
+              description: "Build context path (for build)"
+            },
+            dockerfile: {
+              type: "string",
+              description: "Dockerfile path (for build)"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (for build)"
+            },
+            noCache: {
+              type: "boolean",
+              description: "Build without cache"
+            },
+            // Logs args
+            tail: {
+              type: "number",
+              description: "Number of lines to show (for logs)"
+            },
+            // Compose args
+            file: {
+              type: "string",
+              description: "Compose file path"
+            },
+            services: {
+              type: "array",
+              items: { type: "string" },
+              description: "Services to start (for compose_up)"
+            },
+            removeVolumes: {
+              type: "boolean",
+              description: "Remove volumes (for compose_down)"
+            },
+            // Prune args
+            pruneType: {
+              type: "string",
+              enum: ["containers", "images", "volumes", "system"],
+              description: "Type of resources to prune"
+            },
+            force: {
+              type: "boolean",
+              description: "Force operation"
+            }
+          }
+        }
+      },
+      required: ["operation"]
+    }
+  }
+};
+
+// Kubernetes tool for cluster management
+export const KUBERNETES_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "kubernetes",
+    description: "Manage Kubernetes clusters: get resources, apply manifests, logs, exec, scale, rollout, and more",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: [
+            "cluster_info",
+            "get_context",
+            "list_contexts",
+            "use_context",
+            "get",
+            "describe",
+            "apply",
+            "delete",
+            "logs",
+            "exec",
+            "scale",
+            "rollout_status",
+            "rollout_restart",
+            "port_forward",
+            "get_events",
+            "top",
+            "create_namespace",
+            "set_namespace",
+            "create_configmap",
+            "create_secret"
+          ],
+          description: "The Kubernetes operation to perform"
+        },
+        args: {
+          type: "object",
+          description: "Operation-specific arguments",
+          properties: {
+            // Resource identification
+            resourceType: {
+              type: "string",
+              enum: [
+                "pods",
+                "deployments",
+                "services",
+                "configmaps",
+                "secrets",
+                "namespaces",
+                "nodes",
+                "ingresses",
+                "persistentvolumeclaims",
+                "statefulsets",
+                "daemonsets",
+                "jobs",
+                "cronjobs",
+                "replicasets"
+              ],
+              description: "Type of Kubernetes resource"
+            },
+            name: {
+              type: "string",
+              description: "Resource name"
+            },
+            namespace: {
+              type: "string",
+              description: "Kubernetes namespace"
+            },
+            // Get options
+            allNamespaces: {
+              type: "boolean",
+              description: "Query all namespaces"
+            },
+            selector: {
+              type: "string",
+              description: "Label selector (e.g., 'app=nginx')"
+            },
+            output: {
+              type: "string",
+              enum: ["wide", "yaml", "json", "name"],
+              description: "Output format"
+            },
+            // Apply options
+            path: {
+              type: "string",
+              description: "Path to manifest file or URL"
+            },
+            dryRun: {
+              type: "boolean",
+              description: "Dry-run mode"
+            },
+            // Logs options
+            container: {
+              type: "string",
+              description: "Container name in pod"
+            },
+            tail: {
+              type: "number",
+              description: "Number of lines to show"
+            },
+            previous: {
+              type: "boolean",
+              description: "Show previous container logs"
+            },
+            timestamps: {
+              type: "boolean",
+              description: "Show timestamps"
+            },
+            // Exec options
+            command: {
+              type: "string",
+              description: "Command to execute"
+            },
+            // Scale options
+            replicas: {
+              type: "number",
+              description: "Number of replicas"
+            },
+            // Port-forward options
+            localPort: {
+              type: "number",
+              description: "Local port number"
+            },
+            remotePort: {
+              type: "number",
+              description: "Remote port number"
+            },
+            // Context options
+            context: {
+              type: "string",
+              description: "Context name"
+            },
+            // ConfigMap/Secret options
+            data: {
+              type: "object",
+              description: "Key-value data for ConfigMap/Secret"
+            },
+            secretType: {
+              type: "string",
+              description: "Secret type (default: generic)"
+            },
+            // Delete options
+            force: {
+              type: "boolean",
+              description: "Force deletion"
+            },
+            gracePeriod: {
+              type: "number",
+              description: "Grace period in seconds"
+            }
+          }
+        }
+      },
+      required: ["operation"]
+    }
+  }
+};
+
 /**
  * All advanced tools as an array
  */
@@ -162,4 +450,6 @@ export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   GIT_TOOL,
   CODEBASE_MAP_TOOL,
   SUBAGENT_TOOL,
+  DOCKER_TOOL,
+  KUBERNETES_TOOL,
 ];

@@ -272,7 +272,7 @@ export class DockerSandbox extends EventEmitter {
    */
   async copyTo(hostPath: string, containerPath: string): Promise<void> {
     if (!this.containerId) {
-      throw new Error('Sandbox not running');
+      throw new Error('Docker sandbox is not running. Start it with start() before performing operations.');
     }
 
     const result = await this.runDockerCommand(['cp', hostPath, `${this.containerId}:${containerPath}`]);
@@ -286,7 +286,7 @@ export class DockerSandbox extends EventEmitter {
    */
   async copyFrom(containerPath: string, hostPath: string): Promise<void> {
     if (!this.containerId) {
-      throw new Error('Sandbox not running');
+      throw new Error('Docker sandbox is not running. Start it with start() before performing operations.');
     }
 
     const result = await this.runDockerCommand(['cp', `${this.containerId}:${containerPath}`, hostPath]);

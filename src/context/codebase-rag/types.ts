@@ -179,7 +179,7 @@ export interface IndexStats {
   indexSize: number;
   lastUpdated: Date;
   languages: Record<string, number>;
-  chunkTypes: Record<ChunkType, number>;
+  chunkTypes: Partial<Record<ChunkType, number>>;
 }
 
 /**

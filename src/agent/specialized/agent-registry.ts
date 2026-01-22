@@ -254,15 +254,21 @@ export class AgentRegistry extends EventEmitter {
    */
   async initializeAll(): Promise<Map<string, boolean>> {
     const results = new Map<string, boolean>();
+    const agentEntries = Array.from(this.agents.entries());
 
-    for (const [id, agent] of this.agents) {
-      try {
+    // Initialize all agents in parallel for faster startup
+    const initResults = await Promise.allSettled(
+      agentEntries.map(async ([id, agent]) => {
         await agent.initialize();
-        results.set(id, true);
-      } catch (_error) {
-        results.set(id, false);
-      }
-    }
+        return id;
+      })
+    );
+
+    // Map results back to agent IDs
+    initResults.forEach((result, index) => {
+      const agentId = agentEntries[index][0];
+      results.set(agentId, result.status === 'fulfilled');
+    });
 
     return results;
   }

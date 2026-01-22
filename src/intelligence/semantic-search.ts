@@ -66,6 +66,18 @@ const DEFAULT_OPTIONS: Required<SearchOptions> = {
 };
 
 /**
+ * Maximum number of messages to keep in the search engine.
+ * Older messages are automatically pruned to prevent memory leaks.
+ */
+const MAX_MESSAGES = 10000;
+
+/**
+ * Maximum word index entries per word.
+ * Prevents the index from growing unboundedly.
+ */
+const MAX_INDEX_ENTRIES_PER_WORD = 5000;
+
+/**
  * Semantic Search Engine
  */
 export class SemanticSearchEngine {
@@ -93,6 +105,10 @@ export class SemanticSearchEngine {
   addMessage(message: ConversationMessage): void {
     this.messages.push(message);
     this.indexMessage(message);
+
+    // Auto-trim to prevent memory leaks
+    this.trimIfNeeded();
+
     this.saveIndex();
   }
 
@@ -104,7 +120,67 @@ export class SemanticSearchEngine {
       this.messages.push(message);
       this.indexMessage(message);
     }
+
+    // Auto-trim to prevent memory leaks
+    this.trimIfNeeded();
+
     this.saveIndex();
+  }
+
+  /**
+   * Trim messages if exceeding max limit.
+   * Removes oldest messages and rebuilds index.
+   */
+  private trimIfNeeded(): void {
+    if (this.messages.length > MAX_MESSAGES) {
+      const trimCount = this.messages.length - MAX_MESSAGES;
+      this.messages = this.messages.slice(trimCount);
+      this.rebuildIndex();
+    }
+
+    // Also trim word index if any word has too many entries
+    this.trimWordIndex();
+  }
+
+  /**
+   * Trim word index entries to prevent unbounded growth.
+   * Keeps only the most recent message IDs for each word.
+   */
+  private trimWordIndex(): void {
+    for (const [word, messageIds] of this.wordIndex) {
+      if (messageIds.size > MAX_INDEX_ENTRIES_PER_WORD) {
+        // Convert to array, keep most recent, convert back to set
+        const idsArray = Array.from(messageIds);
+        const trimmedIds = new Set(idsArray.slice(-MAX_INDEX_ENTRIES_PER_WORD));
+        this.wordIndex.set(word, trimmedIds);
+      }
+    }
+  }
+
+  /**
+   * Get memory statistics for monitoring
+   */
+  getMemoryStats(): {
+    messageCount: number;
+    maxMessages: number;
+    indexSize: number;
+    indexMemoryEstimate: string;
+  } {
+    let totalIndexEntries = 0;
+    for (const entries of this.wordIndex.values()) {
+      totalIndexEntries += entries.size;
+    }
+
+    // Rough estimate: ~50 bytes per entry (word + set overhead + id strings)
+    const estimatedBytes = totalIndexEntries * 50 + this.messages.length * 200;
+    const estimatedMB = (estimatedBytes / (1024 * 1024)).toFixed(2);
+
+    return {
+      messageCount: this.messages.length,
+      maxMessages: MAX_MESSAGES,
+      indexSize: this.wordIndex.size,
+      indexMemoryEstimate: `~${estimatedMB} MB`,
+    };
   }
 
   /**

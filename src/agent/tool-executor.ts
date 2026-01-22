@@ -3,6 +3,14 @@
  *
  * Handles execution of all tools (built-in, MCP, and external).
  * Extracted from CodeBuddyAgent for better modularity and testability.
+ *
+ * Features:
+ * - Parallel execution for independent read-only operations
+ * - Configurable concurrency limits with semaphore
+ * - Automatic read-only tool identification based on categories
+ * - Dependency-aware sequential execution for write operations
+ * - Partial error handling with graceful degradation
+ * - Detailed parallelization metrics
  */
 
 import {
@@ -14,9 +22,15 @@ import {
   WebSearchTool,
   MorphEditorTool,
 } from "../tools/index.js";
-import type { ToolResult } from "../types/index.js";
+import { ToolResult, getErrorMessage } from "../types/index.js";
 import { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import { getMCPManager } from "../codebuddy/tools.js";
+import { logger } from "../utils/logger.js";
+import { ToolCategory } from "../tools/types.js";
+import {
+  safeValidateToolArgs,
+  ToolValidationError,
+} from "../utils/input-validator.js";
 
 /**
  * Tool call structure from OpenAI/CodeBuddy API
@@ -45,6 +59,66 @@ export interface ToolExecutorDependencies {
 }
 
 /**
+ * Configuration for parallel execution
+ */
+export interface ParallelExecutionConfig {
+  /** Enable parallel execution (default: true) */
+  enabled: boolean;
+  /** Maximum concurrent executions (default: 5) */
+  maxConcurrency: number;
+  /** Timeout per tool in ms (default: 30000) */
+  toolTimeout: number;
+  /** Categories considered read-only and safe for parallel execution */
+  readOnlyCategories: ToolCategory[];
+  /** Additional tool names to treat as read-only */
+  additionalReadOnlyTools: string[];
+  /** Tool names to always execute sequentially */
+  forceSequentialTools: string[];
+}
+
+/**
+ * Default configuration for parallel execution
+ */
+export const DEFAULT_PARALLEL_CONFIG: ParallelExecutionConfig = {
+  enabled: true,
+  maxConcurrency: 5,
+  toolTimeout: 30000,
+  readOnlyCategories: ['file_read', 'file_search', 'web', 'codebase'],
+  additionalReadOnlyTools: ['codebase_map', 'screenshot', 'pdf', 'document', 'ocr'],
+  forceSequentialTools: ['bash', 'git', 'docker', 'kubernetes'],
+};
+
+/**
+ * Result of a parallel execution batch
+ */
+export interface ParallelExecutionResult {
+  results: Map<string, ToolResult>;
+  metrics: ParallelExecutionMetrics;
+}
+
+/**
+ * Metrics specific to parallel execution
+ */
+export interface ParallelExecutionMetrics {
+  /** Total tools in the batch */
+  totalTools: number;
+  /** Number executed in parallel */
+  parallelCount: number;
+  /** Number executed sequentially */
+  sequentialCount: number;
+  /** Total wall-clock time for the batch */
+  wallClockTime: number;
+  /** Sum of individual tool execution times */
+  totalToolTime: number;
+  /** Time saved by parallelization */
+  timeSaved: number;
+  /** Parallelization efficiency (0-1) */
+  efficiency: number;
+  /** Number of partial failures */
+  partialFailures: number;
+}
+
+/**
  * Metrics for tool execution
  */
 export interface ToolMetrics {
@@ -53,15 +127,100 @@ export interface ToolMetrics {
   successfulExecutions: number;
   failedExecutions: number;
   totalExecutionTime: number;
+  // Parallelization metrics
+  parallelBatches: number;
+  totalParallelTools: number;
+  totalSequentialTools: number;
+  totalTimeSaved: number;
+  averageEfficiency: number;
 }
 
 /**
- * Get error message from unknown error
+ * Simple semaphore for limiting concurrent operations
  */
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+class Semaphore {
+  private permits: number;
+  private waiting: Array<() => void> = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits--;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      this.waiting.push(resolve);
+    });
+  }
+
+  release(): void {
+    this.permits++;
+    const next = this.waiting.shift();
+    if (next) {
+      this.permits--;
+      next();
+    }
+  }
+
+  /**
+   * Execute a function with semaphore protection
+   */
+  async withPermit<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
 }
+
+/**
+ * Tool category to name mapping for automatic read-only detection
+ */
+const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
+  // File reading
+  view_file: 'file_read',
+  // File writing
+  create_file: 'file_write',
+  str_replace_editor: 'file_write',
+  edit_file: 'file_write',
+  multi_edit: 'file_write',
+  // File search
+  search: 'file_search',
+  // System
+  bash: 'system',
+  git: 'system',
+  docker: 'system',
+  kubernetes: 'system',
+  // Web
+  web_search: 'web',
+  web_fetch: 'web',
+  browser: 'web',
+  // Planning
+  create_todo_list: 'planning',
+  update_todo_list: 'planning',
+  // Codebase
+  codebase_map: 'codebase',
+  spawn_subagent: 'codebase',
+  // Media
+  screenshot: 'media',
+  audio: 'media',
+  video: 'media',
+  ocr: 'media',
+  clipboard: 'media',
+  // Document
+  pdf: 'document',
+  document: 'document',
+  archive: 'document',
+  // Utility
+  diagram: 'utility',
+  export: 'utility',
+  qr: 'utility',
+};
 
 /**
  * ToolExecutor handles the execution of all tools in the agent.
@@ -77,6 +236,10 @@ export class ToolExecutor {
   private checkpointManager: CheckpointManager;
   private morphEditor?: MorphEditorTool | null;
 
+  // Parallel execution
+  private parallelConfig: ParallelExecutionConfig;
+  private semaphore: Semaphore;
+
   // Metrics tracking
   private toolRequestCounts: Map<string, number> = new Map();
   private totalExecutions = 0;
@@ -84,7 +247,14 @@ export class ToolExecutor {
   private failedExecutions = 0;
   private totalExecutionTime = 0;
 
-  constructor(deps: ToolExecutorDependencies) {
+  // Parallelization metrics
+  private parallelBatches = 0;
+  private totalParallelTools = 0;
+  private totalSequentialTools = 0;
+  private totalTimeSaved = 0;
+  private efficiencySum = 0;
+
+  constructor(deps: ToolExecutorDependencies, config?: Partial<ParallelExecutionConfig>) {
     this.textEditor = deps.textEditor;
     this.bash = deps.bash;
     this.search = deps.search;
@@ -93,6 +263,29 @@ export class ToolExecutor {
     this.webSearch = deps.webSearch;
     this.checkpointManager = deps.checkpointManager;
     this.morphEditor = deps.morphEditor;
+
+    // Merge with default config
+    this.parallelConfig = { ...DEFAULT_PARALLEL_CONFIG, ...config };
+    this.semaphore = new Semaphore(this.parallelConfig.maxConcurrency);
+  }
+
+  /**
+   * Update parallel execution configuration
+   */
+  setParallelConfig(config: Partial<ParallelExecutionConfig>): void {
+    this.parallelConfig = { ...this.parallelConfig, ...config };
+    // Recreate semaphore if concurrency changed
+    if (config.maxConcurrency !== undefined) {
+      this.semaphore = new Semaphore(config.maxConcurrency);
+    }
+    logger.debug('Parallel execution config updated', { config: this.parallelConfig });
+  }
+
+  /**
+   * Get current parallel execution configuration
+   */
+  getParallelConfig(): ParallelExecutionConfig {
+    return { ...this.parallelConfig };
   }
 
   /**
@@ -108,12 +301,39 @@ export class ToolExecutor {
    */
   async execute(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
     const startTime = Date.now();
-    this.recordToolRequest(toolCall.function.name);
+    const toolName = toolCall.function.name;
+    this.recordToolRequest(toolName);
     this.totalExecutions++;
 
     try {
-      const args = JSON.parse(toolCall.function.arguments);
-      const result = await this.dispatchTool(toolCall.function.name, args, toolCall);
+      // Parse JSON arguments
+      let rawArgs: Record<string, unknown>;
+      try {
+        rawArgs = JSON.parse(toolCall.function.arguments);
+      } catch (parseError) {
+        this.failedExecutions++;
+        this.totalExecutionTime += Date.now() - startTime;
+        return {
+          success: false,
+          error: `Invalid JSON arguments for tool "${toolName}": ${getErrorMessage(parseError)}`,
+        };
+      }
+
+      // Validate arguments using schema validation
+      const validationResult = safeValidateToolArgs<Record<string, unknown>>(toolName, rawArgs);
+      if (!validationResult.valid) {
+        this.failedExecutions++;
+        this.totalExecutionTime += Date.now() - startTime;
+        logger.warn(`Validation failed for tool ${toolName}`, { error: validationResult.error });
+        return {
+          success: false,
+          error: validationResult.error || `Validation failed for tool "${toolName}"`,
+        };
+      }
+
+      // Use validated (and potentially transformed) arguments
+      const args = validationResult.value!;
+      const result = await this.dispatchTool(toolName, args, toolCall);
 
       if (result.success) {
         this.successfulExecutions++;
@@ -126,6 +346,15 @@ export class ToolExecutor {
     } catch (error: unknown) {
       this.failedExecutions++;
       this.totalExecutionTime += Date.now() - startTime;
+
+      // Check if this is a validation error for better messaging
+      if (error instanceof ToolValidationError) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
       return {
         success: false,
         error: `Tool execution error: ${getErrorMessage(error)}`,
@@ -271,51 +500,248 @@ export class ToolExecutor {
   }
 
   /**
-   * Execute multiple tools in parallel (for read-only operations)
+   * Determine the category of a tool
+   */
+  private getToolCategory(toolName: string): ToolCategory | undefined {
+    // Check built-in mapping
+    if (toolName in TOOL_CATEGORY_MAP) {
+      return TOOL_CATEGORY_MAP[toolName];
+    }
+    // MCP tools are treated as external
+    if (toolName.startsWith('mcp__')) {
+      return 'mcp';
+    }
+    return undefined;
+  }
+
+  /**
+   * Check if a tool can be executed in parallel (read-only)
+   * Uses category-based detection with configuration overrides
+   */
+  canExecuteInParallel(toolName: string): boolean {
+    // Check force sequential list first
+    if (this.parallelConfig.forceSequentialTools.includes(toolName)) {
+      return false;
+    }
+
+    // Check additional read-only tools
+    if (this.parallelConfig.additionalReadOnlyTools.includes(toolName)) {
+      return true;
+    }
+
+    // Check by category
+    const category = this.getToolCategory(toolName);
+    if (category && this.parallelConfig.readOnlyCategories.includes(category)) {
+      return true;
+    }
+
+    // MCP tools: assume read-only unless in force sequential
+    // This is a safe default as most MCP read tools don't modify state
+    if (toolName.startsWith('mcp__')) {
+      // Check if tool name suggests read-only operation
+      const lowerName = toolName.toLowerCase();
+      const readOnlyIndicators = ['read', 'get', 'list', 'search', 'fetch', 'query', 'view', 'show'];
+      const writeIndicators = ['write', 'create', 'update', 'delete', 'modify', 'set', 'post', 'put'];
+
+      const hasReadIndicator = readOnlyIndicators.some(ind => lowerName.includes(ind));
+      const hasWriteIndicator = writeIndicators.some(ind => lowerName.includes(ind));
+
+      // Read-only if has read indicators and no write indicators
+      return hasReadIndicator && !hasWriteIndicator;
+    }
+
+    return false;
+  }
+
+  /**
+   * Execute a single tool with timeout protection
+   */
+  private async executeWithTimeout(
+    toolCall: CodeBuddyToolCall,
+    timeout: number
+  ): Promise<{ result: ToolResult; executionTime: number }> {
+    const startTime = Date.now();
+
+    const timeoutPromise = new Promise<ToolResult>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Tool execution timed out after ${timeout}ms`));
+      }, timeout);
+    });
+
+    try {
+      const result = await Promise.race([
+        this.execute(toolCall),
+        timeoutPromise,
+      ]);
+      return {
+        result,
+        executionTime: Date.now() - startTime,
+      };
+    } catch (error) {
+      return {
+        result: {
+          success: false,
+          error: `Execution error: ${getErrorMessage(error)}`,
+        },
+        executionTime: Date.now() - startTime,
+      };
+    }
+  }
+
+  /**
+   * Execute multiple tools with intelligent parallelization
+   *
+   * Features:
+   * - Automatic read-only detection based on tool categories
+   * - Semaphore-limited concurrency
+   * - Partial error handling (continues on individual failures)
+   * - Detailed execution metrics
    */
   async executeParallel(toolCalls: CodeBuddyToolCall[]): Promise<Map<string, ToolResult>> {
+    const { results } = await this.executeParallelWithMetrics(toolCalls);
+    return results;
+  }
+
+  /**
+   * Execute multiple tools with detailed parallelization metrics
+   */
+  async executeParallelWithMetrics(
+    toolCalls: CodeBuddyToolCall[]
+  ): Promise<ParallelExecutionResult> {
+    const batchStartTime = Date.now();
     const results = new Map<string, ToolResult>();
+    const executionTimes: number[] = [];
+    let partialFailures = 0;
 
-    // Group tools by whether they can be parallelized
-    const readOnlyTools = new Set([
-      "view_file",
-      "search",
-      "web_search",
-      "web_fetch",
-    ]);
+    // If parallelization is disabled, execute all sequentially
+    if (!this.parallelConfig.enabled) {
+      for (const toolCall of toolCalls) {
+        const { result, executionTime } = await this.executeWithTimeout(
+          toolCall,
+          this.parallelConfig.toolTimeout
+        );
+        results.set(toolCall.id, result);
+        executionTimes.push(executionTime);
+        if (!result.success) partialFailures++;
+      }
 
+      const wallClockTime = Date.now() - batchStartTime;
+      const totalToolTime = executionTimes.reduce((a, b) => a + b, 0);
+
+      return {
+        results,
+        metrics: {
+          totalTools: toolCalls.length,
+          parallelCount: 0,
+          sequentialCount: toolCalls.length,
+          wallClockTime,
+          totalToolTime,
+          timeSaved: 0,
+          efficiency: 0,
+          partialFailures,
+        },
+      };
+    }
+
+    // Group tools by parallelization capability
     const parallelizable: CodeBuddyToolCall[] = [];
     const sequential: CodeBuddyToolCall[] = [];
 
     for (const toolCall of toolCalls) {
-      if (readOnlyTools.has(toolCall.function.name)) {
+      if (this.canExecuteInParallel(toolCall.function.name)) {
         parallelizable.push(toolCall);
       } else {
         sequential.push(toolCall);
       }
     }
 
-    // Execute parallelizable tools concurrently
-    if (parallelizable.length > 0) {
-      const parallelResults = await Promise.all(
-        parallelizable.map(async (tc) => ({
-          id: tc.id,
-          result: await this.execute(tc),
-        }))
-      );
+    logger.debug('Tool execution grouping', {
+      parallelizable: parallelizable.map(tc => tc.function.name),
+      sequential: sequential.map(tc => tc.function.name),
+    });
 
-      for (const { id, result } of parallelResults) {
-        results.set(id, result);
+    // Execute parallelizable tools with semaphore-limited concurrency
+    const parallelExecutionTimes: number[] = [];
+    if (parallelizable.length > 0) {
+      const parallelPromises = parallelizable.map(async (toolCall) => {
+        return this.semaphore.withPermit(async () => {
+          const { result, executionTime } = await this.executeWithTimeout(
+            toolCall,
+            this.parallelConfig.toolTimeout
+          );
+          return { id: toolCall.id, result, executionTime };
+        });
+      });
+
+      const parallelResults = await Promise.allSettled(parallelPromises);
+
+      for (const settledResult of parallelResults) {
+        if (settledResult.status === 'fulfilled') {
+          const { id, result, executionTime } = settledResult.value;
+          results.set(id, result);
+          parallelExecutionTimes.push(executionTime);
+          if (!result.success) partialFailures++;
+        } else {
+          // Promise was rejected (should be rare with our error handling)
+          partialFailures++;
+          logger.error('Parallel execution promise rejected', {
+            reason: settledResult.reason,
+          });
+        }
       }
     }
 
     // Execute sequential tools one by one
+    const sequentialExecutionTimes: number[] = [];
     for (const toolCall of sequential) {
-      const result = await this.execute(toolCall);
+      const { result, executionTime } = await this.executeWithTimeout(
+        toolCall,
+        this.parallelConfig.toolTimeout
+      );
       results.set(toolCall.id, result);
+      sequentialExecutionTimes.push(executionTime);
+      if (!result.success) partialFailures++;
     }
 
-    return results;
+    // Calculate metrics
+    const wallClockTime = Date.now() - batchStartTime;
+    const totalParallelToolTime = parallelExecutionTimes.reduce((a, b) => a + b, 0);
+    const totalSequentialToolTime = sequentialExecutionTimes.reduce((a, b) => a + b, 0);
+    const totalToolTime = totalParallelToolTime + totalSequentialToolTime;
+
+    // Time saved is the difference between running all sequentially vs parallel
+    // For parallel tools, the max execution time is what matters for wall clock
+    const maxParallelTime = parallelExecutionTimes.length > 0
+      ? Math.max(...parallelExecutionTimes)
+      : 0;
+    const timeSaved = totalParallelToolTime - maxParallelTime;
+
+    // Efficiency: how much parallelization helped (0 = no help, 1 = perfect parallel)
+    const efficiency = totalToolTime > 0
+      ? Math.max(0, Math.min(1, timeSaved / totalToolTime))
+      : 0;
+
+    // Update global metrics
+    this.parallelBatches++;
+    this.totalParallelTools += parallelizable.length;
+    this.totalSequentialTools += sequential.length;
+    this.totalTimeSaved += timeSaved;
+    this.efficiencySum += efficiency;
+
+    const metrics: ParallelExecutionMetrics = {
+      totalTools: toolCalls.length,
+      parallelCount: parallelizable.length,
+      sequentialCount: sequential.length,
+      wallClockTime,
+      totalToolTime,
+      timeSaved,
+      efficiency,
+      partialFailures,
+    };
+
+    logger.debug('Parallel execution completed', { metrics });
+
+    return { results, metrics };
   }
 
   /**
@@ -328,6 +754,12 @@ export class ToolExecutor {
       successfulExecutions: this.successfulExecutions,
       failedExecutions: this.failedExecutions,
       totalExecutionTime: this.totalExecutionTime,
+      // Parallelization metrics
+      parallelBatches: this.parallelBatches,
+      totalParallelTools: this.totalParallelTools,
+      totalSequentialTools: this.totalSequentialTools,
+      totalTimeSaved: this.totalTimeSaved,
+      averageEfficiency: this.parallelBatches > 0 ? this.efficiencySum / this.parallelBatches : 0,
     };
   }
 
@@ -351,19 +783,43 @@ export class ToolExecutor {
     this.successfulExecutions = 0;
     this.failedExecutions = 0;
     this.totalExecutionTime = 0;
+    // Reset parallelization metrics
+    this.parallelBatches = 0;
+    this.totalParallelTools = 0;
+    this.totalSequentialTools = 0;
+    this.totalTimeSaved = 0;
+    this.efficiencySum = 0;
   }
 
   /**
    * Check if a tool is read-only (safe for parallel execution)
+   * @deprecated Use canExecuteInParallel() for more accurate detection
    */
   isReadOnlyTool(toolName: string): boolean {
-    const readOnlyTools = new Set([
-      "view_file",
-      "search",
-      "web_search",
-      "web_fetch",
-    ]);
-    return readOnlyTools.has(toolName);
+    return this.canExecuteInParallel(toolName);
+  }
+
+  /**
+   * Get parallelization statistics summary
+   */
+  getParallelizationStats(): {
+    enabled: boolean;
+    maxConcurrency: number;
+    totalBatches: number;
+    parallelToolsExecuted: number;
+    sequentialToolsExecuted: number;
+    totalTimeSavedMs: number;
+    averageEfficiency: number;
+  } {
+    return {
+      enabled: this.parallelConfig.enabled,
+      maxConcurrency: this.parallelConfig.maxConcurrency,
+      totalBatches: this.parallelBatches,
+      parallelToolsExecuted: this.totalParallelTools,
+      sequentialToolsExecuted: this.totalSequentialTools,
+      totalTimeSavedMs: this.totalTimeSaved,
+      averageEfficiency: this.parallelBatches > 0 ? this.efficiencySum / this.parallelBatches : 0,
+    };
   }
 
   /**
