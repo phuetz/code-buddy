@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
 import { retry, RetryStrategies, RetryPredicates } from '../utils/retry.js';
+import { safeStreamRead, handleStreamError } from '../utils/stream-helpers.js';
 
 // ============================================================================
 // Types
@@ -561,13 +562,30 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     if (!reader) return;
 
     const decoder = new TextDecoder();
+    const maxIterations = 100000; // Safety limit for model pull progress updates
+    let iterations = 0;
 
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      while (iterations < maxIterations) {
+        iterations++;
 
-        const lines = decoder.decode(value).split('\n');
+        const result = await safeStreamRead(reader, {
+          context: 'OllamaPullModel',
+          maxRetries: 2,
+        });
+
+        if (!result.success) {
+          handleStreamError(result.error, {
+            source: 'OllamaProvider',
+            operation: 'pulling model',
+            metadata: { model },
+          });
+          throw result.error;
+        }
+
+        if (result.done) break;
+
+        const lines = decoder.decode(result.value).split('\n');
         for (const line of lines) {
           if (line.trim()) {
             try {
@@ -578,6 +596,12 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
             }
           }
         }
+      }
+
+      if (iterations >= maxIterations) {
+        logger.warn(`[OllamaProvider] Pull model reached max iterations: ${maxIterations}`, {
+          source: 'OllamaProvider',
+        });
       }
     } finally {
       reader.releaseLock();
@@ -700,13 +724,35 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     }
 
     const decoder = new TextDecoder();
+    const maxIterations = 50000; // Safety limit for LLM response chunks
+    let iterations = 0;
 
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      while (iterations < maxIterations) {
+        iterations++;
 
-        const lines = decoder.decode(value).split('\n');
+        const result = await safeStreamRead(reader, {
+          context: 'OllamaStream',
+          maxRetries: 1,
+        });
+
+        if (!result.success) {
+          const errorInfo = handleStreamError(result.error, {
+            source: 'OllamaProvider',
+            operation: 'streaming response',
+            metadata: { model },
+          });
+          // Only throw for non-retryable errors
+          if (!errorInfo.isRetryable) {
+            throw result.error;
+          }
+          // For retryable errors, log and continue (reader may recover)
+          continue;
+        }
+
+        if (result.done) break;
+
+        const lines = decoder.decode(result.value).split('\n');
         for (const line of lines) {
           if (line.trim()) {
             try {
@@ -719,6 +765,12 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
             }
           }
         }
+      }
+
+      if (iterations >= maxIterations) {
+        logger.warn(`[OllamaProvider] Stream reached max iterations: ${maxIterations}`, {
+          source: 'OllamaProvider',
+        });
       }
     } finally {
       reader.releaseLock();

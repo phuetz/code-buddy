@@ -31,6 +31,7 @@ import type {
   ArrowFunction,
 } from './types.js';
 import { TokenType } from './types.js';
+import { createLoopGuard } from '../utils/errors.js';
 
 export class Parser {
   private tokens: Token[];

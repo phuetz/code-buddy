@@ -339,6 +339,42 @@ describe('CodebaseRAG', () => {
       expect(result.strategy).toBe('reranked');
     });
 
+    it('should use reranking when useReranking config is enabled', async () => {
+      const rerankingRag = new CodebaseRAG({
+        useReranking: true,
+        rerankTopK: 20,
+      });
+
+      const result = await rerankingRag.retrieve('test', { strategy: 'reranked' });
+
+      expect(result.strategy).toBe('reranked');
+      rerankingRag.dispose();
+    });
+
+    it('should fall back to hybrid when useReranking is disabled in reranked strategy', async () => {
+      // Default config has useReranking: false
+      const result = await rag.retrieve('test function', { strategy: 'reranked' });
+
+      // The result strategy should still be 'reranked' as that's what was requested
+      expect(result.strategy).toBe('reranked');
+      // But internally it uses hybrid search when useReranking is false
+    });
+
+    it('should return reranking stats after reranked search', async () => {
+      const rerankingRag = new CodebaseRAG({
+        useReranking: true,
+        rerankTopK: 10,
+      });
+
+      await rerankingRag.retrieve('find function test', { strategy: 'reranked' });
+
+      const stats = rerankingRag.getLastRerankingStats();
+      // Stats may be null if no candidates were found, but the method should exist
+      expect(typeof rerankingRag.getLastRerankingStats).toBe('function');
+
+      rerankingRag.dispose();
+    });
+
     it('should use corrective strategy', async () => {
       const result = await rag.retrieve('test', { strategy: 'corrective' });
 

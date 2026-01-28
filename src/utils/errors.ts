@@ -197,6 +197,19 @@ export class JSONParseError extends CodeBuddyError {
 }
 
 /**
+ * Error thrown when a loop exceeds maximum iterations
+ */
+export class LoopTimeoutError extends CodeBuddyError {
+  constructor(
+    message: string,
+    public maxIterations: number,
+    public context?: string
+  ) {
+    super(message, 'LOOP_TIMEOUT_ERROR', { maxIterations, context });
+  }
+}
+
+/**
  * Checks if an error is a CodeBuddyError or subclass
  */
 export function isCodeBuddyError(error: unknown): error is CodeBuddyError {
@@ -278,4 +291,64 @@ export async function withRetry<T>(
   }
 
   throw lastError;
+}
+
+/**
+ * Options for loop guard
+ */
+export interface LoopGuardOptions {
+  /** Maximum number of iterations allowed (default: 10000) */
+  maxIterations?: number;
+  /** Context description for error messages */
+  context?: string;
+  /** Warning threshold - logs warning when reached (default: 80% of max) */
+  warnAt?: number;
+  /** Optional logger function for warnings */
+  onWarn?: (message: string) => void;
+}
+
+/**
+ * Loop guard to prevent infinite loops
+ * Returns a function that should be called at each iteration.
+ * Throws LoopTimeoutError when max iterations exceeded.
+ *
+ * @example
+ * ```typescript
+ * const guard = createLoopGuard({ maxIterations: 1000, context: 'parsing postfix' });
+ * while (true) {
+ *   guard(); // Throws if iterations exceed limit
+ *   // ... loop body
+ * }
+ * ```
+ */
+export function createLoopGuard(options: LoopGuardOptions = {}): () => void {
+  const {
+    maxIterations = 10000,
+    context = 'loop',
+    warnAt = Math.floor(maxIterations * 0.8),
+    onWarn,
+  } = options;
+
+  let iterations = 0;
+  let warned = false;
+
+  return () => {
+    iterations++;
+
+    if (!warned && iterations >= warnAt && onWarn) {
+      warned = true;
+      onWarn(
+        `Warning: ${context} approaching iteration limit (${iterations}/${maxIterations})`
+      );
+    }
+
+    if (iterations > maxIterations) {
+      throw new LoopTimeoutError(
+        `${context} exceeded maximum iterations (${maxIterations}). ` +
+          'This may indicate an infinite loop or corrupted input.',
+        maxIterations,
+        context
+      );
+    }
+  };
 }

@@ -1,6 +1,7 @@
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
+import { createLoopGuard } from '../utils/errors.js';
 
 export interface DocumentContent {
   text: string;
@@ -143,63 +144,73 @@ export class DocumentTool {
   }
 
   /**
-   * Read XLSX file
+   * Read XLSX file with async processing to avoid blocking the event loop
    */
   private async readXlsx(filePath: string): Promise<DocumentContent> {
     const AdmZip = (await import('adm-zip')).default;
     const buffer = await this.vfs.readFileBuffer(filePath);
     const zip = new AdmZip(buffer);
 
-    // Read shared strings
-    const sharedStrings: string[] = [];
-    try {
-      const sharedStringsXml = zip.readAsText('xl/sharedStrings.xml');
-      const matches = sharedStringsXml.match(/<t[^>]*>([^<]*)<\/t>/g) || [];
-      for (const match of matches) {
-        const text = match.replace(/<[^>]+>/g, '');
-        sharedStrings.push(text);
-      }
-    } catch {
-      // No shared strings
-    }
+    // Read shared strings asynchronously
+    const sharedStrings = await this.parseSharedStringsAsync(zip);
 
-    // Read workbook to get sheet names
+    // Read workbook to get sheet names (yield to event loop)
+    await this.yieldToEventLoop();
     const workbookXml = zip.readAsText('xl/workbook.xml');
-    const sheetNames: string[] = [];
-    const sheetMatches = workbookXml.match(/<sheet[^>]+name="([^"]+)"[^>]*>/g) || [];
-    for (const match of sheetMatches) {
-      const nameMatch = match.match(/name="([^"]+)"/);
-      if (nameMatch) {
-        sheetNames.push(nameMatch[1]);
-      }
-    }
+    const sheetNames = this.extractSheetNames(workbookXml);
 
-    // Read sheets
+    // Discover all available sheet files
+    const sheetEntries = zip.getEntries()
+      .filter(entry => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.entryName))
+      .map(entry => {
+        const match = entry.entryName.match(/sheet(\d+)\.xml$/);
+        return { entryName: entry.entryName, index: match ? parseInt(match[1]) : 0 };
+      })
+      .sort((a, b) => a.index - b.index);
+
+    // Process sheets in batches to avoid blocking
     const sheets: SheetContent[] = [];
-    let sheetIndex = 1;
+    const parseErrors: string[] = [];
+    const BATCH_SIZE = 3;
 
-    while (true) {
-      try {
-        const sheetXml = zip.readAsText(`xl/worksheets/sheet${sheetIndex}.xml`);
-        const sheetData = this.parseSheetXml(sheetXml, sharedStrings);
+    for (let i = 0; i < sheetEntries.length; i += BATCH_SIZE) {
+      // Yield to event loop between batches
+      if (i > 0) {
+        await this.yieldToEventLoop();
+      }
 
-        sheets.push({
-          name: sheetNames[sheetIndex - 1] || `Sheet${sheetIndex}`,
-          data: sheetData.data,
-          rowCount: sheetData.data.length,
-          colCount: sheetData.maxCol
-        });
+      const batch = sheetEntries.slice(i, i + BATCH_SIZE);
 
-        sheetIndex++;
-      } catch {
-        break;
+      for (const { entryName, index } of batch) {
+        try {
+          const sheetXml = zip.readAsText(entryName);
+          const sheetData = this.parseSheetXml(sheetXml, sharedStrings);
+
+          sheets.push({
+            name: sheetNames[index - 1] || `Sheet${index}`,
+            data: sheetData.data,
+            rowCount: sheetData.data.length,
+            colCount: sheetData.maxCol
+          });
+        } catch (error) {
+          // Log error and continue with remaining sheets
+          const sheetName = sheetNames[index - 1] || `Sheet${index}`;
+          const errorMsg = `Failed to parse ${sheetName}: ${getErrorMessage(error)}`;
+          parseErrors.push(errorMsg);
+          console.error(`[DocumentTool] ${errorMsg}`);
+        }
       }
     }
 
     // Combine all sheet text
-    const text = sheets.map(s =>
+    let text = sheets.map(s =>
       `[${s.name}]\n` + s.data.map(row => row.join('\t')).join('\n')
     ).join('\n\n');
+
+    // Append parse errors if any occurred
+    if (parseErrors.length > 0) {
+      text += `\n\n[Parse Warnings]\n${parseErrors.join('\n')}`;
+    }
 
     return {
       text,
@@ -209,6 +220,57 @@ export class DocumentTool {
       },
       sheets
     };
+  }
+
+  /**
+   * Parse shared strings XML asynchronously
+   */
+  private async parseSharedStringsAsync(zip: { readAsText: (path: string) => string }): Promise<string[]> {
+    const sharedStrings: string[] = [];
+    try {
+      await this.yieldToEventLoop();
+      const sharedStringsXml = zip.readAsText('xl/sharedStrings.xml');
+
+      // Process in chunks if the XML is large
+      const matches = sharedStringsXml.match(/<t[^>]*>([^<]*)<\/t>/g) || [];
+      const CHUNK_SIZE = 1000;
+
+      for (let i = 0; i < matches.length; i += CHUNK_SIZE) {
+        if (i > 0) {
+          await this.yieldToEventLoop();
+        }
+        const chunk = matches.slice(i, i + CHUNK_SIZE);
+        for (const match of chunk) {
+          const text = match.replace(/<[^>]+>/g, '');
+          sharedStrings.push(text);
+        }
+      }
+    } catch {
+      // No shared strings file - this is normal for some Excel files
+    }
+    return sharedStrings;
+  }
+
+  /**
+   * Extract sheet names from workbook XML
+   */
+  private extractSheetNames(workbookXml: string): string[] {
+    const sheetNames: string[] = [];
+    const sheetMatches = workbookXml.match(/<sheet[^>]+name="([^"]+)"[^>]*>/g) || [];
+    for (const match of sheetMatches) {
+      const nameMatch = match.match(/name="([^"]+)"/);
+      if (nameMatch) {
+        sheetNames.push(nameMatch[1]);
+      }
+    }
+    return sheetNames;
+  }
+
+  /**
+   * Yield to the event loop to prevent blocking
+   */
+  private yieldToEventLoop(): Promise<void> {
+    return new Promise(resolve => setImmediate(resolve));
   }
 
   /**
@@ -285,7 +347,15 @@ export class DocumentTool {
     const slides: SlideContent[] = [];
     let slideIndex = 1;
 
+    // Guard against infinite loops (max 10000 slides should be more than enough)
+    const guard = createLoopGuard({
+      maxIterations: 10000,
+      context: 'PPTX slide parsing',
+      onWarn: (msg) => console.warn(`[DocumentTool] ${msg}`)
+    });
+
     while (true) {
+      guard();
       try {
         const slideXml = zip.readAsText(`ppt/slides/slide${slideIndex}.xml`);
         const text = this.extractTextFromXml(slideXml, 'a:t');

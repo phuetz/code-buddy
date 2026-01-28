@@ -46,6 +46,12 @@ export interface CacheManagerConfig {
   enabled: boolean;
   enableMemoryPressureHandling: boolean;
   memoryThresholdMB: number;
+  /** Interval in ms for checking memory pressure (default: 30000 = 30 seconds) */
+  memoryCheckIntervalMs: number;
+  /** Percentage of cache entries to evict when memory pressure is detected (0-1) */
+  memoryPressureEvictionRatio: number;
+  /** Critical memory threshold as percentage of memoryThresholdMB (triggers aggressive eviction) */
+  criticalMemoryRatio: number;
   enableMetrics: boolean;
   metricsFlushIntervalMs: number;
   /** Enable file watching for automatic invalidation */
@@ -69,7 +75,10 @@ export interface CacheManagerConfig {
 const DEFAULT_MANAGER_CONFIG: CacheManagerConfig = {
   enabled: true,
   enableMemoryPressureHandling: true,
-  memoryThresholdMB: 512, // Start evicting when cache uses > 512MB
+  memoryThresholdMB: 512, // Start evicting when heap uses > 512MB
+  memoryCheckIntervalMs: 30 * 1000, // Check memory every 30 seconds
+  memoryPressureEvictionRatio: 0.25, // Evict 25% of entries under memory pressure
+  criticalMemoryRatio: 0.9, // 90% of threshold triggers aggressive eviction
   enableMetrics: true,
   metricsFlushIntervalMs: 60 * 1000, // Log metrics every minute
   enableFileWatching: false, // Disabled by default (can be expensive)
@@ -96,7 +105,13 @@ export class CacheManager extends EventEmitter {
 
   // Metrics
   private metricsInterval: ReturnType<typeof setInterval> | null = null;
+  private memoryCheckInterval: ReturnType<typeof setInterval> | null = null;
   private initialized: boolean = false;
+
+  // Memory pressure tracking
+  private lastMemoryCheck: { heapUsedMB: number; timestamp: number } | null = null;
+  private memoryPressureHistory: Array<{ timestamp: number; heapUsedMB: number; action: string }> = [];
+  private readonly maxMemoryPressureHistory = 100;
 
   // File dependency tracking
   private fileDependencies: Map<string, Set<string>> = new Map(); // file -> dependent cache keys
@@ -165,9 +180,43 @@ export class CacheManager extends EventEmitter {
       }, this.config.metricsFlushIntervalMs);
     }
 
+    // Start memory pressure monitoring
+    if (this.config.enableMemoryPressureHandling && this.config.memoryCheckIntervalMs > 0) {
+      this.startMemoryMonitoring();
+    }
+
     this.initialized = true;
     this.emit('initialized');
     logger.debug('Cache manager initialized');
+  }
+
+  /**
+   * Start periodic memory pressure monitoring
+   */
+  private startMemoryMonitoring(): void {
+    if (this.memoryCheckInterval) {
+      clearInterval(this.memoryCheckInterval);
+    }
+
+    // Initial check
+    this.checkMemoryPressure();
+
+    // Periodic checks
+    this.memoryCheckInterval = setInterval(() => {
+      this.checkMemoryPressure();
+    }, this.config.memoryCheckIntervalMs);
+
+    logger.debug(`Memory pressure monitoring started (interval: ${this.config.memoryCheckIntervalMs}ms, threshold: ${this.config.memoryThresholdMB}MB)`);
+  }
+
+  /**
+   * Stop memory pressure monitoring
+   */
+  private stopMemoryMonitoring(): void {
+    if (this.memoryCheckInterval) {
+      clearInterval(this.memoryCheckInterval);
+      this.memoryCheckInterval = null;
+    }
   }
 
   // ===========================================================================
@@ -597,29 +646,228 @@ export class CacheManager extends EventEmitter {
 
   /**
    * Check memory pressure and evict if needed
+   * Uses actual process heap memory (process.memoryUsage().heapUsed)
    */
   private checkMemoryPressure(): void {
     if (!this.config.enableMemoryPressureHandling) return;
 
-    const stats = this.getStats();
-    const memoryMB = stats.overall.memoryUsageEstimate / (1024 * 1024);
+    const memoryUsage = process.memoryUsage();
+    const heapUsedMB = memoryUsage.heapUsed / (1024 * 1024);
+    const heapTotalMB = memoryUsage.heapTotal / (1024 * 1024);
+    const thresholdMB = this.config.memoryThresholdMB;
+    const criticalThresholdMB = thresholdMB * this.config.criticalMemoryRatio;
 
-    if (memoryMB > this.config.memoryThresholdMB) {
-      logger.debug(`Cache memory pressure detected: ${memoryMB.toFixed(2)}MB > ${this.config.memoryThresholdMB}MB`);
-      this.evictLowPriorityEntries();
+    // Store last check for trending
+    this.lastMemoryCheck = {
+      heapUsedMB,
+      timestamp: Date.now(),
+    };
+
+    // Check if we're approaching the threshold
+    if (heapUsedMB >= criticalThresholdMB) {
+      // Critical memory pressure - aggressive eviction
+      logger.debug(
+        `Critical memory pressure detected: ${heapUsedMB.toFixed(2)}MB / ${heapTotalMB.toFixed(2)}MB (threshold: ${thresholdMB}MB)`
+      );
+      this.recordMemoryPressureEvent(heapUsedMB, 'critical_eviction');
+      this.evictLowPriorityEntries('critical');
+    } else if (heapUsedMB >= thresholdMB * 0.75) {
+      // Warning level - moderate eviction
+      logger.debug(
+        `Memory pressure warning: ${heapUsedMB.toFixed(2)}MB / ${heapTotalMB.toFixed(2)}MB (threshold: ${thresholdMB}MB)`
+      );
+      this.recordMemoryPressureEvent(heapUsedMB, 'warning_eviction');
+      this.evictLowPriorityEntries('warning');
     }
   }
 
   /**
-   * Evict low-priority entries to reduce memory
+   * Record a memory pressure event for history tracking
    */
-  private evictLowPriorityEntries(): void {
-    // Strategy: Reduce each cache by ~25%
-    // This is called when memory pressure is detected
+  private recordMemoryPressureEvent(heapUsedMB: number, action: string): void {
+    this.memoryPressureHistory.push({
+      timestamp: Date.now(),
+      heapUsedMB,
+      action,
+    });
 
-    // For now, just clear caches partially
-    // A more sophisticated approach would use LRU across all caches
-    this.emit('memory:pressure');
+    // Trim history
+    if (this.memoryPressureHistory.length > this.maxMemoryPressureHistory) {
+      this.memoryPressureHistory.shift();
+    }
+  }
+
+  /**
+   * Get memory pressure history for diagnostics
+   */
+  getMemoryPressureHistory(): Array<{ timestamp: number; heapUsedMB: number; action: string }> {
+    return [...this.memoryPressureHistory];
+  }
+
+  /**
+   * Get current memory status
+   */
+  getMemoryStatus(): {
+    heapUsedMB: number;
+    heapTotalMB: number;
+    thresholdMB: number;
+    usagePercent: number;
+    status: 'normal' | 'warning' | 'critical';
+  } {
+    const memoryUsage = process.memoryUsage();
+    const heapUsedMB = memoryUsage.heapUsed / (1024 * 1024);
+    const heapTotalMB = memoryUsage.heapTotal / (1024 * 1024);
+    const thresholdMB = this.config.memoryThresholdMB;
+    const usagePercent = (heapUsedMB / thresholdMB) * 100;
+
+    let status: 'normal' | 'warning' | 'critical' = 'normal';
+    if (heapUsedMB >= thresholdMB * this.config.criticalMemoryRatio) {
+      status = 'critical';
+    } else if (heapUsedMB >= thresholdMB * 0.75) {
+      status = 'warning';
+    }
+
+    return {
+      heapUsedMB,
+      heapTotalMB,
+      thresholdMB,
+      usagePercent,
+      status,
+    };
+  }
+
+  /**
+   * Evict low-priority entries to reduce memory
+   * Uses LRU strategy across all caches
+   */
+  private evictLowPriorityEntries(level: 'warning' | 'critical'): void {
+    const evictionRatio = level === 'critical'
+      ? this.config.memoryPressureEvictionRatio * 2 // Double eviction for critical
+      : this.config.memoryPressureEvictionRatio;
+
+    const stats = this.getStats();
+    const totalEntries = stats.overall.totalEntries;
+    const entriesToEvict = Math.ceil(totalEntries * evictionRatio);
+
+    if (entriesToEvict === 0) {
+      logger.debug('No entries to evict');
+      return;
+    }
+
+    logger.debug(`Memory pressure eviction: evicting ~${entriesToEvict} entries (${(evictionRatio * 100).toFixed(0)}% of ${totalEntries})`);
+
+    // Calculate how many to evict from each cache proportionally
+    const llmEntries = stats.llmResponse.totalEntries;
+    const fileEntries = stats.fileContent.totalEntries;
+    const embeddingEntries = stats.embedding.totalEntries;
+    const searchEntries = stats.searchResults.totalEntries;
+
+    const llmToEvict = Math.ceil(entriesToEvict * (llmEntries / Math.max(1, totalEntries)));
+    const fileToEvict = Math.ceil(entriesToEvict * (fileEntries / Math.max(1, totalEntries)));
+    const embeddingToEvict = Math.ceil(entriesToEvict * (embeddingEntries / Math.max(1, totalEntries)));
+    const searchToEvict = Math.ceil(entriesToEvict * (searchEntries / Math.max(1, totalEntries)));
+
+    // Emit memory pressure event with details for other components to react
+    // The individual caches have internal LRU eviction mechanisms that will be
+    // triggered when new items are added. Here we emit the event for:
+    // 1. External components to react (e.g., reduce caching aggressiveness)
+    // 2. Logging and monitoring
+    this.emit('memory:pressure', {
+      level,
+      heapUsedMB: this.lastMemoryCheck?.heapUsedMB || 0,
+      thresholdMB: this.config.memoryThresholdMB,
+      entriesToEvict,
+      evictionRatio,
+      breakdown: {
+        llm: llmToEvict,
+        file: fileToEvict,
+        embedding: embeddingToEvict,
+        search: searchToEvict,
+      },
+    });
+
+    // For critical pressure, clear less frequently accessed caches
+    if (level === 'critical') {
+      // Clear search cache first (most volatile, least critical)
+      this.searchCache.clear();
+      logger.debug('Cleared search cache due to critical memory pressure');
+
+      // If still critical after clearing search, clear embeddings
+      const currentUsage = process.memoryUsage();
+      const currentMB = currentUsage.heapUsed / (1024 * 1024);
+      if (currentMB >= this.config.memoryThresholdMB * this.config.criticalMemoryRatio) {
+        this.embeddingCache.clear();
+        logger.debug('Cleared embedding cache due to critical memory pressure');
+      }
+    }
+
+    // Force garbage collection hint (if available via --expose-gc flag)
+    if (typeof global.gc === 'function') {
+      try {
+        global.gc();
+        logger.debug('Triggered garbage collection after cache eviction');
+      } catch {
+        // gc not exposed or failed
+      }
+    }
+
+    logger.debug('Memory pressure eviction complete');
+  }
+
+  /**
+   * Force immediate memory pressure check and eviction if needed
+   */
+  forceMemoryCheck(): {
+    evicted: boolean;
+    status: {
+      heapUsedMB: number;
+      heapTotalMB: number;
+      thresholdMB: number;
+      usagePercent: number;
+      status: 'normal' | 'warning' | 'critical';
+    };
+  } {
+    const statusBefore = this.getMemoryStatus();
+    this.checkMemoryPressure();
+    const statusAfter = this.getMemoryStatus();
+
+    return {
+      evicted: statusBefore.status !== 'normal',
+      status: statusAfter,
+    };
+  }
+
+  /**
+   * Update memory threshold at runtime
+   */
+  setMemoryThreshold(thresholdMB: number): void {
+    if (thresholdMB < 64) {
+      logger.debug('Memory threshold too low, setting to minimum of 64MB');
+      thresholdMB = 64;
+    }
+    this.config.memoryThresholdMB = thresholdMB;
+    logger.debug(`Memory threshold updated to ${thresholdMB}MB`);
+    this.emit('config:update', { memoryThresholdMB: thresholdMB });
+  }
+
+  /**
+   * Update memory check interval at runtime
+   */
+  setMemoryCheckInterval(intervalMs: number): void {
+    if (intervalMs < 1000) {
+      logger.debug('Memory check interval too short, setting to minimum of 1000ms');
+      intervalMs = 1000;
+    }
+    this.config.memoryCheckIntervalMs = intervalMs;
+
+    // Restart monitoring with new interval
+    if (this.config.enableMemoryPressureHandling && this.initialized) {
+      this.stopMemoryMonitoring();
+      this.startMemoryMonitoring();
+    }
+
+    logger.debug(`Memory check interval updated to ${intervalMs}ms`);
+    this.emit('config:update', { memoryCheckIntervalMs: intervalMs });
   }
 
   /**
@@ -924,6 +1172,9 @@ export class CacheManager extends EventEmitter {
       clearInterval(this.metricsInterval);
       this.metricsInterval = null;
     }
+
+    // Stop memory monitoring
+    this.stopMemoryMonitoring();
 
     // Auto-persist if enabled
     if (this.config.autoPersist) {

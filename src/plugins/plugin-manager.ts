@@ -1,5 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
 import { EventEmitter } from 'events';
 import {
   Plugin,
@@ -9,11 +10,33 @@ import {
   PluginMetadata,
   PluginIsolationConfig,
   validateManifest,
+  validatePluginConfig,
 } from './types.js';
 import { getToolManager, ToolRegistration } from '../tools/tool-manager.js';
 import { getSlashCommandManager, SlashCommand } from '../commands/slash-commands.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { IsolatedPluginRunner, createIsolatedPluginRunner } from './isolated-plugin-runner.js';
+
+/**
+ * Plugin Provider interface
+ * Allows plugins to provide additional capabilities (e.g., LLM providers, storage backends)
+ */
+export interface PluginProvider {
+  /** Unique identifier for this provider */
+  id: string;
+  /** Type of provider (e.g., 'llm', 'storage', 'auth') */
+  type: string;
+  /** Human-readable name */
+  name: string;
+  /** Priority for provider selection (higher = preferred) */
+  priority?: number;
+  /** Provider-specific configuration */
+  config?: Record<string, unknown>;
+  /** Initialize the provider */
+  initialize?(): Promise<void>;
+  /** Shutdown the provider */
+  shutdown?(): Promise<void>;
+}
 
 export interface PluginManagerConfig {
   pluginDir: string;
@@ -27,6 +50,9 @@ export interface PluginManagerConfig {
 export class PluginManager extends EventEmitter {
   private plugins: Map<string, PluginMetadata> = new Map();
   private isolatedRunners: Map<string, IsolatedPluginRunner> = new Map();
+  private providers: Map<string, PluginProvider> = new Map();
+  private providersByType: Map<string, PluginProvider[]> = new Map();
+  private pluginConfigs: Map<string, Record<string, unknown>> = new Map();
   private config: PluginManagerConfig;
   private logger: Logger;
 
@@ -73,6 +99,71 @@ export class PluginManager extends EventEmitter {
     }
     // Default to isolated unless explicitly set to false
     return manifest.isolated !== false;
+  }
+
+  /**
+   * Load plugin-specific configuration
+   *
+   * Configuration is loaded from multiple sources with the following priority (highest first):
+   * 1. User config: ~/.codebuddy/plugins/<plugin-id>/config.json
+   * 2. Default config from manifest: manifest.defaultConfig
+   *
+   * The final config is merged and validated against the plugin's configSchema if provided.
+   */
+  private async loadPluginConfig(manifest: PluginManifest): Promise<Record<string, unknown>> {
+    const pluginId = manifest.id;
+
+    // Start with defaults from manifest
+    let config: Record<string, unknown> = { ...(manifest.defaultConfig ?? {}) };
+
+    // Try to load user config from ~/.codebuddy/plugins/<plugin-id>/config.json
+    const userConfigPath = path.join(os.homedir(), '.codebuddy', 'plugins', pluginId, 'config.json');
+
+    if (await fs.pathExists(userConfigPath)) {
+      try {
+        const userConfig = await fs.readJson(userConfigPath);
+
+        if (typeof userConfig === 'object' && userConfig !== null && !Array.isArray(userConfig)) {
+          // Merge user config over defaults (user config takes precedence)
+          config = { ...config, ...userConfig };
+          this.logger.debug(`Loaded user config for plugin ${pluginId} from ${userConfigPath}`);
+        } else {
+          this.logger.warn(`Invalid user config for plugin ${pluginId}: must be an object`);
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to load user config for plugin ${pluginId}: ${error instanceof Error ? error.message : String(error)}`);
+        // Continue with defaults
+      }
+    }
+
+    // Validate against schema if provided
+    if (manifest.configSchema) {
+      const validationResult = validatePluginConfig(config, manifest.configSchema);
+
+      if (!validationResult.valid) {
+        this.logger.warn(`Plugin ${pluginId} config validation errors:`);
+        for (const err of validationResult.errors) {
+          this.logger.warn(`  - ${err}`);
+        }
+        this.emit('plugin:config-validation-failed', {
+          pluginId,
+          errors: validationResult.errors
+        });
+        // Continue with potentially invalid config - let the plugin handle it
+      }
+    }
+
+    // Cache the loaded config
+    this.pluginConfigs.set(pluginId, config);
+
+    return config;
+  }
+
+  /**
+   * Get the loaded configuration for a plugin
+   */
+  getPluginConfig(pluginId: string): Record<string, unknown> | undefined {
+    return this.pluginConfigs.get(pluginId);
   }
 
   /**
@@ -212,7 +303,9 @@ export class PluginManager extends EventEmitter {
         await this.activateIsolatedPlugin(metadata);
       } else {
         // Legacy: activate in main thread
-        const context = this.createPluginContext(metadata);
+        // Load plugin-specific configuration
+        const pluginConfig = await this.loadPluginConfig(metadata.manifest);
+        const context = this.createPluginContext(metadata, pluginConfig);
         await metadata.instance!.activate(context);
       }
 
@@ -335,10 +428,10 @@ export class PluginManager extends EventEmitter {
   /**
    * Create the context object passed to the plugin
    */
-  private createPluginContext(metadata: PluginMetadata): PluginContext {
+  private createPluginContext(metadata: PluginMetadata, pluginConfig: Record<string, unknown> = {}): PluginContext {
     return {
       logger: this.logger.child(metadata.manifest.id),
-      config: {}, // TODO: Load plugin-specific config
+      config: pluginConfig,
       dataDir: path.join(this.config.pluginDir, metadata.manifest.id, 'data'),
       
       registerTool: (tool) => {

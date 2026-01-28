@@ -1,5 +1,6 @@
 import http from 'http';
 import { CodeBuddyAgent, ChatEntry } from '../../agent/codebuddy-agent.js';
+import { withStreamTimeout, withMaxIterations, handleStreamError } from '../../utils/stream-helpers.js';
 
 /**
  * HTTP Server for Web Interface
@@ -15,6 +16,10 @@ export interface HttpServerOptions {
 }
 
 export class HttpServer {
+  // Stream configuration
+  private static readonly STREAM_TIMEOUT_MS = 60_000; // 60 seconds between chunks
+  private static readonly MAX_STREAM_ITERATIONS = 10_000; // Maximum stream iterations
+
   private server: http.Server | null = null;
   private agent: CodeBuddyAgent;
   private port: number;

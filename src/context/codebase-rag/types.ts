@@ -91,7 +91,7 @@ export interface RetrievalResult {
 export interface ScoredChunk {
   chunk: CodeChunk;
   score: number;
-  matchType: "semantic" | "keyword" | "hybrid";
+  matchType: "semantic" | "keyword" | "hybrid" | "reranked";
   highlights?: TextHighlight[];
 }
 

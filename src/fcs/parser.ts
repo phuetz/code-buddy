@@ -42,6 +42,7 @@ import {
   CatchClause,
 } from './types.js';
 import { tokenize as lexerTokenize } from './lexer.js';
+import { createLoopGuard } from '../utils/errors.js';
 
 export class FCSParser {
   private tokens: Token[];
@@ -656,7 +657,14 @@ export class FCSParser {
   private parsePostfix(): AstNode {
     let expr = this.parsePrimary();
 
+    // Guard against infinite loops in postfix parsing (deeply nested calls/members)
+    const guard = createLoopGuard({
+      maxIterations: 10000,
+      context: 'FCS postfix expression parsing',
+    });
+
     while (true) {
+      guard();
       if (this.match(TokenType.LeftParen)) {
         expr = this.parseCall(expr);
       } else if (this.match(TokenType.LeftBracket)) {

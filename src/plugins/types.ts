@@ -3,6 +3,29 @@ import { SlashCommand } from '../commands/slash-commands.js';
 import { Logger } from '../utils/logger.js';
 
 /**
+ * Plugin Configuration Schema
+ * JSON Schema-like definition for validating plugin configuration
+ */
+export interface PluginConfigSchema {
+  type: 'object';
+  properties: Record<string, PluginConfigPropertySchema>;
+  required?: string[];
+}
+
+export interface PluginConfigPropertySchema {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  description?: string;
+  default?: unknown;
+  enum?: (string | number | boolean)[];
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  items?: PluginConfigPropertySchema;
+}
+
+/**
  * Plugin Manifest
  * Defines metadata for a plugin
  */
@@ -19,6 +42,10 @@ export interface PluginManifest {
   permissions?: PluginPermissions;
   /** Whether the plugin should run in an isolated Worker Thread (default: true) */
   isolated?: boolean;
+  /** Default configuration values for this plugin */
+  defaultConfig?: Record<string, unknown>;
+  /** JSON Schema for validating plugin configuration */
+  configSchema?: PluginConfigSchema;
 }
 
 /**
@@ -195,10 +222,26 @@ export function validateManifest(manifest: unknown): ValidationResult {
     errors.push('Field "isolated" must be a boolean');
   }
 
+  // Validate defaultConfig if present
+  if (m.defaultConfig !== undefined) {
+    if (typeof m.defaultConfig !== 'object' || m.defaultConfig === null || Array.isArray(m.defaultConfig)) {
+      errors.push('Field "defaultConfig" must be an object');
+    }
+  }
+
+  // Validate configSchema if present
+  if (m.configSchema !== undefined) {
+    const schemaResult = validateConfigSchema(m.configSchema);
+    if (!schemaResult.valid) {
+      errors.push(...schemaResult.errors.map(e => `configSchema: ${e}`));
+    }
+  }
+
   // Security: Check for suspicious fields that shouldn't exist
   const allowedFields = new Set([
     'id', 'name', 'version', 'description', 'author', 'license',
-    'homepage', 'repository', 'minApiVersion', 'permissions', 'isolated'
+    'homepage', 'repository', 'minApiVersion', 'permissions', 'isolated',
+    'defaultConfig', 'configSchema'
   ]);
   for (const key of Object.keys(m)) {
     if (!allowedFields.has(key)) {
@@ -354,4 +397,174 @@ export function getBlockedModules(permissions: PluginPermissions): string[] {
   }
 
   return blocked;
+}
+
+/**
+ * Validate a plugin configuration schema
+ */
+export function validateConfigSchema(schema: unknown): ValidationResult {
+  const errors: string[] = [];
+
+  if (!schema || typeof schema !== 'object') {
+    return { valid: false, errors: ['Config schema must be an object'] };
+  }
+
+  const s = schema as Record<string, unknown>;
+
+  if (s.type !== 'object') {
+    errors.push('Config schema type must be "object"');
+  }
+
+  if (s.properties !== undefined) {
+    if (typeof s.properties !== 'object' || s.properties === null || Array.isArray(s.properties)) {
+      errors.push('Config schema properties must be an object');
+    } else {
+      const props = s.properties as Record<string, unknown>;
+      for (const [key, value] of Object.entries(props)) {
+        if (!isValidPropertySchema(value)) {
+          errors.push(`Invalid property schema for "${key}"`);
+        }
+      }
+    }
+  }
+
+  if (s.required !== undefined && !isStringArray(s.required)) {
+    errors.push('Config schema required must be an array of strings');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Check if a value is a valid property schema
+ */
+function isValidPropertySchema(schema: unknown): boolean {
+  if (!schema || typeof schema !== 'object') {
+    return false;
+  }
+
+  const s = schema as Record<string, unknown>;
+  const validTypes = ['string', 'number', 'boolean', 'array', 'object'];
+
+  if (!validTypes.includes(s.type as string)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validate a configuration value against a schema
+ */
+export function validateConfigValue(
+  value: unknown,
+  schema: PluginConfigPropertySchema,
+  path: string = ''
+): ValidationResult {
+  const errors: string[] = [];
+  const fullPath = path || 'config';
+
+  // Type validation
+  switch (schema.type) {
+    case 'string':
+      if (typeof value !== 'string') {
+        errors.push(`${fullPath}: expected string, got ${typeof value}`);
+      } else {
+        if (schema.minLength !== undefined && value.length < schema.minLength) {
+          errors.push(`${fullPath}: string too short (min ${schema.minLength})`);
+        }
+        if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+          errors.push(`${fullPath}: string too long (max ${schema.maxLength})`);
+        }
+        if (schema.pattern !== undefined) {
+          try {
+            const regex = new RegExp(schema.pattern);
+            if (!regex.test(value)) {
+              errors.push(`${fullPath}: string does not match pattern "${schema.pattern}"`);
+            }
+          } catch {
+            // Invalid regex in schema - skip pattern validation
+          }
+        }
+        if (schema.enum !== undefined && !schema.enum.includes(value)) {
+          errors.push(`${fullPath}: value must be one of: ${schema.enum.join(', ')}`);
+        }
+      }
+      break;
+
+    case 'number':
+      if (typeof value !== 'number' || isNaN(value)) {
+        errors.push(`${fullPath}: expected number, got ${typeof value}`);
+      } else {
+        if (schema.minimum !== undefined && value < schema.minimum) {
+          errors.push(`${fullPath}: number too small (min ${schema.minimum})`);
+        }
+        if (schema.maximum !== undefined && value > schema.maximum) {
+          errors.push(`${fullPath}: number too large (max ${schema.maximum})`);
+        }
+        if (schema.enum !== undefined && !schema.enum.includes(value)) {
+          errors.push(`${fullPath}: value must be one of: ${schema.enum.join(', ')}`);
+        }
+      }
+      break;
+
+    case 'boolean':
+      if (typeof value !== 'boolean') {
+        errors.push(`${fullPath}: expected boolean, got ${typeof value}`);
+      }
+      if (schema.enum !== undefined && !schema.enum.includes(value as boolean)) {
+        errors.push(`${fullPath}: value must be one of: ${schema.enum.join(', ')}`);
+      }
+      break;
+
+    case 'array':
+      if (!Array.isArray(value)) {
+        errors.push(`${fullPath}: expected array, got ${typeof value}`);
+      } else if (schema.items) {
+        for (let i = 0; i < value.length; i++) {
+          const itemResult = validateConfigValue(value[i], schema.items, `${fullPath}[${i}]`);
+          errors.push(...itemResult.errors);
+        }
+      }
+      break;
+
+    case 'object':
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        errors.push(`${fullPath}: expected object, got ${typeof value}`);
+      }
+      break;
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate a complete plugin configuration against its schema
+ */
+export function validatePluginConfig(
+  config: Record<string, unknown>,
+  schema: PluginConfigSchema
+): ValidationResult {
+  const errors: string[] = [];
+
+  // Check required fields
+  if (schema.required) {
+    for (const field of schema.required) {
+      if (config[field] === undefined) {
+        errors.push(`Missing required config field: ${field}`);
+      }
+    }
+  }
+
+  // Validate each property
+  for (const [key, value] of Object.entries(config)) {
+    const propertySchema = schema.properties[key];
+    if (propertySchema) {
+      const result = validateConfigValue(value, propertySchema, key);
+      errors.push(...result.errors);
+    }
+    // Allow unknown properties for forward compatibility
+  }
+
+  return { valid: errors.length === 0, errors };
 }

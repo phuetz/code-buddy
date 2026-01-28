@@ -24,10 +24,13 @@ export {
   ParserError,
   PathTraversalError,
   JSONParseError,
+  LoopTimeoutError,
   isCodeBuddyError,
   getErrorMessage,
   withTimeout,
   withRetry,
+  createLoopGuard,
+  type LoopGuardOptions,
 } from "./errors.js";
 
 // Logger
@@ -331,3 +334,18 @@ export {
   type ParseResult as ZodParseResult,
   type ValidationOptions as ZodValidationOptions,
 } from "./json-validator.js";
+
+// Stream helpers
+export {
+  withStreamTimeout,
+  safeStreamRead,
+  withMaxIterations,
+  handleStreamError,
+  createTimeoutController,
+  mergeAsyncIterables,
+  drainAsyncIterable,
+  type StreamTimeoutOptions,
+  type SafeStreamReadOptions,
+  type SafeStreamReadResult,
+  type StreamErrorContext,
+} from "./stream-helpers.js";
