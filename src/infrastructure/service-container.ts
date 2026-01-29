@@ -11,6 +11,7 @@
  * - Type-safe service access
  */
 
+import { EventEmitter } from 'events';
 import type {
   IServiceContainer,
   IServiceContainerConfig,
@@ -19,6 +20,12 @@ import type {
   ISessionStore,
   ICostTracker,
 } from './types.js';
+
+// Runtime imports for service creation (ESM compatible)
+import { getSettingsManager } from '../utils/settings-manager.js';
+import { getCheckpointManager } from '../checkpoints/checkpoint-manager.js';
+import { getSessionStore } from '../persistence/session-store.js';
+import { getCostTracker } from '../utils/cost-tracker.js';
 
 // ============================================================================
 // Service Container Implementation
@@ -125,36 +132,29 @@ export class ServiceContainer implements IServiceContainer {
    * Uses the existing singleton implementation for compatibility
    */
   private static createSettingsManager(): ISettingsManager {
-    // Lazy import to avoid circular dependencies
-     
-    const { getSettingsManager } = require('../utils/settings-manager.js');
     return getSettingsManager();
   }
 
   /**
    * Create CheckpointManager instance
+   * Note: Implementation may not have all interface methods
    */
   private static createCheckpointManager(): ICheckpointManager {
-     
-    const { getCheckpointManager } = require('../checkpoints/checkpoint-manager.js');
-    return getCheckpointManager();
+    return getCheckpointManager() as unknown as ICheckpointManager;
   }
 
   /**
    * Create SessionStore instance
+   * Note: Implementation may not have all interface methods
    */
   private static createSessionStore(): ISessionStore {
-     
-    const { getSessionStore } = require('../persistence/session-store.js');
-    return getSessionStore();
+    return getSessionStore() as unknown as ISessionStore;
   }
 
   /**
    * Create CostTracker instance
    */
   private static createCostTracker(): ICostTracker {
-     
-    const { getCostTracker } = require('../utils/cost-tracker.js');
     return getCostTracker();
   }
 }
@@ -213,7 +213,6 @@ function createMockSettingsManager(): ISettingsManager {
 }
 
 function createMockCheckpointManager(): ICheckpointManager {
-  const { EventEmitter } = require('events');
   const emitter = new EventEmitter();
   return Object.assign(emitter, {
     createCheckpoint: () => ({ id: 'test', timestamp: new Date(), description: '', files: [], workingDirectory: '' }),
@@ -253,7 +252,6 @@ function createMockSessionStore(): ISessionStore {
 }
 
 function createMockCostTracker(): ICostTracker {
-  const { EventEmitter } = require('events');
   const emitter = new EventEmitter();
   return Object.assign(emitter, {
     recordUsage: () => ({ inputTokens: 0, outputTokens: 0, model: 'test', timestamp: new Date(), cost: 0 }),
