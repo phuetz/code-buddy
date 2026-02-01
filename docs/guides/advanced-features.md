@@ -6,7 +6,7 @@ Code Buddy supports spawning multiple specialized agents for complex tasks.
 
 ```bash
 # Enable multi-agent orchestration
-grok --multi-agent
+buddy --multi-agent
 
 # Available specialized agents:
 # - CodeGuardian: Security-focused code review
@@ -21,10 +21,10 @@ For large tasks, Code Buddy can work in parallel using git worktrees:
 
 ```bash
 # Enable parallel mode (up to 16 concurrent agents)
-grok --parallel --max-workers 4
+buddy --parallel --max-workers 4
 
 # Use remote machines via SSH
-grok --parallel --remote user@server1,user@server2
+buddy --parallel --remote user@server1,user@server2
 ```
 
 ## Tree of Thought Reasoning
@@ -33,7 +33,7 @@ Enable advanced reasoning for complex problems:
 
 ```bash
 # Use thinking keywords for extended reasoning
-grok --thinking-mode auto
+buddy --thinking-mode auto
 
 # Trigger thinking with specific keywords:
 # - "think step by step"
@@ -131,7 +131,7 @@ The AI automatically includes relevant context:
 /cost
 
 # Set cost limit
-grok --max-cost 10
+buddy --max-cost 10
 
 # View cost breakdown
 /cost --detailed
@@ -141,7 +141,7 @@ grok --max-cost 10
 
 ```bash
 # Enable offline mode with local LLM fallback
-grok --offline
+buddy --offline
 
 # Configure offline LLM
 export GROK_OFFLINE_MODEL=llama3.2
@@ -152,10 +152,10 @@ export GROK_OFFLINE_URL=http://localhost:11434/v1
 
 ```bash
 # Start collaboration server
-grok serve --port 8080
+buddy serve --port 8080
 
 # Join a session
-grok join ws://localhost:8080 --session abc123
+buddy join ws://localhost:8080 --session abc123
 
 # Share session
 /share --invite
@@ -165,13 +165,13 @@ grok join ws://localhost:8080 --session abc123
 
 ```bash
 # Enable debug logging
-DEBUG=codebuddy grok
+DEBUG=codebuddy buddy
 
 # Verbose output
-grok --verbose
+buddy --verbose
 
 # Save interaction log
-grok --log-file session.log
+buddy --log-file session.log
 ```
 
 ## Configuration Files

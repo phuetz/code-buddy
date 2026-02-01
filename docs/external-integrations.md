@@ -20,7 +20,7 @@ Both protocols are designed for **loose coupling** - any client that speaks the 
 ### Starting the Server
 
 ```bash
-grok --json-rpc [options]
+buddy --json-rpc [options]
 ```
 
 Options:
@@ -86,7 +86,7 @@ const readline = require('readline');
 
 class CodeBuddyClient {
   constructor() {
-    this.process = spawn('grok', ['--json-rpc']);
+    this.process = spawn('buddy', ['--json-rpc']);
     this.pending = new Map();
     this.nextId = 1;
 
@@ -231,7 +231,7 @@ public class GrokJsonRpcClient : IDisposable
 ### Starting the Server
 
 ```bash
-grok --mcp-server [options]
+buddy --mcp-server [options]
 ```
 
 ### Configuration for Claude Desktop
@@ -242,7 +242,7 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "code-buddy": {
-      "command": "grok",
+      "command": "buddy",
       "args": ["--mcp-server"]
     }
   }
@@ -411,17 +411,17 @@ public class GrokCLIProvider : ICopilotProvider
 
 ```bash
 # Start server in one terminal
-grok --json-rpc --verbose
+buddy --json-rpc --verbose
 
 # In another terminal, send test request
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientName":"test","clientVersion":"1.0"}}' | grok --json-rpc
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientName":"test","clientVersion":"1.0"}}' | buddy --json-rpc
 ```
 
 ### Test MCP Server
 
 ```bash
 # Use mcp-inspector tool
-npx @anthropic/mcp-inspector grok --mcp-server
+npx @anthropic/mcp-inspector buddy --mcp-server
 ```
 
 ---

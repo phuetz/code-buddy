@@ -173,8 +173,8 @@ const en: Translations = {
     sessionLoaded: 'Session loaded: {name}',
     historyCleared: 'History cleared.',
     modelChanged: 'Model changed to: {model}',
-    costWarning: 'Warning: Session cost \${cost} approaching limit.',
-    costLimit: 'Cost limit reached (\${cost}). Session paused.',
+    costWarning: 'Warning: Session cost ${cost} approaching limit.',
+    costLimit: 'Cost limit reached (${cost}). Session paused.',
   },
   tools: {
     readingFile: 'Reading file: {path}',
@@ -268,8 +268,8 @@ const fr: Translations = {
     sessionLoaded: 'Session chargée : {name}',
     historyCleared: 'Historique effacé.',
     modelChanged: 'Modèle changé pour : {model}',
-    costWarning: 'Attention : Coût de session {cost}\$ proche de la limite.',
-    costLimit: 'Limite de coût atteinte ({cost}\$). Session en pause.',
+    costWarning: 'Attention : Coût de session {cost}$ proche de la limite.',
+    costLimit: 'Limite de coût atteinte ({cost}$). Session en pause.',
   },
   tools: {
     readingFile: 'Lecture du fichier : {path}',

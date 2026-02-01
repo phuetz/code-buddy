@@ -345,7 +345,7 @@ To auto-approve safe operations, use `--security auto-edit` mode.
 ### Review Before Confirming
 ```bash
 # Use plan mode for big changes
-code-buddy --mode plan
+buddy --mode plan
 > Plan how to migrate from REST to GraphQL
 
 # Then switch to code mode

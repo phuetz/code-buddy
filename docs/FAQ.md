@@ -6,19 +6,13 @@
 
 **npm (recommended):**
 ```bash
-npm install -g code-buddy
-```
-
-**Homebrew (macOS):**
-```bash
-brew tap code-buddy/tap
-brew install code-buddy
+npm install -g @phuetz/buddy
 ```
 
 **From source:**
 ```bash
-git clone https://github.com/code-buddy/code-buddy.git
-cd code-buddy
+git clone https://github.com/phuetz/buddy.git
+cd buddy
 npm install
 npm run build
 npm link
@@ -58,13 +52,13 @@ export GROK_BASE_URL=https://your-resource.openai.azure.com
 
 ```bash
 # Interactive mode
-code-buddy
+buddy
 
 # With initial prompt
-code-buddy "explain this codebase"
+buddy "explain this codebase"
 
 # Run a single command
-code-buddy -c "fix the bug in auth.ts"
+buddy -c "fix the bug in auth.ts"
 ```
 
 ### What are the different modes?
@@ -78,7 +72,7 @@ code-buddy -c "fix the bug in auth.ts"
 
 Switch modes with `/mode <name>` or start with `--mode`:
 ```bash
-code-buddy --mode plan
+buddy --mode plan
 ```
 
 ### What is YOLO mode?
@@ -90,7 +84,7 @@ YOLO mode enables full autonomy with higher limits:
 
 Enable with:
 ```bash
-YOLO_MODE=true code-buddy
+YOLO_MODE=true buddy
 # Then type: /yolo on
 ```
 
@@ -161,7 +155,7 @@ Then register it in `src/codebuddy/tools.ts`.
 
 Set with:
 ```bash
-code-buddy --security auto-edit
+buddy --security auto-edit
 ```
 
 ### How are dangerous commands handled?
@@ -190,7 +184,7 @@ Your code is sent to the configured AI API (default: Grok/xAI). Code Buddy:
 
 1. **Use model routing** - Smaller models for simple tasks:
    ```bash
-   code-buddy --model grok-2-mini
+   buddy --model grok-2-mini
    ```
 
 2. **Limit context** - Use focused prompts
@@ -212,7 +206,7 @@ Improve startup:
 npm run build
 
 # Use production mode
-NODE_ENV=production code-buddy
+NODE_ENV=production buddy
 ```
 
 ### How do I check my usage?
@@ -252,7 +246,7 @@ The conversation is too long. Options:
 Increase timeout:
 ```bash
 # For specific commands
-code-buddy --timeout 300000  # 5 minutes
+buddy --timeout 300000  # 5 minutes
 
 # Or set globally
 export TOOL_TIMEOUT=300000
@@ -262,7 +256,7 @@ export TOOL_TIMEOUT=300000
 
 On Unix systems:
 ```bash
-chmod +x $(which code-buddy)
+chmod +x $(which buddy)
 ```
 
 For file operations, ensure you have write access to the target directory.
@@ -271,8 +265,8 @@ For file operations, ensure you have write access to the target directory.
 
 Code Buddy auto-saves sessions. After a crash:
 ```bash
-code-buddy --resume        # Resume last session
-code-buddy --sessions      # List all sessions
+buddy --resume        # Resume last session
+buddy --sessions      # List all sessions
 ```
 
 ---
@@ -284,7 +278,7 @@ code-buddy --sessions      # List all sessions
 1. Install the Code Buddy extension (coming soon)
 2. Or use the terminal integration:
    ```bash
-   code-buddy --cwd ${workspaceFolder}
+   buddy --cwd ${workspaceFolder}
    ```
 
 ### How do I use webhooks?
@@ -292,7 +286,7 @@ code-buddy --sessions      # List all sessions
 Configure webhooks for external integrations:
 
 ```typescript
-import { WebhookManager } from 'code-buddy';
+import { WebhookManager } from 'buddy';
 
 const webhooks = new WebhookManager();
 webhooks.register({
@@ -307,7 +301,7 @@ webhooks.register({
 Yes! Start the local API server:
 
 ```typescript
-import { RestApiServer } from 'code-buddy';
+import { RestApiServer } from 'buddy';
 
 const server = new RestApiServer({ port: 3000 });
 server.start();
@@ -321,7 +315,7 @@ server.start();
 ### How do I export metrics to Prometheus?
 
 ```typescript
-import { PrometheusExporter } from 'code-buddy';
+import { PrometheusExporter } from 'buddy';
 
 const exporter = new PrometheusExporter({ port: 9090 });
 await exporter.start();
@@ -354,7 +348,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 Enable debug logging:
 ```bash
-DEBUG=codebuddy:* code-buddy
+DEBUG=codebuddy:* buddy
 ```
 
 Or check logs:
@@ -404,7 +398,7 @@ Yes, sensitive session data is encrypted at rest using AES-256-GCM. The encrypti
 
 1. Check existing issues first
 2. Include:
-   - Code Buddy version (`code-buddy --version`)
+   - Code Buddy version (`buddy --version`)
    - Node.js version (`node --version`)
    - Operating system
    - Steps to reproduce

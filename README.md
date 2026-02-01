@@ -211,7 +211,7 @@ buddy provider models claude
 
 ### User Settings
 
-Create `~/.grok/user-settings.json`:
+Create `~/.codebuddy/user-settings.json`:
 
 ```json
 {

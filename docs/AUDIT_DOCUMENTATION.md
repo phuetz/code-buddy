@@ -529,27 +529,27 @@ Créer une application React TypeScript avec tests et CI/CD.
 
 1. **Initialiser le projet**
    ```bash
-   grok --prompt "Create a new React TypeScript project with Vite"
+   buddy --prompt "Create a new React TypeScript project with Vite"
    ```
 
 2. **Ajouter des composants**
    ```bash
-   grok --prompt "Create a Button component with tests"
+   buddy --prompt "Create a Button component with tests"
    ```
 
 3. **Setup CI/CD**
    ```bash
-   grok --prompt "Add GitHub Actions for testing and deployment"
+   buddy --prompt "Add GitHub Actions for testing and deployment"
    ```
 
 4. **Code review**
    ```bash
-   grok /review
+   buddy /review
    ```
 
 5. **Commit**
    ```bash
-   grok /commit
+   buddy /commit
    ```
 
 ## Temps estimé

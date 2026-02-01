@@ -19,7 +19,7 @@ npx @phuetz/code-buddy@latest
 export GROK_API_KEY=xai-your-api-key
 
 # Or save it persistently
-grok config --api-key xai-your-api-key
+buddy config --api-key xai-your-api-key
 ```
 
 ### Alternative Providers
@@ -27,16 +27,16 @@ grok config --api-key xai-your-api-key
 ```bash
 # Use Claude
 export ANTHROPIC_API_KEY=sk-ant-...
-grok --provider claude
+buddy --provider claude
 
 # Use OpenAI
 export OPENAI_API_KEY=sk-...
-grok --provider openai
+buddy --provider openai
 
 # Use local Ollama
 export GROK_BASE_URL=http://localhost:11434/v1
 export GROK_API_KEY=ollama
-grok --model llama3.2
+buddy --model llama3.2
 ```
 
 ## Basic Usage
@@ -45,26 +45,26 @@ grok --model llama3.2
 
 ```bash
 # Start interactive chat
-grok
+buddy
 
 # Start in a specific directory
-grok -d /path/to/project
+buddy -d /path/to/project
 
 # Resume last session
-grok --resume
+buddy --resume
 ```
 
 ### Headless Mode
 
 ```bash
 # Single prompt execution
-grok --prompt "explain what this project does"
+buddy --prompt "explain what this project does"
 
 # With specific model
-grok --prompt "fix the bug in main.ts" --model grok-3
+buddy --prompt "fix the bug in main.ts" --model grok-3
 
 # Output as JSON (for scripts)
-grok --prompt "list all TODO comments" --json
+buddy --prompt "list all TODO comments" --json
 ```
 
 ## Slash Commands
@@ -86,16 +86,16 @@ Inside the chat, use these commands:
 
 ```bash
 # Suggest mode (confirm all changes)
-grok --mode suggest
+buddy --mode suggest
 
 # Auto-edit mode (auto-approve safe operations)
-grok --mode auto-edit
+buddy --mode auto-edit
 
 # Full-auto mode (all operations auto-approved)
-grok --mode full-auto
+buddy --mode full-auto
 
 # YOLO mode (maximum autonomy - use with caution!)
-YOLO_MODE=true grok
+YOLO_MODE=true buddy
 ```
 
 ## MCP Servers
