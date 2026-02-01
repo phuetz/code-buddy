@@ -204,7 +204,13 @@ async function loadApiKey(): Promise<string | undefined> {
   await ensureEnvLoaded();
 
   // Check environment first (fastest path)
-  const envApiKey = process.env.GROK_API_KEY;
+  // Priority: Gemini > Grok > OpenAI > Anthropic
+  const envApiKey = process.env.GOOGLE_API_KEY ||
+                    process.env.GEMINI_API_KEY ||
+                    process.env.GROK_API_KEY ||
+                    process.env.XAI_API_KEY ||
+                    process.env.OPENAI_API_KEY ||
+                    process.env.ANTHROPIC_API_KEY;
   if (envApiKey) return envApiKey;
 
   // Priority: secure credential storage > legacy settings file
@@ -820,7 +826,7 @@ program
 
       if (!apiKey) {
         logger.error(
-          "❌ Error: API key required. Set GROK_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
+          "❌ Error: API key required. Set GOOGLE_API_KEY, GROK_API_KEY, or OPENAI_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
         );
         process.exit(1);
       }
@@ -1132,7 +1138,7 @@ gitCommand
 
       if (!apiKey) {
         logger.error(
-          "❌ Error: API key required. Set GROK_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
+          "❌ Error: API key required. Set GOOGLE_API_KEY, GROK_API_KEY, or OPENAI_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
         );
         process.exit(1);
       }

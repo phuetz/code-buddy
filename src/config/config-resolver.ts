@@ -153,12 +153,61 @@ export class ConfigResolver extends EventEmitter {
 
   /**
    * Resolve from environment variables
+   * Priority: Gemini > Grok > OpenAI > Anthropic
    */
   private resolveFromEnv(): ResolvedConfig {
+    // Check Gemini first (preferred)
+    const geminiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (geminiKey) {
+      return {
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: geminiKey,
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        provider: 'gemini',
+        source: 'environment',
+      };
+    }
+
+    // Check Grok
+    const grokKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
+    if (grokKey) {
+      const baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
+      return {
+        baseURL,
+        apiKey: grokKey,
+        model: process.env.GROK_MODEL || 'grok-code-fast-1',
+        provider: 'grok',
+        source: 'environment',
+      };
+    }
+
+    // Check OpenAI
+    if (process.env.OPENAI_API_KEY) {
+      return {
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || 'gpt-4o',
+        provider: 'openai',
+        source: 'environment',
+      };
+    }
+
+    // Check Anthropic
+    if (process.env.ANTHROPIC_API_KEY) {
+      return {
+        baseURL: 'https://api.anthropic.com/v1',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+        provider: 'claude',
+        source: 'environment',
+      };
+    }
+
+    // Fallback to Grok defaults (no key)
     const baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
     return {
       baseURL,
-      apiKey: process.env.GROK_API_KEY || '',
+      apiKey: '',
       model: process.env.GROK_MODEL || 'grok-code-fast-1',
       provider: this.detectProvider(baseURL) || 'grok',
       source: 'environment',
