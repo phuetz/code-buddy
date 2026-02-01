@@ -65,3 +65,11 @@ export {
   getSessionLanesManager,
   resetSessionLanesManager,
 } from './session-lanes.js';
+
+// Default Hooks
+export {
+  registerDefaultHooks,
+  unregisterDefaultHooks,
+  setCurrentProvider,
+  getCurrentProvider,
+} from './default-hooks.js';

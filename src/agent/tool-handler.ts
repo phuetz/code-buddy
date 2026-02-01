@@ -44,6 +44,14 @@ import { getErrorMessage } from "../errors/index.js";
 import { logger } from "../utils/logger.js";
 import { RepairCoordinator } from "./execution/repair-coordinator.js";
 import { getPolicyManager, type PolicyDecision } from "../security/tool-policy/index.js";
+import {
+  getToolHooksManager,
+  registerDefaultHooks,
+  setCurrentProvider,
+  type ToolHookContext,
+  type ToolHookResult,
+  type LLMProvider,
+} from "../tools/hooks/index.js";
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -91,6 +99,23 @@ export class ToolHandler {
   constructor(private deps: ToolHandlerDependencies) {
     this.registry = getFormalToolRegistry();
     this.initializeRegistry();
+    this.initializeToolHooks();
+  }
+
+  /**
+   * Initialize tool hooks system with default hooks
+   */
+  private initializeToolHooks(): void {
+    registerDefaultHooks();
+    logger.debug('Tool hooks system initialized');
+  }
+
+  /**
+   * Set the current LLM provider for result sanitization
+   * Call this when switching providers
+   */
+  public setProvider(provider: LLMProvider): void {
+    setCurrentProvider(provider);
   }
 
   /**
@@ -173,6 +198,11 @@ export class ToolHandler {
    * - Plugin tools (plugin__*): Marketplace plugins
    * - edit_file: Morph Fast Apply (legacy, optional)
    *
+   * Hook integration:
+   * - Executes before_tool_call hooks (can modify args)
+   * - Executes after_tool_call hooks (can modify result)
+   * - Executes error/denied hooks on failures
+   *
    * Policy integration:
    * - Checks PolicyManager before execution
    * - Denies blocked tools
@@ -182,15 +212,34 @@ export class ToolHandler {
    * @returns Tool execution result with success status and output/error
    */
   public async executeTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
+    const startTime = Date.now();
+    const hooksManager = getToolHooksManager();
+
     try {
       const args = JSON.parse(toolCall.function.arguments);
       const toolName = toolCall.function.name;
+
+      // Create hook context
+      let hookContext: ToolHookContext = {
+        toolName,
+        originalArgs: { ...args },
+        args,
+        toolCallId: toolCall.id,
+        timestamp: startTime,
+      };
 
       // Check policy before execution
       const policyDecision = this.checkToolPolicy(toolName, args);
 
       if (policyDecision.action === 'deny') {
         logger.info(`Tool denied by policy: ${toolName}`, { reason: policyDecision.reason });
+
+        // Execute denied hooks
+        await hooksManager.executeDeniedHooks(
+          hookContext,
+          new Error(policyDecision.reason || 'Tool denied by policy')
+        );
+
         return {
           success: false,
           error: `Tool "${toolName}" is not allowed: ${policyDecision.reason}`,
@@ -203,6 +252,13 @@ export class ToolHandler {
           const confirmed = await this.confirmationCallback(toolName, args, policyDecision);
           if (!confirmed) {
             logger.info(`Tool execution cancelled by user: ${toolName}`);
+
+            // Execute denied hooks for user cancellation
+            await hooksManager.executeDeniedHooks(
+              hookContext,
+              new Error('User cancelled execution')
+            );
+
             return {
               success: false,
               error: `User cancelled execution of "${toolName}"`,
@@ -214,44 +270,90 @@ export class ToolHandler {
         // If no callback, proceed (for backwards compatibility)
       }
 
+      // Execute before_tool_call hooks (can modify args)
+      hookContext = await hooksManager.executeBeforeHooks(hookContext);
+      const modifiedArgs = hookContext.args;
+
+      // Execute tool with potentially modified args
+      let result: ToolResult;
+
       // Handle special tool prefixes first
       if (toolName.startsWith("mcp__")) {
-        return await this.executeMCPTool(toolCall);
-      }
-
-      if (toolName.startsWith("plugin__")) {
-        return await this.executePluginTool(toolCall);
-      }
-
-      // Handle legacy edit_file (Morph Fast Apply)
-      if (toolName === "edit_file") {
+        result = await this.executeMCPTool(toolCall);
+      } else if (toolName.startsWith("plugin__")) {
+        result = await this.executePluginTool(toolCall);
+      } else if (toolName === "edit_file") {
+        // Handle legacy edit_file (Morph Fast Apply)
         if (!this.morphEditor) {
-          return {
+          result = {
             success: false,
             error:
               "Morph Fast Apply not available. Please set MORPH_API_KEY environment variable to use this feature.",
           };
+        } else {
+          result = await this.morphEditor.editFile(
+            modifiedArgs.target_file as string,
+            modifiedArgs.instructions as string,
+            modifiedArgs.code_edit as string
+          );
         }
-        return await this.morphEditor.editFile(
-          args.target_file,
-          args.instructions,
-          args.code_edit
+      } else if (this.registry.has(toolName)) {
+        // Dispatch through registry for all other tools
+        result = await this.executeRegistryTool(toolName, modifiedArgs);
+      } else {
+        result = {
+          success: false,
+          error: `Unknown tool: ${toolName}`,
+        };
+      }
+
+      // Convert to hook result format
+      const hookResult: ToolHookResult = {
+        success: result.success,
+        output: result.output,
+        error: result.error,
+        executionTimeMs: Date.now() - startTime,
+      };
+
+      // Execute after_tool_call hooks (can modify result)
+      const finalHookResult = await hooksManager.executeAfterHooks(hookContext, hookResult);
+
+      // Execute error hooks if failed
+      if (!finalHookResult.success && finalHookResult.error) {
+        await hooksManager.executeErrorHooks(
+          hookContext,
+          new Error(finalHookResult.error)
         );
       }
 
-      // Dispatch through registry for all other tools
-      if (this.registry.has(toolName)) {
-        return await this.executeRegistryTool(toolName, args);
+      // Return final result
+      return {
+        success: finalHookResult.success,
+        output: finalHookResult.output,
+        error: finalHookResult.error,
+      };
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+
+      // Execute error hooks
+      try {
+        await hooksManager.executeErrorHooks(
+          {
+            toolName: toolCall.function.name,
+            originalArgs: {},
+            args: {},
+            toolCallId: toolCall.id,
+            timestamp: startTime,
+          },
+          error instanceof Error ? error : new Error(errorMessage)
+        );
+      } catch {
+        // Ignore hook errors
       }
 
       return {
         success: false,
-        error: `Unknown tool: ${toolName}`,
-      };
-    } catch (error: unknown) {
-      return {
-        success: false,
-        error: `Tool execution error: ${getErrorMessage(error)}`,
+        error: `Tool execution error: ${errorMessage}`,
       };
     }
   }
