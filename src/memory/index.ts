@@ -46,3 +46,29 @@ export {
   type Milestone,
   type ProspectiveMemoryConfig,
 } from "./prospective-memory.js";
+
+// Auto-Capture (OpenClaw-inspired pattern detection)
+export {
+  AutoCaptureManager,
+  getAutoCaptureManager,
+  resetAutoCaptureManager,
+  type CapturePattern,
+  type CaptureResult,
+  type AutoCaptureConfig,
+  type MemoryRecallResult,
+} from "./auto-capture.js";
+
+// Memory Lifecycle Hooks (before/after execution)
+export {
+  MemoryLifecycleHooks,
+  getMemoryLifecycleHooks,
+  resetMemoryLifecycleHooks,
+  type MemoryHookContext,
+  type BeforeExecuteResult,
+  type AfterResponseResult,
+  type SessionEndResult,
+  type MemoryLifecycleConfig,
+} from "./memory-lifecycle-hooks.js";
+
+// Semantic Memory Search
+export * from "./semantic-memory-search.js";
