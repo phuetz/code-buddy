@@ -13,7 +13,7 @@ export const WEB_SEARCH_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "web_search",
-    description: "Search the web for current information, documentation, or answers to questions",
+    description: "Search the web for current information. Returns URLs and snippets. IMPORTANT: After getting search results, you MUST call web_fetch on the most relevant URL(s) to get the actual content and provide a detailed answer to the user. Never just return links - always fetch and summarize the content.",
     parameters: {
       type: "object",
       properties: {
@@ -36,7 +36,7 @@ export const WEB_FETCH_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "web_fetch",
-    description: "Fetch and read the content of a web page URL",
+    description: "Fetch and read the full content of a web page URL. Use this after web_search to get the actual article content, news details, or information. Always summarize the fetched content for the user.",
     parameters: {
       type: "object",
       properties: {
