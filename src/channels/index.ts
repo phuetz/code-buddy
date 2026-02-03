@@ -672,3 +672,57 @@ export type {
   WebhookRequest,
   WebhookResponse,
 } from './webhook-server.js';
+
+// Session Isolation (OpenClaw-inspired)
+export type {
+  SessionScope,
+  SessionKeyComponents,
+  SessionIsolationConfig,
+  SessionInfo,
+} from './session-isolation.js';
+export {
+  DEFAULT_SESSION_ISOLATION_CONFIG,
+  SessionIsolator,
+  getSessionIsolator,
+  resetSessionIsolator,
+} from './session-isolation.js';
+
+// Identity Links (OpenClaw-inspired)
+export type {
+  ChannelIdentity,
+  CanonicalIdentity,
+  IdentityLinkerConfig,
+} from './identity-links.js';
+export {
+  IdentityLinker,
+  getIdentityLinker,
+  resetIdentityLinker,
+} from './identity-links.js';
+
+// Agent Peer Routing (OpenClaw-inspired)
+export type {
+  RouteAgentConfig,
+  PeerRoute,
+  RouteCondition,
+  ResolvedRoute,
+  PeerRouterConfig,
+} from './peer-routing.js';
+export {
+  PeerRouter,
+  getPeerRouter,
+  resetPeerRouter,
+} from './peer-routing.js';
+
+// DM Pairing (OpenClaw-inspired)
+export type {
+  PairingStatus,
+  ApprovedSender,
+  PairingRequest,
+  DMPairingConfig,
+} from './dm-pairing.js';
+export {
+  DEFAULT_DM_PAIRING_CONFIG,
+  DMPairingManager,
+  getDMPairing,
+  resetDMPairing,
+} from './dm-pairing.js';

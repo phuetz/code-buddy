@@ -55,12 +55,12 @@ describe('ToolOrchestrator', () => {
 
 ## Architecture Overview
 
-Code Buddy is an AI-powered terminal agent using the Grok API (xAI) via OpenAI SDK. The core pattern is an **agentic loop** where the AI autonomously calls tools to complete tasks.
+Code Buddy is an open-source multi-provider AI coding agent that runs in the terminal. It supports multiple LLM backends (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio) via OpenAI-compatible APIs and provider-specific SDKs. The core pattern is an **agentic loop** where the AI autonomously calls tools to complete tasks. It features multi-channel messaging (Telegram, Discord, Slack), a SKILL.md natural language skills system, pipeline workflows, DM pairing security, and OpenClaw-inspired concurrency control.
 
 ### Core Flow
 
 ```
-User Input --> ChatInterface (Ink/React) --> CodeBuddyAgent --> Grok API
+User Input --> ChatInterface (Ink/React) --> CodeBuddyAgent --> LLM Provider
                                                    |
                                               Tool Calls (max 50/400 rounds)
                                                    |
@@ -123,7 +123,7 @@ CodeBuddyAgent
 - `src/index.ts` - CLI entry, Commander setup, lazy loading
 - `src/agent/codebuddy-agent.ts` - Main orchestrator (agentic loop, tool execution)
 - `src/agent/facades/` - Facade classes for modular concerns
-- `src/codebuddy/client.ts` - Grok API client (OpenAI SDK wrapper)
+- `src/codebuddy/client.ts` - LLM API client (multi-provider, OpenAI SDK compatible)
 - `src/codebuddy/tools.ts` - Tool definitions and RAG selection
 - `src/ui/components/chat-interface.tsx` - React/Ink terminal UI
 - `src/server/index.ts` - HTTP/WebSocket API server

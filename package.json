@@ -1,7 +1,7 @@
 {
   "name": "@phuetz/code-buddy",
   "version": "2.0.0",
-  "description": "An open-source AI coding agent that brings AI power directly into your terminal.",
+  "description": "Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.",
   "author": "Patrice Huetz <ton-email@example.com>",
   "repository": {
     "type": "git",

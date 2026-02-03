@@ -1075,3 +1075,23 @@ export function resetWorkflowEngine(): void {
   }
   workflowEngineInstance = null;
 }
+
+// ============================================================================
+// Pipeline Compositor (Lobster-inspired)
+// ============================================================================
+
+export type {
+  PipelineStep,
+  PipelineOperator,
+  PipelineToken,
+  StepResult as PipelineStepResult,
+  PipelineResult,
+  ToolExecutor,
+  PipelineConfig,
+} from './pipeline.js';
+
+export {
+  PipelineCompositor,
+  getPipelineCompositor,
+  resetPipelineCompositor,
+} from './pipeline.js';

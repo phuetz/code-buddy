@@ -581,15 +581,6 @@ export class SkillRegistry extends EventEmitter {
 }
 
 // ============================================================================
-// Type Augmentation for Events
-// ============================================================================
-
-export interface SkillRegistry {
-  on<K extends keyof SkillEvents>(event: K, listener: SkillEvents[K]): this;
-  emit<K extends keyof SkillEvents>(event: K, ...args: Parameters<SkillEvents[K]>): boolean;
-}
-
-// ============================================================================
 // Singleton
 // ============================================================================
 
