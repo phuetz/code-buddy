@@ -234,6 +234,64 @@ function createApp(config: ServerConfig): Application {
     }
   });
 
+  // Webhook endpoints
+  app.get('/api/webhooks', async (_req, res) => {
+    try {
+      const { WebhookManager } = await import('../webhooks/webhook-manager.js');
+      const mgr = new WebhookManager();
+      res.json(mgr.list());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/webhooks', async (req, res) => {
+    try {
+      const { name, agentMessage, secret } = req.body;
+      if (!name || !agentMessage) {
+        res.status(400).json({ error: 'name and agentMessage are required' });
+        return;
+      }
+      const { WebhookManager } = await import('../webhooks/webhook-manager.js');
+      const mgr = new WebhookManager();
+      const hook = mgr.register(name, agentMessage, secret);
+      res.status(201).json(hook);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete('/api/webhooks/:id', async (req, res) => {
+    try {
+      const { WebhookManager } = await import('../webhooks/webhook-manager.js');
+      const mgr = new WebhookManager();
+      if (mgr.remove(req.params.id)) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: 'Webhook not found' });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/webhooks/:id/trigger', async (req, res) => {
+    try {
+      const { WebhookManager } = await import('../webhooks/webhook-manager.js');
+      const mgr = new WebhookManager();
+      const signature = req.headers['x-webhook-signature'] as string | undefined;
+      const result = mgr.processPayload(req.params.id, req.body, signature);
+      if ('error' in result) {
+        const status = result.error === 'Webhook not found' ? 404 : 400;
+        res.status(status).json(result);
+      } else {
+        res.json(result);
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // Root endpoint
   app.get('/', (_req, res) => {
     res.json({
