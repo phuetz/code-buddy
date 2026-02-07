@@ -646,9 +646,9 @@ const plugin: Plugin = {
 
 ---
 
-## Bundled Skills (25)
+## Bundled Skills (40)
 
-Code Buddy includes 25 built-in SKILL.md files that provide domain-specific knowledge and best practices. Skills are loaded contextually when relevant to your project.
+Code Buddy includes 40 built-in SKILL.md files that provide domain-specific knowledge, best practices, and MCP server integration for popular software. Skills are loaded contextually when relevant to your project.
 
 | Category | Skill | Description |
 |----------|-------|-------------|
@@ -656,6 +656,7 @@ Code Buddy includes 25 built-in SKILL.md files that provide domain-specific know
 | | `prepare-pr` | Branch naming, commit cleanup, PR description template |
 | | `merge-pr` | Merge strategies, conflict resolution, post-merge cleanup |
 | **Dev Tools** | `github` | Issues, releases, Actions workflows, gh CLI |
+| | `gitlab` | GitLab API, glab CLI, CI/CD pipelines, merge requests |
 | | `session-logs` | Export/search conversation history and session metadata |
 | | `model-usage` | Token tracking, cost analysis, provider comparison |
 | | `tmux-sessions` | Terminal multiplexing, pane layouts, session management |
@@ -664,6 +665,20 @@ Code Buddy includes 25 built-in SKILL.md files that provide domain-specific know
 | | `csharp-avalonia` | Cross-platform desktop/mobile with C# and Avalonia UI |
 | | `coding-agent` | Autonomous multi-step coding with planning and validation |
 | | `skill-creator` | Author new SKILL.md files with YAML frontmatter |
+| **Creative & 3D** | `blender` | Python bpy scripting, CLI rendering, Geometry Nodes |
+| | `unreal-engine` | Remote Control API, Python editor scripting, Movie Render Queue |
+| | `davinci-resolve` | DaVinciResolveScript Python API, color grading, render queue |
+| | `ableton-live` | OSC protocol, MIDI Remote Scripts, Max for Live |
+| **Design** | `figma` | REST API, Plugin API, design tokens extraction |
+| | `gimp` | Python-Fu / Script-Fu scripting, batch image processing |
+| | `inkscape` | Extensions API, CLI export, SVG manipulation |
+| **DevOps & Infra** | `kubernetes` | kubectl, Helm, ArgoCD GitOps |
+| | `terraform-ansible` | Terraform IaC + Ansible configuration management |
+| | `grafana-prometheus` | Grafana HTTP API, PromQL, alerting pipelines |
+| | `jenkins-ci` | Jenkins API, Groovy pipelines, shared libraries |
+| **Workflow & Data** | `n8n` | REST API, webhook triggers, workflow automation |
+| | `databases` | PostgreSQL, MongoDB, Redis CLI and automation |
+| | `game-engines` | Unity C# + Godot GDScript, builds, scene management |
 | **Utilities** | `summarize` | Text/file/URL summarization with configurable length |
 | | `weather` | Weather lookups via wttr.in and OpenWeatherMap |
 | **Media** | `image-gen` | Image generation via DALL-E, Stable Diffusion, Midjourney |
@@ -678,7 +693,7 @@ Code Buddy includes 25 built-in SKILL.md files that provide domain-specific know
 | **Smart Home** | `spotify` | Spotify playback control via spotify_player and Web API |
 | | `smart-home` | Philips Hue and Home Assistant control |
 
-Skills are stored in `.codebuddy/skills/bundled/` and can be extended with managed or workspace skills via the Skills Registry.
+Each skill includes **Direct Control** (CLI/API/scripting commands), **MCP Server Integration** (config for `.codebuddy/mcp.json`), and **Common Workflows** (step-by-step recipes). Skills are stored in `.codebuddy/skills/bundled/` and can be extended with managed or workspace skills via the Skills Registry.
 
 ---
 
