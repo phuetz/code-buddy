@@ -55,7 +55,7 @@ describe('ToolOrchestrator', () => {
 
 ## Architecture Overview
 
-Code Buddy is an open-source multi-provider AI coding agent that runs in the terminal. It supports multiple LLM backends (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio) via OpenAI-compatible APIs and provider-specific SDKs. The core pattern is an **agentic loop** where the AI autonomously calls tools to complete tasks. It features multi-channel messaging (Telegram, Discord, Slack), a SKILL.md natural language skills system, pipeline workflows, DM pairing security, and OpenClaw-inspired concurrency control.
+Code Buddy is an open-source multi-provider AI coding agent that runs in the terminal. It supports multiple LLM backends (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio) via OpenAI-compatible APIs and provider-specific SDKs. The core pattern is an **agentic loop** where the AI autonomously calls tools to complete tasks. It features multi-channel messaging (Telegram, Discord, Slack), a SKILL.md natural language skills system, pipeline workflows, DM pairing security, OpenClaw-inspired concurrency control, daemon mode for 24/7 background operation, DAG-based task planning, screen observation with event triggers, proactive agent communication, and multi-agent orchestration with self-healing.
 
 ### Core Flow
 
@@ -120,12 +120,20 @@ CodeBuddyAgent
 
 ### Key Entry Points
 
-- `src/index.ts` - CLI entry, Commander setup, lazy loading
-- `src/agent/codebuddy-agent.ts` - Main orchestrator (agentic loop, tool execution)
+- `src/index.ts` - CLI entry, Commander setup, lazy loading (includes `daemon` and `trigger` commands)
+- `src/agent/codebuddy-agent.ts` - Main orchestrator (agentic loop, tool execution, `executePlan()`, `needsOrchestration()`)
 - `src/agent/facades/` - Facade classes for modular concerns
+- `src/agent/execution/agent-executor.ts` - Middleware pipeline, reasoning, tool streaming
+- `src/agent/middleware/` - Composable before/after turn hooks (cost-limit, context-warning, turn-limit)
+- `src/agent/planner/` - DAG-based task planning (TaskGraph, TaskPlanner, DelegationEngine, ProgressTracker)
+- `src/agent/observer/` - Screen observation, event triggers, trigger registry
+- `src/agent/proactive/` - Push notifications, rate limiting, response waiting
+- `src/agent/orchestrator/` - Multi-agent supervisor, shared context, self-healing, checkpoint rollback
+- `src/agent/profiles/` - Agent profiles and trust folders
+- `src/daemon/` - Daemon manager, lifecycle, cron-agent bridge, health monitor
 - `src/codebuddy/client.ts` - LLM API client (multi-provider, OpenAI SDK compatible)
 - `src/codebuddy/tools.ts` - Tool definitions and RAG selection
-- `src/ui/components/chat-interface.tsx` - React/Ink terminal UI
+- `src/ui/components/ChatInterface.tsx` - React/Ink terminal UI
 - `src/server/index.ts` - HTTP/WebSocket API server
 
 ### Tool Implementation Pattern
@@ -244,6 +252,11 @@ The server (`src/server/`) provides REST and WebSocket APIs:
 - `POST /api/tools/:name/execute` - Execute tool
 - `GET/POST /api/sessions` - Session management
 - `GET/POST /api/memory` - Memory management
+- `GET /api/daemon/status` - Daemon status
+- `GET /api/daemon/health` - Health metrics (CPU, memory)
+- `GET /api/cron/jobs` - List cron jobs
+- `POST /api/cron/jobs/:id/trigger` - Trigger a cron job manually
+- `GET/POST /api/notifications/preferences` - Notification preferences
 
 ### WebSocket Events
 - `authenticate` - JWT authentication

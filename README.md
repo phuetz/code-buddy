@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Tests-300%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-340%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
   <img src="https://img.shields.io/badge/Coverage-85%25-48dbfb?style=flat-square" alt="Coverage"/>
   <img src="https://img.shields.io/badge/Build-passing-00d26a?style=flat-square" alt="Build"/>
 </p>
@@ -40,7 +40,7 @@
 
 ### OpenClaw-Inspired Features
 
-Code Buddy now incorporates advanced patterns from the [OpenClaw](https://github.com/openclaw/openclaw) project:
+Code Buddy incorporates advanced patterns from the [OpenClaw](https://github.com/openclaw/openclaw) project:
 
 | Module | Status | Description |
 |:-------|:------:|:------------|
@@ -55,6 +55,31 @@ Code Buddy now incorporates advanced patterns from the [OpenClaw](https://github
 | **Desktop Automation** | ✅ 100% | Screen capture, OCR, UI control |
 | **Auto-Capture Memory** | ✅ 100% | Pattern-based memory extraction |
 | **Memory Lifecycle** | ✅ 100% | Auto-recall and auto-capture hooks |
+
+### Phase 3 — Streaming & Security
+
+| Module | Status | Description |
+|:-------|:------:|:------------|
+| **Middleware Pipeline** | ✅ 100% | Composable before/after turn hooks (cost limit, context warning, turn limit) |
+| **Reasoning Events** | ✅ 100% | Streaming chain-of-thought display with collapsible UI |
+| **Trust Folders** | ✅ 100% | Directory-level tool permissions via `.codebuddy-trust.json` |
+| **Agent Profiles** | ✅ 100% | Predefined agent configs (secure, minimal, power-user) |
+| **Tool Streaming** | ✅ 100% | Real-time bash output via AsyncGenerator |
+| **TabbedQuestion UI** | ✅ 100% | Multi-option interactive prompts |
+
+### Phase 4 — Autonomous Agent
+
+| Module | Status | Description |
+|:-------|:------:|:------------|
+| **Daemon Mode** | ✅ 100% | Background process with PID management, auto-restart (max 3) |
+| **Cron-Agent Bridge** | ✅ 100% | Scheduled task execution via CodeBuddyAgent instances |
+| **Task Planner** | ✅ 100% | DAG-based decomposition with topological sort and parallel execution |
+| **Screen Observer** | ✅ 100% | Periodic screenshots, perceptual diff, event triggers |
+| **Proactive Agent** | ✅ 100% | Push notifications, question/response, rate limiting, quiet hours |
+| **Orchestrator** | ✅ 100% | Multi-agent supervisor (sequential/parallel/race/all strategies) |
+| **Self-Healing** | ✅ 100% | Error pattern recognition, auto-recovery with exponential backoff |
+| **Checkpoint Rollback** | ✅ 100% | Auto-checkpoint before risky ops, rollback to last good state |
+| **Shared Context** | ✅ 100% | Thread-safe key-value store with optimistic locking |
 
 ---
 
@@ -129,6 +154,36 @@ CodeBuddyAgent
     │       - Hook execution, plugin loading
     │
     └── MessageHistoryManager   # Chat and LLM message history
+```
+
+### Autonomy Layer (Phase 4)
+
+```
+CodeBuddyAgent
+    │
+    ├── TaskPlanner             # DAG decomposition of complex requests
+    │       - needsPlanning() heuristic
+    │       - createPlan() → TaskGraph → parallel execution
+    │
+    ├── SupervisorAgent         # Multi-agent orchestration
+    │       - Sequential, parallel, race, all strategies
+    │       - SharedContext with optimistic locking
+    │
+    ├── SelfHealing             # Automatic error recovery
+    │       - Pattern recognition (6 built-in patterns)
+    │       - Retry with exponential backoff
+    │
+    ├── ScreenObserver          # Environment monitoring
+    │       - Periodic screenshots with perceptual diff
+    │       - Event triggers (file_change, screen_change, time, webhook)
+    │
+    ├── ProactiveAgent          # Agent-initiated communication
+    │       - Push notifications with priority levels
+    │       - Rate limiting and quiet hours
+    │
+    └── DaemonManager           # Background process lifecycle
+            - PID file management, auto-restart
+            - Service registry, health monitoring
 ```
 
 ### Core Flow
@@ -418,6 +473,11 @@ buddy server --port 3000
 | `/api/tools/{name}/execute` | POST | Execute tool |
 | `/api/sessions` | GET/POST | Session management |
 | `/api/memory` | GET/POST | Memory entries |
+| `/api/daemon/status` | GET | Daemon status |
+| `/api/daemon/health` | GET | Health metrics (CPU, memory) |
+| `/api/cron/jobs` | GET | List cron jobs |
+| `/api/cron/jobs/{id}/trigger` | POST | Trigger a cron job |
+| `/api/notifications/preferences` | GET/POST | Notification settings |
 
 ### WebSocket Events
 
@@ -454,6 +514,24 @@ ws.send(JSON.stringify({
 | `/memory` | Memory management |
 | `/hooks list` | List lifecycle hooks |
 | `/plugin list` | List plugins |
+
+### Daemon Commands
+
+```bash
+buddy daemon start [--detach]  # Start background daemon
+buddy daemon stop              # Stop daemon
+buddy daemon restart           # Restart daemon
+buddy daemon status            # Show daemon status and services
+buddy daemon logs [--lines N]  # View daemon logs
+```
+
+### Trigger Commands
+
+```bash
+buddy trigger list             # List all event triggers
+buddy trigger add <pattern> <action>  # Add a trigger
+buddy trigger remove <id>      # Remove a trigger
+```
 
 ---
 
@@ -523,7 +601,7 @@ npm run build
 ### Test Coverage
 
 ```
-300+ tests across:
+340+ tests across 25+ suites:
 - Tool Policy System (2 suites)
 - Bash Allowlist (2 suites)
 - Context Window Guard (34 tests)
@@ -531,7 +609,13 @@ npm run build
 - Moltbot Hooks (52 tests)
 - Connection Profiles (57 tests)
 - Desktop Automation (100 tests)
-- And more...
+- Middleware Pipeline (pipeline tests)
+- Agent Profiles & Streaming (reasoning, profiles)
+- Daemon Manager & Cron Bridge (lifecycle, PID, jobs)
+- Task Planner & Delegation (DAG, topological sort)
+- Screen Observer & Triggers (capture, diff, cooldown)
+- Proactive Agent & Notifications (rate limit, quiet hours)
+- Orchestrator (supervisor, shared context, self-healing, rollback)
 ```
 
 ---
@@ -579,10 +663,15 @@ Create `.codebuddy/settings.json`:
 
 | Feature | Priority | Status |
 |:--------|:---------|:-------|
+| Daemon Mode (background agent) | HIGH | ✅ Done |
+| Task Planner (DAG decomposition) | HIGH | ✅ Done |
+| Screen Observer & Triggers | HIGH | ✅ Done |
+| Proactive Agent (push notifications) | HIGH | ✅ Done |
+| Multi-Agent Orchestrator | HIGH | ✅ Done |
+| Self-Healing & Checkpoint Rollback | HIGH | ✅ Done |
 | Gateway WebSocket Control Plane | HIGH | 🔲 Planned |
 | Canvas A2UI Visual Workspace | HIGH | 🔲 Planned |
 | ClawHub Skills Registry | MEDIUM | 🔲 Planned |
-| DM Pairing Policies | MEDIUM | 🔲 Planned |
 | OAuth Authentication | MEDIUM | 🔲 Planned |
 | Voice Wake Word Detection | MEDIUM | 🔲 Planned |
 | TTS Providers (OpenAI, ElevenLabs) | MEDIUM | 🔲 Planned |
