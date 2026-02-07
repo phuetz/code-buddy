@@ -646,6 +646,42 @@ const plugin: Plugin = {
 
 ---
 
+## Bundled Skills (25)
+
+Code Buddy includes 25 built-in SKILL.md files that provide domain-specific knowledge and best practices. Skills are loaded contextually when relevant to your project.
+
+| Category | Skill | Description |
+|----------|-------|-------------|
+| **PR Workflow** | `review-pr` | Code review checklist, inline comments, approval criteria |
+| | `prepare-pr` | Branch naming, commit cleanup, PR description template |
+| | `merge-pr` | Merge strategies, conflict resolution, post-merge cleanup |
+| **Dev Tools** | `github` | Issues, releases, Actions workflows, gh CLI |
+| | `session-logs` | Export/search conversation history and session metadata |
+| | `model-usage` | Token tracking, cost analysis, provider comparison |
+| | `tmux-sessions` | Terminal multiplexing, pane layouts, session management |
+| | `healthcheck` | Service monitoring, endpoint checks, alerting |
+| **Project** | `project-best-practices` | Project scaffolding, structure, linting, testing conventions |
+| | `csharp-avalonia` | Cross-platform desktop/mobile with C# and Avalonia UI |
+| | `coding-agent` | Autonomous multi-step coding with planning and validation |
+| | `skill-creator` | Author new SKILL.md files with YAML frontmatter |
+| **Utilities** | `summarize` | Text/file/URL summarization with configurable length |
+| | `weather` | Weather lookups via wttr.in and OpenWeatherMap |
+| **Media** | `image-gen` | Image generation via DALL-E, Stable Diffusion, Midjourney |
+| | `whisper-transcribe` | Audio/video transcription with OpenAI Whisper |
+| | `pdf-tools` | PDF creation, merging, text extraction, conversion |
+| | `screenshot` | Screen capture, annotation, OCR text extraction |
+| | `video-tools` | FFmpeg video editing, conversion, thumbnails, GIFs |
+| | `gif-search` | GIF search via Giphy and Tenor APIs |
+| **Communication** | `email-tools` | Email send/read via himalaya CLI and SMTP |
+| | `notion` | Notion API for pages, databases, search, content blocks |
+| | `blog-watcher` | RSS/Atom feed monitoring, web page change detection |
+| **Smart Home** | `spotify` | Spotify playback control via spotify_player and Web API |
+| | `smart-home` | Philips Hue and Home Assistant control |
+
+Skills are stored in `.codebuddy/skills/bundled/` and can be extended with managed or workspace skills via the Skills Registry.
+
+---
+
 ## Development
 
 ```bash
