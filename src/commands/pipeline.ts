@@ -45,17 +45,23 @@ export interface PipelineValidationResult {
  * Uses lazy imports for yaml parsing.
  */
 export async function loadPipelineFile(filePath: string): Promise<PipelineFileDefinition> {
-  const fs = await import('fs');
-  const path = await import('path');
+  const fsModule = await import('fs');
+  const pathModule = await import('path');
+  const fs = (fsModule as unknown as { default?: { default?: typeof import('fs') } & typeof import('fs') }).default?.default
+    ?? (fsModule as unknown as { default?: typeof import('fs') }).default
+    ?? fsModule;
+  const path = (pathModule as unknown as { default?: { default?: typeof import('path') } & typeof import('path') }).default?.default
+    ?? (pathModule as unknown as { default?: typeof import('path') }).default
+    ?? pathModule;
 
-  const resolvedPath = path.default.resolve(filePath);
+  const resolvedPath = path.resolve(filePath);
 
-  if (!fs.default.existsSync(resolvedPath)) {
+  if (!fs.existsSync(resolvedPath)) {
     throw new Error(`Pipeline file not found: ${resolvedPath}`);
   }
 
-  const content = fs.default.readFileSync(resolvedPath, 'utf-8');
-  const ext = path.default.extname(resolvedPath).toLowerCase();
+  const content = fs.readFileSync(resolvedPath, 'utf-8');
+  const ext = path.extname(resolvedPath).toLowerCase();
 
   let definition: PipelineFileDefinition;
 
@@ -259,18 +265,24 @@ export function createPipelineCommand(): Command {
     .option('-d, --dir <directory>', 'Directory to search for pipeline files', '.')
     .action(async (options: { dir: string }) => {
       try {
-        const fs = await import('fs');
-        const path = await import('path');
+        const fsModule = await import('fs');
+        const pathModule = await import('path');
+        const fs = (fsModule as unknown as { default?: { default?: typeof import('fs') } & typeof import('fs') }).default?.default
+          ?? (fsModule as unknown as { default?: typeof import('fs') }).default
+          ?? fsModule;
+        const path = (pathModule as unknown as { default?: { default?: typeof import('path') } & typeof import('path') }).default?.default
+          ?? (pathModule as unknown as { default?: typeof import('path') }).default
+          ?? pathModule;
 
-        const dir = path.default.resolve(options.dir);
+        const dir = path.resolve(options.dir);
 
-        if (!fs.default.existsSync(dir)) {
+        if (!fs.existsSync(dir)) {
           console.error(`Directory not found: ${dir}`);
           process.exit(1);
         }
 
-        const files = fs.default.readdirSync(dir).filter((f: string) => {
-          const ext = path.default.extname(f).toLowerCase();
+        const files = fs.readdirSync(dir).filter((f: string) => {
+          const ext = path.extname(f).toLowerCase();
           return ext === '.json' || ext === '.yaml' || ext === '.yml';
         });
 
@@ -279,7 +291,7 @@ export function createPipelineCommand(): Command {
 
         for (const file of files) {
           try {
-            const filePath = path.default.join(dir, file);
+            const filePath = path.join(dir, file);
             const definition = await loadPipelineFile(filePath);
             if (definition.steps && Array.isArray(definition.steps)) {
               pipelineFiles.push({

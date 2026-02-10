@@ -178,8 +178,8 @@ export class CodeBuddyAgent extends BaseAgent {
       isGrokModel: this.isGrokModel.bind(this),
       recordSessionCost: this.recordSessionCost.bind(this),
       isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
-      sessionCost: this.sessionCost,
-      sessionCostLimit: this.sessionCostLimit,
+      getSessionCost: this.getSessionCost.bind(this),
+      getSessionCostLimit: this.getSessionCostLimit.bind(this),
     });
 
     // Initialize PromptBuilder with Moltbot hooks for intro injection
@@ -700,6 +700,7 @@ export class CodeBuddyAgent extends BaseAgent {
     const model = this.codebuddyClient.getCurrentModel();
     const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
     this.sessionCost += cost;
+    this.routingFacade?.addSessionCost(cost);
     this.costTracker.recordUsage(inputTokens, outputTokens, model);
   }
 

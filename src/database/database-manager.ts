@@ -67,6 +67,18 @@ export class DatabaseManager extends TypedEventEmitter<DatabaseEvents> {
   }
 
   /**
+   * Emit both typed db:* events and legacy event names for backwards compatibility.
+   */
+  private emitWithLegacy<K extends keyof DatabaseEvents>(
+    typedEvent: K,
+    legacyEvent: string,
+    payload: Omit<DatabaseEvents[K], 'type' | 'timestamp'>
+  ): void {
+    this.emit(typedEvent, payload);
+    (this as unknown as { emit: (event: string, data: unknown) => boolean }).emit(legacyEvent, payload);
+  }
+
+  /**
    * Initialize the database connection and run migrations
    */
   async initialize(): Promise<void> {
@@ -101,10 +113,12 @@ export class DatabaseManager extends TypedEventEmitter<DatabaseEvents> {
       await this.runMigrations();
 
       this.initialized = true;
-      this.emit('db:initialized', {});
+      this.emitWithLegacy('db:initialized', 'initialized', {});
 
     } catch (error) {
-      this.emit('db:error', { error: error instanceof Error ? error : new Error(String(error)) });
+      this.emitWithLegacy('db:error', 'error', {
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
       throw error;
     }
   }
@@ -134,7 +148,7 @@ export class DatabaseManager extends TypedEventEmitter<DatabaseEvents> {
         this.db.prepare(
           'INSERT INTO schema_version (version) VALUES (?)'
         ).run(version);
-        this.emit('db:migration', { version, applied: true });
+        this.emitWithLegacy('db:migration', 'migration', { version, applied: true });
       }
     }
   }
@@ -260,7 +274,7 @@ Data:
   vacuum(): void {
     if (!this.db) throw new Error('Database not initialized. Call initialize() before performing database operations.');
     this.db.exec('VACUUM');
-    this.emit('db:vacuum', {});
+    this.emitWithLegacy('db:vacuum', 'vacuum', {});
   }
 
   /**
@@ -272,7 +286,7 @@ Data:
     return new Promise((resolve, reject) => {
       this.db!.backup(destPath)
         .then(() => {
-          this.emit('db:backup', { path: destPath });
+          this.emitWithLegacy('db:backup', 'backup', { path: destPath });
           resolve();
         })
         .catch(reject);
@@ -287,7 +301,7 @@ Data:
       this.db.close();
       this.db = null;
       this.initialized = false;
-      this.emit('db:closed', {});
+      this.emitWithLegacy('db:closed', 'closed', {});
     }
   }
 
@@ -309,7 +323,7 @@ Data:
       }
     });
 
-    this.emit('db:cleared', {});
+    this.emitWithLegacy('db:cleared', 'cleared', {});
   }
 }
 

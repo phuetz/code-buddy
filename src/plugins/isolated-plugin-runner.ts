@@ -11,6 +11,7 @@
 
 import { Worker } from 'worker_threads';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
 import { PluginPermissions, validatePermissions } from './types.js';
 import { createLogger, Logger } from '../utils/logger.js';
@@ -287,6 +288,24 @@ export class IsolatedPluginRunner extends EventEmitter {
   private errorCount = 0;
 
   /**
+   * Resolve plugin worker path in both ESM and CommonJS transpilation contexts.
+   * Jest transpiles TS to CommonJS for tests, where direct `import.meta.url`
+   * syntax is rejected by TypeScript (TS1343).
+   */
+  private resolveWorkerPath(): string {
+    try {
+      const moduleUrl = Function('return import.meta.url')() as string;
+      return fileURLToPath(new URL('plugin-worker.js', moduleUrl));
+    } catch {
+      const baseDir =
+        typeof __dirname !== 'undefined'
+          ? __dirname
+          : path.join(process.cwd(), 'dist', 'plugins');
+      return path.join(baseDir, 'plugin-worker.js');
+    }
+  }
+
+  /**
    * Start the worker and initialize the plugin
    */
   async start(): Promise<void> {
@@ -305,7 +324,7 @@ export class IsolatedPluginRunner extends EventEmitter {
     this.errorCount = 0;
 
     // Get the worker script path (compiled JS)
-    const workerPath = path.join(path.dirname(new URL(import.meta.url).pathname), 'plugin-worker.js');
+    const workerPath = this.resolveWorkerPath();
 
     // Calculate memory limits
     const memoryLimitMb = this.config.memoryLimitMb ?? 128;

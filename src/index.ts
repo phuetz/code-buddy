@@ -1524,7 +1524,8 @@ const speakCommand = program
           execSync(`${player} ${args} "${tmpFile}"`, { stdio: 'inherit' });
           played = true;
           break;
-        } catch {
+        } catch (error) {
+          logger.debug('Audio player unavailable', { player, error });
           continue;
         }
       }
@@ -1535,7 +1536,11 @@ const speakCommand = program
         return;
       }
     } finally {
-      try { unlinkSync(tmpFile); } catch { /* ignore */ }
+      try {
+        unlinkSync(tmpFile);
+      } catch (error) {
+        logger.debug('Failed to remove temporary audio file', { tmpFile, error });
+      }
     }
   });
 

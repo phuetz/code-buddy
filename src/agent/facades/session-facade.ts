@@ -103,25 +103,25 @@ export class SessionFacade {
   /**
    * Save the current chat history to the session
    */
-  async saveCurrentSession(chatHistory: ChatEntry[]): Promise<void> {
-    await this.sessionStore.updateCurrentSession(chatHistory);
+  saveCurrentSession(chatHistory: ChatEntry[]): Promise<void> | void {
+    return this.sessionStore.updateCurrentSession(chatHistory);
   }
 
   /**
    * Get formatted list of sessions
    */
-  async getSessionList(): Promise<string> {
-    return await this.sessionStore.formatSessionList();
+  getSessionList(): Promise<string> | string {
+    return this.sessionStore.formatSessionList();
   }
 
   /**
    * Export current session to a file
    * @returns The path to the exported file, or null if no current session
    */
-  async exportCurrentSession(outputPath?: string): Promise<string | null> {
+  exportCurrentSession(outputPath?: string): Promise<string | null> | string | null {
     const currentId = this.sessionStore.getCurrentSessionId();
     if (!currentId) return null;
-    return await this.sessionStore.exportSessionToFile(currentId, outputPath);
+    return this.sessionStore.exportSessionToFile(currentId, outputPath);
   }
 
   /**

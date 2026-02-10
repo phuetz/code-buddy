@@ -147,12 +147,12 @@ export class SettingsManager {
       const result = validator.validate<ZodUserSettings>(rawSettings, 'user-settings.json');
 
       if (result.valid && result.data) {
-        // Zod applies defaults, convert to our interface
+        // Ensure legacy defaults remain populated (baseURL isn't defaulted in schema).
         return {
           apiKey: result.data.apiKey,
-          baseURL: result.data.baseURL,
-          defaultModel: result.data.defaultModel,
-          models: result.data.models,
+          baseURL: result.data.baseURL ?? DEFAULT_USER_SETTINGS.baseURL,
+          defaultModel: result.data.defaultModel ?? DEFAULT_USER_SETTINGS.defaultModel,
+          models: result.data.models ?? DEFAULT_USER_SETTINGS.models,
           provider: result.data.provider,
           model: result.data.model,
         };

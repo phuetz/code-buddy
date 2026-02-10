@@ -893,10 +893,14 @@ export class LocalProviderManager extends EventEmitter {
       return 'ollama';
     }
 
-    // Check node-llama-cpp
-    const nodeLlama = new NodeLlamaCppProvider();
-    if (await nodeLlama.isAvailable()) {
-      return 'local-llama';
+    // Check node-llama-cpp only when explicitly enabled for auto-detection.
+    // This avoids false positives in environments where the optional package
+    // is installed but no local model runtime is configured.
+    if (process.env.CODEBUDDY_AUTODETECT_LOCAL_LLAMA === 'true') {
+      const nodeLlama = new NodeLlamaCppProvider();
+      if (await nodeLlama.isAvailable()) {
+        return 'local-llama';
+      }
     }
 
     // Check WebLLM (requires browser/Electron)
@@ -1003,6 +1007,20 @@ export async function autoConfigureLocalProvider(
   // Try preferred provider first
   if (preferredProvider) {
     try {
+      if (preferredProvider === 'webllm') {
+        // WebLLM often appears "installable" in tests/environments where no WebGPU exists.
+        // Probe availability first so we can reliably fall back.
+        const probe = new WebLLMProvider();
+        const preferredAvailable = await probe.isAvailable();
+        probe.dispose();
+        if (!preferredAvailable) {
+          logger.warn(`Preferred provider ${preferredProvider} is not available in this environment`, {
+            source: 'LocalProviders',
+          });
+          throw new Error('Preferred provider unavailable');
+        }
+      }
+
       await manager.registerProvider(preferredProvider, {});
       return manager;
     } catch (error) {

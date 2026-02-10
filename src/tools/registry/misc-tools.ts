@@ -8,8 +8,8 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { BrowserTool, BrowserParams } from '../browser-tool.js';
-import { ReasoningTool } from '../reasoning-tool.js';
+import { BrowserTool, ReasoningTool } from '../index.js';
+import type { BrowserParams } from '../browser-tool.js';
 
 // ============================================================================
 // Shared Tool Instances

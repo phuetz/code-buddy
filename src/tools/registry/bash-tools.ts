@@ -8,7 +8,7 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { BashTool } from '../bash.js';
+import { BashTool } from '../index.js';
 
 // ============================================================================
 // Shared BashTool Instance
@@ -46,9 +46,13 @@ export class BashExecuteTool implements ITool {
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     const command = input.command as string;
-    const timeout = (input.timeout as number) ?? 30000;
+    const timeout = input.timeout as number | undefined;
 
-    return await getBash().execute(command, timeout);
+    if (typeof timeout === 'number') {
+      return await getBash().execute(command, timeout);
+    }
+
+    return await getBash().execute(command);
   }
 
   getSchema(): ToolSchema {

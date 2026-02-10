@@ -1,5 +1,5 @@
 /**
- * Tests for all 40 bundled SKILL.md files
+ * Tests for all bundled SKILL.md files
  *
  * Validates:
  * - All bundled skills exist
@@ -16,7 +16,7 @@ const REPO_ROOT = join(__dirname, '..', '..');
 const BUNDLED_SKILLS_DIR = join(REPO_ROOT, '.codebuddy', 'skills', 'bundled');
 
 // Expected number of bundled skills
-const EXPECTED_SKILL_COUNT = 40;
+const EXPECTED_SKILL_COUNT = 46;
 
 // Required frontmatter fields
 const REQUIRED_FRONTMATTER_FIELDS = ['name', 'version', 'description', 'author', 'tags'];
@@ -318,17 +318,19 @@ describe('Bundled SKILL.md Files', () => {
   });
 
   describe('All Skills List', () => {
-    it('should list all 40 bundled skills', () => {
+    it('should list all bundled skills', () => {
       // This test serves as documentation of all bundled skills
       const expectedSkills = [
         'ableton-live',
         'blender',
         'blog-watcher',
+        'brave-search',
         'coding-agent',
         'csharp-avalonia',
         'databases',
         'davinci-resolve',
         'email-tools',
+        'exa-search',
         'figma',
         'game-engines',
         'gif-search',
@@ -346,8 +348,11 @@ describe('Bundled SKILL.md Files', () => {
         'n8n',
         'notion',
         'pdf-tools',
+        'perplexity',
+        'playwright',
         'prepare-pr',
         'project-best-practices',
+        'puppeteer',
         'review-pr',
         'screenshot',
         'session-logs',
@@ -360,6 +365,7 @@ describe('Bundled SKILL.md Files', () => {
         'unreal-engine',
         'video-tools',
         'weather',
+        'web-fetch',
         'whisper-transcribe',
       ];
 

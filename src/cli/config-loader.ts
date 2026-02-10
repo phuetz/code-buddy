@@ -105,10 +105,8 @@ export async function saveCommandLineSettings(
       console.log('Base URL saved to ~/.codebuddy/user-settings.json');
     }
   } catch (error) {
-    const { logger } = await import('../utils/logger.js');
-    logger.warn('Could not save settings to file', {
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.warn('Could not save settings to file', errorMessage);
   }
 }
 

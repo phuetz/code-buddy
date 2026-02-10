@@ -180,7 +180,11 @@ describe('EnhancedCoordinator', () => {
 
   describe('Checkpointing', () => {
     it('should create and restore checkpoints', () => {
-      coordinator.shareResource('insights', 'i1', 'v1', 'coder');
+      coordinator.shareResource('insights', 'i1', {
+        insight: 'v1',
+        source: 'coder',
+        confidence: 0.9,
+      }, 'coder');
       const checkpoint = coordinator.createCheckpoint();
       
       coordinator.reset();
@@ -191,7 +195,8 @@ describe('EnhancedCoordinator', () => {
       
       const restored = coordinator.restoreFromCheckpoint(checkpoint.id);
       expect(restored).toBe(true);
-      expect(coordinator.getResource('insights', 'i1')).toBe('v1');
+      const restoredInsight = coordinator.getResource<{ insight: string }>('insights', 'i1');
+      expect(restoredInsight?.insight).toBe('v1');
     });
   });
 

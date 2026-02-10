@@ -109,7 +109,8 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
             }
           }
         } else {
-          content = `Usage: /memory forget <tag|query|last [N]>\n\nExamples:\n  /memory forget api-keys     - Forget memories with tag or containing "api-keys"\n  /memory forget last         - Forget the most recently added memory\n  /memory forget last 5       - Forget the 5 most recently added memories`;
+          content = `Usage: /memory forget <tag|query>
+Also supported: /memory forget last [N]`;
         }
         break;
 

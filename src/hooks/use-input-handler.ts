@@ -3,7 +3,7 @@ import { useInput } from "ink";
 import { promises as fsPromises } from "fs";
 import path from "path";
 import * as yaml from 'js-yaml';
-import { CodeBuddyAgent, ChatEntry } from "../agent/codebuddy-agent.js";
+import type { CodeBuddyAgent, ChatEntry } from "../agent/codebuddy-agent.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { useEnhancedInput, Key } from "./use-enhanced-input.js";
 import { getErrorMessage } from "../types/index.js";

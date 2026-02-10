@@ -78,20 +78,9 @@ export class ArchiveAgent extends SpecializedAgent {
   }
 
   async initialize(): Promise<void> {
-    // Try to load archiving libraries
-    try {
-      const jszipModule = await import('jszip');
-      this.jszip = jszipModule.default || jszipModule;
-    } catch (_error) {
-      // jszip not available
-    }
-
-    try {
-      const tarModule = await import('tar');
-      this.tar = tarModule;
-    } catch (_error) {
-      // tar not available
-    }
+    // Best-effort preload. Individual actions also lazy-load on demand.
+    await this.ensureJszip();
+    await this.ensureTar();
 
     this.isInitialized = true;
     this.emit('initialized', {
@@ -344,13 +333,14 @@ export class ArchiveAgent extends SpecializedAgent {
       return { success: false, error: 'Adding files is only supported for ZIP archives' };
     }
 
-    if (!this.jszip) {
+    const jszip = await this.ensureJszip();
+    if (!jszip) {
       return { success: false, error: 'jszip library required. Install with: npm install jszip' };
     }
 
     // Read existing archive
     const buffer = readFileSync(archivePath);
-    const zip = await this.jszip.loadAsync(buffer);
+    const zip = await jszip.loadAsync(buffer);
 
     // Add new files
     const files = this.collectFiles(filesToAdd, {});
@@ -391,13 +381,14 @@ export class ArchiveAgent extends SpecializedAgent {
       return { success: false, error: 'Removing files is only supported for ZIP archives' };
     }
 
-    if (!this.jszip) {
+    const jszip = await this.ensureJszip();
+    if (!jszip) {
       return { success: false, error: 'jszip library required' };
     }
 
     // Read existing archive
     const buffer = readFileSync(archivePath);
-    const zip = await this.jszip.loadAsync(buffer);
+    const zip = await jszip.loadAsync(buffer);
 
     // Remove matching files
     let removedCount = 0;
@@ -426,13 +417,60 @@ export class ArchiveAgent extends SpecializedAgent {
   // ZIP Operations
   // ============================================================================
 
+  private async ensureJszip(): Promise<JSZipModule | null> {
+    if (this.jszip) return this.jszip;
+
+    try {
+      const jszipModule = await import('jszip');
+      this.jszip = jszipModule.default || jszipModule;
+    } catch (_error) {
+      const required = this.tryRequireOptional('jszip');
+      if (required) {
+        this.jszip = required.default || required;
+      }
+    }
+
+    return this.jszip;
+  }
+
+  private async ensureTar(): Promise<TarModule | null> {
+    if (this.tar) return this.tar;
+
+    try {
+      const tarModule = await import('tar');
+      this.tar = tarModule;
+    } catch (_error) {
+      const required = this.tryRequireOptional('tar');
+      if (required) {
+        this.tar = required.default || required;
+      }
+    }
+
+    return this.tar;
+  }
+
+  // Prefer CommonJS-style loading first so Jest module mocks are honored.
+  // Falls back to dynamic import for ESM-only runtime environments.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private tryRequireOptional(moduleName: string): any | null {
+    try {
+      if (typeof require !== 'function') {
+        return null;
+      }
+      return require(moduleName);
+    } catch (_error) {
+      return null;
+    }
+  }
+
   private async listZip(archivePath: string): Promise<ArchiveEntry[]> {
-    if (!this.jszip) {
+    const jszip = await this.ensureJszip();
+    if (!jszip) {
       throw new Error('jszip library required. Install with: npm install jszip');
     }
 
     const buffer = readFileSync(archivePath);
-    const zip = await this.jszip.loadAsync(buffer);
+    const zip = await jszip.loadAsync(buffer);
 
     const entries: ArchiveEntry[] = [];
     zip.forEach((path: string, file: JSZipFileEntry) => {
@@ -454,12 +492,13 @@ export class ArchiveAgent extends SpecializedAgent {
     outputDir: string,
     options: Partial<ArchiveExtractOptions>
   ): Promise<string[]> {
-    if (!this.jszip) {
+    const jszip = await this.ensureJszip();
+    if (!jszip) {
       throw new Error('jszip library required');
     }
 
     const buffer = readFileSync(archivePath);
-    const zip = await this.jszip.loadAsync(buffer);
+    const zip = await jszip.loadAsync(buffer);
 
     const extractedFiles: string[] = [];
     const filterRegex = options.filterPatterns
@@ -499,11 +538,12 @@ export class ArchiveAgent extends SpecializedAgent {
     files: Array<{ path: string; fullPath: string }>,
     options: Partial<ArchiveCreateOptions>
   ): Promise<void> {
-    if (!this.jszip) {
+    const jszip = await this.ensureJszip();
+    if (!jszip) {
       throw new Error('jszip library required');
     }
 
-    const zip = new this.jszip();
+    const zip = new jszip();
 
     for (const { path, fullPath } of files) {
       const content = readFileSync(fullPath);
@@ -527,13 +567,14 @@ export class ArchiveAgent extends SpecializedAgent {
   // ============================================================================
 
   private async listTar(archivePath: string, gzipped: boolean): Promise<ArchiveEntry[]> {
-    if (!this.tar) {
+    const tar = await this.ensureTar();
+    if (!tar) {
       throw new Error('tar library required. Install with: npm install tar');
     }
 
     const entries: ArchiveEntry[] = [];
 
-    await this.tar.list({
+    await tar.list({
       file: archivePath,
       gzip: gzipped,
       onentry: (entry: TarEntry) => {
@@ -557,7 +598,8 @@ export class ArchiveAgent extends SpecializedAgent {
     gzipped: boolean,
     options: Partial<ArchiveExtractOptions>
   ): Promise<string[]> {
-    if (!this.tar) {
+    const tar = await this.ensureTar();
+    if (!tar) {
       throw new Error('tar library required');
     }
 
@@ -566,7 +608,7 @@ export class ArchiveAgent extends SpecializedAgent {
       ? new RegExp(options.filterPatterns.map(p => p.replace(/\*/g, '.*')).join('|'))
       : null;
 
-    await this.tar.extract({
+    await tar.extract({
       file: archivePath,
       cwd: outputDir,
       gzip: gzipped,
@@ -587,7 +629,8 @@ export class ArchiveAgent extends SpecializedAgent {
     gzipped: boolean,
     _options: Partial<ArchiveCreateOptions>
   ): Promise<void> {
-    if (!this.tar) {
+    const tar = await this.ensureTar();
+    if (!tar) {
       throw new Error('tar library required');
     }
 
@@ -595,7 +638,7 @@ export class ArchiveAgent extends SpecializedAgent {
     const baseDirs = files.map(f => dirname(f.fullPath));
     const commonBase = this.findCommonBase(baseDirs);
 
-    await this.tar.create(
+    await tar.create(
       {
         file: outputPath,
         gzip: gzipped,

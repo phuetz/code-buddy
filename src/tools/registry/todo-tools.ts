@@ -8,7 +8,8 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { TodoTool, TodoItem } from '../todo-tool.js';
+import { TodoTool } from '../index.js';
+import type { TodoItem } from '../todo-tool.js';
 
 // ============================================================================
 // Shared TodoTool Instance
@@ -42,9 +43,49 @@ export class CreateTodoListTool implements ITool {
   readonly description = 'Create a new todo list with tasks';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    const todos = input.todos as TodoItem[];
+    const todos = (input.todos as Record<string, unknown>[]) || [];
 
-    return await getTodo().createTodoList(todos);
+    const normalizedTodos: TodoItem[] = todos.map((todo, index) => {
+      const rawId = todo.id;
+      const rawStatus = todo.status;
+      const rawPriority = todo.priority;
+      const completed = todo.completed;
+
+      const id =
+        typeof rawId === 'string'
+          ? rawId
+          : typeof rawId === 'number'
+            ? String(rawId)
+            : `todo-${Date.now()}-${index}`;
+
+      const content =
+        typeof todo.content === 'string'
+          ? todo.content
+          : typeof todo.text === 'string'
+            ? todo.text
+            : '';
+
+      const status: TodoItem['status'] =
+        rawStatus === 'pending' || rawStatus === 'in_progress' || rawStatus === 'completed'
+          ? rawStatus
+          : completed === true
+            ? 'completed'
+            : 'pending';
+
+      const priority: TodoItem['priority'] =
+        rawPriority === 'high' || rawPriority === 'medium' || rawPriority === 'low'
+          ? rawPriority
+          : 'medium';
+
+      return {
+        id,
+        content,
+        status,
+        priority,
+      };
+    });
+
+    return await getTodo().createTodoList(normalizedTodos);
   }
 
   getSchema(): ToolSchema {
@@ -81,8 +122,10 @@ export class CreateTodoListTool implements ITool {
 
     for (let i = 0; i < data.todos.length; i++) {
       const todo = data.todos[i] as Record<string, unknown>;
-      if (!todo.id || !todo.content || !todo.status || !todo.priority) {
-        return { valid: false, errors: [`Todo at index ${i} must have id, content, status, and priority`] };
+      const hasText = typeof todo.text === 'string' && todo.text.trim().length > 0;
+      const hasContent = typeof todo.content === 'string' && todo.content.trim().length > 0;
+      if (!hasText && !hasContent) {
+        return { valid: false, errors: [`Todo at index ${i} must include content or text`] };
       }
     }
 

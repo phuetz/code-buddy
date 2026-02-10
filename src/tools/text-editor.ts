@@ -56,7 +56,7 @@ export class TextEditorTool implements Disposable {
    * @returns File contents with line numbers, or directory listing, or error
    *
    * @example
-   * // View entire file (first 10 lines shown, rest summarized)
+   * // View entire file (up to 500 lines shown inline)
    * await editor.view('src/index.ts');
    *
    * // View specific line range
@@ -101,9 +101,11 @@ export class TextEditorTool implements Disposable {
         }
 
         const totalLines = lines.length;
-        const maxDisplayLines = 500;
+        const maxFullDisplayLines = 500;
+        const headDisplayLines = 400;
+        const tailDisplayLines = 100;
 
-        if (totalLines <= maxDisplayLines) {
+        if (totalLines <= maxFullDisplayLines) {
           const numberedLines = lines
             .map((line, idx) => `${idx + 1}: ${line}`)
             .join("\n");
@@ -113,20 +115,21 @@ export class TextEditorTool implements Disposable {
           };
         }
 
-        // For large files: show first 400 lines + last 50 lines
-        const headCount = 400;
-        const tailCount = 50;
-        const headLines = lines.slice(0, headCount)
+        // For very large files, keep both start and end context.
+        const headLines = lines.slice(0, headDisplayLines)
           .map((line, idx) => `${idx + 1}: ${line}`)
           .join("\n");
-        const tailLines = lines.slice(-tailCount)
-          .map((line, idx) => `${totalLines - tailCount + idx + 1}: ${line}`)
+        const tailStartLine = totalLines - tailDisplayLines + 1;
+        const tailLines = lines.slice(-tailDisplayLines)
+          .map((line, idx) => `${tailStartLine + idx}: ${line}`)
           .join("\n");
-        const omitted = totalLines - headCount - tailCount;
+        const omitted = totalLines - headDisplayLines - tailDisplayLines;
+        const omittedStart = headDisplayLines + 1;
+        const omittedEnd = totalLines - tailDisplayLines;
 
         return {
           success: true,
-          output: `Contents of ${filePath} (${totalLines} lines):\n${headLines}\n\n... [${omitted} lines omitted — use start_line/end_line to view specific sections] ...\n\n${tailLines}`,
+          output: `Contents of ${filePath} (${totalLines} lines):\n${headLines}\n\n... +${omitted} lines omitted (lines ${omittedStart}-${omittedEnd}; use start_line/end_line to view specific sections) ...\n\n${tailLines}`,
         };
       } else {
         return {

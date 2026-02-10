@@ -314,7 +314,7 @@ describe('TextEditorTool', () => {
       expect(result.error).toContain('not found');
     });
 
-    it('should truncate large files for display', async () => {
+    it('should show full content for files under 500 lines', async () => {
       const manyLines = Array.from({ length: 50 }, (_, i) => `line${i + 1}`).join('\n');
       mockVfs.exists.mockResolvedValue(true);
       mockVfs.stat.mockResolvedValue({ isDirectory: () => false });
@@ -322,7 +322,8 @@ describe('TextEditorTool', () => {
 
       const result = await editor.view(path.join(testDir, 'large.ts'));
       expect(result.success).toBe(true);
-      expect(result.output).toContain('+40 lines');
+      expect(result.output).toContain('1: line1');
+      expect(result.output).toContain('50: line50');
     });
   });
 

@@ -31,6 +31,14 @@ describe('ConfigResolver', () => {
     delete process.env.GROK_API_KEY;
     delete process.env.GROK_BASE_URL;
     delete process.env.GROK_MODEL;
+    delete process.env.XAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GEMINI_MODEL;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_MODEL;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_MODEL;
   });
 
   afterEach(() => {

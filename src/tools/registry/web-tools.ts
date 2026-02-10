@@ -8,7 +8,7 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { WebSearchTool } from '../web-search.js';
+import { WebSearchTool } from '../index.js';
 
 // ============================================================================
 // Shared WebSearchTool Instance
@@ -140,7 +140,11 @@ export class WebFetchTool implements ITool {
     const url = input.url as string;
     const prompt = input.prompt as string | undefined;
 
-    return await getWebSearch().fetchPage(url, prompt);
+    if (typeof prompt === 'string' && prompt.length > 0) {
+      return await getWebSearch().fetchPage(url, prompt);
+    }
+
+    return await getWebSearch().fetchPage(url);
   }
 
   getSchema(): ToolSchema {

@@ -247,7 +247,7 @@ export class AgentContextFacade {
    * Get memory statistics
    */
   getMemoryStats(): MemoryStats | null {
-    if (!this.memoryEnabled || !this._memory) return null;
+    if (!this.memoryEnabled) return null;
     return this.memory.getStats();
   }
 
@@ -256,7 +256,6 @@ export class AgentContextFacade {
    */
   formatMemoryStatus(): string {
     if (!this.memoryEnabled) return '🧠 Memory: Disabled';
-    if (!this._memory) return '🧠 Memory: Not initialized';
     return this.memory.formatStatus();
   }
 

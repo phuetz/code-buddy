@@ -15,8 +15,7 @@
  */
 
 import { EventEmitter } from 'events';
-import * as _fs from 'fs';
-import * as fsPromises from 'fs/promises';
+import * as fs from 'fs';
 import * as path from 'path';
 import fg from 'fast-glob';
 
@@ -143,7 +142,11 @@ export class SecurityReviewAgent extends EventEmitter {
       // Check package.json
       const packageJsonPath = path.join(targetPath, 'package.json');
       try {
-        const packageJsonContent = await fsPromises.readFile(packageJsonPath, 'utf-8');
+        if (!fs.existsSync(packageJsonPath)) {
+          throw new Error('package.json not found');
+        }
+
+        const packageJsonContent = fs.readFileSync(packageJsonPath, 'utf-8');
         const packageJson = JSON.parse(packageJsonContent);
 
         // Check for known vulnerable patterns
@@ -183,7 +186,11 @@ export class SecurityReviewAgent extends EventEmitter {
       // Check requirements.txt for Python
       const requirementsPath = path.join(targetPath, 'requirements.txt');
       try {
-        const requirements = await fsPromises.readFile(requirementsPath, 'utf-8');
+        if (!fs.existsSync(requirementsPath)) {
+          throw new Error('requirements.txt not found');
+        }
+
+        const requirements = fs.readFileSync(requirementsPath, 'utf-8');
         const lines = requirements.split('\n');
 
         for (const line of lines) {
@@ -265,7 +272,11 @@ export class SecurityReviewAgent extends EventEmitter {
       for (const sensitive of sensitiveFiles) {
         const filePath = path.join(targetPath, sensitive);
         try {
-          const stats = await fsPromises.stat(filePath);
+          if (!fs.existsSync(filePath)) {
+            continue;
+          }
+
+          const stats = fs.statSync(filePath);
           const mode = stats.mode & 0o777;
 
           // Check if file is world-readable
@@ -288,7 +299,9 @@ export class SecurityReviewAgent extends EventEmitter {
       // Check for .git exposure
       const gitPath = path.join(targetPath, '.git');
       try {
-        await fsPromises.access(gitPath);
+        if (!fs.existsSync(gitPath)) {
+          throw new Error('.git not found');
+        }
         // This is normal for dev, but flagged as info
         findings.push({
           id: 'git-directory-present',
@@ -458,7 +471,7 @@ export class SecurityReviewAgent extends EventEmitter {
 
     // Check if target is a file
     try {
-      const stats = await fsPromises.stat(resolvedPath);
+      const stats = fs.statSync(resolvedPath);
       if (stats.isFile()) {
         return [resolvedPath];
       }
@@ -492,12 +505,12 @@ export class SecurityReviewAgent extends EventEmitter {
     const findings: SecurityFinding[] = [];
 
     try {
-      const stats = await fsPromises.stat(filePath);
+      const stats = fs.statSync(filePath);
       if (stats.size > this.config.maxFileSize) {
         return findings;
       }
 
-      const content = await fsPromises.readFile(filePath, 'utf-8');
+      const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n');
       const ext = path.extname(filePath).toLowerCase();
 

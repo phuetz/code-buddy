@@ -408,7 +408,8 @@ describe('Memory Handlers', () => {
     test('should show usage when forget has no key', async () => {
       const result = await handleMemory(['forget']);
 
-      expect(result.entry?.content).toBe('Usage: /memory forget <tag>');
+      expect(result.entry?.content).toContain('Usage: /memory forget');
+      expect(result.entry?.content).toContain('forget last');
     });
 
     test('should have timestamp in entry', async () => {

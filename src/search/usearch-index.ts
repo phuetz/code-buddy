@@ -257,8 +257,19 @@ export class USearchVectorIndex extends EventEmitter {
     const key = this.idToKey.get(id);
     if (key === undefined) return false;
 
-    // Note: USearch doesn't support removal directly in all versions
-    // We mark it as removed in our mapping
+    if (typeof this.index.remove === 'function') {
+      try {
+        this.index.remove(key);
+      } catch (error) {
+        logger.debug('USearch remove failed; falling back to mapping-only removal', {
+          id,
+          key,
+          error,
+        });
+      }
+    }
+
+    // Keep mappings authoritative even if low-level removal is unavailable.
     this.idToKey.delete(id);
     this.keyToId.delete(key);
     this.metadata.delete(id);
@@ -479,12 +490,34 @@ export class USearchVectorIndex extends EventEmitter {
   // ============================================================================
 
   private getOrCreateKey(id: string): number {
-    let key = this.idToKey.get(id);
-    if (key === undefined) {
-      key = this.nextKey++;
-      this.idToKey.set(id, key);
-      this.keyToId.set(key, id);
+    const existingKey = this.idToKey.get(id);
+    if (existingKey !== undefined) {
+      if (this.index && typeof this.index.remove === 'function') {
+        try {
+          // True upsert path: remove old vector, then reuse key.
+          this.index.remove(existingKey);
+          return existingKey;
+        } catch (error) {
+          logger.debug('USearch upsert remove failed; allocating a new key', {
+            id,
+            key: existingKey,
+            error,
+          });
+        }
+      }
+
+      // If duplicate keys cannot be removed by the native index wrapper,
+      // re-key this ID and drop old key mapping so stale entries are ignored.
+      const replacementKey = this.nextKey++;
+      this.idToKey.set(id, replacementKey);
+      this.keyToId.delete(existingKey);
+      this.keyToId.set(replacementKey, id);
+      return replacementKey;
     }
+
+    const key = this.nextKey++;
+    this.idToKey.set(id, key);
+    this.keyToId.set(key, id);
     return key;
   }
 
@@ -557,6 +590,7 @@ interface NativeSearchResults {
  */
 interface USearchNativeIndex {
   add(key: number, vector: Float32Array): void;
+  remove?(key: number): void;
   search(query: Float32Array, k: number): NativeSearchResults;
   save?(path: string): void;
   load?(path: string): void;
@@ -589,6 +623,10 @@ class FallbackVectorIndex implements USearchNativeIndex {
 
   add(key: number, vector: Float32Array): void {
     this.vectors.set(key, vector);
+  }
+
+  remove(key: number): void {
+    this.vectors.delete(key);
   }
 
   search(query: Float32Array, k: number): { keys: number[]; distances: number[] } {

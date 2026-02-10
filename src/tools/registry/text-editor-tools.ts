@@ -8,7 +8,7 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { TextEditorTool } from '../text-editor.js';
+import { TextEditorTool } from '../index.js';
 
 // ============================================================================
 // Shared TextEditorTool Instance

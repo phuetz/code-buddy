@@ -5,7 +5,7 @@
  * such as available binaries, environment variables, and configuration.
  */
 
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
@@ -81,14 +81,39 @@ export function isBinaryAvailable(name: string): boolean {
     return cached.exists;
   }
 
+  // `node` should always resolve to the current runtime binary, even if PATH
+  // has been modified by another test or process.
+  const normalizedName = name.toLowerCase().replace(/\.exe$/, '');
+  const runtimeBinary = path.basename(process.execPath).toLowerCase().replace(/\.exe$/, '');
+  if ((normalizedName === 'node' || normalizedName === runtimeBinary) && fs.existsSync(process.execPath)) {
+    binaryCache.set(name, {
+      exists: true,
+      path: process.execPath,
+      checkedAt: Date.now(),
+    });
+    return true;
+  }
+
   try {
     const command = process.platform === 'win32' ? 'where' : 'which';
-    const result = execSync(`${command} ${name}`, {
+    const result = spawnSync(command, [name], {
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    const binaryPath = result.trim().split('\n')[0];
+    if (result.status !== 0) {
+      throw new Error(result.stderr || `Failed to locate binary: ${name}`);
+    }
+
+    const binaryPath = result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+
+    if (!binaryPath) {
+      throw new Error(`No path returned for binary: ${name}`);
+    }
+
     binaryCache.set(name, {
       exists: true,
       path: binaryPath,

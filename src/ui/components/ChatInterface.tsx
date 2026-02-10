@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text, useInput, DOMElement } from "ink";
-import { CodeBuddyAgent, ChatEntry } from "../../agent/codebuddy-agent.js";
+import type { CodeBuddyAgent, ChatEntry } from "../../agent/codebuddy-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
 import { LoadingSpinner } from "./LoadingSpinner.js";
 import { CommandSuggestions } from "./CommandSuggestions.js";

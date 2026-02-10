@@ -8,7 +8,7 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { SearchTool } from '../search.js';
+import { SearchTool } from '../index.js';
 
 // ============================================================================
 // Shared SearchTool Instance

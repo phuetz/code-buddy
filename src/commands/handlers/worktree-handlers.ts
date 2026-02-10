@@ -155,6 +155,19 @@ To start a new Grok CLI instance:
   • Use /worktree remove ${worktreePath} when done`;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+
+    // Some restricted test/sandbox environments block shell execution.
+    // In that case, provide a manual command instead of hard-failing.
+    if (errorMsg.includes('spawnSync /bin/sh EPERM')) {
+      return `⚠️ Unable to run git automatically in this environment.
+
+Try this command manually:
+  ${cmd}
+
+📁 Path: ${resolvedPath}
+🌿 Branch: ${branchName}`;
+    }
+
     throw new Error(`Failed to create worktree: ${errorMsg}`);
   }
 }

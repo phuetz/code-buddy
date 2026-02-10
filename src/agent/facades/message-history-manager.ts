@@ -44,7 +44,7 @@ export interface HistoryStats {
  */
 const DEFAULT_CONFIG: HistoryConfig = {
   maxHistorySize: 1000,
-  maxMessagesSize: 500,
+  maxMessagesSize: 1000,
   recentEntriesToKeepFull: 100,
   maxContentLength: 500,
   maxOutputLength: 200,
@@ -252,20 +252,24 @@ export class MessageHistoryManager {
    * Trim LLM messages, preserving system message
    */
   private trimMessages(): void {
-    if (this.messages.length > this.config.maxMessagesSize) {
-      const hasSystemMessage = this.messages[0]?.role === 'system';
+    const hasSystemMessage = this.messages[0]?.role === 'system';
 
-      if (hasSystemMessage) {
-        const systemMessage = this.messages[0];
-        const trimCount = this.messages.length - this.config.maxMessagesSize;
-        const recentMessages = this.messages.slice(-(this.config.maxMessagesSize - 1));
+    if (hasSystemMessage) {
+      const systemMessage = this.messages[0];
+      const conversationMessages = this.messages.slice(1);
+      if (conversationMessages.length > this.config.maxMessagesSize) {
+        const trimCount = conversationMessages.length - this.config.maxMessagesSize;
+        const recentMessages = conversationMessages.slice(-this.config.maxMessagesSize);
         this.messages = [systemMessage, ...recentMessages];
         logger.debug(`Trimmed ${trimCount} old LLM messages (system message preserved)`);
-      } else {
-        const trimCount = this.messages.length - this.config.maxMessagesSize;
-        this.messages = this.messages.slice(trimCount);
-        logger.debug(`Trimmed ${trimCount} old LLM messages`);
       }
+      return;
+    }
+
+    if (this.messages.length > this.config.maxMessagesSize) {
+      const trimCount = this.messages.length - this.config.maxMessagesSize;
+      this.messages = this.messages.slice(trimCount);
+      logger.debug(`Trimmed ${trimCount} old LLM messages`);
     }
   }
 

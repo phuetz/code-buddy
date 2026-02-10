@@ -97,9 +97,10 @@ export class FormalToolRegistry extends EventEmitter implements IToolRegistry {
     const metadata: IToolMetadata = {
       name,
       description: tool.description,
-      category: toolMetadata?.category ?? 'utility',
-      keywords: toolMetadata?.keywords ?? [],
-      priority: toolMetadata?.priority ?? 1,
+      category: 'utility',
+      keywords: [],
+      priority: 1,
+      ...toolMetadata,
       ...options.metadata,
     };
 
@@ -305,7 +306,7 @@ export class FormalToolRegistry extends EventEmitter implements IToolRegistry {
       const err = error instanceof Error ? error : new Error(String(error));
       const result: IToolExecutionResult = {
         success: false,
-        error: err.message,
+        error: err.message || 'Tool execution failed',
         toolName: name,
         duration: Date.now() - startTime,
         timestamp: new Date(),

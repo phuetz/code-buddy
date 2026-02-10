@@ -33,7 +33,105 @@ import type { IAutomationProvider } from './automation-manager.js';
 // Dynamic imports to avoid loading native modules at startup
 let nutjsModule: typeof import('@nut-tree-fork/nut-js') | null = null;
 
+function shouldUseHeadlessNutJsMock(): boolean {
+  return process.env.NODE_ENV === 'test'
+    && process.env.CODEBUDDY_USE_REAL_NUTJS_IN_TESTS !== '1';
+}
+
+function createHeadlessNutJsMock(): typeof import('@nut-tree-fork/nut-js') {
+  let mousePosition = { x: 0, y: 0 };
+  let clipboardText = '';
+
+  const keyMap = new Proxy<Record<string, string>>(
+    { Space: 'Space' },
+    {
+      get(target, key) {
+        if (typeof key !== 'string') {
+          return target.Space;
+        }
+        return target[key] ?? key;
+      },
+    }
+  );
+
+  const createWindow = () => ({
+    region: Promise.resolve({ left: 100, top: 100, width: 1280, height: 720 }),
+    title: Promise.resolve('Mock Window'),
+    _native: Promise.resolve({ hwnd: 1 }),
+  });
+
+  return {
+    Key: keyMap,
+    Button: {
+      LEFT: 0,
+      RIGHT: 1,
+      MIDDLE: 2,
+    },
+    mouse: {
+      getPosition: async () => ({ ...mousePosition }),
+      setPosition: async (position: { x: number; y: number }) => {
+        mousePosition = { x: position.x, y: position.y };
+      },
+      move: async (target: { x: number; y: number }) => {
+        mousePosition = { x: target.x, y: target.y };
+      },
+      click: async (_button?: number) => {
+        // No-op in headless fallback
+      },
+      doubleClick: async (_button?: number) => {
+        // No-op in headless fallback
+      },
+      rightClick: async () => {
+        // No-op in headless fallback
+      },
+      pressButton: async (_button?: number) => {
+        // No-op in headless fallback
+      },
+      releaseButton: async (_button?: number) => {
+        // No-op in headless fallback
+      },
+      scrollDown: async (_amount: number) => {
+        // No-op in headless fallback
+      },
+    },
+    keyboard: {
+      pressKey: async (..._keys: unknown[]) => {
+        // No-op in headless fallback
+      },
+      releaseKey: async (..._keys: unknown[]) => {
+        // No-op in headless fallback
+      },
+      type: async (_text: string) => {
+        // No-op in headless fallback
+      },
+    },
+    straightTo: (point: { x: number; y: number }) => point,
+    getActiveWindow: async () => createWindow(),
+    getWindows: async () => [createWindow()],
+    screen: {
+      width: async () => 1920,
+      height: async () => 1080,
+      colorAt: async (position: { x: number; y: number }) => ({
+        R: position.x % 256,
+        G: position.y % 256,
+        B: (position.x + position.y) % 256,
+        A: 255,
+      }),
+    },
+    clipboard: {
+      getContent: async () => clipboardText,
+      setContent: async (text: string) => {
+        clipboardText = text;
+      },
+    },
+  } as unknown as typeof import('@nut-tree-fork/nut-js');
+}
+
 async function getNutJs() {
+  if (shouldUseHeadlessNutJsMock()) {
+    return createHeadlessNutJsMock();
+  }
+
   if (!nutjsModule) {
     nutjsModule = await import('@nut-tree-fork/nut-js');
   }

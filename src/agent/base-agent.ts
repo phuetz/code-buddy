@@ -75,7 +75,7 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
    * Maximum number of LLM messages to keep in memory.
    * @deprecated Use MessageHistoryManager config instead
    */
-  protected static readonly MAX_MESSAGES_SIZE = 500;
+  protected static readonly MAX_MESSAGES_SIZE = 1000;
 
   /** Threshold for considering a tool result "large" (in characters) */
   protected static readonly LARGE_RESULT_THRESHOLD = 5000;
@@ -284,7 +284,17 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
 
   dispose(): void {
     // Dispose facades
-    if (this.contextFacade) this.contextFacade.dispose();
+    if (this.contextFacade) {
+      this.contextFacade.dispose();
+    } else {
+      // Backward-compatible fallback for agents/tests that do not initialize facades.
+      if (this.tokenCounter) this.tokenCounter.dispose();
+      if (this.contextManager) this.contextManager.dispose();
+      if (this._memory) {
+        this._memory.dispose();
+        this._memory = null;
+      }
+    }
     if (this.repairCoordinator) this.repairCoordinator.dispose();
     if (this.historyManager) this.historyManager.dispose();
 
@@ -322,21 +332,22 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
   }
 
   getSessionCost(): number {
-    return this.routingFacade?.getSessionCost() ?? 0;
+    return this.sessionCost;
   }
 
   getSessionCostLimit(): number {
-    return this.routingFacade?.getSessionCostLimit() ?? 10;
+    return this.sessionCostLimit;
   }
 
   setSessionCostLimit(limit: number): void {
+    this.sessionCostLimit = limit;
     if (this.routingFacade) {
       this.routingFacade.setSessionCostLimit(limit);
     }
   }
 
   isSessionCostLimitReached(): boolean {
-    return this.routingFacade?.isSessionCostLimitReached() ?? false;
+    return this.sessionCost >= this.sessionCostLimit;
   }
 
   // ============================================================================
@@ -367,15 +378,15 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
     return this.sessionFacade.getSessionStore();
   }
 
-  async saveCurrentSession(): Promise<void> {
-    await this.sessionFacade.saveCurrentSession(this.historyManager.getChatHistory());
+  saveCurrentSession(): Promise<void> | void {
+    return this.sessionFacade.saveCurrentSession(this.historyManager.getChatHistory());
   }
 
-  async getSessionList(): Promise<string> {
+  getSessionList(): Promise<string> | string {
     return this.sessionFacade.getSessionList();
   }
 
-  async exportCurrentSession(outputPath?: string): Promise<string | null> {
+  exportCurrentSession(outputPath?: string): Promise<string | null> | string | null {
     return this.sessionFacade.exportCurrentSession(outputPath);
   }
 

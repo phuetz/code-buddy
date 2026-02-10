@@ -53,7 +53,12 @@ export class BackgroundTaskManager extends EventEmitter {
   constructor(maxConcurrent: number = 3) {
     super();
     this.maxConcurrent = maxConcurrent;
-    this.tasksDir = path.join(os.homedir(), '.codebuddy', 'tasks');
+    const homeDir =
+      process.env.CODEBUDDY_HOME ||
+      process.env.HOME ||
+      process.env.USERPROFILE ||
+      os.homedir();
+    this.tasksDir = path.join(homeDir, '.codebuddy', 'tasks');
     this.ensureTasksDir();
     this.loadTasks();
 
