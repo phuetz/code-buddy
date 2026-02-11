@@ -447,9 +447,59 @@ export class CodeBuddyClient {
       }
     }
 
+    // Sanitize contents: Gemini requires function responses to immediately
+    // follow a model turn with functionCall. Context compression can break
+    // this sequence by removing intermediate messages.
+    const sanitized: typeof contents = [];
+    for (let i = 0; i < contents.length; i++) {
+      const entry = contents[i];
+      if (entry.role === 'function') {
+        // Only keep function response if preceded by a model turn with functionCall
+        const prev = sanitized[sanitized.length - 1];
+        if (prev && prev.role === 'model' && prev.parts.some(p => 'functionCall' in p)) {
+          sanitized.push(entry);
+        } else {
+          logger.debug('Dropping orphaned function response (no preceding functionCall)', {
+            source: 'CodeBuddyClient',
+            index: i,
+            prevRole: prev?.role,
+          });
+        }
+      } else if (entry.role === 'model' && entry.parts.some(p => 'functionCall' in p)) {
+        // Model with functionCall: only keep if next entry is a function response
+        const next = contents[i + 1];
+        if (next && next.role === 'function') {
+          sanitized.push(entry);
+        } else {
+          // Convert to text-only model turn (strip functionCall parts)
+          const textParts = entry.parts.filter(p => 'text' in p && p.text);
+          if (textParts.length > 0) {
+            sanitized.push({ role: 'model', parts: textParts });
+          }
+          logger.debug('Stripped orphaned functionCall (no following function response)', {
+            source: 'CodeBuddyClient',
+            index: i,
+          });
+        }
+      } else {
+        sanitized.push(entry);
+      }
+    }
+
+    // Merge consecutive same-role entries (Gemini requires strict alternation)
+    const merged: typeof contents = [];
+    for (const entry of sanitized) {
+      const prev = merged[merged.length - 1];
+      if (prev && prev.role === entry.role) {
+        prev.parts.push(...entry.parts);
+      } else {
+        merged.push(entry);
+      }
+    }
+
     // Build request body
     const body: Record<string, unknown> = {
-      contents,
+      contents: merged,
       generationConfig: {
         temperature: opts?.temperature ?? 0.7,
         maxOutputTokens: this.defaultMaxTokens,

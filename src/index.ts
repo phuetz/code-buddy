@@ -893,7 +893,7 @@ program
     });
 
     if (options.allowOutside) {
-      console.log("Warning: Workspace isolation DISABLED - file access is unrestricted");
+      console.error("Warning: Workspace isolation DISABLED - file access is unrestricted");
     }
 
     try {
@@ -918,7 +918,7 @@ program
       // Enable force-tools mode for local models
       if (options.forceTools) {
         process.env.GROK_FORCE_TOOLS = 'true';
-        console.log("🔧 Force tools: ENABLED (function calling for local models)");
+        console.error("🔧 Force tools: ENABLED (function calling for local models)");
       }
 
       // Handle auto-approve mode (like mistral-vibe)
@@ -926,7 +926,7 @@ program
         const { ConfirmationService } = await import("./utils/confirmation-service.js");
         const confirmationService = ConfirmationService.getInstance();
         confirmationService.setSessionFlag("allOperations", true);
-        console.log("✅ Auto-approve: ENABLED (all tool executions will be approved)");
+        console.error("✅ Auto-approve: ENABLED (all tool executions will be approved)");
       }
 
       // Handle --dangerously-skip-permissions (like Claude Code)
@@ -938,7 +938,7 @@ program
         confirmationService.setSessionFlag("bashCommands", true);
         process.env.GROK_SKIP_PERMISSIONS = 'true';
         console.error("⚠️  DANGEROUS: All permission checks BYPASSED");
-        console.log("   Only use this in trusted containers without network access!");
+        console.error("   Only use this in trusted containers without network access!");
       }
 
       // Handle --allowed-tools (like Claude Code --allowedTools)
@@ -947,13 +947,13 @@ program
         setToolFilter(createToolFilter({
           enabledTools: options.allowedTools,
         }));
-        console.log(`🔧 Allowed tools: ${options.allowedTools}`);
+        console.error(`🔧 Allowed tools: ${options.allowedTools}`);
       }
 
       // Handle --mcp-debug
       if (options.mcpDebug) {
         process.env.MCP_DEBUG = 'true';
-        console.log("🔍 MCP debug: ENABLED");
+        console.error("🔍 MCP debug: ENABLED");
       }
 
       // Set max-price for cost limit (like mistral-vibe)
@@ -973,13 +973,13 @@ program
 
         const allTools = await getAllCodeBuddyTools();
         const result = filterTools(allTools, filter);
-        console.log(formatFilterResult(result));
+        console.error(formatFilterResult(result));
       }
 
       // Handle vim mode
       if (options.vim) {
         process.env.GROK_VIM_MODE = 'true';
-        console.log("Vim mode: ENABLED");
+        console.error("Vim mode: ENABLED");
       }
 
       // Check for piped input (like mistral-vibe: cat file.txt | grok)
