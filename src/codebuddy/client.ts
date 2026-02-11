@@ -447,46 +447,40 @@ export class CodeBuddyClient {
       }
     }
 
-    // Sanitize contents: Gemini requires function responses to immediately
-    // follow a model turn with functionCall. Context compression can break
-    // this sequence by removing intermediate messages.
+    // Sanitize contents for Gemini's strict conversation rules:
+    // 1. Must start with 'user'
+    // 2. No consecutive same-role turns
+    // 3. 'function' must immediately follow 'model' with functionCall
+    // 4. 'model' with functionCall must be immediately followed by 'function'
+    // Context compression can break these rules by removing intermediate messages.
+
+    // Pass 1: Drop orphaned function responses and strip orphaned functionCalls
     const sanitized: typeof contents = [];
     for (let i = 0; i < contents.length; i++) {
       const entry = contents[i];
       if (entry.role === 'function') {
-        // Only keep function response if preceded by a model turn with functionCall
         const prev = sanitized[sanitized.length - 1];
         if (prev && prev.role === 'model' && prev.parts.some(p => 'functionCall' in p)) {
           sanitized.push(entry);
-        } else {
-          logger.debug('Dropping orphaned function response (no preceding functionCall)', {
-            source: 'CodeBuddyClient',
-            index: i,
-            prevRole: prev?.role,
-          });
         }
+        // else: drop orphaned function response
       } else if (entry.role === 'model' && entry.parts.some(p => 'functionCall' in p)) {
-        // Model with functionCall: only keep if next entry is a function response
         const next = contents[i + 1];
         if (next && next.role === 'function') {
           sanitized.push(entry);
         } else {
-          // Convert to text-only model turn (strip functionCall parts)
+          // Strip functionCall parts, keep text only
           const textParts = entry.parts.filter(p => 'text' in p && p.text);
           if (textParts.length > 0) {
             sanitized.push({ role: 'model', parts: textParts });
           }
-          logger.debug('Stripped orphaned functionCall (no following function response)', {
-            source: 'CodeBuddyClient',
-            index: i,
-          });
         }
       } else {
         sanitized.push(entry);
       }
     }
 
-    // Merge consecutive same-role entries (Gemini requires strict alternation)
+    // Pass 2: Merge consecutive same-role entries
     const merged: typeof contents = [];
     for (const entry of sanitized) {
       const prev = merged[merged.length - 1];
@@ -495,6 +489,11 @@ export class CodeBuddyClient {
       } else {
         merged.push(entry);
       }
+    }
+
+    // Pass 3: Ensure conversation starts with 'user'
+    if (merged.length > 0 && merged[0].role !== 'user') {
+      merged.unshift({ role: 'user', parts: [{ text: '(continuing previous conversation)' }] });
     }
 
     // Build request body
