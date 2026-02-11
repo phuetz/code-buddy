@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Tests-340%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-20%2C000%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
   <img src="https://img.shields.io/badge/Coverage-85%25-48dbfb?style=flat-square" alt="Coverage"/>
   <img src="https://img.shields.io/badge/Build-passing-00d26a?style=flat-square" alt="Build"/>
 </p>
@@ -114,6 +114,8 @@ Code Buddy incorporates advanced patterns from the [OpenClaw](https://github.com
 | **Cache Trace** | ✅ 100% | Debug prompt construction stages (`CACHE_TRACE=true`) |
 | **Turn Diff Tracker** | ✅ 100% | Per-turn file change tracking with rollback capability |
 | **MCP Predefined Servers** | ✅ 100% | Brave Search, Playwright, Exa pre-configured in MCP |
+| **Headless Mode Fixes** | ✅ 100% | Clean JSON stdout, `process.exit(0)`, Gemini message sanitization |
+| **Gemini Conversation Repair** | ✅ 100% | 3-pass sanitization after context compression (orphan cleanup, role merge, user-start) |
 
 ---
 
@@ -169,6 +171,24 @@ buddy --profile lmstudio
 # Full autonomy mode
 YOLO_MODE=true buddy
 ```
+
+### Headless Mode (CI / Scripting)
+
+```bash
+# Single prompt, JSON output to stdout (logs go to stderr)
+buddy -p "create a hello world Express app" --output json > result.json
+
+# Pipe into other tools
+buddy -p "explain this code" --output json 2>/dev/null | jq '.content'
+
+# Use in CI with full autonomy
+buddy -p "run tests and fix failures" \
+  --dangerously-skip-permissions \
+  --output json \
+  --max-tool-rounds 30
+```
+
+Headless mode exits cleanly after completion — safe for `timeout`, shell scripts, and CI pipelines.
 
 ### Typical Project Workflow
 
@@ -767,21 +787,17 @@ npm run build
 ### Test Coverage
 
 ```
-340+ tests across 25+ suites:
-- Tool Policy System (2 suites)
-- Bash Allowlist (2 suites)
-- Context Window Guard (34 tests)
-- Context Compaction (4 suites)
-- Moltbot Hooks (52 tests)
-- Connection Profiles (57 tests)
-- Desktop Automation (100 tests)
-- Middleware Pipeline (pipeline tests)
-- Agent Profiles & Streaming (reasoning, profiles)
-- Daemon Manager & Cron Bridge (lifecycle, PID, jobs)
-- Task Planner & Delegation (DAG, topological sort)
-- Screen Observer & Triggers (capture, diff, cooldown)
-- Proactive Agent & Notifications (rate limit, quiet hours)
-- Orchestrator (supervisor, shared context, self-healing, rollback)
+20,000+ tests across 475+ suites covering:
+- Core: Tool Policy, Bash Allowlist, Context Window Guard, Compaction
+- Agent: Middleware Pipeline, Profiles, Reasoning, Streaming
+- Autonomy: Daemon, Cron Bridge, Task Planner, Delegation Engine
+- Observation: Screen Observer, Triggers, Proactive Notifications
+- Orchestration: Supervisor, Shared Context, Self-Healing, Rollback
+- Providers: Gemini (vision + conversation), OpenAI-compat, Failover
+- Security: Trust Folders, Skill Scanner, Bash Parser, Session Locks
+- Infrastructure: MCP Client, Webhooks, Extensions, ACP Protocol
+- Voice: Wake Word, TTS Providers, Voice Control Loop
+- UI: ChatHistory, ChatInterface, TabbedQuestion
 ```
 
 ---
