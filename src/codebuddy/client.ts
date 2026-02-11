@@ -97,7 +97,7 @@ export interface CodeBuddyResponse {
 }
 
 export class CodeBuddyClient {
-  private client: OpenAI;
+  private client: OpenAI | null;
   private currentModel: string = "grok-code-fast-1";
   private defaultMaxTokens: number;
   private baseURL: string;
@@ -140,8 +140,8 @@ export class CodeBuddyClient {
         timeout: 360000,
       });
     } else {
-      // Create a dummy client for Gemini (won't be used)
-      this.client = null as unknown as OpenAI;
+      // Gemini uses native API, no OpenAI client needed
+      this.client = null;
       logger.info('Using native Gemini API');
     }
     const envMax = Number(process.env.CODEBUDDY_MAX_TOKENS);
@@ -226,7 +226,7 @@ export class CodeBuddyClient {
         },
       };
 
-      const response = await this.client.chat.completions.create({
+      const response = await this.client!.chat.completions.create({
         model: this.currentModel,
         messages: [{ role: "user", content: "What time is it? Use the get_current_time tool." }],
         tools: [testTool as unknown as OpenAI.ChatCompletionTool],
@@ -707,7 +707,7 @@ export class CodeBuddyClient {
       // Use retry with exponential backoff for API calls
       const response = await retry(
         async () => {
-          return await this.client.chat.completions.create(
+          return await this.client!.chat.completions.create(
             requestPayload as unknown as ChatCompletionCreateParamsNonStreaming
           );
         },
@@ -952,7 +952,7 @@ export class CodeBuddyClient {
       // Use retry with exponential backoff for stream initialization
       const stream = await retry(
         async () => {
-          return await this.client.chat.completions.create(
+          return await this.client!.chat.completions.create(
             streamingPayload as unknown as ChatCompletionCreateParamsStreaming
           );
         },

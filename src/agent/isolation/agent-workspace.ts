@@ -315,10 +315,17 @@ export class AgentWorkspace extends EventEmitter {
 export class WorkspaceManager extends EventEmitter {
   private workspaces: Map<string, AgentWorkspace> = new Map();
   private config: WorkspaceConfig;
+  private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<WorkspaceConfig> = {}) {
     super();
     this.config = { ...DEFAULT_WORKSPACE_CONFIG, ...config };
+
+    // Periodically clean up expired workspaces (every 5 minutes)
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpired().catch(() => {});
+    }, 300000);
+    this.cleanupTimer.unref();
   }
 
   /**
@@ -441,6 +448,10 @@ export class WorkspaceManager extends EventEmitter {
    * Dispose manager
    */
   async dispose(): Promise<void> {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
     await this.clearAll();
     this.removeAllListeners();
   }

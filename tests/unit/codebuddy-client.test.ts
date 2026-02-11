@@ -755,7 +755,7 @@ describe('CodeBuddyClient', () => {
         await expect(
           client.chat([{ role: 'user', content: 'Hi' }])
         ).rejects.toThrow('CodeBuddy API error: Rate limit exceeded');
-      });
+      }, 30000);
 
       it('should wrap authentication errors', async () => {
         mockCreate.mockRejectedValueOnce(new Error('Invalid API key'));

@@ -121,13 +121,26 @@ export class JsonRpcServer {
   }
 
   /**
+   * Validate required string field in params
+   */
+  private requireString(params: Record<string, unknown>, field: string, method: string): string {
+    const value = params[field];
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new Error(`${method}: '${field}' is required and must be a non-empty string`);
+    }
+    return value;
+  }
+
+  /**
    * Dispatch request to appropriate handler
    */
   private async dispatch(request: JsonRpcRequest): Promise<unknown> {
-    const params = request.params || {};
+    const params = (request.params || {}) as Record<string, unknown>;
 
     // Initialize is always allowed
     if (request.method === 'initialize') {
+      this.requireString(params, 'clientName', 'initialize');
+      this.requireString(params, 'clientVersion', 'initialize');
       return this.handleInitialize(params as unknown as InitializeParams);
     }
 
@@ -144,8 +157,10 @@ export class JsonRpcServer {
     switch (request.method) {
       // AI methods
       case 'ai/complete':
+        this.requireString(params, 'prompt', 'ai/complete');
         return this.handleAiComplete(params as unknown as AiCompleteParams);
       case 'ai/chat':
+        this.requireString(params, 'message', 'ai/chat');
         return this.handleAiChat(params as unknown as AiChatParams);
       case 'ai/clearHistory':
         return this.handleAiClearHistory(params as { conversationId?: string });
@@ -154,16 +169,25 @@ export class JsonRpcServer {
       case 'tools/list':
         return this.handleToolsList();
       case 'tools/call':
+        this.requireString(params, 'name', 'tools/call');
+        if (typeof params.arguments !== 'object' || params.arguments === null || Array.isArray(params.arguments)) {
+          throw new Error("tools/call: 'arguments' is required and must be an object");
+        }
         return this.handleToolsCall(params as unknown as ToolsCallParams);
 
       // FCS methods
       case 'fcs/execute':
+        this.requireString(params, 'script', 'fcs/execute');
         return this.handleFcsExecute(params as unknown as FcsExecuteParams);
       case 'fcs/parse':
+        this.requireString(params, 'script', 'fcs/parse');
         return this.handleFcsParse(params as unknown as FcsParseParams);
 
       // Context methods
       case 'context/add':
+        if (!Array.isArray(params.files)) {
+          throw new Error("context/add: 'files' is required and must be an array");
+        }
         return this.handleContextAdd(params as unknown as ContextAddParams);
       case 'context/list':
         return this.handleContextList();

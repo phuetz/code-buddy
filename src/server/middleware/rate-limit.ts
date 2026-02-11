@@ -57,18 +57,29 @@ export const DEFAULT_ROUTE_LIMITS: Record<string, RateLimitOptions> = {
   },
 };
 
-// In-memory store for rate limits
+// In-memory store for rate limits with max size to prevent unbounded growth
+const MAX_RATE_LIMIT_ENTRIES = 10000;
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-// Cleanup old entries periodically
-setInterval(() => {
+// Cleanup old entries periodically + evict oldest if over max size
+const rateLimitCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitStore.entries()) {
     if (entry.resetAt < now) {
       rateLimitStore.delete(key);
     }
   }
+  // LRU eviction: if still over max, remove oldest entries (Map preserves insertion order)
+  if (rateLimitStore.size > MAX_RATE_LIMIT_ENTRIES) {
+    const excess = rateLimitStore.size - MAX_RATE_LIMIT_ENTRIES;
+    const keys = rateLimitStore.keys();
+    for (let i = 0; i < excess; i++) {
+      const next = keys.next();
+      if (!next.done) rateLimitStore.delete(next.value);
+    }
+  }
 }, 60000); // Cleanup every minute
+rateLimitCleanupTimer.unref();
 
 /**
  * Get rate limit key for request
