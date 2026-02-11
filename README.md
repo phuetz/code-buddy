@@ -166,7 +166,7 @@ buddy
 buddy --prompt "analyze the codebase structure"
 
 # Use with local LLM (LM Studio)
-buddy --profile lmstudio
+buddy --base-url http://localhost:1234/v1 --api-key lm-studio
 
 # Full autonomy mode
 YOLO_MODE=true buddy
@@ -208,7 +208,7 @@ buddy                        # Launch interactive chat
 > "Commit everything"
 
 # 4. Advanced modes
-buddy --profile gemini       # Switch AI provider
+buddy --model gemini-2.5-flash  # Switch AI model
 buddy speak                  # Voice conversation mode
 buddy daemon start           # Run 24/7 in background
 buddy server --port 3000     # Expose REST/WebSocket API
@@ -294,22 +294,22 @@ Code Buddy supports multiple AI providers with automatic failover:
 | **Claude** (Anthropic) | claude-sonnet-4, opus | 200K | `ANTHROPIC_API_KEY` |
 | **ChatGPT** (OpenAI) | gpt-4o, gpt-4-turbo | 128K | `OPENAI_API_KEY` |
 | **Gemini** (Google) | gemini-2.0-flash (+ vision) | 2M | `GOOGLE_API_KEY` |
-| **LM Studio** | Any local model | Varies | `--profile lmstudio` |
-| **Ollama** | llama3, codellama, etc. | Varies | `--profile ollama` |
+| **LM Studio** | Any local model | Varies | `--base-url http://localhost:1234/v1` |
+| **Ollama** | llama3, codellama, etc. | Varies | `--base-url http://localhost:11434/v1` |
 
 ### Connection Profiles
 
-Switch between providers instantly:
+Switch between providers using CLI options or configuration:
 
 ```bash
-# List profiles
-buddy --list-profiles
+# Use LM Studio (local)
+buddy --base-url http://localhost:1234/v1 --api-key lm-studio
 
-# Use specific profile
-buddy --profile lmstudio
+# Use Ollama (local)
+buddy --base-url http://localhost:11434/v1 --model llama3
 
-# Auto-detect local servers
-buddy --detect-servers
+# Use a specific model
+buddy --model grok-code-fast-1
 ```
 
 ### Profile Configuration
@@ -882,13 +882,13 @@ echo $GROK_API_KEY  # Verify key is set
 buddy --prompt "test"
 ```
 
-**Switching profiles doesn't work**
+**Switching providers doesn't work**
 ```bash
-# Check current profile
-buddy --show-config
+# Verify connection to local model
+buddy --base-url http://localhost:1234/v1 --api-key lm-studio --prompt "test"
 
-# Force profile switch
-buddy --profile lmstudio --prompt "test"
+# List available models
+buddy --list-models
 ```
 
 **Memory not persisting**
@@ -903,7 +903,7 @@ buddy
 
 **High latency**
 - Use a faster model: `buddy --model grok-code-fast-1`
-- Use local LLM: `buddy --profile ollama`
+- Use local LLM: `buddy --base-url http://localhost:11434/v1 --model llama3`
 
 ### Debug Mode
 

@@ -99,7 +99,6 @@ export class BrowserManager extends EventEmitter {
 
     try {
       // Lazy load Playwright (optional dependency)
-      // @ts-expect-error - playwright is an optional peer dependency
       this.playwright = await import('playwright').catch(() => null);
 
       if (!this.playwright) {
@@ -145,7 +144,6 @@ export class BrowserManager extends EventEmitter {
    */
   async connect(cdpUrl: string): Promise<void> {
     try {
-      // @ts-expect-error - playwright is an optional peer dependency
       this.playwright = await import('playwright').catch(() => null);
 
       if (!this.playwright) {
