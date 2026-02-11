@@ -335,7 +335,7 @@ async function saveCommandLineSettings(
         console.log("✅ API key saved securely (encrypted) to ~/.codebuddy/credentials.enc");
       } else {
         console.log("✅ API key saved to ~/.codebuddy/credentials.enc");
-        console.log("⚠️ Consider enabling encryption for better security");
+        console.error("⚠️ Consider enabling encryption for better security");
       }
     }
 
@@ -937,7 +937,7 @@ program
         confirmationService.setSessionFlag("fileOperations", true);
         confirmationService.setSessionFlag("bashCommands", true);
         process.env.GROK_SKIP_PERMISSIONS = 'true';
-        console.log("⚠️  DANGEROUS: All permission checks BYPASSED");
+        console.error("⚠️  DANGEROUS: All permission checks BYPASSED");
         console.log("   Only use this in trusted containers without network access!");
       }
 
@@ -1010,7 +1010,7 @@ program
           maxToolRounds,
           options.selfHeal !== false
         );
-        return;
+        process.exit(0);
       }
 
       // Initialize rendering system (lazy load)

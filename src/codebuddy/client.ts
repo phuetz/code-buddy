@@ -430,15 +430,20 @@ export class CodeBuddyClient {
           contentLength: toolMsg.content?.length || 0,
         });
 
-        contents.push({
-          role: 'user',
-          parts: [{
-            functionResponse: {
-              name: functionName,
-              response: { result: toolMsg.content },
-            },
-          }],
-        });
+        const part = {
+          functionResponse: {
+            name: functionName,
+            response: { result: toolMsg.content },
+          },
+        };
+        // Merge consecutive tool results into a single 'function' turn
+        // (Gemini requires strict role alternation)
+        const lastContent = contents[contents.length - 1];
+        if (lastContent && lastContent.role === 'function') {
+          lastContent.parts.push(part);
+        } else {
+          contents.push({ role: 'function', parts: [part] });
+        }
       }
     }
 

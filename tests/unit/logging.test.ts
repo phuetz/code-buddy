@@ -266,7 +266,7 @@ describe('Log Formatting', () => {
   describe('JSON format', () => {
     it('should format entries as JSON when format is json', () => {
       const { Logger } = require('../../src/utils/logger');
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
       const logger = new Logger({
         silent: false,
@@ -289,7 +289,7 @@ describe('Log Formatting', () => {
 
     it('should include timestamp in JSON format', () => {
       const { Logger } = require('../../src/utils/logger');
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
       const logger = new Logger({
         silent: false,
@@ -471,8 +471,8 @@ describe('File Logging', () => {
 // ============================================================================
 
 describe('Console Output', () => {
-  it('should output to console.log for info and debug levels', () => {
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+  it('should output to console.error for info and debug levels', () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
     const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: false, level: 'debug' });
@@ -485,8 +485,8 @@ describe('Console Output', () => {
     consoleSpy.mockRestore();
   });
 
-  it('should output to console.warn for warn level', () => {
-    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+  it('should output to console.error for warn level', () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
     const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: false });
@@ -534,7 +534,7 @@ describe('Console Output', () => {
   });
 
   it('should allow toggling silent mode', () => {
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
     const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true });

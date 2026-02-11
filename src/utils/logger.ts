@@ -238,13 +238,9 @@ export class Logger {
     // Output to console
     if (!this.options.silent) {
       const formatted = this.formatEntry(entry);
-      if (level === 'error') {
-        console.error(formatted);
-      } else if (level === 'warn') {
-        console.warn(formatted);
-      } else {
-        console.log(formatted);
-      }
+      // Route all log levels to stderr to avoid polluting stdout
+      // (important for headless --output json mode)
+      console.error(formatted);
     }
 
     // Output to file (always JSON for easy parsing)
