@@ -59,12 +59,31 @@ export type {
 // ============================================================================
 
 import * as path from 'path';
+import * as fs from 'fs';
 
 /**
- * Get the path to bundled SKILL.md skills
+ * Get the path to bundled SKILL.md skills.
+ *
+ * Strategy: walk up from the entry script (process.argv[1]) or cwd
+ * to find .codebuddy/skills/bundled. This avoids __dirname (unavailable
+ * in ESM) and import.meta.url (breaks ts-jest).
  */
 export function getBundledSkillsPath(): string {
-  return path.join(__dirname, 'bundled');
+  const startDir = process.argv[1]
+    ? path.dirname(path.resolve(process.argv[1]))
+    : process.cwd();
+
+  let dir = startDir;
+  for (let i = 0; i < 5; i++) {
+    const candidate = path.join(dir, '.codebuddy', 'skills', 'bundled');
+    if (fs.existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  // Fallback to cwd
+  return path.join(process.cwd(), '.codebuddy', 'skills', 'bundled');
 }
 
 // ============================================================================
