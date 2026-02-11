@@ -9,7 +9,17 @@ import { randomBytes } from 'crypto';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { ChatRequest, ChatResponse, ChatStreamChunk } from '../types.js';
-import { enqueueMessage } from '../../channels/index.js';
+// Lazy import to avoid circular dependency through channels/index.ts
+// (channels/index.ts re-exports channel classes that import BaseChannel
+// before it's fully initialized)
+let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
+async function getEnqueueMessage() {
+  if (!_enqueueMessage) {
+    const mod = await import('../../channels/index.js');
+    _enqueueMessage = mod.enqueueMessage;
+  }
+  return _enqueueMessage;
+}
 
 // Agent interface for server routes (subset of CodeBuddyAgent methods used)
 interface AgentAPI {
@@ -112,6 +122,7 @@ router.post(
 
     try {
       // Enqueue through lane queue for per-session serialization
+      const enqueueMessage = await getEnqueueMessage();
       const result = await enqueueMessage(sessionKey, async () => {
         // Process messages
         const messages = body.messages as ChatCompletionMessageParam[];

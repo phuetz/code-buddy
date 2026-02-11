@@ -9,6 +9,7 @@
  *   codebuddy server --port 3000
  */
 
+import crypto from 'crypto';
 import express, { Application } from 'express';
 import cors from 'cors';
 import { createServer, Server as HttpServer } from 'http';
@@ -26,8 +27,19 @@ import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, me
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
 import { logger } from '../utils/logger.js';
 import { initMetrics, getMetrics as _getMetrics } from '../metrics/index.js';
-import { getPeerRouter } from '../channels/peer-routing.js';
 import type { InboundMessage } from '../channels/index.js';
+
+// Lazy import to avoid circular dependency: channels/index.ts re-exports
+// TelegramChannel/DiscordChannel which import BaseChannel from channels/index.ts
+// before it's fully initialized.
+let _getPeerRouter: typeof import('../channels/peer-routing.js').getPeerRouter;
+async function getPeerRouter() {
+  if (!_getPeerRouter) {
+    const mod = await import('../channels/peer-routing.js');
+    _getPeerRouter = mod.getPeerRouter;
+  }
+  return _getPeerRouter();
+}
 
 /**
  * Generate a secure random secret for development use only
@@ -51,7 +63,7 @@ function getJwtSecret(): string {
     'No JWT_SECRET set. Using ephemeral secret for development. ' +
     'Set JWT_SECRET environment variable for production use.'
   );
-  return require('crypto').randomBytes(64).toString('hex');
+  return crypto.randomBytes(64).toString('hex');
 }
 
 // Default configuration
@@ -142,13 +154,13 @@ function createApp(config: ServerConfig): Application {
   app.use('/v1/chat', chatRoutes);
 
   // Peer routing stats endpoint
-  app.get('/api/routing/stats', (_req, res) => {
-    const router = getPeerRouter();
+  app.get('/api/routing/stats', async (_req, res) => {
+    const router = await getPeerRouter();
     res.json(router.getStats());
   });
 
   // Peer route resolution endpoint (for testing/debugging)
-  app.post('/api/routing/resolve', (req, res) => {
+  app.post('/api/routing/resolve', async (req, res) => {
     const message = req.body.message as InboundMessage | undefined;
     const accountId = req.body.accountId as string | undefined;
 
@@ -157,7 +169,7 @@ function createApp(config: ServerConfig): Application {
       return;
     }
 
-    const router = getPeerRouter();
+    const router = await getPeerRouter();
     const resolved = router.resolve(message, accountId);
     res.json({ resolved });
   });
@@ -399,7 +411,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
   }
 
   return new Promise((resolve, reject) => {
-    server.listen(config.port, config.host, () => {
+    server.listen(config.port, config.host, async () => {
       logger.info(`API Server started on http://${config.host}:${config.port}`);
       logger.info(`Health: http://${config.host}:${config.port}/api/health`);
       logger.info(`Metrics: http://${config.host}:${config.port}/api/metrics`);
@@ -411,9 +423,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
       logger.info(`Security Headers: ${config.securityHeaders?.enabled !== false ? 'Enabled (CSP, X-Frame-Options, HSTS, etc.)' : 'Disabled'}`);
 
       // Log peer routing stats
-      const peerRouter = getPeerRouter();
-      const routeStats = peerRouter.getStats();
-      logger.info(`Peer Routing: ${routeStats.totalRoutes} routes (${routeStats.activeRoutes} active)`);
+      try {
+        const peerRouter = await getPeerRouter();
+        const routeStats = peerRouter.getStats();
+        logger.info(`Peer Routing: ${routeStats.totalRoutes} routes (${routeStats.activeRoutes} active)`);
+      } catch {
+        logger.info('Peer Routing: not initialized');
+      }
 
       resolve({ app, server, config });
     });

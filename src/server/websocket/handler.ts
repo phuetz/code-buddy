@@ -10,7 +10,15 @@ import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types
 import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { verifyToken } from '../auth/jwt.js';
-import { enqueueMessage } from '../../channels/index.js';
+// Lazy import to avoid circular dependency through channels/index.ts
+let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
+async function getEnqueueMessage() {
+  if (!_enqueueMessage) {
+    const mod = await import('../../channels/index.js');
+    _enqueueMessage = mod.enqueueMessage;
+  }
+  return _enqueueMessage;
+}
 
 // Agent interface for WebSocket handler
 // Note: These methods don't exist in CodeBuddyAgent - this is a placeholder for future API alignment
@@ -433,6 +441,7 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
   const sessionKey = `ws:${state.id}`;
 
   try {
+    const enqueueMessage = await getEnqueueMessage();
     await enqueueMessage(sessionKey, () => handler(ws, state, payload || {}));
   } catch (error) {
     sendError(ws, 'HANDLER_ERROR', error instanceof Error ? error.message : String(error), id);

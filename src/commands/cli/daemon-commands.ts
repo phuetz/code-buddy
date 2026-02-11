@@ -95,6 +95,33 @@ export function registerDaemonCommands(program: Command): void {
       const logs = await manager.logs(parseInt(options.lines));
       console.log(logs);
     });
+
+  // Hidden command used by daemon manager to fork the daemon process
+  daemonCommand
+    .command("__run__", { hidden: true })
+    .option("--port <port>", "server port", "3000")
+    .action(async (options) => {
+      const { getDaemonManager } = await import("../../daemon/index.js");
+      const manager = getDaemonManager({ port: parseInt(options.port) });
+      await manager.start(false); // foreground mode (writes PID file)
+
+      // Start the API server to keep the daemon alive
+      try {
+        const { startServer } = await import("../../server/index.js");
+        await startServer({
+          port: parseInt(options.port),
+          host: '0.0.0.0',
+          authEnabled: false,
+        });
+      } catch (error) {
+        console.error('Daemon server failed:', error instanceof Error ? error.message : error);
+      }
+
+      process.on('SIGTERM', async () => {
+        await manager.stop().catch(() => {});
+        process.exit(0);
+      });
+    });
 }
 
 /**

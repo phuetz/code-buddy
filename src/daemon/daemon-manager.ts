@@ -104,7 +104,9 @@ export class DaemonManager extends EventEmitter {
 
     try {
       // Resolve the entry point for the forked daemon process
-      const entryPoint = path.resolve(__dirname, '..', 'index.js');
+      // Use process.argv[1] (the CLI entry point) to find index.js
+      // This avoids import.meta.url which is not supported by ts-jest
+      const entryPoint = process.argv[1] || path.resolve(process.cwd(), 'dist', 'index.js');
 
       const child = fork(
         entryPoint,

@@ -3,10 +3,15 @@
 const STARTUP_TIME = Date.now();
 
 import { program } from "commander";
+import { createRequire } from "module";
 
 // Types for dynamically imported modules
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
+
+// Read version from package.json
+const require = createRequire(import.meta.url);
+const packageJson = require("../package.json");
 
 // Import logger statically since it's used throughout the file synchronously
 import { logger } from "./utils/logger.js";
@@ -20,6 +25,9 @@ import {
 import { registerDaemonCommands, registerTriggerCommands } from "./commands/cli/daemon-commands.js";
 import { registerSpeakCommand } from "./commands/cli/speak-command.js";
 import { registerUtilityCommands } from "./commands/cli/utility-commands.js";
+import { createMCPCommand } from "./commands/mcp.js";
+import { createProviderCommand } from "./commands/provider.js";
+import { createPipelineCommand } from "./commands/pipeline.js";
 
 // Startup timing (enabled via PERF_TIMING=true or DEBUG=true)
 const PERF_TIMING = process.env.PERF_TIMING === 'true' || process.env.DEBUG === 'true';
@@ -593,7 +601,7 @@ program
   .description(
     "A conversational AI CLI tool powered by AI with text editor capabilities"
   )
-  .version("1.0.1")
+  .version(packageJson.version)
   .argument("[message...]", "Initial message to send to Code Buddy")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
   .option("-k, --api-key <key>", "CodeBuddy API key (or set GROK_API_KEY env var)")
@@ -1244,49 +1252,30 @@ gitCommand
     }
   });
 
-// Provider command - manage AI providers (Claude, ChatGPT, Grok, Gemini)
+// Register command modules directly (stubs with re-parse don't work with variadic [message...] argument)
+program.addCommand(createProviderCommand());
+program.addCommand(createMCPCommand());
+program.addCommand(createPipelineCommand());
+
+// Server command - start the HTTP/WebSocket API server
 program
-  .command("provider")
-  .description("Manage AI providers (Claude, ChatGPT, Grok, Gemini)")
-  .allowUnknownOption()
-  .action(async (_options, _command) => {
-    // Lazy load the provider command implementation
-    const { createProviderCommand } = await import("./commands/provider.js");
-    const providerCmd = createProviderCommand();
-
-    // Replace stub with real command and re-run
-    const args = process.argv.slice(2);
-    providerCmd.parse(args, { from: 'user' });
-  });
-
-// MCP command - stub for help, lazy load actual implementation
-program
-  .command("mcp")
-  .description("Manage MCP (Model Context Protocol) servers")
-  .allowUnknownOption()
-  .action(async (_options, _command) => {
-    // Lazy load the full MCP command implementation
-    const { createMCPCommand } = await import("./commands/mcp.js");
-    const mcpCmd = createMCPCommand();
-
-    // Replace stub with real command and re-run
-    const args = process.argv.slice(2);
-    mcpCmd.parse(args, { from: 'user' });
-  });
-
-// Pipeline command - stub for help, lazy load actual implementation
-program
-  .command("pipeline")
-  .description("Manage and run pipeline workflows")
-  .allowUnknownOption()
-  .action(async (_options, _command) => {
-    // Lazy load the full pipeline command implementation
-    const { createPipelineCommand } = await import("./commands/pipeline.js");
-    const pipelineCmd = createPipelineCommand();
-
-    // Replace stub with real command and re-run
-    const args = process.argv.slice(2);
-    pipelineCmd.parse(args, { from: 'user' });
+  .command("server")
+  .description("Start the Code Buddy HTTP/WebSocket API server")
+  .option("--port <port>", "server port", "3000")
+  .option("--host <host>", "server host", "0.0.0.0")
+  .option("--no-auth", "disable JWT authentication")
+  .action(async (options) => {
+    const { startServer } = await import("./server/index.js");
+    try {
+      await startServer({
+        port: parseInt(options.port),
+        host: options.host,
+        authEnabled: options.auth !== false,
+      });
+    } catch (error) {
+      logger.error("Failed to start server", error instanceof Error ? error : new Error(String(error)));
+      process.exit(1);
+    }
   });
 
 // Register extracted CLI command modules
