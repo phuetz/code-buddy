@@ -201,7 +201,7 @@ export class ConfigWatcher extends EventEmitter {
         await this.watchFile(resolvedPath);
       }
     } catch (error) {
-      this.emit('error', error as Error);
+      this.emit('error', error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -243,7 +243,7 @@ export class ConfigWatcher extends EventEmitter {
 
       this.watchers.set(dirPath, watcher);
     } catch (error) {
-      this.emit('error', error as Error);
+      this.emit('error', error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -267,7 +267,7 @@ export class ConfigWatcher extends EventEmitter {
 
       this.watchers.set(filePath, watcher);
     } catch (error) {
-      this.emit('error', error as Error);
+      this.emit('error', error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -323,7 +323,7 @@ export class ConfigWatcher extends EventEmitter {
       this.snapshots.set(filePath, snapshot);
       return snapshot;
     } catch (error) {
-      this.emit('error', error as Error);
+      this.emit('error', error instanceof Error ? error : new Error(String(error)));
       return null;
     }
   }

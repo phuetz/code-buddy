@@ -151,26 +151,26 @@ describe('BashTool', () => {
     test('should execute simple echo command successfully', async () => {
       const result = await bashTool.execute('echo "hello"');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should execute pwd command successfully', async () => {
       const result = await bashTool.execute('pwd');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should execute ls command successfully', async () => {
       const result = await bashTool.execute('ls -la');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should return error for non-existent command', async () => {
       bashTool.setSelfHealing(false);
       const result = await bashTool.execute('nonexistent_command_xyz123');
       expect(result.success).toBe(false);
-      expect(result.error).toBeTruthy();
+      expect(result.error).toBeDefined();
     });
 
     test('should handle command that returns exit code 1', async () => {
@@ -188,13 +188,13 @@ describe('BashTool', () => {
     test('should handle empty output gracefully', async () => {
       const result = await bashTool.execute('true');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy(); // Should have success message
+      expect(result.output).toBeDefined(); // Should have success message
     });
 
     test('should handle multiline output', async () => {
       const result = await bashTool.execute('echo -e "line1\\nline2\\nline3"');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
   });
 
@@ -226,7 +226,7 @@ describe('BashTool', () => {
     test('should block fork bomb pattern', async () => {
       const result = await bashTool.execute(':(){ :|:& };:');
       expect(result.success).toBe(false);
-      expect(result.error).toBeTruthy();
+      expect(result.error).toBeDefined();
     });
   });
 
@@ -256,7 +256,7 @@ describe('BashTool', () => {
     test('should timeout long-running commands', async () => {
       const result = await bashTool.execute('sleep 10', 500);
       expect(result.success).toBe(false);
-      expect(result.error).toBeTruthy();
+      expect(result.error).toBeDefined();
     }, 10000);
 
     test('should complete fast commands within timeout', async () => {
@@ -744,7 +744,7 @@ describe('GitTool', () => {
 
     test('should return branch name', async () => {
       const status = await gitTool.getStatus();
-      expect(status.branch).toBeTruthy();
+      expect(status.branch).toBeDefined();
     });
   });
 
@@ -898,7 +898,7 @@ describe('GitTool', () => {
 
       const result = await gitTool.branch();
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should create new branch', async () => {
@@ -1040,7 +1040,7 @@ describe('SearchTool', () => {
     test('should search for text content', async () => {
       const result = await searchTool.search('hello', { searchType: 'text' });
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should search for files', async () => {

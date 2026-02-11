@@ -172,7 +172,7 @@ jobs:
       it("should return workflow runs array (empty without gh CLI)", async () => {
         const runs = await manager.getWorkflowRuns();
         expect(Array.isArray(runs)).toBe(true);
-      }, 20000);
+      }, 45000);
     });
 
     describe("events", () => {

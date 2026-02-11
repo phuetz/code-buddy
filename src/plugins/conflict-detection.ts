@@ -10,6 +10,7 @@
 
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import { getErrorMessage } from '../types/index.js';
 
 // ============================================================================
 // Types & Interfaces
@@ -265,7 +266,7 @@ export class PluginConflictDetector extends EventEmitter {
           tools = plugin.tools;
         }
       } catch (error) {
-        errors.push(`Failed to resolve tools for plugin "${plugin.id}": ${(error as Error).message}`);
+        errors.push(`Failed to resolve tools for plugin "${plugin.id}": ${getErrorMessage(error)}`);
         this.emit('plugin:error', { pluginId: plugin.id, error });
         return { success: false, registeredTools, skippedTools, errors };
       }

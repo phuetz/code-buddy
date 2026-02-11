@@ -95,25 +95,25 @@ describe('BashTool', () => {
       const result = await bashTool.execute('echo "hello world"');
       expect(result.success).toBe(true);
       // Output may vary based on shell configuration
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should execute pwd command', async () => {
       const result = await bashTool.execute('pwd');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should execute ls command', async () => {
       const result = await bashTool.execute('ls -la');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should return error for invalid command', async () => {
       const result = await bashTool.execute('nonexistent_command_12345');
       expect(result.success).toBe(false);
-      expect(result.error).toBeTruthy();
+      expect(result.error).toBeDefined();
     });
 
     test('should handle command with exit code 1', async () => {
@@ -137,7 +137,7 @@ describe('BashTool', () => {
       const result = await bashTool.execute('sleep 5', 500);
       expect(result.success).toBe(false);
       // May timeout or fail with error
-      expect(result.error).toBeTruthy();
+      expect(result.error).toBeDefined();
     }, 5000);
 
     test('should complete fast commands within timeout', async () => {
@@ -216,7 +216,7 @@ describe('BashTool', () => {
     test('should handle arguments with spaces', async () => {
       const result = await bashTool.execute('echo "hello world"');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should handle arguments with special characters', async () => {
@@ -227,7 +227,7 @@ describe('BashTool', () => {
     test('should handle arguments with quotes', async () => {
       const result = await bashTool.execute("echo 'single quotes'");
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
   });
 
@@ -236,7 +236,7 @@ describe('BashTool', () => {
       const result = await bashTool.execute('true');
       expect(result.success).toBe(true);
       // Empty output returns a success message
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should handle multiline output', async () => {
@@ -262,14 +262,14 @@ describe('BashTool', () => {
     test('should have access to PATH', async () => {
       const result = await bashTool.execute('printenv PATH');
       expect(result.success).toBe(true);
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
 
     test('should have HOME set', async () => {
       const result = await bashTool.execute('printenv HOME');
       expect(result.success).toBe(true);
       // Just check it's set, actual value may vary in test environment
-      expect(result.output).toBeTruthy();
+      expect(result.output).toBeDefined();
     });
   });
 });

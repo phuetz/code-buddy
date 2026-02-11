@@ -39,10 +39,29 @@ import {
   DEFAULT_BROWSER_CONFIG,
 } from './types.js';
 
-// Playwright types (lazy loaded)
+// Playwright types (lazy loaded) - structural shapes for type safety without importing playwright
+interface PlaywrightDialog { type(): string; message(): string; defaultValue(): string; accept(text?: string): Promise<void>; dismiss(): Promise<void>; }
+interface PlaywrightConsoleMessage { type(): string; text(): string; }
+interface PlaywrightRequest { url(): string; method(): string; headers(): Record<string, string>; postData(): string | null; resourceType(): string; }
+interface PlaywrightResponse { url(): string; status(): number; statusText(): string; headers(): Record<string, string>; }
+interface AccessibilityNode {
+  role: string;
+  name: string;
+  value?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  focused?: boolean;
+  valuetext?: string;
+  children?: AccessibilityNode[];
+  [key: string]: unknown;
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- playwright is dynamically loaded
 type Browser = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BrowserContext = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Page = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PlaywrightModule = any;
 
 // ============================================================================
@@ -57,7 +76,8 @@ export class BrowserManager extends EventEmitter {
   private currentPageId: string | null = null;
   private currentSnapshot: WebSnapshot | null = null;
   private nextRef: number = 1;
-  private playwright: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- playwright is dynamically imported
+  private playwright: Record<string, any> | null = null;
 
   constructor(config: Partial<BrowserConfig> = {}) {
     super();
@@ -82,6 +102,9 @@ export class BrowserManager extends EventEmitter {
       // @ts-expect-error - playwright is an optional peer dependency
       this.playwright = await import('playwright').catch(() => null);
 
+      if (!this.playwright) {
+        throw new Error('Playwright failed to load. Install it with: npm install playwright');
+      }
       const browserType = this.playwright[this.config.browser];
 
       this.browser = await browserType.launch({
@@ -125,6 +148,9 @@ export class BrowserManager extends EventEmitter {
       // @ts-expect-error - playwright is an optional peer dependency
       this.playwright = await import('playwright').catch(() => null);
 
+      if (!this.playwright) {
+        throw new Error('Playwright failed to load. Install it with: npm install playwright');
+      }
       this.browser = await this.playwright.chromium.connectOverCDP(cdpUrl);
       const contexts = this.browser.contexts();
       this.context = contexts[0] || await this.browser.newContext();
@@ -174,7 +200,7 @@ export class BrowserManager extends EventEmitter {
       this.emit('page-error', error);
     });
 
-    page.on('dialog', (dialog: any) => {
+    page.on('dialog', (dialog: PlaywrightDialog) => {
       this.emit('dialog', {
         type: dialog.type(),
         message: dialog.message(),
@@ -182,11 +208,11 @@ export class BrowserManager extends EventEmitter {
       });
     });
 
-    page.on('console', (msg: any) => {
+    page.on('console', (msg: PlaywrightConsoleMessage) => {
       this.emit('console', msg.type(), msg.text());
     });
 
-    page.on('request', (request: any) => {
+    page.on('request', (request: PlaywrightRequest) => {
       this.emit('network-request', {
         url: request.url(),
         method: request.method(),
@@ -197,7 +223,7 @@ export class BrowserManager extends EventEmitter {
       });
     });
 
-    page.on('response', (response: any) => {
+    page.on('response', (response: PlaywrightResponse) => {
       this.emit('network-response', {
         url: response.url(),
         status: response.status(),
@@ -355,7 +381,7 @@ export class BrowserManager extends EventEmitter {
 
     const elements: WebElement[] = [];
 
-    const processNode = async (node: any, depth = 0): Promise<void> => {
+    const processNode = async (node: AccessibilityNode, depth = 0): Promise<void> => {
       if (elements.length >= maxElements) return;
       if (options.depth !== undefined && depth > options.depth) return;
 
@@ -725,7 +751,7 @@ export class BrowserManager extends EventEmitter {
   async screenshot(options: ScreenshotOptions = {}): Promise<Buffer> {
     const page = this.getCurrentPage();
 
-    const screenshotOptions: any = {
+    const screenshotOptions: Record<string, unknown> = {
       fullPage: options.fullPage,
       type: options.format || 'png',
       quality: options.quality,
@@ -836,7 +862,7 @@ export class BrowserManager extends EventEmitter {
     }
 
     // Playwright devices
-    const devices = this.playwright.devices;
+    const devices = this.playwright?.devices ?? {};
     if (device.name && devices[device.name]) {
       const preset = devices[device.name];
       await this.context.setViewportSize(preset.viewport);
@@ -915,7 +941,7 @@ export class BrowserManager extends EventEmitter {
   async handleDialog(action: DialogAction): Promise<void> {
     const page = this.getCurrentPage();
 
-    page.once('dialog', async (dialog: any) => {
+    page.once('dialog', async (dialog: PlaywrightDialog) => {
       if (action.accept) {
         await dialog.accept(action.promptText);
       } else {

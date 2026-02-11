@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { CodeBuddyScriptConfig, CodeBuddyValue, CodeBuddyFunction } from './types.js';
+import { getErrorMessage } from '../types/index.js';
 
 // Lazy imports to avoid circular dependencies
 let codebuddyClientInstance: CodeBuddyClientInterface | null = null;
@@ -74,7 +75,7 @@ export function createGrokBindings(
       const response = await codebuddyClientInstance.complete(prompt);
       return response;
     } catch (error) {
-      throw new Error(`CodeBuddy API error: ${(error as Error).message}`);
+      throw new Error(`CodeBuddy API error: ${getErrorMessage(error)}`);
     }
   };
   grok.ask = askFn;
@@ -93,7 +94,7 @@ export function createGrokBindings(
       conversationHistory.push({ role: 'assistant', content: response });
       return response;
     } catch (error) {
-      throw new Error(`Grok chat error: ${(error as Error).message}`);
+      throw new Error(`Grok chat error: ${getErrorMessage(error)}`);
     }
   };
   grok.chat = chatFn;
@@ -459,7 +460,7 @@ Think through the problem and execute the necessary steps.`;
     try {
       return await mcpManagerInstance.callTool(server, toolName, args);
     } catch (error) {
-      throw new Error(`MCP call failed: ${(error as Error).message}`);
+      throw new Error(`MCP call failed: ${getErrorMessage(error)}`);
     }
   };
 

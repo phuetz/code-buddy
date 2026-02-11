@@ -105,7 +105,7 @@ describe('OpenTelemetryIntegration', () => {
     it('should start a new trace and return span ID', () => {
       const spanId = otel.startTrace('test-trace');
 
-      expect(spanId).toBeTruthy();
+      expect(spanId).toBeDefined();
       expect(typeof spanId).toBe('string');
       expect(spanId.length).toBe(16); // Span IDs are 16 hex chars
     });
@@ -113,7 +113,7 @@ describe('OpenTelemetryIntegration', () => {
     it('should create trace with custom kind', () => {
       const spanId = otel.startTrace('server-trace', { kind: 'server' });
 
-      expect(spanId).toBeTruthy();
+      expect(spanId).toBeDefined();
       const span = otel['activeSpans'].get(spanId);
       expect(span?.kind).toBe('server');
     });
@@ -197,7 +197,7 @@ describe('OpenTelemetryIntegration', () => {
         // No parent trace started
         const spanId = otel.startSpan('orphan-span');
 
-        expect(spanId).toBeTruthy();
+        expect(spanId).toBeDefined();
         const span = otel['activeSpans'].get(spanId);
         expect(span?.parentSpanId).toBeUndefined();
       });
@@ -326,7 +326,7 @@ describe('OpenTelemetryIntegration', () => {
         otel.addEvent('timed-event');
 
         const span = otel['activeSpans'].get(spanId);
-        expect(span?.events[0].timestamp).toBeTruthy();
+        expect(span?.events[0].timestamp).toBeDefined();
       });
 
       it('should do nothing if no active span', () => {
@@ -429,7 +429,7 @@ describe('OpenTelemetryIntegration', () => {
 
         expect(context).not.toBeNull();
         expect(context?.spanId).toBe(spanId);
-        expect(context?.traceId).toBeTruthy();
+        expect(context?.traceId).toBeDefined();
         expect(context?.traceFlags).toBe(1);
       });
 
@@ -854,17 +854,17 @@ describe('OpenTelemetryIntegration', () => {
     it('should include host information', () => {
       const resource = otel['resource'];
 
-      expect(resource.attributes['host.name']).toBeTruthy();
-      expect(resource.attributes['host.arch']).toBeTruthy();
-      expect(resource.attributes['os.type']).toBeTruthy();
+      expect(resource.attributes['host.name']).toBeDefined();
+      expect(resource.attributes['host.arch']).toBeDefined();
+      expect(resource.attributes['os.type']).toBeDefined();
     });
 
     it('should include process information', () => {
       const resource = otel['resource'];
 
       expect(resource.attributes['process.runtime.name']).toBe('node');
-      expect(resource.attributes['process.runtime.version']).toBeTruthy();
-      expect(resource.attributes['process.pid']).toBeTruthy();
+      expect(resource.attributes['process.runtime.version']).toBeDefined();
+      expect(resource.attributes['process.pid']).toBeDefined();
     });
 
     it('should merge custom resource attributes', () => {

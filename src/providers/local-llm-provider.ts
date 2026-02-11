@@ -17,6 +17,7 @@ import { logger } from '../utils/logger.js';
 import { retry, RetryStrategies, RetryPredicates } from '../utils/retry.js';
 import { safeStreamRead, handleStreamError } from '../utils/stream-helpers.js';
 import { UserFriendlyError, ModelNotFoundError, ProviderNotAvailableError } from '../utils/errors.js';
+import { getErrorMessage } from '../types/index.js';
 
 // ============================================================================
 // Types
@@ -194,10 +195,11 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
       this.ready = true;
       this.emit('ready', { model: modelPath });
     } catch (error) {
-      if ((error as Error).message.includes('not installed')) {
+      const msg = getErrorMessage(error);
+      if (msg.includes('not installed')) {
         throw error;
       }
-      throw new Error(`Failed to initialize node-llama-cpp: ${(error as Error).message}`);
+      throw new Error(`Failed to initialize node-llama-cpp: ${msg}`);
     }
   }
 
@@ -387,10 +389,11 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
       this.ready = true;
       this.emit('ready', { model });
     } catch (error) {
-      if ((error as Error).message.includes('not installed')) {
+      const msg = getErrorMessage(error);
+      if (msg.includes('not installed')) {
         throw error;
       }
-      throw new Error(`Failed to initialize WebLLM: ${(error as Error).message}`);
+      throw new Error(`Failed to initialize WebLLM: ${msg}`);
     }
   }
 
