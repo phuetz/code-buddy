@@ -232,13 +232,17 @@ export class Scheduler extends EventEmitter {
     // Track wait time
     const waitTime = startTime - task.createdAt.getTime();
     this.waitTimes.push(waitTime);
+    if (this.waitTimes.length > 1000) {
+      this.waitTimes = this.waitTimes.slice(-500);
+    }
 
     this.emit('task:started', task);
 
     try {
-      // Create timeout promise
+      // Create timeout promise with cleanup
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Task timed out after ${task.timeout}ms`)), task.timeout);
+        timeoutId = setTimeout(() => reject(new Error(`Task timed out after ${task.timeout}ms`)), task.timeout);
       });
 
       // Execute with timeout
@@ -246,9 +250,13 @@ export class Scheduler extends EventEmitter {
         Promise.resolve(task.handler()),
         timeoutPromise,
       ]);
+      if (timeoutId) clearTimeout(timeoutId);
 
       const duration = Date.now() - startTime;
       this.executionTimes.push(duration);
+      if (this.executionTimes.length > 1000) {
+        this.executionTimes = this.executionTimes.slice(-500);
+      }
       this.completedCount++;
 
       task.status = 'completed';

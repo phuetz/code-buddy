@@ -249,11 +249,11 @@ export class SearchTool {
       }, SEARCH_TIMEOUT);
 
       rg.stdout.on("data", (data) => {
-        output += data.toString();
+        if (output.length < 5_000_000) output += data.toString();
       });
 
       rg.stderr.on("data", (data) => {
-        errorOutput += data.toString();
+        if (errorOutput.length < 100_000) errorOutput += data.toString();
       });
 
       rg.on("close", (code) => {

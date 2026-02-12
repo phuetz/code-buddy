@@ -1053,18 +1053,18 @@ export class BashTool implements Disposable {
 
       const rg = spawn(rgPath, args, {
         cwd: this.currentDirectory,
-        env: process.env,
+        env: this.getFilteredEnv(),
       });
 
       let stdout = '';
       let stderr = '';
 
       rg.stdout?.on('data', (data) => {
-        stdout += data.toString();
+        if (stdout.length < 5_000_000) stdout += data.toString();
       });
 
       rg.stderr?.on('data', (data) => {
-        stderr += data.toString();
+        if (stderr.length < 100_000) stderr += data.toString();
       });
 
       rg.on('close', (code) => {

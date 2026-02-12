@@ -130,6 +130,7 @@ export class MorphEditorTool {
           "Authorization": `Bearer ${this.morphApiKey}`,
           "Content-Type": "application/json",
         },
+        timeout: 30000,
       });
 
       if (!response.data.choices || !response.data.choices[0] || !response.data.choices[0].message) {

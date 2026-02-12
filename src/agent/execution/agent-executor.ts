@@ -530,7 +530,7 @@ export class AgentExecutor {
 
           inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
           const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;
-          totalOutputTokens = currentOutputTokens;
+          totalOutputTokens += currentOutputTokens;
           yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
           // Run after_turn middleware (handles cost recording + limit)
