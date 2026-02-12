@@ -107,8 +107,10 @@ export class SessionRepository {
       params.push(filter.model);
     }
 
-    const orderBy = filter.orderBy || 'updated_at';
-    const order = filter.order || 'DESC';
+    const allowedColumns = ['updated_at', 'created_at', 'total_cost', 'message_count', 'id'];
+    const orderBy = allowedColumns.includes(filter.orderBy || '') ? filter.orderBy : 'updated_at';
+    const allowedOrders = ['ASC', 'DESC'];
+    const order = allowedOrders.includes((filter.order || '').toUpperCase()) ? filter.order!.toUpperCase() : 'DESC';
     sql += ` ORDER BY ${orderBy} ${order}`;
 
     if (filter.limit) {

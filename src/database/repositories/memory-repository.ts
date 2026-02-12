@@ -52,7 +52,7 @@ export class MemoryRepository {
     `);
 
     const embeddingBlob = memory.embedding
-      ? Buffer.from(memory.embedding.buffer)
+      ? Buffer.from(new Uint8Array(memory.embedding.buffer.slice(0)))
       : null;
 
     const result = stmt.get(

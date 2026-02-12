@@ -76,23 +76,24 @@ export class EdgeTTSProvider implements ITTSProvider {
    */
   private async checkPythonEdgeTTS(): Promise<boolean> {
     return new Promise((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const proc = spawn('edge-tts', ['--version'], {
         shell: true,
         stdio: 'pipe',
       });
 
       proc.on('close', (code) => {
-        resolve(code === 0);
+        if (!settled) { settled = true; if (timer) clearTimeout(timer); resolve(code === 0); }
       });
 
       proc.on('error', () => {
-        resolve(false);
+        if (!settled) { settled = true; if (timer) clearTimeout(timer); resolve(false); }
       });
 
       // Timeout after 5 seconds
-      setTimeout(() => {
-        proc.kill();
-        resolve(false);
+      timer = setTimeout(() => {
+        if (!settled) { settled = true; proc.kill(); resolve(false); }
       }, 5000);
     });
   }

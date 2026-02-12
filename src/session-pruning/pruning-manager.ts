@@ -620,10 +620,11 @@ export class PruningManager extends EventEmitter {
       case 'compact':
         // Reduce size by the specified ratio
         if (item.content) {
-          const targetLength = Math.floor(item.content.length * action.ratio);
+          const ratio = Math.max(0, Math.min(1, action.ratio));
+          const targetLength = Math.max(1, Math.floor(item.content.length * ratio));
           item.content = item.content.substring(0, targetLength);
-          item.sizeBytes = Math.floor(item.sizeBytes * action.ratio);
-          item.tokens = Math.floor((item.tokens ?? 0) * action.ratio);
+          item.sizeBytes = Math.max(1, Math.floor(item.sizeBytes * ratio));
+          item.tokens = Math.max(0, Math.floor((item.tokens ?? 0) * ratio));
         }
         break;
     }

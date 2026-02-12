@@ -668,6 +668,10 @@ export class CheckpointManager extends TypedEventEmitter<CheckpointEvents> {
         this.currentIndex--;
       }
     }
+    // Ensure index stays within bounds
+    if (this.currentIndex >= this.checkpoints.length) {
+      this.currentIndex = Math.max(0, this.checkpoints.length - 1);
+    }
   }
 
   /**
