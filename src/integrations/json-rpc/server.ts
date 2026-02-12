@@ -71,19 +71,23 @@ export class JsonRpcServer {
 
     this.log('info', 'JSON-RPC server starting...');
 
-    for await (const line of this.rl) {
-      if (!line.trim()) continue;
+    try {
+      for await (const line of this.rl) {
+        if (!line.trim()) continue;
 
-      try {
-        const message = JSON.parse(line);
-        await this.handleMessage(message);
-      } catch (error) {
-        this.sendError(
-          null,
-          ErrorCodes.PARSE_ERROR,
-          `Failed to parse JSON: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
+        try {
+          const message = JSON.parse(line);
+          await this.handleMessage(message);
+        } catch (error) {
+          this.sendError(
+            null,
+            ErrorCodes.PARSE_ERROR,
+            `Failed to parse JSON: ${error instanceof Error ? error.message : 'Unknown error'}`
+          );
+        }
       }
+    } finally {
+      this.stop();
     }
 
     this.log('info', 'JSON-RPC server stopped');

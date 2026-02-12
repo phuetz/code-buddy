@@ -450,12 +450,23 @@ class MCPServerConnection extends EventEmitter {
       }
 
       // Timeout after 30 seconds
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
           reject(new Error('MCP request timed out after 30 seconds. The server may be unresponsive or processing a long operation.'));
         }
       }, 30000);
+
+      // Wrap resolve/reject to clear timeout when response arrives
+      const originalEntry = this.pendingRequests.get(id);
+      if (originalEntry) {
+        const origResolve = originalEntry.resolve;
+        const origReject = originalEntry.reject;
+        this.pendingRequests.set(id, {
+          resolve: (value: unknown) => { clearTimeout(timeoutId); origResolve(value); },
+          reject: (err: unknown) => { clearTimeout(timeoutId); origReject(err); },
+        });
+      }
     });
   }
 

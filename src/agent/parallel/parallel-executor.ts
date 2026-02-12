@@ -161,7 +161,7 @@ export class ParallelExecutor extends EventEmitter {
       aggregatedResponse: aggregatedResponse?.content,
       confidence: aggregatedResponse?.confidence || 0,
       totalLatency: Date.now() - startTime,
-      effectiveLatency: Math.max(...responses.map((r) => r.latency)),
+      effectiveLatency: responses.length > 0 ? Math.max(...responses.map((r) => r.latency)) : 0,
       totalTokens: responses.reduce((sum, r) => sum + r.tokensUsed, 0),
       selectedModel: selectBest ? aggregatedResponse?.modelId : undefined,
       metadata: {},
@@ -315,7 +315,7 @@ export class ParallelExecutor extends EventEmitter {
       aggregatedResponse: consensus.consensusAnswer,
       confidence: consensus.agreementLevel,
       totalLatency: Date.now() - startTime,
-      effectiveLatency: Math.max(...responses.map((r) => r.latency)),
+      effectiveLatency: responses.length > 0 ? Math.max(...responses.map((r) => r.latency)) : 0,
       totalTokens: responses.reduce((sum, r) => sum + r.tokensUsed, 0),
       consensus,
       metadata: { consensusReached: consensus.reached },
@@ -421,7 +421,7 @@ export class ParallelExecutor extends EventEmitter {
       aggregatedResponse: synthesized.content,
       confidence: synthesized.confidence,
       totalLatency: Date.now() - startTime,
-      effectiveLatency: Math.max(...responses.map((r) => r.latency)),
+      effectiveLatency: responses.length > 0 ? Math.max(...responses.map((r) => r.latency)) : 0,
       totalTokens: responses.reduce((sum, r) => sum + r.tokensUsed, 0),
       metadata: { synthesized: true },
     };
@@ -469,12 +469,14 @@ export class ParallelExecutor extends EventEmitter {
       }
       messages.push({ role: "user", content: prompt });
 
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const response = await Promise.race([
         client.chat(messages, [], { temperature: model.temperature }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout")), this.config.timeout)
-        ),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("Timeout")), this.config.timeout);
+        }),
       ]);
+      if (timeoutId) clearTimeout(timeoutId);
 
       const content = response.choices[0]?.message?.content || "";
       const tokensUsed = response.usage?.total_tokens || 0;
@@ -497,8 +499,13 @@ export class ParallelExecutor extends EventEmitter {
       // Update stats
       this.updateModelStats(model.id, true, latency);
 
-      // Cache response
+      // Cache response (with LRU eviction)
       if (this.config.cacheResponses) {
+        if (this.cache.size >= 500) {
+          // Evict oldest entry
+          const oldestKey = this.cache.keys().next().value;
+          if (oldestKey) this.cache.delete(oldestKey);
+        }
         this.cache.set(cacheKey, {
           prompt,
           modelId: model.id,

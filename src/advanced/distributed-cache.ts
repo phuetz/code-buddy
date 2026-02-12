@@ -66,6 +66,11 @@ export class DistributedCache extends EventEmitter {
     // Evict if needed
     this.evictIfNeeded(size);
 
+    // Re-check after eviction - reject if still won't fit
+    if (this.getTotalSize() + size > this.config.maxSize) {
+      return false;
+    }
+
     const entry: CacheEntry = {
       key: hashedKey,
       value,
@@ -131,6 +136,8 @@ export class DistributedCache extends EventEmitter {
       if (oldestEntry) {
         this.cache.delete(oldestEntry[0]);
         totalSize -= oldestEntry[1].metadata.size;
+      } else {
+        break; // No entry to evict
       }
     }
   }
