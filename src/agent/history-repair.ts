@@ -130,7 +130,7 @@ export function repairMessageHistory(messages: LLMMessage[]): RepairResult {
   for (const msg of result) {
     const prev = merged[merged.length - 1];
     if (prev && prev.role === 'user' && msg.role === 'user') {
-      prev.content = (prev.content || '') + '\n' + (msg.content || '');
+      prev.content = ((prev.content ?? '') + '\n' + (msg.content ?? '')).trim() || null;
       repairs.push('Merged consecutive user messages');
     } else {
       merged.push(msg);

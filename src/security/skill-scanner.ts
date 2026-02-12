@@ -56,8 +56,8 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\bWebSocket\b/, severity: 'medium', description: 'WebSocket usage', name: 'websocket' },
 
   // Dynamic imports
-  { pattern: /\brequire\s*\([^'"`]/, severity: 'high', description: 'Dynamic require with variable', name: 'dynamic-require' },
-  { pattern: /\bimport\s*\([^'"`]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import' },
+  { pattern: /\brequire\s*\(\s*[a-zA-Z_$\[]/, severity: 'high', description: 'Dynamic require with variable', name: 'dynamic-require' },
+  { pattern: /\bimport\s*\(\s*[a-zA-Z_$\[]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import' },
 
   // Environment/secrets
   { pattern: /process\.env\[/, severity: 'low', description: 'Dynamic environment variable access', name: 'env-dynamic' },

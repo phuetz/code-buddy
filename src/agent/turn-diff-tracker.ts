@@ -180,7 +180,9 @@ export class TurnDiffTracker {
 
     // Remove this turn and all subsequent turns
     const turnIdx = this.turns.indexOf(turn);
-    this.turns.splice(turnIdx);
+    if (turnIdx >= 0) {
+      this.turns.splice(turnIdx);
+    }
 
     return { restored, errors };
   }

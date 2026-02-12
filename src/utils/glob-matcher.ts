@@ -91,6 +91,15 @@ export function globToRegex(pattern: string): RegExp {
     i++;
   }
 
+  // Handle unclosed brackets — close to avoid invalid regex
+  if (inBracket) {
+    regexStr += ']';
+  }
+  // Handle unclosed braces — treat as literal text
+  if (inBrace) {
+    regexStr += '\\{' + escapeRegex(braceContent);
+  }
+
   return new RegExp(`^${regexStr}$`);
 }
 

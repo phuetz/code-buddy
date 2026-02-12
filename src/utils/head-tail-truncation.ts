@@ -94,13 +94,15 @@ export function headTailTruncate(
 
   // Char-based truncation only (few long lines)
   if (workingText.length > maxChars) {
-    const halfChars = Math.floor(maxChars / 2);
+    const omittedChars = workingText.length - maxChars;
+    const markerText = `\n[... ${omittedChars} characters omitted ...]\n`;
+    const availableChars = Math.max(0, maxChars - markerText.length);
+    const halfChars = Math.floor(availableChars / 2);
     const head = workingText.slice(0, halfChars);
     const tail = workingText.slice(-halfChars);
-    const omittedChars = workingText.length - maxChars;
 
     return {
-      output: head + `\n[... ${omittedChars} characters omitted ...]\n` + tail,
+      output: head + markerText + tail,
       truncated: true,
       originalLines,
       omittedLines: 0,
