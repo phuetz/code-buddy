@@ -64,7 +64,10 @@ export class OpenAIProvider extends BaseProvider {
       max_tokens: options.maxTokens ?? this.config.maxTokens ?? 4096,
     });
 
-    const choice = response.choices[0];
+    const choice = response.choices?.[0];
+    if (!choice?.message) {
+      throw new Error('OpenAI API returned empty choices');
+    }
     return {
       id: response.id,
       content: choice.message.content,

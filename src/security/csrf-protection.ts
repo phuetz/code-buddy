@@ -112,15 +112,31 @@ export class CSRFProtection extends EventEmitter {
       return { valid: false, error: 'CSRF token expired' };
     }
 
-    // Check session binding if provided
-    if (options.sessionId && storedToken.sessionId !== options.sessionId) {
-      this.emit('validation-failed', { reason: 'session-mismatch' });
-      return { valid: false, error: 'CSRF token session mismatch' };
+    // Check session binding if provided (timing-safe)
+    if (options.sessionId && storedToken.sessionId) {
+      try {
+        const a = Buffer.from(options.sessionId);
+        const b = Buffer.from(storedToken.sessionId);
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+          this.emit('validation-failed', { reason: 'session-mismatch' });
+          return { valid: false, error: 'CSRF token session mismatch' };
+        }
+      } catch {
+        this.emit('validation-failed', { reason: 'session-mismatch' });
+        return { valid: false, error: 'CSRF token session mismatch' };
+      }
     }
 
-    // Double-submit cookie validation
+    // Double-submit cookie validation (timing-safe)
     if (this.config.doubleSubmit && options.cookieToken) {
-      if (token !== options.cookieToken) {
+      try {
+        const a = Buffer.from(token);
+        const b = Buffer.from(options.cookieToken);
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+          this.emit('validation-failed', { reason: 'cookie-mismatch' });
+          return { valid: false, error: 'CSRF cookie token mismatch' };
+        }
+      } catch {
         this.emit('validation-failed', { reason: 'cookie-mismatch' });
         return { valid: false, error: 'CSRF cookie token mismatch' };
       }
@@ -158,14 +174,16 @@ export class CSRFProtection extends EventEmitter {
    * Invalidate all tokens for a session
    */
   invalidateSession(sessionId: string): number {
-    let count = 0;
+    const toDelete: string[] = [];
     for (const [token, csrfToken] of this.tokens) {
       if (csrfToken.sessionId === sessionId) {
-        this.tokens.delete(token);
-        count++;
+        toDelete.push(token);
       }
     }
-    return count;
+    for (const token of toDelete) {
+      this.tokens.delete(token);
+    }
+    return toDelete.length;
   }
 
   /**
@@ -301,14 +319,17 @@ export class CSRFProtection extends EventEmitter {
    */
   cleanup(): number {
     const now = new Date();
-    let cleaned = 0;
+    const expiredTokens: string[] = [];
 
     for (const [token, csrfToken] of this.tokens) {
       if (now > csrfToken.expiresAt) {
-        this.tokens.delete(token);
-        cleaned++;
+        expiredTokens.push(token);
       }
     }
+    for (const token of expiredTokens) {
+      this.tokens.delete(token);
+    }
+    const cleaned = expiredTokens.length;
 
     if (cleaned > 0) {
       this.emit('cleanup', { cleaned });

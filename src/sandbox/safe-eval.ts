@@ -68,9 +68,16 @@ export function safeEval(code: string, options: SafeEvalOptions = {}): unknown {
       debug: () => {},
     },
     undefined,
-    // Spread user-provided context
-    ...options.context,
   };
+
+  // Safely copy user context, blocking prototype pollution keys
+  if (options.context) {
+    for (const [key, value] of Object.entries(options.context)) {
+      if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
+        sandbox[key] = value;
+      }
+    }
+  }
 
   const vmContext = vm.createContext(sandbox);
 
@@ -127,8 +134,16 @@ export async function safeEvalAsync(
       debug: () => {},
     },
     undefined,
-    ...options.context,
   };
+
+  // Safely copy user context, blocking prototype pollution keys
+  if (options.context) {
+    for (const [key, value] of Object.entries(options.context)) {
+      if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
+        sandbox[key] = value;
+      }
+    }
+  }
 
   const vmContext = vm.createContext(sandbox);
 

@@ -358,7 +358,11 @@ export class IsolatedPluginRunner extends EventEmitter {
 
         this.worker.on('error', (error) => {
           this.logger.error('Worker error:', error);
+          this.isTerminated = true;
           this.emit('error', error);
+          // Terminate the worker to prevent resource leak
+          try { this.worker?.terminate(); } catch { /* ignore */ }
+          this.worker = null;
           reject(error);
         });
 

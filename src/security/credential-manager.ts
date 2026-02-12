@@ -92,6 +92,15 @@ function decrypt(encryptedData: string): string {
   }
 
   const [ivHex, authTagHex, encrypted] = parts;
+
+  // Validate hex strings (IV=12 bytes=24 hex, authTag=16 bytes=32 hex)
+  if (ivHex.length !== 24 || !/^[0-9a-f]+$/i.test(ivHex)) {
+    throw new Error('Invalid IV in encrypted data');
+  }
+  if (authTagHex.length !== 32 || !/^[0-9a-f]+$/i.test(authTagHex)) {
+    throw new Error('Invalid auth tag in encrypted data');
+  }
+
   const key = getMachineKey();
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
@@ -295,13 +304,19 @@ export class CredentialManager extends EventEmitter {
           this.cachedCredentials = JSON.parse(decrypted);
           return { ...this.cachedCredentials };
         } catch {
-          // File might be in plain text format (legacy)
-          logger.warn('Credentials file appears to be in legacy plain-text format');
-          if (this.config.warnPlainText) {
-            logger.warn('Consider re-saving credentials to enable encryption');
+          // Only fall back to plaintext if content looks like valid JSON
+          // (i.e., legacy unencrypted file). Encrypted data won't start with '{'.
+          if (content.trimStart().startsWith('{')) {
+            logger.warn('Credentials file appears to be in legacy plain-text format');
+            if (this.config.warnPlainText) {
+              logger.warn('Consider re-saving credentials to enable encryption');
+            }
+            this.cachedCredentials = JSON.parse(content);
+            return { ...this.cachedCredentials };
           }
-          this.cachedCredentials = JSON.parse(content);
-          return { ...this.cachedCredentials };
+          // File is encrypted but decryption failed (key mismatch or corruption)
+          logger.error('Failed to decrypt credentials file. Key may have changed or file is corrupted.');
+          return {};
         }
       } else {
         if (this.config.warnPlainText) {

@@ -65,7 +65,10 @@ export class GrokProvider extends BaseProvider {
       max_tokens: options.maxTokens ?? this.config.maxTokens ?? 16384,
     });
 
-    const choice = response.choices[0];
+    const choice = response.choices?.[0];
+    if (!choice?.message) {
+      throw new Error('Grok API returned empty choices');
+    }
     return {
       id: response.id,
       content: choice.message.content,

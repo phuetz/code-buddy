@@ -131,7 +131,10 @@ export class GeminiProvider extends BaseProvider {
       };
     };
 
-    const candidate = data.candidates[0];
+    const candidate = data.candidates?.[0];
+    if (!candidate?.content?.parts) {
+      throw new Error('Gemini API returned empty candidates');
+    }
     const toolCalls: ToolCall[] = [];
     let content = '';
 

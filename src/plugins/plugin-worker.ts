@@ -191,13 +191,26 @@ function createSandboxedEnvironment(permissions: PluginPermissionsWorker, plugin
   }) as typeof setTimeout;
 
   const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  const intervalIds = new Set<ReturnType<typeof setInterval>>();
+
   globalThis.setInterval = ((callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
     if (timerCount >= maxTimers) {
       throw new Error(`Timer limit exceeded (max ${maxTimers}). Plugin may be leaking timers.`);
     }
     timerCount++;
-    return originalSetInterval(callback, delay, ...args);
+    const id = originalSetInterval(callback, delay, ...args);
+    intervalIds.add(id);
+    return id;
   }) as typeof setInterval;
+
+  globalThis.clearInterval = ((id: ReturnType<typeof setInterval>) => {
+    if (intervalIds.has(id)) {
+      timerCount--;
+      intervalIds.delete(id);
+    }
+    originalClearInterval(id);
+  }) as typeof clearInterval;
 
   // Log that sandbox is active
   parentPort?.postMessage({
