@@ -154,10 +154,10 @@ export class SupervisorAgent extends EventEmitter {
         })
       );
 
-      // Remove completed from remaining
-      for (const task of ready) {
-        const idx = remaining.indexOf(task);
-        if (idx >= 0) remaining.splice(idx, 1);
+      // Remove completed from remaining (reverse order to preserve indices)
+      const readySet = new Set(ready);
+      for (let i = remaining.length - 1; i >= 0; i--) {
+        if (readySet.has(remaining[i])) remaining.splice(i, 1);
       }
     }
 

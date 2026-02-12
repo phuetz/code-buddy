@@ -13,7 +13,7 @@
  * - Network status
  */
 
-import { execSync, exec } from 'child_process';
+import { execSync, exec, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
@@ -450,15 +450,15 @@ export class SystemControl extends EventEmitter {
   }
 
   private async notifyMacOS(options: NotificationOptions): Promise<void> {
-    const title = options.title.replace(/"/g, '\\"');
-    const body = options.body.replace(/"/g, '\\"');
+    const title = options.title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const body = options.body.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
     let script = `display notification "${body}" with title "${title}"`;
     if (options.sound) {
       script += ' sound name "default"';
     }
 
-    execSync(`osascript -e '${script}'`);
+    execFileSync('osascript', ['-e', script]);
   }
 
   private async powerMacOS(action: PowerAction): Promise<void> {
@@ -621,8 +621,8 @@ export class SystemControl extends EventEmitter {
         encoding: 'utf-8',
       });
       const display = output.trim();
-      if (display) {
-        execSync(`xrandr --output ${display} --brightness ${level / 100}`);
+      if (display && /^[a-zA-Z0-9\-_]+$/.test(display)) {
+        execFileSync('xrandr', ['--output', display, '--brightness', String(level / 100)]);
       }
     } catch {
       try {

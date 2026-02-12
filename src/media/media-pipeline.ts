@@ -206,15 +206,19 @@ export class MediaPipeline extends EventEmitter {
     const now = Date.now();
     let removed = 0;
 
+    const toDelete: string[] = [];
     for (const [id, file] of this.files) {
       if (now - file.createdAt > this.config.autoCleanupMs) {
         if (existsSync(file.tempPath)) {
           unlinkSync(file.tempPath);
         }
         this.totalSize -= file.sizeBytes;
-        this.files.delete(id);
+        toDelete.push(id);
         removed++;
       }
+    }
+    for (const id of toDelete) {
+      this.files.delete(id);
     }
 
     if (removed > 0) {

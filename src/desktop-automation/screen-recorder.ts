@@ -214,7 +214,7 @@ export class ScreenRecorder extends EventEmitter {
             resolve();
           }, 5000);
 
-          this.ffmpegProcess?.on('exit', () => {
+          this.ffmpegProcess?.once('exit', () => {
             clearTimeout(timeout);
             resolve();
           });

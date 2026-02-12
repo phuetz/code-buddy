@@ -156,8 +156,12 @@ export class ObserverCoordinator extends EventEmitter {
     // Clean old entries
     if (this.recentEvents.size > 1000) {
       const cutoff = now - this.config.deduplicationWindowMs * 2;
+      const toDelete: string[] = [];
       for (const [k, t] of this.recentEvents) {
-        if (t < cutoff) this.recentEvents.delete(k);
+        if (t < cutoff) toDelete.push(k);
+      }
+      for (const k of toDelete) {
+        this.recentEvents.delete(k);
       }
     }
 
