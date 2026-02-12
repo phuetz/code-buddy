@@ -73,7 +73,8 @@ export class GeminiProvider extends BaseProvider {
 
     const client = this.client as { apiKey: string; baseUrl: string; model: string };
     const model = this.config.model || this.defaultModel;
-    const url = `${client.baseUrl}/models/${model}:generateContent?key=${client.apiKey}`;
+    const url = `${client.baseUrl}/models/${model}:generateContent`;
+    const apiKey = client.apiKey;
 
     const body = this.formatRequest(options);
 
@@ -93,7 +94,7 @@ export class GeminiProvider extends BaseProvider {
       async () => {
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
           body: JSON.stringify(body),
         });
 
@@ -198,7 +199,8 @@ export class GeminiProvider extends BaseProvider {
 
     const client = this.client as { apiKey: string; baseUrl: string; model: string };
     const model = this.config.model || this.defaultModel;
-    const url = `${client.baseUrl}/models/${model}:streamGenerateContent?key=${client.apiKey}&alt=sse`;
+    const url = `${client.baseUrl}/models/${model}:streamGenerateContent?alt=sse`;
+    const apiKey = client.apiKey;
 
     const body = this.formatRequest(options);
 
@@ -207,7 +209,7 @@ export class GeminiProvider extends BaseProvider {
       async () => {
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
           body: JSON.stringify(body),
         });
 
