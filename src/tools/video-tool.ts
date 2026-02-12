@@ -383,26 +383,43 @@ export class VideoTool {
           audioPath
         ]);
 
+        let settled = false;
+        const timeout = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            ffmpeg.kill('SIGKILL');
+            resolve({ success: false, error: 'Audio extraction timed out after 120s' });
+          }
+        }, 120000);
+
         ffmpeg.on('close', (code) => {
-          if (code === 0) {
-            resolve({
-              success: true,
-              output: `Audio extracted to: ${audioPath}`,
-              data: { path: audioPath }
-            });
-          } else {
-            resolve({
-              success: false,
-              error: `Audio extraction failed with code ${code}`
-            });
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            if (code === 0) {
+              resolve({
+                success: true,
+                output: `Audio extracted to: ${audioPath}`,
+                data: { path: audioPath }
+              });
+            } else {
+              resolve({
+                success: false,
+                error: `Audio extraction failed with code ${code}`
+              });
+            }
           }
         });
 
         ffmpeg.on('error', (err) => {
-          resolve({
-            success: false,
-            error: `Audio extraction error: ${err.message}`
-          });
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve({
+              success: false,
+              error: `Audio extraction error: ${err.message}`
+            });
+          }
         });
       });
     } catch (error: unknown) {

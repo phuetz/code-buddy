@@ -534,6 +534,7 @@ export class SmartSnapshotManager extends EventEmitter {
 
       const buf = readFileSync(outputPath);
       try { unlinkSync(outputPath); } catch (_e) { /* ignore */ }
+      try { const { rmdirSync } = await import('fs'); rmdirSync(tmpDir); } catch (_e) { /* ignore */ }
 
       return {
         image: buf.toString('base64'),
@@ -543,6 +544,7 @@ export class SmartSnapshotManager extends EventEmitter {
         snapshot: this.currentSnapshot!,
       };
     } catch (_err) {
+      try { const { rmSync } = await import('fs'); rmSync(tmpDir, { recursive: true, force: true }); } catch (_e) { /* ignore */ }
       return null;
     }
   }

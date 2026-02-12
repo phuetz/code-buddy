@@ -163,6 +163,9 @@ export class LLMResponseCache extends EventEmitter {
       this.stats.semanticHits++;
       this.stats.tokensSaved += semanticMatch.entry.tokensSaved;
       this.similarityScores.push(semanticMatch.similarity);
+      if (this.similarityScores.length > 1000) {
+        this.similarityScores.splice(0, this.similarityScores.length - 500);
+      }
       this.updateStats();
       this.emit('cache:hit', { type: 'semantic', similarity: semanticMatch.similarity });
       return semanticMatch.entry;

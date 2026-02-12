@@ -748,6 +748,9 @@ export class Orchestrator extends EventEmitter {
     };
 
     this.messageQueue.push(fullMessage);
+    if (this.messageQueue.length > 2000) {
+      this.messageQueue.splice(0, this.messageQueue.length - 1000);
+    }
     this.emit('message_sent', { type: 'message_sent', message: fullMessage });
     this.log('debug', `Message sent from ${message.from} to ${message.to || 'all'}`);
   }
