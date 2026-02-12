@@ -162,8 +162,12 @@ function createApp(config: ServerConfig): Application {
 
   // Peer routing stats endpoint
   app.get('/api/routing/stats', async (_req, res) => {
-    const router = await getPeerRouter();
-    res.json(router.getStats());
+    try {
+      const router = await getPeerRouter();
+      res.json(router.getStats());
+    } catch (error) {
+      res.status(500).json({ error: 'Peer router unavailable' });
+    }
   });
 
   // Peer route resolution endpoint (for testing/debugging)
@@ -176,9 +180,13 @@ function createApp(config: ServerConfig): Application {
       return;
     }
 
-    const router = await getPeerRouter();
-    const resolved = router.resolve(message, accountId);
-    res.json({ resolved });
+    try {
+      const router = await getPeerRouter();
+      const resolved = router.resolve(message, accountId);
+      res.json({ resolved });
+    } catch (error) {
+      res.status(500).json({ error: 'Peer router unavailable' });
+    }
   });
 
   // Daemon status endpoint

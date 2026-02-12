@@ -64,18 +64,21 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 // Cleanup old entries periodically + evict oldest if over max size
 const rateLimitCleanupTimer = setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
+  const expiredKeys: string[] = [];
+  for (const [key, entry] of rateLimitStore) {
     if (entry.resetAt < now) {
-      rateLimitStore.delete(key);
+      expiredKeys.push(key);
     }
+  }
+  for (const key of expiredKeys) {
+    rateLimitStore.delete(key);
   }
   // LRU eviction: if still over max, remove oldest entries (Map preserves insertion order)
   if (rateLimitStore.size > MAX_RATE_LIMIT_ENTRIES) {
     const excess = rateLimitStore.size - MAX_RATE_LIMIT_ENTRIES;
-    const keys = rateLimitStore.keys();
-    for (let i = 0; i < excess; i++) {
-      const next = keys.next();
-      if (!next.done) rateLimitStore.delete(next.value);
+    const keysToRemove = Array.from(rateLimitStore.keys()).slice(0, excess);
+    for (const key of keysToRemove) {
+      rateLimitStore.delete(key);
     }
   }
 }, 60000); // Cleanup every minute

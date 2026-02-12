@@ -131,12 +131,12 @@ export function requireScope(...scopes: ApiScope[]) {
     }
 
     // Admin has all scopes
-    if (req.auth.scopes.includes('admin')) {
+    if (req.auth.scopes?.includes('admin')) {
       return next();
     }
 
     // Check if user has any of the required scopes
-    const hasRequired = scopes.some((scope) => req.auth!.scopes.includes(scope));
+    const hasRequired = scopes.some((scope) => req.auth!.scopes?.includes(scope));
     if (!hasRequired) {
       return res.status(403).json({
         ...API_ERRORS.FORBIDDEN,

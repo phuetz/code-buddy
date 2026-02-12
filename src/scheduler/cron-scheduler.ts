@@ -634,8 +634,15 @@ export class CronScheduler extends EventEmitter {
         if (job.nextRunAt) job.nextRunAt = new Date(job.nextRunAt);
         this.jobs.set(job.id, job);
       }
-    } catch {
-      // No persisted jobs or error reading
+    } catch (error) {
+      // Warn if file exists but failed to parse (corruption vs missing file)
+      try {
+        await fs.access(this.config.persistPath);
+        // File exists but failed to parse — likely corrupted
+        this.emit('error', new Error(`Failed to load persisted jobs: ${error instanceof Error ? error.message : String(error)}`));
+      } catch {
+        // File doesn't exist — normal first run
+      }
     }
   }
 
