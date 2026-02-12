@@ -504,14 +504,14 @@ export class AgentExecutor {
                 };
                 genResult = await gen.next();
               }
-              result = genResult.value;
+              result = genResult.value ?? { success: false, error: 'Tool returned no result' };
             } else {
               result = await this.executeToolViaLane(toolCall);
             }
 
             const toolResultEntry: ChatEntry = {
               type: "tool_result",
-              content: result.success ? result.output || "Success" : result.error || "Error occurred",
+              content: result?.success ? result.output || "Success" : result?.error || "Error occurred",
               timestamp: new Date(),
               toolCall: toolCall,
               toolResult: result,

@@ -456,8 +456,12 @@ Write-Output 'ok'
               );
               const parts = probeOut.trim().split(',');
               if (parts.length === 2) {
-                width = parseInt(parts[0], 10);
-                height = parseInt(parts[1], 10);
+                const w = parseInt(parts[0], 10);
+                const h = parseInt(parts[1], 10);
+                if (!isNaN(w) && !isNaN(h)) {
+                  width = w;
+                  height = h;
+                }
               }
             } catch (_e) { /* use estimated */ }
 

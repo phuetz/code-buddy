@@ -469,7 +469,7 @@ export class ComputerControlTool {
 
     return {
       success: true,
-      output: `Hotkey: ${input.modifiers?.join('+')}+${input.key}`,
+      output: `Hotkey: ${input.modifiers?.length ? input.modifiers.join('+') + '+' : ''}${input.key}`,
     };
   }
 

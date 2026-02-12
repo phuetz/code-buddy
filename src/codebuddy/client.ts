@@ -226,7 +226,14 @@ export class CodeBuddyClient {
         },
       };
 
-      const response = await this.client!.chat.completions.create({
+      if (!this.client) {
+        logger.warn("Cannot probe tool support: no OpenAI client (Gemini provider)");
+        this.toolSupportProbed = true;
+        this.toolSupportDetected = true;
+        return true;
+      }
+
+      const response = await this.client.chat.completions.create({
         model: this.currentModel,
         messages: [{ role: "user", content: "What time is it? Use the get_current_time tool." }],
         tools: [testTool as unknown as OpenAI.ChatCompletionTool],
