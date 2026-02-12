@@ -15,7 +15,7 @@ describe('Talk Mode', () => {
   let manager: TTSManager;
 
   beforeEach(async () => {
-    resetTTSManager();
+    await resetTTSManager();
     manager = new TTSManager({
       enabled: true,
       providers: [],
@@ -34,7 +34,7 @@ describe('Talk Mode', () => {
 
   afterEach(async () => {
     await manager.shutdown();
-    resetTTSManager();
+    await resetTTSManager();
   });
 
   describe('MockTTSProvider', () => {
@@ -360,12 +360,12 @@ describe('Talk Mode', () => {
 });
 
 describe('Singleton', () => {
-  beforeEach(() => {
-    resetTTSManager();
+  beforeEach(async () => {
+    await resetTTSManager();
   });
 
-  afterEach(() => {
-    resetTTSManager();
+  afterEach(async () => {
+    await resetTTSManager();
   });
 
   it('should return same instance', () => {
@@ -375,9 +375,9 @@ describe('Singleton', () => {
     expect(manager1).toBe(manager2);
   });
 
-  it('should reset instance', () => {
+  it('should reset instance', async () => {
     const manager1 = getTTSManager();
-    resetTTSManager();
+    await resetTTSManager();
     const manager2 = getTTSManager();
 
     expect(manager1).not.toBe(manager2);

@@ -725,9 +725,9 @@ export function getTTSManager(config?: Partial<TalkModeConfig>): TTSManager {
   return ttsManagerInstance;
 }
 
-export function resetTTSManager(): void {
+export async function resetTTSManager(): Promise<void> {
   if (ttsManagerInstance) {
-    ttsManagerInstance.shutdown();
+    await ttsManagerInstance.shutdown();
     ttsManagerInstance = null;
   }
 }

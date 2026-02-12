@@ -689,12 +689,12 @@ export class SemanticCache<T = unknown> extends EventEmitter {
   /**
    * Dispose and flush pending saves
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
       this.saveTimeout = null;
     }
-    this.saveToDisk();
+    await this.saveToDisk();
     this.cache.clear();
     this.removeAllListeners();
   }

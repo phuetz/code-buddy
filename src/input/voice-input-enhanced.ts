@@ -65,6 +65,7 @@ export class VoiceInputManager extends EventEmitter {
   private config: VoiceInputConfig;
   private state: VoiceInputState;
   private recordingProcess: ChildProcess | null = null;
+  private levelInterval: ReturnType<typeof setInterval> | null = null;
   private tempDir: string;
 
   constructor(config: Partial<VoiceInputConfig> = {}) {
@@ -210,7 +211,7 @@ export class VoiceInputManager extends EventEmitter {
     const audioFile = path.join(this.tempDir, `recording_${Date.now()}.wav`);
 
     // Visual feedback: emit audio levels periodically
-    const levelInterval = setInterval(() => {
+    this.levelInterval = setInterval(() => {
       if (this.state.isRecording) {
         // Emit a synthetic level to show recording is active
         // Real level would require reading from sox stats
@@ -241,7 +242,7 @@ export class VoiceInputManager extends EventEmitter {
     }
 
     this.recordingProcess.on('close', async () => {
-      clearInterval(levelInterval);
+      if (this.levelInterval) { clearInterval(this.levelInterval); this.levelInterval = null; }
       this.state.isRecording = false;
       this.emit('audio-level', { level: 0, active: false });
       this.emit('recording-stopped');
@@ -252,7 +253,7 @@ export class VoiceInputManager extends EventEmitter {
     });
 
     this.recordingProcess.on('error', (error) => {
-      clearInterval(levelInterval);
+      if (this.levelInterval) { clearInterval(this.levelInterval); this.levelInterval = null; }
       this.state.isRecording = false;
       this.state.errorCount++;
       this.emit('error', error);
@@ -263,6 +264,10 @@ export class VoiceInputManager extends EventEmitter {
    * Stop recording
    */
   stopRecording(): void {
+    if (this.levelInterval) {
+      clearInterval(this.levelInterval);
+      this.levelInterval = null;
+    }
     if (this.recordingProcess) {
       this.recordingProcess.kill('SIGINT');
       this.recordingProcess = null;

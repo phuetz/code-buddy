@@ -439,6 +439,10 @@ export class VoiceControl extends EventEmitter {
 
       if (this.state.isWakeWordActive || !this.config.wakeWordEnabled) {
         this.audioBuffer.push(data);
+        // Cap buffer at ~30s of 16kHz 16-bit mono audio (~960KB)
+        if (this.audioBuffer.length > 3000) {
+          this.audioBuffer.splice(0, this.audioBuffer.length - 3000);
+        }
       }
     });
 

@@ -319,6 +319,7 @@ export class TelegramChannel extends BaseChannel {
       this.emit('error', 'telegram', error);
       // Backoff on error
       await new Promise((resolve) => setTimeout(resolve, 5000));
+      if (!this.pollingActive) return;
     }
 
     // Schedule next poll
