@@ -40,11 +40,41 @@ import { EventEmitter } from 'events';
 // ============================================================================
 
 /**
+ * Configuration for an approval gate step (OpenClaw Lobster-inspired)
+ */
+export interface ApprovalGateConfig {
+  /** Who should approve this step (user ID, role, etc.) */
+  approver?: string;
+  /** Timeout in ms before the approval request expires (default: 300000 = 5 min) */
+  timeoutMs: number;
+  /** Message to display when requesting approval */
+  message: string;
+  /** Optional function that, if it returns true, auto-approves the step */
+  autoApproveCondition?: () => boolean;
+  /** Whether explicit approval is required (no auto-approve fallback) */
+  requireExplicit?: boolean;
+}
+
+/**
+ * Result of an approval gate decision
+ */
+export interface ApprovalResult {
+  /** Whether the step was approved */
+  approved: boolean;
+  /** Who approved (or rejected) */
+  approvedBy?: string;
+  /** When the decision was made */
+  timestamp: Date;
+  /** Optional comment from the approver */
+  comment?: string;
+}
+
+/**
  * A single step in a pipeline
  */
 export interface PipelineStep {
   /** Step type */
-  type: 'tool' | 'skill' | 'function' | 'transform';
+  type: 'tool' | 'skill' | 'function' | 'transform' | 'approval';
   /** Tool or skill name */
   name: string;
   /** Arguments */
@@ -57,6 +87,8 @@ export interface PipelineStep {
   timeout?: number;
   /** Fallback step if this one fails */
   fallback?: PipelineStep;
+  /** Approval gate configuration (only for type 'approval') */
+  approvalGate?: ApprovalGateConfig;
 }
 
 /**
@@ -128,6 +160,12 @@ export interface PipelineConfig {
   maxDurationMs: number;
   /** Tool executor function */
   toolExecutor?: ToolExecutor;
+  /** Approval handler callback for approval gate steps */
+  approvalHandler?: (
+    gate: ApprovalGateConfig,
+    stepIndex: number,
+    context: string
+  ) => Promise<ApprovalResult>;
 }
 
 // ============================================================================
@@ -179,6 +217,11 @@ const BUILTIN_TRANSFORMS: Record<string, (input: string, args: Record<string, un
 
 export class PipelineCompositor extends EventEmitter {
   private config: PipelineConfig;
+  private approvalHistory: ApprovalResult[] = [];
+  private pendingApprovals: Map<number, {
+    resolve: (result: ApprovalResult) => void;
+    reject: (err: Error) => void;
+  }> = new Map();
 
   constructor(config: Partial<PipelineConfig> = {}) {
     super();
@@ -294,7 +337,14 @@ export class PipelineCompositor extends EventEmitter {
     const args = this.parseArgs(rawArgs);
 
     // Determine type
-    const type = BUILTIN_TRANSFORMS[name] ? 'transform' : 'tool';
+    let type: PipelineStep['type'];
+    if (name === 'approval' || name === 'approve') {
+      type = 'approval';
+    } else if (BUILTIN_TRANSFORMS[name]) {
+      type = 'transform';
+    } else {
+      type = 'tool';
+    }
 
     return {
       type,
@@ -414,7 +464,7 @@ export class PipelineCompositor extends EventEmitter {
       let result: StepResult;
 
       try {
-        const output = await this.executeStep(step, currentOutput);
+        const output = await this.executeStep(step, currentOutput, i);
         result = {
           step,
           success: true,
@@ -438,7 +488,7 @@ export class PipelineCompositor extends EventEmitter {
         if (operator === '||' && step.fallback) {
           // Try fallback
           try {
-            const fallbackOutput = await this.executeStep(step.fallback, currentOutput);
+            const fallbackOutput = await this.executeStep(step.fallback, currentOutput, i);
             result.success = true;
             result.output = fallbackOutput;
             currentOutput = fallbackOutput;
@@ -481,7 +531,12 @@ export class PipelineCompositor extends EventEmitter {
   /**
    * Execute a single step
    */
-  private async executeStep(step: PipelineStep, input: string): Promise<string> {
+  private async executeStep(step: PipelineStep, input: string, stepIndex: number = 0): Promise<string> {
+    // Approval steps manage their own timeout (via approvalGate.timeoutMs)
+    if (step.type === 'approval') {
+      return this.runStep(step, input, stepIndex);
+    }
+
     const timeout = step.timeout || this.config.defaultTimeout;
 
     return new Promise<string>((resolve, reject) => {
@@ -489,7 +544,7 @@ export class PipelineCompositor extends EventEmitter {
         reject(new Error(`Step '${step.name}' timed out after ${timeout}ms`));
       }, timeout);
 
-      this.runStep(step, input)
+      this.runStep(step, input, stepIndex)
         .then(output => {
           clearTimeout(timer);
           resolve(output);
@@ -504,7 +559,7 @@ export class PipelineCompositor extends EventEmitter {
   /**
    * Run a step based on its type
    */
-  private async runStep(step: PipelineStep, input: string): Promise<string> {
+  private async runStep(step: PipelineStep, input: string, stepIndex: number = 0): Promise<string> {
     switch (step.type) {
       case 'transform':
         return this.runTransform(step, input);
@@ -515,6 +570,9 @@ export class PipelineCompositor extends EventEmitter {
 
       case 'function':
         return this.runTool(step, input);
+
+      case 'approval':
+        return this.runApprovalGate(step, input, stepIndex);
 
       default:
         throw new Error(`Unknown step type: ${step.type}`);
@@ -550,6 +608,110 @@ export class PipelineCompositor extends EventEmitter {
     }
 
     return result.output;
+  }
+
+  // ==========================================================================
+  // Approval Gates (OpenClaw Lobster-inspired)
+  // ==========================================================================
+
+  /**
+   * Run an approval gate step.
+   *
+   * Resolution order:
+   * 1. If autoApproveCondition exists and returns true (and requireExplicit is not set), auto-approve.
+   * 2. If an approvalHandler callback is configured, delegate to it.
+   * 3. Otherwise, emit 'approval:required' and wait for manual resolution via approveStep().
+   * 4. If the configured timeout elapses, reject with a timeout error.
+   */
+  private async runApprovalGate(step: PipelineStep, input: string, stepIndex: number = 0): Promise<string> {
+    const gate: ApprovalGateConfig = step.approvalGate || {
+      timeoutMs: 300000,
+      message: step.rawArgs || step.name || 'Approval required',
+    };
+
+    // 1. Auto-approve condition (skip if requireExplicit is set)
+    if (gate.autoApproveCondition && !gate.requireExplicit) {
+      try {
+        if (gate.autoApproveCondition()) {
+          const result: ApprovalResult = {
+            approved: true,
+            approvedBy: 'auto',
+            timestamp: new Date(),
+            comment: 'Auto-approved by condition',
+          };
+          this.approvalHistory.push(result);
+          this.emit('approval:auto', result, step);
+          return input; // pass-through
+        }
+      } catch {
+        // If the condition throws, fall through to manual approval
+      }
+    }
+
+    // 2. Approval handler callback
+    if (this.config.approvalHandler) {
+      const result = await this.config.approvalHandler(gate, stepIndex, input);
+      this.approvalHistory.push(result);
+      if (!result.approved) {
+        throw new Error(`Approval rejected${result.comment ? ': ' + result.comment : ''}`);
+      }
+      return input;
+    }
+
+    // 3. Emit event and wait for manual resolution
+    return new Promise<string>((resolve, reject) => {
+      const timeoutMs = gate.timeoutMs ?? 300000;
+      const timer = setTimeout(() => {
+        this.pendingApprovals.delete(stepIndex);
+        const timeoutResult: ApprovalResult = {
+          approved: false,
+          timestamp: new Date(),
+          comment: 'Approval timed out',
+        };
+        this.approvalHistory.push(timeoutResult);
+        reject(new Error('Approval timed out'));
+      }, timeoutMs);
+
+      // Store the pending approval keyed by step index
+      this.pendingApprovals.set(stepIndex, {
+        resolve: (result: ApprovalResult) => {
+          clearTimeout(timer);
+          this.pendingApprovals.delete(stepIndex);
+          this.approvalHistory.push(result);
+          if (result.approved) {
+            resolve(input);
+          } else {
+            reject(new Error(`Approval rejected${result.comment ? ': ' + result.comment : ''}`));
+          }
+        },
+        reject: (err: Error) => {
+          clearTimeout(timer);
+          this.pendingApprovals.delete(stepIndex);
+          reject(err);
+        },
+      });
+
+      this.emit('approval:required', gate, stepIndex, input);
+    });
+  }
+
+  /**
+   * Manually approve or reject a pending approval gate step.
+   * Call this in response to the 'approval:required' event.
+   */
+  approveStep(stepIndex: number, result: ApprovalResult): void {
+    const pending = this.pendingApprovals.get(stepIndex);
+    if (!pending) {
+      throw new Error(`No pending approval for step index ${stepIndex}`);
+    }
+    pending.resolve(result);
+  }
+
+  /**
+   * Get the history of all approval decisions made during this pipeline's lifetime.
+   */
+  getApprovalHistory(): ApprovalResult[] {
+    return [...this.approvalHistory];
   }
 
   // ==========================================================================
@@ -627,6 +789,7 @@ export class PipelineCompositor extends EventEmitter {
       rawArgs: s.rawArgs as string | undefined,
       label: s.label as string | undefined,
       timeout: s.timeout as number | undefined,
+      approvalGate: s.approvalGate as ApprovalGateConfig | undefined,
     }));
 
     return {
@@ -664,7 +827,7 @@ export class PipelineCompositor extends EventEmitter {
       }
       names.add(step.name);
 
-      if (step.type && !['tool', 'skill', 'function', 'transform'].includes(step.type)) {
+      if (step.type && !['tool', 'skill', 'function', 'transform', 'approval'].includes(step.type)) {
         errors.push(`Step ${i + 1} ("${step.name}"): invalid type "${step.type}"`);
       }
 
@@ -681,6 +844,12 @@ export class PipelineCompositor extends EventEmitter {
   // ==========================================================================
 
   dispose(): void {
+    // Reject any pending approvals
+    for (const [idx, pending] of this.pendingApprovals) {
+      pending.reject(new Error('Pipeline disposed'));
+      this.pendingApprovals.delete(idx);
+    }
+    this.approvalHistory = [];
     this.removeAllListeners();
   }
 }

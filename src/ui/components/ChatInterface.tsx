@@ -334,6 +334,15 @@ function ChatInterfaceWithAgent({
                   }]);
                 }
                 break;
+              case "steer":
+                if (chunk.steer) {
+                  setChatHistory((prev) => [...prev, {
+                    type: 'user' as const,
+                    content: `[${chunk.steer!.source}] ${chunk.steer!.content}`,
+                    timestamp: new Date(),
+                  }]);
+                }
+                break;
               case "ask_user":
                 if (chunk.askUser) {
                   // Add question entry to chat history

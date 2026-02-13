@@ -28,6 +28,27 @@ function execGitSafe(args: string[], cwd: string): Promise<{ stdout: string; std
   });
 }
 
+/**
+ * Execute a git command that may exit non-zero without throwing.
+ * Returns the exit code along with stdout/stderr.
+ */
+function execGitRaw(args: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('git', args, { cwd });
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      resolve({ stdout, stderr, exitCode: code ?? 1 });
+    });
+
+    proc.on('error', (err) => reject(err));
+  });
+}
+
 export interface GitStatus {
   staged: string[];
   unstaged: string[];
@@ -42,6 +63,23 @@ export interface CommitOptions {
   autoGenerate?: boolean;
   push?: boolean;
   addAll?: boolean;
+}
+
+export interface BlameLine {
+  lineNumber: number;
+  commitHash: string;
+  author: string;
+  date: string;
+  content: string;
+}
+
+export interface BlameOptions {
+  startLine?: number;
+  endLine?: number;
+}
+
+export interface CherryPickOptions {
+  noCommit?: boolean;
 }
 
 export class GitTool {
@@ -405,6 +443,236 @@ export class GitTool {
         const { stdout } = await this.execGit(['branch', '-a']);
         return { success: true, output: stdout.trim() };
       }
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
+  /**
+   * Run git blame on a file and return structured output
+   * @param filePath - Path to the file to blame
+   * @param options - Optional line range filtering
+   */
+  async blame(filePath: string, options?: BlameOptions): Promise<ToolResult> {
+    try {
+      const args = ['blame', '--porcelain'];
+
+      // Add line range if specified
+      if (options?.startLine !== undefined && options?.endLine !== undefined) {
+        args.push(`-L`, `${options.startLine},${options.endLine}`);
+      } else if (options?.startLine !== undefined) {
+        args.push(`-L`, `${options.startLine},`);
+      }
+
+      args.push('--', filePath);
+
+      const { stdout } = await this.execGit(args);
+
+      // Parse porcelain output into structured blame lines
+      const blameLines = this.parseBlameOutput(stdout);
+
+      if (blameLines.length === 0) {
+        return {
+          success: true,
+          output: 'No blame information available (file may be empty or not committed)',
+        };
+      }
+
+      // Format output for display
+      const formatted = blameLines.map((bl) =>
+        `${bl.lineNumber}\t${bl.commitHash.slice(0, 8)}\t${bl.author}\t${bl.date}\t${bl.content}`
+      ).join('\n');
+
+      const header = 'Line\tCommit\tAuthor\tDate\tContent';
+
+      return {
+        success: true,
+        output: `${header}\n${formatted}`,
+        data: blameLines,
+      };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
+  /**
+   * Parse git blame --porcelain output into structured BlameLine objects
+   */
+  private parseBlameOutput(porcelainOutput: string): BlameLine[] {
+    const lines = porcelainOutput.split('\n');
+    const blameLines: BlameLine[] = [];
+    let currentHash = '';
+    let currentAuthor = '';
+    let currentDate = '';
+    let currentLineNumber = 0;
+
+    for (const line of lines) {
+      // Header line: <hash> <orig-line> <final-line> [<num-lines>]
+      const headerMatch = line.match(/^([0-9a-f]{40})\s+\d+\s+(\d+)/);
+      if (headerMatch) {
+        currentHash = headerMatch[1];
+        currentLineNumber = parseInt(headerMatch[2], 10);
+        continue;
+      }
+
+      // Author line
+      if (line.startsWith('author ')) {
+        currentAuthor = line.slice(7);
+        continue;
+      }
+
+      // Author time (unix timestamp) - convert to ISO date
+      if (line.startsWith('author-time ')) {
+        const timestamp = parseInt(line.slice(12), 10);
+        currentDate = new Date(timestamp * 1000).toISOString().split('T')[0];
+        continue;
+      }
+
+      // Content line (starts with tab)
+      if (line.startsWith('\t')) {
+        blameLines.push({
+          lineNumber: currentLineNumber,
+          commitHash: currentHash,
+          author: currentAuthor,
+          date: currentDate,
+          content: line.slice(1),
+        });
+      }
+    }
+
+    return blameLines;
+  }
+
+  /**
+   * Cherry-pick a commit into the current branch
+   * @param commitHash - The commit hash to cherry-pick
+   * @param options - Cherry-pick options
+   */
+  async cherryPick(commitHash: string, options?: CherryPickOptions): Promise<ToolResult> {
+    try {
+      const args = ['cherry-pick'];
+
+      if (options?.noCommit) {
+        args.push('--no-commit');
+      }
+
+      args.push(commitHash);
+
+      // Use raw execution to handle conflict exit code (1) gracefully
+      const result = await execGitRaw(args, this.cwd);
+
+      if (result.exitCode === 0) {
+        return {
+          success: true,
+          output: result.stdout.trim() || `Cherry-picked commit ${commitHash.slice(0, 8)} successfully`,
+        };
+      }
+
+      // Check for conflicts
+      const combinedOutput = `${result.stdout}\n${result.stderr}`;
+      if (combinedOutput.includes('CONFLICT') || combinedOutput.includes('conflict')) {
+        // Get the list of conflicted files
+        let conflictFiles = '';
+        try {
+          const statusResult = await this.execGit(['diff', '--name-only', '--diff-filter=U']);
+          conflictFiles = statusResult.stdout.trim();
+        } catch {
+          // Ignore -- we'll report the conflict without file details
+        }
+
+        return {
+          success: false,
+          error: `Cherry-pick of ${commitHash.slice(0, 8)} resulted in conflicts`,
+          output: conflictFiles
+            ? `Conflicted files:\n${conflictFiles}\n\nResolve conflicts and run 'git cherry-pick --continue' or 'git cherry-pick --abort'`
+            : `Resolve conflicts and run 'git cherry-pick --continue' or 'git cherry-pick --abort'`,
+        };
+      }
+
+      // Other failure
+      return {
+        success: false,
+        error: result.stderr.trim() || `Cherry-pick failed with exit code ${result.exitCode}`,
+      };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
+  /**
+   * Start a git bisect session
+   * @param badRef - The known bad commit (defaults to HEAD)
+   * @param goodRef - The known good commit
+   */
+  async bisectStart(badRef?: string, goodRef?: string): Promise<ToolResult> {
+    try {
+      // Start bisect
+      const startArgs = ['bisect', 'start'];
+      if (badRef) {
+        startArgs.push(badRef);
+      }
+      if (goodRef) {
+        startArgs.push(goodRef);
+      }
+
+      const { stdout } = await this.execGit(startArgs);
+
+      return {
+        success: true,
+        output: stdout.trim() || 'Bisect session started',
+      };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
+  /**
+   * Mark the current bisect commit as good, bad, or skip
+   * @param result - The test result for the current commit
+   */
+  async bisectStep(result: 'good' | 'bad' | 'skip'): Promise<ToolResult> {
+    try {
+      const { stdout } = await this.execGit(['bisect', result]);
+      const output = stdout.trim();
+
+      // Check if bisect is done (found the first bad commit)
+      const isDone = output.includes('is the first bad commit');
+
+      return {
+        success: true,
+        output: output,
+        data: { done: isDone },
+      };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
+  /**
+   * Reset/end the bisect session
+   */
+  async bisectReset(): Promise<ToolResult> {
+    try {
+      const { stdout } = await this.execGit(['bisect', 'reset']);
+      return {
+        success: true,
+        output: stdout.trim() || 'Bisect session reset',
+      };
     } catch (error: unknown) {
       return {
         success: false,

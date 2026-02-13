@@ -160,14 +160,35 @@ export class ClientCommandDispatcher {
       
       case "__FEATURES__":
          const { handleFeaturesCommand } = await import("./features.js");
-         const entry: ChatEntry = {
+         const featuresEntry: ChatEntry = {
             type: "assistant",
             content: handleFeaturesCommand(),
             timestamp: new Date(),
          };
-         context.setChatHistory((prev) => [...prev, entry]);
+         context.setChatHistory((prev) => [...prev, featuresEntry]);
          context.clearInput();
          return true;
+
+      case "__CONTEXT__": {
+        // Intercept /context stats to provide agent context window stats
+        const contextArgs = originalInput.trim().split(/\s+/).slice(1);
+        if (contextArgs[0]?.toLowerCase() === 'stats') {
+          const { handleContextStats } = await import("./handlers/extra-handlers.js");
+          const agentProxy = {
+            getContextStats: () => context.agent.getContextStats(),
+            formatContextStats: () => context.agent.formatContextStats(),
+            getCurrentModel: () => context.agent.getCurrentModel(),
+          };
+          const statsResult = await handleContextStats(contextArgs.slice(1), agentProxy);
+          if (statsResult.entry) {
+            context.setChatHistory((prev) => [...prev, statsResult.entry!]);
+          }
+          context.clearInput();
+          return true;
+        }
+        // Fall through to enhanced handler for other /context subcommands
+        return false;
+      }
 
       default:
         // Not an internal command handled here

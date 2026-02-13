@@ -660,6 +660,33 @@ export class SecurityAuditor {
   // Helpers
   // ==========================================================================
 
+  /**
+   * Auto-fix file permission findings (chmod 700/600 for sensitive paths)
+   */
+  async fix(result: AuditResult): Promise<{ fixed: number; errors: string[] }> {
+    let fixed = 0;
+    const errors: string[] = [];
+
+    for (const finding of result.findings) {
+      if (
+        (finding.category === 'filesystem' || finding.category === 'credentials') &&
+        finding.details?.path &&
+        typeof finding.details.path === 'string' &&
+        finding.details.expected
+      ) {
+        try {
+          const targetMode = parseInt(finding.details.expected as string, 8);
+          await fs.chmod(finding.details.path, targetMode);
+          fixed++;
+        } catch (err) {
+          errors.push(`Failed to fix ${finding.details.path}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    return { fixed, errors };
+  }
+
   private addFinding(finding: Omit<AuditFinding, 'id'>): void {
     this.findings.push({
       ...finding,

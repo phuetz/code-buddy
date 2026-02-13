@@ -34,6 +34,7 @@ import type {
   MessageButton,
 } from '../index.js';
 import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
+import { ReconnectionManager } from '../reconnection-manager.js';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 const SLACK_SOCKET_URL = 'wss://wss-primary.slack.com/websocket';
@@ -48,12 +49,18 @@ export class SlackChannel extends BaseChannel {
   private pingInterval: NodeJS.Timeout | null = null;
   private userCache = new Map<string, SlackUser>();
   private channelCache = new Map<string, SlackConversation>();
+  private reconnectionManager: ReconnectionManager;
 
   constructor(config: SlackConfig) {
     super('slack', config);
     if (!config.token) {
       throw new Error('Slack bot token is required');
     }
+    this.reconnectionManager = new ReconnectionManager('slack', {
+      maxRetries: 10,
+      initialDelayMs: 1000,
+      maxDelayMs: 60000,
+    });
   }
 
   private get slackConfig(): SlackConfig {
@@ -434,38 +441,42 @@ export class SlackChannel extends BaseChannel {
   }
 
   /**
-   * Reconnect to Socket Mode
+   * Reconnect to Socket Mode using ReconnectionManager for backoff
    */
-  private async reconnect(): Promise<void> {
+  private reconnect(): void {
     if (this.reconnecting) return;
-    this.reconnecting = true;
 
-    try {
-      // Clear ping interval before reconnecting to prevent duplicates
-      if (this.pingInterval) {
-        clearInterval(this.pingInterval);
-        this.pingInterval = null;
-      }
-
-      if (this.ws) {
-        this.ws.removeAllListeners();
-        if (this.ws.readyState === WebSocket.OPEN) {
-          this.ws.close();
+    this.reconnectionManager.scheduleReconnect(async () => {
+      this.reconnecting = true;
+      try {
+        // Clear ping interval before reconnecting to prevent duplicates
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
         }
-        this.ws = null;
-      }
 
-      await new Promise((r) => setTimeout(r, 5000));
-      await this.connect();
-    } finally {
-      this.reconnecting = false;
-    }
+        if (this.ws) {
+          this.ws.removeAllListeners();
+          if (this.ws.readyState === WebSocket.OPEN) {
+            this.ws.close();
+          }
+          this.ws = null;
+        }
+
+        await this.connect();
+        this.reconnectionManager.onConnected();
+      } finally {
+        this.reconnecting = false;
+      }
+    });
   }
 
   /**
    * Disconnect from Slack
    */
   async disconnect(): Promise<void> {
+    this.reconnectionManager.cancel();
+
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;

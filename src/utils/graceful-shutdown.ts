@@ -99,7 +99,7 @@ export class GracefulShutdownManager implements Disposable {
     logger.info(`Received ${signal}, initiating graceful shutdown...`);
 
     // Show user-friendly message
-    console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+    logger.info(`Received ${signal}. Shutting down gracefully...`);
 
     try {
       await this.shutdown({ exitCode: 0 });
@@ -201,9 +201,9 @@ export class GracefulShutdownManager implements Disposable {
     const operationTimeout = Math.min(options.timeoutMs / 3, 10000); // Max 10s for operations
     if (this.pendingOperations.size > 0) {
       if (options.showProgress) {
-        console.log(`Waiting for ${this.pendingOperations.size} pending operation(s)...`);
+        logger.info(`Waiting for ${this.pendingOperations.size} pending operation(s)...`);
         this.getPendingOperations().forEach(op => {
-          console.log(`  - ${op.description} (${Math.round(op.duration / 1000)}s)`);
+          logger.info(`  - ${op.description} (${Math.round(op.duration / 1000)}s)`);
         });
       }
 
@@ -237,16 +237,16 @@ export class GracefulShutdownManager implements Disposable {
         pendingOperations: pendingOps.length,
       });
 
-      console.log(`\nShutdown timed out after ${options.timeoutMs / 1000}s. Forcing exit...`);
+      logger.warn(`Shutdown timed out after ${options.timeoutMs / 1000}s. Forcing exit...`);
 
       if (pendingOps.length > 0) {
-        console.log('Pending operations that were interrupted:');
-        pendingOps.forEach(op => console.log(`  - ${op.description}`));
+        logger.warn('Pending operations that were interrupted:');
+        pendingOps.forEach(op => logger.warn(`  - ${op.description}`));
       }
 
       if (pendingHandlers.length > 0) {
-        console.log('Handlers that did not complete:');
-        pendingHandlers.forEach(h => console.log(`  - ${h.name}`));
+        logger.warn('Handlers that did not complete:');
+        pendingHandlers.forEach(h => logger.warn(`  - ${h.name}`));
       }
 
       if (options.forceExitOnTimeout) {
@@ -256,7 +256,7 @@ export class GracefulShutdownManager implements Disposable {
       logger.info(`Graceful shutdown completed in ${elapsed}ms`);
 
       if (options.showProgress) {
-        console.log(`Shutdown completed in ${elapsed}ms.`);
+        logger.info(`Shutdown completed in ${elapsed}ms.`);
       }
 
       // Flush logs before exit

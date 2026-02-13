@@ -25,6 +25,9 @@ export type ChannelType =
   | 'whatsapp'
   | 'signal'
   | 'matrix'
+  | 'google-chat'
+  | 'teams'
+  | 'webchat'
   | 'cli'
   | 'web'
   | 'api';
@@ -880,6 +883,61 @@ export {
   getDMPairing,
   resetDMPairing,
 } from './dm-pairing.js';
+
+// WhatsApp
+export { WhatsAppChannel } from './whatsapp/index.js';
+export type { WhatsAppConfig, WhatsAppContact } from './whatsapp/index.js';
+
+// Signal
+export { SignalChannel } from './signal/index.js';
+export type {
+  SignalConfig,
+  SignalMessage,
+  SignalAttachment,
+  SignalGroup,
+} from './signal/index.js';
+
+// Google Chat
+export { GoogleChatChannel } from './google-chat/index.js';
+export type {
+  GoogleChatConfig,
+  GoogleChatSpace,
+  GoogleChatUser,
+  GoogleChatMessage,
+  GoogleChatEvent,
+} from './google-chat/index.js';
+
+// Microsoft Teams
+export { TeamsChannel } from './teams/index.js';
+export type {
+  TeamsConfig,
+  BotFrameworkActivity,
+  BotFrameworkAccount,
+  BotFrameworkConversation,
+  BotFrameworkAttachment,
+  ConversationReference,
+} from './teams/index.js';
+
+// Matrix
+export { MatrixChannel } from './matrix/index.js';
+export type {
+  MatrixConfig,
+  MatrixRoom,
+  MatrixEventContent,
+  MatrixRoomEvent,
+} from './matrix/index.js';
+
+// WebChat
+export { WebChatChannel } from './webchat/index.js';
+export type { WebChatConfig } from './webchat/index.js';
+
+// Reconnection Manager
+export { ReconnectionManager } from './reconnection-manager.js';
+export type { ReconnectionConfig, ReconnectionEvents } from './reconnection-manager.js';
+
+// Offline Queue
+export { OfflineQueue } from './offline-queue.js';
+export type { QueuedMessage } from './offline-queue.js';
 
 // ============================================================================
 // Lane Queue Helpers

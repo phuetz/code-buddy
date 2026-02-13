@@ -30,8 +30,15 @@ export interface CopilotCompletionResponse {
 export interface CopilotProxyConfig {
   port: number;
   host: string;
+  /** Auth token — if not set, authentication is DISABLED (use with caution) */
   authToken?: string;
+  /** Require authentication even if authToken is not set */
+  requireAuth?: boolean;
   maxTokens: number;
+  /** Absolute max tokens a client can request */
+  maxTokensLimit?: number;
+  /** Rate limit: max requests per minute per IP */
+  rateLimitPerMinute?: number;
   onCompletion: (req: CopilotCompletionRequest) => Promise<CopilotCompletionResponse>;
 }
 
@@ -39,10 +46,27 @@ export class CopilotProxy extends EventEmitter {
   private server: ReturnType<typeof createServer> | null = null;
   private config: CopilotProxyConfig;
   private requestCount: number = 0;
+  /** Rate limiter: IP → { count, windowStart } */
+  private rateLimitMap = new Map<string, { count: number; windowStart: number }>();
+  private rateLimitCleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: CopilotProxyConfig) {
     super();
-    this.config = config;
+    this.config = {
+      requireAuth: false,
+      maxTokensLimit: 8192,
+      rateLimitPerMinute: 60,
+      ...config,
+    };
+    // Cleanup stale rate limit entries every 5 minutes
+    this.rateLimitCleanupTimer = setInterval(() => {
+      const now = Date.now();
+      for (const [ip, entry] of this.rateLimitMap) {
+        if (now - entry.windowStart > 120000) {
+          this.rateLimitMap.delete(ip);
+        }
+      }
+    }, 300000);
   }
 
   async start(): Promise<void> {
@@ -68,25 +92,20 @@ export class CopilotProxy extends EventEmitter {
     });
   }
 
-  async stop(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.server) {
-        resolve();
-        return;
-      }
-      this.server.close((err) => {
-        this.server = null;
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     this.requestCount++;
+
+    // Rate limiting
+    if (this.config.rateLimitPerMinute && this.config.rateLimitPerMinute > 0) {
+      const clientIp = req.socket.remoteAddress || 'unknown';
+      if (!this.checkRateLimit(clientIp)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: { message: 'Rate limit exceeded', type: 'rate_limit_error', code: 429 }
+        }));
+        return;
+      }
+    }
 
     if (!this.authenticate(req)) {
       res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -130,15 +149,23 @@ export class CopilotProxy extends EventEmitter {
           parsed.max_tokens = this.config.maxTokens;
         }
 
+        // Clamp max_tokens to prevent abuse
+        const limit = this.config.maxTokensLimit || 8192;
+        if (parsed.max_tokens > limit) {
+          parsed.max_tokens = limit;
+        }
+
         const response = await this.config.onCompletion(parsed);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(response));
       } catch (err) {
-        const message = err instanceof SyntaxError
+        // Don't leak internal error details to clients
+        const isSyntaxError = err instanceof SyntaxError;
+        const message = isSyntaxError
           ? 'Invalid JSON in request body'
-          : (err instanceof Error ? err.message : 'Unknown error');
-        const type = err instanceof SyntaxError ? 'invalid_request_error' : 'server_error';
-        const code = err instanceof SyntaxError ? 400 : 500;
+          : 'Internal completion error';
+        const type = isSyntaxError ? 'invalid_request_error' : 'server_error';
+        const code = isSyntaxError ? 400 : 500;
         res.writeHead(code, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message, type, code } }));
       }
@@ -171,6 +198,11 @@ export class CopilotProxy extends EventEmitter {
   }
 
   private authenticate(req: IncomingMessage): boolean {
+    // If requireAuth is true but no token is configured, reject all
+    if (!this.config.authToken && this.config.requireAuth) {
+      return false;
+    }
+    // If no auth token configured and requireAuth is false, allow (development mode)
     if (!this.config.authToken) {
       return true;
     }
@@ -181,11 +213,50 @@ export class CopilotProxy extends EventEmitter {
     return header === `Bearer ${this.config.authToken}`;
   }
 
+  /**
+   * Token-bucket rate limiter per IP.
+   */
+  private checkRateLimit(clientIp: string): boolean {
+    const limit = this.config.rateLimitPerMinute || 60;
+    const now = Date.now();
+    const windowMs = 60000; // 1 minute
+
+    let entry = this.rateLimitMap.get(clientIp);
+    if (!entry || (now - entry.windowStart) > windowMs) {
+      entry = { count: 0, windowStart: now };
+      this.rateLimitMap.set(clientIp, entry);
+    }
+
+    entry.count++;
+    return entry.count <= limit;
+  }
+
   getRequestCount(): number {
     return this.requestCount;
   }
 
   isRunning(): boolean {
     return this.server !== null && this.server.listening;
+  }
+
+  async stop(): Promise<void> {
+    if (this.rateLimitCleanupTimer) {
+      clearInterval(this.rateLimitCleanupTimer);
+      this.rateLimitCleanupTimer = null;
+    }
+    return new Promise((resolve, reject) => {
+      if (!this.server) {
+        resolve();
+        return;
+      }
+      this.server.close((err) => {
+        this.server = null;
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 }

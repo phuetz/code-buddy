@@ -1,6 +1,6 @@
 {
   "name": "@phuetz/code-buddy",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.",
   "author": "Patrice Huetz <patrice.huetz@gmail.com>",
   "repository": {
@@ -20,7 +20,8 @@
     }
   },
   "bin": {
-    "buddy": "dist/index.js"
+    "buddy": "dist/index.js",
+    "code-buddy": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -140,7 +141,9 @@
     "tree-sitter-bash": "^0.23.3",
     "usearch": "^2.21.4",
     "ws": "^8.18.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@whiskeysockets/baileys": "^6.7.16",
+    "matrix-js-sdk": "^36.3.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

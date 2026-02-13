@@ -342,6 +342,9 @@ export class ComputerControlTool {
     if (!point) {
       return { success: false, error: 'Position required (x,y or element ref)' };
     }
+    if (point.browserError) {
+      return { success: false, error: point.browserError };
+    }
 
     await this.automation.click(point.x, point.y, { button: input.button || 'left' });
 
@@ -355,6 +358,9 @@ export class ComputerControlTool {
     const point = await this.resolvePoint(input);
     if (!point) {
       return { success: false, error: 'Position required (x,y or element ref)' };
+    }
+    if (point.browserError) {
+      return { success: false, error: point.browserError };
     }
 
     await this.automation.doubleClick(point.x, point.y, 'left');
@@ -370,6 +376,9 @@ export class ComputerControlTool {
     if (!point) {
       return { success: false, error: 'Position required (x,y or element ref)' };
     }
+    if (point.browserError) {
+      return { success: false, error: point.browserError };
+    }
 
     await this.automation.rightClick(point.x, point.y);
 
@@ -383,6 +392,9 @@ export class ComputerControlTool {
     const point = await this.resolvePoint(input);
     if (!point) {
       return { success: false, error: 'Position required (x,y or element ref)' };
+    }
+    if (point.browserError) {
+      return { success: false, error: point.browserError };
     }
 
     await this.automation.moveMouse(point.x, point.y, {
@@ -752,11 +764,20 @@ export class ComputerControlTool {
   // Helpers
   // ============================================================================
 
-  private async resolvePoint(input: ComputerControlInput): Promise<{ x: number; y: number } | null> {
+  private async resolvePoint(input: ComputerControlInput): Promise<{ x: number; y: number; browserError?: string } | null> {
     // If ref is provided, use element center
     if (input.ref !== undefined) {
       const element = this.snapshotManager.getElement(input.ref);
       if (element) {
+        // Check if this is a browser-sourced element with zero coordinates
+        if (element.attributes?.source === 'browser-accessibility' &&
+            element.center.x === 0 && element.center.y === 0) {
+          return {
+            x: 0, y: 0,
+            browserError: `Element [${input.ref}] is a browser element (from accessibility tree). ` +
+              `Use the browser tool with action=click and ref=${input.ref} instead of computer_control.`,
+          };
+        }
         return element.center;
       }
     }

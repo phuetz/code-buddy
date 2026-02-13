@@ -3,6 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import { EventEmitter } from "events";
 import { CodeBuddyMessage } from "../codebuddy/client.js";
+import { logger } from "../utils/logger.js";
 
 /** Metadata for conversation branches */
 export interface BranchMetadata {
@@ -87,7 +88,7 @@ export class ConversationBranchManager extends EventEmitter {
       // Log save errors instead of silently swallowing
       const errMsg = error instanceof Error ? error.message : String(error);
       if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
-        console.warn(`[ConversationBranches] Failed to save branch ${branch.id}: ${errMsg}`);
+        logger.warn(`[ConversationBranches] Failed to save branch ${branch.id}: ${errMsg}`);
       }
     }
   }

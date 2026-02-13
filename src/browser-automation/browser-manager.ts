@@ -37,6 +37,9 @@ import {
   FileUploadOptions,
   BrowserConfig,
   DEFAULT_BROWSER_CONFIG,
+  ConsoleEntry,
+  RouteRule,
+  ExtendedDeviceConfig,
 } from './types.js';
 
 // Playwright types (lazy loaded) - structural shapes for type safety without importing playwright
@@ -78,6 +81,14 @@ export class BrowserManager extends EventEmitter {
   private nextRef: number = 1;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- playwright is dynamically imported
   private playwright: Record<string, any> | null = null;
+
+  // Console history buffer
+  private consoleBuffer: ConsoleEntry[] = [];
+  private static readonly MAX_CONSOLE_ENTRIES = 500;
+
+  // Lazy-loaded subsystems
+  private _routeInterceptor: import('./route-interceptor.js').RouteInterceptor | null = null;
+  private _profileManager: import('./profile-manager.js').BrowserProfileManager | null = null;
 
   constructor(config: Partial<BrowserConfig> = {}) {
     super();
@@ -208,6 +219,15 @@ export class BrowserManager extends EventEmitter {
 
     page.on('console', (msg: PlaywrightConsoleMessage) => {
       this.emit('console', msg.type(), msg.text());
+      // Buffer console entries
+      this.consoleBuffer.push({
+        type: msg.type(),
+        text: msg.text(),
+        timestamp: new Date(),
+      });
+      if (this.consoleBuffer.length > BrowserManager.MAX_CONSOLE_ENTRIES) {
+        this.consoleBuffer.splice(0, this.consoleBuffer.length - BrowserManager.MAX_CONSOLE_ENTRIES);
+      }
     });
 
     page.on('request', (request: PlaywrightRequest) => {
@@ -323,9 +343,16 @@ export class BrowserManager extends EventEmitter {
   /**
    * Take snapshot of current page
    */
+  /**
+   * Get next available ref number (for shared ref space with desktop)
+   */
+  getNextRef(): number {
+    return this.nextRef++;
+  }
+
   async takeSnapshot(options: SnapshotOptions = {}): Promise<WebSnapshot> {
     const page = this.getCurrentPage();
-    this.nextRef = 1;
+    // Don't reset nextRef — continuous counter for globally unique refs
 
     const ttl = options.ttl ?? 5000;
     const format = options.format ?? 'ai';
@@ -768,7 +795,19 @@ export class BrowserManager extends EventEmitter {
       screenshotOptions.mask = options.mask.map(sel => page.locator(sel));
     }
 
-    return await page.screenshot(screenshotOptions);
+    const buffer = await page.screenshot(screenshotOptions);
+
+    // Annotate with element reference labels if requested
+    if (options.labels && this.currentSnapshot?.valid) {
+      try {
+        const { annotateScreenshot } = await import('./screenshot-annotator.js');
+        return await annotateScreenshot(buffer, this.currentSnapshot.elements);
+      } catch (err) {
+        logger.warn('Screenshot annotation failed, returning raw screenshot', { error: err });
+      }
+    }
+
+    return buffer;
   }
 
   /**
@@ -987,6 +1026,254 @@ export class BrowserManager extends EventEmitter {
    */
   isLaunched(): boolean {
     return this.browser !== null;
+  }
+
+  // ============================================================================
+  // Console History
+  // ============================================================================
+
+  /**
+   * Get console history buffer
+   */
+  getConsoleHistory(type?: string, limit?: number): ConsoleEntry[] {
+    let entries = this.consoleBuffer;
+    if (type) {
+      entries = entries.filter(e => e.type === type);
+    }
+    if (limit) {
+      entries = entries.slice(-limit);
+    }
+    return entries;
+  }
+
+  /**
+   * Clear console history buffer
+   */
+  clearConsoleHistory(): void {
+    this.consoleBuffer = [];
+  }
+
+  // ============================================================================
+  // localStorage / sessionStorage
+  // ============================================================================
+
+  /**
+   * Get localStorage for the current page's origin
+   */
+  async getLocalStorage(): Promise<Record<string, string>> {
+    const page = this.getCurrentPage();
+    return await page.evaluate(() => {
+      const data: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) data[key] = localStorage.getItem(key) || '';
+      }
+      return data;
+    });
+  }
+
+  /**
+   * Set localStorage entries for the current page
+   */
+  async setLocalStorage(data: Record<string, string>): Promise<void> {
+    const page = this.getCurrentPage();
+    await page.evaluate((entries: Record<string, string>) => {
+      for (const [key, value] of Object.entries(entries)) {
+        localStorage.setItem(key, value);
+      }
+    }, data);
+  }
+
+  /**
+   * Get sessionStorage for the current page's origin
+   */
+  async getSessionStorage(): Promise<Record<string, string>> {
+    const page = this.getCurrentPage();
+    return await page.evaluate(() => {
+      const data: Record<string, string> = {};
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key) data[key] = sessionStorage.getItem(key) || '';
+      }
+      return data;
+    });
+  }
+
+  /**
+   * Set sessionStorage entries for the current page
+   */
+  async setSessionStorage(data: Record<string, string>): Promise<void> {
+    const page = this.getCurrentPage();
+    await page.evaluate((entries: Record<string, string>) => {
+      for (const [key, value] of Object.entries(entries)) {
+        sessionStorage.setItem(key, value);
+      }
+    }, data);
+  }
+
+  // ============================================================================
+  // Extended Device Emulation
+  // ============================================================================
+
+  /**
+   * Set timezone for the browser context
+   */
+  async setTimezone(timezoneId: string): Promise<void> {
+    if (!this.context) throw new Error('Browser not launched');
+    // Playwright doesn't have a direct setTimezone on existing context,
+    // but we can use CDP to emulate it
+    const page = this.getCurrentPage();
+    const cdpSession = await page.context().newCDPSession(page);
+    await cdpSession.send('Emulation.setTimezoneOverride', { timezoneId });
+  }
+
+  /**
+   * Set locale for the browser context
+   */
+  async setLocale(locale: string): Promise<void> {
+    if (!this.context) throw new Error('Browser not launched');
+    const page = this.getCurrentPage();
+    const cdpSession = await page.context().newCDPSession(page);
+    await cdpSession.send('Emulation.setLocaleOverride', { locale });
+  }
+
+  /**
+   * Set color scheme preference
+   */
+  async setColorScheme(colorScheme: 'light' | 'dark' | 'no-preference'): Promise<void> {
+    if (!this.context) throw new Error('Browser not launched');
+    const page = this.getCurrentPage();
+    await page.emulateMedia({ colorScheme });
+  }
+
+  /**
+   * Grant permissions to the browser context
+   */
+  async grantPermissions(permissions: string[]): Promise<void> {
+    if (!this.context) throw new Error('Browser not launched');
+    await this.context.grantPermissions(permissions);
+  }
+
+  /**
+   * Extended device emulation with timezone, locale, colorScheme, permissions
+   */
+  async emulateDeviceExtended(device: ExtendedDeviceConfig): Promise<void> {
+    // Apply base device emulation
+    await this.emulateDevice(device);
+
+    // Apply extensions
+    if (device.timezoneId) await this.setTimezone(device.timezoneId);
+    if (device.locale) await this.setLocale(device.locale);
+    if (device.colorScheme) await this.setColorScheme(device.colorScheme);
+    if (device.permissions) await this.grantPermissions(device.permissions);
+  }
+
+  // ============================================================================
+  // Browser Profile Persistence
+  // ============================================================================
+
+  private async getProfileManager(): Promise<import('./profile-manager.js').BrowserProfileManager> {
+    if (!this._profileManager) {
+      const { BrowserProfileManager } = await import('./profile-manager.js');
+      this._profileManager = new BrowserProfileManager();
+    }
+    return this._profileManager;
+  }
+
+  /**
+   * Save current browser state as a named profile
+   */
+  async saveProfile(name: string): Promise<void> {
+    const cookies = await this.getCookies();
+    const localStorage: Record<string, Record<string, string>> = {};
+    const sessionStorage: Record<string, Record<string, string>> = {};
+
+    // Capture storage from current page
+    try {
+      const url = this.getUrl();
+      const origin = new URL(url).origin;
+      localStorage[origin] = await this.getLocalStorage();
+      sessionStorage[origin] = await this.getSessionStorage();
+    } catch {
+      // Page may not be navigated yet
+    }
+
+    const mgr = await this.getProfileManager();
+    await mgr.save(name, { cookies, localStorage, sessionStorage });
+  }
+
+  /**
+   * Load a named profile into the browser
+   */
+  async loadProfile(name: string): Promise<boolean> {
+    const mgr = await this.getProfileManager();
+    const profile = await mgr.load(name);
+    if (!profile) return false;
+
+    // Restore cookies
+    if (profile.cookies.length > 0) {
+      await this.setCookies(profile.cookies);
+    }
+
+    // Restore storage per origin
+    for (const [origin, data] of Object.entries(profile.localStorage)) {
+      try {
+        const page = this.getCurrentPage();
+        await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
+        await this.setLocalStorage(data);
+      } catch {
+        logger.warn(`Failed to restore localStorage for ${origin}`);
+      }
+    }
+
+    return true;
+  }
+
+  // ============================================================================
+  // Network Route Interception
+  // ============================================================================
+
+  private async getRouteInterceptor(): Promise<import('./route-interceptor.js').RouteInterceptor> {
+    if (!this._routeInterceptor) {
+      const { RouteInterceptor } = await import('./route-interceptor.js');
+      this._routeInterceptor = new RouteInterceptor();
+    }
+    return this._routeInterceptor;
+  }
+
+  /**
+   * Add a route interception rule
+   */
+  async addRouteRule(rule: RouteRule): Promise<void> {
+    const page = this.getCurrentPage();
+    const interceptor = await this.getRouteInterceptor();
+    await interceptor.addRule(page, rule);
+  }
+
+  /**
+   * Remove a route interception rule
+   */
+  async removeRouteRule(ruleId: string): Promise<void> {
+    const page = this.getCurrentPage();
+    const interceptor = await this.getRouteInterceptor();
+    await interceptor.removeRule(page, ruleId);
+  }
+
+  /**
+   * List active route rules
+   */
+  listRouteRules(): RouteRule[] {
+    return this._routeInterceptor?.listRules() || [];
+  }
+
+  /**
+   * Clear all route rules
+   */
+  async clearRouteRules(): Promise<void> {
+    if (this._routeInterceptor) {
+      const page = this.getCurrentPage();
+      await this._routeInterceptor.clearRules(page);
+    }
   }
 
   /**

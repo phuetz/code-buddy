@@ -1,6 +1,6 @@
 // Core tools
 export { TextEditorTool } from "./text-editor.js";
-export { BashTool } from "./bash.js";
+export { BashTool } from "./bash/index.js";
 export { TodoTool, type TodoItem, type TodoStats } from "./todo-tool.js";
 export {
   SearchTool,

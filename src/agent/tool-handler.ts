@@ -31,7 +31,9 @@ import {
   createTodoTools,
   createDockerTools,
   createKubernetesTools,
+  createGitTools,
   createMiscTools,
+  createProcessTools,
 } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 import { CodeBuddyToolCall } from "../codebuddy/client.js";
@@ -144,7 +146,9 @@ export class ToolHandler {
       ...createTodoTools(),
       ...createDockerTools(),
       ...createKubernetesTools(),
+      ...createGitTools(),
       ...createMiscTools(),
+      ...createProcessTools(),
     ];
 
     for (const tool of allTools) {
@@ -317,7 +321,6 @@ export class ToolHandler {
       } else {
         // Suggest common alternatives for hallucinated tool names
         const suggestions: Record<string, string> = {
-          git: 'Use the "bash" tool with git commands (e.g., bash with command "git status")',
           npm: 'Use the "bash" tool with npm commands (e.g., bash with command "npm install")',
           node: 'Use the "bash" tool with node commands (e.g., bash with command "node script.js")',
           python: 'Use the "bash" tool with python commands',

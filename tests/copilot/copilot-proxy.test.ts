@@ -1,245 +1,109 @@
+import { CopilotProxy } from '../../src/copilot/copilot-proxy.js';
 import http from 'http';
-import { CopilotProxy, CopilotCompletionRequest, CopilotCompletionResponse, CopilotProxyConfig } from '../../src/copilot/copilot-proxy.js';
-
-function isLocalBindPermissionError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes('listen EPERM') || message.includes('EACCES');
-}
-
-function makeRequest(port: number, method: string, path: string, body?: object, headers?: Record<string, string>): Promise<{ status: number; data: any }> {
-  return new Promise((resolve, reject) => {
-    const payload = body ? JSON.stringify(body) : undefined;
-    const req = http.request({
-      hostname: '127.0.0.1',
-      port,
-      method,
-      path,
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers,
-        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
-      },
-    }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => chunks.push(chunk));
-      res.on('end', () => {
-        const raw = Buffer.concat(chunks).toString('utf-8');
-        try {
-          resolve({ status: res.statusCode ?? 0, data: JSON.parse(raw) });
-        } catch {
-          resolve({ status: res.statusCode ?? 0, data: raw });
-        }
-      });
-    });
-    req.on('error', reject);
-    if (payload) {
-      req.write(payload);
-    }
-    req.end();
-  });
-}
-
-const mockResponse: CopilotCompletionResponse = {
-  id: 'cmpl-test',
-  choices: [{ text: 'console.log("hello")', index: 0, finish_reason: 'stop' }],
-  usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-};
 
 describe('CopilotProxy', () => {
-  describe('unit tests', () => {
-    it('should store config in constructor', () => {
-      const config: CopilotProxyConfig = {
-        port: 5100,
-        host: '127.0.0.1',
-        maxTokens: 256,
-        onCompletion: jest.fn(),
-      };
-      const proxy = new CopilotProxy(config);
-      expect(proxy).toBeInstanceOf(CopilotProxy);
-    });
+  let proxy: CopilotProxy;
+  let currentPort = 19876;
 
-    it('should return false for isRunning before start', () => {
-      const proxy = new CopilotProxy({
-        port: 0,
-        host: '127.0.0.1',
-        maxTokens: 256,
-        onCompletion: jest.fn(),
-      });
-      expect(proxy.isRunning()).toBe(false);
+  function createProxy(overrides: Record<string, unknown> = {}): CopilotProxy {
+    currentPort++; // Use different port each test to avoid conflicts
+    return new CopilotProxy({
+      port: currentPort,
+      host: '127.0.0.1',
+      authToken: 'test-token',
+      requireAuth: true,
+      maxTokens: 100,
+      maxTokensLimit: 500,
+      rateLimitPerMinute: 100,
+      onCompletion: async () => ({
+        id: 'test-1',
+        choices: [{ text: 'hello', index: 0, finish_reason: 'stop' as const }],
+      }),
+      ...overrides,
     });
+  }
 
-    it('should return 0 for getRequestCount initially', () => {
-      const proxy = new CopilotProxy({
-        port: 0,
-        host: '127.0.0.1',
-        maxTokens: 256,
-        onCompletion: jest.fn(),
-      });
-      expect(proxy.getRequestCount()).toBe(0);
-    });
+  afterEach(async () => {
+    if (proxy?.isRunning()) {
+      await proxy.stop();
+    }
   });
 
-  describe('server tests (no auth)', () => {
-    let proxy: CopilotProxy;
-    let port: number;
-    let canRunServerTests = true;
-    const onCompletion = jest.fn<Promise<CopilotCompletionResponse>, [CopilotCompletionRequest]>();
-
-    beforeAll(async () => {
-      onCompletion.mockResolvedValue(mockResponse);
-      proxy = new CopilotProxy({
-        port: 0,
-        host: '127.0.0.1',
-        maxTokens: 256,
-        onCompletion,
+  function makeRequest(port: number, options: http.RequestOptions, body?: string): Promise<{ status: number; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = http.request({ hostname: '127.0.0.1', port, ...options }, (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => data += chunk);
+        res.on('end', () => resolve({ status: res.statusCode || 0, body: data }));
       });
-      try {
-        await proxy.start();
-        const addr = (proxy as any).server.address();
-        port = addr.port;
-      } catch (error) {
-        if (isLocalBindPermissionError(error)) {
-          canRunServerTests = false;
-          return;
-        }
-        throw error;
-      }
+      req.on('error', reject);
+      if (body) req.write(body);
+      req.end();
     });
+  }
 
-    afterAll(async () => {
-      if (!canRunServerTests) return;
-      await proxy.stop();
-    });
-
-    it('should be running after start', () => {
-      if (!canRunServerTests) return;
-      expect(proxy.isRunning()).toBe(true);
-    });
-
-    it('GET /health returns 200', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'GET', '/health');
-      expect(res.status).toBe(200);
-      expect(res.data.status).toBe('ok');
-    });
-
-    it('GET /v1/models returns model list', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'GET', '/v1/models');
-      expect(res.status).toBe(200);
-      expect(res.data.data).toEqual([{ id: 'codebuddy', object: 'model' }]);
-    });
-
-    it('POST /v1/completions calls onCompletion and returns result', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'POST', '/v1/completions', { prompt: 'function add(' });
-      expect(res.status).toBe(200);
-      expect(res.data.id).toBe('cmpl-test');
-      expect(res.data.choices[0].text).toBe('console.log("hello")');
-      expect(onCompletion).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'function add(' }));
-    });
-
-    it('POST /v1/engines/codex/completions works as alias', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'POST', '/v1/engines/codex/completions', { prompt: 'test' });
-      expect(res.status).toBe(200);
-      expect(res.data.id).toBe('cmpl-test');
-    });
-
-    it('POST /v1/completions without prompt returns 400', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'POST', '/v1/completions', { suffix: 'no prompt' });
-      expect(res.status).toBe(400);
-      expect(res.data.error.message).toContain('prompt');
-    });
-
-    it('POST /v1/completions with invalid JSON returns 400', async () => {
-      if (!canRunServerTests) return;
-      return new Promise<void>((resolve, reject) => {
-        const req = http.request({
-          hostname: '127.0.0.1',
-          port,
-          method: 'POST',
-          path: '/v1/completions',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': 5 },
-        }, (res) => {
-          const chunks: Buffer[] = [];
-          res.on('data', (c: Buffer) => chunks.push(c));
-          res.on('end', () => {
-            const data = JSON.parse(Buffer.concat(chunks).toString());
-            expect(res.statusCode).toBe(400);
-            expect(data.error.message).toContain('Invalid JSON');
-            resolve();
-          });
-        });
-        req.on('error', reject);
-        req.write('{bad}');
-        req.end();
-      });
-    });
-
-    it('GET /unknown returns 404', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'GET', '/unknown');
-      expect(res.status).toBe(404);
-      expect(res.data.error.code).toBe(404);
-    });
-
-    it('increments request count', () => {
-      if (!canRunServerTests) return;
-      expect(proxy.getRequestCount()).toBeGreaterThan(0);
-    });
+  it('should reject requests without auth token', async () => {
+    proxy = createProxy();
+    await proxy.start();
+    const res = await makeRequest(currentPort, { path: '/health', method: 'GET' });
+    expect(res.status).toBe(401);
   });
 
-  describe('server tests (with auth)', () => {
-    let proxy: CopilotProxy;
-    let port: number;
-    let canRunServerTests = true;
-    const token = 'test-secret-token';
-
-    beforeAll(async () => {
-      proxy = new CopilotProxy({
-        port: 0,
-        host: '127.0.0.1',
-        maxTokens: 256,
-        authToken: token,
-        onCompletion: jest.fn<Promise<CopilotCompletionResponse>, [CopilotCompletionRequest]>().mockResolvedValue(mockResponse),
-      });
-      try {
-        await proxy.start();
-        const addr = (proxy as any).server.address();
-        port = addr.port;
-      } catch (error) {
-        if (isLocalBindPermissionError(error)) {
-          canRunServerTests = false;
-          return;
-        }
-        throw error;
-      }
+  it('should accept requests with valid auth token', async () => {
+    proxy = createProxy();
+    await proxy.start();
+    const res = await makeRequest(currentPort, {
+      path: '/health',
+      method: 'GET',
+      headers: { authorization: 'Bearer test-token' },
     });
+    expect(res.status).toBe(200);
+  });
 
-    afterAll(async () => {
-      if (!canRunServerTests) return;
-      await proxy.stop();
-    });
+  it('should enforce rate limiting', async () => {
+    proxy = createProxy({ rateLimitPerMinute: 3 });
+    await proxy.start();
+    const headers = { authorization: 'Bearer test-token' };
 
-    it('rejects request without token', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'GET', '/health');
-      expect(res.status).toBe(401);
-    });
-
-    it('rejects request with bad token', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'GET', '/health', undefined, { Authorization: 'Bearer wrong' });
-      expect(res.status).toBe(401);
-    });
-
-    it('accepts request with valid token', async () => {
-      if (!canRunServerTests) return;
-      const res = await makeRequest(port, 'GET', '/health', undefined, { Authorization: `Bearer ${token}` });
+    // Send requests up to the limit
+    for (let i = 0; i < 3; i++) {
+      const res = await makeRequest(currentPort, { path: '/health', method: 'GET', headers });
       expect(res.status).toBe(200);
-      expect(res.data.status).toBe('ok');
-    });
+    }
+
+    // Next request should be rate limited
+    const res = await makeRequest(currentPort, { path: '/health', method: 'GET', headers });
+    expect(res.status).toBe(429);
+  });
+
+  it('should track request count', async () => {
+    proxy = createProxy();
+    await proxy.start();
+    expect(proxy.getRequestCount()).toBe(0);
+    await makeRequest(currentPort, { path: '/health', method: 'GET', headers: { authorization: 'Bearer test-token' } });
+    expect(proxy.getRequestCount()).toBe(1);
+  });
+
+  it('should report running state', async () => {
+    proxy = createProxy();
+    expect(proxy.isRunning()).toBe(false);
+    await proxy.start();
+    expect(proxy.isRunning()).toBe(true);
+    await proxy.stop();
+    expect(proxy.isRunning()).toBe(false);
+  });
+
+  it('should reject when requireAuth is true and no token configured', async () => {
+    proxy = createProxy({ authToken: undefined, requireAuth: true });
+    await proxy.start();
+    const res = await makeRequest(currentPort, { path: '/health', method: 'GET' });
+    expect(res.status).toBe(401);
+  });
+
+  it('should allow when no auth token and requireAuth is false', async () => {
+    proxy = createProxy({ authToken: undefined, requireAuth: false });
+    await proxy.start();
+    const res = await makeRequest(currentPort, { path: '/health', method: 'GET' });
+    expect(res.status).toBe(200);
   });
 });

@@ -31,7 +31,7 @@ export interface Session {
 }
 
 export interface SessionMessage {
-  type: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'reasoning' | 'plan_progress';
+  type: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'reasoning' | 'plan_progress' | 'steer';
   content: string;
   timestamp: string;
   toolCallName?: string;
@@ -225,7 +225,7 @@ export class SessionStore {
     if (this.dbRepository) {
       const dbMessage: Omit<DBMessage, 'id' | 'created_at'> = {
         session_id: this.currentSessionId,
-        role: message.type === 'tool_result' ? 'tool' : message.type === 'tool_call' ? 'assistant' : message.type === 'reasoning' ? 'assistant' : message.type === 'plan_progress' ? 'assistant' : message.type,
+        role: message.type === 'tool_result' ? 'tool' : message.type === 'tool_call' ? 'assistant' : message.type === 'reasoning' ? 'assistant' : message.type === 'plan_progress' ? 'assistant' : message.type === 'steer' ? 'user' : message.type,
         content: message.content,
         tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
         metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,

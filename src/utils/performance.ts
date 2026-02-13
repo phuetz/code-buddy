@@ -2,6 +2,8 @@
  * Performance monitoring and metrics utilities
  */
 
+import { logger } from './logger.js';
+
 export interface PerformanceMetric {
   name: string;
   startTime: number;
@@ -73,7 +75,7 @@ export class PerformanceMonitor {
 
     const metric = this.metrics.get(name);
     if (!metric) {
-      console.warn(`Performance metric '${name}' not found`);
+      logger.warn(`Performance metric '${name}' not found`);
       return null;
     }
 
@@ -267,46 +269,46 @@ export class PerformanceMonitor {
     const report = this.getReport();
 
     if (report.metrics.length === 0) {
-      console.log('No performance metrics recorded');
+      logger.info('No performance metrics recorded');
       return;
     }
 
-    console.log('\n=== Performance Report ===');
-    console.log(`Total operations: ${report.metrics.length}`);
-    console.log(
+    logger.info('=== Performance Report ===');
+    logger.info(`Total operations: ${report.metrics.length}`);
+    logger.info(
       `Total duration: ${PerformanceMonitor.formatDuration(report.totalDuration)}`
     );
-    console.log(
+    logger.info(
       `Average duration: ${PerformanceMonitor.formatDuration(report.averageDuration)}`
     );
 
     if (report.slowest) {
-      console.log(
+      logger.info(
         `Slowest: ${report.slowest.name} (${PerformanceMonitor.formatDuration(report.slowest.duration || 0)})`
       );
     }
 
     if (report.fastest) {
-      console.log(
+      logger.info(
         `Fastest: ${report.fastest.name} (${PerformanceMonitor.formatDuration(report.fastest.duration || 0)})`
       );
     }
 
-    console.log('\n=== Summary by Operation ===');
+    logger.info('=== Summary by Operation ===');
     const summary = this.getSummary();
     for (const [name, stats] of Object.entries(summary)) {
-      console.log(`\n${name}:`);
-      console.log(`  Count: ${stats.count}`);
-      console.log(
+      logger.info(`${name}:`);
+      logger.info(`  Count: ${stats.count}`);
+      logger.info(
         `  Total: ${PerformanceMonitor.formatDuration(stats.totalDuration)}`
       );
-      console.log(
+      logger.info(
         `  Average: ${PerformanceMonitor.formatDuration(stats.averageDuration)}`
       );
-      console.log(
+      logger.info(
         `  Min: ${PerformanceMonitor.formatDuration(stats.minDuration)}`
       );
-      console.log(
+      logger.info(
         `  Max: ${PerformanceMonitor.formatDuration(stats.maxDuration)}`
       );
     }

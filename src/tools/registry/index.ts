@@ -69,6 +69,13 @@ export {
   resetKubernetesInstance,
 } from './kubernetes-tools.js';
 
+// Tool Adapters - Git
+export {
+  GitOperationTool,
+  createGitTools,
+  resetGitInstance,
+} from './git-tools.js';
+
 // Tool Adapters - Misc (Browser, Reasoning)
 export {
   BrowserExecuteTool,
@@ -76,6 +83,13 @@ export {
   createMiscTools,
   resetMiscInstances,
 } from './misc-tools.js';
+
+// Tool Adapters - Process
+export {
+  ProcessOperationTool,
+  createProcessTools,
+  resetProcessInstance,
+} from './process-tools.js';
 
 // Types
 export type {
@@ -114,7 +128,9 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createTodoTools } = await import('./todo-tools.js');
   const { createDockerTools } = await import('./docker-tools.js');
   const { createKubernetesTools } = await import('./kubernetes-tools.js');
+  const { createGitTools } = await import('./git-tools.js');
   const { createMiscTools } = await import('./misc-tools.js');
+  const { createProcessTools } = await import('./process-tools.js');
 
   return [
     ...createTextEditorTools(),
@@ -124,7 +140,9 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createTodoTools(),
     ...createDockerTools(),
     ...createKubernetesTools(),
+    ...createGitTools(),
     ...createMiscTools(),
+    ...createProcessTools(),
   ];
 }
 

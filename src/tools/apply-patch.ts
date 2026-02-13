@@ -166,10 +166,11 @@ function applyHunk(
   // Try to find the old lines in the content, starting from the expected position
   const startLine = hunk.oldStart - 1; // 0-indexed
 
-  // Try exact position first, then fuzz offsets
+  // Try exact position first, then fuzz offsets (fixed: dir=0 means offset=0)
   for (let offset = 0; offset <= fuzz; offset++) {
-    for (const dir of [0, -1, 1]) {
-      const tryStart = startLine + (offset * (dir || 1));
+    const directions = offset === 0 ? [0] : [-1, 1];
+    for (const dir of directions) {
+      const tryStart = startLine + (offset * dir);
       if (tryStart < 0 || tryStart + oldLines.length > contentLines.length) continue;
 
       // Check if old lines match at this position
@@ -284,13 +285,15 @@ function applyFilePatch(
 
     result.applied = result.hunksApplied === result.hunksTotal;
 
-    if (result.applied && !options.dryRun) {
-      const output = contentLines.join('\n');
-      fs.writeFileSync(filePath, hadTrailingNewline && !output.endsWith('\n') ? output + '\n' : output);
-    }
-
-    if (!result.applied && result.hunksApplied > 0) {
-      result.error = `Partial apply: ${result.hunksApplied}/${result.hunksTotal} hunks — file NOT modified`;
+    // Only write if ALL hunks applied (all-or-nothing)
+    if (result.hunksApplied > 0 && !options.dryRun) {
+      if (result.applied) {
+        const output = contentLines.join('\n');
+        fs.writeFileSync(filePath, hadTrailingNewline && !output.endsWith('\n') ? output + '\n' : output);
+      } else {
+        // Partial apply: don't write, report failure
+        result.error = `Partial apply: ${result.hunksApplied}/${result.hunksTotal} hunks — file NOT modified (all-or-nothing)`;
+      }
     } else if (result.hunksApplied === 0) {
       result.error = 'No hunks could be applied (content mismatch)';
     }
@@ -307,6 +310,7 @@ function applyFilePatch(
 
 /**
  * Apply a unified diff patch to one or more files.
+ * Uses atomic rollback: if any file fails, all changes are reverted.
  */
 export async function applyPatch(
   diffText: string,
@@ -319,12 +323,52 @@ export async function applyPatch(
       return { success: false, error: 'No valid patches found in input' };
     }
 
+    // Phase 1: Save original file states for rollback
+    const cwd = options.cwd || process.cwd();
+    const backups = new Map<string, { content: string; existed: boolean }>();
+
+    if (!options.dryRun) {
+      for (const patch of patches) {
+        const patchPath = patch.isNew ? patch.newPath : patch.oldPath;
+        const filePath = path.resolve(cwd, patchPath);
+        try {
+          if (fs.existsSync(filePath)) {
+            backups.set(filePath, {
+              content: fs.readFileSync(filePath, 'utf-8'),
+              existed: true,
+            });
+          } else {
+            backups.set(filePath, { content: '', existed: false });
+          }
+        } catch {
+          backups.set(filePath, { content: '', existed: false });
+        }
+      }
+    }
+
+    // Phase 2: Apply all patches
     const results: PatchResult[] = [];
     for (const patch of patches) {
       results.push(applyFilePatch(patch, options));
     }
 
     const allApplied = results.every(r => r.applied);
+
+    // Phase 3: If any failed and not dry-run, rollback all changes
+    if (!allApplied && !options.dryRun) {
+      for (const [filePath, backup] of backups) {
+        try {
+          if (backup.existed) {
+            fs.writeFileSync(filePath, backup.content);
+          } else if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (rollbackErr) {
+          logger.debug('Rollback failed for file', { filePath, error: rollbackErr });
+        }
+      }
+    }
+
     const summary = results.map(r => {
       const status = r.applied ? 'OK' : 'FAILED';
       const hunks = `${r.hunksApplied}/${r.hunksTotal} hunks`;
@@ -332,11 +376,12 @@ export async function applyPatch(
       return `  ${status}: ${r.file} (${hunks}${err})`;
     }).join('\n');
 
-    const action = options.dryRun ? 'Dry run' : 'Applied';
+    const action = options.dryRun ? 'Dry run' : (allApplied ? 'Applied' : 'ROLLED BACK');
 
     return {
       success: allApplied,
       output: `${action} ${patches.length} file(s):\n${summary}`,
+      error: !allApplied ? 'Patch failed — all changes rolled back (atomic)' : undefined,
       data: { results },
     };
   } catch (error) {

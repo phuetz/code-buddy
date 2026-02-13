@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import os from 'os';
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { logger } from '../utils/logger.js';
 
 // ============================================================================
 // Types
@@ -295,7 +296,7 @@ export class FeatureFlagsManager extends EventEmitter {
         return JSON.parse(content);
       }
     } catch (error) {
-      console.warn(`Failed to load feature flags from ${filePath}:`, error);
+      logger.warn(`Failed to load feature flags from ${filePath}`, { error: String(error) });
     }
     return null;
   }

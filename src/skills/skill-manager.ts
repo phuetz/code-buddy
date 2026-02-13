@@ -3,6 +3,7 @@ import * as path from "path";
 import { EventEmitter } from "events";
 import type { UnifiedSkill } from './types.js';
 import { legacyToUnified } from './adapters/index.js';
+import { logger } from '../utils/logger.js';
 
 export interface Skill {
   name: string;
@@ -185,7 +186,7 @@ export class SkillManager extends EventEmitter {
     super();
     if (!_skillManagerDeprecationWarned) {
       _skillManagerDeprecationWarned = true;
-      console.warn('[DEPRECATED] SkillManager is deprecated. Use SKILL.md system (SkillRegistry) instead. See src/skills/MIGRATION.md');
+      logger.warn('[DEPRECATED] SkillManager is deprecated. Use SKILL.md system (SkillRegistry) instead. See src/skills/MIGRATION.md');
     }
     this.skillsDir = path.join(projectRoot, ".codebuddy", "skills");
 

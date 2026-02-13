@@ -20,6 +20,7 @@ import { getErrorMessage } from "../../errors/index.js";
 import { sanitizeToolResult } from "../../utils/sanitize.js";
 import type { LaneQueue } from "../../concurrency/lane-queue.js";
 import type { MiddlewarePipeline, MiddlewareContext } from "../middleware/index.js";
+import type { MessageQueue } from "../message-queue.js";
 
 /**
  * Dependencies injected into the AgentExecutor
@@ -43,6 +44,8 @@ export interface ExecutorDependencies {
   laneId?: string;
   /** Optional middleware pipeline for composable loop control */
   middlewarePipeline?: MiddlewarePipeline;
+  /** Optional message queue for steer/followup/collect modes */
+  messageQueue?: MessageQueue;
 }
 
 /**
@@ -81,6 +84,18 @@ export class AgentExecutor {
     private deps: ExecutorDependencies,
     private config: ExecutorConfig
   ) {}
+
+  /**
+   * Get or set the middleware pipeline.
+   * Used by CodeBuddyAgent.enableAutoObservation() to inject middleware.
+   */
+  getMiddlewarePipeline(): MiddlewarePipeline | undefined {
+    return this.deps.middlewarePipeline;
+  }
+
+  setMiddlewarePipeline(pipeline: MiddlewarePipeline): void {
+    this.deps.middlewarePipeline = pipeline;
+  }
 
   /**
    * Build a MiddlewareContext from current loop state.
@@ -477,6 +492,23 @@ export class AgentExecutor {
             return;
           }
 
+          // Check for steering messages (steer mode: interrupt execution)
+          const mq = this.deps.messageQueue;
+          if (mq?.hasSteeringMessage()) {
+            const steering = mq.consumeSteeringMessage();
+            if (steering) {
+              yield { type: "steer", steer: { content: steering.content, source: steering.source } };
+              // Inject as user message and skip remaining tool calls
+              messages.push({ role: "user", content: steering.content });
+              history.push({
+                type: "user",
+                content: steering.content,
+                timestamp: new Date(),
+              });
+              continue; // Re-enter loop to get new LLM response
+            }
+          }
+
           if (!this.deps.streamingHandler.hasYieldedToolCalls()) {
             yield { type: "tool_calls", toolCalls: toolCalls };
           }
@@ -494,6 +526,13 @@ export class AgentExecutor {
               const gen = this.deps.toolHandler.executeToolStreaming(toolCall);
               let genResult = await gen.next();
               while (!genResult.done) {
+                // Check abort between stream chunks
+                if (abortController?.signal.aborted) {
+                  await gen.return({ success: false, error: 'Aborted' });
+                  yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+                  yield { type: "done" };
+                  return;
+                }
                 yield {
                   type: "tool_stream",
                   toolStreamData: {
@@ -507,6 +546,13 @@ export class AgentExecutor {
               result = genResult.value ?? { success: false, error: 'Tool returned no result' };
             } else {
               result = await this.executeToolViaLane(toolCall);
+            }
+
+            // Check abort after tool execution completes
+            if (abortController?.signal.aborted) {
+              yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+              yield { type: "done" };
+              return;
             }
 
             const toolResultEntry: ChatEntry = {
@@ -578,6 +624,28 @@ export class AgentExecutor {
           type: "content",
           content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
         };
+      }
+
+      // Process followup/collect messages if any are queued
+      const mqEnd = this.deps.messageQueue;
+      if (mqEnd?.hasPendingMessages()) {
+        const mode = mqEnd.getMode();
+        if (mode === 'followup') {
+          const followups = mqEnd.drain();
+          for (const msg of followups) {
+            messages.push({ role: "user", content: msg.content });
+            history.push({ type: "user", content: msg.content, timestamp: msg.timestamp });
+          }
+          // Signal that followup messages need re-processing (caller handles)
+          yield { type: "steer", steer: { content: `${followups.length} followup message(s) queued`, source: 'queue' } };
+        } else if (mode === 'collect') {
+          const collected = mqEnd.collect();
+          if (collected) {
+            messages.push({ role: "user", content: collected });
+            history.push({ type: "user", content: collected, timestamp: new Date() });
+            yield { type: "steer", steer: { content: collected, source: 'collect' } };
+          }
+        }
       }
 
       yield { type: "done" };

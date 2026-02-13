@@ -11,6 +11,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
+import { logger } from './logger.js';
 
 export interface HistoryManagerConfig {
   /** Maximum number of history entries to store */
@@ -102,7 +103,7 @@ export class HistoryManager {
       }
     } catch (error) {
       // Graceful degradation - start with empty history
-      console.warn('Failed to load history:', error);
+      logger.warn('Failed to load history', { error: String(error) });
       this.history = [];
     }
   }
@@ -120,7 +121,7 @@ export class HistoryManager {
         'utf-8'
       );
     } catch (error) {
-      console.warn('Failed to save history:', error);
+      logger.warn('Failed to save history', { error: String(error) });
     }
   }
 

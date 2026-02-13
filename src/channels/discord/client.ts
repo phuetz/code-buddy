@@ -30,6 +30,8 @@ import type {
   MessageButton,
 } from '../index.js';
 import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
+import { ReconnectionManager } from '../reconnection-manager.js';
+import { logger } from '../../utils/logger.js';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY = 'wss://gateway.discord.gg/?v=10&encoding=json';
@@ -83,12 +85,18 @@ export class DiscordChannel extends BaseChannel {
   private resumeGatewayUrl: string | null = null;
   private botUser: DiscordUser | null = null;
   private reconnecting = false;
+  private reconnectionManager: ReconnectionManager;
 
   constructor(config: DiscordConfig) {
     super('discord', config);
     if (!config.token) {
       throw new Error('Discord bot token is required');
     }
+    this.reconnectionManager = new ReconnectionManager('discord', {
+      maxRetries: 10,
+      initialDelayMs: 1000,
+      maxDelayMs: 60000,
+    });
   }
 
   private get discordConfig(): DiscordConfig {
@@ -351,26 +359,27 @@ export class DiscordChannel extends BaseChannel {
   }
 
   /**
-   * Reconnect to gateway
+   * Reconnect to gateway using ReconnectionManager for backoff
    */
-  private async reconnect(): Promise<void> {
+  private reconnect(): void {
     if (this.reconnecting) return;
-    this.reconnecting = true;
 
-    try {
-      if (this.ws) {
-        this.ws.removeAllListeners();
-        if (this.ws.readyState === WebSocket.OPEN) {
-          this.ws.close();
+    this.reconnectionManager.scheduleReconnect(async () => {
+      this.reconnecting = true;
+      try {
+        if (this.ws) {
+          this.ws.removeAllListeners();
+          if (this.ws.readyState === WebSocket.OPEN) {
+            this.ws.close();
+          }
+          this.ws = null;
         }
-        this.ws = null;
+        await this.connect();
+        this.reconnectionManager.onConnected();
+      } finally {
+        this.reconnecting = false;
       }
-
-      await new Promise((r) => setTimeout(r, 5000));
-      await this.connect();
-    } finally {
-      this.reconnecting = false;
-    }
+    });
   }
 
   /**
@@ -431,6 +440,8 @@ export class DiscordChannel extends BaseChannel {
       botTag: `${data.user.username}#${data.user.discriminator}`,
     };
 
+    this.reconnectionManager.onConnected();
+
     // Register slash commands if provided
     if (this.discordConfig.commands && this.discordConfig.commands.length > 0) {
       await this.registerCommands();
@@ -444,7 +455,7 @@ export class DiscordChannel extends BaseChannel {
    */
   private async registerCommands(): Promise<void> {
     if (!this.discordConfig.applicationId) {
-      console.warn('Cannot register slash commands without applicationId');
+      logger.warn('Cannot register slash commands without applicationId');
       return;
     }
 
@@ -670,6 +681,8 @@ export class DiscordChannel extends BaseChannel {
    * Disconnect from Discord
    */
   async disconnect(): Promise<void> {
+    this.reconnectionManager.cancel();
+
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;

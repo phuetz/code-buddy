@@ -9,7 +9,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { BashTool } from '../tools/bash.js';
+import { BashTool } from '../tools/bash/index.js';
 
 export interface GitProvider {
   type: 'github' | 'gitlab';

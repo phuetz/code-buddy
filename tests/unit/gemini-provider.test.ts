@@ -150,14 +150,18 @@ describe('GeminiProvider', () => {
       expect(response.provider).toBe('gemini');
     });
 
-    it('should include API key in URL', async () => {
+    it('should include API key in request', async () => {
       await provider.complete({
         messages: [{ role: 'user', content: 'Hello' }],
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('key=test-api-key'),
-        expect.anything()
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'test-api-key',
+          }),
+        })
       );
     });
 

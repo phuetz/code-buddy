@@ -56,13 +56,18 @@ export const GIT_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "git",
-    description: "Perform git operations: status, diff, add, commit, push, pull, branch, checkout, stash",
+    description: "Perform git operations: status, diff, add, commit, push, pull, branch, checkout, stash, blame, cherry-pick, bisect",
     parameters: {
       type: "object",
       properties: {
         operation: {
           type: "string",
-          enum: ["status", "diff", "add", "commit", "push", "pull", "branch", "checkout", "stash", "auto_commit"],
+          enum: [
+            "status", "diff", "add", "commit", "push", "pull",
+            "branch", "checkout", "stash", "auto_commit",
+            "blame", "cherry_pick",
+            "bisect_start", "bisect_step", "bisect_reset"
+          ],
           description: "The git operation to perform"
         },
         args: {
@@ -76,7 +81,7 @@ export const GIT_TOOL: CodeBuddyTool = {
             },
             message: {
               type: "string",
-              description: "Commit message (for commit operation)"
+              description: "Commit message (for commit/stash operation)"
             },
             branch: {
               type: "string",
@@ -89,6 +94,51 @@ export const GIT_TOOL: CodeBuddyTool = {
             push: {
               type: "boolean",
               description: "Push after commit (for auto_commit)"
+            },
+            file: {
+              type: "string",
+              description: "File path (for blame operation)"
+            },
+            start_line: {
+              type: "number",
+              description: "Starting line number (for blame line range)"
+            },
+            end_line: {
+              type: "number",
+              description: "Ending line number (for blame line range)"
+            },
+            commit: {
+              type: "string",
+              description: "Commit hash (for cherry_pick operation)"
+            },
+            no_commit: {
+              type: "boolean",
+              description: "Apply changes without committing (for cherry_pick)"
+            },
+            bad_ref: {
+              type: "string",
+              description: "Known bad commit ref (for bisect_start)"
+            },
+            good_ref: {
+              type: "string",
+              description: "Known good commit ref (for bisect_start)"
+            },
+            result: {
+              type: "string",
+              enum: ["good", "bad", "skip"],
+              description: "Mark current commit (for bisect_step)"
+            },
+            pop: {
+              type: "boolean",
+              description: "Pop the stash (for stash operation)"
+            },
+            create: {
+              type: "boolean",
+              description: "Create a new branch (for checkout operation)"
+            },
+            delete: {
+              type: "boolean",
+              description: "Delete a branch (for branch operation)"
             }
           }
         }
@@ -442,6 +492,56 @@ export const KUBERNETES_TOOL: CodeBuddyTool = {
   }
 };
 
+// Process management tool
+export const PROCESS_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "process",
+    description: "Manage system processes: list, poll status, read logs, write to stdin, kill, clear logs, remove from tracking",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["list", "poll", "log", "write", "kill", "clear", "remove"],
+          description: "The process action to perform"
+        },
+        args: {
+          type: "object",
+          description: "Action-specific arguments",
+          properties: {
+            pid: {
+              type: "number",
+              description: "Process ID (required for poll, log, write, kill, clear, remove)"
+            },
+            filter: {
+              type: "string",
+              description: "Filter string for list action"
+            },
+            input: {
+              type: "string",
+              description: "Input to write to stdin (for write action)"
+            },
+            signal: {
+              type: "string",
+              description: "Signal to send (for kill, default: SIGTERM)"
+            },
+            lines: {
+              type: "number",
+              description: "Number of log lines (for log, default: 100)"
+            },
+            stderr: {
+              type: "boolean",
+              description: "Show stderr instead of stdout (for log)"
+            }
+          }
+        }
+      },
+      required: ["action"]
+    }
+  }
+};
+
 /**
  * All advanced tools as an array
  */
@@ -452,4 +552,5 @@ export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   SUBAGENT_TOOL,
   DOCKER_TOOL,
   KUBERNETES_TOOL,
+  PROCESS_TOOL,
 ];

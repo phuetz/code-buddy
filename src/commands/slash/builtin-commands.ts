@@ -150,13 +150,20 @@ const checkpointCommands: SlashCommand[] = [
     ]
   },
   {
+    name: 'undo',
+    description: 'Undo last file changes (revert to previous checkpoint)',
+    prompt: '__UNDO__',
+    filePath: '',
+    isBuiltin: true
+  },
+  {
     name: 'diff',
-    description: 'Show diff between two checkpoints',
-    prompt: '__DIFF_CHECKPOINTS__',
+    description: 'Show uncommitted git changes, or diff between checkpoints',
+    prompt: '__DIFF__',
     filePath: '',
     isBuiltin: true,
     arguments: [
-      { name: 'from', description: 'First checkpoint ID (or "last" for last two)', required: false },
+      { name: 'from', description: 'Checkpoint ID (optional, omit for git diff)', required: false },
       { name: 'to', description: 'Second checkpoint ID', required: false }
     ]
   }
@@ -169,24 +176,8 @@ const checkpointCommands: SlashCommand[] = [
 const gitCommands: SlashCommand[] = [
   {
     name: 'review',
-    description: 'Review code changes before commit',
-    prompt: `You are a code reviewer. Analyze the current git changes and provide a detailed code review.
-
-1. First, run git diff to see all unstaged changes
-2. Run git diff --cached to see staged changes
-3. Analyze the changes for:
-   - Code quality and best practices
-   - Potential bugs or issues
-   - Security vulnerabilities
-   - Performance concerns
-   - Missing tests
-   - Code style consistency
-
-Provide a structured review with:
-- Summary of changes
-- Issues found (critical, warnings, suggestions)
-- Recommendations
-- Overall assessment (approve/request changes)`,
+    description: 'Quick code review of staged/unstaged changes',
+    prompt: '__REVIEW__',
     filePath: '',
     isBuiltin: true
   },
@@ -226,18 +217,13 @@ Keep the commit message concise but descriptive.`,
 const devCommands: SlashCommand[] = [
   {
     name: 'test',
-    description: 'Run tests and analyze results',
-    prompt: `Run the project's test suite and analyze the results:
-
-1. Detect the test framework (jest, vitest, mocha, pytest, etc.)
-2. Run the tests with verbose output
-3. If tests fail:
-   - Analyze the failures
-   - Suggest fixes for failing tests
-   - Offer to fix them if appropriate
-4. Provide a summary of test results`,
+    description: 'Run tests directly (optionally specify a file)',
+    prompt: '__TEST__',
     filePath: '',
-    isBuiltin: true
+    isBuiltin: true,
+    arguments: [
+      { name: 'file', description: 'Test file to run (optional, runs all if omitted)', required: false }
+    ]
   },
   {
     name: 'lint',
@@ -251,6 +237,13 @@ const devCommands: SlashCommand[] = [
    - Offer to auto-fix what's possible
    - Suggest manual fixes for complex issues
 4. Provide a summary`,
+    filePath: '',
+    isBuiltin: true
+  },
+  {
+    name: 'fix',
+    description: 'Auto-fix lint errors and check for type errors',
+    prompt: '__FIX__',
     filePath: '',
     isBuiltin: true
   },
@@ -415,12 +408,12 @@ const contextCommands: SlashCommand[] = [
   },
   {
     name: 'context',
-    description: 'View or manage loaded context files',
+    description: 'View or manage loaded context files, or show stats',
     prompt: '__CONTEXT__',
     filePath: '',
     isBuiltin: true,
     arguments: [
-      { name: 'action', description: 'list, clear, or summary', required: false }
+      { name: 'action', description: 'list, clear, summary, or stats', required: false }
     ]
   },
   {
@@ -798,6 +791,19 @@ const themeCommands: SlashCommand[] = [
 // Advanced Workflow Commands
 // ============================================================================
 
+const searchCommands: SlashCommand[] = [
+  {
+    name: 'search',
+    description: 'Search codebase for a text pattern (uses ripgrep)',
+    prompt: '__SEARCH__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'query', description: 'Search pattern (text or regex)', required: true }
+    ]
+  }
+];
+
 const workflowCommands: SlashCommand[] = [
   {
     name: 'todo',
@@ -924,6 +930,7 @@ export const builtinCommands: SlashCommand[] = [
   ...statsCommands,
   ...voiceCommands,
   ...themeCommands,
+  ...searchCommands,
   ...workflowCommands
 ];
 
@@ -947,6 +954,7 @@ export function getCommandsByCategory(): Record<string, SlashCommand[]> {
     stats: statsCommands,
     voice: voiceCommands,
     theme: themeCommands,
+    search: searchCommands,
     workflow: workflowCommands
   };
 }

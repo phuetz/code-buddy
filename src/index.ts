@@ -21,13 +21,8 @@ import {
   getShutdownManager,
 } from "./utils/graceful-shutdown.js";
 
-// Import extracted CLI command modules
-import { registerDaemonCommands, registerTriggerCommands } from "./commands/cli/daemon-commands.js";
-import { registerSpeakCommand } from "./commands/cli/speak-command.js";
-import { registerUtilityCommands } from "./commands/cli/utility-commands.js";
-import { createMCPCommand } from "./commands/mcp.js";
-import { createProviderCommand } from "./commands/provider.js";
-import { createPipelineCommand } from "./commands/pipeline.js";
+// CLI command modules are loaded lazily below (see registerLazyCommands)
+// to avoid importing heavy transitive dependencies at startup.
 
 // Startup timing (enabled via PERF_TIMING=true or DEBUG=true)
 const PERF_TIMING = process.env.PERF_TIMING === 'true' || process.env.DEBUG === 'true';
@@ -92,7 +87,6 @@ const lazyImport = {
   credentialManager: () => lazyLoad('credentialManager', () => import("./security/credential-manager.js").then(m => m.getCredentialManager)),
 
   // Commands - only loaded when their command is run
-  createMCPCommand: () => lazyLoad('createMCPCommand', () => import("./commands/mcp.js").then(m => m.createMCPCommand)),
   initProject: () => lazyLoad('initProject', () => import("./utils/init-project.js")),
   securityModes: () => lazyLoad('securityModes', () => import("./security/security-modes.js")),
   contextLoader: () => lazyLoad('contextLoader', () => import("./context/context-loader.js")),
@@ -1092,6 +1086,11 @@ program
         agent.setSystemPrompt(customAgentConfig.systemPrompt);
       }
 
+      // Enable auto-observation for computer-use agents
+      if (customAgentConfig?.tags?.includes('computer-use')) {
+        agent.enableAutoObservation();
+      }
+
       // Probe for tool support if requested
       if (options.probeTools) {
         console.log("🔍 Probing model for tool support...");
@@ -1280,10 +1279,86 @@ gitCommand
     }
   });
 
-// Register command modules directly (stubs with re-parse don't work with variadic [message...] argument)
-program.addCommand(createProviderCommand());
-program.addCommand(createMCPCommand());
-program.addCommand(createPipelineCommand());
+// Lazy command registration: create lightweight Commander stubs that defer
+// importing heavy modules until the command is actually invoked.
+// This avoids loading MCP, provider, pipeline, etc. at startup.
+
+/**
+ * Remove commands from a Commander program by name(s).
+ * Uses splice to mutate the readonly commands array in-place.
+ */
+function removeCommands(parent: typeof program, names: string | string[]): void {
+  const nameSet = new Set(Array.isArray(names) ? names : [names]);
+  const cmds = parent.commands as import('commander').Command[];
+  for (let i = cmds.length - 1; i >= 0; i--) {
+    if (nameSet.has(cmds[i].name())) {
+      cmds.splice(i, 1);
+    }
+  }
+}
+
+/**
+ * Register a lazy subcommand tree. When any subcommand action fires, the
+ * real module is imported and re-parsed to handle the invocation.
+ *
+ * For createXxxCommand()-style modules that return a Command with nested
+ * subcommands, we register a thin wrapper that delegates to the real
+ * command tree on first use.
+ */
+function addLazyCommand(
+  parent: typeof program,
+  name: string,
+  description: string,
+  loader: () => Promise<import('commander').Command>,
+): void {
+  // Create a pass-through command that accepts arbitrary args
+  const stub = parent
+    .command(name)
+    .description(description)
+    .allowUnknownOption(true)
+    .allowExcessArguments(true)
+    .helpOption(false);
+
+  // Override the parse to delegate to the real command
+  stub.action(async () => {
+    const realCommand = await loader();
+    // Replace the stub with the real command and re-parse
+    removeCommands(parent, name);
+    parent.addCommand(realCommand);
+    // Re-parse argv so the real command handles subcommands & options
+    await parent.parseAsync(process.argv);
+  });
+}
+
+addLazyCommand(
+  program,
+  'provider',
+  'Manage AI providers (Claude, ChatGPT, Grok, Gemini)',
+  async () => {
+    const { createProviderCommand } = await import('./commands/provider.js');
+    return createProviderCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'mcp',
+  'Manage MCP (Model Context Protocol) servers',
+  async () => {
+    const { createMCPCommand } = await import('./commands/mcp.js');
+    return createMCPCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'pipeline',
+  'Manage and run pipeline workflows',
+  async () => {
+    const { createPipelineCommand } = await import('./commands/pipeline.js');
+    return createPipelineCommand();
+  },
+);
 
 // Server command - start the HTTP/WebSocket API server
 program
@@ -1306,10 +1381,112 @@ program
     }
   });
 
-// Register extracted CLI command modules
-registerDaemonCommands(program);
-registerTriggerCommands(program);
-registerSpeakCommand(program);
-registerUtilityCommands(program);
+// Register extracted CLI command modules lazily.
+// Each registerXxxCommands function only imports `type { Command }` from commander
+// and its action handlers already use dynamic imports, but loading the module
+// file itself pulls in transitive dependencies (logger, etc.) at startup.
+// By deferring the import until the command is matched, we avoid that cost.
+
+/**
+ * Register a lazy command group. Creates a stub command whose action
+ * loads the real registration module and re-parses argv.
+ */
+function addLazyCommandGroup(
+  parent: typeof program,
+  name: string,
+  description: string,
+  loader: () => Promise<void>,
+): void {
+  const stub = parent
+    .command(name)
+    .description(description)
+    .allowUnknownOption(true)
+    .allowExcessArguments(true)
+    .helpOption(false);
+
+  stub.action(async () => {
+    // Remove stub and register the real commands
+    removeCommands(parent, name);
+    await loader();
+    // Re-parse so the real command tree handles the invocation
+    await parent.parseAsync(process.argv);
+  });
+}
+
+addLazyCommandGroup(program, 'daemon', 'Manage the Code Buddy daemon (background process)', async () => {
+  const { registerDaemonCommands } = await import('./commands/cli/daemon-commands.js');
+  registerDaemonCommands(program);
+});
+
+addLazyCommandGroup(program, 'trigger', 'Manage event triggers for automated agent responses', async () => {
+  const { registerTriggerCommands } = await import('./commands/cli/daemon-commands.js');
+  registerTriggerCommands(program);
+});
+
+addLazyCommandGroup(program, 'speak', 'Synthesize speech using AudioReader TTS', async () => {
+  const { registerSpeakCommand } = await import('./commands/cli/speak-command.js');
+  registerSpeakCommand(program);
+});
+
+// Utility commands (doctor, security-audit, onboard, webhook) are all registered
+// by a single registerUtilityCommands() call, so we must remove all stubs before
+// re-registering to avoid Commander duplicate command errors.
+const utilityCommandNames = ['doctor', 'security-audit', 'onboard', 'webhook'];
+const loadUtilityCommands = async () => {
+  // Remove all utility stubs at once
+  removeCommands(program, utilityCommandNames);
+  const { registerUtilityCommands } = await import('./commands/cli/utility-commands.js');
+  registerUtilityCommands(program);
+  await program.parseAsync(process.argv);
+};
+
+for (const cmdName of utilityCommandNames) {
+  const desc = cmdName === 'doctor' ? 'Diagnose Code Buddy environment, dependencies, and configuration'
+    : cmdName === 'security-audit' ? 'Run a security audit of your Code Buddy environment'
+    : cmdName === 'onboard' ? 'Interactive setup wizard for Code Buddy'
+    : 'Manage webhook triggers';
+
+  const stub = program
+    .command(cmdName)
+    .description(desc)
+    .allowUnknownOption(true)
+    .allowExcessArguments(true)
+    .helpOption(false);
+
+  stub.action(async () => {
+    await loadUtilityCommands();
+  });
+}
+
+// OpenClaw-inspired commands
+addLazyCommandGroup(program, 'heartbeat', 'Manage the heartbeat engine (periodic agent wake)', async () => {
+  const { registerHeartbeatCommands } = await import('./commands/cli/openclaw-commands.js');
+  registerHeartbeatCommands(program);
+});
+
+addLazyCommandGroup(program, 'hub', 'Skills marketplace (search, install, publish)', async () => {
+  const { registerHubCommands } = await import('./commands/cli/openclaw-commands.js');
+  registerHubCommands(program);
+});
+
+addLazyCommandGroup(program, 'identity', 'Manage agent identity files (SOUL.md, USER.md, etc.)', async () => {
+  const { registerIdentityCommands } = await import('./commands/cli/openclaw-commands.js');
+  registerIdentityCommands(program);
+});
+
+addLazyCommandGroup(program, 'groups', 'Manage group chat security', async () => {
+  const { registerGroupCommands } = await import('./commands/cli/openclaw-commands.js');
+  registerGroupCommands(program);
+});
+
+addLazyCommandGroup(program, 'auth-profile', 'Manage authentication profiles (API key rotation)', async () => {
+  const { registerAuthProfileCommands } = await import('./commands/cli/openclaw-commands.js');
+  registerAuthProfileCommands(program);
+});
+
+addLazyCommandGroup(program, 'config', 'Show environment variable configuration and validation', async () => {
+  const { registerConfigCommand } = await import('./commands/cli/config-command.js');
+  registerConfigCommand(program);
+});
 
 program.parse();

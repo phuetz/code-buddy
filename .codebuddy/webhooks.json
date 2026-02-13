@@ -1,0 +1,16 @@
+[
+  {
+    "id": "f6e87947-cd5b-499b-8586-9d167a3c94d7",
+    "name": {
+      "name": "test-hook",
+      "url": "http://example.com/hook",
+      "secret": "mysecret123",
+      "events": [
+        "commit",
+        "push"
+      ]
+    },
+    "enabled": true,
+    "createdAt": 1770863900299
+  }
+]

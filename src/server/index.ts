@@ -167,6 +167,7 @@ function createApp(config: ServerConfig): Application {
       const router = await getPeerRouter();
       res.json(router.getStats());
     } catch (error) {
+      logger.error('GET /api/routing/stats failed', { error: String(error) });
       res.status(500).json({ error: 'Peer router unavailable' });
     }
   });
@@ -186,6 +187,7 @@ function createApp(config: ServerConfig): Application {
       const resolved = router.resolve(message, accountId);
       res.json({ resolved });
     } catch (error) {
+      logger.error('POST /api/routing/resolve failed', { error: String(error) });
       res.status(500).json({ error: 'Peer router unavailable' });
     }
   });
@@ -253,6 +255,10 @@ function createApp(config: ServerConfig): Application {
 
   app.post('/api/notifications/preferences', async (req, res) => {
     try {
+      if (!req.body || typeof req.body !== 'object') {
+        res.status(400).json({ error: 'Request body must be a JSON object' });
+        return;
+      }
       const { getNotificationManager } = await import('../agent/proactive/index.js');
       const manager = getNotificationManager();
       manager.setPreferences(req.body);
@@ -276,8 +282,12 @@ function createApp(config: ServerConfig): Application {
   app.post('/api/webhooks', async (req, res) => {
     try {
       const { name, agentMessage, secret } = req.body;
-      if (!name || !agentMessage) {
-        res.status(400).json({ error: 'name and agentMessage are required' });
+      if (!name || typeof name !== 'string' || !agentMessage || typeof agentMessage !== 'string') {
+        res.status(400).json({ error: 'name (string) and agentMessage (string) are required' });
+        return;
+      }
+      if (name.length > 256 || agentMessage.length > 4096) {
+        res.status(400).json({ error: 'name max 256 chars, agentMessage max 4096 chars' });
         return;
       }
       const { WebhookManager } = await import('../webhooks/webhook-manager.js');
@@ -315,6 +325,268 @@ function createApp(config: ServerConfig): Application {
       } else {
         res.json(result);
       }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Heartbeat endpoints
+  app.get('/api/heartbeat/status', async (_req, res) => {
+    try {
+      const { getHeartbeatEngine } = await import('../daemon/heartbeat.js');
+      const engine = getHeartbeatEngine();
+      res.json(engine.getStatus());
+    } catch (error) {
+      res.json({ running: false, enabled: false, totalTicks: 0 });
+    }
+  });
+
+  app.post('/api/heartbeat/start', async (_req, res) => {
+    try {
+      const { getHeartbeatEngine } = await import('../daemon/heartbeat.js');
+      const engine = getHeartbeatEngine();
+      engine.start();
+      res.json({ success: true, status: engine.getStatus() });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/heartbeat/stop', async (_req, res) => {
+    try {
+      const { getHeartbeatEngine } = await import('../daemon/heartbeat.js');
+      const engine = getHeartbeatEngine();
+      engine.stop();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/heartbeat/tick', async (_req, res) => {
+    try {
+      const { getHeartbeatEngine } = await import('../daemon/heartbeat.js');
+      const engine = getHeartbeatEngine();
+      const result = await engine.tick();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Skills Hub endpoints
+  app.get('/api/hub/search', async (req, res) => {
+    try {
+      const { getSkillsHub } = await import('../skills/hub.js');
+      const hub = getSkillsHub();
+      const query = (req.query.q as string) || '';
+      const tags = req.query.tags ? (req.query.tags as string).split(',') : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const result = await hub.search(query, { tags, limit });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get('/api/hub/installed', async (_req, res) => {
+    try {
+      const { getSkillsHub } = await import('../skills/hub.js');
+      const hub = getSkillsHub();
+      res.json(hub.list());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/hub/install', async (req, res) => {
+    try {
+      const { name, version } = req.body;
+      if (!name || typeof name !== 'string') {
+        res.status(400).json({ error: 'name (string) is required' });
+        return;
+      }
+      if (version && typeof version !== 'string') {
+        res.status(400).json({ error: 'version must be a string' });
+        return;
+      }
+      const { getSkillsHub } = await import('../skills/hub.js');
+      const hub = getSkillsHub();
+      const installed = await hub.install(name, version);
+      res.json(installed);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete('/api/hub/:name', async (req, res) => {
+    try {
+      const { getSkillsHub } = await import('../skills/hub.js');
+      const hub = getSkillsHub();
+      const removed = await hub.uninstall(req.params.name);
+      if (removed) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: 'Skill not found' });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Identity endpoints
+  app.get('/api/identity', async (_req, res) => {
+    try {
+      const { getIdentityManager } = await import('../identity/identity-manager.js');
+      const mgr = getIdentityManager();
+      await mgr.load(process.cwd());
+      res.json(mgr.getAll());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get('/api/identity/prompt', async (_req, res) => {
+    try {
+      const { getIdentityManager } = await import('../identity/identity-manager.js');
+      const mgr = getIdentityManager();
+      await mgr.load(process.cwd());
+      res.json({ prompt: mgr.getPromptInjection() });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.put('/api/identity/:name', async (req, res) => {
+    try {
+      const { content } = req.body;
+      if (!content || typeof content !== 'string') {
+        res.status(400).json({ error: 'content (string) is required' });
+        return;
+      }
+      if (content.length > 65536) {
+        res.status(400).json({ error: 'content exceeds maximum length (64KB)' });
+        return;
+      }
+      const { getIdentityManager } = await import('../identity/identity-manager.js');
+      const mgr = getIdentityManager();
+      await mgr.load(process.cwd());
+      await mgr.set(req.params.name, content);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Group security endpoints
+  app.get('/api/groups/status', async (_req, res) => {
+    try {
+      const { getGroupSecurity } = await import('../channels/group-security.js');
+      const mgr = getGroupSecurity();
+      res.json(mgr.getStats());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get('/api/groups/list', async (_req, res) => {
+    try {
+      const { getGroupSecurity } = await import('../channels/group-security.js');
+      const mgr = getGroupSecurity();
+      res.json(mgr.listGroups());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/groups/block', async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId || typeof userId !== 'string') {
+        res.status(400).json({ error: 'userId (string) is required' });
+        return;
+      }
+      const { getGroupSecurity } = await import('../channels/group-security.js');
+      const mgr = getGroupSecurity();
+      mgr.addToBlocklist(userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete('/api/groups/block/:userId', async (req, res) => {
+    try {
+      const { getGroupSecurity } = await import('../channels/group-security.js');
+      const mgr = getGroupSecurity();
+      if (mgr.removeFromBlocklist(req.params.userId)) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: 'User not in blocklist' });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Auth profile endpoints
+  app.get('/api/auth-profiles', async (_req, res) => {
+    try {
+      const { getAuthProfileManager } = await import('../auth/profile-manager.js');
+      const mgr = getAuthProfileManager();
+      res.json(mgr.getStatus());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/auth-profiles', async (req, res) => {
+    try {
+      const profile = req.body;
+      if (!profile || typeof profile !== 'object') {
+        res.status(400).json({ error: 'Request body must be a JSON object' });
+        return;
+      }
+      if (!profile.id || typeof profile.id !== 'string' ||
+          !profile.provider || typeof profile.provider !== 'string') {
+        res.status(400).json({ error: 'id (string) and provider (string) are required' });
+        return;
+      }
+      const { getAuthProfileManager } = await import('../auth/profile-manager.js');
+      const mgr = getAuthProfileManager();
+      mgr.addProfile({
+        type: 'api-key',
+        credentials: {},
+        priority: 0,
+        metadata: {},
+        ...profile,
+      });
+      res.status(201).json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete('/api/auth-profiles/:id', async (req, res) => {
+    try {
+      const { getAuthProfileManager } = await import('../auth/profile-manager.js');
+      const mgr = getAuthProfileManager();
+      if (mgr.removeProfile(req.params.id)) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: 'Profile not found' });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/auth-profiles/reset', async (_req, res) => {
+    try {
+      const { resetAuthProfileManager, getAuthProfileManager } = await import('../auth/profile-manager.js');
+      resetAuthProfileManager();
+      const mgr = getAuthProfileManager();
+      res.json({ success: true, profiles: mgr.getStatus() });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }

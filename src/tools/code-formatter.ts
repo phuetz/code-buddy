@@ -9,7 +9,7 @@
  * - HTML/CSS
  */
 
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 
@@ -137,33 +137,34 @@ function formatJavaScript(
   language: Language,
   opts: FormatOptions
 ): FormatResult {
-  // Try prettier first
+  // Try prettier first — use stdin pipe to prevent shell injection
   try {
-    const prettierConfig = JSON.stringify({
-      parser: language === 'typescript' ? 'typescript' : 'babel',
-      tabWidth: opts.indentSize,
-      useTabs: opts.useTabs,
-      printWidth: opts.lineWidth,
-      singleQuote: opts.singleQuote,
-      trailingComma: opts.trailingComma,
-      semi: opts.semicolons,
+    const ext = language === 'typescript' ? 'ts' : 'js';
+    const result = spawnSync('npx', [
+      'prettier',
+      `--stdin-filepath=file.${ext}`,
+      '--tab-width', String(opts.indentSize || 2),
+      opts.useTabs ? '--use-tabs' : '--no-use-tabs',
+      '--print-width', String(opts.lineWidth || 100),
+      opts.singleQuote ? '--single-quote' : '--no-single-quote',
+      '--trailing-comma', opts.trailingComma || 'es5',
+      opts.semicolons !== false ? '--semi' : '--no-semi',
+    ], {
+      input: code,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 15000,
     });
 
-    const formatted = execSync(
-      `echo ${JSON.stringify(code)} | npx prettier --stdin-filepath=file.${language === 'typescript' ? 'ts' : 'js'} --config -`,
-      {
-        encoding: 'utf-8',
-        input: prettierConfig,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }
-    );
-
-    return {
-      success: true,
-      formatted: formatted.trim(),
-      language,
-      formatter: 'prettier',
-    };
+    if (result.status === 0 && result.stdout) {
+      return {
+        success: true,
+        formatted: result.stdout.trim(),
+        language,
+        formatter: 'prettier',
+      };
+    }
+    throw new Error(result.stderr || 'prettier failed');
   } catch {
     // Fallback to basic formatting
     return basicJsFormat(code, language, opts);
@@ -216,22 +217,28 @@ function basicJsFormat(
  * Format Python code
  */
 function formatPython(code: string, opts: FormatOptions): FormatResult {
-  // Try black first
+  // Try black first — use stdin pipe to prevent shell injection
   try {
-    const formatted = execSync(
-      `echo ${JSON.stringify(code)} | python -m black --line-length ${opts.lineWidth || 88} -`,
-      {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }
-    );
+    const result = spawnSync('python', [
+      '-m', 'black',
+      '--line-length', String(opts.lineWidth || 88),
+      '-',
+    ], {
+      input: code,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 15000,
+    });
 
-    return {
-      success: true,
-      formatted: formatted.trim(),
-      language: 'python',
-      formatter: 'black',
-    };
+    if (result.status === 0 && result.stdout) {
+      return {
+        success: true,
+        formatted: result.stdout.trim(),
+        language: 'python',
+        formatter: 'black',
+      };
+    }
+    throw new Error(result.stderr || 'black failed');
   } catch {
     // Basic Python formatting
     return basicPythonFormat(code, opts);

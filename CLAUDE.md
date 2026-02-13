@@ -130,7 +130,13 @@ CodeBuddyAgent
 - `src/agent/proactive/` - Push notifications, rate limiting, response waiting
 - `src/agent/orchestrator/` - Multi-agent supervisor, shared context, self-healing, checkpoint rollback
 - `src/agent/profiles/` - Agent profiles and trust folders
-- `src/daemon/` - Daemon manager, lifecycle, cron-agent bridge, health monitor
+- `src/daemon/` - Daemon manager, lifecycle, cron-agent bridge, health monitor, heartbeat engine
+- `src/daemon/heartbeat.ts` - Periodic agent wake with HEARTBEAT.md checklist, smart suppression
+- `src/auth/profile-manager.ts` - API key rotation (round-robin/priority/random), session stickiness, exponential backoff
+- `src/identity/identity-manager.ts` - SOUL.md/USER.md/AGENTS.md identity files, hot-reload, prompt injection
+- `src/channels/group-security.ts` - Mention-gating, group allowlists, activation modes, rate limiting
+- `src/skills/hub.ts` - ClawHub-inspired skills marketplace (search, install, publish, sync, lockfile)
+- `src/commands/cli/openclaw-commands.ts` - CLI commands for heartbeat, hub, identity, groups, auth-profile
 - `src/codebuddy/client.ts` - LLM API client (multi-provider, OpenAI SDK compatible)
 - `src/codebuddy/tools.ts` - Tool definitions and RAG selection
 - `src/ui/components/ChatInterface.tsx` - React/Ink terminal UI
@@ -139,7 +145,13 @@ CodeBuddyAgent
 - `src/input/text-to-speech.ts` - TextToSpeechManager used by voice conversation loop
 - `src/input/voice-control.ts` - Continuous voice conversation (STT → Agent → TTS loop), Porcupine wake word integration
 - `src/voice/wake-word.ts` - Wake word detection via Porcupine (Picovoice) with text-match fallback
-- `src/server/index.ts` - HTTP/WebSocket API server (includes webhook routes)
+- `src/server/index.ts` - HTTP/WebSocket API server (webhooks, heartbeat, hub, identity, groups, auth-profiles)
+- `src/channels/whatsapp/index.ts` - WhatsApp via Baileys (QR pairing, media, reconnect)
+- `src/channels/signal/index.ts` - Signal via signal-cli REST API (polling, groups, attachments)
+- `src/channels/google-chat/index.ts` - Google Chat Workspace API (JWT auth, webhook events, cards)
+- `src/channels/teams/index.ts` - Microsoft Teams Bot Framework (OAuth2, adaptive cards, proactive messaging)
+- `src/channels/matrix/index.ts` - Matrix via matrix-js-sdk (E2EE, threads, media, auto-join)
+- `src/channels/webchat/index.ts` - Built-in HTTP+WebSocket chat server with browser UI
 - `src/doctor/index.ts` - Environment diagnostics (`buddy doctor`)
 - `src/wizard/onboarding.ts` - Interactive setup wizard (`buddy onboard`)
 - `src/agents/model-failover.ts` - Cascading provider failover chain
@@ -291,6 +303,19 @@ The server (`src/server/`) provides REST and WebSocket APIs:
 - `GET /api/cron/jobs` - List cron jobs
 - `POST /api/cron/jobs/:id/trigger` - Trigger a cron job manually
 - `GET/POST /api/notifications/preferences` - Notification preferences
+- `GET/POST /api/heartbeat/status|start|stop|tick` - Heartbeat engine control
+- `GET /api/hub/search?q=...` - Skills hub search
+- `GET /api/hub/installed` - List installed hub skills
+- `POST /api/hub/install` - Install a skill from hub
+- `DELETE /api/hub/:name` - Uninstall a hub skill
+- `GET /api/identity` - List loaded identity files
+- `GET /api/identity/prompt` - Get combined identity prompt
+- `PUT /api/identity/:name` - Update an identity file
+- `GET /api/groups/status|list` - Group security status/config
+- `POST /api/groups/block` - Block a user globally
+- `DELETE /api/groups/block/:userId` - Unblock a user
+- `GET/POST/DELETE /api/auth-profiles` - Auth profile CRUD
+- `POST /api/auth-profiles/reset` - Reset all profile cooldowns
 
 ### WebSocket Events
 - `authenticate` - JWT authentication

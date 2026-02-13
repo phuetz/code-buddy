@@ -44,3 +44,14 @@ export {
   type ToolSuggestion,
   type ToolAnalyticsSnapshot,
 } from './tool-analytics.js';
+
+export {
+  CostPredictor,
+  type CostPrediction,
+} from './cost-predictor.js';
+
+export {
+  BudgetAlertManager,
+  type BudgetAlert,
+  type BudgetAlertConfig,
+} from './budget-alerts.js';

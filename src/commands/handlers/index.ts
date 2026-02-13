@@ -167,5 +167,16 @@ export {
   handleDebugMode,
 } from './debug-handlers.js';
 
+// Extra handlers (UX slash commands)
+export {
+  handleUndo,
+  handleDiff,
+  handleContextStats,
+  handleSearch,
+  handleTest,
+  handleFix,
+  handleReview,
+} from './extra-handlers.js';
+
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';

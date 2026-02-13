@@ -125,6 +125,22 @@ export class PromptBuilder {
         logger.debug("Prepended intro hook content to system prompt");
       }
 
+      // Inject bootstrap context files (BOOTSTRAP.md, AGENTS.md, SOUL.md, etc.)
+      try {
+        const { BootstrapLoader } = await import('../context/bootstrap-loader.js');
+        const bootstrap = await new BootstrapLoader().load(this.config.cwd);
+        if (bootstrap.content) {
+          systemPrompt += '\n\n# Workspace Context\n\n' + bootstrap.content;
+          logger.debug(`Loaded bootstrap context from ${bootstrap.sources.length} file(s)`, {
+            sources: bootstrap.sources,
+            chars: bootstrap.tokenCount,
+            truncated: bootstrap.truncated,
+          });
+        }
+      } catch (err) {
+        logger.warn("Failed to load bootstrap context", { error: getErrorMessage(err) });
+      }
+
       // Cache system prompt for optimization
       this.promptCacheManager.cacheSystemPrompt(systemPrompt);
 

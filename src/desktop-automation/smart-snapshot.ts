@@ -262,6 +262,38 @@ export class SmartSnapshotManager extends EventEmitter {
   }
 
   /**
+   * Get the next available ref number.
+   * Allows external modules (e.g. browser-automation) to share the global ref space
+   * so desktop and browser refs never collide.
+   */
+  getNextRef(): number {
+    return this.nextRef++;
+  }
+
+  /**
+   * Inject browser-sourced elements into the current snapshot.
+   * This allows unified ref lookup across desktop and browser elements.
+   */
+  injectBrowserElements(elements: UIElement[], source: string = 'browser-accessibility'): void {
+    if (!this.currentSnapshot?.valid) {
+      logger.warn('Cannot inject browser elements: no valid snapshot');
+      return;
+    }
+
+    for (const elem of elements) {
+      // Tag element with browser source
+      elem.attributes = { ...elem.attributes, source };
+      this.currentSnapshot.elements.push(elem);
+      this.currentSnapshot.elementMap.set(elem.ref, elem);
+    }
+
+    logger.debug('Injected browser elements into desktop snapshot', {
+      count: elements.length,
+      source,
+    });
+  }
+
+  /**
    * Get element by reference number
    */
   getElement(ref: number): UIElement | undefined {

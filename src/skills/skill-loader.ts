@@ -100,7 +100,7 @@ export class SkillLoader {
   constructor(config: Partial<SkillLoaderConfig> = {}) {
     if (!_skillLoaderDeprecationWarned) {
       _skillLoaderDeprecationWarned = true;
-      console.warn('[DEPRECATED] SkillLoader is deprecated. Use SKILL.md system (SkillRegistry) instead. See src/skills/MIGRATION.md');
+      logger.warn('[DEPRECATED] SkillLoader is deprecated. Use SKILL.md system (SkillRegistry) instead. See src/skills/MIGRATION.md');
     }
     this.config = { ...DEFAULT_SKILL_LOADER_CONFIG, ...config };
   }

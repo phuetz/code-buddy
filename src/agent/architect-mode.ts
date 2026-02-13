@@ -1,6 +1,7 @@
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from "../codebuddy/client.js";
 import { EventEmitter } from "events";
 import { getErrorMessage } from "../types/index.js";
+import { auditLogger } from "../security/audit-logger.js";
 
 export interface StepResult {
   step: ArchitectStep;
@@ -22,6 +23,8 @@ export interface ArchitectStep {
   type: "create" | "edit" | "delete" | "command" | "test";
   target?: string;  // File path or command
   details?: string;
+  /** Steps that must complete before this one (for parallel execution) */
+  dependsOn?: number[];
 }
 
 export interface ArchitectConfig {
@@ -119,13 +122,8 @@ export class ArchitectMode extends EventEmitter {
       const response = await this.architectClient.chat(messages);
       const content = response.choices[0]?.message?.content || "";
 
-      // Parse the JSON response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("Architect did not return valid JSON proposal");
-      }
-
-      const proposal = JSON.parse(jsonMatch[0]) as ArchitectProposal;
+      // Parse the JSON response — robust extraction that handles nested objects
+      const proposal = this.parseProposalJson(content);
 
       // Validate proposal
       if (!proposal.steps || proposal.steps.length === 0) {
@@ -162,48 +160,169 @@ export class ArchitectMode extends EventEmitter {
     this.isActive = true;
 
     const results: StepResult[] = [];
+    const completedSteps = new Set<number>();
 
     try {
-      for (const step of targetProposal.steps) {
+      // Group steps into execution waves (parallel where possible)
+      const waves = this.buildExecutionWaves(targetProposal.steps);
+
+      for (const wave of waves) {
         if (!this.isActive) {
           this.emit("editor:cancelled");
           break;
         }
 
-        this.emit("editor:step", { step });
+        // Execute steps in this wave in parallel
+        const wavePromises = wave.map(async (step) => {
+          this.emit("editor:step", { step });
 
-        const stepPrompt = this.buildStepPrompt(step, targetProposal);
+          // Create checkpoint before each step
+          auditLogger.log({
+            action: 'checkpoint_created',
+            decision: 'allow',
+            source: 'architect-mode',
+            target: step.target,
+            details: `Pre-step checkpoint: step ${step.order}`,
+          });
 
-        const messages: CodeBuddyMessage[] = [
-          { role: "system", content: EDITOR_SYSTEM_PROMPT },
-          { role: "user", content: stepPrompt },
-        ];
+          const stepPrompt = this.buildStepPrompt(step, targetProposal);
 
-        const response = await this.editorClient.chat(messages, tools);
+          const messages: CodeBuddyMessage[] = [
+            { role: "system", content: EDITOR_SYSTEM_PROMPT },
+            { role: "user", content: stepPrompt },
+          ];
 
-        const result: StepResult = {
-          step,
-          response: response.choices[0]?.message,
-          success: true,
-        };
+          try {
+            const response = await this.editorClient.chat(messages, tools);
 
-        results.push(result);
+            const result: StepResult = {
+              step,
+              response: response.choices[0]?.message,
+              success: true,
+            };
 
-        if (onStepComplete) {
-          onStepComplete(step, result);
+            completedSteps.add(step.order);
+            return result;
+          } catch (error: unknown) {
+            return {
+              step,
+              response: null,
+              success: false,
+              error: getErrorMessage(error),
+            } as StepResult;
+          }
+        });
+
+        const waveResults = await Promise.all(wavePromises);
+
+        for (const result of waveResults) {
+          results.push(result);
+
+          if (onStepComplete) {
+            onStepComplete(result.step, result);
+          }
+
+          this.emit("editor:step-complete", result);
+
+          if (!result.success) {
+            this.emit("editor:step-failed", {
+              step: result.step,
+              completedSteps: [...completedSteps],
+            });
+            // Stop further waves on failure
+            this.isActive = false;
+          }
         }
 
-        this.emit("editor:step-complete", result);
+        if (!this.isActive) break;
       }
 
-      this.emit("editor:complete", { results });
-      return { success: true, results };
+      const allSuccess = results.every(r => r.success);
+      this.emit("editor:complete", { results, success: allSuccess });
+      return { success: allSuccess, results };
     } catch (error: unknown) {
       this.emit("editor:error", { error: getErrorMessage(error) });
       return { success: false, results };
     } finally {
       this.isActive = false;
     }
+  }
+
+  /**
+   * Build execution waves: groups of steps that can run in parallel.
+   * Steps with dependencies wait until their dependencies complete.
+   */
+  private buildExecutionWaves(steps: ArchitectStep[]): ArchitectStep[][] {
+    const waves: ArchitectStep[][] = [];
+    const scheduled = new Set<number>();
+
+    const remaining = [...steps];
+    let maxIterations = steps.length + 1;
+
+    while (remaining.length > 0 && maxIterations-- > 0) {
+      const wave: ArchitectStep[] = [];
+
+      for (const step of remaining) {
+        const deps = step.dependsOn || [];
+        const allDepsScheduled = deps.every(d => scheduled.has(d));
+        if (allDepsScheduled) {
+          wave.push(step);
+        }
+      }
+
+      if (wave.length === 0) {
+        // No progress — break dependency cycle, schedule remaining sequentially
+        wave.push(remaining[0]);
+      }
+
+      for (const step of wave) {
+        scheduled.add(step.order);
+        const idx = remaining.indexOf(step);
+        if (idx !== -1) remaining.splice(idx, 1);
+      }
+
+      waves.push(wave);
+    }
+
+    return waves;
+  }
+
+  /**
+   * Robust JSON proposal parsing that handles nested objects and markdown code blocks.
+   */
+  private parseProposalJson(content: string): ArchitectProposal {
+    // Try direct parse first
+    try {
+      return JSON.parse(content) as ArchitectProposal;
+    } catch { /* continue */ }
+
+    // Extract from markdown code block
+    const codeBlockMatch = content.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+    if (codeBlockMatch) {
+      try {
+        return JSON.parse(codeBlockMatch[1]) as ArchitectProposal;
+      } catch { /* continue */ }
+    }
+
+    // Find balanced JSON object using brace counting
+    let depth = 0;
+    let start = -1;
+    for (let i = 0; i < content.length; i++) {
+      if (content[i] === '{') {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (content[i] === '}') {
+        depth--;
+        if (depth === 0 && start !== -1) {
+          try {
+            return JSON.parse(content.slice(start, i + 1)) as ArchitectProposal;
+          } catch { /* try next match */ }
+          start = -1;
+        }
+      }
+    }
+
+    throw new Error("Architect did not return valid JSON proposal");
   }
 
   private buildStepPrompt(step: ArchitectStep, proposal: ArchitectProposal): string {

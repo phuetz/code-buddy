@@ -8,6 +8,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import https from 'https';
+import { logger } from './logger.js';
 
 // ============================================================================
 // Types
@@ -323,7 +324,7 @@ export class UpdateNotifier {
         if (output) {
           output(notification);
         } else {
-          console.log(notification);
+          logger.info(notification);
         }
       }
     } catch {

@@ -1,6 +1,7 @@
 import { existsSync } from "fs";
 import fse from "fs-extra";
 import * as path from "path";
+import { logger } from "./logger.js";
 
 export type AutonomyLevel = "suggest" | "confirm" | "auto" | "full" | "yolo";
 
@@ -129,7 +130,7 @@ export class AutonomyManager {
           yolo: { ...DEFAULT_YOLO_CONFIG, ...saved.yolo },
         };
       } catch (error) {
-        console.warn("Failed to load autonomy config:", error);
+        logger.warn("Failed to load autonomy config", { error: String(error) });
       }
     }
 
@@ -153,7 +154,7 @@ export class AutonomyManager {
 
       fse.writeJsonSync(this.configPath, toSave, { spaces: 2 });
     } catch (error) {
-      console.warn("Failed to save autonomy config:", error);
+      logger.warn("Failed to save autonomy config", { error: String(error) });
     }
   }
 

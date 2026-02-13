@@ -1,0 +1,30 @@
+{
+  "enabled": true,
+  "globalTimeout": 30000,
+  "hooks": [
+    {
+      "type": "pre-commit",
+      "command": "npm run lint && npm test",
+      "enabled": false,
+      "timeout": 60000,
+      "continueOnError": false,
+      "description": "Run linter and tests before commit"
+    },
+    {
+      "type": "post-edit",
+      "command": "npm run typecheck",
+      "enabled": false,
+      "timeout": 30000,
+      "continueOnError": true,
+      "description": "Run type checking after file edit"
+    },
+    {
+      "type": "on-file-change",
+      "command": "prettier --write {file}",
+      "enabled": false,
+      "timeout": 10000,
+      "continueOnError": true,
+      "description": "Format file with Prettier on change"
+    }
+  ]
+}

@@ -1,12 +1,17 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
+import type { RemoteApprovalService } from '../security/remote-approval.js';
 
 export interface ConfirmationOptions {
   operation: string;
   filename: string;
   showVSCodeOpen?: boolean;
   content?: string; // Content to show in confirmation dialog
+  /** Unified diff preview of changes (shown to user before approval) */
+  diffPreview?: string;
+  /** Number of lines changed (triggers enhanced confirmation if > threshold) */
+  linesChanged?: number;
 }
 
 export interface ConfirmationResult {
@@ -84,6 +89,9 @@ export class ConfirmationService extends EventEmitter {
   private dryRunMode: boolean = false;
   private dryRunLog: Array<{ operation: string; content: string; timestamp: Date }> = [];
 
+  // Remote approval service (for non-interactive fallback)
+  private remoteApproval: RemoteApprovalService | null = null;
+
   static getInstance(): ConfirmationService {
     if (!ConfirmationService.instance) {
       ConfirmationService.instance = new ConfirmationService();
@@ -93,6 +101,13 @@ export class ConfirmationService extends EventEmitter {
 
   constructor() {
     super();
+  }
+
+  /**
+   * Set remote approval service for non-interactive fallback
+   */
+  setRemoteApprovalService(service: RemoteApprovalService): void {
+    this.remoteApproval = service;
   }
 
   /**
@@ -154,6 +169,16 @@ export class ConfirmationService extends EventEmitter {
     return lines.join('\n');
   }
 
+  /** Threshold for large change confirmation (lines) */
+  private largeChangeThreshold: number = 100;
+
+  /**
+   * Set the threshold for large change enhanced confirmation.
+   */
+  setLargeChangeThreshold(lines: number): void {
+    this.largeChangeThreshold = lines;
+  }
+
   async requestConfirmation(
     options: ConfirmationOptions,
     operationType: 'file' | 'bash' = 'file'
@@ -182,13 +207,35 @@ export class ConfirmationService extends EventEmitter {
       };
     }
 
-    // Check session flags
+    // Check session flags — but require re-confirmation for large changes
+    const isLargeChange = (options.linesChanged ?? 0) > this.largeChangeThreshold;
     if (
-      this.sessionFlags.allOperations ||
-      (operationType === 'file' && this.sessionFlags.fileOperations) ||
-      (operationType === 'bash' && this.sessionFlags.bashCommands)
+      !isLargeChange && (
+        this.sessionFlags.allOperations ||
+        (operationType === 'file' && this.sessionFlags.fileOperations) ||
+        (operationType === 'bash' && this.sessionFlags.bashCommands)
+      )
     ) {
       return { confirmed: true };
+    }
+
+    // Enrich content with diff preview if available
+    if (options.diffPreview && !options.content?.includes(options.diffPreview)) {
+      const preview = options.diffPreview.length > 2000
+        ? options.diffPreview.slice(0, 2000) + '\n... (diff truncated)'
+        : options.diffPreview;
+      const magnitude = isLargeChange ? `\n⚠ LARGE CHANGE: ${options.linesChanged} lines affected` : '';
+      options.content = (options.content ? options.content + '\n\n' : '') +
+        `Diff preview:${magnitude}\n${preview}`;
+    }
+
+    // Remote approval fallback: when not in interactive terminal, try channels
+    if (!process.stdin.isTTY && this.remoteApproval?.hasChannels()) {
+      const approved = await this.remoteApproval.requestApproval({
+        toolName: options.operation,
+        summary: `${options.operation}: ${options.filename}`,
+      });
+      return { confirmed: approved };
     }
 
     // If VS Code should be opened, try to open it

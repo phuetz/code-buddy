@@ -37,7 +37,22 @@
     "resolveJsonModule": true,
     "jsx": "react",
     "moduleResolution": "Bundler",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+
+    // Path aliases for cleaner imports (use @agent/foo instead of ../../agent/foo)
+    "baseUrl": ".",
+    "paths": {
+      "@agent/*": ["src/agent/*"],
+      "@tools/*": ["src/tools/*"],
+      "@utils/*": ["src/utils/*"],
+      "@config/*": ["src/config/*"],
+      "@channels/*": ["src/channels/*"],
+      "@server/*": ["src/server/*"],
+      "@persistence/*": ["src/persistence/*"],
+      "@security/*": ["src/security/*"],
+      "@daemon/*": ["src/daemon/*"],
+      "@analytics/*": ["src/analytics/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]

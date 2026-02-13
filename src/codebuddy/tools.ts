@@ -32,6 +32,8 @@ import {
   WEB_TOOLS,
   ADVANCED_TOOLS,
   MULTIMODAL_TOOLS,
+  COMPUTER_CONTROL_TOOLS,
+  BROWSER_TOOLS,
 } from "./tool-definitions/index.js";
 
 /**
@@ -103,6 +105,8 @@ export function initializeToolRegistry(): void {
   registerGroup(WEB_TOOLS);
   registerGroup(ADVANCED_TOOLS);
   registerGroup(MULTIMODAL_TOOLS);
+  registerGroup(COMPUTER_CONTROL_TOOLS);
+  registerGroup(BROWSER_TOOLS);
 
   isRegistryInitialized = true;
   logger.debug('Tool registry initialized with built-in tools');

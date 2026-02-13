@@ -28,6 +28,8 @@ import type {
   MessageButton,
 } from '../index.js';
 import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
+import { ReconnectionManager } from '../reconnection-manager.js';
+import { logger } from '../../utils/logger.js';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 
@@ -39,12 +41,19 @@ export class TelegramChannel extends BaseChannel {
   private pollingTimeout: NodeJS.Timeout | null = null;
   private lastUpdateId = 0;
   private botInfo: TelegramUser | null = null;
+  private reconnectionManager: ReconnectionManager;
+  private consecutiveErrors = 0;
 
   constructor(config: TelegramConfig) {
     super('telegram', config);
     if (!config.token) {
       throw new Error('Telegram bot token is required');
     }
+    this.reconnectionManager = new ReconnectionManager('telegram', {
+      maxRetries: 10,
+      initialDelayMs: 2000,
+      maxDelayMs: 60000,
+    });
   }
 
   private get telegramConfig(): TelegramConfig {
@@ -123,7 +132,9 @@ export class TelegramChannel extends BaseChannel {
    * Disconnect from Telegram
    */
   async disconnect(): Promise<void> {
+    this.reconnectionManager.cancel();
     this.pollingActive = false;
+    this.consecutiveErrors = 0;
     if (this.pollingTimeout) {
       clearTimeout(this.pollingTimeout);
       this.pollingTimeout = null;
@@ -299,7 +310,7 @@ export class TelegramChannel extends BaseChannel {
   }
 
   /**
-   * Poll for updates
+   * Poll for updates with reconnection support
    */
   private async poll(): Promise<void> {
     if (!this.pollingActive) return;
@@ -311,13 +322,32 @@ export class TelegramChannel extends BaseChannel {
         allowed_updates: ['message', 'edited_message', 'callback_query'],
       });
 
+      // Reset consecutive error count on success
+      this.consecutiveErrors = 0;
+      this.reconnectionManager.onConnected();
+
       for (const update of updates) {
         this.lastUpdateId = update.update_id;
         await this.handleUpdate(update);
       }
     } catch (error) {
+      this.consecutiveErrors++;
       this.emit('error', 'telegram', error);
-      // Backoff on error
+
+      if (this.consecutiveErrors >= 5) {
+        // Too many consecutive errors -- use reconnection manager
+        logger.debug('Telegram: too many consecutive polling errors, attempting reconnect');
+        this.pollingActive = false;
+        this.status.connected = false;
+        this.reconnectionManager.scheduleReconnect(async () => {
+          this.consecutiveErrors = 0;
+          await this.connect();
+          this.reconnectionManager.onConnected();
+        });
+        return;
+      }
+
+      // Simple backoff for transient errors
       await new Promise((resolve) => setTimeout(resolve, 5000));
       if (!this.pollingActive) return;
     }

@@ -177,6 +177,7 @@ export class CodeBuddyClient {
     }
 
     // Return existing probe if already in progress (prevent race condition)
+    // Check AFTER the probed flag to ensure atomicity
     if (this.probePromise) {
       return this.probePromise;
     }
@@ -203,9 +204,11 @@ export class CodeBuddyClient {
       return true;
     }
 
-    // Create and cache the probe promise to prevent concurrent probes
-    this.probePromise = this.performToolProbe();
-    return this.probePromise;
+    // Create and cache the probe promise IMMEDIATELY to prevent concurrent probes.
+    // The assignment must happen synchronously before any await to close the race window.
+    const probe = this.performToolProbe();
+    this.probePromise = probe;
+    return probe;
   }
 
   /**

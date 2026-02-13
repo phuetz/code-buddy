@@ -428,6 +428,73 @@ export const DEFAULT_BROWSER_CONFIG: BrowserConfig = {
 };
 
 // ============================================================================
+// Console History
+// ============================================================================
+
+export interface ConsoleEntry {
+  /** Console message type (log, warn, error, info, debug) */
+  type: string;
+  /** Message text */
+  text: string;
+  /** When the message was logged */
+  timestamp: Date;
+}
+
+// ============================================================================
+// Route Interception
+// ============================================================================
+
+export interface RouteRule {
+  /** Unique rule identifier */
+  id: string;
+  /** URL pattern to match (glob) */
+  urlPattern: string;
+  /** Action to take */
+  action: 'block' | 'mock' | 'modify' | 'log';
+  /** Mock response (for mock action) */
+  mockResponse?: {
+    status: number;
+    body?: string;
+    contentType?: string;
+    headers?: Record<string, string>;
+  };
+  /** Headers to modify (for modify action) */
+  modifyHeaders?: Record<string, string>;
+}
+
+// ============================================================================
+// Browser Profile Persistence
+// ============================================================================
+
+export interface BrowserProfileData {
+  /** Profile name */
+  name: string;
+  /** Saved cookies */
+  cookies: Cookie[];
+  /** localStorage per origin */
+  localStorage: Record<string, Record<string, string>>;
+  /** sessionStorage per origin */
+  sessionStorage: Record<string, Record<string, string>>;
+  /** When the profile was saved */
+  savedAt: Date;
+}
+
+// ============================================================================
+// Extended Device Config
+// ============================================================================
+
+export interface ExtendedDeviceConfig extends DeviceConfig {
+  /** Timezone ID (e.g., 'America/New_York') */
+  timezoneId?: string;
+  /** Locale (e.g., 'en-US') */
+  locale?: string;
+  /** Color scheme preference */
+  colorScheme?: 'light' | 'dark' | 'no-preference';
+  /** Permissions to grant (e.g., ['geolocation', 'notifications']) */
+  permissions?: string[];
+}
+
+// ============================================================================
 // Events
 // ============================================================================
 

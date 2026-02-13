@@ -38,6 +38,38 @@ export function registerUtilityCommands(program: Command): void {
       if (errors > 0) process.exit(1);
     });
 
+  // Security Audit command
+  program
+    .command('security-audit')
+    .description('Run a security audit of your Code Buddy environment')
+    .option('--deep', 'Deep scan (git history, npm audit)')
+    .option('--fix', 'Auto-fix file permission issues')
+    .option('--json', 'Output as JSON')
+    .action(async (options: { deep?: boolean; fix?: boolean; json?: boolean }) => {
+      const { SecurityAuditor } = await import('../../security/security-audit.js');
+      const auditor = new SecurityAuditor();
+      const result = await auditor.audit(options.deep);
+
+      if (options.fix) {
+        const fixResult = await auditor.fix(result);
+        if (!options.json) {
+          console.log(`\nFixed ${fixResult.fixed} permission issue(s).`);
+          for (const err of fixResult.errors) {
+            console.log(`  Error: ${err}`);
+          }
+          console.log('');
+        }
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(SecurityAuditor.formatResult(result));
+      }
+
+      if (!result.passed) process.exit(1);
+    });
+
   // Onboard command
   program
     .command('onboard')

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from './logger.js';
 
 export function loadCustomInstructions(workingDirectory: string = process.cwd()): string | null {
   try {
@@ -12,7 +13,7 @@ export function loadCustomInstructions(workingDirectory: string = process.cwd())
     const customInstructions = fs.readFileSync(instructionsPath, 'utf-8');
     return customInstructions.trim();
   } catch (error) {
-    console.warn('Failed to load custom instructions:', error);
+    logger.warn('Failed to load custom instructions', { error: String(error) });
     return null;
   }
 }

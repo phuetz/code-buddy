@@ -4,6 +4,7 @@
 
 import { EventEmitter } from 'events';
 import type { WorkflowStep, WorkflowContext, StepResult } from './types.js';
+import { logger } from '../utils/logger.js';
 
 export class StepManager extends EventEmitter {
   private actionHandlers: Map<string, (context: WorkflowContext) => Promise<StepResult>> = new Map();
@@ -20,7 +21,7 @@ export class StepManager extends EventEmitter {
     // Log action
     this.registerAction('log', async (context) => {
       const message = context.variables.message || 'No message';
-      console.log(`[Workflow ${context.instanceId}] ${message}`);
+      logger.info(`[Workflow ${context.instanceId}] ${message}`);
       return { success: true, output: message };
     });
 

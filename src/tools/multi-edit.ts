@@ -111,7 +111,21 @@ export class MultiEditTool {
       this.checkpointManager.checkpointBeforeEdit(edit.file_path);
     }
 
-    // Execute all edits
+    // Phase 1: Save original file contents for atomic rollback
+    const backups = new Map<string, string>();
+    for (const edit of edits) {
+      const pathResult = this.pathValidator.validate(edit.file_path);
+      if (pathResult.valid) {
+        try {
+          const content = await this.vfs.readFile(pathResult.resolved, "utf-8");
+          backups.set(pathResult.resolved, content);
+        } catch {
+          // File might not exist yet — no backup needed
+        }
+      }
+    }
+
+    // Phase 2: Execute all edits
     const results: MultiEditResult["results"] = [];
     let failCount = 0;
 
@@ -124,6 +138,7 @@ export class MultiEditTool {
         });
         if (!result.success) {
           failCount++;
+          break; // Stop on first failure for atomic rollback
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -133,16 +148,29 @@ export class MultiEditTool {
           error: errorMessage,
         });
         failCount++;
+        break; // Stop on first failure
+      }
+    }
+
+    // Phase 3: If any failed, rollback all changes to original state
+    if (failCount > 0) {
+      for (const [resolvedPath, originalContent] of backups) {
+        try {
+          await this.vfs.writeFile(resolvedPath, originalContent, "utf-8");
+        } catch {
+          // Best-effort rollback
+        }
       }
     }
 
     // Generate summary
     const summary = this.generateSummary(results);
+    const rollbackNote = failCount > 0 ? ' (all changes rolled back)' : '';
 
     return {
       success: failCount === 0,
-      output: summary,
-      error: failCount > 0 ? `${failCount} edit(s) failed` : undefined,
+      output: summary + rollbackNote,
+      error: failCount > 0 ? `${failCount} edit(s) failed — atomic rollback applied` : undefined,
     };
   }
 

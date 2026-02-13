@@ -26,8 +26,8 @@
 <br/>
 
 [Quick Start](#-quick-start) |
+[CLI Reference](#cli-reference) |
 [Architecture](#-architecture) |
-[Memory System](#-memory-system) |
 [Channels](#-multi-channel-support) |
 [Security](#-security) |
 [API](#-api-server)
@@ -117,6 +117,25 @@ Code Buddy incorporates advanced patterns from the [OpenClaw](https://github.com
 | **Headless Mode Fixes** | ✅ 100% | Clean JSON stdout, `process.exit(0)`, Gemini message sanitization |
 | **Gemini Conversation Repair** | ✅ 100% | 3-pass sanitization after context compression (orphan cleanup, role merge, user-start) |
 
+### Phase 7 — Code Generation Security
+
+| Module | Status | Description |
+|:-------|:------:|:------------|
+| **Centralized Dangerous Patterns** | ✅ 100% | Single registry for all dangerous patterns (bash, code, skills) with severity levels |
+| **Generated Code Validator** | ✅ 100% | Pre-write security scan for eval, XSS, SQL injection, hardcoded secrets, prototype pollution |
+| **Pre-Write Syntax Validator** | ✅ 100% | Balanced delimiters, template literals, indentation (JS/TS/Python/YAML/HTML/CSS/JSON) |
+| **Atomic Rollback (apply-patch)** | ✅ 100% | All-or-nothing patch application with full file state backup |
+| **Atomic Transactions (multi-edit)** | ✅ 100% | Multi-file edits rolled back on first failure |
+| **AST Bash Command Validation** | ✅ 100% | tree-sitter integration in command validator with centralized pattern checks |
+| **Bash Checkpoint** | ✅ 100% | Pre-snapshot of files targeted by destructive commands (rm, mv, truncate) |
+| **Shell Injection Fix** | ✅ 100% | Code formatter uses `spawnSync` stdin pipe instead of `execSync` echo |
+| **Diff Preview in Confirmation** | ✅ 100% | Shows actual diffs before approval, magnitude-based re-confirmation for large changes |
+| **Architect Parallel Execution** | ✅ 100% | Dependency-wave-based parallel step execution with DAG ordering |
+| **Semantic Truncation** | ✅ 100% | Error-preserving output truncation (keeps error lines, stack traces from middle sections) |
+| **Auto-Sandbox Router** | ✅ 100% | Automatic Docker routing for dangerous commands (npm, pip, cargo, make) |
+| **Security Audit Logging** | ✅ 100% | JSONL audit trail for all code generation security decisions |
+| **Copilot Proxy Hardening** | ✅ 100% | Per-IP rate limiting, token clamping, auth bypass fix, sanitized error messages |
+
 ---
 
 ## Installation
@@ -176,29 +195,47 @@ YOLO_MODE=true buddy
 
 ```bash
 # Single prompt, JSON output to stdout (logs go to stderr)
-buddy -p "create a hello world Express app" --output json > result.json
+buddy -p "create a hello world Express app" --output-format json > result.json
 
 # Pipe into other tools
-buddy -p "explain this code" --output json 2>/dev/null | jq '.content'
+buddy -p "explain this code" --output-format json 2>/dev/null | jq '.content'
 
 # Use in CI with full autonomy
 buddy -p "run tests and fix failures" \
   --dangerously-skip-permissions \
-  --output json \
+  --output-format json \
   --max-tool-rounds 30
+
+# Auto-approve all tool executions (no confirmation prompts)
+buddy -p "fix lint errors" --auto-approve --output-format text
 ```
 
 Headless mode exits cleanly after completion — safe for `timeout`, shell scripts, and CI pipelines.
+
+### Session Management
+
+```bash
+# Continue the most recent session
+buddy --continue
+
+# Resume a specific session by ID (supports partial matching)
+buddy --resume abc123
+
+# Set a cost limit for the session
+buddy --max-price 5.00
+```
 
 ### Typical Project Workflow
 
 ```bash
 # 1. First-time setup
-buddy onboard                # Interactive config wizard
+buddy --setup                # Quick API key setup wizard
+buddy onboard                # Full interactive config wizard
 buddy doctor                 # Verify environment & dependencies
 
 # 2. Start coding
 buddy                        # Launch interactive chat
+buddy --vim                  # Launch with Vim keybindings
 
 # 3. Describe what you want in natural language
 > "Create a Node.js project with Express and Prisma"
@@ -209,9 +246,11 @@ buddy                        # Launch interactive chat
 
 # 4. Advanced modes
 buddy --model gemini-2.5-flash  # Switch AI model
-buddy speak                  # Voice conversation mode
-buddy daemon start           # Run 24/7 in background
-buddy server --port 3000     # Expose REST/WebSocket API
+buddy --system-prompt architect # Use architect system prompt
+buddy --agent my-custom-agent   # Use custom agent from ~/.codebuddy/agents/
+buddy speak                     # Voice conversation mode
+buddy daemon start              # Run 24/7 in background
+buddy server --port 3000        # Expose REST/WebSocket API
 ```
 
 Code Buddy autonomously reads files, writes code, runs commands, and fixes errors — typically 5-15 tool calls per task (up to 50, or 400 in YOLO mode).
@@ -281,6 +320,82 @@ User Input → ChatInterface (Ink/React) → CodeBuddyAgent → AI Provider
                                               │
                                         Results back to API (loop)
 ```
+
+---
+
+## CLI Reference
+
+### Global Options
+
+| Flag | Short | Description | Default |
+|:-----|:------|:------------|:--------|
+| `--version` | `-V` | Show version number | - |
+| `--directory <dir>` | `-d` | Set working directory | `.` |
+| `--api-key <key>` | `-k` | API key (or `GROK_API_KEY` env) | - |
+| `--base-url <url>` | `-u` | API base URL (or `GROK_BASE_URL` env) | - |
+| `--model <model>` | `-m` | AI model to use (or `GROK_MODEL` env) | auto-detect |
+| `--prompt <prompt>` | `-p` | Single prompt, headless mode | - |
+| `--browser` | `-b` | Launch browser UI instead of terminal | `false` |
+| `--max-tool-rounds <n>` | | Max tool execution rounds | `400` |
+| `--security-mode <mode>` | `-s` | `suggest`, `auto-edit`, or `full-auto` | `suggest` |
+| `--output-format <fmt>` | `-o` | Headless output: `json`, `stream-json`, `text`, `markdown` | `json` |
+| `--context <patterns>` | `-c` | Glob patterns to load into context | - |
+
+### Session & Cost
+
+| Flag | Description | Default |
+|:-----|:------------|:--------|
+| `--continue` | Resume the most recent saved session | - |
+| `--resume <id>` | Resume a specific session (supports partial ID matching) | - |
+| `--max-price <dollars>` | Maximum cost in dollars before stopping | `10.0` |
+| `--no-cache` | Disable response caching | - |
+
+### Autonomy & Permissions
+
+| Flag | Description | Default |
+|:-----|:------------|:--------|
+| `--auto-approve` | Automatically approve all tool executions | `false` |
+| `--dangerously-skip-permissions` | Bypass all permission checks (trusted containers only) | `false` |
+| `--no-self-heal` | Disable self-healing auto-correction | - |
+| `--allow-outside` | Allow file operations outside workspace directory | `false` |
+
+### Tool Control
+
+| Flag | Description | Example |
+|:-----|:------------|:--------|
+| `--force-tools` | Force-enable function calling for local models | - |
+| `--probe-tools` | Auto-detect tool support at startup | - |
+| `--enabled-tools <patterns>` | Only enable matching tools (glob, comma-separated) | `bash,*file*,search` |
+| `--disabled-tools <patterns>` | Disable matching tools (glob, comma-separated) | `bash,web_*` |
+| `--allowed-tools <patterns>` | Alias for `--enabled-tools` (Claude Code compat) | - |
+
+### Agent & Prompt Configuration
+
+| Flag | Description | Default |
+|:-----|:------------|:--------|
+| `--system-prompt <id>` | System prompt: `default`, `minimal`, `secure`, `code-reviewer`, `architect` (or custom from `~/.codebuddy/prompts/`) | `default` |
+| `--list-prompts` | List available system prompts and exit | - |
+| `--agent <name>` | Use a custom agent from `~/.codebuddy/agents/` | - |
+| `--list-agents` | List available custom agents and exit | - |
+
+### Display & Debugging
+
+| Flag | Description |
+|:-----|:------------|
+| `--plain` | Minimal formatting (plain text output) |
+| `--no-color` | Disable colored output |
+| `--no-emoji` | Disable emoji in output |
+| `--vim` | Enable Vim keybindings for input |
+| `--mcp-debug` | Enable MCP protocol debugging output |
+
+### Setup & Init
+
+| Flag | Description |
+|:-----|:------------|
+| `--init` | Initialize `.codebuddy/` directory with templates |
+| `--dry-run` | Preview changes without applying (simulation mode) |
+| `--setup` | Run interactive API key setup wizard |
+| `--list-models` | List available models from the API and exit |
 
 ---
 
@@ -393,11 +508,17 @@ Code Buddy supports multiple messaging channels:
 
 | Channel | Status | Features |
 |:--------|:------:|:---------|
+| **Terminal** | ✅ Full | Native CLI interface (Ink/React) |
+| **HTTP API** | ✅ Full | REST + WebSocket |
+| **WebChat** | ✅ Full | Built-in HTTP + WebSocket with browser UI |
 | **Discord** | 🟡 Base | Bot integration, slash commands |
 | **Telegram** | 🟡 Base | Bot API, message handlers |
 | **Slack** | 🟡 Base | Bolt framework, events |
-| **Terminal** | ✅ Full | Native CLI interface |
-| **HTTP API** | ✅ Full | REST + WebSocket |
+| **WhatsApp** | 🟡 Base | Baileys (QR pairing, media, reconnect) |
+| **Signal** | 🟡 Base | signal-cli REST API (polling, groups) |
+| **Google Chat** | 🟡 Base | Workspace API (JWT auth, webhook events) |
+| **Microsoft Teams** | 🟡 Base | Bot Framework (OAuth2, adaptive cards) |
+| **Matrix** | 🟡 Base | matrix-js-sdk (E2EE, threads, media) |
 
 ### Channel Configuration
 
@@ -588,6 +709,23 @@ buddy server --port 3000
 | `/api/cron/jobs` | GET | List cron jobs |
 | `/api/cron/jobs/{id}/trigger` | POST | Trigger a cron job |
 | `/api/notifications/preferences` | GET/POST | Notification settings |
+| `/api/heartbeat/status` | GET | Heartbeat engine status |
+| `/api/heartbeat/start` | POST | Start heartbeat |
+| `/api/heartbeat/stop` | POST | Stop heartbeat |
+| `/api/heartbeat/tick` | POST | Trigger a single tick |
+| `/api/hub/search?q=...` | GET | Search skills marketplace |
+| `/api/hub/installed` | GET | List installed hub skills |
+| `/api/hub/install` | POST | Install a skill |
+| `/api/hub/{name}` | DELETE | Uninstall a skill |
+| `/api/identity` | GET | List loaded identity files |
+| `/api/identity/prompt` | GET | Combined identity prompt |
+| `/api/identity/{name}` | PUT | Update an identity file |
+| `/api/groups/status` | GET | Group security status |
+| `/api/groups/list` | GET | List configured groups |
+| `/api/groups/block` | POST | Block a user globally |
+| `/api/groups/block/{userId}` | DELETE | Unblock a user |
+| `/api/auth-profiles` | GET/POST/DELETE | Auth profile CRUD |
+| `/api/auth-profiles/reset` | POST | Reset all cooldowns |
 
 ### WebSocket Events
 
@@ -639,8 +777,82 @@ buddy daemon logs [--lines N]  # View daemon logs
 
 ```bash
 buddy trigger list             # List all event triggers
-buddy trigger add <pattern> <action>  # Add a trigger
+buddy trigger add <spec>       # Add a trigger (format: type:condition action:target)
 buddy trigger remove <id>      # Remove a trigger
+```
+
+### Webhook Commands
+
+```bash
+buddy webhook list                          # List registered webhooks
+buddy webhook add <name> <message> [opts]   # Register a new webhook
+buddy webhook remove <id>                   # Remove a webhook
+```
+
+### Hub Commands (Skills Marketplace)
+
+```bash
+buddy hub search <query>       # Search for skills
+buddy hub install <name>       # Install a skill from the hub
+buddy hub uninstall <name>     # Uninstall a skill
+buddy hub update [name]        # Update all or a specific skill
+buddy hub list                 # List installed skills
+buddy hub info <name>          # Show details about a skill
+buddy hub publish <path>       # Publish a skill to the hub
+buddy hub sync                 # Sync installed skills with lockfile
+```
+
+### Heartbeat Commands
+
+```bash
+buddy heartbeat start [opts]   # Start the heartbeat engine
+buddy heartbeat stop           # Stop the heartbeat engine
+buddy heartbeat status         # Show heartbeat status
+buddy heartbeat tick           # Manually trigger a single tick
+```
+
+### Identity Commands
+
+```bash
+buddy identity show            # Show loaded identity files (SOUL.md, USER.md, etc.)
+buddy identity get <name>      # Show content of a specific identity file
+buddy identity set <name> <c>  # Set content of an identity file
+buddy identity prompt          # Show the combined identity prompt injection
+```
+
+### Group Security Commands
+
+```bash
+buddy groups status            # Show group security status
+buddy groups list              # List configured groups
+buddy groups block <userId>    # Add a user to the global blocklist
+buddy groups unblock <userId>  # Remove a user from the blocklist
+```
+
+### Auth Profile Commands
+
+```bash
+buddy auth-profile list                   # List authentication profiles
+buddy auth-profile add <id> <provider>    # Add a profile (API key rotation)
+buddy auth-profile remove <id>            # Remove a profile
+buddy auth-profile reset                  # Reset all cooldowns
+```
+
+### Config Commands
+
+```bash
+buddy config show [--json]     # Show all environment variables and values
+buddy config validate          # Validate current environment configuration
+buddy config get <name>        # Show value and definition of a variable
+```
+
+### Security Audit
+
+```bash
+buddy security-audit           # Run security audit of your environment
+buddy security-audit --deep    # Deep scan (git history, npm audit)
+buddy security-audit --fix     # Auto-fix file permission issues
+buddy security-audit --json    # Output as JSON
 ```
 
 ### Voice & TTS Commands
@@ -858,15 +1070,18 @@ Create `.codebuddy/settings.json`:
 | Proactive Agent (push notifications) | HIGH | ✅ Done |
 | Multi-Agent Orchestrator | HIGH | ✅ Done |
 | Self-Healing & Checkpoint Rollback | HIGH | ✅ Done |
-| Gateway WebSocket Control Plane | HIGH | 🔲 Planned |
 | Canvas A2UI Visual Workspace | HIGH | ✅ Done |
 | ClawHub Skills Registry | MEDIUM | ✅ Done |
-| OAuth Authentication | MEDIUM | 🔲 Planned |
 | Web Search 5-Provider Chain | HIGH | ✅ Done |
 | Apply Patch & Bash Parser | HIGH | ✅ Done |
 | Per-Model Tool Config | MEDIUM | ✅ Done |
 | Voice Wake Word Detection | MEDIUM | ✅ Done |
 | TTS Providers (OpenAI, ElevenLabs, AudioReader) | MEDIUM | ✅ Done |
+| Code Generation Security (Phase 7) | HIGH | ✅ Done |
+| Auto-Sandbox Router | HIGH | ✅ Done |
+| Semantic Output Truncation | MEDIUM | ✅ Done |
+| Gateway WebSocket Control Plane | HIGH | 🔲 Planned |
+| OAuth Authentication | MEDIUM | 🔲 Planned |
 | Companion Apps (iOS, Android, macOS) | LOW | 🔲 Planned |
 | Tailscale Integration | LOW | 🔲 Planned |
 

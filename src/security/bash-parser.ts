@@ -252,9 +252,9 @@ export function parseBashCommand(input: string): ParseResult {
   // Try tree-sitter first (optional dependency)
   try {
     // Dynamic import — only works if tree-sitter + tree-sitter-bash are installed
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const Parser = require('tree-sitter');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const Bash = require('tree-sitter-bash');
 
     const parser = new Parser();

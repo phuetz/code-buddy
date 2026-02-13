@@ -19,6 +19,7 @@ import type {
 } from './types.js';
 import { DEFAULT_ALLOWLIST_CONFIG, DEFAULT_SAFE_PATTERNS, DEFAULT_DENY_PATTERNS } from './types.js';
 import { matchApprovalPattern, findBestMatch, validatePattern } from './pattern-matcher.js';
+import { logger } from '../../utils/logger.js';
 
 // ============================================================================
 // Allowlist Store
@@ -379,7 +380,7 @@ export class AllowlistStore extends EventEmitter {
       }
     } catch (error) {
       // Use defaults on error
-      console.error('Failed to load allowlist config:', error);
+      logger.error('Failed to load allowlist config', error as Error);
     }
   }
 
@@ -400,7 +401,7 @@ export class AllowlistStore extends EventEmitter {
 
       this.emit('config:saved', this.config);
     } catch (error) {
-      console.error('Failed to save allowlist config:', error);
+      logger.error('Failed to save allowlist config', error as Error);
     }
   }
 

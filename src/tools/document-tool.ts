@@ -2,6 +2,7 @@ import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { createLoopGuard } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 export interface DocumentContent {
   text: string;
@@ -197,7 +198,7 @@ export class DocumentTool {
           const sheetName = sheetNames[index - 1] || `Sheet${index}`;
           const errorMsg = `Failed to parse ${sheetName}: ${getErrorMessage(error)}`;
           parseErrors.push(errorMsg);
-          console.error(`[DocumentTool] ${errorMsg}`);
+          logger.error(`[DocumentTool] ${errorMsg}`);
         }
       }
     }
@@ -351,7 +352,7 @@ export class DocumentTool {
     const guard = createLoopGuard({
       maxIterations: 10000,
       context: 'PPTX slide parsing',
-      onWarn: (msg) => console.warn(`[DocumentTool] ${msg}`)
+      onWarn: (msg) => logger.warn(`[DocumentTool] ${msg}`)
     });
 
     while (true) {

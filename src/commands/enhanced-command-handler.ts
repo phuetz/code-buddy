@@ -82,6 +82,13 @@ import {
   // Missing handlers (colab, diff)
   handleColab,
   handleDiffCheckpoints,
+  // Extra handlers (UX slash commands)
+  handleUndo,
+  handleDiff,
+  handleSearch,
+  handleTest,
+  handleFix,
+  handleReview,
 } from "./handlers/index.js";
 
 import type { CommandHandlerResult } from "./handlers/index.js";
@@ -327,9 +334,32 @@ export class EnhancedCommandHandler {
       case "__COLAB__":
         return handleColab(args);
 
-      // Diff Checkpoints
+      // Diff Checkpoints (legacy token)
       case "__DIFF_CHECKPOINTS__":
         return handleDiffCheckpoints(args);
+
+      // Extra UX commands
+      case "__UNDO__":
+        return handleUndo(args);
+
+      case "__DIFF__":
+        // If args provided, delegate to checkpoint diff; otherwise show git diff
+        if (args.length > 0) {
+          return handleDiffCheckpoints(args);
+        }
+        return handleDiff(args);
+
+      case "__SEARCH__":
+        return handleSearch(args);
+
+      case "__TEST__":
+        return handleTest(args);
+
+      case "__FIX__":
+        return handleFix(args);
+
+      case "__REVIEW__":
+        return handleReview(args);
 
       default:
         return { handled: false };

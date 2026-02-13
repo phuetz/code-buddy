@@ -7,7 +7,7 @@
 
 import { EventEmitter } from 'events';
 import { CodeBuddyClient, CodeBuddyMessage } from '../codebuddy/client.js';
-import { BashTool } from './bash.js';
+import { BashTool } from './bash/index.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 

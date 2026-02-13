@@ -1,4 +1,4 @@
-import { BashTool } from '../../src/tools/bash.js';
+import { BashTool } from '../../src/tools/bash';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 describe('BashTool - Streaming Execution', () => {

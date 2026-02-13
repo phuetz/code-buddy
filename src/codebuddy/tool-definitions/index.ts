@@ -52,6 +52,7 @@ export {
   SUBAGENT_TOOL,
   DOCKER_TOOL,
   KUBERNETES_TOOL,
+  PROCESS_TOOL,
   ADVANCED_TOOLS,
 } from './advanced-tools.js';
 

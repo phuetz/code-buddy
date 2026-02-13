@@ -21,6 +21,9 @@ import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
 import { findSkill } from "../skills/index.js";
 import { skillMdToUnified } from "../skills/adapters/index.js";
+import { MessageQueue, type MessageQueueMode } from "./message-queue.js";
+import { CostPredictor } from "../analytics/cost-predictor.js";
+import { BudgetAlertManager } from "../analytics/budget-alerts.js";
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -54,6 +57,15 @@ export class CodeBuddyAgent extends BaseAgent {
 
   /** Optional peer routing config applied from channel route resolution */
   private peerRoutingConfig: RouteAgentConfig | null = null;
+
+  /** Message queue for steer/followup/collect modes */
+  private messageQueue: MessageQueue = new MessageQueue();
+  private repairListeners: Record<string, (data: unknown) => void> = {};
+
+  /** Cost prediction before execution */
+  private costPredictor!: CostPredictor;
+  /** Budget alert monitoring */
+  private budgetAlertManager: BudgetAlertManager = new BudgetAlertManager();
 
   /**
    * Create a new CodeBuddyAgent instance
@@ -135,6 +147,14 @@ export class CodeBuddyAgent extends BaseAgent {
     this.marketplace = this.infrastructure.marketplace;
     this.repairCoordinator = this.infrastructure.repairCoordinator;
 
+    // Initialize cost prediction and budget alerts
+    this.costPredictor = new CostPredictor(this.costTracker);
+    this.budgetAlertManager = new BudgetAlertManager();
+    this.budgetAlertManager.on('alert', (alert) => {
+      logger.warn(`Budget alert [${alert.type}]: ${alert.message}`);
+      this.emit('budget:alert', alert);
+    });
+
     // Initialize tool selection
     this.useRAGToolSelection = useRAGToolSelection;
     this.toolSelectionStrategy = getToolSelectionStrategy({ useRAG: useRAGToolSelection });
@@ -142,11 +162,17 @@ export class CodeBuddyAgent extends BaseAgent {
     // Initialize client
     this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
 
-    // Forward repair events from RepairCoordinator
-    this.repairCoordinator.on('repair:start', (data) => this.emit('repair:start', data));
-    this.repairCoordinator.on('repair:success', (data) => this.emit('repair:success', data));
-    this.repairCoordinator.on('repair:failed', (data) => this.emit('repair:failed', data));
-    this.repairCoordinator.on('repair:error', (data) => this.emit('repair:error', data));
+    // Forward repair events from RepairCoordinator (store refs for cleanup)
+    this.repairListeners = {
+      start: (data: unknown) => this.emit('repair:start', data),
+      success: (data: unknown) => this.emit('repair:success', data),
+      failed: (data: unknown) => this.emit('repair:failed', data),
+      error: (data: unknown) => this.emit('repair:error', data),
+    };
+    this.repairCoordinator.on('repair:start', this.repairListeners.start);
+    this.repairCoordinator.on('repair:success', this.repairListeners.success);
+    this.repairCoordinator.on('repair:failed', this.repairListeners.failed);
+    this.repairCoordinator.on('repair:error', this.repairListeners.error);
 
     // Initialize StreamingHandler
     this.streamingHandler = new StreamingHandler({
@@ -173,6 +199,7 @@ export class CodeBuddyAgent extends BaseAgent {
       tokenCounter: this.tokenCounter,
       laneQueue: getLaneQueue(),
       laneId: 'agent-tools',
+      messageQueue: this.messageQueue,
     }, {
       maxToolRounds: this.maxToolRounds,
       isGrokModel: this.isGrokModel.bind(this),
@@ -219,9 +246,12 @@ export class CodeBuddyAgent extends BaseAgent {
     // Load custom instructions and generate system prompt
     const customInstructions = loadCustomInstructions();
 
-    // Initialize system prompt (async operation)
-    this.initializeAgentSystemPrompt(systemPromptId, modelToUse, customInstructions);
+    // Initialize system prompt (async operation) — track readiness
+    this.systemPromptReady = this.initializeAgentSystemPrompt(systemPromptId, modelToUse, customInstructions);
   }
+
+  /** Resolves when the system prompt has been loaded (or failed gracefully). */
+  public systemPromptReady: Promise<void>;
 
   private async initializeAgentSystemPrompt(
     systemPromptId: string | undefined,
@@ -236,6 +266,11 @@ export class CodeBuddyAgent extends BaseAgent {
       });
     } catch (error) {
       logger.error("Failed to initialize system prompt", error as Error);
+      // Push a minimal fallback system prompt so the agent is still usable
+      this.messages.push({
+        role: "system",
+        content: "You are a helpful AI coding assistant.",
+      });
     }
   }
 
@@ -348,15 +383,44 @@ export class CodeBuddyAgent extends BaseAgent {
     // Trim history to prevent memory bloat
     this.trimHistory();
 
-    // Model routing - select optimal model based on task complexity
+    // Cost prediction before execution
+    const currentModel = this.codebuddyClient.getCurrentModel();
+    const prediction = this.costPredictor.predict(
+      this.messages as Array<{ role: string; content: string }>,
+      currentModel
+    );
+    logger.debug('Cost prediction', {
+      model: prediction.model,
+      estimatedCost: `$${prediction.estimatedCost.toFixed(6)}`,
+      estimatedInputTokens: prediction.estimatedInputTokens,
+      estimatedOutputTokens: prediction.estimatedOutputTokens,
+      confidence: prediction.confidence,
+    });
+
+    // Warn if predicted cost would exceed remaining budget
+    const remainingBudget = this.sessionCostLimit - this.sessionCost;
+    if (
+      this.sessionCostLimit !== Infinity &&
+      prediction.estimatedCost > remainingBudget
+    ) {
+      yield {
+        type: 'content',
+        content: `\nWarning: Estimated cost ($${prediction.estimatedCost.toFixed(4)}) may exceed remaining budget ($${remainingBudget.toFixed(4)}).\n`,
+      };
+    }
+
+    // Model routing - select optimal model based on task complexity.
+    // Use local variables (not instance state) to avoid race conditions
+    // if multiple streams run concurrently.
     let originalModel: string | null = null;
+    let routingDecision: typeof this.lastRoutingDecision = null;
     if (this.useModelRouting) {
       const conversationContext = this.chatHistory
         .slice(-5)
         .map(e => e.content)
         .filter((c): c is string => typeof c === 'string');
 
-      const routingDecision = this.modelRouter.route(
+      routingDecision = this.modelRouter.route(
         message,
         conversationContext,
         this.codebuddyClient.getCurrentModel()
@@ -379,21 +443,23 @@ export class CodeBuddyAgent extends BaseAgent {
         this.abortController
       );
     } finally {
-      // Restore original model if it was changed by routing
-      if (originalModel) {
+      // Restore original model if it was changed by routing.
+      // Only restore if the model is still the one we set (another call may have changed it).
+      if (originalModel && routingDecision &&
+          this.codebuddyClient.getCurrentModel() === routingDecision.recommendedModel) {
         this.codebuddyClient.setModel(originalModel);
         logger.debug(`Model routing: restored to ${originalModel}`);
       }
 
       // Record usage with model router for cost tracking
-      if (this.useModelRouting && this.lastRoutingDecision) {
+      if (this.useModelRouting && routingDecision) {
         const inputTokens = this.tokenCounter.countMessageTokens(this.messages as Parameters<typeof this.tokenCounter.countMessageTokens>[0]);
         const totalOutputTokens = this.streamingHandler.getTokenCount() || 0;
-        
+
         this.modelRouter.recordUsage(
-          this.lastRoutingDecision.recommendedModel,
+          routingDecision.recommendedModel,
           inputTokens + totalOutputTokens,
-          this.lastRoutingDecision.estimatedCost
+          routingDecision.estimatedCost
         );
       }
 
@@ -689,18 +755,43 @@ export class CodeBuddyAgent extends BaseAgent {
     // Update prompt builder config
     this.promptBuilder.updateConfig({ yoloMode: enabled });
 
-    // Update system prompt for new mode
+    // Update system prompt for new mode — track readiness
     const customInstructions = loadCustomInstructions();
-    
-    (async () => {
+
+    this.systemPromptReady = (async () => {
       const systemPrompt = await this.promptBuilder.buildSystemPrompt(undefined, this.getCurrentModel(), customInstructions);
-      
+
       // Update the system message
       if (this.messages.length > 0 && this.messages[0].role === "system") {
         this.messages[0].content = systemPrompt;
       }
     })().catch(error => {
       logger.error("Failed to update system prompt for YOLO mode", error as Error);
+    });
+  }
+
+  /**
+   * Enable auto-observation middleware for the computer-use verify loop.
+   * Lazily imports and adds AutoObservationMiddleware to the executor's pipeline.
+   * Called automatically when a profile with metadata.enableAutoObservation is active.
+   */
+  enableAutoObservation(config?: Partial<import('./middleware/auto-observation.js').AutoObservationConfig>): void {
+    // Ensure the executor has a middleware pipeline
+    if (!this.executor.getMiddlewarePipeline()) {
+      const { MiddlewarePipeline } = require('./middleware/index.js');
+      this.executor.setMiddlewarePipeline(new MiddlewarePipeline());
+    }
+
+    // Lazily import and add the middleware
+    import('./middleware/auto-observation.js').then(({ AutoObservationMiddleware }) => {
+      const pipeline = this.executor.getMiddlewarePipeline();
+      if (!pipeline) return;
+      // Don't add if already present
+      if (pipeline.getMiddlewareNames().includes('auto-observation')) return;
+      pipeline.use(new AutoObservationMiddleware(config));
+      logger.info('Auto-observation middleware enabled');
+    }).catch(err => {
+      logger.error('Failed to enable auto-observation middleware', err);
     });
   }
 
@@ -715,6 +806,11 @@ export class CodeBuddyAgent extends BaseAgent {
     this.sessionCost += cost;
     this.routingFacade?.addSessionCost(cost);
     this.costTracker.recordUsage(inputTokens, outputTokens, model);
+
+    // Check budget alerts after recording cost
+    if (this.sessionCostLimit !== Infinity) {
+      this.budgetAlertManager.check(this.sessionCost, this.sessionCostLimit);
+    }
   }
 
   /**
@@ -742,6 +838,20 @@ export class CodeBuddyAgent extends BaseAgent {
    *
    * @param config - The route agent config from peer routing resolution
    */
+  /**
+   * Set the message queue mode (steer/followup/collect)
+   */
+  setMessageQueueMode(mode: MessageQueueMode): void {
+    this.messageQueue.setMode(mode);
+  }
+
+  /**
+   * Get the message queue instance for external enqueuing
+   */
+  getMessageQueue(): MessageQueue {
+    return this.messageQueue;
+  }
+
   applyPeerRouting(config: RouteAgentConfig): void {
     this.peerRoutingConfig = config;
 
@@ -881,7 +991,13 @@ export class CodeBuddyAgent extends BaseAgent {
    * Should be called when the agent is no longer needed
    */
   dispose(): void {
-    this.repairCoordinator.removeAllListeners();
+    // Remove only the forwarding listeners we attached (not other listeners)
+    if (this.repairListeners.start) {
+      this.repairCoordinator.off('repair:start', this.repairListeners.start);
+      this.repairCoordinator.off('repair:success', this.repairListeners.success);
+      this.repairCoordinator.off('repair:failed', this.repairListeners.failed);
+      this.repairCoordinator.off('repair:error', this.repairListeners.error);
+    }
     this.peerRoutingConfig = null;
     super.dispose();
   }
