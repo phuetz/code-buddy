@@ -1,11 +1,12 @@
 /**
  * MCP Module - Model Context Protocol Integration
  *
- * This module provides two client implementations:
- * - MCPManager (client.ts): Uses the official MCP SDK, supports multiple transport types
- * - MCPClient (mcp-client.ts): Manual implementation with config file management
+ * This module provides:
+ * - MCPManager (client.ts): SDK-based MCP client, supports multiple transport types
+ * - MCPClient (mcp-client.ts): Manual client implementation with config file management
+ * - CodeBuddyMCPServer (mcp-server.ts): MCP server exposing Code Buddy tools over stdio
  *
- * For new code, prefer MCPManager as it uses the official SDK.
+ * For new code, prefer MCPManager (client) and CodeBuddyMCPServer (server).
  */
 
 // Shared types (no circular dependencies)
@@ -38,6 +39,10 @@ export {
   StreamableHttpTransport,
   createTransport,
 } from "./transports.js";
+
+// MCP Server (Code Buddy as a tool provider)
+export { CodeBuddyMCPServer } from "./mcp-server.js";
+export type { MCPToolDefinition } from "./mcp-server.js";
 
 // Configuration management
 export {

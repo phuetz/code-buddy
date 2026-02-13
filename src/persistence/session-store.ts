@@ -59,6 +59,7 @@ const DEFAULT_CONFIG: SessionStoreConfig = {
 export class SessionStore {
   private currentSessionId: string | null = null;
   private autoSave: boolean = true;
+  private ephemeral: boolean = false;
   private config: SessionStoreConfig;
   private dbRepository: SessionRepository | null = null;
   private sessionsDir: string;
@@ -157,8 +158,10 @@ export class SessionStore {
 
   /**
    * Save a session to disk (with file locking to prevent concurrent write corruption)
+   * Skipped entirely when ephemeral mode is enabled.
    */
   async saveSession(session: Session): Promise<void> {
+    if (this.ephemeral) return;
     await this.ensureSessionsDirectory();
     const filePath = this.getSessionFilePath(session.id);
 
@@ -780,6 +783,21 @@ export class SessionStore {
    */
   isAutoSaveEnabled(): boolean {
     return this.autoSave;
+  }
+
+  /**
+   * Set ephemeral mode - when enabled, sessions are not persisted to disk.
+   * Useful for one-off queries where persistence is unnecessary.
+   */
+  setEphemeral(flag: boolean): void {
+    this.ephemeral = flag;
+  }
+
+  /**
+   * Check if ephemeral mode is enabled
+   */
+  isEphemeral(): boolean {
+    return this.ephemeral;
   }
 
   /**

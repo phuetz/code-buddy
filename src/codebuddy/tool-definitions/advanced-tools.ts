@@ -542,6 +542,30 @@ export const PROCESS_TOOL: CodeBuddyTool = {
   }
 };
 
+// JavaScript REPL tool for sandboxed code execution
+export const JS_REPL_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "js_repl",
+    description: "Execute JavaScript code in a persistent sandboxed REPL. Variables persist across calls. No filesystem or network access.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["execute", "reset", "variables"],
+          description: "Action: execute code (default), reset context, or list variables"
+        },
+        code: {
+          type: "string",
+          description: "JavaScript code to execute (required for execute action)"
+        }
+      },
+      required: ["action"]
+    }
+  }
+};
+
 /**
  * All advanced tools as an array
  */
@@ -553,4 +577,5 @@ export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   DOCKER_TOOL,
   KUBERNETES_TOOL,
   PROCESS_TOOL,
+  JS_REPL_TOOL,
 ];

@@ -53,6 +53,7 @@ export {
   DOCKER_TOOL,
   KUBERNETES_TOOL,
   PROCESS_TOOL,
+  JS_REPL_TOOL,
   ADVANCED_TOOLS,
 } from './advanced-tools.js';
 

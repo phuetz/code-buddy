@@ -510,7 +510,8 @@ async function processPromptHeadless(
   model?: string,
   maxToolRounds?: number,
   selfHealEnabled: boolean = true,
-  outputFormat: string = 'json'
+  outputFormat: string = 'json',
+  outputSchemaPath?: string
 ): Promise<void> {
   try {
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
@@ -571,6 +572,19 @@ async function processPromptHeadless(
             });
           }
           break;
+      }
+    }
+
+    // Validate output against JSON Schema if --output-schema was provided
+    if (outputSchemaPath) {
+      const { validateOutputSchema } = await import("./utils/output-schema-validator.js");
+      const validation = validateOutputSchema(messages, outputSchemaPath);
+      if (!validation.valid) {
+        console.error('Output schema validation failed:');
+        for (const error of validation.errors) {
+          console.error(`  - ${error}`);
+        }
+        process.exit(2);
       }
     }
 
@@ -766,6 +780,22 @@ program
     "--allow-outside",
     "allow file operations outside the workspace directory (disables workspace isolation)"
   )
+  .option(
+    "--output-schema <path>",
+    "validate headless mode JSON output against a JSON Schema file"
+  )
+  .option(
+    "--add-dir <paths...>",
+    "grant additional writable directories (repeatable)"
+  )
+  .option(
+    "--no-alt-screen",
+    "disable alternate screen buffer for Ink UI"
+  )
+  .option(
+    "--ephemeral",
+    "skip session persistence (do not save session to disk)"
+  )
   .action(async (message, options) => {
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
@@ -916,6 +946,7 @@ program
     const _workspaceIsolation = initializeWorkspaceIsolation({
       allowOutside: options.allowOutside,
       directory: process.cwd(),
+      additionalPaths: options.addDir,
     });
 
     if (options.allowOutside) {
@@ -965,6 +996,28 @@ program
         process.env.GROK_SKIP_PERMISSIONS = 'true';
         console.error("⚠️  DANGEROUS: All permission checks BYPASSED");
         console.error("   Only use this in trusted containers without network access!");
+      }
+
+      // Handle --add-dir: grant additional writable directories to sandbox
+      if (options.addDir && options.addDir.length > 0) {
+        try {
+          const { getSandboxManager } = await import("./security/sandbox.js");
+          const sandboxManager = getSandboxManager();
+          for (const dir of options.addDir) {
+            sandboxManager.allowPath(dir);
+          }
+        } catch (_err) {
+          // Sandbox manager may not be initialized; dirs already passed to workspace isolation
+        }
+        console.error(`Writable directories added: ${options.addDir.join(', ')}`);
+      }
+
+      // Handle --ephemeral: skip session persistence
+      if (options.ephemeral) {
+        const { getSessionStore } = await import("./persistence/session-store.js");
+        const sessionStore = getSessionStore();
+        sessionStore.setEphemeral(true);
+        console.error("Ephemeral mode: ENABLED (session will not be saved)");
       }
 
       // Handle --allowed-tools (like Claude Code --allowedTools)
@@ -1035,7 +1088,8 @@ program
           model,
           maxToolRounds,
           options.selfHeal !== false,
-          options.output || options.outputFormat || 'json'
+          options.output || options.outputFormat || 'json',
+          options.outputSchema
         );
         process.exit(0);
       }
@@ -1188,7 +1242,14 @@ program
       recordStartupPhase('ui-render');
       logStartupMetrics();
 
-      render(React.createElement(ChatInterface, { agent, initialMessage }));
+      // Configure Ink render options
+      const inkOptions: Record<string, unknown> = { exitOnCtrlC: true };
+      if (options.altScreen === false) {
+        // --no-alt-screen disables Ink's alternate screen buffer
+        inkOptions.patchConsole = false;
+      }
+
+      render(React.createElement(ChatInterface, { agent, initialMessage }), inkOptions);
 
       // Check for updates in background after UI renders
       setImmediate(async () => {
@@ -1377,6 +1438,31 @@ program
       });
     } catch (error) {
       logger.error("Failed to start server", error instanceof Error ? error : new Error(String(error)));
+      process.exit(1);
+    }
+  });
+
+// MCP Server command - run Code Buddy as an MCP tool provider over stdio
+program
+  .command("mcp-server")
+  .description("Start Code Buddy as an MCP server over stdio (for VS Code, Cursor, etc.)")
+  .option("--list", "List available MCP tools and exit")
+  .action(async (options) => {
+    if (options.list) {
+      const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
+      const tools = CodeBuddyMCPServer.getToolDefinitions();
+      for (const tool of tools) {
+        console.log(`${tool.name}: ${tool.description}`);
+      }
+      return;
+    }
+
+    try {
+      const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
+      const server = new CodeBuddyMCPServer();
+      await server.start();
+    } catch (error) {
+      logger.error("Failed to start MCP server", error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
     }
   });
