@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Tests-20%2C000%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-23%2C500%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
   <img src="https://img.shields.io/badge/Coverage-85%25-48dbfb?style=flat-square" alt="Coverage"/>
   <img src="https://img.shields.io/badge/Build-passing-00d26a?style=flat-square" alt="Build"/>
 </p>
@@ -999,7 +999,7 @@ npm run build
 ### Test Coverage
 
 ```
-20,000+ tests across 475+ suites covering:
+23,500+ tests across 549+ suites covering:
 - Core: Tool Policy, Bash Allowlist, Context Window Guard, Compaction
 - Agent: Middleware Pipeline, Profiles, Reasoning, Streaming
 - Autonomy: Daemon, Cron Bridge, Task Planner, Delegation Engine
