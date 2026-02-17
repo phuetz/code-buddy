@@ -145,6 +145,17 @@ Code Buddy incorporates advanced patterns from the [OpenClaw](https://github.com
 | **Device Node Connectors** | ✅ 100% | Real SSH, ADB, and local transports with platform-specific commands |
 | **Canvas Bidirectional Events** | ✅ 100% | Browser→agent event routing, data binding observers, state queries |
 
+### Phase 9 — External Tool Integration
+
+| Module | Status | Description |
+|:-------|:------:|:------------|
+| **RTK Output Compressor** | ✅ 100% | [RTK](https://github.com/rtk-ai/rtk) integration — compresses bash output 60-90% via format-aware parsing, reducing token usage |
+| **ICM Memory Bridge** | ✅ 100% | [ICM](https://github.com/rtk-ai/icm) MCP server — persistent cross-session memory with episodic + semantic dual architecture |
+| **RTK Tool Hook** | ✅ 100% | After-hook at priority 90 auto-compresses bash results > 500 chars (configurable) |
+| **ICM MCP Predefined Server** | ✅ 100% | Pre-configured `icm mcp` stdio transport in MCP predefined servers |
+| **Integrations Config** | ✅ 100% | New `[integrations]` TOML section for RTK/ICM enable/disable and thresholds |
+| **Doctor RTK/ICM Checks** | ✅ 100% | `buddy doctor` reports RTK and ICM binary availability |
+
 ---
 
 ## Installation
@@ -476,6 +487,7 @@ Code Buddy features a sophisticated memory system inspired by OpenClaw:
 | **Persistent Memory** | Markdown files | Project/user notes |
 | **Enhanced Memory** | SQLite + embeddings | Semantic search |
 | **Prospective Memory** | SQLite | Tasks, goals, reminders |
+| **ICM (optional)** | [ICM MCP server](https://github.com/rtk-ai/icm) | Persistent cross-session memory via episodic + semantic dual architecture |
 
 ### Auto-Capture (OpenClaw Pattern)
 
@@ -670,12 +682,13 @@ Search parameters: `country` (ISO 3166), `search_lang`, `ui_lang`, `freshness` (
 
 ### MCP Predefined Servers
 
-Three MCP servers are pre-configured (disabled by default):
+Four MCP servers are pre-configured (disabled by default):
 
 ```bash
 buddy mcp add brave-search    # Brave Web Search (needs BRAVE_API_KEY)
 buddy mcp add playwright      # Browser automation (no key needed)
 buddy mcp add exa-search      # Exa neural search (needs EXA_API_KEY)
+buddy mcp add icm             # Infinite Context Memory (needs `cargo install icm`)
 buddy mcp list                # Show all configured servers
 ```
 
@@ -1028,7 +1041,7 @@ npm run build
 - Orchestration: Supervisor, Shared Context, Self-Healing, Rollback
 - Providers: Gemini (vision + conversation), OpenAI-compat, Failover
 - Security: Trust Folders, Skill Scanner, Bash Parser, Session Locks
-- Infrastructure: MCP Client, Webhooks, Extensions, ACP Protocol
+- Infrastructure: MCP Client, Webhooks, Extensions, ACP Protocol, RTK Compressor, ICM Bridge
 - Voice: Wake Word, TTS Providers, Voice Control Loop
 - UI: ChatHistory, ChatInterface, TabbedQuestion
 ```
@@ -1058,6 +1071,13 @@ npm run build
 | `YOLO_MODE` | Full autonomy | `false` |
 | `MAX_COST` | Cost limit ($) | `10` |
 | `JWT_SECRET` | API server auth | Required in prod |
+
+**Optional Rust tools (install via `cargo install`):**
+
+| Tool | Install | Purpose |
+|:-----|:--------|:--------|
+| **RTK** | `cargo install rtk` | Compresses bash output 60-90%, reducing token usage |
+| **ICM** | `cargo install icm` | MCP server for persistent cross-session memory |
 
 ### Project Settings
 

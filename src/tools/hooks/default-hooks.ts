@@ -17,6 +17,8 @@ import {
   type ToolResultInput,
 } from './result-sanitizer.js';
 import { logger } from '../../utils/logger.js';
+import { compressWithRTK, isRTKAvailable, getCompressionStats } from '../../utils/rtk-compressor.js';
+import { getConfigManager } from '../../config/toml-config.js';
 
 // Track current provider for sanitization
 let currentProvider: LLMProvider = 'grok';
@@ -48,6 +50,38 @@ export function registerDefaultHooks(): void {
     logger.debug('Default hooks already registered');
     return;
   }
+
+  // RTK output compression hook (after tool execution, before sanitization)
+  hooksManager.registerAfterHook(
+    'rtk-output-compressor',
+    async (_context: ToolHookContext, result: ToolHookResult): Promise<ToolHookResult> => {
+      if (_context.toolName !== 'bash' || !result.output) return result;
+
+      const config = getConfigManager().getConfig();
+      if (!config.integrations?.rtk_enabled) return result;
+
+      const minLength = config.integrations.rtk_min_output_length ?? 500;
+      if (result.output.length < minLength) return result;
+
+      if (!isRTKAvailable()) return result;
+
+      const compressed = compressWithRTK(result.output);
+      if (compressed === result.output) return result;
+
+      const stats = getCompressionStats(result.output, compressed);
+      logger.debug('RTK compressed bash output', {
+        originalTokens: stats.originalTokens,
+        compressedTokens: stats.compressedTokens,
+        ratio: `${(stats.ratio * 100).toFixed(1)}%`,
+      });
+
+      return { ...result, output: compressed };
+    },
+    {
+      name: 'RTK Output Compressor',
+      priority: 90, // Runs before result-sanitizer (50)
+    }
+  );
 
   // Result sanitization hook (after tool execution)
   hooksManager.registerAfterHook(
@@ -170,6 +204,7 @@ export function registerDefaultHooks(): void {
 export function unregisterDefaultHooks(): void {
   const hooksManager = getToolHooksManager();
 
+  hooksManager.unregisterHook('after_tool_call', 'rtk-output-compressor');
   hooksManager.unregisterHook('after_tool_call', 'result-sanitizer');
   hooksManager.unregisterHook('after_tool_call', 'execution-logger');
   hooksManager.unregisterHook('tool_error', 'error-tracker');

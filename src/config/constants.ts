@@ -97,23 +97,33 @@ export const PATHS = {
 } as const;
 
 export const SUPPORTED_MODELS = {
-  // Grok models (xAI API model identifiers - don't rename these)
-  'grok-beta': { maxTokens: 131072, provider: 'xai' },
-  'grok-2-1212': { maxTokens: 32768, provider: 'xai' },
-  'grok-vision-beta': { maxTokens: 8192, provider: 'xai' },
+  // Grok models (xAI API model identifiers)
+  'grok-4-1-fast': { maxTokens: 2000000, provider: 'xai' },
+  'grok-4-latest': { maxTokens: 256000, provider: 'xai' },
+  'grok-4-fast': { maxTokens: 2000000, provider: 'xai' },
+  'grok-code-fast-1': { maxTokens: 256000, provider: 'xai' },
   'grok-3-latest': { maxTokens: 131072, provider: 'xai' },
+  'grok-3-mini': { maxTokens: 131072, provider: 'xai' },
   'grok-3-fast': { maxTokens: 131072, provider: 'xai' },
-  'grok-4-latest': { maxTokens: 131072, provider: 'xai' },
-  // Claude models (when using custom base URL)
+  'grok-2-1212': { maxTokens: 32768, provider: 'xai' },
+  'grok-2-vision-1212': { maxTokens: 32768, provider: 'xai' },
+  // Claude models
+  'claude-opus-4-6': { maxTokens: 200000, provider: 'anthropic' },
+  'claude-sonnet-4-5-20250929': { maxTokens: 200000, provider: 'anthropic' },
+  'claude-haiku-4-5-20251001': { maxTokens: 200000, provider: 'anthropic' },
   'claude-sonnet-4-20250514': { maxTokens: 200000, provider: 'anthropic' },
   'claude-opus-4-20250514': { maxTokens: 200000, provider: 'anthropic' },
-  // Gemini models (when using custom base URL)
+  // Gemini models
   'gemini-2.5-flash': { maxTokens: 1000000, provider: 'google' },
   'gemini-2.5-pro': { maxTokens: 1000000, provider: 'google' },
   'gemini-2.0-flash': { maxTokens: 1000000, provider: 'google' },
   'gemini-2.0-flash-thinking': { maxTokens: 1000000, provider: 'google' },
   'gemini-1.5-pro': { maxTokens: 2000000, provider: 'google' },
   'gemini-1.5-flash': { maxTokens: 1000000, provider: 'google' },
+  // GPT models
+  'gpt-5': { maxTokens: 400000, provider: 'openai' },
+  'gpt-4.1': { maxTokens: 1000000, provider: 'openai' },
+  'gpt-4o': { maxTokens: 128000, provider: 'openai' },
   // LM Studio models (local inference via OpenAI-compatible API)
   'lmstudio': { maxTokens: 8192, provider: 'lmstudio' },
   'local-model': { maxTokens: 8192, provider: 'lmstudio' },
@@ -147,14 +157,16 @@ export const SUPPORTED_MODELS = {
 } as const;
 
 export const TOKEN_LIMITS = {
-  /** Token limit for grok-beta */
-  'grok-beta': 131072,
-  /** Token limit for grok-2-1212 */
+  /** Token limit for grok-4.1 fast */
+  'grok-4-1-fast': 2000000,
+  /** Token limit for grok-4 */
+  'grok-4-latest': 256000,
+  /** Token limit for grok-3 */
+  'grok-3-latest': 131072,
+  /** Token limit for grok-2 */
   'grok-2-1212': 32768,
-  /** Token limit for grok-vision-beta */
-  'grok-vision-beta': 8192,
   /** Token limit for other models */
-  'default': 8192,
+  'default': 131072,
 } as const;
 
 export const ERROR_MESSAGES = {

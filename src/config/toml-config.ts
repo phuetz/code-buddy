@@ -120,6 +120,18 @@ export interface AgentBehaviorConfig {
 }
 
 /**
+ * External integrations configuration
+ */
+export interface IntegrationsConfig {
+  /** Enable RTK output compression for bash results */
+  rtk_enabled?: boolean;
+  /** Minimum output length (chars) before RTK compression kicks in */
+  rtk_min_output_length?: number;
+  /** Enable ICM MCP server for persistent memory */
+  icm_enabled?: boolean;
+}
+
+/**
  * Full configuration structure
  */
 export interface CodeBuddyConfig {
@@ -137,6 +149,8 @@ export interface CodeBuddyConfig {
   ui: UIConfig;
   /** Agent behavior */
   agent: AgentBehaviorConfig;
+  /** External integrations */
+  integrations: IntegrationsConfig;
 }
 
 // ============================================================================
@@ -174,12 +188,28 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
   },
 
   models: {
+    'grok-4-fast': {
+      provider: 'xai',
+      model_id: 'grok-4-1-fast',
+      price_per_m_input: 2.0,
+      price_per_m_output: 10.0,
+      max_context_tokens: 2000000,
+      description: 'Grok 4.1 Fast (2M context)',
+    },
+    'grok-4': {
+      provider: 'xai',
+      model_id: 'grok-4-latest',
+      price_per_m_input: 6.0,
+      price_per_m_output: 18.0,
+      max_context_tokens: 256000,
+      description: 'Grok 4 (256K context)',
+    },
     'grok-code-fast': {
       provider: 'xai',
-      model_id: 'grok-3-fast-latest',
-      price_per_m_input: 5.0,
-      price_per_m_output: 15.0,
-      max_context_tokens: 131072,
+      model_id: 'grok-code-fast-1',
+      price_per_m_input: 0.15,
+      price_per_m_output: 0.60,
+      max_context_tokens: 256000,
       description: 'Fast Grok model optimized for code',
     },
     'grok-3': {
@@ -190,21 +220,37 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
       max_context_tokens: 131072,
       description: 'Full Grok 3 model',
     },
+    'claude-opus': {
+      provider: 'anthropic',
+      model_id: 'claude-opus-4-6',
+      price_per_m_input: 5.0,
+      price_per_m_output: 25.0,
+      max_context_tokens: 200000,
+      description: 'Claude Opus 4.6 (128K output)',
+    },
     'claude-sonnet': {
       provider: 'anthropic',
-      model_id: 'claude-sonnet-4-20250514',
+      model_id: 'claude-sonnet-4-5-20250929',
       price_per_m_input: 3.0,
       price_per_m_output: 15.0,
       max_context_tokens: 200000,
-      description: 'Claude Sonnet 4',
+      description: 'Claude Sonnet 4.5 (64K output)',
     },
-    'claude-opus': {
+    'claude-haiku': {
       provider: 'anthropic',
-      model_id: 'claude-opus-4-20250514',
-      price_per_m_input: 15.0,
-      price_per_m_output: 75.0,
+      model_id: 'claude-haiku-4-5-20251001',
+      price_per_m_input: 1.0,
+      price_per_m_output: 5.0,
       max_context_tokens: 200000,
-      description: 'Claude Opus 4',
+      description: 'Claude Haiku 4.5 (64K output, fastest)',
+    },
+    'gpt-5': {
+      provider: 'openai',
+      model_id: 'gpt-5',
+      price_per_m_input: 10.0,
+      price_per_m_output: 30.0,
+      max_context_tokens: 400000,
+      description: 'GPT-5 (400K context, 128K output)',
     },
     'gpt-4o': {
       provider: 'openai',
@@ -214,13 +260,21 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
       max_context_tokens: 128000,
       description: 'GPT-4o',
     },
+    'gemini-2.5': {
+      provider: 'google',
+      model_id: 'gemini-2.5-flash',
+      price_per_m_input: 0.15,
+      price_per_m_output: 0.60,
+      max_context_tokens: 1000000,
+      description: 'Gemini 2.5 Flash (1M context, 65K output)',
+    },
     'gemini-2': {
       provider: 'google',
-      model_id: 'gemini-2.0-flash-exp',
-      price_per_m_input: 0.0,
-      price_per_m_output: 0.0,
+      model_id: 'gemini-2.0-flash',
+      price_per_m_input: 0.10,
+      price_per_m_output: 0.40,
       max_context_tokens: 1000000,
-      description: 'Gemini 2.0 Flash (free tier)',
+      description: 'Gemini 2.0 Flash (1M context)',
     },
   },
 
@@ -308,6 +362,12 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
     rag_tool_selection: true,
     self_healing: true,
     default_prompt: 'default',
+  },
+
+  integrations: {
+    rtk_enabled: true,
+    rtk_min_output_length: 500,
+    icm_enabled: true,
   },
 };
 
@@ -475,6 +535,15 @@ export function serializeTOML(config: CodeBuddyConfig): string {
   if (config.agent.default_prompt) lines.push(`default_prompt = "${config.agent.default_prompt}"`);
   lines.push('');
 
+  // Integrations
+  if (config.integrations) {
+    lines.push('[integrations]');
+    if (config.integrations.rtk_enabled !== undefined) lines.push(`rtk_enabled = ${config.integrations.rtk_enabled}`);
+    if (config.integrations.rtk_min_output_length !== undefined) lines.push(`rtk_min_output_length = ${config.integrations.rtk_min_output_length}`);
+    if (config.integrations.icm_enabled !== undefined) lines.push(`icm_enabled = ${config.integrations.icm_enabled}`);
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 
@@ -562,6 +631,9 @@ class ConfigManager {
     }
     if (partial.agent) {
       this.config.agent = { ...this.config.agent, ...partial.agent };
+    }
+    if (partial.integrations) {
+      this.config.integrations = { ...this.config.integrations, ...partial.integrations };
     }
   }
 

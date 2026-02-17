@@ -675,9 +675,9 @@ denylist = ["rm -rf /", "sudo .*"]
     });
 
     describe('SUPPORTED_MODELS', () => {
-      it('should have grok-beta model', () => {
-        expect(SUPPORTED_MODELS['grok-beta']).toBeDefined();
-        expect(SUPPORTED_MODELS['grok-beta'].provider).toBe('xai');
+      it('should have grok-4-latest model', () => {
+        expect(SUPPORTED_MODELS['grok-4-latest']).toBeDefined();
+        expect(SUPPORTED_MODELS['grok-4-latest'].provider).toBe('xai');
       });
 
       it('should have grok-3-latest model', () => {
@@ -685,8 +685,8 @@ denylist = ["rm -rf /", "sudo .*"]
       });
 
       it('should have Claude models', () => {
-        expect(SUPPORTED_MODELS['claude-sonnet-4-20250514']).toBeDefined();
-        expect(SUPPORTED_MODELS['claude-opus-4-20250514']).toBeDefined();
+        expect(SUPPORTED_MODELS['claude-opus-4-6']).toBeDefined();
+        expect(SUPPORTED_MODELS['claude-sonnet-4-5-20250929']).toBeDefined();
       });
 
       it('should have Gemini models', () => {
@@ -1456,7 +1456,7 @@ languages:
 
     describe('Provider context limits', () => {
       it('should have correct context limits for xAI models', () => {
-        expect(DEFAULT_CONFIG.models['grok-code-fast'].max_context_tokens).toBe(131072);
+        expect(DEFAULT_CONFIG.models['grok-code-fast'].max_context_tokens).toBe(256000);
       });
 
       it('should have correct context limits for Anthropic models', () => {

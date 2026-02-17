@@ -19,6 +19,8 @@ import { loadMCPConfig } from '../../mcp/config.js';
 import { initializeMCPServers } from '../../codebuddy/tools.js';
 import { getErrorMessage } from '../../errors/index.js';
 import { logger } from '../../utils/logger.js';
+import { ICMBridge } from '../../memory/icm-bridge.js';
+import { getConfigManager } from '../../config/toml-config.js';
 
 /**
  * Command validation result
@@ -67,6 +69,7 @@ export class InfrastructureFacade {
   private readonly hooksManager: HooksManager;
   private readonly promptCacheManager: PromptCacheManager;
   private readonly marketplace: PluginMarketplace;
+  private readonly icmBridge: ICMBridge;
 
   constructor(deps: InfrastructureFacadeDeps) {
     this.mcpClient = deps.mcpClient;
@@ -74,6 +77,7 @@ export class InfrastructureFacade {
     this.hooksManager = deps.hooksManager;
     this.promptCacheManager = deps.promptCacheManager;
     this.marketplace = deps.marketplace;
+    this.icmBridge = new ICMBridge();
   }
 
   // ============================================================================
@@ -119,12 +123,25 @@ export class InfrastructureFacade {
         if (config.servers.length > 0) {
           await initializeMCPServers();
         }
+
+        // Initialize ICM bridge if enabled
+        const buddyConfig = getConfigManager().getConfig();
+        if (buddyConfig.integrations?.icm_enabled && this.mcpClient) {
+          await this.icmBridge.initialize(this.mcpClient as unknown as import('../../memory/icm-bridge.js').MCPToolCaller);
+        }
       } catch (error) {
         logger.warn('MCP initialization failed', { error: getErrorMessage(error) });
       }
     })().catch((error) => {
       logger.warn('Uncaught error in MCP initialization', { error: getErrorMessage(error) });
     });
+  }
+
+  /**
+   * Get the ICM bridge instance for memory operations
+   */
+  getICMBridge(): ICMBridge {
+    return this.icmBridge;
   }
 
   // ============================================================================

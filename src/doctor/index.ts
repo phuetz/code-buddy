@@ -31,6 +31,8 @@ function checkDependencies(): DoctorCheck[] {
   const required: Array<{ cmd: string; label: string; level: 'error' | 'warn' }> = [
     { cmd: 'rg', label: 'ripgrep (rg)', level: 'warn' },
     { cmd: 'sox', label: 'sox (voice input)', level: 'warn' },
+    { cmd: 'rtk', label: 'RTK (token compressor)', level: 'warn' },
+    { cmd: 'icm', label: 'ICM (infinite context memory)', level: 'warn' },
   ];
 
   for (const dep of required) {

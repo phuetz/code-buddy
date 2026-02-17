@@ -6,7 +6,7 @@ import { SUPPORTED_MODELS } from '../config/constants.js';
 import { ValidationError } from './errors.js';
 
 export type ModelName = keyof typeof SUPPORTED_MODELS;
-export type ModelProvider = 'xai' | 'anthropic' | 'google' | 'lmstudio' | 'ollama' | 'unknown';
+export type ModelProvider = 'xai' | 'anthropic' | 'google' | 'openai' | 'lmstudio' | 'ollama' | 'unknown';
 
 export interface ModelInfo {
   maxTokens: number;
@@ -66,9 +66,11 @@ export function validateModel(model: string, strict: boolean = false): void {
 export function getDefaultModel(provider: ModelProvider = 'xai'): string {
   switch (provider) {
     case 'xai':
-      return 'grok-beta';
+      return 'grok-4-latest';
     case 'anthropic':
-      return 'claude-sonnet-4-20250514';
+      return 'claude-opus-4-6';
+    case 'openai':
+      return 'gpt-4o';
     case 'google':
       return 'gemini-2.5-pro';
     case 'lmstudio':
@@ -76,7 +78,7 @@ export function getDefaultModel(provider: ModelProvider = 'xai'): string {
     case 'ollama':
       return 'llama3.2';
     default:
-      return 'grok-beta';
+      return 'grok-4-latest';
   }
 }
 

@@ -17,9 +17,9 @@ import { ValidationError } from '../../src/utils/errors';
 describe('Model Utilities', () => {
   describe('isSupportedModel', () => {
     it('should return true for supported models', () => {
-      expect(isSupportedModel('grok-beta')).toBe(true);
       expect(isSupportedModel('grok-4-latest')).toBe(true);
-      expect(isSupportedModel('claude-sonnet-4-20250514')).toBe(true);
+      expect(isSupportedModel('grok-3-latest')).toBe(true);
+      expect(isSupportedModel('claude-opus-4-6')).toBe(true);
     });
 
     it('should return false for unsupported models', () => {
@@ -30,9 +30,9 @@ describe('Model Utilities', () => {
 
   describe('getModelInfo', () => {
     it('should return info for supported models', () => {
-      const info = getModelInfo('grok-beta');
+      const info = getModelInfo('grok-4-latest');
       expect(info.isSupported).toBe(true);
-      expect(info.maxTokens).toBe(131072);
+      expect(info.maxTokens).toBe(256000);
       expect(info.provider).toBe('xai');
     });
 
@@ -46,7 +46,7 @@ describe('Model Utilities', () => {
 
   describe('validateModel', () => {
     it('should validate supported models in non-strict mode', () => {
-      expect(() => validateModel('grok-beta', false)).not.toThrow();
+      expect(() => validateModel('grok-4-latest', false)).not.toThrow();
       expect(() => validateModel('unknown-model', false)).not.toThrow();
     });
 
@@ -56,7 +56,7 @@ describe('Model Utilities', () => {
     });
 
     it('should validate only supported models in strict mode', () => {
-      expect(() => validateModel('grok-beta', true)).not.toThrow();
+      expect(() => validateModel('grok-4-latest', true)).not.toThrow();
       expect(() => validateModel('unknown-model', true)).toThrow(
         ValidationError
       );
@@ -65,19 +65,20 @@ describe('Model Utilities', () => {
 
   describe('getDefaultModel', () => {
     it('should return correct default for each provider', () => {
-      expect(getDefaultModel('xai')).toBe('grok-beta');
-      expect(getDefaultModel('anthropic')).toBe('claude-sonnet-4-20250514');
+      expect(getDefaultModel('xai')).toBe('grok-4-latest');
+      expect(getDefaultModel('anthropic')).toBe('claude-opus-4-6');
+      expect(getDefaultModel('openai')).toBe('gpt-4o');
       expect(getDefaultModel('google')).toBe('gemini-2.5-pro');
       expect(getDefaultModel('lmstudio')).toBe('local-model');
-      expect(getDefaultModel('unknown')).toBe('grok-beta');
+      expect(getDefaultModel('unknown')).toBe('grok-4-latest');
     });
   });
 
   describe('getSupportedModels', () => {
     it('should return all supported models', () => {
       const models = getSupportedModels();
-      expect(models).toContain('grok-beta');
-      expect(models).toContain('claude-sonnet-4-20250514');
+      expect(models).toContain('grok-4-latest');
+      expect(models).toContain('claude-opus-4-6');
       expect(models).toContain('gemini-2.5-pro');
       expect(models.length).toBeGreaterThan(0);
     });
@@ -86,14 +87,14 @@ describe('Model Utilities', () => {
   describe('getModelsByProvider', () => {
     it('should return models for xai provider', () => {
       const models = getModelsByProvider('xai');
-      expect(models).toContain('grok-beta');
       expect(models).toContain('grok-4-latest');
+      expect(models).toContain('grok-3-latest');
       expect(models.every((m) => m.startsWith('grok'))).toBe(true);
     });
 
     it('should return models for anthropic provider', () => {
       const models = getModelsByProvider('anthropic');
-      expect(models).toContain('claude-sonnet-4-20250514');
+      expect(models).toContain('claude-opus-4-6');
       expect(models.every((m) => m.startsWith('claude'))).toBe(true);
     });
 
@@ -101,6 +102,12 @@ describe('Model Utilities', () => {
       const models = getModelsByProvider('google');
       expect(models).toContain('gemini-2.5-pro');
       expect(models.every((m) => m.startsWith('gemini'))).toBe(true);
+    });
+
+    it('should return models for openai provider', () => {
+      const models = getModelsByProvider('openai');
+      expect(models).toContain('gpt-4o');
+      expect(models.length).toBeGreaterThan(0);
     });
 
     it('should return models for lmstudio provider', () => {
@@ -118,8 +125,8 @@ describe('Model Utilities', () => {
 
   describe('suggestModel', () => {
     it('should find exact matches', () => {
-      const suggestions = suggestModel('grok-beta');
-      expect(suggestions).toContain('grok-beta');
+      const suggestions = suggestModel('grok-4-latest');
+      expect(suggestions).toContain('grok-4-latest');
       expect(suggestions.length).toBe(1);
     });
 
@@ -148,10 +155,10 @@ describe('Model Utilities', () => {
 
   describe('formatModelInfo', () => {
     it('should format supported model info', () => {
-      const formatted = formatModelInfo('grok-beta');
-      expect(formatted).toContain('Model: grok-beta');
+      const formatted = formatModelInfo('grok-4-latest');
+      expect(formatted).toContain('Model: grok-4-latest');
       expect(formatted).toContain('Provider: xai');
-      expect(formatted).toContain('Max Tokens: 131,072');
+      expect(formatted).toContain('Max Tokens: 256,000');
       expect(formatted).toContain('Supported: Yes');
     });
 

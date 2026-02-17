@@ -168,6 +168,16 @@ export const PREDEFINED_SERVERS: Record<string, MCPServerConfig> = {
     },
     enabled: false,
   },
+  'icm': {
+    name: 'icm',
+    transport: {
+      type: 'stdio',
+      command: 'icm',
+      args: ['mcp'],
+      env: {},
+    },
+    enabled: false,
+  },
 };
 
 /**

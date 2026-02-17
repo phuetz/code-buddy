@@ -174,6 +174,8 @@ CodeBuddyAgent
 - `src/persistence/session-lock.ts` - PID-based session file locking (prevents concurrent writes)
 - `src/security/skill-scanner.ts` - Static analysis of skill files for dangerous patterns
 - `src/security/bash-parser.ts` - AST-based bash command parsing (tree-sitter with regex fallback)
+- `src/utils/rtk-compressor.ts` - RTK binary integration for bash output compression (60-90% token reduction)
+- `src/memory/icm-bridge.ts` - ICM MCP server bridge for persistent cross-session memory
 
 ### Tool Implementation Pattern
 
