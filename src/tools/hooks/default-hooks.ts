@@ -17,7 +17,7 @@ import {
   type ToolResultInput,
 } from './result-sanitizer.js';
 import { logger } from '../../utils/logger.js';
-import { compressWithRTK, isRTKAvailable, getCompressionStats } from '../../utils/rtk-compressor.js';
+import { wrapWithRTK, isRTKAvailable } from '../../utils/rtk-compressor.js';
 import { getConfigManager } from '../../config/toml-config.js';
 
 // Track current provider for sanitization
@@ -51,35 +51,35 @@ export function registerDefaultHooks(): void {
     return;
   }
 
-  // RTK output compression hook (after tool execution, before sanitization)
-  hooksManager.registerAfterHook(
-    'rtk-output-compressor',
-    async (_context: ToolHookContext, result: ToolHookResult): Promise<ToolHookResult> => {
-      if (_context.toolName !== 'bash' || !result.output) return result;
+  // RTK command proxy hook (before tool execution — wraps bash commands with `rtk`)
+  hooksManager.registerBeforeHook(
+    'rtk-command-proxy',
+    async (context: ToolHookContext): Promise<ToolHookContext | void> => {
+      if (context.toolName !== 'bash') return;
 
       const config = getConfigManager().getConfig();
-      if (!config.integrations?.rtk_enabled) return result;
+      if (!config.integrations?.rtk_enabled) return;
 
-      const minLength = config.integrations.rtk_min_output_length ?? 500;
-      if (result.output.length < minLength) return result;
+      if (!isRTKAvailable()) return;
 
-      if (!isRTKAvailable()) return result;
+      const command = context.args.command as string | undefined;
+      if (!command) return;
 
-      const compressed = compressWithRTK(result.output);
-      if (compressed === result.output) return result;
-
-      const stats = getCompressionStats(result.output, compressed);
-      logger.debug('RTK compressed bash output', {
-        originalTokens: stats.originalTokens,
-        compressedTokens: stats.compressedTokens,
-        ratio: `${(stats.ratio * 100).toFixed(1)}%`,
-      });
-
-      return { ...result, output: compressed };
+      const wrapped = wrapWithRTK(command);
+      if (wrapped !== command) {
+        logger.debug('RTK wrapping bash command', {
+          original: command.substring(0, 100),
+          wrapped: wrapped.substring(0, 100),
+        });
+        return {
+          ...context,
+          args: { ...context.args, command: wrapped },
+        };
+      }
     },
     {
-      name: 'RTK Output Compressor',
-      priority: 90, // Runs before result-sanitizer (50)
+      name: 'RTK Command Proxy',
+      priority: 90, // Runs before other hooks
     }
   );
 
@@ -204,7 +204,7 @@ export function registerDefaultHooks(): void {
 export function unregisterDefaultHooks(): void {
   const hooksManager = getToolHooksManager();
 
-  hooksManager.unregisterHook('after_tool_call', 'rtk-output-compressor');
+  hooksManager.unregisterHook('before_tool_call', 'rtk-command-proxy');
   hooksManager.unregisterHook('after_tool_call', 'result-sanitizer');
   hooksManager.unregisterHook('after_tool_call', 'execution-logger');
   hooksManager.unregisterHook('tool_error', 'error-tracker');
