@@ -149,9 +149,9 @@ Code Buddy incorporates advanced patterns from the [OpenClaw](https://github.com
 
 | Module | Status | Description |
 |:-------|:------:|:------------|
-| **RTK Output Compressor** | ✅ 100% | [RTK](https://github.com/rtk-ai/rtk) integration — compresses bash output 60-90% via format-aware parsing, reducing token usage |
+| **RTK Command Proxy** | ✅ 100% | [RTK](https://github.com/rtk-ai/rtk) integration — wraps bash commands (`rtk git`, `rtk ls`, etc.) to reduce token usage 60-90% |
 | **ICM Memory Bridge** | ✅ 100% | [ICM](https://github.com/rtk-ai/icm) MCP server — persistent cross-session memory with episodic + semantic dual architecture |
-| **RTK Tool Hook** | ✅ 100% | After-hook at priority 90 auto-compresses bash results > 500 chars (configurable) |
+| **RTK Before-Hook** | ✅ 100% | Before-hook at priority 90 auto-prefixes supported bash commands with `rtk` proxy |
 | **ICM MCP Predefined Server** | ✅ 100% | Pre-configured `icm mcp` stdio transport in MCP predefined servers |
 | **Integrations Config** | ✅ 100% | New `[integrations]` TOML section for RTK/ICM enable/disable and thresholds |
 | **Doctor RTK/ICM Checks** | ✅ 100% | `buddy doctor` reports RTK and ICM binary availability |
@@ -1076,8 +1076,8 @@ npm run build
 
 | Tool | Install | Purpose |
 |:-----|:--------|:--------|
-| **RTK** | `cargo install rtk` | Compresses bash output 60-90%, reducing token usage |
-| **ICM** | `cargo install icm` | MCP server for persistent cross-session memory |
+| **RTK** | `cargo install --git https://github.com/rtk-ai/rtk` | CLI proxy that wraps commands to reduce LLM token usage 60-90% |
+| **ICM** | `cargo install --git https://github.com/rtk-ai/icm` | MCP server for persistent cross-session memory |
 
 ### Project Settings
 
