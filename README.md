@@ -583,6 +583,25 @@ buddy daemon start              # 24/7 background mode
 
 **Supported message types:** text, images, audio, video, documents, stickers, locations, contacts, inline buttons, reply threads, typing indicators.
 
+### What You Can Do via Telegram
+
+Once connected, Telegram gives you full agent capabilities from your phone or desktop:
+
+| Category | Capabilities |
+|:---------|:-------------|
+| **Remote Coding** | Code modifications, bug fixes, refactoring, file analysis, create commits & PRs |
+| **Bash Execution** | Run build, test, deploy commands — with confirmation for destructive ops |
+| **Rich Media** | Send images → Gemini Vision analysis, send files (code, logs) → processed by agent |
+| **Voice Messages** | Send voice notes → STT transcription → agent response |
+| **Daemon Mode** | 24/7 background operation (`buddy daemon start`), cron jobs, proactive alerts |
+| **Notifications** | Build failures, test results, heartbeat alerts pushed to your Telegram |
+| **Interactive** | Inline buttons for confirmations, Markdown-formatted responses |
+
+**Useful commands from Telegram:**
+- Any text message = prompt for the agent
+- `/status` — daemon state
+- `/yolo on` — enable autonomous mode
+
 ### DM Pairing (Access Control)
 
 Prevents unauthorized users from consuming API credits (OpenClaw-inspired):
