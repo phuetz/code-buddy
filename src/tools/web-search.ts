@@ -273,14 +273,28 @@ export class WebSearchTool {
       // Auto fallback chain: Brave MCP → Brave API → Perplexity → Serper → DuckDuckGo
       const chain = this.buildProviderChain();
       let lastError: string | undefined;
+      let emptyResult: ToolResult | undefined;
 
       for (const provider of chain) {
         try {
-          return await this.searchWithProvider(provider, query, count, options, cacheKey);
+          const result = await this.searchWithProvider(provider, query, count, options, cacheKey);
+          // If the provider returned "no results", continue to next provider instead of stopping
+          if (result.success && result.output?.startsWith('No results found')) {
+            emptyResult = result;
+            logger.debug(`Search provider ${provider} returned 0 results, trying next`);
+            continue;
+          }
+          return result;
         } catch (error) {
           lastError = getErrorMessage(error);
           logger.debug(`Search provider ${provider} failed, trying next`, { error: lastError });
         }
+      }
+
+      // If any provider returned an empty-but-successful result, prefer it over error
+      // (e.g. brave-mcp always throws when not connected, but duckduckgo gave 0 results)
+      if (emptyResult) {
+        return emptyResult;
       }
 
       // Cache the failure to prevent repeated timeouts
