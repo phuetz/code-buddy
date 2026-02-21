@@ -286,7 +286,12 @@ export class WebSearchTool {
       // Cache the failure to prevent repeated timeouts
       this.failedQueries.set(query, Date.now());
 
-      return { success: false, error: `All search providers failed. Last error: ${lastError}. Do NOT retry web search — proceed using your own knowledge to complete the task.` };
+      // Surface CAPTCHA / API key hint prominently
+      const isCaptcha = lastError?.includes('CAPTCHA') || lastError?.includes('bot detection');
+      const hint = isCaptcha
+        ? lastError!
+        : `All search providers failed. Last error: ${lastError}. Add BRAVE_API_KEY or SERPER_API_KEY for reliable search.`;
+      return { success: false, error: `${hint} Do NOT retry — proceed using your own knowledge.` };
     } catch (error) {
       return { success: false, error: `Web search failed: ${getErrorMessage(error)}` };
     }
@@ -579,9 +584,15 @@ export class WebSearchTool {
 
     const response = await axios.get(searchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
       },
       timeout: DEFAULT_TIMEOUT_MS,
     });
@@ -590,6 +601,14 @@ export class WebSearchTool {
     const html = typeof response.data === 'string' && response.data.length > 2_000_000
       ? response.data.slice(0, 2_000_000)
       : response.data;
+
+    // Detect CAPTCHA / bot challenge page — DuckDuckGo returns an anomaly-modal instead of results
+    if (typeof html === 'string' && html.includes('anomaly-modal')) {
+      throw new Error(
+        'DuckDuckGo returned a CAPTCHA challenge (bot detection). ' +
+        'Add a BRAVE_API_KEY or SERPER_API_KEY environment variable to enable reliable web search.'
+      );
+    }
     const results: SearchResult[] = [];
 
     const resultRegex = /<div[^>]*class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
