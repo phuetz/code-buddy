@@ -45,6 +45,16 @@ export class LessonsAddTool implements ITool {
     try {
       const tracker = getLessonsTracker(process.cwd());
       const item = tracker.add(category, content, source, context);
+
+      // Emit lesson_added event to active RunStore if one is running (non-fatal)
+      try {
+        const { getActiveRunStore } = await import('../../observability/run-store.js');
+        const store = getActiveRunStore();
+        store?.appendEvent('lesson_added', { id: item.id, category, content });
+      } catch {
+        // non-fatal: RunStore may not be active
+      }
+
       return {
         success: true,
         output: `Lesson saved [${item.id}] (${category}): ${content}`,

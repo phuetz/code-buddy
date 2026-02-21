@@ -31,7 +31,8 @@ export type RunEventType =
   | 'patch_applied'
   | 'decision'
   | 'error'
-  | 'metric';
+  | 'metric'
+  | 'lesson_added';
 
 export interface RunEvent {
   ts: number;
@@ -93,6 +94,11 @@ const MAX_RUNS = 30;
 // RunStore
 // ──────────────────────────────────────────────────────────────────
 
+// Module-level active store reference (used by lessons-tools and other non-class callers)
+let _activeStore: RunStore | null = null;
+export function setActiveRunStore(s: RunStore | null): void { _activeStore = s; }
+export function getActiveRunStore(): RunStore | null { return _activeStore; }
+
 export class RunStore {
   private static _instance: RunStore | null = null;
 
@@ -103,6 +109,8 @@ export class RunStore {
   private eventCounts: Map<string, number> = new Map();
   /** In-memory summaries for fast listing */
   private summaries: Map<string, RunSummary> = new Map();
+  /** The currently active run ID (set by startRun, cleared by endRun) */
+  private _currentRunId: string | null = null;
 
   constructor(runsDir?: string) {
     this.runsDir = runsDir || path.join(os.homedir(), '.codebuddy', 'runs');
@@ -115,6 +123,16 @@ export class RunStore {
       RunStore._instance = new RunStore();
     }
     return RunStore._instance;
+  }
+
+  /**
+   * Convenience method to emit an event on the current active run.
+   * No-op when no run is active (safe to call unconditionally).
+   */
+  appendEvent(type: RunEventType, data: Record<string, unknown>): void {
+    if (this._currentRunId) {
+      this.emit(this._currentRunId, { type, data });
+    }
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -166,6 +184,9 @@ export class RunStore {
 
     this.saveSummary(runId, summary);
     this.pruneOldRuns();
+
+    this._currentRunId = runId;
+    setActiveRunStore(this);
 
     logger.debug(`RunStore: started run ${runId}`, { objective });
     return runId;
@@ -265,6 +286,11 @@ export class RunStore {
     if (ws) {
       ws.end();
       this.handles.delete(runId);
+    }
+
+    if (this._currentRunId === runId) {
+      this._currentRunId = null;
+      setActiveRunStore(null);
     }
 
     logger.debug(`RunStore: ended run ${runId} with status ${status}`);

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] — 2026-02-21
+
+### Added
+
+- **`LessonsTracker.getStats()`** — analytics by category/source with min/max dates (`LessonsStats` interface)
+- **`LessonsTracker.export(format)`** — export lessons as JSON, Markdown (default), or CSV
+- **`LessonsTracker.autoDecay(days)`** — auto-expire INSIGHT lessons older than N days (default 90)
+- **`buddy lessons stats`** — show lesson count breakdown by category
+- **`buddy lessons export [--format md|json|csv] [--output <file>]`** — export lessons to stdout or file
+- **`buddy lessons decay [--days N] [--dry-run]`** — remove expired INSIGHT lessons
+- **`/lessons` slash command** in Ink UI — `list`, `add <content>`, `search <query>`, `stats` subcommands
+- **RunStore `lesson_added` event type** — `LessonsAddTool` emits this event when an active run is present
+
+### Fixed
+
+- **`semantic-memory-search.ts`** — corrected `mmrRerank` generic constraint: was `T extends { content: string }` but `SearchResult` stores text at `entry.content`; now uses `SearchResult` directly with `entry.content`
+
+---
+
 ## [2.7.0] - 2026-02-21
 
 ### Overview

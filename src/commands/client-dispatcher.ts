@@ -158,7 +158,7 @@ export class ClientCommandDispatcher {
         this.handleInitGrok(context);
         return true;
       
-      case "__FEATURES__":
+      case "__FEATURES__": {
          const { handleFeaturesCommand } = await import("./features.js");
          const featuresEntry: ChatEntry = {
             type: "assistant",
@@ -168,6 +168,18 @@ export class ClientCommandDispatcher {
          context.setChatHistory((prev) => [...prev, featuresEntry]);
          context.clearInput();
          return true;
+      }
+
+      case "__LESSONS__": {
+        const { handleLessonsCommand } = await import("./handlers/lessons-handler.js");
+        const lessonsArgs = originalInput.trim().split(/\s+/).slice(1).join(' ');
+        const lessonsResult = handleLessonsCommand(lessonsArgs);
+        if (lessonsResult.entry) {
+          context.setChatHistory((prev) => [...prev, lessonsResult.entry!]);
+        }
+        context.clearInput();
+        return true;
+      }
 
       case "__CONTEXT__": {
         // Intercept /context stats to provide agent context window stats

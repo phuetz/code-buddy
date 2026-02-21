@@ -569,6 +569,16 @@ const memoryCommands: SlashCommand[] = [
       { name: 'key', description: 'Key for the memory', required: true },
       { name: 'value', description: 'Value to remember', required: true }
     ]
+  },
+  {
+    name: 'lessons',
+    description: 'Manage lessons learned (list|add <content>|search <query>|stats)',
+    prompt: '__LESSONS__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'list, add <content>, search <query>, stats', required: false }
+    ]
   }
 ];
 

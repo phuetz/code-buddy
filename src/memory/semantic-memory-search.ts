@@ -507,20 +507,22 @@ export class SemanticMemorySearch extends EventEmitter {
    * Prevents returning semantically redundant results.
    * Ref: Carbonell & Goldstein (1998)
    */
-  private mmrRerank<T extends { content: string; score: number }>(
-    candidates: T[],
+  private mmrRerank(
+    candidates: SearchResult[],
     lambda: number = 0.7,
     k: number = 10
-  ): T[] {
+  ): SearchResult[] {
     if (candidates.length <= 1) return candidates;
 
-    const selected: T[] = [];
+    const selected: SearchResult[] = [];
     const remaining = [...candidates];
 
-    // Simple term-overlap similarity between two text snippets
-    const termSim = (a: string, b: string): number => {
-      const tokA = new Set(a.toLowerCase().split(/\W+/).filter(t => t.length > 2));
-      const tokB = new Set(b.toLowerCase().split(/\W+/).filter(t => t.length > 2));
+    // Simple term-overlap similarity between two SearchResult entries
+    const termSim = (a: SearchResult, b: SearchResult): number => {
+      const textA = a.entry.content ?? '';
+      const textB = b.entry.content ?? '';
+      const tokA = new Set(textA.toLowerCase().split(/\W+/).filter(t => t.length > 2));
+      const tokB = new Set(textB.toLowerCase().split(/\W+/).filter(t => t.length > 2));
       if (tokA.size === 0 || tokB.size === 0) return 0;
       let inter = 0;
       for (const t of tokA) if (tokB.has(t)) inter++;
@@ -535,7 +537,7 @@ export class SemanticMemorySearch extends EventEmitter {
         const relevance = remaining[i].score;
         const maxSim = selected.length === 0
           ? 0
-          : Math.max(...selected.map(s => termSim(remaining[i].content, s.content)));
+          : Math.max(...selected.map(s => termSim(remaining[i], s)));
         const mmrScore = lambda * relevance - (1 - lambda) * maxSim;
         if (mmrScore > bestScore) {
           bestScore = mmrScore;

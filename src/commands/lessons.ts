@@ -8,6 +8,7 @@
  * Subcommands: list, add, search, clear
  */
 
+import * as fs from 'fs';
 import { Command } from 'commander';
 import { getLessonsTracker } from '../agent/lessons-tracker.js';
 import type { LessonCategory } from '../agent/lessons-tracker.js';
@@ -131,6 +132,62 @@ export function createLessonsCommand(): Command {
       const block = tracker.buildContextBlock();
       if (!block) console.log('No lessons — nothing to inject.');
       else console.log(block);
+    });
+
+  // ---- stats ---------------------------------------------------------------
+  cmd
+    .command('stats')
+    .description('Show statistics about recorded lessons')
+    .action(() => {
+      const tracker = getLessonsTracker(process.cwd());
+      const stats = tracker.getStats();
+      console.log(`Total: ${stats.total}`);
+      for (const cat of VALID_CATEGORIES) {
+        console.log(`  ${cat}: ${stats.byCategory[cat] ?? 0}`);
+      }
+      if (stats.oldestAt) console.log(`Oldest: ${new Date(stats.oldestAt).toISOString().slice(0, 10)}`);
+      if (stats.newestAt) console.log(`Newest: ${new Date(stats.newestAt).toISOString().slice(0, 10)}`);
+    });
+
+  // ---- export --------------------------------------------------------------
+  cmd
+    .command('export')
+    .description('Export lessons to stdout or a file')
+    .option('-f, --format <fmt>', 'Output format: md|json|csv', 'md')
+    .option('-o, --output <file>', 'Write to file instead of stdout')
+    .action((opts) => {
+      const fmt = (opts.format as 'md' | 'json' | 'csv') || 'md';
+      if (!['md', 'json', 'csv'].includes(fmt)) {
+        console.error(`Invalid format: ${fmt}. Must be one of: md, json, csv`);
+        process.exit(1);
+      }
+      const tracker = getLessonsTracker(process.cwd());
+      const content = tracker.export(fmt);
+      if (opts.output) {
+        fs.writeFileSync(opts.output, content, 'utf-8');
+        console.log(`Exported to ${opts.output}`);
+      } else {
+        console.log(content);
+      }
+    });
+
+  // ---- decay ---------------------------------------------------------------
+  cmd
+    .command('decay')
+    .description('Remove old INSIGHT lessons past their age limit')
+    .option('-d, --days <n>', 'Max age in days for INSIGHT lessons', '90')
+    .option('--dry-run', 'Show what would be removed without deleting')
+    .action((opts) => {
+      const maxAge = parseInt(opts.days, 10) || 90;
+      const tracker = getLessonsTracker(process.cwd());
+      if (opts.dryRun) {
+        const threshold = Date.now() - maxAge * 86_400_000;
+        const toRemove = tracker.list('INSIGHT').filter(i => i.createdAt > 0 && i.createdAt < threshold);
+        console.log(`Would remove ${toRemove.length} INSIGHT lesson(s) older than ${maxAge} days.`);
+      } else {
+        const n = tracker.autoDecay(maxAge);
+        console.log(`Removed ${n} expired INSIGHT lesson(s).`);
+      }
     });
 
   return cmd;

@@ -35,6 +35,14 @@ export interface LessonItem {
   source: 'user_correction' | 'self_observed' | 'manual';
 }
 
+export interface LessonsStats {
+  total: number;
+  byCategory: Record<LessonCategory, number>;
+  bySource: Record<LessonItem['source'], number>;
+  oldestAt: number | null;
+  newestAt: number | null;
+}
+
 // ============================================================================
 // Singleton registry (one tracker per working directory)
 // ============================================================================
@@ -185,6 +193,67 @@ export class LessonsTracker {
 
     lines.push('</lessons_context>');
     return lines.join('\n');
+  }
+
+  // --------------------------------------------------------------------------
+  // Analytics
+  // --------------------------------------------------------------------------
+
+  getStats(): LessonsStats {
+    this.load();
+    const byCategory: Record<LessonCategory, number> = { PATTERN: 0, RULE: 0, CONTEXT: 0, INSIGHT: 0 };
+    const bySource: Record<LessonItem['source'], number> = { user_correction: 0, self_observed: 0, manual: 0 };
+    let oldestAt: number | null = null;
+    let newestAt: number | null = null;
+
+    for (const item of this.items) {
+      byCategory[item.category] = (byCategory[item.category] ?? 0) + 1;
+      bySource[item.source] = (bySource[item.source] ?? 0) + 1;
+      if (item.createdAt > 0) {
+        if (oldestAt === null || item.createdAt < oldestAt) oldestAt = item.createdAt;
+        if (newestAt === null || item.createdAt > newestAt) newestAt = item.createdAt;
+      }
+    }
+
+    return { total: this.items.length, byCategory, bySource, oldestAt, newestAt };
+  }
+
+  export(format: 'json' | 'md' | 'csv' = 'md'): string {
+    this.load();
+    if (format === 'json') {
+      return JSON.stringify(this.items, null, 2);
+    }
+    if (format === 'csv') {
+      const header = 'id,category,source,createdAt,context,content';
+      const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+      const rows = this.items.map(item =>
+        [
+          escape(item.id),
+          escape(item.category),
+          escape(item.source),
+          escape(new Date(item.createdAt).toISOString()),
+          escape(item.context ?? ''),
+          escape(item.content),
+        ].join(',')
+      );
+      return [header, ...rows].join('\n');
+    }
+    // 'md' — default
+    return this.serialise();
+  }
+
+  autoDecay(maxAgeDays: number = 90): number {
+    this.load();
+    const threshold = Date.now() - maxAgeDays * 86_400_000;
+    const before = this.items.length;
+    this.items = this.items.filter(
+      item => !(item.category === 'INSIGHT' && item.createdAt > 0 && item.createdAt < threshold)
+    );
+    const removed = before - this.items.length;
+    if (removed > 0) {
+      this.save();
+    }
+    return removed;
   }
 
   // --------------------------------------------------------------------------
