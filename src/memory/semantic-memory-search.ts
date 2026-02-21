@@ -184,11 +184,13 @@ export class SemanticMemorySearch extends EventEmitter {
 
     // Sort by score and limit results
     results.sort((a, b) => b.score - a.score);
-    const limited = results.slice(0, opts.maxResults);
 
-    this.emit('search:complete', { query, resultCount: limited.length });
+    // Apply MMR re-ranking for diversity (lambda=0.7: 70% relevance, 30% diversity)
+    const reranked = this.mmrRerank(results, 0.7, opts.maxResults ?? 10);
 
-    return limited;
+    this.emit('search:complete', { query, resultCount: reranked.length });
+
+    return reranked;
   }
 
   /**
@@ -488,13 +490,64 @@ export class SemanticMemorySearch extends EventEmitter {
     // Boost by importance
     const importanceBoost = entry.metadata.importance || 1;
 
-    // Recency boost (newer = higher)
+    // Recency boost — exponential decay with 30-day half-life (OpenClaw pattern)
+    // Formula: exp(-ln(2) * days / halfLife) → 1.0 at day 0, 0.5 at day 30, ~0.25 at day 60
     const daysSinceUpdate = (Date.now() - entry.metadata.timestamp.getTime()) / (1000 * 60 * 60 * 24);
-    const recencyBoost = Math.max(0.5, 1 - daysSinceUpdate / 365);
+    const recencyBoost = Math.max(0.1, Math.exp(-Math.LN2 * daysSinceUpdate / 30));
 
     const score = termFrequency * idf * importanceBoost * recencyBoost;
 
     return { score: Math.min(1, score), matchedTerms };
+  }
+
+
+  /**
+   * MMR (Maximal Marginal Relevance) re-ranking for diversity.
+   * lambda=0.7 means 70% relevance, 30% diversity penalty.
+   * Prevents returning semantically redundant results.
+   * Ref: Carbonell & Goldstein (1998)
+   */
+  private mmrRerank<T extends { content: string; score: number }>(
+    candidates: T[],
+    lambda: number = 0.7,
+    k: number = 10
+  ): T[] {
+    if (candidates.length <= 1) return candidates;
+
+    const selected: T[] = [];
+    const remaining = [...candidates];
+
+    // Simple term-overlap similarity between two text snippets
+    const termSim = (a: string, b: string): number => {
+      const tokA = new Set(a.toLowerCase().split(/\W+/).filter(t => t.length > 2));
+      const tokB = new Set(b.toLowerCase().split(/\W+/).filter(t => t.length > 2));
+      if (tokA.size === 0 || tokB.size === 0) return 0;
+      let inter = 0;
+      for (const t of tokA) if (tokB.has(t)) inter++;
+      return inter / Math.sqrt(tokA.size * tokB.size);
+    };
+
+    while (selected.length < k && remaining.length > 0) {
+      let bestIdx = 0;
+      let bestScore = -Infinity;
+
+      for (let i = 0; i < remaining.length; i++) {
+        const relevance = remaining[i].score;
+        const maxSim = selected.length === 0
+          ? 0
+          : Math.max(...selected.map(s => termSim(remaining[i].content, s.content)));
+        const mmrScore = lambda * relevance - (1 - lambda) * maxSim;
+        if (mmrScore > bestScore) {
+          bestScore = mmrScore;
+          bestIdx = i;
+        }
+      }
+
+      selected.push(remaining[bestIdx]);
+      remaining.splice(bestIdx, 1);
+    }
+
+    return selected;
   }
 
   /**

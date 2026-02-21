@@ -15,6 +15,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
 
+/** Exponential backoff delays in ms: 30s, 1m, 5m, 15m, 60m */
+const BACKOFF_DELAYS_MS = [30_000, 60_000, 300_000, 900_000, 3_600_000];
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -61,6 +64,8 @@ export interface CronJob {
   };
   /** Delivery options */
   delivery?: {
+    /** Delivery mode: 'channel' (default), 'webhook', or 'none' (silent, no notification) */
+    mode?: 'channel' | 'webhook' | 'none';
     /** Channel to deliver to */
     channel?: string;
     /** Session key */
@@ -84,6 +89,12 @@ export interface CronJob {
   lastError?: string;
   /** Max runs (undefined = unlimited) */
   maxRuns?: number;
+  /** Random stagger in milliseconds added to scheduled time (spreads load for concurrent jobs) */
+  staggerMs?: number;
+  /** Current backoff level (0 = no backoff) — incremented on error, reset on success */
+  backoffLevel?: number;
+  /** Next retry time when in backoff state */
+  nextRetryAt?: Date;
   /** Enabled flag */
   enabled: boolean;
 }
@@ -308,6 +319,7 @@ export class CronScheduler extends EventEmitter {
     task: CronJob['task'];
     delivery?: CronJob['delivery'];
     maxRuns?: number;
+    staggerMs?: number;
     enabled?: boolean;
   }): Promise<CronJob> {
     const id = crypto.randomUUID();
@@ -326,6 +338,7 @@ export class CronScheduler extends EventEmitter {
       runCount: 0,
       errorCount: 0,
       maxRuns: params.maxRuns,
+      staggerMs: params.staggerMs,
       enabled: params.enabled ?? true,
     };
 
@@ -482,6 +495,10 @@ export class CronScheduler extends EventEmitter {
       return;
     }
 
+    // Apply stagger jitter to spread load (OpenClaw pattern)
+    const stagger = job.staggerMs ? Math.floor(Math.random() * job.staggerMs) : 0;
+    const jitteredDelay = delay + stagger;
+
     // For 'at' and 'every' types, use setTimeout directly
     if (job.type === 'at' || job.type === 'every') {
       const timer = setTimeout(async () => {
@@ -490,7 +507,7 @@ export class CronScheduler extends EventEmitter {
         if (job.type === 'every' && job.enabled && job.status === 'active') {
           this.scheduleJob(job);
         }
-      }, Math.min(delay, 2147483647)); // setTimeout max
+      }, Math.min(jitteredDelay, 2147483647)); // setTimeout max
 
       this.timers.set(job.id, timer);
     }
@@ -566,6 +583,12 @@ export class CronScheduler extends EventEmitter {
       job.lastRunAt = run.startedAt;
       job.runCount++;
 
+      // Reset backoff on success
+      if (job.backoffLevel && job.backoffLevel > 0) {
+        job.backoffLevel = 0;
+        job.nextRetryAt = undefined;
+      }
+
       // Check max runs
       if (job.maxRuns !== undefined && job.runCount >= job.maxRuns) {
         job.status = 'completed';
@@ -585,6 +608,12 @@ export class CronScheduler extends EventEmitter {
       job.lastRunAt = run.startedAt;
       job.errorCount++;
       job.lastError = run.error;
+
+      // Exponential backoff: increment level, cap at max
+      job.backoffLevel = Math.min((job.backoffLevel ?? 0) + 1, BACKOFF_DELAYS_MS.length - 1);
+      const backoffMs = BACKOFF_DELAYS_MS[job.backoffLevel];
+      job.nextRetryAt = new Date(Date.now() + backoffMs);
+      job.nextRunAt = job.nextRetryAt;
 
       this.emit('job:run:error', run, error instanceof Error ? error : new Error(String(error)));
     }

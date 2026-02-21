@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-02-21
+
+### Overview
+
+OpenClaw parity gaps — 7 new slash commands (`/think`, `/queue`, `/subagents`, `/new`, `/reset`, `/status`, `/verbose`), exponential temporal decay + MMR re-ranking for semantic memory, cron exponential backoff with per-job stagger, and configurable sub-agent nesting depth.
+
+---
+
+### Added
+
+#### Slash Commands — Agent Control
+
+- **`/think [level]`** — Set reasoning depth: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`. OpenClaw `/think` parity.
+- **`/queue [mode]`** — Set message queue mode: `immediate`, `debounce`, `batch`. Controls how rapid user messages are processed.
+- **`/subagents [action]`** — List, inspect, or stop running sub-agents. Actions: `list`, `stop <id>`, `info <id>`.
+- **`/new`** — Start a fresh session while keeping model and tool config intact.
+- **`/reset`** — Hard reset: drop all messages and reload system prompt from scratch.
+- **`/status`** — Show session status: turns used, cost, context tokens, active tools, sub-agents.
+- **`/verbose [on|off|toggle]`** — Toggle verbose output (tool inputs/outputs, reasoning blocks).
+
+#### Semantic Memory — Exponential Decay + MMR
+
+- **Exponential temporal decay** (`src/memory/semantic-memory-search.ts`) — Replaced linear 365-day decay with `exp(-ln2 × days / 30)` (30-day half-life, floor 0.1). Recent memories score 10× higher than 60-day-old ones.
+- **MMR re-ranking** — Maximal Marginal Relevance (λ=0.7): 70% relevance + 30% diversity penalty. Prevents near-duplicate results from dominating search output.
+
+#### Cron Scheduler — Resilience
+
+- **Exponential backoff** (`src/scheduler/cron-scheduler.ts`) — On job failure: delays [30s, 1m, 5m, 15m, 60m]; `backoffLevel` incremented each error, reset on success. `nextRetryAt` overrides `nextRunAt`.
+- **Per-job stagger** — `job.staggerMs` adds random jitter to prevent top-of-hour load spikes.
+- **Delivery mode `'none'`** — Jobs can run without posting output to any channel.
+
+#### Sub-Agent Orchestrator — Depth Config
+
+- **`maxDepth` guard** (`src/agent/orchestrator/supervisor-agent.ts`) — Default depth 2; configurable via `OrchestrationPlan.maxDepth`. Returns early with `[depth-limit]` message when exceeded. Depth annotated in task context strings.
+
+---
+
 ## [2.6.0] - 2026-02-21
 
 ### Overview

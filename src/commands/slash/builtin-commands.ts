@@ -905,6 +905,73 @@ const workflowCommands: SlashCommand[] = [
     ]
   }
 ];
+// ============================================================================
+// Agent Control Commands
+// ============================================================================
+
+const agentControlCommands: SlashCommand[] = [
+  {
+    name: 'think',
+    description: 'Set reasoning depth for this session (off|minimal|low|medium|high|xhigh)',
+    prompt: '__THINK__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'level', description: 'off, minimal, low, medium, high, xhigh', required: false }
+    ]
+  },
+  {
+    name: 'queue',
+    description: 'Set message queue mode (collect|steer|followup|steer-backlog|interrupt)',
+    prompt: '__QUEUE_MODE__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'mode', description: 'collect (default), steer, followup, steer-backlog, interrupt', required: false }
+    ]
+  },
+  {
+    name: 'subagents',
+    description: 'List, inspect, or stop running sub-agents',
+    prompt: '__SUBAGENTS__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'list (default), stop <id>, log <id>, inspect <id>', required: false }
+    ]
+  },
+  {
+    name: 'new',
+    description: 'Start a fresh session — clears all context and message history',
+    prompt: '__NEW_SESSION__',
+    filePath: '',
+    isBuiltin: true
+  },
+  {
+    name: 'reset',
+    description: 'Hard reset: drop all messages and context, keep system prompt and settings',
+    prompt: '__RESET_CONTEXT__',
+    filePath: '',
+    isBuiltin: true
+  },
+  {
+    name: 'status',
+    description: 'Show session status: model, tokens used, session cost, active tools, queue mode',
+    prompt: '__SESSION_STATUS__',
+    filePath: '',
+    isBuiltin: true
+  },
+  {
+    name: 'verbose',
+    description: 'Toggle verbose output (show tool call details, timings, token counts)',
+    prompt: '__VERBOSE__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'on, off, or toggle (default)', required: false }
+    ]
+  }
+];
 
 // ============================================================================
 // All Built-in Commands (Combined)
@@ -931,7 +998,8 @@ export const builtinCommands: SlashCommand[] = [
   ...voiceCommands,
   ...themeCommands,
   ...searchCommands,
-  ...workflowCommands
+  ...workflowCommands,
+  ...agentControlCommands
 ];
 
 /**
@@ -955,6 +1023,7 @@ export function getCommandsByCategory(): Record<string, SlashCommand[]> {
     voice: voiceCommands,
     theme: themeCommands,
     search: searchCommands,
-    workflow: workflowCommands
+    workflow: workflowCommands,
+    agentControl: agentControlCommands
   };
 }

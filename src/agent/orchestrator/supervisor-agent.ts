@@ -17,6 +17,10 @@ export interface OrchestrationPlan {
   mainGoal: string;
   subAgents: SubAgentTask[];
   mergeStrategy: MergeStrategy;
+  /** Maximum sub-agent nesting depth (default: 2, matching OpenClaw standard) */
+  maxDepth?: number;
+  /** Current depth of this orchestration call (0 = top-level) */
+  currentDepth?: number;
 }
 
 export interface SubAgentTask {
@@ -25,6 +29,8 @@ export interface SubAgentTask {
   task: string;
   dependencies: string[];
   timeout?: number;
+  /** Nesting depth of this sub-agent (0 = top-level, 1 = spawned by top-level, etc.) */
+  depth?: number;
 }
 
 export interface OrchestrationResult {
@@ -47,6 +53,11 @@ export interface SubAgentResult {
 // ============================================================================
 
 export class SupervisorAgent extends EventEmitter {
+  private static readonly DEFAULT_MAX_DEPTH = 2;
+
+  private currentDepth: number = 0;
+  private maxDepth: number = SupervisorAgent.DEFAULT_MAX_DEPTH;
+
   private executor: ((agent: string, task: string, context: string) => Promise<SubAgentResult>) | null = null;
 
   /**
@@ -60,6 +71,23 @@ export class SupervisorAgent extends EventEmitter {
    * Orchestrate a plan
    */
   async orchestrate(plan: OrchestrationPlan): Promise<OrchestrationResult> {
+    // Enforce max nesting depth (OpenClaw standardizes at depth 2)
+    const maxDepth = plan.maxDepth ?? SupervisorAgent.DEFAULT_MAX_DEPTH;
+    const currentDepth = plan.currentDepth ?? 0;
+    if (currentDepth >= maxDepth) {
+      logger.warn(`SupervisorAgent: max sub-agent depth ${maxDepth} reached — refusing to spawn deeper agents`);
+      return {
+        success: false,
+        results: new Map(),
+        strategy: plan.mergeStrategy,
+        totalDuration: 0,
+        mergedOutput: `[depth-limit] Max sub-agent nesting depth (${maxDepth}) reached. Cannot spawn further sub-agents.`,
+      };
+    }
+
+    this.currentDepth = currentDepth + 1; // sub-agents spawned from this plan are one level deeper
+    this.maxDepth = maxDepth;
+
     const startTime = Date.now();
     this.emit('orchestrate:start', { goal: plan.mainGoal, strategy: plan.mergeStrategy });
 
@@ -219,7 +247,8 @@ export class SupervisorAgent extends EventEmitter {
         throw new Error('No executor set');
       }
 
-      const result = await this.executor(task.agent, task.task, context);
+      const depthContext = this.currentDepth > 0 ? `\n[depth:${this.currentDepth}/${this.maxDepth}]` : '';
+      const result = await this.executor(task.agent, task.task, context + depthContext);
       this.emit('task:complete', { id: task.id, success: result.success });
       return result;
 
