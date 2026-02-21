@@ -8,6 +8,14 @@ import { logger } from '../utils/logger.js';
 
 export type SearchProvider = 'brave' | 'perplexity' | 'serper' | 'duckduckgo' | 'brave-mcp';
 
+/**
+ * Web search mode (Codex-inspired prompt injection mitigation).
+ * - 'disabled' — no web search allowed
+ * - 'cached'   — use cached/indexed results only (reduced prompt injection risk)
+ * - 'live'     — full live browsing (default)
+ */
+export type WebSearchMode = 'disabled' | 'cached' | 'live';
+
 export interface WebSearchOptions {
   maxResults?: number;
   safeSearch?: boolean;
@@ -25,6 +33,54 @@ export interface WebSearchOptions {
   freshness?: string;
   /** Force a specific provider instead of auto-fallback. */
   provider?: SearchProvider;
+  /**
+   * Override the global search mode for this call.
+   * Useful when forcing live mode in YOLO/full-auto contexts.
+   */
+  mode?: WebSearchMode;
+}
+
+export interface WebSearchDomainPolicy {
+  /** Only return results from these domains (exact or *.domain.com) */
+  allowedDomains?: string[];
+  /** Never return results from these domains */
+  blockedDomains?: string[];
+}
+
+// Global search mode and domain policy (configurable via TOML / runtime)
+let _globalSearchMode: WebSearchMode = 'live';
+let _domainPolicy: WebSearchDomainPolicy = {};
+
+/**
+ * Set the global web search mode.
+ * Called at startup from config.toml or agent autonomy settings.
+ */
+export function setWebSearchMode(mode: WebSearchMode): void {
+  _globalSearchMode = mode;
+}
+
+export function getWebSearchMode(): WebSearchMode {
+  return _globalSearchMode;
+}
+
+export function setWebSearchDomainPolicy(policy: WebSearchDomainPolicy): void {
+  _domainPolicy = policy;
+}
+
+function isDomainAllowed(url: string): boolean {
+  if (!_domainPolicy.allowedDomains?.length && !_domainPolicy.blockedDomains?.length) return true;
+  let hostname = '';
+  try { hostname = new URL(url).hostname.toLowerCase(); } catch { return false; }
+
+  if (_domainPolicy.blockedDomains?.length) {
+    if (_domainPolicy.blockedDomains.some(d => hostname === d || hostname.endsWith('.' + d))) return false;
+  }
+  if (_domainPolicy.allowedDomains?.length) {
+    return _domainPolicy.allowedDomains.some(d =>
+      d.startsWith('*.') ? hostname.endsWith(d.slice(1)) : hostname === d
+    );
+  }
+  return true;
 }
 
 export interface SearchResult {
@@ -181,6 +237,17 @@ export class WebSearchTool {
   private static readonly FAILED_QUERY_TTL = 120000;
 
   async search(query: string, options: WebSearchOptions = {}): Promise<ToolResult> {
+    // Mode check (Codex-inspired prompt injection mitigation)
+    const effectiveMode = options.mode ?? _globalSearchMode;
+    if (effectiveMode === 'disabled') {
+      return { success: false, error: 'Web search is disabled by configuration (mode: disabled).' };
+    }
+    // 'cached' mode: only use providers that return indexed/cached results (Brave index, Perplexity)
+    if (effectiveMode === 'cached' && !options.provider) {
+      options = { ...options, provider: this.braveApiKey ? 'brave' : this.perplexityApiKey ? 'perplexity' : 'duckduckgo' };
+      logger.debug('WebSearch: cached mode — using indexed provider', { provider: options.provider });
+    }
+
     const { maxResults = DEFAULT_SEARCH_COUNT } = options;
     const count = Math.max(1, Math.min(MAX_SEARCH_COUNT, maxResults));
 
@@ -676,32 +743,52 @@ export class WebSearchTool {
   }
 
   private formatResults(results: SearchResult[], query: string): string {
+    // Apply domain policy filter (Codex-inspired allowlist/denylist)
+    const filtered = results.filter(r => !r.url || isDomainAllowed(r.url));
+
     if (this.isWeatherQuery(query)) {
-      return this.formatWeatherResults(results, query);
+      return this.formatWeatherResults(filtered, query);
     }
 
+    results = filtered;
     const lines: string[] = [];
     lines.push(`\n🔍 Résultats pour: "${query}"`);
     lines.push('═'.repeat(50));
     lines.push('');
 
+    // Collect sources for citation block
+    const citedSources: Array<{ n: number; title: string; url: string }> = [];
+
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
-      const num = `${i + 1}.`;
+      const num = i + 1;
 
       if (!result.url && result.snippet) {
         lines.push(`📌 ${result.title}`);
         lines.push(`   ${result.snippet}`);
       } else {
-        lines.push(`${num} **${result.title}**`);
+        // Inline citation marker [n] after the title
+        lines.push(`${num}. **${result.title}** [${num}]`);
         if (result.snippet) lines.push(`   ${result.snippet}`);
-        if (result.url) lines.push(`   🔗 ${result.url}`);
         if (result.published) lines.push(`   📅 ${result.published}`);
+        if (result.url) {
+          citedSources.push({ n: num, title: result.title, url: result.url });
+        }
       }
       lines.push('');
     }
 
-    lines.push('─'.repeat(50));
+    // Append sources / references block (Manus AI-style inline citations)
+    if (citedSources.length > 0) {
+      lines.push('─'.repeat(50));
+      lines.push('**Sources:**');
+      for (const { n, title, url } of citedSources) {
+        lines.push(`[${n}] ${title} — ${url}`);
+      }
+    } else {
+      lines.push('─'.repeat(50));
+    }
+
     return lines.join('\n');
   }
 

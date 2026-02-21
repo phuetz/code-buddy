@@ -42,5 +42,7 @@ export {
   type K8sScaleOptions,
 } from "./kubernetes-tool.js";
 
+export { RunScriptTool } from "./run-script-tool.js";
+
 // Export types used by tools
 export type { ToolResult } from '../types/index.js';

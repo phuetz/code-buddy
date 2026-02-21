@@ -141,8 +141,36 @@ export class PromptBuilder {
         logger.warn("Failed to load bootstrap context", { error: getErrorMessage(err) });
       }
 
+      // Manus AI structured variation — shuffle reminder blocks to prevent
+      // the model from falling into brittle repetition patterns.
+      // Only the footer guideline section is varied; the preamble/tools are left
+      // untouched so prompt caching remains effective on the stable prefix.
+      try {
+        const { varySystemPrompt } = await import('../prompts/variation-injector.js');
+        // Use a daily seed so the variation is stable within a single day
+        // (same day → same order → consistent cache), but rotates across days.
+        const daySeed = Math.floor(Date.now() / 86_400_000);
+        systemPrompt = varySystemPrompt(systemPrompt, {
+          seed: daySeed,
+          shuffleOrder: true,
+          alternativePhrasing: true,
+          variationRate: 0.3,
+        });
+      } catch {
+        // non-critical — proceed with original prompt
+      }
+
       // Cache system prompt for optimization
       this.promptCacheManager.cacheSystemPrompt(systemPrompt);
+
+      // Store stable/dynamic split for cache-breakpoint injection (Manus AI #11/#20)
+      try {
+        const { buildStableDynamicSplit } = await import('../optimization/cache-breakpoints.js');
+        const split = buildStableDynamicSplit(systemPrompt);
+        // The split is used by the client to inject cache_control breakpoints.
+        // Attach it to the PromptCacheManager for inspection if needed.
+        (this.promptCacheManager as unknown as Record<string, unknown>)._stableDynamicSplit = split;
+      } catch { /* non-critical */ }
 
       return systemPrompt;
     } catch (error) {

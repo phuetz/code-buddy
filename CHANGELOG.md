@@ -5,6 +5,289 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-02-21
+
+### Overview
+
+OpenClaw / Manus AI / Codex parity (round 3): OS sandbox workspace-write mode, shell-free exec, per-channel streaming policies, SSRF guard, stable JSON, message queue debounce/cap, WebSearchMode, Anthropic prompt cache breakpoints, response prefill modes, exec policy prefix_rules + CLI, session fork/rollout unification, and tool prefix naming convention.
+
+---
+
+### Added
+
+#### Codex — OS Sandbox Workspace-Write Mode
+
+- **`SandboxMode`** enum (`'read-only' | 'workspace-write' | 'danger-full-access'`) in `src/sandbox/os-sandbox.ts` — Three sandbox tiers mirroring Codex CLI:
+  - `read-only` (default) — no filesystem writes allowed
+  - `workspace-write` — writes limited to git workspace root; `.git/.codebuddy/.ssh/.gnupg/.aws` always read-only regardless of mode
+  - `danger-full-access` — no write restrictions (syscall/network sandbox still active)
+- **`getWorkspaceRoot(cwd)`** — auto-detects workspace root via `git rev-parse --show-toplevel`; falls back to `cwd` when not in a git repo
+- **`createSandboxConfigForMode(mode, cwd, extraReadOnly?, extraReadWrite?)`** — builds an `OSSandboxConfig` for the given tier
+- **`createSandboxForMode(mode, cwd?)`** — convenience: create + initialize an `OSSandbox` for the given tier
+
+#### Codex — Shell-Free Exec
+
+- **`BashTool.shellFreeExec(argv, timeout?, cwd?)`** — Direct `spawn` with `shell: false` using a pre-parsed `argv` token array. Prevents shell injection on validated argument vectors. Called after `bash-parser.ts` has already split the command string into safe tokens.
+
+#### OpenClaw — Per-Channel Streaming Policies
+
+- **`ChannelStreamingPolicy`** interface + **`StreamingChunker`** class (`src/channels/streaming-policy.ts`) — Each channel declares its streaming preferences independently:
+  - `StreamingMode`: `char` | `line` | `sentence` | `paragraph` | `full`
+  - `ChannelFormat`: `markdown` | `markdownv2` | `mrkdwn` | `html` | `plain`
+  - Built-in defaults for: Telegram, Discord, Slack, WhatsApp, Signal, Matrix, WebChat, Teams
+  - `setChannelPolicy(channelId, policy)` / `getChannelPolicy(channelId)` registry
+  - `StreamingChunker` handles buffer management, rate-limit delays, maxChunkSize splitting, and maxTotalLength truncation per policy
+
+#### Codex — SSRF Guard
+
+- **`SSRFGuard`** (`src/security/ssrf-guard.ts`) — Comprehensive SSRF protection:
+  - Blocks all RFC-1918 private IPv4 ranges + loopback + link-local
+  - Blocks IPv4 bypass vectors: octal notation (`0177.0.0.1`), hex (`0x7f000001`), short form (`127.1`)
+  - Blocks IPv6 bypass vectors: NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`), Teredo (`2001::/32`), IPv4-mapped (`::ffff:127.0.0.1`), loopback (`::1`)
+  - Async `isSafeUrl(url)` with DNS resolution + sync `isSafeUrlSync(url)` for known-IP cases
+  - Integrated into `FetchTool` (replaces basic `isInternalUrl()` check)
+  - `assertSafeUrl(url)` throws `SSRFError` on blocked targets
+
+#### Codex — Stable JSON Serialization
+
+- **`stableStringify(value, space?)`** and **`normalizeJson(jsonString, space?)`** (`src/utils/stable-json.ts`) — Recursive key-sorted JSON serialization ensuring identical objects always produce identical byte sequences. Preserves KV-cache hit probability when prompt segments are serialized from objects.
+
+#### OpenClaw — Message Queue Debounce / Cap / Overflow Summarization
+
+- **`MessageQueue`** extended (`src/agent/message-queue.ts`) with `MessageQueueOptions`:
+  - `debounceMs` (default 1000ms) — coalesces rapid messages in `followup`/`collect` modes into a single batch
+  - `cap` (default 20) — maximum queue depth before overflow handling
+  - `drop: 'drop' | 'summarize'` — overflow policy: discard oldest or summarize into a single bullet-list prompt
+- Added `steer-backlog` mode — routes overflow to a secondary queue for priority steering
+- `configure(options)` / `getOptions()` for runtime reconfiguration
+
+#### Codex — WebSearchMode + Domain Policy
+
+- **`WebSearchMode`** (`'disabled' | 'cached' | 'live'`) and **`WebSearchDomainPolicy`** in `src/tools/web-search.ts`:
+  - `disabled` — all search calls return an error immediately
+  - `cached` — forces indexed/cached provider (avoids live crawl cost)
+  - `live` (default) — live search with optional domain filtering
+  - `setWebSearchDomainPolicy({ allowedDomains?, blockedDomains? })` — per-session allow/denylist applied during result formatting
+  - Inline citation `[n]` markers already emitted by `formatResults()`
+
+#### Anthropic — Prompt Cache Breakpoints
+
+- **`buildStableDynamicSplit(systemPrompt)`** — Splits the system prompt at the first dynamic marker line (`Current Time`, `Memory Context`, `Active Todos`, `<todo_context>`, etc.) into a stable prefix (identity + tools + instructions) and a dynamic suffix (time, todos, memory). 10× cost savings for cached prefix ($0.30 vs $3.00/MTok).
+- **`injectAnthropicCacheBreakpoints(messages)`** — Injects `cache_control: {type: "ephemeral"}` on the last system message before sending to Anthropic, activating KV-cache for the stable prefix.
+- Integrated into `CodeBuddyClient.chat()` (auto-enabled when provider is Anthropic).
+- `PromptBuilder` stores the split on `promptCacheManager._stableDynamicSplit` for inspection.
+
+#### Manus AI — Response Prefill Modes (Tool Choice Control)
+
+- **`ResponseConstraint`** and **`ResponseConstraintStack`** (`src/agent/response-constraint.ts`) — State-machine-like sequencing of model tool_choice without removing tools from the list (preserves KV-cache):
+  - `auto` — model chooses freely (default)
+  - `required` — model MUST make at least one tool call
+  - `specified` — model MUST call a specific tool or tool-group prefix (e.g. `plan_`)
+- Integrated into both sequential and streaming paths of `AgentExecutor`.
+- `getResponseConstraintStack()` singleton; push/pop for per-turn overrides.
+
+#### Codex — Security Audit: Agent-Specific Checks
+
+- 5 new checks in `SecurityAudit.checkAgentSecurity()`:
+  1. Session transcripts world-readable
+  2. Plugin allowlist not configured
+  3. YOLO mode in non-CI interactive session
+  4. Webhook targeting internal host (SSRF gadget risk)
+  5. Legacy/poorly instruction-tuned model in use
+
+#### Codex — Exec Policy Prefix Rules + CLI
+
+- **`PrefixRule`** interface and `ExecPolicy.addPrefixRule()` / `evaluateArgv()` — Token-array exact-prefix matching that is safer than regex (bypasses quoting/encoding tricks). Longest-matching prefix wins. Checked before glob/regex rules.
+- **`buddy execpolicy`** CLI (`src/commands/execpolicy.ts`):
+  - `check <command>` — evaluate a shell string
+  - `check-argv <cmd> [args…]` — evaluate parsed argv (prefix rules first)
+  - `list` — list all active rules
+  - `list-prefix` — list prefix rules
+  - `add-prefix <tokens…> --action <action>` — add a prefix rule
+  - `show-dangerous <command>` — check against dangerous patterns
+  - `dashboard` — full policy overview
+
+#### Codex — Session Fork / Rollout Unification
+
+- **`RunStore.forkRun(parentRunId, reason, overrides?)`** — Creates a child run linked to a parent via `metadata.parentRolloutId`. Enables lineage tracking for checkpoint rollbacks and A/B rollout variants. Run records include `forkReason` for traceability.
+- `RunMetadata` extended with `parentRolloutId?: string` and `forkReason?: string`.
+
+#### Codex — Tool Prefix Naming Convention
+
+- **`src/tools/registry/tool-aliases.ts`** — Canonical `<namespace>_<action>` tool aliases following Codex CLI conventions:
+  - `shell_exec`, `shell_git`, `shell_docker`, `shell_k8s`, `shell_process`
+  - `file_read`, `file_write`, `file_edit`
+  - `browser_search`, `browser_fetch`, `browser_control`, `browser_screen`
+  - `search_code`, `search_symbol`, `search_refs`, `search_definition`
+  - `agent_reason`, `agent_ask_human`, `agent_create_skill`, `agent_skill_search`
+- **`createAliasTools(primaryTools)`** — Builds `AliasITool` wrappers that delegate to the primary tool. Registered in `createAllToolsAsync()`. Backward-compatible: original names continue to work.
+- **`toCanonicalName(name)`** / **`toLegacyName(canonical)`** — Name resolution utilities.
+- `TOOL_ALIASES` / `CANONICAL_NAME` maps exported from registry index.
+
+---
+
+## [2.4.0] - 2026-02-21
+
+### Overview
+
+OpenClaw / Manus AI / Codex parity (round 2): tool result compaction guard, observation variator, disk-backed tool results, shell environment policy, named config profiles.
+
+---
+
+### Added
+
+#### Manus AI — Tool Result Compaction Guard
+
+- **`compactLargeToolResults()`** private method in `AgentExecutor` — Before each model call in the tool loop, scans accumulated tool result messages. If their total size exceeds 70K chars (≈17K tokens), the oldest large results are compressed using `RestorableCompressor` (stub + restore_context identifier). Prevents deep agent chains from silently overflowing the context window.
+
+#### Manus AI — Structured Observation Variation
+
+- **ObservationVariator** (`src/context/observation-variator.ts`) — Rotates between 3 presentation templates for tool results and 3 phrasings for memory blocks on every agent turn. Seeded by `turnIndex % N` for determinism. Breaks the "assembly-line hallucination" pattern where the model stops reading tool results and repeats the previous turn's pattern.
+- Integrated into both sequential and streaming paths of `AgentExecutor`.
+
+#### Manus AI — Disk-Backed Tool Results (Dual Representation)
+
+- **`writeToolResult(callId, content, workDir)`** added to `RestorableCompressor` — After each tool call, the full output is persisted to `.codebuddy/tool-results/<callId>.txt`. The `restore_context` tool now reads from disk first (before the in-memory store), enabling recovery even after process restarts or memory eviction.
+
+#### Codex — Shell Environment Policy
+
+- **ShellEnvPolicy** (`src/security/shell-env-policy.ts`) — User-configurable subprocess environment control. Supports `inherit` modes (`all|core|none`), `exclude` glob patterns (default strips `*_KEY`, `*_SECRET`, `*TOKEN`, `AWS_*`, etc.), `include_only` allowlist, and `set` forced overrides. Prevents accidental credential leakage to untrusted subprocesses. Configurable via `[shell_env]` in `.codebuddy/config.toml`.
+
+#### Codex — Named Configuration Profiles
+
+- **`profiles`** section in `CodeBuddyConfig` — Define named presets in `.codebuddy/config.toml` under `[profiles.<name>]`. Each profile is a `Partial<CodeBuddyConfig>` deep-merged over the base config at startup.
+- **`--profile <name>`** CLI flag — Activate a named profile: `buddy --profile deep-review "review this PR"`. Throws a descriptive error if the profile name is not defined, listing available profiles.
+- **`ConfigManager.applyProfile(name)`** — Programmatic profile activation.
+
+---
+
+## [2.3.0] - 2026-02-21
+
+### Overview
+
+OpenClaw / Manus AI / Codex parity: daily session reset, structured prompt variation, error-preserving context compression.
+
+---
+
+### Added
+
+#### OpenClaw — Daily Session Reset
+
+- **DailyResetManager** (`src/daemon/daily-reset.ts`) — Automatically clears conversation history at a configurable time each day (default 04:00 local). MEMORY.md, HEARTBEAT.md, todo.md and all project files are preserved. Posts a `[Daily context boundary — YYYY-MM-DD]` assistant message so logs remain readable. Exported from `src/daemon/index.ts`. Prevents unbounded context growth in 24/7 daemon sessions.
+- `getDailyResetManager(config?)` singleton; events: `reset`.
+
+#### Manus AI — Structured Prompt Variation
+
+- **VariationInjector** (`src/prompts/variation-injector.ts`) — Shuffles the order of behavioural reminder blocks and applies phrasing alternatives (from a curated pool of semantically equivalent wordings) on each session start, using a **day-scoped seed** so the variation is stable within a day (KV cache hit) but rotates across days. Only the footer guideline section is varied; tool definitions and the identity preamble are left untouched to maximise prompt-cache efficiency.
+- Integrated into `PromptBuilder.buildSystemPrompt()` after the stable prefix is assembled.
+- `applyVariation(blocks, options)` and `varySystemPrompt(prompt, options)` are the public API.
+
+#### Manus AI — Error-Preserving Context Compression
+
+- **`detectContentType()`** updated in `src/context/enhanced-compression.ts` — Failed tool results (containing `"success": false`, `Error:`, `Failed:`, or `[ERROR]`) are now classified as `'error'` content type instead of generic `'tool_result'`. The `preserveErrors: true` config already existed; this fix ensures it is actually applied to tool failures, preventing them from being summarised away during context compaction.
+
+---
+
+## [2.2.0] - 2026-02-20
+
+### Overview
+
+Manus AI / OpenClaw context-engineering parity: todo.md attention bias, pre-compaction memory flush, restorable context compression, and inline web-search citations.
+
+---
+
+### Added
+
+#### Manus AI — Attention Bias via todo.md
+
+- **Todo Tracker** (`src/agent/todo-tracker.ts`) — Maintains `todo.md` in the working directory. The current pending task list is automatically appended at the **end** of every LLM context turn (highest recency position), exploiting transformer attention bias to prevent "lost-in-the-middle" goal drift in long sessions.
+- **`todo_update` tool** — Agent can `add`, `complete`, `update`, `remove`, `clear_done`, and `list` todos. Each mutation persists to `todo.md` and takes effect on the next turn.
+- **`buddy todo` CLI** — `list`, `add <text>`, `done <id>`, `update <id>`, `remove <id>`, `clear-done`, `context` (preview injected block).
+- **Integration**: `agent-executor.ts` (both sequential and streaming paths) now appends the todo context suffix after `contextManager.prepareMessages()` on every turn.
+
+#### Manus AI — Restorable Context Compression
+
+- **Restorable Compressor** (`src/context/restorable-compression.ts`) — Instead of lossy summarisation, extracts file paths, URLs, and tool call IDs from messages being dropped. Stores full content indexed by identifier. Agent can call `restore_context(identifier)` to recover the original content on demand, making compression reversible.
+- **`restore_context` tool** — Accepts a file path or URL, checks the in-memory store, falls back to disk for file paths, returns helpful hints for URLs.
+- Both tools registered via `src/tools/registry/attention-tools.ts` → `createAttentionTools()`.
+
+#### OpenClaw — Pre-compaction Memory Flush (NO_REPLY)
+
+- **PrecompactionFlusher** (`src/context/precompaction-flush.ts`) — Before context is compacted (when `contextManager.shouldWarn()` fires), a silent background LLM turn extracts important facts and saves them to `MEMORY.md`. If the LLM returns the `NO_REPLY` sentinel (≤ 300 chars), output is suppressed and nothing is written. Falls back to `~/.codebuddy/MEMORY.md` on project write failure. Integrated into both sequential and streaming executor paths.
+
+#### Inline Web-Search Citations
+
+- **`formatResults()`** updated in `src/tools/web-search.ts` — Search results now include inline `[n]` citation markers after each title, and a **Sources** block at the end listing `[n] Title — URL`. Consistent with Manus AI and academic citation conventions.
+
+---
+
+## [2.1.0] - 2026-02-20
+
+### Overview
+
+Feature release implementing Manus AI / OpenManus / OpenClaw parity gaps: Knowledge Module, AskHuman tool, Self-Authoring Skills, Wide Research orchestrator, DM pairing CLI, Run Observability, Pro Telegram channel features, and dev workflow commands.
+
+---
+
+### Added
+
+#### Manus AI / OpenManus Parity
+
+- **Knowledge Module** (`src/knowledge/knowledge-manager.ts`) — Loads and indexes Markdown knowledge files from three scopes (local `Knowledge.md`, project `.codebuddy/knowledge/*.md`, global `~/.codebuddy/knowledge/*.md`). Parses YAML frontmatter (`title`, `tags`, `scope`, `priority`). Knowledge is automatically injected into the agent system prompt at session start. CLI: `buddy knowledge list|show|search|add|remove|context`.
+
+- **AskHuman Tool** (`src/tools/ask-human-tool.ts`) — Pauses agent execution and blocks for typed user input (120 s timeout). Non-interactive environments return the configured default answer. Implements the OpenManus `ask_human` pattern so the agent can request clarification mid-task.
+
+- **Self-Authoring Skills** (`src/tools/create-skill-tool.ts`) — Agent can author and persist new SKILL.md skills to `.codebuddy/skills/workspace/<slug>/`. Implements the OpenClaw / ClawHub `create_skill` pattern. Validates slug uniqueness; supports `overwrite` flag.
+
+- **Wide Research Orchestrator** (`src/agent/wide-research.ts`) — Spawns N parallel `CodeBuddyAgent` workers (default 5, max 20) to research independent subtopics, then aggregates results into a synthesized report via a second LLM pass. Implements the Manus AI wide-research pattern. Emits typed `WideResearchProgress` events for live streaming. CLI: `buddy research "<topic>" [--workers N] [--rounds N] [--output file]`.
+
+#### New CLI Commands
+
+- **`buddy pairing`** (`src/commands/pairing.ts`) — Manages DM channel pairing: `status`, `list`, `pending`, `approve <id>`, `add <userId>`, `revoke <userId>`. Exposes the existing `DMPairingManager` via CLI.
+
+- **`buddy knowledge`** (`src/commands/knowledge.ts`) — Full CRUD for the knowledge base: `list`, `show <id>`, `search <query>`, `add` (interactive), `remove <id>`, `context` (preview injected block).
+
+- **`buddy research`** (`src/commands/research/index.ts`) — CLI frontend for `WideResearchOrchestrator`. Streams worker progress to stdout and optionally writes the final report to a file.
+
+#### Run Observability
+
+- **Run Store** (`src/observability/run-store.ts`) — SQLite-backed store for tracking agent run history (status, duration, token usage, cost).
+- **Run Viewer** (`src/observability/run-viewer.ts`) — CLI and API views for run history and analytics.
+- **Dev Workflow Commands** (`src/commands/dev/`) — Developer-oriented sub-commands for inspecting runs and internal state.
+- **Run CLI** (`src/commands/run-cli/`) — `buddy run` command for scripted/non-interactive agent invocations.
+
+#### Pro Telegram Features
+
+- **CI Watcher** (`src/channels/telegram/ci-watcher.ts`) — Monitors CI pipelines and pushes status updates to Telegram.
+- **Diff-First Formatter** (`src/channels/telegram/diff-first.ts`) — Sends code changes as unified diffs before full file content.
+- **Enhanced Commands** (`src/channels/telegram/enhanced-commands.ts`) — Additional Telegram bot commands with richer interactions.
+- **Pro Formatter** (`src/channels/telegram/pro-formatter.ts`) — Advanced message formatting (tables, inline keyboards, collapsible sections).
+- **Run Tracker** (`src/channels/telegram/run-tracker.ts`) — Live agent run progress streamed to Telegram.
+- **Scoped Auth** (`src/channels/telegram/scoped-auth.ts`) — Per-chat permission scoping for multi-tenant Telegram deployments.
+- **Pro Channel** (`src/channels/pro/`) — Aggregated pro channel features with unified interface.
+
+#### Repo Profiler
+
+- **`src/agent/repo-profiler.ts`** — Analyzes repository structure at session start (languages, frameworks, entry points) and injects a concise profile into the system prompt to ground the agent in the current codebase without requiring manual context.
+
+#### Write Policy
+
+- **`src/security/write-policy.ts`** — Fine-grained allow/deny rules for file write operations, extending the security layer beyond bash command validation.
+
+#### Tool Registry
+
+- **`src/tools/registry/knowledge-tools.ts`** — ITool adapters for `knowledge_search`, `knowledge_add`, `ask_human`, and `create_skill`. Registered in `createAllToolsAsync()`.
+
+---
+
+### Changed
+
+- `src/agent/codebuddy-agent.ts` — Knowledge context now injected into system prompt after repo profiler block at session initialization.
+- `src/tools/registry/index.ts` — Added exports and registration for `createKnowledgeTools()`, `createScriptTools()`, `createPlanTools()`.
+- `src/index.ts` — Added lazy CLI commands: `pairing`, `knowledge`, `research`.
+
+---
+
 ## [2.0.0] - 2026-01-28
 
 ### Overview
@@ -296,6 +579,9 @@ Key test additions from the three improvement waves:
 
 ---
 
+[2.3.0]: https://github.com/phuetz/code-buddy/compare/v2.2.0...v2.3.0
+[2.2.0]: https://github.com/phuetz/code-buddy/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/phuetz/code-buddy/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/phuetz/code-buddy/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/phuetz/code-buddy/compare/v0.0.12...v1.0.0
 [0.0.12]: https://github.com/phuetz/code-buddy/compare/v0.0.11...v0.0.12

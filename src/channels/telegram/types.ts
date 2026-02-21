@@ -29,6 +29,36 @@ export interface TelegramConfig extends ChannelConfig {
   defaultParseMode?: 'Markdown' | 'MarkdownV2' | 'HTML';
   /** Disable notifications by default */
   disableNotification?: boolean;
+  /** Scoped authorization config */
+  scopedAuth?: {
+    defaultScopes: Array<'read-only' | 'write-patch' | 'run-tests' | 'deploy'>;
+    adminScopes: Array<'read-only' | 'write-patch' | 'run-tests' | 'deploy'>;
+    secretHandles: Array<{ handle: string; envVar: string; description?: string }>;
+  };
+  /** Diff-first mode config */
+  diffFirst?: {
+    enabled: boolean;
+    planFirst?: boolean;
+    maxDiffLines?: number;
+    autoApplyThreshold?: number;
+  };
+  /** Enhanced commands */
+  enhancedCommands?: boolean;
+  /** Context pins */
+  contextPinsEnabled?: boolean;
+  /** CI watcher config */
+  ciWatch?: {
+    enabled: boolean;
+    chatId: string;
+    providers: Array<{
+      type: 'github-actions' | 'gitlab-ci' | 'jenkins' | 'custom-webhook';
+      repoUrl: string;
+      apiTokenHandle?: string;
+      label?: string;
+    }>;
+    alertOn: Array<'build-failure' | 'flaky-test' | 'pr-review' | 'vulnerable-deps' | 'deploy-failure'>;
+    mutedPatterns?: string[];
+  };
 }
 
 /**

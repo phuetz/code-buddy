@@ -7,6 +7,7 @@ import { getSettingsManager } from "../utils/settings-manager.js";
 import { getChatOnlySystemPrompt } from "../prompts/index.js";
 import { getAutonomyManager } from "../utils/autonomy-manager.js";
 import { logger } from "../utils/logger.js";
+import { getRepoProfiler } from "./repo-profiler.js";
 import { getToolSelectionStrategy, ToolSelectionStrategy } from "./execution/tool-selection-strategy.js";
 import { PromptBuilder } from "../services/prompt-builder.js";
 import { StreamingHandler } from "./streaming/index.js";
@@ -253,13 +254,48 @@ export class CodeBuddyAgent extends BaseAgent {
   /** Resolves when the system prompt has been loaded (or failed gracefully). */
   public systemPromptReady: Promise<void>;
 
+  /**
+   * Link tool executions to an observability run.
+   * Called by dev workflows to associate tool calls with a RunStore run.
+   */
+  public setRunId(runId: string | undefined): void {
+    this.toolHandler.setRunId(runId);
+  }
+
   private async initializeAgentSystemPrompt(
     systemPromptId: string | undefined,
     modelName: string,
     customInstructions: string | null
   ): Promise<void> {
     try {
-      const systemPrompt = await this.promptBuilder.buildSystemPrompt(systemPromptId, modelName, customInstructions);
+      let systemPrompt = await this.promptBuilder.buildSystemPrompt(systemPromptId, modelName, customInstructions);
+
+      // Inject repoProfile.contextPack if available
+      try {
+        const profiler = getRepoProfiler();
+        const profile = await profiler.getProfile();
+        if (profile.contextPack) {
+          systemPrompt = `${systemPrompt}\n\n[Repo] ${profile.contextPack}`;
+          logger.debug('RepoProfiler: injected contextPack into system prompt');
+        }
+      } catch {
+        // Non-fatal — repo profiling is best-effort
+      }
+
+      // Inject knowledge base context if any Knowledge.md files are loaded
+      try {
+        const { getKnowledgeManager } = await import('../knowledge/knowledge-manager.js');
+        const km = getKnowledgeManager();
+        await km.load();
+        const knowledgeBlock = km.buildContextBlock();
+        if (knowledgeBlock) {
+          systemPrompt = `${systemPrompt}\n\n${knowledgeBlock}`;
+          logger.debug('KnowledgeManager: injected knowledge context into system prompt');
+        }
+      } catch {
+        // Non-fatal — knowledge injection is best-effort
+      }
+
       this.messages.push({
         role: "system",
         content: systemPrompt,

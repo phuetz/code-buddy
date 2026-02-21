@@ -12,9 +12,12 @@ export interface WebhookConfig {
   createdAt: number;
 }
 
+export type WebhookPayloadCallback = (webhookId: string, body: Record<string, unknown>) => void;
+
 export class WebhookManager {
   private webhooks: Map<string, WebhookConfig> = new Map();
   private configPath: string;
+  private payloadListeners: Map<string, WebhookPayloadCallback[]> = new Map();
 
   constructor(configDir?: string) {
     this.configPath = join(configDir || '.codebuddy', 'webhooks.json');
@@ -81,7 +84,38 @@ export class WebhookManager {
       }
     }
     const message = this.resolveTemplate(hook.agentMessage, body);
+
+    // Notify payload listeners
+    const listeners = this.payloadListeners.get(id) || [];
+    const globalListeners = this.payloadListeners.get('*') || [];
+    for (const cb of [...listeners, ...globalListeners]) {
+      try {
+        cb(id, body);
+      } catch {
+        // Ignore listener errors
+      }
+    }
+
     return { message };
+  }
+
+  /**
+   * Subscribe to webhook payload events.
+   * Use webhookId='*' to listen to all webhooks.
+   */
+  onPayload(webhookId: string, callback: WebhookPayloadCallback): () => void {
+    const listeners = this.payloadListeners.get(webhookId) || [];
+    listeners.push(callback);
+    this.payloadListeners.set(webhookId, listeners);
+
+    // Return unsubscribe function
+    return () => {
+      const current = this.payloadListeners.get(webhookId) || [];
+      const idx = current.indexOf(callback);
+      if (idx >= 0) {
+        current.splice(idx, 1);
+      }
+    };
   }
 
   private verifySignature(payload: string, signature: string, secret: string): boolean {

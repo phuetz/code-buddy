@@ -503,7 +503,19 @@ export class EnhancedContextCompressor {
    */
   private detectContentType(msg: CodeBuddyMessage): ContentType {
     if (msg.role === 'system') return 'system';
-    if (msg.role === 'tool') return 'tool_result';
+    if (msg.role === 'tool') {
+      // Manus AI error preservation: classify failed tool results as 'error'
+      // so they receive a higher importance score and are never compressed away.
+      const content = typeof msg.content === 'string' ? msg.content : '';
+      const isFailure =
+        /"success"\s*:\s*false/.test(content) ||
+        /\berror\b.*:/i.test(content) ||
+        content.startsWith('Error:') ||
+        content.startsWith('Failed:') ||
+        /\[ERROR\]|\bfailed\b.*\b(tool|command|execution)\b/i.test(content);
+      if (isFailure) return 'error';
+      return 'tool_result';
+    }
 
     const content = typeof msg.content === 'string' ? msg.content : '';
 

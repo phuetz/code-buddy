@@ -17,6 +17,28 @@ import * as os from 'os';
 
 export type PolicyAction = 'allow' | 'deny' | 'ask' | 'sandbox';
 
+/**
+ * Prefix rule — Codex-inspired token-array prefix matching.
+ *
+ * Unlike glob/regex `PolicyRule` which matches a command string, a PrefixRule
+ * matches the exact token array prefix of the parsed command.  This is safer
+ * than regex because it avoids bypass via quoting/encoding tricks.
+ *
+ * Example: `prefix: ['git', 'push']` will match `git push origin main` but
+ * NOT `echo git push` because the first token is `echo`.
+ *
+ * When multiple prefix rules match, the longest prefix wins (most specific).
+ */
+export interface PrefixRule {
+  id: string;
+  /** Exact token-array prefix that must match argv[0..prefix.length-1] */
+  prefix: string[];
+  action: PolicyAction;
+  description?: string;
+  enabled: boolean;
+  createdAt: number;
+}
+
 export interface PolicyRule {
   /** Unique rule ID */
   id: string;
@@ -317,6 +339,7 @@ const DANGEROUS_PATTERNS = [
 export class ExecPolicy extends EventEmitter {
   private config: ExecPolicyConfig;
   private rules: PolicyRule[] = [];
+  private prefixRules: PrefixRule[] = [];
   private auditLog: PolicyEvaluation[] = [];
   private initialized = false;
 
@@ -419,6 +442,89 @@ export class ExecPolicy extends EventEmitter {
   isAllowed(command: string, args: string[] = [], workDir?: string): boolean {
     const evaluation = this.evaluate(command, args, workDir);
     return evaluation.action === 'allow';
+  }
+
+  /**
+   * Check argv against prefix rules (token-array matching).
+   * Returns the matching rule with the longest matching prefix, or null.
+   *
+   * This is evaluated BEFORE regex/glob rules to give prefix rules higher
+   * specificity. Call this from evaluate() or use checkPrefix() standalone.
+   */
+  checkPrefix(argv: string[]): PrefixRule | null {
+    let best: PrefixRule | null = null;
+    for (const rule of this.prefixRules) {
+      if (!rule.enabled) continue;
+      if (argv.length < rule.prefix.length) continue;
+      const matches = rule.prefix.every((tok, i) => tok === argv[i]);
+      if (matches) {
+        if (!best || rule.prefix.length > best.prefix.length) {
+          best = rule;
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Add a prefix rule (token-array exact prefix matching).
+   * The new rule is inserted at the front and sorted by prefix length desc
+   * so that more-specific rules are evaluated first.
+   */
+  addPrefixRule(rule: Omit<PrefixRule, 'id' | 'createdAt'>): PrefixRule {
+    const newRule: PrefixRule = {
+      ...rule,
+      id: `prefix-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+    };
+    this.prefixRules.push(newRule);
+    // Longest prefix first (most specific)
+    this.prefixRules.sort((a, b) => b.prefix.length - a.prefix.length);
+    this.emit('prefixRule:added', newRule);
+    return newRule;
+  }
+
+  /** Remove a prefix rule by ID. */
+  removePrefixRule(id: string): boolean {
+    const idx = this.prefixRules.findIndex(r => r.id === id);
+    if (idx === -1) return false;
+    const removed = this.prefixRules.splice(idx, 1)[0];
+    this.emit('prefixRule:removed', removed);
+    return true;
+  }
+
+  /** List all prefix rules. */
+  getPrefixRules(): PrefixRule[] {
+    return [...this.prefixRules];
+  }
+
+  /**
+   * Evaluate argv token array — combines prefix rules + regex/glob rules.
+   * Prefix rules are checked first (longest-match wins).
+   */
+  evaluateArgv(argv: string[], workDir: string = process.cwd()): PolicyEvaluation {
+    const command = argv[0] ?? '';
+    const args = argv.slice(1);
+
+    // 1. Prefix rules (token-array, most specific)
+    const prefixMatch = this.checkPrefix(argv);
+    if (prefixMatch) {
+      const evaluation: PolicyEvaluation = {
+        command,
+        args,
+        workDir,
+        matchedRule: null,
+        action: prefixMatch.action,
+        reason: `Matched prefix rule: ${prefixMatch.prefix.join(' ')}${prefixMatch.description ? ' — ' + prefixMatch.description : ''}`,
+        constraints: {},
+        timestamp: Date.now(),
+      };
+      this.recordAudit(evaluation);
+      return evaluation;
+    }
+
+    // 2. Fall through to pattern-based evaluation
+    return this.evaluate(command, args, workDir);
   }
 
   /**

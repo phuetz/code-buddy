@@ -34,6 +34,8 @@ import {
   createGitTools,
   createMiscTools,
   createProcessTools,
+  createScriptTools,
+  createPlanTools,
 } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 import { CodeBuddyToolCall } from "../codebuddy/client.js";
@@ -55,6 +57,8 @@ import {
   type ToolHookResult,
   type LLMProvider,
 } from "../tools/hooks/index.js";
+import { WritePolicy, WRITE_TOOL_NAMES } from "../security/write-policy.js";
+import { RunStore } from "../observability/run-store.js";
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -99,6 +103,9 @@ export class ToolHandler {
   // Callback for requesting user confirmation
   private confirmationCallback?: (toolName: string, args: Record<string, unknown>, decision: PolicyDecision) => Promise<boolean>;
 
+  /** Active run ID for RunStore observability (set by dev workflows) */
+  private currentRunId: string | undefined;
+
   constructor(private deps: ToolHandlerDependencies) {
     this.registry = getFormalToolRegistry();
     this.initializeRegistry();
@@ -119,6 +126,14 @@ export class ToolHandler {
    */
   public setProvider(provider: LLMProvider): void {
     setCurrentProvider(provider);
+  }
+
+  /**
+   * Set the active run ID for RunStore observability.
+   * Tool calls and results will be emitted to the run's event log.
+   */
+  setRunId(runId: string | undefined): void {
+    this.currentRunId = runId;
   }
 
   /**
@@ -149,6 +164,8 @@ export class ToolHandler {
       ...createGitTools(),
       ...createMiscTools(),
       ...createProcessTools(),
+      ...createScriptTools(),
+      ...createPlanTools(),
     ];
 
     for (const tool of allTools) {
@@ -288,6 +305,44 @@ export class ToolHandler {
         }
       }
 
+      // ── WritePolicy gating (strict / confirm modes) ──────────────
+      if (WRITE_TOOL_NAMES.has(toolName)) {
+        const writePolicy = WritePolicy.getInstance();
+        const paths: string[] = [];
+        if (typeof args.path === 'string') paths.push(args.path);
+        if (typeof args.target_file === 'string') paths.push(args.target_file);
+        if (Array.isArray(args.files)) {
+          for (const f of args.files) {
+            if (typeof f === 'string') paths.push(f);
+            else if (typeof f?.path === 'string') paths.push(f.path);
+          }
+        }
+
+        const gateResult = await writePolicy.gate(
+          { toolName, paths, description: args.description as string | undefined },
+          this.currentRunId
+        );
+
+        if (!gateResult.allowed) {
+          return {
+            success: false,
+            error: gateResult.reason || `WritePolicy blocked tool "${toolName}"`,
+          };
+        }
+      }
+
+      // ── RunStore: emit tool_call event ───────────────────────────
+      if (this.currentRunId) {
+        RunStore.getInstance().emit(this.currentRunId, {
+          type: 'tool_call',
+          data: {
+            toolName,
+            toolCallId: toolCall.id,
+            args: this.sanitizeArgsForLog(args),
+          },
+        });
+      }
+
       // Execute before_tool_call hooks (can modify args)
       hookContext = await hooksManager.executeBeforeHooks(hookContext);
       const modifiedArgs = hookContext.args;
@@ -363,6 +418,21 @@ export class ToolHandler {
         );
       }
 
+      // ── RunStore: emit tool_result event ─────────────────────────
+      if (this.currentRunId) {
+        RunStore.getInstance().emit(this.currentRunId, {
+          type: 'tool_result',
+          data: {
+            toolName,
+            toolCallId: toolCall.id,
+            success: finalHookResult.success,
+            outputLength: finalHookResult.output?.length || 0,
+            error: finalHookResult.error,
+            durationMs: Date.now() - startTime,
+          },
+        });
+      }
+
       // Return final result
       return {
         success: finalHookResult.success,
@@ -393,6 +463,22 @@ export class ToolHandler {
         error: `Tool execution error: ${errorMessage}`,
       };
     }
+  }
+
+  /**
+   * Sanitize tool args for logging (truncate large content fields).
+   */
+  private sanitizeArgsForLog(args: Record<string, unknown>): Record<string, unknown> {
+    const MAX_LEN = 500;
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args)) {
+      if (typeof v === 'string' && v.length > MAX_LEN) {
+        result[k] = v.slice(0, MAX_LEN) + `…[${v.length} chars]`;
+      } else {
+        result[k] = v;
+      }
+    }
+    return result;
   }
 
   /**

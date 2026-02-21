@@ -13,7 +13,7 @@ export interface ChatEntry {
    * - `tool_call`: A request to execute a tool (displayed as "Executing...")
    * - `tool_result`: The output or error from a tool execution
    */
-  type: "user" | "assistant" | "tool_result" | "tool_call" | "reasoning" | "plan_progress" | "steer";
+  type: "user" | "assistant" | "tool_result" | "tool_call" | "reasoning" | "plan_progress" | "steer" | "diff_preview";
   
   /** Content of the message. For tool results, this is the output string. */
   content: string;
@@ -47,7 +47,7 @@ export interface StreamingChunk {
    * - `token_count`: Update on token usage
    * - `done`: Stream completion signal
    */
-  type: "content" | "tool_calls" | "tool_result" | "done" | "token_count" | "reasoning" | "tool_stream" | "ask_user" | "plan_progress" | "steer";
+  type: "content" | "tool_calls" | "tool_result" | "done" | "token_count" | "reasoning" | "tool_stream" | "ask_user" | "plan_progress" | "steer" | "diff_preview" | "run_event";
   
   /** Text content delta (for `content` type) */
   content?: string;
@@ -93,5 +93,25 @@ export interface StreamingChunk {
   steer?: {
     content: string;
     source: string;
+  };
+
+  /** Diff preview data (for `diff_preview` type) */
+  diffPreview?: {
+    turnId: number;
+    diffs: Array<{
+      path: string;
+      action: 'create' | 'modify' | 'delete' | 'rename';
+      linesAdded: number;
+      linesRemoved: number;
+      excerpt: string;
+    }>;
+    plan?: string;
+  };
+
+  /** RunStore observability event (for `run_event` type) */
+  runEvent?: {
+    runId: string;
+    eventType: string;
+    data: Record<string, unknown>;
   };
 }

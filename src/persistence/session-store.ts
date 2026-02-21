@@ -16,6 +16,8 @@ export interface SessionMetadata {
   tokenCount?: number;
   totalCost?: number;
   toolCallCount?: number;
+  /** IDs of runs associated with this session */
+  runIds?: string[];
   [key: string]: string | string[] | number | boolean | undefined;
 }
 
@@ -31,7 +33,7 @@ export interface Session {
 }
 
 export interface SessionMessage {
-  type: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'reasoning' | 'plan_progress' | 'steer';
+  type: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'reasoning' | 'plan_progress' | 'steer' | 'diff_preview';
   content: string;
   timestamp: string;
   toolCallName?: string;
@@ -228,7 +230,7 @@ export class SessionStore {
     if (this.dbRepository) {
       const dbMessage: Omit<DBMessage, 'id' | 'created_at'> = {
         session_id: this.currentSessionId,
-        role: message.type === 'tool_result' ? 'tool' : message.type === 'tool_call' ? 'assistant' : message.type === 'reasoning' ? 'assistant' : message.type === 'plan_progress' ? 'assistant' : message.type === 'steer' ? 'user' : message.type,
+        role: message.type === 'tool_result' ? 'tool' : message.type === 'tool_call' ? 'assistant' : message.type === 'reasoning' ? 'assistant' : message.type === 'plan_progress' ? 'assistant' : message.type === 'steer' ? 'user' : message.type === 'diff_preview' ? 'assistant' : message.type,
         content: message.content,
         tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
         metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,

@@ -55,7 +55,7 @@ describe('ToolOrchestrator', () => {
 
 ## Architecture Overview
 
-Code Buddy is an open-source multi-provider AI coding agent that runs in the terminal. It supports multiple LLM backends (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio) via OpenAI-compatible APIs and provider-specific SDKs. The core pattern is an **agentic loop** where the AI autonomously calls tools to complete tasks. It features multi-channel messaging (Telegram, Discord, Slack), a SKILL.md natural language skills system, pipeline workflows, DM pairing security, OpenClaw-inspired concurrency control, daemon mode for 24/7 background operation, DAG-based task planning, screen observation with event triggers, proactive agent communication, multi-agent orchestration with self-healing, voice conversation with multi-provider TTS (Edge TTS, OpenAI, ElevenLabs, AudioReader/Kokoro-82M), Gemini vision support (image_url → inlineData conversion), model failover chain, webhook triggers, Docker sandbox, skills registry with 40 bundled SKILL.md files, media pipeline, ACP inter-agent protocol, extension system, live canvas (A2UI), copilot proxy, and onboarding wizard + doctor diagnostics.
+Code Buddy is an open-source multi-provider AI coding agent that runs in the terminal. It supports multiple LLM backends (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio) via OpenAI-compatible APIs and provider-specific SDKs. The core pattern is an **agentic loop** where the AI autonomously calls tools to complete tasks. It features multi-channel messaging (Telegram, Discord, Slack), a SKILL.md natural language skills system, pipeline workflows, DM pairing security, OpenClaw-inspired concurrency control, daemon mode for 24/7 background operation, DAG-based task planning, screen observation with event triggers, proactive agent communication, multi-agent orchestration with self-healing, voice conversation with multi-provider TTS (Edge TTS, OpenAI, ElevenLabs, AudioReader/Kokoro-82M), Gemini vision support (image_url → inlineData conversion), model failover chain, webhook triggers, Docker sandbox, skills registry with 40 bundled SKILL.md files, media pipeline, ACP inter-agent protocol, extension system, live canvas (A2UI), copilot proxy, **Open Manus / CodeAct** autonomy (dynamic script execution in Docker), **Persistent Planning** (PLAN.md), onboarding wizard + doctor diagnostics, **run observability** (JSONL event store, timeline replay), **pro channel features** (scoped auth, diff-first, CI watcher), and **golden-path dev workflows** (`buddy dev plan|run|pr|fix-ci`).
 
 ### Core Flow
 
@@ -68,6 +68,15 @@ User Input --> ChatInterface (Ink/React) --> CodeBuddyAgent --> LLM Provider
                                                    |
                                             Results back to API (loop)
 ```
+
+### CodeAct Workflow
+
+For complex tasks, Code Buddy follows a structured **PLAN → THINK → CODE → OBSERVE → UPDATE** loop:
+1. **PLAN:** Maintain persistent state in `PLAN.md` via `PlanTool`.
+2. **THINK:** Break down logic and dependencies.
+3. **CODE:** Generate and execute scripts (Python/TS) via `RunScriptTool` in a Docker sandbox.
+4. **OBSERVE:** Analyze `stdout`/`stderr` and self-correct if necessary.
+5. **UPDATE:** Mark progress in `PLAN.md` and proceed.
 
 ### Facade Architecture
 
@@ -166,6 +175,11 @@ CodeBuddyAgent
 - `src/extensions/extension-loader.ts` - Manifest-based extension system
 - `src/copilot/copilot-proxy.ts` - IDE-compatible completions proxy
 - `src/tools/apply-patch.ts` - Unified diff parser/applier (Codex-inspired, model outputs diffs instead of full files)
+- `src/tools/run-script-tool.ts` - **CodeAct** execution engine (Python/TS/shell scripts in Docker sandbox)
+- `src/tools/plan-tool.ts` - **Persistent Planning** tool (PLAN.md with checkbox status: `[ ]` pending, `[/]` in-progress, `[x]` done, `[-]` skipped)
+- `src/tools/registry/plan-tools.ts` - Factory that registers PlanTool in the tool registry
+- `src/tools/registry/script-tools.ts` - Factory that registers RunScriptTool in the tool registry
+- `src/agent/repo-profiler.ts` - Auto-detects repo languages/frameworks/build commands; injects compact `contextPack` into agent system prompt; caches to `.codebuddy/repoProfile.json`
 - `src/agent/turn-diff-tracker.ts` - Per-turn file change tracking with rollback support
 - `src/agent/history-repair.ts` - Message history self-repair (fixes orphaned tool results, malformed sequences)
 - `src/agent/cache-trace.ts` - Prompt construction debugging (enable via `CACHE_TRACE=true`)
@@ -174,8 +188,55 @@ CodeBuddyAgent
 - `src/persistence/session-lock.ts` - PID-based session file locking (prevents concurrent writes)
 - `src/security/skill-scanner.ts` - Static analysis of skill files for dangerous patterns
 - `src/security/bash-parser.ts` - AST-based bash command parsing (tree-sitter with regex fallback)
+- `src/security/write-policy.ts` - Singleton enforcing diff-first writes; three modes: `strict` (blocks direct writes, forces `apply_patch`), `confirm` (logs), `off`
 - `src/utils/rtk-compressor.ts` - RTK command proxy (wraps bash commands with `rtk` for 60-90% token reduction)
 - `src/memory/icm-bridge.ts` - ICM MCP server bridge for persistent cross-session memory
+- `src/observability/run-store.ts` - JSONL event store per agent run (`.codebuddy/runs/run_<id>/`); tracks tool calls, patches, decisions, tokens/cost; auto-prunes to 30 runs; `streamEvents()` for live tailing
+- `src/observability/run-viewer.ts` - Terminal display: `showRun()`, `tailRun()`, `replayRun()`, `listRuns()`
+- `src/channels/pro/` - Enterprise pro features (lazy-loaded); compose via `ProFeatures` facade
+  - `pro-features.ts` - Dispatcher for `/repo`, `/branch`, `/pr`, `/task`, `/yolo`, `/runs`, `/run`, `/pins`
+  - `scoped-auth.ts` - Tiered permissions (read-only → write-patch → run-tests → deploy), secret handles, temporary grants; persists to `~/.codebuddy/channel-scoped-auth.json`
+  - `diff-first.ts` - Pending code-change previews with 30-min expiry, `onApply`/`onCancel` callbacks
+  - `run-tracker.ts` - Run records with step timelines, artifacts, cost; persists to `~/.codebuddy/channel-runs/`; supports replay/rollback
+  - `run-commands.ts` - `/runs` and `/run <id>` command handlers with permission gating
+  - `ci-watcher.ts` - CI pipeline monitoring (GitHub Actions, GitLab CI, Jenkins, webhooks); deduplication, mute patterns, LLM cause analysis
+  - `enhanced-commands.ts` - `/repo`, `/branch`, `/pr`, `/task`, `/pins` handlers with git/GitHub API
+  - `callback-router.ts` - Routes channel callback queries (diff apply/cancel, run re-run, CI fix/mute, pin ops)
+- `src/channels/telegram/pro-formatter.ts` - Telegram-specific ChannelProFormatter; uses short callback prefixes (`da_`, `dv_`, etc.) to fit Telegram's 64-byte `callback_data` limit
+- `src/commands/dev/` - Golden-path developer workflows
+  - `index.ts` - `buddy dev` subcommands: `plan`, `run`, `pr`, `fix-ci`, `explain`; enforces WritePolicy.strict + RunStore recording
+  - `workflows.ts` - 4 named workflows (add-feature, fix-tests, refactor, security-audit): plan-first, test-after, artifact generation
+- `src/commands/run-cli/index.ts` - `buddy run` subcommands: `list`, `show <id>`, `tail <id>`, `replay <id>`
+- `src/knowledge/knowledge-manager.ts` - Knowledge base (Manus AI-inspired): loads `Knowledge.md` from project + `~/.codebuddy/knowledge/`, frontmatter with `title`/`tags`/`scope`/`priority`, injected as `<knowledge>` block into system prompt at startup
+- `src/tools/ask-human-tool.ts` + `knowledge-tools.ts` - `ask_human` ITool: pauses agent via readline mid-task; 120s auto-timeout; for channels returns default answer when non-interactive
+- `src/tools/create-skill-tool.ts` + `knowledge-tools.ts` - `create_skill` ITool: agent self-authors new SKILL.md to `.codebuddy/skills/workspace/`; hot-reloaded by SkillRegistry (OpenClaw self-authoring)
+- `src/tools/registry/knowledge-tools.ts` - Registers `knowledge_search`, `knowledge_add`, `ask_human`, `create_skill` tools; also wired into `createAllToolsAsync()`
+- `src/agent/wide-research.ts` - Wide Research (Manus AI-inspired): decomposes topic → N subtopics (LLM), spawns parallel CodeBuddyAgent workers, aggregates into final report; `WideResearchOrchestrator` emits progress events
+- `src/commands/pairing.ts` - `buddy pairing` CLI: `status`, `list`, `pending`, `approve <code>`, `add`, `revoke` — wraps DMPairingManager (already implemented, now CLI-accessible)
+- `src/commands/knowledge.ts` - `buddy knowledge` CLI: `list`, `show`, `search`, `add`, `remove`, `context`
+- `src/commands/research/index.ts` - `buddy research "<topic>"` CLI: `--workers N`, `--rounds N`, `--output <file>`, streams progress events
+- `src/agent/todo-tracker.ts` - Manus AI attention bias: singleton `TodoTracker` per working dir; `buildContextSuffix()` injected at END of preparedMessages in both sequential and streaming agent-executor paths each turn; `getTodoTracker(cwd)` factory
+- `src/context/restorable-compression.ts` - Manus AI restorable compression: extracts file/URL/tool-call-ID identifiers from dropped messages, stores full content, `restore(identifier)` → content; `getRestorableCompressor()` singleton; eviction at 10 MB; `writeToolResult(callId, content)` persists full tool outputs to `.codebuddy/tool-results/<callId>.txt` for disk-backed dual-representation
+- `src/context/observation-variator.ts` - Manus AI anti-repetition: rotates 3 tool-result presentation templates and 3 memory-block phrasings per agent turn using `turnIndex % N`; `getObservationVariator()` singleton; integrated in `agent-executor.ts` (both paths)
+- `src/security/shell-env-policy.ts` - Codex-inspired subprocess env control: `ShellEnvPolicy` with `inherit`/`exclude`/`include_only`/`set` config; strips credential-like vars by default; configurable via `[shell_env]` in config.toml; `getShellEnvPolicy()` singleton
+- `src/context/precompaction-flush.ts` - OpenClaw NO_REPLY flush: silent LLM turn before context compaction saves durable facts to MEMORY.md; `NO_REPLY` sentinel (≤ 300 chars) suppresses output; triggered from both agent-executor paths when `shouldWarn()` fires
+- `src/tools/registry/attention-tools.ts` - Registers `todo_update` (add/complete/update/remove/clear_done/list) + `restore_context` tools; `createAttentionTools()` factory
+- `src/commands/todos.ts` - `buddy todo` CLI: `list`, `add <text>`, `done <id>`, `update <id>`, `remove <id>`, `clear-done`, `context`
+- `src/daemon/daily-reset.ts` - OpenClaw daily context boundary: clears message history at configurable hour (default 04:00), preserves MEMORY.md/files, posts a boundary marker; `getDailyResetManager()` singleton started by daemon
+- `src/prompts/variation-injector.ts` - Manus AI structured variation: shuffles guideline blocks + applies phrasing alternatives with day-scoped seed (stable within a day for KV cache, rotates across days); integrated in `PromptBuilder.buildSystemPrompt()`
+- `src/config/toml-config.ts` - named config profiles: `[profiles.<name>]` sections in config.toml deep-merged over base config; `ConfigManager.applyProfile(name)` + `buddy --profile <name>` CLI flag
+- `src/context/enhanced-compression.ts` - Fixed `detectContentType()` to classify failed tool results (`"success": false`) as `'error'` type so `preserveErrors: true` actually retains them during compaction
+- `src/sandbox/os-sandbox.ts` - `SandboxMode` enum (`read-only | workspace-write | danger-full-access`); `getWorkspaceRoot(cwd)` via git; `createSandboxConfigForMode(mode, cwd)` / `createSandboxForMode(mode)` factory; `.git/.codebuddy` always read-only in workspace-write mode
+- `src/tools/bash/bash-tool.ts` - `BashTool.shellFreeExec(argv, timeout?, cwd?)` — Codex shell-free exec via `spawn({ shell: false })` on pre-parsed argv token array (prevents shell injection)
+- `src/channels/streaming-policy.ts` - Per-channel streaming policies: `ChannelStreamingPolicy` interface, `StreamingChunker` class, built-in defaults for Telegram/Discord/Slack/WhatsApp/Signal/Matrix/WebChat/Teams; `setChannelPolicy(id, policy)` / `getChannelPolicy(id)` registry
+- `src/security/ssrf-guard.ts` - SSRF guard with IPv4 (octal/hex/short) + IPv6 (NAT64/6to4/Teredo/IPv4-mapped) bypass blocking; async `isSafeUrl(url)` with DNS resolution; `assertSafeUrl(url)` throws `SSRFError`; integrated into `FetchTool`
+- `src/utils/stable-json.ts` - Stable (key-sorted) JSON serialization: `stableStringify(value)` + `normalizeJson(json)` for KV-cache-friendly prompt segments
+- `src/optimization/cache-breakpoints.ts` - Anthropic prompt cache breakpoints: `buildStableDynamicSplit()`, `injectAnthropicCacheBreakpoints(messages)` — 10× cost saving on cached prompt prefix
+- `src/agent/response-constraint.ts` - Response prefill modes: `ResponseConstraint` (auto/required/specified), `ResponseConstraintStack`, `resolveToolChoice()` → OpenAI `tool_choice`; integrated in agent-executor (both paths)
+- `src/sandbox/execpolicy.ts` - Extended with `PrefixRule` (token-array exact-prefix matching), `addPrefixRule()`, `evaluateArgv()` — prefix rules checked before regex/glob rules
+- `src/commands/execpolicy.ts` - `buddy execpolicy` CLI: `check`, `check-argv`, `list`, `list-prefix`, `add-prefix`, `show-dangerous`, `dashboard`
+- `src/observability/run-store.ts` - `forkRun(parentRunId, reason)` for session fork/rollout unification; `RunMetadata.parentRolloutId` + `forkReason` for lineage tracking
+- `src/tools/registry/tool-aliases.ts` - Codex-style canonical tool aliases (`shell_exec`, `file_read`, `browser_search`, etc.); `createAliasTools(primaryTools)` wrappers; `toCanonicalName()` / `toLegacyName()` / `TOOL_ALIASES` / `CANONICAL_NAME` maps; registered in `createAllToolsAsync()`
 
 ### Tool Implementation Pattern
 

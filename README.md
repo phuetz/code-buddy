@@ -55,7 +55,17 @@ It works as two things at once:
 - Daemon mode for 24/7 background operation
 - Multi-agent orchestration with self-healing
 - Voice conversation with wake word detection
-- Docker sandbox for safe command execution
+- OS sandbox with workspace-write mode (read-only / workspace-write / danger-full-access tiers)
+- Docker sandbox for untrusted code execution
+- Knowledge base injection (Knowledge.md files loaded into agent system prompt)
+- Wide Research mode (parallel sub-agents decompose and research topics concurrently)
+- Todo.md attention bias (task list appended to end of every LLM context turn — Manus AI pattern)
+- Restorable context compression (identifiers preserved, full content recoverable on demand)
+- Pre-compaction memory flush (facts saved to MEMORY.md before context is compacted — OpenClaw pattern)
+- Anthropic prompt cache breakpoints (stable/dynamic split → 10× token cost savings)
+- Per-channel streaming policies (Telegram, Discord, Slack, WhatsApp each get their own chunking/format rules)
+- SSRF guard on all outbound fetches (IPv4 + IPv6 bypass vector blocking)
+- Tool prefix naming convention (`shell_exec`, `file_read`, `browser_search`, … — Codex-style canonical aliases)
 
 ---
 
@@ -65,6 +75,7 @@ It works as two things at once:
 
 - **Node.js** 18.0.0 or higher
 - **ripgrep** (recommended for faster search)
+- **Docker** (required for CodeAct / Open Manus mode)
 
 ```bash
 # macOS
@@ -185,11 +196,15 @@ Code Buddy operates as an autonomous coding agent. It reads your codebase, makes
 | **File Operations** | `view_file`, `create_file`, `str_replace_editor`, `edit_file`, `multi_edit` |
 | **Search** | `search`, `codebase_map` |
 | **System** | `bash`, `docker`, `kubernetes` |
+| **CodeAct** | `run_script` (Python/JS/TS in Docker), `plan` (Persistent Planner) |
 | **Web** | `web_search`, `web_fetch`, `browser` |
 | **Patching** | `apply_patch` (unified diff with fuzz factor, Codex-inspired) |
 | **Planning** | `create_todo_list`, `get_todo_list`, `update_todo_list` |
 | **Media** | `screenshot`, `audio`, `video`, `ocr`, `clipboard` |
 | **Documents** | `pdf`, `document`, `archive` |
+| **Knowledge** | `knowledge_search`, `knowledge_add` — search/add knowledge base entries |
+| **Human Input** | `ask_human` — pause execution for mid-task user clarification (120s timeout) |
+| **Self-Extension** | `create_skill` — write new SKILL.md files at runtime (self-authoring) |
 
 **RAG-based tool selection** filters tools per query to reduce prompt tokens — only relevant tools are included in each API call.
 
@@ -210,6 +225,58 @@ Search parameters: `country` (ISO 3166), `search_lang`, `ui_lang`, `freshness` (
 **Context management** uses smart multi-stage compaction (remove stale tool results, summarize older messages, aggressive truncation) to keep conversations within token limits across long sessions.
 
 **Hybrid search** combines keyword + semantic search with configurable weights for memory retrieval.
+
+### 🚀 Open Manus Features (CodeAct)
+
+Code Buddy implements the **Open Manus / CodeAct** architecture in a structured, phased approach, allowing it to write and execute code (Python, TypeScript, Node.js) in a secure Docker sandbox instead of relying solely on pre-defined tools.
+
+**Phase 1: Sandboxed Execution (Hybrid Agent)**
+*   **RunScriptTool:** Writes and runs scripts in ephemeral Docker containers (`ubuntu:latest`, `node:22-slim`, `python:3.11-slim`).
+*   **Browser Automation:** Uses `Playwright` in Docker to scrape websites, interact with SPAs, and take screenshots programmatically.
+*   **Safety First:** Timeout (120s), Memory Limit (1GB), and ephemeral containers prevent runaway processes.
+
+**Phase 2: Persistent State & Planning**
+*   **Persistent Workspace:** Files created in `.codebuddy/workspace` persist between script executions, allowing multi-step workflows (e.g., scrape → save CSV → analyze CSV → plot chart).
+*   **PlanTool:** The agent maintains a `PLAN.md` file in your project root to track complex, multi-step objectives statefully.
+*   **Structured Loop:** The system prompt enforces a strict **PLAN → THINK → CODE → OBSERVE → UPDATE** cognitive cycle to prevent chaotic behavior.
+
+**Phase 3: Wide Research (Parallel Agents)**
+*   **WideResearchOrchestrator:** Decomposes a topic into N independent subtopics via LLM, spawns N parallel CodeBuddyAgent workers (default: 5, max: 20), then aggregates results into a single comprehensive report.
+*   **Progress streaming:** Emits real-time events as each worker completes.
+*   **CLI:** `buddy research "quantum computing breakthroughs" --workers 8 --output report.md`
+
+**Phase 4: Context Engineering (Manus AI + OpenClaw patterns)**
+
+*   **Todo.md Attention Bias** — The agent maintains a `todo.md` task list that is automatically appended at the **end** of the LLM context on every turn. Because transformers attend more strongly to recent tokens, this keeps objectives in focus across long sessions without modifying the system prompt. Use `buddy todo add/done/list` or the `todo_update` tool.
+*   **Restorable Compression** — When the context window is compressed, file paths and URLs are extracted as identifiers and the original content is stored. The agent can call `restore_context("src/agent/types.ts")` to retrieve the full content on demand, making compression lossless for structured identifiers.
+*   **Pre-compaction Memory Flush (NO_REPLY)** — Before compaction triggers, a silent background LLM turn extracts durable facts and saves them to `MEMORY.md`. If the model returns the `NO_REPLY` sentinel with no meaningful content, the output is suppressed entirely (no notification spam).
+*   **Inline Citations** — Web search results now include `[1]` `[2]` citation markers inline and a **Sources** block listing all referenced URLs.
+
+**Example Prompts:**
+
+```bash
+> "Go to Google News, scrape the top headlines about AI, save them to a CSV, and then use Python to analyze the sentiment."
+> "Write a script to check broken links on my documentation site."
+> "Calculate the Fibonacci sequence up to 1000 and plot the growth rate."
+```
+
+### 🧬 Roots & Comparison
+
+Code Buddy is an evolution of the **OpenClaw** architecture, modernized for the TypeScript ecosystem and enhanced with **Open Manus** (CodeAct) autonomy.
+
+| Feature | OpenClaw | Code Buddy | Open Manus |
+|:---|:---|:---|:---|
+| **Language** | Python | **TypeScript / Node.js** | Python |
+| **Philosophy** | Tool-Based | **Hybrid (Tool + CodeAct)** | Pure CodeAct |
+| **Messaging** | Multi-channel | **11+ Channels (Telegram focus)** | Web Interface |
+| **Task State** | Heartbeat | **Persistent PLAN.md + Workspace** | Transient Session |
+| **Concurrency** | Lane Queue | **Advanced Lane Queue + DAG** | Sequential |
+| **Extensibility** | SKILL.md | **Skills Hub + Plugins + MCP** | Custom Scripts |
+
+**Why Code Buddy?**
+It combines the **industrial-grade reliability** of OpenClaw (concurrency control, security policies, multi-channel messaging) with the **infinite flexibility** of Open Manus (dynamic script generation and execution).
+
+> **Manus AI influence:** Wide Research (parallel sub-agent research workers), Knowledge Base injection, **todo.md attention bias** (task list at end of context each turn), and **restorable context compression** (identifier-based content recovery) are all inspired by Manus AI's context engineering research. The **pre-compaction NO_REPLY flush** pattern is from OpenClaw's compaction documentation.
 
 ### Code Safety
 
@@ -317,6 +384,24 @@ buddy speak --url http://host:8000 "Hello"    # Custom AudioReader URL
 
 **Memory lifecycle hooks** inject relevant memories before execution, capture important info after responses, and summarize conversations at session end. Deduplication via Jaccard similarity (0.95 threshold) prevents duplicates.
 
+### Knowledge Base
+
+Domain knowledge injected into the agent system prompt at startup (`src/knowledge/knowledge-manager.ts`):
+
+* **Sources:** `Knowledge.md` (project root), `.codebuddy/knowledge/*.md` (project-level), `~/.codebuddy/knowledge/*.md` (global)
+* **YAML frontmatter:** `title`, `tags`, `scope` (restrict to specific agent modes), `priority` (injection order)
+* **Agent tools:** `knowledge_search` (keyword search across all entries), `knowledge_add` (persist new knowledge to disk)
+* **Injection:** Loaded entries are wrapped in a `<knowledge>` block and included in the system prompt automatically.
+
+```bash
+buddy knowledge list             # List all loaded knowledge entries
+buddy knowledge show <title>     # Show a specific entry
+buddy knowledge search "TypeScript conventions"
+buddy knowledge add              # Interactive: add a new knowledge entry
+buddy knowledge remove <title>   # Remove an entry
+buddy knowledge context          # Show the full <knowledge> block the agent sees
+```
+
 ### Skills Library (40 Bundled Skills)
 
 Code Buddy includes 40 built-in SKILL.md files that provide domain-specific knowledge, best practices, and MCP server integration. Skills are loaded contextually when relevant to your project.
@@ -365,6 +450,8 @@ Code Buddy includes 40 built-in SKILL.md files that provide domain-specific know
 | | `smart-home` | Philips Hue and Home Assistant control |
 
 Each skill includes **Direct Control** (CLI/API/scripting commands), **MCP Server Integration** (config for `.codebuddy/mcp.json`), and **Common Workflows** (step-by-step recipes). Skills are stored in `.codebuddy/skills/bundled/` and can be extended with managed or workspace skills via the Skills Registry and Hub.
+
+**Self-authoring skills:** The agent can extend its own skill set at runtime using the `create_skill` tool, writing new SKILL.md files to `.codebuddy/skills/workspace/`. The SkillRegistry hot-reloads them within ~250ms, so newly created skills are immediately available without restarting.
 
 ### Proactive Notifications
 
@@ -511,10 +598,21 @@ Add feature + tests + PR:
 Prevents unauthorized users from consuming API credits:
 
 1. Unknown user messages the bot → receives a **6-character pairing code** (expires in 15 min)
-2. Bot owner approves: `/pairing approve telegram ABC123`
+2. Bot owner approves via CLI: `buddy pairing approve --channel telegram ABC123`
 3. User is added to the persistent allowlist (`~/.codebuddy/credentials/telegram-allowFrom.json`)
 
 Security features: rate limiting (5 failed attempts → 1h block), per-channel allowlists, admin bypass.
+
+**Pairing CLI commands:**
+
+```bash
+buddy pairing status             # Show pairing system status
+buddy pairing list               # List all approved users
+buddy pairing pending            # List pending pairing requests
+buddy pairing approve <code>     # Approve a pairing request by code
+buddy pairing add <id>           # Manually add a user to the allowlist
+buddy pairing revoke <id>        # Revoke access for a user
+```
 
 ### Other Channels
 
@@ -741,6 +839,42 @@ const bashPolicy = new BashAllowlist({
 - **Trust folders** — directory-level tool permissions via `.codebuddy-trust.json`
 - **Agent profiles** — predefined configs: `secure` (read-only), `minimal`, `power-user`
 - **Per-model tool config** — capabilities, context window, and patch format per model family
+
+### OS Sandbox — Workspace-Write Mode
+
+Three sandbox tiers for native OS-level isolation (Codex-inspired):
+
+| Mode | Write Access | Use Case |
+|:-----|:------------|:---------|
+| `read-only` | None | Untrusted analysis tasks |
+| `workspace-write` | Git workspace root only | Normal development (default) |
+| `danger-full-access` | Unrestricted | Deployment/release scripts |
+
+`.git`, `.codebuddy`, `.ssh`, `.gnupg`, `.aws` are **always read-only** regardless of mode.
+
+```typescript
+const sandbox = await createSandboxForMode('workspace-write', '/my/project');
+await sandbox.exec('npm', ['test']);
+```
+
+### Exec Policy — Prefix Rules
+
+Codex-inspired command authorization with token-array prefix matching (safer than regex — bypasses quoting/encoding tricks):
+
+```bash
+buddy execpolicy check "git push --force"          # evaluate a shell string
+buddy execpolicy check-argv git push --force       # token-array (prefix rules first)
+buddy execpolicy add-prefix git push --action deny # block git push with longest-match
+buddy execpolicy dashboard                         # full policy overview
+```
+
+### SSRF Guard
+
+Comprehensive Server-Side Request Forgery protection on all outbound HTTP calls:
+- Blocks RFC-1918 private ranges + loopback + link-local
+- Blocks IPv4 bypass vectors: octal (`0177.0.0.1`), hex (`0x7f000001`), short form (`127.1`)
+- Blocks IPv6 transition addresses: NAT64 (`64:ff9b::/96`), 6to4, Teredo, IPv4-mapped (`::ffff:127.0.0.1`)
+- Async DNS resolution check before every fetch
 
 ### Docker Sandbox
 
@@ -1095,6 +1229,24 @@ buddy security-audit [--deep] [--fix] [--json]
 # Voice
 buddy speak [text] [--voice <name>] [--list-voices] [--speed <n>] [--format <fmt>]
 
+# Knowledge Base
+buddy knowledge list|show|search|add|remove|context
+
+# DM Pairing
+buddy pairing status|list|pending|approve <code>|add <id>|revoke <id>
+
+# Wide Research
+buddy research "<topic>" [--workers N] [--rounds N] [--output file.md]
+
+# Task List (todo.md attention bias — injected at end of every agent turn)
+buddy todo list                     # Show all items
+buddy todo add "task description" [-p high|medium|low]
+buddy todo done <id>                # Mark completed
+buddy todo update <id> [-s in_progress] [-t "new text"]
+buddy todo remove <id>              # Delete item
+buddy todo clear-done               # Remove all completed
+buddy todo context                  # Preview the block injected into the agent
+
 # Setup
 buddy onboard          # Interactive setup wizard
 buddy doctor           # Environment diagnostics
@@ -1255,8 +1407,8 @@ Code Buddy's architecture draws from these open-source projects:
 | Project | Inspiration | Key Files |
 |:--------|:------------|:----------|
 | **[OpenClaw](https://github.com/openclaw/openclaw)** | Multi-channel messaging, DM pairing, lane queue concurrency, memory lifecycle, tool policy, skills system, heartbeat, identity system, group security, hub marketplace | 40+ files across `src/channels/`, `src/concurrency/`, `src/memory/`, `src/security/`, `src/skills/` |
-| **[OpenAI Codex CLI](https://github.com/openai/codex)** | Apply-patch unified diff, head/tail truncation, per-model tool config, turn diff tracker, security modes, sandbox | `src/tools/apply-patch.ts`, `src/utils/head-tail-truncation.ts`, `src/config/model-tools.ts` |
-| **[Claude Code](https://github.com/anthropics/claude-code)** | Hook system, slash commands, MCP config, extended thinking, parallel subagents, headless output | `src/hooks/`, `src/commands/slash-commands.ts`, `src/mcp/config.ts`, `src/agent/subagents.ts` |
+| **[OpenAI Codex CLI](https://github.com/openai/codex)** | Apply-patch unified diff, head/tail truncation, per-model tool config, turn diff tracker, security modes, OS sandbox workspace-write tiers, shell-free exec, SSRF guard, exec policy prefix rules, shell env policy, named config profiles, tool prefix naming convention, stable JSON serialization, session fork/rollout unification | `src/tools/apply-patch.ts`, `src/sandbox/os-sandbox.ts`, `src/security/ssrf-guard.ts`, `src/sandbox/execpolicy.ts`, `src/tools/registry/tool-aliases.ts`, `src/utils/stable-json.ts`, `src/observability/run-store.ts` |
+| **[Claude Code](https://github.com/anthropics/claude-code)** | Hook system, slash commands, MCP config, extended thinking, parallel subagents, headless output, Anthropic prompt cache breakpoints | `src/hooks/`, `src/commands/slash-commands.ts`, `src/mcp/config.ts`, `src/optimization/cache-breakpoints.ts` |
 | **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** | Persistent checkpoints, context files, compress command, shell prefix, multimodal input | `src/checkpoints/`, `src/context/context-files.ts`, `src/input/multimodal-input.ts` |
 | **[Aider](https://github.com/paul-gauthier/aider)** | Repository map, voice input, unified diff editor, watch mode (IDE comments) | `src/context/repository-map.ts`, `src/tools/voice-input.ts`, `src/commands/watch-mode.ts` |
 | **[Cursor](https://www.cursor.com/)** | `.cursorrules` config, parallel agent system, sandboxed terminals, embedded browser | `src/config/codebuddyrules.ts`, `src/agent/parallel/`, `src/browser/embedded-browser.ts` |
@@ -1264,6 +1416,8 @@ Code Buddy's architecture draws from these open-source projects:
 | **[Conductor](https://github.com/conductor-is/conductor)** | Spec-driven development, track system | `src/tracks/` |
 | **[RTK](https://github.com/rtk-ai/rtk)** | Command proxy for 60-90% token reduction | `src/utils/rtk-compressor.ts` |
 | **[ICM](https://github.com/rtk-ai/icm)** | Persistent cross-session memory via MCP | `src/memory/icm-bridge.ts` |
+| **[Manus AI](https://manus.im)** | Wide Research (parallel sub-agent research workers), Knowledge Base injection, todo.md attention bias, restorable context compression, pre-compaction NO_REPLY flush, inline web-search citations, observation variator (anti-repetition), structured prompt variation, tool result compaction guard, disk-backed tool results, response prefill modes (tool_choice control), WebSearchMode + domain policy, message queue debounce/cap/overflow | `src/agent/wide-research.ts`, `src/context/observation-variator.ts`, `src/agent/response-constraint.ts`, `src/tools/web-search.ts`, `src/agent/message-queue.ts` |
+| **[OpenClaw](https://github.com/openclaw/openclaw)** | Multi-channel messaging, DM pairing, lane queue concurrency, memory lifecycle, tool policy, skills system, heartbeat, identity system, group security, hub marketplace, daily session reset, per-channel streaming policies | `src/channels/streaming-policy.ts`, `src/channels/`, `src/skills/`, `src/daemon/daily-reset.ts` |
 
 **Other influences:** Rust (Result<T, E> pattern), AutoGPT, MetaGPT, CrewAI, ChatDev (role-based multi-agent), ReAct (reasoning + acting paradigm), Qodo/PR-Agent (RAG for code repos).
 

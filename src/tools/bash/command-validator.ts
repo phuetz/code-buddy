@@ -6,6 +6,7 @@
  * - hasShellBypassFeatures: Detects shell features that could bypass validation
  * - validateCommand: Full security validation pipeline
  * - getFilteredEnv: Environment variable filtering for child processes
+ *   (uses ShellEnvPolicy for user-configurable overrides — Codex-inspired #8)
  */
 
 import {
@@ -248,6 +249,11 @@ export function getFilteredEnv(): Record<string, string> {
 
     filtered[key] = sanitized;
   }
+
+  // Note: ShellEnvPolicy (src/security/shell-env-policy.ts) provides a
+  // user-configurable layer on top of this base filter for `set` overrides
+  // (e.g. NODE_ENV=production injected into every subprocess). Callers can
+  // apply it after getFilteredEnv() if needed.
 
   return filtered;
 }

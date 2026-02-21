@@ -34,3 +34,11 @@ export {
   type HealthMetrics,
   type HealthMonitorConfig,
 } from './health-monitor.js';
+
+export {
+  DailyResetManager,
+  getDailyResetManager,
+  resetDailyResetManager,
+  type DailyResetConfig,
+  type ResetResult,
+} from './daily-reset.js';

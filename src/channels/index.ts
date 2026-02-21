@@ -935,6 +935,18 @@ export type { WebChatConfig } from './webchat/index.js';
 export { ReconnectionManager } from './reconnection-manager.js';
 export type { ReconnectionConfig, ReconnectionEvents } from './reconnection-manager.js';
 
+// Pro Features (channel-agnostic)
+export { ProFeatures, TextProFormatter } from './pro/index.js';
+export type {
+  ProFeaturesConfig,
+  ChannelProFormatter,
+  ProFormattedMessage,
+  AuthScope,
+  DiffFirstConfig,
+  CIWatchConfig,
+  CommandEntry,
+} from './pro/index.js';
+
 // Offline Queue
 export { OfflineQueue } from './offline-queue.js';
 export type { QueuedMessage } from './offline-queue.js';

@@ -132,6 +132,20 @@ export interface IntegrationsConfig {
 }
 
 /**
+ * Named configuration profile — a subset of config keys applied on top of the base config.
+ * Activate with: `buddy --profile <name>`
+ *
+ * Example in .codebuddy/config.toml:
+ *   [profiles.deep-review]
+ *   active_model = "claude-opus"
+ *   [profiles.deep-review.agent]
+ *   yolo_mode = false
+ *   [profiles.deep-review.middleware]
+ *   max_turns = 200
+ */
+export type ProfileConfig = Partial<Omit<CodeBuddyConfig, 'profiles'>>;
+
+/**
  * Full configuration structure
  */
 export interface CodeBuddyConfig {
@@ -151,6 +165,8 @@ export interface CodeBuddyConfig {
   agent: AgentBehaviorConfig;
   /** External integrations */
   integrations: IntegrationsConfig;
+  /** Named configuration profiles (activated via --profile <name>) */
+  profiles?: Record<string, ProfileConfig>;
 }
 
 // ============================================================================
@@ -738,6 +754,24 @@ class ConfigManager {
       throw new Error(`Model "${modelName}" not found`);
     }
     this.config.active_model = modelName;
+  }
+
+  /**
+   * Apply a named profile on top of the current config.
+   * Profile keys are deep-merged the same way as file configs.
+   * Throws if the profile name is not defined.
+   */
+  applyProfile(profileName: string): void {
+    const cfg = this.getConfig();
+    const profile = cfg.profiles?.[profileName];
+    if (!profile) {
+      throw new Error(
+        `Profile "${profileName}" not found. ` +
+        `Available profiles: ${Object.keys(cfg.profiles ?? {}).join(', ') || '(none defined)'}`
+      );
+    }
+    this.mergeConfig(profile);
+    logger.info(`Applied config profile: ${profileName}`, { source: 'ConfigManager' });
   }
 
   /**

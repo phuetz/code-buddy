@@ -91,6 +91,41 @@ export {
   resetProcessInstance,
 } from './process-tools.js';
 
+// Tool Adapters - Script
+export {
+  createScriptTools,
+} from './script-tools.js';
+
+// Tool Adapters - Plan
+export {
+  createPlanTools,
+} from './plan-tools.js';
+
+// Tool Adapters - Knowledge, AskHuman, CreateSkill
+export {
+  KnowledgeSearchTool,
+  KnowledgeAddTool,
+  AskHumanExecuteTool,
+  CreateSkillExecuteTool,
+  createKnowledgeTools,
+} from './knowledge-tools.js';
+
+// Tool Adapters - Attention (Todo + RestoreContext)
+export {
+  TodoAttentionTool,
+  RestoreContextTool,
+  createAttentionTools,
+} from './attention-tools.js';
+
+// Tool Prefix Naming Convention — Codex-inspired canonical aliases
+export {
+  createAliasTools,
+  toCanonicalName,
+  toLegacyName,
+  TOOL_ALIASES,
+  CANONICAL_NAME,
+} from './tool-aliases.js';
+
 // Types
 export type {
   // JSON Schema
@@ -118,7 +153,9 @@ export type {
 } from './types.js';
 
 /**
- * Create all tool instances for registration (async for lazy loading)
+ * Create all tool instances for registration (async for lazy loading).
+ * Also registers canonical-prefix alias tools (shell_*, file_*, browser_*, etc.)
+ * for Codex-style tool naming convention.
  */
 export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createTextEditorTools } = await import('./text-editor-tools.js');
@@ -131,8 +168,13 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createGitTools } = await import('./git-tools.js');
   const { createMiscTools } = await import('./misc-tools.js');
   const { createProcessTools } = await import('./process-tools.js');
+  const { createKnowledgeTools } = await import('./knowledge-tools.js');
+  const { createScriptTools } = await import('./script-tools.js');
+  const { createPlanTools } = await import('./plan-tools.js');
+  const { createAttentionTools } = await import('./attention-tools.js');
+  const { createAliasTools } = await import('./tool-aliases.js');
 
-  return [
+  const primaryTools: ITool[] = [
     ...createTextEditorTools(),
     ...createBashTools(),
     ...createSearchTools(),
@@ -143,7 +185,16 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createGitTools(),
     ...createMiscTools(),
     ...createProcessTools(),
+    ...createKnowledgeTools(),
+    ...createScriptTools(),
+    ...createPlanTools(),
+    ...createAttentionTools(),
   ];
+
+  // Register backward-compat canonical-prefix aliases (shell_exec, file_read, etc.)
+  const aliasTools = createAliasTools(primaryTools);
+
+  return [...primaryTools, ...aliasTools];
 }
 
 // Import ITool type for return type

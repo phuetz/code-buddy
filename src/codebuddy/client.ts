@@ -808,9 +808,22 @@ export class CodeBuddyClient {
       // Disable tools for local inference (LM Studio) as they may not support function calling
       const useTools = !this.isLocalInference() && tools && tools.length > 0;
 
+      // Inject Anthropic prompt-cache breakpoints (Manus AI #20)
+      // Marks the last system message with cache_control so the stable prefix is always cached.
+      let finalMessages: CodeBuddyMessage[] = messages;
+      const modelInfo = getModelInfo(this.currentModel);
+      if (modelInfo.provider === 'anthropic') {
+        try {
+          const { injectAnthropicCacheBreakpoints } = await import('../optimization/cache-breakpoints.js');
+          finalMessages = injectAnthropicCacheBreakpoints(messages) as CodeBuddyMessage[];
+        } catch {
+          // Non-critical: proceed without cache breakpoints
+        }
+      }
+
       const requestPayload: ChatRequestPayload = {
         model: opts.model || this.currentModel,
-        messages,
+        messages: finalMessages,
         tools: useTools ? tools : [],
         tool_choice: useTools ? "auto" : undefined,
         temperature: opts.temperature ?? 0.7,

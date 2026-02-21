@@ -843,10 +843,26 @@ program
     "auto-fallback model when default is overloaded"
   )
   .option(
+    "--profile <name>",
+    "apply a named configuration profile from .codebuddy/config.toml [profiles.<name>]"
+  )
+  .option(
     "--from-pr <pr>",
     "link session to a GitHub pull request (number or URL)"
   )
   .action(async (message, options) => {
+    // Apply named configuration profile (--profile <name>) before anything else
+    if (options.profile) {
+      try {
+        const { getConfigManager } = await import('./config/toml-config.js');
+        getConfigManager().load();
+        getConfigManager().applyProfile(options.profile);
+      } catch (err) {
+        startupLogger.error(`Profile error: ${err instanceof Error ? err.message : err}`);
+        process.exit(1);
+      }
+    }
+
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
       const { runSetup } = await import("./utils/interactive-setup.js");
@@ -1654,5 +1670,72 @@ addLazyCommandGroup(program, 'config', 'Show environment variable configuration 
   const { registerConfigCommand } = await import('./commands/cli/config-command.js');
   registerConfigCommand(program);
 });
+
+// Dev workflows — plan, run, pr, fix-ci, explain
+addLazyCommandGroup(program, 'dev', 'Golden-path developer workflows (plan, run, pr, fix-ci, explain)', async () => {
+  const { registerDevCommands } = await import('./commands/dev/index.js');
+  registerDevCommands(program);
+});
+
+// Run observability — list, show, tail, replay
+addLazyCommandGroup(program, 'runs', 'Inspect and replay agent runs (observability)', async () => {
+  const { registerRunCommands } = await import('./commands/run-cli/index.js');
+  registerRunCommands(program);
+});
+
+// DM pairing — approve, revoke, list, pending
+addLazyCommand(
+  program,
+  'pairing',
+  'Manage DM pairing security (allowlist for messaging channel senders)',
+  async () => {
+    const { createPairingCommand } = await import('./commands/pairing.js');
+    return createPairingCommand();
+  },
+);
+
+// Knowledge base management — add, list, show, search, remove, context
+addLazyCommand(
+  program,
+  'knowledge',
+  'Manage agent knowledge bases (Knowledge.md files injected as context)',
+  async () => {
+    const { createKnowledgeCommand } = await import('./commands/knowledge.js');
+    return createKnowledgeCommand();
+  },
+);
+
+// Wide Research — parallel agent workers for comprehensive research
+addLazyCommand(
+  program,
+  'research',
+  'Wide Research: spawn parallel agent workers to research a topic (Manus AI-inspired)',
+  async () => {
+    const { createResearchCommand } = await import('./commands/research/index.js');
+    return createResearchCommand();
+  },
+);
+
+// Todo attention bias — Manus AI-inspired persistent task list
+addLazyCommand(
+  program,
+  'todo',
+  'Manage persistent task list (todo.md) — injected at end of every agent turn for focus',
+  async () => {
+    const { createTodosCommand } = await import('./commands/todos.js');
+    return createTodosCommand();
+  },
+);
+
+// Exec Policy — Codex-inspired command authorization (allow/deny/ask/sandbox + prefix rules)
+addLazyCommand(
+  program,
+  'execpolicy',
+  'Manage execution policy rules (allow/deny/ask/sandbox) for shell commands',
+  async () => {
+    const { createExecPolicyCommand } = await import('./commands/execpolicy.js');
+    return createExecPolicyCommand();
+  },
+);
 
 program.parse();

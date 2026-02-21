@@ -21,6 +21,11 @@ import { sanitizeToolResult } from "../../utils/sanitize.js";
 import type { LaneQueue } from "../../concurrency/lane-queue.js";
 import type { MiddlewarePipeline, MiddlewareContext } from "../middleware/index.js";
 import type { MessageQueue } from "../message-queue.js";
+import { semanticTruncate } from "../../utils/head-tail-truncation.js";
+import { getTodoTracker } from "../todo-tracker.js";
+import { getObservationVariator } from "../../context/observation-variator.js";
+import { getRestorableCompressor } from "../../context/restorable-compression.js";
+import { getResponseConstraintStack, resolveToolChoice } from "../response-constraint.js";
 
 /**
  * Dependencies injected into the AgentExecutor
@@ -156,6 +161,60 @@ export class AgentExecutor {
   }
 
   /**
+   * Tool Result Compaction Guard (OpenClaw / Manus AI #13)
+   *
+   * Before each model call, scan accumulated tool result messages.
+   * If their total size exceeds the threshold (default 70K chars ≈ ~17K tokens),
+   * compress the oldest ones using RestorableCompressor — replacing full content
+   * with a compact stub referencing the callId. The content remains restorable
+   * via the `restore_context` tool.
+   *
+   * This prevents deep agent chains from silently overflowing the context window.
+   */
+  private compactLargeToolResults(
+    preparedMessages: CodeBuddyMessage[],
+    maxToolResultChars = 70_000
+  ): CodeBuddyMessage[] {
+    // Sum characters from tool result messages
+    let totalToolChars = 0;
+    for (const m of preparedMessages) {
+      if (m.role === 'tool' && typeof m.content === 'string') {
+        totalToolChars += m.content.length;
+      }
+    }
+
+    if (totalToolChars <= maxToolResultChars) return preparedMessages;
+
+    const compressor = getRestorableCompressor();
+    // Compress oldest tool results first (front of the list)
+    const result = [...preparedMessages];
+    let charsToFree = totalToolChars - maxToolResultChars;
+
+    for (let i = 0; i < result.length && charsToFree > 0; i++) {
+      const m = result[i];
+      if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > 500) {
+        const callId = (m as { tool_call_id?: string }).tool_call_id || `tool_${i}`;
+        const compressed = compressor.compress([{
+          role: m.role,
+          content: m.content,
+          tool_call_id: callId,
+        }]);
+        if (compressed.messages[0]) {
+          charsToFree -= (m.content.length - (compressed.messages[0].content?.length ?? 0));
+          result[i] = { ...m, content: compressed.messages[0].content ?? m.content };
+        }
+      }
+    }
+
+    logger.debug(`ToolResultCompactionGuard: compacted tool results`, {
+      before: totalToolChars,
+      freed: totalToolChars - charsToFree,
+    });
+
+    return result;
+  }
+
+  /**
    * Process a user message sequentially (non-streaming)
    *
    * @param message - The user's input message
@@ -198,16 +257,52 @@ export class AgentExecutor {
       // Apply context management
       const preparedMessages = this.deps.contextManager.prepareMessages(messages);
 
+      // --- Manus AI attention bias: append todo.md context at END of messages ---
+      const todoSuffix = getTodoTracker(process.cwd()).buildContextSuffix();
+      if (todoSuffix) {
+        preparedMessages.push({ role: 'system', content: todoSuffix });
+      }
+
       // Check for context warnings
       const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
       if (contextWarning.warn) {
         logger.warn(contextWarning.message);
+
+        // --- OpenClaw pre-compaction memory flush (NO_REPLY pattern) ---
+        // Run a silent background turn to extract facts to MEMORY.md before context is compacted.
+        try {
+          const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
+          const flusher = getPrecompactionFlusher();
+          const flushResult = await flusher.flush(
+            preparedMessages.filter(m => m.role !== 'system').map(m => ({
+              role: m.role as 'user' | 'assistant',
+              content: typeof m.content === 'string' ? m.content : '',
+            })),
+            async (flushMsgs) => {
+              const r = await this.deps.client.chat(
+                flushMsgs.map(m => ({ role: m.role, content: m.content })),
+                [],
+              );
+              return r.choices[0]?.message?.content ?? 'NO_REPLY';
+            }
+          );
+          if (flushResult.flushed) {
+            logger.info(`Pre-compaction flush: saved ${flushResult.factsCount} facts to ${flushResult.writtenTo}`);
+          }
+        } catch (flushErr) {
+          logger.debug('Pre-compaction flush failed (non-critical)', { flushErr });
+        }
       }
+
+      // Apply response constraint (Manus AI response prefill / tool_choice control)
+      const activeConstraint = getResponseConstraintStack().current();
+      const toolNames = tools.map(t => t.function.name);
+      const toolChoiceOverride = resolveToolChoice(activeConstraint, toolNames);
 
       let currentResponse = await this.deps.client.chat(
         preparedMessages,
         tools,
-        undefined,
+        { tool_choice: toolChoiceOverride !== 'auto' ? toolChoiceOverride : undefined } as never,
         this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
           ? { search_parameters: { mode: "auto" } }
           : { search_parameters: { mode: "off" } }
@@ -280,6 +375,19 @@ export class AgentExecutor {
 
             const result = await this.executeToolViaLane(toolCall);
 
+            // --- Disk-backed tool result (Manus AI #19) ---
+            // Persist full result to .codebuddy/tool-results/<callId>.txt for durable restoration.
+            const rawToolContent = sanitizeToolResult(result.success ? result.output || "Success" : result.error || "Error");
+            if (toolCall.id) {
+              getRestorableCompressor().writeToolResult(toolCall.id, rawToolContent);
+            }
+
+            // --- Observation Variator (Manus AI #17) ---
+            // Rotate the presentation wrapper for this tool result to prevent repetition drift.
+            const variator = getObservationVariator();
+            variator.nextTurn();
+            const variedContent = variator.wrapToolResult(toolCall.function.name, rawToolContent);
+
             // Update entry with result
             const updatedEntry: ChatEntry = {
               ...toolCallEntry,
@@ -292,18 +400,20 @@ export class AgentExecutor {
             history[histIdx] = updatedEntry;
             newEntries[newIdx] = updatedEntry;
 
-            // Add tool result to messages
+            // Add tool result to messages (with observation variation applied)
             // Note: 'name' is required for Gemini API to match functionResponse with functionCall
             messages.push({
               role: "tool",
-              content: sanitizeToolResult(result.success ? result.output || "Success" : result.error || "Error"),
+              content: variedContent,
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
             } as CodeBuddyMessage);
           }
 
-          // Get next response
-          const nextPreparedMessages = this.deps.contextManager.prepareMessages(messages);
+          // Get next response (with tool result compaction guard)
+          const nextPreparedMessages = this.compactLargeToolResults(
+            this.deps.contextManager.prepareMessages(messages)
+          );
           currentResponse = await this.deps.client.chat(
             nextPreparedMessages,
             tools,
@@ -433,11 +543,39 @@ export class AgentExecutor {
         if (toolRounds === 0) this.deps.toolSelectionStrategy.cacheTools(tools);
 
         const preparedMessages = this.deps.contextManager.prepareMessages(messages);
+
+        // --- Manus AI attention bias: append todo.md context at END of messages ---
+        const todoSuffixStream = getTodoTracker(process.cwd()).buildContextSuffix();
+        if (todoSuffixStream) {
+          preparedMessages.push({ role: 'system', content: todoSuffixStream });
+        }
+
         // Context warning is now handled by middleware, but keep fallback for non-pipeline mode
         if (!pipeline) {
           const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
           if (contextWarning.warn) {
             yield { type: "content", content: `\n${contextWarning.message}\n` };
+
+            // --- OpenClaw pre-compaction memory flush (streaming path) ---
+            try {
+              const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
+              const flusher = getPrecompactionFlusher();
+              await flusher.flush(
+                preparedMessages.filter(m => m.role !== 'system').map(m => ({
+                  role: m.role as 'user' | 'assistant',
+                  content: typeof m.content === 'string' ? m.content : '',
+                })),
+                async (flushMsgs) => {
+                  const r = await this.deps.client.chat(
+                    flushMsgs.map(m => ({ role: m.role, content: m.content })),
+                    [],
+                  );
+                  return r.choices[0]?.message?.content ?? 'NO_REPLY';
+                }
+              );
+            } catch {
+              // non-critical
+            }
           }
         }
 
@@ -572,6 +710,29 @@ export class AgentExecutor {
               return;
             }
 
+            // Apply semantic truncation if tool output is very large (> 20k chars)
+            const RAW_OUTPUT_LIMIT = 20_000;
+            if (result?.output && result.output.length > RAW_OUTPUT_LIMIT) {
+              const truncResult = semanticTruncate(result.output, { maxChars: RAW_OUTPUT_LIMIT });
+              if (truncResult.truncated) {
+                result = {
+                  ...result,
+                  output: truncResult.output,
+                };
+              }
+            }
+
+            // --- Disk-backed tool result (Manus AI #19) ---
+            const rawStreamContent = sanitizeToolResult(result?.success ? result.output || "Success" : result?.error || "Error");
+            if (toolCall.id) {
+              getRestorableCompressor().writeToolResult(toolCall.id, rawStreamContent);
+            }
+
+            // --- Observation Variator (Manus AI #17) ---
+            const streamVariator = getObservationVariator();
+            streamVariator.nextTurn();
+            const variedStreamContent = streamVariator.wrapToolResult(toolCall.function.name, rawStreamContent);
+
             const toolResultEntry: ChatEntry = {
               type: "tool_result",
               content: result?.success ? result.output || "Success" : result?.error || "Error occurred",
@@ -585,7 +746,7 @@ export class AgentExecutor {
             // Note: 'name' is required for Gemini API to match functionResponse with functionCall
             messages.push({
               role: "tool",
-              content: sanitizeToolResult(result.success ? result.output || "Success" : result.error || "Error"),
+              content: variedStreamContent,
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
             } as CodeBuddyMessage);

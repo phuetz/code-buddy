@@ -30,6 +30,8 @@ import type {
 import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
 import { logger } from '../../utils/logger.js';
+import type { ProFeatures } from '../pro/pro-features.js';
+import type { MessageButton as ProMessageButton } from '../pro/types.js';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 
@@ -43,6 +45,9 @@ export class TelegramChannel extends BaseChannel {
   private botInfo: TelegramUser | null = null;
   private reconnectionManager: ReconnectionManager;
   private consecutiveErrors = 0;
+
+  // Lazy-loaded pro features bundle
+  private _pro?: ProFeatures;
 
   constructor(config: TelegramConfig) {
     super('telegram', config);
@@ -63,6 +68,32 @@ export class TelegramChannel extends BaseChannel {
   private get apiUrl(): string {
     return `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}`;
   }
+
+  /** Lazy getter for ProFeatures bundle with TelegramProFormatter */
+  get pro(): ProFeatures {
+    if (!this._pro) {
+      const { ProFeatures: PF } = require('../pro/pro-features.js');
+      const { TelegramProFormatter: TPF } = require('./pro-formatter.js');
+      this._pro = new PF({
+        adminUsers: this.telegramConfig.adminUsers || [],
+        formatter: new TPF(),
+        diffFirst: this.telegramConfig.diffFirst,
+        ciWatch: this.telegramConfig.ciWatch
+          ? { ...this.telegramConfig.ciWatch, mutedPatterns: this.telegramConfig.ciWatch.mutedPatterns || [] }
+          : undefined,
+        enhancedCommands: this.telegramConfig.enhancedCommands,
+      });
+    }
+    return this._pro!;
+  }
+
+  // Convenience accessors for backward compatibility
+  get scopedAuth() { return this.pro.scopedAuth; }
+  get diffFirst() { return this.pro.diffFirst; }
+  get runTracker() { return this.pro.runTracker; }
+  get runCommands() { return this.pro.runCommands; }
+  get enhancedCommands() { return this.pro.enhancedCommands; }
+  get ciWatcher() { return this.pro.ciWatcher; }
 
   /**
    * Make API request to Telegram
@@ -113,6 +144,26 @@ export class TelegramChannel extends BaseChannel {
         await this.setCommands();
       }
 
+      // Register enhanced commands if enabled
+      if (this.telegramConfig.enhancedCommands !== false) {
+        try {
+          const cmds = this.pro.formatter.getCommandList();
+          await this.apiRequest('setMyCommands', {
+            commands: cmds.map((c) => ({
+              command: c.command.replace(/^\//, ''),
+              description: c.description,
+            })),
+          });
+        } catch {
+          // Non-fatal - commands still work without registration
+        }
+      }
+
+      // Start CI watcher if configured
+      if (this.telegramConfig.ciWatch?.enabled) {
+        this.pro.ciWatcher.start();
+      }
+
       // Start polling or set webhook
       if (this.telegramConfig.webhookUrl) {
         await this.setWebhook();
@@ -135,6 +186,9 @@ export class TelegramChannel extends BaseChannel {
     this.reconnectionManager.cancel();
     this.pollingActive = false;
     this.consecutiveErrors = 0;
+
+    // Clean up pro features
+    if (this._pro) this._pro.destroy();
     if (this.pollingTimeout) {
       clearTimeout(this.pollingTimeout);
       this.pollingTimeout = null;
@@ -422,6 +476,24 @@ export class TelegramChannel extends BaseChannel {
       return;
     }
 
+    // Scoped auth check (non-admin users need at least read-only)
+    if (this.telegramConfig.scopedAuth) {
+      const decision = this.scopedAuth.checkScope(userId, 'read-only');
+      if (!decision.allowed) {
+        await this.send({
+          channelId: chatId,
+          content: `Access denied: ${decision.reason || 'No permissions configured'}`,
+        });
+        return;
+      }
+    }
+
+    // Route enhanced commands
+    if (parsed.isCommand && this.telegramConfig.enhancedCommands !== false) {
+      const handled = await this.routeEnhancedCommand(parsed, chatId, userId);
+      if (handled) return;
+    }
+
     this.emit('message', parsed);
 
     if (parsed.isCommand) {
@@ -442,8 +514,15 @@ export class TelegramChannel extends BaseChannel {
       // Ignore errors
     }
 
-    // Emit as a command-like message
     if (query.data && query.message) {
+      const userId = query.from.id.toString();
+      const chatId = query.message.chat.id.toString();
+
+      // Route pro feature callbacks
+      const handled = await this.routeProCallback(query.data, userId, chatId);
+      if (handled) return;
+
+      // Emit as a command-like message (default behavior)
       const message: InboundMessage = {
         id: query.id,
         channel: this.convertChat(query.message.chat),
@@ -462,6 +541,107 @@ export class TelegramChannel extends BaseChannel {
 
       this.emit('command', message);
     }
+  }
+
+  /**
+   * Route enhanced slash commands via ProFeatures
+   */
+  private async routeEnhancedCommand(
+    parsed: InboundMessage,
+    chatId: string,
+    userId: string
+  ): Promise<boolean> {
+    const cmd = parsed.commandName;
+    const args = parsed.commandArgs || [];
+    const channel = this;
+
+    const sendFn = async (cId: string, text: string, buttons?: ProMessageButton[]) => {
+      await channel.send({
+        channelId: cId,
+        content: text,
+        buttons: buttons?.map((b) => ({
+          text: b.text,
+          type: b.type,
+          url: b.url,
+          data: b.data,
+        })),
+      });
+    };
+
+    const handled = await this.pro.routeCommand(cmd || '', args, chatId, userId, sendFn);
+
+    // For /task, also emit the agent_task command event
+    if (handled && cmd === 'task' && args.length > 0) {
+      const desc = args.join(' ');
+      this.emit('command', { ...parsed, commandName: 'agent_task', commandArgs: [desc] });
+    }
+
+    return handled;
+  }
+
+  /**
+   * Route pro feature callback queries via ProFeatures
+   */
+  private async routeProCallback(
+    data: string,
+    userId: string,
+    chatId: string
+  ): Promise<boolean> {
+    const channel = this;
+
+    const sendFn = async (cId: string, text: string, buttons?: ProMessageButton[]) => {
+      await channel.send({
+        channelId: cId,
+        content: text,
+        buttons: buttons?.map((b) => ({
+          text: b.text,
+          type: b.type,
+          url: b.url,
+          data: b.data,
+        })),
+      });
+    };
+
+    const emitTask = (cId: string, uId: string, objective: string) => {
+      channel.emit('command', {
+        id: `pro_${Date.now()}`,
+        channel: { id: cId, type: 'telegram' as const },
+        sender: { id: uId },
+        content: objective,
+        contentType: 'text' as ContentType,
+        timestamp: new Date(),
+        commandName: 'agent_task',
+        commandArgs: [objective],
+      });
+    };
+
+    return this.pro.routeCallback(data, userId, chatId, sendFn, emitTask);
+  }
+
+  /**
+   * Send a diff preview message
+   */
+  async sendDiffPreview(
+    chatId: string,
+    userId: string,
+    turnId: number,
+    diffs: Array<{ path: string; action: 'create' | 'modify' | 'delete' | 'rename'; linesAdded: number; linesRemoved: number; excerpt: string }>,
+    plan?: string,
+    fullDiff?: string
+  ): Promise<void> {
+    const pending = this.pro.diffFirst.createPendingDiff(chatId, userId, turnId, diffs, plan, fullDiff);
+    const formatted = this.pro.formatter.formatDiffMessage(pending);
+
+    await this.send({
+      channelId: chatId,
+      content: formatted.text,
+      buttons: formatted.buttons?.map((b) => ({
+        text: b.text,
+        type: b.type,
+        url: b.url,
+        data: b.data,
+      })),
+    });
   }
 
   /**

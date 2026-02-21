@@ -469,6 +469,76 @@ export class BashTool implements Disposable {
   }
 
   /**
+   * Shell-free exec — Codex-inspired direct process execution.
+   *
+   * Executes a pre-parsed command token array via spawn with `shell: false`,
+   * bypassing shell interpretation entirely. Prevents shell injection when the
+   * caller has already validated / split the argument vector.
+   *
+   * Use this when the command has been parsed by bash-parser and you want to
+   * avoid double-interpretation through sh/bash.
+   *
+   * @param argv    - [command, ...args] token array (must have at least 1 element)
+   * @param timeout - Max execution time in ms (default: 30000)
+   * @param cwd     - Working directory (default: currentDirectory)
+   */
+  async shellFreeExec(
+    argv: string[],
+    timeout: number = 30000,
+    cwd?: string
+  ): Promise<ToolResult> {
+    if (!argv || argv.length === 0) {
+      return { success: false, error: 'shellFreeExec: argv must be non-empty' };
+    }
+
+    const [cmd, ...args] = argv;
+    const workDir = cwd ?? this.currentDirectory;
+    const filteredEnv = getFilteredEnv();
+
+    return new Promise((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+
+      const proc = spawn(cmd, args, {
+        shell: false,
+        cwd: workDir,
+        env: filteredEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        proc.kill('SIGKILL');
+      }, timeout);
+
+      const maxBuf = 1024 * 1024;
+      proc.stdout?.on('data', (d: Buffer) => {
+        if (stdout.length < maxBuf) stdout += d.toString();
+      });
+      proc.stderr?.on('data', (d: Buffer) => {
+        if (stderr.length < maxBuf) stderr += d.toString();
+      });
+
+      proc.on('close', (code) => {
+        clearTimeout(timer);
+        if (timedOut) {
+          resolve({ success: false, error: 'Command timed out' });
+        } else if (code === 0) {
+          resolve({ success: true, output: stdout.trim() || 'Done' });
+        } else {
+          resolve({ success: false, error: stderr.trim() || `Exit code ${code}` });
+        }
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        resolve({ success: false, error: err.message });
+      });
+    });
+  }
+
+  /**
    * Enable or disable self-healing
    */
   setSelfHealing(enabled: boolean): void {

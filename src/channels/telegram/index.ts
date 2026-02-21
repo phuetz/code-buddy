@@ -7,3 +7,9 @@
 export * from './types.js';
 export * from './client.js';
 export { TelegramChannel as default } from './client.js';
+export * from './scoped-auth.js';
+export * from './diff-first.js';
+export * from './run-tracker.js';
+export * from './run-commands.js';
+export * from './enhanced-commands.js';
+export * from './ci-watcher.js';

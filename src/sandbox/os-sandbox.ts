@@ -1047,6 +1047,112 @@ function execUnsandboxed(
 }
 
 // ============================================================================
+// Sandbox Mode — Codex-inspired workspace-write tiering
+// ============================================================================
+
+/**
+ * Three sandbox tiers (mirrors Codex CLI sandboxing levels):
+ * - 'read-only'         → all writes blocked; default for untrusted commands
+ * - 'workspace-write'  → writes limited to git workspace root; .git/.codebuddy always read-only
+ * - 'danger-full-access'→ no write restrictions (still uses network/syscall sandbox)
+ */
+export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+/**
+ * Detect the git workspace root by running `git rev-parse --show-toplevel`.
+ * Falls back to `cwd` if not inside a git repository.
+ */
+export async function getWorkspaceRoot(cwd: string = process.cwd()): Promise<string> {
+  return new Promise((resolve) => {
+    const proc = spawn('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    let out = '';
+    proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
+    proc.on('close', (code) => {
+      const root = out.trim();
+      resolve(code === 0 && root ? root : cwd);
+    });
+    proc.on('error', () => resolve(cwd));
+  });
+}
+
+/**
+ * Paths that are always read-only regardless of SandboxMode.
+ * Writing to these directories could break version control, secrets, or the agent itself.
+ */
+const ALWAYS_READONLY_SUFFIXES = ['.git', '.codebuddy', '.ssh', '.gnupg', '.aws'];
+
+/**
+ * Build an `OSSandboxConfig` appropriate for the given `SandboxMode`.
+ *
+ * @param mode       - Desired sandbox tier
+ * @param cwd        - Working directory (used to locate workspace root)
+ * @param extraReadOnly  - Additional paths to mount read-only
+ * @param extraReadWrite - Additional paths to mount read-write (ignored in read-only mode)
+ */
+export async function createSandboxConfigForMode(
+  mode: SandboxMode,
+  cwd: string = process.cwd(),
+  extraReadOnly: string[] = [],
+  extraReadWrite: string[] = []
+): Promise<Partial<OSSandboxConfig>> {
+  const workspaceRoot = await getWorkspaceRoot(cwd);
+
+  const systemReadOnly = ['/usr', '/lib', '/lib64', '/bin', '/sbin', '/etc'];
+
+  if (mode === 'read-only') {
+    return {
+      workDir: cwd,
+      readOnlyPaths: [...systemReadOnly, workspaceRoot, ...extraReadOnly],
+      readWritePaths: [],
+      allowNetwork: false,
+    };
+  }
+
+  if (mode === 'workspace-write') {
+    // Start with workspace as read-write, then carve out always-readonly subdirs
+    // by not including them in readWritePaths.
+    // Note: bubblewrap/seatbelt apply mounts in order, so later read-only binds
+    // override earlier read-write ones for the same subtree.
+    const protectedPaths = ALWAYS_READONLY_SUFFIXES.map(suffix =>
+      `${workspaceRoot}/${suffix}`
+    );
+
+    return {
+      workDir: cwd,
+      readOnlyPaths: [...systemReadOnly, ...protectedPaths, ...extraReadOnly],
+      readWritePaths: [workspaceRoot, ...extraReadWrite],
+      allowNetwork: false,
+    };
+  }
+
+  // danger-full-access — write anywhere, still sandbox network/syscalls
+  return {
+    workDir: cwd,
+    readOnlyPaths: [...systemReadOnly, ...extraReadOnly],
+    readWritePaths: [workspaceRoot, '/', ...extraReadWrite],
+    allowNetwork: true,
+  };
+}
+
+/**
+ * Convenience: create and initialize an OSSandbox pre-configured for the given mode.
+ */
+export async function createSandboxForMode(
+  mode: SandboxMode,
+  cwd?: string,
+  extraReadOnly?: string[],
+  extraReadWrite?: string[]
+): Promise<OSSandbox> {
+  const config = await createSandboxConfigForMode(mode, cwd, extraReadOnly, extraReadWrite);
+  const sandbox = new OSSandbox(config);
+  await sandbox.initialize();
+  return sandbox;
+}
+
+// ============================================================================
 // Singleton
 // ============================================================================
 

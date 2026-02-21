@@ -127,6 +127,9 @@ export class SecurityAuditor {
       await this.deepScan();
     }
 
+    // Always run agent-specific checks (OpenClaw-inspired)
+    await this.checkAgentSecurity();
+
     const duration = Date.now() - startTime;
 
     // Calculate summary
@@ -653,6 +656,122 @@ export class SecurityAuditor {
       }
     } catch {
       // npm audit failed or not available
+    }
+  }
+
+  // ==========================================================================
+  // Agent-Specific Checks (OpenClaw-inspired)
+  // ==========================================================================
+
+  /**
+   * Checks specific to AI agent deployments:
+   * - Session transcript world-readability
+   * - DM pairing scope (shared vs isolated)
+   * - Plugin allowlist configuration
+   * - Model selection quality (non-instruction-tuned models)
+   * - YOLO mode in production-like environments
+   * - Webhook delivery SSRF exposure
+   */
+  private async checkAgentSecurity(): Promise<void> {
+    // 1. Session transcripts should not be world-readable
+    try {
+      const sessionDir = this.config.sessionsPath;
+      const stat = await fs.stat(sessionDir).catch(() => null);
+      if (stat) {
+        const mode = stat.mode & 0o777;
+        if (mode & 0o004) { // world-readable bit
+          this.addFinding({
+            category: 'filesystem',
+            severity: 'high',
+            title: 'Session transcripts are world-readable',
+            description: `${sessionDir} has mode ${mode.toString(8)}, readable by all users on this system.`,
+            impact: 'Conversation history (including secrets/PII entered during sessions) is accessible to any local user.',
+            recommendation: `Run: chmod 700 "${sessionDir}"`,
+            details: { path: sessionDir, mode: mode.toString(8), expected: '700' },
+          });
+        }
+      }
+    } catch { /* skip */ }
+
+    // 2. Plugin allowlist — all plugins trusted by default is risky
+    try {
+      const pluginDir = this.config.pluginsPath;
+      const plugins = await fs.readdir(pluginDir).catch(() => []);
+      if (plugins.length > 0) {
+        // Check for allowlist config
+        const configFile = path.join(this.config.configPath, 'config.toml');
+        const configContent = await fs.readFile(configFile, 'utf-8').catch(() => '');
+        const hasPluginAllowlist = /plugin_allowlist|allowed_plugins/i.test(configContent);
+        if (!hasPluginAllowlist) {
+          this.addFinding({
+            category: 'plugins',
+            severity: 'medium',
+            title: 'No plugin allowlist configured',
+            description: `${plugins.length} plugin(s) installed but no allowlist is configured. All plugins run with agent permissions.`,
+            impact: 'Malicious or compromised plugins can execute arbitrary code with full agent access.',
+            recommendation: 'Add plugin_allowlist to .codebuddy/config.toml listing explicitly trusted plugins.',
+            details: { installedPlugins: plugins.length, configPath: configFile },
+          });
+        }
+      }
+    } catch { /* skip */ }
+
+    // 3. YOLO mode detection — warn if enabled outside of isolated environments
+    const yoloMode = process.env.YOLO_MODE === 'true';
+    const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    if (yoloMode && !isCi) {
+      this.addFinding({
+        category: 'configuration',
+        severity: 'high',
+        title: 'YOLO mode enabled in interactive session',
+        description: 'YOLO_MODE=true bypasses all confirmation prompts. Agent will auto-approve all tool executions.',
+        impact: 'A malicious prompt injection or unintended command could cause irreversible damage without confirmation.',
+        recommendation: 'Only enable YOLO_MODE in isolated CI/CD containers. Use --autonomy=auto-edit for interactive sessions.',
+        details: { yoloMode, ci: isCi },
+      });
+    }
+
+    // 4. Webhook endpoint SSRF exposure — webhooks could relay to internal services
+    try {
+      const configFile = path.join(this.config.configPath, 'config.toml');
+      const configContent = await fs.readFile(configFile, 'utf-8').catch(() => '');
+      const webhookUrls = configContent.match(/url\s*=\s*"(https?:\/\/[^"]+)"/gi) ?? [];
+      for (const match of webhookUrls) {
+        const url = match.match(/"(https?:\/\/[^"]+)"/)?.[1];
+        if (url) {
+          try {
+            const { URL: NodeURL } = await import('url');
+            const parsed = new NodeURL(url);
+            const host = parsed.hostname;
+            if (host === 'localhost' || host.startsWith('192.168.') || host.startsWith('10.') || host === '127.0.0.1') {
+              this.addFinding({
+                category: 'network',
+                severity: 'critical',
+                title: 'Webhook configured to internal host',
+                description: `Webhook URL points to internal host: ${url}`,
+                impact: 'Agent-triggered webhooks could be used as SSRF gadgets to access internal services.',
+                recommendation: 'Use only publicly-routable webhook endpoints. Deploy a relay proxy for internal targets.',
+                details: { url },
+              });
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* skip */ }
+
+    // 5. Model quality — warn for models known to be poorly instruction-tuned
+    const modelEnv = process.env.GROK_MODEL || process.env.OPENAI_MODEL || '';
+    const legacyPatterns = ['gpt-3.5', 'davinci', 'curie', 'babbage', 'ada'];
+    if (legacyPatterns.some(p => modelEnv.includes(p))) {
+      this.addFinding({
+        category: 'configuration',
+        severity: 'medium',
+        title: 'Legacy or poorly instruction-tuned model in use',
+        description: `Model "${modelEnv}" may not reliably follow safety instructions or tool constraints.`,
+        impact: 'Agent may not respect deny-listed operations or safety boundaries.',
+        recommendation: 'Upgrade to a modern instruction-tuned model (gpt-4o, claude-3-5-sonnet, grok-3).',
+        details: { model: modelEnv },
+      });
     }
   }
 

@@ -6,6 +6,7 @@
  */
 
 import type { ToolResult } from '../types/index.js';
+import { assertSafeUrl } from '../security/ssrf-guard.js';
 
 // ============================================================================
 // Types
@@ -91,9 +92,10 @@ export class FetchTool {
         return { success: false, error: `Invalid URL: ${url}` };
       }
 
-      // Security check - block local/internal URLs
-      if (this.isInternalUrl(parsedUrl)) {
-        return { success: false, error: 'Requests to internal/local URLs are blocked' };
+      // Security check — full SSRF guard (OpenClaw-inspired, replaces basic isInternalUrl)
+      const ssrfCheck = await assertSafeUrl(url);
+      if (!ssrfCheck.safe) {
+        return { success: false, error: `SSRF protection: ${ssrfCheck.reason}` };
       }
 
       // Prepare request
