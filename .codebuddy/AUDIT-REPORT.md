@@ -474,7 +474,13 @@ Suite a l'audit, les corrections suivantes ont ete implementees dans la meme ses
 | # | Fix | Fichier(s) modifie(s) |
 |:-:|-----|----------------------|
 | 9 | 10 slash commands mortes supprimees | `builtin-commands.ts` |
+| 10 | CANVAS_TOOLS enregistre dans `initializeToolRegistry()` | `tools.ts` |
+| 11 | PID file atomique avec `fs.openSync('wx')` + nettoyage stale | `daemon-manager.ts` |
 | 12 | Auth forcee en production (`NODE_ENV=production` → `authEnabled: true`) | `server/index.ts` |
+| 13 | WebSearchMode enforce sur `fetchPage()` (bloque si `disabled`) | `web-search.ts` |
+| 14 | ShellEnvPolicy integre dans bash-tool (4 sites) + streaming-executor | `bash-tool.ts`, `streaming-executor.ts` |
+| 21 | Abandonne — 0 erreurs ESLint trouvees (finding obsolete) | — |
+| 22 | Validation code via `validateGeneratedCode()` dans create-skill-tool | `create-skill-tool.ts` |
 
 ### Compatibilite Windows
 

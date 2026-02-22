@@ -34,6 +34,7 @@ import {
   MULTIMODAL_TOOLS,
   COMPUTER_CONTROL_TOOLS,
   BROWSER_TOOLS,
+  CANVAS_TOOLS,
 } from "./tool-definitions/index.js";
 
 /**
@@ -107,6 +108,7 @@ export function initializeToolRegistry(): void {
   registerGroup(MULTIMODAL_TOOLS);
   registerGroup(COMPUTER_CONTROL_TOOLS);
   registerGroup(BROWSER_TOOLS);
+  registerGroup(CANVAS_TOOLS);
 
   isRegistryInitialized = true;
   logger.debug('Tool registry initialized with built-in tools');

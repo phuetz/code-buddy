@@ -20,6 +20,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { existsSync } from 'fs';
 import type { ToolResult } from '../types/index.js';
+import { validateGeneratedCode, formatValidationReport } from '../security/code-validator.js';
 
 export interface CreateSkillInput {
   /** Human-readable skill name (e.g. "Deploy to Railway") */
@@ -105,6 +106,15 @@ export class CreateSkillTool {
     fm.push('---');
 
     const skillContent = `${fm.join('\n')}\n\n${body.trim()}\n`;
+
+    // Validate skill body for security (prevent malicious code in LLM-generated skills)
+    const validation = validateGeneratedCode(body);
+    if (!validation.safe) {
+      return {
+        success: false,
+        error: `Code validation failed:\n${formatValidationReport(validation)}\nSkill creation blocked for security reasons.`,
+      };
+    }
 
     // Write to disk
     try {

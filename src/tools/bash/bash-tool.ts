@@ -28,6 +28,7 @@ import {
 } from '../../utils/input-validator.js';
 import { rgPath } from '@vscode/ripgrep';
 import { validateCommand, getFilteredEnv } from './command-validator.js';
+import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
 import { parseBashCommand } from '../../security/bash-parser.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
@@ -115,12 +116,13 @@ export class BashTool implements Disposable {
 
       const isWindows = process.platform === 'win32';
 
-      // Start with filtered environment (only safe vars, no secrets)
+      // Start with filtered environment, then apply user-configurable ShellEnvPolicy
       const filteredEnv = getFilteredEnv();
+      const policyEnv = getShellEnvPolicy().buildEnv(filteredEnv);
 
       // Controlled environment variables for deterministic output
       const controlledEnv: Record<string, string> = {
-        ...filteredEnv,
+        ...policyEnv,
         // Disable history to prevent command logging
         HISTFILE: '/dev/null',
         HISTSIZE: '0',
@@ -493,7 +495,7 @@ export class BashTool implements Disposable {
 
     const [cmd, ...args] = argv;
     const workDir = cwd ?? this.currentDirectory;
-    const filteredEnv = getFilteredEnv();
+    const policyEnv = getShellEnvPolicy().buildEnv(getFilteredEnv());
 
     return new Promise((resolve) => {
       let stdout = '';
@@ -503,7 +505,7 @@ export class BashTool implements Disposable {
       const proc = spawn(cmd, args, {
         shell: false,
         cwd: workDir,
-        env: filteredEnv,
+        env: policyEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -661,7 +663,7 @@ export class BashTool implements Disposable {
 
       const rg = spawn(rgPath, args, {
         cwd: this.currentDirectory,
-        env: getFilteredEnv(),
+        env: getShellEnvPolicy().buildEnv(getFilteredEnv()),
       });
 
       let stdout = '';

@@ -680,6 +680,11 @@ export class WebSearchTool {
   // ============================================================================
 
   async fetchPage(url: string, _prompt?: string): Promise<ToolResult> {
+    // Enforce WebSearchMode — fetchPage should respect the same mode as search()
+    if (_globalSearchMode === 'disabled') {
+      return { success: false, output: '', error: 'Web access is disabled by configuration' };
+    }
+
     try {
       // SSRF guard: block requests to internal/private network addresses
       const ssrfCheck = await assertSafeUrl(url);

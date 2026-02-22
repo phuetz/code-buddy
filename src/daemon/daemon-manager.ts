@@ -85,6 +85,11 @@ export class DaemonManager extends EventEmitter {
       throw new Error(`Daemon already running (PID: ${existingPid})`);
     }
 
+    // Remove stale PID file if process is no longer running
+    if (existingPid && !this.isProcessRunning(existingPid)) {
+      await this.removePid();
+    }
+
     // Ensure directories exist
     await fs.mkdir(path.dirname(this.config.pidFile), { recursive: true });
     await fs.mkdir(path.dirname(this.config.logFile), { recursive: true });
@@ -258,7 +263,17 @@ export class DaemonManager extends EventEmitter {
   // ==========================================================================
 
   private async writePid(pid: number): Promise<void> {
-    await fs.writeFile(this.config.pidFile, String(pid), 'utf-8');
+    try {
+      // Atomic exclusive-create: fails if PID file already exists (prevents race)
+      const fd = fsSync.openSync(this.config.pidFile, 'wx');
+      fsSync.writeSync(fd, String(pid));
+      fsSync.closeSync(fd);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new Error('PID file already exists — daemon may already be starting');
+      }
+      throw err;
+    }
   }
 
   async readPid(): Promise<number | null> {

@@ -11,6 +11,7 @@ import { ConfirmationService } from '../../utils/confirmation-service.js';
 import { validateCommand as validateCommandSafety } from '../../utils/input-validator.js';
 import { validateCommand } from './command-validator.js';
 import { getFilteredEnv } from './command-validator.js';
+import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -65,9 +66,9 @@ export async function* executeStreaming(
 
   // Spawn the process
   const isWindows = process.platform === 'win32';
-  const filteredEnv = getFilteredEnv();
+  const policyEnv = getShellEnvPolicy().buildEnv(getFilteredEnv());
   const controlledEnv: Record<string, string> = {
-    ...filteredEnv,
+    ...policyEnv,
     HISTFILE: '/dev/null',
     HISTSIZE: '0',
     CI: 'true',
