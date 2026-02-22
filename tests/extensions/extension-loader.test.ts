@@ -329,4 +329,167 @@ describe('ExtensionLoader', () => {
       expect(loader.list()).toHaveLength(0);
     });
   });
+
+  // --------------------------------------------------------------------------
+  // Gap coverage tests (#37)
+  // --------------------------------------------------------------------------
+
+  describe('event emission', () => {
+    it('should emit "loaded" when extension is loaded', () => {
+      const extDir = join(tempDir, 'evt-ext');
+      mkdirSync(extDir);
+      writeManifest(extDir, validManifest({ name: 'evt-ext' }));
+
+      const loader = new ExtensionLoader([tempDir]);
+      const spy = jest.fn();
+      loader.on('loaded', spy);
+      loader.load('evt-ext');
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0][0].manifest.name).toBe('evt-ext');
+    });
+
+    it('should emit "activated" on successful activation', async () => {
+      const extDir = join(tempDir, 'act-evt');
+      mkdirSync(extDir);
+      writeManifest(extDir, validManifest({ name: 'act-evt' }));
+
+      const loader = new ExtensionLoader([tempDir]);
+      const spy = jest.fn();
+      loader.on('activated', spy);
+      loader.load('act-evt');
+      await loader.activate('act-evt');
+
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit "deactivated" on successful deactivation', async () => {
+      const extDir = join(tempDir, 'deact-evt');
+      mkdirSync(extDir);
+      writeManifest(extDir, validManifest({ name: 'deact-evt' }));
+
+      const loader = new ExtensionLoader([tempDir]);
+      const spy = jest.fn();
+      loader.on('deactivated', spy);
+      loader.load('deact-evt');
+      await loader.activate('deact-evt');
+      await loader.deactivate('deact-evt');
+
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit "disposed" on dispose', async () => {
+      const loader = new ExtensionLoader([tempDir]);
+      const spy = jest.fn();
+      loader.on('disposed', spy);
+      await loader.dispose();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('loadAll()', () => {
+    it('should load all discovered extensions', () => {
+      const ext1 = join(tempDir, 'load-all-1');
+      const ext2 = join(tempDir, 'load-all-2');
+      mkdirSync(ext1);
+      mkdirSync(ext2);
+      writeManifest(ext1, validManifest({ name: 'load-all-1' }));
+      writeManifest(ext2, validManifest({ name: 'load-all-2', type: 'channel' }));
+
+      const loader = new ExtensionLoader([tempDir]);
+      const instances = loader.loadAll();
+
+      expect(instances).toHaveLength(2);
+      expect(instances.every(i => i.status === 'loaded')).toBe(true);
+    });
+
+    it('should skip invalid extensions in loadAll', () => {
+      const valid = join(tempDir, 'valid-ext');
+      const invalid = join(tempDir, 'invalid-ext');
+      mkdirSync(valid);
+      mkdirSync(invalid);
+      writeManifest(valid, validManifest({ name: 'valid-ext' }));
+      // invalid has no extension.json
+
+      const loader = new ExtensionLoader([tempDir]);
+      const instances = loader.loadAll();
+
+      expect(instances).toHaveLength(1);
+      expect(instances[0].manifest.name).toBe('valid-ext');
+    });
+  });
+
+  describe('load() path traversal', () => {
+    it('should reject names with ".."', () => {
+      const loader = new ExtensionLoader([tempDir]);
+      const result = loader.load('../etc/passwd');
+      expect('error' in result).toBe(true);
+      if ('error' in result) {
+        expect(result.error).toContain('Invalid extension name');
+      }
+    });
+
+    it('should reject names starting with invalid chars', () => {
+      const loader = new ExtensionLoader([tempDir]);
+      const result = loader.load('-bad-name');
+      expect('error' in result).toBe(true);
+    });
+  });
+
+  describe('activate() error paths', () => {
+    it('should set error status when config validation fails', async () => {
+      const extDir = join(tempDir, 'cfg-fail');
+      mkdirSync(extDir);
+      writeManifest(extDir, validManifest({
+        name: 'cfg-fail',
+        configSchema: { apiKey: { type: 'string', required: true } },
+      }));
+
+      const loader = new ExtensionLoader([tempDir]);
+      loader.load('cfg-fail');
+      const result = await loader.activate('cfg-fail', {}); // missing required apiKey
+      expect(result).toBe(false);
+      expect(loader.get('cfg-fail')!.status).toBe('error');
+      expect(loader.get('cfg-fail')!.error).toContain('apiKey');
+    });
+
+    it('should set error status when dependencies are missing', async () => {
+      const extDir = join(tempDir, 'dep-fail');
+      mkdirSync(extDir);
+      writeManifest(extDir, validManifest({
+        name: 'dep-fail',
+        dependencies: ['nonexistent-dep'],
+      }));
+
+      const loader = new ExtensionLoader([tempDir]);
+      loader.load('dep-fail');
+      const result = await loader.activate('dep-fail');
+      expect(result).toBe(false);
+      expect(loader.get('dep-fail')!.status).toBe('error');
+      expect(loader.get('dep-fail')!.error).toContain('nonexistent-dep');
+    });
+
+    it('should return false for deactivating unknown extension', async () => {
+      const loader = new ExtensionLoader([tempDir]);
+      expect(await loader.deactivate('nope')).toBe(false);
+    });
+  });
+
+  describe('dispose() lifecycle callbacks', () => {
+    it('should not throw when lifecycle onDispose throws', async () => {
+      const extDir = join(tempDir, 'err-disp');
+      mkdirSync(extDir);
+      writeManifest(extDir, validManifest({ name: 'err-disp' }));
+
+      const loader = new ExtensionLoader([tempDir]);
+      loader.load('err-disp');
+      // Inject a failing lifecycle
+      (loader as any).lifecycles.set('err-disp', {
+        onDispose: async () => { throw new Error('cleanup failed'); },
+      });
+
+      await expect(loader.dispose()).resolves.not.toThrow();
+    });
+  });
 });

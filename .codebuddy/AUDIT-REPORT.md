@@ -492,8 +492,8 @@ Suite a l'audit, les corrections suivantes ont ete implementees dans la meme ses
 | 28 | Won't Fix — ObservationVariator global par design (cycling anti-repetition) | — |
 | 29 | `saveFacts()` retourne `null` en cas d'echec d'ecriture + log `warn` | `precompaction-flush.ts` |
 | 30 | Warning sur merge lessons avec IDs dupliques et contenu different | `lessons-tracker.ts` |
-| 23 | Differe — refactoring routage commandes (6h, pas un bug) | — |
-| 27 | Differe — registre outils dual-path (8h, faible risque) | — |
+| 23 | Switch 200 lignes remplace par Map-based registry (O(1) dispatch, `getRegisteredTokens()`) | `enhanced-command-handler.ts` |
+| 27 | Bridge `getAllSchemas()` ajoute a FormalToolRegistry, architecture documentee dans ToolRegistry | `tool-registry.ts`, `registry.ts` |
 
 ### LOW fixes appliques
 
@@ -504,7 +504,9 @@ Suite a l'audit, les corrections suivantes ont ete implementees dans la meme ses
 | 32 | Won't Fix — `getTodoTracker`/`getLessonsTracker` deja caches via singleton Map | — |
 | 33 | Deja fait en batch 3 (#25 = cache `getModelToolConfig`) | — |
 | 35 | Documente — `TaskPlanner` (interne) vs `PlanTool` (user-facing `/plan`) sont complementaires | — |
-| 36-38 | Differe — tests UI/extensions + lint (effort ~15h, faible risque) | — |
+| 36 | Tests pure-logic UI: accessibility (16 tests), themes (20), keyboard-shortcuts (25), metrics-dashboard (22) | `tests/ui/` |
+| 37 | Extension-loader gap tests: events, loadAll, path traversal, activate errors, dispose lifecycle (13 tests) | `tests/extensions/extension-loader.test.ts` |
+| 38 | Ferme — ESLint deja a 0 errors, 0 warnings | — |
 
 ### Compatibilite Windows
 

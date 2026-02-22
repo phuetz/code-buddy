@@ -232,11 +232,31 @@ export class FormalToolRegistry extends EventEmitter implements IToolRegistry {
   }
 
   /**
-   * Get tool schemas for LLM
+   * Get tool schemas for LLM (ITool format)
    */
   getSchemas(options: IToolQueryOptions = {}): ToolSchema[] {
     const tools = this.query({ ...options, enabledOnly: true });
     return tools.map(t => t.tool.getSchema());
+  }
+
+  /**
+   * Get all tool schemas in OpenAI function-calling format.
+   *
+   * Bridge method for consumers that need CodeBuddyTool-compatible output.
+   * Converts ITool schemas to the OpenAI format used by the legacy ToolRegistry.
+   *
+   * @see ToolRegistry in `../registry.ts` for the legacy schema registry
+   */
+  getAllSchemas(options: IToolQueryOptions = {}): Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
+    const schemas = this.getSchemas(options);
+    return schemas.map(s => ({
+      type: 'function' as const,
+      function: {
+        name: s.name,
+        description: s.description,
+        parameters: (s.parameters as unknown as Record<string, unknown>) || { type: 'object', properties: {}, required: [] },
+      },
+    }));
   }
 
   // ============================================================================

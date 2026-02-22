@@ -3,14 +3,24 @@ import { ToolMetadata, RegisteredTool, ToolCategory as _ToolCategory } from "./t
 import { logger } from "../utils/logger.js";
 
 /**
- * Centralized registry for all CodeBuddy tools.
- * 
- * Implements the Singleton pattern to ensure a single source of truth for:
- * - Available tools
- * - Tool metadata
- * - Tool enablement state
- * 
- * This registry is used by the `ToolSelector` and agents to discover and access tools.
+ * Legacy tool registry for LLM schema definitions.
+ *
+ * **Architecture note (audit #27):**
+ * This registry stores tool *definitions* (OpenAI function-calling schemas) for
+ * the LLM. It is distinct from `FormalToolRegistry` (`./registry/tool-registry.ts`)
+ * which stores executable *ITool instances* with `execute()` methods.
+ *
+ * Consumers should prefer `FormalToolRegistry` for:
+ * - Tool execution (via `execute()`)
+ * - Querying by category/keyword (via `query()`)
+ * - Getting schemas dynamically (via `getSchemas()`)
+ *
+ * This registry remains the source of truth for:
+ * - RAG-based tool selection (`ToolSelector`)
+ * - `getAllCodeBuddyTools()` in `codebuddy/tools.ts`
+ * - Server API routes (`/api/tools`)
+ *
+ * @see FormalToolRegistry for the execution-side registry
  */
 export class ToolRegistry {
   private static instance: ToolRegistry;

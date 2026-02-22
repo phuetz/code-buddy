@@ -98,276 +98,172 @@ import type { CommandHandlerResult } from "./handlers/index.js";
 export type { CommandHandlerResult };
 
 /**
+ * Handler function type for command dispatch.
+ * Each handler receives the parsed args and returns a result.
+ */
+type CommandHandlerFn = (args: string[]) => Promise<CommandHandlerResult> | CommandHandlerResult;
+
+/**
  * Enhanced Command Handler.
  *
  * Processes special command tokens (starting with `__`) that are mapped from
- * slash commands. This class acts as the central dispatcher, delegating
- * specific command logic to modular handlers in `src/commands/handlers/`.
+ * slash commands. Uses a Map-based registry for O(1) dispatch instead of a
+ * linear switch statement.
  *
- * It maintains references to conversation history and the CodeBuddy client
- * to enable context-aware command execution.
+ * Delegates specific command logic to modular handlers in `src/commands/handlers/`.
  */
 export class EnhancedCommandHandler {
   private conversationHistory: ChatEntry[] = [];
   private codebuddyClient: CodeBuddyClient | null = null;
 
   /**
+   * Command handler registry — maps tokens to handler functions.
+   * Arrow functions capture `this` for context-dependent handlers.
+   */
+  private readonly handlerMap: Map<string, CommandHandlerFn> = new Map<string, CommandHandlerFn>([
+    // Core commands
+    ['__HELP__', () => handleHelp()],
+    ['__YOLO_MODE__', (args) => handleYoloMode(args)],
+    ['__AUTONOMY__', (args) => handleAutonomy(args)],
+    ['__PIPELINE__', (args) => handlePipeline(args)],
+    ['__PARALLEL__', (args) => handleParallel(args)],
+    ['__MODEL_ROUTER__', (args) => handleModelRouter(args)],
+    ['__SKILL__', (args) => handleSkill(args)],
+
+    // Stats & Cost
+    ['__COST__', (args) => handleCost(args)],
+    ['__STATS__', (args) => handleStats(args)],
+    ['__CACHE__', (args) => handleCache(args)],
+    ['__SELF_HEALING__', (args) => handleSelfHealing(args)],
+
+    // Security
+    ['__SECURITY__', (args) => handleSecurity(args)],
+    ['__DRY_RUN__', (args) => handleDryRun(args)],
+    ['__GUARDIAN__', (args) => handleGuardian(args)],
+
+    // Branch management
+    ['__FORK__', (args) => handleFork(args)],
+    ['__BRANCHES__', () => handleBranches()],
+    ['__CHECKOUT__', (args) => handleCheckout(args)],
+    ['__MERGE__', (args) => handleMerge(args)],
+
+    // Memory & TODOs
+    ['__MEMORY__', (args) => handleMemory(args)],
+    ['__REMEMBER__', (args) => handleRemember(args)],
+    ['__SCAN_TODOS__', () => handleScanTodos()],
+    ['__ADDRESS_TODO__', (args) => handleAddressTodo(args)],
+
+    // Context & Workspace
+    ['__WORKSPACE__', () => handleWorkspace()],
+    ['__ADD_CONTEXT__', (args) => handleAddContext(args)],
+    ['__CONTEXT__', (args) => handleContext(args)],
+
+    // Export (context-dependent: conversationHistory)
+    ['__SAVE_CONVERSATION__', (args) => handleSaveConversation(args, this.conversationHistory)],
+    ['__EXPORT__', (args) => handleExport(args)],
+    ['__EXPORT_LIST__', () => handleExportList()],
+    ['__EXPORT_FORMATS__', () => handleExportFormats()],
+
+    // Testing (context-dependent: codebuddyClient)
+    ['__GENERATE_TESTS__', (args) => handleGenerateTests(args)],
+    ['__AI_TEST__', (args) => handleAITest(args, this.codebuddyClient)],
+
+    // UI
+    ['__THEME__', (args) => handleTheme(args)],
+    ['__AVATAR__', (args) => handleAvatar(args)],
+
+    // Voice & TTS
+    ['__VOICE__', (args) => handleVoice(args)],
+    ['__SPEAK__', (args) => handleSpeak(args)],
+    ['__TTS__', (args) => handleTTS(args)],
+
+    // Sessions & History
+    ['__SESSIONS__', (args) => handleSessions(args)],
+    ['__HISTORY__', (args) => handleHistory(args)],
+
+    // Custom Agents
+    ['__AGENT__', (args) => handleAgent(args)],
+
+    // Vibe-inspired commands (context-dependent: conversationHistory)
+    ['__RELOAD__', () => handleReload()],
+    ['__LOG__', () => handleLog()],
+    ['__COMPACT__', (args) => handleCompact(args, this.conversationHistory)],
+    ['__TOOLS__', (args) => handleTools(args)],
+    ['__VIM_MODE__', (args) => handleVimMode(args)],
+    ['__CONFIG__', (args) => handleConfig(args)],
+
+    // Permissions & Worktree (Claude Code-inspired)
+    ['__PERMISSIONS__', (args) => handlePermissions(args)],
+    ['__WORKTREE__', (args) => handleWorktree(args)],
+
+    // Script & FCS execution
+    ['__SCRIPT__', (args) => handleScript(args)],
+    ['__FCS__', (args) => handleFCS(args)],
+
+    // Research-based features
+    ['__TDD_MODE__', (args) => handleTDD(args)],
+    ['__WORKFLOW__', (args) => handleWorkflow(args)],
+    ['__HOOKS__', (args) => handleHooks(args)],
+    ['__PROMPT_CACHE__', (args) => handlePromptCache(args)],
+
+    // Track System (Conductor-inspired)
+    ['__TRACK__', (args) => handleTrack(args)],
+    ['__PLUGINS__', (args) => handlePlugins(args)],
+
+    // Collaboration & Diff
+    ['__COLAB__', (args) => handleColab(args)],
+    ['__DIFF_CHECKPOINTS__', (args) => handleDiffCheckpoints(args)],
+
+    // Extra UX commands
+    ['__UNDO__', (args) => handleUndo(args)],
+    ['__DIFF__', (args) => args.length > 0 ? handleDiffCheckpoints(args) : handleDiff(args)],
+    ['__SEARCH__', (args) => handleSearch(args)],
+    ['__TEST__', (args) => handleTest(args)],
+    ['__FIX__', (args) => handleFix(args)],
+    ['__REVIEW__', (args) => handleReview(args)],
+    ['__PERSONA__', (args) => handlePersonaCommand(args.join(' '))],
+  ]);
+
+  /**
    * Sets the conversation history for context-aware commands (e.g., save, compact).
-   *
-   * @param history - Array of chat entries.
    */
   setConversationHistory(history: ChatEntry[]): void {
     this.conversationHistory = history;
   }
 
   /**
-   * Sets the CodeBuddy client instance for commands that require client access
-   * (e.g., ai-test, certain agent commands).
-   *
-   * @param client - The CodeBuddy client instance.
+   * Sets the CodeBuddy client instance for commands that require client access.
    */
   setCodeBuddyClient(client: CodeBuddyClient): void {
     this.codebuddyClient = client;
   }
 
   /**
-   * Handles a special command token.
-   * Dispatches the command to the appropriate handler function.
+   * Handles a special command token via Map-based O(1) dispatch.
    *
    * @param token - The command token (e.g., `__HELP__`, `__YOLO_MODE__`).
    * @param args - Arguments passed to the command.
-   * @param _fullInput - The full input string (unused in most cases but available).
-   * @returns A promise resolving to the command result, which may include
-   *          a message to display or instruction to pass to the AI.
+   * @param _fullInput - The full input string (available but unused by most handlers).
+   * @returns A promise resolving to the command result.
    */
   async handleCommand(
     token: string,
     args: string[],
     _fullInput: string
   ): Promise<CommandHandlerResult> {
-    switch (token) {
-      // Core commands
-      case "__HELP__":
-        return handleHelp();
-
-      case "__YOLO_MODE__":
-        return handleYoloMode(args);
-
-      case "__AUTONOMY__":
-        return handleAutonomy(args);
-
-      case "__PIPELINE__":
-        return handlePipeline(args);
-
-      case "__PARALLEL__":
-        return handleParallel(args);
-
-      case "__MODEL_ROUTER__":
-        return handleModelRouter(args);
-
-      case "__SKILL__":
-        return handleSkill(args);
-
-      // Stats & Cost
-      case "__COST__":
-        return handleCost(args);
-
-      case "__STATS__":
-        return handleStats(args);
-
-      case "__CACHE__":
-        return handleCache(args);
-
-      case "__SELF_HEALING__":
-        return handleSelfHealing(args);
-
-      // Security
-      case "__SECURITY__":
-        return handleSecurity(args);
-
-      case "__DRY_RUN__":
-        return handleDryRun(args);
-
-      case "__GUARDIAN__":
-        return handleGuardian(args);
-
-      // Branch management
-      case "__FORK__":
-        return handleFork(args);
-
-      case "__BRANCHES__":
-        return handleBranches();
-
-      case "__CHECKOUT__":
-        return handleCheckout(args);
-
-      case "__MERGE__":
-        return handleMerge(args);
-
-      // Memory & TODOs
-      case "__MEMORY__":
-        return handleMemory(args);
-
-      case "__REMEMBER__":
-        return handleRemember(args);
-
-      case "__SCAN_TODOS__":
-        return handleScanTodos();
-
-      case "__ADDRESS_TODO__":
-        return handleAddressTodo(args);
-
-      // Context & Workspace
-      case "__WORKSPACE__":
-        return handleWorkspace();
-
-      case "__ADD_CONTEXT__":
-        return handleAddContext(args);
-
-      case "__CONTEXT__":
-        return handleContext(args);
-
-      // Export
-      case "__SAVE_CONVERSATION__":
-        return handleSaveConversation(args, this.conversationHistory);
-
-      case "__EXPORT__":
-        return handleExport(args);
-
-      case "__EXPORT_LIST__":
-        return handleExportList();
-
-      case "__EXPORT_FORMATS__":
-        return handleExportFormats();
-
-      // Testing
-      case "__GENERATE_TESTS__":
-        return handleGenerateTests(args);
-
-      case "__AI_TEST__":
-        return handleAITest(args, this.codebuddyClient);
-
-      // UI
-      case "__THEME__":
-        return handleTheme(args);
-
-      case "__AVATAR__":
-        return handleAvatar(args);
-
-      // Voice & TTS
-      case "__VOICE__":
-        return handleVoice(args);
-
-      case "__SPEAK__":
-        return handleSpeak(args);
-
-      case "__TTS__":
-        return handleTTS(args);
-
-      // Sessions
-      case "__SESSIONS__":
-        return handleSessions(args);
-
-      // History
-      case "__HISTORY__":
-        return handleHistory(args);
-
-      // Custom Agents
-      case "__AGENT__":
-        return handleAgent(args);
-
-      // Vibe-inspired commands
-      case "__RELOAD__":
-        return handleReload();
-
-      case "__LOG__":
-        return handleLog();
-
-      case "__COMPACT__":
-        return handleCompact(args, this.conversationHistory);
-
-      case "__TOOLS__":
-        return handleTools(args);
-
-      case "__VIM_MODE__":
-        return handleVimMode(args);
-
-      case "__CONFIG__":
-        return handleConfig(args);
-
-      // Permissions (Claude Code-inspired)
-      case "__PERMISSIONS__":
-        return handlePermissions(args);
-
-      // Git worktrees (Claude Code-inspired)
-      case "__WORKTREE__":
-        return handleWorktree(args);
-
-      // Script execution (FileCommander Enhanced-inspired)
-      case "__SCRIPT__":
-        return handleScript(args);
-
-      // FCS execution (100% FileCommander Compatible)
-      case "__FCS__":
-        return handleFCS(args);
-
-      // Research-based features (TDD, CI/CD, Hooks, Caching)
-      case "__TDD_MODE__":
-        return handleTDD(args);
-
-      case "__WORKFLOW__":
-        return handleWorkflow(args);
-
-      case "__HOOKS__":
-        return handleHooks(args);
-
-      case "__PROMPT_CACHE__":
-        return handlePromptCache(args);
-
-      // Track System (Conductor-inspired)
-      case "__TRACK__":
-        return handleTrack(args);
-
-      case "__PLUGINS__":
-        return handlePlugins(args);
-
-      // Colab (AI Collaboration)
-      case "__COLAB__":
-        return handleColab(args);
-
-      // Diff Checkpoints (legacy token)
-      case "__DIFF_CHECKPOINTS__":
-        return handleDiffCheckpoints(args);
-
-      // Extra UX commands
-      case "__UNDO__":
-        return handleUndo(args);
-
-      case "__DIFF__":
-        // If args provided, delegate to checkpoint diff; otherwise show git diff
-        if (args.length > 0) {
-          return handleDiffCheckpoints(args);
-        }
-        return handleDiff(args);
-
-      case "__SEARCH__":
-        return handleSearch(args);
-
-      case "__TEST__":
-        return handleTest(args);
-
-      case "__FIX__":
-        return handleFix(args);
-
-      case "__REVIEW__":
-        return handleReview(args);
-
-      case "__PERSONA__":
-        return handlePersonaCommand(args.join(' '));
-
-      default:
-        return { handled: false };
+    const handler = this.handlerMap.get(token);
+    if (handler) {
+      return handler(args);
     }
+    return { handled: false };
+  }
+
+  /**
+   * Get all registered command tokens.
+   * Useful for introspection, help generation, and testing.
+   */
+  getRegisteredTokens(): string[] {
+    return Array.from(this.handlerMap.keys());
   }
 }
 
