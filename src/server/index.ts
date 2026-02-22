@@ -82,7 +82,9 @@ const DEFAULT_CONFIG: ServerConfig = {
   rateLimit: true,
   rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
   rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW || '60000', 10),
-  authEnabled: process.env.AUTH_ENABLED !== 'false',
+  authEnabled: process.env.NODE_ENV === 'production'
+    ? true  // Auth is always enabled in production (fail-closed)
+    : process.env.AUTH_ENABLED !== 'false',
   jwtSecret: getJwtSecret(),
   jwtExpiration: process.env.JWT_EXPIRATION || '24h',
   websocketEnabled: process.env.WS_ENABLED !== 'false',

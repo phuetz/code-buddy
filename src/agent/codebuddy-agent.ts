@@ -324,7 +324,7 @@ export class CodeBuddyAgent extends BaseAgent {
 
   private isGrokModel(): boolean {
     const currentModel = this.codebuddyClient.getCurrentModel();
-    return currentModel.toLowerCase().includes("codebuddy");
+    return currentModel.toLowerCase().includes("grok");
   }
 
   /**

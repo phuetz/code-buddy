@@ -1,6 +1,7 @@
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
+import { assertSafeUrl } from '../security/ssrf-guard.js';
 
 export interface ImageInput {
   type: 'base64' | 'url' | 'file';
@@ -110,6 +111,12 @@ export class ImageTool {
    * Process an image from a URL
    */
   private async processUrlImage(url: string): Promise<ProcessedImage> {
+    // SSRF guard: block requests to internal/private network addresses
+    const ssrfCheck = await assertSafeUrl(url);
+    if (!ssrfCheck.safe) {
+      throw new Error(`URL blocked by SSRF guard: ${ssrfCheck.reason}`);
+    }
+
     const axios = (await import('axios')).default;
 
     const response = await axios.get(url, {

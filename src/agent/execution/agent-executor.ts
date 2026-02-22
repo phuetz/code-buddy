@@ -421,6 +421,17 @@ export class AgentExecutor {
           const nextPreparedMessages = this.compactLargeToolResults(
             this.deps.contextManager.prepareMessages(messages)
           );
+
+          // Re-inject lessons and todo context for each tool round (mirroring streaming path)
+          const lessonsBlockNext = getLessonsTracker(process.cwd()).buildContextBlock();
+          if (lessonsBlockNext) {
+            nextPreparedMessages.push({ role: 'system', content: lessonsBlockNext });
+          }
+          const todoSuffixNext = getTodoTracker(process.cwd()).buildContextSuffix();
+          if (todoSuffixNext) {
+            nextPreparedMessages.push({ role: 'system', content: todoSuffixNext });
+          }
+
           currentResponse = await this.deps.client.chat(
             nextPreparedMessages,
             tools,

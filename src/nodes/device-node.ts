@@ -278,7 +278,7 @@ export class DeviceNodeManager {
     const transport = await this.getTransport(deviceId);
     if (!transport) return null;
 
-    const outputPath = `/tmp/snap-${deviceId}-${Date.now()}.jpg`;
+    const outputPath = path.join(os.tmpdir(), `snap-${deviceId}-${Date.now()}.jpg`);
     const platform = this.toPlatform(device.type);
     const commands = getPlatformCommands(platform);
     if (!commands) return null;
@@ -304,7 +304,7 @@ export class DeviceNodeManager {
     if (!transport) return null;
 
     const dur = duration || 10;
-    const outputPath = `/tmp/screen-${deviceId}-${Date.now()}.mp4`;
+    const outputPath = path.join(os.tmpdir(), `screen-${deviceId}-${Date.now()}.mp4`);
     const platform = this.toPlatform(device.type);
     const commands = getPlatformCommands(platform);
     if (!commands) return null;
@@ -329,7 +329,7 @@ export class DeviceNodeManager {
     const transport = await this.getTransport(deviceId);
     if (!transport) return null;
 
-    const outputPath = `/tmp/screenshot-${deviceId}-${Date.now()}.png`;
+    const outputPath = path.join(os.tmpdir(), `screenshot-${deviceId}-${Date.now()}.png`);
     const platform = this.toPlatform(device.type);
     const commands = getPlatformCommands(platform);
     if (!commands) return null;

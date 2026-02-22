@@ -87,6 +87,10 @@ function extractIdentifiers(text: string): string[] {
 export class RestorableCompressor {
   /** identifier → original content */
   private store = new Map<string, string>();
+  /** Working directory captured at first writeToolResult call */
+  private workDir: string = process.cwd();
+  /** Maximum store entries before auto-eviction */
+  private static readonly MAX_STORE_ENTRIES = 500;
 
   /**
    * Compress a slice of messages that are about to be dropped.
@@ -160,7 +164,7 @@ export class RestorableCompressor {
 
     // 2. Tool call ID — check disk-backed store
     if (identifier.startsWith('call_') || identifier.startsWith('toulu_') || identifier.startsWith('toolu_')) {
-      const diskContent = this.readToolResultFromDisk(identifier);
+      const diskContent = this.readToolResultFromDisk(identifier, this.workDir);
       if (diskContent) {
         return { found: true, content: diskContent, identifier };
       }
@@ -207,6 +211,8 @@ export class RestorableCompressor {
    * @param workDir - Working directory (defaults to process.cwd())
    */
   writeToolResult(callId: string, content: string, workDir = process.cwd()): void {
+    // Capture working directory for later restore() calls
+    this.workDir = workDir;
     try {
       const dir = path.join(workDir, '.codebuddy', 'tool-results');
       if (!fs.existsSync(dir)) {
@@ -216,6 +222,13 @@ export class RestorableCompressor {
       fs.writeFileSync(filePath, content, 'utf-8');
       // Also store in memory for fast access
       this.store.set(callId, content);
+      // Auto-evict oldest entries if store grows too large (prevent memory leak in long sessions)
+      if (this.store.size > RestorableCompressor.MAX_STORE_ENTRIES) {
+        const keysToEvict = [...this.store.keys()].slice(0, Math.floor(RestorableCompressor.MAX_STORE_ENTRIES * 0.2));
+        for (const key of keysToEvict) {
+          this.store.delete(key);
+        }
+      }
     } catch (err) {
       // Non-critical: disk write failure should not break tool execution
       logger.debug('RestorableCompressor: failed to write tool result to disk', { callId, err });

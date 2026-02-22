@@ -420,14 +420,18 @@ export class PermissionManager extends EventEmitter {
    * Check if path matches a glob pattern
    */
   private pathMatches(filePath: string, pattern: string): boolean {
+    // Normalize separators to forward slashes for cross-platform compatibility
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    const normalizedPattern = pattern.replace(/\\/g, '/');
+
     // Convert glob to regex
-    const regex = pattern
+    const regex = normalizedPattern
       .replace(/[.+^${}()|[\]\\]/g, '\\$&')
       .replace(/\*\*/g, '{{GLOBSTAR}}')
       .replace(/\*/g, '[^/]*')
       .replace(/{{GLOBSTAR}}/g, '.*');
 
-    return new RegExp(`^${regex}$`).test(filePath);
+    return new RegExp(`^${regex}$`).test(normalizedPath);
   }
 
   /**

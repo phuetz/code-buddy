@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { assertSafeUrl } from '../security/ssrf-guard.js';
 
 // ============================================================================
 // Types
@@ -680,6 +681,16 @@ export class WebSearchTool {
 
   async fetchPage(url: string, _prompt?: string): Promise<ToolResult> {
     try {
+      // SSRF guard: block requests to internal/private network addresses
+      const ssrfCheck = await assertSafeUrl(url);
+      if (!ssrfCheck.safe) {
+        return {
+          success: false,
+          output: '',
+          error: `URL blocked by SSRF guard: ${ssrfCheck.reason}`,
+        };
+      }
+
       const response = await axios.get(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; CodeBuddyCLI/1.0; +https://github.com/code-buddy)',
