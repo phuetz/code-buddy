@@ -495,6 +495,17 @@ Suite a l'audit, les corrections suivantes ont ete implementees dans la meme ses
 | 23 | Differe — refactoring routage commandes (6h, pas un bug) | — |
 | 27 | Differe — registre outils dual-path (8h, faible risque) | — |
 
+### LOW fixes appliques
+
+| # | Fix | Fichier(s) modifie(s) |
+|:-:|-----|----------------------|
+| 31 | PID file permissions `0o600` a la creation | `daemon-manager.ts` |
+| 34 | Deduplique yields `tool_calls` dans le path streaming (guard `hasYieldedToolCalls()`) | `agent-executor.ts` |
+| 32 | Won't Fix — `getTodoTracker`/`getLessonsTracker` deja caches via singleton Map | — |
+| 33 | Deja fait en batch 3 (#25 = cache `getModelToolConfig`) | — |
+| 35 | Documente — `TaskPlanner` (interne) vs `PlanTool` (user-facing `/plan`) sont complementaires | — |
+| 36-38 | Differe — tests UI/extensions + lint (effort ~15h, faible risque) | — |
+
 ### Compatibilite Windows
 
 | Categorie | Action |

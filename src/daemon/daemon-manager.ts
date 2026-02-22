@@ -265,7 +265,7 @@ export class DaemonManager extends EventEmitter {
   private async writePid(pid: number): Promise<void> {
     try {
       // Atomic exclusive-create: fails if PID file already exists (prevents race)
-      const fd = fsSync.openSync(this.config.pidFile, 'wx');
+      const fd = fsSync.openSync(this.config.pidFile, 'wx', 0o600);
       fsSync.writeSync(fd, String(pid));
       fsSync.closeSync(fd);
     } catch (err: unknown) {

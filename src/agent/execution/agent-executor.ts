@@ -640,9 +640,11 @@ export class AgentExecutor {
           }
         }
 
-        const extracted = this.deps.streamingHandler.extractToolCalls();
-        if (extracted.toolCalls.length > 0) {
-          yield { type: "tool_calls", toolCalls: extracted.toolCalls };
+        if (!this.deps.streamingHandler.hasYieldedToolCalls()) {
+          const extracted = this.deps.streamingHandler.extractToolCalls();
+          if (extracted.toolCalls.length > 0) {
+            yield { type: "tool_calls", toolCalls: extracted.toolCalls };
+          }
         }
 
         const accumulatedMessage = this.deps.streamingHandler.getAccumulatedMessage();
