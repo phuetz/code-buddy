@@ -16,6 +16,7 @@
 import { CodeBuddyMessage } from '../codebuddy/client.js';
 import { createTokenCounter, TokenCounter } from './token-counter.js';
 import { logger } from '../utils/logger.js';
+import { getModelToolConfig } from '../config/model-tools.js';
 import {
   EnhancedContextCompressor,
   EnhancedCompressionConfig,
@@ -907,21 +908,9 @@ export function createContextManager(
   model: string,
   maxTokens?: number
 ): ContextManagerV2 {
-  // Default context limits for common models
-  const MODEL_LIMITS: Record<string, number> = {
-    'gpt-4': 8192,
-    'gpt-4-turbo': 128000,
-    'gpt-3.5-turbo': 4096,
-    'claude-3': 200000,
-    'llama3.2': 131072,
-    'llama3.1': 131072,
-    'mistral': 32768,
-    'qwen2.5': 32768,
-    // Local models often have lower limits
-    'default': 4096,
-  };
-
-  const detectedLimit = maxTokens || MODEL_LIMITS[model] || MODEL_LIMITS['default'];
+  // Use getModelToolConfig for glob-pattern matching (covers grok-3*, grok-4*, claude-*, etc.)
+  const toolConfig = getModelToolConfig(model);
+  const detectedLimit = maxTokens || toolConfig.contextWindow || 8192;
 
   return new ContextManagerV2({
     model,

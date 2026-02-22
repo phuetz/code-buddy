@@ -20,6 +20,7 @@ import {
 import { EnhancedMemory } from "../memory/index.js";
 import { PromptCacheManager } from "../optimization/prompt-cache.js";
 import { MoltbotHooksManager } from "../hooks/moltbot-hooks.js";
+import { getModelToolConfig } from "../config/model-tools.js";
 
 export interface PromptBuilderConfig {
   yoloMode: boolean;
@@ -167,6 +168,20 @@ export class PromptBuilder {
         });
       } catch {
         // non-critical — proceed with original prompt
+      }
+
+      // Truncate system prompt if it exceeds the model's context budget.
+      // Reserve 50% of (contextWindow - maxOutputTokens) for the system prompt;
+      // the rest goes to conversation history. Simple head-truncation keeps the
+      // most critical instructions (always at the top) intact.
+      const toolConfig = getModelToolConfig(modelName);
+      const contextWindow = toolConfig.contextWindow ?? 8192;
+      const maxOutputTokens = toolConfig.maxOutputTokens ?? 2048;
+      const budgetTokens = Math.floor((contextWindow - maxOutputTokens) * 0.5);
+      const budgetChars = budgetTokens * 4; // ~4 chars per token
+      if (systemPrompt.length > budgetChars) {
+        logger.warn(`System prompt truncated for ${modelName}: ${systemPrompt.length} chars → ${budgetChars} (budget: ${budgetTokens} tokens)`);
+        systemPrompt = systemPrompt.slice(0, budgetChars - 3) + '...';
       }
 
       // Cache system prompt for optimization

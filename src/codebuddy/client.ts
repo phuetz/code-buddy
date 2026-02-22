@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionChunk, ChatCompletionCreateParamsNonStreaming, ChatCompletionCreateParamsStreaming } from "openai/resources/chat";
 import { validateModel, getModelInfo } from "../utils/model-utils.js";
+import { getModelToolConfig } from "../config/model-tools.js";
 import { logger } from "../utils/logger.js";
 import { retry, RetryStrategies, RetryPredicates } from "../utils/retry.js";
 
@@ -145,7 +146,12 @@ export class CodeBuddyClient {
       logger.info('Using native Gemini API');
     }
     const envMax = Number(process.env.CODEBUDDY_MAX_TOKENS);
-    this.defaultMaxTokens = Number.isFinite(envMax) && envMax > 0 ? envMax : 1536;
+    if (Number.isFinite(envMax) && envMax > 0) {
+      this.defaultMaxTokens = envMax;
+    } else {
+      const toolConfig = getModelToolConfig(model || this.currentModel);
+      this.defaultMaxTokens = toolConfig.maxOutputTokens ?? 16384;
+    }
     if (model) {
       // Validate model type
       if (typeof model !== 'string') {
