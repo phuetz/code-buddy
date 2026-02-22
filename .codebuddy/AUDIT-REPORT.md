@@ -482,6 +482,19 @@ Suite a l'audit, les corrections suivantes ont ete implementees dans la meme ses
 | 21 | Abandonne — 0 erreurs ESLint trouvees (finding obsolete) | — |
 | 22 | Validation code via `validateGeneratedCode()` dans create-skill-tool | `create-skill-tool.ts` |
 
+### MEDIUM fixes appliques
+
+| # | Fix | Fichier(s) modifie(s) |
+|:-:|-----|----------------------|
+| 24 | Docker sandbox image pinnee a `node:22.13-slim` | `docker-sandbox.ts` |
+| 25 | Cache `getModelToolConfig()` par nom de modele | `model-tools.ts` |
+| 26 | i18n archive (zero imports production) | `_archived/i18n/` |
+| 28 | Won't Fix — ObservationVariator global par design (cycling anti-repetition) | — |
+| 29 | `saveFacts()` retourne `null` en cas d'echec d'ecriture + log `warn` | `precompaction-flush.ts` |
+| 30 | Warning sur merge lessons avec IDs dupliques et contenu different | `lessons-tracker.ts` |
+| 23 | Differe — refactoring routage commandes (6h, pas un bug) | — |
+| 27 | Differe — registre outils dual-path (8h, faible risque) | — |
+
 ### Compatibilite Windows
 
 | Categorie | Action |

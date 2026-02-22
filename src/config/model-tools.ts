@@ -304,23 +304,32 @@ function matchModel(modelName: string, pattern: string): boolean {
 /**
  * Get the tool configuration for a specific model.
  * Falls back to permissive defaults if no match.
+ * Results are cached per model name (when no custom configs are provided).
  */
+const _configCache = new Map<string, ModelToolConfig>();
+
 export function getModelToolConfig(
   modelName: string,
   customConfigs?: ModelToolConfig[],
 ): ModelToolConfig {
+  // Use cache for default config lookups (hot path)
+  if (!customConfigs && _configCache.has(modelName)) {
+    return _configCache.get(modelName)!;
+  }
+
   const configs = [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS];
 
   for (const config of configs) {
     if (matchModel(modelName, config.model)) {
       logger.debug('Model tool config matched', { model: modelName, pattern: config.model });
+      if (!customConfigs) _configCache.set(modelName, config);
       return config;
     }
   }
 
   // Permissive fallback
   logger.debug('No model tool config match, using defaults', { model: modelName });
-  return {
+  const fallback: ModelToolConfig = {
     model: modelName,
     supportsReasoning: false,
     supportsToolCalls: true,
@@ -329,6 +338,8 @@ export function getModelToolConfig(
     maxOutputTokens: 4096,
     patchFormat: 'search_replace',
   };
+  if (!customConfigs) _configCache.set(modelName, fallback);
+  return fallback;
 }
 
 /**

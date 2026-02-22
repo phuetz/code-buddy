@@ -44,7 +44,7 @@ export interface SandboxResult {
 // ============================================================================
 
 const DEFAULT_CONFIG: SandboxConfig = {
-  image: 'node:22-slim',
+  image: 'node:22.13-slim',
   timeout: 30000,
   memoryLimit: '512m',
   cpuLimit: '1.0',

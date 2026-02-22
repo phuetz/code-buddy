@@ -82,9 +82,14 @@ export class LessonsTracker {
     this.loaded = true;
     const globalItems = this.loadFile(this.globalPath);
     const projectItems = this.loadFile(this.projectPath);
-    // Merge: project overrides global for duplicate ids
+    // Merge: project overrides global for duplicate ids (warn on content mismatch)
     const byId = new Map<string, LessonItem>();
     for (const item of [...globalItems, ...projectItems]) {
+      const existing = byId.get(item.id);
+      if (existing && existing.content !== item.content) {
+        // eslint-disable-next-line no-console
+        console.warn(`[lessons] duplicate ID "${item.id}" — project overrides global`);
+      }
       byId.set(item.id, item);
     }
     this.items = Array.from(byId.values());

@@ -139,7 +139,7 @@ export class PrecompactionFlusher {
       .join('\n\n---\n\n');
   }
 
-  private async saveFacts(content: string, workDir: string): Promise<string> {
+  private async saveFacts(content: string, workDir: string): Promise<string | null> {
     const memoryPath = path.join(workDir, 'MEMORY.md');
     const datestamp = new Date().toISOString().split('T')[0];
     const header = `\n\n## Facts extracted ${datestamp} (pre-compaction flush)\n\n`;
@@ -161,8 +161,8 @@ export class PrecompactionFlusher {
         fs.appendFileSync(globalPath, block, 'utf-8');
         return globalPath;
       } catch {
-        logger.debug('PrecompactionFlusher: could not write facts', { err });
-        return memoryPath; // report intended path even on failure
+        logger.warn('PrecompactionFlusher: could not write facts to any location');
+        return null;
       }
     }
   }
