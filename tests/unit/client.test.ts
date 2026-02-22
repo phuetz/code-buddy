@@ -1141,8 +1141,8 @@ describe('CodeBuddyClient', () => {
       expect(result1).toBe(true);
       expect(result2).toBe(true);
       expect(result3).toBe(true);
-      // Promise caching should limit API calls (may be 1 or 2 depending on timing)
-      expect(mockCreate.mock.calls.length).toBeLessThanOrEqual(2);
+      // With single-flight pattern, exactly 1 API call should be made
+      expect(mockCreate).toHaveBeenCalledTimes(1);
     });
   });
 });

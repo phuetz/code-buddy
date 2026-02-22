@@ -10,7 +10,8 @@ module.exports = {
   // Exclude heavy tests from default runs (run with: npm test -- --testPathPattern=heavy)
   testPathIgnorePatterns: [
     '/node_modules/',
-    '\\.heavy\\.test\\.ts$'
+    '\\.heavy\\.test\\.ts$',
+    '/_archived/'
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

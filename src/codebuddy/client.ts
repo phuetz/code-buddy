@@ -36,6 +36,7 @@ interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming
   tools?: CodeBuddyTool[];
   tool_choice?: "auto" | "none" | "required";
   search_parameters?: SearchParameters;
+  thinking?: { type: 'enabled'; budget_tokens: number };
 }
 
 /** Streaming chat completion request payload */
@@ -255,7 +256,6 @@ export class CodeBuddyClient {
         logger.warn("Tool support probe returned empty choices array");
         this.toolSupportProbed = true;
         this.toolSupportDetected = false;
-        this.probePromise = null;
         return false;
       }
 
@@ -265,7 +265,6 @@ export class CodeBuddyClient {
 
       this.toolSupportProbed = true;
       this.toolSupportDetected = hasToolCall;
-      this.probePromise = null;
 
       if (hasToolCall) {
         logger.debug("Tool support detected: model supports function calling");
@@ -276,7 +275,6 @@ export class CodeBuddyClient {
       // If the request fails (e.g., tools not supported), assume no tool support
       this.toolSupportProbed = true;
       this.toolSupportDetected = false;
-      this.probePromise = null;
       return false;
     }
   }
@@ -840,6 +838,13 @@ export class CodeBuddyClient {
       const searchOpts = opts.searchOptions || searchOptions;
       if (searchOpts?.search_parameters && !this.isLocalInference()) {
         requestPayload.search_parameters = searchOpts.search_parameters;
+      }
+
+      // Add extended thinking budget if enabled
+      const { getExtendedThinking } = await import('../agent/extended-thinking.js');
+      const thinkingConfig = getExtendedThinking().getThinkingConfig();
+      if (thinkingConfig.thinking) {
+        requestPayload.thinking = thinkingConfig.thinking;
       }
 
       // Use retry with exponential backoff for API calls

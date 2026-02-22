@@ -464,6 +464,10 @@ Suite a l'audit, les corrections suivantes ont ete implementees dans la meme ses
 | 2 | Lessons/Todo re-injectes a chaque round d'outils (path sequentiel) | `agent-executor.ts` |
 | 3 | `isGrokModel()` corrige : verifie "grok" au lieu de "codebuddy" | `codebuddy-agent.ts` |
 | 5 | `RestorableCompressor` capture `workDir`, auto-eviction a 500 entrees | `restorable-compression.ts` |
+| 4 | Race condition probe — supprime `probePromise = null` (single-flight pattern) | `client.ts` |
+| 6 | ExtendedThinkingManager integre dans `chat()` — `budget_tokens` passe a l'API | `client.ts` |
+| 7 | Audit corrige : Repair Engine, Specialized Agents, Task Planner sont VIVANTS (faux positifs). Multi-Agent System archive | `_archived/multi-agent/` |
+| 8 | Orchestrator archive (code mort confirme, ~880 LOC) | `_archived/orchestrator/` |
 
 ### HIGH fixes appliques
 
