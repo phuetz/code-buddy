@@ -55,7 +55,8 @@ describe('BashTool - Streaming Execution', () => {
     expect(result.value.success).toBe(false);
   });
 
-  it('should handle timeout', async () => {
+  // sleep is not available on Windows
+  (process.platform === 'win32' ? it.skip : it)('should handle timeout', async () => {
     const gen = bash.executeStreaming('sleep 60', 500);
     const chunks: string[] = [];
 

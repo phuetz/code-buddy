@@ -50,6 +50,7 @@ jest.mock('../../src/codebuddy/tools.js', () => ({
   }),
 }));
 
+import * as path from 'path';
 import { ToolExecutor, CodeBuddyToolCall, ToolExecutorDependencies, ToolMetrics } from '../../src/agent/tool-executor';
 import {
   TextEditorTool,
@@ -208,8 +209,8 @@ describe('ToolExecutor', () => {
         const result = await executor.execute(toolCall);
 
         expect(result.success).toBe(true);
-        expect(mockCheckpointManager.checkpointBeforeCreate).toHaveBeenCalledWith('/test/new.ts');
-        expect(mockTextEditor.create).toHaveBeenCalledWith('/test/new.ts', 'console.log("hello");');
+        expect(mockCheckpointManager.checkpointBeforeCreate).toHaveBeenCalledWith(path.normalize('/test/new.ts'));
+        expect(mockTextEditor.create).toHaveBeenCalledWith(path.normalize('/test/new.ts'), 'console.log("hello");');
       });
 
       it('should handle create_file with empty content', async () => {
@@ -224,7 +225,7 @@ describe('ToolExecutor', () => {
 
         await executor.execute(toolCall);
 
-        expect(mockTextEditor.create).toHaveBeenCalledWith('/test/empty.ts', '');
+        expect(mockTextEditor.create).toHaveBeenCalledWith(path.normalize('/test/empty.ts'), '');
       });
 
       it('should handle create_file with special characters', async () => {
@@ -240,7 +241,7 @@ describe('ToolExecutor', () => {
 
         await executor.execute(toolCall);
 
-        expect(mockTextEditor.create).toHaveBeenCalledWith('/test/special.ts', specialContent);
+        expect(mockTextEditor.create).toHaveBeenCalledWith(path.normalize('/test/special.ts'), specialContent);
       });
     });
 
@@ -262,9 +263,9 @@ describe('ToolExecutor', () => {
         const result = await executor.execute(toolCall);
 
         expect(result.success).toBe(true);
-        expect(mockCheckpointManager.checkpointBeforeEdit).toHaveBeenCalledWith('/test/file.ts');
+        expect(mockCheckpointManager.checkpointBeforeEdit).toHaveBeenCalledWith(path.normalize('/test/file.ts'));
         expect(mockTextEditor.strReplace).toHaveBeenCalledWith(
-          '/test/file.ts',
+          path.normalize('/test/file.ts'),
           'old text',
           'new text',
           undefined
@@ -288,7 +289,7 @@ describe('ToolExecutor', () => {
 
         await executor.execute(toolCall);
 
-        expect(mockTextEditor.strReplace).toHaveBeenCalledWith('/test/file.ts', 'foo', 'bar', true);
+        expect(mockTextEditor.strReplace).toHaveBeenCalledWith(path.normalize('/test/file.ts'), 'foo', 'bar', true);
       });
 
       it('should handle multiline replacements', async () => {
@@ -306,7 +307,7 @@ describe('ToolExecutor', () => {
 
         await executor.execute(toolCall);
 
-        expect(mockTextEditor.strReplace).toHaveBeenCalledWith('/test/file.ts', oldStr, newStr, undefined);
+        expect(mockTextEditor.strReplace).toHaveBeenCalledWith(path.normalize('/test/file.ts'), oldStr, newStr, undefined);
       });
     });
   });
@@ -532,7 +533,7 @@ describe('ToolExecutor', () => {
 
       expect(result.success).toBe(true);
       expect(mockMorphEditor.editFile).toHaveBeenCalledWith(
-        '/test/file.ts',
+        path.normalize('/test/file.ts'),
         'Add type annotation',
         'const x: number = 1;'
       );
@@ -916,8 +917,8 @@ describe('ToolExecutor', () => {
       expect(results.get('call_45')?.success).toBe(true);
 
       // Write operations should be in order
-      expect(executionOrder[0]).toBe('create:/a.ts');
-      expect(executionOrder[1]).toBe('replace:/a.ts');
+      expect(executionOrder[0]).toBe(`create:${path.normalize('/a.ts')}`);
+      expect(executionOrder[1]).toBe(`replace:${path.normalize('/a.ts')}`);
     });
 
     it('should handle mixed parallel and sequential', async () => {
@@ -1038,7 +1039,7 @@ describe('ToolExecutor', () => {
       const result = await executor.execute(toolCall);
 
       expect(result.success).toBe(true);
-      expect(mockTextEditor.create).toHaveBeenCalledWith('/large.ts', longContent);
+      expect(mockTextEditor.create).toHaveBeenCalledWith(path.normalize('/large.ts'), longContent);
     });
   });
 });

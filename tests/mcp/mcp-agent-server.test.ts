@@ -619,11 +619,8 @@ describe('MCP Agent Intelligence Layer', () => {
       await handler({ message: 'test' });
 
       const { CodeBuddyAgent } = require('../../src/agent/codebuddy-agent');
-      expect(CodeBuddyAgent).toHaveBeenCalledWith(
-        'test-key-123',
-        expect.anything(), // baseURL from env
-        expect.anything(), // model from env
-      );
+      expect(CodeBuddyAgent).toHaveBeenCalled();
+      expect(CodeBuddyAgent.mock.calls[0][0]).toBe('test-key-123');
     });
 
     it('should throw when no API key is set', async () => {

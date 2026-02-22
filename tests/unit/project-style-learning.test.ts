@@ -3,6 +3,7 @@
  * Tests style analysis, pattern extraction, and code transformation
  */
 
+import path from 'path';
 import ProjectStyleLearner, {
   getProjectStyleLearner,
   StylePattern,
@@ -92,14 +93,16 @@ describe('ProjectStyleLearner', () => {
     });
 
     it('should skip node_modules directory', async () => {
+      const projectDir = '/project';
+      const srcDir = path.join(projectDir, 'src');
       mockFs.readdir.mockImplementation(async (dir) => {
-        if (dir === '/project') {
+        if (dir === projectDir) {
           return [
             { name: 'node_modules', isDirectory: () => true, isFile: () => false },
             { name: 'src', isDirectory: () => true, isFile: () => false },
           ] as never;
         }
-        if (dir === '/project/src') {
+        if (dir === srcDir) {
           return [
             { name: 'app.ts', isDirectory: () => false, isFile: () => true },
           ] as never;
@@ -108,22 +111,24 @@ describe('ProjectStyleLearner', () => {
       });
       mockFs.readFile.mockResolvedValue('const x = 1;' as never);
 
-      const style = await learner.analyzeProject('/project');
+      const style = await learner.analyzeProject(projectDir);
 
       // node_modules should not contribute to analyzed files
       expect(style.analyzedFiles).toBe(1);
     });
 
     it('should skip hidden directories', async () => {
+      const projectDir = '/project';
+      const srcDir = path.join(projectDir, 'src');
       mockFs.readdir.mockImplementation(async (dir) => {
-        if (dir === '/project') {
+        if (dir === projectDir) {
           return [
             { name: '.git', isDirectory: () => true, isFile: () => false },
             { name: '.vscode', isDirectory: () => true, isFile: () => false },
             { name: 'src', isDirectory: () => true, isFile: () => false },
           ] as never;
         }
-        if (dir === '/project/src') {
+        if (dir === srcDir) {
           return [
             { name: 'app.ts', isDirectory: () => false, isFile: () => true },
           ] as never;
@@ -132,7 +137,7 @@ describe('ProjectStyleLearner', () => {
       });
       mockFs.readFile.mockResolvedValue('const x = 1;' as never);
 
-      const style = await learner.analyzeProject('/project');
+      const style = await learner.analyzeProject(projectDir);
 
       expect(style.analyzedFiles).toBe(1);
     });

@@ -174,11 +174,13 @@ describe('TemplateEngine', () => {
         skipGit: true,
       });
 
-      expect(result.filesCreated).toContain('package.json');
-      expect(result.filesCreated).toContain('tsconfig.json');
-      expect(result.filesCreated).toContain('src/index.ts');
-      expect(result.filesCreated).toContain('.gitignore');
-      expect(result.filesCreated).toContain('README.md');
+      // Normalize path separators for cross-platform comparison
+      const normalizedFiles = result.filesCreated.map(f => f.replace(/\\/g, '/'));
+      expect(normalizedFiles).toContain('package.json');
+      expect(normalizedFiles).toContain('tsconfig.json');
+      expect(normalizedFiles).toContain('src/index.ts');
+      expect(normalizedFiles).toContain('.gitignore');
+      expect(normalizedFiles).toContain('README.md');
     });
 
     it('should return duration', async () => {

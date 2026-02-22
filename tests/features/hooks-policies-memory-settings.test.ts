@@ -93,10 +93,10 @@ describe('AdvancedHookSystem', () => {
     let runner: InstanceType<typeof AdvancedHookRunner>;
 
     beforeEach(() => {
-      runner = new AdvancedHookRunner('/tmp');
+      runner = new AdvancedHookRunner(os.tmpdir());
     });
 
-    it('should run a command hook that returns JSON decision', async () => {
+    (process.platform === 'win32' ? it.skip : it)('should run a command hook that returns JSON decision', async () => {
       const hook = {
         name: 'test-cmd',
         event: HookEvent.PreToolUse,
@@ -109,7 +109,7 @@ describe('AdvancedHookSystem', () => {
       expect(decision.additionalContext).toBe('blocked');
     });
 
-    it('should return allow for command hook with non-JSON output', async () => {
+    (process.platform === 'win32' ? it.skip : it)('should return allow for command hook with non-JSON output', async () => {
       const hook = {
         name: 'test-nonjson',
         event: HookEvent.PreBash,
@@ -121,7 +121,7 @@ describe('AdvancedHookSystem', () => {
       expect(decision.action).toBe('allow');
     });
 
-    it('should return allow for command hook with non-zero exit', async () => {
+    (process.platform === 'win32' ? it.skip : it)('should return allow for command hook with non-zero exit', async () => {
       const hook = {
         name: 'test-fail',
         event: HookEvent.PreBash,
@@ -350,8 +350,8 @@ describe('AdvancedHookSystem', () => {
     });
 
     it('should create new runner when directory changes', () => {
-      const r1 = getAdvancedHookRunner('/tmp/a');
-      const r2 = getAdvancedHookRunner('/tmp/b');
+      const r1 = getAdvancedHookRunner(path.join(os.tmpdir(), 'a'));
+      const r2 = getAdvancedHookRunner(path.join(os.tmpdir(), 'b'));
       expect(r1).not.toBe(r2);
     });
   });

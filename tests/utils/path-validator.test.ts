@@ -49,8 +49,9 @@ describe('PathValidator', () => {
 
   describe('setBaseDirectory', () => {
     it('should update base directory', () => {
-      validator.setBaseDirectory('/new/path');
-      expect(validator.getBaseDirectory()).toBe('/new/path');
+      const newPath = path.resolve('/new/path');
+      validator.setBaseDirectory(newPath);
+      expect(validator.getBaseDirectory()).toBe(newPath);
     });
   });
 
@@ -261,8 +262,9 @@ describe('Singleton and utility functions', () => {
   });
 
   it('initializePathValidator should create new instance with options', () => {
-    const validator = initializePathValidator({ baseDirectory: '/tmp' });
-    expect(validator.getBaseDirectory()).toBe('/tmp');
+    const tmpDir = path.resolve(os.tmpdir());
+    const validator = initializePathValidator({ baseDirectory: tmpDir });
+    expect(validator.getBaseDirectory()).toBe(tmpDir);
   });
 
   it('validatePath should validate using default validator', () => {

@@ -323,7 +323,8 @@ describe('SecurityAuditor - authorization', () => {
 // Credentials checks
 // ==========================================================================
 
-describe('SecurityAuditor - credentials', () => {
+// chmod/file permissions are Unix-only concepts
+(process.platform === 'win32' ? describe.skip : describe)('SecurityAuditor - credentials', () => {
   let tmpCredDir: string;
 
   beforeEach(async () => {
@@ -372,7 +373,8 @@ describe('SecurityAuditor - credentials', () => {
 // File permission checks
 // ==========================================================================
 
-describe('SecurityAuditor - file permissions', () => {
+// chmod/file permissions are Unix-only concepts
+(process.platform === 'win32' ? describe.skip : describe)('SecurityAuditor - file permissions', () => {
   let tmpConfigDir: string;
   let tmpSessionsDir: string;
   let tmpPluginsDir: string;
@@ -684,7 +686,8 @@ describe('SecurityAuditor - tools', () => {
 // Auto-fix
 // ==========================================================================
 
-describe('SecurityAuditor - fix', () => {
+// chmod/file permissions are Unix-only concepts
+(process.platform === 'win32' ? describe.skip : describe)('SecurityAuditor - fix', () => {
   let tmpDir: string;
 
   beforeEach(async () => {

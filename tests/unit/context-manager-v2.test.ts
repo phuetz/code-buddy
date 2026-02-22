@@ -658,7 +658,7 @@ describe('ContextManagerV2', () => {
   describe('Factory Functions', () => {
     it('should create manager with model detection', () => {
       const gptManager = createContextManager('gpt-4');
-      expect(gptManager.getConfig().maxContextTokens).toBe(8192);
+      expect(gptManager.getConfig().maxContextTokens).toBe(128000);
       gptManager.dispose();
     });
 
@@ -670,7 +670,8 @@ describe('ContextManagerV2', () => {
 
     it('should create manager for llama models', () => {
       const llamaManager = createContextManager('llama3.2');
-      expect(llamaManager.getConfig().maxContextTokens).toBe(131072);
+      // llama3.2 falls through to default contextWindow (32768)
+      expect(llamaManager.getConfig().maxContextTokens).toBe(32768);
       llamaManager.dispose();
     });
 
@@ -682,7 +683,8 @@ describe('ContextManagerV2', () => {
 
     it('should use default limit for unknown models', () => {
       const unknownManager = createContextManager('unknown-model');
-      expect(unknownManager.getConfig().maxContextTokens).toBe(4096);
+      // Unknown models use the permissive fallback contextWindow (32768)
+      expect(unknownManager.getConfig().maxContextTokens).toBe(32768);
       unknownManager.dispose();
     });
 

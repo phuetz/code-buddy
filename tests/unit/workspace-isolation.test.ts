@@ -31,9 +31,10 @@ describe('WorkspaceIsolation', () => {
 
   describe('Path Validation', () => {
     it('should allow paths within workspace', () => {
-      const result = isolation.validatePath('/home/user/project/src/file.ts');
+      const filePath = path.join(testWorkspace, 'src', 'file.ts');
+      const result = isolation.validatePath(filePath);
       expect(result.valid).toBe(true);
-      expect(result.resolved).toBe('/home/user/project/src/file.ts');
+      expect(result.resolved).toBe(path.resolve(filePath));
     });
 
     it('should allow the workspace root itself', () => {
@@ -137,8 +138,9 @@ describe('WorkspaceIsolation', () => {
     });
 
     it('resolveOrThrow should return resolved path for valid paths', () => {
-      const resolved = isolation.resolveOrThrow('/home/user/project/file.ts');
-      expect(resolved).toBe('/home/user/project/file.ts');
+      const filePath = path.join(testWorkspace, 'file.ts');
+      const resolved = isolation.resolveOrThrow(filePath);
+      expect(resolved).toBe(path.resolve(filePath));
     });
   });
 
@@ -204,12 +206,13 @@ describe('Singleton Functions', () => {
   });
 
   it('initializeWorkspaceIsolation should configure correctly', () => {
+    const testDir = path.resolve('/test/dir');
     const isolation = initializeWorkspaceIsolation({
       allowOutside: true,
       directory: '/test/dir',
     });
     expect(isolation.getConfig().enabled).toBe(false);
-    expect(isolation.getConfig().workspaceRoot).toBe('/test/dir');
+    expect(isolation.getConfig().workspaceRoot).toBe(testDir);
   });
 
   it('validateWorkspacePath should use singleton', () => {

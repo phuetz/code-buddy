@@ -213,8 +213,10 @@ Prompt with empty frontmatter`;
         return Promise.resolve(['shared.md']);
       });
 
-      fsExtra.readFile.mockImplementation((path: string) => {
-        if (path.includes('.codebuddy/commands')) {
+      fsExtra.readFile.mockImplementation((filePath: string) => {
+        // Normalize separators for cross-platform matching
+        const normalized = filePath.replace(/\\/g, '/');
+        if (normalized.includes('.codebuddy/commands')) {
           // Project directory
           return Promise.resolve('Project version');
         }
@@ -429,8 +431,10 @@ Prompt with empty frontmatter`;
 
   describe('deleteCommand', () => {
     test('should delete project command if exists', async () => {
-      fsExtra.pathExists.mockImplementation((path: string) => {
-        return Promise.resolve(path.includes('/test/project'));
+      fsExtra.pathExists.mockImplementation((filePath: string) => {
+        // Normalize separators for cross-platform matching
+        const normalized = filePath.replace(/\\/g, '/');
+        return Promise.resolve(normalized.includes('/test/project'));
       });
 
       const result = await loader.deleteCommand('toDelete');

@@ -14,6 +14,7 @@
  * - Reload functionality
  */
 
+import * as path from 'path';
 import {
   SlashCommandManager,
   SlashCommand,
@@ -262,11 +263,11 @@ describe('SlashCommandManager', () => {
     });
 
     describe('debug command', () => {
-      test('should return prompt with debugging guidance', () => {
+      test('should match debug-issue via partial match since /debug was removed', () => {
         const result = manager.execute('/debug');
-
+        // /debug was removed but /debug-issue still exists, so partial match resolves to it
         expect(result.success).toBe(true);
-        expect(result.prompt).toBe('__DEBUG_MODE__');
+        expect(result.prompt).toBeDefined();
       });
     });
 
@@ -1274,7 +1275,7 @@ Use $1 and then use $1 again
       manager.createCommandTemplate('newcmd', 'Test');
 
       expect(fs.mkdirSync).toHaveBeenCalledWith(
-        expect.stringContaining('.codebuddy/commands'),
+        expect.stringContaining(path.join('.codebuddy', 'commands')),
         expect.objectContaining({ recursive: true })
       );
     });

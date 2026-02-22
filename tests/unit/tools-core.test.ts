@@ -121,6 +121,8 @@ jest.mock('../../src/utils/input-validator', () => ({
 // Test Utilities
 // =============================================================================
 
+const isWindows = process.platform === 'win32';
+
 const TEST_DIR = path.join(os.tmpdir(), 'grok-cli-tests-' + Date.now());
 
 beforeAll(async () => {
@@ -237,9 +239,11 @@ describe('BashTool', () => {
       path.join(os.homedir(), '.aws'),
       path.join(os.homedir(), '.docker'),
       path.join(os.homedir(), '.npmrc'),
-      '/etc/passwd',
-      '/etc/shadow',
-      '/etc/sudoers',
+      ...(isWindows ? [] : [
+        '/etc/passwd',
+        '/etc/shadow',
+        '/etc/sudoers',
+      ]),
     ];
 
     test.each(blockedPaths)(
@@ -253,7 +257,8 @@ describe('BashTool', () => {
   });
 
   describe('Timeout Handling', () => {
-    test('should timeout long-running commands', async () => {
+    // sleep is not available on Windows
+    (isWindows ? test.skip : test)('should timeout long-running commands', async () => {
       const result = await bashTool.execute('sleep 10', 500);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
@@ -277,7 +282,8 @@ describe('BashTool', () => {
       process.chdir(originalCwd);
     });
 
-    test('should change to valid directory', async () => {
+    // /tmp is a Unix-only path
+    (isWindows ? test.skip : test)('should change to valid directory', async () => {
       const result = await bashTool.execute('cd /tmp');
       expect(result.success).toBe(true);
       expect(result.output).toContain('/tmp');
@@ -290,12 +296,14 @@ describe('BashTool', () => {
       expect(result.error).toContain('Cannot change directory');
     });
 
-    test('should handle cd with quoted path', async () => {
+    // /tmp is a Unix-only path
+    (isWindows ? test.skip : test)('should handle cd with quoted path', async () => {
       const result = await bashTool.execute('cd "/tmp"');
       expect(result.success).toBe(true);
     });
 
-    test('should handle cd with single quotes', async () => {
+    // /tmp is a Unix-only path
+    (isWindows ? test.skip : test)('should handle cd with single quotes', async () => {
       const result = await bashTool.execute("cd '/tmp'");
       expect(result.success).toBe(true);
     });
@@ -336,7 +344,8 @@ describe('BashTool', () => {
       expect(result).toBeDefined();
     }, 30000);
 
-    test('grep should use ripgrep for searching', async () => {
+    // ripgrep may not be available on Windows
+    (isWindows ? test.skip : test)('grep should use ripgrep for searching', async () => {
       const result = await bashTool.grep('test', '.');
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -614,7 +623,7 @@ describe('TextEditorTool', () => {
       const maliciousPath = path.join(TEST_DIR, '..', '..', 'etc', 'passwd');
       const result = await textEditor.view(maliciousPath);
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/traversal|blocked|protected/i);
+      expect(result.error).toMatch(/traversal|blocked|protected|outside/i);
     });
 
     test('should allow paths within base directory', async () => {
@@ -1012,7 +1021,8 @@ describe('GitTool', () => {
 // SearchTool Tests
 // =============================================================================
 
-describe('SearchTool', () => {
+// SearchTool tests rely on ripgrep (rg) and grep which may not be available on Windows
+(isWindows ? describe.skip : describe)('SearchTool', () => {
   let searchTool: SearchTool;
   let testSearchDir: string;
 
@@ -1217,7 +1227,7 @@ describe('Tools Integration', () => {
     await fs.remove(integrationDir);
   });
 
-  test('should create file and search its content', async () => {
+  (isWindows ? test.skip : test)('should create file and search its content', async () => {
     const filePath = path.join(integrationDir, 'searchable.ts');
 
     // Create file
@@ -1229,7 +1239,8 @@ describe('Tools Integration', () => {
     expect(searchResult.success).toBe(true);
   });
 
-  test('should edit file and verify changes with bash', async () => {
+  // cat is not available on Windows
+  (isWindows ? test.skip : test)('should edit file and verify changes with bash', async () => {
     const filePath = path.join(integrationDir, 'editable.txt');
 
     // Create file
@@ -1244,7 +1255,7 @@ describe('Tools Integration', () => {
     expect(catResult.output).toContain('modified');
   });
 
-  test('should list created files with bash', async () => {
+  (isWindows ? test.skip : test)('should list created files with bash', async () => {
     // Create multiple files
     await textEditor.create(path.join(integrationDir, 'file1.txt'), 'content1');
     await textEditor.create(path.join(integrationDir, 'file2.txt'), 'content2');

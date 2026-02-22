@@ -173,7 +173,7 @@ describe('TemplateEngine', () => {
     it('should load custom templates from directory', async () => {
       mockExistsSync.mockImplementation((p: string) => {
         if (p === '/custom/templates') return true;
-        if (p === '/custom/templates/my-template/template.json') return true;
+        if (p === path.join('/custom/templates', 'my-template', 'template.json')) return true;
         return false;
       });
 
@@ -212,7 +212,7 @@ describe('TemplateEngine', () => {
     it('should emit error for invalid template JSON', async () => {
       mockExistsSync.mockImplementation((p: string) => {
         if (p === '/custom/templates') return true;
-        if (p === '/custom/templates/bad-template/template.json') return true;
+        if (p === path.join('/custom/templates', 'bad-template', 'template.json')) return true;
         return false;
       });
 
@@ -255,7 +255,7 @@ describe('TemplateEngine', () => {
     });
 
     it('should throw error if project directory already exists', async () => {
-      mockExistsSync.mockImplementation((p: string) => p === '/output/my-project');
+      mockExistsSync.mockImplementation((p: string) => p === path.join('/output', 'my-project'));
 
       const options: GenerateOptions = {
         template: 'node-cli',
@@ -289,7 +289,7 @@ describe('TemplateEngine', () => {
 
       await engine.generate(options);
 
-      expect(mockMkdir).toHaveBeenCalledWith('/output/my-project', { recursive: true });
+      expect(mockMkdir).toHaveBeenCalledWith(path.join('/output', 'my-project'), { recursive: true });
     });
 
     it('should create template directories', async () => {
@@ -303,8 +303,8 @@ describe('TemplateEngine', () => {
 
       await engine.generate(options);
 
-      expect(mockMkdir).toHaveBeenCalledWith('/output/my-project/src', { recursive: true });
-      expect(mockMkdir).toHaveBeenCalledWith('/output/my-project/tests', { recursive: true });
+      expect(mockMkdir).toHaveBeenCalledWith(path.join('/output', 'my-project', 'src'), { recursive: true });
+      expect(mockMkdir).toHaveBeenCalledWith(path.join('/output', 'my-project', 'tests'), { recursive: true });
     });
 
     it('should create template files with variable substitution', async () => {
@@ -393,7 +393,7 @@ describe('TemplateEngine', () => {
       const result = await engine.generate(options);
 
       expect(result.success).toBe(true);
-      expect(result.projectPath).toBe('/output/my-project');
+      expect(result.projectPath).toBe(path.join('/output', 'my-project'));
       expect(result.filesCreated.length).toBeGreaterThan(0);
       expect(result.duration).toBeGreaterThanOrEqual(0);
       expect(result.nextSteps).toContain('cd my-project');
@@ -797,7 +797,7 @@ describe('TemplateEngine', () => {
 
       await engine.generate(options);
 
-      expect(mockChmod).toHaveBeenCalledWith('/output/test/bin/run.sh', 0o755);
+      expect(mockChmod).toHaveBeenCalledWith(path.join('/output', 'test', 'bin', 'run.sh'), 0o755);
     });
   });
 
@@ -867,7 +867,7 @@ describe('Factory Functions', () => {
       const result = await generateProject(options);
 
       expect(result.success).toBe(true);
-      expect(result.projectPath).toBe('/output/quick-project');
+      expect(result.projectPath).toBe(path.join('/output', 'quick-project'));
     });
   });
 });

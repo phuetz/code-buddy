@@ -15,6 +15,7 @@
  */
 
 import { EventEmitter } from 'events';
+import * as path from 'path';
 
 // Create mock functions
 const mockPathExists = jest.fn().mockResolvedValue(false);
@@ -103,8 +104,9 @@ describe('WorkspaceDetector', () => {
     });
 
     it('should detect React project', async () => {
-      mockPathExists.mockImplementation((path: string) => {
-        if (path.includes('src/App.tsx')) return Promise.resolve(true);
+      const reactFile = path.join('src', 'App.tsx');
+      mockPathExists.mockImplementation((p: string) => {
+        if (p.includes(reactFile)) return Promise.resolve(true);
         return Promise.resolve(false);
       });
 
@@ -876,7 +878,7 @@ describe('WorkspaceDetector', () => {
         const fileMap: Record<string, string> = {
           node: 'package.json',
           typescript: 'tsconfig.json',
-          react: 'src/App.tsx',
+          react: path.join('src', 'App.tsx'),
           nextjs: 'next.config.js',
           vue: 'vue.config.js',
           angular: 'angular.json',
@@ -889,9 +891,9 @@ describe('WorkspaceDetector', () => {
           php: 'composer.json',
         };
 
-        mockPathExists.mockImplementation((path: string) => {
+        mockPathExists.mockImplementation((p: string) => {
           const file = fileMap[type];
-          if (file && path.includes(file)) return Promise.resolve(true);
+          if (file && p.includes(file)) return Promise.resolve(true);
           return Promise.resolve(false);
         });
 

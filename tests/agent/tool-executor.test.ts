@@ -2,6 +2,7 @@
  * Tests for ToolExecutor module
  */
 
+import * as path from "path";
 import { ToolExecutor, CodeBuddyToolCall } from "../../src/agent/tool-executor";
 
 // Mock all dependencies
@@ -131,8 +132,8 @@ describe("ToolExecutor", () => {
 
       await executor.execute(toolCall);
 
-      expect(mockCheckpointManager.checkpointBeforeCreate).toHaveBeenCalledWith("/test/new.ts");
-      expect(mockTextEditor.create).toHaveBeenCalledWith("/test/new.ts", "console.log('hello');");
+      expect(mockCheckpointManager.checkpointBeforeCreate).toHaveBeenCalledWith(path.normalize("/test/new.ts"));
+      expect(mockTextEditor.create).toHaveBeenCalledWith(path.normalize("/test/new.ts"), "console.log('hello');");
     });
 
     it("should execute str_replace_editor tool with checkpoint", async () => {
@@ -152,8 +153,8 @@ describe("ToolExecutor", () => {
 
       await executor.execute(toolCall);
 
-      expect(mockCheckpointManager.checkpointBeforeEdit).toHaveBeenCalledWith("/test/file.ts");
-      expect(mockTextEditor.strReplace).toHaveBeenCalledWith("/test/file.ts", "old", "new", true);
+      expect(mockCheckpointManager.checkpointBeforeEdit).toHaveBeenCalledWith(path.normalize("/test/file.ts"));
+      expect(mockTextEditor.strReplace).toHaveBeenCalledWith(path.normalize("/test/file.ts"), "old", "new", true);
     });
 
     it("should execute bash tool", async () => {

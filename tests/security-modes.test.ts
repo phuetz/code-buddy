@@ -1,6 +1,7 @@
 /**
  * Tests for Security Mode Manager
  */
+import * as path from 'path';
 import { SecurityModeManager, resetSecurityModeManager } from '../src/security/security-modes';
 
 describe('SecurityModeManager', () => {
@@ -237,7 +238,7 @@ describe('SecurityModeManager', () => {
     it('should add allowed directories', () => {
       manager.addAllowedDirectory('/custom/allowed/dir');
       const config = manager.getConfig();
-      expect(config.allowedDirectories).toContain('/custom/allowed/dir');
+      expect(config.allowedDirectories).toContain(path.resolve('/custom/allowed/dir'));
     });
   });
 });

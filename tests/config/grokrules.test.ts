@@ -164,18 +164,20 @@ security:
     });
 
     it("should check blocked paths", async () => {
+      // Use platform-appropriate absolute paths since isPathAllowed uses path.resolve + startsWith
+      const blockedDir = path.resolve(tempDir, "blocked");
+      const allowedDir = path.resolve(tempDir, "allowed");
       const rulesContent = `
 security:
   blockedPaths:
-    - /etc
-    - /usr
+    - ${blockedDir}
 `;
       fs.writeFileSync(path.join(tempDir, ".codebuddyrules"), rulesContent);
 
       await manager.initialize(tempDir);
 
-      expect(manager.isPathAllowed("/etc/passwd")).toBe(false);
-      expect(manager.isPathAllowed("/home/user")).toBe(true);
+      expect(manager.isPathAllowed(path.join(blockedDir, "secret.txt"))).toBe(false);
+      expect(manager.isPathAllowed(path.join(allowedDir, "file.txt"))).toBe(true);
     });
   });
 

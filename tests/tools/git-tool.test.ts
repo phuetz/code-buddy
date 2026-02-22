@@ -243,7 +243,7 @@ describe('GitTool.cherryPick', () => {
     // Verify the file exists on main now
     const filePath = path.join(tmpDir, 'feature.txt');
     expect(fs.existsSync(filePath)).toBe(true);
-    expect(fs.readFileSync(filePath, 'utf-8')).toBe('feature content\n');
+    expect(fs.readFileSync(filePath, 'utf-8').replace(/\r\n/g, '\n')).toBe('feature content\n');
 
     // Verify a new commit was created
     const log = runGit('log --oneline -1');

@@ -240,9 +240,9 @@ describe('compress command', () => {
       const formatted = formatCompressResult(result);
 
       expect(formatted).toContain('Context compressed:');
-      expect(formatted).toContain('Original: 10,000 tokens');
-      expect(formatted).toContain('Compressed: 2,000 tokens');
-      expect(formatted).toContain('Saved: 8,000 tokens (80%)');
+      expect(formatted).toContain(`Original: ${(10000).toLocaleString()} tokens`);
+      expect(formatted).toContain(`Compressed: ${(2000).toLocaleString()} tokens`);
+      expect(formatted).toContain(`Saved: ${(8000).toLocaleString()} tokens (80%)`);
     });
 
     it('should format numbers with locale formatting', () => {
@@ -257,9 +257,9 @@ describe('compress command', () => {
 
       const formatted = formatCompressResult(result);
 
-      // Should use locale-specific number formatting (commas)
-      expect(formatted).toContain('1,000,000');
-      expect(formatted).toContain('500,000');
+      // Should use locale-specific number formatting
+      expect(formatted).toContain((1000000).toLocaleString());
+      expect(formatted).toContain((500000).toLocaleString());
     });
 
     it('should handle edge case with zero savings', () => {

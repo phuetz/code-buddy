@@ -1184,11 +1184,14 @@ security:
       });
 
       it('should check blocked paths', async () => {
+        // Use resolved absolute paths so the test works on both Unix and Windows
+        const blockedDir = path.resolve('/etc');
+        const blockedDir2 = path.resolve('/usr');
         const rulesContent = `
 security:
   blockedPaths:
-    - /etc
-    - /usr
+    - ${blockedDir}
+    - ${blockedDir2}
 `;
         fs.writeFileSync(path.join(tempDir, '.codebuddyrules'), rulesContent);
 

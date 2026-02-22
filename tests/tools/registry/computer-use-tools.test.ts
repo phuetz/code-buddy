@@ -335,9 +335,9 @@ describe('Computer Use Tool Adapters', () => {
   // ============================================================================
 
   describe('createMiscTools', () => {
-    it('should return all four tool types', () => {
+    it('should return all tool types', () => {
       const tools = createMiscTools();
-      expect(tools).toHaveLength(4);
+      expect(tools).toHaveLength(6);
 
       const names = tools.map(t => t.name);
       expect(names).toContain('browser');

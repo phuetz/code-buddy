@@ -158,7 +158,7 @@ describe('Model Utilities', () => {
       const formatted = formatModelInfo('grok-4-latest');
       expect(formatted).toContain('Model: grok-4-latest');
       expect(formatted).toContain('Provider: xai');
-      expect(formatted).toContain('Max Tokens: 256,000');
+      expect(formatted).toContain(`Max Tokens: ${(256000).toLocaleString()}`);
       expect(formatted).toContain('Supported: Yes');
     });
 

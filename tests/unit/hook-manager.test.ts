@@ -51,6 +51,7 @@ import {
   type HookContext,
 } from '../../src/hooks/hook-manager.js';
 import { logger } from '../../src/utils/logger.js';
+import * as path from 'path';
 
 interface HooksConfig {
   hooks: Hook[];
@@ -155,10 +156,10 @@ describe('HookManager', () => {
       manager = new HookManager();
 
       // Should check for global config at ~/.codebuddy/hooks.json
-      expect(mockFs.existsSync).toHaveBeenCalledWith('/home/testuser/.codebuddy/hooks.json');
+      expect(mockFs.existsSync).toHaveBeenCalledWith(path.join('/home/testuser', '.codebuddy', 'hooks.json'));
 
       // Should check for project config at ./.codebuddy/hooks.json
-      expect(mockFs.existsSync).toHaveBeenCalledWith('/test/project/.codebuddy/hooks.json');
+      expect(mockFs.existsSync).toHaveBeenCalledWith(path.join('/test/project', '.codebuddy', 'hooks.json'));
     });
 
     it('should load global hooks config when it exists', () => {
@@ -168,8 +169,9 @@ describe('HookManager', () => {
         ],
       };
 
-      mockFs.existsSync.mockImplementation((path: unknown) =>
-        path === '/home/testuser/.codebuddy/hooks.json'
+      const globalPath = path.join('/home/testuser', '.codebuddy', 'hooks.json');
+      mockFs.existsSync.mockImplementation((p: unknown) =>
+        p === globalPath
       );
       mockFs.readJsonSync.mockReturnValue(globalHooks);
 
@@ -187,8 +189,9 @@ describe('HookManager', () => {
         ],
       };
 
-      mockFs.existsSync.mockImplementation((path: unknown) =>
-        path === '/test/project/.codebuddy/hooks.json'
+      const projectPath = path.join('/test/project', '.codebuddy', 'hooks.json');
+      mockFs.existsSync.mockImplementation((p: unknown) =>
+        p === projectPath
       );
       mockFs.readJsonSync.mockReturnValue(projectHooks);
 
@@ -230,8 +233,9 @@ describe('HookManager', () => {
     });
 
     it('should warn and continue when global config fails to load', () => {
-      mockFs.existsSync.mockImplementation((path: unknown) =>
-        path === '/home/testuser/.codebuddy/hooks.json'
+      const globalPath = path.join('/home/testuser', '.codebuddy', 'hooks.json');
+      mockFs.existsSync.mockImplementation((p: unknown) =>
+        p === globalPath
       );
       mockFs.readJsonSync.mockImplementation(() => {
         throw new Error('Invalid JSON');
@@ -245,8 +249,9 @@ describe('HookManager', () => {
     });
 
     it('should warn and continue when project config fails to load', () => {
-      mockFs.existsSync.mockImplementation((path: unknown) =>
-        path === '/test/project/.codebuddy/hooks.json'
+      const projectPath = path.join('/test/project', '.codebuddy', 'hooks.json');
+      mockFs.existsSync.mockImplementation((p: unknown) =>
+        p === projectPath
       );
       mockFs.readJsonSync.mockImplementation(() => {
         throw new Error('Parse error');
@@ -277,7 +282,7 @@ describe('HookManager', () => {
       manager = new HookManager();
 
       expect(mockFs.existsSync).toHaveBeenCalledWith(
-        expect.stringContaining('C:\\Users\\testuser')
+        expect.stringContaining(path.join('C:\\Users\\testuser', '.codebuddy'))
       );
     });
   });
@@ -311,7 +316,7 @@ describe('HookManager', () => {
 
       expect(mockFs.ensureDirSync).toHaveBeenCalled();
       expect(mockFs.writeJsonSync).toHaveBeenCalledWith(
-        '/test/project/.codebuddy/hooks.json',
+        path.join('/test/project', '.codebuddy', 'hooks.json'),
         { hooks: [hook] },
         { spaces: 2 }
       );

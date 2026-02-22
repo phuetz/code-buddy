@@ -91,8 +91,9 @@ describe('handleContextStats', () => {
     const result = await handleContextStats([], mockAgent);
     expect(result.handled).toBe(true);
     expect(result.entry?.content).toContain('Context Window Statistics');
-    expect(result.entry?.content).toContain('5,000');
-    expect(result.entry?.content).toContain('128,000');
+    // Use locale-aware number formatting for cross-platform compatibility
+    expect(result.entry?.content).toContain((5000).toLocaleString());
+    expect(result.entry?.content).toContain((128000).toLocaleString());
     expect(result.entry?.content).toContain('grok-3-fast-latest');
     expect(result.entry?.content).toContain('10');
     expect(result.entry?.content).toContain('OK');

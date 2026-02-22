@@ -277,7 +277,7 @@ describe('SecurityModeManager', () => {
         const savedConfig = JSON.parse(
           (mockFs.writeFileSync as jest.Mock).mock.calls[0][1]
         );
-        expect(savedConfig.allowedDirectories).toContain('/extra/dir');
+        expect(savedConfig.allowedDirectories).toContain(path.resolve('/extra/dir'));
         expect(savedConfig.allowedDirectories).not.toContain(testWorkingDir);
       });
     });

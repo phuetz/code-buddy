@@ -18,6 +18,7 @@
  * 7. Resource cleanup - reader.releaseLock() called
  */
 
+import path from 'path';
 import { EventEmitter } from 'events';
 import {
   NodeLlamaCppProvider,
@@ -502,7 +503,7 @@ describe('NodeLlamaCppProvider', () => {
 
       const models = await provider.getModels();
 
-      expect(models[0]).toContain('.codebuddy/models/model.gguf');
+      expect(models[0]).toContain(path.join('.codebuddy', 'models', 'model.gguf'));
     });
 
     it('should return empty array if models directory does not exist', async () => {

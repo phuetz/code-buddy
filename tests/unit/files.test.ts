@@ -241,11 +241,17 @@ describe('TextEditorTool', () => {
     });
 
     it('should detect symlink traversal attacks', async () => {
+      // Use platform-appropriate paths for the symlink target
+      const resolvedTestDir = path.resolve(testDir);
+      const outsidePath = process.platform === 'win32'
+        ? path.resolve('C:\\Windows\\System32\\config\\sam')
+        : '/etc/passwd';
+
       // Set up fs mocks for symlink detection (used by resolvePath internally)
       mockFsExistsSync.mockReturnValue(true);
       mockFsRealpathSync.mockImplementation((p: string) => {
-        if (p === testDir) return testDir;
-        return '/etc/passwd'; // Symlink points outside
+        if (path.resolve(p) === resolvedTestDir) return resolvedTestDir;
+        return outsidePath; // Symlink points outside
       });
 
       const result = await editor.view(path.join(testDir, 'malicious-symlink'));

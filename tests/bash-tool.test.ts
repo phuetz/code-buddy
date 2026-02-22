@@ -2,6 +2,11 @@
  * Tests for BashTool security features
  */
 import { BashTool } from '../src/tools/bash';
+import path from 'path';
+import os from 'os';
+
+const isWin = process.platform === 'win32';
+const itUnix = isWin ? it.skip : it;
 
 // Mock the confirmation service to auto-approve
 jest.mock('../src/utils/confirmation-service', () => ({
@@ -85,16 +90,26 @@ describe('BashTool', () => {
 
     // SSH key access should be blocked for security
     it('should block access to ~/.ssh', async () => {
-      const result = await bashTool.execute('cat ~/.ssh/id_rsa');
+      // Use path.join so separators match BLOCKED_PATHS on all platforms
+      const sshDir = path.join(os.homedir(), '.ssh');
+      const result = await bashTool.execute(`cat ${sshDir}/id_rsa`);
       // Should fail - either blocked by security rules or file not found
       // Both outcomes are acceptable for this security test
       expect(result.success).toBe(false);
     }, 10000);
 
     it('should block access to /etc/shadow', async () => {
-      const result = await bashTool.execute('cat /etc/shadow');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+      if (process.platform === 'win32') {
+        // /etc/shadow doesn't exist on Windows; test the homedir-based blocked paths instead
+        const awsPath = path.join(os.homedir(), '.aws');
+        const result = await bashTool.execute(`cat ${awsPath}`);
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('blocked');
+      } else {
+        const result = await bashTool.execute('cat /etc/shadow');
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('blocked');
+      }
     });
   });
 
@@ -116,12 +131,12 @@ describe('BashTool', () => {
     });
 
     // Safe file operations should be allowed
-    it('should allow cat on safe files', async () => {
+    itUnix('should allow cat on safe files', async () => {
       const result = await bashTool.execute('cat package.json');
       expect(result.success).toBe(true);
     }, 10000);
 
-    it('should allow grep command', async () => {
+    itUnix('should allow grep command', async () => {
       // Using ripgrep via BashTool.grep() for fast searching
       const result = await bashTool.grep('test', '.');
       // May succeed or fail depending on matches, but shouldn't be blocked
@@ -146,7 +161,7 @@ describe('BashTool', () => {
   });
 
   describe('Timeout', () => {
-    it('should timeout long-running commands', async () => {
+    itUnix('should timeout long-running commands', async () => {
       const result = await bashTool.execute('sleep 60', 1000);
       expect(result.success).toBe(false);
       // Error could be timeout or command failure

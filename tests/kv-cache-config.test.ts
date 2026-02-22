@@ -330,7 +330,7 @@ describe('KVCacheManager', () => {
 
       expect(typeof formatted).toBe('string');
       expect(formatted).toContain('KV-Cache Configuration');
-      expect(formatted).toContain('8,192');
+      expect(formatted).toContain((8192).toLocaleString());
       expect(formatted).toContain('q4_0');
       expect(formatted).toContain('Memory Estimate');
       expect(formatted).toContain('Recommendation');

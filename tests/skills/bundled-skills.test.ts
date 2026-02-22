@@ -9,7 +9,7 @@
  */
 
 import { readdirSync, existsSync, readFileSync, statSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 
 // Get the repo root (assuming tests are in /tests/skills/)
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -153,7 +153,7 @@ const skillDirs = existsSync(BUNDLED_SKILLS_DIR)
   ? readdirSync(BUNDLED_SKILLS_DIR)
       .map(name => join(BUNDLED_SKILLS_DIR, name))
       .filter(path => statSync(path).isDirectory())
-      .map(path => path.split('/').pop()!)
+      .map(p => basename(p))
       .sort()
   : [];
 

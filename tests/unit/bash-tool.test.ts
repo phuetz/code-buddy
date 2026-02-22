@@ -494,9 +494,11 @@ describe('BashTool', () => {
         path.join(os.homedir(), '.config/gh'),
         path.join(os.homedir(), '.config/gcloud'),
         path.join(os.homedir(), '.kube'),
-        '/etc/passwd',
-        '/etc/shadow',
-        '/etc/sudoers',
+        ...(process.platform !== 'win32' ? [
+          '/etc/passwd',
+          '/etc/shadow',
+          '/etc/sudoers',
+        ] : []),
       ];
 
       test.each(blockedPaths)(
@@ -1341,14 +1343,18 @@ describe('BashTool Security Bypass Prevention', () => {
   });
 
   describe('Path Traversal and Protected Paths', () => {
+    // Use path.join so separators match BLOCKED_PATHS on all platforms
     const pathCases = [
-      { cmd: `cat ${os.homedir()}/.ssh/id_rsa`, name: 'SSH private key' },
-      { cmd: `cat ${os.homedir()}/.aws/credentials`, name: 'AWS credentials' },
-      { cmd: 'cat /etc/shadow', name: '/etc/shadow' },
-      { cmd: 'cat /etc/sudoers', name: '/etc/sudoers' },
-      { cmd: `ls ${os.homedir()}/.gnupg/`, name: 'GPG directory' },
-      { cmd: `cat ${os.homedir()}/.npmrc`, name: 'NPM config' },
-      { cmd: `cat ${os.homedir()}/.kube/config`, name: 'Kube config' },
+      { cmd: `cat ${path.join(os.homedir(), '.ssh', 'id_rsa')}`, name: 'SSH private key' },
+      { cmd: `cat ${path.join(os.homedir(), '.aws', 'credentials')}`, name: 'AWS credentials' },
+      { cmd: `ls ${path.join(os.homedir(), '.gnupg')}/`, name: 'GPG directory' },
+      { cmd: `cat ${path.join(os.homedir(), '.npmrc')}`, name: 'NPM config' },
+      { cmd: `cat ${path.join(os.homedir(), '.kube', 'config')}`, name: 'Kube config' },
+      // Unix-only paths
+      ...(process.platform !== 'win32' ? [
+        { cmd: 'cat /etc/shadow', name: '/etc/shadow' },
+        { cmd: 'cat /etc/sudoers', name: '/etc/sudoers' },
+      ] : []),
     ];
 
     test.each(pathCases)(

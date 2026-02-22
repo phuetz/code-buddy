@@ -201,27 +201,27 @@ describe('PermissionManager', () => {
   // ============================================================
   describe('Read Permission Checks', () => {
     it('should allow reading files matching allowed paths', () => {
-      const result = manager.checkReadPermission('/project/src/index.ts');
+      const result = manager.checkReadPermission(path.resolve('/project/src/index.ts'));
 
       expect(result.allowed).toBe(true);
     });
 
     it('should block reading node_modules', () => {
-      const result = manager.checkReadPermission('/project/node_modules/lodash/index.js');
+      const result = manager.checkReadPermission(path.resolve('/project/node_modules/lodash/index.js'));
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('blocked');
     });
 
     it('should block reading .env files', () => {
-      const result = manager.checkReadPermission('/project/.env');
+      const result = manager.checkReadPermission(path.resolve('/project/.env'));
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('blocked');
     });
 
     it('should block reading secrets directory', () => {
-      const result = manager.checkReadPermission('/project/secrets/api-key.txt');
+      const result = manager.checkReadPermission(path.resolve('/project/secrets/api-key.txt'));
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('blocked');
@@ -237,20 +237,20 @@ describe('PermissionManager', () => {
     });
 
     it('should allow writing to files matching allowed paths', () => {
-      const result = manager.checkWritePermission('/project/src/index.ts');
+      const result = manager.checkWritePermission(path.resolve('/project/src/index.ts'));
 
       expect(result.allowed).toBe(true);
     });
 
     it('should block writing to node_modules', () => {
-      const result = manager.checkWritePermission('/project/node_modules/pkg/index.js');
+      const result = manager.checkWritePermission(path.resolve('/project/node_modules/pkg/index.js'));
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('blocked');
     });
 
     it('should allow file creation when allowCreate is true', () => {
-      const result = manager.checkWritePermission('/project/src/new-file.ts', true);
+      const result = manager.checkWritePermission(path.resolve('/project/src/new-file.ts'), true);
 
       expect(result.allowed).toBe(true);
     });
@@ -260,7 +260,7 @@ describe('PermissionManager', () => {
         fileSystem: { ...manager.getConfig().fileSystem, allowCreate: false },
       });
 
-      const result = manager.checkWritePermission('/project/src/new-file.ts', true);
+      const result = manager.checkWritePermission(path.resolve('/project/src/new-file.ts'), true);
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('creation is disabled');
@@ -274,7 +274,7 @@ describe('PermissionManager', () => {
       manager.recordOperation();
       manager.recordOperation();
 
-      const result = manager.checkWritePermission('/project/src/file.ts');
+      const result = manager.checkWritePermission(path.resolve('/project/src/file.ts'));
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('Maximum operations');

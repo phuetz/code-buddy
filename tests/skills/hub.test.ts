@@ -713,7 +713,7 @@ describe('SkillsHub', () => {
     });
 
     it('should throw for nonexistent path', async () => {
-      await expect(hub.publish('/nonexistent/path')).rejects.toThrow('Skill file not found');
+      await expect(hub.publish('/nonexistent/path')).rejects.toThrow(/Skill file not found|No SKILL\.md found/);
     });
 
     it('should throw for directory without SKILL.md', async () => {

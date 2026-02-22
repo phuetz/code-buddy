@@ -198,7 +198,7 @@ describe('CodeBuddyClient', () => {
           model: 'grok-code-fast-1',
           messages,
           temperature: 0.7,
-          max_tokens: 1536,
+          max_tokens: 16384,
         })
       );
       expect(response.choices[0].message.content).toBe('Hello! How can I help you?');

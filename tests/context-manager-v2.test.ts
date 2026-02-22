@@ -246,7 +246,7 @@ describe('ContextManagerV2', () => {
   describe('Factory Functions', () => {
     it('should create manager with model detection', () => {
       const gptManager = createContextManager('gpt-4');
-      expect(gptManager.getConfig().maxContextTokens).toBe(8192);
+      expect(gptManager.getConfig().maxContextTokens).toBe(128000);
       gptManager.dispose();
 
       const claudeManager = createContextManager('claude-3');

@@ -321,7 +321,7 @@ describe('DeviceNodeManager', () => {
     mgr.pairDevice('cam1', 'Camera Phone', 'ios', ['camera']);
     const path = mgr.cameraSnap('cam1');
     expect(path).not.toBeNull();
-    expect(path).toContain('/tmp/snap-cam1-');
+    expect(path).toContain('snap-cam1-');
     expect(path).toContain('.jpg');
   });
 

@@ -1291,8 +1291,8 @@ describe('ContextWarningMiddleware', () => {
     const result = await middleware.beforeTurn(context);
 
     expect(result.message).toMatch(/\d+\.\d%/);
-    expect(result.message).toContain('100,000');
-    expect(result.message).toContain('128,000');
+    expect(result.message).toContain((100000).toLocaleString());
+    expect(result.message).toContain((128000).toLocaleString());
   });
 
   it('should default warnOnce to true', async () => {

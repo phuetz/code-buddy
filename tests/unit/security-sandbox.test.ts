@@ -568,8 +568,9 @@ describe('Security Sandbox Module', () => {
       });
 
       it('should not add duplicate blocked paths', () => {
+        const sshPath = path.join(os.homedir(), '.ssh');
         const initialCount = manager.getConfig().blockedPaths.length;
-        manager.blockPath('/etc/passwd');
+        manager.blockPath(sshPath);
         expect(manager.getConfig().blockedPaths.length).toBe(initialCount);
       });
 

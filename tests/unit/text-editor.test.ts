@@ -98,7 +98,8 @@ jest.mock('../../src/workspace/workspace-isolation', () => ({
 
 describe('TextEditorTool', () => {
   let editor: TextEditorTool;
-  const testDir = '/test/project';
+  const testDir = path.resolve('/test/project');
+  const blockedTestPath = process.platform === 'win32' ? 'C:\\Windows\\System32\\config\\SAM' : '/etc/passwd';
 
   beforeEach(() => {
     editor = new TextEditorTool();
@@ -123,11 +124,10 @@ describe('TextEditorTool', () => {
     mockGetConfig.mockReturnValue({ enabled: true, workspaceRoot: testDir });
     mockValidatePath.mockImplementation((filePath: string) => {
       const resolved = path.resolve(filePath);
-      const normalizedTestDir = path.normalize(testDir);
-      const normalizedResolved = path.normalize(resolved);
+      const resolvedBlockedPath = path.resolve(blockedTestPath);
 
-      // Check for blocked paths (e.g., /etc/passwd)
-      if (filePath === '/etc/passwd' || resolved === '/etc/passwd') {
+      // Check for blocked paths
+      if (resolved === resolvedBlockedPath) {
         return {
           valid: false,
           resolved,
@@ -137,8 +137,8 @@ describe('TextEditorTool', () => {
       }
 
       // Check if path is within testDir
-      if (!normalizedResolved.startsWith(normalizedTestDir + path.sep) &&
-          normalizedResolved !== normalizedTestDir) {
+      if (!resolved.startsWith(testDir + path.sep) &&
+          resolved !== testDir) {
         return {
           valid: false,
           resolved,
@@ -157,25 +157,25 @@ describe('TextEditorTool', () => {
 
   describe('Path Validation', () => {
     it('should reject paths outside base directory', async () => {
-      const result = await editor.view('/etc/passwd');
+      const result = await editor.view(blockedTestPath);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Access to protected path is blocked');
     });
 
     it('should reject path traversal attempts', async () => {
-      const result = await editor.view(`${testDir}/../../../etc/passwd`);
+      const result = await editor.view(path.join(testDir, '..', '..', '..', path.basename(blockedTestPath)));
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Access to protected path is blocked');
+      expect(result.error).toContain('outside workspace');
     });
 
     it('should reject symlink traversal attacks', async () => {
-      const filePath = `${testDir}/evil-link`;
+      const filePath = path.join(testDir, 'evil-link');
       mockExistsSync.mockReturnValue(true);
       mockRealpathSync.mockImplementation((p: unknown) => {
         const pathStr = p as string;
-        if (pathStr === path.resolve(filePath)) return '/etc/passwd';
+        if (pathStr === path.resolve(filePath)) return blockedTestPath;
         if (pathStr === path.resolve(testDir)) return testDir;
         return pathStr;
       });
@@ -185,7 +185,7 @@ describe('TextEditorTool', () => {
         const resolved = path.resolve(filePath);
         if (mockExistsSync(resolved)) {
           const realPath = mockRealpathSync(resolved) as string;
-          if (realPath === '/etc/passwd') {
+          if (realPath === blockedTestPath) {
             return {
               valid: false,
               resolved,

@@ -438,7 +438,7 @@ describe('TeamManagerV2', () => {
     mode: 'auto' as const,
     delegateMode: false,
     planApproval: false,
-    configPath: '/tmp/test-team/config.json',
+    configPath: path.join(os.tmpdir(), 'test-team', 'config.json'),
   };
 
   beforeEach(async () => {
@@ -605,7 +605,7 @@ describe('SubagentMemory', () => {
   });
 
   it('should return empty list when no dir', () => {
-    const mem = new SubagentMemory({ agentName: 'a', scope: 'local', maxLines: 200, memoryDir: '/tmp/nonexistent-dir-abc123' });
+    const mem = new SubagentMemory({ agentName: 'a', scope: 'local', maxLines: 200, memoryDir: path.join(os.tmpdir(), 'nonexistent-dir-abc123') });
     expect(mem.listMemoryFiles()).toEqual([]);
   });
 
@@ -1123,13 +1123,15 @@ describe('StatusLineManager', () => {
     jest.useRealTimers();
   });
 
-  it('should execute script for dynamic content', async () => {
+  // Shell scripts use Unix-only commands
+  (process.platform === 'win32' ? it.skip : it)('should execute script for dynamic content', async () => {
     const slm = new StatusLineManager({ enabled: true, script: 'echo "dynamic content"' });
     const output = await slm.executeScript();
     expect(output).toBe('dynamic content');
   });
 
-  it('should return empty on script error', async () => {
+  // Shell scripts use Unix-only commands
+  (process.platform === 'win32' ? it.skip : it)('should return empty on script error', async () => {
     const slm = new StatusLineManager({ enabled: true, script: 'exit 1' });
     const output = await slm.executeScript();
     expect(output).toBe('');

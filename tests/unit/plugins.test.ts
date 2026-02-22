@@ -9,6 +9,7 @@
  */
 
 import { EventEmitter } from 'events';
+import * as path from 'path';
 
 // Mock fs before importing modules
 jest.mock('fs', () => ({
@@ -165,9 +166,11 @@ describe('PluginManager', () => {
     it('should discover plugins with valid manifests', async () => {
       const manifest = createMockManifest();
 
-      fs.existsSync.mockImplementation((path: unknown) => {
-        if (path === '/test/plugins') return true;
-        if (path === '/test/plugins/test-plugin/manifest.json') return true;
+      const pluginsDir = '/test/plugins';
+      const manifestPath = path.join(pluginsDir, 'test-plugin', 'manifest.json');
+      fs.existsSync.mockImplementation((p: unknown) => {
+        if (p === pluginsDir) return true;
+        if (p === manifestPath) return true;
         return false;
       });
 
@@ -185,8 +188,8 @@ describe('PluginManager', () => {
     });
 
     it('should skip directories without manifest.json', async () => {
-      fs.existsSync.mockImplementation((path: unknown) => {
-        if (path === '/test/plugins') return true;
+      fs.existsSync.mockImplementation((p: unknown) => {
+        if (p === '/test/plugins') return true;
         return false;
       });
 
@@ -201,9 +204,10 @@ describe('PluginManager', () => {
     });
 
     it('should skip invalid JSON manifests', async () => {
-      fs.existsSync.mockImplementation((path: unknown) => {
-        if (path === '/test/plugins') return true;
-        if (path === '/test/plugins/bad-plugin/manifest.json') return true;
+      const badManifestPath = path.join('/test/plugins', 'bad-plugin', 'manifest.json');
+      fs.existsSync.mockImplementation((p: unknown) => {
+        if (p === '/test/plugins') return true;
+        if (p === badManifestPath) return true;
         return false;
       });
 
@@ -220,8 +224,8 @@ describe('PluginManager', () => {
     });
 
     it('should skip files (non-directories)', async () => {
-      fs.existsSync.mockImplementation((path: unknown) => {
-        if (path === '/test/plugins') return true;
+      fs.existsSync.mockImplementation((p: unknown) => {
+        if (p === '/test/plugins') return true;
         return false;
       });
 
