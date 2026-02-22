@@ -24,9 +24,9 @@ import type { CodeBuddyMessage } from '../codebuddy/client.js';
 // Types
 // ============================================================================
 
-export interface CacheBreakpointMessage extends CodeBuddyMessage {
+export type CacheBreakpointMessage = CodeBuddyMessage & {
   cache_control?: { type: 'ephemeral' };
-}
+};
 
 export interface StableDynamicSplit {
   /** Stable prefix — identity, tool descriptions, base instructions */

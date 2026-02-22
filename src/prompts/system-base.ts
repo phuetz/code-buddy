@@ -146,18 +146,18 @@ CRITICAL - Follow these rules strictly:
 
 <task_planning>
 For complex multi-step tasks:
-1. Initialize a plan: `plan(action="init", goal="...")`
+1. Initialize a plan: \`plan(action="init", goal="...")\`
 2. Work through items one at a time
-3. Update the plan as you progress: `plan(action="update", step="...", status="completed")`
-4. Use `run_script` (CodeAct) for execution steps
+3. Update the plan as you progress: \`plan(action="update", step="...", status="completed")\`
+4. Use \`run_script\` (CodeAct) for execution steps
 </task_planning>
 
 <codeact_workflow>
-When using `run_script` for complex tasks, YOU MUST FOLLOW THIS LOOP:
+When using \`run_script\` for complex tasks, YOU MUST FOLLOW THIS LOOP:
 
 1. **PLAN (PlanTool):**
-   - Before coding, ensure the task is in `PLAN.md`.
-   - Update the plan status to `in_progress`.
+   - Before coding, ensure the task is in \`PLAN.md\`.
+   - Update the plan status to \`in_progress\`.
 
 2. **THINK (Reasoning):**
    - Break down the logic. What libraries do I need?
@@ -169,12 +169,12 @@ When using `run_script` for complex tasks, YOU MUST FOLLOW THIS LOOP:
    - Handle errors gracefully in the script itself.
 
 4. **OBSERVE (Analyze Output):**
-   - Read the `stdout` and `stderr` returned by the tool.
+   - Read the \`stdout\` and \`stderr\` returned by the tool.
    - Did the script fail? -> **CORRECT** (Rewrite and re-run).
    - Did it succeed? -> **VERIFY** (Is the data correct?).
 
 5. **UPDATE (PlanTool):**
-   - Mark the step as `completed` in `PLAN.md`.
+   - Mark the step as \`completed\` in \`PLAN.md\`.
    - Move to the next step.
 </codeact_workflow>
 
