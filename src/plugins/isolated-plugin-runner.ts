@@ -173,7 +173,7 @@ export class IsolatedPluginRunner extends EventEmitter {
   /**
    * Send a message to the worker and wait for response
    */
-  private sendMessage(type: string, payload?: unknown, timeout?: number): Promise<unknown> {
+  protected sendMessage(type: string, payload?: unknown, timeout?: number): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!this.worker || this.isTerminated) {
         reject(new Error('Worker is not running'));
@@ -260,12 +260,36 @@ export class IsolatedPluginRunner extends EventEmitter {
 
       case 'register-tool': {
         // Additional validation: ensure tool name is prefixed with plugin ID for namespacing
-        const tool = payload as { name: string; [key: string]: unknown };
+        const tool = payload as { name: string; defaultPermission?: string; defaultTimeout?: number; readOnly?: boolean; [key: string]: unknown };
         if (!tool.name.startsWith(`${this.config.pluginId}:`)) {
           this.logger.warn(`Tool registration rejected: name must be prefixed with plugin ID (${this.config.pluginId}:)`);
           return;
         }
-        this.emit('register-tool', payload);
+
+        // Build a ToolRegistration with a proxy factory that dispatches execute() back to the worker.
+        // Functions can't cross MessagePort boundaries, so we recreate them here on the main-thread side.
+        const toolName = tool.name;
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const self = this;
+        const toolWithFactory = {
+          ...tool,
+          defaultPermission: (tool.defaultPermission ?? 'ask') as 'always' | 'ask' | 'deny',
+          defaultTimeout: tool.defaultTimeout ?? 30,
+          readOnly: tool.readOnly ?? false,
+          factory: () => ({
+            name: toolName,
+            description: String(tool.description ?? ''),
+            execute: async (input: Record<string, unknown>) => {
+              return self.sendMessage('call', {
+                method: 'tool-execute',
+                toolName,
+                args: input,
+              }, (tool.defaultTimeout ?? 30) * 1000);
+            },
+          }),
+        };
+
+        this.emit('register-tool', toolWithFactory);
         break;
       }
 

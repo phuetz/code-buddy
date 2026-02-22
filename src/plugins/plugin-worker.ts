@@ -266,6 +266,18 @@ function createWorkerLogger(pluginId: string) {
   };
 }
 
+// Local registry of tool executors (functions can't cross MessagePort boundary)
+const toolExecutors: Map<string, (input: Record<string, unknown>) => Promise<unknown>> = new Map();
+
+/**
+ * Ensure a name is prefixed with pluginId:
+ * Plugins may omit the prefix; we add it automatically.
+ */
+function ensurePrefix(name: string, pluginId: string): string {
+  const prefix = `${pluginId}:`;
+  return name.startsWith(prefix) ? name : `${prefix}${name}`;
+}
+
 // Create the plugin context for the isolated environment
 function createIsolatedPluginContext(initData: WorkerInitData) {
   const { pluginId, dataDir, config } = initData;
@@ -275,17 +287,49 @@ function createIsolatedPluginContext(initData: WorkerInitData) {
     config,
     dataDir,
 
-    registerTool: (tool: unknown) => {
+    registerTool: (tool: Record<string, unknown>) => {
+      // Auto-prefix name
+      const name = ensurePrefix(String(tool.name ?? ''), pluginId);
+
+      // Extract the execute function from factory or execute field — store it locally.
+      // Functions cannot be serialized via structured clone, so they stay in the worker.
+      let executor: ((input: Record<string, unknown>) => Promise<unknown>) | null = null;
+
+      if (typeof tool.factory === 'function') {
+        try {
+          const instance = (tool.factory as () => Record<string, unknown>)();
+          if (typeof instance.execute === 'function') {
+            executor = instance.execute as (input: Record<string, unknown>) => Promise<unknown>;
+          }
+        } catch { /* factory construction error — executor stays null */ }
+      } else if (typeof tool.execute === 'function') {
+        executor = tool.execute as (input: Record<string, unknown>) => Promise<unknown>;
+      }
+
+      if (executor) {
+        toolExecutors.set(name, executor);
+      }
+
+      // Strip functions before crossing the MessagePort boundary
+      const serializable: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(tool)) {
+        if (typeof v !== 'function') {
+          serializable[k] = v;
+        }
+      }
+      serializable['name'] = name;
+
       parentPort?.postMessage({
         type: 'register-tool',
-        payload: tool
+        payload: serializable
       } as WorkerMessage);
     },
 
-    registerCommand: (command: unknown) => {
+    registerCommand: (command: Record<string, unknown>) => {
+      const name = ensurePrefix(String(command.name ?? ''), pluginId);
       parentPort?.postMessage({
         type: 'register-command',
-        payload: command
+        payload: { ...command, name }
       } as WorkerMessage);
     },
 
@@ -451,13 +495,32 @@ async function handleMessage(message: WorkerMessage) {
       }
 
       case 'call': {
-        // For future use: calling plugin methods
-        const { method, args } = payload as { method: string; args: unknown[] };
+        const callPayload = payload as { method: string; toolName?: string; args?: unknown; [k: string]: unknown };
+
+        // Tool execution: main thread dispatches back to worker for function call
+        if (callPayload.method === 'tool-execute' && callPayload.toolName) {
+          const executor = toolExecutors.get(callPayload.toolName);
+          if (!executor) {
+            throw new Error(`No executor registered for tool: ${callPayload.toolName}`);
+          }
+          const toolResult = await executor((callPayload.args ?? {}) as Record<string, unknown>);
+          parentPort?.postMessage({
+            type: 'response',
+            id,
+            payload: { success: true, result: toolResult }
+          } as WorkerMessage);
+          break;
+        }
+
+        // Generic plugin method call
         if (!pluginInstance) {
           throw new Error('Plugin not initialized');
         }
 
-        const result = await (pluginInstance as Record<string, (...args: unknown[]) => unknown>)[method]?.(...args);
+        const { method, args } = callPayload;
+        const result = await (pluginInstance as Record<string, (...a: unknown[]) => unknown>)[method]?.(
+          ...((Array.isArray(args) ? args : [args]) as unknown[])
+        );
 
         parentPort?.postMessage({
           type: 'response',

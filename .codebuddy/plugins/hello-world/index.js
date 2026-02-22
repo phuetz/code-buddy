@@ -2,21 +2,22 @@ export default class HelloWorldPlugin {
   activate(context) {
     context.logger.info('Hello World plugin activated!');
 
-    // Register a slash command
+    // Register a slash command (prefixed with plugin ID)
     context.registerCommand({
-      name: 'hello',
+      name: 'hello-world:hello',
       description: 'Say hello',
       prompt: 'Say hello to the user in a friendly way.',
       filePath: '',
       isBuiltin: false
     });
 
-    // Register a tool
+    // Register a tool (prefixed with plugin ID)
+    // Note: the factory function stays in the worker — only serializable metadata crosses to the main thread.
     context.registerTool({
-      name: 'say_hello',
+      name: 'hello-world:say_hello',
       description: 'Returns a hello message',
       factory: () => ({
-        name: 'say_hello',
+        name: 'hello-world:say_hello',
         description: 'Returns a hello message',
         execute: async ({ name }) => {
           return {
