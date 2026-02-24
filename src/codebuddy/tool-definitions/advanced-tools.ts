@@ -566,6 +566,39 @@ export const JS_REPL_TOOL: CodeBuddyTool = {
   }
 };
 
+// Reasoning tool for Tree-of-Thought problem solving (MCTS + BFS)
+export const REASON_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "reason",
+    description: "Solve complex problems using Tree-of-Thought reasoning with Monte Carlo Tree Search. Use this for planning, architecture decisions, debugging complex issues, or any task requiring structured multi-step reasoning. Returns a reasoning tree with scored solution paths.",
+    parameters: {
+      type: "object",
+      properties: {
+        problem: {
+          type: "string",
+          description: "The problem statement or question to reason about"
+        },
+        context: {
+          type: "string",
+          description: "Additional context, constraints, or background information"
+        },
+        mode: {
+          type: "string",
+          enum: ["shallow", "medium", "deep", "exhaustive"],
+          description: "Reasoning depth: shallow (~5 iterations), medium (~20), deep (~50), exhaustive (~100). Default: medium"
+        },
+        constraints: {
+          type: "array",
+          items: { type: "string" },
+          description: "Constraints that the solution must satisfy"
+        }
+      },
+      required: ["problem"]
+    }
+  }
+};
+
 /**
  * All advanced tools as an array
  */
@@ -578,4 +611,5 @@ export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   KUBERNETES_TOOL,
   PROCESS_TOOL,
   JS_REPL_TOOL,
+  REASON_TOOL,
 ];

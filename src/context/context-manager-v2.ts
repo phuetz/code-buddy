@@ -21,6 +21,7 @@ import {
   EnhancedContextCompressor,
   EnhancedCompressionConfig,
 } from './enhanced-compression.js';
+import { ImportanceScorer } from './importance-scorer.js';
 import type {
   KeyInformation,
   ContextArchive,
@@ -117,6 +118,8 @@ export class ContextManagerV2 {
   private lastEnhancedResult: EnhancedCompressionResult | null = null;
   /** Session ID for archiving */
   private sessionId: string;
+  /** Lazy-loaded importance scorer for sliding window decisions */
+  private _importanceScorer: ImportanceScorer | null = null;
 
   // Memory metrics for monitoring
   /** Maximum number of summaries to keep (prevents unbounded growth) */
@@ -389,7 +392,18 @@ export class ContextManagerV2 {
   }
 
   /**
+   * Get or create the importance scorer (lazy-loaded).
+   */
+  private get importanceScorer(): ImportanceScorer {
+    if (!this._importanceScorer) {
+      this._importanceScorer = new ImportanceScorer();
+    }
+    return this._importanceScorer;
+  }
+
+  /**
    * Strategy 1: Sliding Window - Keep N most recent messages
+   * Uses ImportanceScorer to preserve high-importance messages outside the window.
    */
   private applySlidingWindow(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
     const keepCount = this.config.recentMessagesCount;
@@ -398,17 +412,33 @@ export class ContextManagerV2 {
       return messages;
     }
 
-    // Keep the most recent messages
+    // Score all messages using the importance scorer
+    const scores = this.importanceScorer.scoreMessages(messages);
+
+    // Always keep the most recent messages
     const recentMessages = messages.slice(-keepCount);
 
-    // Create a summary marker for removed messages
-    const removedCount = messages.length - keepCount;
-    const summaryMarker: CodeBuddyMessage = {
-      role: 'system',
-      content: `[Previous ${removedCount} messages summarized due to context limits]`,
-    };
+    // For messages outside the window, keep any with score > 0.8 (high importance)
+    const oldMessages = messages.slice(0, -keepCount);
+    const importantOldMessages: CodeBuddyMessage[] = [];
+    for (let i = 0; i < oldMessages.length; i++) {
+      if (scores[i].score > 0.8) {
+        importantOldMessages.push(oldMessages[i]);
+      }
+    }
 
-    return [summaryMarker, ...recentMessages];
+    // Create a summary marker for removed messages
+    const removedCount = messages.length - keepCount - importantOldMessages.length;
+    const parts: CodeBuddyMessage[] = [];
+
+    if (removedCount > 0) {
+      parts.push({
+        role: 'system',
+        content: `[Previous ${removedCount} messages summarized due to context limits]`,
+      });
+    }
+
+    return [...parts, ...importantOldMessages, ...recentMessages];
   }
 
   /**

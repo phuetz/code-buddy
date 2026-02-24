@@ -53,6 +53,10 @@ export interface MiddlewareContext {
   isStreaming: boolean;
   /** Abort controller for cancellation (streaming only) */
   abortController?: AbortController | null;
+  /** Files changed during this session (for quality gates) */
+  changedFiles?: string[];
+  /** Recent tool execution results (for auto-repair) */
+  lastToolResults?: Array<{ toolName: string; success: boolean; output: string }>;
 }
 
 /**

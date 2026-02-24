@@ -159,6 +159,7 @@ export {
   handleFeatures,
   handleListCheckpoints,
   handleRestoreCheckpoint,
+  handleInitGrok,
 } from './missing-handlers.js';
 
 // Debug handlers (enhanced debug mode)
@@ -181,6 +182,13 @@ export {
 export {
   handlePersonaCommand,
 } from './persona-handler.js';
+
+// Think handlers (Tree-of-Thought reasoning)
+export {
+  handleThink,
+  getActiveThinkingMode,
+  setActiveThinkingMode,
+} from './think-handlers.js';
 
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';

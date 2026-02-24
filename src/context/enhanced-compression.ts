@@ -475,7 +475,7 @@ export class EnhancedContextCompressor {
   /**
    * Classify all messages by content type and importance.
    */
-  private classifyMessages(messages: CodeBuddyMessage[]): Map<number, ClassifiedMessage> {
+  public classifyMessages(messages: CodeBuddyMessage[]): Map<number, ClassifiedMessage> {
     const result = new Map<number, ClassifiedMessage>();
 
     for (let i = 0; i < messages.length; i++) {

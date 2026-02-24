@@ -210,6 +210,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Work with archives'
   },
 
+  // Reasoning
+  {
+    name: 'reason',
+    category: 'codebase',
+    keywords: ['reason', 'think', 'plan', 'analyze', 'architecture', 'design', 'debug', 'complex', 'trade-off', 'compare', 'evaluate', 'strategy', 'decision', 'mcts', 'tree-of-thought'],
+    priority: 6,
+    description: 'Solve complex problems using Tree-of-Thought reasoning with MCTS'
+  },
+
   // Utility tools
   {
     name: 'diagram',

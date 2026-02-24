@@ -26,6 +26,25 @@ import {
   CoTStep,
 } from "./types.js";
 import { createMCTS } from "./mcts.js";
+import type { MCTSProgressEvent } from "./types.js";
+
+/**
+ * Format an MCTSProgressEvent into a human-readable progress line.
+ */
+function formatProgressEvent(event: MCTSProgressEvent): string {
+  const prefix = {
+    iteration: 'Iteration',
+    expansion: 'Expanding',
+    evaluation: 'Evaluating',
+    refinement: 'Refining',
+    solution_found: 'Solution found',
+  }[event.type] ?? event.type;
+
+  const score = event.bestScore > 0 ? ` (best: ${event.bestScore.toFixed(2)})` : '';
+  const tokens = event.tokensUsed > 0 ? ` [~${event.tokensUsed} tokens]` : '';
+  const msg = event.message ? ` — ${event.message}` : '';
+  return `[${prefix}] iter=${event.iteration} nodes=${event.nodesCreated}/${event.nodesEvaluated}${score}${tokens}${msg}`;
+}
 
 /**
  * Configuration for the ToT reasoner
@@ -89,6 +108,91 @@ export class TreeOfThoughtReasoner extends EventEmitter {
 
     const result = await mcts.search(problem);
 
+    this.emit("reasoning:complete", { result });
+
+    if (this.config.verbose) {
+      logger.debug("=== Reasoning Tree ===");
+      logger.debug(mcts.formatTree());
+    }
+
+    return result;
+  }
+
+  /**
+   * Solve a problem with streaming progress updates.
+   *
+   * Yields human-readable progress strings as MCTS explores the tree,
+   * then returns the final ReasoningResult.
+   */
+  async *solveStreaming(
+    problem: Problem,
+  ): AsyncGenerator<string, ReasoningResult, undefined> {
+    this.emit("reasoning:start", { problem });
+
+    // Progress events are collected into a queue and drained by the generator
+    const progressQueue: string[] = [];
+    let resolveWaiting: (() => void) | null = null;
+
+    const onProgress = (event: import('./types.js').MCTSProgressEvent): void => {
+      const line = formatProgressEvent(event);
+      progressQueue.push(line);
+      if (resolveWaiting) {
+        resolveWaiting();
+        resolveWaiting = null;
+      }
+    };
+
+    const configWithProgress: MCTSConfig = {
+      ...this.mctsConfig,
+      onProgress,
+    };
+
+    const mcts = createMCTS(configWithProgress, {
+      generateThoughts: (node, prob) => this.generateThoughts(node, prob),
+      evaluateThought: (node, prob) => this.evaluateThought(node, prob),
+      executeCode: (code) => this.executeCodeSafely(code),
+      refineThought: (node, feedback) => this.refineThought(node, feedback),
+    });
+
+    // Start search in background
+    let searchDone = false;
+    let searchResult: ReasoningResult | null = null;
+    let searchError: Error | null = null;
+
+    const searchPromise = mcts.search(problem).then(
+      (result) => { searchResult = result; searchDone = true; },
+      (err) => { searchError = err instanceof Error ? err : new Error(String(err)); searchDone = true; },
+    ).finally(() => {
+      // Wake up the generator if it's waiting
+      if (resolveWaiting) {
+        resolveWaiting();
+        resolveWaiting = null;
+      }
+    });
+
+    // Yield progress events as they arrive
+    while (!searchDone) {
+      if (progressQueue.length > 0) {
+        yield progressQueue.shift()!;
+      } else {
+        // Wait for next progress event or search completion
+        await new Promise<void>((resolve) => { resolveWaiting = resolve; });
+      }
+    }
+
+    // Drain remaining queued events
+    while (progressQueue.length > 0) {
+      yield progressQueue.shift()!;
+    }
+
+    // Ensure the promise is settled
+    await searchPromise;
+
+    if (searchError) {
+      throw searchError;
+    }
+
+    const result = searchResult!;
     this.emit("reasoning:complete", { result });
 
     if (this.config.verbose) {
@@ -173,12 +277,18 @@ Approach 2:
       { role: "user", content: userPrompt },
     ];
 
-    const response = await this.client.chat(messages, [], {
-      temperature: this.config.temperature,
-    });
+    try {
+      const response = await this.client.chat(messages, [], {
+        temperature: this.config.temperature,
+      });
 
-    const content = response.choices[0]?.message?.content || "";
-    return this.parseApproaches(content);
+      const content = response.choices[0]?.message?.content || "";
+      return this.parseApproaches(content);
+    } catch (error) {
+      logger.warn('LLM call failed during thought generation', { error: getErrorMessage(error) });
+      // Return a single fallback thought so the search can continue
+      return [`Continue analyzing: ${problem.description.slice(0, 200)}`];
+    }
   }
 
   /**
@@ -212,14 +322,20 @@ Rate this thought (0-1):`;
       { role: "user", content: userPrompt },
     ];
 
-    const response = await this.client.chat(messages, [], {
-      temperature: 0.1,
-    });
+    try {
+      const response = await this.client.chat(messages, [], {
+        temperature: 0.1,
+      });
 
-    const content = response.choices[0]?.message?.content || "0.5";
-    const score = parseFloat(content.match(/[\d.]+/)?.[0] || "0.5");
+      const content = response.choices[0]?.message?.content || "0.5";
+      const score = parseFloat(content.match(/[\d.]+/)?.[0] || "0.5");
 
-    return Math.max(0, Math.min(1, score));
+      return Math.max(0, Math.min(1, score));
+    } catch (error) {
+      logger.warn('LLM call failed during thought evaluation', { error: getErrorMessage(error) });
+      // Return neutral score so the node isn't unfairly penalized or boosted
+      return 0.5;
+    }
   }
 
   /**
@@ -234,9 +350,12 @@ Rate this thought (0-1):`;
     }
 
     try {
-      // Create a temporary script and run it
-      // For safety, we limit what can be executed
-      const result = await this.executeCommand(`node -e "${code.replace(/"/g, '\\"')}"`);
+      // Sanitize: encode code as base64 and decode in Node to avoid shell injection.
+      // This prevents $(…), backtick, and quote-based injection attacks.
+      const encoded = Buffer.from(code, 'utf-8').toString('base64');
+      const safeCommand = `node -e "eval(Buffer.from('${encoded}','base64').toString())"`;
+
+      const result = await this.executeCommand(safeCommand);
 
       return {
         success: result.success,
@@ -275,8 +394,14 @@ Provide an improved version of this thought that addresses the feedback:`;
       { role: "user", content: userPrompt },
     ];
 
-    const response = await this.client.chat(messages, []);
-    return response.choices[0]?.message?.content || node.content;
+    try {
+      const response = await this.client.chat(messages, []);
+      return response.choices[0]?.message?.content || node.content;
+    } catch (error) {
+      logger.warn('LLM call failed during thought refinement', { error: getErrorMessage(error) });
+      // Return original content when refinement fails
+      return node.content;
+    }
   }
 
   /**
@@ -361,11 +486,12 @@ Provide an improved version of this thought that addresses the feedback:`;
   /**
    * Set thinking mode
    */
-  setMode(mode: ThinkingMode): void {
+  setMode(mode: ThinkingMode, mctsOverrides?: Partial<MCTSConfig>): void {
     this.config.mode = mode;
     this.mctsConfig = {
       ...DEFAULT_MCTS_CONFIG,
       ...THINKING_MODE_CONFIG[mode],
+      ...mctsOverrides,
     };
   }
 
@@ -457,6 +583,9 @@ export function getTreeOfThoughtReasoner(
 ): TreeOfThoughtReasoner {
   if (!totReasonerInstance) {
     totReasonerInstance = createTreeOfThoughtReasoner(apiKey, baseURL, config);
+  } else if (config.mode) {
+    // Re-apply mode when singleton already exists but caller requests a different mode
+    totReasonerInstance.setMode(config.mode);
   }
   return totReasonerInstance;
 }

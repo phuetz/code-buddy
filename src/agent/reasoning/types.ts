@@ -5,6 +5,7 @@
  * Based on research from:
  * - Tree of Thoughts (ToT) - Yao et al., 2023
  * - RethinkMCTS (arXiv 2409.09584)
+ * - MCTSr (arXiv 2406.07394) - Q-value refinement
  * - Chain of Preference Optimization (NeurIPS 2024)
  */
 
@@ -58,6 +59,7 @@ export interface ThoughtMetadata {
   feedback?: string;
   alternatives?: string[];
   confidence?: number;
+  rewardSamples?: number[];
 }
 
 /**
@@ -68,6 +70,34 @@ export interface ExecutionResult {
   output?: string;
   error?: string;
   exitCode?: number;
+}
+
+/**
+ * Complexity level for adaptive reasoning dispatch
+ */
+export type ComplexityLevel = 'none' | 'cot' | 'tot' | 'mcts';
+
+/**
+ * Complexity score with signals explaining the classification
+ */
+export interface ComplexityScore {
+  level: ComplexityLevel;
+  score: number;
+  signals: string[];
+}
+
+/**
+ * Progress event emitted during MCTS search
+ */
+export interface MCTSProgressEvent {
+  type: 'iteration' | 'expansion' | 'evaluation' | 'refinement' | 'solution_found';
+  iteration: number;
+  nodesCreated: number;
+  nodesEvaluated: number;
+  bestScore: number;
+  tokensUsed: number;
+  nodeId?: string;
+  message?: string;
 }
 
 /**
@@ -82,6 +112,12 @@ export interface MCTSConfig {
   timeLimit?: number;           // Time limit in ms
   useRethink: boolean;          // Enable rethink mechanism
   rethinkThreshold: number;     // Score threshold for rethinking
+  tokenBudget?: number;         // Maximum token budget for search
+  rewardSamples?: number;       // Number of evaluation samples per node for robust Q (default: 1)
+  searchAlgorithm?: 'bfs' | 'mcts'; // Search algorithm to use (default: 'mcts')
+  beamWidth?: number;           // Beam width for BFS mode (default: 3)
+  progressiveDeepening?: boolean; // Enable progressive deepening (auto-escalation)
+  onProgress?: (event: MCTSProgressEvent) => void; // Optional progress callback
 }
 
 /**
@@ -95,6 +131,10 @@ export const DEFAULT_MCTS_CONFIG: MCTSConfig = {
   simulationDepth: 3,
   useRethink: true,
   rethinkThreshold: 0.3,
+  rewardSamples: 1,
+  searchAlgorithm: 'mcts',
+  beamWidth: 3,
+  progressiveDeepening: false,
 };
 
 /**
@@ -108,6 +148,7 @@ export interface MCTSStats {
   maxDepthReached: number;
   totalTime: number;
   bestScore: number;
+  tokensUsed: number;
 }
 
 /**
@@ -180,21 +221,25 @@ export const THINKING_MODE_CONFIG: Record<ThinkingMode, Partial<MCTSConfig>> = {
     maxIterations: 5,
     maxDepth: 3,
     expansionCount: 2,
+    tokenBudget: 15000,
   },
   medium: {
     maxIterations: 20,
     maxDepth: 6,
     expansionCount: 3,
+    tokenBudget: 50000,
   },
   deep: {
     maxIterations: 50,
     maxDepth: 10,
     expansionCount: 4,
+    tokenBudget: 150000,
   },
   exhaustive: {
     maxIterations: 100,
     maxDepth: 15,
     expansionCount: 5,
+    tokenBudget: 400000,
   },
 };
 

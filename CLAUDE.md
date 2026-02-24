@@ -71,7 +71,7 @@ CodeBuddyAgent
 - `src/agent/execution/agent-executor.ts` — Middleware pipeline, reasoning, tool streaming (both sequential + streaming paths)
 - `src/codebuddy/client.ts` — LLM API client (multi-provider); `defaultMaxTokens` read from `getModelToolConfig(model).maxOutputTokens`
 - `src/services/prompt-builder.ts` — **Real** system prompt builder (NOT `src/agent/system-prompt-builder.ts` which was deleted); calls `getSystemPromptForMode()`, applies model-aware token budget truncation
-- `src/codebuddy/tools.ts` — Tool definitions + RAG selection (~109 tools total)
+- `src/codebuddy/tools.ts` — Tool definitions + RAG selection (~110 tools total)
 - `src/ui/components/ChatInterface.tsx` — React/Ink terminal UI
 
 ### Key Architecture Decisions
@@ -84,7 +84,7 @@ CodeBuddyAgent
 
 4. **Context Compression** — `ContextManagerV2` (`src/context/context-manager-v2.ts`) uses sliding window + summarization when nearing limits. Uses `getModelToolConfig(model).contextWindow` for the budget.
 
-5. **Middleware Pipeline** — `src/agent/middleware/` has composable before/after turn hooks (cost-limit, context-warning, turn-limit, workflow-guard at priority 45). Register via `codebuddy-agent.ts` constructor.
+5. **Middleware Pipeline** — `src/agent/middleware/` has composable before/after turn hooks (cost-limit, context-warning, turn-limit, reasoning at priority 42, workflow-guard at priority 45). Register via `codebuddy-agent.ts` constructor.
 
 6. **Confirmation Service** — Singleton for destructive operations. Use `ConfirmationService.getInstance()` for file/bash operations needing approval.
 
@@ -94,15 +94,26 @@ CodeBuddyAgent
 
 ### Reasoning Engines
 
-Three reasoning modes in `src/agent/thinking/` and `src/agent/reasoning/`:
+Two systems coexist in `src/agent/thinking/` and `src/agent/reasoning/`:
 
-| Engine | Location | Trigger |
-|--------|----------|---------|
-| **Extended Thinking** | `src/agent/thinking/extended-thinking.ts` | `/think [level]`, budget_tokens support |
-| **Tree-of-Thought** | `src/agent/reasoning/tree-of-thought.ts` | Multi-path exploration |
-| **MCTS** | `src/agent/reasoning/mcts.ts` | Iterative refinement (arXiv 2409.09584) |
+**Extended Thinking** (`src/agent/thinking/extended-thinking.ts`):
+- Provider-level thinking (Grok `budget_tokens`). Levels: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`
 
-Thinking depth levels: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`
+**Tree-of-Thought + MCTS** (`src/agent/reasoning/`):
+- Modes: `shallow` (CoT single-pass), `medium` (ToT BFS), `deep` (MCTS), `exhaustive` (full MCTS + progressive deepening)
+- MCTSr Q-value: `Q(a) = 0.5 * (min(R) + mean(R))` (arXiv 2406.07394)
+- BFS beam search, token budget tracking, progressive deepening auto-escalation
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Tree-of-Thought | `src/agent/reasoning/tree-of-thought.ts` | Thought generation, evaluation, `solve()` + `solveStreaming()` |
+| MCTS | `src/agent/reasoning/mcts.ts` | MCTSr search with BFS/MCTS/progressive modes |
+| Reasoning Facade | `src/agent/reasoning/reasoning-facade.ts` | Unified entry point, auto-mode selection, auto-escalation |
+| Reasoning Middleware | `src/agent/middleware/reasoning-middleware.ts` | Priority 42, auto-detects complex queries (score 0-15), injects `<reasoning_guidance>` |
+| `/think` handler | `src/commands/handlers/think-handlers.ts` | `/think off\|shallow\|medium\|deep\|exhaustive\|status\|<problem>` |
+| `reason` tool | `src/tools/reasoning-tool.ts` + `src/codebuddy/tool-definitions/advanced-tools.ts` | LLM-callable tool for structured problem solving |
+
+Streaming: `reason` tool yields MCTS progress events via `tool_stream` in agent-executor (alongside `bash`).
 
 ### Specialized Agents (`src/agent/specialized/`)
 
@@ -143,6 +154,7 @@ To add a new tool:
 2. Add definition in `src/codebuddy/tools.ts` (OpenAI function calling format)
 3. Add execution case in `CodeBuddyAgent.executeTool()`
 4. Register in `src/tools/registry/` via the appropriate factory
+5. Add metadata in `src/tools/metadata.ts` (keywords, priority for RAG selection)
 
 Tool aliases (Codex-style): `shell_exec`, `file_read`, `browser_search`, etc. — defined in `src/tools/registry/tool-aliases.ts`.
 
@@ -167,6 +179,8 @@ Tool aliases (Codex-style): `shell_exec`, `file_read`, `browser_search`, etc. �
 | i18n | `src/i18n/` | 6 locales (en, de, es, ja, zh, fr); categories: common, cli, tools, errors, help |
 | Services | `src/services/` | `prompt-builder.ts`, `plan-generator.ts`, `codebase-explorer.ts`, VFS router |
 | Voice/TTS | `src/talk-mode/`, `src/input/`, `src/voice/` | Two separate TTS systems (don't conflate) |
+| Reasoning | `src/agent/reasoning/` | ToT + MCTS engines, facade, `/think` command, `reason` tool |
+| Commands | `src/commands/` | `EnhancedCommandHandler` (Map-based O(1) dispatch), `ClientCommandDispatcher` (UI delegation), `SlashCommandManager` |
 
 ### Context Engineering Patterns
 
@@ -251,6 +265,19 @@ buddy groups status|list|block|unblock
 buddy auth-profile list|add|remove|reset
 buddy execpolicy check|list|add-prefix|dashboard
 buddy pairing status|approve <code>
+```
+
+### Slash Commands (interactive session)
+
+```
+/think off|shallow|medium|deep|exhaustive  # Set reasoning depth
+/think status                               # Show reasoning config & last result
+/think <problem>                            # Run Tree-of-Thought on a problem
+/persona list|use|info|reset               # Manage AI personas
+/lessons list|add|search|stats             # Lessons management
+/compact [level]                            # Compress conversation context
+/config [key] [value]                       # View/set configuration
+/tools [list|info]                          # List available tools
 ```
 
 ## HTTP Server (`src/server/`)

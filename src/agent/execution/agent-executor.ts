@@ -701,9 +701,10 @@ export class AgentExecutor {
               return;
             }
 
-            // Use streaming execution for bash tools
+            // Use streaming execution for tools that support it (bash, reason)
             let result;
-            if (toolCall.function.name === 'bash') {
+            const STREAMING_TOOLS = ['bash', 'reason'];
+            if (STREAMING_TOOLS.includes(toolCall.function.name)) {
               const gen = this.deps.toolHandler.executeToolStreaming(toolCall);
               let genResult = await gen.next();
               while (!genResult.done) {

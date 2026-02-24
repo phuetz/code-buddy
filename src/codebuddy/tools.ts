@@ -56,7 +56,7 @@ export type { CodeBuddyTool, JsonSchemaProperty };
 export {
   CORE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled,
   SEARCH_TOOLS, TODO_TOOLS, WEB_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS,
-  COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS,
+  COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL,
 } from "./tool-definitions/index.js";
 
 // ============================================================================

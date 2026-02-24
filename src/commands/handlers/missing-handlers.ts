@@ -674,3 +674,31 @@ Use /checkpoints to see available checkpoints.`,
     };
   }
 }
+
+// ============================================================================
+// /init - Initialize Code Buddy Project
+// ============================================================================
+
+export async function handleInitGrok(): Promise<CommandHandlerResult> {
+  try {
+    const { initCodeBuddyProject, formatInitResult } = await import('../../utils/init-project.js');
+    const initResult = await initCodeBuddyProject();
+    return {
+      handled: true,
+      entry: {
+        type: 'assistant',
+        content: formatInitResult(initResult),
+        timestamp: new Date(),
+      },
+    };
+  } catch (error) {
+    return {
+      handled: true,
+      entry: {
+        type: 'assistant',
+        content: `Error initializing project: ${error instanceof Error ? error.message : String(error)}`,
+        timestamp: new Date(),
+      },
+    };
+  }
+}

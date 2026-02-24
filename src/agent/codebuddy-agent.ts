@@ -210,16 +210,41 @@ export class CodeBuddyAgent extends BaseAgent {
       getSessionCostLimit: this.getSessionCostLimit.bind(this),
     });
 
-    // Initialize default middleware pipeline with WorkflowGuardMiddleware
-    import('./middleware/index.js').then(({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
+    // Initialize default middleware pipeline with WorkflowGuardMiddleware + ReasoningMiddleware
+    import('./middleware/index.js').then(async ({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
       if (!this.executor.getMiddlewarePipeline()) {
         const pipeline = new MiddlewarePipeline();
+        // Reasoning middleware (priority 42) — auto-detects complex queries
+        try {
+          const { createReasoningMiddleware } = await import('./middleware/reasoning-middleware.js');
+          pipeline.use(createReasoningMiddleware());
+          logger.debug('ReasoningMiddleware registered in pipeline (priority 42)');
+        } catch (err) {
+          logger.debug('Failed to register ReasoningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+        }
+        // Workflow guard (priority 45)
         pipeline.use(new WorkflowGuardMiddleware());
+        // Auto-repair middleware (priority 150) — detects tool failures, invokes repair engine
+        try {
+          const { createAutoRepairMiddleware } = await import('./middleware/auto-repair-middleware.js');
+          pipeline.use(createAutoRepairMiddleware());
+          logger.debug('AutoRepairMiddleware registered in pipeline (priority 150)');
+        } catch (err) {
+          logger.debug('Failed to register AutoRepairMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+        }
+        // Quality gate middleware (priority 200) — auto-delegates to specialized agents
+        try {
+          const { createQualityGateMiddleware } = await import('./middleware/quality-gate-middleware.js');
+          pipeline.use(createQualityGateMiddleware());
+          logger.debug('QualityGateMiddleware registered in pipeline (priority 200)');
+        } catch (err) {
+          logger.debug('Failed to register QualityGateMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+        }
         this.executor.setMiddlewarePipeline(pipeline);
         logger.debug('WorkflowGuardMiddleware registered in default pipeline');
       }
     }).catch(err => {
-      logger.debug('Failed to register WorkflowGuardMiddleware (non-critical)', err);
+      logger.debug('Failed to register middleware pipeline (non-critical)', err);
     });
 
     // Initialize PromptBuilder with Moltbot hooks for intro injection

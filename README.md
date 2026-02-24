@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Tests-23%2C700%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-24%2C000%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
   <img src="https://img.shields.io/badge/Coverage-85%25-48dbfb?style=flat-square" alt="Coverage"/>
   <img src="https://img.shields.io/badge/Build-passing-00d26a?style=flat-square" alt="Build"/>
 </p>
@@ -64,6 +64,12 @@ It works as two things at once:
 - Workflow orchestration rules in system prompt (concrete plan triggers, auto-correction protocol, verification contract)
 - Restorable context compression (identifiers preserved, full content recoverable on demand)
 - Pre-compaction memory flush (facts saved to MEMORY.md before context is compacted — OpenClaw pattern)
+- Decision memory extraction (architectural choices + rationale persisted during context flush)
+- Coding style learning (auto-analyzes naming, imports, indentation, error handling patterns)
+- Importance-weighted context compression (error messages, decisions, code scored higher than conversation)
+- Auto-repair middleware (detects tool failures, localizes faults, suggests fixes automatically)
+- Quality gate middleware (auto-delegates to CodeGuardian + Security agents after implementation)
+- Issue-to-PR pipeline (`buddy dev issue #42` → branch → implement → test → PR)
 - Anthropic prompt cache breakpoints (stable/dynamic split → 10× token cost savings)
 - Per-channel streaming policies (Telegram, Discord, Slack, WhatsApp each get their own chunking/format rules)
 - SSRF guard on all outbound fetches (IPv4 + IPv6 bypass vector blocking)
@@ -257,6 +263,15 @@ Code Buddy implements the **Open Manus / CodeAct** architecture in a structured,
 *   **Inline Citations** — Web search results now include `[1]` `[2]` citation markers inline and a **Sources** block listing all referenced URLs.
 *   **Lessons.md Self-Improvement Loop** — After any user correction, the agent calls `lessons_add` to persist the lesson (category: PATTERN, RULE, CONTEXT, or INSIGHT) to `.codebuddy/lessons.md`. On every turn, active lessons are injected as a `<lessons_context>` block BEFORE the todo suffix so learned patterns are always visible. Use `buddy lessons add/search/list` or the `lessons_add`/`lessons_search` tools. The `task_verify` tool runs the **Verification Contract** (tsc + tests + lint) before any task completion.
 
+**Phase 5: Persistent & Contextual Memory (Agent Zero + OpenClaw patterns)**
+
+*   **Decision Memory** — During pre-compaction flush, the LLM extracts architectural decisions (choice, alternatives, rationale, confidence) into structured `<decision>` blocks. These are persisted via EnhancedMemory and injected as `<decisions_context>` in future turns, so the agent remembers *why* past choices were made — even months later.
+*   **Coding Style Learning** — `CodingStyleAnalyzer` detects project conventions (quote style, semicolons, indentation, naming, imports, error handling, testing patterns) via regex heuristics and majority voting across files. The resulting profile is injected as a `<coding_style>` block in the system prompt.
+*   **Importance-Weighted Compression** — `ImportanceScorer` assigns scores (0–1) to each message based on content type (errors=0.95, decisions=0.90, code=0.70, conversation=0.25), recency, and role. The sliding window in `ContextManagerV2` preserves high-importance messages (>0.8) even outside the recent window.
+*   **Auto-Repair Middleware** (priority 150) — Scans recent tool results for error patterns (SyntaxError, FAIL, exit code). When detected, invokes `FaultLocalizer` to pinpoint the file/line, then injects a repair suggestion into the conversation. Max 3 attempts per failure, resets on success.
+*   **Quality Gate Middleware** (priority 200) — After implementation completes, auto-delegates to CodeGuardian (architecture review) and SecurityReview (vulnerability scan) agents. Reports findings as warnings; required gates can block the loop.
+*   **Issue-to-PR Pipeline** — `buddy dev issue <url-or-number>` automates: fetch GitHub issue → create branch → map labels to workflow type → run plan+implement+test → create PR with `Closes #N`. Labels like `bug`→fix-tests, `security`→security-audit, `feature`→add-feature.
+
 **Example Prompts:**
 
 ```bash
@@ -375,6 +390,8 @@ buddy speak --url http://host:8000 "Hello"    # Custom AudioReader URL
 | **Persistent Memory** | Markdown files | Project/user notes |
 | **Enhanced Memory** | SQLite + embeddings | Semantic search |
 | **Prospective Memory** | SQLite | Tasks, goals, reminders |
+| **Decision Memory** | EnhancedMemory | Architectural choices with rationale, auto-extracted during context flush |
+| **Coding Style Memory** | EnhancedMemory | Project conventions (naming, imports, indentation) auto-analyzed from source |
 | **ICM (optional)** | [ICM MCP server](https://github.com/rtk-ai/icm) | Persistent cross-session memory via episodic + semantic dual architecture |
 
 **Auto-capture** detects and stores important information from conversations:
@@ -946,6 +963,12 @@ CodeBuddyAgent
     │       - Sequential, parallel, race, all strategies
     │       - SharedContext with optimistic locking
     │
+    ├── MiddlewarePipeline      # Composable before/after turn hooks
+    │       - ReasoningMiddleware (priority 42)
+    │       - WorkflowGuardMiddleware (priority 45)
+    │       - AutoRepairMiddleware (priority 150)
+    │       - QualityGateMiddleware (priority 200)
+    │
     ├── SelfHealing             # Automatic error recovery
     │       - Pattern recognition (6 built-in patterns)
     │       - Retry with exponential backoff
@@ -1198,6 +1221,14 @@ RTK is automatically integrated via a before-hook — supported bash commands ar
 ### CLI Subcommands
 
 ```bash
+# Dev Workflows
+buddy dev plan "<objective>"       # Profile repo + produce task plan
+buddy dev run "<objective>"        # Plan + implement + test + artifacts
+buddy dev pr "<objective>"         # Dev run + generate PR summary
+buddy dev fix-ci [--log <file>]    # Read CI logs + propose patch
+buddy dev issue <url-or-number>    # GitHub issue → branch → code → tests → PR
+buddy dev explain                  # Summarise repo conventions
+
 # Daemon
 buddy daemon start|stop|restart|status|logs
 
@@ -1344,7 +1375,7 @@ npm run build
 ### Test Coverage
 
 ```
-23,700+ tests across 554+ suites covering:
+24,000+ tests across 590+ suites covering:
 - Core: Tool Policy, Bash Allowlist, Context Window Guard, Compaction
 - Agent: Middleware Pipeline, Profiles, Reasoning, Streaming
 - Autonomy: Daemon, Cron Bridge, Task Planner, Delegation Engine
@@ -1353,6 +1384,9 @@ npm run build
 - Providers: Gemini (vision + conversation), OpenAI-compat, Failover
 - Security: Trust Folders, Skill Scanner, Bash Parser, Session Locks
 - Infrastructure: MCP Client, Webhooks, Extensions, ACP Protocol, RTK Compressor, ICM Bridge
+- Reasoning: Tree-of-Thought, MCTS, Reasoning Facade, /think command
+- Memory: Decision Memory, Coding Style Analyzer, Importance Scorer
+- Middleware: Auto-Repair, Quality Gates, Reasoning, Workflow Guard
 - Voice: Wake Word, TTS Providers, Voice Control Loop
 - UI: ChatHistory, ChatInterface, TabbedQuestion
 ```

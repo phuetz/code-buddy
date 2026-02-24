@@ -215,6 +215,42 @@ Repo context: ${profile.contextPack}`;
       agent.dispose?.();
     });
 
+  // ── buddy dev issue ───────────────────────────────────────
+  dev
+    .command('issue <url-or-number>')
+    .description('Fetch a GitHub issue, plan + implement + test + create PR')
+    .option('-y, --yes', 'skip confirmation prompts', false)
+    .option('--write-policy <mode>', 'write policy: strict|confirm|off', 'strict')
+    .action(async (issueRef: string, opts: { yes: boolean; writePolicy: string }) => {
+      const { runIssuePipeline } = await import('./issue-pipeline.js');
+
+      const validPolicies = ['strict', 'confirm', 'off'];
+      const policyMode = validPolicies.includes(opts.writePolicy)
+        ? (opts.writePolicy as 'strict' | 'confirm' | 'off')
+        : 'strict';
+
+      const agent = await createAgent();
+      await agent.systemPromptReady;
+
+      const result = await runIssuePipeline(issueRef, agent, {
+        nonInteractive: opts.yes,
+        writePolicyMode: policyMode,
+      });
+
+      if (result.status === 'completed') {
+        console.log(`\nIssue #${result.issueNumber} resolved successfully!`);
+        console.log(`Branch: ${result.branch}`);
+        if (result.prUrl) {
+          console.log(`PR: ${result.prUrl}`);
+        }
+      } else {
+        console.error(`\nIssue #${result.issueNumber} failed: ${result.error || 'unknown error'}`);
+        process.exit(1);
+      }
+
+      agent.dispose?.();
+    });
+
   // ── buddy dev explain ──────────────────────────────────────────
   dev
     .command('explain')

@@ -20,3 +20,12 @@ export {
 } from "./tree-of-thought.js";
 
 export type { ToTConfig } from "./tree-of-thought.js";
+
+// Reasoning Facade (unified entry point)
+export {
+  ReasoningFacade,
+  getReasoningFacade,
+  resetReasoningFacade,
+} from "./reasoning-facade.js";
+
+export type { ReasoningOptions, CumulativeUsage } from "./reasoning-facade.js";

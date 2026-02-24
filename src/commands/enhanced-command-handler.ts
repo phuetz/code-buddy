@@ -90,7 +90,20 @@ import {
   handleFix,
   handleReview,
   handlePersonaCommand,
+  // Think handler (Tree-of-Thought reasoning)
+  handleThink,
+  // Commands previously only handled in client-dispatcher
+  handleChangeModel,
+  handleChangeMode,
+  handleClearChat,
+  handleFeatures,
+  handleListCheckpoints,
+  handleRestoreCheckpoint,
+  handleInitGrok,
 } from "./handlers/index.js";
+
+import { handleLessonsCommand } from "./handlers/lessons-handler.js";
+import { handleContextStats } from "./handlers/extra-handlers.js";
 
 import type { CommandHandlerResult } from "./handlers/index.js";
 
@@ -104,6 +117,15 @@ export type { CommandHandlerResult };
 type CommandHandlerFn = (args: string[]) => Promise<CommandHandlerResult> | CommandHandlerResult;
 
 /**
+ * Proxy interface for agent context stats used by the /context stats command.
+ */
+export interface AgentContextProxy {
+  getContextStats: () => unknown;
+  formatContextStats: () => string;
+  getCurrentModel: () => string;
+}
+
+/**
  * Enhanced Command Handler.
  *
  * Processes special command tokens (starting with `__`) that are mapped from
@@ -115,6 +137,7 @@ type CommandHandlerFn = (args: string[]) => Promise<CommandHandlerResult> | Comm
 export class EnhancedCommandHandler {
   private conversationHistory: ChatEntry[] = [];
   private codebuddyClient: CodeBuddyClient | null = null;
+  private agentProxy: AgentContextProxy | null = null;
 
   /**
    * Command handler registry — maps tokens to handler functions.
@@ -222,6 +245,20 @@ export class EnhancedCommandHandler {
     ['__FIX__', (args) => handleFix(args)],
     ['__REVIEW__', (args) => handleReview(args)],
     ['__PERSONA__', (args) => handlePersonaCommand(args.join(' '))],
+
+    // Tree-of-Thought reasoning
+    ['__THINK__', (args) => handleThink(args)],
+
+    // Commands previously handled inline in client-dispatcher
+    ['__CLEAR_CHAT__', () => handleClearChat()],
+    ['__CHANGE_MODEL__', (args) => handleChangeModel(args)],
+    ['__CHANGE_MODE__', (args) => handleChangeMode(args)],
+    ['__LIST_CHECKPOINTS__', (args) => handleListCheckpoints(args)],
+    ['__RESTORE_CHECKPOINT__', (args) => handleRestoreCheckpoint(args)],
+    ['__INIT_GROK__', () => handleInitGrok()],
+    ['__FEATURES__', () => handleFeatures()],
+    ['__LESSONS__', (args) => handleLessonsCommand(args.join(' '))],
+    ['__CONTEXT_STATS__', (args) => handleContextStats(args, this.agentProxy ?? undefined)],
   ]);
 
   /**
@@ -229,6 +266,13 @@ export class EnhancedCommandHandler {
    */
   setConversationHistory(history: ChatEntry[]): void {
     this.conversationHistory = history;
+  }
+
+  /**
+   * Sets the agent context proxy for commands that need agent stats (e.g., /context stats).
+   */
+  setAgentProxy(proxy: AgentContextProxy): void {
+    this.agentProxy = proxy;
   }
 
   /**

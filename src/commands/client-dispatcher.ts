@@ -4,9 +4,6 @@ import { getEnhancedCommandHandler } from "./enhanced-command-handler.js";
 import { GitWorkflowHandler } from "./workflow/git-workflow.js";
 import { getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
-import { getPersistentCheckpointManager } from "../checkpoints/persistent-checkpoint-manager.js";
-import { initCodeBuddyProject, formatInitResult } from "../utils/init-project.js";
-import { AgentMode } from "../agent/agent-mode.js";
 import { updateCurrentModel } from "../utils/model-config.js";
 
 export interface ClientCommandContext {
@@ -118,13 +115,44 @@ export class ClientCommandDispatcher {
     return false;
   }
 
+  /**
+   * Handles internal command tokens by delegating to EnhancedCommandHandler.
+   * Applies UI-specific side effects for commands that need them
+   * (e.g., clearing chat state, opening model picker).
+   */
   private static async handleInternalCommand(
     token: string,
     originalInput: string,
     context: ClientCommandContext
   ): Promise<boolean> {
-    switch (token) {
-      case "__CLEAR_CHAT__":
+    // Intercept /context stats — route to __CONTEXT_STATS__ with agent proxy
+    if (token === "__CONTEXT__") {
+      const contextArgs = originalInput.trim().split(/\s+/).slice(1);
+      if (contextArgs[0]?.toLowerCase() === 'stats') {
+        return await this.delegateToEnhanced("__CONTEXT_STATS__", originalInput, context, contextArgs.slice(1));
+      }
+      // Fall through to enhanced handler for other /context subcommands
+      return false;
+    }
+
+    // __CHANGE_MODEL__ without args opens the interactive model picker UI
+    if (token === "__CHANGE_MODEL__") {
+      const args = originalInput.trim().split(/\s+/).slice(1);
+      if (args.length === 0) {
+        context.setShowModelSelection(true);
+        context.setSelectedModelIndex(0);
+        context.clearInput();
+        return true;
+      }
+      // With args, delegate to enhanced handler for model switching
+      return await this.delegateToEnhanced(token, originalInput, context);
+    }
+
+    // __CLEAR_CHAT__ needs UI state resets beyond what the handler provides
+    if (token === "__CLEAR_CHAT__") {
+      const handled = await this.delegateToEnhanced(token, originalInput, context);
+      if (handled) {
+        // Apply UI-specific side effects
         context.setChatHistory([]);
         context.setIsProcessing(false);
         context.setIsStreaming(false);
@@ -132,91 +160,55 @@ export class ClientCommandDispatcher {
         context.setProcessingTime(0);
         context.processingStartTime.current = 0;
         ConfirmationService.getInstance().resetSession();
-        context.clearInput();
         context.resetHistory();
-        return true;
-
-      case "__CHANGE_MODEL__":
-        context.setShowModelSelection(true);
-        context.setSelectedModelIndex(0);
-        context.clearInput();
-        return true;
-
-      case "__CHANGE_MODE__":
-        this.handleChangeMode(originalInput, context);
-        return true;
-
-      case "__LIST_CHECKPOINTS__":
-        this.handleListCheckpoints(context);
-        return true;
-
-      case "__RESTORE_CHECKPOINT__":
-        this.handleRestoreCheckpoint(originalInput, context);
-        return true;
-
-      case "__INIT_GROK__":
-        await this.handleInitGrok(context);
-        return true;
-      
-      case "__FEATURES__": {
-         const { handleFeaturesCommand } = await import("./features.js");
-         const featuresEntry: ChatEntry = {
-            type: "assistant",
-            content: handleFeaturesCommand(),
-            timestamp: new Date(),
-         };
-         context.setChatHistory((prev) => [...prev, featuresEntry]);
-         context.clearInput();
-         return true;
       }
-
-      case "__LESSONS__": {
-        const { handleLessonsCommand } = await import("./handlers/lessons-handler.js");
-        const lessonsArgs = originalInput.trim().split(/\s+/).slice(1).join(' ');
-        const lessonsResult = handleLessonsCommand(lessonsArgs);
-        if (lessonsResult.entry) {
-          context.setChatHistory((prev) => [...prev, lessonsResult.entry!]);
-        }
-        context.clearInput();
-        return true;
-      }
-
-      case "__PERSONA__": {
-        const { handlePersonaCommand } = await import("./handlers/persona-handler.js");
-        const personaArgs = originalInput.trim().split(/\s+/).slice(1).join(' ');
-        const personaResult = handlePersonaCommand(personaArgs);
-        if (personaResult.entry) {
-          context.setChatHistory((prev) => [...prev, personaResult.entry!]);
-        }
-        context.clearInput();
-        return true;
-      }
-
-      case "__CONTEXT__": {
-        // Intercept /context stats to provide agent context window stats
-        const contextArgs = originalInput.trim().split(/\s+/).slice(1);
-        if (contextArgs[0]?.toLowerCase() === 'stats') {
-          const { handleContextStats } = await import("./handlers/extra-handlers.js");
-          const agentProxy = {
-            getContextStats: () => context.agent.getContextStats(),
-            formatContextStats: () => context.agent.formatContextStats(),
-            getCurrentModel: () => context.agent.getCurrentModel(),
-          };
-          const statsResult = await handleContextStats(contextArgs.slice(1), agentProxy);
-          if (statsResult.entry) {
-            context.setChatHistory((prev) => [...prev, statsResult.entry!]);
-          }
-          context.clearInput();
-          return true;
-        }
-        // Fall through to enhanced handler for other /context subcommands
-        return false;
-      }
-
-      default:
-        // Not an internal command handled here
-        return false;
+      return handled;
     }
+
+    // All other internal tokens: delegate directly to EnhancedCommandHandler
+    if (token.startsWith("__") && token.endsWith("__")) {
+      return await this.delegateToEnhanced(token, originalInput, context);
+    }
+
+    return false;
+  }
+
+  /**
+   * Delegates a command token to EnhancedCommandHandler, applying standard
+   * result handling (add entry to chat, pass prompt to AI, clear input).
+   */
+  private static async delegateToEnhanced(
+    token: string,
+    originalInput: string,
+    context: ClientCommandContext,
+    overrideArgs?: string[]
+  ): Promise<boolean> {
+    const enhancedHandler = getEnhancedCommandHandler();
+    enhancedHandler.setConversationHistory(context.chatHistory);
+    enhancedHandler.setCodeBuddyClient(context.agent.getClient());
+    enhancedHandler.setAgentProxy({
+      getContextStats: () => context.agent.getContextStats(),
+      formatContextStats: () => context.agent.formatContextStats(),
+      getCurrentModel: () => context.agent.getCurrentModel(),
+    });
+
+    const args = overrideArgs ?? originalInput.trim().split(" ").slice(1);
+    const handlerResult = await enhancedHandler.handleCommand(token, args, originalInput);
+
+    if (handlerResult.handled) {
+      if (handlerResult.entry) {
+        context.setChatHistory((prev) => [...prev, handlerResult.entry!]);
+      }
+
+      if (handlerResult.passToAI && handlerResult.prompt) {
+        await context.processUserMessage(handlerResult.prompt);
+      }
+
+      context.clearInput();
+      return true;
+    }
+
+    return false;
   }
 
   private static async handleEnhancedCommand(
@@ -224,114 +216,7 @@ export class ClientCommandDispatcher {
     originalInput: string,
     context: ClientCommandContext
   ): Promise<boolean> {
-      const enhancedHandler = getEnhancedCommandHandler();
-      enhancedHandler.setConversationHistory(context.chatHistory);
-      enhancedHandler.setCodeBuddyClient(context.agent.getClient());
-
-      const args = originalInput.trim().split(" ").slice(1);
-      const handlerResult = await enhancedHandler.handleCommand(
-        token,
-        args,
-        originalInput
-      );
-
-      if (handlerResult.handled) {
-        if (handlerResult.entry) {
-          context.setChatHistory((prev) => [...prev, handlerResult.entry!]);
-        }
-
-        if (handlerResult.passToAI && handlerResult.prompt) {
-          // Pass the generated prompt to the AI
-          await context.processUserMessage(handlerResult.prompt);
-        }
-
-        context.clearInput();
-        return true;
-      }
-      
-      // If recognized as Enhanced Command token but not handled, fall through
-      return false;
-  }
-
-  private static handleChangeMode(input: string, context: ClientCommandContext) {
-      const args = input.trim().split(" ").slice(1);
-      const mode = args[0] as AgentMode | undefined;
-      if (mode && ["plan", "code", "ask"].includes(mode)) {
-        context.agent.setMode(mode);
-        const entry: ChatEntry = {
-          type: "assistant",
-          content: `✓ Switched to ${mode} mode`,
-          timestamp: new Date(),
-        };
-        context.setChatHistory((prev) => [...prev, entry]);
-      } else {
-        const entry: ChatEntry = {
-          type: "assistant",
-          content: `Invalid mode. Available: plan, code, ask`,
-          timestamp: new Date(),
-        };
-        context.setChatHistory((prev) => [...prev, entry]);
-      }
-      context.clearInput();
-  }
-
-  private static handleListCheckpoints(context: ClientCommandContext) {
-      const checkpointManager = getPersistentCheckpointManager();
-      const entry: ChatEntry = {
-        type: "assistant",
-        content: checkpointManager.formatCheckpointList(),
-        timestamp: new Date(),
-      };
-      context.setChatHistory((prev) => [...prev, entry]);
-      context.clearInput();
-  }
-
-  private static handleRestoreCheckpoint(input: string, context: ClientCommandContext) {
-      const checkpointManager = getPersistentCheckpointManager();
-      const args = input.trim().split(" ").slice(1);
-
-      if (args.length === 0) {
-        // Show checkpoints list
-        const entry: ChatEntry = {
-          type: "assistant",
-          content: checkpointManager.formatCheckpointList(),
-          timestamp: new Date(),
-        };
-        context.setChatHistory((prev) => [...prev, entry]);
-      } else {
-        // Restore specific checkpoint
-        const checkpoints = checkpointManager.getCheckpoints();
-        const arg = args[0];
-        let checkpointId = arg;
-
-        // If arg is a number, use it as index
-        const index = parseInt(arg, 10);
-        if (!isNaN(index) && index > 0 && index <= checkpoints.length) {
-          checkpointId = checkpoints[index - 1].id;
-        }
-
-        const restoreResult = checkpointManager.restore(checkpointId);
-        const entry: ChatEntry = {
-          type: "assistant",
-          content: restoreResult.success
-            ? `✅ Restored checkpoint!\n\nFiles restored:\n${restoreResult.restored.map(f => `  • ${f}`).join('\n')}`
-            : `❌ Failed to restore: ${restoreResult.errors.join(', ')}`,
-          timestamp: new Date(),
-        };
-        context.setChatHistory((prev) => [...prev, entry]);
-      }
-      context.clearInput();
-  }
-
-  private static async handleInitGrok(context: ClientCommandContext) {
-      const initResult = await initCodeBuddyProject();
-      const entry: ChatEntry = {
-        type: "assistant",
-        content: formatInitResult(initResult),
-        timestamp: new Date(),
-      };
-      context.setChatHistory((prev) => [...prev, entry]);
-      context.clearInput();
+      return await this.delegateToEnhanced(token, originalInput, context);
   }
 
   private static async handleModelSwitch(input: string, context: ClientCommandContext) {

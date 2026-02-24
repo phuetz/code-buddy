@@ -914,8 +914,19 @@ const workflowCommands: SlashCommand[] = [
 
 const agentControlCommands: SlashCommand[] = [
   // Dead slash commands removed during audit (2026-02-22):
-  // /think, /queue, /subagents, /new, /reset, /status, /verbose
+  // /queue, /subagents, /new, /reset, /status, /verbose
   // These had __TOKEN__ prompts with no handler implementation.
+  // /think was re-implemented with full Tree-of-Thought reasoning (2026-02-23).
+  {
+    name: 'think',
+    description: 'Enable Tree-of-Thought reasoning: /think [shallow|medium|deep|exhaustive] [problem]',
+    prompt: '__THINK__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'mode_or_problem', description: 'Thinking mode (shallow/medium/deep/exhaustive) or problem text', required: false }
+    ]
+  },
 ];
 
 // ============================================================================

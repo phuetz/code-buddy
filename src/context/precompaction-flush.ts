@@ -47,7 +47,7 @@ export interface FlushResult {
 const NO_REPLY_SENTINEL = 'NO_REPLY';
 const ACK_MAX_CHARS = 300;
 
-const FLUSH_SYSTEM_PROMPT = `You are a memory archivist. Your ONLY job is to extract
+const FLUSH_SYSTEM_PROMPT_BASE = `You are a memory archivist. Your ONLY job is to extract
 important, durable facts from a conversation that is about to be compressed.
 
 OUTPUT FORMAT:
@@ -66,6 +66,21 @@ SKIP if: small talk, debugging tangents, transient data, already-known facts.`;
 // ============================================================================
 
 export class PrecompactionFlusher {
+  /**
+   * Build the full flush system prompt, including decision extraction
+   * instructions when the DecisionMemory module is available.
+   */
+  private async buildFlushPrompt(): Promise<string> {
+    try {
+      const { getDecisionMemory } = await import('../memory/decision-memory.js');
+      const decisionMemory = getDecisionMemory();
+      const enhancement = decisionMemory.getDecisionPromptEnhancement();
+      return FLUSH_SYSTEM_PROMPT_BASE + '\n\n' + enhancement;
+    } catch {
+      return FLUSH_SYSTEM_PROMPT_BASE;
+    }
+  }
+
   /** Run a silent flush before context compaction. */
   async flush(
     messages: FlushMessage[],
@@ -81,8 +96,10 @@ export class PrecompactionFlusher {
     // Build a compact snapshot of the conversation to flush
     const snapshot = this.buildSnapshot(messages);
 
+    const systemPrompt = await this.buildFlushPrompt();
+
     const flushMessages: FlushMessage[] = [
-      { role: 'system', content: FLUSH_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: `Conversation to analyse:\n\n${snapshot}` },
     ];
 
@@ -95,6 +112,9 @@ export class PrecompactionFlusher {
     }
 
     const trimmed = response.trim();
+
+    // Extract and persist decisions from the response (fire-and-forget)
+    this.extractAndPersistDecisions(trimmed);
 
     // Detect NO_REPLY sentinel
     if (
@@ -118,6 +138,24 @@ export class PrecompactionFlusher {
     const factsCount = content.split('\n').filter(l => l.startsWith('-')).length;
 
     return { flushed: true, factsCount, writtenTo, suppressed: false };
+  }
+
+  /**
+   * Extract decision blocks from the LLM response and persist them.
+   * Errors are swallowed to avoid disrupting the flush flow.
+   */
+  private async extractAndPersistDecisions(response: string): Promise<void> {
+    try {
+      const { getDecisionMemory } = await import('../memory/decision-memory.js');
+      const decisionMemory = getDecisionMemory();
+      const { decisions } = decisionMemory.extractDecisions(response);
+      if (decisions.length > 0) {
+        await decisionMemory.persistDecisions(decisions);
+        logger.debug('PrecompactionFlusher: persisted decisions', { count: decisions.length });
+      }
+    } catch (err) {
+      logger.debug('PrecompactionFlusher: decision extraction failed', { err });
+    }
   }
 
   // --------------------------------------------------------------------------

@@ -650,7 +650,7 @@ export class ToolHandler {
   ): AsyncGenerator<string, ToolResult, undefined> {
     const toolName = toolCall.function.name;
 
-    // Only bash supports streaming currently
+    // Bash: stream stdout/stderr in real-time
     if (toolName === 'bash') {
       try {
         const args = JSON.parse(toolCall.function.arguments);
@@ -666,6 +666,41 @@ export class ToolHandler {
         return result.value;
       } catch (error) {
         return { success: false, error: `Streaming execution error: ${getErrorMessage(error)}` };
+      }
+    }
+
+    // Reason: stream MCTS progress events in real-time
+    if (toolName === 'reason') {
+      try {
+        const args = JSON.parse(toolCall.function.arguments);
+        const { getTreeOfThoughtReasoner } = await import('./reasoning/index.js');
+        const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+        const baseURL = process.env.GROK_BASE_URL;
+        const mode = (args.mode as string) || 'medium';
+
+        type ThinkingMode = import('./reasoning/types.js').ThinkingMode;
+        const reasoner = getTreeOfThoughtReasoner(apiKey, baseURL, {
+          mode: mode as ThinkingMode,
+        });
+        reasoner.setMode(mode as ThinkingMode);
+
+        const gen = reasoner.solveStreaming({
+          description: args.problem as string,
+          context: args.context as string | undefined,
+          constraints: args.constraints as string[] | undefined,
+        });
+
+        let genResult = await gen.next();
+        while (!genResult.done) {
+          yield genResult.value;
+          genResult = await gen.next();
+        }
+
+        const searchResult = genResult.value;
+        const output = reasoner.formatResult(searchResult);
+        return { success: searchResult.success, output };
+      } catch (error) {
+        return { success: false, error: `Reasoning error: ${getErrorMessage(error)}` };
       }
     }
 

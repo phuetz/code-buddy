@@ -386,6 +386,7 @@ describe('TreeOfThoughtReasoner', () => {
           maxDepthReached: 5,
           totalTime: 5000,
           bestScore: 0.9,
+          tokensUsed: 0,
         },
         tree: {} as ThoughtNode,
       };
@@ -414,6 +415,7 @@ describe('TreeOfThoughtReasoner', () => {
           maxDepthReached: 10,
           totalTime: 10000,
           bestScore: 0.3,
+          tokensUsed: 0,
         },
         tree: {} as ThoughtNode,
       };
@@ -453,6 +455,7 @@ describe('TreeOfThoughtReasoner', () => {
           maxDepthReached: 3,
           totalTime: 2000,
           bestScore: 0.85,
+          tokensUsed: 0,
         },
         tree: {} as ThoughtNode,
       };
@@ -909,6 +912,7 @@ describe('TreeOfThoughtReasoner Parsing', () => {
           maxDepthReached: 3,
           totalTime: 3000,
           bestScore: 0.8,
+          tokensUsed: 0,
         },
         tree: pathNode1,
       };
@@ -960,6 +964,7 @@ describe('TreeOfThoughtReasoner Parsing', () => {
           maxDepthReached: 5,
           totalTime: 8000,
           bestScore: 0.9,
+          tokensUsed: 0,
         },
         tree: {} as ThoughtNode,
       };
@@ -1004,6 +1009,7 @@ describe('TreeOfThoughtReasoner Parsing', () => {
           maxDepthReached: 3,
           totalTime: 1500,
           bestScore: 0.85,
+          tokensUsed: 0,
         },
         tree: {} as ThoughtNode,
       };
@@ -1064,6 +1070,7 @@ describe('TreeOfThoughtReasoner Parsing', () => {
           maxDepthReached: 2,
           totalTime: 1000,
           bestScore: 0.7,
+          tokensUsed: 0,
         },
         tree: {} as ThoughtNode,
       };

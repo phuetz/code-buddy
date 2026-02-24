@@ -20,3 +20,7 @@ export { ContextWarningMiddleware } from './context-warning.js';
 export { AutoObservationMiddleware } from './auto-observation.js';
 export type { AutoObservationConfig } from './auto-observation.js';
 export { WorkflowGuardMiddleware } from './workflow-guard.js';
+export { AutoRepairMiddleware, createAutoRepairMiddleware } from './auto-repair-middleware.js';
+export type { AutoRepairConfig } from './auto-repair-middleware.js';
+export { QualityGateMiddleware, createQualityGateMiddleware } from './quality-gate-middleware.js';
+export type { QualityGateConfig, QualityGate } from './quality-gate-middleware.js';
