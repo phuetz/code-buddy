@@ -29,6 +29,18 @@ import { getRestorableCompressor } from "../../context/restorable-compression.js
 import { getResponseConstraintStack, resolveToolChoice } from "../response-constraint.js";
 
 /**
+ * Register a decision-context provider for the executor.
+ * Called externally (e.g., by CodeBuddyAgent) to wire up decision memory
+ * without incurring dynamic import cost in the hot loop.
+ */
+let _decisionContextProvider: ((query: string) => Promise<string | null>) | null = null;
+export function setDecisionContextProvider(
+  provider: (query: string) => Promise<string | null>
+): void {
+  _decisionContextProvider = provider;
+}
+
+/**
  * Dependencies injected into the AgentExecutor
  */
 export interface ExecutorDependencies {
@@ -255,6 +267,30 @@ export class AgentExecutor {
         }
       }
 
+      // Run before_turn middleware (sequential path)
+      const pipeline = this.deps.middlewarePipeline;
+      if (pipeline) {
+        const ctx = this.buildMiddlewareContext(
+          toolRounds, inputTokens, totalOutputTokens, history, messages, false
+        );
+        const mwResult = await pipeline.runBeforeTurn(ctx);
+        if (mwResult.action === 'stop') {
+          if (mwResult.message) {
+            const stopEntry: ChatEntry = { type: 'assistant', content: mwResult.message, timestamp: new Date() };
+            history.push(stopEntry);
+            messages.push({ role: 'assistant', content: mwResult.message });
+            return [stopEntry];
+          }
+          return [];
+        }
+        if (mwResult.action === 'compact') {
+          this.deps.contextManager.prepareMessages(messages);
+        }
+        if (mwResult.action === 'warn' && mwResult.message) {
+          logger.warn(`Middleware warning: ${mwResult.message}`);
+        }
+      }
+
       // Apply context management
       const preparedMessages = this.deps.contextManager.prepareMessages(messages);
 
@@ -262,6 +298,16 @@ export class AgentExecutor {
       const lessonsBlock = getLessonsTracker(process.cwd()).buildContextBlock();
       if (lessonsBlock) {
         preparedMessages.push({ role: 'system', content: lessonsBlock });
+      }
+
+      // --- Decision memory context: inject relevant past decisions ---
+      if (_decisionContextProvider) {
+        try {
+          const decisionsBlock = await _decisionContextProvider(message);
+          if (decisionsBlock) {
+            preparedMessages.push({ role: 'system', content: decisionsBlock });
+          }
+        } catch { /* decision-memory optional */ }
       }
 
       // --- Manus AI attention bias: append todo.md context at END of messages ---
@@ -417,6 +463,29 @@ export class AgentExecutor {
             } as CodeBuddyMessage);
           }
 
+          // Run after_turn middleware (sequential path)
+          if (pipeline) {
+            const ctx = this.buildMiddlewareContext(
+              toolRounds, inputTokens, totalOutputTokens, history, messages, false
+            );
+            const mwResult = await pipeline.runAfterTurn(ctx);
+            if (mwResult.action === 'stop') {
+              if (mwResult.message) {
+                const stopEntry: ChatEntry = { type: 'assistant', content: mwResult.message, timestamp: new Date() };
+                history.push(stopEntry);
+                messages.push({ role: 'assistant', content: mwResult.message });
+                newEntries.push(stopEntry);
+              }
+              break;
+            }
+            if (mwResult.action === 'warn' && mwResult.message) {
+              logger.warn(`Middleware after-turn warning: ${mwResult.message}`);
+            }
+          } else {
+            // Legacy inline cost check when no pipeline
+            this.config.recordSessionCost(inputTokens, totalOutputTokens);
+          }
+
           // Get next response (with tool result compaction guard)
           const nextPreparedMessages = this.compactLargeToolResults(
             this.deps.contextManager.prepareMessages(messages)
@@ -566,6 +635,16 @@ export class AgentExecutor {
         const lessonsBlockStream = getLessonsTracker(process.cwd()).buildContextBlock();
         if (lessonsBlockStream) {
           preparedMessages.push({ role: 'system', content: lessonsBlockStream });
+        }
+
+        // --- Decision memory context: inject relevant past decisions (streaming path) ---
+        if (_decisionContextProvider) {
+          try {
+            const decisionsBlockStream = await _decisionContextProvider(message);
+            if (decisionsBlockStream) {
+              preparedMessages.push({ role: 'system', content: decisionsBlockStream });
+            }
+          } catch { /* decision-memory optional */ }
         }
 
         // --- Manus AI attention bias: append todo.md context at END of messages ---

@@ -142,6 +142,30 @@ export class PromptBuilder {
         logger.warn("Failed to load bootstrap context", { error: getErrorMessage(err) });
       }
 
+      // Inject active persona instructions
+      try {
+        const { getPersonaManager } = await import('../personas/persona-manager.js');
+        const personaBlock = getPersonaManager().buildSystemPrompt();
+        if (personaBlock) {
+          systemPrompt += `\n\n<persona>\n${personaBlock}\n</persona>`;
+          logger.debug('Injected active persona into system prompt');
+        }
+      } catch { /* personas module optional */ }
+
+      // Inject auto-detected coding style conventions
+      try {
+        const { getCodingStyleAnalyzer } = await import('../memory/coding-style-analyzer.js');
+        const analyzer = getCodingStyleAnalyzer();
+        const profile = await analyzer.analyzeDirectory(this.config.cwd);
+        if (profile) {
+          const styleBlock = analyzer.buildPromptSnippet(profile);
+          if (styleBlock) {
+            systemPrompt += `\n\n${styleBlock}`;
+            logger.debug('Injected coding style conventions into system prompt');
+          }
+        }
+      } catch { /* coding-style module optional */ }
+
       // Inject workflow orchestration rules (concrete plan triggers, verification contract, etc.)
       try {
         const { getWorkflowRulesBlock } = await import('../prompts/workflow-rules.js');

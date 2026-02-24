@@ -19,6 +19,7 @@ import { getDataAnalysisAgent } from './data-analysis-agent.js';
 import { getSQLAgent } from './sql-agent.js';
 import { getArchiveAgent } from './archive-agent.js';
 import { getCodeGuardianAgent } from './code-guardian-agent.js';
+import { getSecurityReviewAgent } from './security-review-agent.js';
 import { getErrorMessage } from '../../types/index.js';
 
 // ============================================================================
@@ -66,6 +67,7 @@ export class AgentRegistry extends EventEmitter {
       getSQLAgent(),
       getArchiveAgent(),
       getCodeGuardianAgent(),
+      getSecurityReviewAgent(),
     ];
 
     for (const agent of agents) {

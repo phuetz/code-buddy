@@ -11,7 +11,7 @@ import { getRepoProfiler } from "./repo-profiler.js";
 import { getToolSelectionStrategy, ToolSelectionStrategy } from "./execution/tool-selection-strategy.js";
 import { PromptBuilder } from "../services/prompt-builder.js";
 import { StreamingHandler } from "./streaming/index.js";
-import { AgentExecutor } from "./execution/agent-executor.js";
+import { AgentExecutor, setDecisionContextProvider } from "./execution/agent-executor.js";
 import { ToolHandler } from "./tool-handler.js";
 import { BaseAgent } from "./base-agent.js";
 import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
@@ -359,6 +359,19 @@ export class CodeBuddyAgent extends BaseAgent {
    *
    * This is called at the start of every message processing cycle.
    */
+  private _dmProviderWired = false;
+  private ensureDecisionMemoryProvider(): void {
+    if (this._dmProviderWired) return;
+    this._dmProviderWired = true;
+    // Skip in test environment to avoid expensive module loading
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') return;
+    // Fire-and-forget: wires the provider once the module is loaded.
+    // The executor will skip decision memory injection until the provider is set.
+    import('../memory/decision-memory.js').then(({ getDecisionMemory }) => {
+      setDecisionContextProvider((query) => getDecisionMemory().buildDecisionContext(query));
+    }).catch(() => { /* decision-memory module optional */ });
+  }
+
   private applySkillMatching(message: string): void {
     try {
       const match = findSkill(message);
@@ -405,6 +418,9 @@ export class CodeBuddyAgent extends BaseAgent {
   }
 
   async processUserMessage(message: string): Promise<ChatEntry[]> {
+    // Lazy-wire decision memory provider on first call
+    this.ensureDecisionMemoryProvider();
+
     // Reset cached tools for new conversation turn
     this.toolSelectionStrategy.clearCache();
 
@@ -435,6 +451,9 @@ export class CodeBuddyAgent extends BaseAgent {
   async *processUserMessageStream(
     message: string
   ): AsyncGenerator<StreamingChunk, void, unknown> {
+    // Lazy-wire decision memory provider on first call
+    this.ensureDecisionMemoryProvider();
+
     // Create new abort controller for this request
     this.abortController = new AbortController();
 

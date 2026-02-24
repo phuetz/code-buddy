@@ -171,6 +171,20 @@ const BUILTIN_PATTERNS: CapturePattern[] = [
     extractMatch: true,
   },
 
+  // Coding style detection (triggered by file write tool results)
+  {
+    id: 'coding-style',
+    name: 'Coding Style Detection',
+    patterns: [
+      /(?:Tool result|✓|Created|Updated|Wrote)\s*(?:for|:)?\s*(\S+\.(?:ts|tsx|js|jsx|py|rb|go|rs|java|c|cpp|css|scss))/i,
+      /(?:create_file|str_replace_editor|edit_file|write_file)\s*.*?(\S+\.(?:ts|tsx|js|jsx|py|rb|go|rs|java|c|cpp|css|scss))/i,
+    ],
+    memoryType: 'pattern',
+    importance: 0.6,
+    tags: ['coding-style', 'auto-detected'],
+    extractMatch: true,
+  },
+
   // Error patterns to remember
   {
     id: 'error-solution',
@@ -378,6 +392,11 @@ export class AutoCaptureManager extends EventEmitter {
       this.captureHistory.push(result);
       this.emit('captured', result);
 
+      // Trigger coding style analysis for file write patterns
+      if (pattern.id === 'coding-style' && captureContent) {
+        this.triggerCodingStyleAnalysis(captureContent).catch(() => {});
+      }
+
       logger.info('Memory auto-captured', {
         pattern: pattern.name,
         type: pattern.memoryType,
@@ -515,6 +534,25 @@ export class AutoCaptureManager extends EventEmitter {
       byPattern,
       recentCaptures: this.recentCaptures.size,
     };
+  }
+
+  /**
+   * Trigger CodingStyleAnalyzer for a written file path.
+   */
+  private async triggerCodingStyleAnalysis(filePath: string): Promise<void> {
+    try {
+      const fs = await import('fs');
+      if (!fs.existsSync(filePath)) return;
+      const content = fs.readFileSync(filePath, 'utf-8');
+      if (!content || content.length < 50) return;
+
+      const { getCodingStyleAnalyzer } = await import('./coding-style-analyzer.js');
+      const analyzer = getCodingStyleAnalyzer();
+      analyzer.analyzeContent(content, filePath);
+      logger.debug(`Coding style analysis triggered for ${filePath}`);
+    } catch {
+      // non-critical — coding style analysis is optional
+    }
   }
 
   /**

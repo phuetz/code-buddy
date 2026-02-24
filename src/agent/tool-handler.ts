@@ -36,6 +36,10 @@ import {
   createProcessTools,
   createScriptTools,
   createPlanTools,
+  createKnowledgeTools,
+  createAttentionTools,
+  createLessonsTools,
+  createAliasTools,
 } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 import { CodeBuddyToolCall } from "../codebuddy/client.js";
@@ -166,7 +170,14 @@ export class ToolHandler {
       ...createProcessTools(),
       ...createScriptTools(),
       ...createPlanTools(),
+      ...createKnowledgeTools(),
+      ...createAttentionTools(),
+      ...createLessonsTools(),
     ];
+
+    // Register canonical-prefix alias tools (shell_exec→bash, file_read→view_file, etc.)
+    const aliasTools = createAliasTools(allTools);
+    allTools.push(...aliasTools);
 
     for (const tool of allTools) {
       if (!this.registry.has(tool.name)) {
