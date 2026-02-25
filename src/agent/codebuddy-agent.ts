@@ -214,6 +214,33 @@ export class CodeBuddyAgent extends BaseAgent {
     import('./middleware/index.js').then(async ({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
       if (!this.executor.getMiddlewarePipeline()) {
         const pipeline = new MiddlewarePipeline();
+        // Turn limit middleware (priority 10) — enforces max turns per session
+        try {
+          const { TurnLimitMiddleware } = await import('./middleware/turn-limit.js');
+          pipeline.use(new TurnLimitMiddleware());
+          logger.debug('TurnLimitMiddleware registered in pipeline (priority 10)');
+        } catch (err) {
+          logger.debug('Failed to register TurnLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+        }
+        // Cost limit middleware (priority 20) — enforces session cost budget
+        try {
+          const { CostLimitMiddleware } = await import('./middleware/cost-limit.js');
+          pipeline.use(new CostLimitMiddleware({
+            recordSessionCost: this.recordSessionCost.bind(this),
+            isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
+          }));
+          logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');
+        } catch (err) {
+          logger.debug('Failed to register CostLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+        }
+        // Context warning middleware (priority 30) — warns when nearing context limits
+        try {
+          const { ContextWarningMiddleware } = await import('./middleware/context-warning.js');
+          pipeline.use(new ContextWarningMiddleware(this.contextManager));
+          logger.debug('ContextWarningMiddleware registered in pipeline (priority 30)');
+        } catch (err) {
+          logger.debug('Failed to register ContextWarningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+        }
         // Reasoning middleware (priority 42) — auto-detects complex queries
         try {
           const { createReasoningMiddleware } = await import('./middleware/reasoning-middleware.js');

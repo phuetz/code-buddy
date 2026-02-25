@@ -522,6 +522,16 @@ export class AgentExecutor {
             content: assistantMessage.content || "",
           });
           newEntries.push(finalEntry);
+
+          // Fire-and-forget auto-capture on final assistant response
+          try {
+            const { getAutoCaptureManager } = await import('../../memory/auto-capture.js');
+            const acm = getAutoCaptureManager();
+            if (acm) {
+              acm.processMessage('assistant', assistantMessage.content || '').catch(() => {});
+            }
+          } catch { /* auto-capture optional */ }
+
           break;
         }
       }
@@ -892,6 +902,15 @@ export class AgentExecutor {
             }
           }
         } else {
+          // Fire-and-forget auto-capture on final assistant response (streaming)
+          try {
+            const { getAutoCaptureManager } = await import('../../memory/auto-capture.js');
+            const acm = getAutoCaptureManager();
+            if (acm) {
+              acm.processMessage('assistant', content || '').catch(() => {});
+            }
+          } catch { /* auto-capture optional */ }
+
           break;
         }
       }

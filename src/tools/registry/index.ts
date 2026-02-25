@@ -126,6 +126,30 @@ export {
   createLessonsTools,
 } from './lessons-tools.js';
 
+// Tool Adapters - Multimodal (audio, video, PDF, OCR, QR, clipboard, diagram, document, export, archive)
+export {
+  AudioExecuteTool,
+  VideoExecuteTool,
+  PDFExecuteTool,
+  OCRExecuteTool,
+  QRExecuteTool,
+  ClipboardExecuteTool,
+  DiagramExecuteTool,
+  DocumentExecuteTool,
+  ExportExecuteTool,
+  ArchiveExecuteTool,
+  createMultimodalTools,
+  resetMultimodalInstances,
+} from './multimodal-tools.js';
+
+// Tool Adapters - Advanced (JS REPL, Multi-Edit)
+export {
+  JSReplExecuteTool,
+  MultiEditExecuteTool,
+  createAdvancedTools,
+  resetAdvancedInstances,
+} from './advanced-tools.js';
+
 // Tool Prefix Naming Convention — Codex-inspired canonical aliases
 export {
   createAliasTools,
@@ -183,6 +207,8 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createAttentionTools } = await import('./attention-tools.js');
   const { createAliasTools } = await import('./tool-aliases.js');
   const { createLessonsTools } = await import('./lessons-tools.js');
+  const { createMultimodalTools } = await import('./multimodal-tools.js');
+  const { createAdvancedTools } = await import('./advanced-tools.js');
 
   const primaryTools: ITool[] = [
     ...createTextEditorTools(),
@@ -200,6 +226,8 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createPlanTools(),
     ...createAttentionTools(),
     ...createLessonsTools(),
+    ...createMultimodalTools(),
+    ...createAdvancedTools(),
   ];
 
   // Register backward-compat canonical-prefix aliases (shell_exec, file_read, etc.)
