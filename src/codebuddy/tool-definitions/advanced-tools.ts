@@ -605,8 +605,8 @@ export const REASON_TOOL: CodeBuddyTool = {
 export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   MULTI_EDIT_TOOL,
   GIT_TOOL,
-  CODEBASE_MAP_TOOL,
-  SUBAGENT_TOOL,
+  // CODEBASE_MAP_TOOL — removed: no execution handler (audit 2026-02-25)
+  // SUBAGENT_TOOL — removed: no execution handler (audit 2026-02-25)
   DOCKER_TOOL,
   KUBERNETES_TOOL,
   PROCESS_TOOL,

@@ -152,6 +152,20 @@ export class PromptBuilder {
         }
       } catch { /* personas module optional */ }
 
+      // Inject knowledge base context
+      try {
+        const { getKnowledgeManager } = await import('../knowledge/knowledge-manager.js');
+        const km = getKnowledgeManager();
+        if (!km.isLoaded) {
+          await km.load();
+        }
+        const knowledgeBlock = km.buildContextBlock();
+        if (knowledgeBlock) {
+          systemPrompt += `\n\n<knowledge>\n${knowledgeBlock}\n</knowledge>`;
+          logger.debug('Injected knowledge base into system prompt');
+        }
+      } catch { /* knowledge module optional */ }
+
       // Inject auto-detected coding style conventions
       try {
         const { getCodingStyleAnalyzer } = await import('../memory/coding-style-analyzer.js');

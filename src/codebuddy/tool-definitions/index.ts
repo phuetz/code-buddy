@@ -93,5 +93,22 @@ export {
   CANVAS_TOOLS,
 } from './canvas-tools.js';
 
+// Agent tools (attention, knowledge, lessons, discovery, device, verification)
+export {
+  TODO_UPDATE_TOOL,
+  RESTORE_CONTEXT_TOOL,
+  KNOWLEDGE_SEARCH_TOOL,
+  KNOWLEDGE_ADD_TOOL,
+  ASK_HUMAN_TOOL,
+  CREATE_SKILL_TOOL,
+  SKILL_DISCOVER_TOOL,
+  DEVICE_MANAGE_TOOL,
+  LESSONS_ADD_TOOL,
+  LESSONS_SEARCH_TOOL,
+  LESSONS_LIST_TOOL,
+  TASK_VERIFY_TOOL,
+  AGENT_TOOLS,
+} from './agent-tools.js';
+
 // Re-export CodeBuddyTool from client for convenience
 export type { CodeBuddyTool as Tool } from './types.js';

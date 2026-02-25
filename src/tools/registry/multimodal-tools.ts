@@ -405,11 +405,11 @@ export class QRExecuteTool implements ITool {
       case 'generate_wifi':
         return tool.generateWiFi(
           input.ssid as string,
-          input.password as string | undefined,
-          input.wifi_type as 'WPA' | 'WEP' | 'nopass' | undefined,
+          (input.password as string) || '',
+          (input.wifi_type as 'WPA' | 'WEP' | 'nopass') || 'WPA',
         );
       case 'generate_vcard':
-        return tool.generateVCard(input.contact as Record<string, string>);
+        return tool.generateVCard(input.contact as any);
       case 'decode':
         return tool.decode(input.path as string);
       case 'list':
@@ -539,31 +539,33 @@ export class DiagramExecuteTool implements ITool {
         return tool.generateFromMermaid(input.code as string, opts);
       case 'flowchart':
         return tool.generateFlowchart(
-          input.nodes as Array<{ id: string; label: string; type?: string }>,
-          input.connections as Array<{ from: string; to: string; label?: string; type?: string }>,
+          input.nodes as any,
+          input.connections as any,
           { title: input.title as string | undefined, ...opts },
         );
       case 'sequence':
         return tool.generateSequenceDiagram(
           input.participants as string[],
-          input.messages as Array<{ from: string; to: string; message: string; type?: string }>,
+          input.messages as any,
           { title: input.title as string | undefined, ...opts },
         );
       case 'class':
         return tool.generateClassDiagram(
-          input.classes as Array<{ name: string; attributes?: string[]; methods?: string[] }>,
-          input.relationships as Array<{ from: string; to: string; type: string; label?: string }>,
+          input.classes as any,
+          input.relationships as any,
           { title: input.title as string | undefined, ...opts },
         );
       case 'pie':
         return tool.generatePieChart(
+          (input.title as string) || 'Chart',
           input.data as Array<{ label: string; value: number }>,
-          { title: input.title as string | undefined, ...opts },
+          opts,
         );
       case 'gantt':
         return tool.generateGanttChart(
-          input.sections as Array<{ name: string; tasks: Array<{ name: string; id: string; start: string; duration: string; status?: string }> }>,
-          { title: input.title as string | undefined, ...opts },
+          (input.title as string) || 'Timeline',
+          input.sections as any,
+          opts,
         );
       case 'list':
         return tool.listDiagrams();
@@ -679,9 +681,9 @@ export class ExportExecuteTool implements ITool {
     switch (op) {
       case 'conversation':
         return tool.exportConversation(
-          input.messages as Array<{ role: string; content: string; timestamp?: string }>,
+          input.messages as any,
           {
-            format: input.format as 'json' | 'markdown' | 'html' | 'txt' | 'pdf' | undefined,
+            format: (input.format as 'json' | 'markdown' | 'html' | 'txt' | 'pdf') || 'markdown',
             outputPath: input.output_path as string | undefined,
             includeMetadata: input.include_metadata as boolean | undefined,
             includeTimestamps: input.include_timestamps as boolean | undefined,
@@ -690,12 +692,12 @@ export class ExportExecuteTool implements ITool {
       case 'csv':
         return tool.exportToCSV(
           input.data as Array<Record<string, unknown>>,
-          { outputPath: input.output_path as string | undefined },
+          input.output_path as string | undefined,
         );
       case 'code_snippets':
         return tool.exportCodeSnippets(
-          input.messages as Array<{ role: string; content: string }>,
-          { outputPath: input.output_path as string | undefined },
+          input.messages as any,
+          { outputDir: input.output_path as string | undefined },
         );
       case 'list':
         return tool.listExports();
@@ -764,8 +766,10 @@ export class ArchiveExecuteTool implements ITool {
       case 'create':
         return tool.create(
           input.sources as string[],
-          input.output_path as string,
-          { format: input.format as 'zip' | 'tar' | 'tar.gz' | 'tar.bz2' | 'tar.xz' | undefined },
+          {
+            format: input.format as 'zip' | 'tar' | 'tar.gz' | 'tar.bz2' | 'tar.xz' | undefined,
+            outputPath: input.output_path as string | undefined,
+          },
         );
       case 'list_archives':
         return tool.listArchives(input.path as string | undefined);

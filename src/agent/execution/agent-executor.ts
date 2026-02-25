@@ -267,6 +267,12 @@ export class AgentExecutor {
         }
       }
 
+      // Auto-select persona based on user message context (fire-and-forget)
+      try {
+        const { getPersonaManager } = await import('../../personas/persona-manager.js');
+        getPersonaManager().autoSelectPersona({ message });
+      } catch { /* persona auto-select optional */ }
+
       // Run before_turn middleware (sequential path)
       const pipeline = this.deps.middlewarePipeline;
       if (pipeline) {
@@ -607,6 +613,12 @@ export class AgentExecutor {
 
     try {
       const pipeline = this.deps.middlewarePipeline;
+
+      // Auto-select persona based on user message context (fire-and-forget, streaming path)
+      try {
+        const { getPersonaManager } = await import('../../personas/persona-manager.js');
+        getPersonaManager().autoSelectPersona({ message });
+      } catch { /* persona auto-select optional */ }
 
       while (toolRounds < maxToolRounds) {
         if (abortController?.signal.aborted) {

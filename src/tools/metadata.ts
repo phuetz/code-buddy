@@ -240,7 +240,93 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['qr', 'code', 'barcode', 'scan', 'generate'],
     priority: 4,
     description: 'QR code operations'
-  }
+  },
+
+  // Agent Tools — attention, knowledge, lessons, discovery, device, verification
+  {
+    name: 'todo_update',
+    category: 'planning',
+    keywords: ['todo', 'task', 'plan', 'track', 'progress', 'attention', 'focus'],
+    priority: 8,
+    description: 'Manage persistent task list for tracking progress'
+  },
+  {
+    name: 'restore_context',
+    category: 'utility',
+    keywords: ['restore', 'context', 'memory', 'compressed', 'retrieve', 'earlier'],
+    priority: 7,
+    description: 'Restore compressed context content by identifier'
+  },
+  {
+    name: 'knowledge_search',
+    category: 'utility',
+    keywords: ['knowledge', 'search', 'convention', 'docs', 'domain', 'procedure'],
+    priority: 5,
+    description: 'Search the agent knowledge base'
+  },
+  {
+    name: 'knowledge_add',
+    category: 'utility',
+    keywords: ['knowledge', 'add', 'save', 'persist', 'remember', 'convention'],
+    priority: 4,
+    description: 'Add a new knowledge entry'
+  },
+  {
+    name: 'ask_human',
+    category: 'utility',
+    keywords: ['ask', 'human', 'clarify', 'question', 'input', 'pause', 'confirm'],
+    priority: 6,
+    description: 'Ask the user a clarifying question'
+  },
+  {
+    name: 'create_skill',
+    category: 'utility',
+    keywords: ['skill', 'create', 'workflow', 'reusable', 'procedure', 'automate'],
+    priority: 3,
+    description: 'Create a new SKILL.md workflow'
+  },
+  {
+    name: 'skill_discover',
+    category: 'utility',
+    keywords: ['skill', 'discover', 'search', 'hub', 'install', 'capability', 'plugin'],
+    priority: 3,
+    description: 'Search Skills Hub for capabilities'
+  },
+  {
+    name: 'device_manage',
+    category: 'utility',
+    keywords: ['device', 'ssh', 'adb', 'android', 'remote', 'screenshot', 'camera', 'pair'],
+    priority: 4,
+    description: 'Manage paired devices (SSH/ADB/local)'
+  },
+  {
+    name: 'lessons_add',
+    category: 'utility',
+    keywords: ['lesson', 'learn', 'correction', 'pattern', 'rule', 'mistake'],
+    priority: 5,
+    description: 'Capture a lesson learned'
+  },
+  {
+    name: 'lessons_search',
+    category: 'utility',
+    keywords: ['lesson', 'search', 'pattern', 'rule', 'past', 'history', 'mistake'],
+    priority: 5,
+    description: 'Search lessons learned'
+  },
+  {
+    name: 'lessons_list',
+    category: 'utility',
+    keywords: ['lesson', 'list', 'all', 'show', 'history'],
+    priority: 4,
+    description: 'List all lessons learned'
+  },
+  {
+    name: 'task_verify',
+    category: 'utility',
+    keywords: ['verify', 'test', 'typecheck', 'lint', 'check', 'validate', 'ci'],
+    priority: 7,
+    description: 'Run verification contract (tsc, test, lint)'
+  },
 ];
 
 /**

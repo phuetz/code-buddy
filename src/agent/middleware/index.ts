@@ -24,3 +24,4 @@ export { AutoRepairMiddleware, createAutoRepairMiddleware } from './auto-repair-
 export type { AutoRepairConfig } from './auto-repair-middleware.js';
 export { QualityGateMiddleware, createQualityGateMiddleware } from './quality-gate-middleware.js';
 export type { QualityGateConfig, QualityGate } from './quality-gate-middleware.js';
+export { ReasoningMiddleware, createReasoningMiddleware } from './reasoning-middleware.js';
