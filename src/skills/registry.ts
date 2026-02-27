@@ -26,6 +26,7 @@ import {
   skillMdToUnified,
   type LegacySkill,
 } from './adapters/index.js';
+import { scanFile as scanSkillFile } from '../security/skill-scanner.js';
 
 // ============================================================================
 // Skill Registry Class
@@ -157,6 +158,22 @@ export class SkillRegistry extends EventEmitter {
    * Register a skill
    */
   private registerSkill(skill: Skill): void {
+    // Security scan: block skills with critical findings
+    if (skill.sourcePath && !skill.sourcePath.startsWith('legacy://') && fs.existsSync(skill.sourcePath)) {
+      try {
+        const scanResult = scanSkillFile(skill.sourcePath);
+        const criticalFindings = scanResult.findings.filter(f => f.severity === 'critical');
+        if (criticalFindings.length > 0) {
+          this.emit('skill:error', skill.sourcePath, new Error(
+            `Skill blocked by security scanner: ${criticalFindings.length} critical finding(s) — ${criticalFindings.map(f => f.description).join('; ')}`
+          ));
+          return;
+        }
+      } catch {
+        // Scanner not available — allow skill through
+      }
+    }
+
     // Add to main map (overwrites lower priority)
     this.skills.set(skill.metadata.name, skill);
 

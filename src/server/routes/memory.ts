@@ -77,25 +77,6 @@ router.get(
 );
 
 /**
- * GET /api/memory/:id
- * Get a specific memory entry
- */
-router.get(
-  '/:id',
-  requireScope('memory'),
-  asyncHandler(async (req: Request, res: Response) => {
-    const id = req.params.id as string;
-    const entry = memoryStore.get(id);
-
-    if (!entry) {
-      throw ApiServerError.notFound(`Memory entry '${id}'`);
-    }
-
-    res.json(entry);
-  })
-);
-
-/**
  * POST /api/memory
  * Create a new memory entry
  */
@@ -123,56 +104,7 @@ router.post(
   })
 );
 
-/**
- * PUT /api/memory/:id
- * Update a memory entry
- */
-router.put(
-  '/:id',
-  requireScope('memory:write'),
-  asyncHandler(async (req: Request, res: Response) => {
-    const id = req.params.id as string;
-    const entry = memoryStore.get(id);
-
-    if (!entry) {
-      throw ApiServerError.notFound(`Memory entry '${id}'`);
-    }
-
-    const { content, category, metadata } = req.body;
-
-    const updated: MemoryEntry = {
-      ...entry,
-      content: content ?? entry.content,
-      category: category ?? entry.category,
-      metadata: metadata ?? entry.metadata,
-      timestamp: new Date().toISOString(),
-    };
-
-    memoryStore.set(id, updated);
-
-    res.json(updated);
-  })
-);
-
-/**
- * DELETE /api/memory/:id
- * Delete a memory entry
- */
-router.delete(
-  '/:id',
-  requireScope('memory:write'),
-  asyncHandler(async (req: Request, res: Response) => {
-    const id = req.params.id as string;
-
-    if (!memoryStore.has(id)) {
-      throw ApiServerError.notFound(`Memory entry '${id}'`);
-    }
-
-    memoryStore.delete(id);
-
-    res.status(204).send();
-  })
-);
+// ── Static routes (must come before /:id to avoid shadowing) ──────────
 
 /**
  * GET /api/memory/search
@@ -415,6 +347,78 @@ router.get(
       exportedAt: new Date().toISOString(),
       entries,
     });
+  })
+);
+
+// ── Dynamic routes (must come after static routes) ────────────────────
+
+/**
+ * GET /api/memory/:id
+ * Get a specific memory entry
+ */
+router.get(
+  '/:id',
+  requireScope('memory'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const entry = memoryStore.get(id);
+
+    if (!entry) {
+      throw ApiServerError.notFound(`Memory entry '${id}'`);
+    }
+
+    res.json(entry);
+  })
+);
+
+/**
+ * PUT /api/memory/:id
+ * Update a memory entry
+ */
+router.put(
+  '/:id',
+  requireScope('memory:write'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const entry = memoryStore.get(id);
+
+    if (!entry) {
+      throw ApiServerError.notFound(`Memory entry '${id}'`);
+    }
+
+    const { content, category, metadata } = req.body;
+
+    const updated: MemoryEntry = {
+      ...entry,
+      content: content ?? entry.content,
+      category: category ?? entry.category,
+      metadata: metadata ?? entry.metadata,
+      timestamp: new Date().toISOString(),
+    };
+
+    memoryStore.set(id, updated);
+
+    res.json(updated);
+  })
+);
+
+/**
+ * DELETE /api/memory/:id
+ * Delete a memory entry
+ */
+router.delete(
+  '/:id',
+  requireScope('memory:write'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+
+    if (!memoryStore.has(id)) {
+      throw ApiServerError.notFound(`Memory entry '${id}'`);
+    }
+
+    memoryStore.delete(id);
+
+    res.status(204).send();
   })
 );
 

@@ -305,6 +305,18 @@ export class CodeBuddyAgent extends BaseAgent {
     // Initialize facades (required before initializeMCP)
     this.initializeFacades();
 
+    // Initialize specialized agent registry (PDF, Excel, SQL, etc.)
+    import('./specialized/agent-registry.js').then(({ initializeAgentRegistry }) => {
+      initializeAgentRegistry().catch(err => {
+        logger.debug('Agent registry init skipped', { error: err instanceof Error ? err.message : String(err) });
+      });
+    }).catch((e) => { logger.debug('Agent registry module load failed (optional)', { error: String(e) }); });
+
+    // Load SKILL.md skills so findSkill() returns results
+    import('../skills/index.js').then(({ initializeSkills }) => {
+      initializeSkills().catch((e) => { logger.debug('Skills initialization failed (optional)', { error: String(e) }); });
+    }).catch((e) => { logger.debug('Skills module load failed (optional)', { error: String(e) }); });
+
     // Initialize MCP servers if configured
     this.initializeMCP();
 
@@ -396,7 +408,7 @@ export class CodeBuddyAgent extends BaseAgent {
     // The executor will skip decision memory injection until the provider is set.
     import('../memory/decision-memory.js').then(({ getDecisionMemory }) => {
       setDecisionContextProvider((query) => getDecisionMemory().buildDecisionContext(query));
-    }).catch(() => { /* decision-memory module optional */ });
+    }).catch((e) => { logger.debug('Decision memory module load failed (optional)', { error: String(e) }); });
   }
 
   private applySkillMatching(message: string): void {
@@ -894,24 +906,25 @@ export class CodeBuddyAgent extends BaseAgent {
    * Lazily imports and adds AutoObservationMiddleware to the executor's pipeline.
    * Called automatically when a profile with metadata.enableAutoObservation is active.
    */
-  enableAutoObservation(config?: Partial<import('./middleware/auto-observation.js').AutoObservationConfig>): void {
+  async enableAutoObservation(config?: Partial<import('./middleware/auto-observation.js').AutoObservationConfig>): Promise<void> {
     // Ensure the executor has a middleware pipeline
     if (!this.executor.getMiddlewarePipeline()) {
-      const { MiddlewarePipeline } = require('./middleware/index.js');
+      const { MiddlewarePipeline } = await import('./middleware/index.js');
       this.executor.setMiddlewarePipeline(new MiddlewarePipeline());
     }
 
     // Lazily import and add the middleware
-    import('./middleware/auto-observation.js').then(({ AutoObservationMiddleware }) => {
+    try {
+      const { AutoObservationMiddleware } = await import('./middleware/auto-observation.js');
       const pipeline = this.executor.getMiddlewarePipeline();
       if (!pipeline) return;
       // Don't add if already present
       if (pipeline.getMiddlewareNames().includes('auto-observation')) return;
       pipeline.use(new AutoObservationMiddleware(config));
       logger.info('Auto-observation middleware enabled');
-    }).catch(err => {
-      logger.error('Failed to enable auto-observation middleware', err);
-    });
+    } catch (err) {
+      logger.error('Failed to enable auto-observation middleware', err as Error);
+    }
   }
 
   /**
@@ -1032,8 +1045,8 @@ export class CodeBuddyAgent extends BaseAgent {
   /**
    * Check if a request is complex enough to warrant planning
    */
-  needsPlanning(request: string): boolean {
-    const { TaskPlanner } = require('./planner/index.js');
+  async needsPlanning(request: string): Promise<boolean> {
+    const { TaskPlanner } = await import('./planner/index.js');
     const planner = new TaskPlanner();
     return planner.needsPlanning(request);
   }
@@ -1058,7 +1071,7 @@ export class CodeBuddyAgent extends BaseAgent {
     const delegationEngine = new DelegationEngine();
     const entries: ChatEntry[] = [];
 
-    const result = await graph.execute(async (task) => {
+    const _result = await graph.execute(async (task) => {
       tracker.update(task.id, 'running');
       const progress = tracker.getProgress();
       this.emit('plan:progress', {

@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { TIMEOUT_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
 
 // ============================================================================
 // Types
@@ -104,12 +105,12 @@ export interface MultimodalCapabilities {
 
 const DEFAULT_CONFIG: MultimodalConfig = {
   tempDir: path.join(os.tmpdir(), 'grok-multimodal'),
-  maxImageSize: 20 * 1024 * 1024, // 20MB
+  maxImageSize: LIMIT_CONFIG.DEFAULT_MAX_IMAGE_SIZE,
   supportedFormats: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'],
   ocrEnabled: true,
   ocrLanguage: 'eng',
   autoResize: true,
-  maxDimension: 2048,
+  maxDimension: LIMIT_CONFIG.DEFAULT_MAX_IMAGE_DIMENSION,
 };
 
 // ============================================================================
@@ -282,7 +283,7 @@ export class MultimodalInputManager extends EventEmitter {
 
     try {
       // Download using curl
-      await this.execCommand('curl', ['-L', '-o', outputPath, url], 60000);
+      await this.execCommand('curl', ['-L', '-o', outputPath, url], TIMEOUT_CONFIG.DEFAULT_DOWNLOAD_TIMEOUT);
 
       const image = await this.loadImageFile(outputPath, 'url');
       image.path = url;
@@ -351,7 +352,7 @@ export class MultimodalInputManager extends EventEmitter {
         image.localPath,
         'stdout',
         '-l', this.config.ocrLanguage,
-      ], 60000);
+      ], TIMEOUT_CONFIG.DEFAULT_DOWNLOAD_TIMEOUT);
 
       return {
         text: result.trim(),
@@ -514,7 +515,7 @@ export class MultimodalInputManager extends EventEmitter {
 
     args.push(outputPath);
 
-    await this.execCommand('screencapture', args, 30000);
+    await this.execCommand('screencapture', args, TIMEOUT_CONFIG.DEFAULT_COMMAND_TIMEOUT);
   }
 
   private async captureScreenshotLinux(outputPath: string, opts: ScreenshotOptions): Promise<void> {
@@ -536,7 +537,7 @@ export class MultimodalInputManager extends EventEmitter {
 
       args.push(outputPath);
 
-      await this.execCommand('scrot', args, 30000);
+      await this.execCommand('scrot', args, TIMEOUT_CONFIG.DEFAULT_COMMAND_TIMEOUT);
       return;
     }
 
@@ -555,7 +556,7 @@ export class MultimodalInputManager extends EventEmitter {
         args.push('-d', String(Math.ceil(opts.delay / 1000)));
       }
 
-      await this.execCommand('gnome-screenshot', args, 30000);
+      await this.execCommand('gnome-screenshot', args, TIMEOUT_CONFIG.DEFAULT_COMMAND_TIMEOUT);
       return;
     }
 
@@ -568,7 +569,7 @@ export class MultimodalInputManager extends EventEmitter {
 
     args.push(outputPath);
 
-    await this.execCommand('import', args, 30000);
+    await this.execCommand('import', args, TIMEOUT_CONFIG.DEFAULT_COMMAND_TIMEOUT);
   }
 
   private async captureScreenshotWindows(outputPath: string, _opts: ScreenshotOptions): Promise<void> {
@@ -583,7 +584,7 @@ export class MultimodalInputManager extends EventEmitter {
       }
     `;
 
-    await this.execCommand('powershell', ['-Command', script], 30000);
+    await this.execCommand('powershell', ['-Command', script], TIMEOUT_CONFIG.DEFAULT_COMMAND_TIMEOUT);
   }
 
   private async getImageDimensions(filePath: string): Promise<{ width: number; height: number } | undefined> {
@@ -622,7 +623,7 @@ export class MultimodalInputManager extends EventEmitter {
         inputPath,
         '-resize', `${this.config.maxDimension}x${this.config.maxDimension}>`,
         outputPath,
-      ], 30000);
+      ], TIMEOUT_CONFIG.DEFAULT_COMMAND_TIMEOUT);
       return outputPath;
     } catch {
       // Return original if resize fails
@@ -669,7 +670,7 @@ export class MultimodalInputManager extends EventEmitter {
     }
   }
 
-  private execCommand(command: string, args: string[], timeout = 30000): Promise<string> {
+  private execCommand(command: string, args: string[], timeout: number = TIMEOUT_CONFIG.DEFAULT_COMMAND_TIMEOUT): Promise<string> {
     return new Promise((resolve, reject) => {
       const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 

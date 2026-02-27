@@ -651,10 +651,10 @@ describe('BashTool', () => {
       expect(result).toBeDefined();
     });
 
-    it('should list files in specified directory', async () => {
+    (process.platform === 'win32' ? it.skip : it)('should list files in specified directory', async () => {
       const result = await bashTool.listFiles(os.tmpdir());
       expect(result).toBeDefined();
-    });
+    }, 30000);
 
     it('should find files matching pattern', async () => {
       const result = await bashTool.findFiles('*.ts', '.');

@@ -166,6 +166,43 @@ export class PromptBuilder {
         }
       } catch { /* knowledge module optional */ }
 
+      // Inject modular rules (.codebuddy/rules/)
+      try {
+        const { getRulesLoader } = await import('../rules/rules-loader.js');
+        const rulesLoader = getRulesLoader();
+        if (!rulesLoader.isLoaded) {
+          await rulesLoader.load();
+        }
+        const rulesBlock = rulesLoader.buildContextBlock();
+        if (rulesBlock) {
+          systemPrompt += `\n\n<rules>\n${rulesBlock}\n</rules>`;
+          logger.debug('Injected modular rules into system prompt');
+        }
+      } catch { /* rules module optional */ }
+
+      // Inject active skill prompt enhancement
+      try {
+        const { getSkillManager } = await import('../skills/index.js');
+        const skillManager = getSkillManager();
+        const skillBlock = skillManager.getSkillPromptEnhancement();
+        if (skillBlock) {
+          systemPrompt += `\n\n${skillBlock}`;
+          logger.debug('Injected active skill enhancement into system prompt');
+        }
+      } catch { /* skills module optional */ }
+
+      // Inject identity (SOUL.md, USER.md, AGENTS.md)
+      try {
+        const { getIdentityManager } = await import('../identity/identity-manager.js');
+        const identityMgr = getIdentityManager();
+        await identityMgr.load(process.cwd());
+        const identityBlock = identityMgr.getPromptInjection();
+        if (identityBlock) {
+          systemPrompt += `\n\n<identity>\n${identityBlock}\n</identity>`;
+          logger.debug('Injected identity into system prompt');
+        }
+      } catch { /* identity module optional */ }
+
       // Inject auto-detected coding style conventions
       try {
         const { getCodingStyleAnalyzer } = await import('../memory/coding-style-analyzer.js');

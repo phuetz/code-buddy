@@ -76,6 +76,33 @@ export interface WhatsAppContact {
   imgUrl?: string;
 }
 
+/**
+ * Minimal typed interface for the dynamically imported Baileys module.
+ * Only the methods actually used in this adapter are declared.
+ */
+interface BaileysModule {
+  default?: (opts: Record<string, unknown>) => BaileysSocket;
+  makeWASocket?: (opts: Record<string, unknown>) => BaileysSocket;
+  useMultiFileAuthState: (path: string) => Promise<{ state: unknown; saveCreds: () => Promise<void> }>;
+}
+
+/**
+ * Minimal typed interface for a Baileys socket instance.
+ */
+interface BaileysSocket {
+  ev: {
+    on: (event: string, handler: (...args: unknown[]) => void) => void;
+  };
+  sendMessage: (
+    jid: string,
+    content: Record<string, unknown>,
+    options?: Record<string, unknown>
+  ) => Promise<{ key: { id?: string } }>;
+  sendPresenceUpdate: (type: string, jid: string) => Promise<void>;
+  end: (reason?: unknown) => void;
+  user?: { id?: string; name?: string };
+}
+
 // ============================================================================
 // Channel Implementation
 // ============================================================================
@@ -120,10 +147,9 @@ export class WhatsAppChannel extends BaseChannel {
    * Connect to WhatsApp via Baileys
    */
   async connect(): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let baileys: any;
+    let baileys: BaileysModule;
     try {
-      baileys = await import('@whiskeysockets/baileys');
+      baileys = await import('@whiskeysockets/baileys') as unknown as BaileysModule;
     } catch {
       throw new Error(
         'WhatsApp channel requires @whiskeysockets/baileys. Install it with: npm install @whiskeysockets/baileys'
@@ -154,6 +180,9 @@ export class WhatsAppChannel extends BaseChannel {
 
     // Create the Baileys socket
     const makeWASocket = baileys.default ?? baileys.makeWASocket;
+    if (!makeWASocket) {
+      throw new Error('WhatsApp: could not find makeWASocket in baileys module');
+    }
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: this.waConfig.printQrInTerminal,
@@ -164,14 +193,14 @@ export class WhatsAppChannel extends BaseChannel {
     this.socket = sock;
 
     // Register event handlers
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', saveCreds as () => void);
 
-    sock.ev.on('connection.update', (update: Record<string, unknown>) => {
-      this.handleConnectionUpdate(update);
+    sock.ev.on('connection.update', (update: unknown) => {
+      this.handleConnectionUpdate(update as Record<string, unknown>);
     });
 
-    sock.ev.on('messages.upsert', (upsert: { messages: BaileysMessage[]; type: string }) => {
-      this.handleMessagesUpsert(upsert);
+    sock.ev.on('messages.upsert', (upsert: unknown) => {
+      this.handleMessagesUpsert(upsert as { messages: BaileysMessage[]; type: string });
     });
 
     // Wait for connection or QR timeout
@@ -220,8 +249,7 @@ export class WhatsAppChannel extends BaseChannel {
 
     if (this.socket) {
       try {
-        const sock = this.socket as { end: (reason?: unknown) => void };
-        sock.end(undefined);
+        (this.socket as BaileysSocket).end(undefined);
       } catch (err) {
         logger.debug('WhatsApp disconnect error (ignored)', {
           error: err instanceof Error ? err.message : String(err),
@@ -247,13 +275,7 @@ export class WhatsAppChannel extends BaseChannel {
       };
     }
 
-    const sock = this.socket as {
-      sendMessage: (
-        jid: string,
-        content: Record<string, unknown>,
-        options?: Record<string, unknown>
-      ) => Promise<{ key: { id?: string } }>;
-    };
+    const sock = this.socket as BaileysSocket;
 
     try {
       const jid = this.normalizeJid(message.channelId);
@@ -296,9 +318,7 @@ export class WhatsAppChannel extends BaseChannel {
   async sendPresenceUpdate(jid: string, type: 'composing' | 'paused' = 'composing'): Promise<void> {
     if (!this.socket) return;
 
-    const sock = this.socket as {
-      sendPresenceUpdate: (type: string, jid: string) => Promise<void>;
-    };
+    const sock = this.socket as BaileysSocket;
 
     try {
       await sock.sendPresenceUpdate(type, this.normalizeJid(jid));
@@ -316,7 +336,7 @@ export class WhatsAppChannel extends BaseChannel {
    */
    
   private async loadAuthState(
-    baileys: any,
+    baileys: BaileysModule,
     sessionPath: string
   ): Promise<{ state: unknown; saveCreds: () => Promise<void> }> {
     const useMultiFileAuthState = baileys.useMultiFileAuthState;
@@ -328,7 +348,7 @@ export class WhatsAppChannel extends BaseChannel {
    */
    
   private async initFreshAuthState(
-    baileys: any,
+    baileys: BaileysModule,
     sessionPath: string
   ): Promise<{ state: unknown; saveCreds: () => Promise<void> }> {
     const useMultiFileAuthState = baileys.useMultiFileAuthState;
@@ -380,7 +400,7 @@ export class WhatsAppChannel extends BaseChannel {
       this.status.lastActivity = new Date();
       this.reconnectionManager.onConnected();
 
-      const sock = this.socket as { user?: { id?: string; name?: string } };
+      const sock = this.socket as BaileysSocket;
       this.status.info = {
         phoneNumber: this.waConfig.phoneNumber,
         jid: sock?.user?.id,

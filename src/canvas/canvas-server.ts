@@ -32,18 +32,26 @@ ws.onopen = () => { status.textContent = 'Connected'; status.style.color = '#4ad
 ws.onclose = () => { status.textContent = 'Disconnected'; status.style.color = '#f87171'; };
 ws.onmessage = (e) => {
   const msg = JSON.parse(e.data);
-  if (msg.type === 'reset') { canvas.innerHTML = ''; return; }
+  if (msg.type === 'reset') { canvas.replaceChildren(); return; }
   if (msg.type === 'history') { msg.items.forEach(addEntry); return; }
   addEntry(msg);
 };
 function addEntry(msg) {
   const div = document.createElement('div');
   div.className = 'entry';
-  const time = new Date(msg.timestamp).toLocaleTimeString();
-  function esc(s) { const d = document.createElement('span'); d.textContent = s; return d.innerHTML; }
-  div.innerHTML = (msg.title ? '<div class="title">' + esc(msg.title) + '</div>' : '') +
-    '<div>' + esc(msg.content) + '</div>' +
-    '<div class="time">' + esc(time) + '</div>';
+  if (msg.title) {
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'title';
+    titleDiv.textContent = msg.title;
+    div.appendChild(titleDiv);
+  }
+  const contentDiv = document.createElement('div');
+  contentDiv.textContent = msg.content;
+  div.appendChild(contentDiv);
+  const timeDiv = document.createElement('div');
+  timeDiv.className = 'time';
+  timeDiv.textContent = new Date(msg.timestamp).toLocaleTimeString();
+  div.appendChild(timeDiv);
   canvas.prepend(div);
 }
 </script></body></html>`;

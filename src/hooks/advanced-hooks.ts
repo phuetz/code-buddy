@@ -34,6 +34,7 @@ export enum HookEvent {
   SubagentStop = 'SubagentStop',
   PermissionRequest = 'PermissionRequest',
   TaskCompleted = 'TaskCompleted',
+  ConfigChange = 'ConfigChange',
 }
 
 export interface AdvancedHook {

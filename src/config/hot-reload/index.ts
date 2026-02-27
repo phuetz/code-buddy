@@ -69,6 +69,7 @@ import { HotReloadEmitter } from './types.js';
 import { diffConfigs, getAffectedSubsystems } from './diff.js';
 import { ConfigWatcher } from './watcher.js';
 import { reloadSubsystems } from './reloader.js';
+import { getHookManager } from '../../hooks/hook-manager.js';
 
 /**
  * Hot-reload manager configuration
@@ -148,6 +149,15 @@ export class HotReloadManager extends HotReloadEmitter {
       }
 
       this.emit('config:changed', changes);
+
+      // Fire ConfigChange hook
+      const changedKeys = changes.map(c => c.path);
+      getHookManager().executeHooks('ConfigChange', {
+        changedFile: filePath,
+        changedKeys,
+      }).catch(() => {
+        // Hook errors are non-fatal for config reloading
+      });
 
       // Determine affected subsystems
       const subsystems = getAffectedSubsystems(changes);

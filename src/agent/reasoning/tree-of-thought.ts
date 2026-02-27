@@ -10,6 +10,10 @@
  */
 
 import { EventEmitter } from "events";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { randomUUID } from "crypto";
 import { logger } from "../../utils/logger.js";
 import { CodeBuddyClient, CodeBuddyMessage } from "../../codebuddy/client.js";
 import { ToolResult, getErrorMessage } from "../../types/index.js";
@@ -340,6 +344,9 @@ Rate this thought (0-1):`;
 
   /**
    * Execute code safely
+   *
+   * Writes code to a temporary file and executes it with `node`, avoiding
+   * eval() and shell injection risks. The temp file is cleaned up afterward.
    */
   private async executeCodeSafely(code: string): Promise<ExecutionResult> {
     if (!this.config.executeCode || !this.executeCommand) {
@@ -349,13 +356,14 @@ Rate this thought (0-1):`;
       };
     }
 
-    try {
-      // Sanitize: encode code as base64 and decode in Node to avoid shell injection.
-      // This prevents $(…), backtick, and quote-based injection attacks.
-      const encoded = Buffer.from(code, 'utf-8').toString('base64');
-      const safeCommand = `node -e "eval(Buffer.from('${encoded}','base64').toString())"`;
+    // Write code to a temp file to avoid eval() and shell injection vectors.
+    // Using a random UUID suffix ensures no collisions between concurrent executions.
+    const tmpFile = path.join(os.tmpdir(), `codebuddy-tot-${randomUUID()}.js`);
 
-      const result = await this.executeCommand(safeCommand);
+    try {
+      await fs.promises.writeFile(tmpFile, code, 'utf-8');
+
+      const result = await this.executeCommand(`node ${tmpFile}`);
 
       return {
         success: result.success,
@@ -367,6 +375,13 @@ Rate this thought (0-1):`;
         success: false,
         error: getErrorMessage(error),
       };
+    } finally {
+      // Clean up temp file regardless of success or failure
+      try {
+        await fs.promises.unlink(tmpFile);
+      } catch {
+        // Ignore cleanup errors — file may not exist if writeFile failed
+      }
     }
   }
 

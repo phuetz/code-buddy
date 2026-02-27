@@ -931,6 +931,9 @@ export type {
 export { WebChatChannel } from './webchat/index.js';
 export type { WebChatConfig } from './webchat/index.js';
 
+// iMessage (BlueBubbles)
+export { IMessageAdapter } from './imessage/index.js';
+
 // Reconnection Manager
 export { ReconnectionManager } from './reconnection-manager.js';
 export type { ReconnectionConfig, ReconnectionEvents } from './reconnection-manager.js';

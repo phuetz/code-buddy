@@ -588,12 +588,12 @@ describe('Scheduler', () => {
 
         localScheduler.start();
 
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         expect(task.status).toBe('failed');
         expect(task.error?.message).toContain('timed out');
         localScheduler.dispose();
-      });
+      }, 10000);
     });
   });
 

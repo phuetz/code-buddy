@@ -593,18 +593,125 @@ export class SecurityReviewAgent extends EventEmitter {
 }
 
 // ============================================================================
+// SpecializedAgent Adapter
+// ============================================================================
+
+import {
+  SpecializedAgent,
+  type AgentTask,
+  type AgentResult,
+} from '../types.js';
+
+const SECURITY_AGENT_CONFIG = {
+  id: 'security-review',
+  name: 'Security Review Agent',
+  description: 'Comprehensive security analysis: OWASP Top 10, secret scanning, dependency audit',
+  capabilities: ['code-security' as const],
+  fileExtensions: ['ts', 'js', 'tsx', 'jsx', 'py', 'java', 'go', 'rb', 'php', 'json', 'yml', 'yaml', 'env'],
+};
+
+const SECURITY_ACTIONS = [
+  'full-scan', 'quick-scan', 'detect-secrets', 'audit-dependencies',
+  'audit-permissions', 'analyze-network', 'check-injection', 'check-xss',
+  'review-auth', 'generate-report',
+];
+
+const SECURITY_ACTION_HELP: Record<string, string> = {
+  'full-scan': 'Run a comprehensive security scan on the target path',
+  'quick-scan': 'Run a quick scan (critical/high severity only)',
+  'detect-secrets': 'Scan for hardcoded secrets and credentials',
+  'audit-dependencies': 'Audit dependencies for known vulnerabilities',
+  'audit-permissions': 'Check file permissions on sensitive files',
+  'analyze-network': 'Analyze network security patterns',
+  'check-injection': 'Check for SQL/command injection vulnerabilities',
+  'check-xss': 'Check for XSS vulnerabilities',
+  'review-auth': 'Review authentication flow patterns',
+  'generate-report': 'Generate a formatted security report',
+};
+
+/**
+ * SpecializedAgent-compatible wrapper around SecurityReviewAgent.
+ * This allows registration in the AgentRegistry.
+ */
+class SecurityReviewSpecializedAgent extends SpecializedAgent {
+  private inner: SecurityReviewAgent;
+
+  constructor(config?: Partial<SecurityReviewConfig>) {
+    super(SECURITY_AGENT_CONFIG);
+    this.inner = new SecurityReviewAgent(config);
+  }
+
+  async initialize(): Promise<void> {
+    await this.inner.initialize();
+    this.isInitialized = true;
+  }
+
+  isReady(): boolean {
+    return this.inner.isReady();
+  }
+
+  async execute(task: AgentTask): Promise<AgentResult> {
+    const targetPath = task.inputFiles?.[0] || task.params?.path as string || process.cwd();
+
+    switch (task.action) {
+      case 'full-scan': return this.inner.fullScan(targetPath);
+      case 'quick-scan': return this.inner.quickScan(targetPath);
+      case 'detect-secrets': return this.inner.detectSecrets(targetPath);
+      case 'audit-dependencies': return this.inner.auditDependencies(targetPath);
+      case 'audit-permissions': return this.inner.auditPermissions(targetPath);
+      case 'analyze-network': return this.inner.analyzeNetworkSecurity(targetPath);
+      case 'check-injection': return this.inner.checkInjectionVulns(targetPath);
+      case 'check-xss': return this.inner.checkXSSVulns(targetPath);
+      case 'review-auth': return this.inner.reviewAuthFlow(targetPath);
+      case 'generate-report': {
+        const format = (task.params?.format as string) || 'text';
+        return this.inner.generateReport(format as 'text' | 'json' | 'sarif' | 'markdown');
+      }
+      default:
+        return { success: false, error: `Unknown action: ${task.action}` };
+    }
+  }
+
+  getSupportedActions(): string[] {
+    return SECURITY_ACTIONS;
+  }
+
+  getActionHelp(action: string): string {
+    return SECURITY_ACTION_HELP[action] || 'No help available';
+  }
+
+  async cleanup(): Promise<void> {
+    this.isInitialized = false;
+  }
+
+  // Delegation methods for direct handler access
+  fullScan(target: string): Promise<SecurityScanResult> { return this.inner.fullScan(target); }
+  quickScan(target: string): Promise<SecurityScanResult> { return this.inner.quickScan(target); }
+  auditDependencies(target: string): Promise<SecurityScanResult> { return this.inner.auditDependencies(target); }
+  detectSecrets(target: string): Promise<SecurityScanResult> { return this.inner.detectSecrets(target); }
+  auditPermissions(target: string): Promise<SecurityScanResult> { return this.inner.auditPermissions(target); }
+  analyzeNetworkSecurity(target: string): Promise<SecurityScanResult> { return this.inner.analyzeNetworkSecurity(target); }
+  checkInjectionVulns(target: string): Promise<SecurityScanResult> { return this.inner.checkInjectionVulns(target); }
+  checkXSSVulns(target: string): Promise<SecurityScanResult> { return this.inner.checkXSSVulns(target); }
+  reviewAuthFlow(target: string): Promise<SecurityScanResult> { return this.inner.reviewAuthFlow(target); }
+  generateReport(format: 'text' | 'json' | 'sarif' | 'markdown'): Promise<SecurityScanResult> { return this.inner.generateReport(format); }
+}
+
+// ============================================================================
 // Singleton
 // ============================================================================
 
 let agentInstance: SecurityReviewAgent | null = null;
+let specializedInstance: SecurityReviewSpecializedAgent | null = null;
 
-export function getSecurityReviewAgent(config?: Partial<SecurityReviewConfig>): SecurityReviewAgent {
-  if (!agentInstance) {
-    agentInstance = new SecurityReviewAgent(config);
+export function getSecurityReviewAgent(config?: Partial<SecurityReviewConfig>): SecurityReviewSpecializedAgent {
+  if (!specializedInstance) {
+    specializedInstance = new SecurityReviewSpecializedAgent(config);
   }
-  return agentInstance;
+  return specializedInstance;
 }
 
 export function resetSecurityReviewAgent(): void {
   agentInstance = null;
+  specializedInstance = null;
 }

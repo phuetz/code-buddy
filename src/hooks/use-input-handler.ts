@@ -21,6 +21,7 @@ import { extractFileReference, getFileSuggestions, FileSuggestion } from "../ui/
 
 // Import interaction logger for session tracking
 import { getInteractionLogger } from "../logging/interaction-logger.js";
+import { logger } from '../utils/logger.js';
 
 // Import history manager for persistent command history
 import { getHistoryManager } from "../utils/history-manager.js";
@@ -118,18 +119,6 @@ export function useInputHandler({
     }
   };
 
-  /**
-   * Get the last user message from chat history for editing
-   */
-  const getLastUserMessage = (): string | null => {
-    for (let i = chatHistory.length - 1; i >= 0; i--) {
-      if (chatHistory[i].type === 'user') {
-        return chatHistory[i].content;
-      }
-    }
-    return null;
-  };
-
   // Helper functions for handleSpecialKey
   const handleEscapeKey = (_key: Key): boolean => {
     if (showCommandSuggestions) {
@@ -157,19 +146,15 @@ export function useInputHandler({
       return true;
     }
 
-    // Double-escape detection for editing previous prompt
+    // Double-escape detection for checkpoint rewind (like Claude Code's Esc+Esc)
     const now = Date.now();
     const timeSinceLastEscape = now - lastEscapeTimeRef.current;
     lastEscapeTimeRef.current = now;
 
-    if (timeSinceLastEscape < DOUBLE_ESCAPE_THRESHOLD && input.trim() === '') {
-      // Double escape with empty input - load last user message for editing
-      const lastMessage = getLastUserMessage();
-      if (lastMessage) {
-        setInput(lastMessage);
-        setCursorPosition(lastMessage.length);
-        return true;
-      }
+    if (timeSinceLastEscape < DOUBLE_ESCAPE_THRESHOLD) {
+      // Double escape - trigger checkpoint rewind via /undo command
+      handleDirectCommand('/undo');
+      return true;
     }
 
     return false; // Let default escape handling work
@@ -587,7 +572,7 @@ export function useInputHandler({
       if (il.getCurrentSessionId()) {
         il.logMessage({ role: 'user', content: userInput });
       }
-    } catch (_err) {}
+    } catch (e) { logger.debug('Failed to log user message to interaction logger', { error: String(e) }); }
 
     setIsProcessing(true);
     clearInput();
@@ -655,7 +640,7 @@ export function useInputHandler({
                     arguments: JSON.parse(tc.function.arguments || '{}'),
                   })));
                 }
-              } catch (_err) {}
+              } catch (e) { logger.debug('Failed to log tool calls to interaction logger', { error: String(e) }); }
 
               // Add individual tool call entries to show tools are being executed
               chunk.toolCalls.forEach((toolCall) => {
@@ -682,7 +667,7 @@ export function useInputHandler({
                     error: chunk.toolResult.error,
                   });
                 }
-              } catch (_err) {}
+              } catch (e) { logger.debug('Failed to log tool result to interaction logger', { error: String(e) }); }
 
               setChatHistory((prev) =>
                 prev.map((entry) => {
@@ -727,7 +712,7 @@ export function useInputHandler({
                 if (il.getCurrentSessionId()) {
                   il.logMessage({ role: 'assistant', content: fullResponseContent });
                 }
-              } catch (_err) {}
+              } catch (e) { logger.debug('Failed to log assistant response to interaction logger', { error: String(e) }); }
             }
 
             // Auto-speak the response if enabled

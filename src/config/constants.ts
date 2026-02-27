@@ -169,6 +169,76 @@ export const TOKEN_LIMITS = {
   'default': 131072,
 } as const;
 
+// === Server ===
+
+export const SERVER_CONFIG = {
+  /** Default port for the API server */
+  DEFAULT_PORT: 3000,
+  /** Default host to bind the server to */
+  DEFAULT_HOST: '0.0.0.0',
+  /** Default maximum request body size */
+  DEFAULT_MAX_REQUEST_SIZE: '10mb',
+  /** Default maximum WebSocket connections */
+  DEFAULT_MAX_CONNECTIONS: 100,
+  /** Default JWT expiration */
+  DEFAULT_JWT_EXPIRATION: '24h',
+} as const;
+
+// === Timeouts ===
+
+export const TIMEOUT_CONFIG = {
+  /** Default timeout for external command execution (ms) */
+  DEFAULT_COMMAND_TIMEOUT: 30000,
+  /** Default timeout for download/OCR operations (ms) */
+  DEFAULT_DOWNLOAD_TIMEOUT: 60000,
+  /** Default export interval for telemetry/metrics (ms) */
+  DEFAULT_EXPORT_INTERVAL: 30000,
+  /** Default WebSocket heartbeat interval (ms) */
+  WS_HEARTBEAT_INTERVAL: 30000,
+  /** Default WebSocket idle timeout (ms) */
+  WS_IDLE_TIMEOUT: 60000,
+  /** Default webhook request timeout (ms) */
+  DEFAULT_WEBHOOK_TIMEOUT: 30000,
+  /** Default rate limit window (ms) */
+  DEFAULT_RATE_LIMIT_WINDOW: 60000,
+  /** Default metrics export interval (ms) */
+  DEFAULT_METRICS_INTERVAL: 60000,
+  /** Default rate limit cleanup interval (ms) */
+  RATE_LIMIT_CLEANUP_INTERVAL: 60000,
+} as const;
+
+// === URLs ===
+
+export const URL_CONFIG = {
+  /** Default cloud API endpoint, overridable via CODEBUDDY_CLOUD_URL env var */
+  CLOUD_API_ENDPOINT: process.env.CODEBUDDY_CLOUD_URL || 'https://api.codebuddy.cloud',
+  /** Default OTLP endpoint for OpenTelemetry */
+  DEFAULT_OTLP_ENDPOINT: 'http://localhost:4318',
+} as const;
+
+// === Limits ===
+
+export const LIMIT_CONFIG = {
+  /** Maximum entries in the rate limit store before eviction */
+  MAX_RATE_LIMIT_ENTRIES: 10000,
+  /** Default rate limit: max requests per window */
+  DEFAULT_RATE_LIMIT_MAX: 100,
+  /** Auth endpoint rate limit: max requests per window */
+  AUTH_RATE_LIMIT_MAX: 10,
+  /** Read-only endpoint rate limit: max requests per window */
+  READONLY_RATE_LIMIT_MAX: 200,
+  /** Sensitive endpoint rate limit: max requests per window */
+  SENSITIVE_RATE_LIMIT_MAX: 5,
+  /** Maximum webhook request body size (bytes) */
+  DEFAULT_WEBHOOK_MAX_BODY_SIZE: 1024 * 1024, // 1MB
+  /** Maximum internal metrics buffer size */
+  MAX_OTEL_METRICS: 1000,
+  /** Maximum image size for multimodal input (bytes) */
+  DEFAULT_MAX_IMAGE_SIZE: 20 * 1024 * 1024, // 20MB
+  /** Maximum image dimension for auto-resize */
+  DEFAULT_MAX_IMAGE_DIMENSION: 2048,
+} as const;
+
 export const ERROR_MESSAGES = {
   NO_API_KEY: 'No API key found. Please set XAI_API_KEY environment variable or provide --api-key flag.',
   TOOL_EXECUTION_FAILED: 'Tool execution failed',

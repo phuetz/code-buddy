@@ -123,5 +123,5 @@ export const BROWSER_TOOL: CodeBuddyTool = {
 export const WEB_TOOLS: CodeBuddyTool[] = [
   WEB_SEARCH_TOOL,
   WEB_FETCH_TOOL,
-  BROWSER_TOOL,
+  // BROWSER_TOOL omitted — superseded by the richer browser-tools.ts (40+ actions)
 ];

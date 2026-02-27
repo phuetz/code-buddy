@@ -1031,7 +1031,7 @@ describe('StatusLineManager', () => {
     const rendered = slm.render();
     expect(rendered).toContain('claude-3');
     expect(rendered).toContain('feature/x');
-    expect(rendered).toContain('500/4000');
+    expect(rendered).toContain('500/4K');
   });
 
   it('should render with custom template', () => {
@@ -1055,7 +1055,7 @@ describe('StatusLineManager', () => {
     slm.updateData({ tokenUsage: { used: 1000, max: 4000 } });
     const rendered = slm.render();
     expect(rendered).toContain('25%');
-    expect(rendered).toContain('1000/4000');
+    expect(rendered).toContain('1K/4K');
   });
 
   it('should handle zero max tokens', () => {

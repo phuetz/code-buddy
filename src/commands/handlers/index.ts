@@ -28,6 +28,8 @@ export {
   handleDryRun,
   handleGuardian,
   handlePairing,
+  handleSecurityReview,
+  handleIdentity,
 } from './security-handlers.js';
 
 // Voice handlers
@@ -149,11 +151,13 @@ export {
   handleColabCommand,
 } from './colab-handler.js';
 
-// Missing handlers (model, mode, clear, colab, diff, features, checkpoints, restore)
+// Missing handlers (model, mode, clear, status, new, colab, diff, features, checkpoints, restore)
 export {
   handleChangeModel,
   handleChangeMode,
   handleClearChat,
+  handleStatus,
+  handleNew,
   handleColab,
   handleDiffCheckpoints,
   handleFeatures,
@@ -189,6 +193,11 @@ export {
   getActiveThinkingMode,
   setActiveThinkingMode,
 } from './think-handlers.js';
+
+// Team handlers (Agent Teams multi-agent coordination)
+export {
+  handleTeam,
+} from './team-handlers.js';
 
 // Re-export CommandHandlerResult type
 export type { CommandHandlerResult } from './branch-handlers.js';

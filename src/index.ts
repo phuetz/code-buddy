@@ -3,15 +3,15 @@
 const STARTUP_TIME = Date.now();
 
 import { program } from "commander";
-import { createRequire } from "module";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 // Types for dynamically imported modules
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
 
-// Read version from package.json
-const require = createRequire(import.meta.url);
-const packageJson = require("../package.json");
+// Read version from package.json (using readFileSync + __dirname to avoid import.meta.url, which ts-jest doesn't support)
+const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
 
 // Import logger statically since it's used throughout the file synchronously
 import { logger } from "./utils/logger.js";
@@ -94,6 +94,9 @@ const lazyImport = {
   performance: () => lazyLoad('performance', () => import("./performance/index.js")),
   pluginManager: () => lazyLoad('pluginManager', () => import("./plugins/plugin-manager.js")),
   lazyLoader: () => lazyLoad('lazyLoader', () => import("./performance/lazy-loader.js")),
+
+  // Settings hierarchy - loaded early for configuration
+  settingsHierarchy: () => lazyLoad('settingsHierarchy', () => import('./config/settings-hierarchy.js').then(m => m.getSettingsHierarchy)),
 
   // Error handling - deferred until needed
   crashHandler: () => lazyLoad('crashHandler', () => import('./errors/crash-handler.js').then(m => m.getCrashHandler())),
@@ -200,7 +203,7 @@ process.on("unhandledRejection", async (reason, _promise) => {
 // Settings and Credential Loading - Now async with lazy imports
 // ============================================================================
 
-// Ensure user settings are initialized
+// Ensure user settings are initialized and hierarchy is loaded
 async function ensureUserSettingsDirectory(): Promise<void> {
   try {
     const getSettingsManager = await lazyImport.settingsManager();
@@ -209,6 +212,17 @@ async function ensureUserSettingsDirectory(): Promise<void> {
     manager.loadUserSettings();
   } catch (_err) {
     logger.debug('Failed to initialize user settings directory', { error: _err });
+  }
+
+  // Load the 3-level settings hierarchy:
+  //   ~/.codebuddy/settings.json  <  .codebuddy/settings.json  <  .codebuddy/settings.local.json
+  try {
+    const getSettingsHierarchy = await lazyImport.settingsHierarchy();
+    const hierarchy = getSettingsHierarchy();
+    hierarchy.loadAllLevels();
+    logger.debug('Settings hierarchy loaded successfully');
+  } catch (_err) {
+    logger.debug('Failed to load settings hierarchy', { error: _err });
   }
 }
 
@@ -539,7 +553,7 @@ async function processPromptHeadless(
         tags: ['headless'],
       });
       interactionLogger = il;
-    } catch (_err) {}
+    } catch (e) { logger.debug('Failed to initialize headless interaction logger', { error: String(e) }); }
 
     // Process the user message
     const chatEntries = await agent.processUserMessage(prompt);
@@ -614,27 +628,46 @@ async function processPromptHeadless(
       }
     }
 
+    // Extract final assistant response text
+    const assistantMessages = messages.filter(
+      m => m.role === 'assistant' && m.content && !('tool_calls' in m && (m as unknown as Record<string, unknown>).tool_calls)
+    );
+    const lastResponse = assistantMessages[assistantMessages.length - 1];
+    const resultText = (lastResponse?.content as string) || '';
+
+    // Gather cost and model info from the agent
+    const sessionCost = agent.getSessionCost();
+    const usedModel = model || process.env.GROK_MODEL || 'unknown';
+
     // Output in the requested format
     const format = outputFormat.toLowerCase();
     if (format === 'text' || format === 'markdown') {
       // Text/markdown: only output the final assistant response
-      const assistantMessages = messages.filter(
-        m => m.role === 'assistant' && m.content && !('tool_calls' in m && (m as unknown as Record<string, unknown>).tool_calls)
-      );
-      const lastResponse = assistantMessages[assistantMessages.length - 1];
-      if (lastResponse?.content) {
-        console.log(lastResponse.content);
+      if (resultText) {
+        console.log(resultText);
       }
     } else if (format === 'stream-json' || format === 'streaming') {
       // Stream JSON: each message on its own line (NDJSON)
       for (const message of messages) {
         process.stdout.write(JSON.stringify(message) + '\n');
       }
+      // Emit a final summary event
+      process.stdout.write(JSON.stringify({
+        type: 'summary',
+        result: resultText,
+        cost: { total: sessionCost },
+        model: usedModel,
+      }) + '\n');
     } else {
-      // Default: json - each message as a separate JSON object
-      for (const message of messages) {
-        console.log(JSON.stringify(message));
-      }
+      // Default: json — structured output with result, cost, and model
+      console.log(JSON.stringify({
+        result: resultText,
+        cost: {
+          total: sessionCost,
+        },
+        model: usedModel,
+        messages,
+      }));
     }
   } catch (error: unknown) {
     // Output error in appropriate format
@@ -645,8 +678,10 @@ async function processPromptHeadless(
     } else {
       console.log(
         JSON.stringify({
-          role: "assistant",
-          content: `Error: ${errorMessage}`,
+          error: errorMessage,
+          result: null,
+          cost: { total: 0 },
+          model: model || process.env.GROK_MODEL || 'unknown',
         })
       );
     }
@@ -673,7 +708,11 @@ program
   )
   .option(
     "-p, --prompt <prompt>",
-    "process a single prompt and exit (headless mode)"
+    "process a single prompt and exit (headless mode, alias: --print)"
+  )
+  .option(
+    "--print <prompt>",
+    "alias for --prompt: process a single prompt and exit (headless mode)"
   )
   .option(
     "-b, --browser",
@@ -1138,15 +1177,18 @@ program
         pipedInput = Buffer.concat(chunks).toString('utf-8').trim();
       }
 
+      // Merge --print alias into --prompt
+      const promptArg = options.prompt || options.print;
+
       // Combine piped input with any CLI prompt or message args
       const combinedPrompt = [
-        options.prompt,
+        promptArg,
         message?.join(' '),
         pipedInput
       ].filter(Boolean).join('\n\n');
 
       // Headless mode: process prompt and exit (if prompt, message, or piped input provided)
-      if (combinedPrompt && (options.prompt || pipedInput)) {
+      if (combinedPrompt && (promptArg || pipedInput)) {
         await processPromptHeadless(
           combinedPrompt,
           apiKey,
@@ -1307,13 +1349,31 @@ program
 
         // End session on process exit
         const cleanup = () => {
-          try { interactionLogger.endSession(); } catch (_err) {}
+          try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end interaction logger session', { error: String(e) }); }
         };
         process.on('exit', cleanup);
         process.on('SIGINT', () => { cleanup(); process.exit(0); });
         process.on('SIGTERM', () => { cleanup(); process.exit(0); });
       } catch (err) {
         logger.warn('Failed to initialize interaction logger', { error: String(err) });
+      }
+
+      // Initialize RunStore for interactive session observability
+      try {
+        const { RunStore } = await import('./observability/run-store.js');
+        const runStore = RunStore.getInstance();
+        const runId = runStore.startRun('interactive session', {
+          channel: 'terminal',
+          tags: ['interactive', model || 'unknown'],
+        });
+        agent.setRunId(runId);
+        // End run on process exit
+        const cleanupRun = () => {
+          try { runStore.endRun(runId, 'completed'); } catch (_err) { /* ignore */ }
+        };
+        process.on('exit', cleanupRun);
+      } catch (err) {
+        logger.debug('RunStore init skipped', { error: String(err) });
       }
 
       await ensureUserSettingsDirectory();
@@ -1349,6 +1409,16 @@ program
           await getUpdateNotifier().checkAndNotify();
         } catch (_err) {
           // Update check should never break the CLI
+        }
+      });
+
+      // Generate .codebuddy/TOOLS.md in the background (non-blocking)
+      setImmediate(async () => {
+        try {
+          const { generateToolsMd } = await import('./tools/tools-md-generator.js');
+          await generateToolsMd();
+        } catch (_err) {
+          logger.debug('TOOLS.md background generation failed', { error: _err });
         }
       });
 
@@ -1511,6 +1581,18 @@ addLazyCommand(
     return createPipelineCommand();
   },
 );
+
+// Channels command - manage channel connections (Telegram, Discord, Slack, etc.)
+program
+  .command("channels")
+  .description("Manage channel connections (Telegram, Discord, Slack, etc.)")
+  .argument("[action]", "start|stop|status|list", "list")
+  .option("--type <type>", "Channel type (telegram|discord|slack|whatsapp|signal|google-chat|teams|matrix|webchat)")
+  .option("--config <path>", "Channel config file path")
+  .action(async (action, options) => {
+    const { handleChannels } = await import("./commands/handlers/channel-handlers.js");
+    await handleChannels(action, options);
+  });
 
 // Server command - start the HTTP/WebSocket API server
 program
@@ -1678,7 +1760,7 @@ addLazyCommandGroup(program, 'dev', 'Golden-path developer workflows (plan, run,
 });
 
 // Run observability — list, show, tail, replay
-addLazyCommandGroup(program, 'runs', 'Inspect and replay agent runs (observability)', async () => {
+addLazyCommandGroup(program, 'run', 'Inspect and replay agent runs (observability)', async () => {
   const { registerRunCommands } = await import('./commands/run-cli/index.js');
   registerRunCommands(program);
 });

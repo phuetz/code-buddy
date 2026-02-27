@@ -10,8 +10,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { logger } from '../../utils/logger.js';
-import { SmartCompactionEngine, CompactionConfig } from '../../context/smart-compaction.js';
+import { SmartCompactionEngine, CompactionConfig, type Message as CompactionMessage } from '../../context/smart-compaction.js';
 
 // ============================================================================
 // Types & Interfaces
@@ -277,8 +276,8 @@ export class RetryFallbackEngine extends EventEmitter {
   async execute<T>(
     fn: (profile: AuthProfile, thinkingLevel?: string) => Promise<T>,
     options: {
-      messages?: Array<{ role: string; content: string | null }>;
-      onCompact?: (messages: any[]) => void;
+      messages?: CompactionMessage[];
+      onCompact?: (messages: CompactionMessage[]) => void;
     } = {}
   ): Promise<ExecutionResult<T>> {
     const startTime = Date.now();
@@ -355,9 +354,9 @@ export class RetryFallbackEngine extends EventEmitter {
           if (classified.requiresCompaction && this.compactionEngine && messages) {
             this.emit('compaction:start', { tokens: messages.length });
 
-            const compacted = await this.compactionEngine.compact(messages as any);
+            const compacted = await this.compactionEngine.compact(messages);
             if (compacted.result.success) {
-              messages = compacted.messages as any;
+              messages = compacted.messages;
               if (messages) options.onCompact?.(messages);
               this.emit('compaction:complete', compacted.result);
               // Retry with compacted context

@@ -128,18 +128,17 @@ export const SCREENSHOT_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "screenshot",
-    description: "Capture screenshots: fullscreen, window, or region. Works on Linux, macOS, and Windows.",
+    description: "Capture screenshots of the screen, a window, or a region. Supports LLM-optimized output. Works on Linux, macOS, and Windows.",
     parameters: {
       type: "object",
       properties: {
-        operation: {
-          type: "string",
-          enum: ["capture", "capture_window", "capture_region", "capture_delayed", "list", "to_base64", "delete", "clear"],
-          description: "Screenshot operation to perform"
+        fullscreen: {
+          type: "boolean",
+          description: "Capture entire screen (default: true)"
         },
-        delay: {
-          type: "number",
-          description: "Delay in seconds before capture"
+        window: {
+          type: "string",
+          description: "Window title or ID to capture"
         },
         region: {
           type: "object",
@@ -149,23 +148,31 @@ export const SCREENSHOT_TOOL: CodeBuddyTool = {
             width: { type: "number" },
             height: { type: "number" }
           },
-          description: "Region to capture (for capture_region)"
+          description: "Screen region to capture"
         },
-        window: {
-          type: "string",
-          description: "Window title or ID to capture"
+        delay: {
+          type: "number",
+          description: "Delay in seconds before capture"
         },
         format: {
           type: "string",
           enum: ["png", "jpg"],
-          description: "Output format (default: png)"
+          description: "Image format (default: png)"
         },
-        path: {
+        quality: {
+          type: "number",
+          description: "JPEG quality 1-100 (only for jpg format)"
+        },
+        outputPath: {
           type: "string",
-          description: "Path for to_base64 or delete operations"
+          description: "Custom output file path"
+        },
+        forLLM: {
+          type: "boolean",
+          description: "Normalize screenshot for LLM consumption (resize + compress)"
         }
       },
-      required: ["operation"]
+      required: []
     }
   }
 };

@@ -217,6 +217,16 @@ export class ReasoningMiddleware implements ConversationMiddleware {
         const complexity = detectComplexity(lastUserMessage);
         if (complexity.level === 'tot' || complexity.level === 'mcts') {
           this.injectGuidance(context);
+
+          // Auto-enable extended thinking for complex queries
+          try {
+            const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
+            if (apiKey) {
+              const { getExtendedThinkingEngine } = await import('../thinking/extended-thinking.js');
+              const et = getExtendedThinkingEngine(apiKey, process.env.GROK_BASE_URL);
+              et.setDepth(complexity.level === 'mcts' ? 'deep' : 'extended');
+            }
+          } catch { /* extended thinking module optional */ }
         }
       }
     }

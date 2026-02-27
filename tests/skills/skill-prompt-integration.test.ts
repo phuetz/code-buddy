@@ -1,204 +1,107 @@
 /**
- * Tests for skill prompt integration in the SystemPromptBuilder.
+ * Tests for skill prompt integration via SkillManager.
  *
- * Verifies that when a matched UnifiedSkill is provided via
- * withSkillContext(), the builder injects the skill's system
- * prompt / description as a high-priority section in the output.
+ * Verifies that when a skill is activated, getSkillPromptEnhancement()
+ * returns the correct prompt block that gets injected into the system prompt
+ * by PromptBuilder.
  */
 
-import { SystemPromptBuilder } from '../../src/agent/system-prompt-builder';
-import type { UnifiedSkill } from '../../src/skills/types';
+import { SkillManager } from '../../src/skills/skill-manager';
 
 // ---------------------------------------------------------------------------
-// Helpers
+// SkillManager – getSkillPromptEnhancement
 // ---------------------------------------------------------------------------
 
-function makeSkill(overrides: Partial<UnifiedSkill> = {}): UnifiedSkill {
-  return {
-    name: 'test-skill',
-    description: 'A test skill for unit tests.',
-    source: 'skillmd',
-    enabled: true,
-    ...overrides,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// SystemPromptBuilder – withSkillContext
-// ---------------------------------------------------------------------------
-
-describe('SystemPromptBuilder – withSkillContext', () => {
-  let builder: SystemPromptBuilder;
+describe('SkillManager – skill prompt enhancement', () => {
+  let manager: SkillManager;
 
   beforeEach(() => {
-    builder = new SystemPromptBuilder({
-      includeTools: false,
-      includeSkills: false,
-      includeMemory: false,
-      includeDatetime: false,
-      includePlatform: false,
-    });
+    // Use a non-existent dir so no custom skills are loaded from disk
+    manager = new SkillManager('/tmp/nonexistent-skill-test');
   });
 
-  it('should include skill description in the built prompt', () => {
-    const skill = makeSkill({ description: 'Expert at TypeScript refactoring.' });
-
-    const prompt = builder
-      .withBaseInstructions('You are Code Buddy.')
-      .withSkillContext(skill)
-      .build();
-
-    expect(prompt).toContain('Expert at TypeScript refactoring.');
-    expect(prompt).toContain('Active Skill: test-skill');
+  it('should return empty string when no skill is active', () => {
+    expect(manager.getSkillPromptEnhancement()).toBe('');
   });
 
-  it('should include skill systemPrompt when available', () => {
-    const skill = makeSkill({
-      name: 'react-specialist',
-      description: 'React expert',
-      systemPrompt: 'Always use functional components and hooks.',
-    });
+  it('should return prompt block when a predefined skill is activated', () => {
+    const skill = manager.activateSkill('typescript-expert');
+    expect(skill).not.toBeNull();
 
-    const prompt = builder
-      .withBaseInstructions('Base instructions.')
-      .withSkillContext(skill)
-      .build();
-
-    expect(prompt).toContain('Always use functional components and hooks.');
-    expect(prompt).toContain('Active Skill: react-specialist');
+    const enhancement = manager.getSkillPromptEnhancement();
+    expect(enhancement).toContain('ACTIVE SKILL: typescript-expert');
+    expect(enhancement).toContain('END SKILL');
   });
 
-  it('should include skill steps when present', () => {
-    const skill = makeSkill({
-      steps: [
-        { index: 1, description: 'Analyze the code', tool: 'view_file' },
-        { index: 2, description: 'Apply changes', tool: 'str_replace_editor' },
-      ],
-    });
+  it('should include skill systemPrompt in the enhancement', () => {
+    const skill = manager.activateSkill('typescript-expert');
+    expect(skill).not.toBeNull();
 
-    const prompt = builder
-      .withBaseInstructions('Base')
-      .withSkillContext(skill)
-      .build();
-
-    expect(prompt).toContain('1. Analyze the code (use: view_file)');
-    expect(prompt).toContain('2. Apply changes (use: str_replace_editor)');
+    const enhancement = manager.getSkillPromptEnhancement();
+    // The enhancement should contain the skill's systemPrompt content
+    expect(enhancement).toContain(skill!.systemPrompt);
   });
 
-  it('should include required tools list', () => {
-    const skill = makeSkill({
-      requires: { tools: ['bash', 'search'] },
-      tools: ['web_search'],
-    });
+  it('should return empty string after deactivating a skill', () => {
+    manager.activateSkill('typescript-expert');
+    expect(manager.getSkillPromptEnhancement()).not.toBe('');
 
-    const prompt = builder
-      .withBaseInstructions('Base')
-      .withSkillContext(skill)
-      .build();
-
-    expect(prompt).toContain('**Required tools**');
-    expect(prompt).toContain('bash');
-    expect(prompt).toContain('search');
-    expect(prompt).toContain('web_search');
+    manager.deactivateSkill();
+    expect(manager.getSkillPromptEnhancement()).toBe('');
   });
 
-  it('should deduplicate required tools from requires.tools and tools', () => {
-    const skill = makeSkill({
-      requires: { tools: ['bash'] },
-      tools: ['bash', 'search'],
-    });
+  it('should replace enhancement when activating a different skill', () => {
+    manager.activateSkill('typescript-expert');
+    const first = manager.getSkillPromptEnhancement();
+    expect(first).toContain('typescript-expert');
 
-    const prompt = builder
-      .withBaseInstructions('Base')
-      .withSkillContext(skill)
-      .build();
-
-    // Count occurrences of 'bash' in the required tools line
-    const lines = prompt.split('\n');
-    const requiredLine = lines.find(l => l.includes('**Required tools**'));
-    expect(requiredLine).toBeDefined();
-
-    // bash should appear only once in the tools list
-    const toolsList = requiredLine!.split('**Required tools**: ')[1];
-    const toolNames = toolsList.split(', ');
-    const bashCount = toolNames.filter(t => t === 'bash').length;
-    expect(bashCount).toBe(1);
+    // Activate a different predefined skill
+    const skills = manager.getAvailableSkills();
+    const otherName = skills.find(s => s !== 'typescript-expert');
+    if (otherName) {
+      manager.activateSkill(otherName);
+      const second = manager.getSkillPromptEnhancement();
+      expect(second).toContain(`ACTIVE SKILL: ${otherName}`);
+      expect(second).not.toContain('ACTIVE SKILL: typescript-expert');
+    }
   });
 
-  it('should not include active skill section when no skill is set', () => {
-    const prompt = builder
-      .withBaseInstructions('Base instructions.')
-      .build();
-
-    expect(prompt).not.toContain('Active Skill');
+  it('should return null from activateSkill for unknown skill name', () => {
+    const result = manager.activateSkill('nonexistent-skill-xyz');
+    expect(result).toBeNull();
+    expect(manager.getSkillPromptEnhancement()).toBe('');
   });
 
-  it('should clear skill context on reset', () => {
-    const skill = makeSkill({ name: 'will-be-reset' });
+  it('should report active skill via getActiveSkill()', () => {
+    expect(manager.getActiveSkill()).toBeNull();
 
-    builder
-      .withBaseInstructions('Base')
-      .withSkillContext(skill);
-
-    builder.reset();
-
-    // After reset, build should not contain the skill
-    const prompt = builder
-      .withBaseInstructions('Base after reset.')
-      .build();
-
-    expect(prompt).not.toContain('will-be-reset');
-    expect(prompt).not.toContain('Active Skill');
+    manager.activateSkill('typescript-expert');
+    const active = manager.getActiveSkill();
+    expect(active).not.toBeNull();
+    expect(active!.name).toBe('typescript-expert');
   });
 
-  it('should replace skill context when called multiple times', () => {
-    const skill1 = makeSkill({ name: 'first-skill', description: 'First' });
-    const skill2 = makeSkill({ name: 'second-skill', description: 'Second' });
+  it('should emit skill:activated event on activation', () => {
+    const handler = jest.fn();
+    manager.on('skill:activated', handler);
 
-    const prompt = builder
-      .withBaseInstructions('Base')
-      .withSkillContext(skill1)
-      .withSkillContext(skill2)
-      .build();
+    manager.activateSkill('typescript-expert');
 
-    // Only the second skill should be present
-    expect(prompt).toContain('second-skill');
-    expect(prompt).toContain('Second');
-    // First skill should NOT be present
-    expect(prompt).not.toContain('first-skill');
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ skill: 'typescript-expert', manual: true })
+    );
   });
 
-  it('should place skill context at high priority (near top of output)', () => {
-    const skill = makeSkill({
-      name: 'high-priority-skill',
-      description: 'High priority skill content.',
-    });
+  it('should emit skill:deactivated event on deactivation', () => {
+    manager.activateSkill('typescript-expert');
 
-    const prompt = builder
-      .withBaseInstructions('Base instructions here.')
-      .withSkillContext(skill)
-      .withMode('code')
-      .build();
+    const handler = jest.fn();
+    manager.on('skill:deactivated', handler);
 
-    // The active skill section should appear before the mode section
-    const skillIdx = prompt.indexOf('Active Skill: high-priority-skill');
-    const modeIdx = prompt.indexOf('Operating Mode');
+    manager.deactivateSkill();
 
-    expect(skillIdx).toBeGreaterThan(-1);
-    expect(modeIdx).toBeGreaterThan(-1);
-    expect(skillIdx).toBeLessThan(modeIdx);
-  });
-
-  it('should allow clearing skill context with null', () => {
-    const skill = makeSkill({ name: 'clearable' });
-
-    const prompt = builder
-      .withBaseInstructions('Base')
-      .withSkillContext(skill)
-      .withSkillContext(null)
-      .build();
-
-    expect(prompt).not.toContain('Active Skill');
-    expect(prompt).not.toContain('clearable');
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ skill: 'typescript-expert' })
+    );
   });
 });

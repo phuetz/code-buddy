@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs-extra';
 import { LessonsTracker } from '../../src/agent/lessons-tracker';
+import { logger } from '../../src/utils/logger';
 
 // Mock os.homedir so global ~/.codebuddy/lessons.md never contaminates tests.
 let _fakeHome = '/tmp/lessons-gaps-placeholder';
@@ -266,7 +267,7 @@ describe('LessonsTracker (gap coverage)', () => {
     });
 
     it('should warn on duplicate id with different content', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
 
       const globalDir = path.join(_fakeHome, '.codebuddy');
       fs.mkdirpSync(globalDir);
@@ -310,7 +311,7 @@ describe('LessonsTracker (gap coverage)', () => {
     });
 
     it('should not warn when duplicate id has identical content', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
 
       const globalDir = path.join(_fakeHome, '.codebuddy');
       fs.mkdirpSync(globalDir);

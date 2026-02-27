@@ -4,9 +4,9 @@
  * Provides global access to queue instances with lazy initialization.
  */
 
-import { Queue, QueueOptions } from './queue';
-import { PriorityQueue, PriorityQueueOptions } from './priority-queue';
-import { PersistentQueue, PersistentQueueOptions } from './persistent-queue';
+import { Queue, QueueOptions } from './queue.js';
+import { PriorityQueue, PriorityQueueOptions } from './priority-queue.js';
+import { PersistentQueue, PersistentQueueOptions } from './persistent-queue.js';
 
 // Singleton instances - stored with 'any' type for generic singleton pattern
 // Type assertions are used when returning typed versions to callers

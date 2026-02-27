@@ -165,13 +165,17 @@ export class CustomCommandLoader {
 
     // Replace argument placeholders
     if (args) {
-      // Replace $ARGUMENTS or {{args}} with the provided args
-      expandedPrompt = expandedPrompt
-        .replace(/\$ARGUMENTS/g, args)
-        .replace(/\{\{args\}\}/g, args)
-        .replace(/\$1/g, args);
+      // Replace $ARGUMENTS with the full argument string (Claude Code style)
+      expandedPrompt = expandedPrompt.replace(/\$ARGUMENTS/g, args);
 
-      // Split args and replace numbered placeholders
+      // Replace $ARGS and {{args}} with the full argument string
+      expandedPrompt = expandedPrompt.replace(/\$ARGS/g, args);
+      expandedPrompt = expandedPrompt.replace(/\{\{args\}\}/g, args);
+
+      // Replace $@ with all arguments
+      expandedPrompt = expandedPrompt.replace(/\$@/g, args);
+
+      // Split args and replace numbered placeholders ($1, $2, etc.)
       const argParts = args.split(/\s+/);
       argParts.forEach((arg, index) => {
         expandedPrompt = expandedPrompt.replace(
@@ -179,6 +183,12 @@ export class CustomCommandLoader {
           arg
         );
       });
+    } else {
+      // Clean up placeholders when no args provided
+      expandedPrompt = expandedPrompt.replace(/\$ARGUMENTS/g, '');
+      expandedPrompt = expandedPrompt.replace(/\$ARGS/g, '');
+      expandedPrompt = expandedPrompt.replace(/\{\{args\}\}/g, '');
+      expandedPrompt = expandedPrompt.replace(/\$@/g, '');
     }
 
     // SECURITY: Whitelist of safe environment variables
@@ -325,8 +335,9 @@ File Format:
   ---
 
   Your prompt template here.
-  Use $ARGUMENTS or {{args}} for input.
-  Use $1, $2, etc. for specific arguments.
+  Use $ARGUMENTS for all user input after the command name.
+  Use $ARGS, {{args}}, or $@ as aliases for $ARGUMENTS.
+  Use $1, $2, etc. for specific positional arguments.
   Use $CWD, $USER, $DATE for special values.
 
 Example (.codebuddy/commands/review.md):

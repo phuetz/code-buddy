@@ -34,7 +34,9 @@ import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, me
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
 import { logger } from '../utils/logger.js';
 import { initMetrics, getMetrics as _getMetrics } from '../metrics/index.js';
+import { CSRFProtection } from '../security/csrf-protection.js';
 import type { InboundMessage } from '../channels/index.js';
+import { SERVER_CONFIG, TIMEOUT_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
 
 // Lazy import to avoid circular dependency: channels/index.ts re-exports
 // TelegramChannel/DiscordChannel which import BaseChannel from channels/index.ts
@@ -75,21 +77,21 @@ function getJwtSecret(): string {
 
 // Default configuration
 const DEFAULT_CONFIG: ServerConfig = {
-  port: parseInt(process.env.PORT || '3000', 10),
-  host: process.env.HOST || '0.0.0.0',
+  port: parseInt(process.env.PORT || String(SERVER_CONFIG.DEFAULT_PORT), 10),
+  host: process.env.HOST || SERVER_CONFIG.DEFAULT_HOST,
   cors: true,
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['*'],
   rateLimit: true,
-  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
-  rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW || '60000', 10),
+  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || String(LIMIT_CONFIG.DEFAULT_RATE_LIMIT_MAX), 10),
+  rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW || String(TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW), 10),
   authEnabled: process.env.NODE_ENV === 'production'
     ? true  // Auth is always enabled in production (fail-closed)
     : process.env.AUTH_ENABLED !== 'false',
   jwtSecret: getJwtSecret(),
-  jwtExpiration: process.env.JWT_EXPIRATION || '24h',
+  jwtExpiration: process.env.JWT_EXPIRATION || SERVER_CONFIG.DEFAULT_JWT_EXPIRATION,
   websocketEnabled: process.env.WS_ENABLED !== 'false',
   logging: process.env.LOGGING !== 'false',
-  maxRequestSize: process.env.MAX_REQUEST_SIZE || '10mb',
+  maxRequestSize: process.env.MAX_REQUEST_SIZE || SERVER_CONFIG.DEFAULT_MAX_REQUEST_SIZE,
   // Security headers: enabled by default, can be disabled via SECURITY_HEADERS=false
   securityHeaders: {
     enabled: process.env.SECURITY_HEADERS !== 'false',
@@ -143,6 +145,23 @@ function createApp(config: ServerConfig): Application {
   // Authentication
   if (config.authEnabled) {
     app.use(createAuthMiddleware(config));
+  }
+
+  // CSRF protection for state-changing endpoints (POST/PUT/DELETE)
+  if (process.env.CSRF_PROTECTION !== 'false') {
+    const csrfProtection = new CSRFProtection({
+      secure: process.env.NODE_ENV === 'production',
+    });
+
+    // Provide CSRF token endpoint
+    app.get('/api/csrf-token', (req, res) => {
+      const sessionId = (req as unknown as Record<string, unknown>).sessionId as string | undefined;
+      const token = csrfProtection.generateToken(sessionId);
+      res.json({ token: token.token });
+    });
+
+    // Apply CSRF middleware for state-changing requests
+    app.use(csrfProtection.middleware() as express.RequestHandler);
   }
 
   // Health routes (no auth required)
@@ -688,8 +707,19 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     consoleExport: process.env.METRICS_CONSOLE === 'true',
     fileExport: process.env.METRICS_FILE === 'true',
     filePath: process.env.METRICS_PATH,
-    exportInterval: parseInt(process.env.METRICS_INTERVAL || '60000', 10),
+    exportInterval: parseInt(process.env.METRICS_INTERVAL || String(TIMEOUT_CONFIG.DEFAULT_METRICS_INTERVAL), 10),
   });
+
+  // Initialize Prometheus exporter for advanced analytics metrics
+  try {
+    const { getPrometheusExporter, createMetricsCollector } = await import('../analytics/prometheus-exporter.js');
+    const promExporter = getPrometheusExporter({
+      prefix: 'codebuddy_',
+      defaultLabels: { service: 'codebuddy-server' },
+    });
+    createMetricsCollector(promExporter);
+    logger.debug('Prometheus exporter initialized');
+  } catch { /* prometheus exporter optional */ }
 
   const app = createApp(config);
   const server = createServer(app);

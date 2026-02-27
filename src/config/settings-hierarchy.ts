@@ -1,19 +1,31 @@
 /**
- * Settings Hierarchy
+ * 3-Level Settings Hierarchy
  *
- * Implements a multi-level settings system with clear priority ordering:
- * 1. ManagedPolicy (highest) - /etc/codebuddy/managed-settings.json
- * 2. CliFlags - command-line arguments
- * 3. ProjectLocal - .codebuddy/settings.local.json
- * 4. Project - .codebuddy/settings.json
- * 5. User - ~/.codebuddy/settings.json
- * 6. Default (lowest) - built-in defaults
+ * Loads and merges settings from three locations (later overrides earlier):
+ * 1. ~/.codebuddy/settings.json      (user global)
+ * 2. .codebuddy/settings.json        (project shared, checked into VCS)
+ * 3. .codebuddy/settings.local.json  (project local, git-ignored)
+ *
+ * Additional override layers for enterprise and CLI use:
+ * - ManagedPolicy (highest) - /etc/codebuddy/managed-settings.json
+ * - CliFlags - command-line arguments
+ *
+ * Full priority ordering (highest wins):
+ * 0. ManagedPolicy
+ * 1. CliFlags
+ * 2. ProjectLocal  (.codebuddy/settings.local.json)
+ * 3. Project       (.codebuddy/settings.json)
+ * 4. User          (~/.codebuddy/settings.json)
+ * 5. Default       (built-in defaults)
+ *
+ * Merge strategy: deep-merge objects, replace arrays and scalars.
  */
 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from '../utils/logger.js';
+import { resolveSecretRefs } from './secret-ref.js';
 
 // ============================================================================
 // Types
@@ -38,6 +50,80 @@ interface LevelData {
   settings: Record<string, unknown>;
 }
 
+/**
+ * Hook configuration — a command to run before or after a tool invocation.
+ */
+export interface HookConfig {
+  /** Shell command to execute */
+  command: string;
+  /** Timeout in milliseconds (default: 60000) */
+  timeout?: number;
+}
+
+/**
+ * MCP (Model Context Protocol) server configuration.
+ */
+export interface McpServerConfig {
+  /** Command to start the server */
+  command: string;
+  /** Arguments to pass to the command */
+  args?: string[];
+  /** Environment variables for the server process */
+  env?: Record<string, string>;
+}
+
+/**
+ * Typed settings shape supported by all three hierarchy levels.
+ *
+ * Every field is optional — a given level only needs to specify the keys it
+ * wants to override.  The final effective config is computed by deep-merging
+ * Default < User < Project < ProjectLocal < CliFlags < ManagedPolicy.
+ */
+export interface CodeBuddySettings {
+  // -- Tool permissions --------------------------------------------------
+  /** Tools that are always allowed without confirmation */
+  allowedTools?: string[];
+  /** Tools that are never allowed (takes precedence over allowedTools) */
+  disallowedTools?: string[];
+
+  // -- Model & provider --------------------------------------------------
+  /** Default model identifier (e.g. 'grok-3-fast', 'claude-sonnet') */
+  model?: string;
+
+  // -- Security ----------------------------------------------------------
+  /** Permission mode: 'suggest' (confirm all), 'auto-edit', 'full-auto' */
+  permissions?: string;
+  /** Alias kept for backwards compatibility */
+  securityMode?: string;
+
+  // -- Hooks -------------------------------------------------------------
+  /** Hooks to run before/after tool invocations */
+  hooks?: {
+    preToolUse?: HookConfig[];
+    postToolUse?: HookConfig[];
+  };
+
+  // -- MCP servers -------------------------------------------------------
+  /** MCP server configurations keyed by server name */
+  mcpServers?: Record<string, McpServerConfig>;
+
+  // -- UI ----------------------------------------------------------------
+  /** UI theme: 'dark', 'light', 'default', 'minimal', 'colorful' */
+  theme?: string;
+
+  // -- Custom commands ---------------------------------------------------
+  /** Whether to load custom slash commands from .codebuddy/commands/ */
+  customCommands?: boolean;
+
+  // -- Existing settings (preserved for backwards compat) ----------------
+  maxToolRounds?: number;
+  maxCost?: number;
+  autoCompact?: boolean;
+
+  // -- Extensible: allow arbitrary additional keys -----------------------
+  [key: string]: unknown;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -51,13 +137,64 @@ const LEVEL_NAMES: Record<SettingsLevel, string> = {
   [SettingsLevel.Default]: 'Default',
 };
 
-const DEFAULT_SETTINGS: Record<string, unknown> = {
+const DEFAULT_SETTINGS: CodeBuddySettings = {
   securityMode: 'suggest',
+  permissions: 'suggest',
   maxToolRounds: 50,
   maxCost: 10,
   theme: 'dark',
   autoCompact: true,
+  customCommands: true,
 };
+
+// ============================================================================
+// Deep Merge Utility
+// ============================================================================
+
+/**
+ * Deep-merge `source` into `target`.
+ *
+ * - Plain objects are recursively merged.
+ * - Arrays are **replaced** (not concatenated) — the higher-priority layer wins.
+ * - Scalars are replaced.
+ *
+ * Returns a new object; neither `target` nor `source` is mutated.
+ */
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...target };
+
+  for (const key of Object.keys(source)) {
+    const srcVal = source[key];
+    const tgtVal = result[key];
+
+    if (
+      isPlainObject(srcVal) &&
+      isPlainObject(tgtVal)
+    ) {
+      result[key] = deepMerge(
+        tgtVal as Record<string, unknown>,
+        srcVal as Record<string, unknown>,
+      );
+    } else {
+      result[key] = srcVal;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Check whether a value is a plain object (not an array, null, Date, etc.).
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  if (Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 
 // ============================================================================
 // SettingsHierarchy
@@ -151,17 +288,32 @@ export class SettingsHierarchy {
   }
 
   /**
-   * Get all settings merged (highest priority wins)
+   * Get all settings merged (highest priority wins).
+   *
+   * Objects are deep-merged; arrays and scalars are replaced by higher-priority
+   * layers.  Merge order: Default < User < Project < ProjectLocal < CliFlags < ManagedPolicy.
    */
-  getAllSettings(): Record<string, unknown> {
-    const merged: Record<string, unknown> = {};
+  getAllSettings(): CodeBuddySettings {
+    let merged: Record<string, unknown> = {};
 
     // Merge in reverse order (lowest priority first)
     for (let i = this.levels.length - 1; i >= 0; i--) {
-      Object.assign(merged, this.levels[i].settings);
+      merged = deepMerge(merged, this.levels[i].settings);
     }
 
-    return merged;
+    return merged as CodeBuddySettings;
+  }
+
+  /**
+   * Get all settings merged with SecretRef resolution.
+   *
+   * Same as `getAllSettings()` but additionally resolves `${env:...}`,
+   * `${file:...}`, and `${exec:...}` references in string values.
+   */
+  async getAllSettingsResolved(): Promise<CodeBuddySettings> {
+    const merged = this.getAllSettings();
+    const resolved = await resolveSecretRefs(merged as Record<string, unknown>);
+    return resolved as CodeBuddySettings;
   }
 
   /**

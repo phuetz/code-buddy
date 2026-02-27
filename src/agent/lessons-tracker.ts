@@ -19,6 +19,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { logger } from '../utils/logger.js';
 
 // ============================================================================
 // Types
@@ -87,8 +88,7 @@ export class LessonsTracker {
     for (const item of [...globalItems, ...projectItems]) {
       const existing = byId.get(item.id);
       if (existing && existing.content !== item.content) {
-        // eslint-disable-next-line no-console
-        console.warn(`[lessons] duplicate ID "${item.id}" — project overrides global`);
+        logger.warn(`[lessons] duplicate ID "${item.id}" — project overrides global`);
       }
       byId.set(item.id, item);
     }

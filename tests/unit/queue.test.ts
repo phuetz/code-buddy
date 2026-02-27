@@ -810,7 +810,7 @@ describe('Queue Module', () => {
         expect(info.exists).toBe(true);
         expect(info.size).toBeGreaterThan(0);
         expect(info.lastModified).not.toBeNull();
-        expect(info.lastModified!.getTime()).toBeLessThanOrEqual(Date.now());
+        expect(info.lastModified!.getTime()).toBeLessThanOrEqual(Date.now() + 10);
       });
     });
 

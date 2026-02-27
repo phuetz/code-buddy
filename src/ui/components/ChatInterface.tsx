@@ -22,6 +22,7 @@ import { MiniStatusBar } from "./StatusBar.js";
 import { KeyboardHelp, useKeyboardHelp, KeyboardHelpButton } from "./KeyboardHelp.js";
 import { ToastProvider } from "./ToastNotifications.js";
 import { logger } from "../../utils/logger.js";
+import { getTTSManager } from "../../input/text-to-speech.js";
 import {
   announceToScreenReader,
   useAccessibilitySettings,
@@ -373,6 +374,34 @@ function ChatInterfaceWithAgent({
                   finalizeStreamingEntry();
                 }
                 setIsStreaming(false);
+
+                // Auto-speak the response if TTS autoSpeak is enabled
+                try {
+                  const ttsManager = getTTSManager();
+                  if (ttsManager.getConfig().autoSpeak) {
+                    // Get the accumulated response content from the last assistant entry
+                    setChatHistory((prev) => {
+                      const lastAssistant = [...prev].reverse().find(e => e.type === 'assistant');
+                      if (lastAssistant?.content?.trim()) {
+                        const textToSpeak = lastAssistant.content
+                          .replace(/```[\s\S]*?```/g, '')
+                          .replace(/`[^`]+`/g, '')
+                          .replace(/\*\*([^*]+)\*\*/g, '$1')
+                          .replace(/\*([^*]+)\*/g, '$1')
+                          .replace(/#+\s/g, '')
+                          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+                          .replace(/\n+/g, '. ')
+                          .trim();
+                        if (textToSpeak) {
+                          ttsManager.speak(textToSpeak).catch(() => {});
+                        }
+                      }
+                      return prev; // No mutation
+                    });
+                  }
+                } catch {
+                  // TTS not available — ignore
+                }
                 break;
             }
           }

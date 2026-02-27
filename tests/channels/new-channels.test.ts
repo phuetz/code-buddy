@@ -34,12 +34,23 @@ describe('IMessageAdapter', () => {
 
   beforeEach(() => {
     adapter = new IMessageAdapter(config);
+    // Mock global fetch for BlueBubbles API calls
+    global.fetch = jest.fn().mockImplementation(async (url: string, opts?: { method?: string }) => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        if (url.includes('/api/v1/chat') && (!opts || opts.method !== 'POST')) return { status: 200, data: [] };
+        if (url.includes('/api/v1/message') && (!opts || opts.method !== 'POST')) return { status: 200, data: [] };
+        return { status: 200, message: 'OK', data: { guid: 'msg-123' } };
+      },
+    })) as jest.Mock;
   });
 
   afterEach(async () => {
     if (adapter.isRunning()) {
       await adapter.stop();
     }
+    jest.restoreAllMocks();
   });
 
   it('should construct with config', () => {
@@ -83,7 +94,7 @@ describe('IMessageAdapter', () => {
     await adapter.start();
     const result = await adapter.sendMessage('chat-1', 'Hello');
     expect(result.success).toBe(true);
-    expect(result.messageId).toBeDefined();
+    expect(result.messageGuid).toBeDefined();
   });
 
   it('should throw sendMessage when not running', async () => {

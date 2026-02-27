@@ -39,7 +39,7 @@ const DEFAULT_CONFIG: StatusLineConfig = {
   position: 'bottom',
 };
 
-const DEFAULT_TEMPLATE = '{{model}} | {{gitBranch}} | Tokens: {{tokenUsage}} | Changes: {{uncommittedChanges}}';
+const DEFAULT_TEMPLATE = '{{model}} | {{gitBranch}} | Context: {{tokenUsage}} | Changes: {{uncommittedChanges}}';
 
 // ============================================================================
 // Status Line Manager
@@ -143,11 +143,28 @@ export class StatusLineManager {
   }
 
   /**
-   * Format token usage
+   * Format a token count with K/M abbreviation
+   */
+  private formatTokenCount(count: number): string {
+    if (count >= 1_000_000) {
+      const val = count / 1_000_000;
+      return val % 1 === 0 ? `${val}M` : `${val.toFixed(1)}M`;
+    }
+    if (count >= 1_000) {
+      const val = count / 1_000;
+      return val % 1 === 0 ? `${val}K` : `${val.toFixed(1)}K`;
+    }
+    return String(count);
+  }
+
+  /**
+   * Format token usage as percentage with abbreviated counts
    */
   private formatTokenUsage(usage: { used: number; max: number }): string {
     const pct = usage.max > 0 ? Math.round((usage.used / usage.max) * 100) : 0;
-    return `${usage.used}/${usage.max} (${pct}%)`;
+    const usedStr = this.formatTokenCount(usage.used);
+    const maxStr = this.formatTokenCount(usage.max);
+    return `${pct}% (${usedStr}/${maxStr})`;
   }
 
   /**

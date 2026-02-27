@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { PriorityQueue, PriorityItem, PriorityQueueOptions, PriorityLevel } from './priority-queue';
+import { PriorityQueue, PriorityItem, PriorityQueueOptions, PriorityLevel } from './priority-queue.js';
 import { logger } from '../utils/logger.js';
 
 export interface PersistentQueueOptions extends PriorityQueueOptions {

@@ -277,20 +277,31 @@ export class SlashCommandManager {
 
     // Replace argument placeholders in prompt
     let prompt = command.prompt;
+    const argsString = args.join(' ');
 
     if (args.length > 0) {
-      // Replace $1, $2, etc. with arguments
+      // Replace $ARGUMENTS with the full argument string (Claude Code style)
+      prompt = prompt.replace(/\$ARGUMENTS/g, argsString);
+
+      // Replace $ARGS with the full argument string
+      prompt = prompt.replace(/\$ARGS/g, argsString);
+
+      // Replace $1, $2, etc. with positional arguments
       args.forEach((arg, index) => {
         prompt = prompt.replace(new RegExp(`\\$${index + 1}`, 'g'), arg);
       });
 
       // Replace $@ with all arguments
-      prompt = prompt.replace(/\$@/g, args.join(' '));
+      prompt = prompt.replace(/\$@/g, argsString);
 
-      // Append arguments if no placeholders
+      // Append arguments if no placeholders were used
       if (!command.prompt.includes('$')) {
-        prompt = `${prompt}\n\nContext: ${args.join(' ')}`;
+        prompt = `${prompt}\n\nContext: ${argsString}`;
       }
+    } else {
+      // Clean up $ARGUMENTS placeholder when no args provided
+      prompt = prompt.replace(/\$ARGUMENTS/g, '');
+      prompt = prompt.replace(/\$ARGS/g, '');
     }
 
     return {
@@ -335,7 +346,8 @@ export class SlashCommandManager {
       }
     }
 
-    output += '\n💡 Create custom commands in .codebuddy/commands/*.md';
+    output += '\n💡 Create custom commands in .codebuddy/commands/*.md\n';
+    output += '   Use $ARGUMENTS in your markdown for user input after the command name';
 
     return output;
   }
@@ -401,7 +413,8 @@ description: ${description}
 
 Your prompt instructions here.
 
-You can use $1, $2, etc. for arguments, or $@ for all arguments.
+Use $ARGUMENTS for all user input after the command name.
+Use $1, $2, etc. for positional arguments, or $@ for all arguments.
 
 Example usage: /${name} argument1 argument2
 `;

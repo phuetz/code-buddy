@@ -44,6 +44,7 @@ export interface BootstrapLoaderConfig {
 // ============================================================================
 
 const DEFAULT_BOOTSTRAP_FILES = [
+  'BOOT.md',
   'BOOTSTRAP.md',
   'AGENTS.md',
   'SOUL.md',

@@ -5,6 +5,7 @@
  */
 
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { SERVER_CONFIG, TIMEOUT_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
 
 // ============================================================================
 // Server Configuration
@@ -86,19 +87,19 @@ export interface RouteRateLimitConfig {
 }
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {
-  port: 3000,
-  host: '0.0.0.0',
+  port: SERVER_CONFIG.DEFAULT_PORT,
+  host: SERVER_CONFIG.DEFAULT_HOST,
   cors: true,
   corsOrigins: '*',
   rateLimit: true,
-  rateLimitWindow: 60000, // 1 minute
+  rateLimitWindow: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
   rateLimitMax: 60, // 60 requests per minute
   authEnabled: true,
   jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
-  jwtExpiration: '24h',
+  jwtExpiration: SERVER_CONFIG.DEFAULT_JWT_EXPIRATION,
   websocketEnabled: true,
-  maxConnections: 100,
-  bodyLimit: '10mb',
+  maxConnections: SERVER_CONFIG.DEFAULT_MAX_CONNECTIONS,
+  bodyLimit: SERVER_CONFIG.DEFAULT_MAX_REQUEST_SIZE,
   logging: true,
   docsEnabled: true,
 };

@@ -48,8 +48,8 @@ export class FileSuggestionProvider {
       });
       const results = output.trim().split('\n').filter(Boolean);
       return results.slice(0, this.config.maxResults);
-    } catch (error: any) {
-      logger.error('File suggestion script failed', error);
+    } catch (error: unknown) {
+      logger.error('File suggestion script failed', { error: String(error) });
       return [];
     }
   }
@@ -286,8 +286,8 @@ export class ConfigBackupRotation {
         try {
           fs.unlinkSync(backup.path);
           deletedCount++;
-        } catch (error: any) {
-          logger.error(`Failed to delete backup: ${backup.path}`, error);
+        } catch (error: unknown) {
+          logger.error(`Failed to delete backup: ${backup.path}`, { error: String(error) });
         }
       }
     }
@@ -308,8 +308,8 @@ export class ConfigBackupRotation {
       fs.copyFileSync(backupPath, targetPath);
       logger.info(`Restored backup from ${backupPath} to ${targetPath}`);
       return true;
-    } catch (error: any) {
-      logger.error('Failed to restore backup', error);
+    } catch (error: unknown) {
+      logger.error('Failed to restore backup', { error: String(error) });
       return false;
     }
   }
@@ -332,7 +332,7 @@ export interface DevcontainerConfig {
   name: string;
   image?: string;
   dockerFile?: string;
-  features: Record<string, any>;
+  features: Record<string, unknown>;
   forwardPorts: number[];
   postCreateCommand?: string;
   remoteUser?: string;
@@ -373,8 +373,8 @@ export class DevcontainerManager {
           logger.info(`Devcontainer config loaded from: ${p}`);
           return this.config;
         }
-      } catch (error: any) {
-        logger.error(`Failed to load devcontainer config from: ${p}`, error);
+      } catch (error: unknown) {
+        logger.error(`Failed to load devcontainer config from: ${p}`, { error: String(error) });
       }
     }
     return null;
@@ -407,7 +407,7 @@ export class DevcontainerManager {
   }
 
   serializeConfig(config: DevcontainerConfig): string {
-    const output: Record<string, any> = { name: config.name };
+    const output: Record<string, unknown> = { name: config.name };
     if (config.image) output.image = config.image;
     if (config.dockerFile) output.dockerFile = config.dockerFile;
     if (Object.keys(config.features).length > 0) output.features = config.features;

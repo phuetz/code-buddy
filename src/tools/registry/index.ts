@@ -28,6 +28,13 @@ export {
   resetBashInstance,
 } from './bash-tools.js';
 
+// Tool Adapters - LS (dedicated directory listing)
+export {
+  ListDirectoryTool,
+  createLsTools,
+  resetLsInstance,
+} from './ls-tools.js';
+
 // Tool Adapters - Search
 export {
   UnifiedSearchTool,
@@ -51,6 +58,7 @@ export {
 export {
   CreateTodoListTool,
   UpdateTodoListTool,
+  GetTodoListTool,
   createTodoTools,
   resetTodoInstance,
 } from './todo-tools.js';
@@ -142,13 +150,23 @@ export {
   resetMultimodalInstances,
 } from './multimodal-tools.js';
 
-// Tool Adapters - Advanced (JS REPL, Multi-Edit)
+// Tool Adapters - Advanced (JS REPL, Multi-Edit, CodebaseMap, SpawnSubagent)
 export {
   JSReplExecuteTool,
   MultiEditExecuteTool,
+  CodebaseMapExecuteTool,
+  SpawnSubagentExecuteTool,
   createAdvancedTools,
   resetAdvancedInstances,
 } from './advanced-tools.js';
+
+// Tool Adapters - Canvas (A2UI, Visual Canvas)
+export {
+  A2UIExecuteTool,
+  CanvasExecuteTool,
+  createCanvasTools,
+  resetCanvasInstances,
+} from './canvas-tools.js';
 
 // Tool Prefix Naming Convention — Codex-inspired canonical aliases
 export {
@@ -209,6 +227,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createLessonsTools } = await import('./lessons-tools.js');
   const { createMultimodalTools } = await import('./multimodal-tools.js');
   const { createAdvancedTools } = await import('./advanced-tools.js');
+  const { createCanvasTools } = await import('./canvas-tools.js');
 
   const primaryTools: ITool[] = [
     ...createTextEditorTools(),
@@ -228,6 +247,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createLessonsTools(),
     ...createMultimodalTools(),
     ...createAdvancedTools(),
+    ...createCanvasTools(),
   ];
 
   // Register backward-compat canonical-prefix aliases (shell_exec, file_read, etc.)

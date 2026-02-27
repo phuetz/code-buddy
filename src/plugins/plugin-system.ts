@@ -347,6 +347,20 @@ export class PluginManager extends EventEmitter {
    * Load all discovered plugins
    */
   async loadAllPlugins(): Promise<{ loaded: string[]; failed: string[] }> {
+    // Also load git-pinned plugins from the GitPinnedMarketplace
+    try {
+      const { getGitPinnedMarketplace } = await import('./git-pinned-marketplace.js');
+      const gitPinned = getGitPinnedMarketplace();
+      const pinnedPlugins = gitPinned.list();
+      for (const pinned of pinnedPlugins) {
+        if (!this.plugins.has(pinned.name)) {
+          // Git-pinned plugins are tracked by repo URL; actual loading
+          // requires cloning to a local dir first (future enhancement)
+          this.emit('plugin:git-pinned', { name: pinned.name, repo: pinned.repo });
+        }
+      }
+    } catch { /* git-pinned marketplace optional */ }
+
     const manifests = await this.discoverPlugins();
 
     // Load all plugins in parallel for faster startup

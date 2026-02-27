@@ -9,3 +9,20 @@ export * from "./codebuddyrules.js";
 export * from "./types.js";
 export * from "./config-resolver.js";
 export * from "./migration.js";
+
+// 3-level settings hierarchy (global < project < project-local)
+export {
+  SettingsHierarchy,
+  SettingsLevel,
+  getSettingsHierarchy,
+  resetSettingsHierarchy,
+} from './settings-hierarchy.js';
+export type {
+  CodeBuddySettings,
+  SettingsWithSource,
+  HookConfig,
+  McpServerConfig,
+} from './settings-hierarchy.js';
+
+// SecretRef resolution for config values
+export { resolveSecretRefs, resolveSecretRef } from './secret-ref.js';

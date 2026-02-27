@@ -1,0 +1,76 @@
+{
+  "name": "codebuddy-vscode",
+  "displayName": "Code Buddy",
+  "description": "Code Buddy AI assistant for VS Code",
+  "version": "0.1.0",
+  "publisher": "codebuddy",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codebuddy.openChat",
+        "title": "Code Buddy: Open Chat"
+      },
+      {
+        "command": "codebuddy.askAboutSelection",
+        "title": "Code Buddy: Ask About Selection"
+      },
+      {
+        "command": "codebuddy.reviewFile",
+        "title": "Code Buddy: Review Current File"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codebuddy",
+          "title": "Code Buddy",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codebuddy": [
+        {
+          "type": "webview",
+          "id": "codebuddy.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Code Buddy",
+      "properties": {
+        "codebuddy.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "CodeBuddy server URL"
+        },
+        "codebuddy.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-connect to server on startup"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -8,6 +8,7 @@
 
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
+import { URL_CONFIG } from '../config/constants.js';
 
 export interface CloudSession {
   id: string;
@@ -30,7 +31,7 @@ export interface CloudConfig {
 }
 
 const DEFAULT_CONFIG: CloudConfig = {
-  apiEndpoint: 'https://api.codebuddy.cloud',
+  apiEndpoint: URL_CONFIG.CLOUD_API_ENDPOINT,
   defaultVisibility: 'private',
   defaultNetworkAccess: 'limited',
   allowedDomains: [],

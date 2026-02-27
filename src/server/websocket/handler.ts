@@ -10,6 +10,7 @@ import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types
 import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { verifyToken } from '../auth/jwt.js';
+import { TIMEOUT_CONFIG } from '../../config/constants.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
 async function getEnqueueMessage() {
@@ -518,10 +519,9 @@ export async function setupWebSocket(
   // Heartbeat to detect stale connections
   const heartbeatInterval = setInterval(() => {
     const now = Date.now();
-    const timeout = 60000; // 1 minute
 
     for (const [ws, state] of connections.entries()) {
-      if (now - state.lastActivity > timeout) {
+      if (now - state.lastActivity > TIMEOUT_CONFIG.WS_IDLE_TIMEOUT) {
         ws.terminate();
         connections.delete(ws);
       } else {
@@ -530,7 +530,7 @@ export async function setupWebSocket(
         }
       }
     }
-  }, 30000);
+  }, TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
 
   wss.on('close', () => {
     clearInterval(heartbeatInterval);

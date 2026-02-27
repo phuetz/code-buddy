@@ -9,6 +9,7 @@ import { createHash, randomUUID } from 'crypto';
 import { readFile, writeFile, mkdir, readdir, stat } from 'fs/promises';
 import { join, dirname, relative } from 'path';
 import { promisify } from 'util';
+import { gzip as gzipCb, gunzip as gunzipCb } from 'zlib';
 import type {
   BackupConfig,
   BackupManifest,
@@ -18,8 +19,8 @@ import type {
 import { CloudStorage, createCloudStorage } from './storage.js';
 import type { CloudConfig } from './types.js';
 
-const gzip = promisify(require('zlib').gzip);
-const gunzip = promisify(require('zlib').gunzip);
+const gzip = promisify(gzipCb);
+const gunzip = promisify(gunzipCb);
 
 // ============================================================================
 // Backup Manager

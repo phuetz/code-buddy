@@ -1,26 +1,25 @@
 /**
- * Unit tests for MultiEditTool
+ * Unit tests for MultiEditTool (mocked VFS)
  */
 
-import { MultiEditTool, EditOperation } from '../../src/tools/multi-edit';
-import * as fs from 'fs-extra';
+import { MultiEditTool, SingleFileEdit } from '../../src/tools/multi-edit';
 
-// Mock fs-extra
-jest.mock('fs-extra', () => ({
-  pathExists: jest.fn(),
-  readFile: jest.fn(),
-  writeFile: jest.fn(),
+// Mock the VFS router
+const mockReadFile = jest.fn();
+const mockWriteFile = jest.fn();
+const mockExists = jest.fn();
+const mockResolvePath = jest.fn();
+
+jest.mock('../../src/services/vfs/unified-vfs-router', () => ({
+  UnifiedVfsRouter: {
+    Instance: {
+      readFile: (...args: unknown[]) => mockReadFile(...args),
+      writeFile: (...args: unknown[]) => mockWriteFile(...args),
+      exists: (...args: unknown[]) => mockExists(...args),
+      resolvePath: (...args: unknown[]) => mockResolvePath(...args),
+    },
+  },
 }));
-
-// Mock PathValidator
-jest.mock('../../src/utils/path-validator', () => {
-  return {
-    PathValidator: jest.fn().mockImplementation(() => ({
-      validate: jest.fn().mockImplementation((p) => ({ valid: true, resolved: p })),
-      setBaseDirectory: jest.fn(),
-    })),
-  };
-});
 
 // Mock ConfirmationService
 jest.mock('../../src/utils/confirmation-service', () => ({
@@ -39,95 +38,133 @@ jest.mock('../../src/checkpoints/checkpoint-manager', () => ({
   })),
 }));
 
+// Mock diff-generator
+jest.mock('../../src/utils/diff-generator', () => ({
+  generateDiff: jest.fn().mockReturnValue({ diff: '--- a/file\n+++ b/file\n@@ @@\n-old\n+new' }),
+}));
+
+// Mock logger
+jest.mock('../../src/utils/logger', () => ({
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 describe('MultiEditTool', () => {
   let tool: MultiEditTool;
 
   beforeEach(() => {
     jest.clearAllMocks();
     tool = new MultiEditTool();
+
+    // Default mock behavior
+    mockResolvePath.mockImplementation((p: string) => ({ valid: true, resolved: p }));
+    mockExists.mockResolvedValue(true);
+    mockWriteFile.mockResolvedValue(undefined);
   });
 
   describe('execute()', () => {
-    it('should perform multiple edits successfully', async () => {
-      (fs.pathExists as unknown as jest.Mock).mockResolvedValue(true);
-      (fs.readFile as unknown as jest.Mock).mockResolvedValue('original content');
-      (fs.writeFile as unknown as jest.Mock).mockResolvedValue(undefined);
+    it('should apply multiple edits to a single file', async () => {
+      mockReadFile.mockResolvedValue('AAA BBB CCC');
 
-      const edits: EditOperation[] = [
-        { file_path: 'file1.ts', old_str: 'original', new_str: 'new1' },
-        { file_path: 'file2.ts', old_str: 'original', new_str: 'new2' },
+      const edits: SingleFileEdit[] = [
+        { old_string: 'AAA', new_string: '111' },
+        { old_string: 'BBB', new_string: '222' },
       ];
 
-      const result = await tool.execute(edits);
+      const result = await tool.execute('file.ts', edits);
 
       expect(result.success).toBe(true);
-      expect(fs.writeFile).toHaveBeenCalledTimes(2);
-      expect(result.output).toContain('✓ 2 successful');
+      expect(mockWriteFile).toHaveBeenCalledTimes(1);
+      expect(mockWriteFile).toHaveBeenCalledWith('file.ts', '111 222 CCC', 'utf-8');
     });
 
-    it('should return error if string not found in one of the files', async () => {
-      (fs.pathExists as unknown as jest.Mock).mockResolvedValue(true);
-      (fs.readFile as unknown as jest.Mock).mockResolvedValue('other content');
+    it('should fail atomically if any edit old_string not found', async () => {
+      mockReadFile.mockResolvedValue('Hello World');
 
-      const edits: EditOperation[] = [
-        { file_path: 'file1.ts', old_str: 'missing', new_str: 'new' },
+      const edits: SingleFileEdit[] = [
+        { old_string: 'Hello', new_string: 'Hi' },
+        { old_string: 'MISSING', new_string: 'X' },
       ];
 
-      const result = await tool.execute(edits);
+      const result = await tool.execute('file.ts', edits);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('1 edit(s) failed');
-      expect(result.output).toContain('Failed edits');
+      expect(result.error).toContain('Edit #2 failed');
+      // File should NOT be written
+      expect(mockWriteFile).not.toHaveBeenCalled();
     });
 
-    it('should handle missing files', async () => {
-      (fs.pathExists as unknown as jest.Mock).mockResolvedValue(false);
+    it('should return error if file not found', async () => {
+      mockExists.mockResolvedValue(false);
 
-      const edits: EditOperation[] = [
-        { file_path: 'missing.ts', old_str: 'x', new_str: 'y' },
-      ];
-
-      const result = await tool.execute(edits);
+      const result = await tool.execute('missing.ts', [
+        { old_string: 'x', new_string: 'y' },
+      ]);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Validation failed');
-    });
-  });
-
-  describe('executeParallel()', () => {
-    it('should perform edits in parallel across different files', async () => {
-      (fs.pathExists as unknown as jest.Mock).mockResolvedValue(true);
-      (fs.readFile as unknown as jest.Mock).mockResolvedValue('content');
-      
-      const edits: EditOperation[] = [
-        { file_path: 'a.ts', old_str: 'content', new_str: 'newA' },
-        { file_path: 'b.ts', old_str: 'content', new_str: 'newB' },
-      ];
-
-      const result = await tool.executeParallel(edits);
-
-      expect(result.success).toBe(true);
-      expect(fs.writeFile).toHaveBeenCalledTimes(2);
+      expect(result.error).toContain('not found');
     });
 
-    it('should execute edits sequentially for the same file', async () => {
-      (fs.pathExists as unknown as jest.Mock).mockResolvedValue(true);
-      
-      // First read returns 'content', second read (after first edit) should return 'new1'
-      (fs.readFile as unknown as jest.Mock)
-        .mockResolvedValueOnce('content')
-        .mockResolvedValueOnce('new1');
+    it('should return error for invalid path', async () => {
+      mockResolvePath.mockReturnValue({ valid: false, error: 'Path outside allowed directory' });
 
-      const edits: EditOperation[] = [
-        { file_path: 'same.ts', old_str: 'content', new_str: 'new1' },
-        { file_path: 'same.ts', old_str: 'new1', new_str: 'new2' },
-      ];
+      const result = await tool.execute('/etc/passwd', [
+        { old_string: 'x', new_string: 'y' },
+      ]);
 
-      const result = await tool.executeParallel(edits);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Path outside');
+    });
+
+    it('should return error for empty edits', async () => {
+      const result = await tool.execute('file.ts', []);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('non-empty array');
+    });
+
+    it('should return error for missing file_path', async () => {
+      const result = await tool.execute('', [{ old_string: 'a', new_string: 'b' }]);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('file_path is required');
+    });
+
+    it('should skip write when content is unchanged', async () => {
+      mockReadFile.mockResolvedValue('same');
+
+      const result = await tool.execute('file.ts', [
+        { old_string: 'same', new_string: 'same' },
+      ]);
 
       expect(result.success).toBe(true);
-      expect(fs.writeFile).toHaveBeenCalledTimes(2);
-      expect(fs.writeFile).toHaveBeenLastCalledWith(expect.any(String), 'new2', 'utf-8');
+      expect(result.output).toContain('No changes needed');
+      expect(mockWriteFile).not.toHaveBeenCalled();
+    });
+
+    it('should apply edits in sequence allowing chaining', async () => {
+      mockReadFile.mockResolvedValue('A-B');
+
+      const edits: SingleFileEdit[] = [
+        { old_string: 'A', new_string: 'X' },
+        { old_string: 'X-B', new_string: 'RESULT' },
+      ];
+
+      const result = await tool.execute('file.ts', edits);
+
+      expect(result.success).toBe(true);
+      expect(mockWriteFile).toHaveBeenCalledWith('file.ts', 'RESULT', 'utf-8');
+    });
+
+    it('should validate edit objects have required fields', async () => {
+      const result = await tool.execute('file.ts', [
+        { old_string: 'a' } as unknown as SingleFileEdit,
+      ]);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('new_string must be a string');
     });
   });
 });

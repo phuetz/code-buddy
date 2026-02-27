@@ -166,7 +166,7 @@ export class AutoObservationMiddleware implements ConversationMiddleware {
             args = typeof tc?.function?.arguments === 'string'
               ? JSON.parse(tc.function.arguments)
               : (tc?.function?.arguments || {});
-          } catch { /* ignore parse errors */ }
+          } catch (e) { logger.debug('Failed to parse tool call arguments in auto-observation', { error: String(e) }); }
 
           const action = args.action as string | undefined;
 

@@ -92,10 +92,14 @@ import {
   handlePersonaCommand,
   // Think handler (Tree-of-Thought reasoning)
   handleThink,
+  // Team handler (Agent Teams multi-agent coordination)
+  handleTeam,
   // Commands previously only handled in client-dispatcher
   handleChangeModel,
   handleChangeMode,
   handleClearChat,
+  handleStatus,
+  handleNew,
   handleFeatures,
   handleListCheckpoints,
   handleRestoreCheckpoint,
@@ -104,6 +108,14 @@ import {
 
 import { handleLessonsCommand } from "./handlers/lessons-handler.js";
 import { handleContextStats } from "./handlers/extra-handlers.js";
+import {
+  handleShortcuts,
+  handleDebugMode,
+  handleToolAnalytics,
+  handleSecurityReview,
+  handleIdentity,
+  handlePairing,
+} from "./handlers/index.js";
 
 import type { CommandHandlerResult } from "./handlers/index.js";
 
@@ -249,16 +261,31 @@ export class EnhancedCommandHandler {
     // Tree-of-Thought reasoning
     ['__THINK__', (args) => handleThink(args)],
 
+    // Agent Teams multi-agent coordination
+    ['__TEAM__', (args) => handleTeam(args)],
+
     // Commands previously handled inline in client-dispatcher
     ['__CLEAR_CHAT__', () => handleClearChat()],
     ['__CHANGE_MODEL__', (args) => handleChangeModel(args)],
     ['__CHANGE_MODE__', (args) => handleChangeMode(args)],
+    ['__STATUS__', () => handleStatus()],
+    ['__NEW__', (args) => handleNew(args)],
     ['__LIST_CHECKPOINTS__', (args) => handleListCheckpoints(args)],
     ['__RESTORE_CHECKPOINT__', (args) => handleRestoreCheckpoint(args)],
     ['__INIT_GROK__', () => handleInitGrok()],
     ['__FEATURES__', () => handleFeatures()],
     ['__LESSONS__', (args) => handleLessonsCommand(args.join(' '))],
     ['__CONTEXT_STATS__', (args) => handleContextStats(args, this.agentProxy ?? undefined)],
+
+    // Re-wired commands (audit phase 4)
+    ['__SHORTCUTS__', () => handleShortcuts()],
+    ['__DEBUG__', (args) => handleDebugMode(args)],
+    ['__TOOL_ANALYTICS__', (args) => handleToolAnalytics(args)],
+
+    // Security & identity commands (audit phase 5)
+    ['__SECURITY_REVIEW__', (args) => handleSecurityReview(args)],
+    ['__IDENTITY__', (args) => handleIdentity(args)],
+    ['__PAIRING__', (args) => handlePairing(args)],
   ]);
 
   /**

@@ -19,7 +19,13 @@ const coreCommands: SlashCommand[] = [
     filePath: '',
     isBuiltin: true
   },
-  // /shortcuts — removed: no handler implemented (audit 2026-02-22)
+  {
+    name: 'shortcuts',
+    description: 'Show keyboard shortcuts and key bindings',
+    prompt: '__SHORTCUTS__',
+    filePath: '',
+    isBuiltin: true
+  },
   {
     name: 'clear',
     description: 'Clear the chat history',
@@ -241,7 +247,16 @@ const devCommands: SlashCommand[] = [
     filePath: '',
     isBuiltin: true
   },
-  // /debug — removed: no handler implemented (audit 2026-02-22)
+  {
+    name: 'debug',
+    description: 'Toggle debug mode for verbose logging',
+    prompt: '__DEBUG__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'on, off, or status', required: false }
+    ]
+  },
   {
     name: 'debug-issue',
     description: 'Help debug a code issue',
@@ -372,6 +387,37 @@ const securityCommands: SlashCommand[] = [
     arguments: [
       { name: 'action', description: 'analyze <path>, security, review, refactor, plan, architecture', required: false },
       { name: 'mode', description: 'Mode: analyze-only, suggest, plan, diff', required: false }
+    ]
+  },
+  {
+    name: 'security-review',
+    description: 'Run comprehensive security scan (OWASP, secrets, dependencies)',
+    prompt: '__SECURITY_REVIEW__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'full-scan, quick-scan, detect-secrets, audit-deps, audit-perms, report [format]', required: false },
+      { name: 'path', description: 'Target path to scan (default: cwd)', required: false }
+    ]
+  },
+  {
+    name: 'identity',
+    description: 'Manage identity linking (SOUL.md, USER.md, AGENTS.md)',
+    prompt: '__IDENTITY__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'show, link, unlink, status', required: false }
+    ]
+  },
+  {
+    name: 'pairing',
+    description: 'Manage DM pairing security for messaging channels',
+    prompt: '__PAIRING__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'status, approve <code>, revoke <id>, list, pending', required: false }
     ]
   }
 ];
@@ -713,7 +759,16 @@ const statsCommands: SlashCommand[] = [
       { name: 'action', description: 'summary, cache, requests, reset', required: false }
     ]
   },
-  // /tool-analytics — removed: no handler implemented (audit 2026-02-22)
+  {
+    name: 'tool-analytics',
+    description: 'Show tool usage analytics and performance metrics',
+    prompt: '__TOOL_ANALYTICS__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'tool-name', description: 'Specific tool to analyze (optional)', required: false }
+    ]
+  },
 ];
 
 // ============================================================================
@@ -914,9 +969,21 @@ const workflowCommands: SlashCommand[] = [
 
 const agentControlCommands: SlashCommand[] = [
   // Dead slash commands removed during audit (2026-02-22):
-  // /queue, /subagents, /new, /reset, /status, /verbose
+  // /queue, /subagents, /reset, /verbose
   // These had __TOKEN__ prompts with no handler implementation.
   // /think was re-implemented with full Tree-of-Thought reasoning (2026-02-23).
+  // /status and /new were re-implemented with proper handlers (2026-02-26).
+  // /team was reactivated from archived multi-agent code (2026-02-26).
+  {
+    name: 'team',
+    description: 'Manage Agent Teams for multi-agent coordination (start, add, status, stop)',
+    prompt: '__TEAM__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'start [goal], add <role>, remove <id>, status, stop, task [title], assign <task> <member>, complete <task>, send <to> <msg>, inbox', required: false }
+    ]
+  },
   {
     name: 'think',
     description: 'Enable Tree-of-Thought reasoning: /think [shallow|medium|deep|exhaustive] [problem]',
@@ -925,6 +992,23 @@ const agentControlCommands: SlashCommand[] = [
     isBuiltin: true,
     arguments: [
       { name: 'mode_or_problem', description: 'Thinking mode (shallow/medium/deep/exhaustive) or problem text', required: false }
+    ]
+  },
+  {
+    name: 'status',
+    description: 'Show key configuration info at a glance (model, mode, cost, context, persona, security, YOLO)',
+    prompt: '__STATUS__',
+    filePath: '',
+    isBuiltin: true
+  },
+  {
+    name: 'new',
+    description: 'Start a new conversation, optionally switching to a different model',
+    prompt: '__NEW__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'model', description: 'Model to switch to (optional)', required: false }
     ]
   },
 ];

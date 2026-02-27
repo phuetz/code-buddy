@@ -10,43 +10,39 @@
 
 import type { CodeBuddyTool } from './types.js';
 
-// Multi-edit tool for atomic multi-file changes
+// Multi-edit tool for atomic multi-replacement on a single file
 export const MULTI_EDIT_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "multi_edit",
-    description: "Edit multiple files simultaneously in a single atomic operation. Use this for refactoring across multiple files.",
+    description: "Apply multiple text replacements to a single file atomically. All edits succeed or none are applied. Each edit specifies old_string (text to find) and new_string (replacement). Use this when you need to make several changes to the same file in one operation.",
     parameters: {
       type: "object",
       properties: {
+        file_path: {
+          type: "string",
+          description: "Path to the file to edit"
+        },
         edits: {
           type: "array",
-          description: "Array of edit operations to perform",
+          description: "Array of edit operations to apply in order",
           items: {
             type: "object",
             properties: {
-              file_path: {
+              old_string: {
                 type: "string",
-                description: "Path to the file to edit"
+                description: "Exact text to find and replace"
               },
-              old_str: {
+              new_string: {
                 type: "string",
-                description: "Text to replace"
-              },
-              new_str: {
-                type: "string",
-                description: "Text to replace with"
-              },
-              replace_all: {
-                type: "boolean",
-                description: "Replace all occurrences (default: false)"
+                description: "Replacement text"
               }
             },
-            required: ["file_path", "old_str", "new_str"]
+            required: ["old_string", "new_string"]
           }
         }
       },
-      required: ["edits"]
+      required: ["file_path", "edits"]
     }
   }
 };
@@ -599,17 +595,85 @@ export const REASON_TOOL: CodeBuddyTool = {
   }
 };
 
+// Plan tool for managing execution plans (PLAN.md)
+export const PLAN_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "plan",
+    description: "Manage a persistent execution plan (PLAN.md). Use this to track progress on complex tasks with checkbox status tracking.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["init", "read", "update", "append"],
+          description: "Action: init (create new plan), read (show current plan), update (change step status), append (add new steps)"
+        },
+        goal: {
+          type: "string",
+          description: "High-level goal for the plan (required for init)"
+        },
+        step: {
+          type: "string",
+          description: "Step description (for append) or step identifier (for update)"
+        },
+        status: {
+          type: "string",
+          enum: ["pending", "in_progress", "completed", "failed"],
+          description: "New status for the step (for update)"
+        }
+      },
+      required: ["action"]
+    }
+  }
+};
+
+// Run script tool for sandboxed script execution
+export const RUN_SCRIPT_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "run_script",
+    description: "Execute a Python, TypeScript, or JavaScript script in a secure sandboxed environment (Docker). Supports external dependencies.",
+    parameters: {
+      type: "object",
+      properties: {
+        script: {
+          type: "string",
+          description: "The script source code to execute"
+        },
+        language: {
+          type: "string",
+          enum: ["python", "typescript", "javascript", "shell"],
+          description: "Script language (default: python)"
+        },
+        dependencies: {
+          type: "array",
+          items: { type: "string" },
+          description: "Package dependencies to install before running (e.g., ['numpy', 'pandas'])"
+        },
+        env: {
+          type: "object",
+          description: "Environment variables to set for the script"
+        }
+      },
+      required: ["script"]
+    }
+  }
+};
+
 /**
  * All advanced tools as an array
  */
 export const ADVANCED_TOOLS: CodeBuddyTool[] = [
   MULTI_EDIT_TOOL,
   GIT_TOOL,
-  // CODEBASE_MAP_TOOL — removed: no execution handler (audit 2026-02-25)
-  // SUBAGENT_TOOL — removed: no execution handler (audit 2026-02-25)
+  CODEBASE_MAP_TOOL,
+  SUBAGENT_TOOL,
   DOCKER_TOOL,
   KUBERNETES_TOOL,
   PROCESS_TOOL,
   JS_REPL_TOOL,
   REASON_TOOL,
+  PLAN_TOOL,
+  RUN_SCRIPT_TOOL,
 ];

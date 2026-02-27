@@ -2,6 +2,8 @@ import { spawn } from "child_process";
 import * as path from "path";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
+import { AttributionManager } from "../ui/cli-enhancements.js";
+import { getIdentityManager } from "../identity/identity-manager.js";
 
 /**
  * Execute a command safely using spawn with array arguments
@@ -84,10 +86,60 @@ export interface CherryPickOptions {
 
 export class GitTool {
   private confirmationService = ConfirmationService.getInstance();
+  private attributionManager: AttributionManager;
   private cwd: string;
 
   constructor(cwd?: string) {
     this.cwd = cwd || process.cwd();
+    this.attributionManager = new AttributionManager();
+  }
+
+  /**
+   * Resolve the Co-Authored-By name from the identity system.
+   * Falls back to "Code Buddy <noreply@codebuddy.dev>".
+   */
+  private resolveAttributionName(): string {
+    try {
+      const identity = getIdentityManager();
+      const soul = identity.get('SOUL.md');
+      if (soul?.content) {
+        // Extract name from first heading or first line
+        const nameMatch = soul.content.match(/^#\s+(.+)/m);
+        if (nameMatch) {
+          const name = nameMatch[1].trim();
+          return `Co-Authored-By: ${name} <noreply@codebuddy.dev>`;
+        }
+      }
+      const identityFile = identity.get('IDENTITY.md');
+      if (identityFile?.content) {
+        const nameMatch = identityFile.content.match(/^#\s+(.+)/m);
+        if (nameMatch) {
+          const name = nameMatch[1].trim();
+          return `Co-Authored-By: ${name} <noreply@codebuddy.dev>`;
+        }
+      }
+    } catch {
+      // Identity system not initialized -- use default
+    }
+    return this.attributionManager.getCommitFooter();
+  }
+
+  /**
+   * Append Co-Authored-By trailer to a commit message if not already present.
+   */
+  private applyAttribution(message: string): string {
+    if (!this.attributionManager.isEnabled()) {
+      return message;
+    }
+    // Check if any Co-Authored-By trailer is already present (case-insensitive)
+    if (/co-authored-by:/i.test(message)) {
+      return message;
+    }
+    const footer = this.resolveAttributionName();
+    if (!footer) {
+      return message;
+    }
+    return `${message}\n\n${footer}`;
   }
 
   /**
@@ -100,6 +152,13 @@ export class GitTool {
     } catch (error: unknown) {
       throw new Error(getErrorMessage(error));
     }
+  }
+
+  /**
+   * Get the attribution manager for external configuration.
+   */
+  getAttributionManager(): AttributionManager {
+    return this.attributionManager;
   }
 
   async isGitRepo(): Promise<boolean> {
@@ -215,8 +274,10 @@ export class GitTool {
     }
 
     try {
+      // Apply Co-Authored-By attribution trailer
+      const attributed = this.applyAttribution(message);
       // Use array args - message is safely passed as a single argument
-      const { stdout } = await this.execGit(['commit', '-m', message]);
+      const { stdout } = await this.execGit(['commit', '-m', attributed]);
       return {
         success: true,
         output: stdout.trim(),

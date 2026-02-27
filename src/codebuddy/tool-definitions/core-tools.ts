@@ -91,6 +91,26 @@ export const STR_REPLACE_EDITOR_TOOL: CodeBuddyTool = {
   },
 };
 
+// Dedicated directory listing (read-only, no bash needed)
+export const LIST_DIRECTORY_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "list_directory",
+    description: "List files and directories at a given path. Returns name, type, size, and modification time. Auto-approved read-only operation.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Directory path to list (default: current directory)",
+          default: ".",
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 // Bash command execution
 export const BASH_TOOL: CodeBuddyTool = {
   type: "function",
@@ -164,6 +184,7 @@ export const CORE_TOOLS: CodeBuddyTool[] = [
   VIEW_FILE_TOOL,
   CREATE_FILE_TOOL,
   STR_REPLACE_EDITOR_TOOL,
+  LIST_DIRECTORY_TOOL,
   BASH_TOOL,
 ];
 

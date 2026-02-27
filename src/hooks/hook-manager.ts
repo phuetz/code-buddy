@@ -13,7 +13,8 @@ export type HookEvent =
   | "SessionStart"
   | "SessionEnd"
   | "PreEdit"
-  | "PostEdit";
+  | "PostEdit"
+  | "ConfigChange";
 
 export interface Hook {
   event: HookEvent;
@@ -35,6 +36,8 @@ export interface HookContext {
   sessionId?: string;
   message?: string;
   filePath?: string;
+  changedFile?: string;
+  changedKeys?: string[];
   timestamp: Date;
 }
 

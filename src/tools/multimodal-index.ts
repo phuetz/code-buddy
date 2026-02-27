@@ -4,47 +4,58 @@
  */
 
 // PDF Tool - Read and extract content from PDF files
-export { PDFTool } from './pdf-tool.js';
+import { PDFTool } from './pdf-tool.js';
+export { PDFTool };
 export type { PDFContent, PDFMetadata, PDFPage } from './pdf-tool.js';
 
 // Audio Tool - Audio file analysis and transcription
-export { AudioTool } from './audio-tool.js';
+import { AudioTool } from './audio-tool.js';
+export { AudioTool };
 export type { AudioInfo, TranscriptionResult, TranscriptionSegment } from './audio-tool.js';
 
 // Video Tool - Video processing and frame extraction
-export { VideoTool } from './video-tool.js';
+import { VideoTool } from './video-tool.js';
+export { VideoTool };
 export type { VideoInfo, FrameExtraction, ExtractedFrame } from './video-tool.js';
 
 // Screenshot Tool - Screen capture functionality
-export { ScreenshotTool } from './screenshot-tool.js';
+import { ScreenshotTool } from './screenshot-tool.js';
+export { ScreenshotTool };
 export type { ScreenshotOptions, ScreenshotResult } from './screenshot-tool.js';
 
 // Clipboard Tool - System clipboard integration
-export { ClipboardTool } from './clipboard-tool.js';
+import { ClipboardTool } from './clipboard-tool.js';
+export { ClipboardTool };
 export type { ClipboardContent } from './clipboard-tool.js';
 
 // Document Tool - Office document support (DOCX, XLSX, PPTX)
-export { DocumentTool } from './document-tool.js';
+import { DocumentTool } from './document-tool.js';
+export { DocumentTool };
 export type { DocumentContent, DocumentMetadata, SheetContent, SlideContent } from './document-tool.js';
 
 // OCR Tool - Optical character recognition
-export { OCRTool } from './ocr-tool.js';
+import { OCRTool } from './ocr-tool.js';
+export { OCRTool };
 export type { OCRResult, OCRBlock, OCROptions } from './ocr-tool.js';
 
 // Diagram Tool - Diagram generation (Mermaid, ASCII)
-export { DiagramTool } from './diagram-tool.js';
+import { DiagramTool } from './diagram-tool.js';
+export { DiagramTool };
 export type { DiagramType, DiagramOptions, DiagramResult } from './diagram-tool.js';
 
 // Export Tool - Conversation and data export
-export { ExportTool } from './export-tool.js';
+import { ExportTool } from './export-tool.js';
+export { ExportTool };
 export type { ExportFormat, Message, ConversationExport, ExportOptions } from './export-tool.js';
 
 // QR Tool - QR code generation and reading
-export { QRTool } from './qr-tool.js';
+import { QRTool } from './qr-tool.js';
+export { QRTool };
 export type { QRGenerateOptions, QRDecodeResult } from './qr-tool.js';
 
 // Archive Tool - Archive handling (ZIP, TAR, etc.)
-export { ArchiveTool } from './archive-tool.js';
+import { ArchiveTool } from './archive-tool.js';
+export { ArchiveTool };
 export type { ArchiveInfo, ArchiveEntry, ExtractOptions, CreateOptions } from './archive-tool.js';
 
 /**
@@ -52,17 +63,17 @@ export type { ArchiveInfo, ArchiveEntry, ExtractOptions, CreateOptions } from '.
  */
 export function createMultimodalTools() {
   return {
-    pdf: new (require('./pdf-tool.js').PDFTool)(),
-    audio: new (require('./audio-tool.js').AudioTool)(),
-    video: new (require('./video-tool.js').VideoTool)(),
-    screenshot: new (require('./screenshot-tool.js').ScreenshotTool)(),
-    clipboard: new (require('./clipboard-tool.js').ClipboardTool)(),
-    document: new (require('./document-tool.js').DocumentTool)(),
-    ocr: new (require('./ocr-tool.js').OCRTool)(),
-    diagram: new (require('./diagram-tool.js').DiagramTool)(),
-    export: new (require('./export-tool.js').ExportTool)(),
-    qr: new (require('./qr-tool.js').QRTool)(),
-    archive: new (require('./archive-tool.js').ArchiveTool)(),
+    pdf: new PDFTool(),
+    audio: new AudioTool(),
+    video: new VideoTool(),
+    screenshot: new ScreenshotTool(),
+    clipboard: new ClipboardTool(),
+    document: new DocumentTool(),
+    ocr: new OCRTool(),
+    diagram: new DiagramTool(),
+    export: new ExportTool(),
+    qr: new QRTool(),
+    archive: new ArchiveTool(),
   };
 }
 

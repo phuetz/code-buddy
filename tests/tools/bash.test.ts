@@ -204,7 +204,7 @@ describe('BashTool', () => {
     });
 
     test('findFiles should execute find command', async () => {
-      const result = await bashTool.findFiles('*.ts', '.');
+      const result = await bashTool.findFiles('*.ts', 'src');
       // May not find files but command should execute
       expect(result).toBeDefined();
     });

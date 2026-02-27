@@ -13,6 +13,26 @@
 
 import { logger } from '../utils/logger.js';
 
+// Cache tree-sitter modules loaded via async import at module init time.
+// parseBashCommand is sync, so we pre-load and cache these optional deps.
+let _treeSitterParser: unknown = null;
+let _treeSitterBash: unknown = null;
+let _treeSitterLoaded = false;
+
+// Kick off async import immediately; result is cached for sync use.
+(async () => {
+  try {
+    const parserMod = await import('tree-sitter');
+    const bashMod = await import('tree-sitter-bash');
+    _treeSitterParser = parserMod.default ?? parserMod;
+    _treeSitterBash = bashMod.default ?? bashMod;
+    _treeSitterLoaded = true;
+  } catch {
+    // tree-sitter not installed — fallback parser will be used
+    _treeSitterLoaded = false;
+  }
+})();
+
 export interface ParsedCommand {
   /** The base command name (e.g., 'rm', 'git', 'npm') */
   command: string;
@@ -249,24 +269,24 @@ export function parseBashCommand(input: string): ParseResult {
     return { commands: [], usedTreeSitter: false, warnings: [] };
   }
 
-  // Try tree-sitter first (optional dependency)
-  try {
-    // Dynamic import — only works if tree-sitter + tree-sitter-bash are installed
-     
-    const Parser = require('tree-sitter');
-     
-    const Bash = require('tree-sitter-bash');
+  // Try tree-sitter first (optional dependency, pre-loaded at module init)
+  if (_treeSitterLoaded && _treeSitterParser && _treeSitterBash) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Parser = _treeSitterParser as any;
+      const Bash = _treeSitterBash;
 
-    const parser = new Parser();
-    parser.setLanguage(Bash);
-    const tree = parser.parse(input);
+      const parser = new Parser();
+      parser.setLanguage(Bash);
+      const tree = parser.parse(input);
 
-    const commands = extractCommandsFromTree(tree.rootNode, input);
-    logger.debug('Parsed bash with tree-sitter', { commandCount: commands.length });
+      const commands = extractCommandsFromTree(tree.rootNode, input);
+      logger.debug('Parsed bash with tree-sitter', { commandCount: commands.length });
 
-    return { commands, usedTreeSitter: true, warnings: [] };
-  } catch {
-    // tree-sitter not available — use fallback
+      return { commands, usedTreeSitter: true, warnings: [] };
+    } catch {
+      // tree-sitter parse failed — use fallback
+    }
   }
 
   return fallbackParse(input);

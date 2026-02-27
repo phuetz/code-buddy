@@ -13,6 +13,7 @@ import { EventEmitter } from 'events';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
 import { getMetrics, type MetricsCollector, type MetricLabels } from '../metrics/metrics-collector.js';
+import { TIMEOUT_CONFIG, URL_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
 
 export interface OTelConfig {
   /** Service name */
@@ -98,7 +99,7 @@ export class OpenTelemetryIntegration extends EventEmitter {
   private activeSpans: Map<string, SpanContext> = new Map();
   private spanStack: string[] = [];
   private metrics: Metric[] = [];
-  private static readonly MAX_METRICS = 1000;
+  private static readonly MAX_METRICS = LIMIT_CONFIG.MAX_OTEL_METRICS;
   private exportInterval: NodeJS.Timeout | null = null;
   private initialized: boolean = false;
   private metricsCollector: MetricsCollector | null = null;
@@ -109,8 +110,8 @@ export class OpenTelemetryIntegration extends EventEmitter {
       serviceName: config.serviceName,
       serviceVersion: config.serviceVersion || '1.0.0',
       environment: config.environment || process.env.NODE_ENV || 'development',
-      endpoint: config.endpoint || 'http://localhost:4318',
-      exportInterval: config.exportInterval || 30000,
+      endpoint: config.endpoint || URL_CONFIG.DEFAULT_OTLP_ENDPOINT,
+      exportInterval: config.exportInterval || TIMEOUT_CONFIG.DEFAULT_EXPORT_INTERVAL,
       consoleExport: config.consoleExport ?? false,
       resourceAttributes: config.resourceAttributes || {},
       samplingRate: config.samplingRate ?? 1.0,

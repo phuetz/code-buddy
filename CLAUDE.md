@@ -10,6 +10,8 @@ npm run dev          # Development mode with Bun
 npm run dev:node     # Development mode with tsx (Node.js)
 npm run build        # Build with TypeScript
 npm start            # Run built CLI
+npm run typecheck    # TypeScript type checking only
+npm run lint         # ESLint only
 npm run validate     # Run lint + typecheck + test (use before committing)
 ```
 
@@ -22,13 +24,18 @@ npm run test:watch                 # Watch mode
 npm run test:coverage              # Coverage report
 ```
 
-Tests are in `tests/` using Jest with ts-jest (`*.test.ts` pattern). 74 test files, 324+ tests.
+Tests are in `tests/` using Jest with ts-jest (`*.test.ts` pattern). 591 test files, 24,000+ tests.
 
 **Testing gotchas:**
 - `BashTool` tests require `ConfirmationService.setSessionFlag('bashCommands', true)`
+- `BashTool` unit tests must mock all transitive imports (`safe-binaries`, `auto-sandbox`, `shell-env-policy`, `bash-parser`, `checkpoint-manager`, `audit-logger`, `command-validator`, `streaming-executor`) — the `execute()` method has async pre-spawn logic so mock process events must be deferred with `setImmediate()`, not emitted synchronously
 - Avoid `import.meta.url` in source — ts-jest doesn't support it, use `__dirname`
 - CLI command tests: use Commander `parseAsync()` + `exitOverride()`, mock `console.log`/`process.exit`
 - Mock dynamic imports via virtual modules for channel adapter tests
+- Channel adapter tests (iMessage, etc.) must mock `global.fetch` for health checks and API calls
+- `DeviceNodeManager` tests must mock transport modules (`ssh-transport`, `adb-transport`, `local-transport`) and `fs` (to prevent `devices.json` persistence across tests). `pairDevice()` is async — don't call synchronously
+- Use `logger` (from `src/utils/logger.js`) not `console.warn/error` in production code — tests spy on `logger.warn` not `console.warn`
+- The `AgentRegistry` has 7 built-in agents (PDF, Excel, DataAnalysis, SQL, Archive, CodeGuardian, SecurityReview)
 
 ## Architecture Overview
 
@@ -120,8 +127,9 @@ Streaming: `reason` tool yields MCTS progress events via `tool_stream` in agent-
 | Agent | Files | Purpose |
 |-------|-------|---------|
 | Code Guardian | `code-guardian/` | Architecture review, refactoring suggestions, patch planning |
-| Security Review | `security-review/` | Vulnerability detection, compliance checks |
+| Security Review | `security-review/` | Vulnerability detection, compliance checks; `SecurityReviewSpecializedAgent` wraps inner `SecurityReviewAgent` with delegation methods |
 | SQL Agent | `sql-agent.ts` | Schema analysis, query optimization |
+| Archive Agent | `archive-agent.ts` | ZIP/TAR archive extraction and analysis |
 | PDF/Excel/Data | `pdf-agent.ts`, `excel-agent.ts`, `data-analysis-agent.ts` | Domain-specific processing |
 
 Managed by `agent-registry.ts`. Multi-agent coordination in `src/agent/multi-agent/` with roles: orchestrator, coder, reviewer, tester.

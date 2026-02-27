@@ -55,3 +55,10 @@ export {
   type BudgetAlert,
   type BudgetAlertConfig,
 } from './budget-alerts.js';
+
+export {
+  PrometheusExporter,
+  getPrometheusExporter,
+  createMetricsCollector,
+  type PrometheusConfig,
+} from './prometheus-exporter.js';

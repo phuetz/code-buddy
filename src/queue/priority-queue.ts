@@ -5,7 +5,7 @@
  * Items with higher priority are processed first.
  */
 
-import { Queue, QueueItem, QueueOptions } from './queue';
+import { Queue, QueueItem, QueueOptions } from './queue.js';
 
 export type PriorityLevel = 'low' | 'normal' | 'high' | 'critical';
 

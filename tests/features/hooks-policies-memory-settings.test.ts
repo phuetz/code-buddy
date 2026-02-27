@@ -68,9 +68,9 @@ describe('AdvancedHookSystem', () => {
   });
 
   describe('HookEvent enum', () => {
-    it('should have all 14 events', () => {
+    it('should have all 15 events', () => {
       const events = Object.keys(HookEvent).filter((k) => isNaN(Number(k)));
-      expect(events.length).toBe(14);
+      expect(events.length).toBe(15);
     });
 
     it('should include PreToolUse and PostToolUse', () => {

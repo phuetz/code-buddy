@@ -348,7 +348,23 @@ mno7890 Fifth commit`;
       expect(result.output).toContain('Test commit message');
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',
-        ['commit', '-m', 'Test commit message'],
+        ['commit', '-m', 'Test commit message\n\nCo-Authored-By: Code Buddy <noreply@codebuddy.dev>'],
+        { cwd: '/test/repo' }
+      );
+    });
+
+    it('should not duplicate Co-Authored-By if already present', async () => {
+      const messageWithTrailer = 'feat: add feature\n\nCo-Authored-By: Someone <someone@example.com>';
+      const commitOutput = '[main abc1234] feat: add feature\n 1 file changed';
+
+      mockSpawn.mockReturnValueOnce(createMockProcess(commitOutput, '', 0));
+
+      await gitTool.commit(messageWithTrailer);
+
+      // Should NOT append a second Co-Authored-By trailer
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'git',
+        ['commit', '-m', messageWithTrailer],
         { cwd: '/test/repo' }
       );
     });
@@ -373,9 +389,10 @@ mno7890 Fifth commit`;
       await gitTool.commit(maliciousMessage);
 
       // The message should be passed as a single argument, not executed
+      // Attribution trailer is appended but the malicious content remains safely quoted
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',
-        ['commit', '-m', maliciousMessage],
+        ['commit', '-m', `${maliciousMessage}\n\nCo-Authored-By: Code Buddy <noreply@codebuddy.dev>`],
         { cwd: '/test/repo' }
       );
     });

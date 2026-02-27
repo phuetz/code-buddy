@@ -19,6 +19,19 @@ import { WebSearchTool, WebSearchOptions, SearchResult } from '../../src/tools/w
 
 describe('WebSearchTool', () => {
   let webSearchTool: WebSearchTool;
+  let originalEnv: NodeJS.ProcessEnv;
+
+  beforeAll(() => {
+    originalEnv = { ...process.env };
+    delete process.env.BRAVE_API_KEY;
+    delete process.env.SERPER_API_KEY;
+    delete process.env.PERPLEXITY_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();

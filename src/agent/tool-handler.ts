@@ -26,6 +26,7 @@ import {
   getFormalToolRegistry,
   createTextEditorTools,
   createBashTools,
+  createLsTools,
   createSearchTools,
   createWebTools,
   createTodoTools,
@@ -42,6 +43,7 @@ import {
   createAliasTools,
   createMultimodalTools,
   createAdvancedTools,
+  createCanvasTools,
 } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 import { CodeBuddyToolCall } from "../codebuddy/client.js";
@@ -162,6 +164,7 @@ export class ToolHandler {
     const allTools = [
       ...createTextEditorTools(),
       ...createBashTools(),
+      ...createLsTools(),
       ...createSearchTools(),
       ...createWebTools(),
       ...createTodoTools(),
@@ -177,6 +180,7 @@ export class ToolHandler {
       ...createLessonsTools(),
       ...createMultimodalTools(),
       ...createAdvancedTools(),
+      ...createCanvasTools(),
     ];
 
     // Register canonical-prefix alias tools (shell_exec→bash, file_read→view_file, etc.)
@@ -265,6 +269,16 @@ export class ToolHandler {
         timestamp: startTime,
       };
 
+      // Check permission mode before execution
+      try {
+        const { getPermissionModeManager } = await import('../security/permission-modes.js');
+        const permManager = getPermissionModeManager();
+        const permDecision = permManager.checkPermission('execute', toolName);
+        if (!permDecision.allowed) {
+          return { success: false, error: `Permission denied: ${permDecision.reason}` };
+        }
+      } catch { /* permission-modes module optional */ }
+
       // Check policy before execution
       const policyDecision = this.checkToolPolicy(toolName, args);
 
@@ -325,6 +339,7 @@ export class ToolHandler {
         const writePolicy = WritePolicy.getInstance();
         const paths: string[] = [];
         if (typeof args.path === 'string') paths.push(args.path);
+        if (typeof args.file_path === 'string') paths.push(args.file_path);
         if (typeof args.target_file === 'string') paths.push(args.target_file);
         if (Array.isArray(args.files)) {
           for (const f of args.files) {
@@ -397,6 +412,8 @@ export class ToolHandler {
           pip: 'Use the "bash" tool with pip commands',
           curl: 'Use the "bash" tool with curl commands',
           docker: 'Use the "bash" tool with docker commands',
+          ls: 'Use the "list_directory" tool to list directory contents',
+          dir: 'Use the "list_directory" tool to list directory contents',
           cat: 'Use the "view_file" tool to read files',
           grep: 'Use the "search" tool to search files',
           sed: 'Use the "str_replace_editor" tool to edit files',
@@ -448,6 +465,17 @@ export class ToolHandler {
         });
       }
 
+      // ── ToolAnalytics: record execution metrics ──────────────────
+      try {
+        const { getToolAnalytics } = await import('../analytics/tool-analytics.js');
+        const durationMs = Date.now() - startTime;
+        if (finalHookResult.success) {
+          getToolAnalytics().recordSuccess(toolName, durationMs);
+        } else {
+          getToolAnalytics().recordFailure(toolName, durationMs, finalHookResult.error || 'Unknown error');
+        }
+      } catch { /* analytics module optional */ }
+
       // Return final result
       return {
         success: finalHookResult.success,
@@ -472,6 +500,12 @@ export class ToolHandler {
       } catch {
         // Ignore hook errors
       }
+
+      // Record failure in analytics
+      try {
+        const { getToolAnalytics } = await import('../analytics/tool-analytics.js');
+        getToolAnalytics().recordFailure(toolCall.function.name, Date.now() - startTime, errorMessage);
+      } catch { /* analytics module optional */ }
 
       return {
         success: false,
@@ -563,8 +597,9 @@ export class ToolHandler {
     }
 
     // Handle file-modifying tools with checkpoints and hooks
-    if (metadata.modifiesFiles && args.path) {
-      const filePath = args.path as string;
+    const editPath = (args.path || args.file_path) as string | undefined;
+    if (metadata.modifiesFiles && editPath) {
+      const filePath = editPath;
 
       // Create checkpoint before modifying file
       if (toolName === 'create_file') {

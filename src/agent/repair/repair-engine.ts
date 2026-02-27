@@ -13,6 +13,7 @@
  */
 
 import { EventEmitter } from "events";
+import { logger } from '../../utils/logger.js';
 import { getErrorMessage } from "../../types/index.js";
 import { CodeBuddyClient, CodeBuddyMessage } from "../../codebuddy/client.js";
 import {
@@ -371,8 +372,8 @@ export class RepairEngine extends EventEmitter {
           patches.push(patch);
         }
       }
-    } catch {
-      // LLM generation failed, return empty
+    } catch (e) {
+      logger.debug('LLM patch generation failed', { error: String(e) });
     }
 
     return patches;
@@ -483,7 +484,8 @@ Please provide an improved fix that addresses the issues with the previous attem
       const content = response.choices[0]?.message?.content || "";
       const patch = this.parseLLMPatch(content, fault);
       return patch ? [patch] : [];
-    } catch {
+    } catch (e) {
+      logger.debug('LLM refinement failed', { error: String(e) });
       return [];
     }
   }
@@ -585,7 +587,8 @@ Please provide an improved fix that addresses the issues with the previous attem
       const endLine = Math.min(lines.length, fault.location.endLine + 10);
 
       return lines.slice(startLine, endLine).join("\n");
-    } catch {
+    } catch (e) {
+      logger.debug('Failed to read file context for repair', { error: String(e) });
       return "";
     }
   }

@@ -7,6 +7,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
+import { validateSyntax } from '../security/syntax-validator.js';
 
 export class RunScriptTool extends BaseTool {
   readonly name = 'run_script';
@@ -54,6 +55,12 @@ export class RunScriptTool extends BaseTool {
     const language = input.language as string;
     const dependencies = (input.dependencies as string[]) || [];
     const env = (input.env as Record<string, string>) || {};
+
+    // Pre-flight syntax validation
+    const syntaxCheck = validateSyntax(script, `script.${this.getExtension(language)}`);
+    if (!syntaxCheck.valid) {
+      return this.error(`Syntax validation failed (${syntaxCheck.language}): ${syntaxCheck.errors.join('; ')}`);
+    }
 
     if (!DockerSandbox.isAvailable()) {
       return this.error('Docker is not available or not running. Please install Docker and ensure it is running to use the run_script tool.');

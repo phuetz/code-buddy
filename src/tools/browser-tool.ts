@@ -156,7 +156,7 @@ type PlaywrightPage = {
   content: () => Promise<string>;
   title: () => Promise<string>;
   url: () => string;
-  evaluate: <T>(fn: () => T) => Promise<T>;
+  evaluate: <T>(fnOrExpression: (() => T) | string) => Promise<T>;
   waitForSelector: (selector: string, options?: unknown) => Promise<unknown>;
   selectOption: (selector: string, values: string | string[]) => Promise<string[]>;
   hover: (selector: string, options?: unknown) => Promise<void>;
@@ -303,9 +303,10 @@ export class BrowserTool extends EventEmitter {
     }
 
     try {
-      // Dynamic import of playwright using Function to avoid TypeScript module resolution
-      const dynamicImport = new Function('specifier', 'return import(specifier)');
-      this.playwright = await dynamicImport('playwright');
+      // Dynamic import of playwright — the string literal is intentionally
+      // constructed to prevent bundlers from statically resolving the module.
+      const specifier = 'playwright';
+      this.playwright = await import(/* webpackIgnore: true */ specifier);
       this.isPlaywrightAvailable = true;
       return true;
     } catch {
@@ -652,9 +653,11 @@ This will install the browser binaries needed for automation.`;
     }
 
     try {
-      // Create function from script string
-      const fn = new Function(`return (${script})`) as () => unknown;
-      const result = await this.page!.evaluate(fn);
+      // SECURITY: The script is evaluated inside Playwright's browser sandbox,
+      // not on the Node.js server. page.evaluate() accepts a string and runs it
+      // in the isolated browser context. We avoid new Function() to prevent
+      // server-side code execution during function construction.
+      const result = await this.page!.evaluate(script);
 
       const output =
         typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result ?? 'undefined');
@@ -784,10 +787,12 @@ This will install the browser binaries needed for automation.`;
       if (submitButton) {
         await this.page!.click(`${selector} [type="submit"], ${selector} button`);
       } else {
-        // Evaluate form.submit()
+        // SECURITY: The expression is evaluated inside Playwright's browser sandbox,
+        // not on the Node.js server. The selector is JSON-stringified to prevent
+        // injection within the browser context.
         const safeSelector = JSON.stringify(selector);
         await this.page!.evaluate(
-          new Function(`document.querySelector(${safeSelector}).submit()`) as () => void
+          `document.querySelector(${safeSelector}).submit()`
         );
       }
 
@@ -855,9 +860,12 @@ This will install the browser binaries needed for automation.`;
       const y = options?.y ?? 500;
       const behavior = options?.behavior ?? 'auto';
 
+      // SECURITY: The expression is evaluated inside Playwright's browser sandbox,
+      // not on the Node.js server. Values are sanitized (Number() coercion,
+      // behavior allow-list) to prevent injection within the browser context.
       const safeBehavior = ['auto', 'smooth', 'instant'].includes(behavior) ? behavior : 'auto';
       await this.page!.evaluate(
-        new Function(`window.scrollTo({ left: ${Number(x)}, top: ${Number(y)}, behavior: '${safeBehavior}' })`) as () => void
+        `window.scrollTo({ left: ${Number(x)}, top: ${Number(y)}, behavior: '${safeBehavior}' })`
       );
 
       return { success: true, output: `Scrolled to x:${x}, y:${y}` };

@@ -22,6 +22,7 @@ describe('TelegramChannel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     channel = new TelegramChannel(mockConfig);
+    channel.on('error', () => {}); // Prevent background polling errors from crashing tests
   });
 
   afterEach(async () => {

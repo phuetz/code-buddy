@@ -2,6 +2,7 @@ import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from "../codebuddy/c
 import { EventEmitter } from "events";
 import { getErrorMessage } from "../types/index.js";
 import { auditLogger } from "../security/audit-logger.js";
+import { logger } from '../utils/logger.js';
 
 export interface StepResult {
   step: ArchitectStep;
@@ -294,14 +295,14 @@ export class ArchitectMode extends EventEmitter {
     // Try direct parse first
     try {
       return JSON.parse(content) as ArchitectProposal;
-    } catch { /* continue */ }
+    } catch (e) { logger.debug('Direct JSON parse failed for architect proposal', { error: String(e) }); }
 
     // Extract from markdown code block
     const codeBlockMatch = content.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
     if (codeBlockMatch) {
       try {
         return JSON.parse(codeBlockMatch[1]) as ArchitectProposal;
-      } catch { /* continue */ }
+      } catch (e) { logger.debug('Code block JSON parse failed for architect proposal', { error: String(e) }); }
     }
 
     // Find balanced JSON object using brace counting
@@ -316,7 +317,7 @@ export class ArchitectMode extends EventEmitter {
         if (depth === 0 && start !== -1) {
           try {
             return JSON.parse(content.slice(start, i + 1)) as ArchitectProposal;
-          } catch { /* try next match */ }
+          } catch (e) { logger.debug('Brace-matched JSON parse failed for architect proposal', { error: String(e) }); }
           start = -1;
         }
       }

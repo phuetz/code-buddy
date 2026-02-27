@@ -1,11 +1,11 @@
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, exec } from 'child_process';
 import { promisify } from 'util';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
-const execAsync = promisify(require('child_process').exec);
+const execAsync = promisify(exec);
 
 export interface ScreenshotOptions {
   fullscreen?: boolean;

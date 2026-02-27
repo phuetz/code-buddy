@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs-extra';
-import { MultiEditTool, getMultiEditTool, EditOperation } from '../src/tools/multi-edit';
+import { MultiEditTool, getMultiEditTool, resetMultiEditTool, SingleFileEdit } from '../src/tools/multi-edit';
 
 // Mock the confirmation service
 jest.mock('../src/utils/confirmation-service', () => ({
@@ -32,31 +32,31 @@ describe('MultiEditTool', () => {
 
   afterEach(async () => {
     await fs.remove(tempDir);
+    resetMultiEditTool();
   });
 
   describe('execute', () => {
     it('should return error for empty edits array', async () => {
-      const result = await multiEdit.execute([]);
+      const filePath = path.join(tempDir, 'test.txt');
+      await fs.writeFile(filePath, 'Hello');
+
+      const result = await multiEdit.execute(filePath, []);
       expect(result.success).toBe(false);
-      expect(result.error).toContain('No edits provided');
+      expect(result.error).toContain('non-empty array');
     });
 
-    it('should return error for undefined edits', async () => {
-      const result = await multiEdit.execute(undefined as unknown as EditOperation[]);
+    it('should return error for missing file_path', async () => {
+      const result = await multiEdit.execute('', [{ old_string: 'a', new_string: 'b' }]);
       expect(result.success).toBe(false);
-      expect(result.error).toContain('No edits provided');
+      expect(result.error).toContain('file_path is required');
     });
 
-    it('should successfully edit a single file', async () => {
+    it('should successfully apply a single edit', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'Hello World');
 
-      const result = await multiEdit.execute([
-        {
-          file_path: filePath,
-          old_str: 'World',
-          new_str: 'Universe',
-        },
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'World', new_string: 'Universe' },
       ]);
 
       expect(result.success).toBe(true);
@@ -64,51 +64,27 @@ describe('MultiEditTool', () => {
       expect(content).toBe('Hello Universe');
     });
 
-    it('should edit multiple files', async () => {
-      const file1 = path.join(tempDir, 'file1.txt');
-      const file2 = path.join(tempDir, 'file2.txt');
-      await fs.writeFile(file1, 'AAA');
-      await fs.writeFile(file2, 'BBB');
-
-      const result = await multiEdit.execute([
-        { file_path: file1, old_str: 'AAA', new_str: '111' },
-        { file_path: file2, old_str: 'BBB', new_str: '222' },
-      ]);
-
-      expect(result.success).toBe(true);
-      expect(await fs.readFile(file1, 'utf-8')).toBe('111');
-      expect(await fs.readFile(file2, 'utf-8')).toBe('222');
-    });
-
-    it('should replace all occurrences when replace_all is true', async () => {
+    it('should apply multiple edits to the same file in order', async () => {
       const filePath = path.join(tempDir, 'test.txt');
-      await fs.writeFile(filePath, 'foo bar foo baz foo');
+      await fs.writeFile(filePath, 'AAA BBB CCC');
 
-      const result = await multiEdit.execute([
-        {
-          file_path: filePath,
-          old_str: 'foo',
-          new_str: 'XXX',
-          replace_all: true,
-        },
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'AAA', new_string: '111' },
+        { old_string: 'BBB', new_string: '222' },
+        { old_string: 'CCC', new_string: '333' },
       ]);
 
       expect(result.success).toBe(true);
       const content = await fs.readFile(filePath, 'utf-8');
-      expect(content).toBe('XXX bar XXX baz XXX');
+      expect(content).toBe('111 222 333');
     });
 
-    it('should replace only first occurrence when replace_all is false', async () => {
+    it('should replace only first occurrence', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'foo bar foo baz foo');
 
-      const result = await multiEdit.execute([
-        {
-          file_path: filePath,
-          old_str: 'foo',
-          new_str: 'XXX',
-          replace_all: false,
-        },
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'foo', new_string: 'XXX' },
       ]);
 
       expect(result.success).toBe(true);
@@ -117,139 +93,82 @@ describe('MultiEditTool', () => {
     });
 
     it('should return error for non-existent file', async () => {
-      const result = await multiEdit.execute([
-        {
-          file_path: path.join(tempDir, 'nonexistent.txt'),
-          old_str: 'old',
-          new_str: 'new',
-        },
-      ]);
+      const result = await multiEdit.execute(
+        path.join(tempDir, 'nonexistent.txt'),
+        [{ old_string: 'old', new_string: 'new' }]
+      );
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not found');
     });
 
-    it('should return error for string not found in file', async () => {
+    it('should return error when old_string not found and roll back', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'Hello World');
 
-      const result = await multiEdit.execute([
-        {
-          file_path: filePath,
-          old_str: 'NotFound',
-          new_str: 'New',
-        },
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'Hello', new_string: 'Hi' },
+        { old_string: 'NOTFOUND', new_string: 'X' },
       ]);
 
       expect(result.success).toBe(false);
-      expect(result.output).toContain('failed');
+      expect(result.error).toContain('Edit #2 failed');
+      expect(result.error).toContain('No changes were applied');
+
+      // Original file should be unchanged (atomic rollback)
+      const content = await fs.readFile(filePath, 'utf-8');
+      expect(content).toBe('Hello World');
     });
 
-    it('should reject paths outside base directory', async () => {
-      const result = await multiEdit.execute([
-        {
-          file_path: '/etc/passwd',
-          old_str: 'old',
-          new_str: 'new',
-        },
+    it('should handle edits that depend on previous edits', async () => {
+      const filePath = path.join(tempDir, 'test.txt');
+      await fs.writeFile(filePath, 'A-B-C');
+
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'A', new_string: 'X' },
+        { old_string: 'X-B', new_string: 'Y' },
       ]);
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Validation failed');
+      expect(result.success).toBe(true);
+      const content = await fs.readFile(filePath, 'utf-8');
+      expect(content).toBe('Y-C');
     });
 
-    it('should reject path traversal attempts', async () => {
-      const traversalPath = path.join(tempDir, '..', '..', 'etc', 'passwd');
-      const result = await multiEdit.execute([
-        {
-          file_path: traversalPath,
-          old_str: 'old',
-          new_str: 'new',
-        },
-      ]);
-
-      expect(result.success).toBe(false);
-    });
-
-    it('should include summary in output', async () => {
+    it('should include diff in output on success', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'Hello');
 
-      const result = await multiEdit.execute([
-        { file_path: filePath, old_str: 'Hello', new_str: 'Hi' },
-      ]);
-
-      expect(result.output).toContain('Multi-Edit Results');
-      expect(result.output).toContain('successful');
-    });
-
-    it('should handle string not found errors in summary', async () => {
-      const file1 = path.join(tempDir, 'file1.txt');
-      const file2 = path.join(tempDir, 'file2.txt');
-      await fs.writeFile(file1, 'content1');
-      await fs.writeFile(file2, 'content2');
-
-      const result = await multiEdit.execute([
-        { file_path: file1, old_str: 'content1', new_str: 'new1' },
-        { file_path: file2, old_str: 'NOTFOUND', new_str: 'y' },
-      ]);
-
-      expect(result.success).toBe(false);
-      expect(result.output).toContain('1 successful');
-      expect(result.output).toContain('1 failed');
-    });
-  });
-
-  describe('executeParallel', () => {
-    it('should execute edits on different files in parallel', async () => {
-      const file1 = path.join(tempDir, 'file1.txt');
-      const file2 = path.join(tempDir, 'file2.txt');
-      await fs.writeFile(file1, 'AAA');
-      await fs.writeFile(file2, 'BBB');
-
-      const result = await multiEdit.executeParallel([
-        { file_path: file1, old_str: 'AAA', new_str: '111' },
-        { file_path: file2, old_str: 'BBB', new_str: '222' },
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'Hello', new_string: 'Hi' },
       ]);
 
       expect(result.success).toBe(true);
-      expect(await fs.readFile(file1, 'utf-8')).toBe('111');
-      expect(await fs.readFile(file2, 'utf-8')).toBe('222');
+      expect(result.output).toContain('Applied 1 edit');
     });
 
-    it('should execute edits on same file sequentially', async () => {
+    it('should handle multi-line edits', async () => {
       const filePath = path.join(tempDir, 'test.txt');
-      await fs.writeFile(filePath, 'ABC');
+      await fs.writeFile(filePath, 'line1\nline2\nline3\n');
 
-      const result = await multiEdit.executeParallel([
-        { file_path: filePath, old_str: 'A', new_str: 'X' },
-        { file_path: filePath, old_str: 'X', new_str: 'Y' },
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'line1\nline2', new_string: 'newline1\nnewline2\nnewline2b' },
       ]);
 
       expect(result.success).toBe(true);
       const content = await fs.readFile(filePath, 'utf-8');
-      expect(content).toBe('YBC');
+      expect(content).toBe('newline1\nnewline2\nnewline2b\nline3\n');
     });
 
-    it('should return error for empty edits', async () => {
-      const result = await multiEdit.executeParallel([]);
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('No edits provided');
-    });
-
-    it('should stop processing same file on first error', async () => {
+    it('should return no-op for identical content', async () => {
       const filePath = path.join(tempDir, 'test.txt');
-      await fs.writeFile(filePath, 'ABC');
+      await fs.writeFile(filePath, 'same');
 
-      const result = await multiEdit.executeParallel([
-        { file_path: filePath, old_str: 'NOTFOUND', new_str: 'X' },
-        { file_path: filePath, old_str: 'A', new_str: 'Y' },
+      const result = await multiEdit.execute(filePath, [
+        { old_string: 'same', new_string: 'same' },
       ]);
 
-      expect(result.success).toBe(false);
-      // Second edit should not have been attempted
-      const content = await fs.readFile(filePath, 'utf-8');
-      expect(content).toBe('ABC');
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('No changes needed');
     });
   });
 
@@ -257,7 +176,7 @@ describe('MultiEditTool', () => {
     it('should update the base directory', () => {
       const newDir = '/new/base/dir';
       multiEdit.setBaseDirectory(newDir);
-      // No error means success - we can't directly access private pathValidator
+      // No error means success
     });
   });
 

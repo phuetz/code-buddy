@@ -120,6 +120,81 @@ jest.mock('@vscode/ripgrep', () => ({
   rgPath: '/usr/bin/rg',
 }));
 
+// Mock safe-binaries checker
+jest.mock('../../src/security/safe-binaries', () => ({
+  SafeBinariesChecker: {
+    getInstance: jest.fn(() => ({
+      isSafe: jest.fn((cmd) => {
+        const safe = ['ls', 'cat', 'grep', 'echo'];
+        return safe.some(s => cmd.trim().startsWith(s));
+      }),
+    })),
+  },
+}));
+
+// Mock auto-sandbox (dynamic import in execute())
+jest.mock('../../src/sandbox/auto-sandbox', () => ({
+  getAutoSandboxRouter: jest.fn(() => ({
+    route: jest.fn().mockResolvedValue({ mode: 'direct' }),
+  })),
+}));
+
+// Mock command-validator
+jest.mock('../../src/tools/bash/command-validator', () => ({
+  ...jest.requireActual('../../src/tools/bash/command-validator'),
+  getFilteredEnv: jest.fn(() => ({ ...process.env })),
+}));
+
+// Mock shell-env-policy
+jest.mock('../../src/security/shell-env-policy', () => ({
+  getShellEnvPolicy: jest.fn(() => ({
+    filterEnv: jest.fn((env: Record<string, string>) => env),
+    buildEnv: jest.fn((env: Record<string, string>) => env),
+  })),
+}));
+
+// Mock streaming-executor
+jest.mock('../../src/tools/bash/streaming-executor', () => ({
+  executeStreaming: jest.fn(),
+}));
+
+// Mock bash-parser
+jest.mock('../../src/security/bash-parser', () => ({
+  parseBashCommand: jest.fn(() => ({
+    commands: [],
+    pipes: [],
+    redirects: [],
+    isValid: true,
+  })),
+}));
+
+// Mock checkpoint-manager
+jest.mock('../../src/checkpoints/checkpoint-manager', () => ({
+  getCheckpointManager: jest.fn(() => ({
+    createCheckpoint: jest.fn(),
+  })),
+}));
+
+// Mock audit-logger
+jest.mock('../../src/security/audit-logger', () => ({
+  auditLogger: {
+    log: jest.fn(),
+    logCommand: jest.fn(),
+    logCommandValidation: jest.fn(),
+    logFileOperation: jest.fn(),
+  },
+}));
+
+// Mock logger
+jest.mock('../../src/utils/logger', () => ({
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 // Import after mocking
 import { BashTool } from '../../src/tools/bash';
 import { validateWithSchema, validateCommand as validateCommandSafety } from '../../src/utils/input-validator';
@@ -133,6 +208,26 @@ function createMockChildProcess(): ChildProcess & EventEmitter {
   Object.defineProperty(mockProcess, 'stderr', { value: new EventEmitter(), writable: true });
   mockProcess.kill = jest.fn().mockReturnValue(true);
   return mockProcess;
+}
+
+/**
+ * Helper: schedule events on a mock process to fire AFTER spawn is called.
+ * Uses setImmediate to defer events past the async setup in execute().
+ */
+function emitAfterSpawn(
+  mockProcess: ChildProcess & EventEmitter,
+  events: { stdout?: string; stderr?: string; exitCode: number | null }
+): void {
+  // Defer to let execute()'s async pre-spawn logic complete
+  setImmediate(() => {
+    if (events.stdout) {
+      (mockProcess.stdout as EventEmitter).emit('data', Buffer.from(events.stdout));
+    }
+    if (events.stderr) {
+      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from(events.stderr));
+    }
+    mockProcess.emit('close', events.exitCode);
+  });
 }
 
 describe('BashTool', () => {
@@ -169,7 +264,7 @@ describe('BashTool', () => {
 
       // The dispose method should not throw
       // Complete the process to resolve the promise
-      mockProcess.emit('close', 0);
+      emitAfterSpawn(mockProcess, { exitCode: 0 });
       await executePromise;
 
       // Verify dispose doesn't crash on subsequent calls
@@ -193,13 +288,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('echo "hello"');
-
-      // Simulate stdout data
-      (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('hello'));
-      mockProcess.emit('close', 0);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { stdout: 'hello', exitCode: 0 });
+      const result = await bashTool.execute('echo "hello"');
       expect(result.success).toBe(true);
       expect(result.output).toContain('hello');
     });
@@ -208,13 +298,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('some-command');
-
-      // Simulate stderr data
-      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('error message'));
-      mockProcess.emit('close', 1);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { stderr: 'error message', exitCode: 1 });
+      const result = await bashTool.execute('some-command');
       expect(result.success).toBe(false);
       expect(result.error).toContain('error message');
     });
@@ -223,13 +308,13 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('mixed-output-command');
-
-      (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('stdout data'));
-      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('stderr data'));
-      mockProcess.emit('close', 0);
-
-      const result = await executePromise;
+      // emitAfterSpawn only supports one stdout/stderr string; emit both via setImmediate
+      setImmediate(() => {
+        (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('stdout data'));
+        (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('stderr data'));
+        mockProcess.emit('close', 0);
+      });
+      const result = await bashTool.execute('mixed-output-command');
       expect(result.success).toBe(true);
       expect(result.output).toContain('stdout data');
       expect(result.output).toContain('STDERR');
@@ -240,10 +325,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('true');
-      mockProcess.emit('close', 0);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { exitCode: 0 });
+      const result = await bashTool.execute('true');
       expect(result.success).toBe(true);
       expect(result.output).toBe('Command executed successfully (no output)');
     });
@@ -252,9 +335,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('test-command');
-      mockProcess.emit('close', 0);
-      await executePromise;
+      emitAfterSpawn(mockProcess, { exitCode: 0 });
+      await bashTool.execute('test-command');
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'bash',
@@ -270,9 +352,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('env');
-      mockProcess.emit('close', 0);
-      await executePromise;
+      emitAfterSpawn(mockProcess, { exitCode: 0 });
+      await bashTool.execute('env');
 
       const spawnOptions = mockSpawn.mock.calls[0][2] as SpawnOptions;
       expect(spawnOptions.env).toMatchObject({
@@ -297,6 +378,9 @@ describe('BashTool', () => {
       mockSpawn.mockReturnValue(mockProcess);
 
       const executePromise = bashTool.execute('sleep 60', 1000);
+
+      // Drain microtasks so async pre-spawn logic completes and setTimeout is registered
+      for (let i = 0; i < 10; i++) await Promise.resolve();
 
       // Advance timer past timeout
       jest.advanceTimersByTime(1500);
@@ -323,6 +407,9 @@ describe('BashTool', () => {
       process.kill = mockProcessKill as unknown as typeof process.kill;
 
       const executePromise = bashTool.execute('slow-command', 500);
+
+      // Drain microtasks so async pre-spawn logic completes and setTimeout is registered
+      for (let i = 0; i < 10; i++) await Promise.resolve();
 
       // Advance past timeout
       jest.advanceTimersByTime(600);
@@ -352,6 +439,9 @@ describe('BashTool', () => {
 
       const executePromise = bashTool.execute('fast-command', 5000);
 
+      // Drain microtasks so spawn and listeners are set up before emitting events
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+
       // Complete quickly
       (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('done'));
       mockProcess.emit('close', 0);
@@ -368,7 +458,10 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      bashTool.execute('some-command'); // No timeout specified
+      const executePromise = bashTool.execute('some-command'); // No timeout specified
+
+      // Drain microtasks so async pre-spawn logic completes and setTimeout is registered
+      for (let i = 0; i < 10; i++) await Promise.resolve();
 
       // Default is 30000ms
       jest.advanceTimersByTime(29000);
@@ -378,6 +471,7 @@ describe('BashTool', () => {
       expect(mockProcess.kill).toHaveBeenCalled();
 
       mockProcess.emit('close', null);
+      await executePromise;
     });
   });
 
@@ -547,15 +641,10 @@ describe('BashTool', () => {
       mockSpawn.mockReturnValue(mockProcess);
 
       // Need to ensure the command starts and then completes after confirmation resolves
-      const executePromise = bashTool.execute('ls');
-
-      // Wait for confirmation to be called (microtask)
-      await Promise.resolve();
-
-      (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('output'));
-      mockProcess.emit('close', 0);
-
-      await executePromise;
+      // Use a non-safe command (safe binaries like ls/cat/grep skip confirmation)
+      // Defer events via setImmediate so spawn + listeners are set up first
+      emitAfterSpawn(mockProcess, { stdout: 'output', exitCode: 0 });
+      await bashTool.execute('npm install');
 
       expect(mockRequestConfirmation).toHaveBeenCalled();
     }, 15000);
@@ -566,10 +655,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('ls');
-
-      mockProcess.emit('close', 0);
-      await executePromise;
+      emitAfterSpawn(mockProcess, { exitCode: 0 });
+      await bashTool.execute('ls');
 
       expect(mockRequestConfirmation).not.toHaveBeenCalled();
     });
@@ -608,11 +695,11 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('ls -la');
-
-      mockProcess.emit('error', new Error('spawn error'));
-
-      const result = await executePromise;
+      // Defer the error event so spawn + listeners are set up first
+      setImmediate(() => {
+        mockProcess.emit('error', new Error('spawn error'));
+      });
+      const result = await bashTool.execute('ls -la');
       expect(result.success).toBe(false);
       expect(result.error).toContain('spawn error');
     });
@@ -624,10 +711,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('ls');
-      mockProcess.emit('close', null);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { exitCode: null as unknown as number });
+      const result = await bashTool.execute('ls');
       expect(result.success).toBe(false);
       // null exit code becomes 1
       expect(result.error).toContain('exited with code 1');
@@ -638,12 +723,8 @@ describe('BashTool', () => {
       mockSpawn.mockReturnValue(mockProcess);
       bashTool.setSelfHealing(false);
 
-      const executePromise = bashTool.execute('failing-command');
-
-      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('Command failed'));
-      mockProcess.emit('close', 42);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { stderr: 'Command failed', exitCode: 42 });
+      const result = await bashTool.execute('failing-command');
       expect(result.success).toBe(false);
       expect(result.error).toContain('Command failed');
     });
@@ -668,13 +749,15 @@ describe('BashTool', () => {
 
       const executePromise = bashTool.execute('large-output');
 
-      // Send more than 1MB of data
-      const largeChunk = Buffer.alloc(512 * 1024, 'x'); // 512KB
-      (mockProcess.stdout as EventEmitter).emit('data', largeChunk);
-      (mockProcess.stdout as EventEmitter).emit('data', largeChunk);
-      (mockProcess.stdout as EventEmitter).emit('data', largeChunk); // This should be truncated
+      setImmediate(() => {
+        // Send more than 1MB of data
+        const largeChunk = Buffer.alloc(512 * 1024, 'x'); // 512KB
+        (mockProcess.stdout as EventEmitter).emit('data', largeChunk);
+        (mockProcess.stdout as EventEmitter).emit('data', largeChunk);
+        (mockProcess.stdout as EventEmitter).emit('data', largeChunk); // This should be truncated
 
-      mockProcess.emit('close', 0);
+        mockProcess.emit('close', 0);
+      });
 
       const result = await executePromise;
       expect(result.success).toBe(true);
@@ -689,11 +772,13 @@ describe('BashTool', () => {
 
       const executePromise = bashTool.execute('error-output');
 
-      const largeChunk = Buffer.alloc(600 * 1024, 'e');
-      (mockProcess.stderr as EventEmitter).emit('data', largeChunk);
-      (mockProcess.stderr as EventEmitter).emit('data', largeChunk);
+      setImmediate(() => {
+        const largeChunk = Buffer.alloc(600 * 1024, 'e');
+        (mockProcess.stderr as EventEmitter).emit('data', largeChunk);
+        (mockProcess.stderr as EventEmitter).emit('data', largeChunk);
 
-      mockProcess.emit('close', 1);
+        mockProcess.emit('close', 1);
+      });
 
       const result = await executePromise;
       expect(result.success).toBe(false);
@@ -722,12 +807,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('failing-command');
-
-      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('error'));
-      mockProcess.emit('close', 1);
-
-      await executePromise;
+      emitAfterSpawn(mockProcess, { stderr: 'error', exitCode: 1 });
+      await bashTool.execute('failing-command');
 
       expect(mockAttemptHealing).toHaveBeenCalled();
     });
@@ -743,12 +824,8 @@ describe('BashTool', () => {
         finalResult: { success: true, output: 'Fixed output' },
       });
 
-      const executePromise = bashTool.execute('broken-command');
-
-      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('error'));
-      mockProcess.emit('close', 1);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { stderr: 'error', exitCode: 1 });
+      const result = await bashTool.execute('broken-command');
 
       expect(result.success).toBe(true);
       expect(result.output).toContain('Self-healed');
@@ -764,12 +841,8 @@ describe('BashTool', () => {
         attempts: [{ pattern: 'test', fix: 'tried-fix' }],
       });
 
-      const executePromise = bashTool.execute('unrecoverable-command');
-
-      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('original error'));
-      mockProcess.emit('close', 1);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { stderr: 'original error', exitCode: 1 });
+      const result = await bashTool.execute('unrecoverable-command');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Self-healing attempted');
@@ -782,12 +855,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('failing-command');
-
-      (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('error'));
-      mockProcess.emit('close', 1);
-
-      await executePromise;
+      emitAfterSpawn(mockProcess, { stderr: 'error', exitCode: 1 });
+      await bashTool.execute('failing-command');
 
       expect(mockAttemptHealing).not.toHaveBeenCalled();
     });
@@ -799,12 +868,8 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        const executePromise = bashTool.listFiles('.');
-
-        (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('file1\nfile2'));
-        mockProcess.emit('close', 0);
-
-        const result = await executePromise;
+        emitAfterSpawn(mockProcess, { stdout: 'file1\nfile2', exitCode: 0 });
+        const result = await bashTool.listFiles('.');
         expect(result.success).toBe(true);
         expect(mockSpawn).toHaveBeenCalledWith(
           'bash',
@@ -817,8 +882,8 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        bashTool.listFiles('test dir');
-        mockProcess.emit('close', 0);
+        emitAfterSpawn(mockProcess, { exitCode: 0 });
+        await bashTool.listFiles('test dir');
 
         // sanitizeForShell should be called
         const { sanitizeForShell } = require('../../src/utils/input-validator');
@@ -840,10 +905,8 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        const executePromise = bashTool.findFiles('*.ts', '.');
-
-        mockProcess.emit('close', 0);
-        await executePromise;
+        emitAfterSpawn(mockProcess, { exitCode: 0 });
+        await bashTool.findFiles('*.ts', '.');
 
         expect(mockSpawn).toHaveBeenCalledWith(
           'bash',
@@ -856,8 +919,8 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        bashTool.findFiles('*.txt', 'src');
-        mockProcess.emit('close', 0);
+        emitAfterSpawn(mockProcess, { exitCode: 0 });
+        await bashTool.findFiles('*.txt', 'src');
 
         const { sanitizeForShell } = require('../../src/utils/input-validator');
         expect(sanitizeForShell).toHaveBeenCalledWith('*.txt');
@@ -879,12 +942,8 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        const grepPromise = bashTool.grep('pattern', '.');
-
-        (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('match'));
-        mockProcess.emit('close', 0);
-
-        const result = await grepPromise;
+        emitAfterSpawn(mockProcess, { stdout: 'match', exitCode: 0 });
+        const result = await bashTool.grep('pattern', '.');
         expect(result.success).toBe(true);
         expect(mockSpawn).toHaveBeenCalledWith(
           '/usr/bin/rg',
@@ -897,10 +956,8 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        const grepPromise = bashTool.grep('nonexistent', '.');
-        mockProcess.emit('close', 1);
-
-        const result = await grepPromise;
+        emitAfterSpawn(mockProcess, { exitCode: 1 });
+        const result = await bashTool.grep('nonexistent', '.');
         expect(result.success).toBe(true);
         expect(result.output).toContain('No matches found');
       });
@@ -909,11 +966,11 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        const grepPromise = bashTool.grep('pattern', '.');
-
-        mockProcess.emit('error', new Error('ripgrep not found'));
-
-        const result = await grepPromise;
+        // Defer error event so spawn + listeners are set up first
+        setImmediate(() => {
+          mockProcess.emit('error', new Error('ripgrep not found'));
+        });
+        const result = await bashTool.grep('pattern', '.');
         expect(result.success).toBe(false);
         expect(result.error).toContain('ripgrep error');
       });
@@ -922,13 +979,9 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        const grepPromise = bashTool.grep('pattern', '.');
-
         // Emit stderr data - this takes priority in error message
-        (mockProcess.stderr as EventEmitter).emit('data', Buffer.from('grep error'));
-        mockProcess.emit('close', 2);
-
-        const result = await grepPromise;
+        emitAfterSpawn(mockProcess, { stderr: 'grep error', exitCode: 2 });
+        const result = await bashTool.grep('pattern', '.');
         expect(result.success).toBe(false);
         expect(result.error).toContain('grep error');
       });
@@ -937,12 +990,9 @@ describe('BashTool', () => {
         const mockProcess = createMockChildProcess();
         mockSpawn.mockReturnValue(mockProcess);
 
-        const grepPromise = bashTool.grep('pattern', '.');
-
         // No stderr - should show exit code message
-        mockProcess.emit('close', 2);
-
-        const result = await grepPromise;
+        emitAfterSpawn(mockProcess, { exitCode: 2 });
+        const result = await bashTool.grep('pattern', '.');
         expect(result.success).toBe(false);
         expect(result.error).toContain('ripgrep exited with code 2');
       });
@@ -970,12 +1020,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('npm test');
-
-      (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('PASS src/test.ts'));
-      mockProcess.emit('close', 0);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { stdout: 'PASS src/test.ts', exitCode: 0 });
+      const result = await bashTool.execute('npm test');
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ type: 'test-results', framework: 'jest' });
@@ -988,12 +1034,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('echo "hello"');
-
-      (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('hello'));
-      mockProcess.emit('close', 0);
-
-      const result = await executePromise;
+      emitAfterSpawn(mockProcess, { stdout: 'hello', exitCode: 0 });
+      const result = await bashTool.execute('echo "hello"');
 
       expect(result.success).toBe(true);
       expect(result.output).toBe('hello');
@@ -1012,9 +1054,8 @@ describe('BashTool', () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      const executePromise = bashTool.execute('test');
-      mockProcess.emit('close', 0);
-      await executePromise;
+      emitAfterSpawn(mockProcess, { exitCode: 0 });
+      await bashTool.execute('test');
 
       const spawnOptions = mockSpawn.mock.calls[0][2] as SpawnOptions;
       // On non-Windows, detached should be true
@@ -1065,7 +1106,7 @@ describe('BashTool Integration Edge Cases', () => {
 
     const longCommand = 'echo ' + 'x'.repeat(10000);
     const executePromise = bashTool.execute(longCommand);
-    mockProcess.emit('close', 0);
+    emitAfterSpawn(mockProcess, { exitCode: 0 });
 
     const result = await executePromise;
     expect(result.success).toBe(true);
@@ -1077,8 +1118,7 @@ describe('BashTool Integration Edge Cases', () => {
 
     const executePromise = bashTool.execute('echo "Hello \u4E16\u754C"');
 
-    (mockProcess.stdout as EventEmitter).emit('data', Buffer.from('Hello \u4E16\u754C'));
-    mockProcess.emit('close', 0);
+    emitAfterSpawn(mockProcess, { stdout: 'Hello \u4E16\u754C', exitCode: 0 });
 
     const result = await executePromise;
     expect(result.success).toBe(true);
@@ -1100,9 +1140,9 @@ describe('BashTool Integration Edge Cases', () => {
       bashTool.execute('cmd3'),
     ];
 
-    mockProcess1.emit('close', 0);
-    mockProcess2.emit('close', 0);
-    mockProcess3.emit('close', 0);
+    emitAfterSpawn(mockProcess1, { exitCode: 0 });
+    emitAfterSpawn(mockProcess2, { exitCode: 0 });
+    emitAfterSpawn(mockProcess3, { exitCode: 0 });
 
     const results = await Promise.all(promises);
 

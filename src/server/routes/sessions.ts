@@ -120,6 +120,42 @@ router.get(
 );
 
 /**
+ * GET /api/sessions/latest
+ * Get the most recent session
+ * NOTE: Must be registered before /:id to avoid route shadowing
+ */
+router.get(
+  '/latest',
+  requireScope('sessions'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const store = await getSessionStore();
+    const sessions = await store.listSessions();
+
+    if (sessions.length === 0) {
+      throw ApiServerError.notFound('No sessions found');
+    }
+
+    // Sort by updatedAt or createdAt
+    const sorted = sessions.sort((a: SessionData, b: SessionData) => {
+      const dateA = new Date(a.updatedAt || a.createdAt).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt).getTime();
+      return dateB - dateA;
+    });
+
+    const latest = sorted[0];
+
+    res.json({
+      id: latest.id,
+      name: latest.name,
+      description: latest.description,
+      createdAt: latest.createdAt,
+      updatedAt: latest.updatedAt,
+      messageCount: latest.messages?.length || 0,
+    });
+  })
+);
+
+/**
  * GET /api/sessions/:id
  * Get session details
  */
@@ -412,41 +448,6 @@ router.post(
       res.setHeader('Content-Disposition', `attachment; filename="${id}.json"`);
       res.json(session);
     }
-  })
-);
-
-/**
- * GET /api/sessions/latest
- * Get the most recent session
- */
-router.get(
-  '/latest',
-  requireScope('sessions'),
-  asyncHandler(async (req: Request, res: Response) => {
-    const store = await getSessionStore();
-    const sessions = await store.listSessions();
-
-    if (sessions.length === 0) {
-      throw ApiServerError.notFound('No sessions found');
-    }
-
-    // Sort by updatedAt or createdAt
-    const sorted = sessions.sort((a: SessionData, b: SessionData) => {
-      const dateA = new Date(a.updatedAt || a.createdAt).getTime();
-      const dateB = new Date(b.updatedAt || b.createdAt).getTime();
-      return dateB - dateA;
-    });
-
-    const latest = sorted[0];
-
-    res.json({
-      id: latest.id,
-      name: latest.name,
-      description: latest.description,
-      createdAt: latest.createdAt,
-      updatedAt: latest.updatedAt,
-      messageCount: latest.messages?.length || 0,
-    });
   })
 );
 

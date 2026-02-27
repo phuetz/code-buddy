@@ -10,12 +10,18 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 import { logger } from '../utils/logger.js';
+import { SERVER_CONFIG, TIMEOUT_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
 import { enqueueMessage } from './index.js';
 import { getPeerRouter } from './peer-routing.js';
 import type { ResolvedRoute } from './peer-routing.js';
 import type { InboundMessage, ChannelType } from './index.js';
 import type { TelegramChannel } from './telegram/index.js';
+import type { TelegramUpdate } from './telegram/types.js';
 import type { SlackChannel } from './slack/index.js';
+import type { SlackEventCallback } from './slack/types.js';
+
+/** Slack webhook body union matching SlackChannel.handleWebhook signature */
+type SlackWebhookBody = SlackEventCallback | { type: 'url_verification'; challenge: string };
 
 /**
  * Webhook server configuration
@@ -69,11 +75,11 @@ export interface WebhookResponse {
 }
 
 const DEFAULT_CONFIG: WebhookServerConfig = {
-  port: 3000,
-  host: '0.0.0.0',
+  port: SERVER_CONFIG.DEFAULT_PORT,
+  host: SERVER_CONFIG.DEFAULT_HOST,
   pathPrefix: '/webhook',
-  timeout: 30000,
-  maxBodySize: 1024 * 1024, // 1MB
+  timeout: TIMEOUT_CONFIG.DEFAULT_WEBHOOK_TIMEOUT,
+  maxBodySize: LIMIT_CONFIG.DEFAULT_WEBHOOK_MAX_BODY_SIZE,
 };
 
 /**
@@ -182,7 +188,7 @@ export class WebhookServer extends EventEmitter {
         | string
         | undefined;
 
-      const handled = await channel.handleWebhook(req.body as any, secret);
+      const handled = await channel.handleWebhook(req.body as TelegramUpdate, secret);
 
       return {
         status: handled ? 200 : 401,
@@ -202,7 +208,7 @@ export class WebhookServer extends EventEmitter {
         | undefined;
 
       const result = await channel.handleWebhook(
-        req.body as any,
+        req.body as SlackWebhookBody,
         signature,
         timestamp
       );
@@ -229,7 +235,7 @@ export class WebhookServer extends EventEmitter {
         payload = JSON.parse((req.body as Record<string, unknown>).payload as string);
       }
 
-      await channel.handleWebhook(payload as any, signature, timestamp);
+      await channel.handleWebhook(payload as SlackWebhookBody, signature, timestamp);
 
       return { status: 200, body: { ok: true } };
     });
@@ -246,7 +252,7 @@ export class WebhookServer extends EventEmitter {
 
       // Emit command event - channel will handle it
       await channel.handleWebhook(
-        { type: 'slash_command', ...(command as object) } as any,
+        { type: 'slash_command', ...(command as object) } as unknown as SlackWebhookBody,
         signature,
         timestamp
       );

@@ -38,9 +38,18 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'multi_edit',
     category: 'file_write',
-    keywords: ['multi', 'multiple', 'batch', 'refactor', 'rename', 'across', 'files', 'atomic'],
-    priority: 7,
-    description: 'Edit multiple files simultaneously'
+    keywords: ['multi', 'edit', 'replace', 'batch', 'atomic', 'refactor', 'multiple', 'edits', 'rename'],
+    priority: 8,
+    description: 'Apply multiple text replacements to a single file atomically'
+  },
+
+  // Directory listing
+  {
+    name: 'list_directory',
+    category: 'file_read',
+    keywords: ['list', 'directory', 'files', 'ls', 'folder', 'contents', 'dir', 'entries'],
+    priority: 9,
+    description: 'List files and directories with type, size, and modification time'
   },
 
   // File search
@@ -217,6 +226,24 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['reason', 'think', 'plan', 'analyze', 'architecture', 'design', 'debug', 'complex', 'trade-off', 'compare', 'evaluate', 'strategy', 'decision', 'mcts', 'tree-of-thought'],
     priority: 6,
     description: 'Solve complex problems using Tree-of-Thought reasoning with MCTS'
+  },
+
+  // Plan management
+  {
+    name: 'plan',
+    category: 'planning',
+    keywords: ['plan', 'goal', 'steps', 'track', 'progress', 'todo', 'organize', 'breakdown', 'checklist', 'PLAN.md'],
+    priority: 7,
+    description: 'Manage a persistent execution plan (PLAN.md) with step tracking'
+  },
+
+  // Script execution
+  {
+    name: 'run_script',
+    category: 'utility',
+    keywords: ['script', 'python', 'typescript', 'javascript', 'shell', 'execute', 'run', 'sandbox', 'docker', 'compute', 'data'],
+    priority: 5,
+    description: 'Execute scripts in a secure sandboxed Docker environment'
   },
 
   // Utility tools

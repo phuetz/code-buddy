@@ -236,3 +236,20 @@ export class PermissionModeManager {
     return this.config.disableBypass;
   }
 }
+
+// ============================================================================
+// Singleton
+// ============================================================================
+
+let permissionModeManagerInstance: PermissionModeManager | null = null;
+
+export function getPermissionModeManager(): PermissionModeManager {
+  if (!permissionModeManagerInstance) {
+    permissionModeManagerInstance = new PermissionModeManager();
+  }
+  return permissionModeManagerInstance;
+}
+
+export function resetPermissionModeManager(): void {
+  permissionModeManagerInstance = null;
+}

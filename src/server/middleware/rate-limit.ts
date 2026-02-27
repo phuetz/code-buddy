@@ -11,6 +11,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { ServerConfig, RouteRateLimitConfig as _RouteRateLimitConfig } from '../types.js';
 import { API_ERRORS } from '../types.js';
+import { TIMEOUT_CONFIG, LIMIT_CONFIG } from '../../config/constants.js';
 
 interface RateLimitEntry {
   count: number;
@@ -41,24 +42,24 @@ export interface RateLimitOptions {
  */
 export const DEFAULT_ROUTE_LIMITS: Record<string, RateLimitOptions> = {
   '/api/': {
-    maxRequests: 100,
-    windowMs: 60000, // 1 minute
+    maxRequests: LIMIT_CONFIG.DEFAULT_RATE_LIMIT_MAX,
+    windowMs: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
     keyPrefix: 'api',
   },
   '/auth/': {
-    maxRequests: 10,
-    windowMs: 60000, // 1 minute
+    maxRequests: LIMIT_CONFIG.AUTH_RATE_LIMIT_MAX,
+    windowMs: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
     keyPrefix: 'auth',
   },
   '/v1/': {
-    maxRequests: 100,
-    windowMs: 60000, // 1 minute
+    maxRequests: LIMIT_CONFIG.DEFAULT_RATE_LIMIT_MAX,
+    windowMs: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
     keyPrefix: 'v1',
   },
 };
 
 // In-memory store for rate limits with max size to prevent unbounded growth
-const MAX_RATE_LIMIT_ENTRIES = 10000;
+const MAX_RATE_LIMIT_ENTRIES = LIMIT_CONFIG.MAX_RATE_LIMIT_ENTRIES;
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
 // Cleanup old entries periodically + evict oldest if over max size
@@ -81,7 +82,7 @@ const rateLimitCleanupTimer = setInterval(() => {
       rateLimitStore.delete(key);
     }
   }
-}, 60000); // Cleanup every minute
+}, TIMEOUT_CONFIG.RATE_LIMIT_CLEANUP_INTERVAL);
 rateLimitCleanupTimer.unref();
 
 /**
@@ -354,29 +355,29 @@ export function createRouteRateLimiter(options: RateLimitOptions) {
 export const rateLimiters = {
   /** Strict limiter for auth endpoints: 10 req/min */
   auth: createRouteRateLimiter({
-    maxRequests: 10,
-    windowMs: 60000,
+    maxRequests: LIMIT_CONFIG.AUTH_RATE_LIMIT_MAX,
+    windowMs: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
     keyPrefix: 'auth',
   }),
 
   /** Standard API limiter: 100 req/min */
   api: createRouteRateLimiter({
-    maxRequests: 100,
-    windowMs: 60000,
+    maxRequests: LIMIT_CONFIG.DEFAULT_RATE_LIMIT_MAX,
+    windowMs: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
     keyPrefix: 'api',
   }),
 
   /** Relaxed limiter for read-only endpoints: 200 req/min */
   readonly: createRouteRateLimiter({
-    maxRequests: 200,
-    windowMs: 60000,
+    maxRequests: LIMIT_CONFIG.READONLY_RATE_LIMIT_MAX,
+    windowMs: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
     keyPrefix: 'readonly',
   }),
 
   /** Very strict limiter for sensitive operations: 5 req/min */
   sensitive: createRouteRateLimiter({
-    maxRequests: 5,
-    windowMs: 60000,
+    maxRequests: LIMIT_CONFIG.SENSITIVE_RATE_LIMIT_MAX,
+    windowMs: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
     keyPrefix: 'sensitive',
   }),
 };
@@ -395,12 +396,12 @@ export function getRateLimitStats(keyId: string): {
   }
 
   const now = Date.now();
-  const windowStart = now - 60000; // Assume 1 minute window
+  const windowStart = now - TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW;
   const validRequests = entry.requests.filter((t) => t > windowStart);
 
   return {
     used: validRequests.length,
-    remaining: Math.max(0, 60 - validRequests.length), // Assume 60 req/min
+    remaining: Math.max(0, LIMIT_CONFIG.DEFAULT_RATE_LIMIT_MAX - validRequests.length),
     resetAt: entry.resetAt,
   };
 }

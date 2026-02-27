@@ -388,7 +388,7 @@ describe('AgentRegistry', () => {
     it('should register all built-in agents', async () => {
       await registry.registerBuiltInAgents();
 
-      expect(registry.getAll().length).toBe(6);
+      expect(registry.getAll().length).toBe(7);
     });
 
     it('should emit agents:registered event', async () => {
@@ -397,7 +397,7 @@ describe('AgentRegistry', () => {
 
       await registry.registerBuiltInAgents();
 
-      expect(handler).toHaveBeenCalledWith({ count: 6 });
+      expect(handler).toHaveBeenCalledWith({ count: 7 });
     });
   });
 
@@ -825,7 +825,7 @@ describe('Singleton Functions', () => {
       const registry = await initializeAgentRegistry();
 
       // Should have all 6 built-in agents
-      expect(registry.getAll().length).toBe(6);
+      expect(registry.getAll().length).toBe(7);
     });
   });
 
@@ -908,7 +908,7 @@ describe('Convenience Functions', () => {
 
       const agents = getAvailableAgents();
 
-      expect(agents.length).toBe(6);
+      expect(agents.length).toBe(7);
       expect(agents[0]).toHaveProperty('id');
       expect(agents[0]).toHaveProperty('name');
       expect(agents[0]).toHaveProperty('description');

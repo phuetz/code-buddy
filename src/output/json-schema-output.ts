@@ -13,7 +13,7 @@ import { logger } from '../utils/logger.js';
 // ============================================================================
 
 export interface JsonSchemaConfig {
-  schema: Record<string, any>;
+  schema: Record<string, unknown>;
   strict: boolean;
   extractFromMarkdown: boolean;
 }
@@ -28,7 +28,7 @@ export interface ValidationError {
 export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
-  data?: any;
+  data?: unknown;
 }
 
 // ============================================================================
@@ -56,7 +56,7 @@ export class JsonSchemaOutput {
       };
     }
 
-    let data: any;
+    let data: unknown;
     try {
       data = JSON.parse(jsonStr);
     } catch (e) {
@@ -132,19 +132,21 @@ export class JsonSchemaOutput {
    * Simple JSON Schema validator
    */
   private validateSchema(
-    data: any,
-    schema: Record<string, any>,
+    data: unknown,
+    schema: Record<string, unknown>,
     path: string
   ): ValidationError[] {
     const errors: ValidationError[] = [];
 
+    const schemaType = schema.type as string | undefined;
+
     // Type check
-    if (schema.type) {
-      if (!this.checkType(data, schema.type)) {
+    if (schemaType) {
+      if (!this.checkType(data, schemaType)) {
         errors.push({
           path: path || '$',
-          message: `Expected type "${schema.type}"`,
-          expected: schema.type,
+          message: `Expected type "${schemaType}"`,
+          expected: schemaType,
           actual: Array.isArray(data) ? 'array' : typeof data,
         });
         return errors; // Can't validate further if type is wrong
@@ -153,21 +155,23 @@ export class JsonSchemaOutput {
 
     // Enum check
     if (schema.enum) {
-      if (!this.checkEnum(data, schema.enum)) {
+      const enumValues = schema.enum as unknown[];
+      if (!this.checkEnum(data, enumValues)) {
         errors.push({
           path: path || '$',
-          message: `Value must be one of: ${schema.enum.join(', ')}`,
-          expected: schema.enum.join(' | '),
+          message: `Value must be one of: ${enumValues.join(', ')}`,
+          expected: enumValues.join(' | '),
           actual: String(data),
         });
       }
     }
 
     // Object-specific validations
-    if (schema.type === 'object' && typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    if (schemaType === 'object' && typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      const obj = data as Record<string, unknown>;
       // Required fields
       if (schema.required) {
-        const missing = this.checkRequired(data, schema.required);
+        const missing = this.checkRequired(obj, schema.required as string[]);
         for (const field of missing) {
           errors.push({
             path: path ? `${path}.${field}` : field,
@@ -178,24 +182,24 @@ export class JsonSchemaOutput {
 
       // Properties
       if (schema.properties) {
-        for (const [key, propSchema] of Object.entries(schema.properties)) {
-          if (data[key] !== undefined) {
+        for (const [key, propSchema] of Object.entries(schema.properties as Record<string, unknown>)) {
+          if (obj[key] !== undefined) {
             const propPath = path ? `${path}.${key}` : key;
-            errors.push(...this.validateSchema(data[key], propSchema as Record<string, any>, propPath));
+            errors.push(...this.validateSchema(obj[key], propSchema as Record<string, unknown>, propPath));
           }
         }
       }
     }
 
     // Array-specific validations
-    if (schema.type === 'array' && Array.isArray(data)) {
+    if (schemaType === 'array' && Array.isArray(data)) {
       if (schema.items) {
         for (let i = 0; i < data.length; i++) {
           const itemPath = `${path || '$'}[${i}]`;
-          errors.push(...this.validateSchema(data[i], schema.items, itemPath));
+          errors.push(...this.validateSchema(data[i], schema.items as Record<string, unknown>, itemPath));
         }
       }
-      if (schema.minItems !== undefined && data.length < schema.minItems) {
+      if (schema.minItems !== undefined && data.length < (schema.minItems as number)) {
         errors.push({
           path: path || '$',
           message: `Array must have at least ${schema.minItems} items`,
@@ -203,7 +207,7 @@ export class JsonSchemaOutput {
           actual: `${data.length} items`,
         });
       }
-      if (schema.maxItems !== undefined && data.length > schema.maxItems) {
+      if (schema.maxItems !== undefined && data.length > (schema.maxItems as number)) {
         errors.push({
           path: path || '$',
           message: `Array must have at most ${schema.maxItems} items`,
@@ -214,21 +218,21 @@ export class JsonSchemaOutput {
     }
 
     // String-specific validations
-    if (schema.type === 'string' && typeof data === 'string') {
-      if (schema.minLength !== undefined && data.length < schema.minLength) {
+    if (schemaType === 'string' && typeof data === 'string') {
+      if (schema.minLength !== undefined && data.length < (schema.minLength as number)) {
         errors.push({
           path: path || '$',
           message: `String must be at least ${schema.minLength} characters`,
         });
       }
-      if (schema.maxLength !== undefined && data.length > schema.maxLength) {
+      if (schema.maxLength !== undefined && data.length > (schema.maxLength as number)) {
         errors.push({
           path: path || '$',
           message: `String must be at most ${schema.maxLength} characters`,
         });
       }
       if (schema.pattern) {
-        if (!this.checkPattern(data, schema.pattern)) {
+        if (!this.checkPattern(data, schema.pattern as string)) {
           errors.push({
             path: path || '$',
             message: `String does not match pattern: ${schema.pattern}`,
@@ -238,8 +242,8 @@ export class JsonSchemaOutput {
     }
 
     // Number-specific validations
-    if (schema.type === 'number' && typeof data === 'number') {
-      if (schema.minimum !== undefined && data < schema.minimum) {
+    if (schemaType === 'number' && typeof data === 'number') {
+      if (schema.minimum !== undefined && data < (schema.minimum as number)) {
         errors.push({
           path: path || '$',
           message: `Number must be >= ${schema.minimum}`,
@@ -247,7 +251,7 @@ export class JsonSchemaOutput {
           actual: String(data),
         });
       }
-      if (schema.maximum !== undefined && data > schema.maximum) {
+      if (schema.maximum !== undefined && data > (schema.maximum as number)) {
         errors.push({
           path: path || '$',
           message: `Number must be <= ${schema.maximum}`,
@@ -263,7 +267,7 @@ export class JsonSchemaOutput {
   /**
    * Check if value matches expected type
    */
-  private checkType(value: any, type: string): boolean {
+  private checkType(value: unknown, type: string): boolean {
     switch (type) {
       case 'string':
         return typeof value === 'string';
@@ -286,14 +290,14 @@ export class JsonSchemaOutput {
   /**
    * Check enum values
    */
-  private checkEnum(value: any, enumValues: any[]): boolean {
+  private checkEnum(value: unknown, enumValues: unknown[]): boolean {
     return enumValues.includes(value);
   }
 
   /**
    * Check required fields
    */
-  private checkRequired(obj: Record<string, any>, required: string[]): string[] {
+  private checkRequired(obj: Record<string, unknown>, required: string[]): string[] {
     return required.filter(field => obj[field] === undefined);
   }
 
@@ -311,14 +315,14 @@ export class JsonSchemaOutput {
   /**
    * Format valid output as pretty JSON
    */
-  formatValidOutput(data: any): string {
+  formatValidOutput(data: unknown): string {
     return JSON.stringify(data, null, 2);
   }
 
   /**
    * Get the schema
    */
-  getSchema(): Record<string, any> {
+  getSchema(): Record<string, unknown> {
     return { ...this.config.schema };
   }
 }

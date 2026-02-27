@@ -648,8 +648,8 @@ describe('Security Sandbox Module', () => {
       const spawnCall = mockSpawn.mock.calls[0];
       const spawnEnv = spawnCall[2]?.env;
 
-      // Should have PATH from process.env
-      expect(spawnEnv?.PATH).toBeDefined();
+      // Should have PATH from process.env (or Path on Windows)
+      expect(spawnEnv?.PATH || spawnEnv?.Path).toBeDefined();
     });
 
     it('should block commands that try to export SSH keys', () => {

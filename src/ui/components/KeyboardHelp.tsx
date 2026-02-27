@@ -53,6 +53,7 @@ const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   // Session
   { keys: 'exit', description: 'Quit application', category: 'Session' },
   { keys: 'Esc', description: 'Cancel current operation', category: 'Session' },
+  { keys: 'Esc+Esc', description: 'Undo last file changes (checkpoint rewind)', category: 'Session' },
   { keys: '/clear', description: 'Clear chat history', category: 'Session' },
 ];
 

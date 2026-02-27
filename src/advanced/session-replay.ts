@@ -6,6 +6,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { EventEmitter } from 'events';
 import crypto from 'crypto';
+import { logger } from '../utils/logger.js';
 
 export interface ReplayEvent {
   id: string;
@@ -90,7 +91,7 @@ export class SessionReplayManager extends EventEmitter {
         try {
           const session = await fs.readJson(path.join(this.storageDir, file));
           sessions.push({ id: session.id, name: session.name, date: new Date(session.startTime) });
-        } catch { /* skip */ }
+        } catch (e) { logger.debug('Failed to parse session replay file', { error: String(e), file }); }
       }
     }
     return sessions.sort((a, b) => b.date.getTime() - a.date.getTime());

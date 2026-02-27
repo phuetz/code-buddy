@@ -136,12 +136,16 @@ export function getCustomCommand(name: string): CustomCommand | undefined {
  */
 export function processCommandPrompt(command: CustomCommand, args: string[]): string {
   let prompt = command.prompt;
+  const argsString = args.join(' ');
 
-  // Replace $ARGUMENTS[n] placeholders
+  // Replace $ARGUMENTS[n] placeholders for indexed access (must run before bare $ARGUMENTS)
   prompt = prompt.replace(/\$ARGUMENTS\[(\d+)\]/g, (_, index) => {
     const idx = parseInt(index, 10);
     return args[idx] || '';
   });
+
+  // Replace $ARGUMENTS with full argument string (Claude Code style)
+  prompt = prompt.replace(/\$ARGUMENTS/g, argsString);
 
   // Replace {{0}}, {{1}}, etc. placeholders
   prompt = prompt.replace(/\{\{(\d+)\}\}/g, (_, index) => {
@@ -150,10 +154,13 @@ export function processCommandPrompt(command: CustomCommand, args: string[]): st
   });
 
   // Replace $ARGS with all arguments joined
-  prompt = prompt.replace(/\$ARGS/g, args.join(' '));
+  prompt = prompt.replace(/\$ARGS/g, argsString);
+
+  // Replace $@ with all arguments
+  prompt = prompt.replace(/\$@/g, argsString);
 
   // Replace {{args}} with all arguments
-  prompt = prompt.replace(/\{\{args\}\}/g, args.join(' '));
+  prompt = prompt.replace(/\{\{args\}\}/g, argsString);
 
   return prompt.trim();
 }

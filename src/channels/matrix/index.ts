@@ -106,6 +106,38 @@ export interface MatrixRoomEvent {
   state_key?: string;
 }
 
+/**
+ * Minimal typed interface for the dynamically imported matrix-js-sdk module.
+ * Only the members actually used in this adapter are declared.
+ */
+interface MatrixSdkModule {
+  createClient: (opts: Record<string, unknown>) => MatrixClient;
+  MemoryStore?: new () => unknown;
+}
+
+/**
+ * Minimal typed interface for a matrix-js-sdk MatrixClient instance.
+ */
+interface MatrixClient {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matrix-js-sdk event handlers have varied signatures
+  on: (event: string, handler: (...args: any[]) => void) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matrix-js-sdk event handlers have varied signatures
+  removeListener: (event: string, handler: (...args: any[]) => void) => void;
+  startClient: (opts?: Record<string, unknown>) => Promise<void>;
+  stopClient: () => void;
+  getUserId: () => string;
+  joinRoom: (roomIdOrAlias: string) => Promise<{ roomId: string }>;
+  leave: (roomId: string) => Promise<void>;
+  getJoinedRooms: () => Promise<{ joined_rooms: string[] }>;
+  getProfileInfo: (userId: string) => Promise<Record<string, unknown>>;
+  sendMessage: (roomId: string, content: unknown) => Promise<{ event_id: string }>;
+  sendEvent: (roomId: string, type: string, content: unknown) => Promise<{ event_id: string }>;
+  uploadContent: (data: unknown, opts?: unknown) => Promise<{ content_uri: string }>;
+  sendTyping: (roomId: string, typing: boolean, timeoutMs: number) => Promise<void>;
+  sendReadReceipt: (event: { roomId: string; getId: () => string }) => Promise<void>;
+  redactEvent: (roomId: string, eventId: string, txnId?: string, opts?: { reason?: string }) => Promise<void>;
+}
+
 // ============================================================================
 // Channel Implementation
 // ============================================================================
@@ -155,11 +187,10 @@ export class MatrixChannel extends BaseChannel {
    * Connect to Matrix using matrix-js-sdk
    */
   async connect(): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let sdk: any;
+    let sdk: MatrixSdkModule;
     try {
       // @ts-expect-error -- optional dependency, loaded dynamically
-      sdk = await import('matrix-js-sdk');
+      sdk = await import('matrix-js-sdk') as unknown as MatrixSdkModule;
     } catch {
       throw new Error(
         'Matrix channel requires matrix-js-sdk. Install it with: npm install matrix-js-sdk'
@@ -167,8 +198,6 @@ export class MatrixChannel extends BaseChannel {
     }
 
     try {
-      const createClient = sdk.createClient;
-
       const clientOpts: Record<string, unknown> = {
         baseUrl: this.matrixConfig.homeserverUrl,
         accessToken: this.matrixConfig.accessToken,
@@ -179,16 +208,15 @@ export class MatrixChannel extends BaseChannel {
       // Use a local store if path is configured
       if (this.matrixConfig.storePath) {
         try {
-          const MemoryStore = (sdk as unknown as { MemoryStore?: new () => unknown }).MemoryStore;
-          if (MemoryStore) {
-            clientOpts.store = new MemoryStore();
+          if (sdk.MemoryStore) {
+            clientOpts.store = new sdk.MemoryStore();
           }
         } catch {
           // Fallback: no persistent store
         }
       }
 
-      const client = createClient(clientOpts as Parameters<typeof createClient>[0]);
+      const client = sdk.createClient(clientOpts);
       this.client = client;
 
       // Register event handlers before starting sync
@@ -272,8 +300,7 @@ export class MatrixChannel extends BaseChannel {
 
     if (this.client) {
       try {
-        const client = this.client as { stopClient: () => void };
-        client.stopClient();
+        (this.client as MatrixClient).stopClient();
       } catch {
         // Ignore errors during disconnect
       }
@@ -295,10 +322,7 @@ export class MatrixChannel extends BaseChannel {
       return { success: false, error: 'Matrix not connected', timestamp: new Date() };
     }
 
-    const client = this.client as {
-      sendMessage: (roomId: string, content: unknown) => Promise<{ event_id: string }>;
-      sendEvent: (roomId: string, type: string, content: unknown) => Promise<{ event_id: string }>;
-    };
+    const client = this.client as MatrixClient;
 
     try {
       const roomId = message.channelId;
@@ -371,10 +395,7 @@ export class MatrixChannel extends BaseChannel {
     attachment: MessageAttachment,
     caption?: string
   ): Promise<DeliveryResult> {
-    const client = this.client as {
-      uploadContent: (data: unknown, opts?: unknown) => Promise<{ content_uri: string }>;
-      sendMessage: (roomId: string, content: unknown) => Promise<{ event_id: string }>;
-    };
+    const client = this.client as MatrixClient;
 
     try {
       let mxcUrl: string | undefined;
@@ -434,13 +455,8 @@ export class MatrixChannel extends BaseChannel {
   /**
    * Register event handlers on the Matrix client
    */
-  private registerEventHandlers(client: unknown): void {
-     
-    const c = client as {
-      on: (event: string, handler: (...args: any[]) => void) => void;
-      getUserId: () => string;
-      joinRoom: (roomId: string) => Promise<void>;
-    };
+  private registerEventHandlers(client: MatrixClient): void {
+    const c = client;
 
     // Room timeline events (messages)
     c.on('Room.timeline', (event: unknown, room: unknown, toStartOfTimeline: unknown) => {
@@ -469,8 +485,7 @@ export class MatrixChannel extends BaseChannel {
         this.reconnectionManager.scheduleReconnect(async () => {
           if (this.client) {
             try {
-              const cli = this.client as { stopClient: () => void };
-              cli.stopClient();
+              (this.client as MatrixClient).stopClient();
             } catch {
               // Ignore
             }
@@ -564,7 +579,7 @@ export class MatrixChannel extends BaseChannel {
    * Handle membership changes (auto-join on invite)
    */
   private async handleMembershipChange(
-    client: { getUserId: () => string; joinRoom: (roomId: string) => Promise<void> },
+    client: MatrixClient,
     event: MatrixRoomEvent,
     member: unknown
   ): Promise<void> {
@@ -611,7 +626,7 @@ export class MatrixChannel extends BaseChannel {
    */
   async joinRoom(roomIdOrAlias: string): Promise<string> {
     if (!this.client) throw new Error('Matrix not connected');
-    const client = this.client as { joinRoom: (id: string) => Promise<{ roomId: string }> };
+    const client = this.client as MatrixClient;
     const result = await client.joinRoom(roomIdOrAlias);
     return result.roomId;
   }
@@ -621,7 +636,7 @@ export class MatrixChannel extends BaseChannel {
    */
   async leaveRoom(roomId: string): Promise<void> {
     if (!this.client) throw new Error('Matrix not connected');
-    const client = this.client as { leave: (roomId: string) => Promise<void> };
+    const client = this.client as MatrixClient;
     await client.leave(roomId);
     this.roomCache.delete(roomId);
   }
@@ -631,7 +646,7 @@ export class MatrixChannel extends BaseChannel {
    */
   async getJoinedRooms(): Promise<string[]> {
     if (!this.client) return [];
-    const client = this.client as { getJoinedRooms: () => Promise<{ joined_rooms: string[] }> };
+    const client = this.client as MatrixClient;
     try {
       const result = await client.getJoinedRooms();
       return result.joined_rooms;
@@ -645,9 +660,7 @@ export class MatrixChannel extends BaseChannel {
    */
   async sendTyping(roomId: string, typing = true, timeoutMs = 10000): Promise<void> {
     if (!this.client) return;
-    const client = this.client as {
-      sendTyping: (roomId: string, typing: boolean, timeoutMs: number) => Promise<void>;
-    };
+    const client = this.client as MatrixClient;
     try {
       await client.sendTyping(roomId, typing, timeoutMs);
     } catch {
@@ -660,9 +673,7 @@ export class MatrixChannel extends BaseChannel {
    */
   async sendReadReceipt(roomId: string, eventId: string): Promise<void> {
     if (!this.client) return;
-    const client = this.client as {
-      sendReadReceipt: (event: { roomId: string; getId: () => string }) => Promise<void>;
-    };
+    const client = this.client as MatrixClient;
     try {
       await client.sendReadReceipt({ roomId, getId: () => eventId });
     } catch {
@@ -675,9 +686,7 @@ export class MatrixChannel extends BaseChannel {
    */
   async react(roomId: string, eventId: string, emoji: string): Promise<void> {
     if (!this.client) return;
-    const client = this.client as {
-      sendEvent: (roomId: string, type: string, content: unknown) => Promise<void>;
-    };
+    const client = this.client as MatrixClient;
     try {
       await client.sendEvent(roomId, 'm.reaction', {
         'm.relates_to': {
@@ -698,9 +707,7 @@ export class MatrixChannel extends BaseChannel {
    */
   async redactMessage(roomId: string, eventId: string, reason?: string): Promise<void> {
     if (!this.client) throw new Error('Matrix not connected');
-    const client = this.client as {
-      redactEvent: (roomId: string, eventId: string, txnId?: string, opts?: { reason?: string }) => Promise<void>;
-    };
+    const client = this.client as MatrixClient;
     await client.redactEvent(roomId, eventId, undefined, reason ? { reason } : undefined);
   }
 

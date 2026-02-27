@@ -21,6 +21,10 @@ import {
   type UIElement,
   type Snapshot,
   type RecordingInfo,
+  type ElementRole,
+  type ModifierKey,
+  type KeyCode,
+  type PermissionType,
 } from '../desktop-automation/index.js';
 
 // ============================================================================
@@ -309,7 +313,7 @@ export class ComputerControlTool {
 
   private async findElements(input: ComputerControlInput): Promise<ToolResult> {
     const elements = this.snapshotManager.findElements({
-      role: input.role as any,
+      role: input.role as ElementRole | undefined,
       name: input.name,
       interactive: input.interactiveOnly,
     });
@@ -461,7 +465,7 @@ export class ComputerControlTool {
     }
 
     await this.automation.keyPress(input.key, {
-      modifiers: input.modifiers as any,
+      modifiers: input.modifiers as ModifierKey[] | undefined,
     });
 
     return {
@@ -476,8 +480,8 @@ export class ComputerControlTool {
     }
 
     // Build keys array: modifiers first, then the main key
-    const keys: string[] = [...(input.modifiers || []), input.key];
-    await this.automation.hotkey(...(keys as any));
+    const keys: KeyCode[] = [...(input.modifiers || []), input.key];
+    await this.automation.hotkey(...keys);
 
     return {
       success: true,
@@ -750,8 +754,8 @@ export class ComputerControlTool {
       return { success: false, error: 'Permission type is required' };
     }
 
-    const result = await this.permissions.check(input.permission as any);
-    const info = this.permissions.getInstructions(input.permission as any);
+    const result = await this.permissions.check(input.permission as PermissionType);
+    const info = this.permissions.getInstructions(input.permission as PermissionType);
 
     return {
       success: true,

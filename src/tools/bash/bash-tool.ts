@@ -31,6 +31,7 @@ import { validateCommand, getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
 import { parseBashCommand } from '../../security/bash-parser.js';
+import { SafeBinariesChecker } from '../../security/safe-binaries.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { auditLogger } from '../../security/audit-logger.js';
 
@@ -158,6 +159,7 @@ export class BashTool implements Disposable {
       };
 
       const proc = spawn('bash', ['-c', command], spawnOptions);
+      this.runningProcesses.add(proc);
 
       // Store process group ID for cleanup
       const pgid = proc.pid;
@@ -212,6 +214,7 @@ export class BashTool implements Disposable {
       });
 
       proc.on('close', (exitCode: number | null) => {
+        this.runningProcesses.delete(proc);
         clearTimeout(timer);
         if (gracefulTerminationTimer) {
           clearTimeout(gracefulTerminationTimer);
@@ -232,6 +235,7 @@ export class BashTool implements Disposable {
       });
 
       proc.on('error', (error: Error) => {
+        this.runningProcesses.delete(proc);
         clearTimeout(timer);
         if (gracefulTerminationTimer) {
           clearTimeout(gracefulTerminationTimer);
@@ -299,9 +303,34 @@ export class BashTool implements Disposable {
         };
       }
 
+      // Auto-sandbox routing: route dangerous commands to Docker sandbox
+      try {
+        const { getAutoSandboxRouter } = await import('../../sandbox/auto-sandbox.js');
+        const router = getAutoSandboxRouter();
+        const routing = await router.route(command);
+        if (routing.mode === 'sandbox') {
+          try {
+            const { DockerSandbox } = await import('../../sandbox/docker-sandbox.js');
+            const sandbox = new DockerSandbox();
+            const sbResult = await sandbox.execute(command, { timeout });
+            return {
+              success: sbResult.exitCode === 0,
+              output: sbResult.output || undefined,
+              error: sbResult.exitCode !== 0 ? (sbResult.error || `Sandbox exit code ${sbResult.exitCode}`) : undefined,
+            };
+          } catch {
+            // Docker sandbox unavailable, fall through to direct execution
+          }
+        }
+      } catch { /* auto-sandbox module unavailable, continue normally */ }
+
+      // Skip confirmation for safe read-only commands (ls, cat, grep, etc.)
+      const safeBinCheck = SafeBinariesChecker.getInstance();
+      const isSafeCommand = safeBinCheck.isSafe(command);
+
       // Check if user has already accepted bash commands for this session
       const sessionFlags = this.confirmationService.getSessionFlags();
-      if (!sessionFlags.bashCommands && !sessionFlags.allOperations) {
+      if (!isSafeCommand && !sessionFlags.bashCommands && !sessionFlags.allOperations) {
         // Request confirmation showing the command
         const confirmationResult = await this.confirmationService.requestConfirmation(
           {

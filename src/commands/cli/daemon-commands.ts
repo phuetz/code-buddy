@@ -117,6 +117,24 @@ export function registerDaemonCommands(program: Command): void {
         console.error('Daemon server failed:', error instanceof Error ? error.message : error);
       }
 
+      // Wire CronAgentBridge so cron jobs execute through the AI agent
+      try {
+        const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+        if (apiKey) {
+          const { getCronAgentBridge } = await import('../../daemon/cron-agent-bridge.js');
+          const { getCronScheduler } = await import('../../scheduler/cron-scheduler.js');
+          const bridge = getCronAgentBridge({
+            apiKey,
+            baseURL: process.env.GROK_BASE_URL,
+            model: process.env.GROK_MODEL || 'grok-3-latest',
+            maxToolRounds: 20,
+            jobTimeoutMs: 300000,
+          });
+          const scheduler = getCronScheduler();
+          scheduler.setTaskExecutor(bridge.createTaskExecutor());
+        }
+      } catch { /* cron-agent bridge optional */ }
+
       process.on('SIGTERM', async () => {
         await manager.stop().catch(() => {});
         process.exit(0);

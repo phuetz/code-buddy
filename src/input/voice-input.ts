@@ -73,6 +73,28 @@ export class VoiceInput extends EventEmitter {
       throw new Error("Already recording");
     }
 
+    // Initialize wake-word detection if Picovoice key is available
+    if (process.env.PICOVOICE_ACCESS_KEY) {
+      try {
+        const { WakeWordDetector } = await import('../voice/wake-word.js');
+        const wwd = new WakeWordDetector({ accessKey: process.env.PICOVOICE_ACCESS_KEY });
+        this.emit('wake-word:ready');
+        wwd.on('detected', () => this.emit('wake-word:detected'));
+      } catch { /* wake-word module optional */ }
+    }
+
+    // Initialize voice activity detection for auto-stop on silence
+    try {
+      const { VoiceActivityDetector } = await import('../voice/voice-activity.js');
+      const vad = new VoiceActivityDetector();
+      vad.on('silence', () => {
+        if (this.isRecording) {
+          this.emit('vad:silence');
+          this.stopRecording();
+        }
+      });
+    } catch { /* VAD module optional */ }
+
     const outputFile = path.join(this.tempDir, `recording-${Date.now()}.wav`);
     this.isRecording = true;
 

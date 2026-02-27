@@ -174,7 +174,11 @@ export class WideResearchOrchestrator extends EventEmitter {
     providerConfig?: Record<string, unknown>
   ): Promise<string[]> {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
-    const client = new CodeBuddyClient(apiKey, providerConfig as any);
+    const client = new CodeBuddyClient(
+      apiKey,
+      providerConfig?.model as string | undefined,
+      providerConfig?.baseURL as string | undefined
+    );
 
     const response = await client.chat([
       {
@@ -221,14 +225,12 @@ export class WideResearchOrchestrator extends EventEmitter {
   ): Promise<string> {
     const { CodeBuddyAgent } = await import('./codebuddy-agent.js');
 
-    const agent = new CodeBuddyAgent(apiKey, {
-      ...(providerConfig as any),
-      maxToolRounds: this.options.maxRoundsPerWorker,
-      systemPromptExtra: [
-        `You are a focused research agent. Your only task is to research the following subtopic as part of a larger study on "${parentTopic}".`,
-        this.options.context,
-      ].filter(Boolean).join('\n\n'),
-    });
+    const agent = new CodeBuddyAgent(
+      apiKey,
+      providerConfig?.baseURL as string | undefined,
+      providerConfig?.model as string | undefined,
+      this.options.maxRoundsPerWorker
+    );
 
     let output = '';
 
@@ -261,7 +263,11 @@ export class WideResearchOrchestrator extends EventEmitter {
     providerConfig?: Record<string, unknown>
   ): Promise<string> {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
-    const client = new CodeBuddyClient(apiKey, providerConfig as any);
+    const client = new CodeBuddyClient(
+      apiKey,
+      providerConfig?.model as string | undefined,
+      providerConfig?.baseURL as string | undefined
+    );
 
     const successful = results.filter(r => r.success);
     if (successful.length === 0) {

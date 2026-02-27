@@ -43,6 +43,10 @@ export {
 } from "./kubernetes-tool.js";
 
 export { RunScriptTool } from "./run-script-tool.js";
+export { LsTool } from "./ls-tool.js";
+
+// TOOLS.md auto-generator
+export { generateToolsMd } from './tools-md-generator.js';
 
 // Export types used by tools
 export type { ToolResult } from '../types/index.js';

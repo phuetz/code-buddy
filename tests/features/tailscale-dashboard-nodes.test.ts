@@ -17,6 +17,41 @@ jest.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
+// Mock device transports to avoid real SSH/ADB connections
+const mockTransport = {
+  connect: jest.fn().mockResolvedValue(undefined),
+  disconnect: jest.fn().mockResolvedValue(undefined),
+  isConnected: jest.fn().mockReturnValue(true),
+  getCapabilities: jest.fn().mockResolvedValue(['system_run']),
+  execute: jest.fn().mockResolvedValue({ stdout: 'stub: executed', stderr: '', exitCode: 0 }),
+};
+
+jest.mock('../../src/nodes/transports/ssh-transport.js', () => ({
+  SSHTransport: jest.fn().mockImplementation(() => ({ ...mockTransport })),
+}));
+jest.mock('../../src/nodes/transports/adb-transport.js', () => ({
+  ADBTransport: jest.fn().mockImplementation(() => ({ ...mockTransport })),
+}));
+jest.mock('../../src/nodes/transports/local-transport.js', () => ({
+  LocalTransport: jest.fn().mockImplementation(() => ({ ...mockTransport })),
+}));
+
+// Mock fs to prevent device-node from persisting/loading to/from disk
+jest.mock('fs', () => {
+  const actual = jest.requireActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    existsSync: jest.fn((p: string) => {
+      if (typeof p === 'string' && p.includes('devices.json')) return false;
+      return actual.existsSync(p);
+    }),
+    writeFileSync: jest.fn((p: string, ...args: unknown[]) => {
+      if (typeof p === 'string' && p.includes('devices.json')) return;
+      return (actual.writeFileSync as Function)(p, ...args);
+    }),
+  };
+});
+
 // ============================================================================
 // Feature 1: Tailscale Integration
 // ============================================================================
@@ -260,25 +295,31 @@ describe('DeviceNodeManager', () => {
     DeviceNodeManager.resetInstance();
   });
 
+  // Helper: pair device and set capabilities directly (bypasses transport auto-detect)
+  async function pairWithCaps(mgr: InstanceType<typeof DeviceNodeManager>, id: string, name: string, transport: 'ssh' | 'adb' | 'local', caps: string[]) {
+    const device = await mgr.pairDevice(id, name, transport);
+    device.capabilities = caps as any;
+    return device;
+  }
+
   it('should be a singleton', () => {
     const a = DeviceNodeManager.getInstance();
     const b = DeviceNodeManager.getInstance();
     expect(a).toBe(b);
   });
 
-  it('should pair a device', () => {
+  it('should pair a device', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    const device = mgr.pairDevice('mac1', 'My Mac', 'macos', ['camera', 'system_run']);
+    const device = await pairWithCaps(mgr, 'mac1', 'My Mac', 'ssh', ['camera', 'system_run']);
     expect(device.id).toBe('mac1');
     expect(device.name).toBe('My Mac');
-    expect(device.type).toBe('macos');
     expect(device.paired).toBe(true);
     expect(device.capabilities).toContain('camera');
   });
 
-  it('should unpair a device', () => {
+  it('should unpair a device', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('mac1', 'My Mac', 'macos', []);
+    await mgr.pairDevice('mac1', 'My Mac', 'ssh');
     expect(mgr.unpairDevice('mac1')).toBe(true);
     expect(mgr.getDevice('mac1')).toBeUndefined();
   });
@@ -288,100 +329,100 @@ describe('DeviceNodeManager', () => {
     expect(mgr.unpairDevice('nope')).toBe(false);
   });
 
-  it('should get device by id', () => {
+  it('should get device by id', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('iphone1', 'iPhone', 'ios', ['camera', 'location']);
+    await mgr.pairDevice('iphone1', 'iPhone', 'adb');
     const device = mgr.getDevice('iphone1');
     expect(device).toBeDefined();
-    expect(device!.type).toBe('ios');
+    expect(device!.type).toBe('android');
   });
 
-  it('should list all devices', () => {
+  it('should list all devices', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('d1', 'Device 1', 'macos', []);
-    mgr.pairDevice('d2', 'Device 2', 'ios', []);
+    await mgr.pairDevice('d1', 'Device 1', 'ssh');
+    await mgr.pairDevice('d2', 'Device 2', 'adb');
     expect(mgr.listDevices()).toHaveLength(2);
   });
 
-  it('should list only paired devices', () => {
+  it('should list only paired devices', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('d1', 'Device 1', 'macos', []);
+    await mgr.pairDevice('d1', 'Device 1', 'ssh');
     expect(mgr.listPairedDevices()).toHaveLength(1);
   });
 
-  it('should check if device is paired', () => {
+  it('should check if device is paired', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('d1', 'Device 1', 'macos', []);
+    await mgr.pairDevice('d1', 'Device 1', 'ssh');
     expect(mgr.isDevicePaired('d1')).toBe(true);
     expect(mgr.isDevicePaired('d99')).toBe(false);
   });
 
-  it('should take camera snap', () => {
+  it('should take camera snap', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('cam1', 'Camera Phone', 'ios', ['camera']);
-    const path = mgr.cameraSnap('cam1');
-    expect(path).not.toBeNull();
-    expect(path).toContain('snap-cam1-');
-    expect(path).toContain('.jpg');
+    await pairWithCaps(mgr, 'cam1', 'Camera Phone', 'adb', ['camera']);
+    const snapPath = await mgr.cameraSnap('cam1');
+    expect(snapPath).not.toBeNull();
+    expect(snapPath).toContain('snap-cam1-');
+    expect(snapPath).toContain('.jpg');
   });
 
-  it('should return null for camera snap without capability', () => {
+  it('should return null for camera snap without capability', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('nocam', 'No Camera', 'android', ['location']);
-    expect(mgr.cameraSnap('nocam')).toBeNull();
+    await pairWithCaps(mgr, 'nocam', 'No Camera', 'adb', ['location']);
+    expect(await mgr.cameraSnap('nocam')).toBeNull();
   });
 
-  it('should screen record', () => {
+  it('should screen record', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('sr1', 'Screen Recorder', 'macos', ['screen_record']);
-    const path = mgr.screenRecord('sr1', 30);
-    expect(path).not.toBeNull();
-    expect(path).toContain('.mp4');
+    await pairWithCaps(mgr, 'sr1', 'Screen Recorder', 'ssh', ['screen_record']);
+    const recPath = await mgr.screenRecord('sr1', 30);
+    expect(recPath).not.toBeNull();
+    expect(recPath).toContain('.mp4');
   });
 
-  it('should return null for screen record without capability', () => {
+  it('should return null for screen record without capability', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('nosr', 'No Screen', 'ios', ['camera']);
-    expect(mgr.screenRecord('nosr')).toBeNull();
+    await pairWithCaps(mgr, 'nosr', 'No Screen', 'adb', ['camera']);
+    expect(await mgr.screenRecord('nosr')).toBeNull();
   });
 
-  it('should get location', () => {
+  it('should get location', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('loc1', 'Location Device', 'android', ['location']);
-    const coords = mgr.getLocation('loc1');
-    expect(coords).toEqual({ lat: 0, lon: 0 });
+    await pairWithCaps(mgr, 'loc1', 'Location Device', 'adb', ['location']);
+    const coords = await mgr.getLocation('loc1');
+    expect(coords).not.toBeNull();
   });
 
-  it('should return null for location without capability', () => {
+  it('should return null for location without capability', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('noloc', 'No Location', 'macos', ['camera']);
-    expect(mgr.getLocation('noloc')).toBeNull();
+    await pairWithCaps(mgr, 'noloc', 'No Location', 'ssh', ['camera']);
+    expect(await mgr.getLocation('noloc')).toBeNull();
   });
 
-  it('should send notification', () => {
+  it('should send notification', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('notif1', 'Notifier', 'ios', ['notifications']);
+    await pairWithCaps(mgr, 'notif1', 'Notifier', 'adb', ['notifications']);
     expect(mgr.sendNotification('notif1', 'Hello', 'World')).toBe(true);
   });
 
-  it('should return false for notification without capability', () => {
+  it('should return false for notification without capability', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('nonotif', 'No Notif', 'android', ['camera']);
+    await pairWithCaps(mgr, 'nonotif', 'No Notif', 'adb', ['camera']);
     expect(mgr.sendNotification('nonotif', 'Hello', 'World')).toBe(false);
   });
 
-  it('should run system command on macOS', () => {
+  it('should run system command', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('mac1', 'Mac', 'macos', ['system_run']);
-    const result = mgr.systemRun('mac1', 'ls -la');
-    expect(result).toContain('stub: executed');
-    expect(result).toContain('ls -la');
+    await pairWithCaps(mgr, 'mac1', 'Mac', 'ssh', ['system_run']);
+    const result = await mgr.systemRun('mac1', 'ls -la');
+    expect(result).not.toBeNull();
   });
 
-  it('should reject system run on non-macOS', () => {
+  it('should reject system run without capability', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('ios1', 'iPhone', 'ios', ['system_run']);
-    expect(mgr.systemRun('ios1', 'ls')).toBeNull();
+    await pairWithCaps(mgr, 'nocap1', 'No Cap', 'adb', ['camera']);
+    const result = await mgr.systemRun('nocap1', 'ls');
+    expect(result).toBeNull();
   });
 
   it('should generate 6-digit pairing code', () => {
@@ -390,11 +431,10 @@ describe('DeviceNodeManager', () => {
     expect(code).toMatch(/^\d{6}$/);
   });
 
-  it('should update last seen', () => {
+  it('should update last seen', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    mgr.pairDevice('d1', 'Device', 'macos', []);
+    await mgr.pairDevice('d1', 'Device', 'local');
     const before = mgr.getDevice('d1')!.lastSeen;
-    // Small delay to ensure timestamp changes
     const result = mgr.updateLastSeen('d1');
     expect(result).toBe(true);
     expect(mgr.getDevice('d1')!.lastSeen).toBeGreaterThanOrEqual(before);

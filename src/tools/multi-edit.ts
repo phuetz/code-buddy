@@ -1,298 +1,184 @@
-import { ToolResult } from "../types/index.js";
-import { ConfirmationService } from "../utils/confirmation-service.js";
-import { getCheckpointManager } from "../checkpoints/checkpoint-manager.js";
-import { PathValidator } from "../utils/path-validator.js";
-import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
+/**
+ * MultiEdit Tool -- Apply multiple edits to a single file atomically.
+ *
+ * Like Claude Code's MultiEdit: takes a file path and an array of
+ * {old_string, new_string} pairs, applies them all in sequence.
+ * If any edit fails to find its old_string, the entire operation is
+ * rolled back (atomic).
+ */
 
-export interface EditOperation {
-  file_path: string;
-  old_str: string;
-  new_str: string;
-  replace_all?: boolean;
+import * as path from 'path';
+import { ToolResult } from '../types/index.js';
+import { ConfirmationService } from '../utils/confirmation-service.js';
+import { getCheckpointManager } from '../checkpoints/checkpoint-manager.js';
+import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
+import { generateDiff as sharedGenerateDiff } from '../utils/diff-generator.js';
+import { logger } from '../utils/logger.js';
+
+/**
+ * A single edit operation: find old_string and replace with new_string.
+ */
+export interface SingleFileEdit {
+  old_string: string;
+  new_string: string;
 }
 
-export interface MultiEditResult {
-  success: boolean;
-  results: Array<{
-    file_path: string;
-    success: boolean;
-    output?: string;
-    error?: string;
-  }>;
-  summary: string;
-}
-
+/**
+ * MultiEditTool applies multiple string replacements to a single file
+ * in one atomic operation. All edits succeed or none are applied.
+ */
 export class MultiEditTool {
   private confirmationService = ConfirmationService.getInstance();
   private checkpointManager = getCheckpointManager();
-  private pathValidator = new PathValidator();
   private vfs = UnifiedVfsRouter.Instance;
+  private baseDirectory: string = process.cwd();
 
   /**
-   * Set the base directory for path validation
+   * Set the base directory for path resolution.
    */
   setBaseDirectory(dir: string): void {
-    this.pathValidator.setBaseDirectory(dir);
+    this.baseDirectory = path.resolve(dir);
   }
 
-  async execute(edits: EditOperation[]): Promise<ToolResult> {
-    if (!edits || edits.length === 0) {
-      return {
-        success: false,
-        error: "No edits provided",
-      };
+  /**
+   * Execute multiple edits on a single file atomically.
+   *
+   * @param filePath - Path to the file to edit
+   * @param edits - Array of {old_string, new_string} pairs to apply in order
+   * @returns ToolResult with diff output on success, or error details on failure
+   */
+  async execute(filePath: string, edits: SingleFileEdit[]): Promise<ToolResult> {
+    // ── Validate inputs ───────────────────────────────────────────
+    if (!filePath || typeof filePath !== 'string') {
+      return { success: false, error: 'file_path is required and must be a string' };
     }
 
-    // Validate all files: path security AND existence (parallel)
-    const validationErrors: string[] = [];
+    if (!Array.isArray(edits) || edits.length === 0) {
+      return { success: false, error: 'edits must be a non-empty array of {old_string, new_string} pairs' };
+    }
 
-    // First pass: synchronous path validation
-    const pathResults = edits.map(edit => ({
-      edit,
-      pathResult: this.pathValidator.validate(edit.file_path),
-    }));
-
-    for (const { edit, pathResult } of pathResults) {
-      if (!pathResult.valid) {
-        validationErrors.push(pathResult.error || `Invalid path: ${edit.file_path}`);
+    for (let i = 0; i < edits.length; i++) {
+      const edit = edits[i];
+      if (typeof edit.old_string !== 'string') {
+        return { success: false, error: `Edit #${i + 1}: old_string must be a string` };
+      }
+      if (typeof edit.new_string !== 'string') {
+        return { success: false, error: `Edit #${i + 1}: new_string must be a string` };
       }
     }
 
-    // Second pass: parallel existence checks for valid paths
-    const existenceChecks = await Promise.all(
-      pathResults
-        .filter(({ pathResult }) => pathResult.valid)
-        .map(async ({ edit, pathResult }) => ({
-          file_path: edit.file_path,
-          exists: await this.vfs.exists(pathResult.resolved),
-        }))
-    );
+    // ── Resolve and validate path ─────────────────────────────────
+    const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
+    if (!pathValidation.valid) {
+      return { success: false, error: pathValidation.error };
+    }
+    const resolvedPath = pathValidation.resolved;
 
-    for (const { file_path, exists } of existenceChecks) {
-      if (!exists) {
-        validationErrors.push(`File not found: ${file_path}`);
-      }
+    if (!(await this.vfs.exists(resolvedPath))) {
+      return { success: false, error: `File not found: ${filePath}` };
     }
 
-    if (validationErrors.length > 0) {
+    // ── Read original content ─────────────────────────────────────
+    let originalContent: string;
+    try {
+      originalContent = await this.vfs.readFile(resolvedPath, 'utf-8');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: `Failed to read file: ${msg}` };
+    }
+
+    // ── Dry-run: apply all edits in memory, checking each ─────────
+    let content = originalContent;
+
+    for (let i = 0; i < edits.length; i++) {
+      const { old_string, new_string } = edits[i];
+
+      if (!content.includes(old_string)) {
+        return {
+          success: false,
+          error: `Edit #${i + 1} failed: old_string not found in file.\n` +
+            `  old_string: "${old_string.length > 80 ? old_string.slice(0, 80) + '...' : old_string}"\n` +
+            `  file: ${filePath}\n` +
+            `No changes were applied (atomic rollback).`,
+        };
+      }
+
+      // Replace only the first occurrence (like Claude Code's Edit tool)
+      content = content.replace(old_string, new_string);
+    }
+
+    // ── If content unchanged, skip write ──────────────────────────
+    if (content === originalContent) {
       return {
-        success: false,
-        error: `Validation failed:\n${validationErrors.join("\n")}`,
+        success: true,
+        output: `No changes needed -- all edits resulted in identical content.`,
       };
     }
 
-    // Check for user confirmation if needed
+    // ── Generate diff for confirmation preview ────────────────────
+    const oldLines = originalContent.split('\n');
+    const newLines = content.split('\n');
+    const diffResult = sharedGenerateDiff(oldLines, newLines, filePath);
+
+    // ── Request confirmation if needed ────────────────────────────
     const sessionFlags = this.confirmationService.getSessionFlags();
     if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
-      const editSummary = edits
-        .map((e) => `  - ${e.file_path}: "${e.old_str.slice(0, 30)}..." → "${e.new_str.slice(0, 30)}..."`)
-        .join("\n");
-
       const confirmationResult = await this.confirmationService.requestConfirmation(
         {
-          operation: `Multi-edit (${edits.length} files)`,
-          filename: edits.map(e => e.file_path).join(", "),
+          operation: `Multi-edit (${edits.length} edits)`,
+          filename: filePath,
           showVSCodeOpen: false,
-          content: `The following edits will be made:\n${editSummary}`,
+          content: diffResult.diff,
         },
-        "file"
+        'file'
       );
 
       if (!confirmationResult.confirmed) {
         return {
           success: false,
-          error: confirmationResult.feedback || "Multi-edit cancelled by user",
+          error: confirmationResult.feedback || 'Multi-edit cancelled by user',
         };
       }
     }
 
-    // Create checkpoint before making any changes
-    for (const edit of edits) {
-      this.checkpointManager.checkpointBeforeEdit(edit.file_path);
+    // ── Create checkpoint before writing ──────────────────────────
+    try {
+      this.checkpointManager.checkpointBeforeEdit(filePath);
+    } catch (err) {
+      logger.warn('Failed to create checkpoint for multi-edit', {
+        file: filePath,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
-    // Phase 1: Save original file contents for atomic rollback
-    const backups = new Map<string, string>();
-    for (const edit of edits) {
-      const pathResult = this.pathValidator.validate(edit.file_path);
-      if (pathResult.valid) {
-        try {
-          const content = await this.vfs.readFile(pathResult.resolved, "utf-8");
-          backups.set(pathResult.resolved, content);
-        } catch {
-          // File might not exist yet — no backup needed
-        }
-      }
+    // ── Write the final content ───────────────────────────────────
+    try {
+      await this.vfs.writeFile(resolvedPath, content, 'utf-8');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: `Failed to write file: ${msg}` };
     }
 
-    // Phase 2: Execute all edits
-    const results: MultiEditResult["results"] = [];
-    let failCount = 0;
+    // ── Build summary ─────────────────────────────────────────────
+    const lineDiff = newLines.length - oldLines.length;
+    const lineDiffStr = lineDiff === 0
+      ? 'same line count'
+      : `${lineDiff > 0 ? '+' : ''}${lineDiff} lines`;
 
-    for (const edit of edits) {
-      try {
-        const result = await this.executeEdit(edit);
-        results.push({
-          file_path: edit.file_path,
-          ...result,
-        });
-        if (!result.success) {
-          failCount++;
-          break; // Stop on first failure for atomic rollback
-        }
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        results.push({
-          file_path: edit.file_path,
-          success: false,
-          error: errorMessage,
-        });
-        failCount++;
-        break; // Stop on first failure
-      }
-    }
-
-    // Phase 3: If any failed, rollback all changes to original state
-    if (failCount > 0) {
-      for (const [resolvedPath, originalContent] of backups) {
-        try {
-          await this.vfs.writeFile(resolvedPath, originalContent, "utf-8");
-        } catch {
-          // Best-effort rollback
-        }
-      }
-    }
-
-    // Generate summary
-    const summary = this.generateSummary(results);
-    const rollbackNote = failCount > 0 ? ' (all changes rolled back)' : '';
-
-    return {
-      success: failCount === 0,
-      output: summary + rollbackNote,
-      error: failCount > 0 ? `${failCount} edit(s) failed — atomic rollback applied` : undefined,
-    };
-  }
-
-  private async executeEdit(edit: EditOperation): Promise<{ success: boolean; output?: string; error?: string }> {
-    // Validate path before any file operation
-    const pathResult = this.pathValidator.validate(edit.file_path);
-    if (!pathResult.valid) {
-      return {
-        success: false,
-        error: pathResult.error || `Invalid path: ${edit.file_path}`,
-      };
-    }
-
-    const resolvedPath = pathResult.resolved;
-    const content = await this.vfs.readFile(resolvedPath, "utf-8");
-
-    if (!content.includes(edit.old_str)) {
-      return {
-        success: false,
-        error: `String not found in file: "${edit.old_str.slice(0, 50)}..."`,
-      };
-    }
-
-    const newContent = edit.replace_all
-      ? content.split(edit.old_str).join(edit.new_str)
-      : content.replace(edit.old_str, edit.new_str);
-
-    await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
-
-    // Calculate diff stats
-    const oldLines = content.split("\n").length;
-    const newLines = newContent.split("\n").length;
-    const lineDiff = newLines - oldLines;
+    const summary = [
+      `Applied ${edits.length} edit${edits.length > 1 ? 's' : ''} to ${filePath} (${lineDiffStr})`,
+      '',
+      diffResult.diff,
+    ].join('\n');
 
     return {
       success: true,
-      output: `Updated ${edit.file_path} (${lineDiff >= 0 ? "+" : ""}${lineDiff} lines)`,
-    };
-  }
-
-  private generateSummary(results: MultiEditResult["results"]): string {
-    const successful = results.filter((r) => r.success);
-    const failed = results.filter((r) => !r.success);
-
-    let summary = `Multi-Edit Results:\n`;
-    summary += `  ✓ ${successful.length} successful\n`;
-    summary += `  ✗ ${failed.length} failed\n\n`;
-
-    if (successful.length > 0) {
-      summary += "Successful edits:\n";
-      for (const result of successful) {
-        summary += `  ✓ ${result.file_path}\n`;
-      }
-    }
-
-    if (failed.length > 0) {
-      summary += "\nFailed edits:\n";
-      for (const result of failed) {
-        summary += `  ✗ ${result.file_path}: ${result.error}\n`;
-      }
-    }
-
-    return summary;
-  }
-
-  async executeParallel(edits: EditOperation[]): Promise<ToolResult> {
-    if (!edits || edits.length === 0) {
-      return {
-        success: false,
-        error: "No edits provided",
-      };
-    }
-
-    // Group edits by file to avoid conflicts
-    const editsByFile = new Map<string, EditOperation[]>();
-    for (const edit of edits) {
-      const existing = editsByFile.get(edit.file_path) || [];
-      existing.push(edit);
-      editsByFile.set(edit.file_path, existing);
-    }
-
-    // Execute edits for different files in parallel
-    const filePromises = Array.from(editsByFile.entries()).map(
-      async ([filePath, fileEdits]) => {
-        const results: Array<{ success: boolean; output?: string; error?: string }> = [];
-
-        // Edits to the same file must be sequential
-        for (const edit of fileEdits) {
-          const result = await this.executeEdit(edit);
-          results.push(result);
-          if (!result.success) break;  // Stop on first error for this file
-        }
-
-        return { filePath, results };
-      }
-    );
-
-    const fileResults = await Promise.all(filePromises);
-
-    // Combine results
-    const allResults: MultiEditResult["results"] = [];
-    for (const { filePath, results } of fileResults) {
-      for (const result of results) {
-        allResults.push({
-          file_path: filePath,
-          ...result,
-        });
-      }
-    }
-
-    const summary = this.generateSummary(allResults);
-    const failCount = allResults.filter((r) => !r.success).length;
-
-    return {
-      success: failCount === 0,
       output: summary,
-      error: failCount > 0 ? `${failCount} edit(s) failed` : undefined,
     };
   }
 }
 
-// Singleton instance
+// ── Singleton accessor ──────────────────────────────────────────────
 let multiEditToolInstance: MultiEditTool | null = null;
 
 export function getMultiEditTool(): MultiEditTool {
@@ -300,4 +186,8 @@ export function getMultiEditTool(): MultiEditTool {
     multiEditToolInstance = new MultiEditTool();
   }
   return multiEditToolInstance;
+}
+
+export function resetMultiEditTool(): void {
+  multiEditToolInstance = null;
 }

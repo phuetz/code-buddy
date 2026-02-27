@@ -5,6 +5,8 @@
  * - __CHANGE_MODEL__ - /model
  * - __CHANGE_MODE__ - /mode
  * - __CLEAR_CHAT__ - /clear
+ * - __STATUS__ - /status
+ * - __NEW__ - /new
  * - __COLAB__ - /colab
  * - __DIFF_CHECKPOINTS__ - /diff
  * - __FEATURES__ - /features
@@ -701,4 +703,138 @@ export async function handleInitGrok(): Promise<CommandHandlerResult> {
       },
     };
   }
+}
+
+// ============================================================================
+// /status - Show key configuration info at a glance
+// ============================================================================
+
+export async function handleStatus(): Promise<CommandHandlerResult> {
+  const lines: string[] = [];
+  lines.push('Status Dashboard');
+  lines.push('='.repeat(50));
+  lines.push('');
+
+  // Current model
+  const currentModel = process.env.GROK_MODEL || 'grok-beta';
+  lines.push(`  Model:           ${currentModel}`);
+
+  // Agent mode
+  try {
+    const { getOperatingModeManager } = await import('../../agent/operating-modes.js');
+    const modeManager = getOperatingModeManager();
+    lines.push(`  Agent Mode:      ${modeManager.formatModeStatus()}`);
+  } catch (_err) {
+    lines.push('  Agent Mode:      unknown');
+  }
+
+  // Session cost
+  try {
+    const { getCostTracker } = await import('../../utils/cost-tracker.js');
+    const tracker = getCostTracker();
+    const report = tracker.getReport();
+    const limit = parseFloat(process.env.MAX_COST || '10');
+    lines.push(`  Session Cost:    $${report.sessionCost.toFixed(4)} / $${limit.toFixed(2)}`);
+  } catch (_err) {
+    const maxCost = process.env.MAX_COST || '10';
+    lines.push(`  Session Cost:    $0.0000 / $${parseFloat(maxCost).toFixed(2)}`);
+  }
+
+  // Context window usage
+  try {
+    const { getModelToolConfig } = await import('../../config/model-tools.js');
+    const config = getModelToolConfig(currentModel);
+    const contextWindow = config.contextWindow || 131072;
+    lines.push(`  Context Window:  ${contextWindow.toLocaleString()} tokens max`);
+  } catch (_err) {
+    lines.push('  Context Window:  unknown');
+  }
+
+  // Active persona
+  try {
+    const { getPersonaManager } = await import('../../personas/persona-manager.js');
+    const personaManager = getPersonaManager();
+    const active = personaManager.getActivePersona();
+    lines.push(`  Persona:         ${active ? active.name : 'default'}`);
+  } catch (_err) {
+    lines.push('  Persona:         default');
+  }
+
+  // Security mode
+  try {
+    const { getSecurityModeManager } = await import('../../security/security-modes.js');
+    const securityManager = getSecurityModeManager();
+    lines.push(`  Security Mode:   ${securityManager.getMode()}`);
+  } catch (_err) {
+    lines.push('  Security Mode:   suggest');
+  }
+
+  // YOLO mode
+  const yoloEnv = process.env.YOLO_MODE === 'true';
+  try {
+    const { getAutonomyManager } = await import('../../utils/autonomy-manager.js');
+    const autonomyManager = getAutonomyManager();
+    const level = autonomyManager.getLevel();
+    const isYolo = level === 'yolo' || yoloEnv;
+    lines.push(`  YOLO Mode:       ${isYolo ? 'ON' : 'OFF'}`);
+    lines.push(`  Autonomy:        ${level}`);
+  } catch (_err) {
+    lines.push(`  YOLO Mode:       ${yoloEnv ? 'ON' : 'OFF'}`);
+  }
+
+  lines.push('');
+  lines.push('Use /config for detailed configuration.');
+  lines.push('Use /cost for cost breakdown.');
+
+  return {
+    handled: true,
+    entry: {
+      type: 'assistant',
+      content: lines.join('\n'),
+      timestamp: new Date(),
+    },
+  };
+}
+
+// ============================================================================
+// /new - Clear conversation and optionally switch model
+// ============================================================================
+
+export async function handleNew(args: string[]): Promise<CommandHandlerResult> {
+  const modelArg = args[0];
+
+  // If a model was specified, attempt to switch to it
+  if (modelArg) {
+    try {
+      const { getSettingsManager } = await import('../../utils/settings-manager.js');
+      const settingsManager = getSettingsManager();
+      settingsManager.setCurrentModel(modelArg);
+      process.env.GROK_MODEL = modelArg;
+    } catch (_err) {
+      // Best-effort model switch: at minimum set the env var
+      process.env.GROK_MODEL = modelArg;
+    }
+
+    return {
+      handled: true,
+      entry: {
+        type: 'assistant',
+        content: `New conversation started with model: ${modelArg}\nChat history cleared.`,
+        timestamp: new Date(),
+      },
+      // Signal the chat interface to clear history
+      prompt: '__CLEAR_HISTORY__',
+    };
+  }
+
+  return {
+    handled: true,
+    entry: {
+      type: 'assistant',
+      content: 'New conversation started. Chat history cleared.',
+      timestamp: new Date(),
+    },
+    // Signal the chat interface to clear history
+    prompt: '__CLEAR_HISTORY__',
+  };
 }

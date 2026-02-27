@@ -745,7 +745,7 @@ export class WebChatChannel extends BaseChannel {
           addSystemMessage(msg.content);
           scrollBottom();
         }
-      } catch(e) { console.error('Parse error', e); }
+      } catch(e) { logger.error('WebSocket parse error', e); }
     };
   }
 

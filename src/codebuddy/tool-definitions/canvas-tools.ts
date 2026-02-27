@@ -281,8 +281,8 @@ ELEMENT TYPES:
  * All canvas tools
  */
 export const CANVAS_TOOLS: CodeBuddyTool[] = [
-  // A2UI_TOOL — removed: no execution handler (audit 2026-02-25)
-  // VISUAL_CANVAS_TOOL — removed: no execution handler (audit 2026-02-25)
+  A2UI_TOOL,
+  VISUAL_CANVAS_TOOL,
 ];
 
 export default CANVAS_TOOLS;

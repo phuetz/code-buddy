@@ -106,3 +106,6 @@ temp/
 .grok/history/
 .grok/user-settings.json
 .jscpd/
+
+# Project-local settings (personal overrides, not shared with team)
+.codebuddy/settings.local.json
