@@ -109,3 +109,26 @@ temp/
 
 # Project-local settings (personal overrides, not shared with team)
 .codebuddy/settings.local.json
+
+# Test artifacts and temp files
+.benchmarks/
+.custom-output/
+.test-backups/
+test-app/
+tmp_*/
+openclaw/
+full-test-log*.txt
+lint-output.txt
+lint-after-fix*.txt
+test-run-output.txt
+test-report.md
+jest-results.json
+whatsapp-log*.txt
+test-e2e*.mjs
+test-lazy-loading.mjs
+test-commander.cjs
+test.svg
+test.ts
+test.txt
+test1.ts
+C?Userspatri*
