@@ -1,6 +1,8 @@
-import { Agent } from '../../src/agent/index';
 
 // Mock tools
+
+import { Agent } from '../../src/agent/index';
+
 const mockView = jest.fn();
 const mockStrReplace = jest.fn();
 const mockCreate = jest.fn();
@@ -12,18 +14,18 @@ const mockBashExecute = jest.fn();
 const mockGetCurrentDirectory = jest.fn().mockReturnValue('/test/dir');
 
 jest.mock('../../src/tools/index.js', () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     view: mockView,
     strReplace: mockStrReplace,
     create: mockCreate,
     insert: mockInsert,
     undoEdit: mockUndoEdit,
     getEditHistory: mockGetEditHistory,
-  })),
-  BashTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: mockBashExecute,
     getCurrentDirectory: mockGetCurrentDirectory,
-  })),
+  }; }),
 }));
 
 describe('Legacy Agent', () => {

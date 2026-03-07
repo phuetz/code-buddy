@@ -1,0 +1,169 @@
+Updated server.js with 165 additions
+--- a/server.js
++++ b/server.js
+@@ -1,0 +1,165 @@
++
++const express = require('express');
++const http = require('http');
++const WebSocket = require('ws');
++const fs = require('fs').promises;
++const path = require('path');
++const { GoogleGenerativeAI } = require('@google/generative-ai');
++
++const app = express();
++const server = http.createServer(app);
++const wss = new WebSocket.Server({ server });
++
++const DB_FILE = path.join(__dirname, 'db.json');
++const PORT = process.env.PORT || 3000;
++
++app.use(express.json());
++app.use(express.static('public'));
++
++let db = {
++    incidents: [],
++    jobs: []
++};
++
++// --- Persistence ---
++async function loadDb() {
++    try {
++        const data = await fs.readFile(DB_FILE, 'utf8');
++        db = JSON.parse(data);
++        console.log('Database loaded.');
++    } catch (error) {
++        if (error.code === 'ENOENT') {
++            await saveDb(); // Create file if it doesn't exist
++        } else {
++            console.error('Failed to load database:', error);
++        }
++    }
++}
++
++async function saveDb() {
++    try {
++        await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
++        console.log('Database saved.');
++    } catch (error) {
++        console.error('Failed to save database:', error);
++    }
++}
++
++// --- WebSocket ---
++wss.on('connection', ws => {
++    console.log('Client connected');
++    ws.send(JSON.stringify({ type: 'init', incidents: db.incidents, jobs: db.jobs }));
++
++    ws.on('close', () => console.log('Client disconnected'));
++});
++
++function broadcast(data) {
++    wss.clients.forEach(client => {
++        if (client.readyState === WebSocket.OPEN) {
++            client.send(JSON.stringify(data));
++        }
++    });
++}
++
++// --- Incidents API ---
++app.get('/api/incidents', (req, res) => {
++    res.json(db.incidents);
++});
++
++app.post('/api/incidents', async (req, res) => {
++    const newIncident = { id: Date.now().toString(), ...req.body, status: 'open', createdAt: new Date() };
++    db.incidents.push(newIncident);
++    await saveDb();
++    broadcast({ type: 'incidentCreated', incident: newIncident });
++    res.status(201).json(newIncident);
++});
++
++app.put('/api/incidents/:id', async (req, res) => {
++    const { id } = req.params;
++    const index = db.incidents.findIndex(inc => inc.id === id);
++    if (index !== -1) {
++        db.incidents[index] = { ...db.incidents[index], ...req.body, updatedAt: new Date() };
++        await saveDb();
++        broadcast({ type: 'incidentUpdated', incident: db.incidents[index] });
++        res.json(db.incidents[index]);
++    } else {
++        res.status(404).send('Incident not found');
++    }
++});
++
++app.delete('/api/incidents/:id', async (req, res) => {
++    const { id } = req.params;
++    const initialLength = db.incidents.length;
++    db.incidents = db.incidents.filter(inc => inc.id !== id);
++    if (db.incidents.length < initialLength) {
++        await saveDb();
++        broadcast({ type: 'incidentDeleted', id });
++        res.status(204).send();
++    } else {
++        res.status(404).send('Incident not found');
++    }
++});
++
++// --- Jobs API (simplified for demonstration) ---
++app.get('/api/jobs', (req, res) => {
++    res.json(db.jobs);
++});
++
++app.post('/api/jobs', async (req, res) => {
++    const newJob = { id: Date.now().toString(), ...req.body, status: 'pending', createdAt: new Date() };
++    db.jobs.push(newJob);
++    await saveDb();
++    broadcast({ type: 'jobCreated', job: newJob });
++
++    // Simulate job processing
++    setTimeout(async () => {
++        const index = db.jobs.findIndex(job => job.id === newJob.id);
++        if (index !== -1) {
++            db.jobs[index].status = 'completed';
++            db.jobs[index].completedAt = new Date();
++            await saveDb();
++            broadcast({ type: 'jobUpdated', job: db.jobs[index] });
++        }
++    }, 5000); // 5 seconds delay
++
++    res.status(201).json(newJob);
++});
++
++// --- Gemini Summarization ---
++app.post('/api/assist/summarize', async (req, res) => {
++    const { text } = req.body;
++    if (!text) {
++        return res.status(400).send('Text is required for summarization.');
++    }
++
++    const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
++    if (!GOOGLE_API_KEY) {
++        return res.status(500).send('GOOGLE_API_KEY is not set.');
++    }
++
++    const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
++    const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
++    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
++
++    try {
++        const prompt = `Summarize the following incident description in a concise, short text (max 2 sentences):
++
++${text}`;
++        const result = await model.generateContent(prompt);
++        const response = await result.response;
++        const summary = response.text();
++        res.json({ summary });
++    } catch (error) {
++        console.error('Error calling Gemini API:', error);
++        res.status(500).json({ error: 'Failed to summarize incident with AI.', details: error.message });
++    }
++});
++
++// --- Server Start ---
++loadDb().then(() => {
++    server.listen(PORT, () => {
++        console.log(`Server listening on port ${PORT}`);
++        console.log(`http://localhost:${PORT}`);
++    });
++});
++

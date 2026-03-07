@@ -59,6 +59,10 @@ const DEFAULT_IDENTITY_FILES = [
   'AGENTS.md',
   'TOOLS.md',
   'IDENTITY.md',
+  'INSTRUCTIONS.md',
+  'BOOT.md',
+  'BOOTSTRAP.md',
+  'HEARTBEAT.md',
 ];
 
 const DEFAULT_CONFIG: IdentityManagerConfig = {

@@ -8,7 +8,8 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   pathExists: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
@@ -17,7 +18,9 @@ jest.mock('fs-extra', () => ({
   rename: jest.fn(),
   stat: jest.fn(),
   access: jest.fn(), // Keeping access for backward compat if needed, but VFS uses pathExists
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('UnifiedDiffEditor', () => {
   let editor: UnifiedDiffEditor;

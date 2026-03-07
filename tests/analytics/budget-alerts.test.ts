@@ -254,40 +254,56 @@ describe('BudgetAlertManager', () => {
   });
 
   describe('event emission', () => {
-    it('should emit alert event when warning threshold is crossed', (done) => {
-      manager.on('alert', (alert: BudgetAlert) => {
-        expect(alert.type).toBe('warning');
-        done();
-      });
+    it('should emit alert event when warning threshold is crossed', async () => {
+      await new Promise<void>((resolve, reject) => {
+        manager.once('alert', (alert: BudgetAlert) => {
+          try {
+            expect(alert.type).toBe('warning');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      manager.check(7.0, 10.0);
+        manager.check(7.0, 10.0);
+      });
     });
 
-    it('should emit alert event when critical threshold is crossed', (done) => {
+    it('should emit alert event when critical threshold is crossed', async () => {
       // Trigger warning first (to move past it)
       manager.check(7.0, 10.0);
 
-      manager.on('alert', (alert: BudgetAlert) => {
-        if (alert.type === 'critical') {
-          done();
-        }
-      });
+      await new Promise<void>((resolve, reject) => {
+        manager.once('alert', (alert: BudgetAlert) => {
+          try {
+            expect(alert.type).toBe('critical');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      manager.check(9.0, 10.0);
+        manager.check(9.0, 10.0);
+      });
     });
 
-    it('should emit alert event when limit is reached', (done) => {
+    it('should emit alert event when limit is reached', async () => {
       // Trigger warning and critical first
       manager.check(7.0, 10.0);
       manager.check(9.0, 10.0);
 
-      manager.on('alert', (alert: BudgetAlert) => {
-        if (alert.type === 'limit_reached') {
-          done();
-        }
-      });
+      await new Promise<void>((resolve, reject) => {
+        manager.once('alert', (alert: BudgetAlert) => {
+          try {
+            expect(alert.type).toBe('limit_reached');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      manager.check(10.0, 10.0);
+        manager.check(10.0, 10.0);
+      });
     });
 
     it('should not emit event when alert is deduplicated', () => {

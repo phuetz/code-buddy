@@ -4,15 +4,17 @@
  * Covers processMessage(), getLLMClient(), and calculateCost()
  */
 
-import InterpreterService from '../../src/interpreter/interpreter-service.js';
 
 // Mock the dynamic import of CodeBuddyClient
+
+import InterpreterService from '../../src/interpreter/interpreter-service.js';
+
 const mockChat = jest.fn();
 
 jest.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: mockChat,
-  })),
+  }; }),
 }));
 
 // Mock logger to suppress output
@@ -26,8 +28,8 @@ jest.mock('../../src/utils/logger.js', () => ({
 }));
 
 // Mock fs to avoid filesystem side effects during construction
-jest.mock('fs', () => {
-  const actual = jest.requireActual('fs');
+jest.mock('fs', async () => {
+  const actual = await vi.importActual('fs');
   return {
     ...actual,
     existsSync: jest.fn().mockReturnValue(false),

@@ -1,0 +1,25 @@
+Updated package.json with 10 additions and 8 removals
+--- a/package.json
++++ b/package.json
+@@ -3,11 +3,13 @@
+   "version": "1.0.0",
+   "main": "index.js",
+   "scripts": {
+-    "test": "echo \"Error: no test specified\" && exit 1"
+-  },
+-  "keywords": [],
+-  "author": "",
+-  "license": "ISC",
+-  "description": ""
+-}
+-
++    "start": "node server.js",
++    "smoke-test": "node smoke-test.mjs",
++    "test": "echo \"Error: no test specified\" && exit 1"
++  },
++  "keywords": [],
++  "author": "",
++  "license": "ISC",
++  "description": ""
++}
++

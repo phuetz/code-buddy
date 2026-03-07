@@ -9,6 +9,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { vi } from 'vitest';
 
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
@@ -21,12 +22,15 @@ jest.mock('../../src/utils/logger', () => ({
 }));
 
 // Mock os module for consistent test results
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   hostname: jest.fn(() => 'test-hostname'),
   arch: jest.fn(() => 'x64'),
   type: jest.fn(() => 'Linux'),
   release: jest.fn(() => '5.4.0'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock fetch for export tests
 global.fetch = jest.fn();
@@ -71,14 +75,14 @@ describe('OpenTelemetryIntegration', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
     otel = new OpenTelemetryIntegration(defaultConfig);
   });
 
   afterEach(async () => {
     await otel.shutdown();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   // ============================================================================
@@ -143,7 +147,7 @@ describe('OpenTelemetryIntegration', () => {
       otel.recordCounter('test_metric', 1);
 
       // Fast-forward to trigger export
-      jest.advanceTimersByTime(30000);
+      vi.advanceTimersByTime(30000);
 
       // Export should have been attempted (metrics are only exported if there are any)
       expect(global.fetch).toHaveBeenCalledWith(
@@ -292,7 +296,7 @@ describe('OpenTelemetryIntegration', () => {
         const handler = jest.fn();
         otel.on('span:end', handler);
 
-        jest.advanceTimersByTime(100);
+        vi.advanceTimersByTime(100);
         otel.endSpan(spanId);
 
         const span = handler.mock.calls[0][0].span;
@@ -548,7 +552,7 @@ describe('OpenTelemetryIntegration', () => {
         otel.recordCounter('requests', 3);
 
         // Trigger export
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/v1/metrics'),
@@ -563,7 +567,7 @@ describe('OpenTelemetryIntegration', () => {
         await otel.init();
         otel.recordCounter('events');
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/v1/metrics'),
@@ -575,7 +579,7 @@ describe('OpenTelemetryIntegration', () => {
         await otel.init();
         otel.recordCounter('requests', 1, { status: '200' });
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/v1/metrics'),
@@ -591,7 +595,7 @@ describe('OpenTelemetryIntegration', () => {
         await otel.init();
         otel.recordGauge('temperature', 25.5);
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/v1/metrics'),
@@ -605,7 +609,7 @@ describe('OpenTelemetryIntegration', () => {
         await otel.init();
         otel.recordGauge('cpu_usage', 75.0, { core: '0' });
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/v1/metrics'),
@@ -621,7 +625,7 @@ describe('OpenTelemetryIntegration', () => {
         await otel.init();
         otel.recordHistogram('latency', 150);
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/v1/metrics'),
@@ -635,7 +639,7 @@ describe('OpenTelemetryIntegration', () => {
         await otel.init();
         otel.recordHistogram('response_time', 200, { endpoint: '/api/users' });
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/v1/metrics'),
@@ -658,7 +662,7 @@ describe('OpenTelemetryIntegration', () => {
         otel.on('span:end', handler);
 
         const result = await otel.measure('test-operation', async () => {
-          jest.advanceTimersByTime(100);
+          vi.advanceTimersByTime(100);
           return 'result';
         });
 
@@ -779,7 +783,7 @@ describe('OpenTelemetryIntegration', () => {
         otel.recordCounter('test_counter', 1);
         otel.recordGauge('test_gauge', 100);
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         expect(global.fetch).toHaveBeenCalledWith(
           'http://localhost:4318/v1/metrics',
@@ -790,7 +794,7 @@ describe('OpenTelemetryIntegration', () => {
       it('should not export empty metrics', async () => {
         await otel.init();
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         // Only called for metrics, not for empty payload
         const metricCalls = (global.fetch as jest.Mock).mock.calls.filter(
@@ -804,7 +808,7 @@ describe('OpenTelemetryIntegration', () => {
         otel.recordCounter('same_metric', 1, { label: 'a' });
         otel.recordCounter('same_metric', 2, { label: 'b' });
 
-        jest.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(30000);
 
         const metricCall = (global.fetch as jest.Mock).mock.calls.find(
           (call: FetchCall) => call[0].includes('/v1/metrics')
@@ -944,11 +948,11 @@ describe('OpenTelemetryIntegration', () => {
       await otel.init();
       await otel.shutdown();
 
-      jest.advanceTimersByTime(60000);
+      vi.advanceTimersByTime(60000);
 
       // Fetch should not be called after shutdown (beyond initial cleanup)
       const callsAfterShutdown = (global.fetch as jest.Mock).mock.calls.length;
-      jest.advanceTimersByTime(60000);
+      vi.advanceTimersByTime(60000);
       expect((global.fetch as jest.Mock).mock.calls.length).toBe(callsAfterShutdown);
     });
 
@@ -1047,7 +1051,7 @@ describe('OpenTelemetry Singleton', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset the singleton by requiring the module fresh
-    jest.resetModules();
+    vi.resetModules();
   });
 
   describe('initOpenTelemetry', () => {
@@ -1058,8 +1062,8 @@ describe('OpenTelemetry Singleton', () => {
       expect(instance).toBeInstanceOf(EventEmitter);
     });
 
-    it('should return same instance on subsequent calls', () => {
-      const { initOpenTelemetry: init } = require('../../src/integrations/opentelemetry-integration');
+    it('should return same instance on subsequent calls', async () => {
+      const { initOpenTelemetry: init } = await import('../../src/integrations/opentelemetry-integration.js');
 
       const instance1 = init({ serviceName: 'test1' });
       const instance2 = init({ serviceName: 'test2' }); // Different config, same instance
@@ -1069,14 +1073,14 @@ describe('OpenTelemetry Singleton', () => {
   });
 
   describe('getOpenTelemetry', () => {
-    it('should return null when not initialized', () => {
-      const { getOpenTelemetry: get } = require('../../src/integrations/opentelemetry-integration');
+    it('should return null when not initialized', async () => {
+      const { getOpenTelemetry: get } = await import('../../src/integrations/opentelemetry-integration.js');
 
       expect(get()).toBeNull();
     });
 
-    it('should return instance after initialization', () => {
-      const { initOpenTelemetry: init, getOpenTelemetry: get } = require('../../src/integrations/opentelemetry-integration');
+    it('should return instance after initialization', async () => {
+      const { initOpenTelemetry: init, getOpenTelemetry: get } = await import('../../src/integrations/opentelemetry-integration.js');
 
       init({ serviceName: 'test' });
 
@@ -1086,7 +1090,7 @@ describe('OpenTelemetry Singleton', () => {
 
   describe('trace helper', () => {
     it('should execute function when OpenTelemetry not initialized', async () => {
-      const { trace: traceHelper } = require('../../src/integrations/opentelemetry-integration');
+      const { trace: traceHelper } = await import('../../src/integrations/opentelemetry-integration.js');
 
       const result = await traceHelper('test', async () => 'result');
 
@@ -1094,7 +1098,7 @@ describe('OpenTelemetry Singleton', () => {
     });
 
     it('should trace function when OpenTelemetry is initialized', async () => {
-      const { initOpenTelemetry: init, trace: traceHelper } = require('../../src/integrations/opentelemetry-integration');
+      const { initOpenTelemetry: init, trace: traceHelper } = await import('../../src/integrations/opentelemetry-integration.js');
 
       const instance = init({ serviceName: 'trace-test' });
       const measureSpy = jest.spyOn(instance, 'measure');
@@ -1115,14 +1119,14 @@ describe('Edge Cases', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
     otel = new OpenTelemetryIntegration({ serviceName: 'edge-test' });
   });
 
   afterEach(async () => {
     await otel.shutdown();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should handle deeply nested spans', () => {
@@ -1157,7 +1161,7 @@ describe('Edge Cases', () => {
       otel.recordCounter('rapid_counter');
     }
 
-    jest.advanceTimersByTime(30000);
+    vi.advanceTimersByTime(30000);
 
     expect(global.fetch).toHaveBeenCalled();
   });
@@ -1209,7 +1213,7 @@ describe('Metric Type Formatting', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
     otel = new OpenTelemetryIntegration({ serviceName: 'metric-format-test' });
     await otel.init();
@@ -1217,12 +1221,12 @@ describe('Metric Type Formatting', () => {
 
   afterEach(async () => {
     await otel.shutdown();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should format counter metrics correctly', async () => {
     otel.recordCounter('test_counter', 5);
-    jest.advanceTimersByTime(30000);
+    vi.advanceTimersByTime(30000);
 
     const metricCall = (global.fetch as jest.Mock).mock.calls.find(
       (call: FetchCall) => call[0].includes('/v1/metrics')
@@ -1240,7 +1244,7 @@ describe('Metric Type Formatting', () => {
 
   it('should format gauge metrics correctly', async () => {
     otel.recordGauge('test_gauge', 42);
-    jest.advanceTimersByTime(30000);
+    vi.advanceTimersByTime(30000);
 
     const metricCall = (global.fetch as jest.Mock).mock.calls.find(
       (call: FetchCall) => call[0].includes('/v1/metrics')
@@ -1256,7 +1260,7 @@ describe('Metric Type Formatting', () => {
 
   it('should format histogram metrics correctly', async () => {
     otel.recordHistogram('test_histogram', 100);
-    jest.advanceTimersByTime(30000);
+    vi.advanceTimersByTime(30000);
 
     const metricCall = (global.fetch as jest.Mock).mock.calls.find(
       (call: FetchCall) => call[0].includes('/v1/metrics')

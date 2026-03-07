@@ -9,7 +9,8 @@
  * - Event emission
  */
 
-import { EventEmitter } from 'events';
+import { vi } from 'vitest';
+
 import {
   extractAIComments,
   removeAIComment,
@@ -20,27 +21,30 @@ import {
 } from '../../src/commands/watch-mode';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
-  readFile: jest.fn(),
-  writeFile: jest.fn(),
+const mockFsExtra = vi.hoisted(() => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
 }));
+
+vi.mock('fs-extra', () => ({ ...mockFsExtra, default: mockFsExtra }));
 
 // Mock fs for FSWatcher
-jest.mock('fs', () => ({
-  watch: jest.fn(),
+const mockFs = vi.hoisted(() => ({
+  watch: vi.fn(),
 }));
 
-const fsExtra = require('fs-extra');
-const fs = require('fs');
+vi.mock('fs', () => ({ ...mockFs, default: mockFs }));
+
+const fsExtra = mockFsExtra;
 
 describe('Watch Mode', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('extractAIComments', () => {
@@ -334,11 +338,11 @@ line 3`);
 
   describe('WatchModeManager', () => {
     let manager: WatchModeManager;
-    let mockWatcher: { close: jest.Mock };
+    let mockWatcher: { close: ReturnType<typeof vi.fn> };
 
     beforeEach(() => {
-      mockWatcher = { close: jest.fn() };
-      fs.watch.mockReturnValue(mockWatcher);
+      mockWatcher = { close: vi.fn() };
+      mockFs.watch.mockReturnValue(mockWatcher);
 
       manager = new WatchModeManager({
         paths: ['/test/project'],
@@ -354,7 +358,7 @@ line 3`);
       test('should start watching specified paths', async () => {
         await manager.start();
 
-        expect(fs.watch).toHaveBeenCalledWith(
+        expect(mockFs.watch).toHaveBeenCalledWith(
           '/test/project',
           { recursive: true },
           expect.any(Function)
@@ -362,7 +366,7 @@ line 3`);
       });
 
       test('should emit started event', async () => {
-        const startedHandler = jest.fn();
+        const startedHandler = vi.fn();
         manager.on('started', startedHandler);
 
         await manager.start();
@@ -375,7 +379,7 @@ line 3`);
 
         await defaultManager.start();
 
-        expect(fs.watch).toHaveBeenCalledWith(
+        expect(mockFs.watch).toHaveBeenCalledWith(
           process.cwd(),
           { recursive: true },
           expect.any(Function)
@@ -385,11 +389,11 @@ line 3`);
       });
 
       test('should emit error event on watch failure', async () => {
-        fs.watch.mockImplementation(() => {
+        mockFs.watch.mockImplementation(function() {
           throw new Error('Watch error');
         });
 
-        const errorHandler = jest.fn();
+        const errorHandler = vi.fn();
         manager.on('error', errorHandler);
 
         await manager.start();
@@ -410,7 +414,7 @@ line 3`);
       });
 
       test('should emit stopped event', async () => {
-        const stoppedHandler = jest.fn();
+        const stoppedHandler = vi.fn();
         manager.on('stopped', stoppedHandler);
 
         await manager.start();
@@ -423,13 +427,13 @@ line 3`);
         await manager.start();
 
         // Trigger a file change to create a debounce timer
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('change', 'test.ts');
 
         await manager.stop();
 
         // No pending timers should remain
-        expect(jest.getTimerCount()).toBe(0);
+        expect(vi.getTimerCount()).toBe(0);
       });
     });
 
@@ -437,10 +441,10 @@ line 3`);
       test('should filter out node_modules', async () => {
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('change', 'node_modules/package/index.js');
 
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
 
         // readFile should not be called for ignored paths
         expect(fsExtra.readFile).not.toHaveBeenCalled();
@@ -449,10 +453,10 @@ line 3`);
       test('should filter out .git directory', async () => {
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('change', '.git/objects/123');
 
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
 
         expect(fsExtra.readFile).not.toHaveBeenCalled();
       });
@@ -460,10 +464,10 @@ line 3`);
       test('should filter out dist directory', async () => {
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('change', 'dist/bundle.js');
 
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
 
         expect(fsExtra.readFile).not.toHaveBeenCalled();
       });
@@ -471,10 +475,10 @@ line 3`);
       test('should filter out minified files', async () => {
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('change', 'app.min.js');
 
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
 
         expect(fsExtra.readFile).not.toHaveBeenCalled();
       });
@@ -485,7 +489,7 @@ line 3`);
         fsExtra.readFile.mockResolvedValue('// AI! Test comment');
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
 
         // Trigger multiple rapid changes
         watchCallback('change', 'test.ts');
@@ -496,7 +500,7 @@ line 3`);
         expect(fsExtra.readFile).not.toHaveBeenCalled();
 
         // After debounce
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
 
         // Should only process once
         expect(fsExtra.readFile).toHaveBeenCalledTimes(1);
@@ -504,15 +508,15 @@ line 3`);
 
       test('should emit comment event for AI comments', async () => {
         fsExtra.readFile.mockResolvedValue('// AI! Add tests');
-        const commentHandler = jest.fn();
+        const commentHandler = vi.fn();
         manager.on('comment', commentHandler);
 
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('change', 'test.ts');
 
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
 
         // Allow async processing
         await Promise.resolve();
@@ -527,21 +531,21 @@ line 3`);
 
       test('should not emit duplicate comment events', async () => {
         fsExtra.readFile.mockResolvedValue('// AI! Same comment');
-        const commentHandler = jest.fn();
+        const commentHandler = vi.fn();
         manager.on('comment', commentHandler);
 
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
 
         // First change
         watchCallback('change', 'test.ts');
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
         await Promise.resolve();
 
         // Second change with same content
         watchCallback('change', 'test.ts');
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
         await Promise.resolve();
 
         // Should only emit once
@@ -550,15 +554,15 @@ line 3`);
 
       test('should emit error event on file read failure', async () => {
         fsExtra.readFile.mockRejectedValue(new Error('Read error'));
-        const errorHandler = jest.fn();
+        const errorHandler = vi.fn();
         manager.on('error', errorHandler);
 
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('change', 'test.ts');
 
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
         await Promise.resolve();
 
         expect(errorHandler).toHaveBeenCalledWith(
@@ -572,10 +576,10 @@ line 3`);
         fsExtra.readFile.mockResolvedValue('// AI! Test');
         await manager.start();
 
-        const watchCallback = fs.watch.mock.calls[0][2];
+        const watchCallback = mockFs.watch.mock.calls[0][2];
         watchCallback('rename', 'test.ts');
 
-        jest.advanceTimersByTime(200);
+        vi.advanceTimersByTime(200);
 
         expect(fsExtra.readFile).not.toHaveBeenCalled();
       });

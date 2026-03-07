@@ -6,27 +6,30 @@
  */
 
 // Mock all tool dependencies before imports
+
+import { CodeBuddyMCPServer, MCPToolDefinition } from '../../src/mcp/mcp-server';
+
 jest.mock('../../src/tools/text-editor', () => {
   return {
-    TextEditorTool: jest.fn().mockImplementation(() => ({
+    TextEditorTool: jest.fn().mockImplementation(function() { return {
       view: jest.fn().mockResolvedValue({ success: true, output: 'file contents here' }),
       create: jest.fn().mockResolvedValue({ success: true, output: 'File created' }),
       strReplace: jest.fn().mockResolvedValue({ success: true, output: 'Replacement applied' }),
-    })),
+    }; }),
   };
 });
 
 jest.mock('../../src/tools/search', () => {
   return {
-    SearchTool: jest.fn().mockImplementation(() => ({
+    SearchTool: jest.fn().mockImplementation(function() { return {
       search: jest.fn().mockResolvedValue({ success: true, output: 'src/foo.ts:10: match found' }),
-    })),
+    }; }),
   };
 });
 
 jest.mock('../../src/tools/git-tool', () => {
   return {
-    GitTool: jest.fn().mockImplementation(() => ({
+    GitTool: jest.fn().mockImplementation(function() { return {
       getStatus: jest.fn().mockResolvedValue({
         branch: 'main',
         ahead: 0,
@@ -41,15 +44,15 @@ jest.mock('../../src/tools/git-tool', () => {
       commit: jest.fn().mockResolvedValue({ success: true, output: 'Committed' }),
       branch: jest.fn().mockResolvedValue({ success: true, output: '* main\n  dev' }),
       checkout: jest.fn().mockResolvedValue({ success: true, output: 'Switched to branch dev' }),
-    })),
+    }; }),
   };
 });
 
 jest.mock('../../src/tools/bash/index', () => {
   return {
-    BashTool: jest.fn().mockImplementation(() => ({
+    BashTool: jest.fn().mockImplementation(function() { return {
       execute: jest.fn().mockResolvedValue({ success: true, output: 'command output' }),
-    })),
+    }; }),
   };
 });
 
@@ -71,7 +74,7 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
   const registeredPrompts = new Map<string, { description: string; schema: unknown; handler: Function }>();
 
   return {
-    McpServer: jest.fn().mockImplementation(() => ({
+    McpServer: jest.fn().mockImplementation(function() { return {
       tool: jest.fn((name: string, description: string, schema: unknown, handler: Function) => {
         registeredTools.set(name, { description, schema, handler });
       }),
@@ -86,20 +89,19 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
       _registeredTools: registeredTools,
       _registeredResources: registeredResources,
       _registeredPrompts: registeredPrompts,
-    })),
+    }; }),
   };
 });
 
 jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => {
   return {
-    StdioServerTransport: jest.fn().mockImplementation(() => ({
+    StdioServerTransport: jest.fn().mockImplementation(function() { return {
       start: jest.fn().mockResolvedValue(undefined),
       close: jest.fn().mockResolvedValue(undefined),
-    })),
+    }; }),
   };
 });
 
-import { CodeBuddyMCPServer, MCPToolDefinition } from '../../src/mcp/mcp-server';
 
 describe('CodeBuddyMCPServer', () => {
   let server: CodeBuddyMCPServer;

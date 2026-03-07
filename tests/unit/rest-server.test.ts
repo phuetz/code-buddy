@@ -17,7 +17,7 @@ import {
 
 // Mock http module
 jest.mock('http', () => {
-  const actualHttp = jest.requireActual('http');
+  const actualHttp = await vi.importActual('http');
   return {
     ...actualHttp,
     createServer: jest.fn(),

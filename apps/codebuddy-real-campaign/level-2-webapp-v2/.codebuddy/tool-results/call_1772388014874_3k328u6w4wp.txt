@@ -1,0 +1,75 @@
+Contents of server.mjs:
+1: import express from 'express';
+2: import { Low } from 'lowdb';
+3: import { JSONFile } from 'lowdb/node';
+4: import { nanoid } from 'nanoid';
+5: 
+6: const app = express();
+7: const port = 3000;
+8: 
+9: // Configure lowdb to write to JSONFile
+10: const adapter = new JSONFile('db.json');
+11: const db = new Low(adapter);
+12: 
+13: // Read data from db.json, this will set db.data content
+14: // If db.json doesn't exist, it'll be created with default data
+15: await db.read();
+16: await db.read();
+17: if (!db.data) {
+18:   db.data = { notes: [] };
+19:   await db.write();
+20: }
+21: 
+22: app.use(express.json());
+23: app.use(express.static('public'));
+24: 
+25: // Get all notes
+26: app.get('/api/notes', (req, res) => {
+27:   res.json(db.data.notes);
+28: });
+29: 
+30: // Get a single note by ID
+31: app.get('/api/notes/:id', (req, res) => {
+32:   const note = db.data.notes.find(n => n.id === req.params.id);
+33:   if (note) {
+34:     res.json(note);
+35:   } else {
+36:     res.status(404).send('Note not found');
+37:   }
+38: });
+39: 
+40: // Add a new note
+41: app.post('/api/notes', async (req, res) => {
+42:   const newNote = { id: nanoid(), content: req.body.content };
+43:   db.data.notes.push(newNote);
+44:   await db.write();
+45:   res.status(201).json(newNote);
+46: });
+47: 
+48: // Update a note
+49: app.put('/api/notes/:id', async (req, res) => {
+50:   const index = db.data.notes.findIndex(n => n.id === req.params.id);
+51:   if (index !== -1) {
+52:     db.data.notes[index].content = req.body.content;
+53:     await db.write();
+54:     res.json(db.data.notes[index]);
+55:   } else {
+56:     res.status(404).send('Note not found');
+57:   }
+58: });
+59: 
+60: // Delete a note
+61: app.delete('/api/notes/:id', async (req, res) => {
+62:   const initialLength = db.data.notes.length;
+63:   db.data.notes = db.data.notes.filter(n => n.id !== req.params.id);
+64:   if (db.data.notes.length < initialLength) {
+65:     await db.write();
+66:     res.status(204).send();
+67:   } else {
+68:     res.status(404).send('Note not found');
+69:   }
+70: });
+71: 
+72: app.listen(port, () => {
+73:   console.log(`Server listening at http://localhost:${port}`);
+74: });

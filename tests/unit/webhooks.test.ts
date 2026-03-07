@@ -20,16 +20,19 @@ import {
 } from '../../src/api/webhooks';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   existsSync: jest.fn(),
   readJsonSync: jest.fn(),
   writeJsonSync: jest.fn(),
   ensureDirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock https and http modules
 jest.mock('https', () => {
-  const actualHttps = jest.requireActual('https');
+  const actualHttps = await vi.importActual('https');
   return {
     ...actualHttps,
     request: jest.fn(),
@@ -37,7 +40,7 @@ jest.mock('https', () => {
 });
 
 jest.mock('http', () => {
-  const actualHttp = jest.requireActual('http');
+  const actualHttp = await vi.importActual('http');
   return {
     ...actualHttp,
     request: jest.fn(),
@@ -118,8 +121,8 @@ describe('WebhookManager', () => {
     // Setup default mock behavior
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     (fs.readJsonSync as jest.Mock).mockReturnValue([]);
-    (fs.writeJsonSync as jest.Mock).mockImplementation(() => {});
-    (fs.ensureDirSync as jest.Mock).mockImplementation(() => {});
+    (fs.writeJsonSync as jest.Mock).mockImplementation(function() {});
+    (fs.ensureDirSync as jest.Mock).mockImplementation(function() {});
 
     tempConfigPath = path.join(os.tmpdir(), 'test-webhooks.json');
     manager = new WebhookManager(tempConfigPath);
@@ -161,7 +164,7 @@ describe('WebhookManager', () => {
 
     it('should handle config file read errors gracefully', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readJsonSync as jest.Mock).mockImplementation(() => {
+      (fs.readJsonSync as jest.Mock).mockImplementation(function() {
         throw new Error('Read error');
       });
 
@@ -659,7 +662,7 @@ describe('WebhookManager', () => {
     });
 
     it('should handle request error', async () => {
-      (https.request as jest.Mock).mockImplementation(() => {
+      (https.request as jest.Mock).mockImplementation(function() {
         process.nextTick(() => {
           mockRequest.emitError(new Error('Connection refused'));
         });
@@ -681,7 +684,7 @@ describe('WebhookManager', () => {
     });
 
     it('should handle request timeout', async () => {
-      (https.request as jest.Mock).mockImplementation(() => {
+      (https.request as jest.Mock).mockImplementation(function() {
         process.nextTick(() => {
           mockRequest.emitTimeout();
         });
@@ -1235,7 +1238,7 @@ describe('WebhookManager', () => {
     });
 
     it('should handle save errors gracefully', () => {
-      (fs.writeJsonSync as jest.Mock).mockImplementation(() => {
+      (fs.writeJsonSync as jest.Mock).mockImplementation(function() {
         throw new Error('Write error');
       });
 
@@ -1261,8 +1264,8 @@ describe('Singleton Functions', () => {
 
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     (fs.readJsonSync as jest.Mock).mockReturnValue([]);
-    (fs.writeJsonSync as jest.Mock).mockImplementation(() => {});
-    (fs.ensureDirSync as jest.Mock).mockImplementation(() => {});
+    (fs.writeJsonSync as jest.Mock).mockImplementation(function() {});
+    (fs.ensureDirSync as jest.Mock).mockImplementation(function() {});
   });
 
   describe('getWebhookManager', () => {
@@ -1328,8 +1331,8 @@ describe('All Webhook Events', () => {
 
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     (fs.readJsonSync as jest.Mock).mockReturnValue([]);
-    (fs.writeJsonSync as jest.Mock).mockImplementation(() => {});
-    (fs.ensureDirSync as jest.Mock).mockImplementation(() => {});
+    (fs.writeJsonSync as jest.Mock).mockImplementation(function() {});
+    (fs.ensureDirSync as jest.Mock).mockImplementation(function() {});
 
     manager = new WebhookManager('/tmp/test-webhooks.json');
 
@@ -1372,8 +1375,8 @@ describe('Edge Cases', () => {
 
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     (fs.readJsonSync as jest.Mock).mockReturnValue([]);
-    (fs.writeJsonSync as jest.Mock).mockImplementation(() => {});
-    (fs.ensureDirSync as jest.Mock).mockImplementation(() => {});
+    (fs.writeJsonSync as jest.Mock).mockImplementation(function() {});
+    (fs.ensureDirSync as jest.Mock).mockImplementation(function() {});
 
     manager = new WebhookManager('/tmp/test-webhooks.json');
     mockRequest = new MockClientRequest();

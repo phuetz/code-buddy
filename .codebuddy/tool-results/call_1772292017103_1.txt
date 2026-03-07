@@ -1,0 +1,355 @@
+Content from https://blog.logrocket.com/exploring-typescript-5-features-smaller-simpler-faster/:
+
+Exploring TypeScript 5 features: Smaller, simpler, faster - LogRocket Blog
+ 
+ • 
+ • 
+ • 
+ • 
+
+ • 
+
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+
+• 
+
+• 
+
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+
+• 
+• 
+
+• • • 
+
+• 
+ 
+ • • 
+• 
+• 
+
+ Advisory boards aren’t only for executives. Join the LogRocket Content Advisory Board today →
+
+ • 
+ Blog
+ 
+ • 
+ Dev
+
+ • 
+ Product Management
+
+ • 
+ UX Design
+
+ • 
+ Podcast
+
+ • 
+ Product Leadership
+
+ • 
+ Features
+
+ • 
+ Solutions
+ 
+ • 
+ Solve User-Reported Issues
+
+ • 
+ Surface User Struggle
+
+ • 
+ Optimize Conversion and Adoption
+
+ • 
+ Start Monitoring for Free
+
+ • 
+ Sign In
+
+ 2023-06-13 
+
+ 3698 
+
+ #typescript 
+
+ Chigozie Oduah
+
+ 171707
+
+ 109 
+
+ Table of contents 
+
+ • 
+ New features and enhancements in TypeScript 5
+ • 
+ Speed, memory, and optimizations
+
+ • 
+ Decorators
+
+ • 
+ const type parameters
+
+ • 
+ --moduleResolution bundler
+
+ • 
+ Supporting multiple configuration files in extends
+
+ • 
+ All enums are union enums
+
+ • 
+ Resolution customization flags
+
+ • 
+ --verbatimModuleSyntax
+
+ • 
+ Support for export type *
+
+ • 
+ Passing emit-specific flags under --build
+
+ • 
+ @overload support in JSDoc
+
+ • 
+ @satisfies support in JSDoc
+
+ • 
+ Breaking changes and deprecations
+
+ Introducing Galileo AI
+
+ LogRocket’s Galileo AI watches every session, surfacing impactful user struggle and key behavior patterns.
+
+ LEARN MORE
+
+ See how LogRocket's Galileo AI surfaces the most severe issues for you
+
+ No signup required
+
+ Check it out
+
+With each new version, TypeScript continues to evolve and improve, bringing new features and enhancements to the table. The latest release, TypeScript 5, promises to be smaller, simpler, and faster than its predecessors.
+
+From performance enhancements to streamlined syntax, TypeScript 5 is poised to be a game-changer for developers looking to build high-quality web applications with ease. In this article, we will take a closer look at TypeScript 5 and explore:
+
+• New or improved features and their benefits for developers
+
+• Breaking changes and deprecations to be aware of
+
+Let’s dive in!
+
+ 🚀 Sign up for The Replay newsletter
+
+ The Replay is a weekly newsletter for dev and engineering leaders.
+
+ Delivered once a week, it's your curated guide to the most important conversations around frontend dev, emerging AI tools, and the state of modern software.
+
+ Notice: JavaScript is required for this content.
+
+New features and enhancements in TypeScript 5
+
+TypeScript 5 brings a range of new features and enhancements to the table. These include the following:
+
+• Speed, memory, and optimizations
+
+• Decorators
+
+• const type parameters
+
+• --moduleResolution bundler
+
+• Supporting multiple configuration files in extends
+
+• All enums are union enums
+
+• Resolution customization flags
+
+• --verbatimModuleSyntax
+
+• Support for export type *
+
+• Passing emit-specific flags under --build
+
+• @overload support in JSDoc
+
+• @satisfies support in JSDoc
+
+In the rest of this section, we’ll explain each feature and enhancement in the list in more detail.
+
+Speed, memory, and optimizations
+
+TypeScript 5 introduces significant improvements in its infrastructure compared to previous versions. The migration from namespaces to modules enables a modular infrastructure, supports modern build tooling, and allows for various optimizations.
+
+In addition to the infrastructure changes, TypeScript 5 offers the following enhancements over TypeScript 4.9:
+
+• 90 percent faster build time for MUI
+
+• 87 percent faster compiler startup time
+
+• 87 percent faster build time for Playwright
+
+• 87 percent faster self-build time for the compiler
+
+• 82 percent faster build time for Outlook Web
+
+• 80 percent faster build time for VS Code
+
+• 59% percent reduction in npm package size
+
+Furthermore, TypeScript enhances uniformity in object types and reduces the data stored within the compiler, resulting in reduced polymorphic operations and balanced memory usage despite the uniform object shapes.
+
+Decorators
+
+Decorators in TypeScript 5 work differently from decorators in the previous versions.
+
+The previous versions of TypeScript decorators only allowed developers to alter limited properties of the function they’re modifying. In TypeScript 5, decorators allow developers to replace the function they’re modifying completely — in other words, to completely customize the behavior of a method in a class.
+
+TypeScript 5 decorators work by replacing the method you are applying them to while keeping a reference to that method to call whenever it has done its job.
+
+The following is an example of a decorator:
+
+function monitoredMethod(originalMethod: any, _context: any) {
+
+ function replacementMethod(this: any, ...args: any[]) {
+ console.log('Initializing method call...');
+ console.log('Calling method...');
+ let result = originalMethod.call(this, ...args);
+ console.log('Method called successfully!');
+ return result;
+ }
+
+ return replacementMethod;
+}
+If you apply the monitoredMethod decorator to a method, the TypeScript compiler replaces that method with replacementMethod. The compiler references the replaced method for replacementMethod to call whenever it needs to.
+
+Consider the example below:
+
+class Robot {
+
+ name: string;
+
+ constructor (name: string) {
+ this.name = name;
+ }
+ 
+ sayHello(name:string) {
+ console.log(`${this.name} says hello to ${name}`);
+ }
+}
+We can apply the monitoredMethod decorator to the Robot.sayHello method, as done below:
+
+class Robot {
+
+ name: string;
+
+ constructor (name: string) {
+ this.name = name;
+ }
+ 
+ @monitoredMethod
+ sayHello(name:string) {
+ console.log(`${this.name} says hello to ${name}`);
+ }
+}
+When you call the Robot.sayHello method, you’ll get the output below:
+
+Initializing method call...
+Calling method...
+myRobot says hello to everyone
+Method called successfully!
+const type parameters
+
+The const type parameter feature allows developers to create const-like inferences for type parameter declarations. In other words, when the compiler is inferring the type of an object from a function parameter, it chooses a more specific type.
+
+Let’s look at an example below:
+
+function printName<T extends readonly string[]>(args: T, index: number) :void {
+ console.log(args[index]);
+}
+
+printName(["John", "Doe", "Smith"], 1);
+The type inference for the printName function call is:
+
+function printName<string[]>(args: string[], index: number): void
+Now, let’s see what happens when we add the const type parameter to the printName declaration:
+
+> function printName<const T extends readonly string[]>(args: T, index: number) :void {
+ console.log(args[index]);
+ }
+
+ printName(["John", "Doe", "Smith"], 1);
+The type inference for the printName function call becomes more specific:
+
+function printName<readonly ["John", "Doe", "Smith"]>(args: readonly ["John", "Doe", "Smith"], index: number): void
+By using const type parameters, developers can avoid the easy-to-forget process of adding as const in certain places to achieve the desired inference.
+
+ Over 200k developers use LogRocket to create better digital experiences
+
+ Learn more →
+
+However, you should note that the const modifier only affects inferences that you make within the call. const identifiers written outside the call won’t see any change in behavior in the function call:
+
+function printName<const T extends readonly string[]>(args: T, index: number) :void {
+ console.log(args[index]);
+}
+
+const arr = ["John", "Doe", "Smith"];
+printName(arr, 1); // `arr` becomes type `string[]` when you pass it to the function
+Additionally, it’s crucial to use readonly string[] instead of string[] as the constraint for functions that require immutable arrays. Without the readonly modifier, the compiler won’t give the immutable arrays a more specific type inference. For example:
+
+// For example, this:
+function printName<readonly ["John", "Doe", "Smith"]>(args: readonly ["John", "Doe", "Smith"], index: number): void
+
+// Becomes this:
+function printName<string[]>(args: string[], index: number): void
+--moduleRe
+
+[Content truncated...]

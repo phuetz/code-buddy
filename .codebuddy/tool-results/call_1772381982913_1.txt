@@ -1,0 +1,29 @@
+
+🔍 Résultats pour: "TypeScript 5 Core Features overview"
+══════════════════════════════════════════════════
+
+1. **TypeScript: Documentation - TypeScript 4.5** [1]
+   TypeScript 4.5 supports an ECMAScript proposal for checking whether an object has a private field on it. You can now write a class with a #private field member and see whether another object has the same field by using the in operator. ... One interesting aspect of this feature is that the check #name in other implies that other must have been constructed as a Person, since there’s no other way that field could be present.
+
+2. **Typescript 5.7 & 5.8 - New Features & Direct Execution** [2]
+   Discover new features in TypeScript 5.7 and 5.8, including better type safety, ECMAScript 2024 support, and direct execution tools.
+   📅 November 24, 2025
+
+3. **TypeScript 5.0: the new features and the issues they solve! | by Sammy-Jo Wymer | REWRITE TECH by Diconium | Medium** [3]
+   Solution #8 TypeScript 5.0 introduced a new --moduleResolution setting value called bundler. This setting is for bundlers and runtimes that have a range of Node-like resolution features and ESM syntax, but do not enforce the strict resolution rules that accompany ES modules in Node or in the browser.¹
+   📅 July 17, 2025
+
+4. **Announcing TypeScript 5.0 - TypeScript** [4]
+   Today we’re excited to announce the release of TypeScript 5.0! This release brings many new features, while aiming to make TypeScript smaller, simpler, and faster. We’ve implemented the new decorators standard, added functionality to better support ESM projects in Node and bundlers, provided new ways for library authors to control generic inference, expanded our JSDoc […]
+   📅 March 17, 2023
+
+5. **New Features in Generally Available TypeScript 5.1 -- Visual Studio Magazine** [5]
+   Another new feature is allowing completely unrelated types for get and set accessor properties that have explicit type annotations. This enables developers to model APIs that have different types between their getters and setters, such as the style property in the DOM and CSSStyleRule API. TypeScript 5.1 also supports namespaced attribute names in JSX, a JavaScript extension syntax that allows devs to write HTML and JavaScript together.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript: Documentation - TypeScript 4.5 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html
+[2] Typescript 5.7 & 5.8 - New Features & Direct Execution — https://javascript-conference.com/blog/typescript-5-7-5-8-features-ecmascript-direct-execution/
+[3] TypeScript 5.0: the new features and the issues they solve! | by Sammy-Jo Wymer | REWRITE TECH by Diconium | Medium — https://medium.com/rewrite-tech/typescript-5-0-the-new-features-and-the-issues-they-solve-49757530e760
+[4] Announcing TypeScript 5.0 - TypeScript — https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/
+[5] New Features in Generally Available TypeScript 5.1 -- Visual Studio Magazine — https://visualstudiomagazine.com/articles/2023/06/01/typescript-5-1.aspx

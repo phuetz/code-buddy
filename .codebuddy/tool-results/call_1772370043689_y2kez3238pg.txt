@@ -1,0 +1,70 @@
+Lines 136-204 of src/index.ts:
+136: // Process Signal Handlers - Using Graceful Shutdown Manager
+137: // ============================================================================
+138: 
+139: // Initialize graceful shutdown system with 30s timeout
+140: const _shutdownManager = initializeGracefulShutdown({
+141:   timeoutMs: 30000, // 30 seconds max before force exit
+142:   forceExitOnTimeout: true,
+143:   showProgress: true,
+144: });
+145: 
+146: // Note: SIGINT, SIGTERM, SIGHUP are now handled by GracefulShutdownManager
+147: // The manager will:
+148: // 1. Wait for pending operations to complete
+149: // 2. Save session state
+150: // 3. Restore terminal
+151: // 4. Close MCP connections
+152: // 5. Close database connections
+153: // 6. Flush logs
+154: // 7. Exit cleanly (or force exit after timeout)
+155: 
+156: // Handle uncaught exceptions with crash recovery
+157: process.on("uncaughtException", async (error) => {
+158:   let crashFile: string | null = null;
+159:   try {
+160:     const crashHandler = await lazyImport.crashHandler();
+161:     crashFile = crashHandler.handleCrash(error, "Uncaught exception");
+162:   } catch (_err) {
+163:     // Intentionally ignored: crash handler itself may fail during fatal error recovery
+164:   }
+165: 
+166:   startupLogger.error("\nUnexpected error occurred:", error);
+167:   if (crashFile) {
+168:     startupLogger.error(`\nCrash context saved to: ${crashFile}`);
+169:     startupLogger.error("You can resume your session with: buddy --resume");
+170:   }
+171: 
+172:   // Use graceful shutdown with error exit code
+173:   try {
+174:     await getShutdownManager().shutdown({ exitCode: 1, showProgress: false });
+175:   } catch (_err) {
+176:     // Intentionally ignored: shutdown itself failed, force exit as last resort
+177:     process.exit(1);
+178:   }
+179: });
+180: 
+181: process.on("unhandledRejection", async (reason, _promise) => {
+182:   const error = reason instanceof Error ? reason : new Error(String(reason));
+183:   let crashFile: string | null = null;
+184:   try {
+185:     const crashHandler = await lazyImport.crashHandler();
+186:     crashFile = crashHandler.handleCrash(error, "Unhandled rejection");
+187:   } catch (_err) {
+188:     // Intentionally ignored: crash handler itself may fail during fatal error recovery
+189:   }
+190: 
+191:   startupLogger.error("\nUnhandled promise rejection:", error);
+192:   if (crashFile) {
+193:     startupLogger.error(`\nCrash context saved to: ${crashFile}`);
+194:     startupLogger.error("You can resume your session with: buddy --resume");
+195:   }
+196: 
+197:   // Use graceful shutdown with error exit code
+198:   try {
+199:     await getShutdownManager().shutdown({ exitCode: 1, showProgress: false });
+200:   } catch (_err) {
+201:     // Intentionally ignored: shutdown itself failed, force exit as last resort
+202:     process.exit(1);
+203:   }
+204: });

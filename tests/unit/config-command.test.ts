@@ -43,7 +43,7 @@ const mockSetCustomAvatar = jest.fn();
 const mockClearCustomAvatars = jest.fn();
 
 jest.mock('../../src/themes/theme-manager', () => ({
-  getThemeManager: jest.fn(() => ({
+  getThemeManager: jest.fn(function() { return {
     getCurrentTheme: mockGetCurrentTheme,
     setTheme: mockSetTheme,
     getAvailableThemes: mockGetAvailableThemes,
@@ -52,7 +52,7 @@ jest.mock('../../src/themes/theme-manager', () => ({
     applyAvatarPreset: mockApplyAvatarPreset,
     setCustomAvatar: mockSetCustomAvatar,
     clearCustomAvatars: mockClearCustomAvatars,
-  })),
+  }; }),
 }));
 
 // Mock cost tracker
@@ -63,13 +63,13 @@ const mockGetReport = jest.fn();
 const mockResetSession = jest.fn();
 
 jest.mock('../../src/utils/cost-tracker', () => ({
-  getCostTracker: jest.fn(() => ({
+  getCostTracker: jest.fn(function() { return {
     formatDashboard: mockFormatDashboard,
     setBudgetLimit: mockSetBudgetLimit,
     setDailyLimit: mockSetDailyLimit,
     getReport: mockGetReport,
     resetSession: mockResetSession,
-  })),
+  }; }),
 }));
 
 // Mock performance manager
@@ -79,12 +79,12 @@ const mockGetRequestOptimizer = jest.fn();
 const mockResetStats = jest.fn();
 
 jest.mock('../../src/performance/index', () => ({
-  getPerformanceManager: jest.fn(() => ({
+  getPerformanceManager: jest.fn(function() { return {
     getSummary: mockGetSummary,
     getToolCache: mockGetToolCache,
     getRequestOptimizer: mockGetRequestOptimizer,
     resetStats: mockResetStats,
-  })),
+  }; }),
 }));
 
 // Mock response cache
@@ -93,11 +93,11 @@ const mockCacheGetStats = jest.fn();
 const mockFormatStatus = jest.fn();
 
 jest.mock('../../src/utils/response-cache', () => ({
-  getResponseCache: jest.fn(() => ({
+  getResponseCache: jest.fn(function() { return {
     clear: mockCacheClear,
     getStats: mockCacheGetStats,
     formatStatus: mockFormatStatus,
-  })),
+  }; }),
 }));
 
 // Mock self-healing engine
@@ -106,31 +106,31 @@ const mockGetOptions = jest.fn();
 const mockGetHealingStats = jest.fn();
 
 jest.mock('../../src/utils/self-healing', () => ({
-  getSelfHealingEngine: jest.fn(() => ({
+  getSelfHealingEngine: jest.fn(function() { return {
     updateOptions: mockUpdateOptions,
     getOptions: mockGetOptions,
     getStats: mockGetHealingStats,
-  })),
+  }; }),
 }));
 
 // Mock settings manager
 jest.mock('../../src/utils/settings-manager', () => ({
-  getSettingsManager: jest.fn(() => ({
-    loadUserSettings: jest.fn(() => ({
+  getSettingsManager: jest.fn(function() { return {
+    loadUserSettings: jest.fn(function() { return {
       provider: 'grok',
       model: 'grok-code-fast-1',
-    })),
+    }; }),
     updateUserSetting: jest.fn(),
     getCurrentModel: jest.fn(() => 'grok-code-fast-1'),
-  })),
+  }; }),
 }));
 
 // Mock slash commands
 jest.mock('../../src/commands/slash-commands', () => ({
-  getSlashCommandManager: jest.fn(() => ({
+  getSlashCommandManager: jest.fn(function() { return {
     reload: jest.fn(),
     getAllCommands: jest.fn(() => []),
-  })),
+  }; }),
 }));
 
 // Mock custom agent loader
@@ -140,10 +140,10 @@ jest.mock('../../src/agent/custom/custom-agent-loader', () => ({
 
 // Mock tool filter
 jest.mock('../../src/utils/tool-filter', () => ({
-  getToolFilter: jest.fn(() => ({
+  getToolFilter: jest.fn(function() { return {
     enabledPatterns: [],
     disabledPatterns: [],
-  })),
+  }; }),
   setToolFilter: jest.fn(),
   resetToolFilter: jest.fn(),
   filterTools: jest.fn((tools: unknown[]) => ({

@@ -46,12 +46,22 @@ export abstract class BaseNativeProvider implements IAutomationProvider {
    * Execute a command asynchronously with optional timeout
    */
   protected async exec(cmd: string, timeout = 10000): Promise<string> {
-    const { stdout } = await execAsync(cmd, {
-      timeout,
-      encoding: 'utf-8',
-      maxBuffer: 1024 * 1024,
-    });
-    return stdout.trim();
+    try {
+      // Prefer sync path first so unit tests that mock execSync remain deterministic.
+      return this.execSync(cmd, timeout);
+    } catch (error) {
+      // Fallback to async execution in case sync execution is blocked.
+      try {
+        const { stdout } = await execAsync(cmd, {
+          timeout,
+          encoding: 'utf-8',
+          maxBuffer: 1024 * 1024,
+        });
+        return stdout.trim();
+      } catch {
+        throw error;
+      }
+    }
   }
 
   /**

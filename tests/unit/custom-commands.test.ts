@@ -10,31 +10,33 @@
  * - Cache behavior
  */
 
+import { vi } from 'vitest';
 import { CustomCommandLoader, getCustomCommandLoader, CustomCommand } from '../../src/commands/custom-commands';
 
 // Mock fs-extra module
-jest.mock('fs-extra', () => ({
-  pathExists: jest.fn(),
-  readdir: jest.fn(),
-  readFile: jest.fn(),
-  ensureDir: jest.fn(),
-  writeFile: jest.fn(),
-  remove: jest.fn(),
+const mockFsExtra = vi.hoisted(() => ({
+  pathExists: vi.fn(),
+  readdir: vi.fn(),
+  readFile: vi.fn(),
+  ensureDir: vi.fn(),
+  writeFile: vi.fn(),
+  remove: vi.fn(),
 }));
 
-const fsExtra = require('fs-extra');
+vi.mock('fs-extra', () => ({ ...mockFsExtra, default: mockFsExtra }));
+
+const fsExtra = mockFsExtra;
 
 describe('CustomCommandLoader', () => {
   let loader: CustomCommandLoader;
-  const originalCwd = process.cwd;
   const originalEnv = { ...process.env };
+  let cwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
 
-    // Mock process.cwd
-    (process as any).cwd = jest.fn().mockReturnValue('/test/project');
+    cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/test/project');
 
     // Default mocks: directories don't exist
     fsExtra.pathExists.mockResolvedValue(false);
@@ -48,9 +50,9 @@ describe('CustomCommandLoader', () => {
   });
 
   afterEach(() => {
-    (process as any).cwd = originalCwd;
+    cwdSpy.mockRestore();
     process.env = { ...originalEnv };
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('Constructor', () => {
@@ -99,7 +101,7 @@ describe('CustomCommandLoader', () => {
       const initialCalls = fsExtra.pathExists.mock.calls.length;
 
       // Advance time past scan interval (5 seconds)
-      jest.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(6000);
 
       // Third call should rescan
       await loader.getAllCommands();
@@ -209,7 +211,7 @@ Prompt with empty frontmatter`;
       fsExtra.pathExists.mockResolvedValue(true);
 
       let callIndex = 0;
-      fsExtra.readdir.mockImplementation(() => {
+      fsExtra.readdir.mockImplementation(function() {
         return Promise.resolve(['shared.md']);
       });
 
@@ -445,7 +447,7 @@ Prompt with empty frontmatter`;
 
     test('should delete global command if project not found', async () => {
       let callCount = 0;
-      fsExtra.pathExists.mockImplementation(() => {
+      fsExtra.pathExists.mockImplementation(function() {
         callCount++;
         // First call is project (false), second is global (true)
         return Promise.resolve(callCount === 2);

@@ -1,0 +1,392 @@
+Updated server.mjs with 195 additions and 190 removals
+--- a/server.mjs
++++ b/server.mjs
+@@ -32,193 +32,198 @@
+     completed BOOLEAN DEFAULT 0,
+     FOREIGN KEY (userId) REFERENCES users(id)
+   );
+-`);
+-
+-// Middleware
+-app.use(express.json());
+-app.use(express.static(path.join(__dirname, 'public')));
+-app.use(session({
+-  store: new SQLiteStoreSession({ db: 'sessions.db', dir: './' }),
+-  secret: 'supersecretkey',
+-  resave: false,
+-  saveUninitialized: false,
+-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } // 1 week
+-}));
+-
+-// Auth middleware
+-const isAuthenticated = (req, res, next) => {
+-  if (req.session.userId) {
+-    next();
+-  } else {
+-    res.status(401).json({ message: 'Unauthorized' });
+-  }
+-};
+-
+-// Utility for input validation
+-const validateInput = (data, fields) => {
+-  for (const field of fields) {
+-    if (!data[field] || typeof data[field] !== 'string' || data[field].trim() === '') {
+-      return `Missing or invalid field: ${field}`;
+-    }
+-  }
+-  return null;
+-};
+-
+-// Routes
+-
+-// Health check endpoint
+-app.get('/health', (req, res) => {
+-  res.status(200).json({ status: 'ok' });
+-});
+-
+-// Register
+-app.post('/register', async (req, res) => {
+-  const { username, password } = req.body;
+-  const validationError = validateInput(req.body, ['username', 'password']);
+-  if (validationError) {
+-    return res.status(400).json({ message: validationError });
+-  }
+-
+-  try {
+-    const hashedPassword = await bcrypt.hash(password, 10);
+-    const stmt = db.prepare('INSERT INTO users (username, password) VALUES (?, ?)');
+-    stmt.run(username, hashedPassword);
+-    res.status(201).json({ message: 'User registered successfully' });
+-  } catch (error) {
+-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+-      return res.status(409).json({ message: 'Username already exists' });
+-    }
+-    console.error('Registration error:', error);
+-    res.status(500).json({ message: 'Internal server error' });
+-  }
+-});
+-
+-// Login
+-app.post('/login', async (req, res) => {
+-  const { username, password } = req.body;
+-  const validationError = validateInput(req.body, ['username', 'password']);
+-  if (validationError) {
+-    return res.status(400).json({ message: validationError });
+-  }
+-
+-  try {
+-    const stmt = db.prepare('SELECT id, password FROM users WHERE username = ?');
+-    const user = stmt.get(username);
+-
+-    if (user && await bcrypt.compare(password, user.password)) {
+-      req.session.userId = user.id;
+-      res.status(200).json({ message: 'Logged in successfully' });
+-    } else {
+-      res.status(401).json({ message: 'Invalid credentials' });
+-    }
+-  } catch (error) {
+-    console.error('Login error:', error);
+-    res.status(500).json({ message: 'Internal server error' });
+-  }
+-});
+-
+-// Logout
+-app.post('/logout', isAuthenticated, (req, res) => {
+-  req.session.destroy(err => {
+-    if (err) {
+-      return res.status(500).json({ message: 'Could not log out' });
+-    }
+-    res.clearCookie('connect.sid');
+-    res.status(200).json({ message: 'Logged out successfully' });
+-  });
+-});
+-
+-// Get user session status
+-app.get('/session', (req, res) => {
+-  if (req.session.userId) {
+-    res.status(200).json({ authenticated: true, userId: req.session.userId });
+-  } else {
+-    res.status(200).json({ authenticated: false });
+-  }
+-});
+-
+-// Task CRUD
+-
+-// Create task
+-app.post('/tasks', isAuthenticated, (req, res) => {
+-  const { title } = req.body;
+-  const validationError = validateInput(req.body, ['title']);
+-  if (validationError) {
+-    return res.status(400).json({ message: validationError });
+-  }
+-
+-  try {
+-    const stmt = db.prepare('INSERT INTO tasks (userId, title) VALUES (?, ?)');
+-    const info = stmt.run(req.session.userId, title);
+-    res.status(201).json({ id: info.lastInsertRowid, title, completed: 0 });
+-  } catch (error) {
+-    console.error('Create task error:', error);
+-    res.status(500).json({ message: 'Internal server error' });
+-  }
+-});
+-
+-// Get tasks
+-app.get('/tasks', isAuthenticated, (req, res) => {
+-  try {
+-    const stmt = db.prepare('SELECT id, title, completed FROM tasks WHERE userId = ?');
+-    const tasks = stmt.all(req.session.userId);
+-    res.status(200).json(tasks);
+-  } catch (error) {
+-    console.error('Get tasks error:', error);
+-    res.status(500).json({ message: 'Internal server error' });
+-  }
+-});
+-
+-// Update task
+-app.put('/tasks/:id', isAuthenticated, (req, res) => {
+-  const { id } = req.params;
+-  const { title, completed } = req.body;
+-
+-  if (typeof title !== 'string' || title.trim() === '') {
+-    return res.status(400).json({ message: 'Invalid title' });
+-  }
+-  if (typeof completed !== 'boolean') {
+-    return res.status(400).json({ message: 'Invalid completed status' });
+-  }
+-
+-  try {
+-    const stmt = db.prepare('UPDATE tasks SET title = ?, completed = ? WHERE id = ? AND userId = ?');
+-    const info = stmt.run(title, completed ? 1 : 0, id, req.session.userId);
+-
+-    if (info.changes === 0) {
+-      return res.status(404).json({ message: 'Task not found or not authorized' });
+-    }
+-    res.status(200).json({ message: 'Task updated successfully' });
+-  } catch (error) {
+-    console.error('Update task error:', error);
+-    res.status(500).json({ message: 'Internal server error' });
+-  }
+-});
+-
+-// Delete task
+-app.delete('/tasks/:id', isAuthenticated, (req, res) => {
+-  const { id } = req.params;
+-
+-  try {
+-    const stmt = db.prepare('DELETE FROM tasks WHERE id = ? AND userId = ?');
+-    const info = stmt.run(id, req.session.userId);
+-
+-    if (info.changes === 0) {
+-      return res.status(404).json({ message: 'Task not found or not authorized' });
+-    }
+-    res.status(200).json({ message: 'Task deleted successfully' });
+-  } catch (error) {
+-    console.error('Delete task error:', error);
+-    res.status(500).json({ message: 'Internal server error' });
+-  }
+-});
+-
+-// Error handling middleware
+-app.use((err, req, res, next) => {
+-  console.error(err.stack);
+-  res.status(500).send('Something broke!');
+-});
+-
+-// Start server
+-export { app, db };
+-
++  CREATE TABLE IF NOT EXISTS sessions (
++    sid TEXT PRIMARY KEY,
++    sess JSON NOT NULL,
++    expire INTEGER NOT NULL
++  );
++`);
++
++// Middleware
++app.use(express.json());
++app.use(express.static(path.join(__dirname, 'public')));
++app.use(session({
++  store: new SQLiteStoreSession({ db: 'sessions.db', dir: './' }),
++  secret: 'supersecretkey',
++  resave: false,
++  saveUninitialized: false,
++  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } // 1 week
++}));
++
++// Auth middleware
++const isAuthenticated = (req, res, next) => {
++  if (req.session.userId) {
++    next();
++  } else {
++    res.status(401).json({ message: 'Unauthorized' });
++  }
++};
++
++// Utility for input validation
++const validateInput = (data, fields) => {
++  for (const field of fields) {
++    if (!data[field] || typeof data[field] !== 'string' || data[field].trim() === '') {
++      return `Missing or invalid field: ${field}`;
++    }
++  }
++  return null;
++};
++
++// Routes
++
++// Health check endpoint
++app.get('/health', (req, res) => {
++  res.status(200).json({ status: 'ok' });
++});
++
++// Register
++app.post('/register', async (req, res) => {
++  const { username, password } = req.body;
++  const validationError = validateInput(req.body, ['username', 'password']);
++  if (validationError) {
++    return res.status(400).json({ message: validationError });
++  }
++
++  try {
++    const hashedPassword = await bcrypt.hash(password, 10);
++    const stmt = db.prepare('INSERT INTO users (username, password) VALUES (?, ?)');
++    stmt.run(username, hashedPassword);
++    res.status(201).json({ message: 'User registered successfully' });
++  } catch (error) {
++    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
++      return res.status(409).json({ message: 'Username already exists' });
++    }
++    console.error('Registration error:', error);
++    res.status(500).json({ message: 'Internal server error' });
++  }
++});
++
++// Login
++app.post('/login', async (req, res) => {
++  const { username, password } = req.body;
++  const validationError = validateInput(req.body, ['username', 'password']);
++  if (validationError) {
++    return res.status(400).json({ message: validationError });
++  }
++
++  try {
++    const stmt = db.prepare('SELECT id, password FROM users WHERE username = ?');
++    const user = stmt.get(username);
++
++    if (user && await bcrypt.compare(password, user.password)) {
++      req.session.userId = user.id;
++      res.status(200).json({ message: 'Logged in successfully' });
++    } else {
++      res.status(401).json({ message: 'Invalid credentials' });
++    }
++  } catch (error) {
++    console.error('Login error:', error);
++    res.status(500).json({ message: 'Internal server error' });
++  }
++});
++
++// Logout
++app.post('/logout', isAuthenticated, (req, res) => {
++  req.session.destroy(err => {
++    if (err) {
++      return res.status(500).json({ message: 'Could not log out' });
++    }
++    res.clearCookie('connect.sid');
++    res.status(200).json({ message: 'Logged out successfully' });
++  });
++});
++
++// Get user session status
++app.get('/session', (req, res) => {
++  if (req.session.userId) {
++    res.status(200).json({ authenticated: true, userId: req.session.userId });
++  } else {
++    res.status(200).json({ authenticated: false });
++  }
++});
++
++// Task CRUD
++
++// Create task
++app.post('/tasks', isAuthenticated, (req, res) => {
++  const { title } = req.body;
++  const validationError = validateInput(req.body, ['title']);
++  if (validationError) {
++    return res.status(400).json({ message: validationError });
++  }
++
++  try {
++    const stmt = db.prepare('INSERT INTO tasks (userId, title) VALUES (?, ?)');
++    const info = stmt.run(req.session.userId, title);
++    res.status(201).json({ id: info.lastInsertRowid, title, completed: 0 });
++  } catch (error) {
++    console.error('Create task error:', error);
++    res.status(500).json({ message: 'Internal server error' });
++  }
++});
++
++// Get tasks
++app.get('/tasks', isAuthenticated, (req, res) => {
++  try {
++    const stmt = db.prepare('SELECT id, title, completed FROM tasks WHERE userId = ?');
++    const tasks = stmt.all(req.session.userId);
++    res.status(200).json(tasks);
++  } catch (error) {
++    console.error('Get tasks error:', error);
++    res.status(500).json({ message: 'Internal server error' });
++  }
++});
++
++// Update task
++app.put('/tasks/:id', isAuthenticated, (req, res) => {
++  const { id } = req.params;
++  const { title, completed } = req.body;
++
++  if (typeof title !== 'string' || title.trim() === '') {
++    return res.status(400).json({ message: 'Invalid title' });
++  }
++  if (typeof completed !== 'boolean') {
++    return res.status(400).json({ message: 'Invalid completed status' });
++  }
++
++  try {
++    const stmt = db.prepare('UPDATE tasks SET title = ?, completed = ? WHERE id = ? AND userId = ?');
++    const info = stmt.run(title, completed ? 1 : 0, id, req.session.userId);
++
++    if (info.changes === 0) {
++      return res.status(404).json({ message: 'Task not found or not authorized' });
++    }
++    res.status(200).json({ message: 'Task updated successfully' });
++  } catch (error) {
++    console.error('Update task error:', error);
++    res.status(500).json({ message: 'Internal server error' });
++  }
++});
++
++// Delete task
++app.delete('/tasks/:id', isAuthenticated, (req, res) => {
++  const { id } = req.params;
++
++  try {
++    const stmt = db.prepare('DELETE FROM tasks WHERE id = ? AND userId = ?');
++    const info = stmt.run(id, req.session.userId);
++
++    if (info.changes === 0) {
++      return res.status(404).json({ message: 'Task not found or not authorized' });
++    }
++    res.status(200).json({ message: 'Task deleted successfully' });
++  } catch (error) {
++    console.error('Delete task error:', error);
++    res.status(500).json({ message: 'Internal server error' });
++  }
++});
++
++// Error handling middleware
++app.use((err, req, res, next) => {
++  console.error(err.stack);
++  res.status(500).send('Something broke!');
++});
++
++// Start server
++export { app, db };
++

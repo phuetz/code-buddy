@@ -30,10 +30,13 @@ jest.mock('../../src/utils/logger.js', () => ({
 
 /**
  * Helper: spawn a long-running child process and return its PID.
- * The child sleeps for 60s so it stays alive for the duration of tests.
+ * Uses Node itself so the helper works on Windows and Unix.
  */
 function spawnBlockingProcess(): ChildProcess {
-  const child = spawn('sleep', ['60'], { detached: true, stdio: 'ignore' });
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60000)'], {
+    detached: true,
+    stdio: 'ignore',
+  });
   child.unref();
   return child;
 }

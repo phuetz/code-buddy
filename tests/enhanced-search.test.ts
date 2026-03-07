@@ -46,6 +46,21 @@ function createMockProcess() {
   return process;
 }
 
+async function expectEvent<TArgs extends unknown[]>(
+  target: { once: (event: string, listener: (...args: unknown[]) => void) => unknown },
+  eventName: string,
+  trigger: () => void | Promise<void>,
+  assertion: (...args: TArgs) => void | Promise<void>
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    target.once(eventName, (...args: unknown[]) => {
+      Promise.resolve(assertion(...(args as TArgs))).then(resolve, reject);
+    });
+
+    Promise.resolve(trigger()).catch(reject);
+  });
+}
+
 describe('EnhancedSearch', () => {
   let search: EnhancedSearch;
 
@@ -85,7 +100,7 @@ describe('EnhancedSearch', () => {
       expect(path).toBe('/mock/path/to/rg');
     });
 
-    it('should handle asar paths', () => {
+    it('should handle asar paths', async () => {
       // Mock rgPath with asar
       jest.resetModules();
       jest.doMock('@vscode/ripgrep', () => ({
@@ -93,7 +108,7 @@ describe('EnhancedSearch', () => {
       }));
 
       // Re-import to get new mock
-      const { EnhancedSearch: ES } = require('../src/tools/enhanced-search.js');
+      const { EnhancedSearch: ES } = await import('../src/tools/enhanced-search.js');
       const s = new ES();
       const path = s.getRipgrepPath();
       expect(path).toContain('asar.unpacked');
@@ -155,7 +170,7 @@ describe('EnhancedSearch', () => {
       expect(args).toContain('!test/**');
     });
 
-    it('should emit match events on stdout data', (done) => {
+    it('should emit match events on stdout data', async () => {
       const mockProcess = createMockProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
@@ -164,13 +179,6 @@ describe('EnhancedSearch', () => {
         onMatch: (match) => matches.push(match),
       });
 
-      search.on('match', (match) => {
-        expect(match.file).toBe('test.ts');
-        expect(match.line).toBe(10);
-        done();
-      });
-
-      // Simulate ripgrep JSON output
       const jsonLine = JSON.stringify({
         type: 'match',
         data: {
@@ -181,17 +189,24 @@ describe('EnhancedSearch', () => {
         },
       });
 
-      mockProcess.stdout.emit('data', Buffer.from(jsonLine + '\n'));
+      const matchEvent = expectEvent<[SearchMatch]>(
+        search,
+        'match',
+        () => {
+          mockProcess.stdout.emit('data', Buffer.from(jsonLine + '\n'));
+        },
+        (match) => {
+          expect(match.file).toBe('test.ts');
+          expect(match.line).toBe(10);
+        }
+      );
+
+      await matchEvent;
     });
 
-    it('should emit progress events', (done) => {
+    it('should emit progress events', async () => {
       const mockProcess = createMockProcess();
       mockSpawn.mockReturnValue(mockProcess);
-
-      search.on('progress', (progress) => {
-        expect(progress.filesSearched).toBeGreaterThanOrEqual(1);
-        done();
-      });
 
       search.streamSearch('query');
 
@@ -201,21 +216,21 @@ describe('EnhancedSearch', () => {
         data: { path: { text: 'file1.ts' } },
       });
 
-      mockProcess.stdout.emit('data', Buffer.from(beginLine + '\n'));
+      await expectEvent<[SearchStats]>(
+        search,
+        'progress',
+        () => {
+          mockProcess.stdout.emit('data', Buffer.from(beginLine + '\n'));
+        },
+        (progress) => {
+          expect(progress.filesSearched).toBeGreaterThanOrEqual(1);
+        }
+      );
     });
 
-    it('should emit complete event with results', (done) => {
+    it('should emit complete event with results', async () => {
       const mockProcess = createMockProcess();
       mockSpawn.mockReturnValue(mockProcess);
-
-      search.on('complete', (results: SearchMatch[], stats: SearchStats) => {
-        expect(results).toHaveLength(1);
-        expect(stats.matchCount).toBe(1);
-        expect(stats.cached).toBe(false);
-        done();
-      });
-
-      search.streamSearch('query');
 
       const matchLine = JSON.stringify({
         type: 'match',
@@ -227,47 +242,71 @@ describe('EnhancedSearch', () => {
         },
       });
 
-      mockProcess.stdout.emit('data', Buffer.from(matchLine + '\n'));
-      mockProcess.emit('close', 0);
+      await expectEvent<[SearchMatch[], SearchStats]>(
+        search,
+        'complete',
+        () => {
+          search.streamSearch('query');
+          mockProcess.stdout.emit('data', Buffer.from(matchLine + '\n'));
+          mockProcess.emit('close', 0);
+        },
+        (results, stats) => {
+          expect(results).toHaveLength(1);
+          expect(stats.matchCount).toBe(1);
+          expect(stats.cached).toBe(false);
+        }
+      );
     });
 
-    it('should emit error event on process error', (done) => {
+    it('should emit error event on process error', async () => {
       const mockProcess = createMockProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      search.on('error', (error) => {
-        expect(error.message).toBe('spawn error');
-        done();
-      });
-
-      search.streamSearch('query');
-      mockProcess.emit('error', new Error('spawn error'));
+      await expectEvent<[Error]>(
+        search,
+        'error',
+        () => {
+          search.streamSearch('query');
+          mockProcess.emit('error', new Error('spawn error'));
+        },
+        (error) => {
+          expect(error.message).toBe('spawn error');
+        }
+      );
     });
 
-    it('should emit error on non-zero exit code', (done) => {
+    it('should emit error on non-zero exit code', async () => {
       const mockProcess = createMockProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      search.on('error', (error) => {
-        expect(error.message).toContain('Search failed');
-        done();
-      });
-
-      search.streamSearch('query');
-      mockProcess.emit('close', 3); // Error code
+      await expectEvent<[Error]>(
+        search,
+        'error',
+        () => {
+          search.streamSearch('query');
+          mockProcess.emit('close', 3);
+        },
+        (error) => {
+          expect(error.message).toContain('Search failed');
+        }
+      );
     });
 
-    it('should handle exit code 1 (no matches) as success', (done) => {
+    it('should handle exit code 1 (no matches) as success', async () => {
       const mockProcess = createMockProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
-      search.on('complete', (results: SearchMatch[]) => {
-        expect(results).toHaveLength(0);
-        done();
-      });
-
-      search.streamSearch('query');
-      mockProcess.emit('close', 1);
+      await expectEvent<[SearchMatch[]]>(
+        search,
+        'complete',
+        () => {
+          search.streamSearch('query');
+          mockProcess.emit('close', 1);
+        },
+        (results) => {
+          expect(results).toHaveLength(0);
+        }
+      );
     });
 
     it('should handle stderr warnings', () => {
@@ -296,7 +335,7 @@ describe('EnhancedSearch', () => {
       expect(warnings).toHaveLength(0);
     });
 
-    it('should call option callbacks', (done) => {
+    it('should call option callbacks', async () => {
       const mockProcess = createMockProcess();
       mockSpawn.mockReturnValue(mockProcess);
 
@@ -321,14 +360,24 @@ describe('EnhancedSearch', () => {
 
       mockProcess.stdout.emit('data', Buffer.from(matchLine + '\n'));
 
-      setTimeout(() => {
-        expect(callbacks.onMatch).toHaveBeenCalled();
-        mockProcess.emit('close', 0);
+      await new Promise<void>((resolve, reject) => {
         setTimeout(() => {
-          expect(callbacks.onComplete).toHaveBeenCalled();
-          done();
+          try {
+            expect(callbacks.onMatch).toHaveBeenCalled();
+            mockProcess.emit('close', 0);
+            setTimeout(() => {
+              try {
+                expect(callbacks.onComplete).toHaveBeenCalled();
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            }, 10);
+          } catch (error) {
+            reject(error);
+          }
         }, 10);
-      }, 10);
+      });
     });
   });
 
@@ -461,7 +510,7 @@ describe('EnhancedSearch', () => {
     it('should use symbol cache', async () => {
       // findSymbols makes multiple internal searches, so we need to mock
       // all processes to close immediately
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = createMockProcess();
         // Auto-close the process
         setImmediate(() => proc.emit('close', 1));
@@ -594,7 +643,7 @@ describe('EnhancedSearch', () => {
 
     it('should search with AND operator', async () => {
       // searchMultiple with AND makes multiple searches, auto-close all
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = createMockProcess();
         setImmediate(() => proc.emit('close', 1));
         return proc;
@@ -932,22 +981,24 @@ describe('Edge cases', () => {
     search = new EnhancedSearch();
   });
 
-  it('should handle invalid JSON in stdout gracefully', (done) => {
+  it('should handle invalid JSON in stdout gracefully', async () => {
     const mockProcess = createMockProcess();
     mockSpawn.mockReturnValue(mockProcess);
 
-    search.streamSearch('test');
-
-    // Send invalid JSON - should not throw
-    mockProcess.stdout.emit('data', Buffer.from('not json\n'));
-    mockProcess.stdout.emit('data', Buffer.from('{"partial":true\n'));
-
-    // Should still complete successfully
-    search.on('complete', () => done());
-    mockProcess.emit('close', 0);
+    await expectEvent(
+      search,
+      'complete',
+      () => {
+        search.streamSearch('test');
+        mockProcess.stdout.emit('data', Buffer.from('not json\n'));
+        mockProcess.stdout.emit('data', Buffer.from('{"partial":true\n'));
+        mockProcess.emit('close', 0);
+      },
+      () => {}
+    );
   });
 
-  it('should handle partial JSON lines (buffering)', (done) => {
+  it('should handle partial JSON lines (buffering)', async () => {
     const mockProcess = createMockProcess();
     mockSpawn.mockReturnValue(mockProcess);
 
@@ -971,25 +1022,23 @@ describe('Edge cases', () => {
     mockProcess.stdout.emit('data', Buffer.from(fullJson.slice(0, mid)));
     mockProcess.stdout.emit('data', Buffer.from(fullJson.slice(mid) + '\n'));
 
-    setTimeout(() => {
-      expect(matches).toHaveLength(1);
-      mockProcess.emit('close', 0);
-      done();
-    }, 20);
+    await new Promise<void>((resolve, reject) => {
+      setTimeout(() => {
+        try {
+          expect(matches).toHaveLength(1);
+          mockProcess.emit('close', 0);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }, 20);
+    });
   });
 
-  it('should process remaining buffer on close', (done) => {
+  it('should process remaining buffer on close', async () => {
     const mockProcess = createMockProcess();
     mockSpawn.mockReturnValue(mockProcess);
 
-    search.on('complete', (results: SearchMatch[]) => {
-      expect(results).toHaveLength(1);
-      done();
-    });
-
-    search.streamSearch('test');
-
-    // Send JSON without trailing newline
     const json = JSON.stringify({
       type: 'match',
       data: {
@@ -1000,21 +1049,35 @@ describe('Edge cases', () => {
       },
     });
 
-    mockProcess.stdout.emit('data', Buffer.from(json));
-    mockProcess.emit('close', 0);
+    await expectEvent<[SearchMatch[]]>(
+      search,
+      'complete',
+      () => {
+        search.streamSearch('test');
+        mockProcess.stdout.emit('data', Buffer.from(json));
+        mockProcess.emit('close', 0);
+      },
+      (results) => {
+        expect(results).toHaveLength(1);
+      }
+    );
   });
 
-  it('should handle empty search results', (done) => {
+  it('should handle empty search results', async () => {
     const mockProcess = createMockProcess();
     mockSpawn.mockReturnValue(mockProcess);
 
-    search.on('complete', (results: SearchMatch[], stats: SearchStats) => {
-      expect(results).toHaveLength(0);
-      expect(stats.matchCount).toBe(0);
-      done();
-    });
-
-    search.streamSearch('nonexistent');
-    mockProcess.emit('close', 1); // Exit code 1 = no matches
+    await expectEvent<[SearchMatch[], SearchStats]>(
+      search,
+      'complete',
+      () => {
+        search.streamSearch('nonexistent');
+        mockProcess.emit('close', 1);
+      },
+      (results, stats) => {
+        expect(results).toHaveLength(0);
+        expect(stats.matchCount).toBe(0);
+      }
+    );
   });
 });

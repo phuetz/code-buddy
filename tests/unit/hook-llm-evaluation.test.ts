@@ -6,6 +6,7 @@
  */
 
 import { SmartHookRunner, SmartHookConfig } from '../../src/hooks/smart-hooks.js';
+
 import {
   AdvancedHookRunner,
   AdvancedHook,
@@ -20,9 +21,9 @@ import {
 const mockChat = jest.fn();
 
 jest.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: mockChat,
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/utils/logger.js', () => ({

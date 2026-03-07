@@ -1,0 +1,17 @@
+Updated index.js with 2 additions and 2 removals
+--- a/index.js
++++ b/index.js
+@@ -65,10 +65,10 @@
+ 
+ switch (command) {
+   case 'add':
+-    if (!arg) {
++    if (args.length === 0) {
+       console.log('Usage: node index.js add <description>');
+       break;
+     }
+-    addTask(arg);
++    addTask(args.join(' '));
+     break;
+   case 'list':
+     listTasks();

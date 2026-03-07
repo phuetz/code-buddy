@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Incident Assistant</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
+      input, textarea, button { width: 100%; margin-top: 8px; }
+      .incident, .job { border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-top: 8px; }
+      .summary { background: #f5faff; border-left: 4px solid #2f7dd1; padding: 8px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>AI Incident Assistant</h1>
+    <div class="grid">
+      <div class="card">
+        <h2>Create Incident</h2>
+        <form id="incidentForm">
+          <input id="title" placeholder="Title" required />
+          <textarea id="description" placeholder="Description" required></textarea>
+          <button type="submit">Create</button>
+        </form>
+        <div id="incidents"></div>
+      </div>
+      <div class="card">
+        <h2>Jobs</h2>
+        <form id="jobForm">
+          <input id="task" placeholder="Task" required />
+          <button type="submit">Enqueue Job</button>
+        </form>
+        <div id="jobs"></div>
+      </div>
+    </div>
+    <script>
+      const incidentsEl = document.getElementById('incidents');
+      const jobsEl = document.getElementById('jobs');
+      let incidents = [];
+      let jobs = [];
+
+      function render() {
+        incidentsEl.innerHTML = incidents.map((inc) => `
+          <div class="incident">
+            <strong>${inc.title}</strong>
+            <div>${inc.description}</div>
+            <div>Status: ${inc.status}</div>
+            <button onclick="summarize('${inc.id}')">Summarize with AI</button>
+            ${inc.summary ? `<div class="summary">${inc.summary}</div>` : ''}
+          </div>
+        `).join('');
+        jobsEl.innerHTML = jobs.map((job) => `
+          <div class="job"><strong>${job.task}</strong> - ${job.status}</div>
+        `).join('');
+      }
+
+      async function loadInitial() {
+        incidents = await (await fetch('/api/incidents')).json();
+        render();
+      }
+
+      document.getElementById('incidentForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('title').value;
+        const description = document.getElementById('description').value;
+        await fetch('/api/incidents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title, description }) });
+        e.target.reset();
+      });
+
+      document.getElementById('jobForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const task = document.getElementById('task').value;
+        await fetch('/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ task }) });
+        e.target.reset();
+      });
+
+      window.summarize = async (id) => {
+        const inc = incidents.find((x) => x.id === id);
+        if (!inc) return;
+        const res = await fetch('/api/assist/summarize', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: `${inc.title}\n${inc.description}` }),
+        });
+        const data = await res.json();
+        inc.summary = data.summary || data.message || 'No summary';
+        render();
+      };
+
+      const ws = new WebSocket(`ws://${location.host}`);
+      ws.addEventListener('message', (evt) => {
+        const data = JSON.parse(evt.data);
+        if (data.type === 'init') {
+          incidents = data.incidents || [];
+          jobs = data.jobs || [];
+        } else if (data.type === 'incidentCreated') {
+          incidents.push(data.incident);
+        } else if (data.type === 'incidentUpdated') {
+          incidents = incidents.map((x) => (x.id === data.incident.id ? data.incident : x));
+        } else if (data.type === 'incidentDeleted') {
+          incidents = incidents.filter((x) => x.id !== data.id);
+        } else if (data.type === 'jobCreated') {
+          jobs.push(data.job);
+        } else if (data.type === 'jobUpdated') {
+          jobs = jobs.map((x) => (x.id === data.job.id ? data.job : x));
+        }
+        render();
+      });
+
+      loadInitial();
+    </script>
+  </body>
+  </html>

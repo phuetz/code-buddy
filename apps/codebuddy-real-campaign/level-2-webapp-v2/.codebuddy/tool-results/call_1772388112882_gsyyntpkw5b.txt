@@ -1,0 +1,2 @@
+find: ‘3000’: No such file or directory
+/bin/bash: line 1: netstat: command not found

@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "TypeScript 5 new language syntax and type system enhancements"
+══════════════════════════════════════════════════
+
+1. **Documentation - TypeScript 5.0** [1]
+   TypeScript 5.0 introduces a new option called --verbatimModuleSyntax to simplify the situation. The rules are much simpler - any imports or exports without a ...
+
+2. **TypeScript 5: New Innovations & Breaking Changes** [2]
+   TypeScript now allows code completion to generate the various “case:” cases in its switch case statement when switching over restricted value ...
+
+3. **TypeScript 5.9 Is Here — And It Changes How You'll Write Code ...** [3]
+   TypeScript 5.9 ships deferred imports, stable Node.js module resolution, expandable hover tooltips, and faster builds.
+
+4. **Documentation - TypeScript 5.5** [4]
+   TypeScript 5.5 declares new proposed methods for the ECMAScript Set type. Some of these methods, like union , intersection , difference , and ...
+
+5. **TypeScript 5.9 New Features: Developer Guide 2026** [5]
+   Explore TypeScript 5.9 new features including improved type inference, decorator metadata, and performance enhancements.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[2] TypeScript 5: New Innovations & Breaking Changes — https://javascript-conference.com/blog/typescript-5/
+[3] TypeScript 5.9 Is Here — And It Changes How You'll Write Code ... — https://medium.com/@mernstackdevbykevin/typescript-5-9-is-here-and-it-changes-how-youll-write-code-every-day-dfb25aa91ea3
+[4] Documentation - TypeScript 5.5 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-5.html
+[5] TypeScript 5.9 New Features: Developer Guide 2026 — https://www.digitalapplied.com/blog/typescript-5-9-new-features-developer-guide-2026

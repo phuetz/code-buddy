@@ -1,0 +1,504 @@
+Contents of src/index.ts (2004 lines):
+1: #!/usr/bin/env node
+2: // Record startup time as early as possible
+3: const STARTUP_TIME = Date.now();
+4: 
+5: import { program } from "commander";
+6: import { readFileSync } from "fs";
+7: import { join, dirname } from "path";
+8: import { globalAgent as httpGlobalAgent } from 'node:http';
+9: import { globalAgent as httpsGlobalAgent } from 'node:https';
+10: 
+11: // Types for dynamically imported modules
+12: import type { ChatCompletionMessageParam } from "openai/resources/chat";
+13: import type { SecurityMode } from "./security/security-modes.js";
+14: 
+15: import { fileURLToPath } from 'url';
+16: 
+17: // Read version from package.json
+18: const __filename = fileURLToPath(import.meta.url);
+19: const __dirname = dirname(__filename);
+20: const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+21: 
+22: // Import logger statically since it's used throughout the file synchronously
+23: import { logger } from "./utils/logger.js";
+24: // Import graceful shutdown for clean application termination
+25: import {
+26:   initializeGracefulShutdown,
+27:   getShutdownManager,
+28: } from "./utils/graceful-shutdown.js";
+29: 
+30: // CLI command modules are loaded lazily below (see registerLazyCommands)
+31: // to avoid importing heavy transitive dependencies at startup.
+32: 
+33: // Startup timing (enabled via PERF_TIMING=true or DEBUG=true)
+34: const PERF_TIMING = process.env.PERF_TIMING === 'true' || process.env.DEBUG === 'true';
+35: const startupPhases: { name: string; time: number }[] = [];
+36: 
+37: function recordStartupPhase(name: string): void {
+38:   if (!PERF_TIMING) return;
+39:   startupPhases.push({ name, time: Date.now() - STARTUP_TIME });
+40: }
+41: 
+42: function logStartupMetrics(): void {
+43:   if (!PERF_TIMING || startupPhases.length === 0) return;
+44:   console.log('\n=== Startup Performance ===');
+45:   console.log(`Total time: ${Date.now() - STARTUP_TIME}ms`);
+46:   console.log('Phase breakdown:');
+47:   for (const phase of startupPhases) {
+48:     console.log(`  ${phase.name}: ${phase.time}ms`);
+49:   }
+50:   console.log('===========================\n');
+51: }
+52: 
+53: recordStartupPhase('imports-start');
+54: 
+55: recordStartupPhase('imports-done');
+56: 
+57: // ============================================================================
+58: // Lazy Import System - Defer heavy modules until needed
+59: // ============================================================================
+60: 
+61: // Cached lazy imports - only loaded once when first accessed
+62: const lazyModuleCache: Map<string, unknown> = new Map();
+63: 
+64: async function lazyLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
+65:   if (lazyModuleCache.has(key)) {
+66:     return lazyModuleCache.get(key) as T;
+67:   }
+68:   const startTime = PERF_TIMING ? Date.now() : 0;
+69:   const module = await loader();
+70:   if (PERF_TIMING) {
+71:     const loadTime = Date.now() - startTime;
+72:     if (loadTime > 50) { // Only log slow loads
+73:       recordStartupPhase(`lazy:${key} (${loadTime}ms)`);
+74:     }
+75:   }
+76:   lazyModuleCache.set(key, module);
+77:   return module;
+78: }
+79: 
+80: // Lazy imports for heavy modules - only loaded when needed
+81: const lazyImport = {
+82:   // UI modules - heavy, only needed for interactive mode
+83:   React: () => lazyLoad('react', () => import("react")),
+84:   ink: () => lazyLoad('ink', () => import("ink")),
+85:   ChatInterface: () => lazyLoad('ChatInterface', () => import("./ui/components/ChatInterface.js").then(m => m.default)),
+86: 
+87:   // Core agent - heavy, needed for all operations
+88:   CodeBuddyAgent: () => lazyLoad('CodeBuddyAgent', () => import("./agent/codebuddy-agent.js").then(m => m.CodeBuddyAgent)),
+89: 
+90:   // Utilities - medium weight
+91:   ConfirmationService: () => lazyLoad('ConfirmationService', () => import("./utils/confirmation-service.js").then(m => m.ConfirmationService)),
+92:   settingsManager: () => lazyLoad('settingsManager', () => import("./utils/settings-manager.js").then(m => m.getSettingsManager)),
+93:   credentialManager: () => lazyLoad('credentialManager', () => import("./security/credential-manager.js").then(m => m.getCredentialManager)),
+94: 
+95:   // Commands - only loaded when their command is run
+96:   initProject: () => lazyLoad('initProject', () => import("./utils/init-project.js")),
+97:   securityModes: () => lazyLoad('securityModes', () => import("./security/security-modes.js")),
+98:   contextLoader: () => lazyLoad('contextLoader', () => import("./context/context-loader.js")),
+99:   renderers: () => lazyLoad('renderers', () => import("./renderers/index.js")),
+100:   performance: () => lazyLoad('performance', () => import("./performance/index.js")),
+101:   pluginManager: () => lazyLoad('pluginManager', () => import("./plugins/plugin-manager.js")),
+102:   lazyLoader: () => lazyLoad('lazyLoader', () => import("./performance/lazy-loader.js")),
+103: 
+104:   // Settings hierarchy - loaded early for configuration
+105:   settingsHierarchy: () => lazyLoad('settingsHierarchy', () => import('./config/settings-hierarchy.js').then(m => m.getSettingsHierarchy)),
+106: 
+107:   // Error handling - deferred until needed
+108:   crashHandler: () => lazyLoad('crashHandler', () => import('./errors/crash-handler.js').then(m => m.getCrashHandler())),
+109:   disposable: () => lazyLoad('disposable', () => import('./utils/disposable.js')),
+110: 
+111:   // Environment - load early but still lazy
+112:   dotenv: () => lazyLoad('dotenv', () => import('dotenv')),
+113: };
+114: 
+115: // ============================================================================
+116: // Minimal startup - defer everything possible
+117: // ============================================================================
+118: 
+119: // Load environment variables lazily (but early)
+120: let envLoaded = false;
+121: async function ensureEnvLoaded(): Promise<void> {
+122:   if (!envLoaded) {
+123:     const dotenv = await lazyImport.dotenv();
+124:     dotenv.config();
+125:     envLoaded = true;
+126:   }
+127: }
+128: 
+129: // Minimal logger for startup errors (no chalk dependency)
+130: const startupLogger = {
+131:   error: (msg: string, err?: unknown) => {
+132:     console.error(msg, err instanceof Error ? err.message : err);
+133:   },
+134:   warn: (msg: string) => console.warn(msg),
+135: };
+136: 
+137: // ============================================================================
+138: // Process Signal Handlers - Using Graceful Shutdown Manager
+139: // ============================================================================
+140: 
+141: // Initialize graceful shutdown system with 30s timeout
+142: const _shutdownManager = initializeGracefulShutdown({
+143:   timeoutMs: 30000, // 30 seconds max before force exit
+144:   forceExitOnTimeout: true,
+145:   showProgress: true,
+146: });
+147: 
+148: // Note: SIGINT, SIGTERM, SIGHUP are now handled by GracefulShutdownManager
+149: // The manager will:
+150: // 1. Wait for pending operations to complete
+151: // 2. Save session state
+152: // 3. Restore terminal
+153: // 4. Close MCP connections
+154: // 5. Close database connections
+155: // 6. Flush logs
+156: // 7. Exit cleanly (or force exit after timeout)
+157: 
+158: // Handle uncaught exceptions with crash recovery
+159: process.on("uncaughtException", async (error) => {
+160:   let crashFile: string | null = null;
+161:   try {
+162:     const crashHandler = await lazyImport.crashHandler();
+163:     crashFile = crashHandler.handleCrash(error, "Uncaught exception");
+164:   } catch (_err) {
+165:     // Intentionally ignored: crash handler itself may fail during fatal error recovery
+166:   }
+167: 
+168:   startupLogger.error("\nUnexpected error occurred:", error);
+169:   if (crashFile) {
+170:     startupLogger.error(`\nCrash context saved to: ${crashFile}`);
+171:     startupLogger.error("You can resume your session with: buddy --resume");
+172:   }
+173: 
+174:   // Use graceful shutdown with error exit code
+175:   try {
+176:     await getShutdownManager().shutdown({ exitCode: 1, showProgress: false });
+177:   } catch (_err) {
+178:     // Intentionally ignored: shutdown itself failed, force exit as last resort
+179:     process.exit(1);
+180:   }
+181: });
+182: 
+183: process.on("unhandledRejection", async (reason, _promise) => {
+184:   const error = reason instanceof Error ? reason : new Error(String(reason));
+185:   let crashFile: string | null = null;
+186:   try {
+187:     const crashHandler = await lazyImport.crashHandler();
+188:     crashFile = crashHandler.handleCrash(error, "Unhandled rejection");
+189:   } catch (_err) {
+190:     // Intentionally ignored: crash handler itself may fail during fatal error recovery
+191:   }
+192: 
+193:   startupLogger.error("\nUnhandled promise rejection:", error);
+194:   if (crashFile) {
+195:     startupLogger.error(`\nCrash context saved to: ${crashFile}`);
+196:     startupLogger.error("You can resume your session with: buddy --resume");
+197:   }
+198: 
+199:   // Use graceful shutdown with error exit code
+200:   try {
+201:     await getShutdownManager().shutdown({ exitCode: 1, showProgress: false });
+202:   } catch (_err) {
+203:     // Intentionally ignored: shutdown itself failed, force exit as last resort
+204:     process.exit(1);
+205:   }
+206: });
+207: 
+208: // ============================================================================
+209: // Settings and Credential Loading - Now async with lazy imports
+210: // ============================================================================
+211: 
+212: // Ensure user settings are initialized and hierarchy is loaded
+213: async function ensureUserSettingsDirectory(): Promise<void> {
+214:   try {
+215:     const getSettingsManager = await lazyImport.settingsManager();
+216:     const manager = getSettingsManager();
+217:     // This will create default settings if they don't exist
+218:     manager.loadUserSettings();
+219:   } catch (_err) {
+220:     logger.debug('Failed to initialize user settings directory', { error: _err });
+221:   }
+222: 
+223:   // Load the 3-level settings hierarchy:
+224:   //   ~/.codebuddy/settings.json  <  .codebuddy/settings.json  <  .codebuddy/settings.local.json
+225:   try {
+226:     const getSettingsHierarchy = await lazyImport.settingsHierarchy();
+227:     const hierarchy = getSettingsHierarchy();
+228:     hierarchy.loadAllLevels();
+229:     logger.debug('Settings hierarchy loaded successfully');
+230:   } catch (_err) {
+231:     logger.debug('Failed to load settings hierarchy', { error: _err });
+232:   }
+233: }
+234: 
+235: // Detected provider configuration
+236: interface DetectedProvider {
+237:   provider: 'gemini' | 'grok' | 'openai' | 'anthropic' | 'unknown';
+238:   apiKey: string;
+239:   baseURL: string;
+240:   defaultModel: string;
+241: }
+242: 
+243: // Detect provider from environment variables
+244: function detectProviderFromEnv(): DetectedProvider | null {
+245:   // Priority: Gemini > Grok > OpenAI > Anthropic
+246:   if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) {
+247:     return {
+248:       provider: 'gemini',
+249:       apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '',
+250:       baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+251:       defaultModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+252:     };
+253:   }
+254: 
+255:   if (process.env.GROK_API_KEY || process.env.XAI_API_KEY) {
+256:     return {
+257:       provider: 'grok',
+258:       apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
+259:       baseURL: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
+260:       defaultModel: process.env.GROK_MODEL || 'grok-3-fast-latest',
+261:     };
+262:   }
+263: 
+264:   if (process.env.OPENAI_API_KEY) {
+265:     return {
+266:       provider: 'openai',
+267:       apiKey: process.env.OPENAI_API_KEY,
+268:       baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+269:       defaultModel: process.env.OPENAI_MODEL || 'gpt-4o',
+270:     };
+271:   }
+272: 
+273:   if (process.env.ANTHROPIC_API_KEY) {
+274:     return {
+275:       provider: 'anthropic',
+276:       apiKey: process.env.ANTHROPIC_API_KEY,
+277:       baseURL: 'https://api.anthropic.com/v1',
+278:       defaultModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+279:     };
+280:   }
+281: 
+282:   return null;
+283: }
+284: 
+285: // Cache detected provider
+286: let cachedProvider: DetectedProvider | null | undefined = undefined;
+287: 
+288: async function getDetectedProvider(): Promise<DetectedProvider | null> {
+289:   if (cachedProvider !== undefined) return cachedProvider;
+290: 
+291:   await ensureEnvLoaded();
+292:   cachedProvider = detectProviderFromEnv();
+293: 
+294:   if (cachedProvider) {
+295:     logger.info(`Auto-detected provider: ${cachedProvider.provider} (model: ${cachedProvider.defaultModel})`);
+296:   }
+297: 
+298:   return cachedProvider;
+299: }
+300: 
+301: // Load API key from environment, secure storage, or legacy settings
+302: async function loadApiKey(): Promise<string | undefined> {
+303:   await ensureEnvLoaded();
+304: 
+305:   // Check environment-detected provider first
+306:   const detected = await getDetectedProvider();
+307:   if (detected) return detected.apiKey;
+308: 
+309:   // Priority: secure credential storage > legacy settings file
+310:   const getCredentialManager = await lazyImport.credentialManager();
+311:   const credManager = getCredentialManager();
+312:   const apiKey = credManager.getApiKey();
+313: 
+314:   if (apiKey) {
+315:     return apiKey;
+316:   }
+317: 
+318:   // Fall back to legacy settings manager
+319:   const getSettingsManager = await lazyImport.settingsManager();
+320:   const settingsManager = getSettingsManager();
+321:   return settingsManager.getApiKey();
+322: }
+323: 
+324: // Load base URL from detected provider or user settings
+325: async function loadBaseURL(): Promise<string> {
+326:   await ensureEnvLoaded();
+327: 
+328:   // Check environment-detected provider first
+329:   const detected = await getDetectedProvider();
+330:   if (detected) return detected.baseURL;
+331: 
+332:   // Check explicit environment override
+333:   const envBaseURL = process.env.GROK_BASE_URL;
+334:   if (envBaseURL) return envBaseURL;
+335: 
+336:   const getSettingsManager = await lazyImport.settingsManager();
+337:   const manager = getSettingsManager();
+338:   return manager.getBaseURL();
+339: }
+340: 
+341: // Save command line settings to user settings file
+342: async function saveCommandLineSettings(
+343:   apiKey?: string,
+344:   baseURL?: string
+345: ): Promise<void> {
+346:   try {
+347:     const getSettingsManager = await lazyImport.settingsManager();
+348:     const settingsManager = getSettingsManager();
+349:     const getCredentialManager = await lazyImport.credentialManager();
+350:     const credManager = getCredentialManager();
+351: 
+352:     // Save API key to secure encrypted storage
+353:     if (apiKey) {
+354:       credManager.setApiKey(apiKey);
+355:       const status = credManager.getSecurityStatus();
+356:       if (status.encryptionEnabled) {
+357:         console.log("✅ API key saved securely (encrypted) to ~/.codebuddy/credentials.enc");
+358:       } else {
+359:         console.log("✅ API key saved to ~/.codebuddy/credentials.enc");
+360:         console.error("⚠️ Consider enabling encryption for better security");
+361:       }
+362:     }
+363: 
+364:     // Save base URL to settings (not sensitive)
+365:     if (baseURL) {
+366:       settingsManager.updateUserSetting("baseURL", baseURL);
+367:       console.log("✅ Base URL saved to ~/.codebuddy/user-settings.json");
+368:     }
+369:   } catch (error) {
+370:     console.warn(
+371:       "⚠️ Could not save settings to file:",
+372:       error instanceof Error ? error.message : "Unknown error"
+373:     );
+374:   }
+375: }
+376: 
+377: // Load model from detected provider or user settings
+378: async function loadModel(): Promise<string | undefined> {
+379:   await ensureEnvLoaded();
+380: 
+381:   // Check environment-detected provider first
+382:   const detected = await getDetectedProvider();
+383:   if (detected) return detected.defaultModel;
+384: 
+385:   // First check environment variables
+386:   let model = process.env.GROK_MODEL;
+387: 
+388:   if (!model) {
+389:     // Use the unified model loading from settings manager
+390:     try {
+391:       const getSettingsManager = await lazyImport.settingsManager();
+392:       const manager = getSettingsManager();
+393:       model = manager.getCurrentModel();
+394:     } catch (_err) {
+395:       logger.debug('Failed to load model from settings manager', { error: _err });
+396:     }
+397:   }
+398: 
+399:   return model;
+400: }
+
+... +1504 lines omitted (lines 401-1904; use start_line/end_line to view specific sections) ...
+
+1905: addLazyCommandGroup(program, 'identity', 'Manage agent identity files (SOUL.md, USER.md, etc.)', async () => {
+1906:   const { registerIdentityCommands } = await import('./commands/cli/openclaw-commands.js');
+1907:   registerIdentityCommands(program);
+1908: });
+1909: 
+1910: addLazyCommandGroup(program, 'groups', 'Manage group chat security', async () => {
+1911:   const { registerGroupCommands } = await import('./commands/cli/openclaw-commands.js');
+1912:   registerGroupCommands(program);
+1913: });
+1914: 
+1915: addLazyCommandGroup(program, 'auth-profile', 'Manage authentication profiles (API key rotation)', async () => {
+1916:   const { registerAuthProfileCommands } = await import('./commands/cli/openclaw-commands.js');
+1917:   registerAuthProfileCommands(program);
+1918: });
+1919: 
+1920: addLazyCommandGroup(program, 'config', 'Show environment variable configuration and validation', async () => {
+1921:   const { registerConfigCommand } = await import('./commands/cli/config-command.js');
+1922:   registerConfigCommand(program);
+1923: });
+1924: 
+1925: // Dev workflows — plan, run, pr, fix-ci, explain
+1926: addLazyCommandGroup(program, 'dev', 'Golden-path developer workflows (plan, run, pr, fix-ci, explain)', async () => {
+1927:   const { registerDevCommands } = await import('./commands/dev/index.js');
+1928:   registerDevCommands(program);
+1929: });
+1930: 
+1931: // Run observability — list, show, tail, replay
+1932: addLazyCommandGroup(program, 'run', 'Inspect and replay agent runs (observability)', async () => {
+1933:   const { registerRunCommands } = await import('./commands/run-cli/index.js');
+1934:   registerRunCommands(program);
+1935: });
+1936: 
+1937: // DM pairing — approve, revoke, list, pending
+1938: addLazyCommand(
+1939:   program,
+1940:   'pairing',
+1941:   'Manage DM pairing security (allowlist for messaging channel senders)',
+1942:   async () => {
+1943:     const { createPairingCommand } = await import('./commands/pairing.js');
+1944:     return createPairingCommand();
+1945:   },
+1946: );
+1947: 
+1948: // Knowledge base management — add, list, show, search, remove, context
+1949: addLazyCommand(
+1950:   program,
+1951:   'knowledge',
+1952:   'Manage agent knowledge bases (Knowledge.md files injected as context)',
+1953:   async () => {
+1954:     const { createKnowledgeCommand } = await import('./commands/knowledge.js');
+1955:     return createKnowledgeCommand();
+1956:   },
+1957: );
+1958: 
+1959: // Wide Research — parallel agent workers for comprehensive research
+1960: addLazyCommand(
+1961:   program,
+1962:   'research',
+1963:   'Wide Research: spawn parallel agent workers to research a topic (Manus AI-inspired)',
+1964:   async () => {
+1965:     const { createResearchCommand } = await import('./commands/research/index.js');
+1966:     return createResearchCommand();
+1967:   },
+1968: );
+1969: 
+1970: // Todo attention bias — Manus AI-inspired persistent task list
+1971: addLazyCommand(
+1972:   program,
+1973:   'todo',
+1974:   'Manage persistent task list (todo.md) — injected at end of every agent turn for focus',
+1975:   async () => {
+1976:     const { createTodosCommand } = await import('./commands/todos.js');
+1977:     return createTodosCommand();
+1978:   },
+1979: );
+1980: 
+1981: // Exec Policy — Codex-inspired command authorization (allow/deny/ask/sandbox + prefix rules)
+1982: addLazyCommand(
+1983:   program,
+1984:   'execpolicy',
+1985:   'Manage execution policy rules (allow/deny/ask/sandbox) for shell commands',
+1986:   async () => {
+1987:     const { createExecPolicyCommand } = await import('./commands/execpolicy.js');
+1988:     return createExecPolicyCommand();
+1989:   },
+1990: );
+1991: 
+1992: // Lessons — self-improvement loop (lessons learned injected per agent turn)
+1993: addLazyCommand(
+1994:   program,
+1995:   'lessons',
+1996:   'Manage lessons learned — self-improvement loop for recurring patterns (injected every turn)',
+1997:   async () => {
+1998:     const { createLessonsCommand } = await import('./commands/lessons.js');
+1999:     return createLessonsCommand();
+2000:   },
+2001: );
+2002: 
+2003: program.parse();
+2004: 

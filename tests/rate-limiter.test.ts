@@ -140,23 +140,39 @@ describe('RateLimiter', () => {
   });
 
   describe('events', () => {
-    it('should emit queued event', (done) => {
-      limiter.on('queued', (data) => {
-        expect(data.requestId).toBeDefined();
-        expect(data.queueLength).toBeGreaterThanOrEqual(1);
-        done();
+    it('should emit queued event', async () => {
+      const queuedEvent = new Promise<void>((resolve, reject) => {
+        limiter.once('queued', (data) => {
+          try {
+            expect(data.requestId).toBeDefined();
+            expect(data.queueLength).toBeGreaterThanOrEqual(1);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      limiter.execute(async () => 'test');
+      const execution = limiter.execute(async () => 'test');
+
+      await Promise.all([queuedEvent, execution]);
     });
 
-    it('should emit success event', (done) => {
-      limiter.on('success', (data) => {
-        expect(data.retries).toBe(0);
-        done();
+    it('should emit success event', async () => {
+      const successEvent = new Promise<void>((resolve, reject) => {
+        limiter.once('success', (data) => {
+          try {
+            expect(data.retries).toBe(0);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      limiter.execute(async () => 'test', { skipQueue: true });
+      const execution = limiter.execute(async () => 'test', { skipQueue: true });
+
+      await Promise.all([successEvent, execution]);
     });
   });
 

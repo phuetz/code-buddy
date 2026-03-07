@@ -190,6 +190,7 @@ async function registerAIMessageHandler(manager: import('../../channels/index.js
 }
 
 async function instantiateChannel(config: ChannelConfigEntry): Promise<import('../../channels/index.js').BaseChannel | null> {
+  const opts = config.options ?? {};
   const channelConfig = {
     type: config.type as import('../../channels/index.js').ChannelType,
     enabled: config.enabled,
@@ -197,25 +198,154 @@ async function instantiateChannel(config: ChannelConfigEntry): Promise<import('.
     webhookUrl: config.webhookUrl,
     allowedUsers: config.allowedUsers,
     allowedChannels: config.allowedChannels,
-    options: config.options,
+    options: opts,
   };
 
   switch (config.type) {
     case 'telegram': {
       const { TelegramChannel } = await import('../../channels/telegram/index.js');
-      return new TelegramChannel({ botToken: config.token || '', ...config.options } as unknown as import('../../channels/index.js').TelegramConfig);
+      return new TelegramChannel({ botToken: config.token || '', ...opts } as unknown as import('../../channels/index.js').TelegramConfig);
     }
     case 'discord': {
       const { DiscordChannel } = await import('../../channels/discord/index.js');
-      return new DiscordChannel({ token: config.token || '', ...config.options } as unknown as import('../../channels/index.js').DiscordConfig);
+      return new DiscordChannel({ token: config.token || '', ...opts } as unknown as import('../../channels/index.js').DiscordConfig);
     }
     case 'slack': {
       const { SlackChannel } = await import('../../channels/slack/index.js');
-      return new SlackChannel({ botToken: config.token || '', ...config.options } as unknown as import('../../channels/index.js').SlackConfig);
+      return new SlackChannel({ botToken: config.token || '', ...opts } as unknown as import('../../channels/index.js').SlackConfig);
+    }
+    case 'whatsapp': {
+      const { WhatsAppChannel } = await import('../../channels/whatsapp/index.js');
+      return new WhatsAppChannel({
+        ...channelConfig,
+        type: 'whatsapp',
+        phoneNumber: typeof opts.phoneNumber === 'string' ? opts.phoneNumber : undefined,
+        sessionDataPath: typeof opts.sessionDataPath === 'string' ? opts.sessionDataPath : undefined,
+        qrTimeout: typeof opts.qrTimeout === 'number' ? opts.qrTimeout : undefined,
+        printQrInTerminal: typeof opts.printQrInTerminal === 'boolean' ? opts.printQrInTerminal : undefined,
+        browserName: typeof opts.browserName === 'string' ? opts.browserName : undefined,
+        markOnlineOnConnect: typeof opts.markOnlineOnConnect === 'boolean' ? opts.markOnlineOnConnect : undefined,
+      } as import('../../channels/index.js').WhatsAppConfig);
+    }
+    case 'signal': {
+      const { SignalChannel } = await import('../../channels/signal/index.js');
+      return new SignalChannel({
+        ...channelConfig,
+        type: 'signal',
+        phoneNumber: String(opts.phoneNumber ?? ''),
+        apiUrl: typeof opts.apiUrl === 'string' ? opts.apiUrl : undefined,
+        pollInterval: typeof opts.pollInterval === 'number' ? opts.pollInterval : undefined,
+        trustAllIdentities: typeof opts.trustAllIdentities === 'boolean' ? opts.trustAllIdentities : undefined,
+      } as import('../../channels/index.js').SignalConfig);
+    }
+    case 'matrix': {
+      const { MatrixChannel } = await import('../../channels/matrix/index.js');
+      return new MatrixChannel({
+        ...channelConfig,
+        type: 'matrix',
+        homeserverUrl: String(opts.homeserverUrl ?? ''),
+        userId: String(opts.userId ?? ''),
+        accessToken: String(config.token ?? opts.accessToken ?? ''),
+        deviceId: typeof opts.deviceId === 'string' ? opts.deviceId : undefined,
+        autoJoin: typeof opts.autoJoin === 'boolean' ? opts.autoJoin : undefined,
+        initialRooms: Array.isArray(opts.initialRooms)
+          ? opts.initialRooms.filter((v): v is string => typeof v === 'string')
+          : undefined,
+        storePath: typeof opts.storePath === 'string' ? opts.storePath : undefined,
+        enableEncryption: typeof opts.enableEncryption === 'boolean' ? opts.enableEncryption : undefined,
+      } as import('../../channels/index.js').MatrixConfig);
+    }
+    case 'google-chat': {
+      const { GoogleChatChannel } = await import('../../channels/google-chat/index.js');
+      return new GoogleChatChannel({
+        ...channelConfig,
+        type: 'google-chat',
+        serviceAccountPath: String(opts.serviceAccountPath ?? ''),
+        spaceId: typeof opts.spaceId === 'string' ? opts.spaceId : undefined,
+        verificationToken: typeof opts.verificationToken === 'string' ? opts.verificationToken : undefined,
+        projectNumber: typeof opts.projectNumber === 'string' ? opts.projectNumber : undefined,
+      } as import('../../channels/index.js').GoogleChatConfig);
+    }
+    case 'teams': {
+      const { TeamsChannel } = await import('../../channels/teams/index.js');
+      return new TeamsChannel({
+        ...channelConfig,
+        type: 'teams',
+        appId: String(opts.appId ?? ''),
+        appPassword: String(config.token ?? opts.appPassword ?? ''),
+        tenantId: typeof opts.tenantId === 'string' ? opts.tenantId : undefined,
+        oauthAuthority: typeof opts.oauthAuthority === 'string' ? opts.oauthAuthority : undefined,
+      } as import('../../channels/index.js').TeamsConfig);
     }
     case 'webchat': {
       const { WebChatChannel } = await import('../../channels/webchat/index.js');
-      return new WebChatChannel({ ...config.options } as unknown as import('../../channels/index.js').WebChatConfig);
+      return new WebChatChannel({ ...opts } as unknown as import('../../channels/index.js').WebChatConfig);
+    }
+    case 'line': {
+      const { LINEChannel } = await import('../../channels/line/index.js');
+      return new LINEChannel({
+        ...channelConfig,
+        channelAccessToken: String(opts.channelAccessToken ?? config.token ?? ''),
+        channelSecret: String(opts.channelSecret ?? ''),
+        port: typeof opts.port === 'number' ? opts.port : undefined,
+      } as import('../../channels/index.js').LINEChannelConfig);
+    }
+    case 'nostr': {
+      const { NostrChannel } = await import('../../channels/nostr/index.js');
+      return new NostrChannel({
+        ...channelConfig,
+        privateKey: typeof opts.privateKey === 'string' ? opts.privateKey : config.token,
+        relays: Array.isArray(opts.relays) ? opts.relays.filter((v): v is string => typeof v === 'string') : [],
+      } as import('../../channels/index.js').NostrChannelConfig);
+    }
+    case 'zalo': {
+      const { ZaloChannel } = await import('../../channels/zalo/index.js');
+      return new ZaloChannel({
+        ...channelConfig,
+        appId: String(opts.appId ?? ''),
+        secretKey: String(opts.secretKey ?? config.token ?? ''),
+        mode: opts.mode === 'personal' ? 'personal' : 'bot',
+      } as import('../../channels/index.js').ZaloChannelConfig);
+    }
+    case 'mattermost': {
+      const { MattermostChannel } = await import('../../channels/mattermost/index.js');
+      return new MattermostChannel({
+        ...channelConfig,
+        url: String(opts.url ?? ''),
+        token: String(config.token ?? opts.token ?? ''),
+        teamId: typeof opts.teamId === 'string' ? opts.teamId : undefined,
+      } as import('../../channels/index.js').MattermostChannelConfig);
+    }
+    case 'nextcloud-talk': {
+      const { NextcloudTalkChannel } = await import('../../channels/nextcloud-talk/index.js');
+      return new NextcloudTalkChannel({
+        ...channelConfig,
+        url: String(opts.url ?? ''),
+        username: String(opts.username ?? ''),
+        password: String(opts.password ?? ''),
+      } as import('../../channels/index.js').NextcloudTalkChannelConfig);
+    }
+    case 'twilio-voice': {
+      const { TwilioVoiceChannel } = await import('../../channels/twilio-voice/index.js');
+      return new TwilioVoiceChannel({
+        ...channelConfig,
+        accountSid: String(opts.accountSid ?? ''),
+        authToken: String(opts.authToken ?? config.token ?? ''),
+        phoneNumber: String(opts.phoneNumber ?? ''),
+        webhookUrl: typeof opts.webhookUrl === 'string' ? opts.webhookUrl : config.webhookUrl,
+      } as import('../../channels/index.js').TwilioVoiceChannelConfig);
+    }
+    case 'imessage': {
+      const { IMessageChannel } = await import('../../channels/imessage/index.js');
+      return new IMessageChannel({
+        ...channelConfig,
+        serverUrl: String(opts.serverUrl ?? 'http://localhost'),
+        password: String(opts.password ?? config.token ?? ''),
+        port: typeof opts.port === 'number' ? opts.port : undefined,
+        pollingInterval: typeof opts.pollingInterval === 'number' ? opts.pollingInterval : undefined,
+        maxRetries: typeof opts.maxRetries === 'number' ? opts.maxRetries : undefined,
+        retryDelay: typeof opts.retryDelay === 'number' ? opts.retryDelay : undefined,
+      } as import('../../channels/index.js').IMessageChannelConfig);
     }
     default: {
       logger.warn(`Unsupported channel type: ${config.type}, using generic config`);

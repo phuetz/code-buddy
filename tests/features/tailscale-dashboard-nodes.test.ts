@@ -27,27 +27,28 @@ const mockTransport = {
 };
 
 jest.mock('../../src/nodes/transports/ssh-transport.js', () => ({
-  SSHTransport: jest.fn().mockImplementation(() => ({ ...mockTransport })),
+  SSHTransport: jest.fn().mockImplementation(function() { return { ...mockTransport }; }),
 }));
 jest.mock('../../src/nodes/transports/adb-transport.js', () => ({
-  ADBTransport: jest.fn().mockImplementation(() => ({ ...mockTransport })),
+  ADBTransport: jest.fn().mockImplementation(function() { return { ...mockTransport }; }),
 }));
 jest.mock('../../src/nodes/transports/local-transport.js', () => ({
-  LocalTransport: jest.fn().mockImplementation(() => ({ ...mockTransport })),
+  LocalTransport: jest.fn().mockImplementation(function() { return { ...mockTransport }; }),
 }));
 
 // Mock fs to prevent device-node from persisting/loading to/from disk
-jest.mock('fs', () => {
-  const actual = jest.requireActual<typeof import('fs')>('fs');
+jest.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
   return {
     ...actual,
     existsSync: jest.fn((p: string) => {
       if (typeof p === 'string' && p.includes('devices.json')) return false;
       return actual.existsSync(p);
     }),
-    writeFileSync: jest.fn((p: string, ...args: unknown[]) => {
+    writeFileSync: jest.fn((...fsArgs: Parameters<typeof actual.writeFileSync>) => {
+      const [p] = fsArgs;
       if (typeof p === 'string' && p.includes('devices.json')) return;
-      return (actual.writeFileSync as Function)(p, ...args);
+      return actual.writeFileSync(...fsArgs);
     }),
   };
 });
@@ -59,9 +60,9 @@ jest.mock('fs', () => {
 describe('TailscaleManager', () => {
   let TailscaleManager: typeof import('../../src/integrations/tailscale').TailscaleManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/integrations/tailscale');
+    const mod = await import('../../src/integrations/tailscale.js');
     TailscaleManager = mod.TailscaleManager;
     TailscaleManager.resetInstance();
   });
@@ -181,9 +182,9 @@ describe('TailscaleManager', () => {
 describe('Dashboard', () => {
   let Dashboard: typeof import('../../src/server/dashboard').Dashboard;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/server/dashboard');
+    const mod = await import('../../src/server/dashboard.js');
     Dashboard = mod.Dashboard;
     Dashboard.resetInstance();
   });
@@ -288,9 +289,9 @@ describe('Dashboard', () => {
 describe('DeviceNodeManager', () => {
   let DeviceNodeManager: typeof import('../../src/nodes/device-node').DeviceNodeManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/nodes/device-node');
+    const mod = await import('../../src/nodes/device-node.js');
     DeviceNodeManager = mod.DeviceNodeManager;
     DeviceNodeManager.resetInstance();
   });
@@ -298,7 +299,7 @@ describe('DeviceNodeManager', () => {
   // Helper: pair device and set capabilities directly (bypasses transport auto-detect)
   async function pairWithCaps(mgr: InstanceType<typeof DeviceNodeManager>, id: string, name: string, transport: 'ssh' | 'adb' | 'local', caps: string[]) {
     const device = await mgr.pairDevice(id, name, transport);
-    device.capabilities = caps as any;
+    device.capabilities = caps as typeof device.capabilities;
     return device;
   }
 
@@ -454,9 +455,9 @@ describe('MessageTool', () => {
   let MessageTool: typeof import('../../src/tools/message-tool').MessageTool;
   const target = { channel: 'discord', chatId: 'general' };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/tools/message-tool');
+    const mod = await import('../../src/tools/message-tool.js');
     MessageTool = mod.MessageTool;
     MessageTool.resetInstance();
   });
@@ -561,9 +562,9 @@ describe('MessageTool', () => {
 describe('GatewayTool', () => {
   let GatewayTool: typeof import('../../src/tools/gateway-tool').GatewayTool;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/tools/gateway-tool');
+    const mod = await import('../../src/tools/gateway-tool.js');
     GatewayTool = mod.GatewayTool;
     GatewayTool.resetInstance();
   });

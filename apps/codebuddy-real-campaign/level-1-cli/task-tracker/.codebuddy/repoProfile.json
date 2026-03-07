@@ -1,0 +1,15 @@
+{
+  "detectedAt": "2026-03-01T17:55:26.705Z",
+  "languages": [
+    "TypeScript",
+    "JavaScript"
+  ],
+  "packageManager": "npm",
+  "commands": {
+    "test": "npm run test"
+  },
+  "directories": {},
+  "conventions": {},
+  "contextPack": "Language: TypeScript, JavaScript | Package manager: npm | Commands: test=\"npm run test\"",
+  "_configMtime": 1772387408243.6755
+}

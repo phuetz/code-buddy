@@ -169,7 +169,7 @@ describe('LazyLoader', () => {
       jest.useRealTimers();
 
       let resolveLoader: (value: unknown) => void;
-      const moduleLoader = jest.fn().mockImplementation(() => {
+      const moduleLoader = jest.fn().mockImplementation(function() {
         return new Promise((resolve) => {
           resolveLoader = resolve;
         });
@@ -264,7 +264,7 @@ describe('LazyLoader', () => {
 
       const error = new Error('Concurrent load failed');
       let rejectLoader: (err: Error) => void;
-      const moduleLoader = jest.fn().mockImplementation(() => {
+      const moduleLoader = jest.fn().mockImplementation(function() {
         return new Promise((_, reject) => {
           rejectLoader = reject;
         });
@@ -473,7 +473,7 @@ describe('LazyLoader', () => {
 
     it('should allow reloading after unload', async () => {
       let loadCount = 0;
-      const moduleLoader = jest.fn().mockImplementation(() => {
+      const moduleLoader = jest.fn().mockImplementation(function() {
         loadCount++;
         return Promise.resolve({ loadCount });
       });

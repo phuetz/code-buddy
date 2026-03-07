@@ -17,12 +17,12 @@ const mockSetMode = jest.fn();
 const mockFormatResult = jest.fn();
 
 jest.mock('../../src/agent/reasoning/tree-of-thought.js', () => ({
-  getTreeOfThoughtReasoner: jest.fn(() => ({
+  getTreeOfThoughtReasoner: jest.fn(function() { return {
     solve: mockSolve,
     chainOfThought: mockChainOfThought,
     setMode: mockSetMode,
     formatResult: mockFormatResult,
-  })),
+  }; }),
   TreeOfThoughtReasoner: jest.fn(),
 }));
 

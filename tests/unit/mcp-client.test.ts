@@ -15,17 +15,23 @@ jest.mock('child_process', () => ({
 }));
 
 // Mock fs
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock os - required for user-level config path
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   homedir: jest.fn(() => '/home/testuser'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
@@ -231,7 +237,7 @@ describe('MCPClient', () => {
 
     it('should handle file read errors gracefully', () => {
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockImplementation(() => {
+      mockReadFileSync.mockImplementation(function() {
         throw new Error('Permission denied');
       });
 

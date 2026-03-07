@@ -5,13 +5,16 @@
 import { AnalyticsDashboard, getAnalyticsDashboard, resetAnalyticsDashboard } from '../src/analytics/dashboard';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   pathExists: jest.fn().mockResolvedValue(false),
   readJSON: jest.fn().mockResolvedValue({}),
   writeJSON: jest.fn().mockResolvedValue(undefined),
   emptyDir: jest.fn().mockResolvedValue(undefined),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('AnalyticsDashboard', () => {
   let dashboard: AnalyticsDashboard;

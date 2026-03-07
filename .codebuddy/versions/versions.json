@@ -1,0 +1,59 @@
+{
+  "versions": [
+    [
+      "v_156563f94d1c",
+      {
+        "id": "v_156563f94d1c",
+        "name": "v1.0",
+        "description": "Test checkpoint",
+        "parentId": null,
+        "branchName": "main",
+        "checkpoint": {
+          "id": "cp_test_123",
+          "timestamp": "2024-01-15T10:00:00.000Z",
+          "description": "Test checkpoint",
+          "files": [
+            {
+              "path": "/test/file1.ts",
+              "content": "const x = 1;",
+              "existed": true
+            },
+            {
+              "path": "/test/file2.ts",
+              "content": "const y = 2;",
+              "existed": true
+            }
+          ],
+          "workingDirectory": "/test"
+        },
+        "metadata": {
+          "author": "unknown",
+          "tags": [],
+          "custom": {}
+        },
+        "createdAt": "2026-03-06T08:16:01.202Z"
+      }
+    ]
+  ],
+  "branches": [
+    [
+      "main",
+      {
+        "name": "main",
+        "headVersionId": "v_156563f94d1c",
+        "createdAt": "2026-03-06T08:16:01.202Z",
+        "description": "Default branch"
+      }
+    ],
+    [
+      "feature",
+      {
+        "name": "feature",
+        "headVersionId": "v_156563f94d1c",
+        "createdAt": "2026-03-06T08:16:01.202Z"
+      }
+    ]
+  ],
+  "tags": [],
+  "currentBranch": "main"
+}

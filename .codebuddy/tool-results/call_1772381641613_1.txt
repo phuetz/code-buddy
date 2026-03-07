@@ -1,0 +1,28 @@
+
+🔍 Résultats pour: "TypeScript 5 Core Language and Type System Enhancements"
+══════════════════════════════════════════════════
+
+1. **TypeScript: Documentation - TypeScript for JavaScript Programmers** [1]
+   This offers a type-system without needing to add extra characters to make types explicit in your code. That’s how TypeScript knows that helloWorld is a string in the above example. You may have written JavaScript in Visual Studio Code, and had editor auto-completion. Visual Studio Code uses TypeScript under the hood to make it easier to work with JavaScript.
+
+2. **TypeScript 5.4-5.6: The Essential Features You Need to Master in 2025 | DataFormatHub** [2]
+   The core strength of TypeScript lies in its type system, and recent releases have focused on <strong>making it smarter, more intuitive, and providing developers with finer-grained control over inference</strong>.
+   📅 December 19, 2025
+
+3. **TypeScript: Documentation - TypeScript 4.5** [3]
+   For more information, see the pull request for const assertions along with the changes for type argument defaults. TypeScript now leverages a system-native implementation of the Node.js realPathSync function on all operating systems.
+
+4. **What to expect from TypeScript 5.5 | by Onix React | Medium** [4]
+   This version will introduce features like <strong>inferred type predicates</strong>, refined control flow analysis, and several other optimizations that will aim to streamline development workflows and enhance code robustness.
+   📅 May 30, 2024
+
+5. **New Typescript features – what’s new in TypeScript?** [5]
+   TypeScript 5.3 brought <strong>improvements to type narrowing</strong>, making the compiler capable of understanding types in complex scenarios. Notably, it enhanced narrowing within switch (true) statements, allowing for more precise type discrimination when ...
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript: Documentation - TypeScript for JavaScript Programmers — https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes.html
+[2] TypeScript 5.4-5.6: The Essential Features You Need to Master in 2025 | DataFormatHub — https://www.dataformathub.com/blog/typescript-5-4-5-6-the-essential-features-you-need-to-master-in-2025-tix
+[3] TypeScript: Documentation - TypeScript 4.5 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html
+[4] What to expect from TypeScript 5.5 | by Onix React | Medium — https://medium.com/@onix_react/what-to-expect-from-typescript-5-5-3bca9737f876
+[5] New Typescript features – what’s new in TypeScript? — https://tsh.io/blog/new-typescript-features

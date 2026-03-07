@@ -16,7 +16,7 @@ jest.mock('child_process', () => ({
 }));
 
 jest.mock('util', () => ({
-  ...jest.requireActual('util'),
+  ...await vi.importActual('util'),
   promisify: jest.fn((_fn: (...args: unknown[]) => unknown) => jest.fn().mockResolvedValue({ stdout: '', stderr: '' })),
 }));
 

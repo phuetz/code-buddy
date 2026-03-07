@@ -24,12 +24,12 @@ npm run test:watch                 # Watch mode
 npm run test:coverage              # Coverage report
 ```
 
-Tests are in `tests/` using Jest with ts-jest (`*.test.ts` pattern). 591 test files, 24,000+ tests.
+Tests are in `tests/` (and in-source `src/**/*.test.ts`) using **Vitest** with happy-dom. `vitest.setup.ts` shims `globalThis.jest` → `vi`, so legacy `jest.fn()` / `jest.spyOn()` calls work in tests.
 
 **Testing gotchas:**
 - `BashTool` tests require `ConfirmationService.setSessionFlag('bashCommands', true)`
 - `BashTool` unit tests must mock all transitive imports (`safe-binaries`, `auto-sandbox`, `shell-env-policy`, `bash-parser`, `checkpoint-manager`, `audit-logger`, `command-validator`, `streaming-executor`) — the `execute()` method has async pre-spawn logic so mock process events must be deferred with `setImmediate()`, not emitted synchronously
-- Avoid `import.meta.url` in source — ts-jest doesn't support it, use `__dirname`
+- The project is ESM (`"type": "module"`) — use `import.meta.url` with `fileURLToPath` for `__dirname` equivalents in source; `@` alias maps to `./src` (configured in `vitest.config.ts`)
 - CLI command tests: use Commander `parseAsync()` + `exitOverride()`, mock `console.log`/`process.exit`
 - Mock dynamic imports via virtual modules for channel adapter tests
 - Channel adapter tests (iMessage, etc.) must mock `global.fetch` for health checks and API calls
@@ -170,8 +170,8 @@ Tool aliases (Codex-style): `shell_exec`, `file_read`, `browser_search`, etc. �
 
 | Subsystem | Location | Notes |
 |-----------|----------|-------|
-| Daemon + cron | `src/daemon/` | PID file, health monitor, heartbeat engine, daily reset at 04:00 |
-| Channels | `src/channels/` | Telegram, Discord, Slack, WhatsApp, Signal, Teams, Matrix, WebChat |
+| Daemon + cron | `src/daemon/` | PID file, health monitor, heartbeat engine, daily reset at 04:00, idle timeout, session maintenance (prune/rotate/cap), cross-platform service installer (launchd/systemd/schtasks) |
+| Channels | `src/channels/` | Telegram, Discord, Slack, WhatsApp, Signal, Teams, Matrix, WebChat, IRC, Feishu/Lark, Synology Chat, LINE, Nostr, Zalo, Mattermost, Nextcloud Talk, Twilio Voice, iMessage, Twitch, Gmail |
 | Pro channel features | `src/channels/pro/` | Lazy-loaded: scoped auth, diff-first, CI watcher, run tracker |
 | Skills | `src/skills/` | Registry + hub marketplace; 40 bundled SKILL.md files |
 | Identity | `src/identity/` | SOUL.md/USER.md/AGENTS.md, hot-reload, prompt injection |
@@ -179,7 +179,9 @@ Tool aliases (Codex-style): `shell_exec`, `file_read`, `browser_search`, etc. �
 | Lessons | `src/agent/lessons-tracker.ts` | PATTERN/RULE/CONTEXT/INSIGHT, project + global `.codebuddy/lessons.md` |
 | Todo tracking | `src/agent/todo-tracker.ts` | Manus-style attention bias, injected at END of each turn |
 | Security | `src/security/` | write-policy, SSRF guard, bash-parser, shell-env-policy, skill-scanner |
-| Observability | `src/observability/` | JSONL RunStore per run, `.codebuddy/runs/`, 30-run auto-prune |
+| Observability | `src/observability/` | JSONL RunStore per run, `.codebuddy/runs/`, 30-run auto-prune; `tracing.ts` — OpenTelemetry via `OTEL_EXPORTER_OTLP_ENDPOINT`; Sentry via `SENTRY_DSN` |
+| Browser automation | `src/tools/browser/`, `src/tools/registry/browser-tools.ts` | Real Playwright impl (`BrowserTool`); adapters: `browser_launch`, `browser_navigate`, `browser_action` |
+| Vision / OCR | `src/tools/vision/`, `src/tools/registry/vision-tools.ts` | Tesseract.js OCR (`ocr_extract`), Sharp image processor (`image_process`) |
 | Sandbox | `src/sandbox/` | Docker + OS sandbox; `SandboxMode` enum |
 | MCP | `src/mcp/` | Predefined servers (ICM, etc.) |
 | Plugins | `src/plugins/` | Worker thread isolation (`isolated-plugin-runner.ts`), conflict detection |
@@ -188,6 +190,16 @@ Tool aliases (Codex-style): `shell_exec`, `file_read`, `browser_search`, etc. �
 | Services | `src/services/` | `prompt-builder.ts`, `plan-generator.ts`, `codebase-explorer.ts`, VFS router |
 | Voice/TTS | `src/talk-mode/`, `src/input/`, `src/voice/` | Two separate TTS systems (don't conflate) |
 | Reasoning | `src/agent/reasoning/` | ToT + MCTS engines, facade, `/think` command, `reason` tool |
+| Gateway | `src/gateway/` | WebSocket server, connect/hello-ok handshake, device identity, presence tracking, session patching, auth (token/password/none), bind modes (loopback/all/tailscale) |
+| Workflows | `src/workflows/` | Lobster typed DAG engine, approval gates with pause/resume tokens, variable resolution, cycle detection |
+| Send Policy | `src/channels/send-policy.ts` | Rule-based deny/allow per channel, chatType, keyPrefix, peerId; runtime overrides via `/send on\|off\|inherit` |
+| Msg Preprocessing | `src/channels/message-preprocessing.ts` | 4-stage pipeline: media detection → audio transcription → link extraction → content enrichment |
+| Nodes | `src/nodes/` | Companion app management, device pairing (short codes), platform capability maps (20+ capabilities), remote invocation |
+| Secrets Vault | `src/commands/cli/secrets-command.ts` | AES-256-GCM encrypted vault with scrypt KDF, key rotation, env import, audit trail |
+| Deploy | `src/deploy/` | Cloud config generators (Fly.io, Railway, Render, Hetzner, Northflank, GCP), Nix flake support |
+| Canvas | `src/server/routes/canvas.ts` | HTTP serving at `/__codebuddy__/canvas/` and `/__codebuddy__/a2ui/`, push/get/list content |
+| Providers (extra) | `src/providers/additional-providers.ts` | Mistral, Deepgram, MiniMax, Moonshot, Venice AI, Z.AI via OpenAI-compatible routing |
+| Automation | `src/automation/` | `PollManager` (URL/file/command polling with change detection), `AuthMonitor` (credential state tracking across providers/channels) |
 | Commands | `src/commands/` | `EnhancedCommandHandler` (Map-based O(1) dispatch), `ClientCommandDispatcher` (UI delegation), `SlashCommandManager` |
 
 ### Context Engineering Patterns
@@ -234,6 +246,8 @@ Applied in `agent-executor.ts` (both sequential and streaming paths):
 | `CACHE_TRACE` | Debug prompt construction | `false` |
 | `PERF_TIMING` | Startup phase profiling | `false` |
 | `VERBOSE` | Verbose output | `false` |
+| `SENTRY_DSN` | Sentry error reporting DSN | Optional |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry OTLP endpoint for distributed tracing | Optional |
 
 ## Special Modes
 
@@ -273,6 +287,13 @@ buddy groups status|list|block|unblock
 buddy auth-profile list|add|remove|reset
 buddy execpolicy check|list|add-prefix|dashboard
 buddy pairing status|approve <code>
+
+# New commands (OpenClaw parity)
+buddy update [--channel stable|beta|dev] [--check] [--force]
+buddy nodes list|pair|approve|describe|remove|invoke|pending
+buddy secrets list|set|get|remove|rotate|audit|import-env
+buddy approvals list|approve|deny|policy
+buddy deploy platforms|init|nix
 ```
 
 ### Slash Commands (interactive session)
@@ -299,7 +320,12 @@ Key endpoints:
 - `GET /api/identity`, `PUT /api/identity/:name`
 - `GET/POST /api/groups`, `GET/POST/DELETE /api/auth-profiles`
 - `GET/POST /api/heartbeat/status|start|stop|tick`
+- `GET /__codebuddy__/canvas/:id` — Canvas content serving
+- `GET /__codebuddy__/a2ui/` — A2UI host page
+- `POST /__codebuddy__/a2ui/eval` — A2UI eval endpoint
 
 WebSocket events: `authenticate`, `chat_stream`, `tool_execute`, `ping/pong`
 
-Default: port 3000, CORS enabled, rate-limit 100 req/min, JWT auth required in production.
+Gateway WebSocket (port 3001): `connect`, `hello_ok`, `auth`, `chat`, `session_create`, `session_join`, `session_leave`, `session_patch`, `presence`, `ping/pong`
+
+Default: port 3000 (HTTP), port 3001 (Gateway WS), CORS enabled, rate-limit 100 req/min, JWT auth required in production.

@@ -3,6 +3,9 @@
  */
 
 import { TeamsChannel } from '../../src/channels/teams/index.js';
+import { getDMPairing } from '../../src/channels/dm-pairing.js';
+import { logger } from '../../src/utils/logger.js';
+
 import type {
   TeamsConfig,
   BotFrameworkActivity,
@@ -22,44 +25,44 @@ jest.mock('../../src/utils/logger.js', () => ({
 
 // Mock dm-pairing (dynamic import used in handleMessageActivity)
 jest.mock('../../src/channels/dm-pairing.js', () => ({
-  getDMPairing: jest.fn(() => ({
+  getDMPairing: jest.fn(function() { return {
     requiresPairing: jest.fn(() => false),
-    checkSender: jest.fn(() => ({ approved: true, senderId: 'user-1', channelType: 'teams' })),
+    checkSender: jest.fn(function() { return { approved: true, senderId: 'user-1', channelType: 'teams' }; }),
     getPairingMessage: jest.fn(() => null),
-  })),
+  }; }),
 }));
 
 // Mock session-isolation (used by getSessionKey)
 jest.mock('../../src/channels/session-isolation.js', () => ({
-  getSessionIsolator: jest.fn(() => ({
+  getSessionIsolator: jest.fn(function() { return {
     getSessionKey: jest.fn(
       (msg: { channel: { type: string; id: string }; sender: { id: string } }) =>
         `${msg.channel.type}:${msg.channel.id}:${msg.sender.id}`
     ),
-  })),
+  }; }),
 }));
 
 // Mock identity-links (used by getCanonicalIdentity)
 jest.mock('../../src/channels/identity-links.js', () => ({
-  getIdentityLinker: jest.fn(() => ({
+  getIdentityLinker: jest.fn(function() { return {
     resolve: jest.fn(() => null),
-  })),
+  }; }),
 }));
 
 // Mock peer-routing
 jest.mock('../../src/channels/peer-routing.js', () => ({
-  getPeerRouter: jest.fn(() => ({
+  getPeerRouter: jest.fn(function() { return {
     resolve: jest.fn(() => null),
-    getAgentConfig: jest.fn(() => ({})),
-  })),
+    getAgentConfig: jest.fn(function() { return {}; }),
+  }; }),
 }));
 
 // Mock concurrency/lane-queue
 jest.mock('../../src/concurrency/lane-queue.js', () => ({
-  LaneQueue: jest.fn().mockImplementation(() => ({
+  LaneQueue: jest.fn().mockImplementation(function() { return {
     enqueue: jest.fn((_key: string, handler: () => Promise<unknown>) => handler()),
     clear: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock fetch
@@ -615,7 +618,6 @@ describe('TeamsChannel', () => {
     });
 
     it('should log debug for non-Teams channel but not ignore it', async () => {
-      const { logger } = require('../../src/utils/logger.js');
       const activity = makeActivity({ channelId: 'webchat' });
 
       await channel.handleActivity(activity);
@@ -1012,18 +1014,17 @@ describe('TeamsChannel', () => {
   describe('DM pairing', () => {
     it('should block message when pairing is not approved and send pairing message', async () => {
       // Override checkDMPairing to return not approved
-      const dmPairingModule = require('../../src/channels/dm-pairing.js');
       const mockPairingManager = {
         requiresPairing: jest.fn(() => true),
-        checkSender: jest.fn(() => ({
+        checkSender: jest.fn(function() { return {
           approved: false,
           senderId: 'user-1',
           channelType: 'teams',
           code: 'ABC123',
-        })),
+        }; }),
         getPairingMessage: jest.fn(() => 'Please pair with code: ABC123'),
       };
-      dmPairingModule.getDMPairing.mockReturnValue(mockPairingManager);
+      (getDMPairing as jest.Mock).mockReturnValue(mockPairingManager);
 
       channel = new TeamsChannel(baseConfig);
       mockFetch.mockResolvedValueOnce(mockTokenResponse());
@@ -1043,9 +1044,9 @@ describe('TeamsChannel', () => {
       expect(messageSpy).not.toHaveBeenCalled();
 
       // Restore
-      dmPairingModule.getDMPairing.mockReturnValue({
+      (getDMPairing as jest.Mock).mockReturnValue({
         requiresPairing: jest.fn(() => false),
-        checkSender: jest.fn(() => ({ approved: true, senderId: 'user-1', channelType: 'teams' })),
+        checkSender: jest.fn(function() { return { approved: true, senderId: 'user-1', channelType: 'teams' }; }),
         getPairingMessage: jest.fn(() => null),
       });
     });
@@ -1062,8 +1063,6 @@ describe('TeamsChannel', () => {
     });
 
     it('should handle conversationUpdate activity without error', async () => {
-      const { logger } = require('../../src/utils/logger.js');
-
       await channel.handleActivity(
         makeActivity({
           type: 'conversationUpdate',
@@ -1205,8 +1204,6 @@ describe('TeamsChannel', () => {
     });
 
     it('should log debug for event activity', async () => {
-      const { logger } = require('../../src/utils/logger.js');
-
       await channel.handleActivity(
         makeActivity({ type: 'event', name: 'tokens/response' })
       );
@@ -1226,8 +1223,6 @@ describe('TeamsChannel', () => {
     });
 
     it('should log debug for unhandled activity types', async () => {
-      const { logger } = require('../../src/utils/logger.js');
-
       await channel.handleActivity(makeActivity({ type: 'installationUpdate' }));
 
       expect(logger.debug).toHaveBeenCalledWith('Teams: unhandled activity type', {

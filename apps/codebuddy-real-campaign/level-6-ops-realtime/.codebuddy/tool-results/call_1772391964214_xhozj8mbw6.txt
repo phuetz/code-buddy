@@ -1,0 +1,6 @@
+npm error code EJSONPARSE
+npm error path /mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-6-ops-realtime/package.json
+npm error JSON.parse Unexpected end of JSON input while parsing near "...et, and async jobs.\"\n"
+npm error JSON.parse Failed to parse JSON data.
+npm error JSON.parse Note: package.json must be actual JSON, not just JavaScript.
+npm error A complete log of this run can be found in: /home/patrice/.npm/_logs/2026-03-01T19_06_04_437Z-debug-0.log

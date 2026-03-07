@@ -1,0 +1,15 @@
+file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/node_modules/lowdb/lib/core/Low.js:5
+        throw new Error('lowdb: missing default data');
+              ^
+
+Error: lowdb: missing default data
+    at checkArgs (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/node_modules/lowdb/lib/core/Low.js:5:15)
+    at new Low (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/node_modules/lowdb/lib/core/Low.js:11:9)
+    at file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/server.mjs:11:12
+    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:337:24)
+    at async loadESM (node:internal/process/esm_loader:34:7)
+    at async handleMainPromise (node:internal/modules/run_main:106:12)
+
+Node.js v18.20.8
+Smoke test failed: connect ECONNREFUSED 127.0.0.1:3000

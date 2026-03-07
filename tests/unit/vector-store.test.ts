@@ -4,12 +4,15 @@
  */
 
 // Mock dependencies before imports
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -38,6 +41,7 @@ jest.mock('../../src/context/codebase-rag/embeddings', () => ({
 }));
 
 import fs from 'fs';
+import { vi } from 'vitest';
 import {
   InMemoryVectorStore,
   PartitionedVectorStore,
@@ -49,18 +53,18 @@ describe('InMemoryVectorStore', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     store = new InMemoryVectorStore();
   });
 
   afterEach(async () => {
     // Clear any pending timers and dispose store
-    jest.clearAllTimers();
+    vi.clearAllTimers();
     if (store) {
       await store.dispose();
     }
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('Constructor', () => {
@@ -481,18 +485,18 @@ describe('PartitionedVectorStore', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     store = new PartitionedVectorStore('language');
   });
 
   afterEach(async () => {
     // Clear any pending timers and dispose store
-    jest.clearAllTimers();
+    vi.clearAllTimers();
     if (store) {
       await store.dispose();
     }
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('Constructor', () => {
@@ -771,13 +775,13 @@ describe('createVectorStore', () => {
 describe('Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     (fs.existsSync as jest.Mock).mockReturnValue(false);
   });
 
   afterEach(() => {
-    jest.clearAllTimers();
-    jest.useRealTimers();
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   it('should handle full lifecycle', async () => {

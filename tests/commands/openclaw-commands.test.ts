@@ -17,6 +17,8 @@ import {
   registerGroupCommands,
   registerAuthProfileCommands,
 } from '../../src/commands/cli/openclaw-commands';
+import { getHeartbeatEngine } from '../../src/daemon/heartbeat.js';
+import { resetAuthProfileManager } from '../../src/auth/profile-manager.js';
 
 // ============================================================================
 // Mocks for dynamic imports
@@ -45,7 +47,7 @@ const mockSkillsHub = {
 };
 
 jest.mock('../../src/skills/hub.js', () => ({
-  getSkillsHub: jest.fn(() => mockSkillsHub),
+  getSkillsHub: jest.fn(function() { return mockSkillsHub; }),
 }));
 
 const mockIdentityManager = {
@@ -57,7 +59,7 @@ const mockIdentityManager = {
 };
 
 jest.mock('../../src/identity/identity-manager.js', () => ({
-  getIdentityManager: jest.fn(() => mockIdentityManager),
+  getIdentityManager: jest.fn(function() { return mockIdentityManager; }),
 }));
 
 const mockGroupSecurity = {
@@ -68,7 +70,7 @@ const mockGroupSecurity = {
 };
 
 jest.mock('../../src/channels/group-security.js', () => ({
-  getGroupSecurity: jest.fn(() => mockGroupSecurity),
+  getGroupSecurity: jest.fn(function() { return mockGroupSecurity; }),
 }));
 
 const mockAuthProfileManager = {
@@ -78,9 +80,10 @@ const mockAuthProfileManager = {
 };
 
 jest.mock('../../src/auth/profile-manager.js', () => ({
-  getAuthProfileManager: jest.fn(() => mockAuthProfileManager),
+  getAuthProfileManager: jest.fn(function() { return mockAuthProfileManager; }),
   resetAuthProfileManager: jest.fn(),
 }));
+
 
 // ============================================================================
 // Test helpers
@@ -115,8 +118,8 @@ function getErrorOutput(): string {
 describe('OpenClaw CLI Commands', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(function() {});
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(function() {});
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
       // Do not actually exit
     }) as unknown as (code?: string | number | null | undefined) => never);
@@ -144,7 +147,6 @@ describe('OpenClaw CLI Commands', () => {
       it('should start engine with default interval', async () => {
         await program.parseAsync(['node', 'test', 'heartbeat', 'start']);
 
-        const { getHeartbeatEngine } = require('../../src/daemon/heartbeat.js');
         expect(getHeartbeatEngine).toHaveBeenCalledWith({ intervalMs: 1800000 });
         expect(mockEngine.start).toHaveBeenCalled();
         expect(getLogOutput()).toContain('Heartbeat started (interval: 1800s)');
@@ -153,7 +155,6 @@ describe('OpenClaw CLI Commands', () => {
       it('should start engine with custom interval', async () => {
         await program.parseAsync(['node', 'test', 'heartbeat', 'start', '--interval', '60000']);
 
-        const { getHeartbeatEngine } = require('../../src/daemon/heartbeat.js');
         expect(getHeartbeatEngine).toHaveBeenCalledWith({ intervalMs: 60000 });
         expect(mockEngine.start).toHaveBeenCalled();
         expect(getLogOutput()).toContain('Heartbeat started (interval: 60s)');
@@ -1072,7 +1073,6 @@ describe('OpenClaw CLI Commands', () => {
       it('should reset the auth profile manager', async () => {
         await program.parseAsync(['node', 'test', 'auth-profile', 'reset']);
 
-        const { resetAuthProfileManager } = require('../../src/auth/profile-manager.js');
         expect(resetAuthProfileManager).toHaveBeenCalled();
         expect(getLogOutput()).toContain('Auth profile manager reset. All cooldowns cleared.');
       });

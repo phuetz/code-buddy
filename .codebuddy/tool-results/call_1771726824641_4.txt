@@ -1,0 +1,38 @@
+Contents of .grok/GROK.md:
+1: # Custom Instructions for Code Buddy
+2: 
+3: ## About This Project
+4: <!-- Describe your project here -->
+5: This project is...
+6: 
+7: ## Code Style Guidelines
+8: - Use TypeScript for all new files
+9: - Follow the existing code style
+10: - Add comments for complex logic
+11: - Use meaningful variable names
+12: 
+13: ## Architecture
+14: <!-- Describe your project architecture -->
+15: - src/ - Source code
+16: - tests/ - Test files
+17: 
+18: ## Testing
+19: - Write tests for new features
+20: - Maintain test coverage above 80%
+21: - Use Jest/Vitest for testing
+22: 
+23: ## Git Conventions
+24: - Use conventional commits (feat:, fix:, docs:, etc.)
+25: - Keep commits small and focused
+26: - Write descriptive commit messages
+27: 
+28: ## Important Notes
+29: <!-- Add any project-specific notes here -->
+30: - ...
+31: 
+32: ## Forbidden Actions
+33: <!-- List things Grok should never do -->
+34: - Never commit .env files
+35: - Never expose API keys
+36: - Never delete production data
+37: 

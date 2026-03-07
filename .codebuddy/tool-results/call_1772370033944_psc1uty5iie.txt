@@ -1,0 +1,237 @@
+Contents of src/openclaw/index.ts:
+1: /**
+2:  * OpenClaw-inspired Modules
+3:  *
+4:  * This module exports all the advanced features inspired by OpenClaw,
+5:  * the most advanced LLM client project on GitHub.
+6:  *
+7:  * Features included:
+8:  * - Tool Policy System (allow/deny patterns with hierarchy)
+9:  * - Tool Lifecycle Hooks (before/after tool calls)
+10:  * - Smart Context Compaction (provider-aware, multi-strategy)
+11:  * - Retry Fallback Engine (provider rotation, auto-compaction)
+12:  * - Semantic Memory Search (2-step search + retrieve)
+13:  * - Plugin Conflict Detection (allowlist, metadata tracking)
+14:  */
+15: 
+16: // Tool Policy System
+17: import {
+18:   ToolPolicyEngine,
+19:   getToolPolicyEngine as _getToolPolicyEngine,
+20:   resetToolPolicyEngine as _resetToolPolicyEngine,
+21:   isToolAllowed,
+22:   filterToolsByPolicy,
+23:   type ToolPolicyConfig,
+24:   type PolicyHierarchy,
+25:   type PolicyDecision,
+26: } from '../security/tool-policy.js';
+27: 
+28: export {
+29:   ToolPolicyEngine,
+30:   _getToolPolicyEngine as getToolPolicyEngine,
+31:   _resetToolPolicyEngine as resetToolPolicyEngine,
+32:   isToolAllowed,
+33:   filterToolsByPolicy,
+34:   type ToolPolicyConfig,
+35:   type PolicyHierarchy,
+36:   type PolicyDecision,
+37: };
+38: 
+39: // Tool Lifecycle Hooks
+40: import {
+41:   ToolLifecycleHooks,
+42:   getToolLifecycleHooks as _getToolLifecycleHooks,
+43:   resetToolLifecycleHooks as _resetToolLifecycleHooks,
+44:   onBeforeToolCall,
+45:   onAfterToolCall,
+46:   onToolResultPersist,
+47:   createLoggingHook,
+48:   createRateLimitHook,
+49:   createSanitizationHook,
+50:   type HookEvent,
+51:   type HookContext,
+52:   type ToolCallContext,
+53:   type ToolResultContext,
+54:   type BeforeToolCallResult,
+55:   type HookHandler,
+56: } from '../hooks/tool-lifecycle-hooks.js';
+57: 
+58: export {
+59:   ToolLifecycleHooks,
+60:   _getToolLifecycleHooks as getToolLifecycleHooks,
+61:   _resetToolLifecycleHooks as resetToolLifecycleHooks,
+62:   onBeforeToolCall,
+63:   onAfterToolCall,
+64:   onToolResultPersist,
+65:   createLoggingHook,
+66:   createRateLimitHook,
+67:   createSanitizationHook,
+68:   type HookEvent,
+69:   type HookContext,
+70:   type ToolCallContext,
+71:   type ToolResultContext,
+72:   type BeforeToolCallResult,
+73:   type HookHandler,
+74: };
+75: 
+76: // Smart Context Compaction
+77: import {
+78:   SmartCompactionEngine,
+79:   getSmartCompactionEngine as _getSmartCompactionEngine,
+80:   resetSmartCompactionEngine as _resetSmartCompactionEngine,
+81:   compactMessages,
+82:   needsCompaction,
+83:   type Message,
+84:   type Provider,
+85:   type ChannelType,
+86:   type CompactionConfig,
+87:   type CompactionResult,
+88:   type CompactionStrategy,
+89: } from '../context/smart-compaction.js';
+90: 
+91: export {
+92:   SmartCompactionEngine,
+93:   _getSmartCompactionEngine as getSmartCompactionEngine,
+94:   _resetSmartCompactionEngine as resetSmartCompactionEngine,
+95:   compactMessages,
+96:   needsCompaction,
+97:   type Message,
+98:   type Provider,
+99:   type ChannelType,
+100:   type CompactionConfig,
+101:   type CompactionResult,
+102:   type CompactionStrategy,
+103: };
+104: 
+105: // Retry Fallback Engine
+106: import {
+107:   RetryFallbackEngine,
+108:   getRetryFallbackEngine as _getRetryFallbackEngine,
+109:   resetRetryFallbackEngine as _resetRetryFallbackEngine,
+110:   classifyError,
+111:   withRetry,
+112:   type AuthProfile,
+113:   type ExecutionConfig,
+114:   type ErrorType,
+115:   type ClassifiedError,
+116:   type ExecutionAttempt,
+117:   type ExecutionResult,
+118: } from '../agent/execution/retry-fallback.js';
+119: 
+120: export {
+121:   RetryFallbackEngine,
+122:   _getRetryFallbackEngine as getRetryFallbackEngine,
+123:   _resetRetryFallbackEngine as resetRetryFallbackEngine,
+124:   classifyError,
+125:   withRetry,
+126:   type AuthProfile,
+127:   type ExecutionConfig,
+128:   type ErrorType,
+129:   type ClassifiedError,
+130:   type ExecutionAttempt,
+131:   type ExecutionResult,
+132: };
+133: 
+134: // Semantic Memory Search
+135: import {
+136:   SemanticMemorySearch,
+137:   getSemanticMemorySearch as _getSemanticMemorySearch,
+138:   resetSemanticMemorySearch as _resetSemanticMemorySearch,
+139:   searchAndRetrieve,
+140:   type MemoryEntry,
+141:   type SearchResult,
+142:   type SearchOptions,
+143:   type RetrievalOptions,
+144:   type RetrievalResult,
+145:   type MemorySearchConfig,
+146: } from '../memory/semantic-memory-search.js';
+147: 
+148: export {
+149:   SemanticMemorySearch,
+150:   _getSemanticMemorySearch as getSemanticMemorySearch,
+151:   _resetSemanticMemorySearch as resetSemanticMemorySearch,
+152:   searchAndRetrieve,
+153:   type MemoryEntry,
+154:   type SearchResult,
+155:   type SearchOptions,
+156:   type RetrievalOptions,
+157:   type RetrievalResult,
+158:   type MemorySearchConfig,
+159: };
+160: 
+161: // Plugin Conflict Detection
+162: import {
+163:   PluginConflictDetector,
+164:   getPluginConflictDetector as _getPluginConflictDetector,
+165:   resetPluginConflictDetector as _resetPluginConflictDetector,
+166:   registerPlugins,
+167:   type Plugin,
+168:   type PluginTool,
+169:   type PluginContext,
+170:   type PluginToolMeta,
+171:   type ConflictReport,
+172:   type ConflictInfo,
+173:   type AllowlistConfig,
+174: } from '../plugins/conflict-detection.js';
+175: 
+176: export {
+177:   PluginConflictDetector,
+178:   _getPluginConflictDetector as getPluginConflictDetector,
+179:   _resetPluginConflictDetector as resetPluginConflictDetector,
+180:   registerPlugins,
+181:   type Plugin,
+182:   type PluginTool,
+183:   type PluginContext,
+184:   type PluginToolMeta,
+185:   type ConflictReport,
+186:   type ConflictInfo,
+187:   type AllowlistConfig,
+188: };
+189: 
+190: /**
+191:  * Initialize all OpenClaw modules with default configuration
+192:  */
+193: export function initializeOpenClawModules(config: {
+194:   builtInTools?: string[];
+195:   policyHierarchy?: PolicyHierarchy;
+196:   compactionConfig?: CompactionConfig;
+197:   authProfiles?: AuthProfile[];
+198:   memoryConfig?: MemorySearchConfig;
+199:   allowlist?: AllowlistConfig;
+200: } = {}): void {
+201:   // Initialize Tool Policy
+202:   if (config.policyHierarchy) {
+203:     _getToolPolicyEngine(config.policyHierarchy);
+204:   }
+205: 
+206:   // Initialize Compaction Engine
+207:   if (config.compactionConfig) {
+208:     _getSmartCompactionEngine(config.compactionConfig);
+209:   }
+210: 
+211:   // Initialize Retry Engine
+212:   if (config.authProfiles) {
+213:     _getRetryFallbackEngine(config.authProfiles);
+214:   }
+215: 
+216:   // Initialize Memory Search
+217:   if (config.memoryConfig) {
+218:     _getSemanticMemorySearch(config.memoryConfig);
+219:   }
+220: 
+221:   // Initialize Plugin Conflict Detector
+222:   _getPluginConflictDetector(config.builtInTools, config.allowlist);
+223: }
+224: 
+225: /**
+226:  * Reset all OpenClaw module singletons
+227:  */
+228: export function resetAllOpenClawModules(): void {
+229:   _resetToolPolicyEngine();
+230:   _resetToolLifecycleHooks();
+231:   _resetSmartCompactionEngine();
+232:   _resetRetryFallbackEngine();
+233:   _resetSemanticMemorySearch();
+234:   _resetPluginConflictDetector();
+235: }
+236: 

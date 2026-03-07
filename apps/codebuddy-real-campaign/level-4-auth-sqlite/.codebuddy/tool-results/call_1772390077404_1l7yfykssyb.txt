@@ -1,0 +1,25 @@
+Updated package.json with 21 additions
+--- a/package.json
++++ b/package.json
+@@ -1,0 +1,21 @@
++{
++  "name": "task-manager",
++  "version": "1.0.0",
++  "description": "Full-stack task manager with local authentication",
++  "main": "server.mjs",
++  "type": "module",
++  "scripts": {
++    "start": "node server.mjs",
++    "smoke-test": "node smoke-test.mjs"
++  },
++  "dependencies": {
++    "express": "^4.18.2",
++    "better-sqlite3": "^9.2.2",
++    "bcryptjs": "^2.4.3",
++    "express-session": "^1.17.3",
++    "connect-sqlite3": "^0.9.13"
++  },
++  "devDependencies": {
++    "supertest": "^6.3.3"
++  }
++}

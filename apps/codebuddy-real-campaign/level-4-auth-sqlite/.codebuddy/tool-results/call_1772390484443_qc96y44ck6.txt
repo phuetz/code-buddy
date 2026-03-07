@@ -1,0 +1,20 @@
+Error: SQLITE_ERROR: no such table: sessions
+Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client
+    at new NodeError (node:internal/errors:405:5)
+    at ServerResponse.setHeader (node:_http_outgoing:655:11)
+    at ServerResponse.header (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/node_modules/express/lib/response.js:794:10)
+    at ServerResponse.send (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/node_modules/express/lib/response.js:174:12)
+    at file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/server.mjs:219:19
+    at Layer.handle_error (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/node_modules/express/lib/router/layer.js:71:5)
+    at trim_prefix (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/node_modules/express/lib/router/index.js:326:13)
+    at /mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/node_modules/express/lib/router/index.js:286:9
+    at Function.process_params (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/node_modules/express/lib/router/index.js:346:12)
+    at Immediate.next (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-4-auth-sqlite/node_modules/express/lib/router/index.js:280:10)
+    at process.processImmediate (node:internal/timers:478:21)
+Error: SQLITE_ERROR: no such table: sessions
+Error: SQLITE_ERROR: no such table: sessions
+Error: SQLITE_ERROR: no such table: sessions
+Error: SQLITE_ERROR: no such table: sessions
+Error: SQLITE_ERROR: no such table: sessions
+Error: SQLITE_ERROR: no such table: sessions
+Error: SQLITE_ERROR: no such table: sessions

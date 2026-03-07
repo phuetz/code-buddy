@@ -1,0 +1,504 @@
+Contents of src/agent/execution/agent-executor.ts (987 lines):
+1: /**
+2:  * Agent Executor Module
+3:  *
+4:  * Implements the core agentic loop for processing user messages,
+5:  * both sequential and streaming. Handles tool execution rounds,
+6:  * token counting, cost tracking, and context management.
+7:  *
+8:  * @module agent/execution
+9:  */
+10: 
+11: import { CodeBuddyClient, CodeBuddyMessage } from "../../codebuddy/client.js";
+12: import { ChatEntry, StreamingChunk } from "../types.js";
+13: import { ToolHandler } from "../tool-handler.js";
+14: import { ToolSelectionStrategy } from "./tool-selection-strategy.js";
+15: import { StreamingHandler, RawStreamingChunk } from "../streaming/index.js";
+16: import { ContextManagerV2 } from "../../context/context-manager-v2.js";
+17: import { TokenCounter } from "../../utils/token-counter.js";
+18: import { logger } from "../../utils/logger.js";
+19: import { getErrorMessage } from "../../errors/index.js";
+20: import { sanitizeToolResult } from "../../utils/sanitize.js";
+21: import type { LaneQueue } from "../../concurrency/lane-queue.js";
+22: import type { MiddlewarePipeline, MiddlewareContext } from "../middleware/index.js";
+23: import type { MessageQueue } from "../message-queue.js";
+24: import { semanticTruncate } from "../../utils/head-tail-truncation.js";
+25: import { getTodoTracker } from "../todo-tracker.js";
+26: import { getLessonsTracker } from "../lessons-tracker.js";
+27: import { getObservationVariator } from "../../context/observation-variator.js";
+28: import { getRestorableCompressor } from "../../context/restorable-compression.js";
+29: import { getResponseConstraintStack, resolveToolChoice } from "../response-constraint.js";
+30: 
+31: /**
+32:  * Register a decision-context provider for the executor.
+33:  * Called externally (e.g., by CodeBuddyAgent) to wire up decision memory
+34:  * without incurring dynamic import cost in the hot loop.
+35:  */
+36: let _decisionContextProvider: ((query: string) => Promise<string | null>) | null = null;
+37: export function setDecisionContextProvider(
+38:   provider: (query: string) => Promise<string | null>
+39: ): void {
+40:   _decisionContextProvider = provider;
+41: }
+42: 
+43: /**
+44:  * Dependencies injected into the AgentExecutor
+45:  */
+46: export interface ExecutorDependencies {
+47:   /** API client for LLM communication */
+48:   client: CodeBuddyClient;
+49:   /** Dispatcher for tool execution */
+50:   toolHandler: ToolHandler;
+51:   /** RAG-based tool selection for query optimization */
+52:   toolSelectionStrategy: ToolSelectionStrategy;
+53:   /** Handles streaming response accumulation */
+54:   streamingHandler: StreamingHandler;
+55:   /** Manages context window and message compression */
+56:   contextManager: ContextManagerV2;
+57:   /** Counts tokens for cost calculation */
+58:   tokenCounter: TokenCounter;
+59:   /** Optional lane queue for serialized tool execution */
+60:   laneQueue?: LaneQueue;
+61:   /** Lane ID for tool execution serialization (defaults to 'default') */
+62:   laneId?: string;
+63:   /** Optional middleware pipeline for composable loop control */
+64:   middlewarePipeline?: MiddlewarePipeline;
+65:   /** Optional message queue for steer/followup/collect modes */
+66:   messageQueue?: MessageQueue;
+67: }
+68: 
+69: /**
+70:  * Runtime configuration for the AgentExecutor
+71:  */
+72: export interface ExecutorConfig {
+73:   /** Maximum tool execution rounds before stopping (prevents infinite loops) */
+74:   maxToolRounds: number;
+75:   /** Returns true if current model is a Grok model (enables web search) */
+76:   isGrokModel: () => boolean;
+77:   /** Records token usage for cost tracking */
+78:   recordSessionCost: (input: number, output: number) => void;
+79:   /** Returns true if session cost limit has been reached */
+80:   isSessionCostLimitReached: () => boolean;
+81:   /** Returns current accumulated session cost in USD */
+82:   getSessionCost: () => number;
+83:   /** Returns maximum allowed session cost in USD */
+84:   getSessionCostLimit: () => number;
+85:   /** Enable auto-discovery hint when tool confidence is low */
+86:   enableAutoDiscovery?: boolean;
+87:   /** Confidence threshold below which the auto-discovery hint is injected (default: 0.3) */
+88:   skillDiscoveryThreshold?: number;
+89: }
+90: 
+91: /**
+92:  * AgentExecutor implements the core agentic loop
+93:  *
+94:  * The agentic loop follows this pattern:
+95:  * 1. Select relevant tools for the query (RAG-based)
+96:  * 2. Send message to LLM with selected tools
+97:  * 3. If LLM requests tool calls, execute them
+98:  * 4. Send tool results back to LLM
+99:  * 5. Repeat until LLM responds without tool calls or max rounds reached
+100:  *
+101:  * Supports both sequential (processUserMessage) and streaming
+102:  * (processUserMessageStream) execution modes.
+103:  */
+104: export class AgentExecutor {
+105:   constructor(
+106:     private deps: ExecutorDependencies,
+107:     private config: ExecutorConfig
+108:   ) {}
+109: 
+110:   /**
+111:    * Get or set the middleware pipeline.
+112:    * Used by CodeBuddyAgent.enableAutoObservation() to inject middleware.
+113:    */
+114:   getMiddlewarePipeline(): MiddlewarePipeline | undefined {
+115:     return this.deps.middlewarePipeline;
+116:   }
+117: 
+118:   setMiddlewarePipeline(pipeline: MiddlewarePipeline): void {
+119:     this.deps.middlewarePipeline = pipeline;
+120:   }
+121: 
+122:   /**
+123:    * Build a MiddlewareContext from current loop state.
+124:    */
+125:   private buildMiddlewareContext(
+126:     toolRound: number,
+127:     inputTokens: number,
+128:     outputTokens: number,
+129:     history: ChatEntry[],
+130:     messages: CodeBuddyMessage[],
+131:     isStreaming: boolean,
+132:     abortController?: AbortController | null
+133:   ): MiddlewareContext {
+134:     return {
+135:       toolRound,
+136:       maxToolRounds: this.config.maxToolRounds,
+137:       sessionCost: this.config.getSessionCost(),
+138:       sessionCostLimit: this.config.getSessionCostLimit(),
+139:       inputTokens,
+140:       outputTokens,
+141:       history,
+142:       messages,
+143:       isStreaming,
+144:       abortController,
+145:     };
+146:   }
+147: 
+148:   /**
+149:    * Execute a tool call, optionally through the LaneQueue for serialization.
+150:    * Read-only tools (grep, glob, read_file) run in parallel; mutating tools run serially.
+151:    */
+152:   private executeToolViaLane(toolCall: Parameters<ToolHandler['executeTool']>[0]): ReturnType<ToolHandler['executeTool']> {
+153:     const laneQueue = this.deps.laneQueue;
+154:     if (!laneQueue) {
+155:       return this.deps.toolHandler.executeTool(toolCall);
+156:     }
+157: 
+158:     const laneId = this.deps.laneId ?? 'default';
+159:     const readOnlyTools = new Set([
+160:       'grep', 'glob', 'read_file', 'list_files', 'search_files',
+161:       'get_file_info', 'tree', 'find_references',
+162:     ]);
+163:     const isParallel = readOnlyTools.has(toolCall.function.name);
+164: 
+165:     return laneQueue.enqueue(
+166:       laneId,
+167:       () => this.deps.toolHandler.executeTool(toolCall),
+168:       {
+169:         parallel: isParallel,
+170:         category: toolCall.function.name,
+171:         timeout: 120000,
+172:       }
+173:     );
+174:   }
+175: 
+176:   /**
+177:    * Tool Result Compaction Guard (OpenClaw / Manus AI #13)
+178:    *
+179:    * Before each model call, scan accumulated tool result messages.
+180:    * If their total size exceeds the threshold (default 70K chars ≈ ~17K tokens),
+181:    * compress the oldest ones using RestorableCompressor — replacing full content
+182:    * with a compact stub referencing the callId. The content remains restorable
+183:    * via the `restore_context` tool.
+184:    *
+185:    * This prevents deep agent chains from silently overflowing the context window.
+186:    */
+187:   private compactLargeToolResults(
+188:     preparedMessages: CodeBuddyMessage[],
+189:     maxToolResultChars = 70_000
+190:   ): CodeBuddyMessage[] {
+191:     // Sum characters from tool result messages
+192:     let totalToolChars = 0;
+193:     for (const m of preparedMessages) {
+194:       if (m.role === 'tool' && typeof m.content === 'string') {
+195:         totalToolChars += m.content.length;
+196:       }
+197:     }
+198: 
+199:     if (totalToolChars <= maxToolResultChars) return preparedMessages;
+200: 
+201:     const compressor = getRestorableCompressor();
+202:     // Compress oldest tool results first (front of the list)
+203:     const result = [...preparedMessages];
+204:     let charsToFree = totalToolChars - maxToolResultChars;
+205: 
+206:     for (let i = 0; i < result.length && charsToFree > 0; i++) {
+207:       const m = result[i];
+208:       if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > 500) {
+209:         const callId = (m as { tool_call_id?: string }).tool_call_id || `tool_${i}`;
+210:         const compressed = compressor.compress([{
+211:           role: m.role,
+212:           content: m.content,
+213:           tool_call_id: callId,
+214:         }]);
+215:         if (compressed.messages[0]) {
+216:           charsToFree -= (m.content.length - (compressed.messages[0].content?.length ?? 0));
+217:           result[i] = { ...m, content: compressed.messages[0].content ?? m.content };
+218:         }
+219:       }
+220:     }
+221: 
+222:     logger.debug(`ToolResultCompactionGuard: compacted tool results`, {
+223:       before: totalToolChars,
+224:       freed: totalToolChars - charsToFree,
+225:     });
+226: 
+227:     return result;
+228:   }
+229: 
+230:   /**
+231:    * Process a user message sequentially (non-streaming)
+232:    *
+233:    * @param message - The user's input message
+234:    * @param history - Chat history array (modified in place)
+235:    * @param messages - LLM message array (modified in place)
+236:    * @returns Array of new chat entries created during this turn
+237:    */
+238:   async processUserMessage(
+239:     message: string,
+240:     history: ChatEntry[],
+241:     messages: CodeBuddyMessage[]
+242:   ): Promise<ChatEntry[]> {
+243:     const newEntries: ChatEntry[] = [];
+244:     const maxToolRounds = this.config.maxToolRounds;
+245:     let toolRounds = 0;
+246: 
+247:     // Track token usage for cost calculation
+248:     const inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
+249:     let totalOutputTokens = 0;
+250: 
+251:     try {
+252:       // Use RAG-based tool selection for initial query
+253:       const selectionResult = await this.deps.toolSelectionStrategy.selectToolsForQuery(message);
+254:       const tools = selectionResult.tools;
+255:       this.deps.toolSelectionStrategy.cacheTools(tools);
+256: 
+257:       // Auto-discovery hint: if confidence is low, nudge agent to discover skills
+258:       const enableAutoDiscovery = this.config.enableAutoDiscovery ?? true;
+259:       const threshold = this.config.skillDiscoveryThreshold ?? 0.3;
+260:       if (enableAutoDiscovery && selectionResult.confidence !== undefined && selectionResult.confidence < threshold) {
+261:         const lastMsg = messages[messages.length - 1];
+262:         if (lastMsg && lastMsg.role === 'user' && typeof lastMsg.content === 'string') {
+263:           messages.push({
+264:             role: 'system' as const,
+265:             content: 'Low tool confidence for this query. Consider using the `skill_discover` tool to search the Skills Hub for relevant capabilities.',
+266:           });
+267:         }
+268:       }
+269: 
+270:       // Auto-select persona based on user message context (fire-and-forget)
+271:       try {
+272:         const { getPersonaManager } = await import('../../personas/persona-manager.js');
+273:         getPersonaManager().autoSelectPersona({ message });
+274:       } catch { /* persona auto-select optional */ }
+275: 
+276:       // Run before_turn middleware (sequential path)
+277:       const pipeline = this.deps.middlewarePipeline;
+278:       if (pipeline) {
+279:         const ctx = this.buildMiddlewareContext(
+280:           toolRounds, inputTokens, totalOutputTokens, history, messages, false
+281:         );
+282:         const mwResult = await pipeline.runBeforeTurn(ctx);
+283:         if (mwResult.action === 'stop') {
+284:           if (mwResult.message) {
+285:             const stopEntry: ChatEntry = { type: 'assistant', content: mwResult.message, timestamp: new Date() };
+286:             history.push(stopEntry);
+287:             messages.push({ role: 'assistant', content: mwResult.message });
+288:             return [stopEntry];
+289:           }
+290:           return [];
+291:         }
+292:         if (mwResult.action === 'compact') {
+293:           this.deps.contextManager.prepareMessages(messages);
+294:         }
+295:         if (mwResult.action === 'warn' && mwResult.message) {
+296:           logger.warn(`Middleware warning: ${mwResult.message}`);
+297:         }
+298:       }
+299: 
+300:       // Apply context management
+301:       const preparedMessages = this.deps.contextManager.prepareMessages(messages);
+302: 
+303:       // --- Lessons context: inject BEFORE todo suffix (stable rules, higher priority) ---
+304:       const lessonsBlock = getLessonsTracker(process.cwd()).buildContextBlock();
+305:       if (lessonsBlock) {
+306:         preparedMessages.push({ role: 'system', content: lessonsBlock });
+307:       }
+308: 
+309:       // --- Decision memory context: inject relevant past decisions ---
+310:       if (_decisionContextProvider) {
+311:         try {
+312:           const decisionsBlock = await _decisionContextProvider(message);
+313:           if (decisionsBlock) {
+314:             preparedMessages.push({ role: 'system', content: decisionsBlock });
+315:           }
+316:         } catch { /* decision-memory optional */ }
+317:       }
+318: 
+319:       // --- Manus AI attention bias: append todo.md context at END of messages ---
+320:       const todoSuffix = getTodoTracker(process.cwd()).buildContextSuffix();
+321:       if (todoSuffix) {
+322:         preparedMessages.push({ role: 'system', content: todoSuffix });
+323:       }
+324: 
+325:       // Check for context warnings
+326:       const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
+327:       if (contextWarning.warn) {
+328:         logger.warn(contextWarning.message);
+329: 
+330:         // --- OpenClaw pre-compaction memory flush (NO_REPLY pattern) ---
+331:         // Run a silent background turn to extract facts to MEMORY.md before context is compacted.
+332:         try {
+333:           const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
+334:           const flusher = getPrecompactionFlusher();
+335:           const flushResult = await flusher.flush(
+336:             preparedMessages.filter(m => m.role !== 'system').map(m => ({
+337:               role: m.role as 'user' | 'assistant',
+338:               content: typeof m.content === 'string' ? m.content : '',
+339:             })),
+340:             async (flushMsgs) => {
+341:               const r = await this.deps.client.chat(
+342:                 flushMsgs.map(m => ({ role: m.role, content: m.content })),
+343:                 [],
+344:               );
+345:               return r.choices[0]?.message?.content ?? 'NO_REPLY';
+346:             }
+347:           );
+348:           if (flushResult.flushed) {
+349:             logger.info(`Pre-compaction flush: saved ${flushResult.factsCount} facts to ${flushResult.writtenTo}`);
+350:           }
+351:         } catch (flushErr) {
+352:           logger.debug('Pre-compaction flush failed (non-critical)', { flushErr });
+353:         }
+354:       }
+355: 
+356:       // Apply response constraint (Manus AI response prefill / tool_choice control)
+357:       const activeConstraint = getResponseConstraintStack().current();
+358:       const toolNames = tools.map(t => t.function.name);
+359:       const toolChoiceOverride = resolveToolChoice(activeConstraint, toolNames);
+360: 
+361:       let currentResponse = await this.deps.client.chat(
+362:         preparedMessages,
+363:         tools,
+364:         { tool_choice: toolChoiceOverride !== 'auto' ? toolChoiceOverride : undefined } as never,
+365:         this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
+366:           ? { search_parameters: { mode: "auto" } }
+367:           : { search_parameters: { mode: "off" } }
+368:       );
+369: 
+370:       // Agent loop
+371:       while (toolRounds < maxToolRounds) {
+372:         const assistantMessage = currentResponse.choices[0]?.message;
+373: 
+374:         if (!assistantMessage) {
+375:           throw new Error("No response received from AI. The API may be unavailable or the request was incomplete. Please try again.");
+376:         }
+377: 
+378:         // Track output tokens
+379:         if (currentResponse.usage) {
+380:           totalOutputTokens += currentResponse.usage.completion_tokens || 0;
+381:         } else if (assistantMessage.content) {
+382:           totalOutputTokens += this.deps.tokenCounter.countTokens(assistantMessage.content);
+383:         }
+384: 
+385:         // Handle tool calls
+386:         if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+387:           toolRounds++;
+388: 
+389:           // Add assistant message with tool calls
+390:           const assistantEntry: ChatEntry = {
+391:             type: "assistant",
+392:             content: assistantMessage.content || "Using tools to help you...",
+393:             timestamp: new Date(),
+394:             toolCalls: assistantMessage.tool_calls,
+395:           };
+396:           history.push(assistantEntry);
+397:           newEntries.push(assistantEntry);
+398: 
+399:           // Add assistant message to conversation
+400:           messages.push({
+
+... +487 lines omitted (lines 401-887; use start_line/end_line to view specific sections) ...
+
+888:           // Run after_turn middleware (handles cost recording + limit)
+889:           if (pipeline) {
+890:             const ctx = this.buildMiddlewareContext(
+891:               toolRounds, inputTokens, totalOutputTokens, history, messages, true, abortController
+892:             );
+893:             const mwResult = await pipeline.runAfterTurn(ctx);
+894:             if (mwResult.action === 'stop') {
+895:               if (mwResult.message) yield { type: "content", content: `\n\n${mwResult.message}` };
+896:               yield { type: "done" };
+897:               return;
+898:             }
+899:             if (mwResult.action === 'warn' && mwResult.message) {
+900:               yield { type: "content", content: `\n${mwResult.message}\n` };
+901:             }
+902:           } else {
+903:             // Legacy inline cost check when no pipeline
+904:             this.config.recordSessionCost(inputTokens, totalOutputTokens);
+905:             if (this.config.isSessionCostLimitReached()) {
+906:               const sessionCost = this.config.getSessionCost();
+907:               const sessionCostLimit = this.config.getSessionCostLimit();
+908:               yield {
+909:                 type: "content",
+910:                 content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
+911:               };
+912:               yield { type: "done" };
+913:               return;
+914:             }
+915:           }
+916:         } else {
+917:           // Fire-and-forget auto-capture on final assistant response (streaming)
+918:           try {
+919:             const { getAutoCaptureManager } = await import('../../memory/auto-capture.js');
+920:             const acm = getAutoCaptureManager();
+921:             if (acm) {
+922:               acm.processMessage('assistant', content || '').catch(() => {});
+923:             }
+924:           } catch { /* auto-capture optional */ }
+925: 
+926:           break;
+927:         }
+928:       }
+929: 
+930:       if (toolRounds >= maxToolRounds) {
+931:         yield { type: "content", content: "\n\nMaximum tool execution rounds reached." };
+932:       }
+933: 
+934:       this.config.recordSessionCost(inputTokens, totalOutputTokens);
+935:       if (this.config.isSessionCostLimitReached()) {
+936:         const sessionCost = this.config.getSessionCost();
+937:         const sessionCostLimit = this.config.getSessionCostLimit();
+938:         yield {
+939:           type: "content",
+940:           content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
+941:         };
+942:       }
+943: 
+944:       // Process followup/collect messages if any are queued
+945:       const mqEnd = this.deps.messageQueue;
+946:       if (mqEnd?.hasPendingMessages()) {
+947:         const mode = mqEnd.getMode();
+948:         if (mode === 'followup') {
+949:           const followups = mqEnd.drain();
+950:           for (const msg of followups) {
+951:             messages.push({ role: "user", content: msg.content });
+952:             history.push({ type: "user", content: msg.content, timestamp: msg.timestamp });
+953:           }
+954:           // Signal that followup messages need re-processing (caller handles)
+955:           yield { type: "steer", steer: { content: `${followups.length} followup message(s) queued`, source: 'queue' } };
+956:         } else if (mode === 'collect') {
+957:           const collected = mqEnd.collect();
+958:           if (collected) {
+959:             messages.push({ role: "user", content: collected });
+960:             history.push({ type: "user", content: collected, timestamp: new Date() });
+961:             yield { type: "steer", steer: { content: collected, source: 'collect' } };
+962:           }
+963:         }
+964:       }
+965: 
+966:       yield { type: "done" };
+967:     } catch (error) {
+968:       if (abortController?.signal.aborted) {
+969:         yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+970:         yield { type: "done" };
+971:         return;
+972:       }
+973: 
+974:       const errorMessage = getErrorMessage(error);
+975:       const errorEntry: ChatEntry = {
+976:         type: "assistant",
+977:         content: `Sorry, I encountered an error: ${errorMessage}`,
+978:         timestamp: new Date(),
+979:       };
+980:       history.push(errorEntry);
+981:       messages.push({ role: "assistant", content: errorEntry.content });
+982:       yield { type: "content", content: errorEntry.content };
+983:       yield { type: "done" };
+984:     }
+985:   }
+986: }
+987: 

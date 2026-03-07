@@ -41,20 +41,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import fsExtra from 'fs-extra';
 
 // Mock fs module
 jest.mock('fs');
 const mockFs = fs as jest.Mocked<typeof fs>;
 
 // Mock fs-extra for SessionEncryption
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   pathExists: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
   ensureDir: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
  
-const mockFsExtra = require('fs-extra') as {
+const mockFsExtra = fsExtra as {
   pathExists: jest.Mock;
   readFile: jest.Mock;
   writeFile: jest.Mock;
@@ -718,7 +722,7 @@ describe('Authentication Flows - ApprovalModeManager', () => {
 
     it('should emit config:error event on save failure', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(() => {
+      mockFs.writeFileSync.mockImplementation(function() {
         throw new Error('Permission denied');
       });
       const listener = jest.fn();
@@ -1794,7 +1798,7 @@ describe('Permission Checks - PermissionManager', () => {
 
     it('should emit config:error on save failure', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(() => {
+      mockFs.writeFileSync.mockImplementation(function() {
         throw new Error('Write failed');
       });
       const listener = jest.fn();

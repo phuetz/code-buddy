@@ -6,12 +6,15 @@
  * YOLO mode, abort handling, and session cost management.
  */
 
-import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent';
-import type { ChatEntry, StreamingChunk } from '../../src/agent/types';
 
 // ---------------------------------------------------------------------------
 // Mock all external dependencies
 // ---------------------------------------------------------------------------
+
+import { EventEmitter } from 'events';
+import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent';
+import type { ChatEntry, StreamingChunk } from '../../src/agent/types';
+import { findSkill } from '../../src/skills/index.js';
 
 const mockChat = jest.fn();
 const mockChatStream = jest.fn();
@@ -20,13 +23,13 @@ const mockSetModel = jest.fn();
 const mockProbeToolSupport = jest.fn().mockResolvedValue(true);
 
 jest.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: mockChat,
     chatStream: mockChatStream,
     getCurrentModel: mockGetCurrentModel,
     setModel: mockSetModel,
     probeToolSupport: mockProbeToolSupport,
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/codebuddy/tools.js', () => ({
@@ -72,23 +75,23 @@ const mockBashSetSelfHealing = jest.fn();
 const mockBashIsSelfHealingEnabled = jest.fn().mockReturnValue(true);
 
 jest.mock('../../src/tools/index.js', () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: 'Done' }),
     view: jest.fn().mockResolvedValue({ success: true, output: 'file content' }),
     create: jest.fn().mockResolvedValue({ success: true, output: 'Created' }),
-  })),
-  MorphEditorTool: jest.fn().mockImplementation(() => null),
-  BashTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  MorphEditorTool: jest.fn().mockImplementation(function() { return null; }),
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: mockBashExecute,
     executeStreaming: jest.fn(),
     getCurrentDirectory: mockBashGetCurrentDirectory,
     setSelfHealing: mockBashSetSelfHealing,
     isSelfHealingEnabled: mockBashIsSelfHealingEnabled,
-  })),
-  ImageTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  ImageTool: jest.fn().mockImplementation(function() { return {
     processImage: jest.fn().mockResolvedValue({ success: true, output: 'Image processed' }),
     isImage: jest.fn().mockReturnValue(false),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/utils/token-counter.js', () => ({
@@ -312,14 +315,14 @@ jest.mock('../../src/hooks/moltbot-hooks.js', () => ({
 }));
 
 jest.mock('../../src/services/prompt-builder.js', () => ({
-  PromptBuilder: jest.fn().mockImplementation(() => ({
+  PromptBuilder: jest.fn().mockImplementation(function() { return {
     buildSystemPrompt: jest.fn().mockResolvedValue('You are a helpful AI coding assistant.'),
     updateConfig: jest.fn(),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/analytics/cost-predictor.js', () => ({
-  CostPredictor: jest.fn().mockImplementation(() => ({
+  CostPredictor: jest.fn().mockImplementation(function() { return {
     predict: jest.fn().mockReturnValue({
       model: 'grok-2-fast',
       estimatedCost: 0.001,
@@ -327,13 +330,13 @@ jest.mock('../../src/analytics/cost-predictor.js', () => ({
       estimatedOutputTokens: 200,
       confidence: 0.8,
     }),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/analytics/budget-alerts.js', () => {
-  const EventEmitter = require('events');
+  
   return {
-    BudgetAlertManager: jest.fn().mockImplementation(() => {
+    BudgetAlertManager: jest.fn().mockImplementation(function() {
       const emitter = new EventEmitter();
       emitter.check = jest.fn().mockReturnValue([]);
       emitter.setThresholds = jest.fn();
@@ -848,7 +851,6 @@ describe('CodeBuddyAgent', () => {
 
   describe('Skill Matching', () => {
     it('should call findSkill during processUserMessage', async () => {
-      const { findSkill } = require('../../src/skills/index.js');
       agent = new CodeBuddyAgent('test-api-key');
       await agent.systemPromptReady;
 
@@ -857,7 +859,6 @@ describe('CodeBuddyAgent', () => {
     });
 
     it('should inject skill system prompt when skill matched with high confidence', async () => {
-      const { findSkill } = require('../../src/skills/index.js');
       findSkill.mockReturnValueOnce({
         confidence: 0.8,
         reason: 'matched git',
@@ -876,7 +877,6 @@ describe('CodeBuddyAgent', () => {
     });
 
     it('should not inject skill when confidence is below threshold', async () => {
-      const { findSkill } = require('../../src/skills/index.js');
       findSkill.mockReturnValueOnce({
         confidence: 0.1,
         reason: 'weak match',
@@ -895,7 +895,6 @@ describe('CodeBuddyAgent', () => {
     });
 
     it('should handle skill matching errors gracefully', async () => {
-      const { findSkill } = require('../../src/skills/index.js');
       findSkill.mockImplementationOnce(() => { throw new Error('Skill error'); });
 
       agent = new CodeBuddyAgent('test-api-key');

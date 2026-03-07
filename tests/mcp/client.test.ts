@@ -6,11 +6,18 @@
  * error handling, health checks, and reconnection logic.
  */
 
-import { EventEmitter } from 'events';
 
 // ---------------------------------------------------------------------------
 // Mock the logger before any imports that use it
 // ---------------------------------------------------------------------------
+
+import { EventEmitter } from 'events';
+import { MCPManager } from '../../src/mcp/client';
+import { MCPClient, getMCPClient, resetMCPClient } from '../../src/mcp/mcp-client';
+import type { MCPServerConfig, MCPTool, ServerStatus } from '../../src/mcp/types';
+import { createTransport } from '../../src/mcp/transports';
+import fs from 'fs';
+
 jest.mock('../../src/utils/logger', () => ({
   logger: {
     debug: jest.fn(),
@@ -29,12 +36,12 @@ const mockClientConnect = jest.fn();
 const mockClientClose = jest.fn();
 
 jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
-  Client: jest.fn().mockImplementation(() => ({
+  Client: jest.fn().mockImplementation(function() { return {
     listTools: mockListTools,
     callTool: mockCallTool,
     connect: mockClientConnect,
     close: mockClientClose,
-  })),
+  }; }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -45,11 +52,11 @@ const mockTransportDisconnect = jest.fn().mockResolvedValue(undefined);
 const mockTransportGetType = jest.fn().mockReturnValue('stdio');
 
 jest.mock('../../src/mcp/transports', () => ({
-  createTransport: jest.fn().mockImplementation(() => ({
+  createTransport: jest.fn().mockImplementation(function() { return {
     connect: mockTransportConnect,
     disconnect: mockTransportDisconnect,
     getType: mockTransportGetType,
-  })),
+  }; }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -71,7 +78,7 @@ function createMockProcess(): EventEmitter & { stdin: any; stdout: EventEmitter;
 let spawnedProcess: ReturnType<typeof createMockProcess>;
 
 jest.mock('child_process', () => ({
-  spawn: jest.fn().mockImplementation(() => {
+  spawn: jest.fn().mockImplementation(function() {
     spawnedProcess = createMockProcess();
     // Simulate a successful initialization handshake on next tick
     process.nextTick(() => {
@@ -94,12 +101,15 @@ jest.mock('child_process', () => ({
 // ---------------------------------------------------------------------------
 // Mock fs for MCPClient config loading
 // ---------------------------------------------------------------------------
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn().mockReturnValue(false),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // ---------------------------------------------------------------------------
 // Mock the types/index module for getErrorMessage
@@ -111,11 +121,6 @@ jest.mock('../../src/types/index', () => ({
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
-import { MCPManager } from '../../src/mcp/client';
-import { MCPClient, getMCPClient, resetMCPClient } from '../../src/mcp/mcp-client';
-import type { MCPServerConfig, MCPTool, ServerStatus } from '../../src/mcp/types';
-import { createTransport } from '../../src/mcp/transports';
-import fs from 'fs';
 
 // ============================================================================
 // MCPManager (SDK-based client) tests
@@ -515,7 +520,7 @@ describe('MCPClient', () => {
 
     it('should throw when write fails', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.writeFileSync as jest.Mock).mockImplementation(() => {
+      (fs.writeFileSync as jest.Mock).mockImplementation(function() {
         throw new Error('EACCES');
       });
 

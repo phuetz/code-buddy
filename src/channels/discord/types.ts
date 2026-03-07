@@ -4,7 +4,7 @@
  * Type definitions for Discord bot integration.
  */
 
-import type { ChannelConfig } from '../index.js';
+import type { ChannelConfig } from '../core.js';
 
 /**
  * Discord-specific configuration

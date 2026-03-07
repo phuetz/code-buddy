@@ -13,14 +13,16 @@ interface ProviderInfo {
   envVar: string;
   models: string[];
   defaultModel: string;
+  baseURL?: string;
 }
 
-const PROVIDERS: Record<string, ProviderInfo> = {
+export const PROVIDERS: Record<string, ProviderInfo> = {
   grok: {
     name: 'Grok (xAI)',
     envVar: 'GROK_API_KEY',
     models: ['grok-beta', 'grok-vision-beta', 'grok-code-fast-1'],
     defaultModel: 'grok-code-fast-1',
+    baseURL: 'https://api.x.ai/v1',
   },
   claude: {
     name: 'Claude (Anthropic)',
@@ -39,12 +41,14 @@ const PROVIDERS: Record<string, ProviderInfo> = {
     envVar: 'OPENAI_API_KEY',
     models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'],
     defaultModel: 'gpt-4o',
+    baseURL: 'https://api.openai.com/v1',
   },
   gemini: {
     name: 'Gemini (Google)',
     envVar: 'GOOGLE_API_KEY',
     models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
     defaultModel: 'gemini-2.5-flash',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta',
   },
 };
 
@@ -72,6 +76,11 @@ function getCurrentProvider(): string {
 function setCurrentProvider(provider: string): void {
   const manager = getSettingsManager();
   manager.updateUserSetting('provider', provider);
+
+  const providerInfo = PROVIDERS[provider];
+  if (providerInfo?.baseURL) {
+    manager.updateUserSetting('baseURL', providerInfo.baseURL);
+  }
 }
 
 function getCurrentModel(): string | undefined {
@@ -80,7 +89,17 @@ function getCurrentModel(): string | undefined {
 }
 
 function setCurrentModel(model: string): void {
-  const manager = getSettingsManager();
+  const manager = getSettingsManager() as {
+    setCurrentModel?: (m: string) => void;
+    updateUserSetting: <K extends 'model' | 'defaultModel'>(key: K, value: string) => void;
+  };
+
+  // Keep project runtime model aligned with provider/model CLI commands.
+  if (typeof manager.setCurrentModel === 'function') {
+    manager.setCurrentModel(model);
+  }
+
+  // Keep user-level model fields in sync for commands that rely on user settings.
   manager.updateUserSetting('model', model);
 }
 

@@ -19,11 +19,28 @@ export function registerDaemonCommands(program: Command): void {
     .description("Start the daemon")
     .option("--detach", "run daemon in background", true)
     .option("--port <port>", "server port", "3000")
+    .option("--foreground", "run in foreground (for service managers)")
+    .option("--install-daemon", "install as system service (launchd/systemd/Task Scheduler)")
     .action(async (options) => {
+      if (options.installDaemon) {
+        const { getServiceInstaller } = await import("../../daemon/service-installer.js");
+        const installer = getServiceInstaller({ port: parseInt(options.port) });
+        const result = await installer.install();
+        if (result.success) {
+          console.log(`Service installed (${result.platform})`);
+          console.log(`  Path: ${result.servicePath}`);
+          if (result.instructions) console.log(`  ${result.instructions}`);
+        } else {
+          console.error(`Failed to install service: ${result.error}`);
+          process.exit(1);
+        }
+        return;
+      }
+
       const { getDaemonManager } = await import("../../daemon/index.js");
       const manager = getDaemonManager({ port: parseInt(options.port) });
       try {
-        await manager.start(options.detach);
+        await manager.start(options.foreground ? false : options.detach);
         const status = await manager.status();
         console.log(`Daemon started (PID: ${status.pid})`);
       } catch (error) {

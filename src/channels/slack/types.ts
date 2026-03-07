@@ -4,7 +4,7 @@
  * Type definitions for Slack bot integration.
  */
 
-import type { ChannelConfig } from '../index.js';
+import type { ChannelConfig } from '../core.js';
 
 /**
  * Slack-specific configuration

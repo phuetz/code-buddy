@@ -19,7 +19,7 @@ import { watch } from 'fs';
 
 jest.mock('fs/promises');
 jest.mock('fs', () => {
-  const actual = jest.requireActual('fs');
+  const actual = await vi.importActual('fs');
   return {
     ...actual,
     watch: jest.fn(),
@@ -572,7 +572,7 @@ describe('IdentityManager', () => {
     });
 
     it('should handle watch errors gracefully when directory does not exist', () => {
-      mockWatch.mockImplementation(() => {
+      mockWatch.mockImplementation(function() {
         throw new Error('ENOENT: no such file or directory');
       });
 

@@ -1,0 +1,12 @@
+Updated package.json with 4 additions and 1 removal
+--- a/package.json
++++ b/package.json
+@@ -16,4 +16,7 @@
+     "node-fetch": "^3.3.2"
+   },
+   "keywords": [],
+-
++  "author": "Code Buddy",
++  "license": "ISC",
++  "description": "IncidentOps Board application with Express, WebSocket, and async jobs."
++

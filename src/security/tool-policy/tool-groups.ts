@@ -108,8 +108,14 @@ export const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   reason: [],
   todo_read: [],
   todo_write: [],
+  spawn_parallel_agents: [],
+  spawn_subagent: [],
+  remember: [],
+  recall: [],
+  forget: ['group:dangerous'],
 
   // Browser
+  browser: ['group:web'],
   browser_action: ['group:web'],
   screenshot: ['group:web'],
 };

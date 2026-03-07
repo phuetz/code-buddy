@@ -2,11 +2,13 @@
  * Tests for CodeBuddyAgent - Core agent orchestration
  */
 
-import { CodeBuddyAgent } from "../../src/agent/codebuddy-agent";
 
 // Mock all dependencies
+
+import { CodeBuddyAgent } from "../../src/agent/codebuddy-agent";
+
 jest.mock("../../src/codebuddy/client.js", () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn().mockResolvedValue({
       choices: [{ message: { content: "Test response", tool_calls: null } }],
       usage: { prompt_tokens: 100, completion_tokens: 50 },
@@ -18,7 +20,7 @@ jest.mock("../../src/codebuddy/client.js", () => ({
     getModel: jest.fn().mockReturnValue("grok-code-fast-1"),
     getCurrentModel: jest.fn().mockReturnValue("grok-code-fast-1"),
     setModel: jest.fn(),
-  })),
+  }; }),
 }));
 
 jest.mock("../../src/codebuddy/tools.js", () => ({
@@ -53,27 +55,27 @@ jest.mock("../../src/mcp/config.js", () => ({
 }));
 
 jest.mock("../../src/tools/index.js", () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Done" }),
-  })),
-  MorphEditorTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  MorphEditorTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Done" }),
-  })),
-  BashTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Command executed" }),
-  })),
-  TodoTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  TodoTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Todo added" }),
-  })),
-  SearchTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  SearchTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Found 5 results" }),
-  })),
-  WebSearchTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  WebSearchTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Web results" }),
-  })),
-  ImageTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  ImageTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Image processed" }),
-  })),
+  }; }),
 }));
 
 jest.mock("../../src/utils/token-counter.js", () => ({
@@ -281,20 +283,26 @@ describe("CodeBuddyAgent", () => {
       expect(agent.off).toBeDefined();
     });
 
-    it("should emit events during processing", (done) => {
+    it("should emit events during processing", async () => {
       agent = new CodeBuddyAgent("test-api-key");
       const events: string[] = [];
 
       agent.on("thinking", () => events.push("thinking"));
-      agent.on("response", () => {
-        events.push("response");
-        expect(events).toContain("thinking");
-        done();
-      });
+      await new Promise<void>((resolve, reject) => {
+        agent.once("response", () => {
+          try {
+            events.push("response");
+            expect(events).toContain("thinking");
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      // Trigger processing (would need to call processUserMessage)
-      agent.emit("thinking");
-      agent.emit("response", "Test response");
+        // Trigger processing (would need to call processUserMessage)
+        agent.emit("thinking");
+        agent.emit("response", "Test response");
+      });
     });
   });
 

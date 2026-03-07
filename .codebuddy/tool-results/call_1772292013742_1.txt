@@ -1,0 +1,27 @@
+
+🔍 Résultats pour: "TypeScript 5 Compiler Infrastructure and Module Resolution Improvements"
+══════════════════════════════════════════════════
+
+1. **Exploring TypeScript 5 features: Smaller, simpler, faster - LogRocket Blog** [1]
+   TypeScript 5 introduces significant improvements in its infrastructure compared to previous versions. <strong>The migration from namespaces to modules enables a modular infrastructure, supports modern build tooling, and allows for various optimizations</strong>.
+   📅 June 4, 2024
+
+2. **TypeScript: Documentation - Modules - Theory** [2]
+   depending on the module compiler option, but the module specifier will be &quot;./math.mjs&quot; either way. By default, module specifiers must be written in a way that works for the code’s target runtime or bundler, and it’s TypeScript’s job to understand those output-relative specifiers. The process of finding the file referenced by a module specifier is called module resolution. TypeScript 5.7 introduced the --rewriteRelativeImportExtensions option, which transforms relative module specifiers with .ts, .tsx, .mts, or .cts extensions to their JavaScript equivalents in output files.
+
+3. **TypeScript: TSConfig Reference - Docs on every TSConfig option** [3]
+   This option defaults to true under the node16, nodenext, and bundler options for --moduleResolution. ... Rewrite .ts, .tsx, .mts, and .cts file extensions in relative import paths to their JavaScript equivalent in output files. For more information, see the TypeScript 5.7 release notes. ... Default: The longest common path of all non-declaration input files. If composite is set, the default is instead the directory containing the tsconfig.json file. When TypeScript compiles files, it keeps the same directory structure in the output directory as exists in the input directory.
+
+4. **TypeScript: TSConfig Option: moduleResolution** [4]
+   Like node16 and nodenext, this mode supports package.json &quot;imports&quot; and &quot;exports&quot;, but unlike the Node.js resolution modes, bundler never requires file extensions on relative paths in imports. &#x27;classic&#x27; was used in TypeScript before the release of 1.6. classic should not be used. There are reference pages explaining the theory behind TypeScript’s module resolution and the details of each option.
+
+5. **TypeScript: Documentation - Modules - Choosing Compiler Options** [5]
+   To model this in TypeScript, you would want to process bundled imports with &quot;moduleResolution&quot;: &quot;bundler&quot; and externalized imports with &quot;moduleResolution&quot;: &quot;nodenext&quot; (or with multiple options to check that everything will work in a range of end-user environments). But TypeScript cannot be configured to use two different module resolution settings in the same compilation.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Exploring TypeScript 5 features: Smaller, simpler, faster - LogRocket Blog — https://blog.logrocket.com/exploring-typescript-5-features-smaller-simpler-faster/
+[2] TypeScript: Documentation - Modules - Theory — https://www.typescriptlang.org/docs/handbook/modules/theory.html
+[3] TypeScript: TSConfig Reference - Docs on every TSConfig option — https://www.typescriptlang.org/tsconfig/
+[4] TypeScript: TSConfig Option: moduleResolution — https://www.typescriptlang.org/tsconfig/moduleResolution.html
+[5] TypeScript: Documentation - Modules - Choosing Compiler Options — https://www.typescriptlang.org/docs/handbook/modules/guides/choosing-compiler-options.html

@@ -8,6 +8,8 @@
  * Gateway message types
  */
 export type GatewayMessageType =
+  | 'connect'
+  | 'hello_ok'
   | 'auth'
   | 'auth_success'
   | 'auth_error'
@@ -21,6 +23,9 @@ export type GatewayMessageType =
   | 'session_join'
   | 'session_leave'
   | 'session_info'
+  | 'session_patch'
+  | 'presence'
+  | 'health'
   | 'ping'
   | 'pong'
   | 'error';
@@ -42,15 +47,78 @@ export interface GatewayMessage<T = unknown> {
 }
 
 /**
+ * Connect handshake payload (first frame from client)
+ */
+export interface ConnectPayload {
+  /** Device identity (persistent across connections) */
+  deviceId: string;
+  /** Device name */
+  deviceName?: string;
+  /** Client role */
+  role: 'control' | 'node' | 'webchat';
+  /** Protocol version */
+  protocolVersion: number;
+  /** Challenge nonce response (for device verification) */
+  challengeResponse?: string;
+}
+
+/**
+ * Hello-OK payload (gateway response to connect)
+ */
+export interface HelloOkPayload {
+  /** Whether device is recognized/paired */
+  paired: boolean;
+  /** Challenge nonce for device verification */
+  challengeNonce?: string;
+  /** Gateway uptime in ms */
+  uptime: number;
+  /** State version for event sequencing */
+  stateVersion: number;
+  /** Presence snapshot */
+  presence: Array<{ deviceId: string; role: string; connectedAt: number }>;
+  /** Health snapshot */
+  health: { status: 'ok' | 'degraded' | 'error'; checkedAt: number };
+  /** Whether auth is required after handshake */
+  authRequired: boolean;
+}
+
+/**
  * Authentication message payload
  */
 export interface AuthPayload {
   /** API key or JWT token */
   token: string;
+  /** Password (for password auth mode) */
+  password?: string;
   /** Client identifier */
   clientId?: string;
   /** Client type */
-  clientType?: 'terminal' | 'web' | 'ide' | 'api';
+  clientType?: 'terminal' | 'web' | 'ide' | 'api' | 'node';
+}
+
+/**
+ * Session patch payload (per-session config changes)
+ */
+export interface SessionPatchPayload {
+  sessionKey: string;
+  patch: {
+    thinkingLevel?: string;
+    verbose?: boolean;
+    model?: string;
+    elevated?: boolean;
+    activation?: 'mention' | 'always';
+    sendPolicy?: 'on' | 'off' | 'inherit';
+  };
+}
+
+/**
+ * Presence payload
+ */
+export interface PresencePayload {
+  deviceId: string;
+  status: 'online' | 'offline' | 'away' | 'typing';
+  sessionKey?: string;
+  timestamp: number;
 }
 
 /**
@@ -146,6 +214,24 @@ export interface ClientState {
 }
 
 /**
+ * Gateway authentication mode
+ */
+export type GatewayAuthMode = 'token' | 'password' | 'none';
+
+/**
+ * Gateway bind mode
+ */
+export type GatewayBindMode = 'loopback' | 'all' | 'tailscale';
+
+/**
+ * Tailscale gateway settings
+ */
+export interface GatewayTailscaleConfig {
+  mode: 'off' | 'serve' | 'funnel';
+  resetOnExit?: boolean;
+}
+
+/**
  * Gateway configuration
  */
 export interface GatewayConfig {
@@ -153,8 +239,16 @@ export interface GatewayConfig {
   port: number;
   /** Server host */
   host: string;
+  /** Bind mode: loopback (127.0.0.1), all (0.0.0.0), or tailscale */
+  bind: GatewayBindMode;
   /** Enable authentication */
   authEnabled: boolean;
+  /** Authentication mode */
+  authMode: GatewayAuthMode;
+  /** Password for password auth mode */
+  authPassword?: string;
+  /** Tailscale integration config */
+  tailscale: GatewayTailscaleConfig;
   /** Ping interval in ms */
   pingIntervalMs: number;
   /** Connection timeout in ms */
@@ -171,7 +265,10 @@ export interface GatewayConfig {
 export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   port: 3001,
   host: '0.0.0.0',
+  bind: 'loopback',
   authEnabled: true,
+  authMode: 'token',
+  tailscale: { mode: 'off' },
   pingIntervalMs: 30000,
   connectionTimeoutMs: 60000,
   maxMessageSize: 1024 * 1024, // 1MB

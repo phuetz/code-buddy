@@ -93,6 +93,8 @@ export const TOOL_GROUPS: Record<ToolGroup, string[]> = {
   'group:web': [
     'web_fetch', 'WebFetch', 'fetch', 'http',
     'web_search', 'WebSearch', 'search',
+    'browser',
+    'browser_action',
     'browser_navigate', 'browser_click', 'browser_type',
     'browser_screenshot', 'browser_scroll',
   ],
@@ -102,6 +104,8 @@ export const TOOL_GROUPS: Record<ToolGroup, string[]> = {
   ],
 
   'group:web:browser': [
+    'browser',
+    'browser_action',
     'browser_navigate', 'browser_click', 'browser_type',
     'browser_screenshot', 'browser_scroll',
     'browser_evaluate', 'browser_wait',
@@ -139,11 +143,12 @@ export const TOOL_GROUPS: Record<ToolGroup, string[]> = {
   'group:memory': [
     'memory_store', 'memory_recall', 'memory_search',
     'memory_delete', 'memory_clear',
+    'remember', 'recall', 'forget',
   ],
 
   'group:agent': [
     'spawn_agent', 'Task',
-    'agent_status', 'agent_stop',
+    'agent_status', 'agent_stop', 'spawn_parallel_agents', 'spawn_subagent',
     'subagent_spawn', 'subagent_list',
   ],
 
@@ -158,7 +163,7 @@ export const TOOL_GROUPS: Record<ToolGroup, string[]> = {
     'git_reset', 'git_push',
     'docker_stop', 'docker_rm',
     'bash', 'Bash', 'exec',
-    'memory_clear', 'memory_delete',
+    'memory_clear', 'memory_delete', 'forget',
   ],
 };
 
@@ -198,6 +203,7 @@ export const TOOL_ALIASES: Record<string, string> = {
   'http': 'web_fetch',
   'WebSearch': 'web_search',
   'search': 'web_search',
+  'browser_action': 'browser',
 
   // Agent
   'Task': 'spawn_agent',

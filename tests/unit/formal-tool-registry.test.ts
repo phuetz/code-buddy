@@ -394,43 +394,77 @@ describe('FormalToolRegistry', () => {
   });
 
   describe('events', () => {
-    it('should emit tool:registered event', (done) => {
+    it('should emit tool:registered event', async () => {
       const tool = new EchoTool();
-      registry.on('tool:registered', (data) => {
-        expect(data.name).toBe('echo');
-        expect(data.tool).toBe(tool);
-        done();
+      await new Promise<void>((resolve, reject) => {
+        registry.once('tool:registered', (data) => {
+          try {
+            expect(data.name).toBe('echo');
+            expect(data.tool).toBe(tool);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        registry.register(tool);
       });
-      registry.register(tool);
     });
 
-    it('should emit tool:unregistered event', (done) => {
+    it('should emit tool:unregistered event', async () => {
       const tool = new EchoTool();
       registry.register(tool);
-      registry.on('tool:unregistered', (data) => {
-        expect(data.name).toBe('echo');
-        done();
+      await new Promise<void>((resolve, reject) => {
+        registry.once('tool:unregistered', (data) => {
+          try {
+            expect(data.name).toBe('echo');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        registry.unregister('echo');
       });
-      registry.unregister('echo');
     });
 
-    it('should emit tool:executed event', (done) => {
+    it('should emit tool:executed event', async () => {
       registry.register(new EchoTool());
-      registry.on('tool:executed', (result) => {
-        expect(result.toolName).toBe('echo');
-        expect(result.success).toBe(true);
-        done();
+      const executedEvent = new Promise<void>((resolve, reject) => {
+        registry.once('tool:executed', (result) => {
+          try {
+            expect(result.toolName).toBe('echo');
+            expect(result.success).toBe(true);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
-      registry.execute('echo', { message: 'test' });
+
+      const execution = Promise.resolve(registry.execute('echo', { message: 'test' }));
+
+      await Promise.all([executedEvent, execution]);
     });
 
-    it('should emit tool:error event on failure', (done) => {
-      registry.on('tool:error', (data) => {
-        expect(data.name).toBe('nonexistent');
-        expect(data.error).toBeDefined();
-        done();
+    it('should emit tool:error event on failure', async () => {
+      const errorEvent = new Promise<void>((resolve, reject) => {
+        registry.once('tool:error', (data) => {
+          try {
+            expect(data.name).toBe('nonexistent');
+            expect(data.error).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
-      registry.execute('nonexistent', {});
+
+      try {
+        await Promise.all([errorEvent, Promise.resolve(registry.execute('nonexistent', {}))]);
+      } catch {
+        await errorEvent;
+      }
     });
   });
 

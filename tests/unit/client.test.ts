@@ -4,6 +4,7 @@
  */
 
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool, hasToolCalls } from '../../src/codebuddy/client';
+import { getModelInfo } from '../../src/utils/model-utils';
 
 // Create mock for OpenAI before importing
 const mockCreate = jest.fn();
@@ -19,7 +20,7 @@ const mockOpenAIInstance = {
 jest.mock('openai', () => {
   return {
     __esModule: true,
-    default: jest.fn().mockImplementation(() => mockOpenAIInstance),
+    default: jest.fn().mockImplementation(function() { return mockOpenAIInstance; }),
   };
 });
 
@@ -40,10 +41,20 @@ jest.mock('../../src/utils/logger', () => ({
     error: jest.fn(),
   },
 }));
+jest.mock('../../src/utils/retry.js', () => ({
+  retry: jest.fn((fn: () => Promise<unknown>) => fn()),
+  RetryStrategies: {
+    llmApi: { maxRetries: 3, baseDelay: 1000 },
+  },
+  RetryPredicates: {
+    llmApiError: jest.fn().mockReturnValue(true),
+  },
+}));
 
 // Import OpenAI after mocking
 import OpenAI from 'openai';
 const MockedOpenAI = OpenAI as jest.MockedClass<typeof OpenAI>;
+const mockedGetModelInfo = getModelInfo as jest.MockedFunction<typeof getModelInfo>;
 
 describe('CodeBuddyClient', () => {
   const mockApiKey = 'test-api-key-12345';
@@ -290,6 +301,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should include search parameters when provided', async () => {
+      client = new CodeBuddyClient(mockApiKey, undefined, 'https://api.openai.com/v1');
       mockCreate.mockResolvedValueOnce({
         choices: [{ message: { role: 'assistant', content: 'Search result' }, finish_reason: 'stop' }],
       });
@@ -415,7 +427,7 @@ describe('CodeBuddyClient', () => {
 
   describe('Search', () => {
     beforeEach(() => {
-      client = new CodeBuddyClient(mockApiKey);
+      client = new CodeBuddyClient(mockApiKey, undefined, 'https://api.openai.com/v1');
     });
 
     it('should perform search with default parameters', async () => {
@@ -454,8 +466,7 @@ describe('CodeBuddyClient', () => {
       jest.clearAllMocks();
 
       // Reset model utils mock for this test suite
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'xai',
         isSupported: true,
@@ -463,8 +474,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should detect tool support from known providers', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'xai',
         isSupported: true,
@@ -481,8 +491,7 @@ describe('CodeBuddyClient', () => {
     it('should skip probe when GROK_FORCE_TOOLS is enabled', async () => {
       process.env.GROK_FORCE_TOOLS = 'true';
 
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
@@ -496,8 +505,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should detect tool support for function calling models', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
@@ -511,8 +519,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should probe API for unknown models', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
@@ -544,8 +551,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should detect no tool support when probe fails', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
@@ -560,8 +566,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should detect no tool support when response has no tool calls', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
@@ -585,8 +590,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should cache probe result', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
@@ -616,8 +620,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should handle empty choices array in probe response', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
@@ -696,8 +699,7 @@ describe('CodeBuddyClient', () => {
     });
 
     it('should enable tools for Ollama by default', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'ollama',
         isSupported: true,
@@ -1103,14 +1105,13 @@ describe('CodeBuddyClient', () => {
 
   describe('Concurrent Probe Handling', () => {
     it('should handle concurrent probeToolSupport calls', async () => {
-      const modelUtils = require('../../src/utils/model-utils');
-      modelUtils.getModelInfo.mockReturnValue({
+      mockedGetModelInfo.mockReturnValue({
         maxTokens: 8192,
         provider: 'unknown',
         isSupported: false,
       });
 
-      mockCreate.mockImplementation(() => {
+      mockCreate.mockImplementation(function() {
         return new Promise((resolve) => {
           setTimeout(() => {
             resolve({

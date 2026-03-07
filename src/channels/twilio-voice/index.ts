@@ -2,12 +2,20 @@
  * Twilio Voice Channel Adapter
  *
  * Manages voice calls via Twilio API.
- * This is a stub implementation.
+ * Provides a lightweight in-process adapter for lifecycle and call flows.
  */
 
 import { logger } from '../../utils/logger.js';
+import { BaseChannel, ChannelConfig, DeliveryResult, OutboundMessage } from '../core.js';
 
 export interface TwilioVoiceConfig {
+  accountSid: string;
+  authToken: string;
+  phoneNumber: string;
+  webhookUrl?: string;
+}
+
+export interface TwilioVoiceChannelConfig extends ChannelConfig {
   accountSid: string;
   authToken: string;
   phoneNumber: string;
@@ -55,7 +63,7 @@ export class TwilioVoiceAdapter {
     }
     const callSid = `CA${Date.now()}_${++callCounter}`;
     this.activeCalls.set(callSid, { to, startedAt: new Date() });
-    logger.debug('TwilioVoiceAdapter: making call', { to, callSid });
+    logger.debug('TwilioVoiceAdapter: making call', { to, callSid, messageLength: message.length });
     return { success: true, callSid };
   }
 
@@ -90,6 +98,64 @@ export class TwilioVoiceAdapter {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
+  }
+}
+
+export class TwilioVoiceChannel extends BaseChannel {
+  private adapter: TwilioVoiceAdapter;
+
+  constructor(config: TwilioVoiceChannelConfig) {
+    super('twilio-voice', {
+      type: 'twilio-voice',
+      enabled: config.enabled,
+      token: config.token,
+      webhookUrl: config.webhookUrl,
+      allowedUsers: config.allowedUsers,
+      allowedChannels: config.allowedChannels,
+      autoReply: config.autoReply,
+      rateLimit: config.rateLimit,
+      options: config.options,
+    });
+    this.adapter = new TwilioVoiceAdapter({
+      accountSid: config.accountSid,
+      authToken: config.authToken,
+      phoneNumber: config.phoneNumber,
+      webhookUrl: config.webhookUrl,
+    });
+  }
+
+  async connect(): Promise<void> {
+    await this.adapter.start();
+    this.status.connected = true;
+    this.status.authenticated = true;
+    this.status.lastActivity = new Date();
+    this.emit('connected', this.type);
+  }
+
+  async disconnect(): Promise<void> {
+    if (!this.status.connected) return;
+    await this.adapter.stop();
+    this.status.connected = false;
+    this.status.lastActivity = new Date();
+    this.emit('disconnected', this.type);
+  }
+
+  async send(message: OutboundMessage): Promise<DeliveryResult> {
+    try {
+      const result = await this.adapter.makeCall(message.channelId, message.content);
+      this.status.lastActivity = new Date();
+      return {
+        success: result.success,
+        messageId: result.callSid,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date(),
+      };
+    }
   }
 }
 

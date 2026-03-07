@@ -3,7 +3,7 @@ import { BaseTool } from './base-tool.js';
 import { DockerSandbox } from '../sandbox/docker-sandbox.js';
 import { ToolResult } from '../types/index.js';
 import { ParameterDefinition } from './base-tool.js';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';

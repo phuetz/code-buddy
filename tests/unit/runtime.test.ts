@@ -10,6 +10,7 @@
  */
 
 import { FCSRuntime as Runtime } from '../../src/scripting/runtime';
+
 import {
   ProgramNode,
   BlockStatement,
@@ -48,7 +49,8 @@ const mockConsole = {
 };
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   readFileSync: jest.fn().mockReturnValue('mock file content'),
   writeFileSync: jest.fn(),
   appendFileSync: jest.fn(),
@@ -65,18 +67,20 @@ jest.mock('fs', () => ({
     birthtime: new Date('2024-01-01'),
     mtime: new Date('2024-06-15'),
   }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock child_process
 jest.mock('child_process', () => ({
   execSync: jest.fn().mockReturnValue('command output'),
-  spawn: jest.fn().mockImplementation(() => ({
+  spawn: jest.fn().mockImplementation(function() { return {
     stdout: { on: jest.fn() },
     stderr: { on: jest.fn() },
     on: jest.fn((event, callback) => {
       if (event === 'close') callback(0);
     }),
-  })),
+  }; }),
 }));
 
 describe('Runtime', () => {

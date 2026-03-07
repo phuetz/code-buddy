@@ -1,0 +1,11 @@
+{
+  "id": "unicode123",
+  "name": "Session 中文 😀",
+  "startTime": "2026-03-06T08:15:21.420Z",
+  "events": [],
+  "metadata": {
+    "model": "test",
+    "systemPrompt": "test",
+    "toolsEnabled": []
+  }
+}

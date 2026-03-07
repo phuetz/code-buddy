@@ -57,14 +57,20 @@ describe('ObservationMasker', () => {
       expect(result.relevanceScore).toBeGreaterThan(0);
     });
 
-    it('should emit context:updated event', (done) => {
-      masker.on('context:updated', (data) => {
-        expect(data.query).toBe('test query');
-        expect(data.keywords).toBeInstanceOf(Array);
-        done();
-      });
+    it('should emit context:updated event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        masker.once('context:updated', (data) => {
+          try {
+            expect(data.query).toBe('test query');
+            expect(data.keywords).toBeInstanceOf(Array);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      masker.setQueryContext('test query');
+        masker.setQueryContext('test query');
+      });
     });
   });
 
@@ -285,13 +291,19 @@ describe('ObservationMasker', () => {
       expect(config.enabled).toBe(false);
     });
 
-    it('should emit config:updated event', (done) => {
-      masker.on('config:updated', (config) => {
-        expect(config.totalTokenBudget).toBe(5000);
-        done();
-      });
+    it('should emit config:updated event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        masker.once('config:updated', (config) => {
+          try {
+            expect(config.totalTokenBudget).toBe(5000);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      masker.updateConfig({ totalTokenBudget: 5000 });
+        masker.updateConfig({ totalTokenBudget: 5000 });
+      });
     });
   });
 
@@ -332,22 +344,28 @@ describe('ObservationMasker', () => {
   });
 
   describe('events', () => {
-    it('should emit mask:complete event', (done) => {
-      masker.on('mask:complete', ({ stats }) => {
-        expect(stats.totalObservations).toBe(1);
-        done();
-      });
+    it('should emit mask:complete event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        masker.once('mask:complete', ({ stats }) => {
+          try {
+            expect(stats.totalObservations).toBe(1);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      masker.maskObservations([
-        {
-          id: '1',
-          toolName: 'bash',
-          input: 'test',
-          output: 'output',
-          timestamp: Date.now(),
-          type: 'command_output',
-        },
-      ]);
+        masker.maskObservations([
+          {
+            id: '1',
+            toolName: 'bash',
+            input: 'test',
+            output: 'output',
+            timestamp: Date.now(),
+            type: 'command_output',
+          },
+        ]);
+      });
     });
   });
 });

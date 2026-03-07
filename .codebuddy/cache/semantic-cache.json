@@ -8,6 +8,11 @@
     "semanticHits": 0,
     "exactHits": 0,
     "evictions": 0,
-    "avgSimilarity": 0
+    "avgSimilarity": 0,
+    "lshLookups": 0,
+    "lshCandidates": 0,
+    "avgLookupTimeMs": 0,
+    "memoryEstimateBytes": 0,
+    "clusters": 0
   }
 }

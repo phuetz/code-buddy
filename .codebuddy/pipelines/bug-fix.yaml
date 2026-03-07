@@ -1,0 +1,29 @@
+name: Bug Fix Workflow
+description: "Sequential workflow: Debugger -> Refactorer -> Test Runner"
+version: "1.0.0"
+steps:
+  - name: spawn_subagent
+    type: tool
+    label: debug
+    args:
+      type: debugger
+      task: "Analyze the reported bug, reproduce it if possible, and find the root cause."
+  
+  - name: spawn_subagent
+    type: tool
+    label: fix
+    args:
+      type: refactorer
+      task: "Implement the fix for the identified bug. Ensure it doesn't break existing functionality."
+
+  - name: spawn_subagent
+    type: tool
+    label: verify
+    args:
+      type: test-runner
+      task: "Run existing tests and add new tests to verify the fix."
+
+  - name: approval
+    label: final-approval
+    args:
+      message: "Bug fix complete. Review results and approve to finish."

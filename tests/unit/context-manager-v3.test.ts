@@ -2,19 +2,21 @@
  * Tests for Context Manager V3
  */
 
+
+// Mock tiktoken
+
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
 
-// Mock tiktoken
 jest.mock('tiktoken', () => ({
-  encoding_for_model: jest.fn(() => ({
+  encoding_for_model: jest.fn(function() { return {
     encode: jest.fn((text: string) => new Array(Math.ceil(text.length / 4))),
     free: jest.fn()
-  })),
-  get_encoding: jest.fn(() => ({
+  }; }),
+  get_encoding: jest.fn(function() { return {
     encode: jest.fn((text: string) => new Array(Math.ceil(text.length / 4))),
     free: jest.fn()
-  }))
+  }; })
 }));
 
 // Mock logger

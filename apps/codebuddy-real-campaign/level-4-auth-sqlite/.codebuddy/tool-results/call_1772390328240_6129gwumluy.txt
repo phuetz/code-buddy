@@ -1,0 +1,236 @@
+Updated smoke-test.mjs with 110 additions and 97 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -2,7 +2,7 @@
+ import assert from 'assert';
+ import { spawn } from 'child_process';
+ import fs from 'fs';
+-import { before, after, describe, it } from 'mocha'; // Import Mocha globals
++import { before, after, describe, it, beforeEach, afterEach } from 'mocha'; // Import Mocha globals
+ 
+ // Clean up previous test data
+ const cleanup = () => {
+@@ -21,112 +21,125 @@
+     cleanup(); // Clean up before starting tests
+     serverProcess = spawn('node', ['server.mjs']);
+     serverProcess.stdout.on('data', (data) => {
+-      console.log(`Server stdout: ${data}`);
++      // console.log(`Server stdout: ${data}`); // Suppress server output during tests
+     });
+     serverProcess.stderr.on('data', (data) => {
+       console.error(`Server stderr: ${data}`);
+     // Give the server a moment to start up
+-    await new Promise(resolve => setTimeout(resolve, 3000));
++    await new Promise(resolve => setTimeout(resolve, 5000)); // Increased timeout
+     agent = request.agent(app);
+   });
+ 
+   after(() => {
+     if (serverProcess) {
+-      serverProcess.kill('SIGINT'); // Send SIGINT for graceful shutdown
+-    }
+-    cleanup(); // Clean up after tests
+-  });
+-
+-  it('should respond to /health', async () => {
+-    const res = await agent.get('/health');
+-    assert.strictEqual(res.statusCode, 200);
+-    assert.deepStrictEqual(res.body, { status: 'ok' });
+-  });
+-
+-  it('should register a new user', async () => {
+-    const res = await agent.post('/register')
+-      .send({ username: 'testuser', password: 'password123' });
+-    assert.strictEqual(res.statusCode, 201);
+-    assert.strictEqual(res.body.message, 'User registered successfully');
++      try {
++        serverProcess.kill('SIGKILL'); // Forceful termination
++      } catch (e) {
++        console.error('Error killing server process:', e);
++      }
++    }
++    cleanup(); // Clean up after tests
++  });
++
++  beforeEach(async () => {
++    // Ensure a clean state for each test if necessary, e.g., clear tasks
++    // For this smoke test, we'll rely on global cleanup before all tests
++  });
++
++  afterEach(async () => {
++    // No specific per-test cleanup needed for this smoke test
+   });
+ 
+   it('should not register a duplicate user', async () => {
+-  it('should not register a duplicate user', async () => {
+-    const res = await agent.post('/register')
+-      .send({ username: 'testuser', password: 'anotherpassword' });
+-    assert.strictEqual(res.statusCode, 409);
+-    assert.strictEqual(res.body.message, 'Username already exists');
+-  });
+-
+-  it('should login the registered user', async () => {
+-    const res = await agent.post('/login')
+-      .send({ username: 'testuser', password: 'password123' });
+-    assert.strictEqual(res.statusCode, 200);
+-    assert.strictEqual(res.body.message, 'Logged in successfully');
+-
+-    const sessionRes = await agent.get('/session');
+-    assert.strictEqual(sessionRes.statusCode, 200);
+-    assert.strictEqual(sessionRes.body.authenticated, true);
+-    userId = sessionRes.body.userId; // Capture userId for later tests
+-    assert.ok(userId);
++  it('should respond to /health', async () => {
++    const res = await agent.get('/health');
++    assert.strictEqual(res.statusCode, 200);
++    assert.deepStrictEqual(res.body, { status: 'ok' });
++  });
++
++  it('should register a new user', async () => {
++    const res = await agent.post('/register')
++      .send({ username: 'testuser', password: 'password123' });
++    assert.strictEqual(res.statusCode, 201);
++    assert.strictEqual(res.body.message, 'User registered successfully');
++  });
++
++  it('should not register a duplicate user', async () => {
++    const res = await agent.post('/register')
++      .send({ username: 'testuser', password: 'anotherpassword' });
++    assert.strictEqual(res.statusCode, 409);
++    assert.strictEqual(res.body.message, 'Username already exists');
+   });
+ 
+   it('should not login with invalid credentials', async () => {
+-  it('should not login with invalid credentials', async () => {
+-    const res = await agent.post('/login')
+-      .send({ username: 'testuser', password: 'wrongpassword' });
+-    assert.strictEqual(res.statusCode, 401);
+-    assert.strictEqual(res.body.message, 'Invalid credentials');
+-  });
+-
+-  it('should create a new task', async () => {
+-    const res = await agent.post('/tasks')
+-      .send({ title: 'Buy groceries' });
+-    assert.strictEqual(res.statusCode, 201);
+-    assert.strictEqual(res.body.title, 'Buy groceries');
+-    assert.strictEqual(res.body.completed, 0);
+-    assert.ok(res.body.id);
+-  });
+-
+-  it('should get tasks for the logged-in user', async () => {
+-    const res = await agent.get('/tasks');
+-    assert.strictEqual(res.statusCode, 200);
+-    assert.ok(Array.isArray(res.body));
+-    assert.strictEqual(res.body.length, 1);
+-    assert.strictEqual(res.body[0].title, 'Buy groceries');
+-  });
+-
+-  it('should update a task', async () => {
+-    const tasksRes = await agent.get('/tasks');
+-    const taskId = tasksRes.body[0].id;
+-
+-    const res = await agent.put(`/tasks/${taskId}`)
+-      .send({ title: 'Buy groceries and milk', completed: true });
+-    assert.strictEqual(res.statusCode, 200);
+-    assert.strictEqual(res.body.message, 'Task updated successfully');
+-
+-    const updatedTasksRes = await agent.get('/tasks');
+-    assert.strictEqual(updatedTasksRes.body[0].title, 'Buy groceries and milk');
+-    assert.strictEqual(updatedTasksRes.body[0].completed, 1);
+-  });
+-
+-  it('should delete a task', async () => {
+-    const tasksRes = await agent.get('/tasks');
+-    const taskId = tasksRes.body[0].id;
+-
+-    const res = await agent.delete(`/tasks/${taskId}`);
+-    assert.strictEqual(res.statusCode, 200);
+-    assert.strictEqual(res.body.message, 'Task deleted successfully');
+-
+-    const emptyTasksRes = await agent.get('/tasks');
+-    assert.strictEqual(emptyTasksRes.body.length, 0);
+-  });
+-
+-  it('should logout the user', async () => {
+-    const res = await agent.post('/logout');
+-    assert.strictEqual(res.statusCode, 200);
+-    assert.strictEqual(res.body.message, 'Logged out successfully');
+-
+-    const sessionRes = await agent.get('/session');
+-    assert.strictEqual(sessionRes.statusCode, 200);
+-    assert.strictEqual(sessionRes.body.authenticated, false);
+-  });
+-});
++  it('should login the registered user', async () => {
++    const res = await agent.post('/login')
++      .send({ username: 'testuser', password: 'password123' });
++    assert.strictEqual(res.statusCode, 200);
++    assert.strictEqual(res.body.message, 'Logged in successfully');
++
++    const sessionRes = await agent.get('/session');
++    assert.strictEqual(sessionRes.statusCode, 200);
++    assert.strictEqual(sessionRes.body.authenticated, true);
++    userId = sessionRes.body.userId; // Capture userId for later tests
++    assert.ok(userId);
++  });
++
++  it('should not login with invalid credentials', async () => {
++    const res = await agent.post('/login')
++      .send({ username: 'testuser', password: 'wrongpassword' });
++    assert.strictEqual(res.statusCode, 401);
++    assert.strictEqual(res.body.message, 'Invalid credentials');
++  });
++
++  it('should create a new task', async () => {
++    const res = await agent.post('/tasks')
++      .send({ title: 'Buy groceries' });
++    assert.strictEqual(res.statusCode, 201);
++    assert.strictEqual(res.body.title, 'Buy groceries');
++    assert.strictEqual(res.body.completed, 0);
++    assert.ok(res.body.id);
++  });
++
++  it('should get tasks for the logged-in user', async () => {
++    const res = await agent.get('/tasks');
++    assert.strictEqual(res.statusCode, 200);
++    assert.ok(Array.isArray(res.body));
++    assert.strictEqual(res.body.length, 1);
++    assert.strictEqual(res.body[0].title, 'Buy groceries');
++  });
++
++  it('should update a task', async () => {
++    const tasksRes = await agent.get('/tasks');
++    const taskId = tasksRes.body[0].id;
++
++    const res = await agent.put(`/tasks/${taskId}`)
++      .send({ title: 'Buy groceries and milk', completed: true });
++    assert.strictEqual(res.statusCode, 200);
++    assert.strictEqual(res.body.message, 'Task updated successfully');
++
++    const updatedTasksRes = await agent.get('/tasks');
++    assert.strictEqual(updatedTasksRes.body[0].title, 'Buy groceries and milk');
++    assert.strictEqual(updatedTasksRes.body[0].completed, 1);
++  });
++
++  it('should delete a task', async () => {
++    const tasksRes = await agent.get('/tasks');
++    const taskId = tasksRes.body[0].id;
++
++    const res = await agent.delete(`/tasks/${taskId}`);
++    assert.strictEqual(res.statusCode, 200);
++    assert.strictEqual(res.body.message, 'Task deleted successfully');
++
++    const emptyTasksRes = await agent.get('/tasks');
++    assert.strictEqual(emptyTasksRes.body.length, 0);
++  });
++
++  it('should logout the user', async () => {
++    const res = await agent.post('/logout');
++    assert.strictEqual(res.statusCode, 200);
++    assert.strictEqual(res.body.message, 'Logged out successfully');
++
++    const sessionRes = await agent.get('/session');
++    assert.strictEqual(sessionRes.statusCode, 200);
++    assert.strictEqual(sessionRes.body.authenticated, false);
++  });
++});

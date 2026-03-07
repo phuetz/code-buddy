@@ -1,0 +1,30 @@
+
+🔍 Résultats pour: "TypeScript 5 major updates language syntax type system compiler tooling"
+══════════════════════════════════════════════════
+
+1. **Announcing TypeScript 5.9 - TypeScript** [1]
+   Today we are excited to announce the release of <strong>TypeScript 5.9</strong>! If you’re not familiar with TypeScript, it’s a language that builds on JavaScript by adding syntax for types. With types, TypeScript makes it possible to check your code to ...
+   📅 August 1, 2025
+
+2. **TypeScript: Documentation - TypeScript 5.9** [2]
+   Previously, that was actually the case. To help here, TypeScript 5.9 is now previewing a feature called expandable hovers, or “quick info verbosity”. If you use an editor like VS Code, you’ll now see a + and - button on the left of these hover tooltips.
+
+3. **Yes, you should upgrade to TypeScript 5.9 — here's why - LogRocket Blog** [3]
+   Explore the key features of <strong>TypeScript 5.9</strong>, including the redesigned tsc --init command, import defer syntax, expandable hovers, and more.
+   📅 September 29, 2025
+
+4. **TypeScript - Wikipedia** [4]
+   TypeScript adds the following syntax extensions to JavaScript: <strong>Type signatures (annotations) and compile-time type checking</strong> ... Syntactically, TypeScript is very similar to JScript .NET, another Microsoft implementation of the ECMA-262 language ...
+   📅 3 days ago
+
+5. **Announcing TypeScript 5.0 - TypeScript** [5]
+   Using this tooling, revisiting our packaging strategy, and removing some deprecated code has shaved off about 26.4 MB from TypeScript 4.9’s 63.8 MB package size. It also brought us a notable speed-up through direct function calls. We put together a detailed write-up about our migration to modules here. TypeScript also added more uniformity to internal object types within the compiler, and also slimmed the data stored on some of these object types as well.
+   📅 March 17, 2023
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Announcing TypeScript 5.9 - TypeScript — https://devblogs.microsoft.com/typescript/announcing-typescript-5-9/
+[2] TypeScript: Documentation - TypeScript 5.9 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html
+[3] Yes, you should upgrade to TypeScript 5.9 — here's why - LogRocket Blog — https://blog.logrocket.com/upgrade-to-typescript-5-9/
+[4] TypeScript - Wikipedia — https://en.wikipedia.org/wiki/TypeScript
+[5] Announcing TypeScript 5.0 - TypeScript — https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/

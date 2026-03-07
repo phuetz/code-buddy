@@ -1,0 +1,1 @@
+Search error: Ripgrep failed with code 2: rg: unrecognized file type: mjs

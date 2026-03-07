@@ -1,0 +1,504 @@
+Contents of src/utils/graceful-shutdown.ts (529 lines):
+1: /**
+2:  * Graceful Shutdown Manager
+3:  *
+4:  * Provides clean application shutdown with:
+5:  * - Session state preservation
+6:  * - Pending operation completion (waits for in-progress operations)
+7:  * - Connection cleanup (MCP, Database)
+8:  * - Log flushing
+9:  * - Configurable timeout (default 30s) before force exit
+10:  *
+11:  * Intercepts signals: SIGINT (Ctrl+C), SIGTERM (kill), SIGHUP (terminal closed)
+12:  */
+13: 
+14: import { logger, getLogger } from './logger.js';
+15: import { DisposableManager, registerDisposable, type Disposable } from './disposable.js';
+16: 
+17: export interface ShutdownOptions {
+18:   /** Maximum time to wait for shutdown in milliseconds (default: 30000) */
+19:   timeoutMs: number;
+20:   /** Whether to force exit after timeout (default: true) */
+21:   forceExitOnTimeout: boolean;
+22:   /** Custom exit code (default: 0 for graceful, 1 for timeout) */
+23:   exitCode?: number;
+24:   /** Show progress during shutdown (default: true) */
+25:   showProgress: boolean;
+26: }
+27: 
+28: export interface ShutdownHandler {
+29:   /** Name for logging purposes */
+30:   name: string;
+31:   /** Priority (higher = runs first, default: 0) */
+32:   priority: number;
+33:   /** The shutdown handler function */
+34:   handler: () => void | Promise<void>;
+35: }
+36: 
+37: const DEFAULT_OPTIONS: ShutdownOptions = {
+38:   timeoutMs: 30000, // 30 seconds max before force exit
+39:   forceExitOnTimeout: true,
+40:   showProgress: true,
+41: };
+42: 
+43: /**
+44:  * Graceful Shutdown Manager
+45:  *
+46:  * Coordinates clean shutdown of all application components
+47:  */
+48: export class GracefulShutdownManager implements Disposable {
+49:   private static instance: GracefulShutdownManager | null = null;
+50:   private handlers: ShutdownHandler[] = [];
+51:   private isShuttingDown = false;
+52:   private shutdownPromise: Promise<void> | null = null;
+53:   private options: ShutdownOptions;
+54:   private signalsRegistered = false;
+55:   private pendingOperations: Map<string, { description: string; startTime: number }> = new Map();
+56:   private completedHandlers: Set<string> = new Set();
+57: 
+58:   private constructor(options: Partial<ShutdownOptions> = {}) {
+59:     this.options = { ...DEFAULT_OPTIONS, ...options };
+60:   }
+61: 
+62:   /**
+63:    * Get singleton instance
+64:    */
+65:   static getInstance(options?: Partial<ShutdownOptions>): GracefulShutdownManager {
+66:     if (!GracefulShutdownManager.instance) {
+67:       GracefulShutdownManager.instance = new GracefulShutdownManager(options);
+68:       // Register self as disposable for cleanup
+69:       registerDisposable(GracefulShutdownManager.instance);
+70:     }
+71:     return GracefulShutdownManager.instance;
+72:   }
+73: 
+74:   /**
+75:    * Register process signal handlers
+76:    */
+77:   registerSignalHandlers(): void {
+78:     if (this.signalsRegistered) {
+79:       return;
+80:     }
+81: 
+82:     // SIGINT: Ctrl+C
+83:     process.on('SIGINT', () => this.handleSignal('SIGINT'));
+84: 
+85:     // SIGTERM: Kill command
+86:     process.on('SIGTERM', () => this.handleSignal('SIGTERM'));
+87: 
+88:     // SIGHUP: Terminal closed
+89:     process.on('SIGHUP', () => this.handleSignal('SIGHUP'));
+90: 
+91:     this.signalsRegistered = true;
+92:     logger.debug('Signal handlers registered for graceful shutdown');
+93:   }
+94: 
+95:   /**
+96:    * Handle incoming signal
+97:    */
+98:   private async handleSignal(signal: string): Promise<void> {
+99:     logger.info(`Received ${signal}, initiating graceful shutdown...`);
+100: 
+101:     // Show user-friendly message
+102:     logger.info(`Received ${signal}. Shutting down gracefully...`);
+103: 
+104:     try {
+105:       await this.shutdown({ exitCode: 0 });
+106:     } catch (error) {
+107:       logger.error('Error during shutdown', error instanceof Error ? error : new Error(String(error)));
+108:       process.exit(1);
+109:     }
+110:   }
+111: 
+112:   /**
+113:    * Register a shutdown handler
+114:    */
+115:   registerHandler(handler: ShutdownHandler): void {
+116:     this.handlers.push(handler);
+117:     // Sort by priority (higher first)
+118:     this.handlers.sort((a, b) => b.priority - a.priority);
+119:     logger.debug(`Registered shutdown handler: ${handler.name} (priority: ${handler.priority})`);
+120:   }
+121: 
+122:   /**
+123:    * Unregister a shutdown handler by name
+124:    */
+125:   unregisterHandler(name: string): boolean {
+126:     const index = this.handlers.findIndex(h => h.name === name);
+127:     if (index !== -1) {
+128:       this.handlers.splice(index, 1);
+129:       return true;
+130:     }
+131:     return false;
+132:   }
+133: 
+134:   /**
+135:    * Track a pending operation (blocks shutdown until complete)
+136:    * Returns a function to mark the operation as complete
+137:    */
+138:   trackOperation(id: string, description: string): () => void {
+139:     this.pendingOperations.set(id, {
+140:       description,
+141:       startTime: Date.now(),
+142:     });
+143:     logger.debug(`Tracking operation: ${id} - ${description}`);
+144: 
+145:     return () => {
+146:       this.pendingOperations.delete(id);
+147:       logger.debug(`Operation completed: ${id}`);
+148:     };
+149:   }
+150: 
+151:   /**
+152:    * Check if there are pending operations
+153:    */
+154:   hasPendingOperations(): boolean {
+155:     return this.pendingOperations.size > 0;
+156:   }
+157: 
+158:   /**
+159:    * Get list of pending operations
+160:    */
+161:   getPendingOperations(): Array<{ id: string; description: string; duration: number }> {
+162:     const now = Date.now();
+163:     return Array.from(this.pendingOperations.entries()).map(([id, op]) => ({
+164:       id,
+165:       description: op.description,
+166:       duration: now - op.startTime,
+167:     }));
+168:   }
+169: 
+170:   /**
+171:    * Execute shutdown with timeout
+172:    */
+173:   async shutdown(overrideOptions?: Partial<ShutdownOptions>): Promise<void> {
+174:     // Prevent multiple concurrent shutdowns
+175:     if (this.isShuttingDown) {
+176:       logger.debug('Shutdown already in progress, waiting...');
+177:       return this.shutdownPromise!;
+178:     }
+179: 
+180:     this.isShuttingDown = true;
+181:     const options = { ...this.options, ...overrideOptions };
+182: 
+183:     this.shutdownPromise = this.executeShutdown(options);
+184:     return this.shutdownPromise;
+185:   }
+186: 
+187:   /**
+188:    * Execute the actual shutdown sequence
+189:    */
+190:   private async executeShutdown(options: ShutdownOptions): Promise<void> {
+191:     const startTime = Date.now();
+192:     this.completedHandlers.clear();
+193: 
+194:     logger.info('Starting graceful shutdown sequence...', {
+195:       handlerCount: this.handlers.length,
+196:       pendingOperations: this.pendingOperations.size,
+197:       timeoutMs: options.timeoutMs,
+198:     });
+199: 
+200:     // Wait for pending operations first (with partial timeout)
+201:     const operationTimeout = Math.min(options.timeoutMs / 3, 10000); // Max 10s for operations
+202:     if (this.pendingOperations.size > 0) {
+203:       if (options.showProgress) {
+204:         logger.info(`Waiting for ${this.pendingOperations.size} pending operation(s)...`);
+205:         this.getPendingOperations().forEach(op => {
+206:           logger.info(`  - ${op.description} (${Math.round(op.duration / 1000)}s)`);
+207:         });
+208:       }
+209: 
+210:       await this.waitForPendingOperations(operationTimeout);
+211:     }
+212: 
+213:     // Create timeout promise for handlers
+214:     const remainingTime = options.timeoutMs - (Date.now() - startTime);
+215:     const timeoutPromise = new Promise<'timeout'>((resolve) => {
+216:       setTimeout(() => resolve('timeout'), Math.max(remainingTime, 1000));
+217:     });
+218: 
+219:     // Create shutdown work promise
+220:     const shutdownWork = this.runShutdownHandlers(options.showProgress);
+221: 
+222:     // Race between shutdown and timeout
+223:     const result = await Promise.race([
+224:       shutdownWork.then(() => 'completed' as const),
+225:       timeoutPromise,
+226:     ]);
+227: 
+228:     const elapsed = Date.now() - startTime;
+229: 
+230:     if (result === 'timeout') {
+231:       const pendingOps = this.getPendingOperations();
+232:       const pendingHandlers = this.handlers.filter(h => !this.completedHandlers.has(h.name));
+233: 
+234:       logger.warn(`Shutdown timed out after ${options.timeoutMs}ms`, {
+235:         completedHandlers: this.completedHandlers.size,
+236:         totalHandlers: this.handlers.length,
+237:         pendingOperations: pendingOps.length,
+238:       });
+239: 
+240:       logger.warn(`Shutdown timed out after ${options.timeoutMs / 1000}s. Forcing exit...`);
+241: 
+242:       if (pendingOps.length > 0) {
+243:         logger.warn('Pending operations that were interrupted:');
+244:         pendingOps.forEach(op => logger.warn(`  - ${op.description}`));
+245:       }
+246: 
+247:       if (pendingHandlers.length > 0) {
+248:         logger.warn('Handlers that did not complete:');
+249:         pendingHandlers.forEach(h => logger.warn(`  - ${h.name}`));
+250:       }
+251: 
+252:       if (options.forceExitOnTimeout) {
+253:         process.exit(options.exitCode ?? 1);
+254:       }
+255:     } else {
+256:       logger.info(`Graceful shutdown completed in ${elapsed}ms`);
+257: 
+258:       if (options.showProgress) {
+259:         logger.info(`Shutdown completed in ${elapsed}ms.`);
+260:       }
+261: 
+262:       // Flush logs before exit
+263:       await this.flushLogs();
+264: 
+265:       process.exit(options.exitCode ?? 0);
+266:     }
+267:   }
+268: 
+269:   /**
+270:    * Wait for pending operations to complete
+271:    */
+272:   private async waitForPendingOperations(timeoutMs: number): Promise<void> {
+273:     const startTime = Date.now();
+274: 
+275:     while (this.pendingOperations.size > 0) {
+276:       if (Date.now() - startTime > timeoutMs) {
+277:         logger.warn('Timeout waiting for pending operations', {
+278:           remaining: this.pendingOperations.size,
+279:         });
+280:         break;
+281:       }
+282: 
+283:       // Wait a bit and check again
+284:       await new Promise(resolve => setTimeout(resolve, 100));
+285:     }
+286:   }
+287: 
+288:   /**
+289:    * Run all shutdown handlers in priority order
+290:    */
+291:   private async runShutdownHandlers(showProgress: boolean = false): Promise<void> {
+292:     // First, run custom handlers
+293:     for (const handler of this.handlers) {
+294:       try {
+295:         if (showProgress) {
+296:           process.stdout.write(`  [shutdown] ${handler.name}...`);
+297:         }
+298:         logger.debug(`Running shutdown handler: ${handler.name}`);
+299: 
+300:         const result = handler.handler();
+301:         if (result instanceof Promise) {
+302:           await result;
+303:         }
+304: 
+305:         this.completedHandlers.add(handler.name);
+306: 
+307:         if (showProgress) {
+308:           process.stdout.write(' done\n');
+309:         }
+310:         logger.debug(`Completed shutdown handler: ${handler.name}`);
+311:       } catch (error) {
+312:         this.completedHandlers.add(handler.name); // Mark as completed even on error
+313:         if (showProgress) {
+314:           process.stdout.write(' failed\n');
+315:         }
+316:         logger.error(`Error in shutdown handler ${handler.name}:`, error instanceof Error ? error : new Error(String(error)));
+317:         // Continue with other handlers even if one fails
+318:       }
+319:     }
+320: 
+321:     // Then, dispose all registered disposables
+322:     try {
+323:       if (showProgress) {
+324:         process.stdout.write('  [shutdown] disposing resources...');
+325:       }
+326:       logger.debug('Disposing all registered resources...');
+327:       await DisposableManager.getInstance().disposeAll();
+328:       if (showProgress) {
+329:         process.stdout.write(' done\n');
+330:       }
+331:       logger.debug('All resources disposed');
+332:     } catch (error) {
+333:       if (showProgress) {
+334:         process.stdout.write(' failed\n');
+335:       }
+336:       logger.error('Error disposing resources:', error instanceof Error ? error : new Error(String(error)));
+337:     }
+338:   }
+339: 
+340:   /**
+341:    * Flush all pending logs
+342:    */
+343:   private async flushLogs(): Promise<void> {
+344:     try {
+345:       const loggerInstance = getLogger();
+346:       loggerInstance.close();
+347:     } catch {
+348:       // Ignore errors during log flushing
+349:     }
+350:   }
+351: 
+352:   /**
+353:    * Check if shutdown is in progress
+354:    */
+355:   isInShutdown(): boolean {
+356:     return this.isShuttingDown;
+357:   }
+358: 
+359:   /**
+360:    * Implement Disposable interface
+361:    */
+362:   dispose(): void {
+363:     // Cleanup if needed
+364:     this.handlers = [];
+365:     GracefulShutdownManager.instance = null;
+366:   }
+367: 
+368:   /**
+369:    * Reset the singleton (for testing)
+370:    */
+371:   static reset(): void {
+372:     if (GracefulShutdownManager.instance) {
+373:       GracefulShutdownManager.instance.handlers = [];
+374:       GracefulShutdownManager.instance.isShuttingDown = false;
+375:       GracefulShutdownManager.instance.shutdownPromise = null;
+376:     }
+377:     GracefulShutdownManager.instance = null;
+378:   }
+379: }
+380: 
+381: /**
+382:  * Get the global shutdown manager instance
+383:  */
+384: export function getShutdownManager(options?: Partial<ShutdownOptions>): GracefulShutdownManager {
+385:   return GracefulShutdownManager.getInstance(options);
+386: }
+387: 
+388: /**
+389:  * Register a shutdown handler with the global manager
+390:  */
+391: export function onShutdown(
+392:   name: string,
+393:   handler: () => void | Promise<void>,
+394:   priority: number = 0
+395: ): void {
+396:   getShutdownManager().registerHandler({ name, handler, priority });
+397: }
+398: 
+399: /**
+400:  * Initiate graceful shutdown
+
+... +29 lines omitted (lines 401-429; use start_line/end_line to view specific sections) ...
+
+430:  * Register default handlers for common resources
+431:  */
+432: export function registerDefaultShutdownHandlers(): void {
+433:   const manager = getShutdownManager();
+434: 
+435:   // Session save handler (highest priority)
+436:   manager.registerHandler({
+437:     name: 'session-save',
+438:     priority: 100,
+439:     handler: async () => {
+440:       try {
+441:         // Dynamically import to avoid circular dependencies
+442:         const { getSessionStore } = await import('../persistence/session-store.js');
+443:         const sessionStore = getSessionStore();
+444:         const currentSession = await sessionStore.getCurrentSession();
+445: 
+446:         if (currentSession) {
+447:           await sessionStore.saveSession(currentSession);
+448:           logger.info(`Session saved: ${currentSession.id}`);
+449:         }
+450:       } catch (error) {
+451:         logger.warn('Failed to save session during shutdown', { error: String(error) });
+452:       }
+453:     },
+454:   });
+455: 
+456:   // Crash handler terminal restore (high priority)
+457:   manager.registerHandler({
+458:     name: 'terminal-restore',
+459:     priority: 90,
+460:     handler: async () => {
+461:       try {
+462:         const { getCrashHandler } = await import('../errors/crash-handler.js');
+463:         getCrashHandler().restoreTerminal();
+464:       } catch {
+465:         // Ignore errors
+466:       }
+467:     },
+468:   });
+469: 
+470:   // MCP connection cleanup (medium priority)
+471:   manager.registerHandler({
+472:     name: 'mcp-cleanup',
+473:     priority: 50,
+474:     handler: async () => {
+475:       try {
+476:         const { getMCPClient } = await import('../mcp/mcp-client.js');
+477:         const client = getMCPClient();
+478:         if (client) {
+479:           await client.dispose();
+480:           logger.debug('MCP connections closed');
+481:         }
+482:       } catch {
+483:         // MCP client may not be initialized
+484:       }
+485:     },
+486:   });
+487: 
+488:   // Database cleanup (medium priority)
+489:   manager.registerHandler({
+490:     name: 'database-cleanup',
+491:     priority: 40,
+492:     handler: async () => {
+493:       try {
+494:         const { getDatabaseManager } = await import('../database/database-manager.js');
+495:         const db = getDatabaseManager();
+496:         if (db) {
+497:           db.close();
+498:           logger.debug('Database connections closed');
+499:         }
+500:       } catch {
+501:         // Database may not be initialized
+502:       }
+503:     },
+504:   });
+505: 
+506:   // Log flush (lowest priority - should be last)
+507:   manager.registerHandler({
+508:     name: 'log-flush',
+509:     priority: -100,
+510:     handler: () => {
+511:       const loggerInstance = getLogger();
+512:       loggerInstance.close();
+513:     },
+514:   });
+515: 
+516:   logger.debug('Default shutdown handlers registered');
+517: }
+518: 
+519: /**
+520:  * Initialize graceful shutdown system
+521:  * Call this early in application startup
+522:  */
+523: export function initializeGracefulShutdown(options?: Partial<ShutdownOptions>): GracefulShutdownManager {
+524:   const manager = getShutdownManager(options);
+525:   manager.registerSignalHandlers();
+526:   registerDefaultShutdownHandlers();
+527:   return manager;
+528: }
+529: 

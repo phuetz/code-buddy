@@ -1,0 +1,138 @@
+Updated smoke-test.mjs with 69 additions and 62 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -146,65 +146,72 @@
+                 }
+             };
+ 
+-            ws1.onopen = () => console.log('WS1 connected');
+-            ws2.onopen = () => console.log('WS2 connected');
+-            ws1.onerror = reject;
+-            ws2.onerror = reject;
+-            ws1.onclose = () => console.log('WS1 closed');
+-            ws2.onclose = () => console.log('WS2 closed');
+-
+-            // Enqueue another job to test WS updates
+-            setTimeout(async () => {
+-                const anotherJobRes = await fetch(`${baseUrl}/api/jobs`, {
+-                    method: 'POST',
+-                    headers: { 'Content-Type': 'application/json' },
+-                    body: JSON.stringify({ task: 'Another WS Test Job' })
+-                });
+-                const anotherJob = await anotherJobRes.json();
+-                console.log('Another job enqueued for WS test:', anotherJob.id);
+-            }, 1000);
+-
+-            setTimeout(() => reject(new Error("WebSocket job status not confirmed in time.")), 30000);
+-        });
+-
+-        await jobPromise;
+-        ws1.close();
+-        ws2.close();
+-        console.log('WebSocket job progression verified.');
+-
+-        // 7. Delete the incident
+-        console.log('7. Deleting the incident...');
+-        const deleteRes = await fetch(`${baseUrl}/api/incidents/${newIncident.id}`, {
+-            method: 'DELETE'
+-        });
+-        if (deleteRes.status !== 204) {
+-            throw new Error(`Failed to delete incident: ${deleteRes.status}`);
+-        }
+-        console.log('Incident deleted.');
+-
+-        console.log('All smoke tests passed!');
+-
+-    } catch (error) {
+-        console.error('Smoke test failed:', error);
+-        process.exit(1);
+-    } finally {
+-        // 8. Cleanup
+-        console.log('8. Cleaning up...');
+-        if (serverProcess) {
+-            serverProcess.kill();
+-            console.log('Server process killed.');
+-        }
+-        // Clean up the data file
+-        try {
+-            await fs.unlink(DATA_FILE);
+-            console.log('incidents.json cleaned up.');
+-        } catch (error) {
+-            if (error.code !== 'ENOENT') {
+-                console.error('Error cleaning up data file:', error);
+-            }
+-        }
+-    }
+-}
+-
+-runSmokeTest();
+-
++            ws2.onclose = () => console.log('WS2 closed');
++
++            // Wait for both WebSockets to be open
++            await new Promise(resolve => {
++                let openCount = 0;
++                const checkOpen = () => {
++                    openCount++;
++                    if (openCount === 2) resolve();
++                };
++                ws1.onopen = () => { console.log('WS1 connected'); checkOpen(); };
++                ws2.onopen = () => { console.log('WS2 connected'); checkOpen(); };
++            });
++            console.log("Both WebSockets are open.");
++
++            // Enqueue another job to test WS updates
++            setTimeout(async () => {
++                const anotherJobRes = await fetch(`${baseUrl}/api/jobs`, {
++                    method: 'POST',
++                    headers: { 'Content-Type': 'application/json' },
++                    body: JSON.stringify({ task: 'Another WS Test Job' })
++                });
++                const anotherJob = await anotherJobRes.json();
++                console.log('Another job enqueued for WS test:', anotherJob.id);
++            }, 1000);
++
++            setTimeout(() => reject(new Error("WebSocket job status not confirmed in time.")), 30000);
++        });
++
++        await jobPromise;
++        ws1.close();
++        ws2.close();
++        console.log('WebSocket job progression verified.');
++
++        // 7. Delete the incident
++        console.log('7. Deleting the incident...');
++        const deleteRes = await fetch(`${baseUrl}/api/incidents/${newIncident.id}`, {
++            method: 'DELETE'
++        });
++        if (deleteRes.status !== 204) {
++            throw new Error(`Failed to delete incident: ${deleteRes.status}`);
++        }
++        console.log('Incident deleted.');
++
++        console.log('All smoke tests passed!');
++
++    } catch (error) {
++        console.error('Smoke test failed:', error);
++        process.exit(1);
++    } finally {
++        // 8. Cleanup
++        console.log('8. Cleaning up...');
++        if (serverProcess) {
++            serverProcess.kill();
++            console.log('Server process killed.');
++        }
++        // Clean up the data file
++        try {
++            await fs.unlink(DATA_FILE);
++            console.log('incidents.json cleaned up.');
++        } catch (error) {
++            if (error.code !== 'ENOENT') {
++                console.error('Error cleaning up data file:', error);
++            }
++        }
++    }
++}
++
++runSmokeTest();
++

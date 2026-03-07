@@ -1,0 +1,26 @@
+Contents of package.json:
+1: {
+2:   "name": "task-manager",
+3:   "version": "1.0.0",
+4:   "description": "Full-stack task manager with local authentication",
+5:   "main": "server.mjs",
+6:   "type": "module",
+7:   "scripts": {
+8:     "start": "node server.mjs",
+9:     "smoke-test": "mocha smoke-test.mjs"
+10:   },
+11:   "dependencies": {
+12:     "express": "^4.18.2",
+13:     "better-sqlite3": "^9.2.2",
+14:     "bcryptjs": "^2.4.3",
+15:     "express-session": "^1.17.3",
+16:     "connect-sqlite3": "^0.9.13"
+17:   },
+18:   "devDependencies": {
+19:     "supertest": "^6.3.3",
+20:     "mocha": "^10.2.0"
+21:   },
+22:   "mocha": {
+23:     "timeout": "5000"
+24:   }
+25: }

@@ -1,0 +1,8 @@
+Updated test2.txt with 2 additions and 2 removals
+--- a/test2.txt
++++ b/test2.txt
+@@ -1,2 +1,2 @@
+-BONJOUR
+-
++SALUT
++

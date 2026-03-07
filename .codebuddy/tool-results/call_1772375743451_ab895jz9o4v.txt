@@ -1,0 +1,1 @@
+[SIMULATED] close_window skipped (no system changes applied).

@@ -1,0 +1,10 @@
+Search results for "clear":
+  /home/patrice/claude/grok-cli/src/performance/tool-cache.ts (3 matches)
+  coverage/context/pruning/hard-clear.ts.html
+  coverage/lcov-report/context/pruning/hard-clear.ts.html
+  src/context/pruning/hard-clear.ts
+  tests/context/pruning/hard-clear.test.ts
+  scripts/templates/refactoring/cleanup-imports.fcs
+  src/commands/client-dispatcher.ts
+  src/analytics/complexity-analyzer.ts
+  ... +21 more

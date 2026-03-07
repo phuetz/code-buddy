@@ -1,0 +1,287 @@
+Updated smoke-test.mjs with 141 additions and 139 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -1,142 +1,144 @@
+ import assert from 'assert';
+ import { spawn } from 'child_process';
+ import http from 'http';
+-
+-const port = 3000;
+-const baseUrl = `http://localhost:${port}/api/notes`;
+-
+-let serverProcess;
+-
+-async function startServer() {
+-    return new Promise((resolve, reject) => {
+-        import fs from 'fs';
+-const serverOut = fs.openSync('server.out', 'w');
+-const serverErr = fs.openSync('server.err', 'w');
+-serverProcess = spawn('node', ['server.mjs'], { stdio: ['ignore', serverOut, serverErr] });
+-        serverProcess.on('error', (err) => {
+-            console.error('Failed to start server process:', err);
+-            reject(err);
+-        });
+-        // Give the server a moment to start up
+-        const checkServer = () => {
+-            http.get(`http://localhost:${port}/api/notes`, (res) => {
+-                if (res.statusCode === 200 || res.statusCode === 404) { // 404 is acceptable for static files not found
+-                    resolve();
+-                } else {
+-                    setTimeout(checkServer, 2000);
+-                }
+-            }).on('error', () => {
+-                setTimeout(checkServer, 500);
+-            });
+-        };
+-        setTimeout(checkServer, 500); // Initial check after a short delay
+-    });
+-}
+-
+-function stopServer() {
+-    if (serverProcess) {
+-        serverProcess.kill();
+-    }
+-}
+-
+-async function makeRequest(url, method, data = null) {
+-    return new Promise((resolve, reject) => {
+-        const options = {
+-            hostname: 'localhost',
+-            port: port,
+-            path: url,
+-            method: method,
+-            headers: {
+-                'Content-Type': 'application/json',
+-            },
+-        };
+-
+-        const req = http.request(options, (res) => {
+-            let responseData = '';
+-            res.on('data', (chunk) => {
+-                responseData += chunk;
+-            });
+-            res.on('end', () => {
+-                try {
+-                    resolve({ statusCode: res.statusCode, data: responseData ? JSON.parse(responseData) : null });
+-                } catch (e) {
+-                    resolve({ statusCode: res.statusCode, data: responseData }); // Return raw if not JSON
+-                }
+-            });
+-        });
+-
+-        req.on('error', (e) => {
+-            reject(e);
+-        });
+-
+-        if (data) {
+-            req.write(JSON.stringify(data));
+-        }
+-        req.end();
+-    });
+-}
+-
+-async function runTests() {
+-    console.log('Starting smoke tests...');
+-    let noteId = '';
+-
+-    try {
+-        // Test 1: Add a note
+-        console.log('Test 1: Adding a note...');
+-        const addRes = await makeRequest('/api/notes', 'POST', { content: 'Test Note 1' });
+-        assert.strictEqual(addRes.statusCode, 201, `Expected 201, got ${addRes.statusCode}`);
+-        assert.strictEqual(addRes.data.content, 'Test Note 1', 'Content mismatch');
+-        assert.ok(addRes.data.id, 'Note ID should be present');
+-        noteId = addRes.data.id;
+-        console.log('Test 1 Passed.');
+-
+-        // Test 2: Get all notes
+-        console.log('Test 2: Getting all notes...');
+-        const getNotesRes = await makeRequest('/api/notes', 'GET');
+-        assert.strictEqual(getNotesRes.statusCode, 200, `Expected 200, got ${getNotesRes.statusCode}`);
+-        assert.ok(Array.isArray(getNotesRes.data), 'Expected an array');
+-        assert.ok(getNotesRes.data.some(n => n.id === noteId), 'Newly added note not found in list');
+-        console.log('Test 2 Passed.');
+-
+-        // Test 3: Get a single note
+-        console.log('Test 3: Getting a single note...');
+-        const getSingleNoteRes = await makeRequest(`/api/notes/${noteId}`, 'GET');
+-        assert.strictEqual(getSingleNoteRes.statusCode, 200, `Expected 200, got ${getSingleNoteRes.statusCode}`);
+-        assert.strictEqual(getSingleNoteRes.data.id, noteId, 'Note ID mismatch');
+-        assert.strictEqual(getSingleNoteRes.data.content, 'Test Note 1', 'Content mismatch');
+-        console.log('Test 3 Passed.');
+-
+-        // Test 4: Update a note
+-        console.log('Test 4: Updating a note...');
+-        const updateRes = await makeRequest(`/api/notes/${noteId}`, 'PUT', { content: 'Updated Test Note 1' });
+-        assert.strictEqual(updateRes.statusCode, 200, `Expected 200, got ${updateRes.statusCode}`);
+-        assert.strictEqual(updateRes.data.content, 'Updated Test Note 1', 'Updated content mismatch');
+-        console.log('Test 4 Passed.');
+-
+-        // Test 5: Delete a note
+-        console.log('Test 5: Deleting a note...');
+-        const deleteRes = await makeRequest(`/api/notes/${noteId}`, 'DELETE');
+-        assert.strictEqual(deleteRes.statusCode, 204, `Expected 204, got ${deleteRes.statusCode}`);
+-        console.log('Test 5 Passed.');
+-
+-        // Verify deletion
+-        console.log('Test 6: Verifying note deletion...');
+-        const getNotesAfterDeleteRes = await makeRequest('/api/notes', 'GET');
+-        assert.ok(!getNotesAfterDeleteRes.data.some(n => n.id === noteId), 'Deleted note still found in list');
+-        console.log('Test 6 Passed.');
+-
+-        console.log('All smoke tests passed!');
+-    } catch (error) {
+-        console.error('Smoke test failed:', error.message);
+-        process.exit(1);
+-    } finally {
+-        stopServer();
+-    }
+-}
+-
+-async function main() {
+-    await startServer();
+-    await runTests();
+-}
+-
+-main();
++import fs from 'fs';
++
++const port = 3000;
++const baseUrl = `http://localhost:${port}/api/notes`;
++
++let serverProcess;
++let serverOut;
++let serverErr;
++
++async function startServer() {
++    return new Promise((resolve, reject) => {
++        serverOut = fs.openSync('server.out', 'w');
++        serverErr = fs.openSync('server.err', 'w');
++        serverProcess = spawn('node', ['server.mjs'], { stdio: ['ignore', serverOut, serverErr] });
++        serverProcess.on('error', (err) => {
++            console.error('Failed to start server process:', err);
++            reject(err);
++        });
++        // Give the server a moment to start up
++        const checkServer = () => {
++            http.get(`http://localhost:${port}/api/notes`, (res) => {
++                if (res.statusCode === 200 || res.statusCode === 404) { // 404 is acceptable for static files not found
++                    resolve();
++                } else {
++                    setTimeout(checkServer, 2000);
++                }
++            }).on('error', () => {
++                setTimeout(checkServer, 500);
++            });
++        };
++        setTimeout(checkServer, 500); // Initial check after a short delay
++    });
++}
++
++function stopServer() {
++    if (serverProcess) {
++        serverProcess.kill();
++    }
++}
++
++async function makeRequest(url, method, data = null) {
++    return new Promise((resolve, reject) => {
++        const options = {
++            hostname: 'localhost',
++            port: port,
++            path: url,
++            method: method,
++            headers: {
++                'Content-Type': 'application/json',
++            },
++        };
++
++        const req = http.request(options, (res) => {
++            let responseData = '';
++            res.on('data', (chunk) => {
++                responseData += chunk;
++            });
++            res.on('end', () => {
++                try {
++                    resolve({ statusCode: res.statusCode, data: responseData ? JSON.parse(responseData) : null });
++                } catch (e) {
++                    resolve({ statusCode: res.statusCode, data: responseData }); // Return raw if not JSON
++                }
++            });
++        });
++
++        req.on('error', (e) => {
++            reject(e);
++        });
++
++        if (data) {
++            req.write(JSON.stringify(data));
++        }
++        req.end();
++    });
++}
++
++async function runTests() {
++    console.log('Starting smoke tests...');
++    let noteId = '';
++
++    try {
++        // Test 1: Add a note
++        console.log('Test 1: Adding a note...');
++        const addRes = await makeRequest('/api/notes', 'POST', { content: 'Test Note 1' });
++        assert.strictEqual(addRes.statusCode, 201, `Expected 201, got ${addRes.statusCode}`);
++        assert.strictEqual(addRes.data.content, 'Test Note 1', 'Content mismatch');
++        assert.ok(addRes.data.id, 'Note ID should be present');
++        noteId = addRes.data.id;
++        console.log('Test 1 Passed.');
++
++        // Test 2: Get all notes
++        console.log('Test 2: Getting all notes...');
++        const getNotesRes = await makeRequest('/api/notes', 'GET');
++        assert.strictEqual(getNotesRes.statusCode, 200, `Expected 200, got ${getNotesRes.statusCode}`);
++        assert.ok(Array.isArray(getNotesRes.data), 'Expected an array');
++        assert.ok(getNotesRes.data.some(n => n.id === noteId), 'Newly added note not found in list');
++        console.log('Test 2 Passed.');
++
++        // Test 3: Get a single note
++        console.log('Test 3: Getting a single note...');
++        const getSingleNoteRes = await makeRequest(`/api/notes/${noteId}`, 'GET');
++        assert.strictEqual(getSingleNoteRes.statusCode, 200, `Expected 200, got ${getSingleNoteRes.statusCode}`);
++        assert.strictEqual(getSingleNoteRes.data.id, noteId, 'Note ID mismatch');
++        assert.strictEqual(getSingleNoteRes.data.content, 'Test Note 1', 'Content mismatch');
++        console.log('Test 3 Passed.');
++
++        // Test 4: Update a note
++        console.log('Test 4: Updating a note...');
++        const updateRes = await makeRequest(`/api/notes/${noteId}`, 'PUT', { content: 'Updated Test Note 1' });
++        assert.strictEqual(updateRes.statusCode, 200, `Expected 200, got ${updateRes.statusCode}`);
++        assert.strictEqual(updateRes.data.content, 'Updated Test Note 1', 'Updated content mismatch');
++        console.log('Test 4 Passed.');
++
++        // Test 5: Delete a note
++        console.log('Test 5: Deleting a note...');
++        const deleteRes = await makeRequest(`/api/notes/${noteId}`, 'DELETE');
++        assert.strictEqual(deleteRes.statusCode, 204, `Expected 204, got ${deleteRes.statusCode}`);
++        console.log('Test 5 Passed.');
++
++        // Verify deletion
++        console.log('Test 6: Verifying note deletion...');
++        const getNotesAfterDeleteRes = await makeRequest('/api/notes', 'GET');
++        assert.ok(!getNotesAfterDeleteRes.data.some(n => n.id === noteId), 'Deleted note still found in list');
++        console.log('Test 6 Passed.');
++
++        console.log('All smoke tests passed!');
++    } catch (error) {
++        console.error('Smoke test failed:', error.message);
++        process.exit(1);
++    } finally {
++        stopServer();
++    }
++}
++
++async function main() {
++    await startServer();
++    await runTests();
++}
++
++main();

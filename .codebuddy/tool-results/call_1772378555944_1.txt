@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "TypeScript 5 Performance Optimizations and Configuration Updates"
+══════════════════════════════════════════════════
+
+1. **Documentation - TypeScript 5.0** [1]
+   TypeScript 5.0 manages to make all enums into union enums by creating a unique type for each computed member. That means that all enums can now be narrowed and ...
+
+2. **TypeScript 5: New Innovations & Breaking Changes** [2]
+   TypeScript 5 presents as a solid release with a focus on optimizations. Developers who are not impacted by the breaking changes will gain immediate ...
+
+3. **TypeScript 5.x Updates: What You Need to Know | by Er Raj Aryan** [3]
+   Faster builds thanks to incremental compiler optimizations. · Improved error messaging for easier debugging. · Stricter type narrowing in ...
+
+4. **Documentation - TypeScript 5.5** [4]
+   TypeScript's control flow analysis does a great job of tracking how the type of a variable changes as it moves through your code.
+
+5. **Exploring TypeScript 5 features: Smaller, simpler, faster** [5]
+   Explore TypeScript 5 performance enhancements, streamlined syntax, and other features for building high-quality web apps with ease.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[2] TypeScript 5: New Innovations & Breaking Changes — https://javascript-conference.com/blog/typescript-5/
+[3] TypeScript 5.x Updates: What You Need to Know | by Er Raj Aryan — https://medium.com/@er-raj-aryan/typescript-5-x-updates-what-you-need-to-know-7519713834d0
+[4] Documentation - TypeScript 5.5 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-5.html
+[5] Exploring TypeScript 5 features: Smaller, simpler, faster — https://blog.logrocket.com/exploring-typescript-5-features-smaller-simpler-faster/

@@ -1,0 +1,187 @@
+Contents of README.md (1495 lines):
+1: <div align="center">
+2: 
+3: <img src="https://img.shields.io/badge/🤖-Code_Buddy-blueviolet?style=for-the-badge&labelColor=1a1a2e" alt="Code Buddy"/>
+4: 
+5: # Code Buddy
+6: 
+7: ### Your AI-Powered Development Tool & Personal Assistant
+8: 
+9: <p align="center">
+10:   <a href="https://www.npmjs.com/package/@phuetz/code-buddy"><img src="https://img.shields.io/npm/v/@phuetz/code-buddy.svg?style=flat-square&color=ff6b6b&label=version" alt="npm version"/></a>
+11:   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-feca57.svg?style=flat-square" alt="License: MIT"/></a>
+12:   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18.0.0-54a0ff?style=flat-square&logo=node.js" alt="Node Version"/></a>
+13:   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.3-5f27cd?style=flat-square&logo=typescript" alt="TypeScript"/></a>
+14:   <a href="https://deepwiki.com/phuetz/code-buddy/"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"/></a>
+15: </p>
+16: 
+17: <p align="center">
+18:   <img src="https://img.shields.io/badge/Tests-23%2C700%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
+19:   <img src="https://img.shields.io/badge/Coverage-85%25-48dbfb?style=flat-square" alt="Coverage"/>
+20:   <img src="https://img.shields.io/badge/Build-passing-00d26a?style=flat-square" alt="Build"/>
+21: </p>
+22: 
+23: <br/>
+24: 
+25: **A multi-AI terminal agent that writes code, runs commands, searches the web, talks to you, and manages your projects — from your terminal, your phone, or running 24/7 in the background.**
+26: 
+27: <br/>
+28: 
+29: [Quick Start](#quick-start) |
+30: [Development Tool](#development-tool) |
+31: [Personal Assistant](#personal-assistant) |
+32: [Channels](#multi-channel-messaging) |
+33: [Autonomous Agent](#autonomous-agent) |
+34: [Security](#security--trust) |
+35: [CLI Reference](#cli-reference) |
+36: [API](#api-server--integrations)
+37: 
+38: </div>
+39: 
+40: ---
+41: 
+42: ## What is Code Buddy?
+43: 
+44: Code Buddy is an open-source multi-provider AI coding agent that runs in your terminal. It supports **Grok, Claude, ChatGPT, Gemini, LM Studio, and Ollama** via OpenAI-compatible APIs and provider-specific SDKs.
+45: 
+46: It works as two things at once:
+47: 
+48: - **A development tool** — reads files, writes code, runs commands, creates PRs, plans complex tasks, and fixes its own mistakes across 5-50 tool calls per task.
+49: - **A personal assistant** — talks to you by voice, remembers your preferences, monitors your screen, sends notifications to your phone via Telegram/Discord/Slack, and runs scheduled tasks 24/7 in the background.
+50: 
+51: **Key highlights:**
+52: - 6 AI providers with automatic failover
+53: - 40 bundled skills (PR workflow, DevOps, creative tools, smart home, media)
+54: - 11 messaging channels (Terminal, Telegram, Discord, Slack, WhatsApp, Signal, Teams, Matrix, Google Chat, WebChat, HTTP API)
+55: - Daemon mode for 24/7 background operation
+56: - Multi-agent orchestration with self-healing
+57: - Voice conversation with wake word detection
+58: - OS sandbox with workspace-write mode (read-only / workspace-write / danger-full-access tiers)
+59: - Docker sandbox for untrusted code execution
+60: - Knowledge base injection (Knowledge.md files loaded into agent system prompt)
+61: - Wide Research mode (parallel sub-agents decompose and research topics concurrently)
+62: - Todo.md attention bias (task list appended to end of every LLM context turn — Manus AI pattern)
+63: - Lessons.md self-improvement loop (PATTERN/RULE/CONTEXT/INSIGHT lessons injected before every turn — persists corrections across sessions)
+64: - Workflow orchestration rules in system prompt (concrete plan triggers, auto-correction protocol, verification contract)
+65: - Restorable context compression (identifiers preserved, full content recoverable on demand)
+66: - Pre-compaction memory flush (facts saved to MEMORY.md before context is compacted — OpenClaw pattern)
+67: - Anthropic prompt cache breakpoints (stable/dynamic split → 10× token cost savings)
+68: - Per-channel streaming policies (Telegram, Discord, Slack, WhatsApp each get their own chunking/format rules)
+69: - SSRF guard on all outbound fetches (IPv4 + IPv6 bypass vector blocking)
+70: - Tool prefix naming convention (`shell_exec`, `file_read`, `browser_search`, … — Codex-style canonical aliases)
+71: 
+72: ---
+73: 
+74: ## Quick Start
+75: 
+76: ### Prerequisites
+77: 
+78: - **Node.js** 18.0.0 or higher
+79: - **ripgrep** (recommended for faster search)
+80: - **Docker** (required for CodeAct / Open Manus mode)
+81: 
+82: ```bash
+83: # macOS
+84: brew install ripgrep
+85: 
+86: # Ubuntu/Debian
+87: sudo apt-get install ripgrep
+88: 
+89: # Windows
+90: choco install ripgrep
+91: ```
+92: 
+93: ### Install
+94: 
+95: ```bash
+96: # npm (recommended)
+97: npm install -g @phuetz/code-buddy
+98: 
+99: # Or try without installing
+
+[... 322 lines omitted ...]
+[2 important lines preserved:]
+299: | **Semantic Truncation** | Error-preserving output truncation (keeps error lines and stack traces) |
+300: | **Security Audit Logging** | JSONL audit trail for all code generation security decisions |
+[... end preserved lines ...]
+
+1416: 
+1417: Code Buddy's architecture draws from these open-source projects:
+1418: 
+1419: | Project | Inspiration | Key Files |
+1420: |:--------|:------------|:----------|
+1421: | **[OpenClaw](https://github.com/openclaw/openclaw)** | Multi-channel messaging, DM pairing, lane queue concurrency, memory lifecycle, tool policy, skills system, heartbeat, identity system, group security, hub marketplace | 40+ files across `src/channels/`, `src/concurrency/`, `src/memory/`, `src/security/`, `src/skills/` |
+1422: | **[OpenAI Codex CLI](https://github.com/openai/codex)** | Apply-patch unified diff, head/tail truncation, per-model tool config, turn diff tracker, security modes, OS sandbox workspace-write tiers, shell-free exec, SSRF guard, exec policy prefix rules, shell env policy, named config profiles, tool prefix naming convention, stable JSON serialization, session fork/rollout unification | `src/tools/apply-patch.ts`, `src/sandbox/os-sandbox.ts`, `src/security/ssrf-guard.ts`, `src/sandbox/execpolicy.ts`, `src/tools/registry/tool-aliases.ts`, `src/utils/stable-json.ts`, `src/observability/run-store.ts` |
+1423: | **[Claude Code](https://github.com/anthropics/claude-code)** | Hook system, slash commands, MCP config, extended thinking, parallel subagents, headless output, Anthropic prompt cache breakpoints | `src/hooks/`, `src/commands/slash-commands.ts`, `src/mcp/config.ts`, `src/optimization/cache-breakpoints.ts` |
+1424: | **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** | Persistent checkpoints, context files, compress command, shell prefix, multimodal input | `src/checkpoints/`, `src/context/context-files.ts`, `src/input/multimodal-input.ts` |
+1425: | **[Aider](https://github.com/paul-gauthier/aider)** | Repository map, voice input, unified diff editor, watch mode (IDE comments) | `src/context/repository-map.ts`, `src/tools/voice-input.ts`, `src/commands/watch-mode.ts` |
+1426: | **[Cursor](https://www.cursor.com/)** | `.cursorrules` config, parallel agent system, sandboxed terminals, embedded browser | `src/config/codebuddyrules.ts`, `src/agent/parallel/`, `src/browser/embedded-browser.ts` |
+1427: | **[Mistral Vibe](https://github.com/mistralai/mistral-vibe)** | External markdown prompts, TOML config, tool permission system, fuzzy match, update notifier | `src/prompts/`, `src/config/toml-config.ts`, `src/utils/fuzzy-match.ts` |
+1428: | **[Conductor](https://github.com/conductor-is/conductor)** | Spec-driven development, track system | `src/tracks/` |
+1429: | **[RTK](https://github.com/rtk-ai/rtk)** | Command proxy for 60-90% token reduction | `src/utils/rtk-compressor.ts` |
+1430: | **[ICM](https://github.com/rtk-ai/icm)** | Persistent cross-session memory via MCP | `src/memory/icm-bridge.ts` |
+1431: | **[Manus AI](https://manus.im)** | Wide Research (parallel sub-agent research workers), Knowledge Base injection, todo.md attention bias, restorable context compression, pre-compaction NO_REPLY flush, inline web-search citations, observation variator (anti-repetition), structured prompt variation, tool result compaction guard, disk-backed tool results, response prefill modes (tool_choice control), WebSearchMode + domain policy, message queue debounce/cap/overflow | `src/agent/wide-research.ts`, `src/context/observation-variator.ts`, `src/agent/response-constraint.ts`, `src/tools/web-search.ts`, `src/agent/message-queue.ts` |
+1432: | **[OpenClaw](https://github.com/openclaw/openclaw)** | Multi-channel messaging, DM pairing, lane queue concurrency, memory lifecycle, tool policy, skills system, heartbeat, identity system, group security, hub marketplace, daily session reset, per-channel streaming policies | `src/channels/streaming-policy.ts`, `src/channels/`, `src/skills/`, `src/daemon/daily-reset.ts` |
+1433: 
+1434: **Other influences:** Rust (Result<T, E> pattern), AutoGPT, MetaGPT, CrewAI, ChatDev (role-based multi-agent), ReAct (reasoning + acting paradigm), Qodo/PR-Agent (RAG for code repos).
+1435: 
+1436: **Benchmarks referenced:** SWE-bench, HumanEval, MBPP, BigCodeBench, WebArena, Berkeley Function Calling Leaderboard.
+1437: 
+1438: For detailed research notes, see `docs/RESEARCH_IMPROVEMENTS.md`, `docs/RAG_TOOL_SELECTION.md`, and `deep_research/ai-coding-assistant-improvements/`.
+1439: 
+1440: ---
+1441: 
+1442: ## Troubleshooting
+1443: 
+1444: **API key not working**
+1445: ```bash
+1446: echo $GROK_API_KEY  # Verify key is set
+1447: buddy --prompt "test"
+1448: ```
+1449: 
+1450: **Switching providers doesn't work**
+1451: ```bash
+1452: # Verify connection to local model
+1453: buddy --base-url http://localhost:1234/v1 --api-key lm-studio --prompt "test"
+1454: 
+1455: # List available models
+1456: buddy --list-models
+1457: ```
+1458: 
+1459: **Memory not persisting**
+1460: ```bash
+1461: # Check memory directory
+1462: ls ~/.codebuddy/memory/
+1463: 
+1464: # Clear and reinitialize
+1465: rm -rf ~/.codebuddy/memory/
+1466: buddy
+1467: ```
+1468: 
+1469: **High latency**
+1470: - Use a faster model: `buddy --model grok-code-fast-1`
+1471: - Use local LLM: `buddy --base-url http://localhost:11434/v1 --model llama3`
+1472: 
+1473: **Debug mode**
+1474: ```bash
+1475: DEBUG=codebuddy:* buddy
+1476: ```
+1477: 
+1478: ---
+1479: 
+1480: ## License
+1481: 
+1482: MIT License - see [LICENSE](LICENSE) for details.
+1483: 
+1484: ---
+1485: 
+1486: <div align="center">
+1487: 
+1488: **[Report Bug](https://github.com/phuetz/code-buddy/issues)** |
+1489: **[Request Feature](https://github.com/phuetz/code-buddy/discussions)** |
+1490: **[Star on GitHub](https://github.com/phuetz/code-buddy)**
+1491: 
+1492: <sub>Multi-AI: Grok | Claude | ChatGPT | Gemini | LM Studio | Ollama</sub>
+1493: 
+1494: </div>
+1495: 

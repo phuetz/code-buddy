@@ -156,28 +156,42 @@ describe("Auto-Test", () => {
     });
 
     describe("events", () => {
-      it("should emit test:start event", (done) => {
-        manager.on("test:start", (data: { type: string }) => {
-          expect(data.type).toBe("all");
-          done();
+      it("should emit test:start event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("test:start", (data: { type: string }) => {
+            try {
+              expect(data.type).toBe("all");
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.emit("test:start", { type: "all" });
         });
-        manager.emit("test:start", { type: "all" });
       });
 
-      it("should emit test:complete event", (done) => {
-        manager.on("test:complete", (result: TestResult) => {
-          expect(result.total).toBe(5);
-          done();
-        });
-        manager.emit("test:complete", {
-          success: true,
-          passed: 5,
-          failed: 0,
-          skipped: 0,
-          total: 5,
-          duration: 100,
-          tests: [],
-          framework: "Jest",
+      it("should emit test:complete event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("test:complete", (result: TestResult) => {
+            try {
+              expect(result.total).toBe(5);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.emit("test:complete", {
+            success: true,
+            passed: 5,
+            failed: 0,
+            skipped: 0,
+            total: 5,
+            duration: 100,
+            tests: [],
+            framework: "Jest",
+          });
         });
       });
     });

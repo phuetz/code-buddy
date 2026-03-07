@@ -1,16 +1,18 @@
 /**
  * Tests for ComputerSkills — LLM step execution.
  */
-import { ComputerSkills } from '../src/interpreter/computer/skills.js';
 
 // We mock the LLM client to avoid real API calls
+
+import { ComputerSkills } from '../src/interpreter/computer/skills.js';
+
 jest.mock('../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn().mockResolvedValue({
       choices: [{ message: { content: 'Paris' } }],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     }),
-  })),
+  }; }),
 }));
 
 describe('ComputerSkills — LLM step', () => {

@@ -18,6 +18,7 @@ export class OSC8Hyperlink {
 
   static stripLinks(text: string): string {
     // Remove OSC-8 escape sequences
+    // eslint-disable-next-line no-control-regex
     return text.replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, '');
   }
 }

@@ -1,0 +1,72 @@
+# Gemini Chat Application
+
+This is a simple chat application that uses the Google Gemini API for generating responses.
+
+## Features
+
+- Express.js backend with `/health` and `/api/chat` endpoints.
+- Frontend for sending messages and displaying replies.
+- Integration with Google Gemini API.
+- Basic error handling.
+
+## Setup
+
+1.  **Clone the repository (or create the files as instructed).**
+
+2.  **Install dependencies:**
+
+    ```bash
+    npm install
+    ```
+
+3.  **Set up your API Key:**
+
+    Create a `.env` file in the root directory and add your Gemini API key:
+
+    ```
+    GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
+    # or
+    GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+    ```
+
+    Replace `YOUR_GEMINI_API_KEY` with your actual API key from Google AI Studio.
+
+4.  **Run the application:**
+
+    ```bash
+    npm start
+    ```
+
+    The server will start on `http://localhost:3000` (or the port specified in your environment variables).
+
+## Endpoints
+
+-   **GET /health**
+    Returns `OK` if the server is running.
+
+-   **POST /api/chat**
+    Accepts a JSON body with a `message` field and returns a Gemini API response.
+    Example:
+    ```json
+    {
+        "message": "Hello, how are you?"
+    }
+    ```
+    Response:
+    ```json
+    {
+        "reply": "I am doing well, thank you for asking!"
+    }
+    ```
+
+## Project Structure
+
+```
+.env
+package.json
+server.mjs
+README.md
+public/
+├── index.html
+└── app.js
+```

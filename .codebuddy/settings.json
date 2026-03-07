@@ -1,3 +1,26 @@
 {
-  "model": "mistralai/devstral-small-2-2512"
+  "model": "gpt-4o",
+  "mcpServers": {
+    "new-server": {
+      "name": "new-server",
+      "transport": {
+        "type": "http",
+        "url": "http://localhost:8080"
+      }
+    },
+    "first-server": {
+      "name": "first-server",
+      "transport": {
+        "type": "stdio",
+        "command": "python"
+      }
+    },
+    "overwrite-me": {
+      "name": "overwrite-me",
+      "transport": {
+        "type": "http",
+        "url": "http://new-url"
+      }
+    }
+  }
 }

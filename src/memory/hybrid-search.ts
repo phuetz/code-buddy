@@ -2,8 +2,8 @@
  * Hybrid Memory Search
  *
  * Combines BM25 keyword search with semantic vector search
- * for high-quality memory retrieval. Currently BM25 is fully
- * implemented; semantic search is a stub for future embedding integration.
+ * for high-quality memory retrieval. BM25 is always available,
+ * while semantic search activates opportunistically when embeddings initialize.
  */
 
 import { logger } from '../utils/logger.js';

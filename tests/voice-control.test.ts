@@ -2,11 +2,13 @@
  * Tests for Voice Control System
  */
 
-import { VoiceControl, getVoiceControl, resetVoiceControl } from '../src/input/voice-control';
 
 // Mock child_process
+
+import { VoiceControl, getVoiceControl, resetVoiceControl } from '../src/input/voice-control';
+
 jest.mock('child_process', () => ({
-  spawn: jest.fn().mockImplementation(() => ({
+  spawn: jest.fn().mockImplementation(function() { return {
     on: jest.fn((event, callback) => {
       if (event === 'close') {
         setTimeout(() => callback(0), 10);
@@ -19,11 +21,12 @@ jest.mock('child_process', () => ({
       on: jest.fn(),
     },
     kill: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   ensureDirSync: jest.fn(),
   existsSync: jest.fn().mockReturnValue(false),
@@ -35,7 +38,9 @@ jest.mock('fs-extra', () => ({
   remove: jest.fn().mockResolvedValue(undefined),
   removeSync: jest.fn(),
   createReadStream: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('VoiceControl', () => {
   let voiceControl: VoiceControl;
@@ -167,18 +172,24 @@ describe('VoiceControl', () => {
       expect(customCmd?.description).toBe('A custom command');
     });
 
-    it('should emit command:registered event', (done) => {
-      voiceControl.on('command:registered', (data) => {
-        expect(data.name).toBe('myCommand');
-        done();
-      });
+    it('should emit command:registered event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        voiceControl.once('command:registered', (data) => {
+          try {
+            expect(data.name).toBe('myCommand');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      voiceControl.registerCommand({
-        name: 'myCommand',
-        aliases: [],
-        description: 'Test',
-        pattern: /^test$/i,
-        handler: async () => ({ success: true }),
+        voiceControl.registerCommand({
+          name: 'myCommand',
+          aliases: [],
+          description: 'Test',
+          pattern: /^test$/i,
+          handler: async () => ({ success: true }),
+        });
       });
     });
   });
@@ -245,12 +256,18 @@ describe('VoiceControl', () => {
       expect(state.isListening).toBe(false);
     });
 
-    it('should emit listening:stop event', (done) => {
-      voiceControl.on('listening:stop', () => {
-        done();
-      });
+    it('should emit listening:stop event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        voiceControl.once('listening:stop', () => {
+          try {
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      voiceControl.stopListening();
+        voiceControl.stopListening();
+      });
     });
   });
 

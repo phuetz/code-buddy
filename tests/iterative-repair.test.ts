@@ -11,17 +11,20 @@ import {
 } from '../src/agent/repair/iterative-repair';
 
 // Mock file system
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn().mockReturnValue(true),
   readFileSync: jest.fn().mockReturnValue('const x = null;\nconst y = x.value;'),
   writeFileSync: jest.fn(),
   copyFileSync: jest.fn(),
   unlinkSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock child_process
 jest.mock('child_process', () => ({
-  spawn: jest.fn().mockImplementation(() => ({
+  spawn: jest.fn().mockImplementation(function() { return {
     stdout: { on: jest.fn() },
     stderr: { on: jest.fn() },
     on: jest.fn((event, cb) => {
@@ -29,7 +32,7 @@ jest.mock('child_process', () => ({
         setTimeout(() => cb(0), 10);
       }
     }),
-  })),
+  }; }),
   execSync: jest.fn().mockReturnValue(Buffer.from('OK')),
   spawnSync: jest.fn().mockReturnValue({
     status: 0,

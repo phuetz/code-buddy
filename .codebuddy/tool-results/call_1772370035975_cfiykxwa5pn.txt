@@ -1,0 +1,32 @@
+Contents of src/app/index.ts:
+1: /**
+2:  * Application Module
+3:  *
+4:  * Provides application factory and configuration utilities.
+5:  *
+6:  * @module app
+7:  */
+8: 
+9: // Types
+10: export type {
+11:   ApplicationConfig,
+12:   CommandLineOptions,
+13:   RunMode,
+14:   IApplication,
+15:   LazyImports,
+16: } from './types.js';
+17: 
+18: // Factory functions
+19: export {
+20:   loadEnvironment,
+21:   loadApiKey,
+22:   loadBaseURL,
+23:   loadModel,
+24:   ensureUserSettings,
+25:   setupSignalHandlers,
+26:   buildConfig,
+27:   validateConfig,
+28:   bootstrap,
+29:   saveSettings,
+30: } from './application-factory.js';
+31: 

@@ -1,0 +1,217 @@
+Lines 385-600 of src/agent/execution/agent-executor.ts:
+385:         // Handle tool calls
+386:         if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+387:           toolRounds++;
+388: 
+389:           // Add assistant message with tool calls
+390:           const assistantEntry: ChatEntry = {
+391:             type: "assistant",
+392:             content: assistantMessage.content || "Using tools to help you...",
+393:             timestamp: new Date(),
+394:             toolCalls: assistantMessage.tool_calls,
+395:           };
+396:           history.push(assistantEntry);
+397:           newEntries.push(assistantEntry);
+398: 
+399:           // Add assistant message to conversation
+400:           messages.push({
+401:             role: "assistant",
+402:             content: assistantMessage.content || "",
+403:             tool_calls: assistantMessage.tool_calls,
+404:           });
+405: 
+406:           // Pre-check cost limit before executing tools
+407:           this.config.recordSessionCost(inputTokens, totalOutputTokens);
+408:           if (this.config.isSessionCostLimitReached()) {
+409:             const sessionCost = this.config.getSessionCost();
+410:             const sessionCostLimit = this.config.getSessionCostLimit();
+411:             const costEntry: ChatEntry = {
+412:               type: "assistant",
+413:               content: `Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before tool execution.`,
+414:               timestamp: new Date(),
+415:             };
+416:             history.push(costEntry);
+417:             messages.push({ role: "assistant", content: costEntry.content });
+418:             newEntries.push(costEntry);
+419:             break;
+420:           }
+421: 
+422:           // Execute tool calls
+423:           for (const toolCall of assistantMessage.tool_calls) {
+424:             const toolCallEntry: ChatEntry = {
+425:               type: "tool_call",
+426:               content: "Executing...",
+427:               timestamp: new Date(),
+428:               toolCall: toolCall,
+429:             };
+430:             const histIdx = history.length;
+431:             history.push(toolCallEntry);
+432:             const newIdx = newEntries.length;
+433:             newEntries.push(toolCallEntry);
+434: 
+435:             const result = await this.executeToolViaLane(toolCall);
+436: 
+437:             // --- Disk-backed tool result (Manus AI #19) ---
+438:             // Persist full result to .codebuddy/tool-results/<callId>.txt for durable restoration.
+439:             const rawToolContent = sanitizeToolResult(result.success ? result.output || "Success" : result.error || "Error");
+440:             if (toolCall.id) {
+441:               getRestorableCompressor().writeToolResult(toolCall.id, rawToolContent);
+442:             }
+443: 
+444:             // --- Observation Variator (Manus AI #17) ---
+445:             // Rotate the presentation wrapper for this tool result to prevent repetition drift.
+446:             const variator = getObservationVariator();
+447:             variator.nextTurn();
+448:             const variedContent = variator.wrapToolResult(toolCall.function.name, rawToolContent);
+449: 
+450:             // Update entry with result
+451:             const updatedEntry: ChatEntry = {
+452:               ...toolCallEntry,
+453:               type: "tool_result",
+454:               content: result.success ? result.output || "Success" : result.error || "Error occurred",
+455:               toolResult: result,
+456:             };
+457: 
+458:             // Replace in history and newEntries using tracked indices (O(1))
+459:             history[histIdx] = updatedEntry;
+460:             newEntries[newIdx] = updatedEntry;
+461: 
+462:             // Add tool result to messages (with observation variation applied)
+463:             // Note: 'name' is required for Gemini API to match functionResponse with functionCall
+464:             messages.push({
+465:               role: "tool",
+466:               content: variedContent,
+467:               tool_call_id: toolCall.id,
+468:               name: toolCall.function.name,
+469:             } as CodeBuddyMessage);
+470:           }
+471: 
+472:           // Run after_turn middleware (sequential path)
+473:           if (pipeline) {
+474:             const ctx = this.buildMiddlewareContext(
+475:               toolRounds, inputTokens, totalOutputTokens, history, messages, false
+476:             );
+477:             const mwResult = await pipeline.runAfterTurn(ctx);
+478:             if (mwResult.action === 'stop') {
+479:               if (mwResult.message) {
+480:                 const stopEntry: ChatEntry = { type: 'assistant', content: mwResult.message, timestamp: new Date() };
+481:                 history.push(stopEntry);
+482:                 messages.push({ role: 'assistant', content: mwResult.message });
+483:                 newEntries.push(stopEntry);
+484:               }
+485:               break;
+486:             }
+487:             if (mwResult.action === 'warn' && mwResult.message) {
+488:               logger.warn(`Middleware after-turn warning: ${mwResult.message}`);
+489:             }
+490:           } else {
+491:             // Legacy inline cost check when no pipeline
+492:             this.config.recordSessionCost(inputTokens, totalOutputTokens);
+493:           }
+494: 
+495:           // Get next response (with tool result compaction guard)
+496:           const nextPreparedMessages = this.compactLargeToolResults(
+497:             this.deps.contextManager.prepareMessages(messages)
+498:           );
+499: 
+500:           // Re-inject lessons and todo context for each tool round (mirroring streaming path)
+501:           const lessonsBlockNext = getLessonsTracker(process.cwd()).buildContextBlock();
+502:           if (lessonsBlockNext) {
+503:             nextPreparedMessages.push({ role: 'system', content: lessonsBlockNext });
+504:           }
+505:           const todoSuffixNext = getTodoTracker(process.cwd()).buildContextSuffix();
+506:           if (todoSuffixNext) {
+507:             nextPreparedMessages.push({ role: 'system', content: todoSuffixNext });
+508:           }
+509: 
+510:           currentResponse = await this.deps.client.chat(
+511:             nextPreparedMessages,
+512:             tools,
+513:             undefined,
+514:             this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
+515:               ? { search_parameters: { mode: "auto" } }
+516:               : { search_parameters: { mode: "off" } }
+517:           );
+518:         } else {
+519:           // No more tool calls
+520:           const finalEntry: ChatEntry = {
+521:             type: "assistant",
+522:             content: assistantMessage.content || "I understand, but I don't have a specific response.",
+523:             timestamp: new Date(),
+524:           };
+525:           history.push(finalEntry);
+526:           messages.push({
+527:             role: "assistant",
+528:             content: assistantMessage.content || "",
+529:           });
+530:           newEntries.push(finalEntry);
+531: 
+532:           // Fire-and-forget auto-capture on final assistant response
+533:           try {
+534:             const { getAutoCaptureManager } = await import('../../memory/auto-capture.js');
+535:             const acm = getAutoCaptureManager();
+536:             if (acm) {
+537:               acm.processMessage('assistant', assistantMessage.content || '').catch(() => {});
+538:             }
+539:           } catch { /* auto-capture optional */ }
+540: 
+541:           break;
+542:         }
+543:       }
+544: 
+545:       if (toolRounds >= maxToolRounds) {
+546:         const warningEntry: ChatEntry = {
+547:           type: "assistant",
+548:           content: "Maximum tool execution rounds reached. Stopping to prevent infinite loops.",
+549:           timestamp: new Date(),
+550:         };
+551:         history.push(warningEntry);
+552:         messages.push({ role: "assistant", content: warningEntry.content });
+553:         newEntries.push(warningEntry);
+554:       }
+555: 
+556:       // Record session cost
+557:       this.config.recordSessionCost(inputTokens, totalOutputTokens);
+558:       if (this.config.isSessionCostLimitReached()) {
+559:         const sessionCost = this.config.getSessionCost();
+560:         const sessionCostLimit = this.config.getSessionCostLimit();
+561:         const costEntry: ChatEntry = {
+562:           type: "assistant",
+563:           content: `💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Please start a new session.`,
+564:           timestamp: new Date(),
+565:         };
+566:         history.push(costEntry);
+567:         messages.push({ role: "assistant", content: costEntry.content });
+568:         newEntries.push(costEntry);
+569:       }
+570: 
+571:       return newEntries;
+572:     } catch (error) {
+573:       const errorMessage = getErrorMessage(error);
+574:       const errorEntry: ChatEntry = {
+575:         type: "assistant",
+576:         content: `Sorry, I encountered an error: ${errorMessage}`,
+577:         timestamp: new Date(),
+578:       };
+579:       history.push(errorEntry);
+580:       messages.push({ role: "assistant", content: errorEntry.content });
+581:       return [errorEntry];
+582:     }
+583:   }
+584: 
+585:   /**
+586:    * Process a user message with streaming response
+587:    *
+588:    * Yields chunks as they arrive from the LLM, enabling real-time UI updates.
+589:    * Chunk types: 'content', 'tool_calls', 'tool_result', 'token_count', 'done'
+590:    *
+591:    * @param message - The user's input message
+592:    * @param history - Chat history array (modified in place)
+593:    * @param messages - LLM message array (modified in place)
+594:    * @param abortController - Controller to cancel the operation
+595:    * @yields Streaming chunks for UI consumption
+596:    */
+597:   async *processUserMessageStream(
+598:     message: string,
+599:     history: ChatEntry[],
+600:     messages: CodeBuddyMessage[],

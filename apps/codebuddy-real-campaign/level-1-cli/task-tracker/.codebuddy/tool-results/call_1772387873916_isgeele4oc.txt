@@ -1,0 +1,27 @@
+Updated index.js with 4 additions and 4 removals
+--- a/index.js
++++ b/index.js
+@@ -75,17 +75,17 @@
+     listTasks();
+     break;
+   case 'complete':
+-    if (!arg || isNaN(arg)) {
++    if (args.length === 0 || isNaN(args[0])) {
+       console.log('Usage: node index.js complete <task_id>');
+       break;
+     }
+-    completeTask(parseInt(arg));
++    completeTask(parseInt(args[0]));
+     break;
+   case 'remove':
+     if (!arg || isNaN(arg)) {
+-    if (!arg || isNaN(arg)) {
++    if (args.length === 0 || isNaN(args[0])) {
+       console.log('Usage: node index.js remove <task_id>');
+       break;
+     }
+-    removeTask(parseInt(arg));
++    removeTask(parseInt(args[0]));
+     break;
+   default:
+     console.log('Usage: node index.js <add|list|complete|remove> [arguments]');

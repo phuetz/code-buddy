@@ -3,8 +3,8 @@
  *
  * Extends the basic hook system with Claude Code-like capabilities:
  * - Command hooks: run shell commands, parse JSON stdout for decisions
- * - Prompt hooks: LLM-evaluated hooks (stub - returns allow with stored prompt)
- * - Agent hooks: spawns subagent evaluation (stub - returns allow)
+ * - Prompt hooks: LLM-evaluated hooks using stored prompt instructions
+ * - Agent hooks: subagent evaluation hooks for delegated review/approval flows
  *
  * Supports event matching with regex matchers, async fire-and-forget,
  * one-shot hooks, and a registry for CRUD operations.

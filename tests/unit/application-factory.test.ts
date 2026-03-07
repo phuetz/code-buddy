@@ -15,28 +15,28 @@ import {
 
 // Mock dependencies
 jest.mock('../../src/utils/settings-manager.js', () => ({
-  getSettingsManager: jest.fn(() => ({
+  getSettingsManager: jest.fn(function() { return {
     loadUserSettings: jest.fn().mockReturnValue({}),
     getApiKey: jest.fn().mockReturnValue('settings-api-key'),
     getBaseURL: jest.fn().mockReturnValue('https://settings.api.com'),
     getCurrentModel: jest.fn().mockReturnValue('settings-model'),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/security/credential-manager.js', () => ({
-  getCredentialManager: jest.fn(() => ({
+  getCredentialManager: jest.fn(function() { return {
     getApiKey: jest.fn().mockReturnValue(null),
     setApiKey: jest.fn(),
     getSecurityStatus: jest.fn().mockReturnValue({ encryptionEnabled: false }),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/errors/crash-handler.js', () => ({
-  getCrashHandler: jest.fn(() => ({
+  getCrashHandler: jest.fn(function() { return {
     initialize: jest.fn(),
     restoreTerminal: jest.fn(),
     handleCrash: jest.fn(),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/utils/disposable.js', () => ({

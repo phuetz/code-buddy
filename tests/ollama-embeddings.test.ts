@@ -110,7 +110,7 @@ describe('OllamaEmbeddingProvider', () => {
       expect(provider.isReady()).toBe(true);
     });
 
-    it('should emit ready event on success', (done) => {
+    it('should emit ready event on success', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ models: [{ name: 'nomic-embed-text:latest' }] }),
@@ -121,12 +121,18 @@ describe('OllamaEmbeddingProvider', () => {
       });
 
       const provider = new OllamaEmbeddingProvider();
-      provider.on('ready', () => {
-        expect(provider.isReady()).toBe(true);
-        done();
+      const readyEvent = new Promise<void>((resolve, reject) => {
+        provider.once('ready', () => {
+          try {
+            expect(provider.isReady()).toBe(true);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      provider.initialize();
+      await Promise.all([readyEvent, provider.initialize()]);
     });
   });
 
@@ -275,25 +281,33 @@ describe('OllamaEmbeddingProvider', () => {
       expect(embeddings[0].length).toBe(768);
     });
 
-    it('should emit batch progress', (done) => {
+    it('should emit batch progress', async () => {
       const provider = new OllamaEmbeddingProvider({ batchSize: 2 });
-      provider.initialize().then(() => {
-        // Mock responses
-        for (let i = 0; i < 3; i++) {
-          mockFetch.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ embedding: new Array(768).fill(0.1) }),
-          });
-        }
+      await provider.initialize();
 
-        provider.on('batch:progress', (progress) => {
-          expect(progress).toHaveProperty('completed');
-          expect(progress).toHaveProperty('total');
-          done();
+      // Mock responses
+      for (let i = 0; i < 3; i++) {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ embedding: new Array(768).fill(0.1) }),
         });
+      }
 
-        provider.embedBatch(['text1', 'text2', 'text3']);
+      const progressEvent = new Promise<void>((resolve, reject) => {
+        provider.once('batch:progress', (progress) => {
+          try {
+            expect(progress).toHaveProperty('completed');
+            expect(progress).toHaveProperty('total');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
+
+      const batch = provider.embedBatch(['text1', 'text2', 'text3']);
+
+      await Promise.all([progressEvent, batch]);
     });
   });
 

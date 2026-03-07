@@ -9,14 +9,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
   readdirSync: jest.fn(),
   statSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock jszip and tar
 const mockZipFile = jest.fn();
@@ -39,7 +42,14 @@ const mockTarList = jest.fn();
 const mockTarExtract = jest.fn();
 const mockTarCreate = jest.fn();
 
-jest.mock('jszip', () => MockJSZip, { virtual: true });
+jest.mock(
+  'jszip',
+  () => ({
+    __esModule: true,
+    default: MockJSZip,
+  }),
+  { virtual: true }
+);
 jest.mock('tar', () => ({
   list: mockTarList,
   extract: mockTarExtract,
@@ -241,7 +251,7 @@ describe('ArchiveAgent', () => {
     describe('info action', () => {
       it('should return archive info', async () => {
         const mockZip = new MockJSZip();
-        mockZipForEach.mockImplementation(() => {});
+        mockZipForEach.mockImplementation(function() {});
         mockZipLoad.mockResolvedValue(mockZip);
 
         const result = await agent.execute({

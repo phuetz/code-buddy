@@ -12,17 +12,18 @@ import DistributedCache, {
 
 // Mock crypto module with unique hashes
 let hashCounter = 0;
-const mockDigest = jest.fn().mockImplementation(() => {
+const mockDigest = jest.fn().mockImplementation(function() {
   hashCounter++;
   return `hash${hashCounter.toString().padStart(16, '0')}`;
 });
 const mockUpdate = jest.fn().mockReturnValue({ digest: mockDigest });
 const mockCreateHash = jest.fn().mockReturnValue({ update: mockUpdate });
 
-jest.mock('crypto', () => ({
-  createHash: jest.fn().mockImplementation(() => ({
+jest.mock('crypto', () => {
+  const impl = {
+  createHash: jest.fn().mockImplementation(function() { return {
     update: jest.fn().mockImplementation((input: string) => ({
-      digest: jest.fn().mockImplementation(() => {
+      digest: jest.fn().mockImplementation(function() {
         // Create a deterministic hash based on input
         let hash = 0;
         for (let i = 0; i < input.length; i++) {
@@ -32,8 +33,10 @@ jest.mock('crypto', () => ({
         return Math.abs(hash).toString(16).padStart(16, '0');
       }),
     })),
-  })),
-}));
+  }; }),
+};
+  return { ...impl, default: impl };
+});
 
 describe('DistributedCache', () => {
   let cache: DistributedCache;

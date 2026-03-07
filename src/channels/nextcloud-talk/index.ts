@@ -2,12 +2,19 @@
  * Nextcloud Talk Channel Adapter
  *
  * Connects to Nextcloud Talk for messaging and room management.
- * This is a stub implementation.
+ * Provides a lightweight in-process adapter for lifecycle and room flows.
  */
 
 import { logger } from '../../utils/logger.js';
+import { BaseChannel, ChannelConfig, DeliveryResult, OutboundMessage } from '../core.js';
 
 export interface NextcloudTalkConfig {
+  url: string;
+  username: string;
+  password: string;
+}
+
+export interface NextcloudTalkChannelConfig extends ChannelConfig {
   url: string;
   username: string;
   password: string;
@@ -78,6 +85,63 @@ export class NextcloudTalkAdapter {
 
   getConfig(): NextcloudTalkConfig {
     return { ...this.config };
+  }
+}
+
+export class NextcloudTalkChannel extends BaseChannel {
+  private adapter: NextcloudTalkAdapter;
+
+  constructor(config: NextcloudTalkChannelConfig) {
+    super('nextcloud-talk', {
+      type: 'nextcloud-talk',
+      enabled: config.enabled,
+      token: config.token,
+      webhookUrl: config.webhookUrl,
+      allowedUsers: config.allowedUsers,
+      allowedChannels: config.allowedChannels,
+      autoReply: config.autoReply,
+      rateLimit: config.rateLimit,
+      options: config.options,
+    });
+    this.adapter = new NextcloudTalkAdapter({
+      url: config.url,
+      username: config.username,
+      password: config.password,
+    });
+  }
+
+  async connect(): Promise<void> {
+    await this.adapter.start();
+    this.status.connected = true;
+    this.status.authenticated = true;
+    this.status.lastActivity = new Date();
+    this.emit('connected', this.type);
+  }
+
+  async disconnect(): Promise<void> {
+    if (!this.status.connected) return;
+    await this.adapter.stop();
+    this.status.connected = false;
+    this.status.lastActivity = new Date();
+    this.emit('disconnected', this.type);
+  }
+
+  async send(message: OutboundMessage): Promise<DeliveryResult> {
+    try {
+      const result = await this.adapter.sendMessage(message.channelId, message.content);
+      this.status.lastActivity = new Date();
+      return {
+        success: result.success,
+        messageId: result.messageId,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date(),
+      };
+    }
   }
 }
 

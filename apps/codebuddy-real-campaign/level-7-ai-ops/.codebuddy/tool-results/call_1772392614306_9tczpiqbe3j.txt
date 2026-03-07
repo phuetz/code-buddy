@@ -1,0 +1,12 @@
+file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-7-ai-ops/smoke-test.mjs:1
+const fetch = require('node-fetch');
+              ^
+
+ReferenceError: require is not defined in ES module scope, you can use import instead
+    at file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-7-ai-ops/smoke-test.mjs:1:15
+    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:337:24)
+    at async loadESM (node:internal/process/esm_loader:34:7)
+    at async handleMainPromise (node:internal/modules/run_main:106:12)
+
+Node.js v18.20.8

@@ -2,10 +2,13 @@
  * Tests for Checkpoint Manager
  */
 
-import { CheckpointManager, createCheckpointManager } from '../src/undo/checkpoint-manager';
 
 // Mock dependencies
-jest.mock('fs-extra', () => ({
+
+import { CheckpointManager, createCheckpointManager } from '../src/undo/checkpoint-manager';
+
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   pathExists: jest.fn().mockResolvedValue(false),
   readJSON: jest.fn().mockResolvedValue({ checkpoints: [], currentIndex: -1 }),
@@ -17,7 +20,9 @@ jest.mock('fs-extra', () => ({
   remove: jest.fn().mockResolvedValue(undefined),
   stat: jest.fn().mockResolvedValue({ size: 100, mode: 0o644 }),
   readdir: jest.fn().mockResolvedValue([]),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('child_process', () => ({
   execSync: jest.fn().mockReturnValue('main\n'),
@@ -25,12 +30,12 @@ jest.mock('child_process', () => ({
 }));
 
 jest.mock('diff-match-patch', () => ({
-  diff_match_patch: jest.fn().mockImplementation(() => ({
+  diff_match_patch: jest.fn().mockImplementation(function() { return {
     diff_main: jest.fn().mockReturnValue([]),
     diff_cleanupSemantic: jest.fn(),
     patch_make: jest.fn().mockReturnValue([]),
     patch_toText: jest.fn().mockReturnValue(''),
-  })),
+  }; }),
 }), { virtual: true });
 
 describe('CheckpointManager', () => {

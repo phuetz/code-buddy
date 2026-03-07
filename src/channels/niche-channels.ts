@@ -81,22 +81,44 @@ export class TlonAdapter {
   }
 }
 
+export interface GmailPubSubConfig {
+  projectId?: string;
+  topicName?: string;
+  subscriptionName?: string;
+  labelFilter?: string[];
+  serviceAccountKeyPath?: string;
+}
+
 export class GmailWebhookAdapter {
   private running: boolean = false;
-  private messages: Array<{ id: string; subject: string; read: boolean }> = [];
+  private messages: Array<{ id: string; subject: string; from: string; read: boolean; receivedAt: Date }> = [];
   private config: Record<string, unknown>;
+  private pubsubConfig: GmailPubSubConfig;
+  private watchExpiry: Date | null = null;
+  private callbacks: Array<(msg: { id: string; subject: string; from: string }) => void> = [];
 
   constructor(config: Record<string, unknown> = {}) {
     this.config = config;
+    this.pubsubConfig = {
+      projectId: config.projectId as string,
+      topicName: config.topicName as string || 'projects/my-project/topics/gmail-notifications',
+      subscriptionName: config.subscriptionName as string,
+      labelFilter: config.labelFilter as string[],
+      serviceAccountKeyPath: config.serviceAccountKeyPath as string,
+    };
   }
 
   start(): void {
     this.running = true;
-    logger.debug('GmailWebhookAdapter started');
+    logger.debug('GmailWebhookAdapter started with Pub/Sub', {
+      projectId: this.pubsubConfig.projectId,
+      topicName: this.pubsubConfig.topicName,
+    });
   }
 
   stop(): void {
     this.running = false;
+    this.callbacks = [];
     logger.debug('GmailWebhookAdapter stopped');
   }
 
@@ -104,9 +126,38 @@ export class GmailWebhookAdapter {
     return this.running;
   }
 
-  getMessages(limit?: number): Array<{ id: string; subject: string; read: boolean }> {
+  /**
+   * Set up Gmail push notifications via Pub/Sub.
+   * In production, this calls the Gmail API watch() endpoint.
+   */
+  async setupWatch(labelIds?: string[]): Promise<{ historyId: string; expiration: string }> {
+    if (!this.running) throw new Error('Adapter not running');
+    const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    this.watchExpiry = expiry;
+    logger.debug('Gmail Pub/Sub watch set up', { labelIds, expiry: expiry.toISOString() });
+    return {
+      historyId: `history_${Date.now()}`,
+      expiration: expiry.getTime().toString(),
+    };
+  }
+
+  /**
+   * Process incoming Pub/Sub notification.
+   * Called by the webhook endpoint when Google pushes a notification.
+   */
+  async handlePubSubNotification(data: { emailAddress: string; historyId: string }): Promise<void> {
+    if (!this.running) return;
+    logger.debug('Gmail Pub/Sub notification received', data);
+    // In production, this would call Gmail API to fetch new messages since historyId
+  }
+
+  getMessages(limit?: number): Array<{ id: string; subject: string; from: string; read: boolean; receivedAt: Date }> {
     const msgs = [...this.messages];
     return limit ? msgs.slice(0, limit) : msgs;
+  }
+
+  getUnreadCount(): number {
+    return this.messages.filter(m => !m.read).length;
   }
 
   markRead(messageId: string): boolean {
@@ -118,13 +169,44 @@ export class GmailWebhookAdapter {
     return false;
   }
 
+  markAllRead(): number {
+    let count = 0;
+    for (const msg of this.messages) {
+      if (!msg.read) {
+        msg.read = true;
+        count++;
+      }
+    }
+    return count;
+  }
+
+  onNewMessage(callback: (msg: { id: string; subject: string; from: string }) => void): void {
+    this.callbacks.push(callback);
+  }
+
+  getWatchExpiry(): Date | null {
+    return this.watchExpiry;
+  }
+
+  isWatchActive(): boolean {
+    return this.watchExpiry !== null && this.watchExpiry > new Date();
+  }
+
   getConfig(): Record<string, unknown> {
     return { ...this.config };
   }
 
+  getPubSubConfig(): GmailPubSubConfig {
+    return { ...this.pubsubConfig };
+  }
+
   // Test helper to add messages
-  _addMessage(id: string, subject: string): void {
-    this.messages.push({ id, subject, read: false });
+  _addMessage(id: string, subject: string, from: string = 'test@example.com'): void {
+    const msg = { id, subject, from, read: false, receivedAt: new Date() };
+    this.messages.push(msg);
+    for (const cb of this.callbacks) {
+      cb({ id, subject, from });
+    }
   }
 }
 

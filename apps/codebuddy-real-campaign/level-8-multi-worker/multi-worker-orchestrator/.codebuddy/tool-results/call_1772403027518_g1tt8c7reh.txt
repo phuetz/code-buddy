@@ -1,0 +1,175 @@
+Contents of smoke-test.mjs:
+1: 
+2: import WebSocket from 'ws';
+3: import fetch from 'node-fetch';
+4: import { exec, spawn } from 'child_process';
+5: import { fileURLToPath } from 'url';
+6: import path from 'path';
+7: import { promisify } from 'util';
+8: 
+9: const __filename = fileURLToPath(import.meta.url);
+10: const __dirname = path.dirname(__filename);
+11: const execPromise = promisify(exec);
+12: 
+13: const startServer = () => {
+14:     return new Promise((resolve, reject) => {
+15:         const serverProcess = spawn('node', [path.join(__dirname, 'server.js')], { detached: true });
+16: 
+17:         serverProcess.stdout.on('data', (data) => {
+18:             const output = data.toString();
+19:             console.log(`Server: ${output}`);
+20:             const match = output.match(/Server listening on port (\d+)/);
+21:             if (match) {
+22:                 const port = match[1];
+23:                 console.log(`Server started on port ${port}`);
+24:                 resolve({ serverProcess, port });
+25:             }
+26:         });
+27: 
+28:         serverProcess.stderr.on('data', (data) => {
+29:             console.error(`Server Error: ${data.toString()}`);
+30:         });
+31: 
+32:         serverProcess.on('error', (err) => {
+33:             reject(err);
+34:         });
+35:     });
+36: };
+37: 
+38: const startWorker = (workerScript, wsUrl) => {
+39:     const workerProcess = spawn('node', [path.join(__dirname, workerScript)], { detached: true, env: { ...process.env, WS_URL: wsUrl } });
+40:     workerProcess.stdout.on('data', (data) => console.log(`Worker (${workerScript}): ${data.toString()}`));
+41:     workerProcess.stderr.on('data', (data) => console.error(`Worker Error (${workerScript}): ${data.toString()}`));
+42:     return workerProcess;
+43: };
+44: 
+45: const waitForWebSocketEvent = (ws, eventType, jobId) => {
+46:     return new Promise(resolve => {
+47:         ws.onmessage = (message) => {
+48:             const data = JSON.parse(message.data);
+49:             if (data.event === eventType && (!jobId || data.job.id === jobId)) {
+50:                 resolve(data.job);
+51:             }
+52:         };
+53:     });
+54: };
+55: 
+56: const runSmokeTest = async () => {
+57:     let serverProcess, workerAProcess, workerBProcess, ws;
+58:     try {
+59:         console.log('Starting server...');
+60:         const { serverProcess: sP, port } = await startServer();
+61:         serverProcess = sP;
+62:         const baseUrl = `http://localhost:${port}`;
+63:         const wsUrl = `ws://localhost:${port}`;
+64: 
+65:         console.log('Starting workers...');
+66:         workerAProcess = startWorker('workerA.js', wsUrl);
+67:         workerBProcess = startWorker('workerB.js', wsUrl);
+68: 
+69:         // Give workers a moment to connect
+70:         await new Promise(resolve => setTimeout(resolve, 3000));
+71: 
+72:         console.log('Connecting to WebSocket...');
+73:         ws = new WebSocket(wsUrl);
+74: 
+75:         await new Promise((resolve, reject) => {
+76:             ws.onopen = () => {
+77:                 console.log('WebSocket connected.');
+78:                 resolve();
+79:             };
+80:             ws.onerror = (err) => {
+81:                 reject(new Error(`WebSocket connection error: ${err.message}`));
+82:             };
+83:         });
+84: 
+85:         console.log('Sending job_A...');
+86:         const jobA_response = await fetch(`${baseUrl}/api/jobs`, {
+87:             method: 'POST',
+88:             headers: { 'Content-Type': 'application/json' },
+89:             body: JSON.stringify({ type: 'workerA', payload: { task: 'process image' } })
+90:         });
+91:         const jobA = await jobA_response.json();
+92:         console.log('Job A queued:', jobA);
+93: 
+94:         console.log('Sending job_B...');
+95:         const jobB_response = await fetch(`${baseUrl}/api/jobs`, {
+96:             method: 'POST',
+97:             headers: { 'Content-Type': 'application/json' },
+98:             body: JSON.stringify({ type: 'workerB', payload: { task: 'process data' } })
+99:         });
+100:         const jobB = await jobB_response.json();
+101:         console.log('Job B queued:', jobB);
+102: 
+103:         const jobTransitions = {};
+104: 
+105:         ws.onmessage = (message) => {
+106:             const data = JSON.parse(message.data);
+107:             if (data.event.startsWith('job_') && data.job) {
+108:                 const jobId = data.job.id;
+109:                 if (!jobTransitions[jobId]) {
+110:                     jobTransitions[jobId] = [];
+111:                 }
+112:                 jobTransitions[jobId].push(data.event);
+113:                 console.log(`WS Event for ${jobId}: ${data.event}`);
+114:             }
+115:         };
+116: 
+117:         console.log('Waiting for job A to complete...');
+118:         let finalJobA;
+119:         while (!finalJobA || (finalJobA.status !== 'done' && finalJobA.status !== 'failed')) {
+120:             finalJobA = await waitForWebSocketEvent(ws, 'job_done', jobA.id).catch(() => null) || await waitForWebSocketEvent(ws, 'job_failed', jobA.id).catch(() => null);
+121:             if (finalJobA) {
+122:                 console.log(`Job A final status via WS: ${finalJobA.status}`);
+123:             }
+124:             await new Promise(resolve => setTimeout(resolve, 500)); // Small delay to prevent tight loop
+125:         }
+126: 
+127:         console.log('Waiting for job B to complete...');
+128:         let finalJobB;
+129:         while (!finalJobB || (finalJobB.status !== 'done' && finalJobB.status !== 'failed')) {
+130:             finalJobB = await waitForWebSocketEvent(ws, 'job_done', jobB.id).catch(() => null) || await waitForWebSocketEvent(ws, 'job_failed', jobB.id).catch(() => null);
+131:             if (finalJobB) {
+132:                 console.log(`Job B final status via WS: ${finalJobB.status}`);
+133:             }
+134:             await new Promise(resolve => setTimeout(resolve, 500)); // Small delay to prevent tight loop
+135:         }
+136: 
+137:         // Verify final status via HTTP GET
+138:         console.log('Verifying job A final status via HTTP...');
+139:         const jobA_final_http_response = await fetch(`${baseUrl}/api/jobs/${jobA.id}`);
+140:         const jobA_final_http = await jobA_final_http_response.json();
+141:         console.log('Job A final status via HTTP:', jobA_final_http.status);
+142:         if (jobA_final_http.status === 'done' || jobA_final_http.status === 'failed') {
+143:             console.log('Job A status verified.');
+144:         } else {
+145:             throw new Error(`Job A did not reach final state via HTTP. Current status: ${jobA_final_http.status}`);
+146:         }
+147: 
+148:         console.log('Verifying job B final status via HTTP...');
+149:         const jobB_final_http_response = await fetch(`${baseUrl}/api/jobs/${jobB.id}`);
+150:         const jobB_final_http = await jobB_final_http_response.json();
+151:         console.log('Job B final status via HTTP:', jobB_final_http.status);
+152:         if (jobB_final_http.status === 'done' || jobB_final_http.status === 'failed') {
+153:             console.log('Job B status verified.');
+154:         } else {
+155:             throw new Error(`Job B did not reach final state via HTTP. Current status: ${jobB_final_http.status}`);
+156:         }
+157: 
+158:         console.log('Smoke test passed!');
+159: 
+160:     } catch (error) {
+161:         console.error('Smoke test failed:', error);
+162:         process.exit(1);
+163:     } finally {
+164:         console.log('Cleaning up...');
+165:         if (ws) ws.close();
+166:         if (serverProcess) process.kill(-serverProcess.pid); // Kill the entire process group
+167:         if (workerAProcess) process.kill(-workerAProcess.pid);
+168:         if (workerBProcess) process.kill(-workerBProcess.pid);
+169:         console.log('Cleanup complete.');
+170:     }
+171: };
+172: 
+173: runSmokeTest();
+174: 

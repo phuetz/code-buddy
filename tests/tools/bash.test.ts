@@ -9,30 +9,32 @@
  * - Shell argument escaping
  */
 
+
+// Mock dependencies
+
 import { BashTool } from '../../src/tools/bash';
 import path from 'path';
 import os from 'os';
 
-// Mock dependencies
 jest.mock('../../src/utils/confirmation-service', () => ({
   ConfirmationService: {
-    getInstance: jest.fn(() => ({
-      getSessionFlags: jest.fn(() => ({ bashCommands: true, allOperations: false })),
+    getInstance: jest.fn(function() { return {
+      getSessionFlags: jest.fn(function() { return { bashCommands: true, allOperations: false }; }),
       requestConfirmation: jest.fn(() => Promise.resolve({ confirmed: true })),
-    })),
+    }; }),
   },
 }));
 
 jest.mock('../../src/security/sandbox', () => ({
-  getSandboxManager: jest.fn(() => ({
-    validateCommand: jest.fn(() => ({ valid: true })),
-  })),
+  getSandboxManager: jest.fn(function() { return {
+    validateCommand: jest.fn(function() { return { valid: true }; }),
+  }; }),
 }));
 
 jest.mock('../../src/utils/self-healing', () => ({
-  getSelfHealingEngine: jest.fn(() => ({
+  getSelfHealingEngine: jest.fn(function() { return {
     attemptHealing: jest.fn(() => Promise.resolve({ success: false, attempts: [] })),
-  })),
+  }; }),
 }));
 
 const isWindows = process.platform === 'win32';

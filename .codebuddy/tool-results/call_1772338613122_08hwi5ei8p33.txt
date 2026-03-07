@@ -1,0 +1,1 @@
+Tesseract OCR not installed. Install with: sudo apt install tesseract-ocr (Linux) or brew install tesseract (macOS). Alternatively, set OPENAI_API_KEY for vision-based OCR.

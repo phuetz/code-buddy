@@ -59,7 +59,7 @@ describe("TDD Mode", () => {
     });
 
     it("should have mocks templates", () => {
-      expect(TEST_TEMPLATES.typescript.mocksTemplate).toContain("jest.mock");
+      expect(TEST_TEMPLATES.typescript.mocksTemplate).toMatch(/(?:vi|jest)\.mock/);
       expect(TEST_TEMPLATES.python.mocksTemplate).toContain("Mock");
     });
   });
@@ -120,12 +120,19 @@ describe("TDD Mode", () => {
         expect(manager.getState()).toBe("requirements");
       });
 
-      it("should emit cycle:started event", (done) => {
-        manager.on("cycle:started", (data: { requirements: string }) => {
-          expect(data.requirements).toBe("Test requirement");
-          done();
+      it("should emit cycle:started event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("cycle:started", (data: { requirements: string }) => {
+            try {
+              expect(data.requirements).toBe("Test requirement");
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.startCycle("Test requirement");
         });
-        manager.startCycle("Test requirement");
       });
 
       it("should throw if not idle", () => {
@@ -149,12 +156,19 @@ describe("TDD Mode", () => {
         expect(manager.getState()).toBe("idle");
       });
 
-      it("should emit cycle:cancelled event", (done) => {
-        manager.on("cycle:cancelled", () => {
-          done();
+      it("should emit cycle:cancelled event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("cycle:cancelled", () => {
+            try {
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.startCycle("Test");
+          manager.cancelCycle();
         });
-        manager.startCycle("Test");
-        manager.cancelCycle();
       });
     });
 
@@ -179,14 +193,21 @@ describe("TDD Mode", () => {
         expect(manager.getState()).toBe("reviewing-tests");
       });
 
-      it("should emit tests:generated event", (done) => {
-        manager.on("tests:generated", (data) => {
-          expect(data.tests).toHaveLength(1);
-          expect(data.files).toHaveLength(1);
-          done();
+      it("should emit tests:generated event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("tests:generated", (data) => {
+            try {
+              expect(data.tests).toHaveLength(1);
+              expect(data.files).toHaveLength(1);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.startCycle("Test");
+          manager.recordGeneratedTests(["test code"], ["test.ts"]);
         });
-        manager.startCycle("Test");
-        manager.recordGeneratedTests(["test code"], ["test.ts"]);
       });
     });
 

@@ -9,7 +9,11 @@
 export type {
   GatewayMessageType,
   GatewayMessage,
+  ConnectPayload,
+  HelloOkPayload,
   AuthPayload,
+  SessionPatchPayload,
+  PresencePayload,
   ChatPayload,
   ChatStreamPayload,
   ToolPayload,
@@ -17,6 +21,9 @@ export type {
   ErrorPayload,
   ClientState,
   GatewayConfig,
+  GatewayAuthMode,
+  GatewayBindMode,
+  GatewayTailscaleConfig,
   GatewayEvents,
 } from './types.js';
 

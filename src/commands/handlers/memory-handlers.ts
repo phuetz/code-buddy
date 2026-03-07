@@ -1,5 +1,5 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
-import { getEnhancedMemory } from "../../memory/index.js";
+import { getEnhancedMemory, getMemoryManager, type MemoryCategory } from "../../memory/index.js";
 import { getCommentWatcher } from "../../tools/comment-watcher.js";
 import { getErrorMessage } from "../../errors/index.js";
 
@@ -12,10 +12,11 @@ export interface CommandHandlerResult {
 }
 
 /**
- * Memory - Manage persistent memory using EnhancedMemory (SQLite/Vector)
+ * Memory - Manage persistent memory using PersistentMemoryManager (Markdown) and EnhancedMemory (SQLite/Vector)
  */
 export async function handleMemory(args: string[]): Promise<CommandHandlerResult> {
-  const memory = getEnhancedMemory();
+  const enhancedMemory = getEnhancedMemory();
+  const persistentMemory = getMemoryManager();
   const action = args[0]?.toLowerCase() || 'list';
 
   try {
@@ -26,16 +27,28 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
       case "find":
         if (args[1]) {
           const query = args.slice(1).join(" ");
-          const results = await memory.recall({ query, limit: 5 });
           
-          if (results.length === 0) {
+          // Try persistent memory first (exact/keyword match)
+          const persistentResult = persistentMemory.recall(query);
+          
+          // Also try enhanced memory (semantic search)
+          const enhancedResults = await enhancedMemory.recall({ query, limit: 5 });
+          
+          if (!persistentResult && enhancedResults.length === 0) {
             content = "No matching memories found.";
           } else {
-            const formatted = results.map(r => {
-              const date = new Date(r.createdAt).toLocaleDateString();
-              return `- [${r.type}] ${r.content} (score: ${r.importance.toFixed(2)}, ${date})`;
-            }).join('\n');
-            content = `🔍 **Recall Results**:\n${formatted}`;
+            let formatted = "";
+            if (persistentResult) {
+              formatted += `📁 **Persistent Memory (Markdown)**:\n- ${query}: ${persistentResult}\n\n`;
+            }
+            if (enhancedResults.length > 0) {
+              formatted += `🔍 **Enhanced Memory (Semantic)**:\n`;
+              formatted += enhancedResults.map(r => {
+                const date = new Date(r.createdAt).toLocaleDateString();
+                return `- [${r.type}] ${r.content} (score: ${r.importance.toFixed(2)}, ${date})`;
+              }).join('\n');
+            }
+            content = formatted;
           }
         } else {
           content = `Usage: /memory recall <query>`;
@@ -44,107 +57,30 @@ export async function handleMemory(args: string[]): Promise<CommandHandlerResult
 
       case "forget":
         if (args[1]) {
-          const searchTerm = args.slice(1).join(" ");
-
-          // Special case: "forget last" or "forget last N"
-          if (searchTerm.toLowerCase().startsWith("last")) {
-            const countMatch = searchTerm.match(/last\s+(\d+)/i);
-            const count = countMatch ? parseInt(countMatch[1], 10) : 1;
-
-            // Get all memories sorted by creation date (most recent first)
-            const allMems = await memory.recall({ limit: 10000 });
-            const sortedByDate = allMems.sort((a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
-
-            const toForget = sortedByDate.slice(0, count);
-            if (toForget.length > 0) {
-              for (const m of toForget) {
-                await memory.forget(m.id);
-              }
-              content = `🗑️ Forgot ${toForget.length} most recent ${toForget.length === 1 ? 'memory' : 'memories'}`;
-            } else {
-              content = `No memories to forget`;
-            }
-          } else {
-            // Fuzzy search: try tag match first, then content match
-            let mems = await memory.recall({ tags: [searchTerm] });
-
-            // If no exact tag match, try fuzzy content search
-            if (mems.length === 0) {
-              mems = await memory.recall({ query: searchTerm, limit: 50 });
-
-              // Further filter for fuzzy matching on tags and content
-              const searchLower = searchTerm.toLowerCase();
-              mems = mems.filter(m => {
-                // Check if any tag contains the search term (fuzzy)
-                const tagMatch = m.tags.some(tag =>
-                  tag.toLowerCase().includes(searchLower) ||
-                  searchLower.includes(tag.toLowerCase())
-                );
-                // Check if content contains the search term
-                const contentMatch = m.content.toLowerCase().includes(searchLower);
-                return tagMatch || contentMatch;
-              });
-            }
-
-            if (mems.length > 0) {
-              // Show preview of what will be forgotten
-              if (mems.length > 5) {
-                // For many matches, ask for confirmation by showing count
-                const preview = mems.slice(0, 3).map(m =>
-                  `  - ${m.content.slice(0, 50)}${m.content.length > 50 ? '...' : ''}`
-                ).join('\n');
-                content = `🗑️ Found ${mems.length} memories matching "${searchTerm}":\n${preview}\n  ... and ${mems.length - 3} more.\n\nTo forget all, run: /memory forget-confirm ${searchTerm}`;
-              } else {
-                let forgotCount = 0;
-                for (const m of mems) {
-                  await memory.forget(m.id);
-                  forgotCount++;
-                }
-                content = `🗑️ Forgot ${forgotCount} ${forgotCount === 1 ? 'memory' : 'memories'} matching "${searchTerm}"`;
-              }
-            } else {
-              content = `No memories found matching "${searchTerm}"`;
-            }
-          }
-        } else {
-          content = `Usage: /memory forget <tag|query>
-Also supported: /memory forget last [N]`;
-        }
-        break;
-
-      case "forget-confirm":
-        // Force forget all matches without preview
-        if (args[1]) {
-          const searchTerm = args.slice(1).join(" ");
-          let mems = await memory.recall({ tags: [searchTerm] });
-
-          if (mems.length === 0) {
-            mems = await memory.recall({ query: searchTerm, limit: 1000 });
-            const searchLower = searchTerm.toLowerCase();
-            mems = mems.filter(m => {
-              const tagMatch = m.tags.some(tag =>
-                tag.toLowerCase().includes(searchLower) ||
-                searchLower.includes(tag.toLowerCase())
-              );
-              const contentMatch = m.content.toLowerCase().includes(searchLower);
-              return tagMatch || contentMatch;
-            });
-          }
-
-          if (mems.length > 0) {
-            let forgotCount = 0;
+          const key = args[1];
+          const scope = (args[2] as "project" | "user") || "project";
+          
+          const forgottenPersistent = await persistentMemory.forget(key, scope);
+          
+          // For backward compatibility, also try enhanced memory
+          let forgottenEnhanced = 0;
+          if (!forgottenPersistent) {
+            const mems = await enhancedMemory.recall({ query: key, limit: 10 });
             for (const m of mems) {
-              await memory.forget(m.id);
-              forgotCount++;
+              await enhancedMemory.forget(m.id);
+              forgottenEnhanced++;
             }
-            content = `🗑️ Forgot ${forgotCount} ${forgotCount === 1 ? 'memory' : 'memories'} matching "${searchTerm}"`;
+          }
+
+          if (forgottenPersistent) {
+            content = `🗑️ Forgot "${key}" from persistent ${scope} memory.`;
+          } else if (forgottenEnhanced > 0) {
+            content = `🗑️ Forgot ${forgottenEnhanced} memories from enhanced memory matching "${key}".`;
           } else {
-            content = `No memories found matching "${searchTerm}"`;
+            content = `No memory found matching "${key}".`;
           }
         } else {
-          content = `Usage: /memory forget-confirm <query>`;
+          content = `Usage: /memory forget <key> [project|user]`;
         }
         break;
 
@@ -153,31 +89,42 @@ Also supported: /memory forget last [N]`;
         if (args.length >= 3) {
           const key = args[1];
           const value = args.slice(2).join(" ");
-          await memory.store({
+          const scope = (args[args.length - 1] === "user" || args[args.length - 1] === "project") 
+            ? args.pop() as "project" | "user" 
+            : "project";
+          
+          // Store in both for redundancy and better retrieval
+          await persistentMemory.remember(key, value, { scope, category: "custom" });
+          await enhancedMemory.store({
             type: 'fact',
-            content: value,
-            tags: [key],
+            content: `${key}: ${value}`,
+            tags: [key, scope],
             importance: 0.8
           });
-          content = `✅ Remembered: "${value}" (tag: ${key})`;
+          
+          content = `✅ Remembered: "${key}" in persistent ${scope} memory and semantic index.`;
         } else {
-          content = `Usage: /memory remember <key/tag> <content>`;
+          content = `Usage: /memory remember <key> <content> [project|user]`;
         }
         break;
 
       case "context":
-        content = await memory.buildContext({
+        const enhancedContext = await enhancedMemory.buildContext({
           includeProject: true,
           includePreferences: true,
           includeRecentSummaries: true
         });
-        content = `🧠 **Current Context Injection**:\n\n${content}`;
+        const persistentContext = persistentMemory.getContextForPrompt();
+        
+        content = `🧠 **Current Context Injection**:\n\n` +
+                 `📁 **Persistent**:\n${persistentContext || "(empty)"}\n\n` +
+                 `🔍 **Enhanced**:\n${enhancedContext || "(empty)"}`;
         break;
 
       case "status":
       case "list":
       default:
-        content = memory.formatStatus();
+        content = persistentMemory.formatMemories();
         break;
     }
 
@@ -188,7 +135,7 @@ Also supported: /memory forget last [N]`;
         content,
         timestamp: new Date(),
       },
-      message: content // Compatibility with newer interface
+      message: content
     };
   } catch (error) {
     return {
@@ -203,30 +150,35 @@ Also supported: /memory forget last [N]`;
 }
 
 /**
- * Remember - Quick memory store using EnhancedMemory
+ * Remember - Quick memory store using PersistentMemoryManager and EnhancedMemory
  */
 export async function handleRemember(args: string[]): Promise<CommandHandlerResult> {
-  const memory = getEnhancedMemory();
-
   if (args.length < 2) {
     return {
       handled: true,
       entry: {
         type: "assistant",
-        content: `Usage: /remember <key> <value>`,
+        content: `Usage: /remember <key> <value> [project|user]`,
         timestamp: new Date(),
       },
     };
   }
 
   const key = args[0];
+  const scope = (args[args.length - 1] === "user" || args[args.length - 1] === "project") 
+    ? args.pop() as "project" | "user" 
+    : "project";
   const value = args.slice(1).join(" ");
 
   try {
-    await memory.store({
+    const persistentMemory = getMemoryManager();
+    const enhancedMemory = getEnhancedMemory();
+
+    await persistentMemory.remember(key, value, { scope, category: "custom" });
+    await enhancedMemory.store({
       type: 'fact',
-      content: value,
-      tags: [key],
+      content: `${key}: ${value}`,
+      tags: [key, scope],
       importance: 0.8
     });
 
@@ -234,7 +186,7 @@ export async function handleRemember(args: string[]): Promise<CommandHandlerResu
       handled: true,
       entry: {
         type: "assistant",
-        content: `✅ Remembered: "${value}" (tag: ${key})`,
+        content: `✅ Remembered: "${key}" in persistent ${scope} memory and semantic index.`,
         timestamp: new Date(),
       },
     };

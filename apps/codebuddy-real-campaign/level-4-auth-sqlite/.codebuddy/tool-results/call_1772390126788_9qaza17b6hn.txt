@@ -1,0 +1,170 @@
+Updated public/app.js with 166 additions
+--- a/public/app.js
++++ b/public/app.js
+@@ -1,0 +1,166 @@
++document.addEventListener('DOMContentLoaded', () => {
++    const authSection = document.getElementById('auth-section');
++    const taskSection = document.getElementById('task-section');
++    const registerForm = document.getElementById('register-form');
++    const loginForm = document.getElementById('login-form');
++    const addTaskForm = document.getElementById('add-task-form');
++    const taskList = document.getElementById('task-list');
++    const logoutButton = document.getElementById('logout-button');
++    const authMessage = document.getElementById('auth-message');
++    const taskMessage = document.getElementById('task-message');
++
++    const showMessage = (element, message, type) => {
++        element.textContent = message;
++        element.className = `message ${type}`;
++        setTimeout(() => {
++            element.textContent = '';
++            element.className = 'message';
++        }, 3000);
++    };
++
++    const checkSession = async () => {
++        const res = await fetch('/session');
++        const data = await res.json();
++        if (data.authenticated) {
++            authSection.style.display = 'none';
++            taskSection.style.display = 'block';
++            fetchTasks();
++        } else {
++            authSection.style.display = 'block';
++            taskSection.style.display = 'none';
++        }
++    };
++
++    const fetchTasks = async () => {
++        const res = await fetch('/tasks');
++        if (res.ok) {
++            const tasks = await res.json();
++            taskList.innerHTML = '';
++            tasks.forEach(task => addTaskToDOM(task));
++        } else {
++            showMessage(taskMessage, 'Failed to load tasks', 'error');
++        }
++    };
++
++    const addTaskToDOM = (task) => {
++        const li = document.createElement('li');
++        li.dataset.id = task.id;
++        li.className = task.completed ? 'completed' : '';
++        li.innerHTML = `
++            <span>${task.title}</span>
++            <div class="task-actions">
++                <button class="toggle-complete">${task.completed ? 'Uncomplete' : 'Complete'}</button>
++                <button class="delete-task">Delete</button>
++            </div>
++        `;
++        taskList.appendChild(li);
++    };
++
++    registerForm.addEventListener('submit', async (e) => {
++        e.preventDefault();
++        const username = e.target.elements['register-username'].value;
++        const password = e.target.elements['register-password'].value;
++
++        const res = await fetch('/register', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ username, password })
++        });
++        const data = await res.json();
++        if (res.ok) {
++            showMessage(authMessage, data.message, 'success');
++            e.target.reset();
++        } else {
++            showMessage(authMessage, data.message, 'error');
++        }
++    });
++
++    loginForm.addEventListener('submit', async (e) => {
++        e.preventDefault();
++        const username = e.target.elements['login-username'].value;
++        const password = e.target.elements['login-password'].value;
++
++        const res = await fetch('/login', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ username, password })
++        });
++        const data = await res.json();
++        if (res.ok) {
++            showMessage(authMessage, data.message, 'success');
++            e.target.reset();
++            checkSession();
++        } else {
++            showMessage(authMessage, data.message, 'error');
++        }
++    });
++
++    logoutButton.addEventListener('click', async () => {
++        const res = await fetch('/logout', { method: 'POST' });
++        const data = await res.json();
++        if (res.ok) {
++            showMessage(authMessage, data.message, 'success');
++            checkSession();
++        } else {
++            showMessage(authMessage, data.message, 'error');
++        }
++    });
++
++    addTaskForm.addEventListener('submit', async (e) => {
++        e.preventDefault();
++        const titleInput = e.target.elements['new-task-title'];
++        const title = titleInput.value;
++
++        const res = await fetch('/tasks', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ title })
++        });
++        const data = await res.json();
++        if (res.ok) {
++            addTaskToDOM(data);
++            titleInput.value = '';
++            showMessage(taskMessage, 'Task added!', 'success');
++        } else {
++            showMessage(taskMessage, data.message, 'error');
++        }
++    });
++
++    taskList.addEventListener('click', async (e) => {
++        if (e.target.classList.contains('delete-task')) {
++            const li = e.target.closest('li');
++            const id = li.dataset.id;
++
++            const res = await fetch(`/tasks/${id}`, { method: 'DELETE' });
++            const data = await res.json();
++            if (res.ok) {
++                li.remove();
++                showMessage(taskMessage, data.message, 'success');
++            } else {
++                showMessage(taskMessage, data.message, 'error');
++            }
++        } else if (e.target.classList.contains('toggle-complete')) {
++            const li = e.target.closest('li');
++            const id = li.dataset.id;
++            const currentTitle = li.querySelector('span').textContent;
++            const isCompleted = li.classList.contains('completed');
++
++            const res = await fetch(`/tasks/${id}`, {
++                method: 'PUT',
++                headers: { 'Content-Type': 'application/json' },
++                body: JSON.stringify({ title: currentTitle, completed: !isCompleted })
++            });
++            const data = await res.json();
++            if (res.ok) {
++                li.classList.toggle('completed');
++                e.target.textContent = isCompleted ? 'Complete' : 'Uncomplete';
++                showMessage(taskMessage, data.message, 'success');
++            } else {
++                showMessage(taskMessage, data.message, 'error');
++            }
++        }
++    });
++
++    checkSession();
++});
++

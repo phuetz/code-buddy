@@ -1,0 +1,17 @@
+Updated package.json with 7 additions and 3 removals
+--- a/package.json
++++ b/package.json
+@@ -10,6 +10,10 @@
+   "keywords": [],
+   "author": "",
+   "license": "ISC",
+-  "description": ""
+-}
+-
++  "dependencies": {
++    "express": "^4.17.1",
++    "ws": "^8.2.3",
++    "node-fetch": "^3.0.0"
++  }
++}
++

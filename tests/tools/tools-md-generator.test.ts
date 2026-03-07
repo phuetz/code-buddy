@@ -5,12 +5,14 @@
  * and directory creation behaviour.
  */
 
+
+// ─── Mock heavy dependencies before the module is imported ───────────────────
+
 import { writeFile, readFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import os from 'os';
-
-// ─── Mock heavy dependencies before the module is imported ───────────────────
+import { generateToolsMd } from '../../src/tools/tools-md-generator';
 
 const mockGetEnabledTools = jest.fn();
 
@@ -33,7 +35,7 @@ jest.mock(
 
 jest.mock(
   '../../src/tools/registry.js',
-  () => ({ getToolRegistry: jest.fn(() => ({ getEnabledTools: mockGetEnabledTools })) }),
+  () => ({ getToolRegistry: jest.fn(function() { return { getEnabledTools: mockGetEnabledTools }; }) }),
   { virtual: true },
 );
 
@@ -45,7 +47,6 @@ jest.mock(
 
 // ─── Import after mocks ───────────────────────────────────────────────────────
 
-import { generateToolsMd } from '../../src/tools/tools-md-generator';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -297,7 +298,7 @@ describe('generateToolsMd()', () => {
 
   it('does not throw when an internal error occurs (graceful degradation)', async () => {
     // Force getEnabledTools to throw
-    mockGetEnabledTools.mockImplementation(() => {
+    mockGetEnabledTools.mockImplementation(function() {
       throw new Error('Registry exploded');
     });
 

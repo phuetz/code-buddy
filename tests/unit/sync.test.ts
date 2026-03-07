@@ -1046,15 +1046,21 @@ describe('SyncManager', () => {
       autoManager.dispose();
     });
 
-    it('should emit auto-sync-tick events', (done) => {
+    it('should emit auto-sync-tick events', async () => {
       const autoManager = new SyncManager({ syncInterval: 50 });
 
-      autoManager.on('auto-sync-tick', () => {
-        autoManager.dispose();
-        done();
-      });
+      await new Promise<void>((resolve, reject) => {
+        autoManager.once('auto-sync-tick', () => {
+          try {
+            autoManager.dispose();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      autoManager.startAutoSync();
+        autoManager.startAutoSync();
+      });
     }, 1000);
 
     it('should stop auto-sync on dispose', () => {

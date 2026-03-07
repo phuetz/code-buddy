@@ -10,6 +10,7 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { vi } from 'vitest';
 // ---------------------------------------------------------------------------
 // Mock child_process before importing the module under test.
 // We type execSync as returning `string` (the overload used when encoding is
@@ -23,7 +24,7 @@ jest.mock('child_process', () => ({
 // Use a plain jest.Mock typed to return string to avoid the Buffer overload
 // incompatibility in the strict TS type signature of execSync.
  
-const mockExecSync = require('child_process').execSync as jest.MockedFunction<() => string>;
+const mockExecSync = vi.mocked(execSync);
 
 // ---------------------------------------------------------------------------
 // Mock logger to silence warnings during tests
@@ -39,6 +40,8 @@ jest.mock('../../src/utils/logger.js', () => ({
 }));
 
 import { resolveSecretRef, resolveSecretRefs } from '../../src/config/secret-ref.js';
+import { execSync } from 'child_process';
+import { logger } from '../../src/utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,7 +125,6 @@ describe('SecretRef', () => {
     });
 
     it('emits a warning when the env var is missing', async () => {
-      const { logger } = jest.requireMock('../../src/utils/logger.js');
       delete process.env.MISSING_VAR;
       await resolveSecretRef('${env:MISSING_VAR}');
       expect(logger.warn).toHaveBeenCalledWith(
@@ -182,7 +184,6 @@ describe('SecretRef', () => {
     });
 
     it('emits a warning when the file cannot be read', async () => {
-      const { logger } = jest.requireMock('../../src/utils/logger.js');
       await resolveSecretRef('${file:/nonexistent/path/secret.txt}');
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('/nonexistent/path/secret.txt'),
@@ -224,7 +225,7 @@ describe('SecretRef', () => {
     });
 
     it('returns empty string when the command throws', async () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation(function() {
         throw new Error('command not found');
       });
       const result = await resolveSecretRef('${exec:nonexistent-command}');
@@ -232,8 +233,7 @@ describe('SecretRef', () => {
     });
 
     it('emits a warning when the command fails', async () => {
-      const { logger } = jest.requireMock('../../src/utils/logger.js');
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation(function() {
         throw new Error('exit code 1');
       });
       await resolveSecretRef('${exec:failing-cmd}');

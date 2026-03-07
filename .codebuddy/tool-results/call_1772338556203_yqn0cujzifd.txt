@@ -1,0 +1,5 @@
+Hostname: MINISTAR
+Platform: win32 (x64)
+Uptime: 25 hours
+CPU: AMD Ryzen 9 7945HX with Radeon Graphics         (32 cores)
+Memory: 71 GB / 95.7 GB

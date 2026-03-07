@@ -235,6 +235,7 @@ router.post(
 
       // Skip tools requiring confirmation in batch mode
       // Note: CodeBuddyTool doesn't carry requiresConfirmation; skip for now
+      // eslint-disable-next-line no-constant-condition
       if (false) {
         results.push({
           toolName: toolRequest.name,

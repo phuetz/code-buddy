@@ -22,11 +22,14 @@ jest.mock('../../src/utils/logger.js', () => ({
 }));
 
 // Mock fs for file caching tests
-jest.mock('fs/promises', () => ({
+jest.mock('fs/promises', () => {
+  const impl = {
   readFile: jest.fn(),
   writeFile: jest.fn(),
   stat: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import { LLMResponseCache, resetLLMResponseCache } from '../../src/cache/llm-response-cache.js';
 import { EmbeddingCache, resetEmbeddingCache } from '../../src/cache/embedding-cache.js';

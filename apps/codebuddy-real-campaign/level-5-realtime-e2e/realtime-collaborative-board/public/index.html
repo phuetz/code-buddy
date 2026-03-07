@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime Collaborative Board</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        #items { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 20px; }
+        .item { border: 1px solid #ccc; padding: 10px; border-radius: 5px; background-color: #f9f9f9; }
+        .item input { width: calc(100% - 20px); padding: 5px; margin-bottom: 5px; }
+        .item button { margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Realtime Collaborative Board</h1>
+
+    <form id="create-item-form">
+        <input type="text" id="new-item-title" placeholder="New item title" required>
+        <button type="submit">Add Item</button>
+    </form>
+
+    <div id="items"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

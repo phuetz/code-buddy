@@ -4,17 +4,19 @@
  * Tests the unified skill registry methods: registerLegacySkill and getAllUnified.
  */
 
-import { SkillRegistry, resetSkillRegistry } from '../../src/skills/registry';
-import type { Skill, UnifiedSkill } from '../../src/skills/types';
 
 // ============================================================================
 // Mocks
 // ============================================================================
 
 // Mock the parser module since we are testing registry logic, not file parsing
+
+import { SkillRegistry, resetSkillRegistry } from '../../src/skills/registry';
+import type { Skill, UnifiedSkill } from '../../src/skills/types';
+
 jest.mock('../../src/skills/parser', () => ({
   parseSkillFile: jest.fn(),
-  validateSkill: jest.fn(() => ({ valid: true, errors: [] })),
+  validateSkill: jest.fn(function() { return { valid: true, errors: [] }; }),
 }));
 
 // ============================================================================

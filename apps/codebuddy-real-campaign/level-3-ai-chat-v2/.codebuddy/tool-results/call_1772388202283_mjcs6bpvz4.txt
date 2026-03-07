@@ -1,0 +1,43 @@
+Updated README.md with 39 additions
+--- a/README.md
++++ b/README.md
+@@ -1,0 +1,39 @@
++# AI Support Desk
++
++This is a simple AI Support Desk application powered by the Google Gemini API.
++
++## Setup
++
++1. **Install dependencies:**
++   ```bash
++   npm install
++   ```
++
++2. **Set API Key:**
++   Set your Google Gemini API key as an environment variable named `GOOGLE_API_KEY` or `GEMINI_API_KEY`.
++
++   Example (Linux/macOS):
++   ```bash
++   export GOOGLE_API_KEY="YOUR_API_KEY"
++   ```
++   Example (Windows):
++   ```cmd
++   set GOOGLE_API_KEY="YOUR_API_KEY"
++   ```
++
++## Running the application
++
++```bash
++npm start
++```
++
++Then, open your browser to `http://localhost:3000`.
++
++## Smoke Test
++
++To run a smoke test that starts the server and tests the `/health` and `/api/chat` endpoints:
++
++```bash
++npm run smoke-test
++```
++

@@ -24,8 +24,8 @@ import type {
   ContentType,
   MessageAttachment,
   MessageButton,
-} from '../index.js';
-import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
+} from '../core.js';
+import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
 import { logger } from '../../utils/logger.js';
 
 // ============================================================================

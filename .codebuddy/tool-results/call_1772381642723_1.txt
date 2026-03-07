@@ -1,0 +1,28 @@
+
+🔍 Résultats pour: "TypeScript 5 Module Resolution Build Performance Configuration Updates"
+══════════════════════════════════════════════════
+
+1. **TypeScript: TSConfig Option: moduleResolution** [1]
+   Like node16 and nodenext, this mode supports package.json &quot;imports&quot; and &quot;exports&quot;, but unlike the Node.js resolution modes, bundler never requires file extensions on relative paths in imports. &#x27;classic&#x27; was used in TypeScript before the release of 1.6. classic should not be used. There are reference pages explaining the theory behind TypeScript’s module resolution and the details of each option.
+
+2. **Understanding module resolution in TypeScript | Better Stack Community** [2]
+   In practice, module resolution configuration transforms import handling from a source of runtime errors into a build-time guarantee. You configure resolution once based on your environment, and TypeScript ensures every import can be resolved before your code runs, catching broken imports during development rather than in production.
+
+3. **TypeScript: TSConfig Reference - Docs on every TSConfig option** [3]
+   --resolvePackageJsonImports forces TypeScript to consult the imports field of package.json files when performing a lookup that starts with # from a file whose ancestor directory contains a package.json. This option defaults to true under the node16, nodenext, and bundler options for --moduleResolution. ... Rewrite .ts, .tsx, .mts, and .cts file extensions in relative import paths to their JavaScript equivalent in output files. For more information, see the TypeScript 5.7 release notes.
+
+4. **Performance Enhancement Opportunities: Advanced Caching and Memory Optimization · Issue #62543 · microsoft/TypeScript** [4]
+   Optimize module resolution cache for watch and editor #37055 - Module resolution cache for watch and editor · Performance: Monomorphic AST Nodes #59198 - Monomorphic AST nodes · Incremental builds with .tsbuildinfo-files are not faster than non incremental builds #44305 - Incremental build performance ... We believe these optimizations could meaningfully improve developer experience, especially for large-scale TypeScript projects, and we&#x27;re excited to collaborate with the TypeScript team on making the compiler even faster.
+   📅 October 4, 2025
+
+5. **TypeScript 5: New Innovations & Breaking Changes | iJS Conference Blog** [5]
+   Because this sometimes didn’t fit the behavior of module bundlers like Webpack, <strong>TypeScript 5 now includes a new config option (“moduleResolution”: “bundler”) for these bundlers</strong>.
+   📅 May 20, 2025
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript: TSConfig Option: moduleResolution — https://www.typescriptlang.org/tsconfig/moduleResolution.html
+[2] Understanding module resolution in TypeScript | Better Stack Community — https://betterstack.com/community/guides/scaling-nodejs/typescript-module-resolution/
+[3] TypeScript: TSConfig Reference - Docs on every TSConfig option — https://www.typescriptlang.org/tsconfig/
+[4] Performance Enhancement Opportunities: Advanced Caching and Memory Optimization · Issue #62543 · microsoft/TypeScript — https://github.com/microsoft/typescript/issues/62543
+[5] TypeScript 5: New Innovations & Breaking Changes | iJS Conference Blog — https://javascript-conference.com/blog/typescript-5/

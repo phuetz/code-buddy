@@ -1,0 +1,20 @@
+node:assert:125
+  throw new AssertionError(obj);
+  ^
+
+AssertionError [ERR_ASSERTION]: Test 1 Failed: Incorrect console output.
+    at Object.<anonymous> (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-1-cli/task-tracker/test.js:50:8)
+    at Module._compile (node:internal/modules/cjs/loader:1364:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1422:10)
+    at Module.load (node:internal/modules/cjs/loader:1203:32)
+    at Module._load (node:internal/modules/cjs/loader:1019:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:128:12)
+    at node:internal/main/run_main_module:28:49 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'Task added: "Buy groceries"',
+  expected: 'Task added: "Buy groceries" ',
+  operator: 'strictEqual'
+}
+
+Node.js v18.20.8

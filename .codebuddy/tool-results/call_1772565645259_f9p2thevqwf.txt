@@ -1,0 +1,388 @@
+Lines 601-987 of src/agent/execution/agent-executor.ts:
+601:     abortController: AbortController | null
+602:   ): AsyncGenerator<StreamingChunk, void, unknown> {
+603:     // Calculate input tokens
+604:     let inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
+605:     yield {
+606:       type: "token_count",
+607:       tokenCount: inputTokens,
+608:     };
+609: 
+610:     const maxToolRounds = this.config.maxToolRounds;
+611:     let toolRounds = 0;
+612:     let totalOutputTokens = 0;
+613: 
+614:     try {
+615:       const pipeline = this.deps.middlewarePipeline;
+616: 
+617:       // Auto-select persona based on user message context (fire-and-forget, streaming path)
+618:       try {
+619:         const { getPersonaManager } = await import('../../personas/persona-manager.js');
+620:         getPersonaManager().autoSelectPersona({ message });
+621:       } catch { /* persona auto-select optional */ }
+622: 
+623:       while (toolRounds < maxToolRounds) {
+624:         if (abortController?.signal.aborted) {
+625:           yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+626:           yield { type: "done" };
+627:           return;
+628:         }
+629: 
+630:         // Run before_turn middleware
+631:         if (pipeline) {
+632:           const ctx = this.buildMiddlewareContext(
+633:             toolRounds, inputTokens, totalOutputTokens, history, messages, true, abortController
+634:           );
+635:           const mwResult = await pipeline.runBeforeTurn(ctx);
+636:           if (mwResult.action === 'stop') {
+637:             if (mwResult.message) yield { type: "content", content: `\n\n${mwResult.message}` };
+638:             yield { type: "done" };
+639:             return;
+640:           }
+641:           if (mwResult.action === 'compact') {
+642:             // Trigger context compaction
+643:             this.deps.contextManager.prepareMessages(messages);
+644:           }
+645:           if (mwResult.action === 'warn' && mwResult.message) {
+646:             yield { type: "content", content: `\n${mwResult.message}\n` };
+647:           }
+648:         }
+649: 
+650:         const selectionResult = await this.deps.toolSelectionStrategy.selectToolsForQuery(message);
+651:         const tools = selectionResult.tools;
+652:         if (toolRounds === 0) this.deps.toolSelectionStrategy.cacheTools(tools);
+653: 
+654:         const preparedMessages = this.deps.contextManager.prepareMessages(messages);
+655: 
+656:         // --- Lessons context: inject BEFORE todo suffix (stable rules, higher priority) ---
+657:         const lessonsBlockStream = getLessonsTracker(process.cwd()).buildContextBlock();
+658:         if (lessonsBlockStream) {
+659:           preparedMessages.push({ role: 'system', content: lessonsBlockStream });
+660:         }
+661: 
+662:         // --- Decision memory context: inject relevant past decisions (streaming path) ---
+663:         if (_decisionContextProvider) {
+664:           try {
+665:             const decisionsBlockStream = await _decisionContextProvider(message);
+666:             if (decisionsBlockStream) {
+667:               preparedMessages.push({ role: 'system', content: decisionsBlockStream });
+668:             }
+669:           } catch { /* decision-memory optional */ }
+670:         }
+671: 
+672:         // --- Manus AI attention bias: append todo.md context at END of messages ---
+673:         const todoSuffixStream = getTodoTracker(process.cwd()).buildContextSuffix();
+674:         if (todoSuffixStream) {
+675:           preparedMessages.push({ role: 'system', content: todoSuffixStream });
+676:         }
+677: 
+678:         // Context warning — always check regardless of pipeline state
+679:         {
+680:           const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
+681:           if (contextWarning.warn) {
+682:             yield { type: "content", content: `\n${contextWarning.message}\n` };
+683: 
+684:             // --- OpenClaw pre-compaction memory flush (streaming path) ---
+685:             try {
+686:               const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
+687:               const flusher = getPrecompactionFlusher();
+688:               await flusher.flush(
+689:                 preparedMessages.filter(m => m.role !== 'system').map(m => ({
+690:                   role: m.role as 'user' | 'assistant',
+691:                   content: typeof m.content === 'string' ? m.content : '',
+692:                 })),
+693:                 async (flushMsgs) => {
+694:                   const r = await this.deps.client.chat(
+695:                     flushMsgs.map(m => ({ role: m.role, content: m.content })),
+696:                     [],
+697:                   );
+698:                   return r.choices[0]?.message?.content ?? 'NO_REPLY';
+699:                 }
+700:               );
+701:             } catch {
+702:               // non-critical
+703:             }
+704:           }
+705:         }
+706: 
+707:         const stream = this.deps.client.chatStream(
+708:           preparedMessages,
+709:           tools,
+710:           undefined,
+711:           this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
+712:             ? { search_parameters: { mode: "auto" } }
+713:             : { search_parameters: { mode: "off" } }
+714:         );
+715:         
+716:         this.deps.streamingHandler.reset();
+717: 
+718:         for await (const chunk of stream) {
+719:           if (abortController?.signal.aborted) {
+720:             yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+721:             yield { type: "done" };
+722:             return;
+723:           }
+724: 
+725:           const result = this.deps.streamingHandler.accumulateChunk(chunk as RawStreamingChunk);
+726: 
+727:           if (result.reasoningContent) {
+728:             yield { type: "reasoning", reasoning: result.reasoningContent };
+729:           }
+730: 
+731:           if (result.hasNewToolCalls && result.toolCalls) {
+732:             yield { type: "tool_calls", toolCalls: result.toolCalls };
+733:           }
+734: 
+735:           if (result.displayContent) {
+736:             yield { type: "content", content: result.displayContent };
+737:           }
+738: 
+739:           if (result.shouldEmitTokenCount && result.tokenCount !== undefined) {
+740:             yield { type: "token_count", tokenCount: inputTokens + result.tokenCount };
+741:           }
+742:         }
+743: 
+744:         if (!this.deps.streamingHandler.hasYieldedToolCalls()) {
+745:           const extracted = this.deps.streamingHandler.extractToolCalls();
+746:           if (extracted.toolCalls.length > 0) {
+747:             yield { type: "tool_calls", toolCalls: extracted.toolCalls };
+748:           }
+749:         }
+750: 
+751:         const accumulatedMessage = this.deps.streamingHandler.getAccumulatedMessage();
+752:         const content = accumulatedMessage.content || "Using tools to help you...";
+753:         const toolCalls = accumulatedMessage.tool_calls;
+754: 
+755:         const assistantEntry: ChatEntry = {
+756:           type: "assistant",
+757:           content: content,
+758:           timestamp: new Date(),
+759:           toolCalls: toolCalls,
+760:         };
+761:         history.push(assistantEntry);
+762:         messages.push({ role: "assistant", content: content, tool_calls: toolCalls });
+763: 
+764:         if (toolCalls && toolCalls.length > 0) {
+765:           toolRounds++;
+766: 
+767:           // Pre-check cost limit before executing tools
+768:           this.config.recordSessionCost(inputTokens, totalOutputTokens);
+769:           if (this.config.isSessionCostLimitReached()) {
+770:             const sessionCost = this.config.getSessionCost();
+771:             const sessionCostLimit = this.config.getSessionCostLimit();
+772:             yield { type: "content", content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before tool execution.` };
+773:             yield { type: "done" };
+774:             return;
+775:           }
+776: 
+777:           // Check for steering messages (steer mode: interrupt execution)
+778:           const mq = this.deps.messageQueue;
+779:           if (mq?.hasSteeringMessage()) {
+780:             const steering = mq.consumeSteeringMessage();
+781:             if (steering) {
+782:               yield { type: "steer", steer: { content: steering.content, source: steering.source } };
+783:               // Inject as user message and skip remaining tool calls
+784:               messages.push({ role: "user", content: steering.content });
+785:               history.push({
+786:                 type: "user",
+787:                 content: steering.content,
+788:                 timestamp: new Date(),
+789:               });
+790:               continue; // Re-enter loop to get new LLM response
+791:             }
+792:           }
+793: 
+794:           if (!this.deps.streamingHandler.hasYieldedToolCalls()) {
+795:             yield { type: "tool_calls", toolCalls: toolCalls };
+796:           }
+797: 
+798:           for (const toolCall of toolCalls) {
+799:             if (abortController?.signal.aborted) {
+800:               yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+801:               yield { type: "done" };
+802:               return;
+803:             }
+804: 
+805:             // Use streaming execution for tools that support it (bash, reason)
+806:             let result;
+807:             const STREAMING_TOOLS = ['bash', 'reason'];
+808:             if (STREAMING_TOOLS.includes(toolCall.function.name)) {
+809:               const gen = this.deps.toolHandler.executeToolStreaming(toolCall);
+810:               let genResult = await gen.next();
+811:               while (!genResult.done) {
+812:                 // Check abort between stream chunks
+813:                 if (abortController?.signal.aborted) {
+814:                   await gen.return({ success: false, error: 'Aborted' });
+815:                   yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+816:                   yield { type: "done" };
+817:                   return;
+818:                 }
+819:                 yield {
+820:                   type: "tool_stream",
+821:                   toolStreamData: {
+822:                     toolCallId: toolCall.id,
+823:                     toolName: toolCall.function.name,
+824:                     delta: genResult.value,
+825:                   },
+826:                 };
+827:                 genResult = await gen.next();
+828:               }
+829:               result = genResult.value ?? { success: false, error: 'Tool returned no result' };
+830:             } else {
+831:               result = await this.executeToolViaLane(toolCall);
+832:             }
+833: 
+834:             // Check abort after tool execution completes
+835:             if (abortController?.signal.aborted) {
+836:               yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+837:               yield { type: "done" };
+838:               return;
+839:             }
+840: 
+841:             // Apply semantic truncation if tool output is very large (> 20k chars)
+842:             const RAW_OUTPUT_LIMIT = 20_000;
+843:             if (result?.output && result.output.length > RAW_OUTPUT_LIMIT) {
+844:               const truncResult = semanticTruncate(result.output, { maxChars: RAW_OUTPUT_LIMIT });
+845:               if (truncResult.truncated) {
+846:                 result = {
+847:                   ...result,
+848:                   output: truncResult.output,
+849:                 };
+850:               }
+851:             }
+852: 
+853:             // --- Disk-backed tool result (Manus AI #19) ---
+854:             const rawStreamContent = sanitizeToolResult(result?.success ? result.output || "Success" : result?.error || "Error");
+855:             if (toolCall.id) {
+856:               getRestorableCompressor().writeToolResult(toolCall.id, rawStreamContent);
+857:             }
+858: 
+859:             // --- Observation Variator (Manus AI #17) ---
+860:             const streamVariator = getObservationVariator();
+861:             streamVariator.nextTurn();
+862:             const variedStreamContent = streamVariator.wrapToolResult(toolCall.function.name, rawStreamContent);
+863: 
+864:             const toolResultEntry: ChatEntry = {
+865:               type: "tool_result",
+866:               content: result?.success ? result.output || "Success" : result?.error || "Error occurred",
+867:               timestamp: new Date(),
+868:               toolCall: toolCall,
+869:               toolResult: result,
+870:             };
+871:             history.push(toolResultEntry);
+872:             yield { type: "tool_result", toolCall, toolResult: result };
+873: 
+874:             // Note: 'name' is required for Gemini API to match functionResponse with functionCall
+875:             messages.push({
+876:               role: "tool",
+877:               content: variedStreamContent,
+878:               tool_call_id: toolCall.id,
+879:               name: toolCall.function.name,
+880:             } as CodeBuddyMessage);
+881:           }
+882: 
+883:           inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
+884:           const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;
+885:           totalOutputTokens += currentOutputTokens;
+886:           yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
+887: 
+888:           // Run after_turn middleware (handles cost recording + limit)
+889:           if (pipeline) {
+890:             const ctx = this.buildMiddlewareContext(
+891:               toolRounds, inputTokens, totalOutputTokens, history, messages, true, abortController
+892:             );
+893:             const mwResult = await pipeline.runAfterTurn(ctx);
+894:             if (mwResult.action === 'stop') {
+895:               if (mwResult.message) yield { type: "content", content: `\n\n${mwResult.message}` };
+896:               yield { type: "done" };
+897:               return;
+898:             }
+899:             if (mwResult.action === 'warn' && mwResult.message) {
+900:               yield { type: "content", content: `\n${mwResult.message}\n` };
+901:             }
+902:           } else {
+903:             // Legacy inline cost check when no pipeline
+904:             this.config.recordSessionCost(inputTokens, totalOutputTokens);
+905:             if (this.config.isSessionCostLimitReached()) {
+906:               const sessionCost = this.config.getSessionCost();
+907:               const sessionCostLimit = this.config.getSessionCostLimit();
+908:               yield {
+909:                 type: "content",
+910:                 content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
+911:               };
+912:               yield { type: "done" };
+913:               return;
+914:             }
+915:           }
+916:         } else {
+917:           // Fire-and-forget auto-capture on final assistant response (streaming)
+918:           try {
+919:             const { getAutoCaptureManager } = await import('../../memory/auto-capture.js');
+920:             const acm = getAutoCaptureManager();
+921:             if (acm) {
+922:               acm.processMessage('assistant', content || '').catch(() => {});
+923:             }
+924:           } catch { /* auto-capture optional */ }
+925: 
+926:           break;
+927:         }
+928:       }
+929: 
+930:       if (toolRounds >= maxToolRounds) {
+931:         yield { type: "content", content: "\n\nMaximum tool execution rounds reached." };
+932:       }
+933: 
+934:       this.config.recordSessionCost(inputTokens, totalOutputTokens);
+935:       if (this.config.isSessionCostLimitReached()) {
+936:         const sessionCost = this.config.getSessionCost();
+937:         const sessionCostLimit = this.config.getSessionCostLimit();
+938:         yield {
+939:           type: "content",
+940:           content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
+941:         };
+942:       }
+943: 
+944:       // Process followup/collect messages if any are queued
+945:       const mqEnd = this.deps.messageQueue;
+946:       if (mqEnd?.hasPendingMessages()) {
+947:         const mode = mqEnd.getMode();
+948:         if (mode === 'followup') {
+949:           const followups = mqEnd.drain();
+950:           for (const msg of followups) {
+951:             messages.push({ role: "user", content: msg.content });
+952:             history.push({ type: "user", content: msg.content, timestamp: msg.timestamp });
+953:           }
+954:           // Signal that followup messages need re-processing (caller handles)
+955:           yield { type: "steer", steer: { content: `${followups.length} followup message(s) queued`, source: 'queue' } };
+956:         } else if (mode === 'collect') {
+957:           const collected = mqEnd.collect();
+958:           if (collected) {
+959:             messages.push({ role: "user", content: collected });
+960:             history.push({ type: "user", content: collected, timestamp: new Date() });
+961:             yield { type: "steer", steer: { content: collected, source: 'collect' } };
+962:           }
+963:         }
+964:       }
+965: 
+966:       yield { type: "done" };
+967:     } catch (error) {
+968:       if (abortController?.signal.aborted) {
+969:         yield { type: "content", content: "\n\n[Operation cancelled by user]" };
+970:         yield { type: "done" };
+971:         return;
+972:       }
+973: 
+974:       const errorMessage = getErrorMessage(error);
+975:       const errorEntry: ChatEntry = {
+976:         type: "assistant",
+977:         content: `Sorry, I encountered an error: ${errorMessage}`,
+978:         timestamp: new Date(),
+979:       };
+980:       history.push(errorEntry);
+981:       messages.push({ role: "assistant", content: errorEntry.content });
+982:       yield { type: "content", content: errorEntry.content };
+983:       yield { type: "done" };
+984:     }
+985:   }
+986: }
+987: 

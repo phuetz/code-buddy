@@ -9,14 +9,16 @@
  * - Multi-path exploration
  */
 
-import { EventEmitter } from 'events';
 
 // Mock CodeBuddyClient before imports
+
+import { EventEmitter } from 'events';
+
 const mockChat = jest.fn();
 jest.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: mockChat,
-  })),
+  }; }),
 }));
 
 // Mock types
@@ -803,7 +805,7 @@ describe('ExtendedThinkingEngine', () => {
 
       // Setup thoughts that trigger branching
       let callCount = 0;
-      mockChat.mockImplementation(() => {
+      mockChat.mockImplementation(function() {
         callCount++;
         if (callCount <= 3) {
           return Promise.resolve({
@@ -837,7 +839,7 @@ describe('ExtendedThinkingEngine', () => {
       engine.setConfig({ maxChains: 2 });
 
       let callCount = 0;
-      mockChat.mockImplementation(() => {
+      mockChat.mockImplementation(function() {
         callCount++;
         if (callCount <= 5) {
           return Promise.resolve({
@@ -885,7 +887,7 @@ describe('ExtendedThinkingEngine', () => {
       // This is a complex scenario that requires multiple chains to complete
       // For now, we test the basic self-consistency path
       let callCount = 0;
-      mockChat.mockImplementation(() => {
+      mockChat.mockImplementation(function() {
         callCount++;
         return Promise.resolve({
           choices: [{
@@ -1210,7 +1212,7 @@ describe('ExtendedThinkingEngine', () => {
 
     it('should respect maxTime limit', async () => {
       // Mock slow responses
-      mockChat.mockImplementation(() => {
+      mockChat.mockImplementation(function() {
         return new Promise(resolve => {
           setTimeout(() => {
             resolve({

@@ -1,0 +1,341 @@
+Contents of src/performance/tool-cache.ts:
+1: /**
+2:  * Tool Cache
+3:  *
+4:  * Caches results of deterministic tool calls to avoid redundant operations.
+5:  * Uses semantic similarity to match similar queries.
+6:  */
+7: 
+8: import { EventEmitter } from 'events';
+9: import { SemanticCache } from '../utils/semantic-cache.js';
+10: import { ToolResult } from '../types/index.js';
+11: 
+12: // ============================================================================
+13: // Types
+14: // ============================================================================
+15: 
+16: export interface ToolCacheConfig {
+17:   enabled: boolean;
+18:   ttlMs: number;
+19:   maxEntries: number;
+20:   similarityThreshold: number;
+21:   cacheableTools: Set<string>;
+22:   excludePatterns: RegExp[];
+23: }
+24: 
+25: export interface CachedToolResult extends ToolResult {
+26:   cached: boolean;
+27:   cacheKey?: string;
+28:   similarity?: number;
+29: }
+30: 
+31: export interface ToolCacheStats {
+32:   hits: number;
+33:   misses: number;
+34:   hitRate: number;
+35:   savedCalls: number;
+36:   savedTime: number; // Estimated ms saved
+37: }
+38: 
+39: // ============================================================================
+40: // Default Configuration
+41: // ============================================================================
+42: 
+43: const DEFAULT_CONFIG: ToolCacheConfig = {
+44:   enabled: true,
+45:   ttlMs: 5 * 60 * 1000, // 5 minutes
+46:   maxEntries: 500,
+47:   similarityThreshold: 0.9,
+48:   cacheableTools: new Set([
+49:     'search',
+50:     'grep',
+51:     'rg',
+52:     'glob',
+53:     'find_files',
+54:     'list_files',
+55:     'view_file',
+56:     'symbol_search',
+57:     'find_references',
+58:     'web_search',
+59:     'git_status',
+60:     'git_log',
+61:   ]),
+62:   excludePatterns: [
+63:     /--force/i,
+64:     /--no-cache/i,
+65:     /random|uuid|timestamp/i,
+66:   ],
+67: };
+68: 
+69: // Tools that modify state (never cache)
+70: const MUTABLE_TOOLS = new Set([
+71:   'bash',
+72:   'str_replace_editor',
+73:   'create_file',
+74:   'delete_file',
+75:   'move_file',
+76:   'git_commit',
+77:   'git_push',
+78:   'git_checkout',
+79:   'npm_install',
+80: ]);
+81: 
+82: // ============================================================================
+83: // Tool Cache Class
+84: // ============================================================================
+85: 
+86: export class ToolCache extends EventEmitter {
+87:   private cache: SemanticCache<ToolResult>;
+88:   private config: ToolCacheConfig;
+89:   private stats: ToolCacheStats;
+90:   private avgToolTime: number = 500; // Estimated average tool execution time in ms
+91: 
+92:   constructor(config: Partial<ToolCacheConfig> = {}) {
+93:     super();
+94:     this.config = { ...DEFAULT_CONFIG, ...config };
+95:     this.cache = new SemanticCache<ToolResult>({
+96:       maxEntries: this.config.maxEntries,
+97:       ttlMs: this.config.ttlMs,
+98:       similarityThreshold: this.config.similarityThreshold,
+99:       persistToDisk: true,
+100:       cachePath: '.codebuddy/cache/tool-cache.json',
+101:     });
+102:     this.stats = {
+103:       hits: 0,
+104:       misses: 0,
+105:       hitRate: 0,
+106:       savedCalls: 0,
+107:       savedTime: 0,
+108:     };
+109: 
+110:     // Forward cache events
+111:     this.cache.on('cache:hit', (data) => this.emit('hit', data));
+112:     this.cache.on('cache:miss', (data) => this.emit('miss', data));
+113:   }
+114: 
+115:   /**
+116:    * Check if a tool call can be cached
+117:    */
+118:   isCacheable(toolName: string, args: Record<string, unknown>): boolean {
+119:     if (!this.config.enabled) return false;
+120: 
+121:     // Never cache mutable tools
+122:     if (MUTABLE_TOOLS.has(toolName)) return false;
+123: 
+124:     // Check if tool is in cacheable list
+125:     if (!this.config.cacheableTools.has(toolName)) return false;
+126: 
+127:     // Check exclude patterns
+128:     const argsStr = JSON.stringify(args);
+129:     for (const pattern of this.config.excludePatterns) {
+130:       if (pattern.test(argsStr)) return false;
+131:     }
+132: 
+133:     return true;
+134:   }
+135: 
+136:   /**
+137:    * Get cached result or execute tool
+138:    */
+139:   async getOrExecute(
+140:     toolName: string,
+141:     args: Record<string, unknown>,
+142:     executeFn: () => Promise<ToolResult>
+143:   ): Promise<CachedToolResult> {
+144:     // Check if cacheable
+145:     if (!this.isCacheable(toolName, args)) {
+146:       const result = await executeFn();
+147:       return { ...result, cached: false };
+148:     }
+149: 
+150:     // Create cache key
+151:     const cacheKey = this.createCacheKey(toolName, args);
+152: 
+153:     // Try cache
+154:     const { result, cached, similarity } = await this.cache.getOrCompute(
+155:       cacheKey,
+156:       executeFn,
+157:       { toolName, args }
+158:     );
+159: 
+160:     // Update stats
+161:     if (cached) {
+162:       this.stats.hits++;
+163:       this.stats.savedCalls++;
+164:       this.stats.savedTime += this.avgToolTime;
+165:     } else {
+166:       this.stats.misses++;
+167:     }
+168:     this.updateHitRate();
+169: 
+170:     return {
+171:       ...result,
+172:       cached,
+173:       cacheKey,
+174:       similarity,
+175:     };
+176:   }
+177: 
+178:   /**
+179:    * Invalidate cache for specific tool or pattern
+180:    */
+181:   invalidate(toolName?: string, pattern?: string | RegExp): number {
+182:     if (toolName) {
+183:       return this.cache.invalidate(new RegExp(`^${toolName}:`));
+184:     }
+185:     if (pattern) {
+186:       return this.cache.invalidate(pattern);
+187:     }
+188:     return 0;
+189:   }
+190: 
+191:   /**
+192:    * Invalidate cache entries affected by file changes
+193:    */
+194:   invalidateForFile(filePath: string): number {
+195:     // Invalidate any cache entries that reference this file
+196:     return this.cache.invalidate(new RegExp(filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+197:   }
+198: 
+199:   /**
+200:    * Clear entire cache
+201:    */
+202:   clear(): void {
+203:     this.cache.clear();
+204:     this.resetStats();
+205:   }
+206: 
+207:   /**
+208:    * Get cache statistics
+209:    */
+210:   getStats(): ToolCacheStats {
+211:     return { ...this.stats };
+212:   }
+213: 
+214:   /**
+215:    * Reset statistics
+216:    */
+217:   resetStats(): void {
+218:     this.stats = {
+219:       hits: 0,
+220:       misses: 0,
+221:       hitRate: 0,
+222:       savedCalls: 0,
+223:       savedTime: 0,
+224:     };
+225:   }
+226: 
+227:   /**
+228:    * Get detailed cache info
+229:    */
+230:   getCacheInfo(): {
+231:     stats: ToolCacheStats;
+232:     cacheStats: ReturnType<SemanticCache['getStats']>;
+233:     config: ToolCacheConfig;
+234:   } {
+235:     return {
+236:       stats: this.getStats(),
+237:       cacheStats: this.cache.getStats(),
+238:       config: { ...this.config },
+239:     };
+240:   }
+241: 
+242:   /**
+243:    * Update configuration
+244:    */
+245:   updateConfig(config: Partial<ToolCacheConfig>): void {
+246:     this.config = { ...this.config, ...config };
+247:   }
+248: 
+249:   /**
+250:    * Dispose cache
+251:    */
+252:   dispose(): void {
+253:     this.cache.dispose();
+254:     this.removeAllListeners();
+255:   }
+256: 
+257:   // ============================================================================
+258:   // Private Methods
+259:   // ============================================================================
+260: 
+261:   private createCacheKey(toolName: string, args: Record<string, unknown>): string {
+262:     // Sort args for consistent key
+263:     const sortedArgs = Object.keys(args)
+264:       .sort()
+265:       .map((k) => `${k}=${JSON.stringify(args[k])}`)
+266:       .join('&');
+267:     return `${toolName}:${sortedArgs}`;
+268:   }
+269: 
+270:   private updateHitRate(): void {
+271:     const total = this.stats.hits + this.stats.misses;
+272:     this.stats.hitRate = total > 0 ? this.stats.hits / total : 0;
+273:   }
+274: }
+275: 
+276: // ============================================================================
+277: // Singleton Instance
+278: // ============================================================================
+279: 
+280: let toolCacheInstance: ToolCache | null = null;
+281: 
+282: export function getToolCache(config?: Partial<ToolCacheConfig>): ToolCache {
+283:   if (!toolCacheInstance) {
+284:     toolCacheInstance = new ToolCache(config);
+285:   }
+286:   return toolCacheInstance;
+287: }
+288: 
+289: export function resetToolCache(): void {
+290:   if (toolCacheInstance) {
+291:     toolCacheInstance.dispose();
+292:   }
+293:   toolCacheInstance = null;
+294: }
+295: 
+296: // ============================================================================
+297: // Utility Functions
+298: // ============================================================================
+299: 
+300: /**
+301:  * Wrap a tool executor with caching
+302:  */
+303: export function withCache<T extends ToolResult>(
+304:   toolName: string,
+305:   args: Record<string, unknown>,
+306:   executeFn: () => Promise<T>
+307: ): Promise<T & { cached: boolean }> {
+308:   const cache = getToolCache();
+309:   return cache.getOrExecute(toolName, args, executeFn) as Promise<T & { cached: boolean }>;
+310: }
+311: 
+312: /**
+313:  * Decorator for caching tool methods
+314:  */
+315: export function Cacheable(toolName?: string) {
+316:   return function (
+317:     _target: unknown,
+318:     propertyKey: string,
+319:     descriptor: PropertyDescriptor
+320:   ) {
+321:     const originalMethod = descriptor.value;
+322:     const name = toolName || propertyKey;
+323: 
+324:     descriptor.value = async function (this: unknown, ...args: unknown[]) {
+325:       const cache = getToolCache();
+326:       const argsObj = (args[0] as Record<string, unknown>) || {};
+327: 
+328:       if (!cache.isCacheable(name, argsObj)) {
+329:         return originalMethod.apply(this, args);
+330:       }
+331: 
+332:       return cache.getOrExecute(name, argsObj, () =>
+333:         originalMethod.apply(this, args)
+334:       );
+335:     };
+336: 
+337:     return descriptor;
+338:   };
+339: }
+340: 

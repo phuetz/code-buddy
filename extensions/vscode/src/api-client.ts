@@ -1,6 +1,5 @@
 import type {
   ChatResponse,
-  CommandRequest,
   CommandResponse,
   HealthStatus,
   ServerMetrics,
@@ -52,7 +51,6 @@ export class CodeBuddyClient {
   }
 
   async executeCommand(command: string, args?: Record<string, unknown>): Promise<CommandResponse> {
-    const body: CommandRequest = { command, args };
     const res = await this.fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

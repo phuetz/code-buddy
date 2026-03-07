@@ -1,0 +1,59 @@
+Contents of smoke-test.mjs:
+1: import { execSync } from 'child_process';
+2: import { readFileSync, unlinkSync, existsSync } from 'fs';
+3: import path from 'path';
+4: 
+5: const DB_FILE = path.join(process.cwd(), 'tasks.json');
+6: 
+7: function runCLI(args) {
+8:   return execSync(`node index.js ${args.join(' ')}`, { encoding: 'utf8' }).trim();
+9: }
+10: 
+11: function setupTest() {
+12:   if (existsSync(DB_FILE)) {
+13:     unlinkSync(DB_FILE);
+14:   }
+15: }
+16: 
+17: console.log('Running smoke tests...');
+18: 
+19: setupTest();
+20: 
+21: // Test 1: Add a task
+22: console.log('Adding task: "Buy groceries"');
+23: let output = runCLI(['add', 'Buy groceries']);
+24: if (output !== 'Task added: "Buy groceries"') {
+25:   console.error(`Test 1 Failed: Expected 'Task added: "Buy groceries"', Got '${output}'`);
+26:   process.exit(1);
+27: }
+28: 
+29: // Test 2: List tasks
+30: console.log('Listing tasks...');
+31: output = runCLI(['list']);
+32: console.assert(output.includes('1. [ ] Buy groceries'), `Test 2 Failed: ${output}`);
+33: 
+34: // Test 3: Complete a task
+35: console.log('Completing task 1...');
+36: output = runCLI(['complete', '1']);
+37: console.assert(output === 'Task 1 marked as complete.', `Test 3 Failed: ${output}`);
+38: 
+39: // Test 4: List tasks (should be completed)
+40: console.log('Listing tasks (should be completed)...');
+41: output = runCLI(['list']);
+42: console.assert(output.includes('1. [x] Buy groceries'), `Test 4 Failed: ${output}`);
+43: 
+44: // Test 5: Remove a task
+45: console.log('Removing task 1...');
+46: output = runCLI(['remove', '1']);
+47: console.assert(output === 'Task 1 removed.', `Test 5 Failed: ${output}`);
+48: 
+49: // Test 6: List tasks (should be empty)
+50: console.log('Listing tasks (should be empty)...');
+51: output = runCLI(['list']);
+52: console.assert(output === 'No tasks found.', `Test 6 Failed: ${output}`);
+53: 
+54: console.log('All smoke tests passed!');
+55: 
+56: // Clean up
+57: setupTest();
+58: 

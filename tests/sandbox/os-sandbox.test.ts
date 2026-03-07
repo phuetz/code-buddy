@@ -11,7 +11,7 @@ import {
 } from "../../src/sandbox/os-sandbox";
 import * as os from "os";
 
-jest.setTimeout(30000);
+vi.setConfig({ testTimeout: 30000 });
 
 describe("OSSandbox", () => {
   let sandbox: OSSandbox;

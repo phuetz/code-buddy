@@ -1,0 +1,23 @@
+Updated public/index.html with 19 additions
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,0 +1,19 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++    <meta charset="UTF-8">
++    <meta name="viewport" content="width=device-width, initial-scale=1.0">
++    <title>Notes Board</title>
++    <link rel="stylesheet" href="style.css">
++</head>
++<body>
++    <h1>Notes Board</h1>
++    <form id="note-form">
++        <input type="text" id="note-content" placeholder="New note content" required>
++        <button type="submit">Add Note</button>
++    </form>
++    <div id="notes-container"></div>
++
++    <script src="app.js"></script>
++</body>
++</html>

@@ -1,0 +1,5 @@
+Updated e2e-test-output.txt with 1 addition
+--- a/e2e-test-output.txt
++++ b/e2e-test-output.txt
+@@ -1,0 +1,1 @@
++Hello from E2E Test

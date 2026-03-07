@@ -5,6 +5,8 @@
  * Tests indexing, retrieval strategies, and query processing.
  */
 
+import { promises } from 'fs';
+
 import {
   CodebaseRAG,
   createCodebaseRAG,
@@ -18,7 +20,8 @@ import {
 } from '../../src/context/codebase-rag/types';
 
 // Mock fs/promises
-jest.mock('fs', () => ({
+jest.mock('fs', async () => {
+  const impl = {
   promises: {
     readFile: jest.fn(),
     writeFile: jest.fn(),
@@ -26,11 +29,13 @@ jest.mock('fs', () => ({
     mkdir: jest.fn(),
     access: jest.fn(),
   },
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock path
-jest.mock('path', () => {
-  const originalPath = jest.requireActual('path');
+jest.mock('path', async () => {
+  const originalPath = await vi.importActual('path');
   return {
     ...originalPath,
     join: jest.fn((...args: string[]) => args.join('/')),
@@ -51,12 +56,12 @@ jest.mock('../../src/utils/logger', () => ({
 
 // Mock embeddings
 jest.mock('../../src/context/codebase-rag/embeddings', () => ({
-  createEmbeddingProvider: jest.fn(() => ({
+  createEmbeddingProvider: jest.fn(function() { return {
     embed: jest.fn().mockResolvedValue(new Array(384).fill(0.1)),
     embedBatch: jest.fn().mockResolvedValue([new Array(384).fill(0.1)]),
     getDimension: jest.fn().mockReturnValue(384),
     getModelName: jest.fn().mockReturnValue('mock-model'),
-  })),
+  }; }),
   cosineSimilarity: jest.fn((a: number[], b: number[]) => {
     // Simple mock cosine similarity
     let dot = 0;
@@ -69,7 +74,7 @@ jest.mock('../../src/context/codebase-rag/embeddings', () => ({
 
 // Mock vector-store
 jest.mock('../../src/context/codebase-rag/vector-store', () => ({
-  createVectorStore: jest.fn(() => ({
+  createVectorStore: jest.fn(function() { return {
     add: jest.fn().mockResolvedValue(undefined),
     addBatch: jest.fn().mockResolvedValue(undefined),
     search: jest.fn().mockResolvedValue([
@@ -80,20 +85,20 @@ jest.mock('../../src/context/codebase-rag/vector-store', () => ({
     deleteByFilter: jest.fn().mockResolvedValue(0),
     count: jest.fn().mockResolvedValue(0),
     clear: jest.fn().mockResolvedValue(undefined),
-  })),
-  InMemoryVectorStore: jest.fn().mockImplementation(() => ({
+  }; }),
+  InMemoryVectorStore: jest.fn().mockImplementation(function() { return {
     add: jest.fn().mockResolvedValue(undefined),
     search: jest.fn().mockResolvedValue([]),
     delete: jest.fn().mockResolvedValue(undefined),
     clear: jest.fn().mockResolvedValue(undefined),
     saveToDisk: jest.fn().mockResolvedValue(undefined),
     dispose: jest.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 // Mock chunker
 jest.mock('../../src/context/codebase-rag/chunker', () => ({
-  createChunker: jest.fn(() => ({
+  createChunker: jest.fn(function() { return {
     chunkFile: jest.fn((content: string, filePath: string) => {
       const mockChunk: CodeChunk = {
         id: `chunk-${Date.now()}`,
@@ -111,7 +116,7 @@ jest.mock('../../src/context/codebase-rag/chunker', () => ({
     }),
     getConfig: jest.fn().mockReturnValue(DEFAULT_RAG_CONFIG),
     updateConfig: jest.fn(),
-  })),
+  }; }),
   detectLanguage: jest.fn((filePath: string) => {
     if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) return 'typescript';
     if (filePath.endsWith('.js') || filePath.endsWith('.jsx')) return 'javascript';
@@ -121,7 +126,7 @@ jest.mock('../../src/context/codebase-rag/chunker', () => ({
   }),
 }));
 
-const fsPromises = require('fs').promises;
+const fsPromises = vi.mocked(promises);
 
 describe('CodebaseRAG', () => {
   let rag: CodebaseRAG;

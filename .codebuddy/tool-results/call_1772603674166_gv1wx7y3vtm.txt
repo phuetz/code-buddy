@@ -1,0 +1,54 @@
+Contents of .grok/README.md:
+1: # .grok Directory
+2: 
+3: This directory contains configuration and customization files for [Code Buddy](https://github.com/phuetz/code-buddy).
+4: 
+5: ## Files
+6: 
+7: - **GROK.md** - Custom instructions that Grok follows when working in this project
+8: - **settings.json** - Project-specific settings
+9: - **hooks.json** - Automated hooks (pre-commit, post-edit, etc.)
+10: - **mcp.json** - MCP server configurations (committable, shared with team)
+11: - **security.json** - Security mode configuration
+12: - **commands/** - Custom slash commands
+13: 
+14: ## Custom Commands
+15: 
+16: Create `.md` files in the `commands/` directory to add custom slash commands.
+17: 
+18: Example `commands/my-command.md`:
+19: ```markdown
+20: ---
+21: description: My custom command
+22: ---
+23: 
+24: # My Command
+25: 
+26: Your prompt template here. Use $1, $2 for arguments.
+27: ```
+28: 
+29: Then use it with: `/my-command arg1 arg2`
+30: 
+31: ## Hooks
+32: 
+33: Configure automated actions in `hooks.json`:
+34: - `pre-commit` - Run before git commit
+35: - `post-edit` - Run after file edit
+36: - `on-file-change` - Run when files change
+37: 
+38: ## MCP Servers
+39: 
+40: Configure MCP servers in `mcp.json` to extend Grok's capabilities.
+41: This file can be committed to share servers with your team.
+42: 
+43: ## Security
+44: 
+45: Configure security modes in `security.json`:
+46: - `suggest` - All changes require approval (safest)
+47: - `auto-edit` - File edits auto-apply, bash requires approval
+48: - `full-auto` - Fully autonomous but sandboxed
+49: 
+50: ## More Information
+51: 
+52: See the [Code Buddy documentation](https://github.com/phuetz/code-buddy) for more details.
+53: 

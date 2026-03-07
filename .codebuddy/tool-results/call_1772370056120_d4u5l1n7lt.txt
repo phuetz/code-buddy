@@ -1,0 +1,256 @@
+Contents of src/app/application-factory.ts:
+1: /**
+2:  * Application Factory
+3:  *
+4:  * Factory for creating and configuring the application.
+5:  * Centralizes initialization logic extracted from index.ts.
+6:  */
+7: 
+8: import * as dotenv from 'dotenv';
+9: import { getSettingsManager } from '../utils/settings-manager.js';
+10: import { getCredentialManager } from '../security/credential-manager.js';
+11: import { getCrashHandler } from '../errors/crash-handler.js';
+12: import { disposeAll } from '../utils/disposable.js';
+13: import { logger } from '../utils/logger.js';
+14: import type { ApplicationConfig, CommandLineOptions } from './types.js';
+15: 
+16: // ============================================================================
+17: // Configuration Loading
+18: // ============================================================================
+19: 
+20: /**
+21:  * Load environment variables
+22:  */
+23: export function loadEnvironment(): void {
+24:   dotenv.config();
+25: }
+26: 
+27: /**
+28:  * Load API key from various sources
+29:  * Priority: environment > secure credential storage > legacy settings
+30:  */
+31: export function loadApiKey(): string | undefined {
+32:   // Check environment first
+33:   const envKey = process.env.GROK_API_KEY;
+34:   if (envKey) return envKey;
+35: 
+36:   // Then secure credential manager
+37:   const credManager = getCredentialManager();
+38:   const credKey = credManager.getApiKey();
+39:   if (credKey) return credKey;
+40: 
+41:   // Finally legacy settings
+42:   const settingsManager = getSettingsManager();
+43:   return settingsManager.getApiKey();
+44: }
+45: 
+46: /**
+47:  * Load base URL from settings or environment
+48:  */
+49: export function loadBaseURL(): string {
+50:   const envURL = process.env.GROK_BASE_URL;
+51:   if (envURL) return envURL;
+52: 
+53:   const manager = getSettingsManager();
+54:   return manager.getBaseURL();
+55: }
+56: 
+57: /**
+58:  * Load model from settings or environment
+59:  */
+60: export function loadModel(): string | undefined {
+61:   const envModel = process.env.GROK_MODEL;
+62:   if (envModel) return envModel;
+63: 
+64:   try {
+65:     const manager = getSettingsManager();
+66:     return manager.getCurrentModel();
+67:   } catch {
+68:     return undefined;
+69:   }
+70: }
+71: 
+72: /**
+73:  * Ensure user settings directory exists
+74:  */
+75: export function ensureUserSettings(): void {
+76:   try {
+77:     const manager = getSettingsManager();
+78:     manager.loadUserSettings();
+79:   } catch {
+80:     // Silently ignore - directory may not exist yet
+81:   }
+82: }
+83: 
+84: // ============================================================================
+85: // Process Signal Handlers
+86: // ============================================================================
+87: 
+88: /**
+89:  * Setup process signal handlers for graceful shutdown
+90:  */
+91: export function setupSignalHandlers(): void {
+92:   const crashHandler = getCrashHandler();
+93:   crashHandler.initialize();
+94: 
+95:   process.on('SIGTERM', async () => {
+96:     crashHandler.restoreTerminal();
+97:     console.log('\nGracefully shutting down...');
+98:     await disposeAll();
+99:     process.exit(0);
+100:   });
+101: 
+102:   process.on('SIGINT', async () => {
+103:     crashHandler.restoreTerminal();
+104:     await disposeAll();
+105:     process.exit(0);
+106:   });
+107: 
+108:   process.on('uncaughtException', (error) => {
+109:     const crashFile = crashHandler.handleCrash(error, 'Uncaught exception');
+110:     logger.error('\nUnexpected error occurred:', error);
+111:     if (crashFile) {
+112:       logger.error(`\nCrash context saved to: ${crashFile}`);
+113:       logger.error('You can resume your session with: grok --resume');
+114:     }
+115:     process.exit(1);
+116:   });
+117: 
+118:   process.on('unhandledRejection', (reason) => {
+119:     const error = reason instanceof Error ? reason : new Error(String(reason));
+120:     const crashFile = crashHandler.handleCrash(error, 'Unhandled rejection');
+121:     logger.error('\nUnhandled promise rejection:', error);
+122:     if (crashFile) {
+123:       logger.error(`\nCrash context saved to: ${crashFile}`);
+124:       logger.error('You can resume your session with: grok --resume');
+125:     }
+126:     process.exit(1);
+127:   });
+128: }
+129: 
+130: // ============================================================================
+131: // Application Configuration
+132: // ============================================================================
+133: 
+134: /**
+135:  * Build application configuration from command line options
+136:  */
+137: export function buildConfig(options: CommandLineOptions): ApplicationConfig {
+138:   const config: ApplicationConfig = {
+139:     apiKey: options.apiKey ?? loadApiKey(),
+140:     baseURL: options.baseURL ?? loadBaseURL(),
+141:     model: options.model ?? loadModel(),
+142:     maxToolRounds: options.maxToolRounds,
+143:     securityMode: options.securityMode,
+144:     dryRun: options.dryRun,
+145:     cache: options.cache,
+146:     selfHeal: options.selfHeal,
+147:     verbose: options.verbose,
+148:     context: options.context,
+149:     systemPrompt: options.systemPrompt,
+150:     agent: options.agent,
+151:     probeTools: options.probeTools,
+152:   };
+153: 
+154:   return config;
+155: }
+156: 
+157: /**
+158:  * Validate application configuration
+159:  */
+160: export function validateConfig(config: ApplicationConfig): { valid: boolean; errors: string[] } {
+161:   const errors: string[] = [];
+162: 
+163:   if (!config.apiKey) {
+164:     errors.push('API key is required. Set GROK_API_KEY environment variable or use --api-key option.');
+165:   }
+166: 
+167:   return {
+168:     valid: errors.length === 0,
+169:     errors,
+170:   };
+171: }
+172: 
+173: // ============================================================================
+174: // Application Factory
+175: // ============================================================================
+176: 
+177: /**
+178:  * Application bootstrap options
+179:  */
+180: export interface BootstrapOptions {
+181:   /** Skip environment loading (for testing) */
+182:   skipEnv?: boolean;
+183:   /** Skip signal handlers (for testing) */
+184:   skipSignals?: boolean;
+185:   /** Custom configuration */
+186:   config?: Partial<ApplicationConfig>;
+187: }
+188: 
+189: /**
+190:  * Bootstrap the application
+191:  * Sets up environment, signal handlers, and returns configuration
+192:  */
+193: export async function bootstrap(options: BootstrapOptions = {}): Promise<ApplicationConfig> {
+194:   // Load environment
+195:   if (!options.skipEnv) {
+196:     loadEnvironment();
+197:   }
+198: 
+199:   // Setup signal handlers
+200:   if (!options.skipSignals) {
+201:     setupSignalHandlers();
+202:   }
+203: 
+204:   // Ensure settings directory
+205:   ensureUserSettings();
+206: 
+207:   // Build configuration
+208:   const config: ApplicationConfig = {
+209:     apiKey: loadApiKey(),
+210:     baseURL: loadBaseURL(),
+211:     model: loadModel(),
+212:     ...options.config,
+213:   };
+214: 
+215:   return config;
+216: }
+217: 
+218: /**
+219:  * Save command line settings to persistent storage
+220:  */
+221: export async function saveSettings(apiKey?: string, baseURL?: string): Promise<void> {
+222:   try {
+223:     if (apiKey) {
+224:       const credManager = getCredentialManager();
+225:       credManager.setApiKey(apiKey);
+226:       const status = credManager.getSecurityStatus();
+227:       if (status.encryptionEnabled) {
+228:         console.log('✅ API key saved securely (encrypted) to ~/.codebuddy/credentials.enc');
+229:       } else {
+230:         console.log('✅ API key saved to ~/.codebuddy/credentials.enc');
+231:         console.log('⚠️ Consider enabling encryption for better security');
+232:       }
+233:     }
+234: 
+235:     if (baseURL) {
+236:       const settingsManager = getSettingsManager();
+237:       settingsManager.updateUserSetting('baseURL', baseURL);
+238:       console.log('✅ Base URL saved to ~/.codebuddy/user-settings.json');
+239:     }
+240:   } catch (error) {
+241:     logger.warn('Could not save settings', {
+242:       error: error instanceof Error ? error.message : 'Unknown error'
+243:     });
+244:   }
+245: }
+246: 
+247: // ============================================================================
+248: // Exports
+249: // ============================================================================
+250: 
+251: export {
+252:   type ApplicationConfig,
+253:   type CommandLineOptions,
+254: } from './types.js';
+255: 

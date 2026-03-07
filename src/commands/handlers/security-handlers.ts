@@ -277,15 +277,66 @@ ${error instanceof Error ? error.message : String(error)}`,
  * Inspired by Claude Code's /security-review
  */
 export async function handleSecurityReview(args: string[]): Promise<CommandHandlerResult> {
-  const reviewer = getSecurityReviewAgent();
+  const knownActions = new Set([
+    'scan',
+    'full',
+    'quick',
+    'deps',
+    'dependencies',
+    'secrets',
+    'credentials',
+    'permissions',
+    'perms',
+    'network',
+    'injection',
+    'xss',
+    'auth',
+    'authentication',
+    'report',
+    'help',
+  ]);
 
-  // Initialize if needed
-  if (!reviewer.isReady()) {
-    await reviewer.initialize();
+  if (args.length === 0) {
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: 'Usage: /security-review <path> [--quick] [--format <text|json|sarif|markdown>]\n\nUse /security-review help for detailed commands.',
+        timestamp: new Date(),
+      },
+    };
   }
 
-  const action = args[0]?.toLowerCase() || 'scan';
-  const target = args.slice(1).join(' ') || process.cwd();
+  let format: 'text' | 'json' | 'sarif' | 'markdown' = 'text';
+  let quickFlag = false;
+  const positional: string[] = [];
+
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === '--quick') {
+      quickFlag = true;
+      continue;
+    }
+    if (arg === '--format') {
+      const nextValue = args[index + 1]?.toLowerCase();
+      if (nextValue === 'json' || nextValue === 'sarif' || nextValue === 'markdown' || nextValue === 'text') {
+        format = nextValue;
+        index++;
+      }
+      continue;
+    }
+    positional.push(arg);
+  }
+
+  const firstArg = positional[0]?.toLowerCase();
+  const action = firstArg && knownActions.has(firstArg)
+    ? firstArg
+    : quickFlag
+      ? 'quick'
+      : 'scan';
+  const target = firstArg && knownActions.has(firstArg)
+    ? positional.slice(1).join(' ') || process.cwd()
+    : positional.join(' ');
 
   // Help command
   if (action === 'help') {
@@ -325,6 +376,24 @@ export async function handleSecurityReview(args: string[]): Promise<CommandHandl
         timestamp: new Date(),
       },
     };
+  }
+
+  if (action !== 'report' && !target) {
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: 'Usage: /security-review <path> [--quick] [--format <text|json|sarif|markdown>]',
+        timestamp: new Date(),
+      },
+    };
+  }
+
+  const reviewer = getSecurityReviewAgent();
+
+  // Initialize only when we actually need to execute a scan/report.
+  if (!reviewer.isReady()) {
+    await reviewer.initialize();
   }
 
   try {
@@ -373,8 +442,7 @@ export async function handleSecurityReview(args: string[]): Promise<CommandHandl
         break;
 
       case 'report':
-        const format = args[1]?.toLowerCase() || 'text';
-        result = await reviewer.generateReport(format as 'text' | 'json' | 'sarif' | 'markdown');
+        result = await reviewer.generateReport(format);
         break;
 
       default:
@@ -514,6 +582,7 @@ function getSeverityIcon(severity: string): string {
 
 const VALID_PAIRING_CHANNELS: ChannelType[] = [
   'telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix',
+  'line', 'nostr', 'zalo', 'mattermost', 'nextcloud-talk', 'twilio-voice', 'imessage',
 ];
 
 /**
@@ -654,7 +723,9 @@ Supported channels: ${VALID_PAIRING_CHANNELS.join(', ')}`;
 // ============================================================================
 
 const VALID_IDENTITY_CHANNELS: ChannelType[] = [
-  'telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix', 'cli', 'web', 'api',
+  'telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix',
+  'line', 'nostr', 'zalo', 'mattermost', 'nextcloud-talk', 'twilio-voice', 'imessage',
+  'cli', 'web', 'api',
 ];
 
 /**

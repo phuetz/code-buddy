@@ -48,7 +48,7 @@ const mockGPUMonitor = {
 };
 
 jest.mock('../../src/hardware/gpu-monitor', () => ({
-  getGPUMonitor: jest.fn(() => mockGPUMonitor),
+  getGPUMonitor: jest.fn(function() { return mockGPUMonitor; }),
   GPUMonitor: jest.fn(),
 }));
 
@@ -598,7 +598,7 @@ describe('Models Module', () => {
       });
 
       it('should handle deletion failure gracefully', () => {
-        mockedFs.unlinkSync.mockImplementation(() => {
+        mockedFs.unlinkSync.mockImplementation(function() {
           throw new Error('Permission denied');
         });
 
@@ -901,7 +901,7 @@ describe('Models Module', () => {
     });
 
     it('should handle scan failure gracefully', () => {
-      mockedFs.readdirSync.mockImplementation(() => {
+      mockedFs.readdirSync.mockImplementation(function() {
         throw new Error('Directory not found');
       });
 

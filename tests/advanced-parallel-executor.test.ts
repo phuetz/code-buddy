@@ -168,58 +168,90 @@ describe('AdvancedParallelExecutor', () => {
   });
 
   describe('events', () => {
-    it('should emit parallel:start event', (done) => {
-      executor.on('parallel:start', (data) => {
-        expect(data.taskCount).toBeDefined();
-        expect(data.maxConcurrent).toBeDefined();
-        done();
+    it('should emit parallel:start event', async () => {
+      const event = new Promise<void>((resolve, reject) => {
+        executor.once('parallel:start', (data) => {
+          try {
+            expect(data.taskCount).toBeDefined();
+            expect(data.maxConcurrent).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      executor.executeParallel([
+      const execution = executor.executeParallel([
         { id: 'test', name: 'Test', task: 'Task' },
       ]);
+
+      await Promise.all([event, execution]);
     });
 
-    it('should emit agent:start event', (done) => {
-      executor.on('agent:start', (data) => {
-        expect(data.agentId).toBeDefined();
-        expect(data.task).toBeDefined();
-        done();
+    it('should emit agent:start event', async () => {
+      const event = new Promise<void>((resolve, reject) => {
+        executor.once('agent:start', (data) => {
+          try {
+            expect(data.agentId).toBeDefined();
+            expect(data.task).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      executor.executeParallel([
+      const execution = executor.executeParallel([
         { id: 'test', name: 'Test', task: 'Task' },
       ]);
+
+      await Promise.all([event, execution]);
     });
 
-    it('should emit parallel:complete event', (done) => {
-      executor.on('parallel:complete', (data) => {
-        expect(data.duration).toBeDefined();
-        expect(data.successCount).toBeDefined();
-        done();
+    it('should emit parallel:complete event', async () => {
+      const event = new Promise<void>((resolve, reject) => {
+        executor.once('parallel:complete', (data) => {
+          try {
+            expect(data.duration).toBeDefined();
+            expect(data.successCount).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      executor.executeParallel([
+      const execution = executor.executeParallel([
         { id: 'test', name: 'Test', task: 'Task' },
       ]);
+
+      await Promise.all([event, execution]);
     });
 
-    it('should emit parallel:warning for too many tasks', (done) => {
+    it('should emit parallel:warning for too many tasks', async () => {
       const smallExecutor = new AdvancedParallelExecutor({
         maxConcurrent: 2,
         useWorktrees: false,
       });
 
-      smallExecutor.on('parallel:warning', (data) => {
-        expect(data.message).toContain('exceeds max concurrent');
-        done();
+      const event = new Promise<void>((resolve, reject) => {
+        smallExecutor.once('parallel:warning', (data) => {
+          try {
+            expect(data.message).toContain('exceeds max concurrent');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      smallExecutor.executeParallel([
+      const execution = smallExecutor.executeParallel([
         { id: '1', name: 'A1', task: 'T1' },
         { id: '2', name: 'A2', task: 'T2' },
         { id: '3', name: 'A3', task: 'T3' },
       ]);
+
+      await Promise.all([event, execution]);
     });
   });
 

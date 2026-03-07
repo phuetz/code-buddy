@@ -3,36 +3,35 @@
  *
  * Tests the autonomous repair functionality integrated into CodeBuddyAgent.
  */
+import { createRepairEngine } from '../../src/agent/repair/index.js';
+import { resetRepairCoordinator } from '../../src/agent/execution/repair-coordinator.js';
 
-import { EventEmitter } from 'events';
-
-// Mock the repair module before importing agent
 jest.mock('../../src/agent/repair/index.js', () => ({
-  RepairEngine: jest.fn().mockImplementation(() => ({
+  RepairEngine: jest.fn().mockImplementation(function() { return {
     repair: jest.fn().mockResolvedValue([]),
     setExecutors: jest.fn(),
     dispose: jest.fn(),
-  })),
-  createRepairEngine: jest.fn().mockImplementation(() => ({
+  }; }),
+  createRepairEngine: jest.fn().mockImplementation(function() { return {
     repair: jest.fn().mockResolvedValue([]),
     setExecutors: jest.fn(),
     dispose: jest.fn(),
-  })),
-  getRepairEngine: jest.fn().mockImplementation(() => ({
+  }; }),
+  getRepairEngine: jest.fn().mockImplementation(function() { return {
     repair: jest.fn().mockResolvedValue([]),
     setExecutors: jest.fn(),
     dispose: jest.fn(),
-  })),
+  }; }),
   resetRepairEngine: jest.fn(),
 }));
 
 // Mock other dependencies
 jest.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn(),
     stream: jest.fn(),
     dispose: jest.fn(),
-  })),
+  }; }),
 }));
 
 const mockBashInstance = {
@@ -43,17 +42,17 @@ const mockBashInstance = {
 };
 
 jest.mock('../../src/tools/index.js', () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     view: jest.fn().mockResolvedValue({ success: true, output: '' }),
     create: jest.fn().mockResolvedValue({ success: true }),
     strReplace: jest.fn().mockResolvedValue({ success: true }),
-  })),
-  BashTool: jest.fn().mockImplementation(() => mockBashInstance),
-  TodoTool: jest.fn().mockImplementation(() => ({})),
-  SearchTool: jest.fn().mockImplementation(() => ({})),
-  WebSearchTool: jest.fn().mockImplementation(() => ({})),
-  ImageTool: jest.fn().mockImplementation(() => ({})),
-  MorphEditorTool: jest.fn().mockImplementation(() => ({})),
+  }; }),
+  BashTool: jest.fn().mockImplementation(function() { return mockBashInstance; }),
+  TodoTool: jest.fn().mockImplementation(function() { return {}; }),
+  SearchTool: jest.fn().mockImplementation(function() { return {}; }),
+  WebSearchTool: jest.fn().mockImplementation(function() { return {}; }),
+  ImageTool: jest.fn().mockImplementation(function() { return {}; }),
+  MorphEditorTool: jest.fn().mockImplementation(function() { return {}; }),
 }));
 
 jest.mock('../../src/codebuddy/tools.js', () => ({
@@ -184,10 +183,48 @@ jest.mock('../../src/tools/tool-selector.js', () => ({
   formatToolSelectionMetrics: jest.fn().mockReturnValue(''),
 }));
 
+interface RepairAttemptResult {
+  attempted: boolean;
+  success: boolean;
+  fixes: string[];
+  message: string;
+}
+
+interface RepairToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface RepairToolResult {
+  success: boolean;
+  output: string;
+}
+
+interface RepairEngineMock {
+  repair: jest.Mock;
+  setExecutors: jest.Mock;
+  dispose: jest.Mock;
+}
+
+interface RepairAgentLike {
+  isAutoRepairEnabled(): boolean;
+  setAutoRepair(enabled: boolean): void;
+  attemptAutoRepair(errorOutput: string, command?: string): Promise<RepairAttemptResult>;
+  on(event: string, listener: (payload: unknown) => void): void;
+  dispose?(): void;
+  executeTool(toolCall: RepairToolCall): Promise<RepairToolResult>;
+}
+
+type CodeBuddyAgentCtor = new (apiKey: string) => RepairAgentLike;
+
 describe('Agent Repair Integration', () => {
-  let CodeBuddyAgent: any;
-  let agent: any;
-  let mockRepairEngine: any;
+  let CodeBuddyAgent: CodeBuddyAgentCtor;
+  let agent: RepairAgentLike;
+  let mockRepairEngine: RepairEngineMock;
 
   beforeAll(async () => {
     // Import after mocks are set up
@@ -200,17 +237,15 @@ describe('Agent Repair Integration', () => {
     jest.clearAllMocks();
 
     // Reset the repair coordinator singleton
-    const { resetRepairCoordinator } = require('../../src/agent/execution/repair-coordinator.js');
     resetRepairCoordinator();
 
     // Get reference to mock repair engine
-    const { createRepairEngine } = require('../../src/agent/repair/index.js');
     mockRepairEngine = {
       repair: jest.fn().mockResolvedValue([]),
       setExecutors: jest.fn(),
       dispose: jest.fn(),
     };
-    createRepairEngine.mockReturnValue(mockRepairEngine);
+    (createRepairEngine as unknown as jest.Mock).mockReturnValue(mockRepairEngine);
 
     // Create agent instance
     agent = new CodeBuddyAgent('test-api-key');
@@ -418,8 +453,7 @@ describe('Agent Repair Integration', () => {
         },
       ]);
 
-      // Access protected executeTool via any
-      const result = await (agent as any).executeTool({
+      const result = await agent.executeTool({
         id: 'call-1',
         type: 'function',
         function: {
@@ -445,7 +479,7 @@ describe('Agent Repair Integration', () => {
       // Mock failed repair
       mockRepairEngine.repair.mockResolvedValue([]);
 
-      const result = await (agent as any).executeTool({
+      const result = await agent.executeTool({
         id: 'call-2',
         type: 'function',
         function: {

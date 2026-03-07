@@ -1,0 +1,4 @@
+📸 Screenshot captured
+   Path: /tmp/screenshot.png
+   Size: 1.41 MB
+   Time: 2026-03-01T04:16:38.685Z

@@ -1,0 +1,13 @@
+Contents of package.json:
+1: {
+2:   "name": "task-tracker",
+3:   "version": "1.0.0",
+4:   "description": "A simple CLI task tracker",
+5:   "main": "index.js",
+6:   "scripts": {
+7:     "test": "node test.js"
+8:   },
+9:   "keywords": [],
+10:   "author": "",
+11:   "license": "ISC"
+12: }

@@ -1,0 +1,83 @@
+Updated smoke-test.mjs with 39 additions and 37 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -165,40 +165,42 @@
+ }
+ 
+ async function runTests() {
+-    try {
+-        // Start the server in a child process (assuming `npm start` runs it)
+-        const serverProcess = spawn('npm', ['start']);
+-
+-        serverProcess.stdout.on('data', (data) => {
+-            console.log(`Server: ${data}`);
+-        });
+-
+-        serverProcess.stderr.on('data', (data) => {
+-            console.error(`Server Error: ${data}`);
+-        });
+-
+-        // Give the server some time to start
+-        console.log('Waiting for server to start...');
+-        await new Promise(resolve => setTimeout(resolve, 5000));
+-
+-        await healthCheck();
+-        await testIncidentsCrud();
+-        await testJobs();
+-        await testWebSocket();
+-        await testGeminiSummarize();
+-
+-        console.log('All smoke tests passed!');
+-    } catch (error) {
+-        console.error('Smoke test failed:', error);
+-        process.exit(1);
+-    } finally {
+-        // Ensure the server process is killed
+-        if (serverProcess) {
+-            serverProcess.kill();
+-            console.log('Server process terminated.');
+-        }
+-    }
+-}
+-
+-runTests();
+-
++    let serverProcess;
++    try {
++        const { spawn } = await import('child_process');
++        // Start the server in a child process (assuming `npm start` runs it)
++        serverProcess = spawn('npm', ['start']);
++
++        serverProcess.stdout.on('data', (data) => {
++            console.log(`Server: ${data}`);
++        });
++
++        serverProcess.stderr.on('data', (data) => {
++            console.error(`Server Error: ${data}`);
++        });
++
++        // Give the server some time to start
++        console.log('Waiting for server to start...');
++        await new Promise(resolve => setTimeout(resolve, 5000));
++
++        await healthCheck();
++        await testIncidentsCrud();
++        await testJobs();
++        await testWebSocket();
++        await testGeminiSummarize();
++
++        console.log('All smoke tests passed!');
++    } catch (error) {
++        console.error('Smoke test failed:', error);
++        process.exit(1);
++    } finally {
++        // Ensure the server process is killed
++        if (serverProcess) {
++            serverProcess.kill();
++            console.log('Server process terminated.');
++        }
++    }
++}
++
++runTests();
++

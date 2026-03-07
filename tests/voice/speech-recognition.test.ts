@@ -14,14 +14,21 @@ global.fetch = mockFetch;
 
 describe('SpeechRecognizer', () => {
   let recognizer: SpeechRecognizer;
+  const previousAzureRegion = process.env.AZURE_SPEECH_REGION;
 
   beforeEach(() => {
     jest.clearAllMocks();
     recognizer = new SpeechRecognizer();
+    process.env.AZURE_SPEECH_REGION = 'westeurope';
   });
 
   afterEach(async () => {
     await recognizer.stopListening();
+    if (previousAzureRegion !== undefined) {
+      process.env.AZURE_SPEECH_REGION = previousAzureRegion;
+    } else {
+      delete process.env.AZURE_SPEECH_REGION;
+    }
   });
 
   describe('constructor', () => {
@@ -243,15 +250,61 @@ describe('SpeechRecognizer', () => {
       });
     });
 
+    describe('azure provider', () => {
+      beforeEach(() => {
+        recognizer.updateConfig({ provider: 'azure' });
+        recognizer.setApiKey('test-azure-key');
+      });
+
+      it('should transcribe with azure', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              RecognitionStatus: 'Success',
+              DisplayText: 'Hello from azure',
+              NBest: [
+                {
+                  Display: 'Hello from azure',
+                  Confidence: 0.87,
+                  Words: [
+                    {
+                      Word: 'Hello',
+                      Offset: 0,
+                      Duration: 5000000,
+                      Confidence: 0.9,
+                    },
+                  ],
+                },
+              ],
+            }),
+        });
+
+        const result = await recognizer.transcribe(Buffer.alloc(1024));
+
+        expect(result.text).toBe('Hello from azure');
+        expect(result.confidence).toBe(0.87);
+        expect(result.words?.[0].word).toBe('Hello');
+      });
+
+      it('should require azure region', async () => {
+        delete process.env.AZURE_SPEECH_REGION;
+
+        await expect(recognizer.transcribe(Buffer.alloc(1024))).rejects.toThrow(
+          'Azure Speech region required'
+        );
+      });
+    });
+
     describe('local provider', () => {
       beforeEach(() => {
         recognizer.updateConfig({ provider: 'local' });
       });
 
-      it('should return empty result for local provider', async () => {
+      it('should return a finalized transcript result for local provider', async () => {
         const result = await recognizer.transcribe(Buffer.alloc(1024));
 
-        expect(result.text).toBe('');
+        expect(typeof result.text).toBe('string');
         expect(result.isFinal).toBe(true);
       });
     });

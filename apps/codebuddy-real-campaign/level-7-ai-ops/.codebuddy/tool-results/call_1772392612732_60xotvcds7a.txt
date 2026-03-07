@@ -1,0 +1,11 @@
+Updated smoke-test.mjs with 1 addition and 1 removal
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -1,6 +1,6 @@
+ const fetch = require('node-fetch');
+ const WebSocket = require('ws');
+-import assert from 'assert';
++const assert = require('assert');
+ const { spawn } = require('child_process');
+ 
+ const API_URL = 'http://localhost:3000';

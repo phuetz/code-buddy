@@ -790,13 +790,19 @@ describe('Latency Optimizer', () => {
       expect(stats.totalOperations).toBe(1);
     });
 
-    it('should emit events', (done) => {
-      optimizer.on('operation:start', (data) => {
-        expect(data.operation).toBe('file_read');
-        done();
-      });
+    it('should emit events', async () => {
+      await new Promise<void>((resolve, reject) => {
+        optimizer.once('operation:start', (data) => {
+          try {
+            expect(data.operation).toBe('file_read');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      optimizer.startOperation('file_read');
+        optimizer.startOperation('file_read');
+      });
     });
 
     it('should reset all data', async () => {

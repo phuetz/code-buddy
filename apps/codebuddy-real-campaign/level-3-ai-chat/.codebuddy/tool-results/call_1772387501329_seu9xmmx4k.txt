@@ -1,0 +1,23 @@
+Updated public/index.html with 19 additions
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,0 +1,19 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++    <meta charset="UTF-8">
++    <meta name="viewport" content="width=device-width, initial-scale=1.0">
++    <title>AI Support Desk</title>
++    <link rel="stylesheet" href="style.css">
++</head>
++<body>
++    <div class="chat-container">
++        <h1>AI Support Desk</h1>
++        <div class="chat-history" id="chat-history"></div>
++        <input type="text" id="user-input" placeholder="Type your message...">
++        <button id="send-button">Send</button>
++    </div>
++    <script src="script.js"></script>
++</body>
++</html>
++

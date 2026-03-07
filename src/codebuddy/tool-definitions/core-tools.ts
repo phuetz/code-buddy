@@ -23,6 +23,14 @@ export const VIEW_FILE_TOOL: CodeBuddyTool = {
           type: "string",
           description: "Path to file or directory to view",
         },
+        file_path: {
+          type: "string",
+          description: "Alias for path",
+        },
+        target_file: {
+          type: "string",
+          description: "Alias for path",
+        },
         start_line: {
           type: "number",
           description: "Starting line number for partial file view (optional)",
@@ -32,7 +40,7 @@ export const VIEW_FILE_TOOL: CodeBuddyTool = {
           description: "Ending line number for partial file view (optional)",
         },
       },
-      required: ["path"],
+      required: ["path", "old_str", "new_str"],
     },
   },
 };
@@ -49,6 +57,14 @@ export const CREATE_FILE_TOOL: CodeBuddyTool = {
         path: {
           type: "string",
           description: "Path where the file should be created",
+        },
+        file_path: {
+          type: "string",
+          description: "Alias for path",
+        },
+        target_file: {
+          type: "string",
+          description: "Alias for path",
         },
         content: {
           type: "string",
@@ -73,13 +89,53 @@ export const STR_REPLACE_EDITOR_TOOL: CodeBuddyTool = {
           type: "string",
           description: "Path to the file to edit",
         },
+        file_path: {
+          type: "string",
+          description: "Alias for path",
+        },
+        target_file: {
+          type: "string",
+          description: "Alias for path",
+        },
         old_str: {
           type: "string",
           description: "Text to replace (must match exactly, or will use fuzzy matching for multi-line strings)",
         },
+        old_text: {
+          type: "string",
+          description: "Alias for old_str",
+        },
+        old_content: {
+          type: "string",
+          description: "Alias for old_str",
+        },
+        find: {
+          type: "string",
+          description: "Alias for old_str",
+        },
+        old_string: {
+          type: "string",
+          description: "Alias for old_str",
+        },
         new_str: {
           type: "string",
           description: "Text to replace with",
+        },
+        new_text: {
+          type: "string",
+          description: "Alias for new_str",
+        },
+        new_content: {
+          type: "string",
+          description: "Alias for new_str",
+        },
+        replace: {
+          type: "string",
+          description: "Alias for new_str",
+        },
+        new_string: {
+          type: "string",
+          description: "Alias for new_str",
         },
         replace_all: {
           type: "boolean",

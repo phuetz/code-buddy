@@ -1,0 +1,69 @@
+import { execSync } from 'child_process';
+import { readFileSync, unlinkSync, existsSync } from 'fs';
+import path from 'path';
+
+const DB_FILE = path.join(process.cwd(), 'tasks.json');
+
+function runCLI(args) {
+  return execSync(`node index.js ${args.join(' ')}`, { encoding: 'utf8' }).trim();
+}
+
+function setupTest() {
+  if (existsSync(DB_FILE)) {
+    unlinkSync(DB_FILE);
+  }
+}
+
+console.log('Running smoke tests...');
+
+setupTest();
+
+// Test 1: Add a task
+console.log('Adding task: "Buy groceries"');
+let output = runCLI(['add', 'Buy groceries']);
+console.assert(output === 'Task added: "Buy groceries"', `Test 1 Failed: ${output}`);
+
+// Test 2: List tasks
+console.log('Listing tasks...');
+output = runCLI(['list']);
+if (!output.includes('1. [ ] Buy groceries')) {
+  console.error(`Test 2 Failed: Expected output to include '1. [ ] Buy groceries', Got '${output}'`);
+  process.exit(1);
+}
+
+// Test 3: Complete a task
+console.log('Completing task 1...');
+output = runCLI(['complete', '1']);
+if (output !== 'Task 1 marked as complete.') {
+  console.error(`Test 3 Failed: Expected 'Task 1 marked as complete.', Got '${output}'`);
+  process.exit(1);
+}
+
+// Test 4: List tasks (should be completed)
+console.log('Listing tasks (should be completed)...');
+output = runCLI(['list']);
+if (!output.includes('1. [x] Buy groceries')) {
+  console.error(`Test 4 Failed: Expected output to include '1. [x] Buy groceries', Got '${output}'`);
+  process.exit(1);
+}
+
+// Test 5: Remove a task
+console.log('Removing task 1...');
+output = runCLI(['remove', '1']);
+if (output !== 'Task 1 removed.') {
+  console.error(`Test 5 Failed: Expected 'Task 1 removed.', Got '${output}'`);
+  process.exit(1);
+}
+
+// Test 6: List tasks (should be empty)
+console.log('Listing tasks (should be empty)...');
+output = runCLI(['list']);
+if (output !== 'No tasks found.') {
+  console.error(`Test 6 Failed: Expected 'No tasks found.', Got '${output}'`);
+  process.exit(1);
+}
+
+console.log('All smoke tests passed!');
+
+// Clean up
+setupTest();

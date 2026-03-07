@@ -307,7 +307,7 @@ describe('StatusLineManager', () => {
     });
 
     it('returns empty string and logs a warning when script throws', async () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation(function() {
         throw new Error('command not found');
       });
       const mgr = new StatusLineManager({ enabled: true, script: 'nonexistent-cmd' });

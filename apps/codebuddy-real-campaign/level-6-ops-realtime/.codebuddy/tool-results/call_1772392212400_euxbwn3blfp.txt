@@ -1,0 +1,305 @@
+Updated src/server.js with 152 additions and 146 removals
+--- a/src/server.js
++++ b/src/server.js
+@@ -42,149 +42,155 @@
+ // --- WebSocket ---
+ wss.on('connection', ws => {
+     console.log('Client connected');
+-    ws.on('close', () => console.log('Client disconnected'));
+-});
+-
+-function broadcast(data) {
+-    wss.clients.forEach(client => {
+-        if (client.readyState === WebSocket.OPEN) {
+-            client.send(JSON.stringify(data));
+-        }
+-    });
+-}
+-
+-// --- Health Endpoint ---
+-app.get('/health', (req, res) => {
+-    res.status(200).send('OK');
+-});
+-
+-// --- Incident API ---
+-// Create Incident
+-app.post('/api/incidents', async (req, res) => {
+-    const { title, description } = req.body;
+-    if (!title || !description) {
+-        return res.status(400).send('Title and description are required.');
+-    }
+-    const id = uuidv4();
+-    incidents[id] = { id, title, description, status: 'new', createdAt: new Date() };
+-    await saveIncidents();
+-    broadcast({ type: 'incident_created', incident: incidents[id] });
+-    res.status(201).json(incidents[id]);
+-});
+-
+-// Get All Incidents
+-app.get('/api/incidents', (req, res) => {
+-    res.json(Object.values(incidents));
+-});
+-
+-// Get Single Incident
+-app.get('/api/incidents/:id', (req, res) => {
+-    const { id } = req.params;
+-    const incident = incidents[id];
+-    if (!incident) {
+-        return res.status(404).send('Incident not found.');
+-    }
+-    res.json(incident);
+-});
+-
+-// Update Incident
+-app.put('/api/incidents/:id', async (req, res) => {
+-    const { id } = req.params;
+-    const { title, description, status } = req.body;
+-    let incident = incidents[id];
+-    if (!incident) {
+-        return res.status(404).send('Incident not found.');
+-    }
+-
+-    if (title) incident.title = title;
+-    if (description) incident.description = description;
+-    if (status) incident.status = status;
+-    incident.updatedAt = new Date();
+-
+-    await saveIncidents();
+-    broadcast({ type: 'incident_updated', incident: incident });
+-    res.json(incident);
+-});
+-
+-// Delete Incident
+-app.delete('/api/incidents/:id', async (req, res) => {
+-    const { id } = req.params;
+-    if (!incidents[id]) {
+-        return res.status(404).send('Incident not found.');
+-    }
+-    const deletedIncident = incidents[id];
+-    delete incidents[id];
+-    await saveIncidents();
+-    broadcast({ type: 'incident_deleted', id });
+-    res.status(204).send();
+-});
+-
+-// --- Async Job System ---
+-async function processJobQueue() {
+-    if (jobQueue.length > 0) {
+-        const jobId = jobQueue.shift();
+-        const job = jobs[jobId];
+-        if (job) {
+-            job.status = 'running';
+-            job.startedAt = new Date();
+-            broadcast({ type: 'job_updated', job });
+-            console.log(`Job ${jobId} started`);
+-
+-            try {
+-                // Simulate async work
+-                await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 1000));
+-                job.status = 'done';
+-                job.completedAt = new Date();
+-                console.log(`Job ${jobId} done`);
+-            } catch (error) {
+-                job.status = 'failed';
+-                job.error = error.message;
+-                console.error(`Job ${jobId} failed:`, error);
+-            } finally {
+-                broadcast({ type: 'job_updated', job });
+-                setTimeout(processJobQueue, 100); // Process next job
+-            }
+-        }
+-    }
+-}
+-
+-// Enqueue a new job
+-app.post('/api/jobs', (req, res) => {
+-    const { task } = req.body;
+-    if (!task) {
+-        return res.status(400).send('Task is required for a job.');
+-    }
+-    const id = uuidv4();
+-    const newJob = { id, task, status: 'queued', createdAt: new Date() };
+-    jobs[id] = newJob;
+-    jobQueue.push(id);
+-    broadcast({ type: 'job_created', job: newJob });
+-    processJobQueue(); // Attempt to process immediately
+-    res.status(202).json(newJob);
+-});
+-
+-// Get job status
+-app.get('/api/jobs/:id', (req, res) => {
+-    const { id } = req.params;
+-    const job = jobs[id];
+-    if (!job) {
+-        return res.status(404).send('Job not found.');
+-    }
+-    res.json(job);
+-});
+-
+-// --- Server Start ---
+-const PORT = process.env.PORT || 0; // Use 0 for random port
+-server.listen(PORT, async () => {
+-    await loadIncidents();
+-    const actualPort = server.address().port;
+-    console.log(`Server listening on port ${actualPort}`);
+-    console.log(`Frontend available at http://localhost:${actualPort}`);
+-    // This line is for the smoke test to get the port
+-    if (process.env.NODE_ENV === 'test') {
+-        process.send({ port: actualPort });
+-    }
+-});
+-
+-module.exports = { server, wss, incidents, jobs, jobQueue, DATA_FILE, saveIncidents, loadIncidents };
+-
++    // Send current state of all jobs to the newly connected client
++    Object.values(jobs).forEach(job => {
++        if (ws.readyState === WebSocket.OPEN) {
++            ws.send(JSON.stringify({ type: 'job_created', job })); // Treat existing jobs as 'created' for new clients
++        }
++    });
++    ws.on('close', () => console.log('Client disconnected'));
++});
++
++function broadcast(data) {
++    wss.clients.forEach(client => {
++        if (client.readyState === WebSocket.OPEN) {
++            client.send(JSON.stringify(data));
++        }
++    });
++}
++
++// --- Health Endpoint ---
++app.get('/health', (req, res) => {
++    res.status(200).send('OK');
++});
++
++// --- Incident API ---
++// Create Incident
++app.post('/api/incidents', async (req, res) => {
++    const { title, description } = req.body;
++    if (!title || !description) {
++        return res.status(400).send('Title and description are required.');
++    }
++    const id = uuidv4();
++    incidents[id] = { id, title, description, status: 'new', createdAt: new Date() };
++    await saveIncidents();
++    broadcast({ type: 'incident_created', incident: incidents[id] });
++    res.status(201).json(incidents[id]);
++});
++
++// Get All Incidents
++app.get('/api/incidents', (req, res) => {
++    res.json(Object.values(incidents));
++});
++
++// Get Single Incident
++app.get('/api/incidents/:id', (req, res) => {
++    const { id } = req.params;
++    const incident = incidents[id];
++    if (!incident) {
++        return res.status(404).send('Incident not found.');
++    }
++    res.json(incident);
++});
++
++// Update Incident
++app.put('/api/incidents/:id', async (req, res) => {
++    const { id } = req.params;
++    const { title, description, status } = req.body;
++    let incident = incidents[id];
++    if (!incident) {
++        return res.status(404).send('Incident not found.');
++    }
++
++    if (title) incident.title = title;
++    if (description) incident.description = description;
++    if (status) incident.status = status;
++    incident.updatedAt = new Date();
++
++    await saveIncidents();
++    broadcast({ type: 'incident_updated', incident: incident });
++    res.json(incident);
++});
++
++// Delete Incident
++app.delete('/api/incidents/:id', async (req, res) => {
++    const { id } = req.params;
++    if (!incidents[id]) {
++        return res.status(404).send('Incident not found.');
++    }
++    const deletedIncident = incidents[id];
++    delete incidents[id];
++    await saveIncidents();
++    broadcast({ type: 'incident_deleted', id });
++    res.status(204).send();
++});
++
++// --- Async Job System ---
++async function processJobQueue() {
++    if (jobQueue.length > 0) {
++        const jobId = jobQueue.shift();
++        const job = jobs[jobId];
++        if (job) {
++            job.status = 'running';
++            job.startedAt = new Date();
++            broadcast({ type: 'job_updated', job });
++            console.log(`Job ${jobId} started`);
++
++            try {
++                // Simulate async work
++                await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 1000));
++                job.status = 'done';
++                job.completedAt = new Date();
++                console.log(`Job ${jobId} done`);
++            } catch (error) {
++                job.status = 'failed';
++                job.error = error.message;
++                console.error(`Job ${jobId} failed:`, error);
++            } finally {
++                broadcast({ type: 'job_updated', job });
++                setTimeout(processJobQueue, 100); // Process next job
++            }
++        }
++    }
++}
++
++// Enqueue a new job
++app.post('/api/jobs', (req, res) => {
++    const { task } = req.body;
++    if (!task) {
++        return res.status(400).send('Task is required for a job.');
++    }
++    const id = uuidv4();
++    const newJob = { id, task, status: 'queued', createdAt: new Date() };
++    jobs[id] = newJob;
++    jobQueue.push(id);
++    broadcast({ type: 'job_created', job: newJob });
++    processJobQueue(); // Attempt to process immediately
++    res.status(202).json(newJob);
++});
++
++// Get job status
++app.get('/api/jobs/:id', (req, res) => {
++    const { id } = req.params;
++    const job = jobs[id];
++    if (!job) {
++        return res.status(404).send('Job not found.');
++    }
++    res.json(job);
++});
++
++// --- Server Start ---
++const PORT = process.env.PORT || 0; // Use 0 for random port
++server.listen(PORT, async () => {
++    await loadIncidents();
++    const actualPort = server.address().port;
++    console.log(`Server listening on port ${actualPort}`);
++    console.log(`Frontend available at http://localhost:${actualPort}`);
++    // This line is for the smoke test to get the port
++    if (process.env.NODE_ENV === 'test') {
++        process.send({ port: actualPort });
++    }
++});
++
++module.exports = { server, wss, incidents, jobs, jobQueue, DATA_FILE, saveIncidents, loadIncidents };
++

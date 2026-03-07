@@ -1,0 +1,12 @@
+Updated smoke-test.mjs with 1 addition and 1 removal
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -33,7 +33,7 @@
+ 
+   after(() => {
+     if (serverProcess) {
+-      serverProcess.kill();
++      serverProcess.kill('SIGINT'); // Send SIGINT for graceful shutdown
+     }
+     cleanup(); // Clean up after tests
+   });

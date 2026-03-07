@@ -1,0 +1,1 @@
+fatal: destination path 'C:Userspatri.geminitmpopenclaw_test' already exists and is not an empty directory.

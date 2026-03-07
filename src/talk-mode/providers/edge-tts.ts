@@ -6,7 +6,6 @@
  */
 
 import { spawn } from 'child_process';
-import { Writable } from 'stream';
 import type {
   TTSProviderConfig,
   Voice,
@@ -33,26 +32,30 @@ interface EdgeVoice {
   };
 }
 
+interface EdgeTTSCommand {
+  command: string;
+  argsPrefix: string[];
+}
+
 /**
- * Edge TTS Provider (uses edge-tts Python package or communicates directly)
+ * Edge TTS Provider (uses the edge-tts CLI or python -m edge_tts)
  */
 export class EdgeTTSProvider implements ITTSProvider {
   readonly id = 'edge' as const;
   private config: EdgeTTSConfig = {};
   private initialized = false;
   private cachedVoices: Voice[] = [];
-  private pythonAvailable = false;
+  private edgeTTSCommand: EdgeTTSCommand | null = null;
 
   async initialize(config: TTSProviderConfig): Promise<void> {
     const settings = config.settings as EdgeTTSConfig | undefined;
     this.config = settings || {};
 
-    // Check if edge-tts Python package is available
-    this.pythonAvailable = await this.checkPythonEdgeTTS();
+    // Check if edge-tts is available either as a CLI or via python -m edge_tts.
+    this.edgeTTSCommand = await this.detectEdgeTTSCommand();
 
-    if (!this.pythonAvailable) {
-      console.warn('edge-tts Python package not found. Install with: pip install edge-tts');
-      // Still allow initialization, will use alternative method
+    if (!this.edgeTTSCommand) {
+      console.warn('edge-tts executable not found. Install with: pip install edge-tts');
     }
 
     // Fetch voice list
@@ -61,7 +64,7 @@ export class EdgeTTSProvider implements ITTSProvider {
   }
 
   async isAvailable(): Promise<boolean> {
-    return this.initialized;
+    return this.initialized && this.edgeTTSCommand !== null;
   }
 
   async listVoices(): Promise<Voice[]> {
@@ -72,13 +75,34 @@ export class EdgeTTSProvider implements ITTSProvider {
   }
 
   /**
-   * Check if edge-tts Python package is available
+   * Detect an available edge-tts command launcher
    */
-  private async checkPythonEdgeTTS(): Promise<boolean> {
+  private async detectEdgeTTSCommand(): Promise<EdgeTTSCommand | null> {
+    const candidates: EdgeTTSCommand[] = [
+      { command: 'edge-tts', argsPrefix: [] },
+      { command: 'python', argsPrefix: ['-m', 'edge_tts'] },
+      { command: 'python3', argsPrefix: ['-m', 'edge_tts'] },
+      { command: 'py', argsPrefix: ['-m', 'edge_tts'] },
+    ];
+
+    for (const candidate of candidates) {
+      const available = await this.checkCommand(candidate.command, [
+        ...candidate.argsPrefix,
+        '--version',
+      ]);
+      if (available) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private async checkCommand(command: string, args: string[]): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const proc = spawn('edge-tts', ['--version'], {
+      const proc = spawn(command, args, {
         shell: true,
         stdio: 'pipe',
       });
@@ -102,7 +126,7 @@ export class EdgeTTSProvider implements ITTSProvider {
    * Fetch available voices
    */
   private async fetchVoices(): Promise<void> {
-    if (this.pythonAvailable) {
+    if (this.edgeTTSCommand) {
       try {
         const voicesJson = await this.runEdgeTTSCommand(['--list-voices', '--json']);
         const voices = JSON.parse(voicesJson) as EdgeVoice[];
@@ -196,8 +220,7 @@ export class EdgeTTSProvider implements ITTSProvider {
     const volumeStr = this.config.volume ?? `${Math.round((volume - 1) * 100)}%`;
     const pitchStr = this.config.pitch ?? `${Math.round((pitch - 1) * 50)}Hz`;
 
-    // Use Python edge-tts if available
-    if (this.pythonAvailable) {
+    if (this.edgeTTSCommand) {
       const args = [
         '--voice', voice,
         '--text', text,
@@ -224,22 +247,8 @@ export class EdgeTTSProvider implements ITTSProvider {
       };
     }
 
-    // Fallback: use WebSocket connection directly
-    return this.synthesizeViaWebSocket(text, voice, { rate, volume, pitch });
-  }
-
-  /**
-   * Synthesize via WebSocket (direct Edge TTS connection)
-   */
-  private async synthesizeViaWebSocket(
-    text: string,
-    voice: string,
-    options: { rate: number; volume: number; pitch: number }
-  ): Promise<SynthesisResult> {
-    // This is a simplified implementation
-    // Full implementation would use the Edge TTS WebSocket protocol
     throw new Error(
-      'Direct WebSocket synthesis not implemented. Please install edge-tts: pip install edge-tts'
+      `edge-tts executable not found. Install with: pip install edge-tts. Requested voice: ${voice}, text length: ${text.length}, rate: ${rate}, volume: ${volume}, pitch: ${pitch}`
     );
   }
 
@@ -248,7 +257,12 @@ export class EdgeTTSProvider implements ITTSProvider {
    */
   private runEdgeTTSCommand(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      const proc = spawn('edge-tts', args, {
+      if (!this.edgeTTSCommand) {
+        reject(new Error('edge-tts executable not found. Install with: pip install edge-tts'));
+        return;
+      }
+
+      const proc = spawn(this.edgeTTSCommand.command, [...this.edgeTTSCommand.argsPrefix, ...args], {
         shell: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -281,7 +295,12 @@ export class EdgeTTSProvider implements ITTSProvider {
    */
   private runEdgeTTSCommandBuffer(args: string[]): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const proc = spawn('edge-tts', args, {
+      if (!this.edgeTTSCommand) {
+        reject(new Error('edge-tts executable not found. Install with: pip install edge-tts'));
+        return;
+      }
+
+      const proc = spawn(this.edgeTTSCommand.command, [...this.edgeTTSCommand.argsPrefix, ...args], {
         shell: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -312,6 +331,7 @@ export class EdgeTTSProvider implements ITTSProvider {
   async shutdown(): Promise<void> {
     this.initialized = false;
     this.cachedVoices = [];
+    this.edgeTTSCommand = null;
   }
 
   /**

@@ -1,0 +1,28 @@
+{
+  "detectedAt": "2026-03-07T19:45:33.819Z",
+  "languages": [
+    "TypeScript",
+    "JavaScript"
+  ],
+  "framework": "React",
+  "packageManager": "npm",
+  "commands": {
+    "test": "npm run test",
+    "lint": "npm run lint",
+    "format": "npm run format",
+    "build": "npm run build"
+  },
+  "directories": {
+    "src": "src",
+    "tests": "tests",
+    "docs": "docs"
+  },
+  "conventions": {
+    "naming": "camelCase (JS/TS)",
+    "lintRules": [
+      "eslint"
+    ]
+  },
+  "contextPack": "Language: TypeScript, JavaScript | Framework: React | Package manager: npm | Commands: test=\"npm run test\", lint=\"npm run lint\", format=\"npm run format\", build=\"npm run build\" | Dirs: src=src, tests=tests, docs=docs | Naming: camelCase (JS/TS)",
+  "_configMtime": 1772912712153.9663
+}

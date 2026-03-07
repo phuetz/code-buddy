@@ -13,8 +13,12 @@
  */
 
 // Mock external dependencies before imports
-jest.mock('react', () => {
-  const React = jest.requireActual('react');
+
+import fs from 'fs';
+import path from 'path';
+
+jest.mock('react', async () => {
+  const React = await vi.importActual('react');
   return {
     ...React,
     memo: jest.fn((component) => component),
@@ -29,22 +33,28 @@ jest.mock('ink', () => ({
   Text: 'Text',
 }));
 
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(() => true),
   readdirSync: jest.fn(() => []),
-}));
+};
+  return { ...impl, default: impl };
+});
 
-jest.mock('path', () => ({
+jest.mock('path', () => {
+  const impl = {
   join: jest.fn((...args: string[]) => args.join('/')),
   relative: jest.fn((from: string, to: string) => to.replace(from + '/', '')),
   extname: jest.fn((filename: string) => {
     const idx = filename.lastIndexOf('.');
     return idx > 0 ? filename.slice(idx) : '';
   }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('../../src/ui/context/theme-context', () => ({
-  useTheme: jest.fn(() => ({
+  useTheme: jest.fn(function() { return {
     colors: {
       primary: '#007AFF',
       text: '#FFFFFF',
@@ -52,11 +62,9 @@ jest.mock('../../src/ui/context/theme-context', () => ({
       borderActive: '#007AFF',
       backgroundAlt: '#2C2C2E',
     },
-  })),
+  }; }),
 }));
 
-import fs from 'fs';
-import path from 'path';
 
 describe('FileAutocomplete Component', () => {
   beforeEach(() => {

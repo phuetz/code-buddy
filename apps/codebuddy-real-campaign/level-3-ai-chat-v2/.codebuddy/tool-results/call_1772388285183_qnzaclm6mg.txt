@@ -1,0 +1,19 @@
+Updated smoke-test.mjs with 2 additions and 2 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -26,13 +26,13 @@
+ 
+   try {
+     // Test /health endpoint
+-    const healthResponse = await fetch('http://localhost:3000/health');
++    const healthResponse = await fetch('http://localhost:3337/health');
+     if (healthResponse.status !== 200) {
+       throw new Error(`Health check failed with status ${healthResponse.status}`);
+     }
+ 
+     // Test /api/chat endpoint
+-    const chatResponse = await fetch('http://localhost:3000/api/chat', {
++    const chatResponse = await fetch('http://localhost:3337/api/chat', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ message: 'Hello, what is your purpose?' }),

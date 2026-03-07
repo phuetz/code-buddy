@@ -1,0 +1,178 @@
+Updated smoke-test.mjs with 174 additions
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -1,0 +1,174 @@
++
++import WebSocket from 'ws';
++import fetch from 'node-fetch';
++import { exec, spawn } from 'child_process';
++import { fileURLToPath } from 'url';
++import path from 'path';
++import { promisify } from 'util';
++
++const __filename = fileURLToPath(import.meta.url);
++const __dirname = path.dirname(__filename);
++const execPromise = promisify(exec);
++
++const startServer = () => {
++    return new Promise((resolve, reject) => {
++        const serverProcess = spawn('node', [path.join(__dirname, 'server.js')], { detached: true });
++
++        serverProcess.stdout.on('data', (data) => {
++            const output = data.toString();
++            console.log(`Server: ${output}`);
++            const match = output.match(/Server listening on port (\d+)/);
++            if (match) {
++                const port = match[1];
++                console.log(`Server started on port ${port}`);
++                resolve({ serverProcess, port });
++            }
++        });
++
++        serverProcess.stderr.on('data', (data) => {
++            console.error(`Server Error: ${data.toString()}`);
++        });
++
++        serverProcess.on('error', (err) => {
++            reject(err);
++        });
++    });
++};
++
++const startWorker = (workerScript, wsUrl) => {
++    const workerProcess = spawn('node', [path.join(__dirname, workerScript)], { detached: true, env: { ...process.env, WS_URL: wsUrl } });
++    workerProcess.stdout.on('data', (data) => console.log(`Worker (${workerScript}): ${data.toString()}`));
++    workerProcess.stderr.on('data', (data) => console.error(`Worker Error (${workerScript}): ${data.toString()}`));
++    return workerProcess;
++};
++
++const waitForWebSocketEvent = (ws, eventType, jobId) => {
++    return new Promise(resolve => {
++        ws.onmessage = (message) => {
++            const data = JSON.parse(message.data);
++            if (data.event === eventType && (!jobId || data.job.id === jobId)) {
++                resolve(data.job);
++            }
++        };
++    });
++};
++
++const runSmokeTest = async () => {
++    let serverProcess, workerAProcess, workerBProcess, ws;
++    try {
++        console.log('Starting server...');
++        const { serverProcess: sP, port } = await startServer();
++        serverProcess = sP;
++        const baseUrl = `http://localhost:${port}`;
++        const wsUrl = `ws://localhost:${port}`;
++
++        console.log('Starting workers...');
++        workerAProcess = startWorker('workerA.js', wsUrl);
++        workerBProcess = startWorker('workerB.js', wsUrl);
++
++        // Give workers a moment to connect
++        await new Promise(resolve => setTimeout(resolve, 3000));
++
++        console.log('Connecting to WebSocket...');
++        ws = new WebSocket(wsUrl);
++
++        await new Promise((resolve, reject) => {
++            ws.onopen = () => {
++                console.log('WebSocket connected.');
++                resolve();
++            };
++            ws.onerror = (err) => {
++                reject(new Error(`WebSocket connection error: ${err.message}`));
++            };
++        });
++
++        console.log('Sending job_A...');
++        const jobA_response = await fetch(`${baseUrl}/api/jobs`, {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ type: 'workerA', payload: { task: 'process image' } })
++        });
++        const jobA = await jobA_response.json();
++        console.log('Job A queued:', jobA);
++
++        console.log('Sending job_B...');
++        const jobB_response = await fetch(`${baseUrl}/api/jobs`, {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ type: 'workerB', payload: { task: 'process data' } })
++        });
++        const jobB = await jobB_response.json();
++        console.log('Job B queued:', jobB);
++
++        const jobTransitions = {};
++
++        ws.onmessage = (message) => {
++            const data = JSON.parse(message.data);
++            if (data.event.startsWith('job_') && data.job) {
++                const jobId = data.job.id;
++                if (!jobTransitions[jobId]) {
++                    jobTransitions[jobId] = [];
++                }
++                jobTransitions[jobId].push(data.event);
++                console.log(`WS Event for ${jobId}: ${data.event}`);
++            }
++        };
++
++        console.log('Waiting for job A to complete...');
++        let finalJobA;
++        while (!finalJobA || (finalJobA.status !== 'done' && finalJobA.status !== 'failed')) {
++            finalJobA = await waitForWebSocketEvent(ws, 'job_done', jobA.id).catch(() => null) || await waitForWebSocketEvent(ws, 'job_failed', jobA.id).catch(() => null);
++            if (finalJobA) {
++                console.log(`Job A final status via WS: ${finalJobA.status}`);
++            }
++            await new Promise(resolve => setTimeout(resolve, 500)); // Small delay to prevent tight loop
++        }
++
++        console.log('Waiting for job B to complete...');
++        let finalJobB;
++        while (!finalJobB || (finalJobB.status !== 'done' && finalJobB.status !== 'failed')) {
++            finalJobB = await waitForWebSocketEvent(ws, 'job_done', jobB.id).catch(() => null) || await waitForWebSocketEvent(ws, 'job_failed', jobB.id).catch(() => null);
++            if (finalJobB) {
++                console.log(`Job B final status via WS: ${finalJobB.status}`);
++            }
++            await new Promise(resolve => setTimeout(resolve, 500)); // Small delay to prevent tight loop
++        }
++
++        // Verify final status via HTTP GET
++        console.log('Verifying job A final status via HTTP...');
++        const jobA_final_http_response = await fetch(`${baseUrl}/api/jobs/${jobA.id}`);
++        const jobA_final_http = await jobA_final_http_response.json();
++        console.log('Job A final status via HTTP:', jobA_final_http.status);
++        if (jobA_final_http.status === 'done' || jobA_final_http.status === 'failed') {
++            console.log('Job A status verified.');
++        } else {
++            throw new Error(`Job A did not reach final state via HTTP. Current status: ${jobA_final_http.status}`);
++        }
++
++        console.log('Verifying job B final status via HTTP...');
++        const jobB_final_http_response = await fetch(`${baseUrl}/api/jobs/${jobB.id}`);
++        const jobB_final_http = await jobB_final_http_response.json();
++        console.log('Job B final status via HTTP:', jobB_final_http.status);
++        if (jobB_final_http.status === 'done' || jobB_final_http.status === 'failed') {
++            console.log('Job B status verified.');
++        } else {
++            throw new Error(`Job B did not reach final state via HTTP. Current status: ${jobB_final_http.status}`);
++        }
++
++        console.log('Smoke test passed!');
++
++    } catch (error) {
++        console.error('Smoke test failed:', error);
++        process.exit(1);
++    } finally {
++        console.log('Cleaning up...');
++        if (ws) ws.close();
++        if (serverProcess) process.kill(-serverProcess.pid); // Kill the entire process group
++        if (workerAProcess) process.kill(-workerAProcess.pid);
++        if (workerBProcess) process.kill(-workerBProcess.pid);
++        console.log('Cleanup complete.');
++    }
++};
++
++runSmokeTest();
++

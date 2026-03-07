@@ -1,0 +1,1 @@
+Path "/tmp/screenshot.png" is not in a trusted directory. Use /trust to add it.

@@ -7,12 +7,15 @@ import * as path from 'path';
 import * as os from 'os';
 
 // Mock dependencies
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   existsSync: jest.fn(),
   readJsonSync: jest.fn(),
   ensureDirSync: jest.fn(),
   writeJsonSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import {
   ROITracker,
@@ -75,7 +78,7 @@ describe('ROITracker', () => {
 
     it('should handle corrupted data gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation(() => {
+      mockFs.readJsonSync.mockImplementation(function() {
         throw new Error('JSON parse error');
       });
 
@@ -596,7 +599,7 @@ describe('ROITracker', () => {
     });
 
     it('should handle save errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(() => {
+      mockFs.writeJsonSync.mockImplementation(function() {
         throw new Error('Write failed');
       });
 

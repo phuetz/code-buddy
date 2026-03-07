@@ -8,12 +8,22 @@
 
 import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger.js';
+import { BaseChannel, ChannelConfig, DeliveryResult, OutboundMessage } from '../core.js';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface IMessageConfig {
+  serverUrl: string;
+  password: string;
+  port?: number;
+  pollingInterval?: number;
+  maxRetries?: number;
+  retryDelay?: number;
+}
+
+export interface IMessageChannelConfig extends ChannelConfig {
   serverUrl: string;
   password: string;
   port?: number;
@@ -308,7 +318,7 @@ export class IMessageAdapter extends EventEmitter {
         this.emit('reconnected');
         logger.info('IMessageAdapter: reconnected successfully');
         return;
-      } catch (error) {
+      } catch {
         if (attempt < maxRetries) {
           const delay = retryDelay * Math.pow(2, attempt - 1);
           logger.warn(`IMessageAdapter: reconnection failed, retrying in ${delay}ms`);
@@ -361,6 +371,66 @@ export class IMessageAdapter extends EventEmitter {
 
     if (!response.ok) {
       throw new Error(`BlueBubbles server health check failed: ${response.status}`);
+    }
+  }
+}
+
+export class IMessageChannel extends BaseChannel {
+  private adapter: IMessageAdapter;
+
+  constructor(config: IMessageChannelConfig) {
+    super('imessage', {
+      type: 'imessage',
+      enabled: config.enabled,
+      token: config.token,
+      webhookUrl: config.webhookUrl,
+      allowedUsers: config.allowedUsers,
+      allowedChannels: config.allowedChannels,
+      autoReply: config.autoReply,
+      rateLimit: config.rateLimit,
+      options: config.options,
+    });
+    this.adapter = new IMessageAdapter({
+      serverUrl: config.serverUrl,
+      password: config.password,
+      port: config.port,
+      pollingInterval: config.pollingInterval,
+      maxRetries: config.maxRetries,
+      retryDelay: config.retryDelay,
+    });
+  }
+
+  async connect(): Promise<void> {
+    await this.adapter.start();
+    this.status.connected = true;
+    this.status.authenticated = true;
+    this.status.lastActivity = new Date();
+    this.emit('connected', this.type);
+  }
+
+  async disconnect(): Promise<void> {
+    if (!this.status.connected) return;
+    await this.adapter.stop();
+    this.status.connected = false;
+    this.status.lastActivity = new Date();
+    this.emit('disconnected', this.type);
+  }
+
+  async send(message: OutboundMessage): Promise<DeliveryResult> {
+    try {
+      const result = await this.adapter.sendMessage(message.channelId, message.content);
+      this.status.lastActivity = new Date();
+      return {
+        success: result.success,
+        messageId: result.messageGuid,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date(),
+      };
     }
   }
 }

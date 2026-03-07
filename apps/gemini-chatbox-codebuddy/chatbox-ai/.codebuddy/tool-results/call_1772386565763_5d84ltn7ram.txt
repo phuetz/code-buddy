@@ -1,0 +1,5 @@
+Updated .env.example with 1 addition
+--- a/.env.example
++++ b/.env.example
+@@ -1,0 +1,1 @@
++

@@ -1,0 +1,126 @@
+Contents of smoke-test.mjs:
+1: import request from 'supertest';
+2: import assert from 'assert';
+3: import fs from 'fs';
+4: import { before, after, describe, it, beforeEach, afterEach } from 'mocha';
+5: import { app, db } from './server.mjs'; // Import the app and db from server.mjs
+6: 
+7: // Clean up previous test data
+8: const cleanup = () => {
+9:   try { fs.unlinkSync('database.db'); } catch (e) { /* ignore */ }
+10:   try { fs.unlinkSync('sessions.db'); } catch (e) { /* ignore */ }
+11: };
+12: 
+13: describe('Task Manager API Smoke Test', () => {
+14:   let agent;
+15: 
+16:   before(async () => {
+17:     cleanup(); // Clean up before starting tests
+18:     agent = request.agent(app); // Use the imported app instance
+19:   });
+20: 
+21:   after(() => {
+22:     db.close(); // Close the database connection after all tests
+23:     cleanup(); // Clean up after tests
+24:   });
+25: 
+26:   beforeEach(async () => {
+27:     // No specific per-test cleanup needed for this smoke test
+28:     // The global cleanup in before() is sufficient for now
+29:   });
+30: 
+31:   afterEach(async () => {
+32:     // No specific per-test cleanup needed for this smoke test
+33:   });
+34: 
+35:   it('should respond to /health', async () => {
+36:     const res = await agent.get('/health');
+37:     assert.strictEqual(res.statusCode, 200);
+38:     assert.deepStrictEqual(res.body, { status: 'ok' });
+39:   });
+40: 
+41:   it('should register a new user', async () => {
+42:     const res = await agent.post('/register')
+43:       .send({ username: 'testuser', password: 'password123' });
+44:     assert.strictEqual(res.statusCode, 201);
+45:     assert.strictEqual(res.body.message, 'User registered successfully');
+46:   });
+47: 
+48:   it('should not register a duplicate user', async () => {
+49:     const res = await agent.post('/register')
+50:       .send({ username: 'testuser', password: 'anotherpassword' });
+51:     assert.strictEqual(res.statusCode, 409);
+52:     assert.strictEqual(res.body.message, 'Username already exists');
+53:   });
+54: 
+55:   it('should login the registered user', async () => {
+56:     const res = await agent.post('/login')
+57:       .send({ username: 'testuser', password: 'password123' });
+58:     assert.strictEqual(res.statusCode, 200);
+59:     assert.strictEqual(res.body.message, 'Logged in successfully');
+60: 
+61:     const sessionRes = await agent.get('/session');
+62:     assert.strictEqual(sessionRes.statusCode, 200);
+63:     assert.strictEqual(sessionRes.body.authenticated, true);
+64:   });
+65: 
+66:   it('should not login with invalid credentials', async () => {
+67:     const res = await agent.post('/login')
+68:       .send({ username: 'testuser', password: 'wrongpassword' });
+69:     assert.strictEqual(res.statusCode, 401);
+70:     assert.strictEqual(res.body.message, 'Invalid credentials');
+71:   });
+72: 
+73:   it('should create a new task', async () => {
+74:     const res = await agent.post('/tasks')
+75:       .send({ title: 'Buy groceries' });
+76:     assert.strictEqual(res.statusCode, 201);
+77:     assert.strictEqual(res.body.title, 'Buy groceries');
+78:     assert.strictEqual(res.body.completed, 0);
+79:     assert.ok(res.body.id);
+80:   });
+81: 
+82:   it('should get tasks for the logged-in user', async () => {
+83:     const res = await agent.get('/tasks');
+84:     assert.strictEqual(res.statusCode, 200);
+85:     assert.ok(Array.isArray(res.body));
+86:     assert.strictEqual(res.body.length, 1);
+87:     assert.strictEqual(res.body[0].title, 'Buy groceries');
+88:   });
+89: 
+90:   it('should update a task', async () => {
+91:     const tasksRes = await agent.get('/tasks');
+92:     const taskId = tasksRes.body[0].id;
+93: 
+94:     const res = await agent.put(`/tasks/${taskId}`)
+95:       .send({ title: 'Buy groceries and milk', completed: true });
+96:     assert.strictEqual(res.statusCode, 200);
+97:     assert.strictEqual(res.body.message, 'Task updated successfully');
+98: 
+99:     const updatedTasksRes = await agent.get('/tasks');
+100:     assert.strictEqual(updatedTasksRes.body[0].title, 'Buy groceries and milk');
+101:     assert.strictEqual(updatedTasksRes.body[0].completed, 1);
+102:   });
+103: 
+104:   it('should delete a task', async () => {
+105:     const tasksRes = await agent.get('/tasks');
+106:     const taskId = tasksRes.body[0].id;
+107: 
+108:     const res = await agent.delete(`/tasks/${taskId}`);
+109:     assert.strictEqual(res.statusCode, 200);
+110:     assert.strictEqual(res.body.message, 'Task deleted successfully');
+111: 
+112:     const emptyTasksRes = await agent.get('/tasks');
+113:     assert.strictEqual(emptyTasksRes.body.length, 0);
+114:   });
+115: 
+116:   it('should logout the user', async () => {
+117:     const res = await agent.post('/logout');
+118:     assert.strictEqual(res.statusCode, 200);
+119:     assert.strictEqual(res.body.message, 'Logged out successfully');
+120: 
+121:     const sessionRes = await agent.get('/session');
+122:     assert.strictEqual(sessionRes.statusCode, 200);
+123:     assert.strictEqual(sessionRes.body.authenticated, false);
+124:   });
+125: });

@@ -1,0 +1,248 @@
+Content from https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/:
+
+Announcing TypeScript 5.0 - TypeScript
+
+ • 
+ • 
+ 
+ • 
+ • 
+
+ • 
+
+• 
+• 
+• 
+
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+
+• • • 
+• 
+
+• 
+• 
+• 
+
+• 
+
+ Skip to main content
+
+• 
+
+ Daniel Rosenwasser
+
+ Principal Product Manager
+
+ Today we’re excited to announce the release of TypeScript 5.0!
+
+This release brings many new features, while aiming to make TypeScript smaller, simpler, and faster.
+We’ve implemented the new decorators standard, added functionality to better support ESM projects in Node and bundlers, provided new ways for library authors to control generic inference, expanded our JSDoc functionality, simplified configuration, and made many other improvements.
+
+If you’re not familiar with TypeScript yet, it’s a language that builds on JavaScript by adding syntax for types which can be used for type-checking.
+Type-checking can help catch lots of common mistakes, from typos to logic errors.
+Bringing types to JavaScript also allows us to build great tooling, since types can power features like code completions, go-to-definition, and refactorings in your favorite editor.
+In fact, if you’ve used editors like Visual Studio or VS Code, TypeScript already provides the JavaScript experience there!
+You can read up about the language at https://typescriptlang.org.
+
+But if you’re already familiar with TypeScript, have no fear!
+5.0 is not a disruptive release, and everything you know is still applicable.
+While TypeScript 5.0 includes correctness changes and some deprecations for infrequently-used options, we believe most developers will have an upgrade experience similar to previous releases.
+
+To get started using TypeScript 5.0, you can get it through NuGet, or use npm with the following command:
+
+npm install -D typescript
+
+You can also follow directions for using a newer version of TypeScript in Visual Studio Code.
+
+Here’s a quick list of what’s new in TypeScript 5.0!
+
+• Decorators
+
+• const Type Parameters
+
+• Supporting Multiple Configuration Files in extends
+
+• All enums Are Union enums
+
+• --moduleResolution bundler
+
+• Resolution Customization Flags
+
+• --verbatimModuleSyntax
+
+• Support for export type *
+
+• @satisfies Support in JSDoc
+
+• @overload Support in JSDoc
+
+• Passing Emit-Specific Flags Under --build
+
+• Case-Insensitive Import Sorting in Editors
+
+• Exhaustive switch/case Completions
+
+• Speed, Memory, and Package Size Optimizations
+
+• Breaking Changes and Deprecations
+
+• What’s Next?
+
+ What’s New Since the Beta and RC?
+
+TypeScript 5.0 has several notable changes since our beta release.
+
+One new difference since TypeScript 5.0 Beta is that TypeScript permits decorators to be placed before or after export and export default.
+This change reflects discussions and consensus within TC39, the standards body for ECMAScript/JavaScript.
+
+Another is that the new bundler module resolution option can now only be used when the --module option is set to esnext.
+This was done to ensure that import statements written in input files won’t be transformed to require calls before the bundler resolves them, whether or not the bundler or loader respects TypeScript’s module option.
+We’ve also provided some context in these release notes recommending most library authors stick to node16 or nodenext.
+
+While TypeScript 5.0 Beta shipped with this functionality, we did not document our work for supporting case-insensitive import sorting in editor scenarios.
+This is in part because the UX for customization is still in discussion, but by default, TypeScript should now work better with the rest of your tooling.
+
+Since our RC, our most notable change is that TypeScript 5.0 now specifies a minimum Node.js version of 12.20 in our package.json.
+We’ve also published a write-up about TypeScript 5.0’s migration to modules, and linked to it.
+
+Since TypeScript 5.0 Beta and RC were announced, the specific numbers for speed benchmarks and package size deltas have also been adjusted, though noise has been a factor across runs.
+The names of some benchmarks have also been adjusted for clarity, and package size improvements have been moved into a separate chart.
+
+Decorators
+
+Decorators are an upcoming ECMAScript feature that allow us to customize classes and their members in a reusable way.
+
+Let’s consider the following code:
+
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+}
+
+const p = new Person("Ron");
+p.greet();
+
+greet is pretty simple here, but let’s imagine it’s something way more complicated – maybe it does some async logic, it’s recursive, it has side effects, etc.
+Regardless of what kind of ball-of-mud you’re imagining, let’s say you throw in some console.log calls to help debug greet.
+
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ greet() {
+ console.log("LOG: Entering method.");
+
+ console.log(`Hello, my name is ${this.name}.`);
+
+ console.log("LOG: Exiting method.")
+ }
+}
+
+This pattern is fairly common.
+It sure would be nice if there was a way we could do this for every method!
+
+This is where decorators come in.
+We can write a function called loggedMethod that looks like the following:
+
+function loggedMethod(originalMethod: any, _context: any) {
+
+ function replacementMethod(this: any, ...args: any[]) {
+ console.log("LOG: Entering method.")
+ const result = originalMethod.call(this, ...args);
+ console.log("LOG: Exiting method.")
+ return result;
+ }
+
+ return replacementMethod;
+}
+
+"What’s the deal with all of these anys?
+What is this, anyScript!?"
+
+Just be patient – we’re keeping things simple for now so that we can focus on what this function is doing.
+Notice that loggedMethod takes the original method (originalMethod) and returns a function that
+
+• logs an "Entering…" message
+
+• passes along this and all of its arguments to the original method
+
+• logs an "Exiting…" message, and
+
+• returns whatever the original method returned.
+
+Now we can use loggedMethod to decorate the method greet:
+
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ @loggedMethod
+ greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+}
+
+const p = new Person("Ron");
+p.greet();
+
+// Output:
+//
+// LOG: Entering method.
+// Hello, my name is Ron.
+// LOG: Exiting method.
+
+We just used loggedMethod as a decorator above greet – and notice that we wrote it as @loggedMethod.
+When we did that, it got called with the method target and a context object.
+Because loggedMethod returned a new function, that function replaced the original definition of greet.
+
+We didn’t mention it yet, but loggedMethod was defined with a second parameter.
+It’s called a "context object", and it has some useful information about how the decorated method was declared – like whether it was a #private member, or static, or what the name of the method was.
+Let’s rewrite loggedMethod to take advantage of that and print out the name of the method that was decorated.
+
+function loggedMethod(originalMethod: any, context: ClassMethodDecoratorContext) {
+ const methodName = String(context.name);
+
+ function replacementMethod(this: any, ...args: any[]) {
+ console.log(`LOG: Entering method '${methodName}'.`)
+ const result = originalMethod.call(this, ...args);
+ console.log(`LOG: Exiting method '${methodName}'.`)
+ return result;
+ }
+
+ return replacementMethod;
+}
+
+We’re now using the context parameter – and that it’s the first thing in loggedMethod that has a type stricter than any and any[].
+TypeScript provides a type called ClassMethodDecoratorContext that models the context object that method decorators take.
+
+Apart from metadata, the context object for methods also has a useful function called addInitializer.
+It’s a way to hook into the beginning of the constructor (or the initialization of the class itself if we’re working with statics).
+
+As an example – in JavaScript, it’s common to write something like the following pattern:
+
+class Per
+
+[Content truncated...]

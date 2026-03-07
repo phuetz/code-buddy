@@ -1,0 +1,2 @@
+Contents of server.out:
+1: 

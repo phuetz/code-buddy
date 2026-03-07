@@ -399,7 +399,7 @@ function ChatInterfaceWithAgent({
                       return prev; // No mutation
                     });
                   }
-                } catch {
+                } catch (_error) {
                   // TTS not available — ignore
                 }
                 break;

@@ -1,10 +1,13 @@
+
+// Mock dynamic imports used inside initCodeBuddyProject
+
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { initCodeBuddyProject, formatInitResult, generateCODEBUDDYMdContent } from '../../src/utils/init-project.js';
 
-// Mock dynamic imports used inside initCodeBuddyProject
 jest.mock('../../src/agent/repo-profiler.js', () => ({
-  RepoProfiler: jest.fn().mockImplementation(() => ({
+  RepoProfiler: jest.fn().mockImplementation(function() { return {
     getProfile: jest.fn().mockResolvedValue({
       languages: ['typescript'],
       framework: 'express',
@@ -12,7 +15,7 @@ jest.mock('../../src/agent/repo-profiler.js', () => ({
       directories: { src: 'src/', tests: 'tests/' },
       contextPack: 'TypeScript | express',
     }),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/context/context-files.js', () => ({
@@ -26,7 +29,6 @@ jest.mock('../../src/context/context-files.js', () => ({
   }),
 }));
 
-import { initCodeBuddyProject, formatInitResult, generateCODEBUDDYMdContent } from '../../src/utils/init-project.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cb-init-test-'));

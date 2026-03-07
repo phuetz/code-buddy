@@ -1,0 +1,1 @@
+File already exists: smoke-test.mjs. Use str_replace_editor to modify existing files instead of create_file.

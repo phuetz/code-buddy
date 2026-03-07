@@ -1,0 +1,504 @@
+Contents of src/tools/document-tool.ts (642 lines):
+1: import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
+2: import path from 'path';
+3: import { ToolResult, getErrorMessage } from '../types/index.js';
+4: import { createLoopGuard } from '../utils/errors.js';
+5: import { logger } from '../utils/logger.js';
+6: 
+7: export interface DocumentContent {
+8:   text: string;
+9:   type: 'docx' | 'xlsx' | 'pptx' | 'odt' | 'ods' | 'odp' | 'rtf' | 'csv';
+10:   metadata: DocumentMetadata;
+11:   sheets?: SheetContent[]; // For spreadsheets
+12:   slides?: SlideContent[]; // For presentations
+13: }
+14: 
+15: export interface DocumentMetadata {
+16:   title?: string;
+17:   author?: string;
+18:   creator?: string;
+19:   created?: string;
+20:   modified?: string;
+21:   lastModifiedBy?: string;
+22:   pageCount?: number;
+23:   wordCount?: number;
+24:   sheetCount?: number;
+25:   slideCount?: number;
+26: }
+27: 
+28: export interface SheetContent {
+29:   name: string;
+30:   data: string[][];
+31:   rowCount: number;
+32:   colCount: number;
+33: }
+34: 
+35: export interface SlideContent {
+36:   number: number;
+37:   title?: string;
+38:   text: string;
+39: }
+40: 
+41: /**
+42:  * Document Tool for reading Office documents (DOCX, XLSX, PPTX) and other formats
+43:  * Uses ZIP-based extraction for Office Open XML formats
+44:  */
+45: export class DocumentTool {
+46:   private readonly supportedFormats = ['.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp', '.rtf', '.csv', '.tsv'];
+47:   private readonly maxFileSizeMB = 100;
+48:   private vfs = UnifiedVfsRouter.Instance;
+49: 
+50:   /**
+51:    * Read document content
+52:    */
+53:   async readDocument(filePath: string): Promise<ToolResult> {
+54:     try {
+55:       const resolvedPath = path.resolve(process.cwd(), filePath);
+56: 
+57:       if (!await this.vfs.exists(resolvedPath)) {
+58:         return {
+59:           success: false,
+60:           error: `Document not found: ${filePath}`
+61:         };
+62:       }
+63: 
+64:       const ext = path.extname(resolvedPath).toLowerCase();
+65:       if (!this.supportedFormats.includes(ext)) {
+66:         return {
+67:           success: false,
+68:           error: `Unsupported format: ${ext}. Supported: ${this.supportedFormats.join(', ')}`
+69:         };
+70:       }
+71: 
+72:       const stats = await this.vfs.stat(resolvedPath);
+73:       const fileSizeMB = stats.size / (1024 * 1024);
+74:       if (fileSizeMB > this.maxFileSizeMB) {
+75:         return {
+76:           success: false,
+77:           error: `File too large: ${fileSizeMB.toFixed(2)}MB. Max: ${this.maxFileSizeMB}MB`
+78:         };
+79:       }
+80: 
+81:       let content: DocumentContent;
+82: 
+83:       switch (ext) {
+84:         case '.docx':
+85:           content = await this.readDocx(resolvedPath);
+86:           break;
+87:         case '.xlsx':
+88:           content = await this.readXlsx(resolvedPath);
+89:           break;
+90:         case '.pptx':
+91:           content = await this.readPptx(resolvedPath);
+92:           break;
+93:         case '.csv':
+94:         case '.tsv':
+95:           content = await this.readCsv(resolvedPath, ext === '.tsv' ? '\t' : ',');
+96:           break;
+97:         case '.rtf':
+98:           content = await this.readRtf(resolvedPath);
+99:           break;
+100:         default:
+101:           return {
+102:             success: false,
+103:             error: `Format ${ext} is recognized but not yet fully implemented`
+104:           };
+105:       }
+106: 
+107:       return {
+108:         success: true,
+109:         output: this.formatOutput(content, filePath),
+110:         data: content
+111:       };
+112:     } catch (error) {
+113:       return {
+114:         success: false,
+115:         error: `Failed to read document: ${getErrorMessage(error)}`
+116:       };
+117:     }
+118:   }
+119: 
+120:   /**
+121:    * Read DOCX file
+122:    */
+123:   private async readDocx(filePath: string): Promise<DocumentContent> {
+124:     const AdmZip = (await import('adm-zip')).default;
+125:     const buffer = await this.vfs.readFileBuffer(filePath);
+126:     const zip = new AdmZip(buffer);
+127: 
+128:     // Read document.xml
+129:     const documentXml = zip.readAsText('word/document.xml');
+130: 
+131:     // Extract text from XML
+132:     const text = this.extractTextFromXml(documentXml, 'w:t');
+133: 
+134:     // Try to read metadata from core.xml
+135:     const metadata = this.extractDocxMetadata(zip);
+136: 
+137:     return {
+138:       text,
+139:       type: 'docx',
+140:       metadata: {
+141:         ...metadata,
+142:         wordCount: text.split(/\s+/).filter(w => w.length > 0).length
+143:       }
+144:     };
+145:   }
+146: 
+147:   /**
+148:    * Read XLSX file with async processing to avoid blocking the event loop
+149:    */
+150:   private async readXlsx(filePath: string): Promise<DocumentContent> {
+151:     const AdmZip = (await import('adm-zip')).default;
+152:     const buffer = await this.vfs.readFileBuffer(filePath);
+153:     const zip = new AdmZip(buffer);
+154: 
+155:     // Read shared strings asynchronously
+156:     const sharedStrings = await this.parseSharedStringsAsync(zip);
+157: 
+158:     // Read workbook to get sheet names (yield to event loop)
+159:     await this.yieldToEventLoop();
+160:     const workbookXml = zip.readAsText('xl/workbook.xml');
+161:     const sheetNames = this.extractSheetNames(workbookXml);
+162: 
+163:     // Discover all available sheet files
+164:     const sheetEntries = zip.getEntries()
+165:       .filter(entry => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.entryName))
+166:       .map(entry => {
+167:         const match = entry.entryName.match(/sheet(\d+)\.xml$/);
+168:         return { entryName: entry.entryName, index: match ? parseInt(match[1]) : 0 };
+169:       })
+170:       .sort((a, b) => a.index - b.index);
+171: 
+172:     // Process sheets in batches to avoid blocking
+173:     const sheets: SheetContent[] = [];
+174:     const parseErrors: string[] = [];
+175:     const BATCH_SIZE = 3;
+176: 
+177:     for (let i = 0; i < sheetEntries.length; i += BATCH_SIZE) {
+178:       // Yield to event loop between batches
+179:       if (i > 0) {
+180:         await this.yieldToEventLoop();
+181:       }
+182: 
+183:       const batch = sheetEntries.slice(i, i + BATCH_SIZE);
+184: 
+185:       for (const { entryName, index } of batch) {
+186:         try {
+187:           const sheetXml = zip.readAsText(entryName);
+188:           const sheetData = this.parseSheetXml(sheetXml, sharedStrings);
+189: 
+190:           sheets.push({
+191:             name: sheetNames[index - 1] || `Sheet${index}`,
+192:             data: sheetData.data,
+193:             rowCount: sheetData.data.length,
+194:             colCount: sheetData.maxCol
+195:           });
+196:         } catch (error) {
+197:           // Log error and continue with remaining sheets
+198:           const sheetName = sheetNames[index - 1] || `Sheet${index}`;
+199:           const errorMsg = `Failed to parse ${sheetName}: ${getErrorMessage(error)}`;
+200:           parseErrors.push(errorMsg);
+201:           logger.error(`[DocumentTool] ${errorMsg}`);
+202:         }
+203:       }
+204:     }
+205: 
+206:     // Combine all sheet text
+207:     let text = sheets.map(s =>
+208:       `[${s.name}]\n` + s.data.map(row => row.join('\t')).join('\n')
+209:     ).join('\n\n');
+210: 
+211:     // Append parse errors if any occurred
+212:     if (parseErrors.length > 0) {
+213:       text += `\n\n[Parse Warnings]\n${parseErrors.join('\n')}`;
+214:     }
+215: 
+216:     return {
+217:       text,
+218:       type: 'xlsx',
+219:       metadata: {
+220:         sheetCount: sheets.length
+221:       },
+222:       sheets
+223:     };
+224:   }
+225: 
+226:   /**
+227:    * Parse shared strings XML asynchronously
+228:    */
+229:   private async parseSharedStringsAsync(zip: { readAsText: (path: string) => string }): Promise<string[]> {
+230:     const sharedStrings: string[] = [];
+231:     try {
+232:       await this.yieldToEventLoop();
+233:       const sharedStringsXml = zip.readAsText('xl/sharedStrings.xml');
+234: 
+235:       // Process in chunks if the XML is large
+236:       const matches = sharedStringsXml.match(/<t[^>]*>([^<]*)<\/t>/g) || [];
+237:       const CHUNK_SIZE = 1000;
+238: 
+239:       for (let i = 0; i < matches.length; i += CHUNK_SIZE) {
+240:         if (i > 0) {
+241:           await this.yieldToEventLoop();
+242:         }
+243:         const chunk = matches.slice(i, i + CHUNK_SIZE);
+244:         for (const match of chunk) {
+245:           const text = match.replace(/<[^>]+>/g, '');
+246:           sharedStrings.push(text);
+247:         }
+248:       }
+249:     } catch {
+250:       // No shared strings file - this is normal for some Excel files
+251:     }
+252:     return sharedStrings;
+253:   }
+254: 
+255:   /**
+256:    * Extract sheet names from workbook XML
+257:    */
+258:   private extractSheetNames(workbookXml: string): string[] {
+259:     const sheetNames: string[] = [];
+260:     const sheetMatches = workbookXml.match(/<sheet[^>]+name="([^"]+)"[^>]*>/g) || [];
+261:     for (const match of sheetMatches) {
+262:       const nameMatch = match.match(/name="([^"]+)"/);
+263:       if (nameMatch) {
+264:         sheetNames.push(nameMatch[1]);
+265:       }
+266:     }
+267:     return sheetNames;
+268:   }
+269: 
+270:   /**
+271:    * Yield to the event loop to prevent blocking
+272:    */
+273:   private yieldToEventLoop(): Promise<void> {
+274:     return new Promise(resolve => setImmediate(resolve));
+275:   }
+276: 
+277:   /**
+278:    * Parse Excel sheet XML
+279:    */
+280:   private parseSheetXml(xml: string, sharedStrings: string[]): { data: string[][]; maxCol: number } {
+281:     const data: string[][] = [];
+282:     let maxCol = 0;
+283: 
+284:     // Find all rows
+285:     const rowMatches = xml.match(/<row[^>]*>[\s\S]*?<\/row>/g) || [];
+286: 
+287:     for (const rowXml of rowMatches) {
+288:       const rowNumMatch = rowXml.match(/r="(\d+)"/);
+289:       const rowNum = rowNumMatch ? parseInt(rowNumMatch[1]) - 1 : data.length;
+290: 
+291:       // Ensure row exists
+292:       while (data.length <= rowNum) {
+293:         data.push([]);
+294:       }
+295: 
+296:       // Find all cells in row
+297:       const cellMatches = rowXml.match(/<c[^>]*>[\s\S]*?<\/c>/g) || [];
+298: 
+299:       for (const cellXml of cellMatches) {
+300:         const refMatch = cellXml.match(/r="([A-Z]+)(\d+)"/);
+301:         if (!refMatch) continue;
+302: 
+303:         const colStr = refMatch[1];
+304:         const colIndex = this.colStringToIndex(colStr);
+305:         maxCol = Math.max(maxCol, colIndex + 1);
+306: 
+307:         // Ensure row has enough columns
+308:         while (data[rowNum].length <= colIndex) {
+309:           data[rowNum].push('');
+310:         }
+311: 
+312:         // Get cell value
+313:         const valueMatch = cellXml.match(/<v>([^<]*)<\/v>/);
+314:         let value = valueMatch ? valueMatch[1] : '';
+315: 
+316:         // Check if it's a shared string reference
+317:         const typeMatch = cellXml.match(/t="s"/);
+318:         if (typeMatch && sharedStrings[parseInt(value)]) {
+319:           value = sharedStrings[parseInt(value)];
+320:         }
+321: 
+322:         data[rowNum][colIndex] = value;
+323:       }
+324:     }
+325: 
+326:     return { data, maxCol };
+327:   }
+328: 
+329:   /**
+330:    * Convert Excel column string to index (A=0, B=1, ..., AA=26, etc.)
+331:    */
+332:   private colStringToIndex(col: string): number {
+333:     let index = 0;
+334:     for (let i = 0; i < col.length; i++) {
+335:       index = index * 26 + (col.charCodeAt(i) - 64);
+336:     }
+337:     return index - 1;
+338:   }
+339: 
+340:   /**
+341:    * Read PPTX file
+342:    */
+343:   private async readPptx(filePath: string): Promise<DocumentContent> {
+344:     const AdmZip = (await import('adm-zip')).default;
+345:     const buffer = await this.vfs.readFileBuffer(filePath);
+346:     const zip = new AdmZip(buffer);
+347: 
+348:     const slides: SlideContent[] = [];
+349:     let slideIndex = 1;
+350: 
+351:     // Guard against infinite loops (max 10000 slides should be more than enough)
+352:     const guard = createLoopGuard({
+353:       maxIterations: 10000,
+354:       context: 'PPTX slide parsing',
+355:       onWarn: (msg) => logger.warn(`[DocumentTool] ${msg}`)
+356:     });
+357: 
+358:     while (true) {
+359:       guard();
+360:       try {
+361:         const slideXml = zip.readAsText(`ppt/slides/slide${slideIndex}.xml`);
+362:         const text = this.extractTextFromXml(slideXml, 'a:t');
+363: 
+364:         // Try to get slide title (usually in first shape)
+365:         const titleMatch = slideXml.match(/<p:sp[^>]*>[\s\S]*?<p:txBody>[\s\S]*?<a:p>[\s\S]*?<a:t>([^<]+)<\/a:t>/);
+366:         const title = titleMatch ? titleMatch[1] : undefined;
+367: 
+368:         slides.push({
+369:           number: slideIndex,
+370:           title,
+371:           text
+372:         });
+373: 
+374:         slideIndex++;
+375:       } catch {
+376:         break;
+377:       }
+378:     }
+379: 
+380:     const text = slides.map(s =>
+381:       `[Slide ${s.number}${s.title ? ': ' + s.title : ''}]\n${s.text}`
+382:     ).join('\n\n');
+383: 
+384:     return {
+385:       text,
+386:       type: 'pptx',
+387:       metadata: {
+388:         slideCount: slides.length
+389:       },
+390:       slides
+391:     };
+392:   }
+393: 
+394:   /**
+395:    * Read CSV/TSV file
+396:    */
+397:   private async readCsv(filePath: string, delimiter: string): Promise<DocumentContent> {
+398:     const content = await this.vfs.readFile(filePath, 'utf8');
+399:     const lines = content.split(/\r?\n/);
+400:     const data: string[][] = [];
+
+... +142 lines omitted (lines 401-542; use start_line/end_line to view specific sections) ...
+
+543:       odp: '📽️'
+544:     };
+545: 
+546:     lines.push(`${typeEmoji[content.type] || '📄'} ${content.type.toUpperCase()}: ${path.basename(filePath)}`);
+547: 
+548:     if (content.metadata.title) {
+549:       lines.push(`   Title: ${content.metadata.title}`);
+550:     }
+551:     if (content.metadata.author) {
+552:       lines.push(`   Author: ${content.metadata.author}`);
+553:     }
+554:     if (content.metadata.wordCount) {
+555:       lines.push(`   Words: ${content.metadata.wordCount}`);
+556:     }
+557:     if (content.metadata.sheetCount) {
+558:       lines.push(`   Sheets: ${content.metadata.sheetCount}`);
+559:     }
+560:     if (content.metadata.slideCount) {
+561:       lines.push(`   Slides: ${content.metadata.slideCount}`);
+562:     }
+563: 
+564:     lines.push('');
+565:     lines.push('--- Content ---');
+566:     lines.push(content.text.slice(0, 5000));
+567: 
+568:     if (content.text.length > 5000) {
+569:       lines.push(`\n... [truncated, ${content.text.length - 5000} more characters]`);
+570:     }
+571: 
+572:     return lines.join('\n');
+573:   }
+574: 
+575:   /**
+576:    * List supported documents in directory
+577:    */
+578:   async listDocuments(dirPath: string = '.'): Promise<ToolResult> {
+579:     try {
+580:       const resolvedPath = path.resolve(process.cwd(), dirPath);
+581: 
+582:       if (!await this.vfs.exists(resolvedPath)) {
+583:         return {
+584:           success: false,
+585:           error: `Directory not found: ${dirPath}`
+586:         };
+587:       }
+588: 
+589:       const entries = await this.vfs.readDirectory(resolvedPath);
+590:       const docs = entries.filter(e => {
+591:         if (!e.isFile) return false;
+592:         const ext = path.extname(e.name).toLowerCase();
+593:         return this.supportedFormats.includes(ext);
+594:       });
+595: 
+596:       if (docs.length === 0) {
+597:         return {
+598:           success: true,
+599:           output: `No supported documents found in ${dirPath}`
+600:         };
+601:       }
+602: 
+603:       const docListPromises = docs.map(async doc => {
+604:         const fullPath = path.join(resolvedPath, doc.name);
+605:         const stats = await this.vfs.stat(fullPath);
+606:         const ext = path.extname(doc.name).toLowerCase();
+607:         const emoji = ext.includes('doc') ? '📝' : ext.includes('xls') || ext === '.csv' ? '📊' : '📽️';
+608:         return `  ${emoji} ${doc.name} (${this.formatSize(stats.size)})`;
+609:       });
+610: 
+611:       const docList = (await Promise.all(docListPromises)).join('\n');
+612: 
+613:       return {
+614:         success: true,
+615:         output: `Documents in ${dirPath}:\n${docList}`
+616:       };
+617:     } catch (error) {
+618:       return {
+619:         success: false,
+620:         error: `Failed to list documents: ${getErrorMessage(error)}`
+621:       };
+622:     }
+623:   }
+624: 
+625:   /**
+626:    * Check if file is a supported document
+627:    */
+628:   isDocument(filePath: string): boolean {
+629:     const ext = path.extname(filePath).toLowerCase();
+630:     return this.supportedFormats.includes(ext);
+631:   }
+632: 
+633:   /**
+634:    * Format file size
+635:    */
+636:   private formatSize(bytes: number): string {
+637:     if (bytes < 1024) return `${bytes} B`;
+638:     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+639:     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+640:   }
+641: }
+642: 

@@ -6,6 +6,9 @@
  */
 
 // Mock vscode-languageserver - must be before imports
+
+import { DiagnosticSeverity, CompletionItemKind } from 'vscode-languageserver/node';
+
 jest.mock('vscode-languageserver/node', () => {
   const mockConnection = {
     console: {
@@ -71,7 +74,6 @@ jest.mock('vscode-languageserver/node', () => {
   };
 });
 
-import { DiagnosticSeverity, CompletionItemKind } from 'vscode-languageserver/node';
 
 jest.mock('vscode-languageserver-textdocument', () => ({
   TextDocument: {
@@ -81,7 +83,7 @@ jest.mock('vscode-languageserver-textdocument', () => ({
 
 // Mock CodeBuddyClient
 jest.mock('../src/codebuddy/client', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn().mockResolvedValue({
       choices: [{
         message: {
@@ -91,7 +93,7 @@ jest.mock('../src/codebuddy/client', () => ({
         },
       }],
     }),
-  })),
+  }; }),
 }));
 
 describe('LSP Server', () => {

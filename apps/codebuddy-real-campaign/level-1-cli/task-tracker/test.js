@@ -1,0 +1,92 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+
+const DB_FILE = path.join(__dirname, 'tasks.json');
+const INDEX_JS = path.join(__dirname, 'index.js');
+
+// Mock console.log
+let consoleOutput = [];
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+  consoleOutput.push(args.join(' '));
+};
+
+function runCLI(args) {
+  consoleOutput = [];
+  // Temporarily modify process.argv
+  const originalArgv = process.argv;
+  process.argv = ['node', INDEX_JS, ...args];
+
+  // Clear module cache to re-run index.js
+  delete require.cache[require.resolve(INDEX_JS)];
+  require(INDEX_JS);
+
+  process.argv = originalArgv; // Restore original argv
+  return consoleOutput;
+}
+
+function setupTest() {
+  if (fs.existsSync(DB_FILE)) {
+    fs.unlinkSync(DB_FILE);
+  }
+}
+
+function teardownTest() {
+  if (fs.existsSync(DB_FILE)) {
+    fs.unlinkSync(DB_FILE);
+  }
+  console.log = originalConsoleLog; // Restore original console.log
+}
+
+console.log('Running tests...');
+
+// Test 1: Add a task
+setupTest();
+let consoleOutput1 = runCLI(['add', 'Buy groceries']);
+let tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+assert.strictEqual(tasks.length, 1, 'Test 1 Failed: Task not added.');
+assert.strictEqual(tasks[0].description, 'Buy groceries', 'Test 1 Failed: Incorrect task description.');
+assert.strictEqual(consoleOutput1[0], 'Task added: "Buy groceries"', 'Test 1 Failed: Incorrect console output.');
+console.log('Test 1 Passed: Add a task.');
+
+// Test 2: List tasks
+setupTest();
+runCLI(['add', 'Read a book']);
+runCLI(['add', 'Go for a run']);
+consoleOutput = []; // Clear output before listing
+runCLI(['list']);
+tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+assert.strictEqual(consoleOutput[0], '1. [ ] Read a book', 'Test 2 Failed: Incorrect list output for task 1.');
+assert.strictEqual(consoleOutput[1], '2. [ ] Go for a run', 'Test 2 Failed: Incorrect list output for task 2.');
+console.log('Test 2 Passed: List tasks.');
+
+// Test 3: Complete a task
+setupTest();
+runCLI(['add', 'Finish report']);
+runCLI(['complete', '1']);
+tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+assert.strictEqual(tasks[0].completed, true, 'Test 3 Failed: Task not marked as complete.');
+assert.strictEqual(consoleOutput[0], 'Task 1 marked as complete.', 'Test 3 Failed: Incorrect console output.');
+console.log('Test 3 Passed: Complete a task.');
+
+// Test 4: Remove a task
+setupTest();
+runCLI(['add', 'Pay bills']);
+runCLI(['add', 'Clean house']);
+runCLI(['remove', '1']);
+tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+assert.strictEqual(tasks.length, 1, 'Test 4 Failed: Task not removed.');
+assert.strictEqual(tasks[0].description, 'Clean house', 'Test 4 Failed: Wrong task removed.');
+assert.strictEqual(consoleOutput[0], 'Task 1 removed.', 'Test 4 Failed: Incorrect console output.');
+console.log('Test 4 Passed: Remove a task.');
+
+// Test 5: List empty tasks
+setupTest();
+consoleOutput = [];
+runCLI(['list']);
+assert.strictEqual(consoleOutput[0], 'No tasks found.', 'Test 5 Failed: Incorrect output for empty list.');
+console.log('Test 5 Passed: List empty tasks.');
+
+teardownTest();
+console.log('All tests passed!');

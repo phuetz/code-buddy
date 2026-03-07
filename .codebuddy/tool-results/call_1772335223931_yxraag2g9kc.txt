@@ -1,0 +1,1 @@
+fatal: could not create work tree dir '/openclaw_repo': Permission denied

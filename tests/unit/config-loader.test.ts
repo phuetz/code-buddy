@@ -2,6 +2,7 @@
  * Tests for CLI Configuration Loader
  */
 
+import { vi } from 'vitest';
 import {
   ensureUserSettingsDirectory,
   loadApiKey,
@@ -13,26 +14,24 @@ import {
   CLIConfig,
 } from '../../src/cli/config-loader';
 
-// Mock the settings manager module
-jest.mock('../../src/utils/settings-manager', () => {
+const { mockManager, getSettingsManager } = vi.hoisted(() => {
   const mockManager = {
-    loadUserSettings: jest.fn(),
-    getApiKey: jest.fn(),
-    getBaseURL: jest.fn(),
-    getCurrentModel: jest.fn(),
-    updateUserSetting: jest.fn(),
+    loadUserSettings: vi.fn(),
+    getApiKey: vi.fn(),
+    getBaseURL: vi.fn(),
+    getCurrentModel: vi.fn(),
+    updateUserSetting: vi.fn(),
   };
 
   return {
-    getSettingsManager: jest.fn(() => mockManager),
-    __mockManager: mockManager,
+    mockManager,
+    getSettingsManager: vi.fn(() => mockManager),
   };
 });
 
-// Get mock manager for assertions
-const { getSettingsManager, __mockManager: mockManager } = jest.requireMock(
-  '../../src/utils/settings-manager'
-);
+vi.mock('../../src/utils/settings-manager.js', () => ({
+  getSettingsManager,
+}));
 
 describe('config-loader', () => {
   const originalEnv = process.env;
@@ -61,7 +60,7 @@ describe('config-loader', () => {
     });
 
     it('should silently ignore errors', () => {
-      mockManager.loadUserSettings.mockImplementation(() => {
+      mockManager.loadUserSettings.mockImplementation(function() {
         throw new Error('Permission denied');
       });
 
@@ -145,7 +144,7 @@ describe('config-loader', () => {
 
     it('should handle settings manager errors gracefully', () => {
       delete process.env.GROK_MODEL;
-      mockManager.getCurrentModel.mockImplementation(() => {
+      mockManager.getCurrentModel.mockImplementation(function() {
         throw new Error('Settings error');
       });
 
@@ -288,7 +287,7 @@ describe('config-loader', () => {
     });
 
     it('should handle save errors gracefully', async () => {
-      mockManager.updateUserSetting.mockImplementation(() => {
+      mockManager.updateUserSetting.mockImplementation(function() {
         throw new Error('Write permission denied');
       });
 
@@ -304,7 +303,7 @@ describe('config-loader', () => {
     });
 
     it('should handle non-Error exceptions', async () => {
-      mockManager.updateUserSetting.mockImplementation(() => {
+      mockManager.updateUserSetting.mockImplementation(function() {
         throw 'String error';
       });
 

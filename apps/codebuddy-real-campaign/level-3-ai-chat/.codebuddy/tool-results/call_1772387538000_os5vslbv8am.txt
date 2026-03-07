@@ -1,0 +1,29 @@
+Error communicating with Gemini API: GoogleGenerativeAIFetchError: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [400 Bad Request] API key not valid. Please pass a valid API key. [{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID","domain":"googleapis.com","metadata":{"service":"generativelanguage.googleapis.com"}},{"@type":"type.googleapis.com/google.rpc.LocalizedMessage","locale":"en-US","message":"API key not valid. Please pass a valid API key."}]
+    at handleResponseNotOk (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat/node_modules/@google/generative-ai/dist/index.mjs:432:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async makeRequest (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat/node_modules/@google/generative-ai/dist/index.mjs:401:9)
+    at async generateContent (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat/node_modules/@google/generative-ai/dist/index.mjs:865:22)
+    at async ChatSession.sendMessage (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat/node_modules/@google/generative-ai/dist/index.mjs:1208:9)
+    at async file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat/server.js:46:24 {
+  status: 400,
+  statusText: 'Bad Request',
+  errorDetails: [
+    {
+      '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+      reason: 'API_KEY_INVALID',
+      domain: 'googleapis.com',
+      metadata: [Object]
+    },
+    {
+      '@type': 'type.googleapis.com/google.rpc.LocalizedMessage',
+      locale: 'en-US',
+      message: 'API key not valid. Please pass a valid API key.'
+    }
+  ]
+}
+API Test Failed: Invalid response or status code.
+Status: 500
+Response: {
+  error: 'An error occurred while processing your request. Please try again later.'
+}
+One or more tests failed.

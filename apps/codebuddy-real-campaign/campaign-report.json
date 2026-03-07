@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-03-01T17:54:58.228Z",
+  "report": [
+    {
+      "id": "level-1-cli",
+      "toolCalls": 0,
+      "tools": [],
+      "validationOk": false,
+      "validation": "Command failed: npm test\n\n> task-tracker@1.0.0 test\n> node test.js\n\nnode:assert:152\r\n  throw new AssertionError(obj);\r\n  ^\r\n\r\nAssertionError [ERR_ASSERTION]: Test 1 Failed: Incorrect console output.\r\n+ actual - expected\r\n\r\n+ 'Task added: \"Buy groceries\"'\r\n- 'Task added: \"Buy groceries\" '\r\n                              ^\r\n\r\n    at Object.<anonymous> (D:\\CascadeProjects\\grok-cli\\apps\\codebuddy-real-campaign\\level-1-cli\\task-tracker\\test.js:50:8)\r\n    at Module._compile (node:internal/modules/cjs/loader:1812:14)\r\n    at Object..js (node:internal/modules/cjs/loader:1943:10)\r\n    at Module.load (node:internal/modules/cjs/loader:1533:32)\r\n    at Module._load (node:internal/modules/cjs/loader:1335:12)\r\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\r\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\r\n    at node:internal/main/run_main_module:33:47 {\r\n  generatedMessage: false,\r\n  code: 'ERR_ASSERTION',\r\n  actual: 'Task added: \"Buy groceries\"',\r\n  expected: 'Task added: \"Buy groceries\" ',\r\n  operator: 'strictEqual',\r\n  diff: 'simple'\r\n}\r\n\r\nNode.js v24.14.0\r\n"
+    },
+    {
+      "id": "level-2-webapp",
+      "toolCalls": 0,
+      "tools": [],
+      "validationOk": false,
+      "validation": "Command failed: node smoke-test.mjs\nnode:internal/modules/cjs/loader:1459\r\n  throw err;\r\n  ^\r\n\r\nError: Cannot find module 'D:\\CascadeProjects\\grok-cli\\apps\\codebuddy-real-campaign\\level-2-webapp\\smoke-test.mjs'\r\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1456:15)\r\n    at defaultResolveImpl (node:internal/modules/cjs/loader:1066:19)\r\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1071:22)\r\n    at Module._load (node:internal/modules/cjs/loader:1242:25)\r\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\r\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\r\n    at node:internal/main/run_main_module:33:47 {\r\n  code: 'MODULE_NOT_FOUND',\r\n  requireStack: []\r\n}\r\n\r\nNode.js v24.14.0\r\n"
+    },
+    {
+      "id": "level-3-ai-chat",
+      "toolCalls": 1,
+      "tools": [
+        "bash"
+      ],
+      "validationOk": false,
+      "validation": "Command failed: node smoke-test.mjs\nRunning smoke test...\nSmoke test failed: Could not connect to server: \n"
+    }
+  ]
+}

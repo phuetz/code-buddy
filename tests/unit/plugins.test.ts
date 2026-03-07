@@ -8,17 +8,27 @@
  * - Plugin sandbox (PluginSandbox)
  */
 
-import { EventEmitter } from 'events';
-import * as path from 'path';
 
 // Mock fs before importing modules
-jest.mock('fs', () => ({
+
+import { EventEmitter } from 'events';
+import * as path from 'path';
+import axios from 'axios';
+import * as semver from 'semver';
+import fs from 'fs';
+import fsExtra from 'fs-extra';
+
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readdirSync: jest.fn(),
   readFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   pathExists: jest.fn().mockResolvedValue(false),
   readJSON: jest.fn().mockResolvedValue({ plugins: [] }),
@@ -26,7 +36,9 @@ jest.mock('fs-extra', () => ({
   writeFile: jest.fn().mockResolvedValue(undefined),
   readdir: jest.fn().mockResolvedValue([]),
   remove: jest.fn().mockResolvedValue(undefined),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('axios');
 
@@ -42,12 +54,6 @@ jest.mock('worker_threads', () => ({
   workerData: null,
 }));
 
-import axios from 'axios';
-import * as semver from 'semver';
-
-// Use require for mocked modules to avoid TypeScript issues
-const fs = require('fs');
-const fsExtra = require('fs-extra');
 
 import {
   PluginManager,

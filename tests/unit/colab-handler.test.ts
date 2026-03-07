@@ -20,7 +20,7 @@ describe('Colab Handler', () => {
     // Setup fs mocks
     mockFs.existsSync.mockReturnValue(false);
     mockFs.readFileSync.mockReturnValue('{}');
-    mockFs.writeFileSync.mockImplementation(() => {});
+    mockFs.writeFileSync.mockImplementation(function() {});
     mockFs.mkdirSync.mockImplementation(() => undefined);
 
     // Dynamic imports

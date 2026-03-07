@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IncidentOps Board</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>IncidentOps Board</h1>
+
+        <div class="section">
+            <h2>Create New Incident</h2>
+            <form id="create-incident-form">
+                <input type="text" id="incident-title" placeholder="Incident Title" required>
+                <textarea id="incident-description" placeholder="Incident Description" required></textarea>
+                <button type="submit">Create Incident</button>
+            </form>
+        </div>
+
+        <div class="section">
+            <h2>Active Incidents</h2>
+            <div id="incidents-list" class="list-container"></div>
+        </div>
+
+        <div class="section">
+            <h2>Job Queue</h2>
+            <form id="create-job-form">
+                <input type="text" id="job-task" placeholder="Job Task Description" required>
+                <button type="submit">Enqueue Job</button>
+            </form>
+            <div id="jobs-list" class="list-container"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

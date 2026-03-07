@@ -3,16 +3,20 @@
  */
 
 // Mock @picovoice/porcupine-node before imports
+
+import { DEFAULT_WAKE_WORD_CONFIG } from '../../src/voice/types.js';
+import { Porcupine } from '@picovoice/porcupine-node';
+
 const mockProcess = jest.fn().mockReturnValue(-1);
 const mockRelease = jest.fn();
 
 jest.mock('@picovoice/porcupine-node', () => ({
-  Porcupine: jest.fn().mockImplementation(() => ({
+  Porcupine: jest.fn().mockImplementation(function() { return {
     process: mockProcess,
     release: mockRelease,
     frameLength: 512,
     sampleRate: 16000,
-  })),
+  }; }),
   BuiltinKeyword: {
     COMPUTER: 'computer',
     PICOVOICE: 'picovoice',
@@ -26,7 +30,6 @@ import {
   WakeWordDetector,
   createWakeWordDetector,
 } from '../../src/voice/wake-word.js';
-import { DEFAULT_WAKE_WORD_CONFIG } from '../../src/voice/types.js';
 
 describe('WakeWordDetector', () => {
   let detector: WakeWordDetector;
@@ -185,7 +188,6 @@ describe('WakeWordDetector', () => {
     });
 
     it('should use custom keywordPaths when provided', async () => {
-      const { Porcupine } = require('@picovoice/porcupine-node');
       const det = new WakeWordDetector({
         accessKey: 'test-key',
         keywordPaths: ['/path/to/keyword.ppn'],

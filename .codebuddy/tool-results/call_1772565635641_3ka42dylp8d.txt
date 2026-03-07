@@ -1,0 +1,164 @@
+Lines 238-400 of src/agent/execution/agent-executor.ts:
+238:   async processUserMessage(
+239:     message: string,
+240:     history: ChatEntry[],
+241:     messages: CodeBuddyMessage[]
+242:   ): Promise<ChatEntry[]> {
+243:     const newEntries: ChatEntry[] = [];
+244:     const maxToolRounds = this.config.maxToolRounds;
+245:     let toolRounds = 0;
+246: 
+247:     // Track token usage for cost calculation
+248:     const inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
+249:     let totalOutputTokens = 0;
+250: 
+251:     try {
+252:       // Use RAG-based tool selection for initial query
+253:       const selectionResult = await this.deps.toolSelectionStrategy.selectToolsForQuery(message);
+254:       const tools = selectionResult.tools;
+255:       this.deps.toolSelectionStrategy.cacheTools(tools);
+256: 
+257:       // Auto-discovery hint: if confidence is low, nudge agent to discover skills
+258:       const enableAutoDiscovery = this.config.enableAutoDiscovery ?? true;
+259:       const threshold = this.config.skillDiscoveryThreshold ?? 0.3;
+260:       if (enableAutoDiscovery && selectionResult.confidence !== undefined && selectionResult.confidence < threshold) {
+261:         const lastMsg = messages[messages.length - 1];
+262:         if (lastMsg && lastMsg.role === 'user' && typeof lastMsg.content === 'string') {
+263:           messages.push({
+264:             role: 'system' as const,
+265:             content: 'Low tool confidence for this query. Consider using the `skill_discover` tool to search the Skills Hub for relevant capabilities.',
+266:           });
+267:         }
+268:       }
+269: 
+270:       // Auto-select persona based on user message context (fire-and-forget)
+271:       try {
+272:         const { getPersonaManager } = await import('../../personas/persona-manager.js');
+273:         getPersonaManager().autoSelectPersona({ message });
+274:       } catch { /* persona auto-select optional */ }
+275: 
+276:       // Run before_turn middleware (sequential path)
+277:       const pipeline = this.deps.middlewarePipeline;
+278:       if (pipeline) {
+279:         const ctx = this.buildMiddlewareContext(
+280:           toolRounds, inputTokens, totalOutputTokens, history, messages, false
+281:         );
+282:         const mwResult = await pipeline.runBeforeTurn(ctx);
+283:         if (mwResult.action === 'stop') {
+284:           if (mwResult.message) {
+285:             const stopEntry: ChatEntry = { type: 'assistant', content: mwResult.message, timestamp: new Date() };
+286:             history.push(stopEntry);
+287:             messages.push({ role: 'assistant', content: mwResult.message });
+288:             return [stopEntry];
+289:           }
+290:           return [];
+291:         }
+292:         if (mwResult.action === 'compact') {
+293:           this.deps.contextManager.prepareMessages(messages);
+294:         }
+295:         if (mwResult.action === 'warn' && mwResult.message) {
+296:           logger.warn(`Middleware warning: ${mwResult.message}`);
+297:         }
+298:       }
+299: 
+300:       // Apply context management
+301:       const preparedMessages = this.deps.contextManager.prepareMessages(messages);
+302: 
+303:       // --- Lessons context: inject BEFORE todo suffix (stable rules, higher priority) ---
+304:       const lessonsBlock = getLessonsTracker(process.cwd()).buildContextBlock();
+305:       if (lessonsBlock) {
+306:         preparedMessages.push({ role: 'system', content: lessonsBlock });
+307:       }
+308: 
+309:       // --- Decision memory context: inject relevant past decisions ---
+310:       if (_decisionContextProvider) {
+311:         try {
+312:           const decisionsBlock = await _decisionContextProvider(message);
+313:           if (decisionsBlock) {
+314:             preparedMessages.push({ role: 'system', content: decisionsBlock });
+315:           }
+316:         } catch { /* decision-memory optional */ }
+317:       }
+318: 
+319:       // --- Manus AI attention bias: append todo.md context at END of messages ---
+320:       const todoSuffix = getTodoTracker(process.cwd()).buildContextSuffix();
+321:       if (todoSuffix) {
+322:         preparedMessages.push({ role: 'system', content: todoSuffix });
+323:       }
+324: 
+325:       // Check for context warnings
+326:       const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
+327:       if (contextWarning.warn) {
+328:         logger.warn(contextWarning.message);
+329: 
+330:         // --- OpenClaw pre-compaction memory flush (NO_REPLY pattern) ---
+331:         // Run a silent background turn to extract facts to MEMORY.md before context is compacted.
+332:         try {
+333:           const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
+334:           const flusher = getPrecompactionFlusher();
+335:           const flushResult = await flusher.flush(
+336:             preparedMessages.filter(m => m.role !== 'system').map(m => ({
+337:               role: m.role as 'user' | 'assistant',
+338:               content: typeof m.content === 'string' ? m.content : '',
+339:             })),
+340:             async (flushMsgs) => {
+341:               const r = await this.deps.client.chat(
+342:                 flushMsgs.map(m => ({ role: m.role, content: m.content })),
+343:                 [],
+344:               );
+345:               return r.choices[0]?.message?.content ?? 'NO_REPLY';
+346:             }
+347:           );
+348:           if (flushResult.flushed) {
+349:             logger.info(`Pre-compaction flush: saved ${flushResult.factsCount} facts to ${flushResult.writtenTo}`);
+350:           }
+351:         } catch (flushErr) {
+352:           logger.debug('Pre-compaction flush failed (non-critical)', { flushErr });
+353:         }
+354:       }
+355: 
+356:       // Apply response constraint (Manus AI response prefill / tool_choice control)
+357:       const activeConstraint = getResponseConstraintStack().current();
+358:       const toolNames = tools.map(t => t.function.name);
+359:       const toolChoiceOverride = resolveToolChoice(activeConstraint, toolNames);
+360: 
+361:       let currentResponse = await this.deps.client.chat(
+362:         preparedMessages,
+363:         tools,
+364:         { tool_choice: toolChoiceOverride !== 'auto' ? toolChoiceOverride : undefined } as never,
+365:         this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
+366:           ? { search_parameters: { mode: "auto" } }
+367:           : { search_parameters: { mode: "off" } }
+368:       );
+369: 
+370:       // Agent loop
+371:       while (toolRounds < maxToolRounds) {
+372:         const assistantMessage = currentResponse.choices[0]?.message;
+373: 
+374:         if (!assistantMessage) {
+375:           throw new Error("No response received from AI. The API may be unavailable or the request was incomplete. Please try again.");
+376:         }
+377: 
+378:         // Track output tokens
+379:         if (currentResponse.usage) {
+380:           totalOutputTokens += currentResponse.usage.completion_tokens || 0;
+381:         } else if (assistantMessage.content) {
+382:           totalOutputTokens += this.deps.tokenCounter.countTokens(assistantMessage.content);
+383:         }
+384: 
+385:         // Handle tool calls
+386:         if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+387:           toolRounds++;
+388: 
+389:           // Add assistant message with tool calls
+390:           const assistantEntry: ChatEntry = {
+391:             type: "assistant",
+392:             content: assistantMessage.content || "Using tools to help you...",
+393:             timestamp: new Date(),
+394:             toolCalls: assistantMessage.tool_calls,
+395:           };
+396:           history.push(assistantEntry);
+397:           newEntries.push(assistantEntry);
+398: 
+399:           // Add assistant message to conversation
+400:           messages.push({

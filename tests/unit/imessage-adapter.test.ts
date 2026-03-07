@@ -4,6 +4,7 @@
  */
 
 import { IMessageAdapter, IMessageConfig } from '../../src/channels/imessage/index';
+import { vi } from 'vitest';
 
 // Mock logger
 jest.mock('../../src/utils/logger.js', () => ({
@@ -73,7 +74,7 @@ describe('IMessageAdapter', () => {
   let mockFetch: jest.Mock;
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     // Default: all API calls succeed
     mockFetch = setupFetchRouter({
       '/api/v1/server/info': () => mockFetchResponse({ status: 200, message: 'OK', data: {} }),
@@ -88,7 +89,7 @@ describe('IMessageAdapter', () => {
       // Temporarily override fetch for stop cleanup
       await adapter.stop();
     }
-    jest.useRealTimers();
+    vi.useRealTimers();
     jest.restoreAllMocks();
   });
 
@@ -492,7 +493,7 @@ describe('IMessageAdapter', () => {
       await adapter.start();
 
       // Advance past the polling interval
-      await jest.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(messageHandler).toHaveBeenCalledTimes(2);
 
@@ -543,7 +544,7 @@ describe('IMessageAdapter', () => {
       adapter.on('message', messageHandler);
 
       await adapter.start();
-      await jest.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(messageHandler).toHaveBeenCalledTimes(1);
       expect(messageHandler.mock.calls[0][0].id).toBe('msg-other');
@@ -554,7 +555,7 @@ describe('IMessageAdapter', () => {
       adapter.on('message', messageHandler);
 
       await adapter.start();
-      await jest.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(messageHandler).not.toHaveBeenCalled();
     });
@@ -588,10 +589,10 @@ describe('IMessageAdapter', () => {
       adapter.on('message', messageHandler);
 
       await adapter.start();
-      await jest.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       // Second poll should use the updated timestamp in the URL
-      await jest.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       // The second poll call should have after= with the updated timestamp
       const pollCalls = (global.fetch as jest.Mock).mock.calls.filter(
@@ -622,7 +623,7 @@ describe('IMessageAdapter', () => {
 
       // Advance through 5 polling failures (maxRetries = 5)
       for (let i = 0; i < 5; i++) {
-        await jest.advanceTimersByTimeAsync(3000);
+        await vi.advanceTimersByTimeAsync(3000);
       }
 
       // After max retries, error should be emitted and reconnect attempted
@@ -651,13 +652,13 @@ describe('IMessageAdapter', () => {
 
       // Trigger max polling failures (5 intervals)
       for (let i = 0; i < 5; i++) {
-        await jest.advanceTimersByTimeAsync(3000);
+        await vi.advanceTimersByTimeAsync(3000);
       }
 
       // Reconnect will retry with exponential backoff: 5000, 10000, 20000, 40000, 80000
       // Advance through all retry delays generously
       for (let i = 0; i < 5; i++) {
-        await jest.advanceTimersByTimeAsync(5000 * Math.pow(2, i) + 100);
+        await vi.advanceTimersByTimeAsync(5000 * Math.pow(2, i) + 100);
       }
 
       expect(disconnectedHandler).toHaveBeenCalled();
@@ -686,7 +687,7 @@ describe('IMessageAdapter', () => {
 
       // 3 failures, then success - should not trigger reconnect (maxRetries=5)
       for (let i = 0; i < 4; i++) {
-        await jest.advanceTimersByTimeAsync(3000);
+        await vi.advanceTimersByTimeAsync(3000);
       }
 
       expect(errorHandler).not.toHaveBeenCalled();

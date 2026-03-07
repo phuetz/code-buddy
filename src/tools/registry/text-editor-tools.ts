@@ -10,6 +10,11 @@ import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
 import { TextEditorTool } from '../index.js';
 
+function extractPath(input: Record<string, unknown>): string | undefined {
+  const candidate = input.path ?? input.file_path ?? input.target_file ?? input.file;
+  return typeof candidate === 'string' ? candidate : undefined;
+}
+
 // ============================================================================
 // Shared TextEditorTool Instance
 // ============================================================================
@@ -46,7 +51,7 @@ export class ViewFileTool implements ITool {
   readonly description = 'View file contents with optional line range';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    const path = input.path as string;
+    const path = extractPath(input) as string;
     const startLine = input.start_line as number | undefined;
     const endLine = input.end_line as number | undefined;
 
@@ -69,6 +74,14 @@ export class ViewFileTool implements ITool {
             type: 'string',
             description: 'Path to the file or directory to view',
           },
+          file_path: {
+            type: 'string',
+            description: 'Alias for path',
+          },
+          target_file: {
+            type: 'string',
+            description: 'Alias for path',
+          },
           start_line: {
             type: 'number',
             description: 'Start line for partial view (1-indexed)',
@@ -90,7 +103,8 @@ export class ViewFileTool implements ITool {
 
     const data = input as Record<string, unknown>;
 
-    if (typeof data.path !== 'string' || data.path.trim() === '') {
+    const path = extractPath(data);
+    if (typeof path !== 'string' || path.trim() === '') {
       return { valid: false, errors: ['path must be a non-empty string'] };
     }
 
@@ -138,7 +152,7 @@ export class CreateFileTool implements ITool {
   readonly description = 'Create a new file with the specified content';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    const path = input.path as string;
+    const path = extractPath(input) as string;
     const content = input.content as string;
 
     return await getTextEditor().create(path, content);
@@ -154,6 +168,14 @@ export class CreateFileTool implements ITool {
           path: {
             type: 'string',
             description: 'Path where the new file should be created',
+          },
+          file_path: {
+            type: 'string',
+            description: 'Alias for path',
+          },
+          target_file: {
+            type: 'string',
+            description: 'Alias for path',
           },
           content: {
             type: 'string',
@@ -172,7 +194,8 @@ export class CreateFileTool implements ITool {
 
     const data = input as Record<string, unknown>;
 
-    if (typeof data.path !== 'string' || data.path.trim() === '') {
+    const path = extractPath(data);
+    if (typeof path !== 'string' || path.trim() === '') {
       return { valid: false, errors: ['path must be a non-empty string'] };
     }
 
@@ -213,9 +236,9 @@ export class StrReplaceEditorTool implements ITool {
   readonly description = 'Replace text in a file using exact or fuzzy matching';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    const path = input.path as string;
-    const oldStr = input.old_str as string;
-    const newStr = input.new_str as string;
+    const path = extractPath(input) as string;
+    const oldStr = (input.old_str ?? input.old_text ?? input.old_content ?? input.find ?? input.old_string) as string;
+    const newStr = (input.new_str ?? input.new_text ?? input.new_content ?? input.replace ?? input.new_string) as string;
     const replaceAll = (input.replace_all as boolean) ?? false;
 
     return await getTextEditor().strReplace(path, oldStr, newStr, replaceAll);
@@ -232,13 +255,53 @@ export class StrReplaceEditorTool implements ITool {
             type: 'string',
             description: 'Path to the file to edit',
           },
+          file_path: {
+            type: 'string',
+            description: 'Alias for path',
+          },
+          target_file: {
+            type: 'string',
+            description: 'Alias for path',
+          },
           old_str: {
             type: 'string',
             description: 'Text to find and replace',
           },
+          old_text: {
+            type: 'string',
+            description: 'Alias for old_str',
+          },
+          old_content: {
+            type: 'string',
+            description: 'Alias for old_str',
+          },
+          find: {
+            type: 'string',
+            description: 'Alias for old_str',
+          },
+          old_string: {
+            type: 'string',
+            description: 'Alias for old_str',
+          },
           new_str: {
             type: 'string',
             description: 'Replacement text',
+          },
+          new_text: {
+            type: 'string',
+            description: 'Alias for new_str',
+          },
+          new_content: {
+            type: 'string',
+            description: 'Alias for new_str',
+          },
+          replace: {
+            type: 'string',
+            description: 'Alias for new_str',
+          },
+          new_string: {
+            type: 'string',
+            description: 'Alias for new_str',
           },
           replace_all: {
             type: 'boolean',
@@ -246,7 +309,7 @@ export class StrReplaceEditorTool implements ITool {
             default: false,
           },
         },
-        required: ['path', 'old_str', 'new_str'],
+        required: ['path'],
       },
     };
   }
@@ -258,15 +321,18 @@ export class StrReplaceEditorTool implements ITool {
 
     const data = input as Record<string, unknown>;
 
-    if (typeof data.path !== 'string' || data.path.trim() === '') {
+    const path = extractPath(data);
+    if (typeof path !== 'string' || path.trim() === '') {
       return { valid: false, errors: ['path must be a non-empty string'] };
     }
 
-    if (typeof data.old_str !== 'string') {
+    const oldStr = data.old_str ?? data.old_text ?? data.old_content ?? data.find ?? data.old_string;
+    if (typeof oldStr !== 'string') {
       return { valid: false, errors: ['old_str must be a string'] };
     }
 
-    if (typeof data.new_str !== 'string') {
+    const newStr = data.new_str ?? data.new_text ?? data.new_content ?? data.replace ?? data.new_string;
+    if (typeof newStr !== 'string') {
       return { valid: false, errors: ['new_str must be a string'] };
     }
 

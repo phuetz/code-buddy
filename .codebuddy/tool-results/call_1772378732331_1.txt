@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "TypeScript 5 compiler performance improvements configuration changes"
+══════════════════════════════════════════════════
+
+1. **Documentation - TypeScript 5.0** [1]
+   Overall, we expect most codebases should see speed improvements ... Aside from deprecations, we've changed some settings to better improve cross-platform behavior ...
+
+2. **TypeScript 5: New Innovations & Breaking Changes** [2]
+   Depending on the project in question, TypeScript 5 can improve build times by up to 81%. As a result, you may receive a build about a quarter ...
+
+3. **TypeScript's Massive Go Update: The Game-Changer That Makes It ...** [3]
+   Microsoft has completely rewritten the TypeScript compiler in Go, and the results are nothing short of extraordinary — a 10x speed boost, lower ...
+
+4. **Documentation - TypeScript 5.5** [4]
+   This change also improved performance; in our benchmarks, the emit stage saw a 1-4% improvement in projects with declaration emit enabled. On this page.
+
+5. **Performance · microsoft/TypeScript Wiki - GitHub** [5]
+   There are easy ways to configure TypeScript to ensure faster compilations and editing experiences. The earlier that these practices can be adopted, the better.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[2] TypeScript 5: New Innovations & Breaking Changes — https://javascript-conference.com/blog/typescript-5/
+[3] TypeScript's Massive Go Update: The Game-Changer That Makes It ... — https://medium.com/@vishalvoid/typescripts-massive-go-update-the-game-changer-that-makes-it-10x-faster-d971872114b5
+[4] Documentation - TypeScript 5.5 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-5.html
+[5] Performance · microsoft/TypeScript Wiki - GitHub — https://github.com/microsoft/Typescript/wiki/Performance

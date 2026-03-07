@@ -4,6 +4,7 @@
 
 import * as os from 'os';
 import * as path from 'path';
+import fs from 'fs-extra';
 import {
   BenchmarkRunner,
   BenchmarkResult,
@@ -15,24 +16,30 @@ import {
 } from '../../src/benchmarks/performance-benchmarks';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   writeJson: jest.fn().mockResolvedValue(undefined),
   writeFile: jest.fn().mockResolvedValue(undefined),
   readFile: jest.fn().mockResolvedValue('mock content'),
   readJson: jest.fn(),
   remove: jest.fn().mockResolvedValue(undefined),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock os for consistent test results
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   platform: jest.fn().mockReturnValue('linux'),
   arch: jest.fn().mockReturnValue('x64'),
   cpus: jest.fn().mockReturnValue([{}, {}, {}, {}]),
   totalmem: jest.fn().mockReturnValue(16 * 1024 * 1024 * 1024),
   freemem: jest.fn().mockReturnValue(8 * 1024 * 1024 * 1024),
   tmpdir: jest.fn().mockReturnValue('/tmp'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock console to suppress output during tests
 const mockConsole = {
@@ -40,7 +47,7 @@ const mockConsole = {
   error: jest.spyOn(console, 'error').mockImplementation(),
 };
 
-const mockFs = require('fs-extra') as jest.Mocked<typeof import('fs-extra')>;
+const mockFs = fs as jest.Mocked<typeof fs>;
 const mockOs = os as jest.Mocked<typeof os>;
 
 describe('BenchmarkRunner', () => {

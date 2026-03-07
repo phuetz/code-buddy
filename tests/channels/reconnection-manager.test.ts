@@ -5,7 +5,7 @@
  */
 
 import { ReconnectionManager } from '../../src/channels/reconnection-manager.js';
-import type { ReconnectionConfig } from '../../src/channels/reconnection-manager.js';
+import { vi } from 'vitest';
 
 // Mock logger
 jest.mock('../../src/utils/logger.js', () => ({
@@ -21,13 +21,13 @@ describe('ReconnectionManager', () => {
   let manager: ReconnectionManager;
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     manager = new ReconnectionManager('test-channel');
   });
 
   afterEach(() => {
     manager.cancel();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   // ==========================================================================
@@ -173,7 +173,7 @@ describe('ReconnectionManager', () => {
 
       expect(connectFn).not.toHaveBeenCalled();
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
       // Let the async callback execute
       await Promise.resolve();
       await Promise.resolve();
@@ -233,7 +233,7 @@ describe('ReconnectionManager', () => {
 
       m.scheduleReconnect(jest.fn().mockResolvedValue(undefined));
 
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -257,7 +257,7 @@ describe('ReconnectionManager', () => {
       const error = new Error('Connection failed');
       m.scheduleReconnect(jest.fn().mockRejectedValue(error));
 
-      await jest.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(100);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -300,7 +300,7 @@ describe('ReconnectionManager', () => {
 
       m.scheduleReconnect(jest.fn().mockRejectedValue('string error'));
 
-      await jest.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(100);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -368,7 +368,7 @@ describe('ReconnectionManager', () => {
       const connectFn = jest.fn();
       m.scheduleReconnect(connectFn);
 
-      jest.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(10000);
 
       expect(connectFn).not.toHaveBeenCalled();
 
@@ -426,7 +426,7 @@ describe('ReconnectionManager', () => {
       const connectFn = jest.fn().mockResolvedValue(undefined);
       m.scheduleReconnect(connectFn);
 
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -455,7 +455,7 @@ describe('ReconnectionManager', () => {
 
       m.cancel();
 
-      jest.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(10000);
 
       expect(connectFn).not.toHaveBeenCalled();
       expect(m.isPending()).toBe(false);
@@ -549,7 +549,7 @@ describe('ReconnectionManager', () => {
 
       m.scheduleReconnect(jest.fn().mockResolvedValue(undefined));
 
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -574,7 +574,7 @@ describe('ReconnectionManager', () => {
 
       m.scheduleReconnect(jest.fn().mockRejectedValue(new Error('fail')));
 
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -649,7 +649,7 @@ describe('ReconnectionManager', () => {
       const fn1 = jest.fn().mockRejectedValue(new Error('fail'));
       m.scheduleReconnect(fn1);
 
-      await jest.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(100);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();

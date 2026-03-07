@@ -39,10 +39,13 @@ import type {
 } from '../../src/agent/repair/types';
 
 // Mock fs module for iterative repair tests
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   readFileSync: jest.fn().mockReturnValue('const x = null;'),
   writeFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock child_process for test execution
 jest.mock('child_process', () => ({

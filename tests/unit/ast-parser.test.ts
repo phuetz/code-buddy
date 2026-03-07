@@ -5,7 +5,7 @@
  */
 
 // Increase Jest timeout for this memory-heavy test suite
-jest.setTimeout(60000);
+vi.setConfig({ testTimeout: 60000 });
 
 describe('AST Parser', () => {
   // Lazy import to avoid memory issues

@@ -252,15 +252,21 @@ describe('EmbeddingProvider', () => {
       expect(provider.isReady()).toBe(true);
     });
 
-    it('should emit initialized event', (done) => {
+    it('should emit initialized event', async () => {
       const provider = new EmbeddingProvider({ provider: 'mock' });
 
-      provider.on('initialized', (data) => {
-        expect(data.provider).toBe('mock');
-        done();
+      const initializedEvent = new Promise<void>((resolve, reject) => {
+        provider.once('initialized', (data) => {
+          try {
+            expect(data.provider).toBe('mock');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      provider.initialize();
+      await Promise.all([initializedEvent, provider.initialize()]);
     });
 
     it('should not reinitialize if already initialized', async () => {

@@ -1,0 +1,164 @@
+Contents of smoke-test.mjs:
+1: import { spawn } from 'child_process';
+2: import fetch from 'node-fetch';
+3: import WebSocket from 'ws';
+4: import { promises as fs } from 'fs';
+5: import path from 'path';
+6: 
+7: const DATA_FILE = path.join(process.cwd(), 'data', 'incidents.json');
+8: 
+9: async function runSmokeTest() {
+10:     console.log('Starting smoke test...');
+11: 
+12:     let serverProcess;
+13:     let port;
+14: 
+15:     try {
+16:         // 1. Start the server on a random port
+17:         console.log('1. Starting server...');
+18:         serverProcess = spawn('node', ['src/server.js'], {
+19:             env: { ...process.env, NODE_ENV: 'test' },
+20:             stdio: ['inherit', 'inherit', 'inherit', 'ipc']
+21:         });
+22: 
+23:         port = await new Promise((resolve, reject) => {
+24:             serverProcess.on('message', (msg) => {
+25:                 if (msg.port) resolve(msg.port);
+26:             });
+27:             serverProcess.on('error', reject);
+28:             serverProcess.on('exit', (code) => {
+29:                 if (code !== 0) reject(new Error(`Server exited with code ${code}`));
+30:             });
+31:             // Set a timeout to prevent hanging if the server doesn't send the port
+32:             setTimeout(() => reject(new Error("Server did not report port in time.")), 10000);
+33:         });
+34: 
+35:         const baseUrl = `http://localhost:${port}`;
+36:         const wsUrl = `ws://localhost:${port}`;
+37:         console.log(`Server running on ${baseUrl}`);
+38: 
+39:         // 2. Verify /health endpoint
+40:         console.log('2. Verifying /health endpoint...');
+41:         const healthRes = await fetch(`${baseUrl}/health`);
+42:         if (healthRes.status !== 200) {
+43:             throw new Error(`Health check failed with status ${healthRes.status}`);
+44:         }
+45:         console.log('/health OK.');
+46: 
+47:         // 3. Create an incident
+48:         console.log('3. Creating an incident...');
+49:         const newIncidentRes = await fetch(`${baseUrl}/api/incidents`, {
+50:             method: 'POST',
+51:             headers: { 'Content-Type': 'application/json' },
+52:             body: JSON.stringify({ title: 'Test Incident', description: 'This is a test incident.' })
+53:         });
+54:         const newIncident = await newIncidentRes.json();
+55:         if (newIncidentRes.status !== 201 || !newIncident.id) {
+56:             throw new Error(`Failed to create incident: ${JSON.stringify(newIncident)}`);
+57:         }
+58:         console.log('Incident created:', newIncident.id);
+59: 
+60:         // 4. Update the incident
+61:         console.log('4. Updating the incident status...');
+62:         const updatedIncidentRes = await fetch(`${baseUrl}/api/incidents/${newIncident.id}`, {
+63:             method: 'PUT',
+64:             headers: { 'Content-Type': 'application/json' },
+65:             body: JSON.stringify({ status: 'in_progress' })
+66:         });
+67:         const updatedIncident = await updatedIncidentRes.json();
+68:         if (updatedIncidentRes.status !== 200 || updatedIncident.status !== 'in_progress') {
+69:             throw new Error(`Failed to update incident: ${JSON.stringify(updatedIncident)}`);
+70:         }
+71:         console.log('Incident updated to in_progress.');
+72: 
+73:         // 5. Launch a job and verify progression via HTTP
+74:         console.log('5. Launching a job and verifying via HTTP...');
+75:         const newJobRes = await fetch(`${baseUrl}/api/jobs`, {
+76:             method: 'POST',
+77:             headers: { 'Content-Type': 'application/json' },
+78:             body: JSON.stringify({ task: 'Process important data' })
+79:         });
+80:         const newJob = await newJobRes.json();
+81:         if (newJobRes.status !== 202 || !newJob.id) {
+82:             throw new Error(`Failed to enqueue job: ${JSON.stringify(newJob)}`);
+83:         }
+84:         console.log('Job enqueued:', newJob.id);
+85: 
+86:         let jobStatus = newJob.status;
+87:         let attempts = 0;
+88:         while (jobStatus !== 'done' && jobStatus !== 'failed' && attempts < 20) {
+89:             await new Promise(resolve => setTimeout(resolve, 500));
+90:             const jobRes = await fetch(`${baseUrl}/api/jobs/${newJob.id}`);
+91:             const job = await jobRes.json();
+92:             jobStatus = job.status;
+93:             console.log(`Job ${newJob.id} status (HTTP): ${jobStatus}`);
+94:             attempts++;
+95:         }
+96: 
+97:         if (jobStatus !== 'done') {
+98:             throw new Error(`Job ${newJob.id} did not complete successfully via HTTP. Final status: ${jobStatus}`);
+99:         }
+100:         console.log('Job completed successfully via HTTP.');
+101: 
+102:         // 6. Verify job progression via WebSocket with 2 clients
+103:         console.log('6. Verifying job progression via WebSocket with 2 clients...');
+104:         const ws1 = new WebSocket(wsUrl);
+105:         const ws2 = new WebSocket(wsUrl);
+106: 
+107:         await Promise.all([
+108:             new Promise(resolve => ws1.onopen = () => { console.log('WS1 connected'); resolve(); }),
+109:             new Promise(resolve => ws2.onopen = () => { console.log('WS2 connected'); resolve(); })
+110:         ]);
+111:         console.log("Both WebSockets are open.");
+112: 
+113:         let ws1JobStatus = '';
+114:         let ws2JobStatus = '';
+115:         let jobCreatedCount = 0;
+116:         let jobUpdatedCount = 0;
+117: 
+118:         const jobPromise = new Promise((resolve, reject) => {
+119: 
+120:             setTimeout(() => reject(new Error("WebSocket job status not confirmed in time.")), 30000);
+121:         });
+122: 
+123:         await jobPromise;
+124:         ws1.close();
+125:         ws2.close();
+126:         console.log('WebSocket job progression verified.');
+127: 
+128:         // 7. Delete the incident
+129:         console.log('7. Deleting the incident...');
+130:         const deleteRes = await fetch(`${baseUrl}/api/incidents/${newIncident.id}`, {
+131:             method: 'DELETE'
+132:         });
+133:         if (deleteRes.status !== 204) {
+134:             throw new Error(`Failed to delete incident: ${deleteRes.status}`);
+135:         }
+136:         console.log('Incident deleted.');
+137: 
+138:         console.log('All smoke tests passed!');
+139: 
+140:     } catch (error) {
+141:         console.error('Smoke test failed:', error);
+142:         process.exit(1);
+143:     } finally {
+144:         // 8. Cleanup
+145:         console.log('8. Cleaning up...');
+146:         if (serverProcess) {
+147:             serverProcess.kill();
+148:             console.log('Server process killed.');
+149:         }
+150:         // Clean up the data file
+151:         try {
+152:             await fs.unlink(DATA_FILE);
+153:             console.log('incidents.json cleaned up.');
+154:         } catch (error) {
+155:             if (error.code !== 'ENOENT') {
+156:                 console.error('Error cleaning up data file:', error);
+157:             }
+158:         }
+159:     }
+160: }
+161: 
+162: runSmokeTest();
+163: 

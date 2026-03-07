@@ -1,0 +1,14 @@
+Contents of prompt.txt:
+1: Tu développes une application IA avancée dans ce dossier vide.
+2: Construis une application 'ai-support-desk' (Express + frontend) connectée à Gemini.
+3: Fonctionnalités: conversation multi-tour, historique court, endpoint /health, endpoint /api/chat.
+4: Ajoute gestion d erreurs API robuste + limite de taille message + fallback message utilisateur.
+5: Ajoute script de test réel qui appelle /api/chat et vérifie une réponse.
+6: Contraintes:
+7: - Code production minimal mais propre.
+8: - Travaille directement dans le dossier courant (ne crée pas de sous-dossier principal).
+9: - Crée un README clair.
+10: - Crée un smoke-test.mjs qui retourne code 0 si tout fonctionne.
+11: - Lance les commandes nécessaires pour valider le fonctionnement réel.
+12: - Si une commande échoue, corrige et relance.
+13: - Réponds avec un résumé final bref.

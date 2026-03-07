@@ -1,0 +1,4 @@
+String not found in file: "  let agent;
+  let userId;"
+
+💡 Tip: For multi-line replacements, ensure exact whitespace match or use line-based editing.

@@ -1,0 +1,66 @@
+Updated server.js with 62 additions
+--- a/server.js
++++ b/server.js
+@@ -1,0 +1,62 @@
++
++import express from 'express';
++import { GoogleGenerativeAI } from '@google/generative-ai';
++import dotenv from 'dotenv';
++
++dotenv.config();
++
++const app = express();
++const port = process.env.PORT || 3000;
++
++// Access your API key as an environment variable
++const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
++
++// Middleware to parse JSON request bodies
++app.use(express.json());
++
++// Serve static files from the 'public' directory
++app.use(express.static('public'));
++
++// /health endpoint
++app.get('/health', (req, res) => {
++    res.status(200).send('OK');
++});
++
++// /api/chat endpoint
++app.post('/api/chat', async (req, res) => {
++    const { message, history } = req.body;
++
++    if (!message) {
++        return res.status(400).json({ error: 'Message is required.' });
++    }
++
++    // Message size limit
++    const MAX_MESSAGE_LENGTH = 1000;
++    if (message.length > MAX_MESSAGE_LENGTH) {
++        return res.status(400).json({ error: `Message exceeds the maximum length of ${MAX_MESSAGE_LENGTH} characters.` });
++    }
++
++    try {
++        const model = genAI.getGenerativeModel({ model: "gemini-pro"});
++
++        const chat = model.startChat({
++            history: history || [],
++        });
++
++        const result = await chat.sendMessage(message);
++        const response = await result.response;
++        const text = response.text();
++
++        res.json({ response: text });
++
++    } catch (error) {
++        console.error('Error communicating with Gemini API:', error);
++        // Fallback message for the user
++        res.status(500).json({ error: 'An error occurred while processing your request. Please try again later.' });
++    }
++});
++
++app.listen(port, () => {
++    console.log(`Server listening at http://localhost:${port}`);
++});
++

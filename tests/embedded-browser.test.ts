@@ -176,23 +176,35 @@ describe('EmbeddedBrowser', () => {
   });
 
   describe('events', () => {
-    it('should emit session:created event', (done) => {
-      browser.on('session:created', (data) => {
-        expect(data.sessionId).toBeDefined();
-        done();
-      });
+    it('should emit session:created event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        browser.once('session:created', (data) => {
+          try {
+            expect(data.sessionId).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      browser.createSession();
+        browser.createSession();
+      });
     });
 
-    it('should emit session:closed event', (done) => {
-      browser.on('session:closed', (data) => {
-        expect(data.sessionId).toBeDefined();
-        done();
-      });
+    it('should emit session:closed event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        browser.once('session:closed', (data) => {
+          try {
+            expect(data.sessionId).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      const session = browser.createSession();
-      browser.closeSession(session.id);
+        const session = browser.createSession();
+        browser.closeSession(session.id);
+      });
     });
   });
 

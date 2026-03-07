@@ -19,13 +19,16 @@ import { tmpdir } from 'os';
 // ============================================================================
 
 // Mock chalk before importing logger
-jest.mock('chalk', () => ({
+jest.mock('chalk', () => {
+  const impl = {
   gray: (s: string) => `[gray]${s}[/gray]`,
   blue: (s: string) => `[blue]${s}[/blue]`,
   yellow: (s: string) => `[yellow]${s}[/yellow]`,
   red: (s: string) => `[red]${s}[/red]`,
   cyan: (s: string) => `[cyan]${s}[/cyan]`,
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Store original env vars
 const originalEnv = { ...process.env };
@@ -789,10 +792,13 @@ describe('Debug Helper Function', () => {
 // ============================================================================
 
 // Mock the home directory for interaction logger tests
-jest.mock('os', () => ({
-  ...jest.requireActual('os'),
+jest.mock('os', () => {
+  const impl = {
+  ...await vi.importActual('os'),
   homedir: () => join(tmpdir(), 'grok-test-home-logging'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('Interaction Logger', () => {
   const MOCK_HOME = join(tmpdir(), 'grok-test-home-logging');

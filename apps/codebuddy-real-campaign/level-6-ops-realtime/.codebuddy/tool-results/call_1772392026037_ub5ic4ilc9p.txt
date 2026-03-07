@@ -1,0 +1,4 @@
+String not found in file: "        console.log('6. Verifying job progression via WebSocket with 2 clients...');
+        const w..."
+
+💡 Tip: For multi-line replacements, ensure exact whitespace match or use line-based editing.

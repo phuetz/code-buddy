@@ -1,0 +1,1 @@
+Command blocked: Potentially dangerous command pattern detected: curl.*|.*sh

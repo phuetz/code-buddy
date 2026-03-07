@@ -1,0 +1,13 @@
+Tu développes une application web full-stack dans ce dossier vide.
+Construis une application 'notes-board' avec backend Express + frontend HTML/JS.
+Backend: CRUD notes + persistance fichier JSON + validation d input.
+Frontend: liste, ajout, suppression, édition simple.
+Ajoute test API minimal et smoke-test E2E local.
+Contraintes:
+- Code production minimal mais propre.
+- Travaille directement dans le dossier courant (ne crée pas de sous-dossier principal).
+- Crée un README clair.
+- Crée un smoke-test.mjs qui retourne code 0 si tout fonctionne.
+- Lance les commandes nécessaires pour valider le fonctionnement réel.
+- Si une commande échoue, corrige et relance.
+- Réponds avec un résumé final bref.

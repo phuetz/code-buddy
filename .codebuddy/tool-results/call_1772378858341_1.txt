@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "TypeScript 5 Compiler Performance Configuration Module Resolution Improvements"
+══════════════════════════════════════════════════
+
+1. **Documentation - TypeScript 5.0** [1]
+   TypeScript 4.7 introduced the node16 and nodenext options for its --module and --moduleResolution settings. The intent of these options was to better model the ...
+
+2. **TypeScript Settings You Should Add To Increase Performance ...** [2]
+   Smaller bundle sizes lead to faster load times and improved performance for end-users in production environments. ... Under the hood, this setting ...
+
+3. **TypeScript 5: New Innovations & Breaking Changes** [3]
+   TypeScript 4.7 introduced a stricter module resolution. Because this sometimes didn't fit the behavior of module bundlers like Webpack, ...
+
+4. **Performance · microsoft/TypeScript Wiki - GitHub** [4]
+   There are easy ways to configure TypeScript to ensure faster compilations and editing experiences. The earlier that these practices can be adopted, the better.
+
+5. **TypeScript 5.0 Updates: What's New - GeeksforGeeks** [5]
+   Explore the latest TypeScript 5.0 features like decorators, const type parameters, improved enums, module resolution, and config file support
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[2] TypeScript Settings You Should Add To Increase Performance ... — https://medium.com/@colizu2020/unlock-blazing-fast-typescript-builds-with-these-config-settings-2025-38dfd9fd227c
+[3] TypeScript 5: New Innovations & Breaking Changes — https://javascript-conference.com/blog/typescript-5/
+[4] Performance · microsoft/TypeScript Wiki - GitHub — https://github.com/microsoft/Typescript/wiki/Performance
+[5] TypeScript 5.0 Updates: What's New - GeeksforGeeks — https://www.geeksforgeeks.org/typescript/typescript-5-0-updates-what-s-new/

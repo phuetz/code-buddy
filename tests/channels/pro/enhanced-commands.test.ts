@@ -58,7 +58,7 @@ describe('EnhancedCommands', () => {
     });
 
     it('should handle git errors gracefully', () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation(function() {
         throw new Error('not a git repository');
       });
 
@@ -108,7 +108,7 @@ describe('EnhancedCommands', () => {
     });
 
     it('should handle errors gracefully', () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation(function() {
         throw new Error('bad revision');
       });
 
@@ -172,7 +172,7 @@ describe('EnhancedCommands', () => {
     });
 
     it('should handle gh CLI errors', () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation(function() {
         throw new Error('gh: command not found');
       });
 

@@ -17,7 +17,7 @@ import {
   getPromptManager,
   autoSelectPromptId,
 } from "../prompts/index.js";
-import { EnhancedMemory } from "../memory/index.js";
+import { EnhancedMemory, PersistentMemoryManager } from "../memory/index.js";
 import { PromptCacheManager } from "../optimization/prompt-cache.js";
 import { MoltbotHooksManager } from "../hooks/moltbot-hooks.js";
 import { getModelToolConfig } from "../config/model-tools.js";
@@ -34,7 +34,8 @@ export class PromptBuilder {
     private config: PromptBuilderConfig,
     private promptCacheManager: PromptCacheManager,
     private memory?: EnhancedMemory,
-    private moltbotHooksManager?: MoltbotHooksManager
+    private moltbotHooksManager?: MoltbotHooksManager,
+    private persistentMemory?: PersistentMemoryManager
   ) {}
 
   /**
@@ -65,16 +66,31 @@ export class PromptBuilder {
 
       // Get memory context if enabled
       let memoryContext: string | undefined;
-      if (this.config.memoryEnabled && this.memory) {
-        try {
-          memoryContext = await this.memory.buildContext({
-            includeProject: true,
-            includePreferences: true,
-            includeRecentSummaries: true
-          });
-        } catch (err) {
-          logger.warn("Failed to build memory context", { error: getErrorMessage(err) });
+      if (this.config.memoryEnabled) {
+        let enhancedMemoryContext = "";
+        if (this.memory) {
+          try {
+            enhancedMemoryContext = await this.memory.buildContext({
+              includeProject: true,
+              includePreferences: true,
+              includeRecentSummaries: true
+            });
+          } catch (err) {
+            logger.warn("Failed to build enhanced memory context", { error: getErrorMessage(err) });
+          }
         }
+
+        let persistentMemoryContext = "";
+        if (this.persistentMemory) {
+          try {
+            persistentMemoryContext = this.persistentMemory.getContextForPrompt();
+          } catch (err) {
+            logger.warn("Failed to build persistent memory context", { error: getErrorMessage(err) });
+          }
+        }
+
+        memoryContext = (enhancedMemoryContext + "\n" + persistentMemoryContext).trim();
+        if (!memoryContext) memoryContext = undefined;
       }
 
       if (systemPromptId && systemPromptId !== 'auto') {

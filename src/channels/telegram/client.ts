@@ -26,8 +26,8 @@ import type {
   MessageAttachment,
   ContentType,
   MessageButton,
-} from '../index.js';
-import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
+} from '../core.js';
+import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
 import { logger } from '../../utils/logger.js';
 import type { ProFeatures } from '../pro/pro-features.js';
@@ -553,6 +553,7 @@ export class TelegramChannel extends BaseChannel {
   ): Promise<boolean> {
     const cmd = parsed.commandName;
     const args = parsed.commandArgs || [];
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
 
     const sendFn = async (cId: string, text: string, buttons?: ProMessageButton[]) => {
@@ -587,6 +588,7 @@ export class TelegramChannel extends BaseChannel {
     userId: string,
     chatId: string
   ): Promise<boolean> {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
 
     const sendFn = async (cId: string, text: string, buttons?: ProMessageButton[]) => {

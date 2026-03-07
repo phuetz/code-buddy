@@ -1,0 +1,15 @@
+Directory: D:\CascadeProjects\grok-cli\apps\codebuddy-real-campaign\level-4-auth-sqlite
+10 entries
+
+Type       Size  Modified          Name
+---------------------------------------
+dir/          -  2026-03-01 19:34  .codebuddy/
+dir/          -  2026-03-01 19:40  node_modules/
+dir/          -  2026-03-01 19:35  public/
+file      32 KB  2026-03-01 19:41  database.db-shm
+file      64 KB  2026-03-01 19:41  database.db-wal
+file     119 KB  2026-03-01 19:42  package-lock.json
+file      551 B  2026-03-01 19:37  package.json
+file     1.5 KB  2026-03-01 19:35  README.md
+file     6.6 KB  2026-03-01 19:41  server.mjs
+file     4.5 KB  2026-03-01 19:41  smoke-test.mjs

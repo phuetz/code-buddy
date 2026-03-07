@@ -1,0 +1,29 @@
+
+🔍 Résultats pour: "TypeScript 5 new language features type system enhancements"
+══════════════════════════════════════════════════
+
+1. **TypeScript: Documentation - TypeScript 5.9** [1]
+   Do we really need to jump to the definition of the type Options just to see what members this value has? Previously, that was actually the case. To help here, TypeScript 5.9 is now previewing a feature called expandable hovers, or “quick info verbosity”. If you use an editor like VS Code, ...
+
+2. **TypeScript 5.9 New Features: Developer Guide 2026** [2]
+   TypeScript 5.9 introduces several additions to the type system that <strong>enable more precise type modeling without additional verbosity</strong>.
+   📅 January 26, 2026
+
+3. **TypeScript 5.4-5.6: The Essential Features You Need to Master in 2025 | DataFormatHub** [3]
+   Beyond core type system changes, ... realize you needed until you have it. TypeScript 5.5 now performs <strong>basic syntax validation for regular expression literals</strong>....
+   📅 December 19, 2025
+
+4. **Yes, you should upgrade to TypeScript 5.9 — here's why - LogRocket Blog** [4]
+   Explore the key features of TypeScript 5.9, including the redesigned tsc --init command, import defer syntax, expandable hovers, and more.
+   📅 September 29, 2025
+
+5. **New Typescript features – what’s new in TypeScript?** [5]
+   TypeScript 5.3 brought improvements to <strong>type narrowing</strong>, making the compiler capable of understanding types in complex scenarios. Notably, it enhanced narrowing within switch (true) statements, allowing for more precise type discrimination when ...
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript: Documentation - TypeScript 5.9 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html
+[2] TypeScript 5.9 New Features: Developer Guide 2026 — https://www.digitalapplied.com/blog/typescript-5-9-new-features-developer-guide-2026
+[3] TypeScript 5.4-5.6: The Essential Features You Need to Master in 2025 | DataFormatHub — https://www.dataformathub.com/blog/typescript-5-4-5-6-the-essential-features-you-need-to-master-in-2025-tix
+[4] Yes, you should upgrade to TypeScript 5.9 — here's why - LogRocket Blog — https://blog.logrocket.com/upgrade-to-typescript-5-9/
+[5] New Typescript features – what’s new in TypeScript? — https://tsh.io/blog/new-typescript-features

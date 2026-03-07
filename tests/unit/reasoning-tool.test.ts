@@ -17,7 +17,7 @@ const mockReasoner = {
 };
 
 jest.mock('../../src/agent/reasoning/index', () => ({
-  getTreeOfThoughtReasoner: jest.fn(() => mockReasoner),
+  getTreeOfThoughtReasoner: jest.fn(function() { return mockReasoner; }),
 }));
 
 describe('ReasoningTool', () => {

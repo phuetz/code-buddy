@@ -80,16 +80,16 @@ jest.mock('ws', () => {
 });
 
 // Mock http server
-jest.mock('http', () => {
-  const original = jest.requireActual('http');
+jest.mock('http', async () => {
+  const original = await vi.importActual('http');
   return {
     ...original,
-    createServer: jest.fn(() => ({
+    createServer: jest.fn(function() { return {
       listen: jest.fn((_port: number, _host: string, callback: () => void) => callback()),
       close: jest.fn((callback: () => void) => callback()),
       on: jest.fn(),
       listening: true,
-    })),
+    }; }),
   };
 });
 
@@ -333,35 +333,53 @@ describe('WebSocket Transport', () => {
       expect(stats.byType.webchat).toBe(1);
     });
 
-    it('should emit events on agent registration', (done) => {
-      registry.on('agent:registered', (agent) => {
-        expect(agent.id).toBe('agent-1');
-        done();
-      });
+    it('should emit events on agent registration', async () => {
+      await new Promise<void>((resolve, reject) => {
+        registry.once('agent:registered', (agent) => {
+          try {
+            expect(agent.id).toBe('agent-1');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      registry.register(createTestAgent());
+        registry.register(createTestAgent());
+      });
     });
 
-    it('should emit events on agent unregistration', (done) => {
+    it('should emit events on agent unregistration', async () => {
       registry.register(createTestAgent());
 
-      registry.on('agent:unregistered', (agentId) => {
-        expect(agentId).toBe('agent-1');
-        done();
-      });
+      await new Promise<void>((resolve, reject) => {
+        registry.once('agent:unregistered', (agentId) => {
+          try {
+            expect(agentId).toBe('agent-1');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      registry.unregister('agent-1');
+        registry.unregister('agent-1');
+      });
     });
 
-    it('should emit events on status change', (done) => {
+    it('should emit events on status change', async () => {
       registry.register(createTestAgent());
 
-      registry.on('agent:status-changed', (agent) => {
-        expect(agent.status).toBe('busy');
-        done();
-      });
+      await new Promise<void>((resolve, reject) => {
+        registry.once('agent:status-changed', (agent) => {
+          try {
+            expect(agent.status).toBe('busy');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      registry.updateStatus('agent-1', 'busy');
+        registry.updateStatus('agent-1', 'busy');
+      });
     });
   });
 

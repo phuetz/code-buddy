@@ -1,6 +1,10 @@
-import type { ChatCompletionChunk } from 'openai/resources/chat';
 
 // Mock logger before importing the client
+
+import type { ChatCompletionChunk } from 'openai/resources/chat';
+import { CodeBuddyClient } from '../../src/codebuddy/client.js';
+import type { CodeBuddyTool, CodeBuddyMessage } from '../../src/codebuddy/client.js';
+
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     info: jest.fn(),
@@ -13,7 +17,7 @@ jest.mock('../../src/utils/logger.js', () => ({
 // Mock model-utils to avoid validation issues
 jest.mock('../../src/utils/model-utils.js', () => ({
   validateModel: jest.fn(),
-  getModelInfo: jest.fn(() => ({ isSupported: true, provider: 'google' })),
+  getModelInfo: jest.fn(function() { return { isSupported: true, provider: 'google' }; }),
 }));
 
 // Mock retry to just execute the function directly
@@ -23,8 +27,6 @@ jest.mock('../../src/utils/retry.js', () => ({
   RetryPredicates: {},
 }));
 
-import { CodeBuddyClient } from '../../src/codebuddy/client.js';
-import type { CodeBuddyTool, CodeBuddyMessage } from '../../src/codebuddy/client.js';
 
 // ---------- helpers ----------
 

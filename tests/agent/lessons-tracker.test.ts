@@ -15,7 +15,7 @@ import { getLessonsTracker, LessonsTracker } from '../../src/agent/lessons-track
 // The module-level variable is updated per-test in beforeEach.
 let _fakeHome = '/tmp/lessons-test-home-placeholder';
 jest.mock('os', () => {
-  const actual = jest.requireActual<typeof import('os')>('os');
+  const actual = await vi.importActual<typeof import('os')>('os');
   return { ...actual, homedir: jest.fn(() => _fakeHome) };
 });
 

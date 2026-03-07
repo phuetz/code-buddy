@@ -11,10 +11,13 @@ import ProjectStyleLearner, {
 } from '../../src/advanced/project-style-learning';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   readFile: jest.fn(),
   readdir: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import fs from 'fs-extra';
 

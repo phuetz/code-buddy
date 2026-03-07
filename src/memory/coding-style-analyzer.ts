@@ -375,7 +375,7 @@ export class CodingStyleAnalyzer {
       content.match(/(?:const|let|var|function)\s+[a-zA-Z_$]/g) || []
     ).length;
     const annotations = (
-      content.match(/:\s*(?:[A-Z][a-zA-Z0-9<>\[\]|&]*|string|number|boolean|void|any|unknown|never)/g) || []
+      content.match(/:\s*(?:[A-Z][a-zA-Z0-9<>[\]|&]*|string|number|boolean|void|any|unknown|never)/g) || []
     ).length;
 
     if (declarations === 0) return 'moderate';

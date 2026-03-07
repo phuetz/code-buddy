@@ -1,0 +1,28 @@
+
+🔍 Résultats pour: "TypeScript 5.0 Core Language and Type System Enhancements official release notes"
+══════════════════════════════════════════════════
+
+1. **TypeScript: Documentation - TypeScript 5.9** [1]
+   Note that <strong>import defer is not transformed or “downleveled” at all by TypeScript</strong>. It is intended to be used in runtimes that support the feature natively, or by tools such as bundlers that can apply the appropriate transformation.
+
+2. **Announcing TypeScript 5.0 - TypeScript** [2]
+   Aside from deprecations, we’ve changed some settings to better improve cross-platform behavior in TypeScript. --newLine, which controls the line endings emitted in JavaScript files, used to be inferred based on the current operating system if not specified. We think builds should be as deterministic as possible, and Windows Notepad supports line-feed line endings now, so the new default setting is LF.
+   📅 March 17, 2023
+
+3. **TypeScript: Documentation - TypeScript 5.0** [3]
+   Aside from deprecations, we’ve changed some settings to better improve cross-platform behavior in TypeScript. --newLine, which controls the line endings emitted in JavaScript files, used to be inferred based on the current operating system if not specified. We think builds should be as deterministic as possible, and Windows Notepad supports line-feed line endings now, so the new default setting is LF.
+
+4. **TypeScript 5.5: A Deep Dive into the New Features and Enhancements | by Fahim ahmed | Medium** [4]
+   2. Enhanced Control Flow Analysis for Constant Indexed Accesses · The control flow analysis in TypeScript has been improved to better handle constant indexed accesses. This feature allows TypeScript to better understand the types of elements when accessing object properties or array elements with constant keys. ... const config = { theme: &quot;dark&quot;, language: &quot;en&quot;, }; const key = &quot;theme&quot;; const value = config[key]; // TypeScript 5.5 can better analyze this as a string.
+   📅 October 20, 2024
+
+5. **TypeScript: Documentation - TypeScript 5.1** [5]
+   This optimization was able to <strong>reduce the type-checking time of the code in this issue from about 45 seconds to about 0.4 seconds</strong>.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript: Documentation - TypeScript 5.9 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html
+[2] Announcing TypeScript 5.0 - TypeScript — https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/
+[3] TypeScript: Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[4] TypeScript 5.5: A Deep Dive into the New Features and Enhancements | by Fahim ahmed | Medium — https://medium.com/@fahim52510/typescript-5-5-a-deep-dive-into-the-new-features-and-enhancements-6cf24ed692da
+[5] TypeScript: Documentation - TypeScript 5.1 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-1.html

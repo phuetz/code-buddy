@@ -1,0 +1,22 @@
+Updated package.json with 18 additions
+--- a/package.json
++++ b/package.json
+@@ -1,0 +1,18 @@
++{
++  "name": "ai-support-desk",
++  "version": "1.0.0",
++  "description": "AI Support Desk application powered by Gemini API",
++  "main": "server.mjs",
++  "type": "module",
++  "scripts": {
++    "start": "node server.mjs",
++    "smoke-test": "node smoke-test.mjs"
++  },
++  "dependencies": {
++    "express": "^4.18.2",
++    "@google/generative-ai": "^0.1.3"
++  },
++  "devDependencies": {
++    "node-fetch": "^3.3.2"
++  }
++}

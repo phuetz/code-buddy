@@ -1,0 +1,12 @@
+Updated README.md with 1 addition and 1 removal
+--- a/README.md
++++ b/README.md
+@@ -6,7 +6,7 @@
+ 
+ - User registration, login, and logout
+ - Session management using cookies
+-- SQLite database for users and tasks
++- SQLite database (using `better-sqlite3` for improved cross-platform compatibility) for users and tasks
+ - CRUD operations for tasks, protected by user authentication
+ - Input validation and error handling
+ - `/health` endpoint for readiness checks

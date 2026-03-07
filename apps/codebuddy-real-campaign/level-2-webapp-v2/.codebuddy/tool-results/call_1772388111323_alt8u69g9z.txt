@@ -1,0 +1,2 @@
+/bin/bash: line 1: findstr: command not found
+/bin/bash: line 1: netstat: command not found

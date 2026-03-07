@@ -232,9 +232,15 @@ export class CanvasExecuteTool implements ITool {
           return { success: true, output: `${sbId} sent to back` };
         }
         case 'import': {
-          if (!canvasId) return { success: false, error: 'canvasId is required' };
-          // Import is just loading JSON data
-          return { success: true, output: 'Import not yet implemented' };
+          const jsonInput = input.json ?? input.data;
+          if (typeof jsonInput !== 'string' || jsonInput.trim().length === 0) {
+            return { success: false, error: 'json (or data) is required for import action' };
+          }
+          const imported = mgr.importFromJSON(jsonInput);
+          return {
+            success: true,
+            output: `Canvas imported: ${imported.id} (${imported.elements.length} elements)`,
+          };
         }
         default:
           return { success: false, error: `Unknown action: ${action}` };
@@ -263,6 +269,8 @@ export class CanvasExecuteTool implements ITool {
           size: { type: 'object', description: 'Size {width, height}' },
           format: { type: 'string', enum: ['terminal', 'html', 'json', 'svg'], description: 'Output format' },
           config: { type: 'object', description: 'Canvas configuration' },
+          json: { type: 'string', description: 'Serialized canvas JSON to import (for import action)' },
+          data: { type: 'string', description: 'Alias of json for import action' },
         },
         required: ['action'],
       },

@@ -6,30 +6,41 @@
  * handling multiple configuration sources.
  */
 
-import path from 'path';
-import os from 'os';
 
 // Mock fs
-jest.mock('fs', () => ({
+
+import path from 'path';
+import os from 'os';
+import fs from 'fs';
+import { MCPServerConfig } from '../../src/mcp/client';
+import { logger } from '../../src/utils/logger';
+
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock os
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   homedir: jest.fn(() => '/home/testuser'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock settings manager
 const mockLoadProjectSettings = jest.fn();
 const mockUpdateProjectSetting = jest.fn();
 jest.mock('../../src/utils/settings-manager.js', () => ({
-  getSettingsManager: jest.fn(() => ({
+  getSettingsManager: jest.fn(function() { return {
     loadProjectSettings: mockLoadProjectSettings,
     updateProjectSetting: mockUpdateProjectSetting,
-  })),
+  }; }),
 }));
 
 // Mock logger
@@ -42,7 +53,6 @@ jest.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
-import fs from 'fs';
 import {
   MCPConfig,
   loadMCPConfig,
@@ -56,8 +66,6 @@ import {
   hasProjectMCPConfig,
   getMCPConfigPaths,
 } from '../../src/mcp/config';
-import { MCPServerConfig } from '../../src/mcp/client';
-import { logger } from '../../src/utils/logger';
 
 describe('loadMCPConfig', () => {
   beforeEach(() => {
@@ -235,7 +243,7 @@ describe('loadMCPConfig', () => {
       (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
         return p.includes('.codebuddy') && p.includes('mcp.json') && !p.includes('testuser');
       });
-      (fs.readFileSync as jest.Mock).mockImplementation(() => {
+      (fs.readFileSync as jest.Mock).mockImplementation(function() {
         throw new Error('Permission denied');
       });
       mockLoadProjectSettings.mockReturnValue({});
@@ -693,9 +701,9 @@ describe('Integration Scenarios', () => {
     it('should add, get, and remove server', () => {
       // Setup initial state
       let currentServers: Record<string, any> = {};
-      mockLoadProjectSettings.mockImplementation(() => ({
+      mockLoadProjectSettings.mockImplementation(function() { return {
         mcpServers: currentServers,
-      }));
+      }; });
       mockUpdateProjectSetting.mockImplementation((key, value) => {
         if (key === 'mcpServers') {
           currentServers = value;

@@ -1,0 +1,1 @@
+Syntax validation failed (javascript): Line 51: Mismatched '}' — expected closing for '(' at line 50; Line 52: Mismatched ')' — expected closing for '{' at line 49; Unclosed '(' at line 2; Unclosed '(' at line 49; Unclosed '{' at line 49

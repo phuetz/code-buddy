@@ -37,7 +37,7 @@ describe('MCPManager Enhancements', () => {
       callTool: jest.fn(),
     };
     
-    (Client as jest.Mock).mockImplementation(() => mockClientInstance);
+    (Client as jest.Mock).mockImplementation(function() { return mockClientInstance; });
   });
 
   afterEach(async () => {

@@ -40,10 +40,11 @@ const DEFAULT_CONFIG: AutoObservationConfig = {
 
 /** computer_control actions that mutate UI state */
 const DESKTOP_STATE_ACTIONS = new Set([
-  'click', 'double_click', 'right_click',
-  'type', 'key', 'hotkey',
+  'click', 'left_click', 'middle_click', 'double_click', 'right_click', 'move_mouse',
+  'type', 'key', 'key_down', 'key_up', 'hotkey',
   'drag', 'scroll',
-  'focus_window', 'close_window',
+  'focus_window', 'close_window', 'minimize_window', 'maximize_window', 'restore_window',
+  'move_window', 'resize_window', 'set_window', 'act_on_best_window',
 ]);
 
 /** browser actions that mutate page state */

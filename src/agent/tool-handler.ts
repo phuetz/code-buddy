@@ -34,10 +34,14 @@ import {
   createKubernetesTools,
   createGitTools,
   createMiscTools,
+  createBrowserTools,
   createProcessTools,
+  createVisionTools,
   createScriptTools,
   createPlanTools,
   createKnowledgeTools,
+  createMemoryTools,
+  createParallelTools,
   createAttentionTools,
   createLessonsTools,
   createAliasTools,
@@ -172,10 +176,14 @@ export class ToolHandler {
       ...createKubernetesTools(),
       ...createGitTools(),
       ...createMiscTools(),
+      ...createBrowserTools(),
       ...createProcessTools(),
+      ...createVisionTools(),
       ...createScriptTools(),
       ...createPlanTools(),
       ...createKnowledgeTools(),
+      ...createMemoryTools(),
+      ...createParallelTools(),
       ...createAttentionTools(),
       ...createLessonsTools(),
       ...createMultimodalTools(),
@@ -803,9 +811,15 @@ export class ToolHandler {
    */
   public async refreshToolsFromSkills(): Promise<void> {
     try {
-      const { SkillRegistry } = await import('../skills/skill-registry.js');
-      const registry = new SkillRegistry();
-      await registry.refresh();
+      const { getSkillRegistry } = await import('../skills/registry.js');
+      const registry = getSkillRegistry();
+
+      if (typeof registry.reloadAll === 'function') {
+        await registry.reloadAll();
+      } else if (typeof registry.load === 'function') {
+        await registry.load();
+      }
+
       logger.info('Tool registry refreshed from skills');
     } catch (err) {
       logger.warn('Failed to refresh tools from skills', {

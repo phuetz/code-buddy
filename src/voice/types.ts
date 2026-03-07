@@ -96,6 +96,21 @@ export interface SpeechRecognitionConfig {
   silenceTimeout: number;
   /** Maximum recording duration (ms) */
   maxDuration: number;
+  /**
+   * Dual model strategy (VoiceCommander pattern):
+   * Use a fast model for short audio and an accurate model for longer audio.
+   * Audio shorter than durationThreshold uses fastModel, longer uses accurateModel.
+   */
+  dualModel?: {
+    /** Enable dual model switching */
+    enabled: boolean;
+    /** Duration threshold in seconds (default: 20) */
+    durationThreshold: number;
+    /** Fast model for short recordings */
+    fastModel: 'tiny' | 'base' | 'small';
+    /** Accurate model for long recordings */
+    accurateModel: 'medium' | 'large';
+  };
 }
 
 /**

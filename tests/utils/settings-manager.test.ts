@@ -5,13 +5,16 @@
 import * as fs from 'fs';
 
 // Mock fs before importing the module
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
+jest.mock('fs', () => {
+  const impl = {
+  ...await vi.importActual('fs'),
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import {
   SettingsManager,
@@ -33,8 +36,8 @@ describe('SettingsManager', () => {
     // Mock fs.existsSync to return false by default (no existing settings files)
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     (fs.readFileSync as jest.Mock).mockReturnValue('{}');
-    (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
-    (fs.mkdirSync as jest.Mock).mockImplementation(() => {});
+    (fs.writeFileSync as jest.Mock).mockImplementation(function() {});
+    (fs.mkdirSync as jest.Mock).mockImplementation(function() {});
 
     manager = getSettingsManager();
   });

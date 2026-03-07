@@ -1,0 +1,1 @@
+API_KEY not found. Please set GOOGLE_API_KEY or GEMINI_API_KEY environment variable.

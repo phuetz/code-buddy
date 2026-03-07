@@ -5,7 +5,8 @@
 import { OfflineMode, getOfflineMode, resetOfflineMode } from '../src/offline/offline-mode';
 
 // Mock dependencies
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   pathExists: jest.fn().mockResolvedValue(false),
   readJSON: jest.fn().mockResolvedValue([]),
@@ -16,7 +17,9 @@ jest.mock('fs-extra', () => ({
   emptyDir: jest.fn().mockResolvedValue(undefined),
   readdir: jest.fn().mockResolvedValue([]),
   stat: jest.fn().mockResolvedValue({ size: 0, isFile: () => true, isDirectory: () => false }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('axios', () => ({
   get: jest.fn().mockRejectedValue(new Error('Network error')),

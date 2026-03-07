@@ -1,0 +1,56 @@
+import 'dotenv/config';
+import express from 'express';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const app = express();
+const port = Number(process.env.PORT || 3337);
+
+const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+
+if (!API_KEY) {
+  console.error('API_KEY not found. Please set GOOGLE_API_KEY or GEMINI_API_KEY environment variable.');
+  process.exit(1);
+}
+
+const genAI = new GoogleGenerativeAI(API_KEY);
+const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-2.5-flash' });
+
+app.use(express.json());
+app.use(express.static('public'));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// Chat API endpoint
+app.post('/api/chat', async (req, res) => {
+  const { history, message } = req.body;
+
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    return res.status(400).json({ error: 'Message is required and must be a non-empty string.' });
+  }
+
+  if (message.length > 1000) {
+    return res.status(400).json({ error: 'Message exceeds maximum length of 1000 characters.' });
+  }
+
+  try {
+    const chat = model.startChat({
+      history: history || [],
+    });
+
+    const result = await chat.sendMessage(message);
+    const response = await result.response;
+    const text = response.text();
+
+    res.json({ response: text });
+  } catch (error) {
+    console.error('Error in chat API:', error);
+    res.status(500).json({ error: 'An unexpected error occurred.' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});

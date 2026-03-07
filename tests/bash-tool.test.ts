@@ -1,6 +1,7 @@
 /**
  * Tests for BashTool security features
  */
+
 import { BashTool } from '../src/tools/bash';
 import path from 'path';
 import os from 'os';
@@ -11,18 +12,18 @@ const itUnix = isWin ? it.skip : it;
 // Mock the confirmation service to auto-approve
 jest.mock('../src/utils/confirmation-service', () => ({
   ConfirmationService: {
-    getInstance: jest.fn(() => ({
-      getSessionFlags: jest.fn(() => ({ bashCommands: true, allOperations: false })),
+    getInstance: jest.fn(function() { return {
+      getSessionFlags: jest.fn(function() { return { bashCommands: true, allOperations: false }; }),
       requestConfirmation: jest.fn(() => Promise.resolve({ confirmed: true })),
-    })),
+    }; }),
   },
 }));
 
 // Mock the sandbox manager
 jest.mock('../src/security/sandbox', () => ({
-  getSandboxManager: jest.fn(() => ({
-    validateCommand: jest.fn(() => ({ valid: true })),
-  })),
+  getSandboxManager: jest.fn(function() { return {
+    validateCommand: jest.fn(function() { return { valid: true }; }),
+  }; }),
 }));
 
 describe('BashTool', () => {

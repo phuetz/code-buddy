@@ -1,0 +1,30 @@
+Execution failed (Exit Code 1):
+Unable to find image 'mcr.microsoft.com/playwright:v1.48.0-jammy' locally
+v1.48.0-jammy: Pulling from playwright
+5f33ef6f1aa5: Pulling fs layer
+86e05ded27c5: Pulling fs layer
+2e485bb8696c: Pulling fs layer
+2e485bb8696c: Download complete
+5f33ef6f1aa5: Download complete
+5f33ef6f1aa5: Pull complete
+2e485bb8696c: Pull complete
+86e05ded27c5: Download complete
+86e05ded27c5: Pull complete
+Digest: sha256:7dbbf924428aad5c87a5a3a5bc38f23e110cb1f5427fbbc7dbc3231014a4b0db
+Status: Downloaded newer image for mcr.microsoft.com/playwright:v1.48.0-jammy
+(node:7) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/workspace/script_bef78835.js:1
+import './test_server.mjs';
+^^^^^^
+
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at Module._compile (node:internal/modules/cjs/loader:1428:41)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+    at Module.load (node:internal/modules/cjs/loader:1288:32)
+    at Module._load (node:internal/modules/cjs/loader:1104:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:174:12)
+    at node:internal/main/run_main_module:28:49
+
+Node.js v20.18.0

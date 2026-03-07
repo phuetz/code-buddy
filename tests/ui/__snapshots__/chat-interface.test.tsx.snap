@@ -1,0 +1,5 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`UI Snapshots (Item 87) > should match ChatMessage snapshot 1`] = `"user:Test"`;
+
+exports[`UI Snapshots (Item 87) > should match ProgressBar snapshot 1`] = `"[===============] 75%"`;

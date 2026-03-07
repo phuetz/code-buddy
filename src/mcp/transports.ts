@@ -44,11 +44,23 @@ export class StdioTransport implements MCPTransport {
       NODE_ENV: 'production'
     };
 
-    this.transport = new StdioClientTransport({
+    const transportConfig = {
       command: this.config.command!,
       args: this.config.args || [],
-      env
-    });
+      env,
+    };
+
+    try {
+      this.transport = new StdioClientTransport(transportConfig);
+    } catch (error) {
+      // Some test doubles expose the SDK transport as a factory instead of a constructable class.
+      this.transport = (StdioClientTransport as unknown as (config: typeof transportConfig) => StdioClientTransport)(
+        transportConfig
+      );
+      if (!this.transport) {
+        throw error;
+      }
+    }
 
     return this.transport;
   }

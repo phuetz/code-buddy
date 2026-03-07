@@ -1,0 +1,13 @@
+Tu développes une application IA avancée dans ce dossier vide.
+Construis une application 'ai-support-desk' (Express + frontend) connectée à Gemini.
+Fonctionnalités: conversation multi-tour, historique court, endpoint /health, endpoint /api/chat.
+Ajoute gestion d erreurs API robuste + limite de taille message + fallback message utilisateur.
+Ajoute script de test réel qui appelle /api/chat et vérifie une réponse.
+Contraintes:
+- Code production minimal mais propre.
+- Travaille directement dans le dossier courant (ne crée pas de sous-dossier principal).
+- Crée un README clair.
+- Crée un smoke-test.mjs qui retourne code 0 si tout fonctionne.
+- Lance les commandes nécessaires pour valider le fonctionnement réel.
+- Si une commande échoue, corrige et relance.
+- Réponds avec un résumé final bref.

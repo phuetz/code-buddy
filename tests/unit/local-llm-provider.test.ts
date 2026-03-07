@@ -20,6 +20,7 @@
 
 import path from 'path';
 import { EventEmitter } from 'events';
+import { vi } from 'vitest';
 import {
   NodeLlamaCppProvider,
   WebLLMProvider,
@@ -40,12 +41,47 @@ import type {
 // Mocks - Must be defined before jest.mock calls due to hoisting
 // ============================================================================
 
-// Mock fs-extra - jest.mock is hoisted, so we need to use jest.fn() directly
-jest.mock('fs-extra', () => ({
-  ensureDir: jest.fn().mockResolvedValue(undefined),
-  pathExists: jest.fn().mockResolvedValue(true),
-  readdir: jest.fn().mockResolvedValue([]),
-}));
+const { mockFsExtra, mockStreamHelpers, mockRetryModule, nodeLlamaCpp, webllm } =
+  vi.hoisted(() => ({
+    mockFsExtra: {
+      ensureDir: vi.fn().mockResolvedValue(undefined),
+      pathExists: vi.fn().mockResolvedValue(true),
+      readdir: vi.fn().mockResolvedValue([]),
+    },
+    mockStreamHelpers: {
+      safeStreamRead: vi.fn(),
+      handleStreamError: vi.fn(),
+    },
+    mockRetryModule: {
+      retry: vi.fn(),
+      RetryStrategies: {
+        llmApi: { maxRetries: 3, baseDelay: 1000 },
+      },
+      RetryPredicates: {
+        transientError: vi.fn().mockReturnValue(true),
+      },
+    },
+    nodeLlamaCpp: {
+      LlamaModel: vi.fn(function LlamaModelMock() {
+        return {};
+      }),
+      LlamaContext: vi.fn(function LlamaContextMock() {
+        return {};
+      }),
+      LlamaChatSession: vi.fn(function LlamaChatSessionMock() {
+        return {
+          prompt: vi.fn().mockResolvedValue('Mock response from LlamaCpp'),
+        };
+      }),
+    },
+    webllm: {
+      MLCEngine: vi.fn(function MLCEngineMock() {
+        return {};
+      }),
+    },
+  }));
+
+vi.mock('fs-extra', () => ({ ...mockFsExtra, default: mockFsExtra }));
 
 // Mock logger
 jest.mock('../../src/utils/logger.js', () => ({
@@ -58,75 +94,29 @@ jest.mock('../../src/utils/logger.js', () => ({
 }));
 
 // Mock stream-helpers
-jest.mock('../../src/utils/stream-helpers.js', () => ({
-  safeStreamRead: jest.fn(),
-  handleStreamError: jest.fn(),
-}));
+vi.mock('../../src/utils/stream-helpers.js', () => mockStreamHelpers);
 
 // Mock retry utility
-jest.mock('../../src/utils/retry.js', () => ({
-  retry: jest.fn(),
-  RetryStrategies: {
-    llmApi: { maxRetries: 3, baseDelay: 1000 },
-  },
-  RetryPredicates: {
-    transientError: jest.fn().mockReturnValue(true),
-  },
-}));
+vi.mock('../../src/utils/retry.js', () => mockRetryModule);
 
 // Mock node-llama-cpp module
-jest.mock('node-llama-cpp', () => ({
-  LlamaModel: jest.fn(),
-  LlamaContext: jest.fn(),
-  LlamaChatSession: jest.fn(),
-}), { virtual: true });
+vi.mock('node-llama-cpp', () => nodeLlamaCpp, { virtual: true });
 
 // Mock @mlc-ai/web-llm module
-jest.mock('@mlc-ai/web-llm', () => ({
-  MLCEngine: jest.fn(),
-}), { virtual: true });
+vi.mock('@mlc-ai/web-llm', () => webllm, { virtual: true });
 
-// Get mock references after imports - use require to avoid hoisting issues
- 
-const mockFsExtra = require('fs-extra') as {
-  ensureDir: jest.Mock;
-  pathExists: jest.Mock;
-  readdir: jest.Mock;
-};
-
- 
-const streamHelpers = require('../../src/utils/stream-helpers.js') as {
-  safeStreamRead: jest.Mock;
-  handleStreamError: jest.Mock;
-};
-const mockSafeStreamRead = streamHelpers.safeStreamRead;
-const mockHandleStreamError = streamHelpers.handleStreamError;
-
- 
-const retryModule = require('../../src/utils/retry.js') as {
-  retry: jest.Mock;
-};
-const mockRetry = retryModule.retry;
-
-// Get node-llama-cpp mocks
-const nodeLlamaCpp = jest.requireMock('node-llama-cpp') as {
-  LlamaModel: jest.Mock;
-  LlamaContext: jest.Mock;
-  LlamaChatSession: jest.Mock;
-};
+const mockSafeStreamRead = mockStreamHelpers.safeStreamRead;
+const mockHandleStreamError = mockStreamHelpers.handleStreamError;
+const mockRetry = mockRetryModule.retry;
 const mockLlamaModel = nodeLlamaCpp.LlamaModel;
 const mockLlamaContext = nodeLlamaCpp.LlamaContext;
 const mockLlamaChatSession = nodeLlamaCpp.LlamaChatSession;
 
-// Get webllm mock
-const webllm = jest.requireMock('@mlc-ai/web-llm') as {
-  MLCEngine: jest.Mock;
-};
 const mockMLCEngine = webllm.MLCEngine;
 
 // Mock global fetch
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+const mockFetch = vi.fn();
+global.fetch = mockFetch as unknown as typeof fetch;
 
 // ============================================================================
 // Test Utilities
@@ -161,10 +151,16 @@ describe('NodeLlamaCppProvider', () => {
     jest.clearAllMocks();
     mockFsExtra.pathExists.mockResolvedValue(true);
     mockFsExtra.readdir.mockResolvedValue([]);
-    mockLlamaModel.mockReturnValue({});
-    mockLlamaContext.mockReturnValue({});
-    mockLlamaChatSession.mockReturnValue({
-      prompt: jest.fn().mockResolvedValue('Mock response from LlamaCpp'),
+    mockLlamaModel.mockImplementation(function LlamaModelInstance() {
+      return {};
+    });
+    mockLlamaContext.mockImplementation(function LlamaContextInstance() {
+      return {};
+    });
+    mockLlamaChatSession.mockImplementation(function LlamaChatSessionInstance() {
+      return {
+        prompt: jest.fn().mockResolvedValue('Mock response from LlamaCpp'),
+      };
     });
   });
 
@@ -330,8 +326,10 @@ describe('NodeLlamaCppProvider', () => {
     });
 
     it('should estimate tokens used', async () => {
-      mockLlamaChatSession.mockReturnValue({
-        prompt: jest.fn().mockResolvedValue('This is a longer response with multiple words'),
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionLongResponse() {
+        return {
+          prompt: jest.fn().mockResolvedValue('This is a longer response with multiple words'),
+        };
       });
 
       const response = await provider.complete([
@@ -356,7 +354,9 @@ describe('NodeLlamaCppProvider', () => {
 
     it('should use custom temperature from options', async () => {
       const mockPrompt = jest.fn().mockResolvedValue('Response');
-      mockLlamaChatSession.mockReturnValue({ prompt: mockPrompt });
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionTemperature() {
+        return { prompt: mockPrompt };
+      });
 
       await provider.complete(
         [{ role: 'user', content: 'Hello' }],
@@ -371,7 +371,9 @@ describe('NodeLlamaCppProvider', () => {
 
     it('should use custom maxTokens from options', async () => {
       const mockPrompt = jest.fn().mockResolvedValue('Response');
-      mockLlamaChatSession.mockReturnValue({ prompt: mockPrompt });
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionMaxTokens() {
+        return { prompt: mockPrompt };
+      });
 
       await provider.complete(
         [{ role: 'user', content: 'Hello' }],
@@ -394,7 +396,9 @@ describe('NodeLlamaCppProvider', () => {
       });
 
       const mockPrompt = jest.fn().mockResolvedValue('Response');
-      mockLlamaChatSession.mockReturnValue({ prompt: mockPrompt });
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionConfigDefaults() {
+        return { prompt: mockPrompt };
+      });
 
       await configProvider.complete([{ role: 'user', content: 'Hello' }]);
 
@@ -447,8 +451,10 @@ describe('NodeLlamaCppProvider', () => {
     });
 
     it('should stream response in chunks', async () => {
-      mockLlamaChatSession.mockReturnValue({
-        prompt: jest.fn().mockResolvedValue('Hello World Response'),
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionStreaming() {
+        return {
+          prompt: jest.fn().mockResolvedValue('Hello World Response'),
+        };
       });
 
       const chunks: string[] = [];
@@ -464,7 +470,9 @@ describe('NodeLlamaCppProvider', () => {
 
     it('should use last user message for streaming', async () => {
       const mockPrompt = jest.fn().mockResolvedValue('Response');
-      mockLlamaChatSession.mockReturnValue({ prompt: mockPrompt });
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionLastUser() {
+        return { prompt: mockPrompt };
+      });
 
       const stream = provider.stream([
         { role: 'user', content: 'First message' },
@@ -599,7 +607,9 @@ describe('WebLLMProvider', () => {
         },
       },
     };
-    mockMLCEngine.mockReturnValue(mockEngine);
+    mockMLCEngine.mockImplementation(function MLCEngineInstance() {
+      return mockEngine;
+    });
   });
 
   afterEach(() => {
@@ -677,13 +687,15 @@ describe('WebLLMProvider', () => {
     });
 
     it('should handle engine without reload method', async () => {
-      mockMLCEngine.mockReturnValue({
-        chat: {
-          completions: {
-            create: jest.fn(),
+      mockMLCEngine.mockImplementation(function MLCEngineWithoutReload() {
+        return {
+          chat: {
+            completions: {
+              create: jest.fn(),
+            },
           },
-        },
-        // No reload method
+          // No reload method
+        };
       });
 
       await provider.initialize({});

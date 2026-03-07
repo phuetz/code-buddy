@@ -1,0 +1,49 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const messagesDiv = document.getElementById('messages');
+
+    const addMessage = (text, sender) => {
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message', sender);
+        messageElement.textContent = text;
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    };
+
+    const sendMessage = async () => {
+        const message = messageInput.value.trim();
+        if (message === '') return;
+
+        addMessage(message, 'user');
+        messageInput.value = '';
+
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                addMessage(data.reply, 'bot');
+            } else {
+                addMessage(`Error: ${data.error || 'Unknown error'}`, 'bot');
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+            addMessage('Error: Could not connect to the server.', 'bot');
+        }
+    };
+
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+});

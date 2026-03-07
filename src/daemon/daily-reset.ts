@@ -41,7 +41,37 @@ export interface DailyResetConfig {
   enabled: boolean;
   /** Post a summary message after reset. Default: true */
   postSummary: boolean;
+  /** Idle timeout in minutes — reset session if no activity for this long */
+  idleMinutes?: number;
+  /** Per-session-type reset overrides */
+  resetByType?: {
+    direct?: { resetHour?: number; idleMinutes?: number };
+    group?: { resetHour?: number; idleMinutes?: number };
+    thread?: { resetHour?: number; idleMinutes?: number };
+  };
+  /** Per-channel reset overrides (takes precedence over resetByType) */
+  resetByChannel?: Record<string, { resetHour?: number; idleMinutes?: number }>;
 }
+
+export interface SessionMaintenanceConfig {
+  /** Prune sessions older than this many days. Default: 30 */
+  pruneAfterDays: number;
+  /** Maximum number of sessions to keep. Default: 500 */
+  maxEntries: number;
+  /** Rotate session store file when exceeding this size in bytes. Default: 10MB */
+  rotateBytes: number;
+  /** Maximum total disk usage for sessions. Default: unlimited */
+  maxDiskBytes?: number;
+  /** Maintenance mode: 'warn' (report only) or 'enforce' (auto-cleanup) */
+  mode: 'warn' | 'enforce';
+}
+
+export const DEFAULT_SESSION_MAINTENANCE: SessionMaintenanceConfig = {
+  pruneAfterDays: 30,
+  maxEntries: 500,
+  rotateBytes: 10 * 1024 * 1024, // 10MB
+  mode: 'enforce',
+};
 
 export interface ResetResult {
   triggeredAt: Date;

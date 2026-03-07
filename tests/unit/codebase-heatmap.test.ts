@@ -87,7 +87,7 @@ src/components/App.tsx
     });
 
     it('should handle git command failure gracefully', () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation(function() {
         throw new Error('Git command failed');
       });
 

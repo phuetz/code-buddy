@@ -1,0 +1,29 @@
+name: Feature Development
+description: "Sequential workflow: Explorer -> Refactorer -> Reviewer"
+version: "1.0.0"
+steps:
+  - name: spawn_subagent
+    type: tool
+    label: explore
+    args:
+      type: explorer
+      task: "Analyze the codebase to prepare for implementing the requested feature. Identify key files and dependencies."
+  
+  - name: spawn_subagent
+    type: tool
+    label: implement
+    args:
+      type: refactorer
+      task: "Based on the exploration, implement the requested feature. Follow project patterns and conventions."
+
+  - name: spawn_subagent
+    type: tool
+    label: review
+    args:
+      type: code-reviewer
+      task: "Review the implementation for bugs, security issues, and performance bottlenecks."
+
+  - name: approval
+    label: final-approval
+    args:
+      message: "Pipeline complete. Review results and approve to finish."

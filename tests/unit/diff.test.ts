@@ -12,9 +12,12 @@
 // Mock fs-extra before importing modules that use it
 const mockFsReadFile = jest.fn();
 
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   readFile: (...args: unknown[]) => mockFsReadFile(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock fs promises
 const mockFsPromisesReadFile = jest.fn();
@@ -23,8 +26,9 @@ const mockFsPromisesMkdir = jest.fn();
 const mockFsPromisesAccess = jest.fn();
 const mockFsPromisesReaddir = jest.fn();
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
+jest.mock('fs', () => {
+  const impl = {
+  ...await vi.importActual('fs'),
   promises: {
     readFile: (...args: unknown[]) => mockFsPromisesReadFile(...args),
     writeFile: (...args: unknown[]) => mockFsPromisesWriteFile(...args),
@@ -32,7 +36,9 @@ jest.mock('fs', () => ({
     access: (...args: unknown[]) => mockFsPromisesAccess(...args),
     readdir: (...args: unknown[]) => mockFsPromisesReaddir(...args),
   },
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock UnifiedVfsRouter
 const mockVfsExists = jest.fn();

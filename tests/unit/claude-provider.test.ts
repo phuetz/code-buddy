@@ -2,18 +2,20 @@
  * Unit tests for ClaudeProvider
  */
 
+
+// Mock Anthropic SDK
+
 import { ClaudeProvider } from '../../src/providers/claude-provider';
 import { CompletionOptions } from '../../src/providers/types';
 
-// Mock Anthropic SDK
 const mockCreate = jest.fn();
 const mockStream = jest.fn();
-const mockAnthropic = jest.fn().mockImplementation(() => ({
+const mockAnthropic = jest.fn().mockImplementation(function() { return {
   messages: {
     create: mockCreate,
     stream: mockStream,
   },
-}));
+}; });
 
 jest.mock('@anthropic-ai/sdk', () => ({
   __esModule: true,

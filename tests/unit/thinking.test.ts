@@ -12,18 +12,20 @@
  * - src/agent/thinking/types.ts
  */
 
-import { EventEmitter } from 'events';
 
 // ============================================================================
 // MOCKS
 // ============================================================================
 
 // Mock CodeBuddyClient
+
+import { EventEmitter } from 'events';
+
 const mockChat = jest.fn();
 jest.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: mockChat,
-  })),
+  }; }),
 }));
 
 // Mock thinking types with actual configuration values
@@ -643,12 +645,19 @@ describe('Thinking Module - ThinkingKeywordsManager', () => {
       expect(result.detected).toBe(true);
     });
 
-    it('should emit event on enable/disable', (done) => {
-      manager.on('thinking:enabled', (enabled) => {
-        expect(enabled).toBe(false);
-        done();
+    it('should emit event on enable/disable', async () => {
+      await new Promise<void>((resolve, reject) => {
+        manager.once('thinking:enabled', (enabled) => {
+          try {
+            expect(enabled).toBe(false);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        manager.setEnabled(false);
       });
-      manager.setEnabled(false);
     });
 
     it('should track enabled state', () => {
@@ -671,12 +680,19 @@ describe('Thinking Module - ThinkingKeywordsManager', () => {
       expect(result.detected).toBe(true);
     });
 
-    it('should emit event on default level change', (done) => {
-      manager.on('thinking:default-changed', (level) => {
-        expect(level).toBe('deep');
-        done();
+    it('should emit event on default level change', async () => {
+      await new Promise<void>((resolve, reject) => {
+        manager.once('thinking:default-changed', (level) => {
+          try {
+            expect(level).toBe('deep');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        manager.setDefaultLevel('deep');
       });
-      manager.setDefaultLevel('deep');
     });
 
     it('should get default level', () => {
@@ -690,13 +706,20 @@ describe('Thinking Module - ThinkingKeywordsManager', () => {
   // Event Emission Tests
   // --------------------------------------------------------------------------
   describe('Events', () => {
-    it('should emit thinking:detected event when keyword found', (done) => {
-      manager.on('thinking:detected', (result: ThinkingKeywordResult) => {
-        expect(result.detected).toBe(true);
-        expect(result.level).toBe('deep');
-        done();
+    it('should emit thinking:detected event when keyword found', async () => {
+      await new Promise<void>((resolve, reject) => {
+        manager.once('thinking:detected', (result: ThinkingKeywordResult) => {
+          try {
+            expect(result.detected).toBe(true);
+            expect(result.level).toBe('deep');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        manager.detectThinkingLevel('megathink about this');
       });
-      manager.detectThinkingLevel('megathink about this');
     });
 
     it('should not emit event when no keyword detected', () => {
@@ -706,17 +729,24 @@ describe('Thinking Module - ThinkingKeywordsManager', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it('should include all result fields in event', (done) => {
-      manager.on('thinking:detected', (result: ThinkingKeywordResult) => {
-        expect(result).toHaveProperty('detected');
-        expect(result).toHaveProperty('level');
-        expect(result).toHaveProperty('keyword');
-        expect(result).toHaveProperty('cleanedInput');
-        expect(result).toHaveProperty('tokenBudget');
-        expect(result).toHaveProperty('systemPromptAddition');
-        done();
+    it('should include all result fields in event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        manager.once('thinking:detected', (result: ThinkingKeywordResult) => {
+          try {
+            expect(result).toHaveProperty('detected');
+            expect(result).toHaveProperty('level');
+            expect(result).toHaveProperty('keyword');
+            expect(result).toHaveProperty('cleanedInput');
+            expect(result).toHaveProperty('tokenBudget');
+            expect(result).toHaveProperty('systemPromptAddition');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        manager.detectThinkingLevel('ultrathink about this');
       });
-      manager.detectThinkingLevel('ultrathink about this');
     });
   });
 

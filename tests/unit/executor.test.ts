@@ -17,7 +17,7 @@ import { EventEmitter } from 'events';
 
 // Mock child_process before importing modules that use it
 jest.mock('child_process', () => ({
-  spawn: jest.fn().mockImplementation(() => {
+  spawn: jest.fn().mockImplementation(function() {
     const mockProcess = new EventEmitter() as any;
     mockProcess.stdout = new EventEmitter();
     mockProcess.stderr = new EventEmitter();
@@ -874,16 +874,24 @@ describe('AdvancedParallelExecutor (Multi-Agent)', () => {
       expect(executor.getActiveAgents()).toEqual([]);
     });
 
-    it('should track active agents during execution', (done) => {
-      executor.on('agent:start', () => {
-        const active = executor.getActiveAgents();
-        expect(active.length).toBeGreaterThan(0);
-        done();
+    it('should track active agents during execution', async () => {
+      const started = new Promise<void>((resolve, reject) => {
+        executor.once('agent:start', () => {
+          try {
+            const active = executor.getActiveAgents();
+            expect(active.length).toBeGreaterThan(0);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      executor.executeParallel([
+      const execution = executor.executeParallel([
         { id: 'agent-1', name: 'Agent', task: 'Task' },
       ]);
+
+      await Promise.all([started, execution]);
     });
 
     it('should clear active agents after execution', async () => {
@@ -913,19 +921,27 @@ describe('AdvancedParallelExecutor (Multi-Agent)', () => {
       expect(result).toBe(false);
     });
 
-    it('should emit agent:cancelled when cancelling', (done) => {
-      executor.on('agent:cancelled', (event) => {
-        expect(event.agentId).toBe('agent-1');
-        done();
+    it('should emit agent:cancelled when cancelling', async () => {
+      const cancelled = new Promise<void>((resolve, reject) => {
+        executor.once('agent:cancelled', (event) => {
+          try {
+            expect(event.agentId).toBe('agent-1');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      executor.on('agent:start', () => {
+      executor.once('agent:start', () => {
         executor.cancelAgent('agent-1');
       });
 
-      executor.executeParallel([
+      const execution = executor.executeParallel([
         { id: 'agent-1', name: 'Agent', task: 'Long task', timeout: 10000 },
       ]);
+
+      await Promise.all([cancelled, execution]);
     });
   });
 

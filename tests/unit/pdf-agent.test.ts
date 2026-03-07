@@ -4,20 +4,22 @@
  */
 
 import { PDFAgent, getPDFAgent, createPDFAgent } from '../../src/agent/specialized/pdf-agent';
-import { AgentTask, AgentResult } from '../../src/agent/specialized/types';
+import { AgentTask } from '../../src/agent/specialized/types';
 import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   statSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock pdf-parse module
 const mockPdfParse = jest.fn();
-jest.mock('pdf-parse', () => mockPdfParse, { virtual: true });
+jest.mock('pdf-parse', () => ({ __esModule: true, default: mockPdfParse }), { virtual: true });
 
 describe('PDFAgent', () => {
   let agent: PDFAgent;
@@ -407,7 +409,7 @@ describe('PDFAgent', () => {
   describe('Fallback behavior (no pdf-parse)', () => {
     beforeEach(async () => {
       // Simulate pdf-parse not available
-      mockPdfParse.mockImplementation(() => {
+      mockPdfParse.mockImplementation(function() {
         throw new Error('Module not found');
       });
 

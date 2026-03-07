@@ -1,0 +1,16 @@
+{
+  "detectedAt": "2026-03-01T19:13:49.796Z",
+  "languages": [
+    "TypeScript",
+    "JavaScript"
+  ],
+  "framework": "Express",
+  "packageManager": "npm",
+  "commands": {},
+  "directories": {
+    "src": "src"
+  },
+  "conventions": {},
+  "contextPack": "Language: TypeScript, JavaScript | Framework: Express | Package manager: npm | Dirs: src=src",
+  "_configMtime": 1772392395471.5955
+}

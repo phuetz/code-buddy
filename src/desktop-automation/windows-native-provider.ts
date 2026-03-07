@@ -162,12 +162,13 @@ public class NativeInput {
 
   /**
    * Execute a PowerShell script via the configured PS command.
-   * Escapes double quotes in the script for shell invocation.
+   * Uses EncodedCommand to avoid quoting/heredoc parsing issues.
    */
   private async ps(script: string): Promise<string> {
-    const escapedScript = script.replace(/"/g, '\\"');
+    const preparedScript = `$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; ${script}`;
+    const encodedScript = Buffer.from(preparedScript, 'utf16le').toString('base64');
     return this.exec(
-      `${this.psCmd} -NoProfile -NonInteractive -Command "${escapedScript}"`,
+      `${this.psCmd} -NoProfile -NonInteractive -EncodedCommand ${encodedScript}`,
       15000
     );
   }
@@ -537,12 +538,12 @@ $r = New-Object NativeInput+RECT;
 $len = [NativeInput]::GetWindowTextLength($h);
 $sb = New-Object System.Text.StringBuilder($len + 1);
 [NativeInput]::GetWindowText($h, $sb, $sb.Capacity) | Out-Null;
-$pid = [uint32]0;
-[NativeInput]::GetWindowThreadProcessId($h, [ref]$pid) | Out-Null;
+$procId = [uint32]0;
+[NativeInput]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null;
 $fg = [NativeInput]::GetForegroundWindow();
 $pname = '';
-try { $pname = (Get-Process -Id $pid -ErrorAction SilentlyContinue).ProcessName } catch {}
-Write-Output "$($r.Left)|$($r.Top)|$($r.Right)|$($r.Bottom)|$($sb.ToString())|$pid|$pname|$($fg -eq $h)"`;
+try { $pname = (Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName } catch {}
+Write-Output "$($r.Left)|$($r.Top)|$($r.Right)|$($r.Bottom)|$($sb.ToString())|$procId|$pname|$($fg -eq $h)"`;
 
       const result = await this.ps(script);
       const parts = result.trim().split('|');

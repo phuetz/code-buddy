@@ -8,6 +8,8 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import type { HubConfig, InstalledSkill, HubSkill } from '../../src/skills/hub';
+
 import {
   SkillsHub,
   resetSkillsHub,
@@ -16,7 +18,6 @@ import {
   compareSemver,
   parseSemver,
 } from '../../src/skills/hub';
-import type { HubConfig, InstalledSkill, HubSkill } from '../../src/skills/hub';
 
 // ============================================================================
 // Mock fetch globally
@@ -47,7 +48,7 @@ jest.mock('../../src/skills/parser', () => ({
       enabled: true,
     };
   }),
-  validateSkill: jest.fn(() => ({ valid: true, errors: [] })),
+  validateSkill: jest.fn(function() { return { valid: true, errors: [] }; }),
 }));
 
 // ============================================================================

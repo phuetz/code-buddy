@@ -170,6 +170,157 @@ describe('LobsterEngine', () => {
   it('should return success for empty results', () => {
     expect(engine.getWorkflowStatus([])).toBe('success');
   });
+
+  // ─── OpenClaw Compatibility ──────────────────────────────────────
+
+  describe('OpenClaw Compatibility', () => {
+    it('should merge env into variables', () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'a', name: 'A', command: 'echo ${MY_VAR}' },
+        ],
+        env: { MY_VAR: 'hello' },
+      };
+      engine.normalizeOpenClawFormat(wf);
+      expect(wf.variables).toEqual({ MY_VAR: 'hello' });
+    });
+
+    it('should resolve args defaults into variables', () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'a', name: 'A', command: 'echo ${branch}' },
+        ],
+        args: { branch: { default: 'main' } },
+      };
+      engine.normalizeOpenClawFormat(wf);
+      expect(wf.variables!.branch).toBe('main');
+    });
+
+    it('should infer implicit deps from stdin references', () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'build', name: 'Build', command: 'npm run build' },
+          { id: 'test', name: 'Test', command: 'npm test', stdin: '$build.stdout' },
+        ],
+      };
+      engine.normalizeOpenClawFormat(wf);
+      expect(wf.steps[1].dependsOn).toEqual(['build']);
+    });
+
+    it('should infer deps from command $step.stdout references', () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'fetch', name: 'Fetch', command: 'curl api' },
+          { id: 'process', name: 'Process', command: 'echo $fetch.stdout | jq .' },
+        ],
+      };
+      engine.normalizeOpenClawFormat(wf);
+      expect(wf.steps[1].dependsOn).toContain('fetch');
+    });
+
+    it('should not duplicate dependsOn if already declared', () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'a', name: 'A', command: 'echo' },
+          { id: 'b', name: 'B', command: 'echo $a.stdout', dependsOn: ['a'] },
+        ],
+      };
+      engine.normalizeOpenClawFormat(wf);
+      expect(wf.steps[1].dependsOn).toEqual(['a']); // no duplicate
+    });
+
+    it('should detect approval gate via approval field', async () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'build', name: 'Build', command: 'npm run build' },
+          { id: 'gate', name: 'Deploy Gate', command: 'check', approval: 'required' },
+          { id: 'deploy', name: 'Deploy', command: 'deploy', dependsOn: ['gate'] },
+        ],
+      };
+      const result = await engine.executeWithApproval(wf);
+      expect(result.status).toBe('needs_approval');
+      expect(result.requiresApproval?.gate.stepId).toBe('gate');
+    });
+
+    it('should skip step when condition evaluates to false', async () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'a', name: 'A', command: 'echo a' },
+          { id: 'b', name: 'B', command: 'echo b', condition: '$nonexistent.approved' },
+        ],
+      };
+      const result = await engine.executeWithApproval(wf);
+      expect(result.status).toBe('ok');
+      const stepB = result.output.find(r => r.stepId === 'b');
+      expect(stepB?.status).toBe('skipped');
+    });
+
+    it('should execute step when condition is truthy', async () => {
+      const wf: LobsterWorkflow = {
+        name: 'oc', version: '1', steps: [
+          { id: 'a', name: 'A', command: 'approve', approval: 'required' },
+          { id: 'b', name: 'B', command: 'echo b', condition: '$a.approved', dependsOn: ['a'] },
+        ],
+      };
+      const handler = async () => true;
+      const result = await engine.executeWithApproval(wf, {}, handler);
+      expect(result.status).toBe('ok');
+      const stepB = result.output.find(r => r.stepId === 'b');
+      expect(stepB?.status).toBe('success');
+    });
+
+    it('should resolve $step.approved and $step.exitCode', () => {
+      expect(engine.resolveVariables('$gate.approved', { 'gate.approved': 'true' })).toBe('true');
+      expect(engine.resolveVariables('$build.exitCode', { 'build.exitCode': '0' })).toBe('0');
+    });
+
+    it('should evaluate equality conditions', () => {
+      expect(engine.evaluateCondition('0 == 0', {})).toBe(true);
+      expect(engine.evaluateCondition('1 == 0', {})).toBe(false);
+      expect(engine.evaluateCondition('a != b', {})).toBe(true);
+      expect(engine.evaluateCondition('a != a', {})).toBe(false);
+    });
+
+    it('should evaluate truthy/falsy conditions', () => {
+      expect(engine.evaluateCondition(undefined, {})).toBe(true);
+      expect(engine.evaluateCondition('', {})).toBe(true); // empty string condition = no condition
+      expect(engine.evaluateCondition('false', {})).toBe(false);
+      expect(engine.evaluateCondition('0', {})).toBe(false);
+      expect(engine.evaluateCondition('true', {})).toBe(true);
+    });
+
+    it('should parse full OpenClaw-style workflow JSON', () => {
+      const openclawWorkflow = JSON.stringify({
+        name: 'deploy-pipeline',
+        version: '2.0.0',
+        args: { target: { default: 'staging' } },
+        env: { NODE_ENV: 'production' },
+        steps: [
+          { id: 'build', name: 'Build', command: 'npm run build' },
+          { id: 'test', name: 'Test', command: 'npm test', stdin: '$build.stdout' },
+          { id: 'review', name: 'Review', command: 'review', approval: 'required' },
+          { id: 'deploy', name: 'Deploy', command: 'deploy $test.stdout', condition: '$review.approved', dependsOn: ['review'] },
+        ],
+      });
+      const wf = engine.parseWorkflow(openclawWorkflow);
+      expect(wf.name).toBe('deploy-pipeline');
+      expect(wf.variables?.NODE_ENV).toBe('production');
+      expect(wf.variables?.target).toBe('staging');
+      // test step should now depend on build (inferred from stdin)
+      expect(wf.steps[1].dependsOn).toContain('build');
+      // deploy step should have both review (explicit) and test (inferred from command)
+      expect(wf.steps[3].dependsOn).toContain('review');
+      expect(wf.steps[3].dependsOn).toContain('test');
+    });
+
+    it('should extractStepReferences from text', () => {
+      const ids = new Set(['build', 'test', 'deploy']);
+      expect(engine.extractStepReferences('$build.stdout', ids)).toEqual(['build']);
+      expect(engine.extractStepReferences('echo $test.json | $deploy.exitCode', ids)).toEqual(['test', 'deploy']);
+      expect(engine.extractStepReferences('no refs here', ids)).toEqual([]);
+      expect(engine.extractStepReferences('$unknown.stdout', ids)).toEqual([]);
+    });
+  });
 });
 
 // ─── Session Persistent Settings ─────────────────────────────────

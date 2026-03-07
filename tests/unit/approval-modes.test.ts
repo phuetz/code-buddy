@@ -15,12 +15,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock the json-validator
 jest.mock('../../src/utils/json-validator.js', () => ({
@@ -176,7 +179,7 @@ describe('ApprovalModeManager', () => {
     it('should emit config:error event on failure', () => {
       const handler = jest.fn();
       manager.on('config:error', handler);
-      (fs.writeFileSync as jest.Mock).mockImplementation(() => {
+      (fs.writeFileSync as jest.Mock).mockImplementation(function() {
         throw new Error('Write error');
       });
 

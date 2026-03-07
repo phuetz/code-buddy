@@ -1,0 +1,4 @@
+> task-tracker@1.0.0 test
+> node test.js
+
+All tests passed!

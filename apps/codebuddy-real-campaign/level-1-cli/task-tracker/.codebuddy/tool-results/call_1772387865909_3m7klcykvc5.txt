@@ -1,0 +1,96 @@
+Contents of index.js:
+1: const fs = require('fs');
+2: const DB_FILE = './tasks.json';
+3: 
+4: function loadTasks() {
+5:   if (!fs.existsSync(DB_FILE)) {
+6:     return [];
+7:   }
+8:   const data = fs.readFileSync(DB_FILE, 'utf8');
+9:   return JSON.parse(data);
+10: }
+11: 
+12: function saveTasks(tasks) {
+13:   fs.writeFileSync(DB_FILE, JSON.stringify(tasks, null, 2), 'utf8');
+14: }
+15: 
+16: function addTask(description) {
+17:   const tasks = loadTasks();
+18:   const newTask = {
+19:     id: tasks.length > 0 ? Math.max(...tasks.map(task => task.id)) + 1 : 1,
+20:     description,
+21:     completed: false,
+22:   };
+23:   tasks.push(newTask);
+24:   saveTasks(tasks);
+25:   console.log(`Task added: "${description}"`);
+26: }
+27: 
+28: function listTasks() {
+29:   const tasks = loadTasks();
+30:   if (tasks.length === 0) {
+31:     console.log('No tasks found.');
+32:     return;
+33:   }
+34:   tasks.forEach(task => {
+35:     console.log(`${task.id}. [${task.completed ? 'x' : ' '}] ${task.description}`);
+36:   });
+37: }
+38: 
+39: function completeTask(id) {
+40:   const tasks = loadTasks();
+41:   const taskIndex = tasks.findIndex(task => task.id === id);
+42:   if (taskIndex === -1) {
+43:     console.log(`Task with ID ${id} not found.`);
+44:     return;
+45:   }
+46:   tasks[taskIndex].completed = true;
+47:   saveTasks(tasks);
+48:   console.log(`Task ${id} marked as complete.`);
+49: }
+50: 
+51: function removeTask(id) {
+52:   let tasks = loadTasks();
+53:   const initialLength = tasks.length;
+54:   tasks = tasks.filter(task => task.id !== id);
+55:   if (tasks.length === initialLength) {
+56:     console.log(`Task with ID ${id} not found.`);
+57:     return;
+58:   }
+59:   saveTasks(tasks);
+60:   console.log(`Task ${id} removed.`);
+61: }
+62: 
+63: const command = process.argv[2];
+64: const arg = process.argv[3];
+65: 
+66: switch (command) {
+67:   case 'add':
+68:     if (!arg) {
+69:       console.log('Usage: node index.js add <description>');
+70:       break;
+71:     }
+72:     addTask(arg);
+73:     break;
+74:   case 'list':
+75:     listTasks();
+76:     break;
+77:   case 'complete':
+78:     if (!arg || isNaN(arg)) {
+79:       console.log('Usage: node index.js complete <task_id>');
+80:       break;
+81:     }
+82:     completeTask(parseInt(arg));
+83:     break;
+84:   case 'remove':
+85:     if (!arg || isNaN(arg)) {
+86:       console.log('Usage: node index.js remove <task_id>');
+87:       break;
+88:     }
+89:     removeTask(parseInt(arg));
+90:     break;
+91:   default:
+92:     console.log('Usage: node index.js <add|list|complete|remove> [arguments]');
+93:     break;
+94: }
+95: 

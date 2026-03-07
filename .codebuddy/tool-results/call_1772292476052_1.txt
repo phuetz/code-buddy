@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "TypeScript 5 Compiler Configuration, Module Resolution, Performance Improvements"
+══════════════════════════════════════════════════
+
+1. **Documentation - TypeScript 5.0** [1]
+   TypeScript 4.7 introduced the node16 and nodenext options for its --module and --moduleResolution settings. The intent of these options was to better model the ...
+
+2. **Announcing TypeScript 5.0 - Microsoft Dev Blogs** [2]
+   We're excited to announce the release of TypeScript 5.0! This release brings many new features, while aiming to make TypeScript smaller, simpler, and faster.
+
+3. **TypeScript Settings You Should Add To Increase Performance ...** [3]
+   In this article, we are going to look at an example of an optimized tsconfig.json file that is optimized for compilation and examine each ...
+
+4. **TypeScript 5: New Innovations & Breaking Changes** [4]
+   Depending on the project in question, TypeScript 5 can improve build times by up to 81%. As a result, you may receive a build about a quarter ...
+
+5. **Documentation - TypeScript 5.9** [5]
+   This feature allows you to import a module without immediately executing the module and its dependencies, providing better control over when work and side- ...
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[2] Announcing TypeScript 5.0 - Microsoft Dev Blogs — https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/
+[3] TypeScript Settings You Should Add To Increase Performance ... — https://medium.com/@colizu2020/unlock-blazing-fast-typescript-builds-with-these-config-settings-2025-38dfd9fd227c
+[4] TypeScript 5: New Innovations & Breaking Changes — https://javascript-conference.com/blog/typescript-5/
+[5] Documentation - TypeScript 5.9 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html

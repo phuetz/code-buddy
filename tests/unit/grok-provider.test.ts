@@ -2,18 +2,20 @@
  * Unit tests for GrokProvider
  */
 
+
+// Create mock constructor and methods
+
 import { GrokProvider } from '../../src/providers/grok-provider';
 import { CompletionOptions } from '../../src/providers/types';
 
-// Create mock constructor and methods
 const mockCreate = jest.fn();
-const mockOpenAI = jest.fn().mockImplementation(() => ({
+const mockOpenAI = jest.fn().mockImplementation(function() { return {
   chat: {
     completions: {
       create: mockCreate,
     },
   },
-}));
+}; });
 
 // Mock the whole module for dynamic import
 jest.mock('openai', () => ({

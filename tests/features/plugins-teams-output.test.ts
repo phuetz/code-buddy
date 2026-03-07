@@ -26,6 +26,7 @@ jest.mock('../../src/utils/logger.js', () => ({
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { vi } from 'vitest';
 
 // ============================================================================
 // Feature 1: Plugin Manifest System
@@ -991,7 +992,7 @@ describe('StatusLineManager', () => {
 
   afterEach(() => {
     // Clean up any timers
-    jest.clearAllTimers();
+    vi.clearAllTimers();
   });
 
   it('should initialize disabled by default', () => {

@@ -11,7 +11,7 @@ import { ToolResult } from '../../src/types/index';
 // Mock CodeBuddyClient
 jest.mock('../../src/codebuddy/client', () => {
   return {
-    CodeBuddyClient: jest.fn().mockImplementation(() => {
+    CodeBuddyClient: jest.fn().mockImplementation(function() {
       return {
         chat: jest.fn(),
       };
@@ -140,7 +140,7 @@ describe('Subagents Module', () => {
       const agent = new Subagent(apiKey, { ...config, timeout: 50 }, baseURL);
       const mockClient = (agent as unknown as MockedSubagent).client;
       
-      mockClient.chat.mockImplementation(() => {
+      mockClient.chat.mockImplementation(function() {
         return new Promise(resolve => setTimeout(() => resolve({
           choices: [{ message: { content: 'done' } }]
         }), 100));
@@ -196,7 +196,7 @@ describe('Subagents Module', () => {
       const agent = new Subagent(apiKey, config, baseURL);
       const mockClient = (agent as unknown as MockedSubagent).client;
       
-      mockClient.chat.mockImplementation(() => {
+      mockClient.chat.mockImplementation(function() {
         agent.stop();
         return Promise.resolve({
           choices: [{

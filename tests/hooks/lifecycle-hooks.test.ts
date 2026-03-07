@@ -123,18 +123,24 @@ describe("Lifecycle Hooks", () => {
         expect(hooks.some((h) => h.name === "custom-hook")).toBe(true);
       });
 
-      it("should emit hook:registered event", (done) => {
-        manager.on("hook:registered", (data: { name: string; type: HookType }) => {
-          expect(data.name).toBe("test-hook");
-          done();
-        });
+      it("should emit hook:registered event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("hook:registered", (data: { name: string; type: HookType }) => {
+            try {
+              expect(data.name).toBe("test-hook");
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
 
-        manager.registerHook({
-          name: "test-hook",
-          type: "pre-edit",
-          enabled: true,
-          timeout: 5000,
-          failOnError: false,
+          manager.registerHook({
+            name: "test-hook",
+            type: "pre-edit",
+            enabled: true,
+            timeout: 5000,
+            failOnError: false,
+          });
         });
       });
     });

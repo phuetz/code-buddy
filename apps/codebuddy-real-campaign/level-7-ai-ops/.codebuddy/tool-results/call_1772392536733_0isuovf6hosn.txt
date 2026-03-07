@@ -1,0 +1,207 @@
+Updated smoke-test.mjs with 203 additions
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -1,0 +1,203 @@
++import fetch from 'node-fetch';
++import WebSocket from 'ws';
++import assert from 'assert';
++
++const API_URL = 'http://localhost:3000';
++const WS_URL = 'ws://localhost:3000';
++
++const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
++const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
++
++async function healthCheck() {
++    console.log('Running health check...');
++    const res = await fetch(`${API_URL}/api/incidents`);
++    assert.strictEqual(res.status, 200, 'Health check failed: Expected 200 status');
++    console.log('Health check passed.');
++}
++
++async function testIncidentsCrud() {
++    console.log('Running incidents CRUD test...');
++    // Create
++    const newIncident = { title: 'Test Incident', description: 'This is a test incident.' };
++    const createRes = await fetch(`${API_URL}/api/incidents`, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify(newIncident)
++    });
++    const createdIncident = await createRes.json();
++    assert.strictEqual(createRes.status, 201, 'Create incident failed');
++    assert.strictEqual(createdIncident.title, newIncident.title, 'Created incident title mismatch');
++    console.log('Incident created.');
++
++    // Read
++    const getRes = await fetch(`${API_URL}/api/incidents`);
++    const incidents = await getRes.json();
++    assert.strictEqual(getRes.status, 200, 'Get incidents failed');
++    assert.ok(incidents.some(inc => inc.id === createdIncident.id), 'Created incident not found in list');
++    console.log('Incidents read.');
++
++    // Update
++    const updatedTitle = 'Updated Test Incident';
++    const updateRes = await fetch(`${API_URL}/api/incidents/${createdIncident.id}`, {
++        method: 'PUT',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ title: updatedTitle, status: 'resolved' })
++    });
++    const updatedIncident = await updateRes.json();
++    assert.strictEqual(updateRes.status, 200, 'Update incident failed');
++    assert.strictEqual(updatedIncident.title, updatedTitle, 'Updated incident title mismatch');
++    assert.strictEqual(updatedIncident.status, 'resolved', 'Updated incident status mismatch');
++    console.log('Incident updated.');
++
++    // Delete
++    const deleteRes = await fetch(`${API_URL}/api/incidents/${createdIncident.id}`, {
++        method: 'DELETE'
++    });
++    assert.strictEqual(deleteRes.status, 204, 'Delete incident failed');
++    const getAfterDeleteRes = await fetch(`${API_URL}/api/incidents`);
++    const incidentsAfterDelete = await getAfterDeleteRes.json();
++    assert.ok(!incidentsAfterDelete.some(inc => inc.id === createdIncident.id), 'Deleted incident found in list');
++    console.log('Incident deleted.');
++    console.log('Incidents CRUD test passed.');
++}
++
++async function testJobs() {
++    console.log('Running jobs test...');
++    const newJob = { title: 'Test Job', description: 'This is a test job.' };
++    const createRes = await fetch(`${API_URL}/api/jobs`, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify(newJob)
++    });
++    const createdJob = await createRes.json();
++    assert.strictEqual(createRes.status, 201, 'Create job failed');
++    assert.strictEqual(createdJob.status, 'pending', 'Job initial status mismatch');
++    console.log('Job created.');
++
++    // Wait for job to complete (simulated 5 seconds)
++    console.log('Waiting for job to complete...');
++    await new Promise(resolve => setTimeout(resolve, 6000)); // 5s job + buffer
++
++    const getRes = await fetch(`${API_URL}/api/jobs`);
++    const jobs = await getRes.json();
++    const completedJob = jobs.find(job => job.id === createdJob.id);
++    assert.ok(completedJob, 'Completed job not found');
++    assert.strictEqual(completedJob.status, 'completed', 'Job did not complete');
++    console.log('Job completed test passed.');
++}
++
++async function testWebSocket() {
++    console.log('Running WebSocket test...');
++    return new Promise((resolve, reject) => {
++        const ws = new WebSocket(WS_URL);
++        let incidentCreated = false;
++        let jobCreated = false;
++
++        ws.onopen = async () => {
++            console.log('WebSocket connected.');
++            // Create an incident to trigger a broadcast
++            await fetch(`${API_URL}/api/incidents`, {
++                method: 'POST',
++                headers: { 'Content-Type': 'application/json' },
++                body: JSON.stringify({ title: 'WS Incident', description: 'Test WS' })
++            });
++            // Create a job to trigger a broadcast
++            await fetch(`${API_URL}/api/jobs`, {
++                method: 'POST',
++                headers: { 'Content-Type': 'application/json' },
++                body: JSON.stringify({ title: 'WS Job', description: 'Test WS Job' })
++            });
++        };
++
++        ws.onmessage = (event) => {
++            const data = JSON.parse(event.data);
++            if (data.type === 'incidentCreated' && data.incident.title === 'WS Incident') {
++                incidentCreated = true;
++                console.log('WebSocket incidentCreated received.');
++            }
++            if (data.type === 'jobCreated' && data.job.title === 'WS Job') {
++                jobCreated = true;
++                console.log('WebSocket jobCreated received.');
++            }
++
++            if (incidentCreated && jobCreated) {
++                console.log('WebSocket test passed.');
++                ws.close();
++                resolve();
++            }
++        };
++
++        ws.onerror = (error) => {
++            console.error('WebSocket error:', error);
++            reject(error);
++        };
++
++        ws.onclose = () => {
++            if (!incidentCreated || !jobCreated) {
++                reject(new Error('WebSocket test failed: Did not receive all expected messages.'));
++            }
++        };
++    });
++}
++
++async function testGeminiSummarize() {
++    console.log('Running Gemini summarization test...');
++    if (!GOOGLE_API_KEY) {
++        console.log('Skipping Gemini summarization test: GOOGLE_API_KEY not set.');
++        return;
++    }
++
++    const textToSummarize = 'The system experienced a critical outage due to a database connection failure. This impacted all user-facing services for approximately 30 minutes. Root cause analysis is ongoing.';
++    const res = await fetch(`${API_URL}/api/assist/summarize`, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ text: textToSummarize })
++    });
++    const data = await res.json();
++
++    assert.strictEqual(res.status, 200, `Gemini summarization failed: Expected 200, got ${res.status}`);
++    assert.ok(data.summary, 'Summary field missing');
++    assert.ok(typeof data.summary === 'string', 'Summary is not a string');
++    assert.ok(data.summary.length > 10, 'Summary is too short');
++    console.log('Gemini summarization test passed.');
++}
++
++async function runTests() {
++    try {
++        // Start the server in a child process (assuming `npm start` runs it)
++        const { spawn } = require('child_process');
++        const serverProcess = spawn('npm', ['start']);
++
++        serverProcess.stdout.on('data', (data) => {
++            console.log(`Server: ${data}`);
++        });
++
++        serverProcess.stderr.on('data', (data) => {
++            console.error(`Server Error: ${data}`);
++        });
++
++        // Give the server some time to start
++        console.log('Waiting for server to start...');
++        await new Promise(resolve => setTimeout(resolve, 5000));
++
++        await healthCheck();
++        await testIncidentsCrud();
++        await testJobs();
++        await testWebSocket();
++        await testGeminiSummarize();
++
++        console.log('All smoke tests passed!');
++    } catch (error) {
++        console.error('Smoke test failed:', error);
++        process.exit(1);
++    } finally {
++        // Ensure the server process is killed
++        if (serverProcess) {
++            serverProcess.kill();
++            console.log('Server process terminated.');
++        }
++    }
++}
++
++runTests();
++

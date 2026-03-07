@@ -1,0 +1,94 @@
+Contents of test.js:
+1: const assert = require('assert');
+2: const fs = require('fs');
+3: const path = require('path');
+4: 
+5: const DB_FILE = path.join(__dirname, 'tasks.json');
+6: const INDEX_JS = path.join(__dirname, 'index.js');
+7: 
+8: // Mock console.log
+9: let consoleOutput = [];
+10: const originalConsoleLog = console.log;
+11: console.log = (...args) => {
+12:   consoleOutput.push(args.join(' '));
+13: };
+14: 
+15: function runCLI(args) {
+16:   consoleOutput = [];
+17:   // Temporarily modify process.argv
+18:   const originalArgv = process.argv;
+19:   process.argv = ['node', INDEX_JS, ...args];
+20: 
+21:   // Clear module cache to re-run index.js
+22:   delete require.cache[require.resolve(INDEX_JS)];
+23:   require(INDEX_JS);
+24: 
+25:   process.argv = originalArgv; // Restore original argv
+26:   return consoleOutput;
+27: }
+28: 
+29: function setupTest() {
+30:   if (fs.existsSync(DB_FILE)) {
+31:     fs.unlinkSync(DB_FILE);
+32:   }
+33: }
+34: 
+35: function teardownTest() {
+36:   if (fs.existsSync(DB_FILE)) {
+37:     fs.unlinkSync(DB_FILE);
+38:   }
+39:   console.log = originalConsoleLog; // Restore original console.log
+40: }
+41: 
+42: console.log('Running tests...');
+43: 
+44: // Test 1: Add a task
+45: setupTest();
+46: runCLI(['add', 'Buy groceries']);
+47: let tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+48: assert.strictEqual(tasks.length, 1, 'Test 1 Failed: Task not added.');
+49: assert.strictEqual(tasks[0].description, 'Buy groceries', 'Test 1 Failed: Incorrect task description.');
+50: assert.strictEqual(consoleOutput[0], 'Task added: "Buy groceries" ', 'Test 1 Failed: Incorrect console output.');
+51: console.log('Test 1 Passed: Add a task.');
+52: 
+53: // Test 2: List tasks
+54: setupTest();
+55: runCLI(['add', 'Read a book']);
+56: runCLI(['add', 'Go for a run']);
+57: consoleOutput = []; // Clear output before listing
+58: runCLI(['list']);
+59: tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+60: assert.strictEqual(consoleOutput[0], '1. [ ] Read a book', 'Test 2 Failed: Incorrect list output for task 1.');
+61: assert.strictEqual(consoleOutput[1], '2. [ ] Go for a run', 'Test 2 Failed: Incorrect list output for task 2.');
+62: console.log('Test 2 Passed: List tasks.');
+63: 
+64: // Test 3: Complete a task
+65: setupTest();
+66: runCLI(['add', 'Finish report']);
+67: runCLI(['complete', '1']);
+68: tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+69: assert.strictEqual(tasks[0].completed, true, 'Test 3 Failed: Task not marked as complete.');
+70: assert.strictEqual(consoleOutput[0], 'Task 1 marked as complete.', 'Test 3 Failed: Incorrect console output.');
+71: console.log('Test 3 Passed: Complete a task.');
+72: 
+73: // Test 4: Remove a task
+74: setupTest();
+75: runCLI(['add', 'Pay bills']);
+76: runCLI(['add', 'Clean house']);
+77: runCLI(['remove', '1']);
+78: tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+79: assert.strictEqual(tasks.length, 1, 'Test 4 Failed: Task not removed.');
+80: assert.strictEqual(tasks[0].description, 'Clean house', 'Test 4 Failed: Wrong task removed.');
+81: assert.strictEqual(consoleOutput[0], 'Task 1 removed.', 'Test 4 Failed: Incorrect console output.');
+82: console.log('Test 4 Passed: Remove a task.');
+83: 
+84: // Test 5: List empty tasks
+85: setupTest();
+86: consoleOutput = [];
+87: runCLI(['list']);
+88: assert.strictEqual(consoleOutput[0], 'No tasks found.', 'Test 5 Failed: Incorrect output for empty list.');
+89: console.log('Test 5 Passed: List empty tasks.');
+90: 
+91: teardownTest();
+92: console.log('All tests passed!');
+93: 

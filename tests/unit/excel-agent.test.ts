@@ -3,29 +3,34 @@
  * Tests Excel/CSV reading, writing, and data manipulation functionality
  */
 
+
+// Mock fs module
+
 import { ExcelAgent, getExcelAgent, createExcelAgent } from '../../src/agent/specialized/excel-agent';
 import { AgentTask } from '../../src/agent/specialized/types';
 import * as fs from 'fs';
 
-// Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock xlsx module
 const mockXlsx = {
   read: jest.fn(),
   utils: {
-    book_new: jest.fn(() => ({})),
-    aoa_to_sheet: jest.fn(() => ({})),
+    book_new: jest.fn(function() { return {}; }),
+    aoa_to_sheet: jest.fn(function() { return {}; }),
     book_append_sheet: jest.fn(),
     sheet_to_json: jest.fn(),
   },
   writeFile: jest.fn(),
 };
-jest.mock('xlsx', () => mockXlsx, { virtual: true });
+jest.mock('xlsx', () => ({ __esModule: true, default: mockXlsx }), { virtual: true });
 
 describe('ExcelAgent', () => {
   let agent: ExcelAgent;
@@ -34,6 +39,7 @@ describe('ExcelAgent', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.doMock('xlsx', () => ({ __esModule: true, default: mockXlsx }), { virtual: true });
     agent = new ExcelAgent();
 
     // Default mock implementations
@@ -122,7 +128,6 @@ describe('ExcelAgent', () => {
       }, { virtual: true });
 
       const freshAgent = new ExcelAgent();
-      const emitSpy = jest.spyOn(freshAgent, 'emit');
 
       await freshAgent.initialize();
 
@@ -584,7 +589,7 @@ describe('ExcelAgent', () => {
 
     describe('error handling', () => {
       it('should catch and return errors gracefully', async () => {
-        (fs.readFileSync as jest.Mock).mockImplementation(() => {
+        (fs.readFileSync as jest.Mock).mockImplementation(function() {
           throw new Error('Read error');
         });
 

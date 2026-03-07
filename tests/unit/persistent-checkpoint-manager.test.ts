@@ -23,7 +23,8 @@ const mockStatSync = jest.fn().mockReturnValue({ isFile: () => true, size: 100 }
 const mockReaddirSync = jest.fn().mockReturnValue([]);
 
 // Mock fs before importing the module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: (...args: unknown[]) => mockExistsSync(...args),
   mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
   readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
@@ -31,15 +32,21 @@ jest.mock('fs', () => ({
   unlinkSync: (...args: unknown[]) => mockUnlinkSync(...args),
   statSync: (...args: unknown[]) => mockStatSync(...args),
   readdirSync: (...args: unknown[]) => mockReaddirSync(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock os
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   homedir: () => '/home/testuser',
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock crypto
-jest.mock('crypto', () => ({
+jest.mock('crypto', () => {
+  const impl = {
   createHash: () => ({
     update: jest.fn().mockReturnThis(),
     digest: () => 'abcdef1234567890',
@@ -47,11 +54,13 @@ jest.mock('crypto', () => ({
   randomBytes: () => ({
     toString: () => 'abcd1234',
   }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock path with actual implementation
 jest.mock('path', () => {
-  const actualPath = jest.requireActual('path');
+  const actualPath = await vi.importActual('path');
   return {
     ...actualPath,
     join: (...args: string[]) => args.join('/'),
@@ -80,7 +89,7 @@ import {
 } from '../../src/checkpoints/persistent-checkpoint-manager';
 
 // Set a short test timeout
-jest.setTimeout(10000);
+vi.setConfig({ testTimeout: 10000 });
 
 describe('PersistentCheckpointManager', () => {
   let manager: PersistentCheckpointManager;
@@ -174,7 +183,7 @@ describe('PersistentCheckpointManager', () => {
 
     it('should handle directory creation errors gracefully', () => {
       mockExistsSync.mockReturnValue(false);
-      mockMkdirSync.mockImplementation(() => {
+      mockMkdirSync.mockImplementation(function() {
         throw new Error('Permission denied');
       });
 
@@ -442,7 +451,7 @@ describe('PersistentCheckpointManager', () => {
     });
 
     it('should delete file that did not exist', () => {
-      mockExistsSync.mockImplementation(() => {
+      mockExistsSync.mockImplementation(function() {
         return true; // All files exist now
       });
 
@@ -497,7 +506,7 @@ describe('PersistentCheckpointManager', () => {
     });
 
     it('should handle restore errors gracefully', () => {
-      mockWriteFileSync.mockImplementation(() => {
+      mockWriteFileSync.mockImplementation(function() {
         throw new Error('Write failed');
       });
 
@@ -778,7 +787,7 @@ describe('PersistentCheckpointManager', () => {
     });
 
     it('should handle storage size calculation errors', () => {
-      mockReaddirSync.mockImplementation(() => {
+      mockReaddirSync.mockImplementation(function() {
         throw new Error('Read error');
       });
 

@@ -6,6 +6,9 @@
 
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
+import { Resvg } from '@resvg/resvg-js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import type {
   Canvas,
   CanvasConfig,
@@ -14,11 +17,11 @@ import type {
   CanvasHistoryEntry,
   Position,
   Size,
-  ElementStyle,
   ExportOptions,
-  ExportFormat,
 } from './types.js';
 import { DEFAULT_CANVAS_CONFIG } from './types.js';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Canvas Manager
@@ -670,9 +673,182 @@ export class CanvasManager extends EventEmitter {
         return this.renderToHTML(canvasId);
       case 'svg':
         return this.renderToSVG(canvasId);
+      case 'png':
+        return this.renderToPNG(canvasId, options);
+      case 'pdf':
+        return this.renderToPDF(canvasId);
       default:
-        throw new Error(`Export format ${options.format} not yet implemented`);
+        throw new Error(`Unsupported export format: ${options.format}`);
     }
+  }
+
+  /**
+   * Render to PNG using resvg (SVG rasterization).
+   */
+  private renderToPNG(canvasId: string, options: ExportOptions): Buffer {
+    const canvas = this.canvases.get(canvasId);
+    if (!canvas) {
+      throw new Error(`Canvas ${canvasId} not found`);
+    }
+
+    const scale = options.scale && options.scale > 0 ? options.scale : 1;
+    const width = Math.max(1, Math.round(canvas.config.width * scale));
+    const svg = this.renderToSVG(canvasId);
+    const resvg = new Resvg(svg, {
+      fitTo: { mode: 'width', value: width },
+      background: options.transparentBackground ? undefined : canvas.config.backgroundColor,
+      font: { loadSystemFonts: false },
+    });
+
+    return resvg.render().asPng();
+  }
+
+  /**
+   * Render to PDF.
+   *
+   * Uses wkhtmltopdf when available for richer rendering and falls back to
+   * a minimal built-in PDF generator if the binary is unavailable.
+   */
+  private async renderToPDF(canvasId: string): Promise<Buffer> {
+    const html = this.renderToHTML(canvasId);
+    const pdfFromBinary = await this.renderToPDFWithWkhtmltopdf(html);
+    if (pdfFromBinary) {
+      return pdfFromBinary;
+    }
+    return this.renderMinimalPDF(canvasId);
+  }
+
+  private async renderToPDFWithWkhtmltopdf(html: string): Promise<Buffer | null> {
+    const { mkdtemp, writeFile, readFile, rm } = await import('fs/promises');
+    const { join } = await import('path');
+    const { tmpdir } = await import('os');
+
+    const tmp = await mkdtemp(join(tmpdir(), 'canvas-export-'));
+    const htmlPath = join(tmp, 'canvas.html');
+    const pdfPath = join(tmp, 'canvas.pdf');
+
+    try {
+      await writeFile(htmlPath, html, 'utf8');
+      await execFileAsync('wkhtmltopdf', [htmlPath, pdfPath], { timeout: 15000 });
+      return await readFile(pdfPath);
+    } catch {
+      return null;
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Build a basic PDF payload with canvas metadata and element list.
+   * This guarantees a valid PDF even without external PDF tooling.
+   */
+  private renderMinimalPDF(canvasId: string): Buffer {
+    const canvas = this.canvases.get(canvasId);
+    if (!canvas) {
+      throw new Error(`Canvas ${canvasId} not found`);
+    }
+
+    const elementLines = canvas.elements
+      .sort((a, b) => a.zIndex - b.zIndex)
+      .slice(0, 120)
+      .map((element) => {
+        const label = element.label || this.getElementSummary(element);
+        return `[${element.type}] ${label}`.trim();
+      });
+
+    const lines = [
+      `Canvas: ${canvas.config.name}`,
+      `Size: ${canvas.config.width}x${canvas.config.height}`,
+      `Elements: ${canvas.elements.length}`,
+      '',
+      ...elementLines,
+    ];
+
+    return this.buildSimplePdf(lines);
+  }
+
+  private getElementSummary(element: CanvasElement): string {
+    if (element.type === 'text' && 'content' in element) {
+      const text = (element.content as { text: string }).text || '';
+      return text.slice(0, 80);
+    }
+    if (element.type === 'code' && 'content' in element) {
+      const language = (element.content as { language?: string }).language || 'code';
+      return `[${language}]`;
+    }
+    if (element.type === 'markdown' && 'content' in element) {
+      const md = (element.content as { markdown?: string }).markdown || '';
+      return md.slice(0, 80);
+    }
+    return `${element.id.slice(0, 8)}...`;
+  }
+
+  private buildSimplePdf(rawLines: string[]): Buffer {
+    const normalized = rawLines
+      .flatMap((line) => this.wrapText(line.replace(/[^\x20-\x7E]/g, '?'), 95))
+      .slice(0, 220);
+    const escaped = normalized.map((line) => this.escapePdfText(line));
+
+    const streamLines: string[] = [
+      'BT',
+      '/F1 10 Tf',
+      '1 0 0 1 40 760 Tm',
+    ];
+    for (const line of escaped) {
+      streamLines.push(`(${line}) Tj`);
+      streamLines.push('0 -12 Td');
+    }
+    streamLines.push('ET');
+    const contentStream = `${streamLines.join('\n')}\n`;
+
+    const objects: string[] = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+      `<< /Length ${Buffer.byteLength(contentStream, 'utf8')} >>\nstream\n${contentStream}endstream`,
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    ];
+
+    const header = '%PDF-1.4\n';
+    let body = '';
+    const offsets: number[] = [];
+
+    for (let i = 0; i < objects.length; i++) {
+      offsets.push(Buffer.byteLength(header + body, 'utf8'));
+      body += `${i + 1} 0 obj\n${objects[i]}\nendobj\n`;
+    }
+
+    const xrefOffset = Buffer.byteLength(header + body, 'utf8');
+    const xrefEntries = [
+      '0000000000 65535 f ',
+      ...offsets.map((offset) => `${offset.toString().padStart(10, '0')} 00000 n `),
+    ];
+
+    const xref = `xref\n0 ${objects.length + 1}\n${xrefEntries.join('\n')}\n`;
+    const trailer = `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    return Buffer.from(header + body + xref + trailer, 'utf8');
+  }
+
+  private wrapText(input: string, maxLen: number): string[] {
+    if (input.length <= maxLen) {
+      return [input];
+    }
+
+    const out: string[] = [];
+    let rest = input;
+    while (rest.length > maxLen) {
+      out.push(rest.slice(0, maxLen));
+      rest = rest.slice(maxLen);
+    }
+    if (rest.length > 0) {
+      out.push(rest);
+    }
+    return out;
+  }
+
+  private escapePdfText(text: string): string {
+    return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
   }
 
   /**

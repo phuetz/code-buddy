@@ -1,0 +1,1 @@
+Window: "Windows PowerShell" (WindowsTerminal, PID: 21572)

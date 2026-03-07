@@ -11,17 +11,22 @@
  * - Connection management
  */
 
+
+// Mock the MCP SDK transports
+
 import { EventEmitter } from 'events';
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import axios from 'axios';
+import { logger } from '../../src/utils/logger';
 
-// Mock the MCP SDK transports
 jest.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
-  StdioClientTransport: jest.fn().mockImplementation(() => ({
+  StdioClientTransport: jest.fn().mockImplementation(function() { return {
     close: jest.fn().mockResolvedValue(undefined),
     start: jest.fn().mockResolvedValue(undefined),
     send: jest.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 // Mock axios
@@ -33,7 +38,7 @@ jest.mock('axios', () => {
   return {
     __esModule: true,
     default: {
-      create: jest.fn(() => mockAxiosInstance),
+      create: jest.fn(function() { return mockAxiosInstance; }),
       post: jest.fn().mockResolvedValue({ data: {} }),
     },
   };
@@ -59,9 +64,6 @@ import {
   StreamableHttpTransport,
   createTransport,
 } from '../../src/mcp/transports';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import axios from 'axios';
-import { logger } from '../../src/utils/logger';
 
 describe('Transport Module', () => {
   beforeEach(() => {

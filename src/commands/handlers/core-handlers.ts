@@ -237,21 +237,32 @@ Usage: /autonomy <level>`,
 /**
  * Pipeline - Run agent workflows
  */
-export function handlePipeline(args: string[]): CommandHandlerResult {
+export async function handlePipeline(args: string[]): Promise<CommandHandlerResult> {
   const pipelineName = args[0];
+  const fs = await import('fs');
+  const path = await import('path');
+  const pipelineDir = path.join(process.cwd(), '.codebuddy', 'pipelines');
 
-  if (!pipelineName) {
+  if (!pipelineName || pipelineName === 'list') {
+    let extraPipelines = '';
+    if (fs.existsSync(pipelineDir)) {
+      const files = fs.readdirSync(pipelineDir).filter(f => f.endsWith('.yaml') || f.endsWith('.json'));
+      if (files.length > 0) {
+        extraPipelines = '\n  📁 Custom Pipelines:\n' + files.map(f => `  • ${f.replace(/\.(yaml|json)$/, '')}`).join('\n');
+      }
+    }
+
     const content = `🔄 Available Pipelines
 
   • code-review: Comprehensive code review workflow
   • bug-fix: Systematic bug fixing workflow
   • feature-development: Feature development workflow
   • security-audit: Security audit workflow
-  • documentation: Documentation generation workflow
+  • documentation: Documentation generation workflow${extraPipelines}
 
 Usage: /pipeline <name> [target]
 
-Example: /pipeline code-review src/utils.ts`;
+Example: /pipeline feature-dev "Add a new endpoint to the API"`;
 
     return {
       handled: true,
@@ -264,6 +275,25 @@ Example: /pipeline code-review src/utils.ts`;
   }
 
   const target = args.slice(1).join(" ") || process.cwd();
+
+  // Check for file-based pipeline
+  const possiblePaths = [
+    path.join(pipelineDir, `${pipelineName}.yaml`),
+    path.join(pipelineDir, `${pipelineName}.yml`),
+    path.join(pipelineDir, `${pipelineName}.json`),
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return {
+        handled: true,
+        passToAI: true,
+        prompt: `Run the pipeline defined in "${p}" using target context: "${target}"
+
+Steps should be executed one by one using the Pipeline system.`,
+      };
+    }
+  }
 
   const pipelineSteps: Record<string, string> = {
     "code-review": `1. Analyze code structure
@@ -310,21 +340,65 @@ Execute each step and report results.`,
 /**
  * Parallel - Run parallel subagents
  */
-export function handleParallel(args: string[]): CommandHandlerResult {
+export async function handleParallel(args: string[]): Promise<CommandHandlerResult> {
+  const action = args[0]?.toLowerCase();
+  
+  if (action === 'explore') {
+    const task = args.slice(1).join(' ');
+    if (!task) return { handled: true, entry: { type: 'assistant', content: 'Usage: /parallel explore <task>', timestamp: new Date() } };
+    
+    return {
+      handled: true,
+      passToAI: true,
+      prompt: `Explore this topic using 3 specialized parallel agents (explorer, code-reviewer, and documenter):
+      
+Task: ${task}
+
+Use the spawn_parallel_agents tool to launch them concurrently.`,
+    };
+  }
+
+  if (action === 'research') {
+    const topic = args.slice(1).join(' ');
+    if (!topic) return { handled: true, entry: { type: 'assistant', content: 'Usage: /parallel research <topic>', timestamp: new Date() } };
+    
+    // Lazy-load wide research
+    const { runWideResearch } = await import('../../agent/wide-research.js');
+    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+    
+    if (!apiKey) {
+      return {
+        handled: true,
+        entry: { type: 'assistant', content: '❌ API key missing for research.', timestamp: new Date() },
+      };
+    }
+
+    const result = await runWideResearch(topic, apiKey);
+    return {
+      handled: true,
+      entry: {
+        type: 'assistant',
+        content: result.output || 'Research failed.',
+        timestamp: new Date(),
+      },
+    };
+  }
+
   const task = args.join(" ");
 
-  if (!task) {
+  if (!task || action === 'help') {
     return {
       handled: true,
       entry: {
         type: "assistant",
         content: `🔀 Parallel Subagent Runner
 
-Usage: /parallel <task description>
+Usage:
+  /parallel <task description>   - Let AI decide how to parallelize
+  /parallel explore <task>       - Use explorer, reviewer, and documenter agents
+  /parallel research <topic>     - Multi-agent deep research (Manus AI-style)
 
-Example: /parallel analyze all TypeScript files in src/
-
-This will execute the task using parallel subagents where beneficial.`,
+Example: /parallel analyze all TypeScript files in src/`,
         timestamp: new Date(),
       },
     };

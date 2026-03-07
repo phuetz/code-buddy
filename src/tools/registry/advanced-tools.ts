@@ -314,8 +314,12 @@ export class SpawnSubagentExecuteTool implements ITool {
       return { success: false, error: 'No API key available for subagent (GROK_API_KEY or XAI_API_KEY)' };
     }
 
+    // Pipeline integration: use _input as task if task is generic, and _context as context
+    const finalTask = (task === 'process' || !task) ? (input._input as string || task) : task;
+    const finalContext = context || (input._context as string) || (input._input as string);
+
     const subagent = new Subagent(apiKey, config, process.env.GROK_BASE_URL);
-    const result = await subagent.run(task, context);
+    const result = await subagent.run(finalTask, finalContext);
 
     return {
       success: result.success,

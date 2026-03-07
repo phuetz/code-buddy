@@ -1,0 +1,32 @@
+Updated package.json with 13 additions and 12 removals
+--- a/package.json
++++ b/package.json
+@@ -3,15 +3,16 @@
+   "version": "1.0.0",
+   "main": "index.js",
+   "scripts": {
+-    "test": "echo \"Error: no test specified\" && exit 1"
+-  },
+-  "keywords": [],
+-  "author": "",
+-  "license": "ISC",
+-  "description": "",
+-  "dependencies": {
+-    "@google/generative-ai": "^0.24.1",
+-    "express": "^5.2.1"
+-  }
+-}
+-
++    "start": "node server.js",
++    "test": "echo \"Error: no test specified\" && exit 1"
++  },
++  "keywords": [],
++  "author": "",
++  "license": "ISC",
++  "description": "",
++  "dependencies": {
++    "@google/generative-ai": "^0.24.1",
++    "express": "^5.2.1"
++  }
++}
++

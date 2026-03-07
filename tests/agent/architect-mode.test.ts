@@ -12,7 +12,7 @@ import {
 
 // Mock CodeBuddyClient
 jest.mock("../../src/codebuddy/client.js", () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn().mockResolvedValue({
       choices: [{
         message: {
@@ -40,7 +40,7 @@ jest.mock("../../src/codebuddy/client.js", () => ({
       yield { choices: [{ delta: { content: "response" } }] };
     }),
     getModel: jest.fn().mockReturnValue("grok-3-latest"),
-  })),
+  }; }),
 }));
 
 jest.mock("../../src/types/index.js", () => ({
@@ -110,36 +110,48 @@ describe("ArchitectMode", () => {
       expect(architect.off).toBeDefined();
     });
 
-    it("should emit events during design phase", (done) => {
+    it("should emit events during design phase", async () => {
       architect = new ArchitectMode(apiKey);
       const events: string[] = [];
 
       architect.on("design:start", () => events.push("design:start"));
-      architect.on("design:complete", () => {
-        events.push("design:complete");
-        expect(events).toContain("design:start");
-        done();
-      });
+      await new Promise<void>((resolve, reject) => {
+        architect.once("design:complete", () => {
+          try {
+            events.push("design:complete");
+            expect(events).toContain("design:start");
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      architect.emit("design:start");
-      architect.emit("design:complete", {});
+        architect.emit("design:start");
+        architect.emit("design:complete", {});
+      });
     });
 
-    it("should emit events during execution phase", (done) => {
+    it("should emit events during execution phase", async () => {
       architect = new ArchitectMode(apiKey);
       const events: string[] = [];
 
       architect.on("execute:start", () => events.push("execute:start"));
       architect.on("step:complete", () => events.push("step:complete"));
-      architect.on("execute:complete", () => {
-        events.push("execute:complete");
-        expect(events).toContain("execute:start");
-        done();
-      });
+      await new Promise<void>((resolve, reject) => {
+        architect.once("execute:complete", () => {
+          try {
+            events.push("execute:complete");
+            expect(events).toContain("execute:start");
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      architect.emit("execute:start");
-      architect.emit("step:complete", {});
-      architect.emit("execute:complete", []);
+        architect.emit("execute:start");
+        architect.emit("step:complete", {});
+        architect.emit("execute:complete", []);
+      });
     });
   });
 

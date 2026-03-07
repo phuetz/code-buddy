@@ -236,26 +236,38 @@ describe('Event Emission', () => {
     resetOptimizers();
   });
 
-  it('should emit operation:start event', (done) => {
-    optimizer.on('operation:start', (event) => {
-      expect(event.operation).toBe('file_read');
-      expect(event.target).toBe(OPERATION_TARGETS.file_read);
-      done();
-    });
+  it('should emit operation:start event', async () => {
+    await new Promise<void>((resolve, reject) => {
+      optimizer.once('operation:start', (event) => {
+        try {
+          expect(event.operation).toBe('file_read');
+          expect(event.target).toBe(OPERATION_TARGETS.file_read);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
 
-    optimizer.startOperation('file_read');
+      optimizer.startOperation('file_read');
+    });
   });
 
-  it('should emit operation:end event', (done) => {
-    optimizer.on('operation:end', (event) => {
-      expect(event.operation).toBe('file_read');
-      expect(event.duration).toBeGreaterThanOrEqual(0);
-      expect(event.status).toMatch(/met|exceeded/);
-      done();
-    });
+  it('should emit operation:end event', async () => {
+    await new Promise<void>((resolve, reject) => {
+      optimizer.once('operation:end', (event) => {
+        try {
+          expect(event.operation).toBe('file_read');
+          expect(event.duration).toBeGreaterThanOrEqual(0);
+          expect(event.status).toMatch(/met|exceeded/);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
 
-    const id = optimizer.startOperation('file_read');
-    optimizer.endOperation(id);
+      const id = optimizer.startOperation('file_read');
+      optimizer.endOperation(id);
+    });
   });
 
   it('should emit cache:hit and cache:miss events', async () => {

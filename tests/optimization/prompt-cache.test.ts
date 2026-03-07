@@ -147,11 +147,18 @@ describe("Prompt Cache", () => {
         expect(manager.getStats().entries).toBeGreaterThanOrEqual(0);
       });
 
-      it("should emit cache:warmed event", (done) => {
-        manager.on("cache:warmed", () => {
-          done();
+      it("should emit cache:warmed event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("cache:warmed", () => {
+            try {
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.warmCache({});
         });
-        manager.warmCache({});
       });
     });
 
@@ -191,24 +198,38 @@ describe("Prompt Cache", () => {
     });
 
     describe("events", () => {
-      it("should emit cache:hit event on repeated caching", (done) => {
-        manager.on("cache:hit", (data: { hash: string; tokens: number; type: string }) => {
-          expect(data.hash).toBeDefined();
-          done();
+      it("should emit cache:hit event on repeated caching", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("cache:hit", (data: { hash: string; tokens: number; type: string }) => {
+            try {
+              expect(data.hash).toBeDefined();
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          // Cache same content twice to trigger a hit
+          const content = "x".repeat(5000);
+          manager.cacheSystemPrompt(content);
+          manager.cacheSystemPrompt(content);
         });
-        // Cache same content twice to trigger a hit
-        const content = "x".repeat(5000);
-        manager.cacheSystemPrompt(content);
-        manager.cacheSystemPrompt(content);
       });
 
-      it("should emit cache:miss event on first cache", (done) => {
-        manager.on("cache:miss", (data: { hash: string; tokens: number; type: string }) => {
-          expect(data.hash).toBeDefined();
-          done();
+      it("should emit cache:miss event on first cache", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("cache:miss", (data: { hash: string; tokens: number; type: string }) => {
+            try {
+              expect(data.hash).toBeDefined();
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          const content = "x".repeat(5000);
+          manager.cacheSystemPrompt(content);
         });
-        const content = "x".repeat(5000);
-        manager.cacheSystemPrompt(content);
       });
     });
   });

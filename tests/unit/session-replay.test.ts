@@ -3,23 +3,27 @@
  * Tests recording, playback, event handling, persistence, and integrity verification
  */
 
+import { vi } from 'vitest';
 import SessionReplayManager, {
   getSessionReplayManager,
-  ReplayEvent,
   ReplaySession,
 } from '../../src/advanced/session-replay';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   writeJson: jest.fn().mockResolvedValue(undefined),
   readJson: jest.fn(),
   readdir: jest.fn(),
   pathExists: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock crypto
-jest.mock('crypto', () => ({
+jest.mock('crypto', () => {
+  const impl = {
   randomBytes: jest.fn().mockReturnValue({
     toString: jest.fn().mockReturnValue('abc12345'),
   }),
@@ -28,9 +32,12 @@ jest.mock('crypto', () => ({
       digest: jest.fn().mockReturnValue('hash1234abcd'),
     }),
   }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import fs from 'fs-extra';
+import crypto from 'crypto';
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
@@ -45,12 +52,12 @@ describe('SessionReplayManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     manager = new SessionReplayManager();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('Recording', () => {
@@ -353,7 +360,7 @@ describe('SessionReplayManager', () => {
           startTime: new Date(),
         } as never);
 
-        const sessions = await manager.listSessions();
+        await manager.listSessions();
 
         expect(mockFs.readJson).toHaveBeenCalledTimes(1);
       });
@@ -409,7 +416,7 @@ describe('SessionReplayManager', () => {
         const replayPromise = manager.replay('replay123', { speed: 100 });
 
         // Fast-forward through delays
-        await jest.runAllTimersAsync();
+        await vi.runAllTimersAsync();
         await replayPromise;
 
         expect(replayStarted).toHaveBeenCalledWith('replay123');
@@ -435,7 +442,7 @@ describe('SessionReplayManager', () => {
         const onEvent = jest.fn();
 
         const replayPromise = manager.replay('replay123', { onEvent });
-        await jest.runAllTimersAsync();
+        await vi.runAllTimersAsync();
         await replayPromise;
 
         expect(onEvent).toHaveBeenCalledWith(mockSession.events[0]);
@@ -464,10 +471,9 @@ describe('SessionReplayManager', () => {
         mockFs.readdir.mockResolvedValue(['replay123-file.json'] as never);
         mockFs.readJson.mockResolvedValue(mockSession as never);
 
-        const startTime = Date.now();
         const replayPromise = manager.replay('replay123', { speed: 10 });
 
-        await jest.runAllTimersAsync();
+        await vi.runAllTimersAsync();
         await replayPromise;
 
         // With speed 10, delays should be 10x faster
@@ -501,7 +507,7 @@ describe('SessionReplayManager', () => {
     describe('verifyIntegrity()', () => {
       it('should return true for valid session', () => {
         // Mock crypto to return consistent hashes
-        const crypto = require('crypto');
+// const crypto = require('crypto'); -- replaced by import
         crypto.createHash.mockReturnValue({
           update: jest.fn().mockReturnValue({
             digest: jest.fn().mockReturnValue('hash1234'),
@@ -524,7 +530,7 @@ describe('SessionReplayManager', () => {
 
       it('should return false for tampered session', () => {
         // Mock crypto to return different hash
-        const crypto = require('crypto');
+// const crypto = require('crypto'); -- replaced by import
         crypto.createHash.mockReturnValue({
           update: jest.fn().mockReturnValue({
             digest: jest.fn().mockReturnValue('differenthash'),
@@ -559,11 +565,11 @@ describe('SessionReplayManager', () => {
       });
 
       it('should check all events in sequence', () => {
-        const crypto = require('crypto');
+// const crypto = require('crypto'); -- replaced by import
         let callCount = 0;
         crypto.createHash.mockReturnValue({
           update: jest.fn().mockReturnValue({
-            digest: jest.fn().mockImplementation(() => {
+            digest: jest.fn().mockImplementation(function() {
               callCount++;
               return callCount === 2 ? 'wrong' : 'hash1234'; // Second event fails
             }),
@@ -720,10 +726,10 @@ describe('Edge Cases', () => {
   });
 
   it('should handle starting new recording while one is active', () => {
-    const session1 = manager.startRecording('Session 1', mockMetadata);
+    manager.startRecording('Session 1', mockMetadata);
     manager.recordEvent('input', { from: 'session1' });
 
-    const session2 = manager.startRecording('Session 2', mockMetadata);
+    manager.startRecording('Session 2', mockMetadata);
     manager.recordEvent('input', { from: 'session2' });
 
     const current = manager.getCurrentSession();

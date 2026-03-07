@@ -16,13 +16,15 @@
  * - Dispose / cleanup
  */
 
+
+// Mock logger
+
 import { BashTool } from '../../src/tools/bash';
 import { ConfirmationService } from '../../src/utils/confirmation-service';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 
-// Mock logger
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     debug: jest.fn(),
@@ -34,22 +36,22 @@ jest.mock('../../src/utils/logger.js', () => ({
 
 // Mock sandbox manager
 jest.mock('../../src/security/sandbox', () => ({
-  getSandboxManager: jest.fn(() => ({
-    validateCommand: jest.fn(() => ({ valid: true })),
-  })),
+  getSandboxManager: jest.fn(function() { return {
+    validateCommand: jest.fn(function() { return { valid: true }; }),
+  }; }),
 }));
 
 // Mock self-healing engine
 jest.mock('../../src/utils/self-healing', () => ({
-  getSelfHealingEngine: jest.fn(() => ({
+  getSelfHealingEngine: jest.fn(function() { return {
     attemptHealing: jest.fn(() => Promise.resolve({ success: false, attempts: [] })),
-  })),
+  }; }),
   SelfHealingEngine: jest.fn(),
 }));
 
 // Mock test output parser
 jest.mock('../../src/utils/test-output-parser', () => ({
-  parseTestOutput: jest.fn(() => ({ isTestOutput: false })),
+  parseTestOutput: jest.fn(function() { return { isTestOutput: false }; }),
   isLikelyTestOutput: jest.fn(() => false),
 }));
 
@@ -61,8 +63,8 @@ jest.mock('../../src/utils/input-validator', () => ({
     findFiles: { pattern: { type: 'string', required: true }, directory: { type: 'string' } },
     grep: { pattern: { type: 'string', required: true }, files: { type: 'string' } },
   },
-  validateWithSchema: jest.fn(() => ({ valid: true })),
-  validateCommand: jest.fn(() => ({ valid: true })),
+  validateWithSchema: jest.fn(function() { return { valid: true }; }),
+  validateCommand: jest.fn(function() { return { valid: true }; }),
   sanitizeForShell: jest.fn((s: string) => `'${s}'`),
 }));
 

@@ -14,9 +14,11 @@ import {
   createPipelineCommand,
 } from '../../src/commands/pipeline';
 import type { PipelineFileDefinition } from '../../src/commands/pipeline';
+import fs from 'fs';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   default: {
     existsSync: jest.fn(),
     readdirSync: jest.fn(),
@@ -25,10 +27,13 @@ jest.mock('fs', () => ({
   existsSync: jest.fn(),
   readdirSync: jest.fn(),
   readFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock path module
-jest.mock('path', () => ({
+jest.mock('path', () => {
+  const impl = {
   default: {
     resolve: jest.fn((p: string) => p),
     extname: jest.fn((p: string) => {
@@ -43,7 +48,9 @@ jest.mock('path', () => ({
     return idx >= 0 ? p.slice(idx) : '';
   }),
   join: jest.fn((...args: string[]) => args.join('/')),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock js-yaml for YAML parsing
 jest.mock('js-yaml', () => ({
@@ -53,7 +60,7 @@ jest.mock('js-yaml', () => ({
   load: jest.fn((content: string) => JSON.parse(content)),
 }));
 
-const fs = require('fs');
+// const fs = require('fs'); -- replaced by import
 
 describe('Pipeline CLI Command', () => {
   beforeEach(() => {

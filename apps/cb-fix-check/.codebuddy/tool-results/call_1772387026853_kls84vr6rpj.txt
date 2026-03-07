@@ -1,0 +1,5 @@
+Updated test2.txt with 1 addition
+--- a/test2.txt
++++ b/test2.txt
+@@ -1,0 +1,1 @@
++

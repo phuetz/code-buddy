@@ -1,0 +1,429 @@
+Contents of src/inference/kv-cache-config.ts:
+1: /**
+2:  * KV-Cache Configuration for Local LLM Inference
+3:  *
+4:  * Manages Key-Value cache settings for llama.cpp and LM Studio:
+5:  * - Cache size estimation
+6:  * - Quantization options (fp16, q8_0, q4_0)
+7:  * - Context length management
+8:  * - Memory offloading configuration
+9:  */
+10: 
+11: import { EventEmitter } from 'events';
+12: import { logger } from '../utils/logger.js';
+13: 
+14: // ============================================================================
+15: // Types
+16: // ============================================================================
+17: 
+18: export type KVQuantization = 'f16' | 'f32' | 'q8_0' | 'q4_0' | 'q4_1';
+19: export type OffloadMode = 'none' | 'partial' | 'full';
+20: 
+21: export interface ModelArchitecture {
+22:   /** Number of layers */
+23:   nLayers: number;
+24:   /** Hidden dimension size */
+25:   nEmbed: number;
+26:   /** Number of attention heads */
+27:   nHead: number;
+28:   /** Number of key-value heads (for GQA) */
+29:   nKVHead?: number;
+30:   /** Head dimension (usually nEmbed / nHead) */
+31:   headDim?: number;
+32: }
+33: 
+34: export interface KVCacheConfig {
+35:   /** Maximum context length */
+36:   contextLength: number;
+37:   /** KV cache quantization type */
+38:   kvQuantization: KVQuantization;
+39:   /** Memory offload mode */
+40:   offloadMode: OffloadMode;
+41:   /** Number of layers to offload to CPU */
+42:   cpuOffloadLayers: number;
+43:   /** Flash attention enabled */
+44:   flashAttention: boolean;
+45:   /** Batch size for continuous batching */
+46:   batchSize: number;
+47:   /** Ubatch size (micro-batch) */
+48:   ubatchSize: number;
+49: }
+50: 
+51: export interface KVCacheEstimate {
+52:   /** Total KV cache size in bytes */
+53:   totalBytes: number;
+54:   /** Size per layer in bytes */
+55:   perLayerBytes: number;
+56:   /** GPU memory required (MB) */
+57:   gpuMemoryMB: number;
+58:   /** CPU memory required if offloading (MB) */
+59:   cpuMemoryMB: number;
+60:   /** Recommended configuration */
+61:   recommendation: string;
+62:   /** Whether it fits in available VRAM */
+63:   fitsInVRAM: boolean;
+64: }
+65: 
+66: export interface InferenceServerConfig {
+67:   /** Base URL for the server */
+68:   baseUrl: string;
+69:   /** Server type */
+70:   serverType: 'llamacpp' | 'lmstudio' | 'ollama' | 'vllm';
+71:   /** KV cache configuration */
+72:   kvCache: KVCacheConfig;
+73:   /** Model architecture (for estimation) */
+74:   architecture?: ModelArchitecture;
+75: }
+76: 
+77: export const DEFAULT_KV_CACHE_CONFIG: KVCacheConfig = {
+78:   contextLength: 4096,
+79:   kvQuantization: 'f16',
+80:   offloadMode: 'none',
+81:   cpuOffloadLayers: 0,
+82:   flashAttention: true,
+83:   batchSize: 512,
+84:   ubatchSize: 512,
+85: };
+86: 
+87: // ============================================================================
+88: // Common Model Architectures
+89: // ============================================================================
+90: 
+91: export const MODEL_ARCHITECTURES: Record<string, ModelArchitecture> = {
+92:   // Qwen 2.5
+93:   'qwen2.5-0.5b': { nLayers: 24, nEmbed: 896, nHead: 14, nKVHead: 2 },
+94:   'qwen2.5-1.5b': { nLayers: 28, nEmbed: 1536, nHead: 12, nKVHead: 2 },
+95:   'qwen2.5-3b': { nLayers: 36, nEmbed: 2048, nHead: 16, nKVHead: 2 },
+96:   'qwen2.5-7b': { nLayers: 28, nEmbed: 3584, nHead: 28, nKVHead: 4 },
+97:   'qwen2.5-14b': { nLayers: 48, nEmbed: 5120, nHead: 40, nKVHead: 8 },
+98:   'qwen2.5-32b': { nLayers: 64, nEmbed: 5120, nHead: 40, nKVHead: 8 },
+99:   'qwen2.5-72b': { nLayers: 80, nEmbed: 8192, nHead: 64, nKVHead: 8 },
+100: 
+101:   // Llama 3.x
+102:   'llama-3.2-1b': { nLayers: 16, nEmbed: 2048, nHead: 32, nKVHead: 8 },
+103:   'llama-3.2-3b': { nLayers: 28, nEmbed: 3072, nHead: 24, nKVHead: 8 },
+104:   'llama-3.1-8b': { nLayers: 32, nEmbed: 4096, nHead: 32, nKVHead: 8 },
+105:   'llama-3.1-70b': { nLayers: 80, nEmbed: 8192, nHead: 64, nKVHead: 8 },
+106: 
+107:   // Mistral / Devstral
+108:   'mistral-7b': { nLayers: 32, nEmbed: 4096, nHead: 32, nKVHead: 8 },
+109:   'devstral-7b': { nLayers: 32, nEmbed: 4096, nHead: 32, nKVHead: 8 },
+110:   'devstral-24b': { nLayers: 56, nEmbed: 5120, nHead: 32, nKVHead: 8 },
+111: 
+112:   // DeepSeek
+113:   'deepseek-coder-6.7b': { nLayers: 32, nEmbed: 4096, nHead: 32, nKVHead: 32 },
+114:   'deepseek-coder-33b': { nLayers: 62, nEmbed: 7168, nHead: 56, nKVHead: 56 },
+115: 
+116:   // StarCoder
+117:   'starcoder2-3b': { nLayers: 30, nEmbed: 2560, nHead: 32, nKVHead: 4 },
+118:   'starcoder2-7b': { nLayers: 32, nEmbed: 4608, nHead: 36, nKVHead: 4 },
+119:   'starcoder2-15b': { nLayers: 40, nEmbed: 6144, nHead: 48, nKVHead: 4 },
+120: };
+121: 
+122: // Bytes per element for different quantization types
+123: const BYTES_PER_ELEMENT: Record<KVQuantization, number> = {
+124:   f32: 4,
+125:   f16: 2,
+126:   q8_0: 1.0625, // 8 bits + 0.5 bits overhead
+127:   q4_0: 0.5625, // 4 bits + 0.5 bits overhead
+128:   q4_1: 0.625, // 4 bits + 1 bit overhead
+129: };
+130: 
+131: // ============================================================================
+132: // KV Cache Manager
+133: // ============================================================================
+134: 
+135: export class KVCacheManager extends EventEmitter {
+136:   private config: KVCacheConfig;
+137:   private architecture: ModelArchitecture | null = null;
+138: 
+139:   constructor(config: Partial<KVCacheConfig> = {}) {
+140:     super();
+141:     this.config = { ...DEFAULT_KV_CACHE_CONFIG, ...config };
+142:   }
+143: 
+144:   /**
+145:    * Set model architecture for accurate estimation
+146:    */
+147:   setArchitecture(arch: ModelArchitecture | string): void {
+148:     if (typeof arch === 'string') {
+149:       // Try to find architecture by model name
+150:       const lowerName = arch.toLowerCase();
+151:       for (const [key, value] of Object.entries(MODEL_ARCHITECTURES)) {
+152:         if (lowerName.includes(key)) {
+153:           this.architecture = value;
+154:           logger.debug('Model architecture detected', { model: key, arch: value });
+155:           return;
+156:         }
+157:       }
+158:       logger.warn('Unknown model architecture, using defaults', { model: arch });
+159:       // Use generic 7B architecture as fallback
+160:       this.architecture = MODEL_ARCHITECTURES['llama-3.1-8b'];
+161:     } else {
+162:       this.architecture = arch;
+163:     }
+164:   }
+165: 
+166:   /**
+167:    * Estimate KV cache memory requirements
+168:    */
+169:   estimateMemory(
+170:     contextLength?: number,
+171:     batchSize?: number
+172:   ): KVCacheEstimate {
+173:     const ctx = contextLength ?? this.config.contextLength;
+174:     const batch = batchSize ?? this.config.batchSize;
+175: 
+176:     if (!this.architecture) {
+177:       // Use generic estimation without architecture
+178:       return this.estimateGeneric(ctx, batch);
+179:     }
+180: 
+181:     const arch = this.architecture;
+182:     const nKVHead = arch.nKVHead ?? arch.nHead;
+183:     const headDim = arch.headDim ?? Math.floor(arch.nEmbed / arch.nHead);
+184: 
+185:     // KV cache size per token per layer:
+186:     // 2 (K and V) × nKVHead × headDim × bytesPerElement
+187:     const bytesPerElement = BYTES_PER_ELEMENT[this.config.kvQuantization];
+188:     const perTokenPerLayer = 2 * nKVHead * headDim * bytesPerElement;
+189: 
+190:     // Total per layer = perTokenPerLayer × contextLength × batchSize
+191:     const perLayerBytes = perTokenPerLayer * ctx * batch;
+192: 
+193:     // Total = perLayerBytes × nLayers
+194:     const totalBytes = perLayerBytes * arch.nLayers;
+195: 
+196:     // Calculate GPU vs CPU memory based on offload config
+197:     const gpuLayers = arch.nLayers - this.config.cpuOffloadLayers;
+198:     const cpuLayers = this.config.cpuOffloadLayers;
+199: 
+200:     const gpuMemoryMB = (perLayerBytes * gpuLayers) / (1024 * 1024);
+201:     const cpuMemoryMB = (perLayerBytes * cpuLayers) / (1024 * 1024);
+202: 
+203:     // Simple VRAM check (assume we need at least 512MB headroom)
+204:     const fitsInVRAM = gpuMemoryMB < 7500; // Conservative for 8GB GPU
+205: 
+206:     const recommendation = this.generateRecommendation(gpuMemoryMB, ctx);
+207: 
+208:     return {
+209:       totalBytes,
+210:       perLayerBytes,
+211:       gpuMemoryMB,
+212:       cpuMemoryMB,
+213:       recommendation,
+214:       fitsInVRAM,
+215:     };
+216:   }
+217: 
+218:   /**
+219:    * Generic estimation without model architecture
+220:    */
+221:   private estimateGeneric(contextLength: number, batchSize: number): KVCacheEstimate {
+222:     // Rough estimation: ~0.5-1 MB per 1K context for 7B model
+223:     const bytesPerElement = BYTES_PER_ELEMENT[this.config.kvQuantization];
+224:     const baseMemoryPerK = 0.75 * 1024 * 1024; // 0.75 MB per 1K tokens
+225: 
+226:     const totalBytes = (contextLength / 1000) * baseMemoryPerK * batchSize * bytesPerElement;
+227:     const gpuMemoryMB = totalBytes / (1024 * 1024);
+228: 
+229:     return {
+230:       totalBytes,
+231:       perLayerBytes: totalBytes / 32, // Assume 32 layers
+232:       gpuMemoryMB,
+233:       cpuMemoryMB: 0,
+234:       recommendation: this.generateRecommendation(gpuMemoryMB, contextLength),
+235:       fitsInVRAM: gpuMemoryMB < 7500,
+236:     };
+237:   }
+238: 
+239:   /**
+240:    * Generate configuration recommendation
+241:    */
+242:   private generateRecommendation(gpuMemoryMB: number, contextLength: number): string {
+243:     if (gpuMemoryMB < 2000) {
+244:       return 'Configuration looks good. KV cache fits comfortably in VRAM.';
+245:     }
+246:     if (gpuMemoryMB < 4000) {
+247:       return 'Consider using q8_0 KV quantization to reduce memory usage.';
+248:     }
+249:     if (gpuMemoryMB < 6000) {
+250:       return 'Recommend q4_0 KV quantization. Consider reducing context length.';
+251:     }
+252:     if (gpuMemoryMB < 8000) {
+253:       return `KV cache is large. Recommend ctx=${Math.min(contextLength, 4096)}, kvQuant=q4_0, or enable CPU offload.`;
+254:     }
+255:     return 'KV cache exceeds typical VRAM. Enable partial offload or reduce context significantly.';
+256:   }
+257: 
+258:   /**
+259:    * Generate llama.cpp server arguments
+260:    */
+261:   generateLlamaCppArgs(): string[] {
+262:     const args: string[] = [];
+263: 
+264:     // Context length
+265:     args.push('-c', String(this.config.contextLength));
+266: 
+267:     // Batch sizes
+268:     args.push('-b', String(this.config.batchSize));
+269:     args.push('-ub', String(this.config.ubatchSize));
+270: 
+271:     // KV cache quantization
+272:     if (this.config.kvQuantization !== 'f16') {
+273:       args.push('--cache-type-k', this.config.kvQuantization);
+274:       args.push('--cache-type-v', this.config.kvQuantization);
+275:     }
+276: 
+277:     // Flash attention
+278:     if (this.config.flashAttention) {
+279:       args.push('-fa');
+280:     }
+281: 
+282:     // GPU layers (if architecture known)
+283:     if (this.architecture) {
+284:       const gpuLayers = this.architecture.nLayers - this.config.cpuOffloadLayers;
+285:       args.push('-ngl', String(gpuLayers));
+286:     }
+287: 
+288:     return args;
+289:   }
+290: 
+291:   /**
+292:    * Generate LM Studio configuration
+293:    */
+294:   generateLMStudioConfig(): Record<string, unknown> {
+295:     return {
+296:       contextLength: this.config.contextLength,
+297:       gpu: {
+298:         offload: this.config.offloadMode !== 'none',
+299:         layers: this.architecture
+300:           ? this.architecture.nLayers - this.config.cpuOffloadLayers
+301:           : 'auto',
+302:       },
+303:       kvCache: {
+304:         quantization: this.config.kvQuantization,
+305:       },
+306:       inference: {
+307:         batchSize: this.config.batchSize,
+308:         flashAttention: this.config.flashAttention,
+309:       },
+310:     };
+311:   }
+312: 
+313:   /**
+314:    * Optimize configuration for available VRAM
+315:    */
+316:   optimizeForVRAM(availableVRAMMB: number, modelSizeMB: number): KVCacheConfig {
+317:     // Reserve memory for model weights + some headroom
+318:     const vramForKV = availableVRAMMB - modelSizeMB - 512; // 512MB headroom
+319: 
+320:     if (vramForKV < 500) {
+321:       // Very limited VRAM - minimal config
+322:       return {
+323:         ...this.config,
+324:         contextLength: 2048,
+325:         kvQuantization: 'q4_0',
+326:         batchSize: 256,
+327:         ubatchSize: 256,
+328:         offloadMode: 'partial',
+329:         cpuOffloadLayers: this.architecture ? Math.floor(this.architecture.nLayers / 2) : 16,
+330:       };
+331:     }
+332: 
+333:     if (vramForKV < 2000) {
+334:       // Limited VRAM - conservative config
+335:       return {
+336:         ...this.config,
+337:         contextLength: 4096,
+338:         kvQuantization: 'q4_0',
+339:         batchSize: 512,
+340:         ubatchSize: 512,
+341:         offloadMode: 'none',
+342:       };
+343:     }
+344: 
+345:     if (vramForKV < 4000) {
+346:       // Moderate VRAM
+347:       return {
+348:         ...this.config,
+349:         contextLength: 8192,
+350:         kvQuantization: 'q8_0',
+351:         batchSize: 512,
+352:         ubatchSize: 512,
+353:         offloadMode: 'none',
+354:       };
+355:     }
+356: 
+357:     // Plenty of VRAM
+358:     return {
+359:       ...this.config,
+360:       contextLength: 16384,
+361:       kvQuantization: 'f16',
+362:       batchSize: 1024,
+363:       ubatchSize: 512,
+364:       offloadMode: 'none',
+365:     };
+366:   }
+367: 
+368:   /**
+369:    * Get current configuration
+370:    */
+371:   getConfig(): KVCacheConfig {
+372:     return { ...this.config };
+373:   }
+374: 
+375:   /**
+376:    * Update configuration
+377:    */
+378:   updateConfig(config: Partial<KVCacheConfig>): void {
+379:     Object.assign(this.config, config);
+380:     this.emit('configUpdated', this.config);
+381:   }
+382: 
+383:   /**
+384:    * Format configuration for display
+385:    */
+386:   formatConfig(): string {
+387:     const estimate = this.estimateMemory();
+388:     const lines: string[] = [];
+389: 
+390:     lines.push('KV-Cache Configuration');
+391:     lines.push('─────────────────────────────────────');
+392:     lines.push(`Context Length:  ${this.config.contextLength.toLocaleString()}`);
+393:     lines.push(`KV Quantization: ${this.config.kvQuantization}`);
+394:     lines.push(`Flash Attention: ${this.config.flashAttention ? 'Enabled' : 'Disabled'}`);
+395:     lines.push(`Batch Size:      ${this.config.batchSize}`);
+396:     lines.push(`Offload Mode:    ${this.config.offloadMode}`);
+397:     lines.push('');
+398:     lines.push('Memory Estimate');
+399:     lines.push('─────────────────────────────────────');
+400:     lines.push(`GPU Memory:      ${estimate.gpuMemoryMB.toFixed(0)} MB`);
+401:     if (estimate.cpuMemoryMB > 0) {
+402:       lines.push(`CPU Memory:      ${estimate.cpuMemoryMB.toFixed(0)} MB`);
+403:     }
+404:     lines.push(`Fits in VRAM:    ${estimate.fitsInVRAM ? 'Yes' : 'No'}`);
+405:     lines.push('');
+406:     lines.push(`Recommendation: ${estimate.recommendation}`);
+407: 
+408:     return lines.join('\n');
+409:   }
+410: }
+411: 
+412: // ============================================================================
+413: // Singleton
+414: // ============================================================================
+415: 
+416: let kvCacheManagerInstance: KVCacheManager | null = null;
+417: 
+418: export function getKVCacheManager(config?: Partial<KVCacheConfig>): KVCacheManager {
+419:   if (!kvCacheManagerInstance) {
+420:     kvCacheManagerInstance = new KVCacheManager(config);
+421:   }
+422:   return kvCacheManagerInstance;
+423: }
+424: 
+425: export function resetKVCacheManager(): void {
+426:   kvCacheManagerInstance = null;
+427: }
+428: 

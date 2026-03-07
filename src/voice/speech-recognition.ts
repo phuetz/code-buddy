@@ -6,13 +6,19 @@
  */
 
 import { EventEmitter } from 'events';
+import { execFile } from 'child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { basename, join } from 'path';
+import { promisify } from 'util';
 import type {
   SpeechRecognitionConfig,
   TranscriptResult,
   TranscriptWord,
-  AudioChunk,
 } from './types.js';
 import { DEFAULT_SPEECH_RECOGNITION_CONFIG } from './types.js';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Speech recognizer interface
@@ -248,8 +254,75 @@ export class SpeechRecognizer extends EventEmitter implements ISpeechRecognizer 
    * Transcribe using Azure Speech Services
    */
   private async transcribeWithAzure(audio: Buffer): Promise<TranscriptResult> {
-    // Azure requires subscription key and region
-    throw new Error('Azure Speech transcription not yet implemented');
+    if (!this.config.apiKey) {
+      throw new Error('Azure Speech API key required');
+    }
+
+    const region = process.env.AZURE_SPEECH_REGION || process.env.AZURE_REGION;
+    if (!region) {
+      throw new Error('Azure Speech region required (set AZURE_SPEECH_REGION)');
+    }
+
+    const endpoint =
+      `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1` +
+      `?language=${encodeURIComponent(this.config.language)}&format=detailed`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': this.config.apiKey,
+        'Content-Type': 'audio/wav; codecs=audio/pcm; samplerate=16000',
+        Accept: 'application/json',
+      },
+      body: new Uint8Array(audio),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Azure Speech API error: ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+      RecognitionStatus?: string;
+      DisplayText?: string;
+      NBest?: Array<{
+        Display?: string;
+        Confidence?: number;
+        Words?: Array<{
+          Word?: string;
+          Offset?: number;
+          Duration?: number;
+          Confidence?: number;
+        }>;
+      }>;
+    };
+
+    const best = data.NBest?.[0];
+    const text = best?.Display || data.DisplayText || '';
+    const confidenceRaw = best?.Confidence ?? 0;
+    const confidence = confidenceRaw > 1 ? confidenceRaw / 100 : confidenceRaw;
+    const words: TranscriptWord[] =
+      best?.Words?.map((word) => {
+        const offsetTicks = word.Offset ?? 0;
+        const durationTicks = word.Duration ?? 0;
+        const start = offsetTicks / 10_000_000;
+        const end = (offsetTicks + durationTicks) / 10_000_000;
+        const wordConfidenceRaw = word.Confidence ?? confidence;
+        const wordConfidence = wordConfidenceRaw > 1 ? wordConfidenceRaw / 100 : wordConfidenceRaw;
+        return {
+          word: word.Word || '',
+          startTime: start,
+          endTime: end,
+          confidence: wordConfidence,
+        };
+      }) || [];
+
+    return {
+      text,
+      isFinal: true,
+      confidence: text ? confidence : 0,
+      words: words.length > 0 ? words : undefined,
+      language: this.config.language,
+    };
   }
 
   /**
@@ -324,17 +397,123 @@ export class SpeechRecognizer extends EventEmitter implements ISpeechRecognizer 
   }
 
   /**
-   * Transcribe locally (placeholder)
+   * Select the appropriate Whisper model based on audio duration.
+   * VoiceCommander dual-model pattern: fast model for short audio,
+   * accurate model for longer recordings.
+   */
+  private selectModelForDuration(audioLengthBytes: number): string {
+    const dual = this.config.dualModel;
+    if (!dual?.enabled) {
+      return this.config.whisperModel || 'base';
+    }
+
+    // Estimate duration: 16-bit mono 16kHz = 32000 bytes/sec
+    const estimatedDurationSecs = audioLengthBytes / 32000;
+    if (estimatedDurationSecs >= dual.durationThreshold) {
+      return dual.accurateModel;
+    }
+    return dual.fastModel;
+  }
+
+  /**
+   * Transcribe locally.
+   *
+   * Tries local `whisper` CLI first, then optionally falls back to
+   * OpenAI Whisper when an API key is configured.
+   * Uses dual-model strategy when enabled (VoiceCommander pattern).
    */
   private async transcribeLocal(audio: Buffer): Promise<TranscriptResult> {
-    // This would use a local Whisper model or other local STT
-    console.warn('Local transcription not implemented, returning empty result');
+    if (this.isLikelyWav(audio)) {
+      const localResult = await this.transcribeWithLocalWhisperCli(audio);
+      if (localResult) {
+        return localResult;
+      }
+    }
+
+    if (this.config.apiKey) {
+      return this.transcribeWithWhisper(audio);
+    }
 
     return {
       text: '',
       isFinal: true,
       confidence: 0,
     };
+  }
+
+  private isLikelyWav(audio: Buffer): boolean {
+    if (audio.length < 12) {
+      return false;
+    }
+    return (
+      audio.toString('ascii', 0, 4) === 'RIFF' &&
+      audio.toString('ascii', 8, 12) === 'WAVE'
+    );
+  }
+
+  private async transcribeWithLocalWhisperCli(audio: Buffer): Promise<TranscriptResult | null> {
+    const dir = await mkdtemp(join(tmpdir(), 'codebuddy-stt-'));
+    const inputPath = join(dir, 'audio.wav');
+    const language = this.config.language.split('-')[0];
+    const selectedModel = this.selectModelForDuration(audio.length);
+
+    try {
+      await writeFile(inputPath, audio);
+      await execFileAsync(
+        'whisper',
+        [
+          inputPath,
+          '--model',
+          selectedModel,
+          '--language',
+          language,
+          '--output_format',
+          'json',
+          '--output_dir',
+          dir,
+        ],
+        {
+          timeout: 120000,
+          maxBuffer: 10 * 1024 * 1024,
+        }
+      );
+
+      const jsonPath = join(dir, `${basename(inputPath, '.wav')}.json`);
+      const content = await readFile(jsonPath, 'utf8');
+      const parsed = JSON.parse(content) as {
+        text?: string;
+        segments?: Array<{
+          text?: string;
+          start?: number;
+          end?: number;
+          avg_logprob?: number;
+        }>;
+      };
+
+      const text = (parsed.text || '').trim();
+      const words: TranscriptWord[] =
+        parsed.segments?.map((segment) => ({
+          word: (segment.text || '').trim(),
+          startTime: segment.start ?? 0,
+          endTime: segment.end ?? segment.start ?? 0,
+          confidence:
+            segment.avg_logprob !== undefined
+              ? Math.max(0, Math.min(1, Math.exp(segment.avg_logprob)))
+              : 0.75,
+        })) || [];
+
+      return {
+        text,
+        isFinal: true,
+        confidence: text ? 0.75 : 0,
+        words: words.length > 0 ? words : undefined,
+        language: this.config.language,
+      };
+    } catch {
+      return null;
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 
   isListening(): boolean {

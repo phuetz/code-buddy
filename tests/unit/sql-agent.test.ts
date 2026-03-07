@@ -3,17 +3,22 @@
  * Tests SQL query execution on data files
  */
 
+
+// Mock fs module
+
 import { SQLAgent, getSQLAgent, createSQLAgent } from '../../src/agent/specialized/sql-agent';
 import { AgentTask } from '../../src/agent/specialized/types';
 import * as fs from 'fs';
 
-// Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   rmSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock better-sqlite3 module
 const mockDb = {
@@ -23,12 +28,12 @@ const mockDb = {
   transaction: jest.fn(),
 };
 const mockSqlite = jest.fn(() => mockDb);
-jest.mock('better-sqlite3', () => mockSqlite, { virtual: true });
+jest.mock('better-sqlite3', () => ({ __esModule: true, default: mockSqlite }), { virtual: true });
 
 // Mock alasql module
 const mockAlasql = jest.fn() as jest.Mock & { tables: Record<string, unknown> };
 mockAlasql.tables = {};
-jest.mock('alasql', () => mockAlasql, { virtual: true });
+jest.mock('alasql', () => ({ __esModule: true, default: mockAlasql }), { virtual: true });
 
 describe('SQLAgent', () => {
   let agent: SQLAgent;
@@ -51,7 +56,7 @@ describe('SQLAgent', () => {
     // Reset mock db
     mockDb.exec.mockReturnValue(undefined);
     mockDb.prepare.mockReturnValue({
-      run: jest.fn(() => ({ changes: 1 })),
+      run: jest.fn(function() { return { changes: 1 }; }),
       all: jest.fn(() => [
         { name: 'John', age: '30', city: 'NYC' },
         { name: 'Jane', age: '25', city: 'LA' },
@@ -118,12 +123,11 @@ describe('SQLAgent', () => {
     });
 
     it('should fall back to alasql when better-sqlite3 unavailable', async () => {
-      mockSqlite.mockImplementation(() => {
+      mockSqlite.mockImplementation(function() {
         throw new Error('Module not found');
       });
 
       const freshAgent = new SQLAgent();
-      const emitSpy = jest.spyOn(freshAgent, 'emit');
 
       await freshAgent.initialize();
 
@@ -509,7 +513,7 @@ describe('SQLAgent', () => {
       });
 
       it('should catch and return errors gracefully', async () => {
-        mockDb.prepare.mockImplementation(() => {
+        mockDb.prepare.mockImplementation(function() {
           throw new Error('SQL syntax error');
         });
 

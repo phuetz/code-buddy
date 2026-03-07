@@ -24,7 +24,9 @@ export function isRTKAvailable(): boolean {
   if (rtkAvailable !== null) return rtkAvailable;
 
   try {
-    execSync('which rtk', { stdio: 'ignore' });
+    // Cross-platform: `where` on Windows, `which` on Unix
+    const cmd = process.platform === 'win32' ? 'where rtk' : 'which rtk';
+    execSync(cmd, { stdio: 'ignore' });
     rtkAvailable = true;
   } catch {
     rtkAvailable = false;

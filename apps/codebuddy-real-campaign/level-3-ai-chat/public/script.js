@@ -1,0 +1,53 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const chatHistory = document.getElementById('chat-history');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+
+    let history = []; // Stores chat history for multi-turn conversation
+
+    const addMessage = (sender, message) => {
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message', `${sender}-message`);
+        messageElement.textContent = message;
+        chatHistory.appendChild(messageElement);
+        chatHistory.scrollTop = chatHistory.scrollHeight; // Scroll to bottom
+    };
+
+    sendButton.addEventListener('click', async () => {
+        const message = userInput.value.trim();
+        if (message) {
+            addMessage('user', message);
+            userInput.value = '';
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message, history }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addMessage('ai', data.response);
+                    // Update history for multi-turn conversation
+                    history.push({ role: 'user', parts: [{ text: message }] });
+                    history.push({ role: 'model', parts: [{ text: data.response }] });
+                } else {
+                    addMessage('ai', data.error || 'Error: Could not get a response from the AI.');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addMessage('ai', 'Error: Could not connect to the server.');
+            }
+        }
+    });
+
+    userInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendButton.click();
+        }
+    });
+});

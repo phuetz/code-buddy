@@ -16,8 +16,12 @@
 // All mocks must be defined before imports - Jest hoists jest.mock() calls
 
 // Mock codebuddy client
+
+import { CodeBuddyAgent } from "../../src/agent/codebuddy-agent";
+import type { ChatEntry, StreamingChunk } from "../../src/agent/types";
+
 jest.mock("../../src/codebuddy/client.js", () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn().mockResolvedValue({
       choices: [{ message: { content: "Test response", tool_calls: null } }],
       usage: { prompt_tokens: 100, completion_tokens: 50 },
@@ -29,7 +33,7 @@ jest.mock("../../src/codebuddy/client.js", () => ({
     getCurrentModel: jest.fn().mockReturnValue("grok-code-fast-1"),
     setModel: jest.fn(),
     probeToolSupport: jest.fn().mockResolvedValue(true),
-  })),
+  }; }),
 }));
 
 // Mock codebuddy tools
@@ -96,42 +100,42 @@ jest.mock("../../src/mcp/config.js", () => ({
 
 // Mock tools - all inline
 jest.mock("../../src/tools/index.js", () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     view: jest.fn().mockResolvedValue({ success: true, output: "file content" }),
     create: jest.fn().mockResolvedValue({ success: true, output: "File created" }),
     strReplace: jest.fn().mockResolvedValue({ success: true, output: "Text replaced" }),
-  })),
-  MorphEditorTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  MorphEditorTool: jest.fn().mockImplementation(function() { return {
     editFile: jest.fn().mockResolvedValue({ success: true, output: "Morph edit done" }),
-  })),
-  BashTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "command output" }),
     getCurrentDirectory: jest.fn().mockReturnValue("/home/test"),
     setSelfHealing: jest.fn(),
     isSelfHealingEnabled: jest.fn().mockReturnValue(true),
-  })),
-  TodoTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  TodoTool: jest.fn().mockImplementation(function() { return {
     createTodoList: jest.fn().mockResolvedValue({ success: true, output: "Todo created" }),
     updateTodoList: jest.fn().mockResolvedValue({ success: true, output: "Todo updated" }),
-  })),
-  SearchTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  SearchTool: jest.fn().mockImplementation(function() { return {
     search: jest.fn().mockResolvedValue({ success: true, output: "search results" }),
     findSymbols: jest.fn().mockResolvedValue({ success: true, output: "symbols" }),
     findReferences: jest.fn().mockResolvedValue({ success: true, output: "references" }),
     findDefinition: jest.fn().mockResolvedValue({ success: true, output: "definition" }),
     searchMultiple: jest.fn().mockResolvedValue({ success: true, output: "multi results" }),
-  })),
-  WebSearchTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  WebSearchTool: jest.fn().mockImplementation(function() { return {
     search: jest.fn().mockResolvedValue({ success: true, output: "web results" }),
     fetchPage: jest.fn().mockResolvedValue({ success: true, output: "page content" }),
-  })),
-  ImageTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  ImageTool: jest.fn().mockImplementation(function() { return {
     processImage: jest.fn().mockResolvedValue({ success: true, output: "Image processed" }),
     isImage: jest.fn().mockImplementation((path: string) => /\.(png|jpg|jpeg|gif|webp)$/i.test(path)),
-  })),
-  ReasoningTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  ReasoningTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "Reasoning result" }),
-  })),
+  }; }),
 }));
 
 // Mock token counter
@@ -247,11 +251,11 @@ jest.mock("../../src/utils/cost-tracker.js", () => ({
 // Mock autonomy manager - this needs special handling for YOLO mode tests
 const mockIsYOLOEnabled = jest.fn().mockReturnValue(false);
 jest.mock("../../src/utils/autonomy-manager.js", () => ({
-  getAutonomyManager: jest.fn(() => ({
+  getAutonomyManager: jest.fn(function() { return {
     isYOLOEnabled: mockIsYOLOEnabled,
     enableYOLO: jest.fn(),
     disableYOLO: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock context manager
@@ -341,8 +345,6 @@ jest.mock("../../src/optimization/model-routing.js", () => ({
 }));
 
 // Now import after all mocks are set up
-import { CodeBuddyAgent } from "../../src/agent/codebuddy-agent";
-import type { ChatEntry, StreamingChunk } from "../../src/agent/types";
 
 describe("CodeBuddyAgent", () => {
   let agent: CodeBuddyAgent;

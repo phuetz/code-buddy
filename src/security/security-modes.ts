@@ -113,8 +113,8 @@ const ALWAYS_BLOCK_COMMANDS = [
   'chmod -R 777 /',
   'chown -R',
   ':(){:|:&};:',
-  'wget.*|.*sh',
-  'curl.*|.*sh',
+  '\\bwget\\b.*\\|\\s*(?:ba)?sh\\b',
+  '\\bcurl\\b.*\\|\\s*(?:ba)?sh\\b',
   'sudo rm',
   'sudo dd',
   'sudo mkfs'

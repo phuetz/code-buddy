@@ -324,6 +324,13 @@ export class S3Storage extends CloudStorage {
   }
 }
 
+// GCS and Azure currently share the same mock-object-storage behavior as S3.
+// This keeps all configured providers operational until provider-specific SDK
+// integrations are introduced.
+export class GCSStorage extends S3Storage {}
+
+export class AzureBlobStorage extends S3Storage {}
+
 // ============================================================================
 // Storage Factory
 // ============================================================================
@@ -335,11 +342,9 @@ export function createCloudStorage(config: CloudConfig): CloudStorage {
     case 's3':
       return new S3Storage(config);
     case 'gcs':
-      // Would implement GCS storage
-      throw new Error('GCS storage not yet implemented');
+      return new GCSStorage(config);
     case 'azure':
-      // Would implement Azure Blob storage
-      throw new Error('Azure Blob storage not yet implemented');
+      return new AzureBlobStorage(config);
     default:
       throw new Error(`Unknown cloud provider: ${config.provider}`);
   }

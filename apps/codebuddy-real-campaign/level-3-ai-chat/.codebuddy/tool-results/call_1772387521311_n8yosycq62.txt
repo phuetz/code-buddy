@@ -1,0 +1,96 @@
+Updated test.js with 92 additions
+--- a/test.js
++++ b/test.js
+@@ -1,0 +1,92 @@
++import http from 'http';
++
++const API_ENDPOINT = 'http://localhost:3000/api/chat';
++const HEALTH_ENDPOINT = 'http://localhost:3000/health';
++
++async function runApiTest() {
++    console.log('Running API test...');
++
++    // Test /health endpoint first
++    try {
++        const healthResponse = await fetch(HEALTH_ENDPOINT);
++        if (!healthResponse.ok) {
++            throw new Error(`Health check failed with status: ${healthResponse.status}`);
++        }
++        console.log('/health endpoint check passed.');
++    } catch (error) {
++        console.error('Health check failed:', error.message);
++        process.exit(1);
++    }
++
++    // Test /api/chat endpoint
++    const testMessage = 'Hello, AI!';
++    const requestBody = JSON.stringify({ message: testMessage, history: [] });
++
++    const options = {
++        method: 'POST',
++        headers: {
++            'Content-Type': 'application/json',
++            'Content-Length': Buffer.byteLength(requestBody),
++        },
++    };
++
++    return new Promise((resolve, reject) => {
++        const req = http.request(API_ENDPOINT, options, (res) => {
++            let data = '';
++
++            res.on('data', (chunk) => {
++                data += chunk;
++            });
++
++            res.on('end', () => {
++                try {
++                    const jsonResponse = JSON.parse(data);
++                    if (res.statusCode === 200 && jsonResponse.response) {
++                        console.log('API Test Passed: Received a valid response.');
++                        console.log('Response:', jsonResponse.response);
++                        resolve();
++                    } else {
++                        console.error('API Test Failed: Invalid response or status code.');
++                        console.error('Status:', res.statusCode);
++                        console.error('Response:', jsonResponse);
++                        reject(new Error('API Test Failed'));
++                    }
++                } catch (parseError) {
++                    console.error('API Test Failed: Could not parse JSON response.', parseError);
++                    console.error('Raw response:', data);
++                    reject(parseError);
++                }
++            });
++        });
++
++        req.on('error', (e) => {
++            console.error(`API Test Failed: Request error: ${e.message}`);
++            reject(e);
++        });
++
++        req.write(requestBody);
++        req.end();
++    });
++}
++
++// To run this test, you need to start your server.js first.
++// For automated testing, you might integrate this with a test runner
++// that starts/stops the server.
++
++// Self-invoking function to run the test
++(async () => {
++    // Give the server a moment to start if it's being started externally
++    // In a real CI/CD or robust testing setup, you'd manage server lifecycle.
++    console.log('Waiting for server to be ready...');
++    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
++
++    try {
++        await runApiTest();
++        console.log('All tests completed successfully.');
++        process.exit(0);
++    } catch (error) {
++        console.error('One or more tests failed.');
++        process.exit(1);
++    }
++})();
++

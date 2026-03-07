@@ -15,7 +15,8 @@ let historyState: string[] = [];
 let indexState = -1;
 let originalInputState = '';
 
-jest.mock('react', () => ({
+jest.mock('react', () => {
+  const impl = {
   useState: jest.fn((init) => {
     if (Array.isArray(init)) {
       return [historyState, (updater: ((prev: string[]) => string[]) | string[]) => {
@@ -39,7 +40,9 @@ jest.mock('react', () => ({
     return [init, mockSetState];
   }),
   useCallback: jest.fn((fn) => fn),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('useInputHistory', () => {
   beforeEach(() => {

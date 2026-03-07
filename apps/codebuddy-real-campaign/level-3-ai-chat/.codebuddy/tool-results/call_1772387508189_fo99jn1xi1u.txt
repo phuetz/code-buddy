@@ -1,0 +1,6 @@
+Updated .env with 2 additions
+--- a/.env
++++ b/.env
+@@ -1,0 +1,2 @@
++GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
++

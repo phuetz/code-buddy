@@ -419,7 +419,7 @@ export class TeamManagerV2 {
   }
 
   /**
-   * Generate a tmux layout string (stub)
+   * Generate a simple tmux-style layout summary string
    */
   generateTmuxLayout(): string {
     const panes = [this.config.leadAgent, ...this.config.teammates];

@@ -162,7 +162,7 @@ describe('HNSWVectorStore', () => {
       expect(store.size()).toBe(100);
     });
 
-    it('should emit batch progress', (done) => {
+    it('should emit batch progress', async () => {
       const store = new HNSWVectorStore({ dimensions: 4 });
 
       const entries: VectorEntry[] = Array.from({ length: 1500 }, (_, i) => ({
@@ -170,14 +170,22 @@ describe('HNSWVectorStore', () => {
         vector: randomVector(4),
       }));
 
-      store.on('batch:progress', (progress) => {
-        expect(progress).toHaveProperty('completed');
-        expect(progress).toHaveProperty('total');
-        expect(progress.total).toBe(1500);
-        done();
+      const progressEvent = new Promise<void>((resolve, reject) => {
+        store.once('batch:progress', (progress) => {
+          try {
+            expect(progress).toHaveProperty('completed');
+            expect(progress).toHaveProperty('total');
+            expect(progress.total).toBe(1500);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      store.addBatch(entries);
+      const addBatch = store.addBatch(entries);
+
+      await Promise.all([progressEvent, addBatch]);
     });
   });
 
@@ -294,16 +302,24 @@ describe('HNSWVectorStore', () => {
       expect(deleted).toBe(false);
     });
 
-    it('should emit delete event', (done) => {
+    it('should emit delete event', async () => {
       const store = new HNSWVectorStore({ dimensions: 4 });
       store.add({ id: 'test-1', vector: [0.1, 0.2, 0.3, 0.4] });
 
-      store.on('delete', (data) => {
-        expect(data.id).toBe('test-1');
-        done();
+      const deleteEvent = new Promise<void>((resolve, reject) => {
+        store.once('delete', (data) => {
+          try {
+            expect(data.id).toBe('test-1');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
       store.delete('test-1');
+
+      await deleteEvent;
     });
 
     it('should update entry point when deleting entry', () => {
@@ -380,16 +396,24 @@ describe('HNSWVectorStore', () => {
       expect(store.size()).toBe(0);
     });
 
-    it('should emit clear event', (done) => {
+    it('should emit clear event', async () => {
       const store = new HNSWVectorStore({ dimensions: 4 });
       store.add({ id: 'test-1', vector: [0.1, 0.2, 0.3, 0.4] });
 
-      store.on('clear', () => {
-        expect(store.size()).toBe(0);
-        done();
+      const clearEvent = new Promise<void>((resolve, reject) => {
+        store.once('clear', () => {
+          try {
+            expect(store.size()).toBe(0);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
       store.clear();
+
+      await clearEvent;
     });
   });
 

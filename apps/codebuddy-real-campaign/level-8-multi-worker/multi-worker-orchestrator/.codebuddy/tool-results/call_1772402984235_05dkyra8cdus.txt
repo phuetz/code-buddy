@@ -1,0 +1,79 @@
+Updated README.md with 75 additions
+--- a/README.md
++++ b/README.md
+@@ -1,0 +1,75 @@
++# Multi-Worker Orchestrator
++
++This project implements a multi-worker job orchestration system with an Express API, WebSocket communication, and a persistent JSON job queue.
++
++## Features
++
++- **Express API**: Exposes endpoints for job management (`POST /api/jobs`, `GET /api/jobs/:id`).
++- **WebSocket**: Real-time updates on job status (queued, running, retry, done, failed).
++- **Persistent Job Queue**: Jobs are stored in `jobs.json`.
++- **Two Logical Workers**: `workerA` and `workerB` process different job types with a maximum of 2 retries.
++- **Health Endpoint**: `/health` for liveness checks.
++- **Smoke Test**: `smoke-test.mjs` to verify the system's functionality.
++
++## Setup
++
++1.  **Install Dependencies**:
++
++    ```bash
++    npm install
++    ```
++
++## Scripts
++
++-   **`start`**: Starts the main server and the two workers.
++
++    ```bash
++    npm start
++    ```
++
++-   **`smoke-test`**: Runs the smoke test to verify the application.
++
++    ```bash
++    npm run smoke-test
++    ```
++
++## API Endpoints
++
++-   `GET /health`: Returns `OK` if the server is running.
++-   `POST /api/jobs`: Enqueues a new job.
++    -   Request Body:
++
++        ```json
++        {
++            "type": "workerA" | "workerB",
++            "payload": { /* any JSON data */ }
++        }
++        ```
++
++    -   Response:
++
++        ```json
++        {
++            "id": "job-1678886400000",
++            "type": "workerA",
++            "payload": { "task": "process image" },
++            "status": "queued",
++            "retries": 0,
++            "createdAt": "2023-03-15T10:00:00.000Z"
++        }
++        ```
++
++-   `GET /api/jobs/:id`: Retrieves the status of a specific job.
++
++## WebSocket Events
++
++Clients connected to the WebSocket (`ws://localhost:<port>`) will receive JSON messages for job status transitions:
++
++-   `job_queued`: When a new job is added.
++-   `job_running`: When a worker starts processing a job.
++-   `job_retry`: When a job fails and is scheduled for a retry.
++-   `job_done`: When a job successfully completes.
++-   `job_failed`: When a job fails after all retries.
++
++Each event message will have the format: `{"event": "event_name", "job": { ...job_object... }}`.
++

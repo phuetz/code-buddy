@@ -559,9 +559,109 @@ export class RefactoringAssistant {
   /**
    * Inline a variable
    */
-  private async inlineVariable(_request: RefactoringRequest): Promise<RefactoringResult> {
-    // Similar to inlineFunction but for variables
-    return this.errorResult("inlineVariable", "Not yet implemented");
+  private async inlineVariable(request: RefactoringRequest): Promise<RefactoringResult> {
+    if (!request.filePath) {
+      return this.errorResult("inlineVariable", "File path is required");
+    }
+    if (!request.range && !request.symbolId) {
+      return this.errorResult("inlineVariable", "Range or symbol ID is required");
+    }
+
+    try {
+      const parseResult = await this.parser.parseFile(request.filePath);
+      const content = await this.vfs.readFile(request.filePath, "utf-8");
+      const lines = content.split("\n");
+
+      // Resolve target symbol from symbolId or range.
+      let targetVariable: CodeSymbol | undefined;
+      if (request.symbolId) {
+        targetVariable = parseResult.symbols.find(
+          (s) => s.id === request.symbolId && (s.type === "variable" || s.type === "constant")
+        );
+      } else if (request.range) {
+        targetVariable = parseResult.symbols.find(
+          (s) =>
+            (s.type === "variable" || s.type === "constant") &&
+            this.rangeContains(s.range, request.range!)
+        );
+      }
+
+      if (!targetVariable) {
+        return this.errorResult("inlineVariable", "Variable symbol not found");
+      }
+
+      const declarationLineIndex = targetVariable.range.start.line - 1;
+      if (declarationLineIndex < 0 || declarationLineIndex >= lines.length) {
+        return this.errorResult("inlineVariable", "Variable declaration line is out of bounds");
+      }
+
+      const declarationLine = lines[declarationLineIndex];
+      const declaration = this.extractInlineableDeclaration(declarationLine, targetVariable.name);
+      if (!declaration) {
+        return this.errorResult(
+          "inlineVariable",
+          "Only simple single-line const/let/var declarations can be inlined"
+        );
+      }
+
+      // Inlineing mutable or reassigned variables is unsafe.
+      if (declaration.kind !== "const") {
+        return this.errorResult("inlineVariable", "Only const variables can be safely inlined");
+      }
+
+      if (this.hasReassignment(lines, declarationLineIndex, declaration.name)) {
+        return this.errorResult(
+          "inlineVariable",
+          `Variable "${declaration.name}" is reassigned and cannot be safely inlined`
+        );
+      }
+
+      const replacementExpr = declaration.expression.trim();
+      if (!replacementExpr) {
+        return this.errorResult("inlineVariable", "Variable initializer is empty");
+      }
+
+      const replacedLines = [...lines];
+      const identifierPattern = new RegExp(`\\b${this.escapeRegex(declaration.name)}\\b`, "g");
+      let replacementCount = 0;
+
+      for (let i = 0; i < replacedLines.length; i++) {
+        if (i === declarationLineIndex) continue;
+        const line = replacedLines[i];
+        const replaced = line.replace(identifierPattern, () => {
+          replacementCount++;
+          return `(${replacementExpr})`;
+        });
+        replacedLines[i] = replaced;
+      }
+
+      if (replacementCount === 0) {
+        return this.errorResult(
+          "inlineVariable",
+          `No references found for variable "${declaration.name}" to inline`
+        );
+      }
+
+      // Remove declaration line after all replacements.
+      replacedLines.splice(declarationLineIndex, 1);
+      const newContent = replacedLines.join("\n");
+
+      return {
+        success: true,
+        type: "inlineVariable",
+        changes: [
+          {
+            filePath: request.filePath,
+            type: "modify",
+            originalContent: content,
+            newContent,
+          },
+        ],
+        safetyAnalysis: this.createSafetyAnalysis("medium", 1, replacementCount),
+      };
+    } catch (error) {
+      return this.errorResult("inlineVariable", getErrorMessage(error));
+    }
   }
 
   /**
@@ -709,6 +809,53 @@ export class RefactoringAssistant {
   private getIndentation(line: string): string {
     const match = line.match(/^(\s*)/);
     return match ? match[1] : "";
+  }
+
+  /**
+   * Extract a simple variable declaration that can be safely inlined.
+   *
+   * Supported form:
+   *   const|let|var name [: type] = expression;
+   */
+  private extractInlineableDeclaration(
+    line: string,
+    variableName: string
+  ): { kind: "const" | "let" | "var"; name: string; expression: string } | null {
+    const escaped = this.escapeRegex(variableName);
+    const pattern = new RegExp(
+      `^\\s*(const|let|var)\\s+${escaped}(?:\\s*:\\s*[^=]+)?\\s*=\\s*(.+?)\\s*;?\\s*$`
+    );
+    const match = line.match(pattern);
+    if (!match) return null;
+
+    return {
+      kind: match[1] as "const" | "let" | "var",
+      name: variableName,
+      expression: match[2].trim(),
+    };
+  }
+
+  /**
+   * Detect direct reassignment of a variable after its declaration.
+   */
+  private hasReassignment(lines: string[], declarationLineIndex: number, variableName: string): boolean {
+    const escaped = this.escapeRegex(variableName);
+    const assignmentPattern = new RegExp(`\\b${escaped}\\b\\s*=[^=]`);
+
+    for (let i = declarationLineIndex + 1; i < lines.length; i++) {
+      if (assignmentPattern.test(lines[i])) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Escape regex special characters.
+   */
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   /**

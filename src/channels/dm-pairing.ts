@@ -132,7 +132,10 @@ export interface DMPairingConfig {
 
 export const DEFAULT_DM_PAIRING_CONFIG: DMPairingConfig = {
   enabled: false,
-  pairingChannels: ['telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix'],
+  pairingChannels: [
+    'telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix',
+    'line', 'nostr', 'zalo', 'mattermost', 'nextcloud-talk', 'twilio-voice', 'imessage',
+  ],
   codeLength: 6,
   codeExpiryMs: 15 * 60 * 1000, // 15 minutes
   maxPending: 100,

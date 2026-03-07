@@ -1,0 +1,17 @@
+Updated package.json with 7 additions and 3 removals
+--- a/package.json
++++ b/package.json
+@@ -16,6 +16,10 @@
+     "connect-sqlite3": "^0.9.13"
+   },
+   "devDependencies": {
+-    "supertest": "^6.3.3"
+-  }
+-}
++    "supertest": "^6.3.3",
++    "mocha": "^10.2.0"
++  },
++  "mocha": {
++    "timeout": "5000"
++  }
++}

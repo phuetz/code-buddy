@@ -9,15 +9,17 @@
  * - Reset functionality
  */
 
-import { ChunkProcessor } from '../../src/streaming/chunk-processor';
 
 // Mock dependencies
+
+import { ChunkProcessor } from '../../src/streaming/chunk-processor';
+import { sanitizeLLMOutput, extractCommentaryToolCalls } from '../../src/utils/sanitize';
+
 jest.mock('../../src/utils/sanitize', () => ({
   sanitizeLLMOutput: jest.fn((content: string) => content),
-  extractCommentaryToolCalls: jest.fn(() => ({ toolCalls: [], content: '' })),
+  extractCommentaryToolCalls: jest.fn(function() { return { toolCalls: [], content: '' }; }),
 }));
 
-import { sanitizeLLMOutput, extractCommentaryToolCalls } from '../../src/utils/sanitize';
 
 const mockSanitize = sanitizeLLMOutput as jest.Mock;
 const mockExtractCommentary = extractCommentaryToolCalls as jest.Mock;

@@ -60,6 +60,34 @@ export const TOOL_METADATA: ToolMetadata[] = [
     priority: 10,
     description: 'Search for text content or files'
   },
+  {
+    name: 'find_symbols',
+    category: 'file_search',
+    keywords: ['symbols', 'functions', 'classes', 'definitions', 'code', 'index', 'semantic'],
+    priority: 8,
+    description: 'Find symbols (functions, classes, variables) in the codebase'
+  },
+  {
+    name: 'find_references',
+    category: 'file_search',
+    keywords: ['references', 'usages', 'where used', 'callers', 'semantic'],
+    priority: 8,
+    description: 'Find references/usages of a symbol'
+  },
+  {
+    name: 'find_definition',
+    category: 'file_search',
+    keywords: ['definition', 'go to definition', 'declaration', 'symbol'],
+    priority: 8,
+    description: 'Find definition/declaration location of a symbol'
+  },
+  {
+    name: 'search_multi',
+    category: 'file_search',
+    keywords: ['multi', 'search', 'batch', 'parallel', 'patterns', 'queries'],
+    priority: 7,
+    description: 'Run multiple searches in one call'
+  },
 
   // System operations
   {
@@ -68,6 +96,20 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['bash', 'terminal', 'command', 'run', 'execute', 'shell', 'npm', 'yarn', 'pip', 'install', 'build', 'test', 'compile'],
     priority: 9,
     description: 'Execute bash commands'
+  },
+  {
+    name: 'process',
+    category: 'system',
+    keywords: ['process', 'spawn', 'kill', 'list', 'logs', 'pid', 'monitor'],
+    priority: 6,
+    description: 'Manage system processes (spawn, inspect, logs, terminate)'
+  },
+  {
+    name: 'js_repl',
+    category: 'system',
+    keywords: ['javascript', 'repl', 'eval', 'node', 'snippet', 'runtime'],
+    priority: 5,
+    description: 'Execute JavaScript snippets in a controlled runtime'
   },
 
   // Git operations
@@ -118,6 +160,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['browser', 'automate', 'click', 'fill', 'form', 'screenshot', 'scrape', 'navigate', 'headless', 'puppeteer', 'playwright', 'selenium', 'test', 'ui', 'automation', 'web'],
     priority: 6,
     description: 'Automate web browser for navigation, interaction, and testing'
+  },
+  {
+    name: 'computer_control',
+    category: 'system',
+    keywords: ['computer', 'control', 'desktop', 'mouse', 'keyboard', 'window', 'click', 'type', 'automation'],
+    priority: 6,
+    description: 'Control desktop applications with mouse, keyboard, and window actions'
   },
 
   // Planning
@@ -268,6 +317,27 @@ export const TOOL_METADATA: ToolMetadata[] = [
     priority: 4,
     description: 'QR code operations'
   },
+  {
+    name: 'a2ui',
+    category: 'utility',
+    keywords: ['a2ui', 'surface', 'component', 'ui', 'interface', 'canvas', 'render'],
+    priority: 4,
+    description: 'Build dynamic UI surfaces and components with the A2UI protocol'
+  },
+  {
+    name: 'canvas',
+    category: 'utility',
+    keywords: ['canvas', 'visual', 'workspace', 'diagram', 'layout', 'element', 'render', 'export', 'import'],
+    priority: 4,
+    description: 'Create and manipulate visual workspaces with positioned elements'
+  },
+  {
+    name: 'deploy',
+    category: 'utility',
+    keywords: ['deploy', 'cloud', 'fly', 'railway', 'render', 'gcp', 'hosting', 'production', 'hetzner', 'northflank'],
+    priority: 6,
+    description: 'Deploy applications to cloud platforms'
+  },
 
   // Agent Tools — attention, knowledge, lessons, discovery, device, verification
   {
@@ -327,6 +397,34 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Manage paired devices (SSH/ADB/local)'
   },
   {
+    name: 'spawn_parallel_agents',
+    category: 'codebase',
+    keywords: ['parallel', 'agents', 'concurrent', 'subtasks', 'batch', 'delegate'],
+    priority: 5,
+    description: 'Execute multiple subtasks concurrently with specialized sub-agents'
+  },
+  {
+    name: 'remember',
+    category: 'utility',
+    keywords: ['memory', 'remember', 'persist', 'context', 'store', 'preference'],
+    priority: 5,
+    description: 'Store persistent memory entries'
+  },
+  {
+    name: 'recall',
+    category: 'utility',
+    keywords: ['memory', 'recall', 'retrieve', 'lookup', 'context'],
+    priority: 5,
+    description: 'Retrieve persistent memory by key'
+  },
+  {
+    name: 'forget',
+    category: 'utility',
+    keywords: ['memory', 'forget', 'remove', 'delete', 'cleanup'],
+    priority: 4,
+    description: 'Delete a persistent memory entry'
+  },
+  {
     name: 'lessons_add',
     category: 'utility',
     keywords: ['lesson', 'learn', 'correction', 'pattern', 'rule', 'mistake'],
@@ -353,6 +451,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['verify', 'test', 'typecheck', 'lint', 'check', 'validate', 'ci'],
     priority: 7,
     description: 'Run verification contract (tsc, test, lint)'
+  },
+  {
+    name: 'knowledge_graph',
+    category: 'codebase',
+    keywords: ['knowledge', 'graph', 'relationships', 'imports', 'calls', 'extends', 'dependencies', 'code', 'architecture'],
+    priority: 6,
+    description: 'Query code entity relationships and dependencies'
   },
 ];
 

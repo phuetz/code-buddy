@@ -5,7 +5,8 @@
 import { PluginMarketplace, getPluginMarketplace, resetPluginMarketplace } from '../src/plugins/marketplace';
 
 // Mock dependencies
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   pathExists: jest.fn().mockResolvedValue(false),
   readJSON: jest.fn().mockResolvedValue({ plugins: [] }),
@@ -14,7 +15,9 @@ jest.mock('fs-extra', () => ({
   readdir: jest.fn().mockResolvedValue([]),
   remove: jest.fn().mockResolvedValue(undefined),
   createReadStream: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('axios');
 

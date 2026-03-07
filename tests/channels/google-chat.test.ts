@@ -16,10 +16,13 @@ jest.mock('../../src/utils/logger.js', () => ({
 
 // Mock fs.readFileSync for service account loading
 const mockReadFileSync = jest.fn();
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
+jest.mock('fs', () => {
+  const impl = {
+  ...await vi.importActual('fs'),
   readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock session isolation and DM pairing from parent module
 jest.mock('../../src/channels/session-isolation.js', () => ({
@@ -259,7 +262,7 @@ describe('GoogleChatChannel', () => {
     it('should throw and emit error on service account load failure', async () => {
       channel.on('error', () => {}); // prevent unhandled
 
-      mockReadFileSync.mockImplementation(() => {
+      mockReadFileSync.mockImplementation(function() {
         throw new Error('File not found');
       });
 
@@ -270,7 +273,7 @@ describe('GoogleChatChannel', () => {
       const errorSpy = jest.fn();
       channel.on('error', errorSpy);
 
-      mockReadFileSync.mockImplementation(() => {
+      mockReadFileSync.mockImplementation(function() {
         throw new Error('File not found');
       });
 
@@ -286,7 +289,7 @@ describe('GoogleChatChannel', () => {
     it('should set error status on connection failure', async () => {
       channel.on('error', () => {});
 
-      mockReadFileSync.mockImplementation(() => {
+      mockReadFileSync.mockImplementation(function() {
         throw new Error('ENOENT');
       });
 

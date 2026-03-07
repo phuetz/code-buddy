@@ -542,7 +542,8 @@ export class SmartSnapshotManager extends EventEmitter {
   ): Promise<AnnotatedScreenshot | null> {
     const { mkdtempSync, readFileSync, unlinkSync } = await import('fs');
     const { join } = await import('path');
-    const tmpDir = mkdtempSync(join(require('os').tmpdir(), 'cb-annotate-'));
+    const { tmpdir } = await import('os');
+    const tmpDir = mkdtempSync(join(tmpdir(), 'cb-annotate-'));
     const outputPath = join(tmpDir, 'annotated.png');
 
     // Build drawtext filter chain
@@ -601,41 +602,10 @@ export class SmartSnapshotManager extends EventEmitter {
     }
   }
 
-  private async detectMacOSElements(options: SnapshotOptions): Promise<UIElement[]> {
+  private async detectMacOSElements(_options: SnapshotOptions): Promise<UIElement[]> {
     const elements: UIElement[] = [];
 
     try {
-      // Use AppleScript to query accessibility elements
-      const script = `
-        tell application "System Events"
-          set frontApp to first application process whose frontmost is true
-          set appName to name of frontApp
-          set allElements to {}
-
-          try
-            set allWindows to windows of frontApp
-            repeat with w in allWindows
-              set windowElements to entire contents of w
-              repeat with elem in windowElements
-                try
-                  set elemRole to role of elem
-                  set elemName to name of elem
-                  set elemDesc to description of elem
-                  set elemPos to position of elem
-                  set elemSize to size of elem
-                  set elemEnabled to enabled of elem
-                  set elemFocused to focused of elem
-
-                  set end of allElements to {elemRole, elemName, elemDesc, elemPos, elemSize, elemEnabled, elemFocused}
-                end try
-              end repeat
-            end repeat
-          end try
-
-          return allElements
-        end tell
-      `;
-
       // This is a simplified version - real implementation would need
       // proper AppleScript output parsing
       const output = execSync(
@@ -660,6 +630,9 @@ export class SmartSnapshotManager extends EventEmitter {
    * Detect if running inside WSL2
    */
   private isWSL(): boolean {
+    if (process.platform !== 'linux') {
+      return false;
+    }
     try {
       const release = execSync('uname -r', { encoding: 'utf-8' });
       return /microsoft|wsl/i.test(release);
@@ -688,7 +661,7 @@ export class SmartSnapshotManager extends EventEmitter {
   /**
    * Detect elements on WSL2 via PowerShell UIAutomation (same script as detectWindowsElements)
    */
-  private async detectWSLElements(options: SnapshotOptions): Promise<UIElement[]> {
+  private async detectWSLElements(_options: SnapshotOptions): Promise<UIElement[]> {
     const elements: UIElement[] = [];
 
     // Check powershell.exe is available
@@ -723,7 +696,7 @@ function Get-Elements($element, $depth) {
             $results += Get-Elements $child ($depth + 1)
             $child = $walker.GetNextSibling($child)
         }
-    } catch {}
+    } catch [System.Exception] { $_ | Out-Null }
 
     return $results
 }
@@ -772,7 +745,7 @@ if ($focused) {
   /**
    * Detect elements on native Linux via AT-SPI
    */
-  private async detectLinuxATSPIElements(options: SnapshotOptions): Promise<UIElement[]> {
+  private async detectLinuxATSPIElements(_options: SnapshotOptions): Promise<UIElement[]> {
     const elements: UIElement[] = [];
 
     try {
@@ -862,7 +835,7 @@ print(json.dumps(all_elements[:100]))
     return elements;
   }
 
-  private async detectWindowsElements(options: SnapshotOptions): Promise<UIElement[]> {
+  private async detectWindowsElements(_options: SnapshotOptions): Promise<UIElement[]> {
     const elements: UIElement[] = [];
 
     try {
@@ -896,7 +869,7 @@ function Get-Elements($element, $depth) {
             $results += Get-Elements $child ($depth + 1)
             $child = $walker.GetNextSibling($child)
         }
-    } catch {}
+    } catch [System.Exception] { $_ | Out-Null }
 
     return $results
 }
@@ -955,11 +928,107 @@ if ($focused) {
   // Element Detection - OCR Fallback
   // ============================================================================
 
-  private async detectOCRElements(options: SnapshotOptions): Promise<UIElement[]> {
-    // OCR-based detection would use the OCR tool to find text elements
-    // This is a placeholder - actual implementation would integrate with ocr-tool.ts
-    logger.debug('OCR element detection not yet implemented');
-    return [];
+  private async detectOCRElements(_options: SnapshotOptions): Promise<UIElement[]> {
+    const elements: UIElement[] = [];
+
+    try {
+      const { ScreenshotTool } = await import('../tools/screenshot-tool.js');
+      const screenshotTool = new ScreenshotTool();
+      const screenshot = await screenshotTool.capture({
+        fullscreen: true,
+        format: 'png',
+      });
+
+      const screenshotData = screenshot.data as { path?: string } | undefined;
+      if (!screenshot.success || !screenshotData?.path) {
+        logger.debug('OCR detection skipped: screenshot capture failed');
+        return [];
+      }
+
+      const { OCRTool } = await import('../tools/ocr-tool.js');
+      const ocrTool = new OCRTool();
+      const ocrResult = await ocrTool.extractText(screenshotData.path, {
+        language: process.env.OCR_LANGUAGE || 'eng',
+      });
+
+      if (!ocrResult.success) {
+        logger.debug('OCR detection skipped: OCR extraction failed', { error: ocrResult.error });
+        return [];
+      }
+
+      const data = ocrResult.data as
+        | {
+            text?: string;
+            blocks?: Array<{
+              text?: string;
+              confidence?: number;
+              boundingBox?: { x: number; y: number; width: number; height: number };
+            }>;
+          }
+        | undefined;
+
+      // Prefer word/line-level OCR blocks when available.
+      if (Array.isArray(data?.blocks) && data.blocks.length > 0) {
+        for (const block of data.blocks.slice(0, this.config.maxElements)) {
+          const text = block.text?.trim();
+          const box = block.boundingBox;
+          if (!text || !box || box.width <= 0 || box.height <= 0) {
+            continue;
+          }
+
+          const role = this.mapOCRTextToRole(text, box);
+          elements.push({
+            ref: this.nextRef++,
+            role,
+            name: text,
+            bounds: { x: box.x, y: box.y, width: box.width, height: box.height },
+            center: {
+              x: box.x + box.width / 2,
+              y: box.y + box.height / 2,
+            },
+            interactive: this.isInteractiveRole(role),
+            focused: false,
+            enabled: true,
+            visible: true,
+            attributes: {
+              source: 'ocr',
+              confidence: block.confidence,
+            },
+          });
+        }
+      } else if (data?.text?.trim()) {
+        // Fallback when OCR backend does not return boxes:
+        // preserve at least textual affordances as lightweight references.
+        const lines = data.text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(0, this.config.maxElements);
+
+        let y = 20;
+        for (const line of lines) {
+          const role = this.mapOCRTextToRole(line, { x: 20, y, width: 240, height: 20 });
+          elements.push({
+            ref: this.nextRef++,
+            role,
+            name: line,
+            bounds: { x: 20, y, width: 240, height: 20 },
+            center: { x: 140, y: y + 10 },
+            interactive: this.isInteractiveRole(role),
+            focused: false,
+            enabled: true,
+            visible: true,
+            attributes: { source: 'ocr-fallback' },
+          });
+          y += 24;
+        }
+      }
+    } catch (error) {
+      logger.debug('OCR element detection failed', { error });
+      return [];
+    }
+
+    return elements;
   }
 
   // ============================================================================
@@ -1031,6 +1100,38 @@ if ($focused) {
     return roleMap[controlType] || 'unknown';
   }
 
+  private mapOCRTextToRole(
+    text: string,
+    bounds: { x: number; y: number; width: number; height: number }
+  ): ElementRole {
+    const lower = text.toLowerCase();
+
+    if (/(https?:\/\/|www\.|\.com\b|\.io\b|\.dev\b)/.test(lower)) {
+      return 'link';
+    }
+    if (
+      /\b(ok|cancel|submit|save|continue|next|back|close|apply|search|login|sign in|sign up)\b/.test(
+        lower
+      )
+    ) {
+      return 'button';
+    }
+    if (/\b(remember me|accept terms|agree|enable|disable)\b/.test(lower)) {
+      return 'checkbox';
+    }
+    if (/\b(select|choose|option|dropdown)\b/.test(lower)) {
+      return 'dropdown';
+    }
+    if (/\b(tab|overview|details|settings)\b/.test(lower) && bounds.height <= 48) {
+      return 'tab';
+    }
+    if (/\b(type|enter|input|search)\b/.test(lower) && bounds.width >= 120 && bounds.height <= 64) {
+      return 'text-field';
+    }
+
+    return 'text';
+  }
+
   private isInteractiveRole(role: ElementRole): boolean {
     const interactiveRoles: ElementRole[] = [
       'button',
@@ -1058,14 +1159,23 @@ if ($focused) {
           return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
         }
       } else if (process.platform === 'linux') {
-        const output = execSync(`xdpyinfo | grep dimensions`, { encoding: 'utf-8' });
-        const match = output.match(/(\d+)x(\d+)/);
-        if (match) {
-          return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
+        try {
+          const output = execSync(`xdpyinfo | grep dimensions`, { encoding: 'utf-8' });
+          const match = output.match(/(\d+)x(\d+)/);
+          if (match) {
+            return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
+          }
+        } catch (_error) {
+          const output = execSync(`xrandr --query`, { encoding: 'utf-8' });
+          const match = output.match(/current\s+(\d+)\s+x\s+(\d+)/i);
+          if (match) {
+            return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
+          }
         }
       } else if (process.platform === 'win32') {
+        const script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::PrimaryScreen.Bounds | ConvertTo-Json -Compress`;
         const output = execSync(
-          `powershell -Command "[System.Windows.Forms.Screen]::PrimaryScreen.Bounds | ConvertTo-Json"`,
+          `powershell -NoProfile -NonInteractive -Command "${script}"`,
           { encoding: 'utf-8' }
         );
         const data = JSON.parse(output);

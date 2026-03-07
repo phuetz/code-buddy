@@ -1,0 +1,17 @@
+Updated realtime-collaborative-board/package.json with 13 additions
+--- a/realtime-collaborative-board/package.json
++++ b/realtime-collaborative-board/package.json
+@@ -1,0 +1,13 @@
++{
++  "name": "realtime-collaborative-board",
++  "version": "1.0.0",
++  "description": "Realtime Collaborative Board with WebSocket",
++  "main": "server.js",
++  "scripts": {
++    "start": "node server.js",
++    "smoke-test": "node smoke-test.mjs"
++  },
++  "keywords": [],
++  "author": "",
++  "license": "ISC"
++}

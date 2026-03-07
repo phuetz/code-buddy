@@ -196,7 +196,7 @@ describe('Events Module', () => {
       });
 
       it('should handle listener errors gracefully', () => {
-        const errorListener = jest.fn().mockImplementation(() => {
+        const errorListener = jest.fn().mockImplementation(function() {
           throw new Error('Listener error');
         });
         const normalListener = jest.fn();

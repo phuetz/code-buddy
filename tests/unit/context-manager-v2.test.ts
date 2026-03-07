@@ -11,6 +11,8 @@
  * - Auto-compact functionality
  */
 
+import type { CodeBuddyMessage } from '../../src/codebuddy/client';
+
 import {
   ContextManagerV2,
   createContextManager,
@@ -18,11 +20,10 @@ import {
   ContextManagerConfig,
   ContextStats,
 } from '../../src/context/context-manager-v2';
-import type { CodeBuddyMessage } from '../../src/codebuddy/client';
 
 // Mock the token counter
 jest.mock('../../src/utils/token-counter', () => ({
-  createTokenCounter: jest.fn(() => ({
+  createTokenCounter: jest.fn(function() { return {
     countMessageTokens: jest.fn((messages: unknown[]) => {
       // Simple mock: estimate 4 chars per token for content
       let total = 0;
@@ -35,7 +36,7 @@ jest.mock('../../src/utils/token-counter', () => ({
       return total;
     }),
     dispose: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock the logger

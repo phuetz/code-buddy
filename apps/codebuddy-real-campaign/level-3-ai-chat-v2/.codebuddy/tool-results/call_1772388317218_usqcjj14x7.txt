@@ -1,0 +1,8 @@
+Server Error: Error in chat API: GoogleGenerativeAIError: [400 Bad Request] API key not valid. Please pass a valid API key. [{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID","domain":"googleapis.com","metadata":{"service":"generativelanguage.googleapis.com"}},{"@type":"type.googleapis.com/google.rpc.LocalizedMessage","locale":"en-US","message":"API key not valid. Please pass a valid API key."}]
+    at makeRequest (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat-v2/node_modules/@google/generative-ai/dist/index.mjs:214:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async generateContent (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat-v2/node_modules/@google/generative-ai/dist/index.mjs:523:22)
+    at async ChatSession.sendMessage (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat-v2/node_modules/@google/generative-ai/dist/index.mjs:667:9)
+    at async file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-3-ai-chat-v2/server.mjs:43:20
+
+Smoke test failed: Chat API failed: An unexpected error occurred.

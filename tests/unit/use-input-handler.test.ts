@@ -11,13 +11,16 @@
  * - Special key handling
  */
 
+
+// Mock external dependencies
+
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 
-// Mock external dependencies
-jest.mock('react', () => ({
+jest.mock('react', () => {
+  const impl = {
   useState: jest.fn((init) => {
     const val = typeof init === 'function' ? init() : init;
     return [val, jest.fn()];
@@ -26,7 +29,9 @@ jest.mock('react', () => ({
   useEffect: jest.fn(),
   useRef: jest.fn((init) => ({ current: init })),
   useCallback: jest.fn((fn) => fn),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('ink', () => ({
   useInput: jest.fn(),
@@ -34,23 +39,23 @@ jest.mock('ink', () => ({
 
 jest.mock('../../src/utils/confirmation-service.js', () => ({
   ConfirmationService: {
-    getInstance: jest.fn(() => ({
-      getSessionFlags: jest.fn(() => ({ allOperations: false })),
+    getInstance: jest.fn(function() { return {
+      getSessionFlags: jest.fn(function() { return { allOperations: false }; }),
       setSessionFlag: jest.fn(),
       resetSession: jest.fn(),
-    })),
+    }; }),
   },
 }));
 
 jest.mock('../../src/commands/slash-commands.js', () => ({
-  getSlashCommandManager: jest.fn(() => ({
+  getSlashCommandManager: jest.fn(function() { return {
     getCommands: jest.fn(() => [
       { name: 'help', description: 'Show help' },
       { name: 'clear', description: 'Clear chat' },
       { name: 'model', description: 'Change model' },
     ]),
-    execute: jest.fn(() => ({ success: true, prompt: 'test' })),
-  })),
+    execute: jest.fn(function() { return { success: true, prompt: 'test' }; }),
+  }; }),
 }));
 
 jest.mock('../../src/utils/model-config.js', () => ({

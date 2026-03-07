@@ -1,0 +1,27 @@
+Updated smoke-test.mjs with 23 additions
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -1,0 +1,23 @@
++import http from 'http';
++
++const HEALTH_ENDPOINT = 'http://localhost:3000/health';
++
++console.log('Running smoke test...');
++
++const req = http.get(HEALTH_ENDPOINT, (res) => {
++    if (res.statusCode === 200) {
++        console.log('Smoke test passed: /health endpoint returned 200 OK.');
++        process.exit(0);
++    } else {
++        console.error(`Smoke test failed: /health endpoint returned status ${res.statusCode}.`);
++        process.exit(1);
++    }
++});
++
++req.on('error', (e) => {
++    console.error(`Smoke test failed: Could not connect to server: ${e.message}`);
++    process.exit(1);
++});
++
++req.end();
++

@@ -1,8 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput, useApp } from "ink";
-import { CodeBuddyAgent } from "../../agent/codebuddy-agent.js";
-import { getSettingsManager } from "../../utils/settings-manager.js";
-import { logger } from "../../utils/logger.js";
+import type { CodeBuddyAgent } from "../../agent/codebuddy-agent.js";
 
 interface ApiKeyInputProps {
   onApiKeySet: (agent: CodeBuddyAgent) => void;
@@ -24,6 +22,11 @@ function ApiKeyInputInner({ onApiKeySet }: ApiKeyInputProps) {
     setIsSubmitting(true);
     try {
       const apiKey = input.trim();
+      const [{ CodeBuddyAgent }, { getSettingsManager }, { logger }] = await Promise.all([
+        import("../../agent/codebuddy-agent.js"),
+        import("../../utils/settings-manager.js"),
+        import("../../utils/logger.js"),
+      ]);
       const agent = new CodeBuddyAgent(apiKey);
 
       // Set environment variable for current process

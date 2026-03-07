@@ -24,12 +24,16 @@ import {
   ToolResultRecord,
   ExportFormat,
 } from '../../src/persistence/session-export';
+import { vi } from 'vitest';
 
 // Mock fs/promises module
-jest.mock('fs/promises', () => ({
+jest.mock('fs/promises', () => {
+  const impl = {
   writeFile: jest.fn().mockResolvedValue(undefined),
   readFile: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock the data-redaction module
 jest.mock('../../src/security/data-redaction', () => ({
@@ -730,13 +734,13 @@ describe('SessionPlayer', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     player = new SessionPlayer();
     mockSession = createMockSession();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
     player.dispose();
   });
 
@@ -791,7 +795,7 @@ describe('SessionPlayer', () => {
       player.on('message', messageHandler);
 
       const replayPromise = player.replay({ speed: 0 });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(messageHandler).toHaveBeenCalledTimes(mockSession.messages.length);
@@ -804,7 +808,7 @@ describe('SessionPlayer', () => {
       player.on('replay:ended', endHandler);
 
       const replayPromise = player.replay({ speed: 0 });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(startHandler).toHaveBeenCalled();
@@ -815,7 +819,7 @@ describe('SessionPlayer', () => {
       const onMessage = jest.fn();
 
       const replayPromise = player.replay({ speed: 0, onMessage });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(onMessage).toHaveBeenCalledTimes(mockSession.messages.length);
@@ -826,7 +830,7 @@ describe('SessionPlayer', () => {
       const onToolCall = jest.fn();
 
       const replayPromise = player.replay({ speed: 0, onToolCall });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(onToolCall).toHaveBeenCalled();
@@ -837,7 +841,7 @@ describe('SessionPlayer', () => {
       player.on('message', messageHandler);
 
       const replayPromise = player.replay({ speed: 0, startFrom: 1 });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(messageHandler).toHaveBeenCalledTimes(2); // messages at index 1 and 2
@@ -848,7 +852,7 @@ describe('SessionPlayer', () => {
       player.on('message', messageHandler);
 
       const replayPromise = player.replay({ speed: 0, stopAt: 2 });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(messageHandler).toHaveBeenCalledTimes(2); // messages at index 0 and 1
@@ -859,7 +863,7 @@ describe('SessionPlayer', () => {
       player.on('toolcall', toolCallHandler);
 
       const replayPromise = player.replay({ speed: 0, skipTools: true });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(toolCallHandler).not.toHaveBeenCalled();
@@ -1065,16 +1069,16 @@ describe('Factory Functions', () => {
 
   describe('replaySession()', () => {
     it('should load and replay session from file', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       const session = createMockSession();
       mockFs.readFile.mockResolvedValue(JSON.stringify(session));
 
       const replayPromise = replaySession('/test/session.json', { speed: 0 });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await replayPromise;
 
       expect(mockFs.readFile).toHaveBeenCalledWith('/test/session.json', 'utf-8');
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
   });
 });

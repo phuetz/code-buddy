@@ -10,6 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { execSync } from 'child_process';
 
 // ============================================================================
 // Mocks
@@ -35,9 +36,9 @@ jest.mock('child_process', () => ({
 describe('UserSettingsManager', () => {
   let UserSettingsManager: typeof import('../../src/config/user-settings').UserSettingsManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/config/user-settings');
+    const mod = await import('../../src/config/user-settings.js');
     UserSettingsManager = mod.UserSettingsManager;
     UserSettingsManager.resetInstance();
   });
@@ -142,9 +143,9 @@ describe('SessionPicker', () => {
     { id: 'qrstuvwx9012', name: 'design review', branch: 'main', messageCount: 20, lastAccessed: now - 5000, tags: [] },
   ];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/persistence/session-picker');
+    const mod = await import('../../src/persistence/session-picker.js');
     SessionPicker = mod.SessionPicker;
   });
 
@@ -198,14 +199,12 @@ describe('SessionPicker', () => {
 
 describe('BrailleSpinner', () => {
   let BrailleSpinner: typeof import('../../src/ui/ui-enhancements').BrailleSpinner;
-  let BRAILLE_CHARS: typeof import('../../src/ui/ui-enhancements').BRAILLE_CHARS;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
     jest.useFakeTimers();
-    const mod = require('../../src/ui/ui-enhancements');
+    const mod = await import('../../src/ui/ui-enhancements.js');
     BrailleSpinner = mod.BrailleSpinner;
-    BRAILLE_CHARS = mod.BRAILLE_CHARS;
   });
 
   afterEach(() => {
@@ -266,9 +265,9 @@ describe('BrailleSpinner', () => {
 describe('CJKInputHandler', () => {
   let CJKInputHandler: typeof import('../../src/ui/ui-enhancements').CJKInputHandler;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/ui/ui-enhancements');
+    const mod = await import('../../src/ui/ui-enhancements.js');
     CJKInputHandler = mod.CJKInputHandler;
   });
 
@@ -308,10 +307,10 @@ describe('ITermProgressBar', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let writeSpy: jest.SpyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
     originalEnv = { ...process.env };
-    const mod = require('../../src/ui/ui-enhancements');
+    const mod = await import('../../src/ui/ui-enhancements.js');
     ITermProgressBar = mod.ITermProgressBar;
     writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
   });
@@ -350,9 +349,9 @@ describe('ITermProgressBar', () => {
 describe('SkillVariableResolver', () => {
   let SkillVariableResolver: typeof import('../../src/skills/skill-enhancements').SkillVariableResolver;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/skills/skill-enhancements');
+    const mod = await import('../../src/skills/skill-enhancements.js');
     SkillVariableResolver = mod.SkillVariableResolver;
   });
 
@@ -407,9 +406,9 @@ describe('SkillVariableResolver', () => {
 describe('SkillBudgetCalculator', () => {
   let SkillBudgetCalculator: typeof import('../../src/skills/skill-enhancements').SkillBudgetCalculator;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/skills/skill-enhancements');
+    const mod = await import('../../src/skills/skill-enhancements.js');
     SkillBudgetCalculator = mod.SkillBudgetCalculator;
   });
 
@@ -447,11 +446,11 @@ describe('NestedLaunchGuard', () => {
   let NestedLaunchGuard: typeof import('../../src/utils/safety-misc').NestedLaunchGuard;
   let originalEnv: string | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
     originalEnv = process.env.CODEBUDDY_SESSION_ID;
     delete process.env.CODEBUDDY_SESSION_ID;
-    const mod = require('../../src/utils/safety-misc');
+    const mod = await import('../../src/utils/safety-misc.js');
     NestedLaunchGuard = mod.NestedLaunchGuard;
   });
 
@@ -497,9 +496,9 @@ describe('ConfigBackupManager', () => {
   let tmpDir: string;
   let testFile: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/utils/safety-misc');
+    const mod = await import('../../src/utils/safety-misc.js');
     ConfigBackupManager = mod.ConfigBackupManager;
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-backup-test-'));
     testFile = path.join(tmpDir, 'settings.json');
@@ -570,9 +569,9 @@ describe('ConfigBackupManager', () => {
 describe('FeedbackCommand', () => {
   let FeedbackCommand: typeof import('../../src/utils/safety-misc').FeedbackCommand;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/utils/safety-misc');
+    const mod = await import('../../src/utils/safety-misc.js');
     FeedbackCommand = mod.FeedbackCommand;
   });
 
@@ -603,9 +602,9 @@ describe('FeedbackCommand', () => {
 describe('HookEventEmitter', () => {
   let HookEventEmitter: typeof import('../../src/hooks/hook-events').HookEventEmitter;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    const mod = require('../../src/hooks/hook-events');
+    const mod = await import('../../src/hooks/hook-events.js');
     HookEventEmitter = mod.HookEventEmitter;
     HookEventEmitter.resetInstance();
   });
@@ -662,12 +661,12 @@ describe('WorktreeSessionManager', () => {
   let WorktreeSessionManager: typeof import('../../src/git/worktree-sessions').WorktreeSessionManager;
   let mockExecSync: jest.Mock;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
-    mockExecSync = require('child_process').execSync as jest.Mock;
+    mockExecSync = execSync as unknown as jest.Mock;
     mockExecSync.mockReset();
     mockExecSync.mockImplementation(() => Buffer.from(''));
-    const mod = require('../../src/git/worktree-sessions');
+    const mod = await import('../../src/git/worktree-sessions.js');
     WorktreeSessionManager = mod.WorktreeSessionManager;
     WorktreeSessionManager.resetInstance();
   });

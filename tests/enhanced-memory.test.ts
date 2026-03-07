@@ -5,13 +5,16 @@
 import { EnhancedMemory, getEnhancedMemory, resetEnhancedMemory } from '../src/memory/enhanced-memory';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   pathExists: jest.fn().mockResolvedValue(false),
   readJSON: jest.fn().mockResolvedValue([]),
   writeJSON: jest.fn().mockResolvedValue(undefined),
   readdir: jest.fn().mockResolvedValue([]),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('EnhancedMemory', () => {
   let memory: EnhancedMemory;

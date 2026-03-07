@@ -1,0 +1,175 @@
+Updated smoke-test.mjs with 57 additions and 111 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -104,114 +104,60 @@
+         const ws1 = new WebSocket(wsUrl);
+         const ws2 = new WebSocket(wsUrl);
+ 
+-        let ws1JobStatus = '';
+-        let ws2JobStatus = '';
+-        let jobCreatedCount = 0;
+-        let jobUpdatedCount = 0;
+-
+-        const jobPromise = new Promise((resolve, reject) => {
+-            const checkCompletion = () => {
+-                if (ws1JobStatus === 'done' && ws2JobStatus === 'done' && jobCreatedCount >= 1 && jobUpdatedCount >= 2) {
+-                    resolve();
+-                }
+-            };
+-
+-            ws1.onmessage = event => {
+-                const data = JSON.parse(event.data);
+-                if (data.type === 'job_created' && data.job.id === newJob.id) {
+-                    jobCreatedCount++;
+-                    ws1JobStatus = data.job.status;
+-                    console.log('WS1: Job created, status:', ws1JobStatus);
+-                    checkCompletion();
+-                } else if (data.type === 'job_updated' && data.job.id === newJob.id) {
+-                    jobUpdatedCount++;
+-                    ws1JobStatus = data.job.status;
+-                    console.log('WS1: Job updated, status:', ws1JobStatus);
+-                    checkCompletion();
+-                }
+-            };
+-
+-            ws2.onmessage = event => {
+-                const data = JSON.parse(event.data);
+-                if (data.type === 'job_created' && data.job.id === newJob.id) {
+-                    jobCreatedCount++;
+-                    ws2JobStatus = data.job.status;
+-                    console.log('WS2: Job created, status:', ws2JobStatus);
+-                    checkCompletion();
+-                } else if (data.type === 'job_updated' && data.job.id === newJob.id) {
+-                    jobUpdatedCount++;
+-                    ws2JobStatus = data.job.status;
+-                    console.log('WS2: Job updated, status:', ws2JobStatus);
+-                    checkCompletion();
+-                }
+-            };
+-
+-            ws2.onclose = () => console.log('WS2 closed');
+-
+-            // Wait for both WebSockets to be open
+-            await new Promise(resolve => {
+-                let openCount = 0;
+-                const checkOpen = () => {
+-                    openCount++;
+-                    if (openCount === 2) resolve();
+-                };
+-                ws1.onopen = () => { console.log('WS1 connected'); checkOpen(); };
+-                ws2.onopen = () => { console.log('WS2 connected'); checkOpen(); };
+-            });
+-            console.log("Both WebSockets are open.");
+-
+-            // Enqueue another job to test WS updates
+-            setTimeout(async () => {
+-                const anotherJobRes = await fetch(`${baseUrl}/api/jobs`, {
+-                    method: 'POST',
+-                    headers: { 'Content-Type': 'application/json' },
+-                    body: JSON.stringify({ task: 'Another WS Test Job' })
+-                });
+-                const anotherJob = await anotherJobRes.json();
+-                console.log('Another job enqueued for WS test:', anotherJob.id);
+-            }, 1000);
+-
+-            setTimeout(() => reject(new Error("WebSocket job status not confirmed in time.")), 30000);
+-        });
+-
+-        await jobPromise;
+-        ws1.close();
+-        ws2.close();
+-        console.log('WebSocket job progression verified.');
+-
+-        // 7. Delete the incident
+-        console.log('7. Deleting the incident...');
+-        const deleteRes = await fetch(`${baseUrl}/api/incidents/${newIncident.id}`, {
+-            method: 'DELETE'
+-        });
+-        if (deleteRes.status !== 204) {
+-            throw new Error(`Failed to delete incident: ${deleteRes.status}`);
+-        }
+-        console.log('Incident deleted.');
+-
+-        console.log('All smoke tests passed!');
+-
+-    } catch (error) {
+-        console.error('Smoke test failed:', error);
+-        process.exit(1);
+-    } finally {
+-        // 8. Cleanup
+-        console.log('8. Cleaning up...');
+-        if (serverProcess) {
+-            serverProcess.kill();
+-            console.log('Server process killed.');
+-        }
+-        // Clean up the data file
+-        try {
+-            await fs.unlink(DATA_FILE);
+-            console.log('incidents.json cleaned up.');
+-        } catch (error) {
+-            if (error.code !== 'ENOENT') {
+-                console.error('Error cleaning up data file:', error);
+-            }
+-        }
+-    }
+-}
+-
+-runSmokeTest();
+-
++        await Promise.all([
++            new Promise(resolve => ws1.onopen = () => { console.log('WS1 connected'); resolve(); }),
++            new Promise(resolve => ws2.onopen = () => { console.log('WS2 connected'); resolve(); })
++        ]);
++        console.log("Both WebSockets are open.");
++
++        let ws1JobStatus = '';
++        let ws2JobStatus = '';
++        let jobCreatedCount = 0;
++        let jobUpdatedCount = 0;
++
++        const jobPromise = new Promise((resolve, reject) => {
++
++            setTimeout(() => reject(new Error("WebSocket job status not confirmed in time.")), 30000);
++        });
++
++        await jobPromise;
++        ws1.close();
++        ws2.close();
++        console.log('WebSocket job progression verified.');
++
++        // 7. Delete the incident
++        console.log('7. Deleting the incident...');
++        const deleteRes = await fetch(`${baseUrl}/api/incidents/${newIncident.id}`, {
++            method: 'DELETE'
++        });
++        if (deleteRes.status !== 204) {
++            throw new Error(`Failed to delete incident: ${deleteRes.status}`);
++        }
++        console.log('Incident deleted.');
++
++        console.log('All smoke tests passed!');
++
++    } catch (error) {
++        console.error('Smoke test failed:', error);
++        process.exit(1);
++    } finally {
++        // 8. Cleanup
++        console.log('8. Cleaning up...');
++        if (serverProcess) {
++            serverProcess.kill();
++            console.log('Server process killed.');
++        }
++        // Clean up the data file
++        try {
++            await fs.unlink(DATA_FILE);
++            console.log('incidents.json cleaned up.');
++        } catch (error) {
++            if (error.code !== 'ENOENT') {
++                console.error('Error cleaning up data file:', error);
++            }
++        }
++    }
++}
++
++runSmokeTest();
++

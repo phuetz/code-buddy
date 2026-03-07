@@ -1,0 +1,5 @@
+Search results for "event loop":
+  D:\CascadeProjects\grok-cli\test-e2e-extended.mjs (2 matches)
+  D:\CascadeProjects\grok-cli\src\tools\document-tool.ts (4 matches)
+  D:\CascadeProjects\grok-cli\src\modes\code-review.ts (1 matches)
+  D:\CascadeProjects\grok-cli\src\intelligence\anomaly-detector.ts (1 matches)

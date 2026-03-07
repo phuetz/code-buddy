@@ -1,0 +1,19 @@
+# UI Snapshot (snap-1772338587328)
+Source: focused
+Elements: 5
+Valid until: 2026-03-01T04:16:32.328Z
+
+## Interactive Elements
+
+### Buttons
+  [1] OK
+  [2] Cancel
+
+### Text-fields
+  [3] Search (focused)
+
+### Checkboxs
+  [4] Remember me = "false"
+
+### Links
+  [5] Forgot password?

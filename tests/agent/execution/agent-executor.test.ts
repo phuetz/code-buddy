@@ -9,6 +9,7 @@
 import { AgentExecutor, ExecutorDependencies, ExecutorConfig } from '../../../src/agent/execution/agent-executor';
 import type { ChatEntry, StreamingChunk } from '../../../src/agent/types';
 import type { CodeBuddyMessage } from '../../../src/codebuddy/client';
+import { logger } from '../../../src/utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Mock modules
@@ -472,7 +473,6 @@ describe('AgentExecutor', () => {
         message: 'Context is 80% full',
       });
 
-      const { logger } = require('../../../src/utils/logger.js');
       const history: ChatEntry[] = [];
       const messages: CodeBuddyMessage[] = [];
 
@@ -1390,7 +1390,7 @@ describe('AgentExecutor', () => {
 
       // Cost limit reached after tool round
       let costCheckCount = 0;
-      (config.isSessionCostLimitReached as jest.Mock).mockImplementation(() => {
+      (config.isSessionCostLimitReached as jest.Mock).mockImplementation(function() {
         costCheckCount++;
         return costCheckCount >= 2;
       });

@@ -15,7 +15,9 @@ jest.mock('marked', () => ({
   },
 }));
 
-jest.mock('marked-terminal', () => jest.fn());
+jest.mock('marked-terminal', () => ({
+  default: jest.fn(),
+}));
 
 jest.mock('cli-highlight', () => ({
   highlight: jest.fn((code: string) => code),

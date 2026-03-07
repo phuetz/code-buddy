@@ -54,8 +54,8 @@ const DANGEROUS_COMMANDS = [
   'chmod -R 777 /',
   'chown -R',
   '> /dev/sda',
-  'wget.*|.*sh',
-  'curl.*|.*sh',
+  '\\bwget\\b.*\\|\\s*(?:ba)?sh\\b',
+  '\\bcurl\\b.*\\|\\s*(?:ba)?sh\\b',
   'sudo rm',
   'sudo dd',
 ];
@@ -114,9 +114,19 @@ export class SandboxManager {
       }
     }
 
+    // Expand home shortcuts so blocked path checks catch "~/.ssh" style access.
+    const commandForPathChecks = command.replace(/~(?=[\\/])/g, os.homedir());
+    const normalizeForPathMatch = (value: string): string => value.replace(/\\/g, '/').toLowerCase();
+    const normalizedCommand = normalizeForPathMatch(command);
+    const normalizedExpandedCommand = normalizeForPathMatch(commandForPathChecks);
+
     // Check for attempts to access blocked paths
     for (const blockedPath of this.config.blockedPaths) {
-      if (command.includes(blockedPath)) {
+      const normalizedBlockedPath = normalizeForPathMatch(blockedPath);
+      if (
+        normalizedCommand.includes(normalizedBlockedPath) ||
+        normalizedExpandedCommand.includes(normalizedBlockedPath)
+      ) {
         return {
           valid: false,
           reason: `Access to blocked path: ${blockedPath}`

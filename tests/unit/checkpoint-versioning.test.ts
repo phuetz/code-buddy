@@ -23,7 +23,8 @@ const mockReadJson = jest.fn().mockResolvedValue({});
 const mockUnlink = jest.fn().mockResolvedValue(undefined);
 
 // Mock fs-extra before importing the module
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   __esModule: true,
   default: {
     ensureDir: (...args: unknown[]) => mockEnsureDir(...args),
@@ -39,15 +40,20 @@ jest.mock('fs-extra', () => ({
   writeJson: (...args: unknown[]) => mockWriteJson(...args),
   readJson: (...args: unknown[]) => mockReadJson(...args),
   unlink: (...args: unknown[]) => mockUnlink(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock crypto
-jest.mock('crypto', () => ({
+jest.mock('crypto', () => {
+  const impl = {
   createHash: () => ({
     update: jest.fn().mockReturnThis(),
     digest: jest.fn().mockReturnValue('abcdef1234567890abcdef1234567890'),
   }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import {
   CheckpointVersioning,
@@ -57,7 +63,7 @@ import {
 import type { Checkpoint } from '../../src/checkpoints/checkpoint-manager';
 
 // Set a short test timeout
-jest.setTimeout(10000);
+vi.setConfig({ testTimeout: 10000 });
 
 describe('CheckpointVersioning', () => {
   let versioning: CheckpointVersioning;

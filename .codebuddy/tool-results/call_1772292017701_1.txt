@@ -1,0 +1,278 @@
+Content from https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html:
+
+• • • • • • • • • • • TypeScript: Documentation - TypeScript 5.0• • 
+Was this page helpful?
+
+TypeScript 5.0
+
+Decorators
+
+Decorators are an upcoming ECMAScript feature that allow us to customize classes and their members in a reusable way.
+
+Let’s consider the following code:
+
+ts
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+}
+
+const p = new Person("Ray");
+p.greet();
+
+greet is pretty simple here, but let’s imagine it’s something way more complicated - maybe it does some async logic, it’s recursive, it has side effects, etc.
+Regardless of what kind of ball-of-mud you’re imagining, let’s say you throw in some console.log calls to help debug greet.
+
+ts
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ greet() {
+ console.log("LOG: Entering method.");
+
+ console.log(`Hello, my name is ${this.name}.`);
+
+ console.log("LOG: Exiting method.")
+ }
+}
+
+This pattern is fairly common.
+It sure would be nice if there was a way we could do this for every method!
+
+This is where decorators come in.
+We can write a function called loggedMethod that looks like the following:
+
+ts
+function loggedMethod(originalMethod: any, _context: any) {
+
+ function replacementMethod(this: any, ...args: any[]) {
+ console.log("LOG: Entering method.")
+ const result = originalMethod.call(this, ...args);
+ console.log("LOG: Exiting method.")
+ return result;
+ }
+
+ return replacementMethod;
+}
+
+“What’s the deal with all of these anys?
+What is this, anyScript!?”
+
+Just be patient - we’re keeping things simple for now so that we can focus on what this function is doing.
+Notice that loggedMethod takes the original method (originalMethod) and returns a function that
+
+• logs an “Entering…” message
+
+• passes along this and all of its arguments to the original method
+
+• logs an “Exiting…” message, and
+
+• returns whatever the original method returned.
+
+Now we can use loggedMethod to decorate the method greet:
+
+ts
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ @loggedMethod
+ greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+}
+
+const p = new Person("Ray");
+p.greet();
+
+// Output:
+//
+// LOG: Entering method.
+// Hello, my name is Ray.
+// LOG: Exiting method.
+
+We just used loggedMethod as a decorator above greet - and notice that we wrote it as @loggedMethod.
+When we did that, it got called with the method target and a context object.
+Because loggedMethod returned a new function, that function replaced the original definition of greet.
+
+We didn’t mention it yet, but loggedMethod was defined with a second parameter.
+It’s called a “context object”, and it has some useful information about how the decorated method was declared - like whether it was a #private member, or static, or what the name of the method was.
+Let’s rewrite loggedMethod to take advantage of that and print out the name of the method that was decorated.
+
+ts
+function loggedMethod(originalMethod: any, context: ClassMethodDecoratorContext) {
+ const methodName = String(context.name);
+
+ function replacementMethod(this: any, ...args: any[]) {
+ console.log(`LOG: Entering method '${methodName}'.`)
+ const result = originalMethod.call(this, ...args);
+ console.log(`LOG: Exiting method '${methodName}'.`)
+ return result;
+ }
+
+ return replacementMethod;
+}
+
+We’re now using the context parameter - and that it’s the first thing in loggedMethod that has a type stricter than any and any[].
+TypeScript provides a type called ClassMethodDecoratorContext that models the context object that method decorators take.
+
+Apart from metadata, the context object for methods also has a useful function called addInitializer.
+It’s a way to hook into the beginning of the constructor (or the initialization of the class itself if we’re working with statics).
+
+As an example - in JavaScript, it’s common to write something like the following pattern:
+
+ts
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+
+ this.greet = this.greet.bind(this);
+ }
+
+ greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+}
+
+Alternatively, greet might be declared as a property initialized to an arrow function.
+
+ts
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ greet = () => {
+ console.log(`Hello, my name is ${this.name}.`);
+ };
+}
+
+This code is written to ensure that this isn’t re-bound if greet is called as a stand-alone function or passed as a callback.
+
+ts
+const greet = new Person("Ray").greet;
+
+// We don't want this to fail!
+greet();
+
+We can write a decorator that uses addInitializer to call bind in the constructor for us.
+
+ts
+function bound(originalMethod: any, context: ClassMethodDecoratorContext) {
+ const methodName = context.name;
+ if (context.private) {
+ throw new Error(`'bound' cannot decorate private properties like ${methodName as string}.`);
+ }
+ context.addInitializer(function () {
+ this[methodName] = this[methodName].bind(this);
+ });
+}
+
+bound isn’t returning anything - so when it decorates a method, it leaves the original alone.
+Instead, it will add logic before any other fields are initialized.
+
+ts
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ @bound
+ @loggedMethod
+ greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+}
+
+const p = new Person("Ray");
+const greet = p.greet;
+
+// Works!
+greet();
+
+Notice that we stacked two decorators - @bound and @loggedMethod.
+These decorations run in “reverse order”.
+That is, @loggedMethod decorates the original method greet, and @bound decorates the result of @loggedMethod.
+In this example, it doesn’t matter - but it could if your decorators have side-effects or expect a certain order.
+
+Also worth noting - if you’d prefer stylistically, you can put these decorators on the same line.
+
+ts
+ @bound @loggedMethod greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+
+Something that might not be obvious is that we can even make functions that return decorator functions.
+That makes it possible to customize the final decorator just a little.
+If we wanted, we could have made loggedMethod return a decorator and customize how it logs its messages.
+
+ts
+function loggedMethod(headMessage = "LOG:") {
+ return function actualDecorator(originalMethod: any, context: ClassMethodDecoratorContext) {
+ const methodName = String(context.name);
+
+ function replacementMethod(this: any, ...args: any[]) {
+ console.log(`${headMessage} Entering method '${methodName}'.`)
+ const result = originalMethod.call(this, ...args);
+ console.log(`${headMessage} Exiting method '${methodName}'.`)
+ return result;
+ }
+
+ return replacementMethod;
+ }
+}
+
+If we did that, we’d have to call loggedMethod before using it as a decorator.
+We could then pass in any string as the prefix for messages that get logged to the console.
+
+ts
+class Person {
+ name: string;
+ constructor(name: string) {
+ this.name = name;
+ }
+
+ @loggedMethod("⚠️")
+ greet() {
+ console.log(`Hello, my name is ${this.name}.`);
+ }
+}
+
+const p = new Person("Ray");
+p.greet();
+
+// Output:
+//
+// ⚠️ Entering method 'greet'.
+// Hello, my name is Ray.
+// ⚠️ Exiting method 'greet'.
+
+Decorators can be used on more than just methods!
+They can be used on properties/fields, getters, setters, and auto-accessors.
+Even classes themselves can be decorated for things like subclassing and registration.
+
+To learn more about decorators in-depth, you can read up on Axel Rauschmayer’s extensive summary.
+
+For more information about the changes involved, you can view the original pull request.
+
+Differences with Experimental Legacy Decorators
+
+If you’ve been using TypeScript for a while, you might be aware of the fact that it’s had support for “experimental” decorators for years.
+While these experimental decorators have been incredibly useful, they modeled a much older version of the decorators proposal, and always required an opt-in compiler flag called --experimentalDecorators.
+Any att
+
+[Content truncated...]

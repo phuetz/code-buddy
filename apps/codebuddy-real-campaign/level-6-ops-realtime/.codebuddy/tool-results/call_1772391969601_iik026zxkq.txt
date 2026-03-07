@@ -1,0 +1,10 @@
+Updated package.json with 2 additions and 1 removal
+--- a/package.json
++++ b/package.json
+@@ -19,4 +19,5 @@
+   "author": "Code Buddy",
+   "license": "ISC",
+   "description": "IncidentOps Board application with Express, WebSocket, and async jobs."
+-
++}
++

@@ -12,9 +12,11 @@
  * - Code Review
  */
 
-import { EventEmitter } from 'events';
 
 // Mock the logger first - this needs to be before any imports
+
+import { EventEmitter } from 'events';
+
 jest.mock('../../src/utils/logger', () => ({
   logger: {
     debug: jest.fn(),
@@ -29,9 +31,9 @@ const mockBashExecute = jest.fn();
 
 // Mock BashTool before any imports that use it
 jest.mock('../../src/tools/bash', () => ({
-  BashTool: jest.fn().mockImplementation(() => ({
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: mockBashExecute,
-  })),
+  }; }),
 }));
 
 // ============================================================================
@@ -43,12 +45,12 @@ describe('GitHubIntegration', () => {
   let getGitHubIntegration: typeof import('../../src/integrations/github-integration').getGitHubIntegration;
   let resetGitHubIntegration: typeof import('../../src/integrations/github-integration').resetGitHubIntegration;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     mockBashExecute.mockReset();
 
     // Re-import to get fresh module
-    const module = require('../../src/integrations/github-integration');
+    const module = await import('../../src/integrations/github-integration');
     GitHubIntegration = module.GitHubIntegration;
     getGitHubIntegration = module.getGitHubIntegration;
     resetGitHubIntegration = module.resetGitHubIntegration;
@@ -647,10 +649,10 @@ describe('GitHubActionsManager', () => {
   let getGitHubActionsManager: typeof import('../../src/integrations/github-actions').getGitHubActionsManager;
   let resetGitHubActionsManager: typeof import('../../src/integrations/github-actions').resetGitHubActionsManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
 
-    const module = require('../../src/integrations/github-actions');
+    const module = await import('../../src/integrations/github-actions');
     GitHubActionsManager = module.GitHubActionsManager;
     getGitHubActionsManager = module.getGitHubActionsManager;
     resetGitHubActionsManager = module.resetGitHubActionsManager;
@@ -868,7 +870,7 @@ describe('NotificationManager', () => {
   let getNotificationManager: typeof import('../../src/integrations/notification-integrations').getNotificationManager;
   let originalFetch: typeof fetch;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
 
@@ -879,7 +881,7 @@ describe('NotificationManager', () => {
       status: 200,
     });
 
-    const module = require('../../src/integrations/notification-integrations');
+    const module = await import('../../src/integrations/notification-integrations');
     NotificationManager = module.NotificationManager;
     getNotificationManager = module.getNotificationManager;
   });
@@ -1124,7 +1126,7 @@ describe('TaskManagementIntegration', () => {
   let getTaskManagement: typeof import('../../src/integrations/task-management-integration').getTaskManagement;
   let originalFetch: typeof fetch;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
 
     // Save and mock global fetch
@@ -1135,7 +1137,7 @@ describe('TaskManagementIntegration', () => {
       json: () => Promise.resolve({}),
     });
 
-    const module = require('../../src/integrations/task-management-integration');
+    const module = await import('../../src/integrations/task-management-integration');
     TaskManagementIntegration = module.TaskManagementIntegration;
     JiraClient = module.JiraClient;
     LinearClient = module.LinearClient;
@@ -1449,10 +1451,10 @@ describe('CodeReviewManager', () => {
   let CodeReviewManager: typeof import('../../src/integrations/code-review').CodeReviewManager;
   let getCodeReviewManager: typeof import('../../src/integrations/code-review').getCodeReviewManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
 
-    const module = require('../../src/integrations/code-review');
+    const module = await import('../../src/integrations/code-review');
     CodeReviewManager = module.CodeReviewManager;
     getCodeReviewManager = module.getCodeReviewManager;
   });
@@ -1584,7 +1586,7 @@ describe('GitPlatformIntegration', () => {
   let getGitPlatform: typeof import('../../src/integrations/git-platform-integration').getGitPlatform;
   let originalFetch: typeof fetch;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
 
     // Save and mock global fetch
@@ -1595,7 +1597,7 @@ describe('GitPlatformIntegration', () => {
       json: () => Promise.resolve({}),
     });
 
-    const module = require('../../src/integrations/git-platform-integration');
+    const module = await import('../../src/integrations/git-platform-integration');
     GitPlatformIntegration = module.GitPlatformIntegration;
     getGitPlatform = module.getGitPlatform;
   });
@@ -1689,10 +1691,10 @@ describe('CICDManager', () => {
   let CICDManager: typeof import('../../src/integrations/cicd-integration').CICDManager;
   let getCICDManager: typeof import('../../src/integrations/cicd-integration').getCICDManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
 
-    const module = require('../../src/integrations/cicd-integration');
+    const module = await import('../../src/integrations/cicd-integration');
     CICDManager = module.CICDManager;
     getCICDManager = module.getCICDManager;
   });

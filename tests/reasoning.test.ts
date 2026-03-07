@@ -468,17 +468,21 @@ describe('TreeOfThoughtReasoner', () => {
   });
 
   describe('events', () => {
-    it('should emit reasoning:start event', (done) => {
+    it('should emit reasoning:start event', async () => {
       const reasoner = createTreeOfThoughtReasoner('test-key');
 
-      reasoner.on('reasoning:start', (data) => {
-        expect(data.problem).toBeDefined();
-        done();
-      });
+      await new Promise<void>((resolve, reject) => {
+        reasoner.once('reasoning:start', (data) => {
+          try {
+            expect(data.problem).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      // We can't actually run solve without a real API, but we can test the event setup
-      // For a real test, you'd mock the CodeBuddyClient
-      done();
+        reasoner.emit('reasoning:start', { problem: 'test problem' });
+      });
     });
   });
 });

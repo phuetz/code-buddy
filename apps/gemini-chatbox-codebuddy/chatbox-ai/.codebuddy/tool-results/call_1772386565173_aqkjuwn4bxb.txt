@@ -1,0 +1,5 @@
+Updated frontend/script.js with 1 addition
+--- a/frontend/script.js
++++ b/frontend/script.js
+@@ -1,0 +1,1 @@
++

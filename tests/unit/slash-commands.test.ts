@@ -15,6 +15,9 @@
  */
 
 import * as path from 'path';
+import fs from 'fs';
+import os from 'os';
+
 import {
   SlashCommandManager,
   SlashCommand,
@@ -25,21 +28,27 @@ import {
 } from '../../src/commands/slash-commands';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readdirSync: jest.fn(),
   readFileSync: jest.fn(),
   mkdirSync: jest.fn(),
   writeFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock os module
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   homedir: jest.fn(() => '/home/testuser'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
-const fs = require('fs');
-const os = require('os');
+// const fs = require('fs'); -- replaced by import
+// const os = require('os'); -- replaced by import
 
 describe('SlashCommandManager', () => {
   let manager: SlashCommandManager;
@@ -947,7 +956,7 @@ Custom prompt
     test('should handle file read errors gracefully during custom command loading', () => {
       fs.existsSync.mockReturnValue(true);
       fs.readdirSync.mockReturnValue(['failing.md']);
-      fs.readFileSync.mockImplementation(() => {
+      fs.readFileSync.mockImplementation(function() {
         throw new Error('File read error');
       });
 
@@ -960,7 +969,7 @@ Custom prompt
 
     test('should handle directory read errors gracefully', () => {
       fs.existsSync.mockReturnValue(true);
-      fs.readdirSync.mockImplementation(() => {
+      fs.readdirSync.mockImplementation(function() {
         throw new Error('Directory read error');
       });
 

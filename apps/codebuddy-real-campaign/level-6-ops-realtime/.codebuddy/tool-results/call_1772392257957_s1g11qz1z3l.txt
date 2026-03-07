@@ -1,0 +1,21 @@
+Updated smoke-test.mjs with 5 additions and 9 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -230,12 +230,8 @@
+                 console.error('Error cleaning up data file:', error);
+             }
+         }
+-    } finally {
+-        if (logStream) {
+-            await logStream.close();
+-        }
+-    }
+-}
+-
+-runSmokeTest();
+-
++    }
++}
++
++runSmokeTest();
++

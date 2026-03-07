@@ -1,0 +1,112 @@
+Updated realtime-collaborative-board/server.js with 108 additions
+--- a/realtime-collaborative-board/server.js
++++ b/realtime-collaborative-board/server.js
+@@ -1,0 +1,108 @@
++
++const express = require('express');
++const http = require('http');
++const WebSocket = require('ws');
++const fs = require('fs');
++const path = require('path');
++const { v4: uuidv4 } = require('uuid');
++
++const app = express();
++const server = http.createServer(app);
++const wss = new WebSocket.Server({ server });
++
++const DATA_FILE = path.join(__dirname, 'items.json');
++
++app.use(express.json());
++app.use(express.static('public'));
++
++// Load items from file
++let items = [];
++try {
++    const data = fs.readFileSync(DATA_FILE, 'utf8');
++    items = JSON.parse(data);
++} catch (error) {
++    console.log('No items.json found, starting with empty array.');
++}
++
++// Save items to file
++const saveItems = () => {
++    fs.writeFileSync(DATA_FILE, JSON.stringify(items, null, 2), 'utf8');
++};
++
++// WebSocket broadcast function
++wss.broadcast = (data) => {
++    wss.clients.forEach(client => {
++        if (client.readyState === WebSocket.OPEN) {
++            client.send(JSON.stringify(data));
++        }
++    });
++};
++
++// --- REST Endpoints ---
++
++app.get('/health', (req, res) => {
++    res.status(200).send('OK');
++});
++
++// GET all items
++app.get('/api/items', (req, res) => {
++    res.json(items);
++});
++
++// GET item by ID
++app.get('/api/items/:id', (req, res) => {
++    const item = items.find(i => i.id === req.params.id);
++    if (item) {
++        res.json(item);
++    } else {
++        res.status(404).send('Item not found');
++    }
++});
++
++// POST create new item
++app.post('/api/items', (req, res) => {
++    const newItem = { id: uuidv4(), ...req.body };
++    items.push(newItem);
++    saveItems();
++    wss.broadcast({ type: 'CREATE', payload: newItem });
++    res.status(201).json(newItem);
++});
++
++// PUT update item
++app.put('/api/items/:id', (req, res) => {
++    const index = items.findIndex(i => i.id === req.params.id);
++    if (index !== -1) {
++        items[index] = { ...items[index], ...req.body, id: req.params.id };
++        saveItems();
++        wss.broadcast({ type: 'UPDATE', payload: items[index] });
++        res.json(items[index]);
++    } else {
++        res.status(404).send('Item not found');
++    }
++});
++
++// DELETE item
++app.delete('/api/items/:id', (req, res) => {
++    const index = items.findIndex(i => i.id === req.params.id);
++    if (index !== -1) {
++        const deletedItem = items.splice(index, 1);
++        saveItems();
++        wss.broadcast({ type: 'DELETE', payload: { id: req.params.id } });
++        res.status(204).send();
++    } else {
++        res.status(404).send('Item not found');
++    }
++});
++
++// --- WebSocket Connection ---
++wss.on('connection', ws => {
++    console.log('Client connected');
++    ws.on('close', () => console.log('Client disconnected'));
++});
++
++// Start server
++const PORT = process.env.PORT || 0; // Use port 0 to get a random available port
++server.listen(PORT, () => {
++    console.log(`Server listening on http://localhost:${server.address().port}`);
++});
++

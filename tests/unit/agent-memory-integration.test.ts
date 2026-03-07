@@ -3,10 +3,8 @@
  *
  * Tests the memory system methods integrated into CodeBuddyAgent.
  */
+import { getEnhancedMemory } from '../../src/memory/index.js';
 
-import { EventEmitter } from 'events';
-
-// Mock the memory module before importing agent
 jest.mock('../../src/memory/index.js', () => {
   const mockMemory = {
     store: jest.fn().mockResolvedValue({
@@ -59,7 +57,7 @@ jest.mock('../../src/memory/index.js', () => {
   };
 
   return {
-    EnhancedMemory: jest.fn().mockImplementation(() => mockMemory),
+    EnhancedMemory: jest.fn().mockImplementation(function() { return mockMemory; }),
     getEnhancedMemory: jest.fn().mockReturnValue(mockMemory),
     resetEnhancedMemory: jest.fn(),
   };
@@ -67,29 +65,29 @@ jest.mock('../../src/memory/index.js', () => {
 
 // Mock other dependencies
 jest.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn(),
     stream: jest.fn(),
     getCurrentModel: jest.fn().mockReturnValue('test-model'),
     dispose: jest.fn(),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/tools/index.js', () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     view: jest.fn().mockResolvedValue({ success: true, output: '' }),
     create: jest.fn().mockResolvedValue({ success: true }),
     strReplace: jest.fn().mockResolvedValue({ success: true }),
-  })),
-  BashTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: '' }),
     getCurrentDirectory: jest.fn().mockReturnValue('/test'),
-  })),
-  TodoTool: jest.fn().mockImplementation(() => ({})),
-  SearchTool: jest.fn().mockImplementation(() => ({})),
-  WebSearchTool: jest.fn().mockImplementation(() => ({})),
-  ImageTool: jest.fn().mockImplementation(() => ({})),
-  MorphEditorTool: jest.fn().mockImplementation(() => ({})),
+  }; }),
+  TodoTool: jest.fn().mockImplementation(function() { return {}; }),
+  SearchTool: jest.fn().mockImplementation(function() { return {}; }),
+  WebSearchTool: jest.fn().mockImplementation(function() { return {}; }),
+  ImageTool: jest.fn().mockImplementation(function() { return {}; }),
+  MorphEditorTool: jest.fn().mockImplementation(function() { return {}; }),
 }));
 
 jest.mock('../../src/codebuddy/tools.js', () => ({
@@ -226,28 +224,64 @@ jest.mock('../../src/tools/tool-selector.js', () => ({
 }));
 
 jest.mock('../../src/agent/repair/index.js', () => ({
-  RepairEngine: jest.fn().mockImplementation(() => ({
+  RepairEngine: jest.fn().mockImplementation(function() { return {
     repair: jest.fn().mockResolvedValue([]),
     setExecutors: jest.fn(),
     dispose: jest.fn(),
-  })),
-  createRepairEngine: jest.fn().mockImplementation(() => ({
+  }; }),
+  createRepairEngine: jest.fn().mockImplementation(function() { return {
     repair: jest.fn().mockResolvedValue([]),
     setExecutors: jest.fn(),
     dispose: jest.fn(),
-  })),
-  getRepairEngine: jest.fn().mockImplementation(() => ({
+  }; }),
+  getRepairEngine: jest.fn().mockImplementation(function() { return {
     repair: jest.fn().mockResolvedValue([]),
     setExecutors: jest.fn(),
     dispose: jest.fn(),
-  })),
+  }; }),
   resetRepairEngine: jest.fn(),
 }));
 
+interface MemoryEntryLike {
+  id: string;
+}
+
+interface MemoryStatsLike {
+  totalMemories: number;
+  byType: Record<string, number>;
+  projects: number;
+  summaries: number;
+}
+
+interface MemoryMock {
+  store: jest.Mock;
+  recall: jest.Mock;
+  buildContext: jest.Mock;
+  storeSummary: jest.Mock;
+  setProjectContext: jest.Mock;
+  getStats: jest.Mock;
+  formatStatus: jest.Mock;
+  dispose: jest.Mock;
+}
+
+interface MemoryAgentLike {
+  isMemoryEnabled(): boolean;
+  setMemoryEnabled(enabled: boolean): void;
+  remember(type: string, content: string, options?: Record<string, unknown>): Promise<MemoryEntryLike>;
+  recall(query?: string, options?: Record<string, unknown>): Promise<unknown[]>;
+  getMemoryContext(query?: string): Promise<string>;
+  storeConversationSummary(summary: string, topics: string[], decisions?: string[]): Promise<void>;
+  getMemoryStats(): MemoryStatsLike | null;
+  formatMemoryStatus(): string;
+  dispose(): void;
+}
+
+type CodeBuddyAgentCtor = new (apiKey: string) => MemoryAgentLike;
+
 describe('Agent Memory Integration', () => {
-  let CodeBuddyAgent: any;
-  let agent: any;
-  let mockMemory: any;
+  let CodeBuddyAgent: CodeBuddyAgentCtor;
+  let agent: MemoryAgentLike;
+  let mockMemory: MemoryMock;
 
   beforeAll(async () => {
     // Import after mocks are set up
@@ -260,7 +294,6 @@ describe('Agent Memory Integration', () => {
     jest.clearAllMocks();
 
     // Get reference to mock memory
-    const { getEnhancedMemory } = require('../../src/memory/index.js');
     mockMemory = getEnhancedMemory();
 
     // Create agent instance

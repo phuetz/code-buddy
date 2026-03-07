@@ -1,0 +1,17 @@
+Updated test.js with 2 additions and 2 removals
+--- a/test.js
++++ b/test.js
+@@ -43,10 +43,10 @@
+ 
+ // Test 1: Add a task
+ setupTest();
+-runCLI(['add', 'Buy groceries']);
++let consoleOutput1 = runCLI(['add', 'Buy groceries']);
+ let tasks = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+ assert.strictEqual(tasks.length, 1, 'Test 1 Failed: Task not added.');
+ assert.strictEqual(tasks[0].description, 'Buy groceries', 'Test 1 Failed: Incorrect task description.');
+-assert.strictEqual(consoleOutput[0], 'Task added: "Buy groceries" ', 'Test 1 Failed: Incorrect console output.');
++assert.strictEqual(consoleOutput1[0], 'Task added: "Buy groceries"', 'Test 1 Failed: Incorrect console output.');
+ console.log('Test 1 Passed: Add a task.');
+ 
+ // Test 2: List tasks

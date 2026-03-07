@@ -1,0 +1,1 @@
+Path "C:\Users\patri\.gemini\tmp\openclaw_test" is not in a trusted directory. Use /trust to add it.

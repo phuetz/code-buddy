@@ -1,0 +1,9 @@
+README.md*
+database.db-shm*
+database.db-wal*
+node_modules/
+package-lock.json*
+package.json*
+public/
+server.mjs*
+smoke-test.mjs*

@@ -1,0 +1,5 @@
+String not found in file: "const waitForWebSocketEvent = (ws, eventType, jobId) => {
+    return new Promise(resolve => {
+      ..."
+
+💡 Tip: For multi-line replacements, ensure exact whitespace match or use line-based editing.

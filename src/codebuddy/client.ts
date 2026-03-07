@@ -4,6 +4,7 @@ import { validateModel, getModelInfo } from "../utils/model-utils.js";
 import { getModelToolConfig } from "../config/model-tools.js";
 import { logger } from "../utils/logger.js";
 import { retry, RetryStrategies, RetryPredicates } from "../utils/retry.js";
+import { normalizeBaseURL, DEFAULT_BASE_URL } from "../utils/base-url.js";
 
 export type CodeBuddyMessage = ChatCompletionMessageParam;
 
@@ -80,6 +81,12 @@ export interface ChatOptions {
   model?: string;
   temperature?: number;
   searchOptions?: SearchOptions;
+  /** Optional request timeout override (ms) for Gemini native API calls */
+  timeoutMs?: number;
+  /** Internal: retry counter for Gemini malformed function-call recovery */
+  geminiMalformedRetryCount?: number;
+  /** Internal: guard against infinite model fallback loops on Gemini */
+  geminiModelFallbackTried?: boolean;
 }
 
 export interface CodeBuddyResponse {
@@ -108,6 +115,11 @@ export class CodeBuddyClient {
   private toolSupportDetected: boolean | null = null;
   private probePromise: Promise<boolean> | null = null;
   private isGeminiProvider: boolean = false;
+  private geminiRequestTimeoutMs: number;
+
+  private static isGeminiModelName(model: string): boolean {
+    return model.toLowerCase().includes('gemini');
+  }
 
   constructor(apiKey: string, model?: string, baseURL?: string) {
     // Validate API key
@@ -118,21 +130,19 @@ export class CodeBuddyClient {
       throw new Error('API key cannot be empty or whitespace only');
     }
 
-    // Validate baseURL if provided
-    if (baseURL !== undefined && baseURL !== null) {
-      if (typeof baseURL !== 'string') {
-        throw new Error('Base URL must be a string');
-      }
-      if (baseURL.trim().length > 0 && !baseURL.match(/^https?:\/\//i)) {
-        throw new Error('Base URL must start with http:// or https://');
-      }
-    }
-
-    this.baseURL = baseURL || process.env.GROK_BASE_URL || "https://api.x.ai/v1";
+    const selectedBaseURL = baseURL ?? process.env.GROK_BASE_URL ?? DEFAULT_BASE_URL;
+    this.baseURL = normalizeBaseURL(selectedBaseURL);
     this.apiKey = apiKey;
 
     // Detect Gemini provider
     this.isGeminiProvider = this.baseURL.includes('generativelanguage.googleapis.com');
+    const envGeminiTimeout = Number(
+      process.env.CODEBUDDY_GEMINI_TIMEOUT_MS || process.env.CODEBUDDY_REQUEST_TIMEOUT_MS
+    );
+    this.geminiRequestTimeoutMs =
+      Number.isFinite(envGeminiTimeout) && envGeminiTimeout >= 5000
+        ? envGeminiTimeout
+        : 60000;
 
     // Only create OpenAI client for non-Gemini providers
     if (!this.isGeminiProvider) {
@@ -160,7 +170,17 @@ export class CodeBuddyClient {
       }
       // Validate model (non-strict to allow custom models)
       validateModel(model, false);
-      this.currentModel = model;
+
+      // Guard against provider/model mismatch: using a Grok model with Gemini API
+      // leads to hard 404 errors at runtime.
+      if (this.isGeminiProvider && !CodeBuddyClient.isGeminiModelName(model)) {
+        logger.warn(
+          `Model '${model}' is incompatible with Gemini provider. Falling back to 'gemini-2.5-flash'.`
+        );
+        this.currentModel = 'gemini-2.5-flash';
+      } else {
+        this.currentModel = model;
+      }
 
       // Log warning if model is not officially supported
       const modelInfo = getModelInfo(model);
@@ -345,6 +365,35 @@ export class CodeBuddyClient {
     if (this.baseURL.match(/172\.\d+\.\d+\.\d+:1234/)) return true; // WSL/Docker IP with LM Studio port
     if (this.baseURL.match(/192\.168\.\d+\.\d+:1234/)) return true; // Private network with LM Studio port
     return false;
+  }
+
+  /**
+   * xAI no longer accepts legacy search_parameters payloads.
+   */
+  private isXaiProvider(): boolean {
+    return this.baseURL.includes('api.x.ai');
+  }
+
+  /**
+   * Gate legacy search_parameters by provider compatibility.
+   */
+  private shouldIncludeSearchParameters(searchParams?: SearchParameters): boolean {
+    if (!searchParams) {
+      return false;
+    }
+
+    if (this.isLocalInference()) {
+      return false;
+    }
+
+    if (this.isXaiProvider()) {
+      logger.debug('Skipping deprecated search_parameters for xAI provider', {
+        source: 'CodeBuddyClient',
+      });
+      return false;
+    }
+
+    return true;
   }
 
   setModel(model: string): void {
@@ -567,7 +616,10 @@ export class CodeBuddyClient {
     opts?: ChatOptions
   ): Promise<CodeBuddyResponse> {
     const model = opts?.model || this.currentModel;
+    const malformedRetryCount = opts?.geminiMalformedRetryCount ?? 0;
     const url = `${this.baseURL}/models/${model}:generateContent`;
+    const requestTimeoutMs =
+      opts?.timeoutMs && opts.timeoutMs >= 1000 ? opts.timeoutMs : this.geminiRequestTimeoutMs;
 
     const body = this.buildGeminiBody(messages, tools, opts);
 
@@ -579,42 +631,76 @@ export class CodeBuddyClient {
       toolCount: tools?.length || 0,
     });
 
-    // Make request with retry
-    const response = await retry(
-      async () => {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': this.apiKey,
-          },
-          body: JSON.stringify(body),
-        });
+    let response: Response;
+    try {
+      // Make request with retry
+      response = await retry(
+        async () => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+          let res: Response;
+          try {
+            res = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': this.apiKey,
+              },
+              body: JSON.stringify(body),
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
 
-        if (!res.ok) {
-          const errorText = await res.text();
-          logger.error('Gemini API error', {
-            source: 'CodeBuddyClient',
-            status: res.status,
-            statusText: res.statusText,
-            errorBody: errorText?.substring(0, 500),
-          });
-          throw new Error(`${res.status} ${errorText || res.statusText}`);
-        }
+          if (!res.ok) {
+            const errorText = await res.text();
+            logger.error('Gemini API error', {
+              source: 'CodeBuddyClient',
+              status: res.status,
+              statusText: res.statusText,
+              errorBody: errorText?.substring(0, 500),
+            });
+            throw new Error(`${res.status} ${errorText || res.statusText}`);
+          }
 
-        return res;
-      },
-      {
-        ...RetryStrategies.llmApi,
-        isRetryable: RetryPredicates.llmApiError,
-        onRetry: (error, attempt, delay) => {
-          logger.warn(`Gemini API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
-            source: 'CodeBuddyClient',
-            error: error instanceof Error ? error.message : String(error),
-          });
+          return res;
         },
+        {
+          ...RetryStrategies.llmApi,
+          timeout: requestTimeoutMs * 2,
+          isRetryable: RetryPredicates.llmApiError,
+          onRetry: (error, attempt, delay) => {
+            logger.warn(`Gemini API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
+              source: 'CodeBuddyClient',
+              error: error instanceof Error ? error.message : String(error),
+              requestTimeoutMs,
+            });
+          },
+        }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const looksLikeModel404 =
+        message.includes('404') &&
+        message.includes('models/') &&
+        message.includes('is not found');
+      const alreadyTriedFallback = opts?.geminiModelFallbackTried === true;
+
+      if (looksLikeModel404 && !alreadyTriedFallback && model !== 'gemini-2.5-flash') {
+        logger.warn('Gemini model not found, retrying with fallback model', {
+          source: 'CodeBuddyClient',
+          originalModel: model,
+          fallbackModel: 'gemini-2.5-flash',
+        });
+        return await this.geminiChat(messages, tools, {
+          ...opts,
+          model: 'gemini-2.5-flash',
+          geminiModelFallbackTried: true,
+        });
       }
-    );
+      throw error;
+    }
 
     const data = await response.json() as {
       candidates: Array<{
@@ -634,13 +720,27 @@ export class CodeBuddyClient {
     const candidate = data.candidates?.[0];
 
     // Handle MALFORMED_FUNCTION_CALL: Gemini sometimes generates Python-style
-    // calls instead of JSON. Return a recovery message so the agent can retry.
+    // calls instead of strict JSON tool-call args.
     if (candidate && !candidate.content && candidate.finishReason === 'MALFORMED_FUNCTION_CALL') {
       const finishMsg = (candidate as { finishMessage?: string }).finishMessage || '';
       logger.warn('Gemini returned MALFORMED_FUNCTION_CALL, requesting retry', {
         source: 'CodeBuddyClient',
         snippet: finishMsg.substring(0, 200),
+        malformedRetryCount,
       });
+
+      if (malformedRetryCount < 2) {
+        const recoverySystemMessage: CodeBuddyMessage = {
+          role: 'system',
+          content: 'Retry tool calling with strict JSON arguments only. Do not emit Python-style function syntax.',
+        };
+        return await this.geminiChat(
+          [...messages, recoverySystemMessage],
+          tools,
+          { ...opts, geminiMalformedRetryCount: malformedRetryCount + 1 },
+        );
+      }
+
       return {
         choices: [{
           message: {
@@ -836,8 +936,9 @@ export class CodeBuddyClient {
 
       // Add search parameters if specified (skip for local inference)
       const searchOpts = opts.searchOptions || searchOptions;
-      if (searchOpts?.search_parameters && !this.isLocalInference()) {
-        requestPayload.search_parameters = searchOpts.search_parameters;
+      const searchParameters = searchOpts?.search_parameters;
+      if (this.shouldIncludeSearchParameters(searchParameters)) {
+        requestPayload.search_parameters = searchParameters;
       }
 
       // Add extended thinking budget if enabled
@@ -1029,19 +1130,29 @@ export class CodeBuddyClient {
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
     const model = opts?.model || this.currentModel;
     const streamUrl = `${this.baseURL}/models/${model}:streamGenerateContent?alt=sse`;
+    const requestTimeoutMs =
+      opts?.timeoutMs && opts.timeoutMs >= 1000 ? opts.timeoutMs : this.geminiRequestTimeoutMs;
 
     try {
       // Build the same request body as geminiChat
       const body = this.buildGeminiBody(messages, tools, opts);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
 
-      const res = await fetch(streamUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': this.apiKey,
-        },
-        body: JSON.stringify(body),
-      });
+      let res: Response;
+      try {
+        res = await fetch(streamUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': this.apiKey,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!res.ok) {
         // Fallback to non-streaming on error
@@ -1262,8 +1373,9 @@ export class CodeBuddyClient {
 
       // Add search parameters if specified (skip for local inference)
       const searchOpts = opts.searchOptions || searchOptions;
-      const searchParams = (searchOpts?.search_parameters && !this.isLocalInference())
-        ? { search_parameters: searchOpts.search_parameters }
+      const searchParameters = searchOpts?.search_parameters;
+      const searchParams = this.shouldIncludeSearchParameters(searchParameters)
+        ? { search_parameters: searchParameters }
         : {};
 
       // Create streaming request payload

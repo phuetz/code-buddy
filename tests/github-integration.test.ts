@@ -2,11 +2,13 @@
  * Tests for GitHub Integration
  */
 
-import { GitHubIntegration, getGitHubIntegration, resetGitHubIntegration } from '../src/integrations/github-integration';
 
 // Mock BashTool
+
+import { GitHubIntegration, getGitHubIntegration, resetGitHubIntegration } from '../src/integrations/github-integration';
+
 jest.mock('../src/tools/bash', () => ({
-  BashTool: jest.fn().mockImplementation(() => ({
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockImplementation((command: string) => {
       // Mock different commands
       if (command.includes('git remote get-url')) {
@@ -106,7 +108,7 @@ jest.mock('../src/tools/bash', () => ({
       }
       return Promise.resolve({ success: true, output: '' });
     }),
-  })),
+  }; }),
 }));
 
 describe('GitHubIntegration', () => {

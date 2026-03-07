@@ -18,10 +18,13 @@ import {
 const _TEST_DIR = join(tmpdir(), 'grok-test-logs');
 
 // Mock the log directory
-jest.mock('os', () => ({
-  ...jest.requireActual('os'),
+jest.mock('os', () => {
+  const impl = {
+  ...await vi.importActual('os'),
   homedir: () => join(tmpdir(), 'grok-test-home'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 beforeEach(() => {
   // Create test directories

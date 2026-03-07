@@ -10,6 +10,24 @@
 
 import { logger } from '../utils/logger.js';
 
+type SuggestionMessage = {
+  role: 'system' | 'user';
+  content: string;
+};
+
+type SuggestionClient = {
+  chat: (
+    messages: SuggestionMessage[],
+    tools?: unknown[]
+  ) => Promise<{
+    choices?: Array<{
+      message?: {
+        content?: string | null;
+      };
+    }>;
+  }>;
+};
+
 /**
  * Engine for generating follow-up prompt suggestions based on
  * conversation context and the last assistant response.
@@ -17,6 +35,7 @@ import { logger } from '../utils/logger.js';
 export class PromptSuggestionEngine {
   private enabled: boolean;
   private cachedSuggestions: string[];
+  private client: SuggestionClient | null = null;
 
   constructor(enabled = true) {
     this.enabled = enabled;
@@ -44,10 +63,6 @@ export class PromptSuggestionEngine {
   /**
    * Generate 2-3 follow-up suggestions based on context and last response.
    *
-   * Currently returns the formatted prompt string that would be sent to an LLM.
-   * The actual LLM call is stubbed for now - integrate with CodeBuddyClient
-   * when ready.
-   *
    * @param context - The conversation context or user's last message
    * @param lastResponse - The assistant's last response
    * @returns Array of suggestion strings
@@ -63,12 +78,9 @@ export class PromptSuggestionEngine {
       return [];
     }
 
-    // Build the prompt that would be sent to the LLM
-    const prompt = this.buildSuggestionPrompt(context, lastResponse);
-
-    // Stub: parse suggestions from the prompt structure
-    // In production, this would call the LLM and parse the response
-    const suggestions = this.parseStubSuggestions(context, lastResponse);
+    const suggestions =
+      (await this.generateSuggestionsWithAI(context, lastResponse)) ||
+      this.generateHeuristicSuggestions(context, lastResponse);
 
     this.cachedSuggestions = suggestions;
     logger.debug(`Generated ${suggestions.length} prompt suggestions`);
@@ -108,10 +120,59 @@ export class PromptSuggestionEngine {
   }
 
   /**
-   * Stub implementation that generates suggestions based on keywords.
-   * Replace with actual LLM call in production.
+   * Generate suggestions with the configured LLM if an API key is available.
    */
-  private parseStubSuggestions(context: string, lastResponse: string): string[] {
+  private async generateSuggestionsWithAI(
+    context: string,
+    lastResponse: string
+  ): Promise<string[] | null> {
+    const client = await this.getClient();
+    if (!client) {
+      return null;
+    }
+
+    try {
+      const response = await client.chat([
+        {
+          role: 'system',
+          content: 'You generate concise follow-up prompt suggestions. Return 2 or 3 short suggestions, one per line, with no numbering.',
+        },
+        {
+          role: 'user',
+          content: this.buildSuggestionPrompt(context, lastResponse),
+        },
+      ], []);
+
+      const content = response.choices?.[0]?.message?.content || '';
+      const suggestions = this.parseSuggestions(content);
+      return suggestions.length >= 2 ? suggestions : null;
+    } catch (error) {
+      logger.debug('Falling back to heuristic prompt suggestions', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  private async getClient(): Promise<SuggestionClient | null> {
+    if (this.client) {
+      return this.client;
+    }
+
+    const apiKey = process.env.GROK_API_KEY?.trim();
+    if (!apiKey) {
+      return null;
+    }
+
+    const { CodeBuddyClient } = await import('../codebuddy/client.js');
+    this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || 'grok-code-fast-1') as SuggestionClient;
+    return this.client;
+  }
+
+  /**
+   * Local heuristic fallback when no LLM is configured.
+   */
+  private generateHeuristicSuggestions(context: string, lastResponse: string): string[] {
     const combined = `${context} ${lastResponse}`.toLowerCase();
     const suggestions: string[] = [];
 
@@ -138,5 +199,24 @@ export class PromptSuggestionEngine {
     }
 
     return suggestions.slice(0, 3);
+  }
+
+  private parseSuggestions(content: string): string[] {
+    const cleaned = content
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').trim())
+      .filter(Boolean);
+
+    const unique: string[] = [];
+    for (const suggestion of cleaned) {
+      if (!unique.includes(suggestion)) {
+        unique.push(suggestion);
+      }
+      if (unique.length >= 3) {
+        break;
+      }
+    }
+
+    return unique;
   }
 }

@@ -38,6 +38,24 @@ const TOOL_TRIGGER_KEYWORDS = [
   'cherche', 'recherche', 'trouve', 'où trouver',
 ];
 
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string; functionCall?: { name: string; args: unknown } }>;
+    };
+    finishReason?: string;
+  }>;
+  promptFeedback?: {
+    blockReason?: string;
+    blockReasonMessage?: string;
+  };
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+};
+
 export class GeminiProvider extends BaseProvider {
   readonly type: ProviderType = 'gemini';
   readonly name = 'Gemini (Google)';
@@ -90,7 +108,7 @@ export class GeminiProvider extends BaseProvider {
     });
 
     // Use retry with exponential backoff for API calls
-    const response = await retry(
+    const data = await retry(
       async () => {
         const res = await fetch(url, {
           method: 'POST',
@@ -104,11 +122,41 @@ export class GeminiProvider extends BaseProvider {
           throw error;
         }
 
-        return res;
+        const parsed = await res.json() as GeminiGenerateContentResponse;
+        const firstCandidate = parsed.candidates?.[0];
+        if (!firstCandidate) {
+          const blockReason = parsed.promptFeedback?.blockReason;
+          if (blockReason) {
+            const reasonMessage = parsed.promptFeedback?.blockReasonMessage;
+            throw new Error(
+              reasonMessage
+                ? `Gemini API blocked prompt (${blockReason}): ${reasonMessage}`
+                : `Gemini API blocked prompt (${blockReason})`
+            );
+          }
+          const emptyCandidatesError = new Error('Gemini API returned empty candidates');
+          (emptyCandidatesError as Error & { retryable?: boolean }).retryable = true;
+          throw emptyCandidatesError;
+        }
+
+        if (!firstCandidate.content?.parts) {
+          if (firstCandidate.finishReason === 'MAX_TOKENS') {
+            throw new Error('Gemini API returned no content before MAX_TOKENS; increase maxTokens.');
+          }
+          throw new Error(
+            firstCandidate.finishReason
+              ? `Gemini API returned candidate without content (finishReason: ${firstCandidate.finishReason})`
+              : 'Gemini API returned candidate without content'
+          );
+        }
+
+        return parsed;
       },
       {
         ...RetryStrategies.llmApi,
-        isRetryable: RetryPredicates.llmApiError,
+        isRetryable: (error) =>
+          RetryPredicates.llmApiError(error) ||
+          (error as { retryable?: boolean })?.retryable === true,
         onRetry: (error, attempt, delay) => {
           logger.warn(`Gemini API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
             source: 'GeminiProvider',
@@ -117,20 +165,6 @@ export class GeminiProvider extends BaseProvider {
         },
       }
     );
-
-    const data = await response.json() as {
-      candidates: Array<{
-        content: {
-          parts: Array<{ text?: string; functionCall?: { name: string; args: unknown } }>;
-        };
-        finishReason: string;
-      }>;
-      usageMetadata?: {
-        promptTokenCount?: number;
-        candidatesTokenCount?: number;
-        totalTokenCount?: number;
-      };
-    };
 
     const candidate = data.candidates?.[0];
     if (!candidate?.content?.parts) {
@@ -166,11 +200,18 @@ export class GeminiProvider extends BaseProvider {
       completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
     });
 
+    const finishReason =
+      candidate.finishReason === 'STOP'
+        ? 'stop'
+        : toolCalls.length > 0
+          ? 'tool_calls'
+          : 'stop';
+
     return {
       id: `gemini_${Date.now()}`,
       content: content || null,
       toolCalls,
-      finishReason: candidate.finishReason === 'STOP' ? 'stop' : 'tool_calls',
+      finishReason,
       usage: {
         promptTokens: data.usageMetadata?.promptTokenCount || 0,
         completionTokens: data.usageMetadata?.candidatesTokenCount || 0,

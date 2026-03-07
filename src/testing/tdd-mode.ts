@@ -114,7 +114,7 @@ describe('{feature}', () => {
       // Test boundaries
     });`,
     mocksTemplate: `
-jest.mock('{module}', () => ({
+vi.mock('{module}', () => ({
   {mockImplementation}
 }));`,
   },

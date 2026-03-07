@@ -1,0 +1,1 @@
+D:\CascadeProjects\grok-cli\src-sidecar\target\release\codebuddy-sidecar.exe: D:\CascadeProjects\grok-cli\src-sidecar\src\desktop.rs D:\CascadeProjects\grok-cli\src-sidecar\src\main.rs D:\CascadeProjects\grok-cli\src-sidecar\src\stt.rs

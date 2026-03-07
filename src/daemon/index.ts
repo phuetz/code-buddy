@@ -42,3 +42,11 @@ export {
   type DailyResetConfig,
   type ResetResult,
 } from './daily-reset.js';
+
+export {
+  ServiceInstaller,
+  getServiceInstaller,
+  resetServiceInstaller,
+  type ServiceInstallerConfig,
+  type ServiceInstallResult,
+} from './service-installer.js';

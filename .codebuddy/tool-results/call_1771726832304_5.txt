@@ -1,0 +1,9 @@
+Search results for "tool cache":
+  /home/patrice/claude/grok-cli/src/workspace/workspace-isolation.ts (1 matches)
+  /home/patrice/claude/grok-cli/src/performance/tool-cache.ts (2 matches)
+  /home/patrice/claude/grok-cli/src/performance/performance-manager.ts (1 matches)
+  /home/patrice/claude/grok-cli/tests/unit/handlers.test.ts (4 matches)
+  /home/patrice/claude/grok-cli/tests/unit/performance.test.ts (3 matches)
+  /home/patrice/claude/grok-cli/src/agent/execution/tool-selection-strategy.ts (1 matches)
+  /home/patrice/claude/grok-cli/tests/unit/config-command.test.ts (3 matches)
+  /home/patrice/claude/grok-cli/src/commands/handlers/stats-handlers.ts (3 matches)

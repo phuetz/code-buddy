@@ -399,7 +399,7 @@ export class ROITracker {
           }));
         }
       }
-    } catch {
+    } catch (_error) {
       this.tasks = [];
     }
   }
@@ -411,7 +411,7 @@ export class ROITracker {
     try {
       fs.ensureDirSync(path.dirname(this.config.dataPath));
       fs.writeJsonSync(this.config.dataPath, this.tasks, { spaces: 2 });
-    } catch {
+    } catch (_error) {
       // Ignore save errors
     }
   }

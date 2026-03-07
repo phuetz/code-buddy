@@ -19,12 +19,15 @@ interface MockStreamEmitter {
 }
 
 // Mock fs-extra before importing the module
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   existsSync: jest.fn(),
   readJsonSync: jest.fn(),
   ensureDirSync: jest.fn(),
   writeJsonSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock child_process
 jest.mock('child_process', () => ({
@@ -237,7 +240,7 @@ describe('HookManager', () => {
       mockFs.existsSync.mockImplementation((p: unknown) =>
         p === globalPath
       );
-      mockFs.readJsonSync.mockImplementation(() => {
+      mockFs.readJsonSync.mockImplementation(function() {
         throw new Error('Invalid JSON');
       });
 
@@ -253,7 +256,7 @@ describe('HookManager', () => {
       mockFs.existsSync.mockImplementation((p: unknown) =>
         p === projectPath
       );
-      mockFs.readJsonSync.mockImplementation(() => {
+      mockFs.readJsonSync.mockImplementation(function() {
         throw new Error('Parse error');
       });
 
@@ -359,7 +362,7 @@ describe('HookManager', () => {
     });
 
     it('should handle save errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(() => {
+      mockFs.writeJsonSync.mockImplementation(function() {
         throw new Error('Write failed');
       });
 
@@ -717,7 +720,7 @@ describe('HookManager', () => {
       manager.addHook({ event: 'PreToolUse', command: 'echo second' });
 
       let callCount = 0;
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         callCount++;
         const { child } = createMockChildProcess({
           exitCode: 0,
@@ -740,7 +743,7 @@ describe('HookManager', () => {
       manager.addHook({ event: 'PreToolUse', command: 'echo third' });
 
       let callCount = 0;
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         callCount++;
         if (callCount === 2) {
           const { child } = createMockChildProcess({
@@ -766,7 +769,7 @@ describe('HookManager', () => {
       manager.addHook({ event: 'PreToolUse', command: 'echo second' });
 
       let callCount = 0;
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         callCount++;
         const args = callCount === 1
           ? { path: '/modified.ts' }
@@ -793,7 +796,7 @@ describe('HookManager', () => {
       manager.addHook({ event: 'PreToolUse', command: 'echo second' });
 
       let callCount = 0;
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         callCount++;
         if (callCount === 1) {
           const { child } = createMockChildProcess({
@@ -1038,29 +1041,9 @@ describe('HookManager', () => {
   });
 
   describe('Singleton Pattern', () => {
-    it('should return the same instance', async () => {
-      // Import fresh module
-      jest.resetModules();
-
-      // Re-mock the dependencies
-      jest.doMock('fs-extra', () => ({
-        existsSync: jest.fn().mockReturnValue(false),
-        readJsonSync: jest.fn().mockReturnValue({ hooks: [] }),
-        ensureDirSync: jest.fn(),
-        writeJsonSync: jest.fn(),
-      }));
-
-      jest.doMock('child_process', () => ({
-        spawn: jest.fn(),
-      }));
-
-      jest.doMock('../../src/utils/logger.js', () => ({
-        logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
-      }));
-
-      const { getHookManager: getManager1 } = await import('../../src/hooks/hook-manager.js');
-      const instance1 = getManager1();
-      const instance2 = getManager1();
+    it('should return the same instance', () => {
+      const instance1 = _getHookManager();
+      const instance2 = _getHookManager();
 
       expect(instance1).toBe(instance2);
     });
@@ -1074,7 +1057,7 @@ describe('HookManager', () => {
     it('should handle exception during hook execution', async () => {
       manager.addHook({ event: 'PreToolUse', command: 'echo test' });
 
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         throw new Error('Spawn failed completely');
       });
 
@@ -1110,7 +1093,7 @@ describe('HookManager', () => {
       manager.addHook({ event: 'PreToolUse', command: 'echo second' });
 
       let callCount = 0;
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         callCount++;
         if (callCount === 1) {
           throw new Error('First hook failed');

@@ -1,0 +1,14 @@
+Directory: D:\CascadeProjects\grok-cli\.grok
+9 entries
+
+Type       Size  Modified          Name
+---------------------------------------
+dir/          -  2026-02-22 09:24  cache/
+dir/          -  2026-02-22 09:24  commands/
+file      845 B  2025-12-15 23:03  GROK.md
+file      729 B  2025-12-14 02:13  hooks.json
+file      946 B  2025-12-13 19:35  mcp-servers.example.json
+file      783 B  2025-12-14 02:13  mcp.json
+file     1.4 KB  2025-12-14 16:27  README.md
+file       98 B  2025-12-14 02:13  security.json
+file      183 B  2025-12-07 19:00  settings.json

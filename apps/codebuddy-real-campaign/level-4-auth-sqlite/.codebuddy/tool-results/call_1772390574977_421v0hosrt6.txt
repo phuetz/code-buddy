@@ -1,0 +1,230 @@
+Contents of server.mjs:
+1: import express from 'express';
+2: import session from 'express-session';
+3: import SQLiteStore from 'connect-sqlite3';
+4: import bcrypt from 'bcryptjs';
+5: import Database from 'better-sqlite3';
+6: import path from 'path';
+7: import { fileURLToPath } from 'url';
+8: 
+9: const __filename = fileURLToPath(import.meta.url);
+10: const __dirname = path.dirname(__filename);
+11: 
+12: const app = express();
+13: const PORT = process.env.PORT || 3000;
+14: const SQLiteStoreSession = SQLiteStore(session);
+15: 
+16: // Database setup
+17: const db = new Database('database.db');
+18: db.pragma('journal_mode = WAL');
+19: 
+20: export const closeDb = () => db.close();
+21: 
+22: db.exec(`
+23:   CREATE TABLE IF NOT EXISTS users (
+24:     id INTEGER PRIMARY KEY AUTOINCREMENT,
+25:     username TEXT UNIQUE NOT NULL,
+26:     password TEXT NOT NULL
+27:   );
+28:   CREATE TABLE IF NOT EXISTS tasks (
+29:     id INTEGER PRIMARY KEY AUTOINCREMENT,
+30:     userId INTEGER NOT NULL,
+31:     title TEXT NOT NULL,
+32:     completed BOOLEAN DEFAULT 0,
+33:     FOREIGN KEY (userId) REFERENCES users(id)
+34:   );
+35:   CREATE TABLE IF NOT EXISTS sessions (
+36:     sid TEXT PRIMARY KEY,
+37:     sess JSON NOT NULL,
+38:     expire INTEGER NOT NULL
+39:   );
+40: `);
+41: 
+42: // Middleware
+43: app.use(express.json());
+44: app.use(express.static(path.join(__dirname, 'public')));
+45: app.use(session({
+46:   store: new SQLiteStoreSession({ db: 'sessions.db', dir: './' }),
+47:   secret: 'supersecretkey',
+48:   resave: false,
+49:   saveUninitialized: false,
+50:   cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } // 1 week
+51: }));
+52: 
+53: // Auth middleware
+54: const isAuthenticated = (req, res, next) => {
+55:   if (req.session.userId) {
+56:     next();
+57:   } else {
+58:     res.status(401).json({ message: 'Unauthorized' });
+59:   }
+60: };
+61: 
+62: // Utility for input validation
+63: const validateInput = (data, fields) => {
+64:   for (const field of fields) {
+65:     if (!data[field] || typeof data[field] !== 'string' || data[field].trim() === '') {
+66:       return `Missing or invalid field: ${field}`;
+67:     }
+68:   }
+69:   return null;
+70: };
+71: 
+72: // Routes
+73: 
+74: // Health check endpoint
+75: app.get('/health', (req, res) => {
+76:   res.status(200).json({ status: 'ok' });
+77: });
+78: 
+79: // Register
+80: app.post('/register', async (req, res) => {
+81:   const { username, password } = req.body;
+82:   const validationError = validateInput(req.body, ['username', 'password']);
+83:   if (validationError) {
+84:     return res.status(400).json({ message: validationError });
+85:   }
+86: 
+87:   try {
+88:     const hashedPassword = await bcrypt.hash(password, 10);
+89:     const stmt = db.prepare('INSERT INTO users (username, password) VALUES (?, ?)');
+90:     stmt.run(username, hashedPassword);
+91:     res.status(201).json({ message: 'User registered successfully' });
+92:   } catch (error) {
+93:     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+94:       return res.status(409).json({ message: 'Username already exists' });
+95:     }
+96:     console.error('Registration error:', error);
+97:     res.status(500).json({ message: 'Internal server error' });
+98:   }
+99: });
+100: 
+101: // Login
+102: app.post('/login', async (req, res) => {
+103:   const { username, password } = req.body;
+104:   const validationError = validateInput(req.body, ['username', 'password']);
+105:   if (validationError) {
+106:     return res.status(400).json({ message: validationError });
+107:   }
+108: 
+109:   try {
+110:     const stmt = db.prepare('SELECT id, password FROM users WHERE username = ?');
+111:     const user = stmt.get(username);
+112: 
+113:     if (user && await bcrypt.compare(password, user.password)) {
+114:       req.session.userId = user.id;
+115:       res.status(200).json({ message: 'Logged in successfully' });
+116:     } else {
+117:       res.status(401).json({ message: 'Invalid credentials' });
+118:     }
+119:   } catch (error) {
+120:     console.error('Login error:', error);
+121:     res.status(500).json({ message: 'Internal server error' });
+122:   }
+123: });
+124: 
+125: // Logout
+126: app.post('/logout', isAuthenticated, (req, res) => {
+127:   req.session.destroy(err => {
+128:     if (err) {
+129:       return res.status(500).json({ message: 'Could not log out' });
+130:     }
+131:     res.clearCookie('connect.sid');
+132:     res.status(200).json({ message: 'Logged out successfully' });
+133:   });
+134: });
+135: 
+136: // Get user session status
+137: app.get('/session', (req, res) => {
+138:   if (req.session.userId) {
+139:     res.status(200).json({ authenticated: true, userId: req.session.userId });
+140:   } else {
+141:     res.status(200).json({ authenticated: false });
+142:   }
+143: });
+144: 
+145: // Task CRUD
+146: 
+147: // Create task
+148: app.post('/tasks', isAuthenticated, (req, res) => {
+149:   const { title } = req.body;
+150:   const validationError = validateInput(req.body, ['title']);
+151:   if (validationError) {
+152:     return res.status(400).json({ message: validationError });
+153:   }
+154: 
+155:   try {
+156:     const stmt = db.prepare('INSERT INTO tasks (userId, title) VALUES (?, ?)');
+157:     const info = stmt.run(req.session.userId, title);
+158:     res.status(201).json({ id: info.lastInsertRowid, title, completed: 0 });
+159:   } catch (error) {
+160:     console.error('Create task error:', error);
+161:     res.status(500).json({ message: 'Internal server error' });
+162:   }
+163: });
+164: 
+165: // Get tasks
+166: app.get('/tasks', isAuthenticated, (req, res) => {
+167:   try {
+168:     const stmt = db.prepare('SELECT id, title, completed FROM tasks WHERE userId = ?');
+169:     const tasks = stmt.all(req.session.userId);
+170:     res.status(200).json(tasks);
+171:   } catch (error) {
+172:     console.error('Get tasks error:', error);
+173:     res.status(500).json({ message: 'Internal server error' });
+174:   }
+175: });
+176: 
+177: // Update task
+178: app.put('/tasks/:id', isAuthenticated, (req, res) => {
+179:   const { id } = req.params;
+180:   const { title, completed } = req.body;
+181: 
+182:   if (typeof title !== 'string' || title.trim() === '') {
+183:     return res.status(400).json({ message: 'Invalid title' });
+184:   }
+185:   if (typeof completed !== 'boolean') {
+186:     return res.status(400).json({ message: 'Invalid completed status' });
+187:   }
+188: 
+189:   try {
+190:     const stmt = db.prepare('UPDATE tasks SET title = ?, completed = ? WHERE id = ? AND userId = ?');
+191:     const info = stmt.run(title, completed ? 1 : 0, id, req.session.userId);
+192: 
+193:     if (info.changes === 0) {
+194:       return res.status(404).json({ message: 'Task not found or not authorized' });
+195:     }
+196:     res.status(200).json({ message: 'Task updated successfully' });
+197:   } catch (error) {
+198:     console.error('Update task error:', error);
+199:     res.status(500).json({ message: 'Internal server error' });
+200:   }
+201: });
+202: 
+203: // Delete task
+204: app.delete('/tasks/:id', isAuthenticated, (req, res) => {
+205:   const { id } = req.params;
+206: 
+207:   try {
+208:     const stmt = db.prepare('DELETE FROM tasks WHERE id = ? AND userId = ?');
+209:     const info = stmt.run(id, req.session.userId);
+210: 
+211:     if (info.changes === 0) {
+212:       return res.status(404).json({ message: 'Task not found or not authorized' });
+213:     }
+214:     res.status(200).json({ message: 'Task deleted successfully' });
+215:   } catch (error) {
+216:     console.error('Delete task error:', error);
+217:     res.status(500).json({ message: 'Internal server error' });
+218:   }
+219: });
+220: 
+221: // Error handling middleware
+222: app.use((err, req, res, next) => {
+223:   console.error(err.stack);
+224:   res.status(500).send('Something broke!');
+225: });
+226: 
+227: // Start server
+228: export { app, db };
+229: 

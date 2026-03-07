@@ -9,11 +9,14 @@ import * as path from 'path';
 import fg from 'fast-glob';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   statSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock fast-glob
 jest.mock('fast-glob');

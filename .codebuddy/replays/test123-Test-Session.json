@@ -1,0 +1,15 @@
+{
+  "id": "test123",
+  "name": "Test Session",
+  "startTime": "2026-03-06T08:15:21.381Z",
+  "events": [],
+  "metadata": {
+    "model": "grok-code-fast-1",
+    "systemPrompt": "You are a helpful assistant",
+    "toolsEnabled": [
+      "bash",
+      "read_file",
+      "write_file"
+    ]
+  }
+}

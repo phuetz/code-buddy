@@ -25,7 +25,7 @@ const mockTracker = {
 };
 
 jest.mock('../../src/agent/lessons-tracker.js', () => ({
-  getLessonsTracker: jest.fn(() => mockTracker),
+  getLessonsTracker: jest.fn(function() { return mockTracker; }),
 }));
 
 // ============================================================================
@@ -69,8 +69,8 @@ describe('createLessonsCommand', () => {
     mockTracker.clearByCategory.mockReturnValue(0);
     mockTracker.buildContextBlock.mockReturnValue(null);
 
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    consoleErrSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleSpy = jest.spyOn(console, 'log').mockImplementation(function() {});
+    consoleErrSpy = jest.spyOn(console, 'error').mockImplementation(function() {});
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation(
       (() => {}) as unknown as (code?: number | string | null) => never
     );

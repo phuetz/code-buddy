@@ -1,0 +1,16 @@
+Crée une application complète dans ce dossier.
+Contraintes strictes:
+- Utilise uniquement l'outil create_file pour écrire les fichiers (pas de bash pour écrire du contenu).
+- N'écris jamais de fichier vide.
+- Crée directement ces fichiers avec du contenu complet:
+  - package.json
+  - server.mjs
+  - public/index.html
+  - public/app.js
+  - README.md
+Objectif:
+- serveur express avec GET /health et POST /api/chat
+- /api/chat appelle réellement Gemini (REST API) via GOOGLE_API_KEY ou GEMINI_API_KEY
+- frontend minimal pour chatter
+- gestion d'erreurs propre
+Ensuite exécute uniquement des commandes de vérification (node --check et un test de démarrage simple) et résume le résultat.

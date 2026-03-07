@@ -21,7 +21,7 @@ const mockSetCurrentModel = jest.fn();
 const mockGetAvailableModels = jest.fn();
 
 jest.mock('../../src/utils/settings-manager', () => ({
-  getSettingsManager: jest.fn(() => ({
+  getSettingsManager: jest.fn(function() { return {
     loadUserSettings: mockLoadUserSettings,
     updateUserSetting: mockUpdateUserSetting,
     getCurrentModel: mockGetCurrentModel,
@@ -32,12 +32,12 @@ jest.mock('../../src/utils/settings-manager', () => ({
       if (key === 'model') return 'grok-code-fast-1';
       return undefined;
     }),
-  })),
+  }; }),
 }));
 
 // Mock autonomy manager
 jest.mock('../../src/utils/autonomy-manager', () => ({
-  getAutonomyManager: jest.fn(() => ({
+  getAutonomyManager: jest.fn(function() { return {
     enableYOLO: jest.fn(),
     disableYOLO: jest.fn(),
     updateYOLOConfig: jest.fn(),
@@ -46,23 +46,23 @@ jest.mock('../../src/utils/autonomy-manager', () => ({
     setLevel: jest.fn(),
     addToYOLOAllowList: jest.fn(),
     addToYOLODenyList: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock slash command manager
 jest.mock('../../src/commands/slash-commands', () => ({
-  getSlashCommandManager: jest.fn(() => ({
+  getSlashCommandManager: jest.fn(function() { return {
     getAllCommands: jest.fn(() => [
       { name: 'help', description: 'Show help', isBuiltin: true },
       { name: 'model', description: 'Change model', isBuiltin: true },
       { name: 'commit', description: 'Commit changes', isBuiltin: true },
     ]),
-  })),
+  }; }),
 }));
 
 // Mock skill manager
 jest.mock('../../src/skills/skill-manager', () => ({
-  getSkillManager: jest.fn(() => ({
+  getSkillManager: jest.fn(function() { return {
     getAvailableSkills: jest.fn(() => ['code-review', 'debugging', 'testing']),
     getActiveSkill: jest.fn(() => null),
     getSkill: jest.fn((name: string) => ({
@@ -74,17 +74,17 @@ jest.mock('../../src/skills/skill-manager', () => ({
       description: `Activated ${name}`,
     })),
     deactivateSkill: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock conversation exporter
 jest.mock('../../src/utils/conversation-export', () => ({
-  getConversationExporter: jest.fn(() => ({
-    export: jest.fn(() => ({
+  getConversationExporter: jest.fn(function() { return {
+    export: jest.fn(function() { return {
       success: true,
       filePath: '/tmp/conversation.md',
-    })),
-  })),
+    }; }),
+  }; }),
 }));
 
 describe('Model Router Handler', () => {

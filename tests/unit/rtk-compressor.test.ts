@@ -27,11 +27,12 @@ describe('isRTKAvailable', () => {
     mockedExecSync.mockReturnValue(Buffer.from('/usr/bin/rtk'));
 
     expect(isRTKAvailable()).toBe(true);
-    expect(mockedExecSync).toHaveBeenCalledWith('which rtk', { stdio: 'ignore' });
+    const expectedCmd = process.platform === 'win32' ? 'where rtk' : 'which rtk';
+    expect(mockedExecSync).toHaveBeenCalledWith(expectedCmd, { stdio: 'ignore' });
   });
 
   it('should return false when rtk binary is not found', () => {
-    mockedExecSync.mockImplementation(() => {
+    mockedExecSync.mockImplementation(function() {
       throw new Error('not found');
     });
 
@@ -111,7 +112,7 @@ describe('wrapWithRTK', () => {
 
   it('should return original when RTK is not available', () => {
     resetRTKCache();
-    mockedExecSync.mockImplementation(() => {
+    mockedExecSync.mockImplementation(function() {
       throw new Error('not found');
     });
 

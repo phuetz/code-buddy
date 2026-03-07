@@ -6,6 +6,8 @@
  */
 
 import { logger } from '../utils/logger.js';
+import fs from 'fs';
+import path from 'path';
 
 // ============================================================================
 // Types
@@ -92,12 +94,31 @@ export class PluginManifestManager {
   }
 
   /**
-   * Read manifest from plugin path (stub - returns parsed JSON-like object)
+   * Read manifest from plugin path.
    */
   private readManifest(pluginPath: string): PluginManifest {
-    // In real implementation this would read from disk
-    // For now we expect the pluginPath to be a manifest object serialized
-    throw new Error(`Cannot read manifest from ${pluginPath} - use installFromSource or loadPluginDirect`);
+    const resolvedPath = this.resolvePluginPath(pluginPath);
+
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`Plugin path does not exist: ${pluginPath}`);
+    }
+
+    let manifestPath = resolvedPath;
+    const stat = fs.statSync(resolvedPath);
+
+    if (stat.isDirectory()) {
+      const detected = this.findManifestInDirectory(resolvedPath);
+      if (!detected) {
+        throw new Error(
+          `No plugin manifest found in directory: ${resolvedPath} (expected manifest.json, plugin-manifest.json, or codebuddy-plugin.json)`
+        );
+      }
+      manifestPath = detected;
+    }
+
+    const raw = fs.readFileSync(manifestPath, 'utf-8');
+    const parsed = JSON.parse(raw) as PluginManifest;
+    return parsed;
   }
 
   /**
@@ -192,7 +213,7 @@ export class PluginManifestManager {
   }
 
   /**
-   * Install from various sources (stub implementation)
+   * Install from various sources.
    */
   async installFromSource(source: PluginSourceType, location: string): Promise<InstalledPlugin> {
     // Check marketplace restrictions
@@ -200,6 +221,33 @@ export class PluginManifestManager {
       if (!this.isMarketplaceAllowed(location)) {
         throw new Error(`Marketplace URL not allowed: ${location}`);
       }
+    }
+
+    if (source === 'file' || source === 'directory') {
+      return this.loadPlugin(location);
+    }
+
+    if (source === 'url' && location.endsWith('.json')) {
+      const response = await fetch(location);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch manifest from URL: ${location} (${response.status})`);
+      }
+
+      const manifest = await response.json() as PluginManifest;
+      if (!manifest.name) {
+        manifest.name = this.extractPluginName(source, location);
+      }
+      if (!manifest.version) {
+        manifest.version = '0.0.0';
+      }
+      if (!manifest.components) {
+        manifest.components = {};
+      }
+      if (!manifest.marketplace) {
+        manifest.marketplace = { source, url: location };
+      }
+
+      return this.loadPluginDirect(manifest, location);
     }
 
     const pluginName = this.extractPluginName(source, location);
@@ -221,6 +269,41 @@ export class PluginManifestManager {
     this.plugins.set(pluginName, installed);
     logger.info(`Installed plugin from ${source}: ${pluginName}`);
     return installed;
+  }
+
+  /**
+   * Resolve plugin path against current working directory and configured plugin dirs.
+   */
+  private resolvePluginPath(pluginPath: string): string {
+    const directPath = path.resolve(pluginPath);
+    if (fs.existsSync(directPath)) {
+      return directPath;
+    }
+
+    for (const baseDir of this.pluginDirs) {
+      const candidate = path.resolve(baseDir, pluginPath);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    return directPath;
+  }
+
+  /**
+   * Find a manifest file in a plugin directory.
+   */
+  private findManifestInDirectory(directoryPath: string): string | null {
+    const candidates = ['manifest.json', 'plugin-manifest.json', 'codebuddy-plugin.json'];
+
+    for (const filename of candidates) {
+      const fullPath = path.join(directoryPath, filename);
+      if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+        return fullPath;
+      }
+    }
+
+    return null;
   }
 
   /**

@@ -36,8 +36,8 @@ jest.mock('../../src/agent/custom/custom-agent-loader.js', () => {
   ];
 
   return {
-    getCustomAgentLoader: jest.fn(() => ({
-      listAgents: jest.fn(() => mockAgents),
+    getCustomAgentLoader: jest.fn(function() { return {
+      listAgents: jest.fn(function() { return mockAgents; }),
       getAgent: jest.fn((id: string) => mockAgents.find(a => a.id === id)),
       formatAgentList: jest.fn(() => `Available Agents:\n${mockAgents.map(a => `- ${a.id}: ${a.name}`).join('\n')}`),
       createAgent: jest.fn((name: string) => `/home/user/.codebuddy/agents/${name}.toml`),
@@ -47,7 +47,7 @@ jest.mock('../../src/agent/custom/custom-agent-loader.js', () => {
           a.triggers?.some(t => lower.includes(t.toLowerCase()))
         );
       }),
-    })),
+    }; }),
   };
 });
 

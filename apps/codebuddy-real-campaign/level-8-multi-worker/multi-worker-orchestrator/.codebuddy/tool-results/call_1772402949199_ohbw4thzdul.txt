@@ -1,0 +1,154 @@
+Updated server.js with 150 additions
+--- a/server.js
++++ b/server.js
+@@ -1,0 +1,150 @@
++
++const express = require('express');
++const http = require('http');
++const WebSocket = require('ws');
++const fs = require('fs');
++const path = require('path');
++
++const app = express();
++const server = http.createServer(app);
++const wss = new WebSocket.Server({ server });
++
++const JOBS_FILE = path.join(__dirname, 'jobs.json');
++let jobs = {};
++
++// Load jobs from file
++const loadJobs = () => {
++    if (fs.existsSync(JOBS_FILE)) {
++        jobs = JSON.parse(fs.readFileSync(JOBS_FILE));
++    } else {
++        jobs = {};
++    }
++};
++
++// Save jobs to file
++const saveJobs = () => {
++    fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
++};
++
++// Initialize jobs
++loadJobs();
++
++app.use(express.json());
++
++// Health endpoint
++app.get('/health', (req, res) => {
++    res.status(200).send('OK');
++});
++
++// POST /api/jobs - Enqueue a new job
++app.post('/api/jobs', (req, res) => {
++    const { type, payload } = req.body;
++    if (!type) {
++        return res.status(400).send('Job type is required.');
++    }
++
++    const jobId = `job-${Date.now()}`;
++    jobs[jobId] = {
++        id: jobId,
++        type,
++        payload,
++        status: 'queued',
++        retries: 0,
++        createdAt: new Date().toISOString()
++    };
++    saveJobs();
++    wss.clients.forEach(client => {
++        if (client.readyState === WebSocket.OPEN) {
++            client.send(JSON.stringify({ event: 'job_queued', job: jobs[jobId] }));
++        }
++    });
++    res.status(201).json(jobs[jobId]);
++});
++
++// GET /api/jobs/:id - Get job status
++app.get('/api/jobs/:id', (req, res) => {
++    const { id } = req.params;
++    const job = jobs[id];
++    if (job) {
++        res.status(200).json(job);
++    } else {
++        res.status(404).send('Job not found.');
++    }
++});
++
++// WebSocket connection handling
++wss.on('connection', ws => {
++    console.log('Client connected');
++    ws.on('close', () => console.log('Client disconnected'));
++    // Send current jobs state to new client
++    ws.send(JSON.stringify({ event: 'initial_jobs', jobs: Object.values(jobs) }));
++});
++
++// Job processing (simplified for now, will be moved to workers)
++const processJob = (jobId) => {
++    const job = jobs[jobId];
++    if (!job) return;
++
++    job.status = 'running';
++    saveJobs();
++    wss.clients.forEach(client => {
++        if (client.readyState === WebSocket.OPEN) {
++            client.send(JSON.stringify({ event: 'job_running', job }));
++        }
++    });
++
++    setTimeout(() => {
++        // Simulate success or failure
++        const success = Math.random() > 0.3; // 70% success rate
++        if (success) {
++            job.status = 'done';
++            job.completedAt = new Date().toISOString();
++            saveJobs();
++            wss.clients.forEach(client => {
++                if (client.readyState === WebSocket.OPEN) {
++                    client.send(JSON.stringify({ event: 'job_done', job }));
++                }
++            });
++        } else {
++            if (job.retries < 2) {
++                job.retries++;
++                job.status = 'retry';
++                saveJobs();
++                wss.clients.forEach(client => {
++                    if (client.readyState === WebSocket.OPEN) {
++                        client.send(JSON.stringify({ event: 'job_retry', job }));
++                    }
++                });
++                // Re-queue for retry
++                setTimeout(() => processJob(jobId), 1000); // Retry after 1 second
++            } else {
++                job.status = 'failed';
++                job.failedAt = new Date().toISOString();
++                saveJobs();
++                wss.clients.forEach(client => {
++                    if (client.readyState === WebSocket.OPEN) {
++                        client.send(JSON.stringify({ event: 'job_failed', job }));
++                    }
++                });
++            }
++        }
++    }, 2000); // Simulate work for 2 seconds
++};
++
++// Start processing queued jobs (simplified, will be handled by workers)
++setInterval(() => {
++    const queuedJobId = Object.keys(jobs).find(id => jobs[id].status === 'queued');
++    if (queuedJobId) {
++        processJob(queuedJobId);
++    }
++}, 500);
++
++const PORT = process.env.PORT || 0; // Use 0 to get an ephemeral port
++server.listen(PORT, () => {
++    const actualPort = server.address().port;
++    console.log(`Server listening on port ${actualPort}`);
++    console.log(`WebSocket server running on ws://localhost:${actualPort}`);
++});
++
++module.exports = { app, server, wss, jobs, loadJobs, saveJobs };
++

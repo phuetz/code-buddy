@@ -188,31 +188,53 @@ describe('SandboxedTerminal', () => {
   });
 
   describe('events', () => {
-    it('should emit exec:start event', (done) => {
-      terminal.on('exec:start', (data) => {
-        expect(data.command).toBeDefined();
-        done();
+    it('should emit exec:start event', async () => {
+      const startEvent = new Promise<void>((resolve, reject) => {
+        terminal.once('exec:start', (data) => {
+          try {
+            expect(data.command).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      terminal.execute('echo "test"');
+      const execution = terminal.execute('echo "test"');
+
+      await Promise.all([startEvent, execution]);
     });
 
-    it('should emit exec:complete event', (done) => {
-      terminal.on('exec:complete', (data) => {
-        expect(data.result).toBeDefined();
-        done();
+    it('should emit exec:complete event', async () => {
+      const completeEvent = new Promise<void>((resolve, reject) => {
+        terminal.once('exec:complete', (data) => {
+          try {
+            expect(data.result).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      terminal.execute('echo "test"');
+      const execution = terminal.execute('echo "test"');
+
+      await Promise.all([completeEvent, execution]);
     });
 
-    it('should emit session:created event', (done) => {
-      terminal.on('session:created', (data) => {
-        expect(data.sessionId).toBeDefined();
-        done();
-      });
+    it('should emit session:created event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        terminal.once('session:created', (data) => {
+          try {
+            expect(data.sessionId).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
 
-      terminal.createSession();
+        terminal.createSession();
+      });
     });
   });
 

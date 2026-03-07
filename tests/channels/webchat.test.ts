@@ -2,14 +2,20 @@
  * WebChat Channel Adapter Tests
  */
 
-import { EventEmitter } from 'events';
-import type { IncomingMessage, ServerResponse } from 'http';
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
 // Mock logger
+
+import { EventEmitter } from 'events';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { WebChatChannel } from '../../src/channels/webchat/index.js';
+import type { WebChatConfig } from '../../src/channels/webchat/index.js';
+import type { OutboundMessage } from '../../src/channels/index.js';
+import http from 'http';
+
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     debug: jest.fn(),
@@ -21,18 +27,18 @@ jest.mock('../../src/utils/logger.js', () => ({
 
 // Mock dm-pairing (imported dynamically inside handleWsMessage)
 jest.mock('../../src/channels/dm-pairing.js', () => ({
-  getDMPairing: jest.fn(() => ({
+  getDMPairing: jest.fn(function() { return {
     requiresPairing: jest.fn(() => false),
     checkSender: jest.fn(async () => ({ approved: true })),
     getPairingMessage: jest.fn(() => ''),
-  })),
+  }; }),
 }));
 
 // Mock session-isolation (used by getSessionKey via index.js)
 jest.mock('../../src/channels/session-isolation.js', () => ({
-  getSessionIsolator: jest.fn(() => ({
+  getSessionIsolator: jest.fn(function() { return {
     getSessionKey: jest.fn(() => 'mock-session-key'),
-  })),
+  }; }),
   resetSessionIsolator: jest.fn(),
   DEFAULT_SESSION_ISOLATION_CONFIG: {},
   SessionIsolator: jest.fn(),
@@ -40,29 +46,29 @@ jest.mock('../../src/channels/session-isolation.js', () => ({
 
 // Mock identity-links
 jest.mock('../../src/channels/identity-links.js', () => ({
-  getIdentityLinker: jest.fn(() => ({
+  getIdentityLinker: jest.fn(function() { return {
     resolve: jest.fn(() => null),
-  })),
+  }; }),
   resetIdentityLinker: jest.fn(),
   IdentityLinker: jest.fn(),
 }));
 
 // Mock peer-routing
 jest.mock('../../src/channels/peer-routing.js', () => ({
-  getPeerRouter: jest.fn(() => ({
+  getPeerRouter: jest.fn(function() { return {
     resolve: jest.fn(() => null),
-    getAgentConfig: jest.fn(() => ({})),
-  })),
+    getAgentConfig: jest.fn(function() { return {}; }),
+  }; }),
   resetPeerRouter: jest.fn(),
   PeerRouter: jest.fn(),
 }));
 
 // Mock concurrency/lane-queue
 jest.mock('../../src/concurrency/lane-queue.js', () => ({
-  LaneQueue: jest.fn(() => ({
+  LaneQueue: jest.fn(function() { return {
     enqueue: jest.fn((_lane: string, fn: () => Promise<unknown>) => fn()),
     clear: jest.fn(),
-  })),
+  }; }),
 }));
 
 // --- ws mock ---
@@ -103,18 +109,14 @@ const mockServerInstance = Object.assign(new EventEmitter(), {
 jest.mock('http', () => ({
   __esModule: true,
   default: {
-    createServer: jest.fn(() => mockServerInstance),
+    createServer: jest.fn(function() { return mockServerInstance; }),
   },
-  createServer: jest.fn(() => mockServerInstance),
+  createServer: jest.fn(function() { return mockServerInstance; }),
 }));
 
 // ---------------------------------------------------------------------------
 // Import under test (after mocks)
 // ---------------------------------------------------------------------------
-import { WebChatChannel } from '../../src/channels/webchat/index.js';
-import type { WebChatConfig } from '../../src/channels/webchat/index.js';
-import type { OutboundMessage } from '../../src/channels/index.js';
-import http from 'http';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -352,7 +354,7 @@ describe('WebChatChannel', () => {
     });
 
     it('should reject when HTTP server emits error', async () => {
-      (mockServerInstance.listen as jest.Mock).mockImplementation(() => {
+      (mockServerInstance.listen as jest.Mock).mockImplementation(function() {
         // Simulate async error after the 'error' handler is registered
         process.nextTick(() => mockServerInstance.emit('error', new Error('EADDRINUSE')));
       });
@@ -521,7 +523,7 @@ describe('WebChatChannel', () => {
       await channel.connect();
 
       const ws = simulateConnection(channel);
-      ws.send.mockImplementation(() => {
+      ws.send.mockImplementation(function() {
         throw new Error('send failed');
       });
 

@@ -10,6 +10,8 @@
  */
 
 import * as delegate from '../../src/commands/delegate';
+import { exec } from 'child_process';
+import crypto from 'crypto';
 
 // Mock child_process
 jest.mock('child_process', () => ({
@@ -17,14 +19,17 @@ jest.mock('child_process', () => ({
 }));
 
 // Mock crypto
-jest.mock('crypto', () => ({
+jest.mock('crypto', () => {
+  const impl = {
   randomBytes: jest.fn().mockReturnValue({
     toString: jest.fn().mockReturnValue('abc123'),
   }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
-const { exec } = require('child_process');
-const crypto = require('crypto');
+// const { exec } = require('child_process'); -- replaced by import
+// const crypto = require('crypto'); -- replaced by import
 
 // Helper to create mock exec implementation
 function mockExec(responses: Record<string, { stdout?: string; stderr?: string; error?: Error }>) {

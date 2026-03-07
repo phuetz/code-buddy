@@ -1,0 +1,5 @@
+Updated test.txt with 1 addition
+--- a/test.txt
++++ b/test.txt
+@@ -1,0 +1,1 @@
++SUCCESS_BASH_TEST

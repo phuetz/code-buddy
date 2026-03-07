@@ -10,6 +10,8 @@
  * - create_skill
  * - skill_discover
  * - device_manage
+ * - spawn_parallel_agents
+ * - remember / recall / forget
  * - lessons_add / lessons_search / lessons_list
  * - task_verify
  */
@@ -267,6 +269,104 @@ export const DEVICE_MANAGE_TOOL: CodeBuddyTool = {
   },
 };
 
+export const SPAWN_PARALLEL_AGENTS_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'spawn_parallel_agents',
+    description: 'Execute multiple sub-tasks concurrently using parallel sub-agents. Best for independent tasks.',
+    parameters: {
+      type: 'object',
+      properties: {
+        tasks: {
+          type: 'array',
+          description: 'List of tasks to execute in parallel',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'Unique identifier for this task' },
+              type: {
+                type: 'string',
+                enum: ['code-reviewer', 'debugger', 'test-runner', 'explorer', 'refactorer', 'documenter'],
+                description: 'Type of specialized agent to use',
+              },
+              task: { type: 'string', description: 'The specific instructions for this sub-agent' },
+              context: { type: 'string', description: 'Additional context for this specific task' },
+            },
+            required: ['task'],
+          },
+        },
+      },
+      required: ['tasks'],
+    },
+  },
+};
+
+export const REMEMBER_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'remember',
+    description: 'Store important information, decisions, or preferences in persistent memory.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Short unique key for this memory' },
+        value: { type: 'string', description: 'The information to be remembered' },
+        scope: {
+          type: 'string',
+          enum: ['project', 'user'],
+          description: 'Scope for this memory (default: project)',
+        },
+        category: {
+          type: 'string',
+          enum: ['project', 'preferences', 'decisions', 'patterns', 'custom'],
+          description: 'Type of information being stored',
+        },
+      },
+      required: ['key', 'value'],
+    },
+  },
+};
+
+export const RECALL_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'recall',
+    description: 'Retrieve a specific memory entry by its key.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Memory key to retrieve' },
+        scope: {
+          type: 'string',
+          enum: ['project', 'user'],
+          description: 'Optional scope filter',
+        },
+      },
+      required: ['key'],
+    },
+  },
+};
+
+export const FORGET_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'forget',
+    description: 'Remove a memory entry that is no longer valid.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Memory key to remove' },
+        scope: {
+          type: 'string',
+          enum: ['project', 'user'],
+          description: 'Scope to remove from (default: project)',
+        },
+      },
+      required: ['key'],
+    },
+  },
+};
+
 // ============================================================================
 // Lessons & Verification Tools
 // ============================================================================
@@ -389,6 +489,10 @@ export const AGENT_TOOLS: CodeBuddyTool[] = [
   CREATE_SKILL_TOOL,
   SKILL_DISCOVER_TOOL,
   DEVICE_MANAGE_TOOL,
+  SPAWN_PARALLEL_AGENTS_TOOL,
+  REMEMBER_TOOL,
+  RECALL_TOOL,
+  FORGET_TOOL,
   LESSONS_ADD_TOOL,
   LESSONS_SEARCH_TOOL,
   LESSONS_LIST_TOOL,

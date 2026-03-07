@@ -15,19 +15,25 @@ import path from 'path';
 import os from 'os';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn().mockReturnValue(true),
   mkdirSync: jest.fn(),
   readdirSync: jest.fn().mockReturnValue([]),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   unlinkSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock os module
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   homedir: jest.fn().mockReturnValue('/mock/home'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import {
   WorkflowEngine,

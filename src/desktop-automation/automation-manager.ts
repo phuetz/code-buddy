@@ -718,10 +718,48 @@ export class DesktopAutomationManager extends EventEmitter {
 
   async findWindow(titleOrProcess: string | RegExp): Promise<WindowInfo | null> {
     const windows = await this.getWindows({
-      title: titleOrProcess,
       includeHidden: false,
     });
-    return windows[0] || null;
+
+    const found = windows.find(w => this.matchesWindowInfo(w, titleOrProcess));
+    return found || null;
+  }
+
+  /**
+   * Wait for a window matching title to appear, up to timeoutMs.
+   */
+  async waitForWindow(
+    titleOrProcess: string | RegExp,
+    timeoutMs = 10000,
+    pollIntervalMs = 250
+  ): Promise<WindowInfo | null> {
+    const timeout = Math.max(0, timeoutMs);
+    const poll = Math.max(10, pollIntervalMs);
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt <= timeout) {
+      const win = await this.findWindow(titleOrProcess);
+      if (win) {
+        return win;
+      }
+      await new Promise(resolve => setTimeout(resolve, poll));
+    }
+
+    return null;
+  }
+
+  private matchesWindowTitle(title: string, matcher: string | RegExp): boolean {
+    if (matcher instanceof RegExp) {
+      return matcher.test(title);
+    }
+    return title.toLowerCase().includes(matcher.toLowerCase());
+  }
+
+  private matchesWindowInfo(window: WindowInfo, matcher: string | RegExp): boolean {
+    return (
+      this.matchesWindowTitle(window.title, matcher) ||
+      this.matchesWindowTitle(window.processName, matcher)
+    );
   }
 
   async focusWindow(handle: string): Promise<void> {
@@ -899,6 +937,9 @@ export class DesktopAutomationManager extends EventEmitter {
    * Detect if running inside WSL2
    */
   private isWSL(): boolean {
+    if (process.platform !== 'linux') {
+      return false;
+    }
     try {
       const release = execSync('uname -r', { encoding: 'utf-8' });
       return /microsoft|wsl/i.test(release);

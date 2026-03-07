@@ -1,0 +1,16 @@
+file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/smoke-test.mjs:12
+        const fs = require('fs');
+                   ^
+
+ReferenceError: require is not defined
+    at file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/smoke-test.mjs:12:20
+    at new Promise (<anonymous>)
+    at startServer (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/smoke-test.mjs:11:12)
+    at main (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/smoke-test.mjs:138:11)
+    at file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/smoke-test.mjs:142:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:337:24)
+    at async loadESM (node:internal/process/esm_loader:34:7)
+    at async handleMainPromise (node:internal/modules/run_main:106:12)
+
+Node.js v18.20.8

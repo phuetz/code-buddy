@@ -1,0 +1,1 @@
+{"type":"test-results","summary":{"total":1,"passed":1,"failed":0,"skipped":0},"tests":[],"framework":"pytest"}

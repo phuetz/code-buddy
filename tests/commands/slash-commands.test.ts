@@ -9,6 +9,8 @@
  * - Template creation
  */
 
+import fs from 'fs';
+
 import {
   SlashCommandManager,
   getSlashCommandManager,
@@ -16,16 +18,19 @@ import {
 } from '../../src/commands/slash-commands';
 
 // Mock fs module with explicit typing
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readdirSync: jest.fn(),
   readFileSync: jest.fn(),
   mkdirSync: jest.fn(),
   writeFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
  
-const fs = require('fs');
+// const fs = require('fs'); -- replaced by import
 
 describe('SlashCommandManager', () => {
   let manager: SlashCommandManager;

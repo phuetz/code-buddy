@@ -2,10 +2,13 @@
  * Tests for Team Session Manager
  */
 
-import { TeamSessionManager, getTeamSessionManager, resetTeamSessionManager } from '../src/collaboration/team-session';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+
+import { TeamSessionManager, getTeamSessionManager, resetTeamSessionManager } from '../src/collaboration/team-session';
+
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   ensureDirSync: jest.fn(),
   existsSync: jest.fn().mockReturnValue(false),
@@ -17,16 +20,20 @@ jest.mock('fs-extra', () => ({
   readFile: jest.fn(),
   remove: jest.fn().mockResolvedValue(undefined),
   readdir: jest.fn().mockResolvedValue([]),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock ws
 jest.mock('ws', () => {
-  return jest.fn().mockImplementation(() => ({
-    on: jest.fn(),
-    send: jest.fn(),
-    close: jest.fn(),
-    readyState: 1,
-  }));
+  return {
+    default: jest.fn().mockImplementation(function() { return {
+      on: jest.fn(),
+      send: jest.fn(),
+      close: jest.fn(),
+      readyState: 1,
+    }; }),
+  };
 });
 
 describe('TeamSessionManager', () => {

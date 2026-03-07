@@ -1,0 +1,36 @@
+Updated package.json with 15 additions and 14 removals
+--- a/package.json
++++ b/package.json
+@@ -2,17 +2,18 @@
+   "name": "level-3-ai-chat",
+   "version": "1.0.0",
+   "main": "index.js",
+-  "scripts": {
+-    "start": "node server.js",
+-    "test": "echo \"Error: no test specified\" && exit 1"
+-  },
+-  "keywords": [],
+-  "author": "",
+-  "license": "ISC",
+-  "description": "",
+-  "dependencies": {
+-    "@google/generative-ai": "^0.24.1",
+-    "express": "^5.2.1"
+-  }
+-}
+-
++  "type": "module",
++  "scripts": {
++    "start": "node server.js",
++    "test": "echo \"Error: no test specified\" && exit 1"
++  },
++  "keywords": [],
++  "author": "",
++  "license": "ISC",
++  "description": "",
++  "dependencies": {
++    "@google/generative-ai": "^0.24.1",
++    "express": "^5.2.1"
++  }
++}
++

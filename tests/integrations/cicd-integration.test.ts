@@ -176,13 +176,20 @@ jobs:
     });
 
     describe("events", () => {
-      it("should emit workflows:detected event", (done) => {
+      it("should emit workflows:detected event", async () => {
         const mgr = new CICDManager(process.cwd(), { autoDetect: false });
-        mgr.on("workflows:detected", (workflows: WorkflowDefinition[]) => {
-          expect(Array.isArray(workflows)).toBe(true);
-          done();
+        await new Promise<void>((resolve, reject) => {
+          mgr.once("workflows:detected", (workflows: WorkflowDefinition[]) => {
+            try {
+              expect(Array.isArray(workflows)).toBe(true);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          mgr.detectWorkflows();
         });
-        mgr.detectWorkflows();
       });
     });
   });

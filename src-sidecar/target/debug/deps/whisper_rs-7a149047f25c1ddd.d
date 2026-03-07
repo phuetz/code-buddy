@@ -1,0 +1,15 @@
+D:\CascadeProjects\grok-cli\src-sidecar\target\debug\deps\whisper_rs-7a149047f25c1ddd.d: C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\lib.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\error.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\standalone.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\utilities.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_ctx.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_ctx_wrapper.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_grammar.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_params.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_state.rs
+
+D:\CascadeProjects\grok-cli\src-sidecar\target\debug\deps\libwhisper_rs-7a149047f25c1ddd.rmeta: C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\lib.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\error.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\standalone.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\utilities.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_ctx.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_ctx_wrapper.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_grammar.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_params.rs C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_state.rs
+
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\lib.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\error.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\standalone.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\utilities.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_ctx.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_ctx_wrapper.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_grammar.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_params.rs:
+C:\Users\patri\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\whisper-rs-0.13.2\src\whisper_state.rs:
+
+# env-dep:WHISPER_CPP_VERSION=1.7.1

@@ -1,0 +1,9 @@
+Updated smoke-test.mjs with 1 addition and 1 removal
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -1,4 +1,4 @@
+-const fetch = require('node-fetch');
++import fetch from 'node-fetch';
+ const WebSocket = require('ws');
+ const assert = require('assert');
+ const { spawn } = require('child_process');

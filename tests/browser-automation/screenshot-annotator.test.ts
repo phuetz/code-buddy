@@ -12,6 +12,7 @@
  */
 
 import type { WebElement } from '../../src/browser-automation/types.js';
+import { vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks – declared before any import that touches the annotator
@@ -42,7 +43,7 @@ jest.mock('sharp', () => {
   };
 });
 
-jest.mock('../../src/utils/logger', () => ({
+jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     warn: jest.fn(),
     info: jest.fn(),
@@ -88,9 +89,12 @@ function makeElement(overrides: Partial<WebElement> = {}): WebElement {
  */
 async function loadAnnotatorWithoutSharp(): Promise<typeof annotateScreenshot> {
   sharpUnavailable = true;
-  jest.resetModules();
+  vi.resetModules();
+  vi.doMock('sharp', () => {
+    throw new Error('Cannot find module \'sharp\'');
+  });
   // Re-mock logger for the fresh module load
-  jest.mock('../../src/utils/logger', () => ({
+  vi.doMock('../../src/utils/logger.js', () => ({
     logger: {
       warn: jest.fn(),
       info: jest.fn(),
@@ -99,7 +103,7 @@ async function loadAnnotatorWithoutSharp(): Promise<typeof annotateScreenshot> {
     },
   }));
    
-  const mod = require('../../src/browser-automation/screenshot-annotator');
+  const mod = await import('../../src/browser-automation/screenshot-annotator.js');
   return mod.annotateScreenshot;
 }
 
@@ -184,8 +188,7 @@ describe('annotateScreenshot', () => {
     });
 
     it('should only annotate elements with a truthy boundingBox', async () => {
-      const noBBox = makeElement({ ref: 5 });
-      (noBBox as any).boundingBox = null;
+      const noBBox = { ...makeElement({ ref: 5 }), boundingBox: null } as unknown as WebElement;
 
       const withBBox = makeElement({ ref: 6 });
 
@@ -425,6 +428,10 @@ describe('annotateScreenshot', () => {
     afterEach(() => {
       // Restore sharp availability for subsequent tests
       sharpUnavailable = false;
+      vi.doMock('sharp', () => ({
+        __esModule: true,
+        default: mockSharpDefault,
+      }));
     });
   });
 });

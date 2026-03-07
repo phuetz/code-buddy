@@ -25,24 +25,27 @@ import {
 } from '../../src/utils/text-utils.js';
 
 // Mock React hooks
-jest.mock('react', () => ({
+jest.mock('react', () => {
+  const impl = {
   useState: jest.fn((init) => {
     const val = typeof init === 'function' ? init() : init;
     return [val, jest.fn()];
   }),
   useCallback: jest.fn((fn) => fn),
   useRef: jest.fn((init) => ({ current: init })),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock the input history hook
 jest.mock('../../src/hooks/use-input-history.js', () => ({
-  useInputHistory: jest.fn(() => ({
+  useInputHistory: jest.fn(function() { return {
     addToHistory: jest.fn(),
     navigateHistory: jest.fn(() => null),
     resetHistory: jest.fn(),
     setOriginalInput: jest.fn(),
     isNavigatingHistory: jest.fn(() => false),
-  })),
+  }; }),
 }));
 
 describe('useEnhancedInput', () => {

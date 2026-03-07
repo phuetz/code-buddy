@@ -1,7 +1,9 @@
+
+// Mock CodeBuddyClient
+
 import { ArchitectMode, createArchitectMode, ArchitectProposal } from '../src/agent/architect-mode.js';
 import { CodeBuddyClient } from '../src/codebuddy/client.js';
 
-// Mock CodeBuddyClient
 jest.mock('../src/codebuddy/client.js');
 
 describe('ArchitectMode', () => {
@@ -15,9 +17,9 @@ describe('ArchitectMode', () => {
     jest.clearAllMocks();
     
     // Setup mock client behavior
-    (CodeBuddyClient as unknown as jest.Mock).mockImplementation(() => ({
+    (CodeBuddyClient as unknown as jest.Mock).mockImplementation(function() { return {
       chat: mockChat
-    }));
+    }; });
 
     architectMode = createArchitectMode(mockApiKey);
   });

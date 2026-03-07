@@ -21,7 +21,7 @@ const mockOpenAIInstance = {
 jest.mock('openai', () => {
   return {
     __esModule: true,
-    default: jest.fn().mockImplementation(() => mockOpenAIInstance),
+    default: jest.fn().mockImplementation(function() { return mockOpenAIInstance; }),
   };
 });
 

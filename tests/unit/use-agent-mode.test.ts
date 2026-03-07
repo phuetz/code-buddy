@@ -9,7 +9,8 @@
  */
 
 // Mock React hooks
-jest.mock('react', () => ({
+jest.mock('react', () => {
+  const impl = {
   useState: jest.fn((init) => {
     const val = typeof init === 'function' ? init() : init;
     return [val, jest.fn()];
@@ -18,7 +19,9 @@ jest.mock('react', () => ({
   useRef: jest.fn((init) => ({ current: init })),
   useEffect: jest.fn(),
   useMemo: jest.fn((fn) => fn()),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('useAgentMode', () => {
   beforeEach(() => {

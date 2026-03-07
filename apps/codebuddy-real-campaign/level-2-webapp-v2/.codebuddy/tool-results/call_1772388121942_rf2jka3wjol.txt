@@ -1,0 +1,22 @@
+node:events:495
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1817:16)
+    at listenInCluster (node:net:1865:12)
+    at Server.listen (node:net:1953:7)
+    at Function.listen (/mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/node_modules/express/lib/application.js:635:24)
+    at file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-2-webapp-v2/server.mjs:71:5
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1844:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+
+Node.js v18.20.8
+Smoke test failed: Expected 201, got 404

@@ -13,11 +13,14 @@ import TeamModeManager, {
 
 // Mock crypto with incrementing IDs
 let mockIdCounter = 0;
-jest.mock('crypto', () => ({
-  randomBytes: jest.fn().mockImplementation(() => ({
+jest.mock('crypto', () => {
+  const impl = {
+  randomBytes: jest.fn().mockImplementation(function() { return {
     toString: jest.fn().mockImplementation(() => `mock${++mockIdCounter}`),
-  })),
-}));
+  }; }),
+};
+  return { ...impl, default: impl };
+});
 
 describe('TeamModeManager', () => {
   let manager: TeamModeManager;

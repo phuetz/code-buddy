@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { logger } from "./logger.js";
+import { normalizeBaseURL, DEFAULT_BASE_URL } from "./base-url.js";
 import {
   getZodConfigValidator,
   UserSettingsSchema as _UserSettingsSchema,
@@ -53,7 +54,7 @@ export interface ProjectSettings {
  * Default values for user settings
  */
 const DEFAULT_USER_SETTINGS: Partial<UserSettings> = {
-  baseURL: "https://api.x.ai/v1",
+  baseURL: DEFAULT_BASE_URL,
   defaultModel: "grok-code-fast-1",
   models: [
     "grok-code-fast-1",
@@ -234,12 +235,7 @@ export class SettingsManager {
       }
     }
     if (key === 'baseURL' && value !== undefined && value !== null) {
-      if (typeof value !== 'string') {
-        throw new Error('Base URL must be a string. Got: ' + (typeof value));
-      }
-      if ((value as string).trim().length > 0 && !(value as string).match(/^https?:\/\//i)) {
-        throw new Error('Base URL must start with http:// or https://');
-      }
+      value = normalizeBaseURL(value as string) as UserSettings[K];
     }
     if ((key === 'defaultModel' || key === 'model') && value !== undefined && value !== null) {
       if (typeof value !== 'string') {
@@ -391,13 +387,27 @@ export class SettingsManager {
   /**
    * Get the current model with proper fallback logic:
    * 1. Project-specific model setting
-   * 2. User's default model
-   * 3. System default
+   * 2. User's explicit model override
+   * 3. User's default model
+   * 4. System default
    */
   public getCurrentModel(): string {
-    const projectModel = this.getProjectSetting("model");
-    if (projectModel) {
-      return projectModel;
+    // Prefer explicit project model only when it meaningfully overrides user settings.
+    // Older defaults can pin new workspaces to Grok unintentionally.
+    if (fs.existsSync(this.projectSettingsPath)) {
+      const projectModel = this.getProjectSetting("model");
+      if (projectModel) {
+        const userModel = this.getUserSetting("model");
+        const isDefaultProjectModel = projectModel === DEFAULT_PROJECT_SETTINGS.model;
+        if (!isDefaultProjectModel || !userModel) {
+          return projectModel;
+        }
+      }
+    }
+
+    const userModel = this.getUserSetting("model");
+    if (userModel) {
+      return userModel;
     }
 
     const userDefaultModel = this.getUserSetting("defaultModel");
@@ -456,14 +466,28 @@ export class SettingsManager {
     // First check environment variable
     const envBaseURL = process.env.GROK_BASE_URL;
     if (envBaseURL) {
-      return envBaseURL;
+      try {
+        return normalizeBaseURL(envBaseURL);
+      } catch (error) {
+        logger.warn('Ignoring invalid GROK_BASE_URL, falling back to settings/default', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     // Then check user settings
     const userBaseURL = this.getUserSetting("baseURL");
-    return (
-      userBaseURL || DEFAULT_USER_SETTINGS.baseURL || "https://api.x.ai/v1"
-    );
+    if (userBaseURL) {
+      try {
+        return normalizeBaseURL(userBaseURL);
+      } catch (error) {
+        logger.warn('Ignoring invalid baseURL in user settings, falling back to default', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return DEFAULT_USER_SETTINGS.baseURL || DEFAULT_BASE_URL;
   }
 
   // ============================================================================

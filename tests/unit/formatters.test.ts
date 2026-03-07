@@ -66,10 +66,13 @@ jest.mock('child_process', () => ({
 }));
 
 // Mock fs-extra for formatFile tests
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   readFile: jest.fn(),
   writeFile: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('Code Formatter', () => {
   describe('detectLanguage', () => {

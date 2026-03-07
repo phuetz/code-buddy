@@ -4,7 +4,7 @@
  * Type definitions for Telegram bot integration.
  */
 
-import type { ChannelConfig } from '../index.js';
+import type { ChannelConfig } from '../core.js';
 
 /**
  * Telegram-specific configuration

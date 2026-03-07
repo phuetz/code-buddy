@@ -1,0 +1,2 @@
+Lines 50-50 of test.js:
+50: assert.strictEqual(consoleOutput[0], 'Task added: "Buy groceries" ', 'Test 1 Failed: Incorrect console output.');

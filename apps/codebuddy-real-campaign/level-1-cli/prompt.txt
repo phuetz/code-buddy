@@ -1,0 +1,12 @@
+Tu développes une application CLI dans ce dossier vide.
+Construis une CLI 'task-tracker' en Node.js sans dépendance externe.
+Fonctionnalités: add/list/done/remove, stockage JSON local, filtre --status.
+Ajoute des tests unitaires natifs (node:test) et une commande npm test.
+Contraintes:
+- Code production minimal mais propre.
+- Travaille directement dans le dossier courant (ne crée pas de sous-dossier principal).
+- Crée un README clair.
+- Crée un smoke-test.mjs qui retourne code 0 si tout fonctionne.
+- Lance les commandes nécessaires pour valider le fonctionnement réel.
+- Si une commande échoue, corrige et relance.
+- Réponds avec un résumé final bref.

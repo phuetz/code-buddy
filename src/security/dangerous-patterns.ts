@@ -182,8 +182,8 @@ export const DANGEROUS_CODE_PATTERNS: DangerousPattern[] = [
   { pattern: /\bWebSocket\b/, severity: 'medium', description: 'WebSocket usage', name: 'websocket', category: 'network_exfiltration', appliesTo: ['skill'] },
 
   // --- Dynamic imports ---
-  { pattern: /\brequire\s*\(\s*[a-zA-Z_$\[]/, severity: 'high', description: 'Dynamic require with variable', name: 'dynamic-require', category: 'dynamic_import', appliesTo: ['skill', 'code'] },
-  { pattern: /\bimport\s*\(\s*[a-zA-Z_$\[]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import', category: 'dynamic_import', appliesTo: ['skill', 'code'] },
+  { pattern: /\brequire\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic require with variable', name: 'dynamic-require', category: 'dynamic_import', appliesTo: ['skill', 'code'] },
+  { pattern: /\bimport\s*\(\s*[a-zA-Z_$[]/, severity: 'high', description: 'Dynamic import with variable', name: 'dynamic-import', category: 'dynamic_import', appliesTo: ['skill', 'code'] },
 
   // --- Environment/secrets ---
   { pattern: /process\.env\[/, severity: 'low', description: 'Dynamic environment variable access', name: 'env-dynamic', category: 'secret_exposure', appliesTo: ['skill'] },

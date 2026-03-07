@@ -92,12 +92,28 @@ export {
   resetMiscInstances,
 } from './misc-tools.js';
 
+// Tool Adapters - Playwright Browser (browser_launch, browser_navigate, browser_action)
+export {
+  BrowserLaunchTool,
+  BrowserNavigateTool,
+  BrowserActionTool,
+  createBrowserTools,
+  resetBrowserInstance,
+} from './browser-tools.js';
+
 // Tool Adapters - Process
 export {
   ProcessOperationTool,
   createProcessTools,
   resetProcessInstance,
 } from './process-tools.js';
+
+// Tool Adapters - Vision (ocr_extract, image_analyze)
+export {
+  OcrExtractTool,
+  ImageAnalyzeTool,
+  createVisionTools,
+} from './vision-tools.js';
 
 // Tool Adapters - Script
 export {
@@ -117,6 +133,14 @@ export {
   CreateSkillExecuteTool,
   createKnowledgeTools,
 } from './knowledge-tools.js';
+
+// Tool Adapters - Persistent Memory (remember, recall, forget)
+export {
+  RememberTool,
+  RecallTool,
+  ForgetTool,
+  createMemoryTools,
+} from './memory-tools.js';
 
 // Tool Adapters - Attention (Todo + RestoreContext)
 export {
@@ -168,6 +192,12 @@ export {
   resetCanvasInstances,
 } from './canvas-tools.js';
 
+// Tool Adapters - Parallel (spawn_parallel_agents)
+export {
+  ParallelAgentTool,
+  createParallelTools,
+} from './parallel-tools.js';
+
 // Tool Prefix Naming Convention — Codex-inspired canonical aliases
 export {
   createAliasTools,
@@ -218,7 +248,9 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createKubernetesTools } = await import('./kubernetes-tools.js');
   const { createGitTools } = await import('./git-tools.js');
   const { createMiscTools } = await import('./misc-tools.js');
+  const { createBrowserTools } = await import('./browser-tools.js');
   const { createProcessTools } = await import('./process-tools.js');
+  const { createVisionTools } = await import('./vision-tools.js');
   const { createKnowledgeTools } = await import('./knowledge-tools.js');
   const { createScriptTools } = await import('./script-tools.js');
   const { createPlanTools } = await import('./plan-tools.js');
@@ -228,6 +260,8 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createMultimodalTools } = await import('./multimodal-tools.js');
   const { createAdvancedTools } = await import('./advanced-tools.js');
   const { createCanvasTools } = await import('./canvas-tools.js');
+  const { createMemoryTools } = await import('./memory-tools.js');
+  const { createParallelTools } = await import('./parallel-tools.js');
 
   const primaryTools: ITool[] = [
     ...createTextEditorTools(),
@@ -239,8 +273,12 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createKubernetesTools(),
     ...createGitTools(),
     ...createMiscTools(),
+    ...createBrowserTools(),
     ...createProcessTools(),
+    ...createVisionTools(),
     ...createKnowledgeTools(),
+    ...createMemoryTools(),
+    ...createParallelTools(),
     ...createScriptTools(),
     ...createPlanTools(),
     ...createAttentionTools(),

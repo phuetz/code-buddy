@@ -1,0 +1,2 @@
+Execution failed (Exit Code 127):
+/workspace/script_d95f36f1.sh: line 1: node: not found

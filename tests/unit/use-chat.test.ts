@@ -16,7 +16,8 @@ const mockSetIsStreaming = jest.fn();
 const mockSetTokenCount = jest.fn();
 const mockSetProcessingTime = jest.fn();
 
-jest.mock('react', () => ({
+jest.mock('react', () => {
+  const impl = {
   useState: jest.fn((init) => {
     const val = typeof init === 'function' ? init() : init;
     if (Array.isArray(init)) {
@@ -34,7 +35,9 @@ jest.mock('react', () => ({
   useRef: jest.fn((init) => ({ current: init })),
   useEffect: jest.fn(),
   useMemo: jest.fn((fn) => fn()),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('useChat', () => {
   beforeEach(() => {

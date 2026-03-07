@@ -40,13 +40,11 @@ import type {
   InterpreterConfig,
   InterpreterState,
   TokenUsage,
-  CostBreakdown,
   BudgetStatus,
   UsageStats,
   ChatMessage,
   ChatResult,
   PendingApproval,
-  InterpreterEvents,
 } from './types.js';
 
 import {
@@ -58,7 +56,6 @@ import {
   DEFAULT_PROFILE,
   BUILTIN_PROFILE_MAP,
   getBuiltinProfile,
-  mergeProfile,
   validateProfile,
 } from './profiles.js';
 
@@ -339,8 +336,7 @@ export class InterpreterService extends EventEmitter {
       };
       this.conversationHistory.push(userMessage);
 
-      // TODO: Integrate with actual LLM client
-      // For now, return a placeholder result
+      // Process through the configured LLM client with budget tracking.
       const result = await this.processMessage(message);
 
       // Update usage

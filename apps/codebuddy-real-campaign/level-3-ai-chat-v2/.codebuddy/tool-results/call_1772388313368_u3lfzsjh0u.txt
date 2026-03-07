@@ -1,0 +1,57 @@
+Contents of server.mjs:
+1: import 'dotenv/config';
+2: import express from 'express';
+3: import { GoogleGenerativeAI } from '@google/generative-ai';
+4: 
+5: const app = express();
+6: const port = 3337;
+7: 
+8: const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+9: 
+10: if (!API_KEY) {
+11:   console.error('API_KEY not found. Please set GOOGLE_API_KEY or GEMINI_API_KEY environment variable.');
+12:   process.exit(1);
+13: }
+14: 
+15: const genAI = new GoogleGenerativeAI(API_KEY);
+16: const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+17: 
+18: app.use(express.json());
+19: app.use(express.static('public'));
+20: 
+21: // Health check endpoint
+22: app.get('/health', (req, res) => {
+23:   res.status(200).send('OK');
+24: });
+25: 
+26: // Chat API endpoint
+27: app.post('/api/chat', async (req, res) => {
+28:   const { history, message } = req.body;
+29: 
+30:   if (!message || typeof message !== 'string' || message.trim().length === 0) {
+31:     return res.status(400).json({ error: 'Message is required and must be a non-empty string.' });
+32:   }
+33: 
+34:   if (message.length > 1000) {
+35:     return res.status(400).json({ error: 'Message exceeds maximum length of 1000 characters.' });
+36:   }
+37: 
+38:   try {
+39:     const chat = model.startChat({
+40:       history: history || [],
+41:     });
+42: 
+43:     const result = await chat.sendMessage(message);
+44:     const response = await result.response;
+45:     const text = response.text();
+46: 
+47:     res.json({ response: text });
+48:   } catch (error) {
+49:     console.error('Error in chat API:', error);
+50:     res.status(500).json({ error: 'An unexpected error occurred.' });
+51:   }
+52: });
+53: 
+54: app.listen(port, () => {
+55:   console.log(`Server listening on port ${port}`);
+56: });

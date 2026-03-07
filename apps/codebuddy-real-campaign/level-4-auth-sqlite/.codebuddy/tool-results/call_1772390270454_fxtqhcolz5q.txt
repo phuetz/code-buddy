@@ -1,0 +1,14 @@
+Updated server.mjs with 7 additions
+--- a/server.mjs
++++ b/server.mjs
+@@ -222,3 +222,10 @@
+   console.log(`Server running on http://localhost:${PORT}`);
+ });
+ 
++process.on('SIGINT', () => {
++  db.close();
++  console.log('Database connection closed. Exiting.');
++  process.exit(0);
++});
++
++

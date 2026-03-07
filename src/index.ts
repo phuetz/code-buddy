@@ -4,14 +4,21 @@ const STARTUP_TIME = Date.now();
 
 import { program } from "commander";
 import { readFileSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { globalAgent as httpGlobalAgent } from 'node:http';
+import { globalAgent as httpsGlobalAgent } from 'node:https';
 
 // Types for dynamically imported modules
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
 
-// Read version from package.json (using readFileSync + __dirname to avoid import.meta.url, which ts-jest doesn't support)
+import { fileURLToPath } from 'url';
+
+// Read version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+const launchCwd = process.cwd();
 
 // Import logger statically since it's used throughout the file synchronously
 import { logger } from "./utils/logger.js";
@@ -115,7 +122,15 @@ let envLoaded = false;
 async function ensureEnvLoaded(): Promise<void> {
   if (!envLoaded) {
     const dotenv = await lazyImport.dotenv();
-    dotenv.config();
+    // Always load .env from the launch directory first so `--directory`
+    // does not accidentally drop API keys from the caller workspace.
+    dotenv.config({ path: join(launchCwd, '.env') });
+
+    // If cwd changed after launch and has its own .env, load it too
+    // (without overriding already-populated environment variables).
+    if (process.cwd() !== launchCwd) {
+      dotenv.config();
+    }
     envLoaded = true;
   }
 }
@@ -162,7 +177,7 @@ process.on("uncaughtException", async (error) => {
   startupLogger.error("\nUnexpected error occurred:", error);
   if (crashFile) {
     startupLogger.error(`\nCrash context saved to: ${crashFile}`);
-    startupLogger.error("You can resume your session with: grok --resume");
+    startupLogger.error("You can resume your session with: buddy --resume");
   }
 
   // Use graceful shutdown with error exit code
@@ -187,7 +202,7 @@ process.on("unhandledRejection", async (reason, _promise) => {
   startupLogger.error("\nUnhandled promise rejection:", error);
   if (crashFile) {
     startupLogger.error(`\nCrash context saved to: ${crashFile}`);
-    startupLogger.error("You can resume your session with: grok --resume");
+    startupLogger.error("You can resume your session with: buddy --resume");
   }
 
   // Use graceful shutdown with error exit code
@@ -516,6 +531,146 @@ Respond with ONLY the commit message, no additional text.`;
   }
 }
 
+async function finalizeHeadlessRun(code: number): Promise<void> {
+  const flushStreamWithTimeout = async (
+    stream: NodeJS.WriteStream,
+    timeoutMs: number = 250
+  ): Promise<void> => {
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        try {
+          stream.write('', () => resolve());
+        } catch (_error) {
+          resolve();
+        }
+      }),
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, timeoutMs);
+        timer.unref();
+      }),
+    ]);
+  };
+
+  try {
+    const { disposeAll } = await import('./utils/disposable.js');
+    await disposeAll();
+  } catch (error) {
+    logger.debug('Headless cleanup skipped', { error: String(error) });
+  }
+
+  try {
+    const { getLogger } = await import('./utils/logger.js');
+    getLogger().close();
+  } catch (_error) {
+    // Ignore logger shutdown errors during process exit.
+  }
+
+  // Explicitly stop singleton file watchers that keep headless runs alive.
+  try {
+    const { resetSkillRegistry } = await import('./skills/registry.js');
+    resetSkillRegistry();
+  } catch (_error) {
+    // Ignore skill registry shutdown errors.
+  }
+  try {
+    const { resetIdentityManager } = await import('./identity/identity-manager.js');
+    resetIdentityManager();
+  } catch (_error) {
+    // Ignore identity manager shutdown errors.
+  }
+  try {
+    const { resetHotReloadManager } = await import('./config/hot-reload/index.js');
+    resetHotReloadManager();
+  } catch (_error) {
+    // Ignore hot reload shutdown errors.
+  }
+  try {
+    const { resetConfigWatcher } = await import('./config/hot-reload/watcher.js');
+    resetConfigWatcher();
+  } catch (_error) {
+    // Ignore config watcher shutdown errors.
+  }
+  try {
+    const { resetSettingsHierarchy } = await import('./config/settings-hierarchy.js');
+    resetSettingsHierarchy();
+  } catch (_error) {
+    // Ignore settings hierarchy shutdown errors.
+  }
+
+  // Best-effort close of global HTTP agents to reduce socket-close races on Windows.
+  try {
+    httpGlobalAgent.destroy();
+    httpsGlobalAgent.destroy();
+  } catch (_error) {
+    // Ignore HTTP agent shutdown errors.
+  }
+
+  // Flush stdout/stderr before forcing exit.
+  // In some piped/embedded contexts, write callbacks can stall indefinitely.
+  await flushStreamWithTimeout(process.stdout);
+  await flushStreamWithTimeout(process.stderr);
+
+  if (!process.stdin.destroyed) {
+    process.stdin.pause();
+  }
+
+  const handles = ((process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.() || []);
+  for (const handle of handles) {
+    if (handle === process.stdout || handle === process.stderr || handle === process.stdin) {
+      continue;
+    }
+    try {
+      const h = handle as {
+        constructor?: { name?: string };
+        unref?: () => void;
+        close?: () => void;
+      };
+      h.unref?.();
+      if (h.constructor?.name === 'FSWatcher') {
+        h.close?.();
+      }
+    } catch (_error) {
+      // Ignore per-handle unref failures.
+    }
+  }
+
+  if (process.env.CODEBUDDY_DEBUG_HANDLES === '1') {
+    const activeHandles = ((process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.() || [])
+      .map((h) => {
+        const handle = h as {
+          constructor?: { name?: string };
+          unref?: () => void;
+          close?: () => void;
+          _path?: string;
+          path?: string;
+          _filename?: string;
+          filename?: string;
+        };
+        return {
+          type: handle.constructor?.name || 'Unknown',
+          hasUnref: typeof handle.unref === 'function',
+          hasClose: typeof handle.close === 'function',
+          path: handle._path || handle.path || handle._filename || handle.filename,
+        };
+      });
+    const activeRequests = ((process as unknown as { _getActiveRequests?: () => unknown[] })._getActiveRequests?.() || [])
+      .map((r) => (r as { constructor?: { name?: string } })?.constructor?.name || 'Unknown');
+    logger.debug('Active handles before headless return', {
+      count: activeHandles.length,
+      handles: activeHandles,
+      activeRequestsCount: activeRequests.length,
+      activeRequests,
+    });
+  }
+
+  process.exitCode = code;
+  const fallbackExitTimer = setTimeout(() => {
+    process.exit(code);
+  }, 1500);
+  fallbackExitTimer.unref();
+  return;
+}
+
 // Headless mode processing function
 async function processPromptHeadless(
   prompt: string,
@@ -527,6 +682,9 @@ async function processPromptHeadless(
   outputFormat: string = 'json',
   outputSchemaPath?: string
 ): Promise<void> {
+  const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
+  process.env.CODEBUDDY_DISABLE_MCP = 'true';
+
   try {
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
     const agent = new CodeBuddyAgent(apiKey, baseURL, model, maxToolRounds);
@@ -616,17 +774,18 @@ async function processPromptHeadless(
     }
 
     // Validate output against JSON Schema if --output-schema was provided
-    if (outputSchemaPath) {
-      const { validateOutputSchema } = await import("./utils/output-schema-validator.js");
-      const validation = validateOutputSchema(messages, outputSchemaPath);
-      if (!validation.valid) {
-        console.error('Output schema validation failed:');
-        for (const error of validation.errors) {
-          console.error(`  - ${error}`);
+      if (outputSchemaPath) {
+        const { validateOutputSchema } = await import("./utils/output-schema-validator.js");
+        const validation = validateOutputSchema(messages, outputSchemaPath);
+        if (!validation.valid) {
+          console.error('Output schema validation failed:');
+          for (const error of validation.errors) {
+            console.error(`  - ${error}`);
+          }
+          await finalizeHeadlessRun(2);
+          return;
         }
-        process.exit(2);
       }
-    }
 
     // Extract final assistant response text
     const assistantMessages = messages.filter(
@@ -685,7 +844,14 @@ async function processPromptHeadless(
         })
       );
     }
-    process.exit(1);
+    await finalizeHeadlessRun(1);
+    return;
+  } finally {
+    if (previousDisableMCP === undefined) {
+      delete process.env.CODEBUDDY_DISABLE_MCP;
+    } else {
+      process.env.CODEBUDDY_DISABLE_MCP = previousDisableMCP;
+    }
   }
 }
 
@@ -1034,6 +1200,10 @@ program
       console.log(`   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}\n`);
     }
 
+    // Load environment before changing cwd so root .env values (API keys) remain available
+    // even when --directory points to a workspace without its own .env file.
+    await ensureEnvLoaded();
+
     if (options.directory) {
       try {
         process.chdir(options.directory);
@@ -1056,6 +1226,14 @@ program
 
     if (options.allowOutside) {
       console.error("Warning: Workspace isolation DISABLED - file access is unrestricted");
+    }
+
+    // Initialize observability (Sentry/OpenTelemetry)
+    try {
+      const { initObservability } = await import("./observability/index.js");
+      initObservability();
+    } catch (err) {
+      logger.debug('Observability init skipped', { error: String(err) });
     }
 
     try {
@@ -1166,9 +1344,15 @@ program
         console.error("Vim mode: ENABLED");
       }
 
+      // Merge --print alias into --prompt
+      const promptArg = options.prompt || options.print;
+      const hasExplicitPrompt = Boolean(promptArg || (Array.isArray(message) && message.length > 0));
+
       // Check for piped input (like mistral-vibe: cat file.txt | grok)
+      // Avoid blocking on stdin when an explicit prompt is already provided
+      // (common in programmatic exec/spawn usage where stdin stays open).
       let pipedInput = '';
-      if (!process.stdin.isTTY) {
+      if (!process.stdin.isTTY && !hasExplicitPrompt) {
         // Reading from stdin (pipe or redirect)
         const chunks: Buffer[] = [];
         for await (const chunk of process.stdin) {
@@ -1176,9 +1360,6 @@ program
         }
         pipedInput = Buffer.concat(chunks).toString('utf-8').trim();
       }
-
-      // Merge --print alias into --prompt
-      const promptArg = options.prompt || options.print;
 
       // Combine piped input with any CLI prompt or message args
       const combinedPrompt = [
@@ -1199,7 +1380,8 @@ program
           options.output || options.outputFormat || 'json',
           options.outputSchema
         );
-        process.exit(0);
+        await finalizeHeadlessRun(0);
+        return;
       }
 
       // Initialize rendering system (lazy load)
@@ -1462,6 +1644,10 @@ gitCommand
     "400"
   )
   .action(async (options) => {
+    // Load environment before changing cwd so root .env values (API keys) remain available
+    // even when --directory points to a workspace without its own .env file.
+    await ensureEnvLoaded();
+
     if (options.directory) {
       try {
         process.chdir(options.directory);
@@ -1830,5 +2016,40 @@ addLazyCommand(
     return createLessonsCommand();
   },
 );
+
+// Update — channel-based update management (stable/beta/dev)
+addLazyCommand(
+  program,
+  'update',
+  'Update Code Buddy (switch channels: stable, beta, dev)',
+  async () => {
+    const { createUpdateCommand } = await import('./commands/update.js');
+    return createUpdateCommand();
+  },
+);
+
+// Nodes — companion app node management (macOS, iOS, Android)
+addLazyCommandGroup(program, 'nodes', 'Manage companion app nodes (macOS, iOS, Android)', async () => {
+  const { registerNodeCommands } = await import('./commands/cli/node-commands.js');
+  registerNodeCommands(program);
+});
+
+// Secrets — encrypted vault for API keys and credentials
+addLazyCommandGroup(program, 'secrets', 'Manage API keys and credentials (encrypted vault)', async () => {
+  const { registerSecretsCommands } = await import('./commands/cli/secrets-command.js');
+  registerSecretsCommands(program);
+});
+
+// Approvals — manage tool/action approval requests
+addLazyCommandGroup(program, 'approvals', 'Manage tool/action approval requests', async () => {
+  const { registerApprovalsCommands } = await import('./commands/cli/approvals-command.js');
+  registerApprovalsCommands(program);
+});
+
+// Deploy — generate cloud deployment configurations
+addLazyCommandGroup(program, 'deploy', 'Generate cloud deployment configurations (Fly, Railway, Render, Nix)', async () => {
+  const { registerDeployCommands } = await import('./commands/cli/deploy-command.js');
+  registerDeployCommands(program);
+});
 
 program.parse();

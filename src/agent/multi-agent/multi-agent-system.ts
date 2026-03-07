@@ -63,6 +63,7 @@ export class MultiAgentSystem extends EventEmitter {
   private timeline: WorkflowEvent[] = [];
   private tools: CodeBuddyTool[] = [];
   private toolExecutor: ToolExecutor;
+  private defaultRegistryInitialized = false;
 
   constructor(
     apiKey: string,
@@ -135,14 +136,57 @@ export class MultiAgentSystem extends EventEmitter {
   }
 
   /**
-   * Default tool executor (placeholder - should be replaced with actual implementation)
+   * Default tool executor backed by the formal tool registry.
+   * This keeps the multi-agent system usable even when no external executor is injected.
    */
-  private async defaultToolExecutor(_toolCall: CodeBuddyToolCall): Promise<ToolResult> {
-    // This should be overridden by the actual tool executor
+  private async defaultToolExecutor(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
+    let args: Record<string, unknown>;
+
+    try {
+      args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+    } catch (error) {
+      return {
+        success: false,
+        error: `Invalid tool arguments for "${toolCall.function.name}": ${getErrorMessage(error)}`,
+      };
+    }
+
+    const registry = await this.getOrInitializeDefaultRegistry();
+    const result = await registry.execute(
+      toolCall.function.name,
+      args,
+      {
+        cwd: process.cwd(),
+        extra: {
+          source: "multi-agent-system",
+          toolCallId: toolCall.id,
+        },
+      }
+    );
+
     return {
-      success: false,
-      error: "Tool executor not configured. Please provide a tool executor function.",
+      success: result.success,
+      output: result.output,
+      error: result.error,
+      data: result.data,
     };
+  }
+
+  private async getOrInitializeDefaultRegistry(): Promise<import("../../tools/registry/index.js").FormalToolRegistry> {
+    const { getFormalToolRegistry, createAllToolsAsync } = await import("../../tools/registry/index.js");
+    const registry = getFormalToolRegistry();
+
+    if (!this.defaultRegistryInitialized) {
+      const tools = await createAllToolsAsync();
+      for (const tool of tools) {
+        if (!registry.has(tool.name)) {
+          registry.register(tool);
+        }
+      }
+      this.defaultRegistryInitialized = true;
+    }
+
+    return registry;
   }
 
   /**

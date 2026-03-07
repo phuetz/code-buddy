@@ -28,12 +28,15 @@ jest.mock('../../src/utils/logger', () => ({
 }));
 
 // Mock fs
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(() => true),
   mkdirSync: jest.fn(),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import {
   EmbeddingProvider,

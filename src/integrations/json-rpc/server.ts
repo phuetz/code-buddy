@@ -242,7 +242,7 @@ export class JsonRpcServer {
         ai: true,
         tools: true,
         fcs: true,
-        streaming: false, // Not yet implemented
+        streaming: false,
       },
     };
 

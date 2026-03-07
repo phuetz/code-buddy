@@ -1,0 +1,12 @@
+Updated smoke-test.mjs with 1 addition and 1 removal
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -9,7 +9,7 @@
+ 
+ async function startServer() {
+     return new Promise((resolve, reject) => {
+-        const fs = require('fs');
++        import fs from 'fs';
+ const serverOut = fs.openSync('server.out', 'w');
+ const serverErr = fs.openSync('server.err', 'w');
+ serverProcess = spawn('node', ['server.mjs'], { stdio: ['ignore', serverOut, serverErr] });

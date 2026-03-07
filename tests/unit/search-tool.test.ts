@@ -11,9 +11,13 @@
  * - Error handling
  */
 
-import { EventEmitter } from 'events';
 
 // Mock @vscode/ripgrep
+
+import { EventEmitter } from 'events';
+import { vi } from 'vitest';
+import { SearchTool } from '../../src/tools/search.js';
+
 jest.mock('@vscode/ripgrep', () => ({
   rgPath: '/mock/path/to/rg',
 }));
@@ -25,41 +29,57 @@ jest.mock('child_process', () => ({
   ChildProcess: class {},
 }));
 
-// Mock fs-extra
-const mockReaddir = jest.fn();
-const mockFsExtra = {
-  readdir: mockReaddir,
-  pathExists: jest.fn(() => Promise.resolve(true)),
-  stat: jest.fn(() => Promise.resolve({ isDirectory: () => false })),
-};
-jest.mock('fs-extra', () => mockFsExtra);
+// Mock virtual filesystem router used by SearchTool
+const { mockReaddir, mockVfs, mockEnhancedSearch } = vi.hoisted(() => {
+  const mockReaddir = vi.fn();
+  const mockVfs = {
+    readDirectory: vi.fn(async (...args: unknown[]) => {
+      const entries = await mockReaddir(...args);
+      return (entries ?? []).map((entry: Record<string, unknown>) => ({
+        ...entry,
+        isFile: typeof entry.isFile === 'function' ? Boolean(entry.isFile()) : Boolean(entry.isFile),
+        isDirectory:
+          typeof entry.isDirectory === 'function'
+            ? Boolean(entry.isDirectory())
+            : Boolean(entry.isDirectory),
+      }));
+    }),
+  };
+  const mockEnhancedSearch = {
+    findSymbols: vi.fn(),
+    findReferences: vi.fn(),
+    findDefinition: vi.fn(),
+    searchMultiple: vi.fn(),
+    getCacheStats: vi.fn(function() { return { searchCache: 0, symbolCache: 0 }; }),
+    clearCache: vi.fn(),
+  };
+
+  return { mockReaddir, mockVfs, mockEnhancedSearch };
+});
+
+jest.mock('../../src/services/vfs/unified-vfs-router.js', () => ({
+  UnifiedVfsRouter: {
+    Instance: mockVfs,
+  },
+}));
 
 // Mock ConfirmationService
 jest.mock('../../src/utils/confirmation-service', () => ({
   ConfirmationService: {
-    getInstance: jest.fn(() => ({
-      getSessionFlags: jest.fn(() => ({ allOperations: false })),
+    getInstance: jest.fn(function() { return {
+      getSessionFlags: jest.fn(function() { return { allOperations: false }; }),
       requestConfirmation: jest.fn(() => Promise.resolve({ confirmed: true })),
-    })),
+    }; }),
   },
 }));
 
 // Mock enhanced-search
-const mockEnhancedSearch = {
-  findSymbols: jest.fn(),
-  findReferences: jest.fn(),
-  findDefinition: jest.fn(),
-  searchMultiple: jest.fn(),
-  getCacheStats: jest.fn(() => ({ searchCache: 0, symbolCache: 0 })),
-  clearCache: jest.fn(),
-};
 jest.mock('../../src/tools/enhanced-search.js', () => ({
-  getEnhancedSearch: jest.fn(() => mockEnhancedSearch),
+  getEnhancedSearch: jest.fn(function() { return mockEnhancedSearch; }),
   SearchMatch: class {},
   SymbolMatch: class {},
 }));
 
-import { SearchTool } from '../../src/tools/search.js';
 
 // Helper to create mock child process
 function createMockProcess() {
@@ -689,7 +709,7 @@ describe('SearchTool', () => {
     it('should respect MAX_DEPTH limit', async () => {
       // Create deep directory structure
       let callCount = 0;
-      mockReaddir.mockImplementation(() => {
+      mockReaddir.mockImplementation(function() {
         callCount++;
         if (callCount > 15) {
           return Promise.resolve([]);
@@ -1211,7 +1231,7 @@ describe('SearchTool', () => {
   describe('error handling', () => {
     it('should handle unexpected errors in search', async () => {
       // Force an error by making spawn throw
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         throw new Error('Unexpected error');
       });
 
@@ -1222,7 +1242,7 @@ describe('SearchTool', () => {
     });
 
     it('should handle non-Error thrown objects', async () => {
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         throw 'string error';
       });
 

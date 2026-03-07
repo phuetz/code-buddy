@@ -15,20 +15,26 @@ const mockReadFile = jest.fn();
 const mockReaddir = jest.fn();
 const mockChmod = jest.fn();
 
-jest.mock('fs/promises', () => ({
+jest.mock('fs/promises', () => {
+  const impl = {
   mkdir: (...args: unknown[]) => mockMkdir(...args),
   writeFile: (...args: unknown[]) => mockWriteFile(...args),
   readFile: (...args: unknown[]) => mockReadFile(...args),
   readdir: (...args: unknown[]) => mockReaddir(...args),
   chmod: (...args: unknown[]) => mockChmod(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock fs sync functions
 const mockExistsSync = jest.fn();
 
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: (p: string) => mockExistsSync(p),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock child_process
 const mockSpawn = jest.fn();
@@ -236,7 +242,7 @@ describe('TemplateEngine', () => {
   describe('generate', () => {
     beforeEach(() => {
       // Setup mock spawn to resolve successfully
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = new EventEmitter() as NodeJS.EventEmitter & { on: jest.Mock };
         setTimeout(() => proc.emit('close', 0), 0);
         return proc;
@@ -449,7 +455,7 @@ describe('TemplateEngine', () => {
 
   describe('Variable Substitution', () => {
     beforeEach(() => {
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = new EventEmitter() as NodeJS.EventEmitter;
         setTimeout(() => proc.emit('close', 0), 0);
         return proc;
@@ -551,7 +557,7 @@ describe('TemplateEngine', () => {
 
   describe('Conditional Files', () => {
     beforeEach(() => {
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = new EventEmitter() as NodeJS.EventEmitter;
         setTimeout(() => proc.emit('close', 0), 0);
         return proc;
@@ -691,7 +697,7 @@ describe('TemplateEngine', () => {
 
   describe('Variable Validation', () => {
     beforeEach(() => {
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = new EventEmitter() as NodeJS.EventEmitter;
         setTimeout(() => proc.emit('close', 0), 0);
         return proc;
@@ -763,7 +769,7 @@ describe('TemplateEngine', () => {
 
   describe('Executable Files', () => {
     beforeEach(() => {
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = new EventEmitter() as NodeJS.EventEmitter;
         setTimeout(() => proc.emit('close', 0), 0);
         return proc;
@@ -848,7 +854,7 @@ describe('Factory Functions', () => {
       mockMkdir.mockResolvedValue(undefined);
       mockWriteFile.mockResolvedValue(undefined);
       mockChmod.mockResolvedValue(undefined);
-      mockSpawn.mockImplementation(() => {
+      mockSpawn.mockImplementation(function() {
         const proc = new EventEmitter() as NodeJS.EventEmitter;
         setTimeout(() => proc.emit('close', 0), 0);
         return proc;

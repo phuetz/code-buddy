@@ -8,6 +8,13 @@
  * - SearchTool: Search functionality (text search, file search, symbols)
  */
 
+
+// =============================================================================
+// Mock Dependencies
+// =============================================================================
+
+// Mock confirmation service - auto-approve all operations
+
 import { BashTool } from '../../src/tools/bash';
 import { TextEditorTool } from '../../src/tools/text-editor';
 import { GitTool, GitStatus } from '../../src/tools/git-tool';
@@ -16,36 +23,31 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import os from 'os';
 
-// =============================================================================
-// Mock Dependencies
-// =============================================================================
-
-// Mock confirmation service - auto-approve all operations
 jest.mock('../../src/utils/confirmation-service', () => ({
   ConfirmationService: {
-    getInstance: jest.fn(() => ({
-      getSessionFlags: jest.fn(() => ({
+    getInstance: jest.fn(function() { return {
+      getSessionFlags: jest.fn(function() { return {
         bashCommands: true,
         fileOperations: true,
         allOperations: false,
-      })),
+      }; }),
       requestConfirmation: jest.fn(() => Promise.resolve({ confirmed: true })),
-    })),
+    }; }),
   },
 }));
 
 // Mock sandbox manager
 jest.mock('../../src/security/sandbox', () => ({
-  getSandboxManager: jest.fn(() => ({
-    validateCommand: jest.fn(() => ({ valid: true })),
-  })),
+  getSandboxManager: jest.fn(function() { return {
+    validateCommand: jest.fn(function() { return { valid: true }; }),
+  }; }),
 }));
 
 // Mock self-healing engine
 jest.mock('../../src/utils/self-healing', () => ({
-  getSelfHealingEngine: jest.fn(() => ({
+  getSelfHealingEngine: jest.fn(function() { return {
     attemptHealing: jest.fn(() => Promise.resolve({ success: false, attempts: [] })),
-  })),
+  }; }),
   SelfHealingEngine: jest.fn(),
 }));
 
@@ -74,25 +76,25 @@ jest.mock('../../src/utils/fuzzy-match', () => ({
 
 // Mock enhanced search
 jest.mock('../../src/tools/enhanced-search', () => ({
-  getEnhancedSearch: jest.fn(() => ({
+  getEnhancedSearch: jest.fn(function() { return {
     findSymbols: jest.fn(() => Promise.resolve([])),
     findReferences: jest.fn(() => Promise.resolve([])),
     findDefinition: jest.fn(() => Promise.resolve(null)),
     searchMultiple: jest.fn(() => Promise.resolve(new Map())),
-    getCacheStats: jest.fn(() => ({ searchCache: 0, symbolCache: 0 })),
+    getCacheStats: jest.fn(function() { return { searchCache: 0, symbolCache: 0 }; }),
     clearCache: jest.fn(),
-  })),
+  }; }),
   SearchMatch: {},
   SymbolMatch: {},
 }));
 
 // Mock cache
 jest.mock('../../src/utils/cache', () => ({
-  Cache: jest.fn().mockImplementation(() => ({
+  Cache: jest.fn().mockImplementation(function() { return {
     get: jest.fn(() => null),
     set: jest.fn(),
     clear: jest.fn(),
-  })),
+  }; }),
   createCacheKey: jest.fn((...args: unknown[]) => args.join('-')),
 }));
 
@@ -112,8 +114,8 @@ jest.mock('../../src/utils/input-validator', () => ({
     findFiles: {},
     grep: {},
   },
-  validateWithSchema: jest.fn(() => ({ valid: true })),
-  validateCommand: jest.fn(() => ({ valid: true })),
+  validateWithSchema: jest.fn(function() { return { valid: true }; }),
+  validateCommand: jest.fn(function() { return { valid: true }; }),
   sanitizeForShell: jest.fn((str: string) => str),
 }));
 

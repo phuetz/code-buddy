@@ -1,0 +1,12 @@
+Updated public/index.html with 1 addition and 1 removal
+--- a/public/index.html
++++ b/public/index.html
+@@ -171,7 +171,7 @@
+                     <div class="actions">
+                         <button onclick="updateIncidentStatus('${incident.id}', 'resolved')">Mark Resolved</button>
+                         <button onclick="deleteIncident('${incident.id}')">Delete</button>
+-                        <button data-incident-id="${incident.id}" data-action="summarize" onclick="summarizeIncident('${incident.id}', '${incident.description.replace(/\'/g, "\\'").replace(/\"/g, "\\\"")}')">Summarize with AI</button>
++                        <button data-incident-id="${incident.id}" data-action="summarize" onclick="summarizeIncident('${incident.id}', decodeURIComponent('${encodeURIComponent(incident.description)}'))">Summarize with AI</button>
+                     </div>
+                     <div id="summary-${incident.id}" class="summary"></div>
+                 `;

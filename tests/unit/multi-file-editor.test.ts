@@ -7,7 +7,8 @@ import { MultiFileEditor } from '../../src/tools/advanced/multi-file-editor';
 import * as fs from 'fs-extra';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   pathExists: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
@@ -16,7 +17,9 @@ jest.mock('fs-extra', () => ({
   rename: jest.fn(),
   unlink: jest.fn(),
   remove: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('MultiFileEditor', () => {
   let editor: MultiFileEditor;

@@ -1,0 +1,504 @@
+Contents of src/agent/codebuddy-agent.ts (1163 lines):
+1: import { CodeBuddyClient, CodeBuddyToolCall } from "../codebuddy/client.js";
+2: import { ToolSelectionResult } from "../codebuddy/tools.js";
+3: import { ToolResult } from "../types/index.js";
+4: import { createTokenCounter } from "../utils/token-counter.js";
+5: import { loadCustomInstructions } from "../utils/custom-instructions.js";
+6: import { getSettingsManager } from "../utils/settings-manager.js";
+7: import { getChatOnlySystemPrompt } from "../prompts/index.js";
+8: import { getAutonomyManager } from "../utils/autonomy-manager.js";
+9: import { logger } from "../utils/logger.js";
+10: import { getRepoProfiler } from "./repo-profiler.js";
+11: import { getToolSelectionStrategy, ToolSelectionStrategy } from "./execution/tool-selection-strategy.js";
+12: import { PromptBuilder } from "../services/prompt-builder.js";
+13: import { StreamingHandler } from "./streaming/index.js";
+14: import { AgentExecutor, setDecisionContextProvider } from "./execution/agent-executor.js";
+15: import { ToolHandler } from "./tool-handler.js";
+16: import { BaseAgent } from "./base-agent.js";
+17: import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
+18: import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
+19: import type { SessionStore } from "../persistence/session-store.js";
+20: import type { CostTracker } from "../utils/cost-tracker.js";
+21: import { getLaneQueue } from "../concurrency/lane-queue.js";
+22: import type { RouteAgentConfig } from "../channels/peer-routing.js";
+23: import { findSkill } from "../skills/index.js";
+24: import { skillMdToUnified } from "../skills/adapters/index.js";
+25: import { MessageQueue, type MessageQueueMode } from "./message-queue.js";
+26: import { CostPredictor } from "../analytics/cost-predictor.js";
+27: import { BudgetAlertManager } from "../analytics/budget-alerts.js";
+28: import { initializeMemory, getMemoryManager } from "../memory/persistent-memory.js";
+29: 
+30: // Re-export types for backwards compatibility
+31: export type { ChatEntry, StreamingChunk } from "./types.js";
+32: import type { ChatEntry, StreamingChunk } from "./types.js";
+33: 
+34: /**
+35:  * Main agent class that orchestrates conversation with CodeBuddy AI and tool execution
+36:  *
+37:  * Usage:
+38:  * ```typescript
+39:  * const agent = new CodeBuddyAgent(apiKey);
+40:  * for await (const chunk of agent.processUserMessageStream("Hello")) {
+41:  *   console.log(chunk);
+42:  * }
+43:  *
+44:  * // Clean up when done
+45:  * agent.dispose();
+46:  * ```
+47:  */
+48: export class CodeBuddyAgent extends BaseAgent {
+49:   /** Encapsulated infrastructure dependencies */
+50:   private readonly infrastructure: AgentInfrastructure;
+51: 
+52:   private codebuddyClient: CodeBuddyClient;
+53:   private toolHandler: ToolHandler;
+54:   private promptBuilder: PromptBuilder;
+55:   private streamingHandler: StreamingHandler;
+56:   private executor: AgentExecutor;
+57: 
+58:   private toolSelectionStrategy: ToolSelectionStrategy;
+59: 
+60:   /** Optional peer routing config applied from channel route resolution */
+61:   private peerRoutingConfig: RouteAgentConfig | null = null;
+62: 
+63:   /** Message queue for steer/followup/collect modes */
+64:   private messageQueue: MessageQueue = new MessageQueue();
+65:   private repairListeners: Record<string, (data: unknown) => void> = {};
+66: 
+67:   /** Cost prediction before execution */
+68:   private costPredictor!: CostPredictor;
+69:   /** Budget alert monitoring */
+70:   private budgetAlertManager: BudgetAlertManager = new BudgetAlertManager();
+71: 
+72:   /**
+73:    * Create a new CodeBuddyAgent instance
+74:    *
+75:    * @param apiKey - API key for authentication
+76:    * @param baseURL - Optional base URL for the API endpoint
+77:    * @param model - Optional model name (defaults to saved model or grok-code-fast-1)
+78:    * @param maxToolRounds - Maximum tool execution rounds (default: depends on YOLO mode)
+79:    * @param useRAGToolSelection - Enable RAG-based tool selection (default: true)
+80:    */
+81:   constructor(
+82:     apiKey: string,
+83:     baseURL?: string,
+84:     model?: string,
+85:     maxToolRounds?: number,
+86:     useRAGToolSelection: boolean = true,
+87:     systemPromptId?: string  // New: external prompt ID (default, minimal, secure, etc.)
+88:   ) {
+89:     super();
+90: 
+91:     // Determine model to use
+92:     const manager = getSettingsManager();
+93:     const savedModel = manager.getCurrentModel();
+94:     const modelToUse = model || savedModel || "grok-code-fast-1";
+95: 
+96:     // YOLO mode: requires BOTH env var AND explicit config confirmation
+97:     const autonomyManager = getAutonomyManager();
+98:     const envYoloMode = process.env.YOLO_MODE === "true";
+99:     const configYoloMode = autonomyManager.isYOLOEnabled();
+100: 
+101:     if (envYoloMode && !configYoloMode) {
+102:       logger.warn("YOLO_MODE env var set but not enabled via /yolo command or config. Use '/yolo on' to explicitly enable YOLO mode.");
+103:       this.yoloMode = false;
+104:     } else {
+105:       this.yoloMode = configYoloMode;
+106:     }
+107: 
+108:     this.maxToolRounds = maxToolRounds || (this.yoloMode ? 400 : 50);
+109: 
+110:     // Session cost limit with YOLO mode handling
+111:     const YOLO_HARD_LIMIT = 100;
+112:     const maxCostEnv = process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : null;
+113: 
+114:     if (this.yoloMode) {
+115:       this.sessionCostLimit = maxCostEnv !== null
+116:         ? Math.min(maxCostEnv, YOLO_HARD_LIMIT * 10)
+117:         : YOLO_HARD_LIMIT;
+118:       logger.warn(`YOLO MODE ACTIVE - Cost limit: $${this.sessionCostLimit}, Max rounds: ${this.maxToolRounds}`);
+119:     } else {
+120:       this.sessionCostLimit = maxCostEnv !== null ? maxCostEnv : 10;
+121:     }
+122: 
+123:     // Detect max context from environment
+124:     const envMaxContext = Number(process.env.CODEBUDDY_MAX_CONTEXT);
+125:     const maxContextTokens = Number.isFinite(envMaxContext) && envMaxContext > 0
+126:       ? envMaxContext
+127:       : undefined;
+128: 
+129:     // Create infrastructure - encapsulates all manager dependencies
+130:     this.infrastructure = createAgentInfrastructureSync(
+131:       { apiKey, model: modelToUse, baseURL, maxContextTokens },
+132:       { memoryEnabled: this.memoryEnabled, useModelRouting: this.useModelRouting }
+133:     );
+134: 
+135:     // Bridge to BaseAgent properties for backwards compatibility
+136:     // Note: We cast interface types to concrete types since BaseAgent uses concrete types
+137:     // This is safe because the singletons returned by getters are the concrete implementations
+138:     this.tokenCounter = this.infrastructure.tokenCounter;
+139:     this.contextManager = this.infrastructure.contextManager;
+140:     this.checkpointManager = this.infrastructure.checkpoints as unknown as CheckpointManager;
+141:     this.sessionStore = this.infrastructure.sessions as unknown as SessionStore;
+142:     this.modeManager = this.infrastructure.modeManager;
+143:     this.sandboxManager = this.infrastructure.sandboxManager;
+144:     this.mcpClient = this.infrastructure.mcpClient;
+145:     this.costTracker = this.infrastructure.costs as unknown as CostTracker;
+146:     this.promptCacheManager = this.infrastructure.promptCacheManager;
+147:     this.hooksManager = this.infrastructure.hooksManager;
+148:     this.modelRouter = this.infrastructure.modelRouter;
+149:     this.marketplace = this.infrastructure.marketplace;
+150:     this.repairCoordinator = this.infrastructure.repairCoordinator;
+151: 
+152:     // Initialize Persistent Memory (CLAUDE.md style)
+153:     initializeMemory().catch(err => {
+154:       logger.error('Failed to initialize persistent memory', { error: String(err) });
+155:     });
+156: 
+157:     // Initialize cost prediction and budget alerts
+158:     this.costPredictor = new CostPredictor(this.costTracker);
+159:     this.budgetAlertManager = new BudgetAlertManager();
+160:     this.budgetAlertManager.on('alert', (alert) => {
+161:       logger.warn(`Budget alert [${alert.type}]: ${alert.message}`);
+162:       this.emit('budget:alert', alert);
+163:     });
+164: 
+165:     // Initialize tool selection
+166:     this.useRAGToolSelection = useRAGToolSelection;
+167:     this.toolSelectionStrategy = getToolSelectionStrategy({ useRAG: useRAGToolSelection });
+168: 
+169:     // Initialize client
+170:     this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
+171: 
+172:     // Forward repair events from RepairCoordinator (store refs for cleanup)
+173:     this.repairListeners = {
+174:       start: (data: unknown) => this.emit('repair:start', data),
+175:       success: (data: unknown) => this.emit('repair:success', data),
+176:       failed: (data: unknown) => this.emit('repair:failed', data),
+177:       error: (data: unknown) => this.emit('repair:error', data),
+178:     };
+179:     this.repairCoordinator.on('repair:start', this.repairListeners.start);
+180:     this.repairCoordinator.on('repair:success', this.repairListeners.success);
+181:     this.repairCoordinator.on('repair:failed', this.repairListeners.failed);
+182:     this.repairCoordinator.on('repair:error', this.repairListeners.error);
+183: 
+184:     // Initialize StreamingHandler
+185:     this.streamingHandler = new StreamingHandler({
+186:       model: modelToUse,
+187:       trackTokens: true,
+188:       sanitizeOutput: true
+189:     });
+190: 
+191:     // Initialize ToolHandler
+192:     this.toolHandler = new ToolHandler({
+193:       checkpointManager: this.checkpointManager,
+194:       hooksManager: this.hooksManager,
+195:       marketplace: this.marketplace,
+196:       repairCoordinator: this.repairCoordinator
+197:     });
+198: 
+199:     // Initialize Executor
+200:     this.executor = new AgentExecutor({
+201:       client: this.codebuddyClient,
+202:       toolHandler: this.toolHandler,
+203:       toolSelectionStrategy: this.toolSelectionStrategy,
+204:       streamingHandler: this.streamingHandler,
+205:       contextManager: this.contextManager,
+206:       tokenCounter: this.tokenCounter,
+207:       laneQueue: getLaneQueue(),
+208:       laneId: 'agent-tools',
+209:       messageQueue: this.messageQueue,
+210:     }, {
+211:       maxToolRounds: this.maxToolRounds,
+212:       isGrokModel: this.isGrokModel.bind(this),
+213:       recordSessionCost: this.recordSessionCost.bind(this),
+214:       isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
+215:       getSessionCost: this.getSessionCost.bind(this),
+216:       getSessionCostLimit: this.getSessionCostLimit.bind(this),
+217:     });
+218: 
+219:     // Initialize default middleware pipeline with WorkflowGuardMiddleware + ReasoningMiddleware
+220:     import('./middleware/index.js').then(async ({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
+221:       if (!this.executor.getMiddlewarePipeline()) {
+222:         const pipeline = new MiddlewarePipeline();
+223:         // Turn limit middleware (priority 10) — enforces max turns per session
+224:         try {
+225:           const { TurnLimitMiddleware } = await import('./middleware/turn-limit.js');
+226:           pipeline.use(new TurnLimitMiddleware());
+227:           logger.debug('TurnLimitMiddleware registered in pipeline (priority 10)');
+228:         } catch (err) {
+229:           logger.debug('Failed to register TurnLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+230:         }
+231:         // Cost limit middleware (priority 20) — enforces session cost budget
+232:         try {
+233:           const { CostLimitMiddleware } = await import('./middleware/cost-limit.js');
+234:           pipeline.use(new CostLimitMiddleware({
+235:             recordSessionCost: this.recordSessionCost.bind(this),
+236:             isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
+237:           }));
+238:           logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');
+239:         } catch (err) {
+240:           logger.debug('Failed to register CostLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+241:         }
+242:         // Context warning middleware (priority 30) — warns when nearing context limits
+243:         try {
+244:           const { ContextWarningMiddleware } = await import('./middleware/context-warning.js');
+245:           pipeline.use(new ContextWarningMiddleware(this.contextManager));
+246:           logger.debug('ContextWarningMiddleware registered in pipeline (priority 30)');
+247:         } catch (err) {
+248:           logger.debug('Failed to register ContextWarningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+249:         }
+250:         // Reasoning middleware (priority 42) — auto-detects complex queries
+251:         try {
+252:           const { createReasoningMiddleware } = await import('./middleware/reasoning-middleware.js');
+253:           pipeline.use(createReasoningMiddleware());
+254:           logger.debug('ReasoningMiddleware registered in pipeline (priority 42)');
+255:         } catch (err) {
+256:           logger.debug('Failed to register ReasoningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+257:         }
+258:         // Workflow guard (priority 45)
+259:         pipeline.use(new WorkflowGuardMiddleware());
+260:         // Auto-repair middleware (priority 150) — detects tool failures, invokes repair engine
+261:         try {
+262:           const { createAutoRepairMiddleware } = await import('./middleware/auto-repair-middleware.js');
+263:           pipeline.use(createAutoRepairMiddleware());
+264:           logger.debug('AutoRepairMiddleware registered in pipeline (priority 150)');
+265:         } catch (err) {
+266:           logger.debug('Failed to register AutoRepairMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+267:         }
+268:         // Quality gate middleware (priority 200) — auto-delegates to specialized agents
+269:         try {
+270:           const { createQualityGateMiddleware } = await import('./middleware/quality-gate-middleware.js');
+271:           pipeline.use(createQualityGateMiddleware());
+272:           logger.debug('QualityGateMiddleware registered in pipeline (priority 200)');
+273:         } catch (err) {
+274:           logger.debug('Failed to register QualityGateMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+275:         }
+276:         this.executor.setMiddlewarePipeline(pipeline);
+277:         logger.debug('WorkflowGuardMiddleware registered in default pipeline');
+278:       }
+279:     }).catch(err => {
+280:       logger.debug('Failed to register middleware pipeline (non-critical)', err);
+281:     });
+282: 
+283:     // Initialize PromptBuilder with Moltbot hooks for intro injection
+284:     this.promptBuilder = new PromptBuilder({
+285:       yoloMode: this.yoloMode,
+286:       memoryEnabled: this.memoryEnabled,
+287:       morphEditorEnabled: !!this.toolHandler.morphEditor,
+288:       cwd: process.cwd()
+289:     }, this.promptCacheManager, this.memory, this.infrastructure.moltbotHooksManager, getMemoryManager());
+290: 
+291:     // Set up executors for the repair coordinator
+292:     this.repairCoordinator.setExecutors({
+293:       commandExecutor: async (cmd: string) => {
+294:         const result = await this.toolHandler.bash.execute(cmd);
+295:         return {
+296:           success: result.success,
+297:           output: result.output || '',
+298:           error: result.error,
+299:         };
+300:       },
+301:       fileReader: async (path: string) => {
+302:         const result = await this.toolHandler.textEditor.view(path);
+303:         return result.output || '';
+304:       },
+305:       fileWriter: async (path: string, content: string) => {
+306:         // Use edit to write file content
+307:         await this.toolHandler.textEditor.create(path, content);
+308:       },
+309:     });
+310: 
+311:     // Initialize facades (required before initializeMCP)
+312:     this.initializeFacades();
+313: 
+314:     // Initialize specialized agent registry (PDF, Excel, SQL, etc.)
+315:     import('./specialized/agent-registry.js').then(({ initializeAgentRegistry }) => {
+316:       initializeAgentRegistry().catch(err => {
+317:         logger.debug('Agent registry init skipped', { error: err instanceof Error ? err.message : String(err) });
+318:       });
+319:     }).catch((e) => { logger.debug('Agent registry module load failed (optional)', { error: String(e) }); });
+320: 
+321:     // Load SKILL.md skills so findSkill() returns results
+322:     import('../skills/index.js').then(({ initializeSkills }) => {
+323:       initializeSkills().catch((e) => { logger.debug('Skills initialization failed (optional)', { error: String(e) }); });
+324:     }).catch((e) => { logger.debug('Skills module load failed (optional)', { error: String(e) }); });
+325: 
+326:     // Initialize MCP servers if configured (can be disabled for headless/one-shot runs).
+327:     if (process.env.CODEBUDDY_DISABLE_MCP !== 'true') {
+328:       this.initializeMCP();
+329:     }
+330: 
+331:     // Load custom instructions and generate system prompt
+332:     const customInstructions = loadCustomInstructions();
+333: 
+334:     // Initialize system prompt (async operation) — track readiness
+335:     this.systemPromptReady = this.initializeAgentSystemPrompt(systemPromptId, modelToUse, customInstructions);
+336:   }
+337: 
+338:   /** Resolves when the system prompt has been loaded (or failed gracefully). */
+339:   public systemPromptReady: Promise<void>;
+340: 
+341:   /**
+342:    * Link tool executions to an observability run.
+343:    * Called by dev workflows to associate tool calls with a RunStore run.
+344:    */
+345:   public setRunId(runId: string | undefined): void {
+346:     this.toolHandler.setRunId(runId);
+347:   }
+348: 
+349:   private async initializeAgentSystemPrompt(
+350:     systemPromptId: string | undefined,
+351:     modelName: string,
+352:     customInstructions: string | null
+353:   ): Promise<void> {
+354:     try {
+355:       let systemPrompt = await this.promptBuilder.buildSystemPrompt(systemPromptId, modelName, customInstructions);
+356: 
+357:       // Inject repoProfile.contextPack if available
+358:       try {
+359:         const profiler = getRepoProfiler();
+360:         const profile = await profiler.getProfile();
+361:         if (profile.contextPack) {
+362:           systemPrompt = `${systemPrompt}\n\n[Repo] ${profile.contextPack}`;
+363:           logger.debug('RepoProfiler: injected contextPack into system prompt');
+364:         }
+365:       } catch {
+366:         // Non-fatal — repo profiling is best-effort
+367:       }
+368: 
+369:       // Inject knowledge base context if any Knowledge.md files are loaded
+370:       try {
+371:         const { getKnowledgeManager } = await import('../knowledge/knowledge-manager.js');
+372:         const km = getKnowledgeManager();
+373:         await km.load();
+374:         const knowledgeBlock = km.buildContextBlock();
+375:         if (knowledgeBlock) {
+376:           systemPrompt = `${systemPrompt}\n\n${knowledgeBlock}`;
+377:           logger.debug('KnowledgeManager: injected knowledge context into system prompt');
+378:         }
+379:       } catch {
+380:         // Non-fatal — knowledge injection is best-effort
+381:       }
+382: 
+383:       this.messages.push({
+384:         role: "system",
+385:         content: systemPrompt,
+386:       });
+387:     } catch (error) {
+388:       logger.error("Failed to initialize system prompt", error as Error);
+389:       // Push a minimal fallback system prompt so the agent is still usable
+390:       this.messages.push({
+391:         role: "system",
+392:         content: "You are a helpful AI coding assistant.",
+393:       });
+394:     }
+395:   }
+396: 
+397:   private isGrokModel(): boolean {
+398:     const currentModel = this.codebuddyClient.getCurrentModel();
+399:     return currentModel.toLowerCase().includes("grok");
+400:   }
+
+... +663 lines omitted (lines 401-1063; use start_line/end_line to view specific sections) ...
+
+1064:    */
+1065:   async executePlan(request: string): Promise<ChatEntry[]> {
+1066:     const { TaskPlanner, TaskGraph, DelegationEngine } = await import('./planner/index.js');
+1067:     const { ProgressTracker } = await import('./planner/progress-tracker.js');
+1068: 
+1069:     const planner = new TaskPlanner();
+1070:     const decompose = async (prompt: string): Promise<string> => {
+1071:       const entries = await this.processUserMessage(prompt);
+1072:       return entries.filter(e => e.type === 'assistant').map(e => e.content).join('\n');
+1073:     };
+1074:     const plan = await planner.createPlan(request, decompose);
+1075: 
+1076:     const graph = new TaskGraph(plan.tasks);
+1077:     const tracker = new ProgressTracker();
+1078:     tracker.start(plan.tasks.length);
+1079:     const delegationEngine = new DelegationEngine();
+1080:     const entries: ChatEntry[] = [];
+1081: 
+1082:     const _result = await graph.execute(async (task) => {
+1083:       tracker.update(task.id, 'running');
+1084:       const progress = tracker.getProgress();
+1085:       this.emit('plan:progress', {
+1086:         taskId: task.id,
+1087:         status: 'running',
+1088:         total: progress.total,
+1089:         completed: progress.completed,
+1090:       });
+1091: 
+1092:       try {
+1093:         delegationEngine.matchSubagent(task);
+1094:         const agentResult = await this.processUserMessage(task.description);
+1095:         entries.push(...agentResult);
+1096: 
+1097:         tracker.update(task.id, 'completed');
+1098:         return { success: true, output: agentResult.map(e => e.content).join('\n'), duration: 0 };
+1099:       } catch (error) {
+1100:         tracker.update(task.id, 'failed');
+1101:         return { success: false, output: String(error), duration: 0 };
+1102:       }
+1103:     });
+1104: 
+1105:     return entries;
+1106:   }
+1107: 
+1108:   // =========================================================================
+1109:   // Orchestration (Phase 4 - Iteration 5)
+1110:   // =========================================================================
+1111: 
+1112:   /**
+1113:    * Check if a request needs multi-agent orchestration
+1114:    */
+1115:   needsOrchestration(request: string): boolean {
+1116:     const keywords = [
+1117:       'and also', 'while also', 'in parallel',
+1118:       'simultaneously', 'at the same time',
+1119:       'review and fix', 'test and deploy',
+1120:       'refactor and test', 'build and test',
+1121:     ];
+1122:     const lower = request.toLowerCase();
+1123:     const matchCount = keywords.filter(k => lower.includes(k)).length;
+1124:     // Also check for multiple distinct actions (3+ verbs)
+1125:     const verbs = lower.match(/\b(create|fix|update|test|deploy|review|refactor|build|add|remove|delete|install|run|check)\b/g);
+1126:     return matchCount >= 1 || (verbs ? new Set(verbs).size >= 3 : false);
+1127:   }
+1128: 
+1129:   /**
+1130:    * Handle a canvas event from the A2UI server.
+1131:    * Converts the event into a user message and processes it through the agent.
+1132:    */
+1133:   async onCanvasEvent(event: {
+1134:     surfaceId: string;
+1135:     componentId?: string;
+1136:     name: string;
+1137:     context?: Record<string, unknown>;
+1138:   }): Promise<void> {
+1139:     const message = `[Canvas Event] ${event.name} on component "${event.componentId || 'unknown'}" in surface "${event.surfaceId}"${event.context ? `: ${JSON.stringify(event.context)}` : ''}`;
+1140:     try {
+1141:       await this.processUserMessage(message);
+1142:     } catch (err) {
+1143:       this.emit('error', err instanceof Error ? err : new Error(String(err)));
+1144:     }
+1145:   }
+1146: 
+1147:   /**
+1148:    * Clean up all resources
+1149:    * Should be called when the agent is no longer needed
+1150:    */
+1151:   dispose(): void {
+1152:     // Remove only the forwarding listeners we attached (not other listeners)
+1153:     if (this.repairListeners.start) {
+1154:       this.repairCoordinator.off('repair:start', this.repairListeners.start);
+1155:       this.repairCoordinator.off('repair:success', this.repairListeners.success);
+1156:       this.repairCoordinator.off('repair:failed', this.repairListeners.failed);
+1157:       this.repairCoordinator.off('repair:error', this.repairListeners.error);
+1158:     }
+1159:     this.peerRoutingConfig = null;
+1160:     super.dispose();
+1161:   }
+1162: }
+1163: 

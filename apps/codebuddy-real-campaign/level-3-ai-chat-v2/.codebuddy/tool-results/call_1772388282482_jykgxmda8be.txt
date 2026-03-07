@@ -1,0 +1,58 @@
+Contents of smoke-test.mjs:
+1: import fetch from 'node-fetch';
+2: import { exec } from 'child_process';
+3: 
+4: const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+5: 
+6: if (!API_KEY) {
+7:   console.error('API_KEY not found. Please set GOOGLE_API_KEY or GEMINI_API_KEY environment variable.');
+8:   process.exit(1);
+9: }
+10: 
+11: const serverProcess = exec('node server.mjs');
+12: 
+13: serverProcess.stdout.on('data', (data) => {
+14:   console.log(`Server: ${data}`);
+15: });
+16: 
+17: serverProcess.stderr.on('data', (data) => {
+18:   console.error(`Server Error: ${data}`);
+19: });
+20: 
+21: const runSmokeTest = async () => {
+22:   console.log('Running smoke test...');
+23: 
+24:   // Wait for server to start
+25:   await new Promise(resolve => setTimeout(resolve, 3000));
+26: 
+27:   try {
+28:     // Test /health endpoint
+29:     const healthResponse = await fetch('http://localhost:3000/health');
+30:     if (healthResponse.status !== 200) {
+31:       throw new Error(`Health check failed with status ${healthResponse.status}`);
+32:     }
+33:     console.log('Health check passed.');
+34: 
+35:     // Test /api/chat endpoint
+36:     const chatResponse = await fetch('http://localhost:3000/api/chat', {
+37:       method: 'POST',
+38:       headers: { 'Content-Type': 'application/json' },
+39:       body: JSON.stringify({ message: 'Hello, what is your purpose?' }),
+40:     });
+41: 
+42:     const chatData = await chatResponse.json();
+43: 
+44:     if (!chatResponse.ok || !chatData.response) {
+45:       throw new Error(`Chat API failed: ${chatData.error || 'No response'}`);
+46:     }
+47:     console.log('Chat API test passed.');
+48:     console.log('Smoke test successful!');
+49:   } catch (error) {
+50:     console.error('Smoke test failed:', error.message);
+51:     process.exit(1);
+52:   } finally {
+53:     serverProcess.kill();
+54:   }
+55: };
+56: 
+57: runSmokeTest();

@@ -11,30 +11,24 @@
  * - Warning states for budget/token limits
  */
 
-// Mock React and Ink before imports
-jest.mock('react', () => {
-  const React = jest.requireActual('react');
-  return {
-    ...React,
-    useState: jest.fn((initial) => [initial, jest.fn()]),
-    useEffect: jest.fn(),
-    useMemo: jest.fn((fn) => fn()),
-  };
-});
+import { vi } from 'vitest';
+import { useTheme } from '../../src/ui/context/theme-context.js';
+import { MiniStatusBar, StatusBar } from '../../src/ui/components/StatusBar.js';
 
-jest.mock('ink', () => ({
+vi.mock('ink', () => ({
   Box: 'Box',
   Text: 'Text',
 }));
 
-jest.mock('../../src/ui/context/theme-context', () => ({
-  useTheme: jest.fn(() => ({
+const mockUseTheme = vi.hoisted(() =>
+  vi.fn(() => ({
     colors: {
       primary: '#007AFF',
+      secondary: '#5856D6',
       success: '#34C759',
       warning: '#FF9500',
       error: '#FF3B30',
-      info: '#5856D6',
+      info: '#5AC8FA',
       accent: '#AF52DE',
       text: '#FFFFFF',
       textMuted: '#8E8E93',
@@ -43,11 +37,15 @@ jest.mock('../../src/ui/context/theme-context', () => ({
       borderBusy: '#FF9500',
       backgroundAlt: '#2C2C2E',
     },
-  })),
+  }))
+);
+
+vi.mock('../../src/ui/context/theme-context.js', () => ({
+  useTheme: mockUseTheme,
 }));
 
-jest.mock('../../src/utils/token-counter', () => ({
-  formatTokenCount: jest.fn((count: number) => {
+vi.mock('../../src/utils/token-counter.js', () => ({
+  formatTokenCount: vi.fn((count: number) => {
     if (count <= 999) return count.toString();
     if (count < 1000000) {
       const k = count / 1000;
@@ -58,21 +56,29 @@ jest.mock('../../src/utils/token-counter', () => ({
   }),
 }));
 
-// Import after mocking
-import React from 'react';
-import { useTheme } from '../../src/ui/context/theme-context';
-
-// Import the module to test helper functions
-// We can't directly test React components without a proper renderer,
-// but we can test the utility functions and verify the component structure
+vi.mock('../../src/optimization/latency-optimizer.js', () => ({
+  LATENCY_THRESHOLDS: {
+    FAST: 250,
+    ACCEPTABLE: 1000,
+  },
+  getLatencyOptimizer: vi.fn(() => ({
+    getStats: vi.fn(() => ({
+      avgDuration: 0,
+      p95: 0,
+      metTarget: 0,
+      totalOperations: 0,
+    })),
+  })),
+  getStreamingOptimizer: vi.fn(() => ({
+    getStats: vi.fn(() => ({
+      avgFirstToken: 0,
+    })),
+  })),
+}));
 
 describe('StatusBar Module', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    // Reset useState mock to return proper values
-    (React.useState as jest.Mock).mockImplementation((initial) => [initial, jest.fn()]);
-    (React.useMemo as jest.Mock).mockImplementation((fn) => fn());
-    (React.useEffect as jest.Mock).mockImplementation(() => {});
+    vi.clearAllMocks();
   });
 
   // ==========================================================================
@@ -329,7 +335,7 @@ describe('StatusBar Module', () => {
   describe('Theme Integration', () => {
     it('should call useTheme hook', () => {
       // Verify useTheme is called correctly
-      const colors = (useTheme as jest.Mock)().colors;
+      const colors = vi.mocked(useTheme)().colors;
 
       expect(colors).toBeDefined();
       expect(colors.success).toBe('#34C759');
@@ -343,6 +349,11 @@ describe('StatusBar Module', () => {
   // ==========================================================================
 
   describe('StatusBar Props', () => {
+    it('should export the status bar components', () => {
+      expect(StatusBar).toBeTypeOf('function');
+      expect(MiniStatusBar).toBeTypeOf('function');
+    });
+
     it('should have sensible default values', () => {
       const defaultProps = {
         maxTokens: 128000,
@@ -366,11 +377,11 @@ describe('StatusBar Module', () => {
 
   describe('Session Duration Timer', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should calculate elapsed time correctly', () => {
@@ -389,7 +400,7 @@ describe('StatusBar Module', () => {
       };
 
       // Simulate time passing
-      jest.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(3000);
       updateDuration();
 
       expect(elapsed).toBe(3);

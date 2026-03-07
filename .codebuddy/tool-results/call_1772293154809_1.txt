@@ -1,0 +1,27 @@
+
+🔍 Résultats pour: "TypeScript 5 New Language Constructs and Syntax Features"
+══════════════════════════════════════════════════
+
+1. **TypeScript: Documentation - TypeScript 5.8** [1]
+   Phrased differently, it must be possible to easily erase or “strip out” any TypeScript-specific syntax from a file, leaving behind a valid JavaScript file. That means constructs like the following are not supported:
+
+2. **Announcing TypeScript 5.9 - TypeScript** [2]
+   TypeScript 5.9 introduces support for ECMAScript’s deferred module evaluation proposal using the new import defer syntax. This feature allows you to import a module without immediately executing the module and its dependencies, providing better control over when work and side-effects occur.
+   📅 August 1, 2025
+
+3. **TypeScript: Documentation - TypeScript 5.9** [3]
+   TypeScript 5.9 introduces support for ECMAScript’s deferred module evaluation proposal using the new import defer syntax. This feature allows you to import a module without immediately executing the module and its dependencies, providing better control over when work and side-effects occur.
+
+4. **TypeScript: Documentation - TypeScript 5.5** [4]
+   Some of these methods, like <strong>union, intersection, difference, and symmetricDifference</strong>, take another Set and return a new Set as the result. The other methods, isSubsetOf, isSupersetOf, and isDisjointFrom, take another Set and return a boolean. None of these methods mutate the original Sets.
+
+5. **TypeScript: Documentation - TypeScript 5.0** [5]
+   While these experimental decorators ... decorators in TypeScript without this flag used to prompt an error message. --experimentalDecorators will continue to exist for the foreseeable future; however, without the flag, decorators will now be valid syntax for all new code...
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript: Documentation - TypeScript 5.8 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html
+[2] Announcing TypeScript 5.9 - TypeScript — https://devblogs.microsoft.com/typescript/announcing-typescript-5-9/
+[3] TypeScript: Documentation - TypeScript 5.9 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html
+[4] TypeScript: Documentation - TypeScript 5.5 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-5.html
+[5] TypeScript: Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html

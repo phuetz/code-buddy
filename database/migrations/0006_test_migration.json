@@ -1,0 +1,6 @@
+{
+  "version": 6,
+  "name": "test_migration",
+  "up": "-- Add your UP migration SQL here",
+  "down": "-- Add your DOWN migration SQL here"
+}

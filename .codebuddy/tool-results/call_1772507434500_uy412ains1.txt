@@ -1,0 +1,5 @@
+Updated tmp/gemini-real-conditions-probe.txt with 1 addition
+--- a/tmp/gemini-real-conditions-probe.txt
++++ b/tmp/gemini-real-conditions-probe.txt
+@@ -1,0 +1,1 @@
++REAL_CONDITIONS_OK

@@ -45,9 +45,14 @@ export class BackgroundTaskManager {
 
     this.tasks.set(id, task);
 
-    const child = spawn('sh', ['-c', command], {
-      detached: true,
+    const isWindows = process.platform === 'win32';
+    const shell = isWindows ? (process.env.COMSPEC || 'cmd.exe') : 'sh';
+    const shellArgs = isWindows ? ['/d', '/s', '/c', command] : ['-c', command];
+
+    const child = spawn(shell, shellArgs, {
+      detached: !isWindows,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
 
     this.processes.set(id, child);
@@ -136,13 +141,17 @@ export class BackgroundTaskManager {
     }
 
     try {
-      if (child.pid) {
+      if (child.pid && process.platform !== 'win32') {
         process.kill(-child.pid, 'SIGTERM');
       } else {
         child.kill('SIGTERM');
       }
     } catch {
-      child.kill('SIGTERM');
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // Process may have already exited or be unkillable on this platform.
+      }
     }
 
     const task = this.tasks.get(taskId);

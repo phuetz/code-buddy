@@ -1,0 +1,28 @@
+
+🔍 Résultats pour: "TypeScript 5 Language and Type System Enhancements"
+══════════════════════════════════════════════════
+
+1. **TypeScript 5.5: A Deep Dive into the New Features and Enhancements | by Fahim ahmed | Medium** [1]
+   From <strong>inferred type predicates and regular expression validation to new methods for working with sets</strong>, the update caters to the evolving needs of modern JavaScript and TypeScript developers.
+   📅 October 20, 2024
+
+2. **New Typescript features – what’s new in TypeScript?** [2]
+   TypeScript 5.3 brought <strong>improvements to type narrowing</strong>, making the compiler capable of understanding types in complex scenarios. Notably, it enhanced narrowing within switch (true) statements, allowing for more precise type discrimination when ...
+
+3. **TypeScript: Documentation - TypeScript 4.5** [3]
+   For more information, see the pull request for const assertions along with the changes for type argument defaults. TypeScript now leverages a system-native implementation of the Node.js realPathSync function on all operating systems.
+
+4. **TypeScript 5.5: Faster, Smarter and More Powerful - The New Stack** [4]
+   This update includes <strong>inferred type conditions, improved expression validation and separate declarations, as well as notable performance boosts and enhancements to editor reliability</strong>.
+   📅 June 25, 2024
+
+5. **TypeScript: Documentation - TypeScript 5.9** [5]
+   Do we really need to jump to the definition of the type Options just to see what members this value has? Previously, that was actually the case. To help here, TypeScript 5.9 is now previewing a feature called expandable hovers, or “quick info verbosity”. If you use an editor like VS Code, you’ll now see a + and - button on the left of these hover tooltips.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript 5.5: A Deep Dive into the New Features and Enhancements | by Fahim ahmed | Medium — https://medium.com/@fahim52510/typescript-5-5-a-deep-dive-into-the-new-features-and-enhancements-6cf24ed692da
+[2] New Typescript features – what’s new in TypeScript? — https://tsh.io/blog/new-typescript-features
+[3] TypeScript: Documentation - TypeScript 4.5 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html
+[4] TypeScript 5.5: Faster, Smarter and More Powerful - The New Stack — https://thenewstack.io/typescript-5-5-faster-smarter-and-more-powerful/
+[5] TypeScript: Documentation - TypeScript 5.9 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html

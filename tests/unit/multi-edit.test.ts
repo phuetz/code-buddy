@@ -2,9 +2,11 @@
  * Unit tests for MultiEditTool (mocked VFS)
  */
 
-import { MultiEditTool, SingleFileEdit } from '../../src/tools/multi-edit';
 
 // Mock the VFS router
+
+import { MultiEditTool, SingleFileEdit } from '../../src/tools/multi-edit';
+
 const mockReadFile = jest.fn();
 const mockWriteFile = jest.fn();
 const mockExists = jest.fn();
@@ -24,18 +26,18 @@ jest.mock('../../src/services/vfs/unified-vfs-router', () => ({
 // Mock ConfirmationService
 jest.mock('../../src/utils/confirmation-service', () => ({
   ConfirmationService: {
-    getInstance: jest.fn(() => ({
+    getInstance: jest.fn(function() { return {
       getSessionFlags: jest.fn().mockReturnValue({ fileOperations: true }),
       requestConfirmation: jest.fn().mockResolvedValue({ confirmed: true }),
-    })),
+    }; }),
   },
 }));
 
 // Mock CheckpointManager
 jest.mock('../../src/checkpoints/checkpoint-manager', () => ({
-  getCheckpointManager: jest.fn(() => ({
+  getCheckpointManager: jest.fn(function() { return {
     checkpointBeforeEdit: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock diff-generator

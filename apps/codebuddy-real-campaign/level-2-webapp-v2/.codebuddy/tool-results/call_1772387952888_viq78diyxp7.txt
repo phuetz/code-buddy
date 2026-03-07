@@ -1,0 +1,65 @@
+Updated public/app.js with 61 additions
+--- a/public/app.js
++++ b/public/app.js
+@@ -1,0 +1,61 @@
++document.addEventListener('DOMContentLoaded', () => {
++    const noteForm = document.getElementById('note-form');
++    const noteContentInput = document.getElementById('note-content');
++    const notesContainer = document.getElementById('notes-container');
++
++    const fetchNotes = async () => {
++        const res = await fetch('/api/notes');
++        const notes = await res.json();
++        notesContainer.innerHTML = '';
++        notes.forEach(note => {
++            const noteElement = document.createElement('div');
++            noteElement.className = 'note';
++            noteElement.innerHTML = `
++                <p>${note.content}</p>
++                <button data-id="${note.id}" class="edit-btn">Edit</button>
++                <button data-id="${note.id}" class="delete-btn">Delete</button>
++            `;
++            notesContainer.appendChild(noteElement);
++        });
++    };
++
++    noteForm.addEventListener('submit', async (e) => {
++        e.preventDefault();
++        const content = noteContentInput.value;
++        await fetch('/api/notes', {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            },
++            body: JSON.stringify({ content }),
++        });
++        noteContentInput.value = '';
++        fetchNotes();
++    });
++
++    notesContainer.addEventListener('click', async (e) => {
++        if (e.target.classList.contains('delete-btn')) {
++            const id = e.target.dataset.id;
++            await fetch(`/api/notes/${id}`, {
++                method: 'DELETE',
++            });
++            fetchNotes();
++        } else if (e.target.classList.contains('edit-btn')) {
++            const id = e.target.dataset.id;
++            const currentContent = e.target.previousElementSibling.textContent;
++            const newContent = prompt('Edit your note:', currentContent);
++            if (newContent !== null && newContent.trim() !== '') {
++                await fetch(`/api/notes/${id}`, {
++                    method: 'PUT',
++                    headers: {
++                        'Content-Type': 'application/json',
++                    },
++                    body: JSON.stringify({ content: newContent.trim() }),
++                });
++                fetchNotes();
++            }
++        }
++    });
++
++    fetchNotes();
++});

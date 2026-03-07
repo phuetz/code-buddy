@@ -2,10 +2,12 @@
  * Matrix Channel Tests
  */
 
+
+// Mock logger
+
 import { MatrixChannel } from '../../src/channels/matrix/index.js';
 import type { MatrixConfig, MatrixRoomEvent } from '../../src/channels/matrix/index.js';
 
-// Mock logger
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     debug: jest.fn(),
@@ -111,7 +113,7 @@ const mockCreateClient = jest.fn((_opts?: unknown) => createMockClient());
 
 jest.mock('matrix-js-sdk', () => ({
   createClient: (opts: unknown) => mockCreateClient(opts),
-  MemoryStore: jest.fn().mockImplementation(() => ({ type: 'memory' })),
+  MemoryStore: jest.fn().mockImplementation(function() { return { type: 'memory' }; }),
 }), { virtual: true });
 
 // ============================================================================

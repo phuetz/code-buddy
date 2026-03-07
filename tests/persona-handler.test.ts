@@ -5,7 +5,8 @@ import { handlePersonaCommand } from '../src/commands/handlers/persona-handler.j
 import { getPersonaManager, resetPersonaManager } from '../src/personas/persona-manager.js';
 
 // Mock fs-extra to avoid disk I/O
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   readdir: jest.fn().mockResolvedValue([]),
   readJSON: jest.fn().mockRejectedValue(new Error('not found')),
@@ -13,7 +14,9 @@ jest.mock('fs-extra', () => ({
   remove: jest.fn().mockResolvedValue(undefined),
   pathExists: jest.fn().mockResolvedValue(false),
   watch: jest.fn().mockReturnValue({ close: jest.fn() }),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 /** Wait for PersonaManager's async initialize() to complete */
 async function flushInit(): Promise<void> {

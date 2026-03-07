@@ -1,0 +1,43 @@
+Updated package.json with 23 additions and 13 removals
+--- a/package.json
++++ b/package.json
+@@ -3,16 +3,26 @@
+   "version": "1.0.0",
+   "main": "index.js",
+   "scripts": {
+-    "test": "echo \"Error: no test specified\" && exit 1"
+-  },
+-  "keywords": [],
+-  "author": "",
+-  "license": "ISC",
+-  "description": "",
+-  "dependencies": {
+-    "body-parser": "^2.2.2",
+-    "express": "^5.2.1",
+-    "ws": "^8.19.0"
+-  }
+-}
+-
++    "start": "node src/server.js",
++    "smoke-test": "node smoke-test.mjs"
++  },
++  "dependencies": {
++    "body-parser": "^1.20.2",
++    "express": "^4.18.3",
++    "uuid": "^9.0.1",
++    "ws": "^8.16.0"
++  },
++  "devDependencies": {
++    "node-fetch": "^3.3.2"
++  },
++  "keywords": [],
++  "author": "",
++  "license": "ISC",
++  "description": "",
++  "dependencies": {
++    "body-parser": "^2.2.2",
++    "express": "^5.2.1",
++    "ws": "^8.19.0"
++  }
++}
++

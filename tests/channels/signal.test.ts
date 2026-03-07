@@ -6,6 +6,9 @@
  */
 
 import { SignalChannel } from '../../src/channels/signal/index.js';
+import { vi } from 'vitest';
+import { getDMPairing } from '../../src/channels/dm-pairing.js';
+
 import type {
   SignalConfig,
   SignalMessage,
@@ -24,41 +27,41 @@ jest.mock('../../src/utils/logger.js', () => ({
 
 // Mock dm-pairing module (dynamically imported in handleIncoming)
 jest.mock('../../src/channels/dm-pairing.js', () => ({
-  getDMPairing: jest.fn(() => ({
+  getDMPairing: jest.fn(function() { return {
     requiresPairing: jest.fn(() => false),
-    checkSender: jest.fn(() => ({ approved: true, senderId: '', channelType: 'signal' })),
+    checkSender: jest.fn(function() { return { approved: true, senderId: '', channelType: 'signal' }; }),
     getPairingMessage: jest.fn(() => null),
-  })),
+  }; }),
 }));
 
 // Mock session-isolation module (used by getSessionKey)
 jest.mock('../../src/channels/session-isolation.js', () => ({
-  getSessionIsolator: jest.fn(() => ({
+  getSessionIsolator: jest.fn(function() { return {
     getSessionKey: jest.fn(() => 'signal:+15551234567'),
-  })),
+  }; }),
 }));
 
 // Mock identity-links module (used by getCanonicalIdentity)
 jest.mock('../../src/channels/identity-links.js', () => ({
-  getIdentityLinker: jest.fn(() => ({
+  getIdentityLinker: jest.fn(function() { return {
     resolve: jest.fn(() => null),
-  })),
+  }; }),
 }));
 
 // Mock peer-routing module (used by resolveRoute)
 jest.mock('../../src/channels/peer-routing.js', () => ({
-  getPeerRouter: jest.fn(() => ({
+  getPeerRouter: jest.fn(function() { return {
     resolve: jest.fn(() => null),
-    getAgentConfig: jest.fn(() => ({})),
-  })),
+    getAgentConfig: jest.fn(function() { return {}; }),
+  }; }),
 }));
 
 // Mock concurrency/lane-queue module
 jest.mock('../../src/concurrency/lane-queue.js', () => ({
-  LaneQueue: jest.fn(() => ({
+  LaneQueue: jest.fn(function() { return {
     enqueue: jest.fn((_, fn) => fn()),
     clear: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Mock fetch
@@ -143,10 +146,6 @@ function setMockRoutes(routes: MockRoute[]): void {
   mockRoutes = routes;
 }
 
-function setDefaultRoute(response: Partial<Response>): void {
-  defaultRoute = response;
-}
-
 function installRouteBasedMock(): void {
   mockFetch.mockImplementation((url: string) => {
     for (const route of mockRoutes) {
@@ -200,7 +199,7 @@ function setupConnectMocks(
 async function connectAndWaitForPoll(ch: SignalChannel): Promise<void> {
   await ch.connect();
   for (let i = 0; i < 20; i++) {
-    await jest.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
   }
 }
 
@@ -209,7 +208,7 @@ describe('SignalChannel', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     channel = new SignalChannel(defaultConfig);
     mockRoutes = [];
     defaultRoute = mockJsonResponse([]);
@@ -219,9 +218,9 @@ describe('SignalChannel', () => {
   afterEach(async () => {
     await channel.disconnect();
     for (let i = 0; i < 10; i++) {
-      await jest.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
     }
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   // ==========================================================================
@@ -834,8 +833,8 @@ describe('SignalChannel', () => {
       ).length;
 
       // Advance by poll interval and flush
-      await jest.advanceTimersByTimeAsync(defaultConfig.pollInterval!);
-      for (let i = 0; i < 20; i++) await jest.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(defaultConfig.pollInterval!);
+      for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(0);
 
       const receiveCallsAfter = mockFetch.mock.calls.filter(
         (call) => typeof call[0] === 'string' && call[0].includes('/v1/receive/'),
@@ -866,8 +865,8 @@ describe('SignalChannel', () => {
       expect(channel.getStatus().connected).toBe(true);
 
       // Advance timer for next poll
-      await jest.advanceTimersByTimeAsync(defaultConfig.pollInterval!);
-      for (let i = 0; i < 20; i++) await jest.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(defaultConfig.pollInterval!);
+      for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(0);
 
       // Should still be running
       expect(channel.getStatus().connected).toBe(true);
@@ -2050,15 +2049,14 @@ describe('SignalChannel', () => {
 
   describe('DM pairing integration', () => {
     it('should block messages when DM pairing is not approved', async () => {
-      const { getDMPairing } = jest.requireMock('../../src/channels/dm-pairing.js');
-      getDMPairing.mockReturnValue({
+      vi.mocked(getDMPairing).mockReturnValue({
         requiresPairing: jest.fn(() => true),
-        checkSender: jest.fn(() => ({
+        checkSender: jest.fn(function() { return {
           approved: false,
           code: 'PAIR123',
           senderId: '+15559876543',
           channelType: 'signal',
-        })),
+        }; }),
         getPairingMessage: jest.fn(() => 'Please pair with code: PAIR123'),
       });
 
@@ -2084,7 +2082,7 @@ describe('SignalChannel', () => {
       // Reset mock to default
       getDMPairing.mockReturnValue({
         requiresPairing: jest.fn(() => false),
-        checkSender: jest.fn(() => ({ approved: true, senderId: '', channelType: 'signal' })),
+        checkSender: jest.fn(function() { return { approved: true, senderId: '', channelType: 'signal' }; }),
         getPairingMessage: jest.fn(() => null),
       });
     });

@@ -32,10 +32,10 @@ jest.mock('axios', () => {
     post: jest.fn(),
   };
   return {
-    create: jest.fn(() => mockAxiosInstance),
+    create: jest.fn(function() { return mockAxiosInstance; }),
     post: jest.fn(),
     default: {
-      create: jest.fn(() => mockAxiosInstance),
+      create: jest.fn(function() { return mockAxiosInstance; }),
       post: jest.fn(),
     },
   };

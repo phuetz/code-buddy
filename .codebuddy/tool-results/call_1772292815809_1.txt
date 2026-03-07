@@ -1,0 +1,30 @@
+
+🔍 Résultats pour: "TypeScript 5 Compiler Performance and Configuration Enhancements"
+══════════════════════════════════════════════════
+
+1. **Performance · microsoft/TypeScript Wiki · GitHub** [1]
+   You can and should still use resources on this page to investigate issues with speed (e.g. take a performance trace with TypeScript 5.9/6.0 to tell you which part of your code is the slowest), but we are looking for feedback on these native previews which are often up to 10x faster. There are easy ways to configure TypeScript to ensure faster compilations and editing experiences.
+
+2. **Performance Enhancement Opportunities: Advanced Caching and Memory Optimization · Issue #62543 · microsoft/TypeScript** [2]
+   Summary This issue proposes several concrete performance optimization opportunities for the TypeScript compiler, building upon the excellent existing work in module resolution caching, incremental compilation, and the upcoming native com...
+   📅 October 4, 2025
+
+3. **Exploring TypeScript 5 features: Smaller, simpler, faster - LogRocket Blog** [3]
+   Furthermore, TypeScript <strong>enhances uniformity in object types and reduces the data stored within the compiler</strong>, resulting in reduced polymorphic operations and balanced memory usage despite the uniform object shapes.
+   📅 June 4, 2024
+
+4. **TypeScript 5.9 RC: import defer, Minimal tsconfig, and Major Performance Gains | Progosling News | Progosling** [4]
+   The default output of tsc --init has been overhauled to produce a lean, opinionated tsconfig.json with modern defaults—module: &quot;nodenext&quot;, target: &quot;esnext&quot;, strictness flags, JSX support set to react-jsx, and more—saving developers from manual configuration and enforcing best practices out of the box (devblogs.microsoft.com). TypeScript 5.9 adds support for ECMAScript’s import defer syntax, enabling deferred execution of modules until first access. This static, namespace-only import mechanism defers side effects and initializations, cutting startup costs in large applications and improving performance in serverless or CLI environments (devblogs.microsoft.com).
+   📅 July 31, 2025
+
+5. **TypeScript 5.5: Faster, Smarter and More Powerful - The New Stack** [5]
+   Performance and size optimizations: <strong>Multiple improvements to compiler speed and package size</strong>. Easier API consumption from ECMAScript Modules: Better support for using TypeScript’s API in ESM (ECMAScript Modules) environments.
+   📅 June 25, 2024
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Performance · microsoft/TypeScript Wiki · GitHub — https://github.com/microsoft/TypeScript/wiki/Performance
+[2] Performance Enhancement Opportunities: Advanced Caching and Memory Optimization · Issue #62543 · microsoft/TypeScript — https://github.com/microsoft/typescript/issues/62543
+[3] Exploring TypeScript 5 features: Smaller, simpler, faster - LogRocket Blog — https://blog.logrocket.com/exploring-typescript-5-features-smaller-simpler-faster/
+[4] TypeScript 5.9 RC: import defer, Minimal tsconfig, and Major Performance Gains | Progosling News | Progosling — https://progosling.com/en/dev-digest/typescript-5-9-rc-import-defer
+[5] TypeScript 5.5: Faster, Smarter and More Powerful - The New Stack — https://thenewstack.io/typescript-5-5-faster-smarter-and-more-powerful/

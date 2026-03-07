@@ -1,0 +1,29 @@
+
+🔍 Résultats pour: "TypeScript 5 New Language Constructs and Type System Enhancements"
+══════════════════════════════════════════════════
+
+1. **TypeScript 5.5: A Deep Dive into the New Features and Enhancements | by Fahim ahmed | Medium** [1]
+   From <strong>inferred type predicates and regular expression validation to new methods for working with sets</strong>, the update caters to the evolving needs of modern JavaScript and TypeScript developers.
+   📅 October 20, 2024
+
+2. **What’s New in TypeScript 5.0: Declarators, Const Type, Enums Improvement, Speed, and Much More!** [2]
+   Take a deep dive into the new TypeScript 5.0 and find out what&#x27;s new, including <strong>Declarators, Const Type, Enums Improvement</strong>, and much more.
+   📅 March 13, 2024
+
+3. **TypeScript: Documentation - TypeScript 5.9** [3]
+   We also felt that it was time that tsc --init initialized with a few more prescriptive settings than we already enable. We looked at some common pain points and papercuts users have when they create a new TypeScript project. For example, most users write in modules (not global scripts), and --moduleDetection can force TypeScript to treat every implementation file as a module.
+
+4. **TypeScript 5.0: the new features and the issues they solve! | by Sammy-Jo Wymer | REWRITE TECH by Diconium | Medium** [4]
+   Solution #1 TypeScript 5.0 introduced <strong>big improvements to the decorator implementation</strong>, which means decorators now work a lot better with the type system.
+   📅 July 17, 2025
+
+5. **What's New in TypeScript 5.5, Now Generally Available -- Visual Studio Magazine** [5]
+   Microsoft shipped the latest iteration of its type-infused superset of JavaScript, TypeScript 5.5, introducing <strong>inferred type predicates, control flow narrowing, JSDoc @import and other enhancements</strong>.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript 5.5: A Deep Dive into the New Features and Enhancements | by Fahim ahmed | Medium — https://medium.com/@fahim52510/typescript-5-5-a-deep-dive-into-the-new-features-and-enhancements-6cf24ed692da
+[2] What’s New in TypeScript 5.0: Declarators, Const Type, Enums Improvement, Speed, and Much More! — https://kinsta.com/blog/typescript-5-0/
+[3] TypeScript: Documentation - TypeScript 5.9 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html
+[4] TypeScript 5.0: the new features and the issues they solve! | by Sammy-Jo Wymer | REWRITE TECH by Diconium | Medium — https://medium.com/rewrite-tech/typescript-5-0-the-new-features-and-the-issues-they-solve-49757530e760
+[5] What's New in TypeScript 5.5, Now Generally Available -- Visual Studio Magazine — https://visualstudiomagazine.com/articles/2024/06/24/typescript-5-5.aspx

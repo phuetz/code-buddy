@@ -2,44 +2,38 @@
  * Skill Discovery Tool Tests
  */
 
-// Mock the skills hub module
-jest.mock('../../src/skills/hub.js', () => {
-  const mockHub = {
-    search: jest.fn(),
-    install: jest.fn(),
-  };
+import { vi } from 'vitest';
+import { SkillDiscoveryTool } from '../../src/tools/skill-discovery-tool.js';
+
+const mockHub = vi.hoisted(() => ({
+  search: vi.fn(),
+  install: vi.fn(),
+}));
+
+const mockRegistry = vi.hoisted(() => ({
+  reloadAll: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/skills/hub.js', () => {
   return {
-    getSkillsHub: jest.fn(() => mockHub),
-    __mockHub: mockHub,
+    getSkillsHub: vi.fn(() => mockHub),
   };
 });
 
-// Mock the skill registry module
-jest.mock('../../src/skills/skill-registry.js', () => ({
-  SkillRegistry: {
-    getInstance: jest.fn(() => ({
-      refresh: jest.fn().mockResolvedValue(undefined),
-    })),
-  },
+vi.mock('../../src/skills/registry.js', () => ({
+  getSkillRegistry: vi.fn(() => mockRegistry),
 }));
-
-import { SkillDiscoveryTool } from '../../src/tools/skill-discovery-tool.js';
-
-// Get the mock hub for assertions
-const getMockHub = () => {
-   
-  const mod = require('../../src/skills/hub.js');
-  return mod.__mockHub;
-};
 
 describe('SkillDiscoveryTool', () => {
   let tool: SkillDiscoveryTool;
-  let mockHub: ReturnType<typeof getMockHub>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockHub.search.mockReset();
+    mockHub.install.mockReset();
+    mockRegistry.reloadAll.mockReset();
+    mockRegistry.reloadAll.mockResolvedValue(undefined);
     tool = new SkillDiscoveryTool();
-    mockHub = getMockHub();
-    jest.clearAllMocks();
   });
 
   it('should return error when query is empty', async () => {

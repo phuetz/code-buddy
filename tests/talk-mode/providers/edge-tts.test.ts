@@ -12,31 +12,67 @@ jest.mock('child_process', () => ({
 
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
+function createSpawnResult(options: {
+  closeCode?: number;
+  error?: Error;
+  stdoutData?: string;
+}): ReturnType<typeof spawn> {
+  return {
+    on: jest.fn((event, callback) => {
+      if (event === 'error' && options.error) {
+        callback(options.error);
+      }
+      if (event === 'close' && options.closeCode !== undefined) {
+        callback(options.closeCode);
+      }
+    }),
+    stdout: {
+      on: jest.fn((event, callback) => {
+        if (event === 'data' && options.stdoutData !== undefined) {
+          callback(Buffer.from(options.stdoutData));
+        }
+      }),
+    },
+    stderr: { on: jest.fn() },
+    kill: jest.fn(),
+  } as unknown as ReturnType<typeof spawn>;
+}
+
 describe('EdgeTTSProvider', () => {
   let provider: EdgeTTSProvider;
+  let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     provider = new EdgeTTSProvider();
   });
 
   afterEach(async () => {
     await provider.shutdown();
+    warnSpy.mockRestore();
   });
 
   describe('initialize', () => {
     it('should initialize even without edge-tts installed', async () => {
-      // Mock edge-tts not available
-      mockSpawn.mockReturnValue({
-        on: jest.fn((event, callback) => {
-          if (event === 'error') {
-            callback(new Error('Command not found'));
-          }
-        }),
-        stdout: { on: jest.fn() },
-        stderr: { on: jest.fn() },
-        kill: jest.fn(),
-      } as any);
+      mockSpawn.mockReturnValue(createSpawnResult({
+        error: new Error('Command not found'),
+      }));
+
+      await provider.initialize({
+        provider: 'edge',
+        enabled: true,
+        priority: 1,
+      });
+
+      expect(await provider.isAvailable()).toBe(false);
+    });
+
+    it('should detect edge-tts when available', async () => {
+      mockSpawn.mockReturnValue(createSpawnResult({
+        closeCode: 0,
+        stdoutData: '[]',
+      }));
 
       await provider.initialize({
         provider: 'edge',
@@ -47,24 +83,11 @@ describe('EdgeTTSProvider', () => {
       expect(await provider.isAvailable()).toBe(true);
     });
 
-    it('should detect edge-tts when available', async () => {
-      // Mock edge-tts available
-      mockSpawn.mockReturnValue({
-        on: jest.fn((event, callback) => {
-          if (event === 'close') {
-            callback(0);
-          }
-        }),
-        stdout: {
-          on: jest.fn((event, callback) => {
-            if (event === 'data') {
-              callback(Buffer.from('[]')); // Empty voice list
-            }
-          }),
-        },
-        stderr: { on: jest.fn() },
-        kill: jest.fn(),
-      } as any);
+    it('should detect python module fallback when CLI wrapper is missing', async () => {
+      mockSpawn
+        .mockReturnValueOnce(createSpawnResult({ error: new Error('Command not found') }))
+        .mockReturnValueOnce(createSpawnResult({ closeCode: 0 }))
+        .mockReturnValueOnce(createSpawnResult({ closeCode: 0, stdoutData: '[]' }));
 
       await provider.initialize({
         provider: 'edge',
@@ -73,22 +96,18 @@ describe('EdgeTTSProvider', () => {
       });
 
       expect(await provider.isAvailable()).toBe(true);
+      expect(mockSpawn.mock.calls[0][0]).toBe('edge-tts');
+      expect(mockSpawn.mock.calls[1][0]).toBe('python');
+      expect(mockSpawn.mock.calls[1][1]).toEqual(['-m', 'edge_tts', '--version']);
+      expect(mockSpawn.mock.calls[2][1]).toEqual(['-m', 'edge_tts', '--list-voices', '--json']);
     });
   });
 
   describe('listVoices', () => {
     beforeEach(async () => {
-      // Mock edge-tts not available to use default voices
-      mockSpawn.mockReturnValue({
-        on: jest.fn((event, callback) => {
-          if (event === 'error') {
-            callback(new Error('Command not found'));
-          }
-        }),
-        stdout: { on: jest.fn() },
-        stderr: { on: jest.fn() },
-        kill: jest.fn(),
-      } as any);
+      mockSpawn.mockReturnValue(createSpawnResult({
+        error: new Error('Command not found'),
+      }));
 
       await provider.initialize({
         provider: 'edge',
@@ -135,16 +154,9 @@ describe('EdgeTTSProvider', () => {
 
   describe('synthesize', () => {
     beforeEach(async () => {
-      mockSpawn.mockReturnValue({
-        on: jest.fn((event, callback) => {
-          if (event === 'error') {
-            callback(new Error('Command not found'));
-          }
-        }),
-        stdout: { on: jest.fn() },
-        stderr: { on: jest.fn() },
-        kill: jest.fn(),
-      } as any);
+      mockSpawn.mockReturnValue(createSpawnResult({
+        error: new Error('Command not found'),
+      }));
 
       await provider.initialize({
         provider: 'edge',
@@ -154,23 +166,15 @@ describe('EdgeTTSProvider', () => {
     });
 
     it('should throw when edge-tts not installed', async () => {
-      // edge-tts is mocked as not available
-      await expect(provider.synthesize('Hello')).rejects.toThrow();
+      await expect(provider.synthesize('Hello')).rejects.toThrow('edge-tts executable not found');
     });
   });
 
   describe('voice extraction', () => {
     beforeEach(async () => {
-      mockSpawn.mockReturnValue({
-        on: jest.fn((event, callback) => {
-          if (event === 'error') {
-            callback(new Error('Command not found'));
-          }
-        }),
-        stdout: { on: jest.fn() },
-        stderr: { on: jest.fn() },
-        kill: jest.fn(),
-      } as any);
+      mockSpawn.mockReturnValue(createSpawnResult({
+        error: new Error('Command not found'),
+      }));
 
       await provider.initialize({
         provider: 'edge',
@@ -197,16 +201,9 @@ describe('EdgeTTSProvider', () => {
 
   describe('shutdown', () => {
     it('should shutdown cleanly', async () => {
-      mockSpawn.mockReturnValue({
-        on: jest.fn((event, callback) => {
-          if (event === 'error') {
-            callback(new Error('Command not found'));
-          }
-        }),
-        stdout: { on: jest.fn() },
-        stderr: { on: jest.fn() },
-        kill: jest.fn(),
-      } as any);
+      mockSpawn.mockReturnValue(createSpawnResult({
+        error: new Error('Command not found'),
+      }));
 
       await provider.initialize({
         provider: 'edge',

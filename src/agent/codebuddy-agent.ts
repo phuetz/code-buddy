@@ -11,7 +11,7 @@ import { getRepoProfiler } from "./repo-profiler.js";
 import { getToolSelectionStrategy, ToolSelectionStrategy } from "./execution/tool-selection-strategy.js";
 import { PromptBuilder } from "../services/prompt-builder.js";
 import { StreamingHandler } from "./streaming/index.js";
-import { AgentExecutor, setDecisionContextProvider } from "./execution/agent-executor.js";
+import { AgentExecutor, setDecisionContextProvider, setICMBridgeProvider } from "./execution/agent-executor.js";
 import { ToolHandler } from "./tool-handler.js";
 import { BaseAgent } from "./base-agent.js";
 import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
@@ -25,6 +25,7 @@ import { skillMdToUnified } from "../skills/adapters/index.js";
 import { MessageQueue, type MessageQueueMode } from "./message-queue.js";
 import { CostPredictor } from "../analytics/cost-predictor.js";
 import { BudgetAlertManager } from "../analytics/budget-alerts.js";
+import { initializeMemory, getMemoryManager } from "../memory/persistent-memory.js";
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -147,6 +148,11 @@ export class CodeBuddyAgent extends BaseAgent {
     this.modelRouter = this.infrastructure.modelRouter;
     this.marketplace = this.infrastructure.marketplace;
     this.repairCoordinator = this.infrastructure.repairCoordinator;
+
+    // Initialize Persistent Memory (CLAUDE.md style)
+    initializeMemory().catch(err => {
+      logger.error('Failed to initialize persistent memory', { error: String(err) });
+    });
 
     // Initialize cost prediction and budget alerts
     this.costPredictor = new CostPredictor(this.costTracker);
@@ -280,7 +286,7 @@ export class CodeBuddyAgent extends BaseAgent {
       memoryEnabled: this.memoryEnabled,
       morphEditorEnabled: !!this.toolHandler.morphEditor,
       cwd: process.cwd()
-    }, this.promptCacheManager, this.memory, this.infrastructure.moltbotHooksManager);
+    }, this.promptCacheManager, this.memory, this.infrastructure.moltbotHooksManager, getMemoryManager());
 
     // Set up executors for the repair coordinator
     this.repairCoordinator.setExecutors({
@@ -317,8 +323,10 @@ export class CodeBuddyAgent extends BaseAgent {
       initializeSkills().catch((e) => { logger.debug('Skills initialization failed (optional)', { error: String(e) }); });
     }).catch((e) => { logger.debug('Skills module load failed (optional)', { error: String(e) }); });
 
-    // Initialize MCP servers if configured
-    this.initializeMCP();
+    // Initialize MCP servers if configured (can be disabled for headless/one-shot runs).
+    if (process.env.CODEBUDDY_DISABLE_MCP !== 'true') {
+      this.initializeMCP();
+    }
 
     // Load custom instructions and generate system prompt
     const customInstructions = loadCustomInstructions();
@@ -409,6 +417,16 @@ export class CodeBuddyAgent extends BaseAgent {
     import('../memory/decision-memory.js').then(({ getDecisionMemory }) => {
       setDecisionContextProvider((query) => getDecisionMemory().buildDecisionContext(query));
     }).catch((e) => { logger.debug('Decision memory module load failed (optional)', { error: String(e) }); });
+
+    // Wire ICM cross-session memory bridge into executor
+    import('../memory/icm-bridge.js').then(({ ICMBridge }) => {
+      const bridge = new ICMBridge();
+      // Initialize once MCP client is available
+      if (this.mcpClient) {
+        bridge.initialize(this.mcpClient as unknown as import('../memory/icm-bridge.js').MCPToolCaller).catch(() => {});
+      }
+      setICMBridgeProvider(() => bridge);
+    }).catch((e) => { logger.debug('ICM bridge module load failed (optional)', { error: String(e) }); });
   }
 
   private applySkillMatching(message: string): void {

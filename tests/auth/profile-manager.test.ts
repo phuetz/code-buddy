@@ -17,12 +17,15 @@ import type { AuthProfile, AuthProfileManagerConfig } from '../../src/auth/profi
 // Mocks
 // ---------------------------------------------------------------------------
 
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn().mockReturnValue(false),
   readFileSync: jest.fn().mockReturnValue('{}'),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {

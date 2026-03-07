@@ -197,9 +197,13 @@ describe('NostrAdapter', () => {
     await expect(adapter.sendDirectMessage('npub1abc', 'Hello')).rejects.toThrow('not running');
   });
 
-  it('should return a public key placeholder', () => {
+  it('should derive a deterministic npub public key', () => {
     const pubkey = adapter.getPublicKey();
     expect(pubkey).toContain('npub1');
+    expect(pubkey).not.toContain('placeholder');
+
+    const adapter2 = new NostrAdapter(config);
+    expect(adapter2.getPublicKey()).toBe(pubkey);
   });
 
   it('should add a relay', async () => {

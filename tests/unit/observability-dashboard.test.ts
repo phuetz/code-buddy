@@ -5,8 +5,8 @@
  */
 
 // Mock dependencies before imports
-jest.mock('react', () => {
-  const React = jest.requireActual('react');
+jest.mock('react', async () => {
+  const React = await vi.importActual('react');
   return {
     ...React,
     memo: jest.fn((component) => component),
@@ -22,7 +22,7 @@ jest.mock('ink', () => ({
   Box: 'Box',
   Text: 'Text',
   useInput: jest.fn(),
-  useApp: jest.fn(() => ({ exit: jest.fn() })),
+  useApp: jest.fn(function() { return { exit: jest.fn() }; }),
 }));
 
 jest.mock('../../src/ui/context/theme-context.js', () => ({

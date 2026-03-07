@@ -166,16 +166,18 @@ describe('Cloud Storage', () => {
       expect(storage).toBeInstanceOf(LocalStorage);
     });
 
-    it('should throw for unsupported providers', () => {
-      expect(() => createCloudStorage({
+    it('should create cloud storage for gcs and azure providers', () => {
+      const gcs = createCloudStorage({
         provider: 'gcs',
         bucket: 'test',
-      })).toThrow('GCS storage not yet implemented');
-
-      expect(() => createCloudStorage({
+      });
+      const azure = createCloudStorage({
         provider: 'azure',
         bucket: 'test',
-      })).toThrow('Azure Blob storage not yet implemented');
+      });
+
+      expect(gcs).toBeInstanceOf(CloudStorage);
+      expect(azure).toBeInstanceOf(CloudStorage);
     });
   });
 });

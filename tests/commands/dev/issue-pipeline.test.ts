@@ -200,7 +200,7 @@ describe('runIssuePipeline', () => {
   });
 
   it('handles invalid issue reference', async () => {
-    mockExecSync.mockImplementation(() => {
+    mockExecSync.mockImplementation(function() {
       throw new Error('not found');
     });
 

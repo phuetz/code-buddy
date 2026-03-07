@@ -178,7 +178,7 @@ describe('ProcessTool', () => {
     });
 
     it('should return error when execSync throws', async () => {
-      mockedExecSync.mockImplementation(() => {
+      mockedExecSync.mockImplementation(function() {
         throw new Error('Command failed');
       });
 
@@ -190,7 +190,7 @@ describe('ProcessTool', () => {
     });
 
     it('should handle non-Error thrown values gracefully', async () => {
-      mockedExecSync.mockImplementation(() => {
+      mockedExecSync.mockImplementation(function() {
         throw 'string error';
       });
 
@@ -233,7 +233,7 @@ describe('ProcessTool', () => {
     });
 
     it('should report process is not running when kill(pid, 0) throws', async () => {
-      const spy = jest.spyOn(process, 'kill').mockImplementation(() => {
+      const spy = jest.spyOn(process, 'kill').mockImplementation(function() {
         throw new Error('ESRCH');
       });
 
@@ -420,7 +420,7 @@ describe('ProcessTool', () => {
     });
 
     it('should return error when process.kill throws', async () => {
-      const spy = jest.spyOn(process, 'kill').mockImplementation(() => {
+      const spy = jest.spyOn(process, 'kill').mockImplementation(function() {
         throw new Error('EPERM');
       });
 

@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "phuetz openclaw github"
+══════════════════════════════════════════════════
+
+1. **GitHub - openclaw/openclaw: Your own personal AI assistant. Any OS. Any Platform. The lobster way. 🦞** [1]
+   OpenClaw is <strong>a personal AI assistant you run on your own devices</strong>.
+
+2. **openclaw · GitHub** [2]
+   Your personal, open source AI assistant. openclaw has 20 repositories available. Follow their code on GitHub.
+
+3. **Releases · openclaw/openclaw** [3]
+   Highlight: External Secrets Management introduces a full openclaw secrets workflow (audit, configure, apply, reload) with runtime snapshot activation, strict secrets apply target-path validation, safer migration scrubbing, ref-only auth-profile support, and dedicated docs.
+
+4. **You Could've Invented OpenClaw · GitHub** [4]
+   The next step would be making this config-driven — a JSON file specifying which channels to start and how to authenticate them. That&#x27;s what OpenClaw does: its gateway manages Telegram, Discord, WhatsApp, Slack, Signal, iMessage, and more, all through a single config file.
+
+5. **GitHub - openclaw/clawhub: Skill Directory for OpenClaw** [5]
+   Skill Directory for OpenClaw. Contribute to openclaw/clawhub development by creating an account on GitHub.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] GitHub - openclaw/openclaw: Your own personal AI assistant. Any OS. Any Platform. The lobster way. 🦞 — https://github.com/openclaw/openclaw
+[2] openclaw · GitHub — https://github.com/openclaw
+[3] Releases · openclaw/openclaw — https://github.com/openclaw/openclaw/releases/
+[4] You Could've Invented OpenClaw · GitHub — https://gist.github.com/dabit3/bc60d3bea0b02927995cd9bf53c3db32
+[5] GitHub - openclaw/clawhub: Skill Directory for OpenClaw — https://github.com/openclaw/clawhub

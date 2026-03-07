@@ -1,0 +1,504 @@
+Contents of src/modes/code-review.ts (805 lines):
+1: /**
+2:  * Code Review Mode
+3:  *
+4:  * Provides AI-powered code review capabilities:
+5:  * - Line-by-line analysis
+6:  * - Security vulnerability detection
+7:  * - Performance suggestions
+8:  * - Best practice recommendations
+9:  * - Refactoring opportunities
+10:  */
+11: 
+12: import * as fs from 'fs/promises';
+13: import * as path from 'path';
+14: import { EventEmitter } from 'events';
+15: import { spawn } from 'child_process';
+16: 
+17: // ============================================================================
+18: // Types
+19: // ============================================================================
+20: 
+21: export type ReviewSeverity = 'critical' | 'warning' | 'info' | 'suggestion';
+22: export type ReviewCategory =
+23:   | 'security'
+24:   | 'performance'
+25:   | 'maintainability'
+26:   | 'bug'
+27:   | 'style'
+28:   | 'documentation'
+29:   | 'testing'
+30:   | 'accessibility'
+31:   | 'best-practice';
+32: 
+33: export interface ReviewComment {
+34:   id: string;
+35:   file: string;
+36:   line: number;
+37:   endLine?: number;
+38:   column?: number;
+39:   severity: ReviewSeverity;
+40:   category: ReviewCategory;
+41:   message: string;
+42:   suggestion?: string;
+43:   codeSnippet?: string;
+44:   fixAvailable?: boolean;
+45:   autoFix?: ReviewFix;
+46: }
+47: 
+48: export interface ReviewFix {
+49:   type: 'replace' | 'insert' | 'delete';
+50:   line: number;
+51:   endLine?: number;
+52:   oldText?: string;
+53:   newText?: string;
+54: }
+55: 
+56: export interface ReviewSummary {
+57:   totalFiles: number;
+58:   totalComments: number;
+59:   bySeverity: Record<ReviewSeverity, number>;
+60:   byCategory: Record<ReviewCategory, number>;
+61:   score: number; // 0-100
+62:   grade: 'A' | 'B' | 'C' | 'D' | 'F';
+63:   highlights: string[];
+64:   recommendations: string[];
+65: }
+66: 
+67: export interface ReviewResult {
+68:   files: FileReview[];
+69:   summary: ReviewSummary;
+70:   duration: number;
+71: }
+72: 
+73: export interface FileReview {
+74:   path: string;
+75:   comments: ReviewComment[];
+76:   linesReviewed: number;
+77:   score: number;
+78: }
+79: 
+80: export interface ReviewConfig {
+81:   includePatterns: string[];
+82:   excludePatterns: string[];
+83:   maxFiles: number;
+84:   maxLinesPerFile: number;
+85:   categories: ReviewCategory[];
+86:   severityThreshold: ReviewSeverity;
+87:   enableAutoFix: boolean;
+88:   gitDiffOnly: boolean;
+89:   baseBranch?: string;
+90: }
+91: 
+92: // ============================================================================
+93: // Default Configuration
+94: // ============================================================================
+95: 
+96: const DEFAULT_CONFIG: ReviewConfig = {
+97:   includePatterns: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py'],
+98:   excludePatterns: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.test.*', '**/*.spec.*'],
+99:   maxFiles: 50,
+100:   maxLinesPerFile: 1000,
+101:   categories: ['security', 'performance', 'maintainability', 'bug', 'best-practice'],
+102:   severityThreshold: 'info',
+103:   enableAutoFix: true,
+104:   gitDiffOnly: false,
+105: };
+106: 
+107: // ============================================================================
+108: // Code Review Rules
+109: // ============================================================================
+110: 
+111: interface ReviewRule {
+112:   id: string;
+113:   name: string;
+114:   category: ReviewCategory;
+115:   severity: ReviewSeverity;
+116:   pattern: RegExp;
+117:   message: string;
+118:   suggestion?: string;
+119:   languages: string[];
+120:   autoFix?: (match: RegExpExecArray, line: string) => ReviewFix | null;
+121: }
+122: 
+123: const REVIEW_RULES: ReviewRule[] = [
+124:   // Security Rules
+125:   {
+126:     id: 'SEC001',
+127:     name: 'Hardcoded Secret',
+128:     category: 'security',
+129:     severity: 'critical',
+130:     pattern: /(?:password|secret|api[_-]?key|token|auth)\s*[=:]\s*["'][^"']{8,}["']/gi,
+131:     message: 'Potential hardcoded secret detected. Use environment variables instead.',
+132:     suggestion: 'Move this value to an environment variable or configuration file.',
+133:     languages: ['typescript', 'javascript', 'python'],
+134:   },
+135:   {
+136:     id: 'SEC002',
+137:     name: 'SQL Injection Risk',
+138:     category: 'security',
+139:     severity: 'critical',
+140:     pattern: /(?:query|execute|exec)\s*\([^)]*\+[^)]*\)|(?:query|execute|exec)\s*\([^)]*\$\{[^}]+\}[^)]*\)/gi,
+141:     message: 'Potential SQL injection vulnerability. Use parameterized queries.',
+142:     suggestion: 'Use prepared statements or parameterized queries to prevent SQL injection.',
+143:     languages: ['typescript', 'javascript', 'python'],
+144:   },
+145:   {
+146:     id: 'SEC003',
+147:     name: 'Dangerous eval()',
+148:     category: 'security',
+149:     severity: 'critical',
+150:     pattern: /\beval\s*\(/g,
+151:     message: 'Use of eval() is dangerous and can lead to code injection.',
+152:     suggestion: 'Avoid eval(). Consider using JSON.parse() for data or safer alternatives.',
+153:     languages: ['typescript', 'javascript'],
+154:   },
+155:   {
+156:     id: 'SEC004',
+157:     name: 'innerHTML Usage',
+158:     category: 'security',
+159:     severity: 'warning',
+160:     pattern: /\.innerHTML\s*=/g,
+161:     message: 'Direct innerHTML assignment can lead to XSS vulnerabilities.',
+162:     suggestion: 'Use textContent for text or a sanitization library for HTML.',
+163:     languages: ['typescript', 'javascript'],
+164:   },
+165: 
+166:   // Performance Rules
+167:   {
+168:     id: 'PERF001',
+169:     name: 'Nested Loops',
+170:     category: 'performance',
+171:     severity: 'warning',
+172:     pattern: /for\s*\([^)]+\)\s*\{[^}]*for\s*\([^)]+\)/g,
+173:     message: 'Nested loops can cause O(n²) complexity. Consider optimization.',
+174:     suggestion: 'Consider using a Map/Set for lookups or restructuring the algorithm.',
+175:     languages: ['typescript', 'javascript', 'python'],
+176:   },
+177:   {
+178:     id: 'PERF002',
+179:     name: 'Sync File Operation',
+180:     category: 'performance',
+181:     severity: 'warning',
+182:     pattern: /(?:readFileSync|writeFileSync|existsSync|statSync)\s*\(/g,
+183:     message: 'Synchronous file operations block the event loop.',
+184:     suggestion: 'Use async versions (readFile, writeFile) with await.',
+185:     languages: ['typescript', 'javascript'],
+186:   },
+187:   {
+188:     id: 'PERF003',
+189:     name: 'Inefficient Array Method',
+190:     category: 'performance',
+191:     severity: 'info',
+192:     pattern: /\.filter\([^)]+\)\.map\([^)]+\)/g,
+193:     message: 'Chained filter().map() iterates twice. Consider using reduce() or a single loop.',
+194:     suggestion: 'Use reduce() or flatMap() to combine operations.',
+195:     languages: ['typescript', 'javascript'],
+196:   },
+197: 
+198:   // Maintainability Rules
+199:   {
+200:     id: 'MAINT001',
+201:     name: 'Long Function',
+202:     category: 'maintainability',
+203:     severity: 'info',
+204:     pattern: /function\s+\w+\s*\([^)]*\)\s*\{[\s\S]{2000,}\}/g,
+205:     message: 'Function is very long. Consider breaking it into smaller functions.',
+206:     suggestion: 'Extract logical sections into separate functions.',
+207:     languages: ['typescript', 'javascript'],
+208:   },
+209:   {
+210:     id: 'MAINT002',
+211:     name: 'Magic Number',
+212:     category: 'maintainability',
+213:     severity: 'info',
+214:     pattern: /(?<![.\w])\d{4,}(?!\s*[,\]}])/g,
+215:     message: 'Magic number detected. Consider using a named constant.',
+216:     suggestion: 'Extract this number into a descriptive constant.',
+217:     languages: ['typescript', 'javascript', 'python'],
+218:   },
+219:   {
+220:     id: 'MAINT003',
+221:     name: 'TODO Comment',
+222:     category: 'maintainability',
+223:     severity: 'info',
+224:     pattern: /\/\/\s*TODO|#\s*TODO/gi,
+225:     message: 'TODO comment found. Consider addressing or tracking this.',
+226:     languages: ['typescript', 'javascript', 'python'],
+227:   },
+228: 
+229:   // Bug-prone Code
+230:   {
+231:     id: 'BUG001',
+232:     name: 'Loose Equality',
+233:     category: 'bug',
+234:     severity: 'warning',
+235:     pattern: /[^!=]==[^=]/g,
+236:     message: 'Use strict equality (===) instead of loose equality (==).',
+237:     suggestion: 'Replace == with === for type-safe comparison.',
+238:     languages: ['typescript', 'javascript'],
+239:     autoFix: (_match, _line) => ({
+240:       type: 'replace',
+241:       line: 0,
+242:       oldText: '==',
+243:       newText: '===',
+244:     }),
+245:   },
+246:   {
+247:     id: 'BUG002',
+248:     name: 'Floating Promise',
+249:     category: 'bug',
+250:     severity: 'warning',
+251:     pattern: /(?<!await\s)(?<!return\s)\b\w+\s*\.\s*(?:then|catch)\s*\(/g,
+252:     message: 'Promise without await or return may cause unhandled rejections.',
+253:     suggestion: 'Add await or return to handle the promise properly.',
+254:     languages: ['typescript', 'javascript'],
+255:   },
+256:   {
+257:     id: 'BUG003',
+258:     name: 'Empty Catch Block',
+259:     category: 'bug',
+260:     severity: 'warning',
+261:     pattern: /catch\s*\([^)]*\)\s*\{\s*\}/g,
+262:     message: 'Empty catch block silently swallows errors.',
+263:     suggestion: 'At minimum, log the error. Consider proper error handling.',
+264:     languages: ['typescript', 'javascript'],
+265:   },
+266: 
+267:   // Best Practices
+268:   {
+269:     id: 'BP001',
+270:     name: 'Console in Production',
+271:     category: 'best-practice',
+272:     severity: 'info',
+273:     pattern: /console\.(log|debug|info|warn|error)\s*\(/g,
+274:     message: 'Console statements should not be in production code.',
+275:     suggestion: 'Use a proper logging library or remove debug statements.',
+276:     languages: ['typescript', 'javascript'],
+277:   },
+278:   {
+279:     id: 'BP002',
+280:     name: 'Any Type',
+281:     category: 'best-practice',
+282:     severity: 'info',
+283:     pattern: /:\s*any\b/g,
+284:     message: 'Avoid using "any" type. It defeats TypeScript\'s type safety.',
+285:     suggestion: 'Use a specific type, unknown, or generic types.',
+286:     languages: ['typescript'],
+287:   },
+288:   {
+289:     id: 'BP003',
+290:     name: 'Commented Code',
+291:     category: 'best-practice',
+292:     severity: 'suggestion',
+293:     pattern: /\/\/\s*(?:const|let|var|function|if|for|while|return)\s/g,
+294:     message: 'Commented-out code should be removed.',
+295:     suggestion: 'Remove dead code. Use version control for history.',
+296:     languages: ['typescript', 'javascript'],
+297:   },
+298: ];
+299: 
+300: // ============================================================================
+301: // Code Review Engine
+302: // ============================================================================
+303: 
+304: export class CodeReviewEngine extends EventEmitter {
+305:   private config: ReviewConfig;
+306:   private projectRoot: string;
+307: 
+308:   constructor(projectRoot: string, config: Partial<ReviewConfig> = {}) {
+309:     super();
+310:     this.projectRoot = projectRoot;
+311:     this.config = { ...DEFAULT_CONFIG, ...config };
+312:   }
+313: 
+314:   /**
+315:    * Run code review on the project
+316:    */
+317:   async review(): Promise<ReviewResult> {
+318:     const startTime = Date.now();
+319: 
+320:     // Get files to review
+321:     const files = await this.getFilesToReview();
+322:     this.emit('progress', { phase: 'collecting', files: files.length });
+323: 
+324:     // Review each file
+325:     const fileReviews: FileReview[] = [];
+326: 
+327:     for (let i = 0; i < files.length; i++) {
+328:       const file = files[i];
+329:       this.emit('progress', { phase: 'reviewing', current: i + 1, total: files.length, file });
+330: 
+331:       try {
+332:         const review = await this.reviewFile(file);
+333:         if (review.comments.length > 0) {
+334:           fileReviews.push(review);
+335:         }
+336:       } catch (error) {
+337:         this.emit('error', { file, error });
+338:       }
+339:     }
+340: 
+341:     // Generate summary
+342:     const summary = this.generateSummary(fileReviews);
+343: 
+344:     return {
+345:       files: fileReviews,
+346:       summary,
+347:       duration: Date.now() - startTime,
+348:     };
+349:   }
+350: 
+351:   /**
+352:    * Review a single file
+353:    */
+354:   async reviewFile(filePath: string): Promise<FileReview> {
+355:     const fullPath = path.join(this.projectRoot, filePath);
+356:     const content = await fs.readFile(fullPath, 'utf-8');
+357:     const lines = content.split('\n');
+358:     const ext = path.extname(filePath);
+359:     const language = this.getLanguage(ext);
+360: 
+361:     const comments: ReviewComment[] = [];
+362: 
+363:     // Apply rules
+364:     for (const rule of REVIEW_RULES) {
+365:       if (!rule.languages.includes(language)) continue;
+366:       if (!this.config.categories.includes(rule.category)) continue;
+367:       if (!this.meetsThreshold(rule.severity)) continue;
+368: 
+369:       // Check each line
+370:       for (let i = 0; i < lines.length; i++) {
+371:         const line = lines[i];
+372:         const matches = line.matchAll(new RegExp(rule.pattern.source, rule.pattern.flags));
+373: 
+374:         for (const match of matches) {
+375:           if (match.index === undefined) continue;
+376: 
+377:           const comment: ReviewComment = {
+378:             id: `${rule.id}-${filePath}-${i + 1}-${match.index}`,
+379:             file: filePath,
+380:             line: i + 1,
+381:             column: match.index + 1,
+382:             severity: rule.severity,
+383:             category: rule.category,
+384:             message: rule.message,
+385:             suggestion: rule.suggestion,
+386:             codeSnippet: line.trim(),
+387:           };
+388: 
+389:           if (rule.autoFix && this.config.enableAutoFix) {
+390:             comment.fixAvailable = true;
+391:             const fix = rule.autoFix(match, line);
+392:             comment.autoFix = fix ?? undefined;
+393:             if (comment.autoFix) {
+394:               comment.autoFix.line = i + 1;
+395:             }
+396:           }
+397: 
+398:           comments.push(comment);
+399:         }
+400:       }
+
+... +305 lines omitted (lines 401-705; use start_line/end_line to view specific sections) ...
+
+706: 
+707:     // Summary
+708:     lines.push(`Score: ${result.summary.score}/100 (Grade: ${result.summary.grade})`);
+709:     lines.push(`Files Reviewed: ${result.summary.totalFiles}`);
+710:     lines.push(`Total Issues: ${result.summary.totalComments}`);
+711:     lines.push('');
+712: 
+713:     // By severity
+714:     lines.push('Issues by Severity:');
+715:     lines.push(`  🚨 Critical: ${result.summary.bySeverity.critical}`);
+716:     lines.push(`  ⚠️  Warning: ${result.summary.bySeverity.warning}`);
+717:     lines.push(`  ℹ️  Info: ${result.summary.bySeverity.info}`);
+718:     lines.push(`  💡 Suggestion: ${result.summary.bySeverity.suggestion}`);
+719:     lines.push('');
+720: 
+721:     // Highlights
+722:     if (result.summary.highlights.length > 0) {
+723:       lines.push('Highlights:');
+724:       for (const h of result.summary.highlights) {
+725:         lines.push(`  ${h}`);
+726:       }
+727:       lines.push('');
+728:     }
+729: 
+730:     // File details
+731:     if (result.files.length > 0) {
+732:       lines.push('───────────────────────────────────────────────────────────────');
+733:       lines.push('                        FILE DETAILS                            ');
+734:       lines.push('───────────────────────────────────────────────────────────────');
+735:       lines.push('');
+736: 
+737:       for (const file of result.files) {
+738:         lines.push(`📄 ${file.path} (Score: ${file.score})`);
+739:         for (const comment of file.comments) {
+740:           const icon = comment.severity === 'critical' ? '🚨'
+741:             : comment.severity === 'warning' ? '⚠️'
+742:             : comment.severity === 'info' ? 'ℹ️'
+743:             : '💡';
+744: 
+745:           lines.push(`  ${icon} Line ${comment.line}: ${comment.message}`);
+746:           if (comment.codeSnippet) {
+747:             lines.push(`     > ${comment.codeSnippet.slice(0, 60)}${comment.codeSnippet.length > 60 ? '...' : ''}`);
+748:           }
+749:           if (comment.suggestion) {
+750:             lines.push(`     💡 ${comment.suggestion}`);
+751:           }
+752:         }
+753:         lines.push('');
+754:       }
+755:     }
+756: 
+757:     // Recommendations
+758:     if (result.summary.recommendations.length > 0) {
+759:       lines.push('───────────────────────────────────────────────────────────────');
+760:       lines.push('Recommendations:');
+761:       for (const r of result.summary.recommendations) {
+762:         lines.push(`  • ${r}`);
+763:       }
+764:     }
+765: 
+766:     lines.push('');
+767:     lines.push(`Review completed in ${result.duration}ms`);
+768: 
+769:     return lines.join('\n');
+770:   }
+771: 
+772:   /**
+773:    * Dispose
+774:    */
+775:   dispose(): void {
+776:     this.removeAllListeners();
+777:   }
+778: }
+779: 
+780: // ============================================================================
+781: // Factory Function
+782: // ============================================================================
+783: 
+784: export function createCodeReview(
+785:   projectRoot: string,
+786:   config?: Partial<ReviewConfig>
+787: ): CodeReviewEngine {
+788:   return new CodeReviewEngine(projectRoot, config);
+789: }
+790: 
+791: /**
+792:  * Quick review function
+793:  */
+794: export async function reviewProject(
+795:   projectRoot: string,
+796:   options?: Partial<ReviewConfig>
+797: ): Promise<ReviewResult> {
+798:   const engine = new CodeReviewEngine(projectRoot, options);
+799:   try {
+800:     return await engine.review();
+801:   } finally {
+802:     engine.dispose();
+803:   }
+804: }
+805: 

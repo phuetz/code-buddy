@@ -12,10 +12,12 @@
  * - Undo functionality
  */
 
+
+// Mock fs-extra module
+
 import { TextEditorTool } from '../../src/tools/text-editor';
 import * as path from 'path';
 
-// Mock fs-extra module
 const mockPathExists = jest.fn();
 const mockStat = jest.fn();
 const mockReaddir = jest.fn();
@@ -28,7 +30,8 @@ const mockRemove = jest.fn();
 // to maintain test compatibility
 const mockWriteFile = jest.fn();
 
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   pathExists: (...args: unknown[]) => mockPathExists(...args),
   stat: (...args: unknown[]) => mockStat(...args),
   readdir: (...args: unknown[]) => mockReaddir(...args),
@@ -38,13 +41,18 @@ jest.mock('fs-extra', () => ({
   ensureDir: (...args: unknown[]) => mockEnsureDir(...args),
   remove: (...args: unknown[]) => mockRemove(...args),
   writeFile: (...args: unknown[]) => mockWriteFile(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock fs/promises module
 // Kept for compatibility if other modules use it, but TextEditorTool now goes through VFS -> fs-extra
-jest.mock('fs/promises', () => ({
+jest.mock('fs/promises', () => {
+  const impl = {
   writeFile: (...args: unknown[]) => mockWriteFile(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock confirmation service
 const mockGetSessionFlags = jest.fn();
@@ -52,10 +60,10 @@ const mockRequestConfirmation = jest.fn();
 
 jest.mock('../../src/utils/confirmation-service', () => ({
   ConfirmationService: {
-    getInstance: jest.fn(() => ({
+    getInstance: jest.fn(function() { return {
       getSessionFlags: mockGetSessionFlags,
       requestConfirmation: mockRequestConfirmation,
-    })),
+    }; }),
   },
 }));
 
@@ -90,10 +98,10 @@ const mockValidatePath = jest.fn();
 const mockGetConfig = jest.fn();
 
 jest.mock('../../src/workspace/workspace-isolation', () => ({
-  getWorkspaceIsolation: jest.fn(() => ({
+  getWorkspaceIsolation: jest.fn(function() { return {
     validatePath: (...args: unknown[]) => mockValidatePath(...args),
     getConfig: () => mockGetConfig(),
-  })),
+  }; }),
 }));
 
 describe('TextEditorTool', () => {

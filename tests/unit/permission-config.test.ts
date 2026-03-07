@@ -130,7 +130,7 @@ describe('PermissionManager', () => {
 
     it('should handle file read errors gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockImplementation(() => {
+      mockFs.readFileSync.mockImplementation(function() {
         throw new Error('Read error');
       });
 
@@ -184,7 +184,7 @@ describe('PermissionManager', () => {
 
     it('should emit config:error event on failure', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(() => {
+      mockFs.writeFileSync.mockImplementation(function() {
         throw new Error('Write error');
       });
       const listener = jest.fn();

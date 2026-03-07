@@ -1,0 +1,8 @@
+Updated smoke-test.mjs with 1 removal
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -131,4 +131,3 @@
+     assert.strictEqual(sessionRes.body.authenticated, false);
+   });
+ });
+-

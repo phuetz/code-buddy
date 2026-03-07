@@ -35,7 +35,7 @@ jest.mock('../../src/agent/custom/custom-agent-loader', () => {
   };
 
   return {
-    getCustomAgentLoader: jest.fn(() => mockLoader),
+    getCustomAgentLoader: jest.fn(function() { return mockLoader; }),
     resetCustomAgentLoader: jest.fn(),
     CustomAgentLoader: jest.fn(),
   };
@@ -170,7 +170,7 @@ Use /agent create <name> to create a new agent interactively.`;
     });
 
     test('should handle creation error', () => {
-      mockLoader.createAgent.mockImplementation(() => {
+      mockLoader.createAgent.mockImplementation(function() {
         throw new Error('Permission denied');
       });
 

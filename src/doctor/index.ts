@@ -10,7 +10,8 @@ export interface DoctorCheck {
 
 function commandExists(cmd: string): boolean {
   try {
-    execSync(`which ${cmd}`, { stdio: 'ignore' });
+    const lookupCommand = process.platform === 'win32' ? `where ${cmd}` : `which ${cmd}`;
+    execSync(lookupCommand, { stdio: 'ignore' });
     return true;
   } catch {
     return false;

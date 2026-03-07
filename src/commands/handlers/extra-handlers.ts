@@ -12,7 +12,8 @@
  */
 
 import { ChatEntry } from '../../agent/codebuddy-agent.js';
-import { execSync, spawn } from 'child_process';
+import fs from 'fs';
+import { execSync, spawnSync } from 'child_process';
 import path from 'path';
 
 export interface CommandHandlerResult {
@@ -305,34 +306,43 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
     const cwd = process.cwd();
     let output = '';
 
-    try {
-      // Try ripgrep first (faster)
-      output = execSync(
-        `rg --line-number --no-heading --color=never --max-count=20 -- ${escapeShellArg(query)}`,
-        { cwd, encoding: 'utf-8', maxBuffer: 1024 * 1024, timeout: 10000 }
+    const rgResult = runCommand(
+      'rg',
+      ['--line-number', '--no-heading', '--color=never', '--max-count=20', '--', query],
+      { cwd, timeoutMs: 10000 }
+    );
+
+    if (rgResult.success) {
+      output = rgResult.output;
+    } else if (rgResult.status === 1) {
+      return {
+        handled: true,
+        entry: {
+          type: 'assistant',
+          content: `No matches found for: ${query}`,
+          timestamp: new Date(),
+        },
+      };
+    } else {
+      const gitGrepResult = runCommand(
+        'git',
+        ['grep', '-n', '-I', '-m', '20', '-e', query, '--', '.'],
+        { cwd, timeoutMs: 10000 }
       );
-    } catch (rgError) {
-      // Fall back to grep if ripgrep not available
-      try {
-        output = execSync(
-          `grep -rn --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.py' --include='*.go' --include='*.rs' --include='*.java' --include='*.json' --include='*.yaml' --include='*.yml' --include='*.md' -m 20 -- ${escapeShellArg(query)}`,
-          { cwd, encoding: 'utf-8', maxBuffer: 1024 * 1024, timeout: 10000 }
-        );
-      } catch {
-        // grep also failed or returned no results
-        const exitCode = (rgError as { status?: number }).status;
-        if (exitCode === 1) {
-          // No matches found (rg/grep exit code 1)
-          return {
-            handled: true,
-            entry: {
-              type: 'assistant',
-              content: `No matches found for: ${query}`,
-              timestamp: new Date(),
-            },
-          };
-        }
-        throw rgError;
+
+      if (gitGrepResult.success) {
+        output = gitGrepResult.output;
+      } else if (gitGrepResult.status === 1) {
+        return {
+          handled: true,
+          entry: {
+            type: 'assistant',
+            content: `No matches found for: ${query}`,
+            timestamp: new Date(),
+          },
+        };
+      } else {
+        throw new Error(rgResult.output || gitGrepResult.output || 'Search tool not available');
       }
     }
 
@@ -439,55 +449,52 @@ export async function handleFix(_args: string[]): Promise<CommandHandlerResult> 
   try {
     const cwd = process.cwd();
     const results: string[] = [];
+    const targets = collectFixTargets(cwd);
 
-    // Try ESLint fix
-    try {
-      const eslintOutput = execSync('npx eslint --fix . 2>&1', {
-        cwd,
-        encoding: 'utf-8',
-        maxBuffer: 5 * 1024 * 1024,
-        timeout: 60000,
-        env: { ...process.env, FORCE_COLOR: '0' },
-      });
+    if (targets.length === 0) {
+      results.push('ESLint: No changed JS/TS files found. Pass files explicitly or stage changes first.');
+    } else {
+      const limitedTargets = targets.slice(0, 25);
+      const eslintResult = runCommand(
+        getNpxCommand(),
+        ['eslint', '--fix', '--cache', '--', ...limitedTargets],
+        {
+          cwd,
+          timeoutMs: 15000,
+          env: { ...process.env, FORCE_COLOR: '0' },
+        }
+      );
 
-      if (eslintOutput.trim()) {
-        results.push('ESLint auto-fix:\n```\n' + truncateOutput(eslintOutput.trim(), 2000) + '\n```');
-      } else {
-        results.push('ESLint: No fixable issues found.');
-      }
-    } catch (error) {
-      const execError = error as { stdout?: string; stderr?: string };
-      const output = (execError.stdout || '') + (execError.stderr || '');
-      if (output.trim()) {
-        results.push('ESLint results:\n```\n' + truncateOutput(output.trim(), 2000) + '\n```');
+      if (eslintResult.success) {
+        if (eslintResult.output) {
+          results.push('ESLint auto-fix:\n```\n' + truncateOutput(eslintResult.output, 2000) + '\n```');
+        } else {
+          results.push(`ESLint: Auto-fix completed for ${limitedTargets.length} file(s).`);
+        }
+      } else if (eslintResult.timedOut) {
+        results.push(
+          `ESLint: Timed out after 15s while checking ${limitedTargets.length} file(s). ` +
+          'Run `npm run lint:fix` for a full repository pass.'
+        );
+      } else if (eslintResult.output) {
+        results.push('ESLint results:\n```\n' + truncateOutput(eslintResult.output, 2000) + '\n```');
       } else {
         results.push('ESLint: Not available or no configuration found.');
       }
     }
 
-    // Run TypeScript type check
-    try {
-      const tscOutput = execSync('npx tsc --noEmit 2>&1', {
-        cwd,
-        encoding: 'utf-8',
-        maxBuffer: 5 * 1024 * 1024,
-        timeout: 60000,
-        env: { ...process.env, FORCE_COLOR: '0' },
-      });
-
-      if (tscOutput.trim()) {
-        results.push('TypeScript check:\n```\n' + truncateOutput(tscOutput.trim(), 2000) + '\n```');
+    const hasTypeScriptTargets = targets.some(target => /\.(cts|mts|ts|tsx)$/.test(target));
+    if (hasTypeScriptTargets) {
+      if (fs.existsSync(path.join(cwd, 'tsconfig.json'))) {
+        results.push(
+          'TypeScript: Quick fix mode skips a full project typecheck to stay responsive. ' +
+          'Run `npm run typecheck` for complete validation.'
+        );
       } else {
-        results.push('TypeScript: No type errors found.');
+        results.push('TypeScript: No tsconfig.json found.');
       }
-    } catch (error) {
-      const execError = error as { stdout?: string; stderr?: string };
-      const output = (execError.stdout || '') + (execError.stderr || '');
-      if (output.trim()) {
-        results.push('TypeScript errors:\n```\n' + truncateOutput(output.trim(), 2000) + '\n```');
-      } else {
-        results.push('TypeScript: Not available or no tsconfig.json found.');
-      }
+    } else {
+      results.push('TypeScript: No changed TS files found.');
     }
 
     return {
@@ -601,7 +608,93 @@ function createProgressBar(percent: number, width: number): string {
   return '[' + '#'.repeat(filled) + '-'.repeat(empty) + '] ' + percent.toFixed(1) + '%';
 }
 
-function escapeShellArg(arg: string): string {
-  // Escape single quotes by ending the single-quoted string, adding escaped quote, and reopening
-  return "'" + arg.replace(/'/g, "'\\''") + "'";
+interface RunCommandOptions {
+  cwd: string;
+  timeoutMs: number;
+  env?: NodeJS.ProcessEnv;
+}
+
+interface RunCommandResult {
+  output: string;
+  status: number | null;
+  success: boolean;
+  timedOut: boolean;
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  { cwd, timeoutMs, env }: RunCommandOptions
+): RunCommandResult {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: 'utf-8',
+    maxBuffer: 5 * 1024 * 1024,
+    timeout: timeoutMs,
+    env,
+    windowsHide: true,
+  });
+
+  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+  const errorMessage = result.error instanceof Error ? result.error.message : '';
+  const output = [stdout.trim(), stderr.trim(), errorMessage.trim()].filter(Boolean).join('\n').trim();
+  const timedOut =
+    result.signal === 'SIGTERM' ||
+    (result.error instanceof Error &&
+      'code' in result.error &&
+      (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT');
+
+  return {
+    output,
+    status: result.status,
+    success: result.status === 0 && !result.error,
+    timedOut,
+  };
+}
+
+function getNpxCommand(): string {
+  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+}
+
+function collectFixTargets(cwd: string): string[] {
+  const supportedExtensions = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
+  const changedFiles = new Set<string>();
+
+  const commands: Array<[string, string[]]> = [
+    ['git', ['diff', '--name-only', '--cached', '--diff-filter=ACMRTUXB']],
+    ['git', ['diff', '--name-only', '--diff-filter=ACMRTUXB']],
+    ['git', ['ls-files', '--others', '--exclude-standard']],
+  ];
+
+  for (const [command, args] of commands) {
+    const result = runCommand(command, args, {
+      cwd,
+      timeoutMs: 3000,
+    });
+
+    if (!result.success && result.status !== 1) {
+      continue;
+    }
+
+    for (const line of result.output.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const fullPath = path.resolve(cwd, trimmed);
+      if (!fs.existsSync(fullPath)) {
+        continue;
+      }
+
+      if (!supportedExtensions.has(path.extname(trimmed).toLowerCase())) {
+        continue;
+      }
+
+      changedFiles.add(trimmed);
+    }
+  }
+
+  return Array.from(changedFiles).sort();
 }

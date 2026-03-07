@@ -1,0 +1,3 @@
+Contents of test2.txt:
+1: BONJOUR
+2: 

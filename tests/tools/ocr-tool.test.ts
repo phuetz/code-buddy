@@ -130,7 +130,7 @@ describe('OCRTool', () => {
         mockVfs.stat.mockResolvedValue({ size: 1024 });
         
         // Mock checkTesseract failure
-        mockExecSync.mockImplementation(() => {
+        mockExecSync.mockImplementation(function() {
           throw new Error('Command failed');
         });
 
@@ -166,7 +166,7 @@ describe('OCRTool', () => {
     });
 
     it('should handle missing Tesseract', async () => {
-      mockExecSync.mockImplementation(() => { throw new Error('Command failed'); });
+      mockExecSync.mockImplementation(function() { throw new Error('Command failed'); });
 
       const result = await tool.listLanguages();
 

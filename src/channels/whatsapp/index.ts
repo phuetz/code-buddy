@@ -8,15 +8,13 @@
 
 import type {
   ChannelConfig,
-  ChannelUser,
-  ChannelInfo,
   InboundMessage,
   OutboundMessage,
   DeliveryResult,
   ContentType,
   MessageAttachment,
-} from '../index.js';
-import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
+} from '../core.js';
+import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
 import { logger } from '../../utils/logger.js';
 import { mkdirSync, existsSync } from 'fs';
@@ -111,6 +109,7 @@ interface BaileysSocket {
  * WhatsApp channel using Baileys (WhatsApp Web multi-device)
  */
 export class WhatsAppChannel extends BaseChannel {
+  private static baileysLoader: (() => Promise<BaileysModule>) | null = null;
   private socket: unknown = null;
   private authState: unknown = null;
   private qrTimeout: NodeJS.Timeout | null = null;
@@ -144,12 +143,21 @@ export class WhatsAppChannel extends BaseChannel {
   }
 
   /**
+   * Override the Baileys module loader in tests to avoid loading the real client.
+   */
+  static setBaileysLoaderForTesting(loader: (() => Promise<BaileysModule>) | null): void {
+    this.baileysLoader = loader;
+  }
+
+  /**
    * Connect to WhatsApp via Baileys
    */
   async connect(): Promise<void> {
     let baileys: BaileysModule;
     try {
-      baileys = await import('@whiskeysockets/baileys') as unknown as BaileysModule;
+      const loader = (this.constructor as typeof WhatsAppChannel).baileysLoader
+        ?? (async () => await import('@whiskeysockets/baileys') as unknown as BaileysModule);
+      baileys = await loader();
     } catch {
       throw new Error(
         'WhatsApp channel requires @whiskeysockets/baileys. Install it with: npm install @whiskeysockets/baileys'

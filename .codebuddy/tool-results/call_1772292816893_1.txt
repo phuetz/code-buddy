@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "TypeScript 5 New Language Constructs and Type System Additions"
+══════════════════════════════════════════════════
+
+1. **TypeScript 5.9 New Features: Developer Guide 2026** [1]
+   TypeScript 5.9 introduces several additions to the type system that enable more precise type modeling without additional verbosity. The ...
+
+2. **Announcing TypeScript 5.0** [2]
+   We're excited to announce the release of TypeScript 5.0! This release brings many new features, while aiming to make TypeScript smaller, simpler, and faster.
+
+3. **TypeScript 5: New Innovations & Breaking Changes** [3]
+   In TypeScript 5, even more complex constructs can be implemented with these type comments. For example, as shown in Listing 6, method ...
+
+4. **Documentation - Everyday Types** [4]
+   TypeScript's type system allows you to build new types out of existing ones using a large variety of operators. Now that we know how to write a few types, it's ...
+
+5. **The Definitive TypeScript 5.0 Guide - SitePen** [5]
+   Originally published October 2018. Updated March 2023. This article describes the features and functionality of TypeScript 5.0.
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript 5.9 New Features: Developer Guide 2026 — https://www.digitalapplied.com/blog/typescript-5-9-new-features-developer-guide-2026
+[2] Announcing TypeScript 5.0 — https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/
+[3] TypeScript 5: New Innovations & Breaking Changes — https://javascript-conference.com/blog/typescript-5/
+[4] Documentation - Everyday Types — https://www.typescriptlang.org/docs/handbook/2/everyday-types.html
+[5] The Definitive TypeScript 5.0 Guide - SitePen — https://www.sitepen.com/blog/update-the-definitive-typescript-guide

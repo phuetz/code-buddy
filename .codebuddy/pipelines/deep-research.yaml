@@ -1,0 +1,22 @@
+name: Deep Research
+description: "Parallel workflow: Multiple research agents -> Synthesizer"
+version: "1.0.0"
+steps:
+  - name: spawn_parallel_agents
+    type: tool
+    label: parallel-research
+    args:
+      tasks:
+        - type: explorer
+          task: "Research the technical background of the topic."
+        - type: explorer
+          task: "Research competitors and existing solutions."
+        - type: explorer
+          task: "Research implementation best practices."
+  
+  - name: spawn_subagent
+    type: tool
+    label: synthesis
+    args:
+      type: documenter
+      task: "Synthesize the results from all previous research tasks into a single comprehensive report."

@@ -11,7 +11,11 @@ import type {
   GatewayMessage,
   GatewayMessageType,
   ClientState,
+  ConnectPayload,
+  HelloOkPayload,
   AuthPayload,
+  SessionPatchPayload,
+  PresencePayload,
   ChatPayload,
   SessionPayload,
   ErrorPayload,
@@ -180,6 +184,8 @@ export class GatewayServer extends EventEmitter {
   protected sessions: SessionManager = new SessionManager();
   protected handlers: Map<GatewayMessageType, MessageHandler> = new Map();
   protected running = false;
+  protected startedAt: number | null = null;
+  protected stateVersion = 0;
   private pingInterval: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<GatewayConfig> = {}) {
@@ -197,21 +203,88 @@ export class GatewayServer extends EventEmitter {
       send(createMessage('pong', { clientId }));
     });
 
+    // Connect handshake handler (must be first frame)
+    this.registerHandler('connect', async (clientId, message, send) => {
+      const payload = message.payload as ConnectPayload;
+      const client = this.clients.get(clientId);
+
+      // Build hello-ok response with presence snapshot
+      const presence = Array.from(this.clients.values())
+        .filter(c => c.authenticated)
+        .map(c => ({
+          deviceId: c.metadata?.deviceId as string || c.id,
+          role: c.metadata?.role as string || 'control',
+          connectedAt: c.connectedAt,
+        }));
+
+      const helloOk: HelloOkPayload = {
+        paired: true, // In production, check device registry
+        uptime: this.running ? Date.now() - (this.startedAt || Date.now()) : 0,
+        stateVersion: this.stateVersion,
+        presence,
+        health: { status: 'ok', checkedAt: Date.now() },
+        authRequired: this.config.authEnabled && this.config.authMode !== 'none',
+      };
+
+      if (client) {
+        client.metadata = {
+          ...client.metadata,
+          deviceId: payload.deviceId,
+          deviceName: payload.deviceName,
+          role: payload.role,
+          protocolVersion: payload.protocolVersion,
+        };
+      }
+
+      this.emit('client:connect', clientId);
+      send(createMessage('hello_ok', helloOk));
+    });
+
+    // Session patch handler (per-session config updates)
+    this.registerHandler('session_patch', async (clientId, message, send) => {
+      const payload = message.payload as SessionPatchPayload;
+      const session = this.sessions.getSession(payload.sessionKey);
+      if (!session) {
+        send(createErrorMessage('SESSION_NOT_FOUND', `Session ${payload.sessionKey} not found`));
+        return;
+      }
+      session.metadata = { ...session.metadata, ...payload.patch };
+      send(createMessage('session_info', {
+        sessionId: payload.sessionKey,
+        status: 'patched',
+        metadata: session.metadata,
+      }, payload.sessionKey));
+    });
+
+    // Presence handler
+    this.registerHandler('presence', async (clientId, message, _send) => {
+      const payload = message.payload as PresencePayload;
+      // Broadcast presence to all clients in the session
+      this.emit('presence', { clientId, ...payload });
+    });
+
     // Auth handler
     this.registerHandler('auth', async (clientId, message, send) => {
       const payload = message.payload as AuthPayload;
 
-      if (this.config.authEnabled && !payload.token) {
-        send(createErrorMessage('AUTH_REQUIRED', 'Authentication token required'));
-        return;
-      }
-
-      // Validate token (implement your own validation)
-      const isValid = await this.validateToken(payload.token);
-
-      if (!isValid) {
-        send(createErrorMessage('AUTH_FAILED', 'Invalid authentication token'));
-        return;
+      if (!this.config.authEnabled || this.config.authMode === 'none') {
+        // Auth disabled — auto-approve
+      } else if (this.config.authMode === 'password') {
+        if (!payload.password || payload.password !== this.config.authPassword) {
+          send(createErrorMessage('AUTH_FAILED', 'Invalid password'));
+          return;
+        }
+      } else {
+        // Token auth (default)
+        if (!payload.token) {
+          send(createErrorMessage('AUTH_REQUIRED', 'Authentication token required'));
+          return;
+        }
+        const isValid = await this.validateToken(payload.token);
+        if (!isValid) {
+          send(createErrorMessage('AUTH_FAILED', 'Invalid authentication token'));
+          return;
+        }
       }
 
       // Update client state
@@ -449,12 +522,25 @@ export class GatewayServer extends EventEmitter {
   }
 
   /**
+   * Resolve the bind address from the bind mode config.
+   */
+  getBindAddress(): string {
+    switch (this.config.bind) {
+      case 'loopback': return '127.0.0.1';
+      case 'all': return '0.0.0.0';
+      case 'tailscale': return '127.0.0.1'; // Tailscale Serve handles exposure
+      default: return this.config.host;
+    }
+  }
+
+  /**
    * Start the server
    * Override in transport-specific subclass
    */
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    this.startedAt = Date.now();
     this.startPingInterval();
   }
 

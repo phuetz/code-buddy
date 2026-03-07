@@ -18,7 +18,7 @@ import {
 
 // Mock CodeBuddyClient
 jest.mock("../../src/codebuddy/client.js", () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: jest.fn().mockResolvedValue({
       choices: [{
         message: {
@@ -28,7 +28,7 @@ jest.mock("../../src/codebuddy/client.js", () => ({
       }],
       usage: { prompt_tokens: 100, completion_tokens: 50 },
     }),
-  })),
+  }; }),
 }));
 
 describe("Subagent", () => {

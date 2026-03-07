@@ -153,29 +153,43 @@ describe("Auto-Lint", () => {
     });
 
     describe("events", () => {
-      it("should emit lint:start event", (done) => {
-        manager.on("lint:start", (data: { file: string; linter: string }) => {
-          expect(data.file).toBe("test.ts");
-          done();
+      it("should emit lint:start event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("lint:start", (data: { file: string; linter: string }) => {
+            try {
+              expect(data.file).toBe("test.ts");
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.emit("lint:start", { file: "test.ts", linter: "ESLint" });
         });
-        manager.emit("lint:start", { file: "test.ts", linter: "ESLint" });
       });
 
-      it("should emit lint:complete event", (done) => {
-        manager.on("lint:complete", (data: { file: string; result: LintResult }) => {
-          expect(data.result.success).toBe(true);
-          done();
-        });
-        manager.emit("lint:complete", {
-          file: "test.ts",
-          result: {
-            success: true,
-            errors: [],
-            warnings: [],
-            fixedCount: 0,
-            duration: 100,
-            linter: "ESLint",
-          },
+      it("should emit lint:complete event", async () => {
+        await new Promise<void>((resolve, reject) => {
+          manager.once("lint:complete", (data: { file: string; result: LintResult }) => {
+            try {
+              expect(data.result.success).toBe(true);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+
+          manager.emit("lint:complete", {
+            file: "test.ts",
+            result: {
+              success: true,
+              errors: [],
+              warnings: [],
+              fixedCount: 0,
+              duration: 100,
+              linter: "ESLint",
+            },
+          });
         });
       });
     });

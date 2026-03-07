@@ -1,0 +1,9 @@
+file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-7-ai-ops/smoke-test.mjs:195
+        if (serverProcess) {
+        ^
+
+ReferenceError: serverProcess is not defined
+    at runTests (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-7-ai-ops/smoke-test.mjs:195:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+Node.js v18.20.8

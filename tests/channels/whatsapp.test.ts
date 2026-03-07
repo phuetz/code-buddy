@@ -5,13 +5,18 @@
  * All external dependencies are mocked.
  */
 
-import { EventEmitter } from 'events';
 
 // ============================================================================
 // Mocks
 // ============================================================================
 
 // Mock logger
+
+import { EventEmitter } from 'events';
+import { vi } from 'vitest';
+import { WhatsAppChannel } from '../../src/channels/whatsapp/index.js';
+import type { WhatsAppConfig } from '../../src/channels/whatsapp/index.js';
+
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     debug: jest.fn(),
@@ -24,10 +29,13 @@ jest.mock('../../src/utils/logger.js', () => ({
 // Mock fs
 const mockExistsSync = jest.fn();
 const mockMkdirSync = jest.fn();
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: (...args: unknown[]) => mockExistsSync(...args),
   mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock dm-pairing dynamic import
 jest.mock('../../src/channels/dm-pairing.js', () => ({
@@ -61,10 +69,10 @@ jest.mock('../../src/channels/peer-routing.js', () => ({
 
 // Mock concurrency lane-queue
 jest.mock('../../src/concurrency/lane-queue.js', () => ({
-  LaneQueue: jest.fn().mockImplementation(() => ({
+  LaneQueue: jest.fn().mockImplementation(function() { return {
     enqueue: jest.fn((_: unknown, handler: () => unknown) => handler()),
     clear: jest.fn(),
-  })),
+  }; }),
 }));
 
 // Shared mock state - these survive jest.clearAllMocks() because we
@@ -84,18 +92,14 @@ let mockSocketEv: EventEmitter;
 // For `baileys.default` to work, we need `__esModule: true` + `default` export.
 // We also need `makeWASocket` as a fallback since the code does
 // `baileys.default ?? baileys.makeWASocket`.
-jest.mock('@whiskeysockets/baileys', () => {
-  return {
-    __esModule: true,
-    get default() { return mockMakeWASocket; },
-    get makeWASocket() { return mockMakeWASocket; },
-    get useMultiFileAuthState() { return mockUseMultiFileAuthState; },
-  };
-}, { virtual: true });
+vi.mock('@whiskeysockets/baileys', () => ({
+  __esModule: true,
+  default: mockMakeWASocket,
+  makeWASocket: mockMakeWASocket,
+  useMultiFileAuthState: mockUseMultiFileAuthState,
+}));
 
 // Must import AFTER mocks are set up
-import { WhatsAppChannel } from '../../src/channels/whatsapp/index.js';
-import type { WhatsAppConfig } from '../../src/channels/whatsapp/index.js';
 
 // ============================================================================
 // Helpers
@@ -127,7 +131,7 @@ function setupMockImplementations(): void {
   mockSendPresenceUpdate.mockResolvedValue(undefined);
   mockEnd.mockReturnValue(undefined);
 
-  mockMakeWASocket.mockImplementation(() => {
+  mockMakeWASocket.mockImplementation(function() {
     mockSocketEv = new EventEmitter();
     return {
       ev: mockSocketEv,
@@ -137,6 +141,14 @@ function setupMockImplementations(): void {
       user: { id: '1234567890@s.whatsapp.net', name: 'TestBot' },
     };
   });
+}
+
+function setupBaileysLoader(): void {
+  WhatsAppChannel.setBaileysLoaderForTesting(async () => ({
+    default: mockMakeWASocket,
+    makeWASocket: mockMakeWASocket,
+    useMultiFileAuthState: mockUseMultiFileAuthState,
+  }));
 }
 
 /**
@@ -181,6 +193,7 @@ describe('WhatsAppChannel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     setupMockImplementations();
+    setupBaileysLoader();
     channel = new WhatsAppChannel(createConfig());
   });
 
@@ -190,6 +203,7 @@ describe('WhatsAppChannel', () => {
     } catch {
       // ignore
     }
+    WhatsAppChannel.setBaileysLoaderForTesting(null);
   });
 
   // ==========================================================================
@@ -405,7 +419,7 @@ describe('WhatsAppChannel', () => {
     });
 
     it('should reject with timeout error if QR pairing times out', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
 
       const ch = new WhatsAppChannel(createConfig({ qrTimeout: 5000 }));
 
@@ -413,14 +427,14 @@ describe('WhatsAppChannel', () => {
 
       // Let microtasks (the async connect body, await import, await auth) resolve
       // We need multiple rounds because connect() has multiple awaits
-      await jest.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Fast-forward past QR timeout
-      jest.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(6000);
 
       await expect(connectPromise).rejects.toThrow('WhatsApp QR pairing timed out');
 
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
   });
 
@@ -466,7 +480,7 @@ describe('WhatsAppChannel', () => {
     it('should ignore socket.end() errors gracefully', async () => {
       await connectChannel(channel);
 
-      mockEnd.mockImplementation(() => {
+      mockEnd.mockImplementation(function() {
         throw new Error('Socket already closed');
       });
 
@@ -1613,7 +1627,7 @@ describe('WhatsAppChannel', () => {
     });
 
     it('should attempt reconnect on non-401 close', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
 
       const connectSpy = jest.spyOn(channel, 'connect').mockResolvedValue(undefined);
 
@@ -1627,12 +1641,12 @@ describe('WhatsAppChannel', () => {
       expect(channel.getStatus().connected).toBe(false);
 
       // Advance past the 5-second reconnect timer
-      jest.advanceTimersByTime(5500);
+      vi.advanceTimersByTime(5500);
 
       // connect() is called asynchronously
       expect(connectSpy).toHaveBeenCalled();
 
-      jest.useRealTimers();
+      vi.useRealTimers();
       connectSpy.mockRestore();
     });
 
@@ -1662,7 +1676,7 @@ describe('WhatsAppChannel', () => {
     });
 
     it('should clear reconnect timer on disconnect', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
 
       const connectSpy = jest.spyOn(channel, 'connect').mockResolvedValue(undefined);
 
@@ -1678,15 +1692,15 @@ describe('WhatsAppChannel', () => {
       channel.disconnect();
 
       // Advancing time should NOT trigger connect (disconnect clears reconnectTimer)
-      jest.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(10000);
       expect(connectSpy).not.toHaveBeenCalled();
 
-      jest.useRealTimers();
+      vi.useRealTimers();
       connectSpy.mockRestore();
     });
 
     it('should not double-reconnect if already reconnecting', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
 
       const connectSpy = jest.spyOn(channel, 'connect').mockResolvedValue(undefined);
 
@@ -1701,17 +1715,17 @@ describe('WhatsAppChannel', () => {
         lastDisconnect: { error: { output: { statusCode: 503 } } },
       });
 
-      jest.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(6000);
 
       // Should only have been called once (the reconnect)
       expect(connectSpy).toHaveBeenCalledTimes(1);
 
-      jest.useRealTimers();
+      vi.useRealTimers();
       connectSpy.mockRestore();
     });
 
     it('should emit error when reconnect fails', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
 
       const errorSpy = jest.fn();
       channel.on('error', errorSpy);
@@ -1723,22 +1737,22 @@ describe('WhatsAppChannel', () => {
         lastDisconnect: { error: { output: { statusCode: 500 } } },
       });
 
-      jest.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(6000);
 
       // Need to flush promise queue for the async error handler
-      await jest.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
 
       expect(errorSpy).toHaveBeenCalledWith(
         'whatsapp',
         expect.objectContaining({ message: 'Reconnect failed' })
       );
 
-      jest.useRealTimers();
+      vi.useRealTimers();
       connectSpy.mockRestore();
     });
 
     it('should handle connection close without lastDisconnect error', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
 
       const connectSpy = jest.spyOn(channel, 'connect').mockResolvedValue(undefined);
 
@@ -1751,10 +1765,10 @@ describe('WhatsAppChannel', () => {
       expect(channel.getStatus().connected).toBe(false);
 
       // Should attempt reconnect (statusCode !== 401 when statusCode is undefined)
-      jest.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(6000);
       expect(connectSpy).toHaveBeenCalled();
 
-      jest.useRealTimers();
+      vi.useRealTimers();
       connectSpy.mockRestore();
     });
   });

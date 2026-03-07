@@ -13,8 +13,11 @@
  */
 
 // Mock external dependencies before imports
-jest.mock('react', () => {
-  const React = jest.requireActual('react');
+
+import { useTheme } from '../../src/ui/context/theme-context';
+
+jest.mock('react', async () => {
+  const React = await vi.importActual('react');
   return {
     ...React,
     memo: jest.fn((component) => component),
@@ -28,17 +31,16 @@ jest.mock('ink', () => ({
 }));
 
 jest.mock('../../src/ui/context/theme-context', () => ({
-  useTheme: jest.fn(() => ({
+  useTheme: jest.fn(function() { return {
     colors: {
       primary: '#007AFF',
       textMuted: '#8E8E93',
       borderActive: '#007AFF',
       borderBusy: '#FF9500',
     },
-  })),
+  }; }),
 }));
 
-import { useTheme } from '../../src/ui/context/theme-context';
 
 describe('ChatInput Component', () => {
   beforeEach(() => {

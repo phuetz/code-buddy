@@ -41,6 +41,14 @@ export interface WideResearchOptions {
   context?: string;
   /** LLM model for workers (defaults to current agent model) */
   model?: string;
+  /** Per-worker timeout in milliseconds (default: 90000) */
+  workerTimeoutMs?: number;
+  /** Overall research timeout in milliseconds (default: 300000) */
+  overallTimeoutMs?: number;
+  /** Timeout for decomposition phase in milliseconds (default: 45000) */
+  decomposeTimeoutMs?: number;
+  /** Timeout for aggregation phase in milliseconds (default: 60000) */
+  aggregateTimeoutMs?: number;
 }
 
 export interface ResearchWorkerResult {
@@ -90,6 +98,10 @@ export class WideResearchOrchestrator extends EventEmitter {
       stream: options.stream ?? true,
       context: options.context ?? '',
       model: options.model ?? '',
+      workerTimeoutMs: Math.max(5_000, options.workerTimeoutMs ?? 90_000),
+      overallTimeoutMs: Math.max(30_000, options.overallTimeoutMs ?? 300_000),
+      decomposeTimeoutMs: Math.max(5_000, options.decomposeTimeoutMs ?? 45_000),
+      aggregateTimeoutMs: Math.max(5_000, options.aggregateTimeoutMs ?? 60_000),
     };
   }
 
@@ -103,9 +115,16 @@ export class WideResearchOrchestrator extends EventEmitter {
     providerConfig?: Record<string, unknown>
   ): Promise<WideResearchResult> {
     const startTime = Date.now();
+    const deadline = startTime + this.options.overallTimeoutMs;
 
     // Step 1: Decompose into subtopics
-    const subtopics = await this.decompose(topic, apiKey, providerConfig);
+    const subtopics = await this.withTimeout(
+      this.decompose(topic, apiKey, providerConfig),
+      this.options.decomposeTimeoutMs,
+      'decompose phase timed out'
+    ).catch(() =>
+      Array.from({ length: this.options.workers }, (_, i) => `${topic} - aspect ${i + 1}`)
+    );
     this.emit('progress', { type: 'decomposed', subtopics } satisfies WideResearchProgress);
 
     // Step 2: Run workers in parallel (batched by this.options.workers)
@@ -118,8 +137,26 @@ export class WideResearchOrchestrator extends EventEmitter {
         this.emit('progress', { type: 'worker_start', workerIndex, subtopic } satisfies WideResearchProgress);
 
         const workerStart = Date.now();
+        const remainingOverallMs = Math.max(1_000, deadline - Date.now());
+        if (remainingOverallMs <= 1_000) {
+          const result: ResearchWorkerResult = {
+            subtopic,
+            workerIndex,
+            output: '',
+            success: false,
+            error: 'Skipped: overall research timeout reached',
+            durationMs: 0,
+          };
+          this.emit('progress', { type: 'worker_done', workerIndex, subtopic, success: false } satisfies WideResearchProgress);
+          return result;
+        }
+
         try {
-          const output = await this.runWorker(subtopic, topic, apiKey, providerConfig);
+          const output = await this.withTimeout(
+            this.runWorker(subtopic, topic, apiKey, providerConfig),
+            Math.min(this.options.workerTimeoutMs, remainingOverallMs),
+            `worker timed out after ${Math.min(this.options.workerTimeoutMs, remainingOverallMs)}ms`
+          );
           const result: ResearchWorkerResult = {
             subtopic,
             workerIndex,
@@ -149,7 +186,12 @@ export class WideResearchOrchestrator extends EventEmitter {
 
     // Step 3: Aggregate
     this.emit('progress', { type: 'aggregating' } satisfies WideResearchProgress);
-    const report = await this.aggregate(topic, workerResults, apiKey, providerConfig);
+    const remainingOverallMs = Math.max(5_000, deadline - Date.now());
+    const report = await this.withTimeout(
+      this.aggregate(topic, workerResults, apiKey, providerConfig),
+      Math.min(this.options.aggregateTimeoutMs, remainingOverallMs),
+      'aggregate phase timed out'
+    ).catch(() => this.buildFallbackReport(topic, workerResults));
 
     const finalResult: WideResearchResult = {
       topic,
@@ -302,6 +344,41 @@ export class WideResearchOrchestrator extends EventEmitter {
       chunks.push(arr.slice(i, i + size));
     }
     return chunks;
+  }
+
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      promise.then(
+        value => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        error => {
+          clearTimeout(timer);
+          reject(error);
+        }
+      );
+    });
+  }
+
+  private buildFallbackReport(topic: string, results: ResearchWorkerResult[]): string {
+    const successful = results.filter(r => r.success && r.output.trim().length > 0);
+    if (successful.length === 0) {
+      return `# ${topic}\n\nNo successful worker output was available before timeout.`;
+    }
+
+    const sections = successful
+      .map(r => `## ${r.subtopic}\n\n${r.output}`)
+      .join('\n\n---\n\n');
+
+    return [
+      `# Research Report (Fallback Synthesis): ${topic}`,
+      '',
+      'Aggregation timed out, returning concatenated worker outputs.',
+      '',
+      sections,
+    ].join('\n');
   }
 }
 

@@ -1,0 +1,29 @@
+
+🔍 Résultats pour: "TypeScript 5 new features and improvements"
+══════════════════════════════════════════════════
+
+1. **TypeScript 5.0: the new features and the issues they solve! | by Sammy-Jo Wymer | REWRITE TECH by Diconium | Medium** [1]
+   Solution #1 TypeScript 5.0 introduced <strong>big improvements to the decorator implementation</strong>, which means decorators now work a lot better with the type system.
+   📅 July 17, 2025
+
+2. **TypeScript 5: New Innovations & Breaking Changes | iJS Conference Blog** [2]
+   TypeScript 5 also brings some improvements in its results. Depending on the project in question, TypeScript 5 can <strong>improve build times by up to 81%</strong>. As a result, you may receive a build about a quarter faster.
+   📅 May 20, 2025
+
+3. **TypeScript: Documentation - TypeScript 5.0** [3]
+   In TypeScript 5.0, as well as future ... 5.3, and 5.4, you can specify &quot;ignoreDeprecations&quot;: &quot;5.0&quot; to silence those warnings. We’ll also shortly be releasing a 4.9 patch to allow specifying ignoreDeprecations to allow for smoother upgrades. Aside from deprecations, we’ve changed some settings to better improve cross-platform behavior in TypeScript. --newLine, which controls ...
+
+4. **TypeScript: Documentation - TypeScript 5.8** [4]
+   In TypeScript 5.8, the type system special-cases conditional expressions directly inside return statements. Each branch of the conditional is checked against the declared return type of the containing functions (if one exists), so the type system can catch the bug in the example above. ... This change was made within this pull request, as part of a broader set of future improvements for TypeScript.
+
+5. **Announcing TypeScript 5.9 - TypeScript** [5]
+   For more details, see the implementing pull request and discussion issue. TypeScript 5.9 introduces support for ECMAScript’s deferred module evaluation proposal using the new import defer syntax. This feature allows you to import a module without immediately executing the module and its dependencies, providing better control over when work and side-effects occur.
+   📅 August 1, 2025
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] TypeScript 5.0: the new features and the issues they solve! | by Sammy-Jo Wymer | REWRITE TECH by Diconium | Medium — https://medium.com/rewrite-tech/typescript-5-0-the-new-features-and-the-issues-they-solve-49757530e760
+[2] TypeScript 5: New Innovations & Breaking Changes | iJS Conference Blog — https://javascript-conference.com/blog/typescript-5/
+[3] TypeScript: Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[4] TypeScript: Documentation - TypeScript 5.8 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html
+[5] Announcing TypeScript 5.9 - TypeScript — https://devblogs.microsoft.com/typescript/announcing-typescript-5-9/

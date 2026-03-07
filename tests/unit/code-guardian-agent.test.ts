@@ -16,12 +16,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
   statSync: jest.fn(),
   readdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('CodeGuardianAgent', () => {
   let agent: CodeGuardianAgent;
@@ -699,7 +702,7 @@ class DataProcessor:
 
     describe('error handling', () => {
       it('should catch and return errors gracefully', async () => {
-        (fs.readFileSync as jest.Mock).mockImplementation(() => {
+        (fs.readFileSync as jest.Mock).mockImplementation(function() {
           throw new Error('Read error');
         });
 

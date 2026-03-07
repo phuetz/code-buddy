@@ -1,0 +1,5 @@
+Updated frontend/index.html with 1 addition
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1,0 +1,1 @@
++

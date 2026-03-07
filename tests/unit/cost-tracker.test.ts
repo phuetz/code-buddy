@@ -5,12 +5,15 @@
 import { EventEmitter } from 'events';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   existsSync: jest.fn().mockReturnValue(false),
   readJsonSync: jest.fn().mockReturnValue({}),
   writeJsonSync: jest.fn(),
   ensureDirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock the analytics repository
 jest.mock('../../src/database/repositories/analytics-repository.js', () => ({
@@ -21,9 +24,12 @@ jest.mock('../../src/database/repositories/analytics-repository.js', () => ({
 }));
 
 // Mock os module for home directory
-jest.mock('os', () => ({
+jest.mock('os', () => {
+  const impl = {
   homedir: jest.fn().mockReturnValue('/home/testuser'),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 import * as fs from 'fs-extra';
 import { CostTracker, getCostTracker, TokenUsage, CostConfig, CostReport } from '../../src/utils/cost-tracker.js';
@@ -83,7 +89,7 @@ describe('CostTracker', () => {
 
     it('should handle config load errors gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readJsonSync.mockImplementation(() => {
+      mockFs.readJsonSync.mockImplementation(function() {
         throw new Error('Read error');
       });
 
@@ -156,7 +162,7 @@ describe('CostTracker', () => {
     });
 
     it('should fallback to JSON when SQLite initialization fails', () => {
-      mockGetAnalyticsRepository.mockImplementation(() => {
+      mockGetAnalyticsRepository.mockImplementation(function() {
         throw new Error('SQLite init failed');
       });
 
@@ -521,7 +527,7 @@ describe('CostTracker', () => {
     });
 
     it('should handle save config errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(() => {
+      mockFs.writeJsonSync.mockImplementation(function() {
         throw new Error('Write error');
       });
 
@@ -546,7 +552,7 @@ describe('CostTracker', () => {
     });
 
     it('should handle history save errors gracefully', () => {
-      mockFs.writeJsonSync.mockImplementation(() => {
+      mockFs.writeJsonSync.mockImplementation(function() {
         throw new Error('Write error');
       });
 

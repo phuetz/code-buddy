@@ -13,9 +13,9 @@
 // Mock CodeBuddyClient
 const mockChatResponse = jest.fn();
 jest.mock('../../src/codebuddy/client', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(() => ({
+  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
     chat: mockChatResponse,
-  })),
+  }; }),
 }));
 
 import {

@@ -9,6 +9,10 @@
 // Mocks
 // =========================================================================
 
+import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent';
+import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server';
+import { formatAgentResponse } from '../../src/mcp/mcp-agent-tools';
+
 const mockProcessUserMessage = jest.fn().mockResolvedValue([
   { type: 'assistant', content: 'Hello from agent', timestamp: new Date() },
 ]);
@@ -23,13 +27,13 @@ const mockNeedsOrchestration = jest.fn().mockReturnValue(false);
 const mockDispose = jest.fn();
 
 jest.mock('../../src/agent/codebuddy-agent', () => ({
-  CodeBuddyAgent: jest.fn().mockImplementation(() => ({
+  CodeBuddyAgent: jest.fn().mockImplementation(function() { return {
     processUserMessage: mockProcessUserMessage,
     executePlan: mockExecutePlan,
     needsOrchestration: mockNeedsOrchestration,
     dispose: mockDispose,
     agentMode: 'code',
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/utils/confirmation-service', () => ({
@@ -109,9 +113,9 @@ const mockWebSearch = jest.fn().mockResolvedValue({
 });
 
 jest.mock('../../src/tools/web-search', () => ({
-  WebSearchTool: jest.fn().mockImplementation(() => ({
+  WebSearchTool: jest.fn().mockImplementation(function() { return {
     search: mockWebSearch,
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/context/context-files', () => ({
@@ -125,29 +129,29 @@ jest.mock('../../src/context/context-files', () => ({
 
 // Mock tools used by the original server
 jest.mock('../../src/tools/text-editor', () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     view: jest.fn().mockResolvedValue({ success: true, output: 'file contents' }),
     create: jest.fn().mockResolvedValue({ success: true, output: 'File created' }),
     strReplace: jest.fn().mockResolvedValue({ success: true, output: 'Replaced' }),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/tools/search', () => ({
-  SearchTool: jest.fn().mockImplementation(() => ({
+  SearchTool: jest.fn().mockImplementation(function() { return {
     search: jest.fn().mockResolvedValue({ success: true, output: 'match' }),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/tools/git-tool', () => ({
-  GitTool: jest.fn().mockImplementation(() => ({
+  GitTool: jest.fn().mockImplementation(function() { return {
     getStatus: jest.fn().mockResolvedValue({ branch: 'main', ahead: 0, behind: 0, staged: [], unstaged: [], untracked: [] }),
-  })),
+  }; }),
 }));
 
 jest.mock('../../src/tools/bash/index', () => ({
-  BashTool: jest.fn().mockImplementation(() => ({
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: 'ok' }),
-  })),
+  }; }),
 }));
 
 // Mock MCP SDK
@@ -156,7 +160,7 @@ const registeredResources = new Map<string, { uri: string; options: unknown; han
 const registeredPrompts = new Map<string, { description: string; schema: unknown; handler: Function }>();
 
 jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
-  McpServer: jest.fn().mockImplementation(() => ({
+  McpServer: jest.fn().mockImplementation(function() { return {
     tool: jest.fn((name: string, description: string, schema: unknown, handler: Function) => {
       registeredTools.set(name, { description, schema, handler });
     }),
@@ -168,15 +172,13 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
     }),
     connect: jest.fn().mockResolvedValue(undefined),
     close: jest.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: jest.fn().mockImplementation(() => ({})),
+  StdioServerTransport: jest.fn().mockImplementation(function() { return {}; }),
 }));
 
-import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server';
-import { formatAgentResponse } from '../../src/mcp/mcp-agent-tools';
 
 // =========================================================================
 // Tests
@@ -608,7 +610,6 @@ describe('MCP Agent Intelligence Layer', () => {
 
   describe('agent lazy initialization', () => {
     it('should not initialize agent on construction', () => {
-      const { CodeBuddyAgent } = require('../../src/agent/codebuddy-agent');
       // Agent is only initialized when a tool handler is called
       // The constructor creates the MCP server but not the agent
       expect(CodeBuddyAgent).not.toHaveBeenCalled();
@@ -618,7 +619,6 @@ describe('MCP Agent Intelligence Layer', () => {
       const handler = registeredTools.get('agent_chat')!.handler;
       await handler({ message: 'test' });
 
-      const { CodeBuddyAgent } = require('../../src/agent/codebuddy-agent');
       expect(CodeBuddyAgent).toHaveBeenCalled();
       expect(CodeBuddyAgent.mock.calls[0][0]).toBe('test-key-123');
     });

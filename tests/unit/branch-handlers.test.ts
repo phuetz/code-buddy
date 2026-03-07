@@ -34,7 +34,7 @@ jest.mock('../../src/persistence/conversation-branches', () => {
   };
 
   return {
-    getBranchManager: jest.fn(() => mockBranchManager),
+    getBranchManager: jest.fn(function() { return mockBranchManager; }),
     resetBranchManager: jest.fn(),
   };
 });

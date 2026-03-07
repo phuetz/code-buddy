@@ -32,8 +32,8 @@ import type {
   ContentType,
   MessageAttachment,
   MessageButton,
-} from '../index.js';
-import { BaseChannel, getSessionKey, checkDMPairing } from '../index.js';
+} from '../core.js';
+import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
 
 const SLACK_API_BASE = 'https://slack.com/api';

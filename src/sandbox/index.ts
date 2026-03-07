@@ -8,6 +8,7 @@
  */
 
 export * from "./docker-sandbox.js";
+export * from "./e2b-sandbox.js";
 export * from "./os-sandbox.js";
 export * from "./execpolicy.js";
 export * from "./safe-eval.js";

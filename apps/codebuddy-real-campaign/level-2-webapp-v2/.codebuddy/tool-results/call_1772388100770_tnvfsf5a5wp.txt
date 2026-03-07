@@ -1,0 +1,2 @@
+Contents of server.err:
+1: 

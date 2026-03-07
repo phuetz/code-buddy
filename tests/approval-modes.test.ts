@@ -418,7 +418,7 @@ describe('ApprovalModeManager', () => {
       const listener = jest.fn();
       manager.on('config:error', listener);
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.writeFileSync.mockImplementation(() => {
+      mockFs.writeFileSync.mockImplementation(function() {
         throw new Error('Write failed');
       });
 

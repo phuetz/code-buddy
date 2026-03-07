@@ -2,43 +2,47 @@
  * Tests for ToolExecutor module
  */
 
-import * as path from "path";
-import { ToolExecutor, CodeBuddyToolCall } from "../../src/agent/tool-executor";
 
 // Mock all dependencies
+
+import * as path from "path";
+import { ToolExecutor, CodeBuddyToolCall } from "../../src/agent/tool-executor";
+import { TextEditorTool, BashTool, SearchTool, TodoTool, ImageTool, WebSearchTool, MorphEditorTool } from "../../src/tools/index.js";
+import { CheckpointManager } from "../../src/checkpoints/checkpoint-manager.js";
+
 jest.mock("../../src/tools/index.js", () => ({
-  TextEditorTool: jest.fn().mockImplementation(() => ({
+  TextEditorTool: jest.fn().mockImplementation(function() { return {
     view: jest.fn().mockResolvedValue({ success: true, output: "file content" }),
     create: jest.fn().mockResolvedValue({ success: true }),
     strReplace: jest.fn().mockResolvedValue({ success: true }),
-  })),
-  BashTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  BashTool: jest.fn().mockImplementation(function() { return {
     execute: jest.fn().mockResolvedValue({ success: true, output: "command output" }),
-  })),
-  SearchTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  SearchTool: jest.fn().mockImplementation(function() { return {
     search: jest.fn().mockResolvedValue({ success: true, output: "search results" }),
-  })),
-  TodoTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  TodoTool: jest.fn().mockImplementation(function() { return {
     createTodoList: jest.fn().mockResolvedValue({ success: true }),
     updateTodoList: jest.fn().mockResolvedValue({ success: true }),
-  })),
-  ImageTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  ImageTool: jest.fn().mockImplementation(function() { return {
     processImage: jest.fn().mockResolvedValue({ success: true }),
-  })),
-  WebSearchTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  WebSearchTool: jest.fn().mockImplementation(function() { return {
     search: jest.fn().mockResolvedValue({ success: true, output: "web results" }),
     fetchPage: jest.fn().mockResolvedValue({ success: true, output: "page content" }),
-  })),
-  MorphEditorTool: jest.fn().mockImplementation(() => ({
+  }; }),
+  MorphEditorTool: jest.fn().mockImplementation(function() { return {
     editFile: jest.fn().mockResolvedValue({ success: true }),
-  })),
+  }; }),
 }));
 
 jest.mock("../../src/checkpoints/checkpoint-manager.js", () => ({
-  CheckpointManager: jest.fn().mockImplementation(() => ({
+  CheckpointManager: jest.fn().mockImplementation(function() { return {
     checkpointBeforeCreate: jest.fn(),
     checkpointBeforeEdit: jest.fn(),
-  })),
+  }; }),
 }));
 
 jest.mock("../../src/codebuddy/tools.js", () => ({
@@ -50,8 +54,6 @@ jest.mock("../../src/codebuddy/tools.js", () => ({
   }),
 }));
 
-import { TextEditorTool, BashTool, SearchTool, TodoTool, ImageTool, WebSearchTool, MorphEditorTool } from "../../src/tools/index.js";
-import { CheckpointManager } from "../../src/checkpoints/checkpoint-manager.js";
 
 describe("ToolExecutor", () => {
   let executor: ToolExecutor;

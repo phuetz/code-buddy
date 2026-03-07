@@ -14,8 +14,11 @@
  */
 
 // Mock external dependencies before imports
-jest.mock('react', () => {
-  const React = jest.requireActual('react');
+
+import { highlight } from 'cli-highlight';
+
+jest.mock('react', async () => {
+  const React = await vi.importActual('react');
   return {
     ...React,
     memo: jest.fn((component) => component),
@@ -32,12 +35,15 @@ jest.mock('cli-highlight', () => ({
   highlight: jest.fn((code: string) => code),
 }));
 
-jest.mock('crypto', () => ({
-  createHash: jest.fn(() => ({
+jest.mock('crypto', () => {
+  const impl = {
+  createHash: jest.fn(function() { return {
     update: jest.fn().mockReturnThis(),
     digest: jest.fn(() => 'mockhash123'),
-  })),
-}));
+  }; }),
+};
+  return { ...impl, default: impl };
+});
 
 jest.mock('../../src/ui/utils/colors', () => ({
   Colors: {
@@ -57,7 +63,6 @@ jest.mock('../../src/ui/shared/max-sized-box', () => ({
   MaxSizedBox: 'MaxSizedBox',
 }));
 
-import { highlight } from 'cli-highlight';
 
 describe('DiffRenderer UI Component', () => {
   beforeEach(() => {

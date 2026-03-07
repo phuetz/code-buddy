@@ -2,15 +2,17 @@
  * Tests for Headless Mode Processing
  */
 
+import { vi } from 'vitest';
 import {
   processPromptHeadless,
   handleCommitAndPushHeadless,
   readPipedInput,
   HeadlessOptions,
 } from '../../src/cli/headless';
+import { logger } from '../../src/utils/logger.js';
 
 // Mock logger
-jest.mock('../../src/utils/logger', () => ({
+jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     error: jest.fn(),
     info: jest.fn(),
@@ -19,49 +21,42 @@ jest.mock('../../src/utils/logger', () => ({
   },
 }));
 
-import { logger } from '../../src/utils/logger';
 const loggerErrorSpy = logger.error as jest.Mock;
 
-// Mock the agent module
-jest.mock('../../src/agent/codebuddy-agent', () => {
-  const mockAgent = {
-    setSelfHealing: jest.fn(),
-    processUserMessage: jest.fn(),
-    executeBashCommand: jest.fn(),
-  };
+const { mockAgent, CodeBuddyAgent, mockConfirmService, getConfirmationServiceInstance } =
+  vi.hoisted(() => {
+    const mockAgent = {
+      setSelfHealing: vi.fn(),
+      processUserMessage: vi.fn(),
+      executeBashCommand: vi.fn(),
+    };
+    const mockConfirmService = {
+      setSessionFlag: vi.fn(),
+    };
 
-  return {
-    CodeBuddyAgent: jest.fn(() => mockAgent),
-    __mockAgent: mockAgent,
-  };
-});
+    return {
+      mockAgent,
+      CodeBuddyAgent: vi.fn(function CodeBuddyAgentMock() {
+        return mockAgent;
+      }),
+      mockConfirmService,
+      getConfirmationServiceInstance: vi.fn(() => mockConfirmService),
+    };
+  });
 
-// Mock the confirmation service
-jest.mock('../../src/utils/confirmation-service', () => {
-  const mockService = {
-    setSessionFlag: jest.fn(),
-  };
+vi.mock('../../src/agent/codebuddy-agent.js', () => ({
+  CodeBuddyAgent,
+}));
 
-  return {
-    ConfirmationService: {
-      getInstance: jest.fn(() => mockService),
-    },
-    __mockService: mockService,
-  };
-});
-
-// Get mocks for assertions
-const { CodeBuddyAgent, __mockAgent: mockAgent } = jest.requireMock(
-  '../../src/agent/codebuddy-agent'
-);
-const { ConfirmationService, __mockService: mockConfirmService } = jest.requireMock(
-  '../../src/utils/confirmation-service'
-);
+vi.mock('../../src/utils/confirmation-service.js', () => ({
+  ConfirmationService: {
+    getInstance: getConfirmationServiceInstance,
+  },
+}));
 
 describe('headless mode', () => {
   // Spy on console and process
   let consoleLogSpy: jest.SpyInstance;
-  let consoleErrorSpy: jest.SpyInstance;
   let processExitSpy: jest.SpyInstance;
 
   const defaultOptions: HeadlessOptions = {
@@ -74,15 +69,13 @@ describe('headless mode', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
       throw new Error('process.exit called');
-    }) as any);
+    }) as unknown as typeof process.exit);
   });
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
     processExitSpy.mockRestore();
   });
 
@@ -125,7 +118,7 @@ describe('headless mode', () => {
 
       await processPromptHeadless('test prompt', defaultOptions);
 
-      expect(ConfirmationService.getInstance).toHaveBeenCalled();
+      expect(getConfirmationServiceInstance).toHaveBeenCalled();
       expect(mockConfirmService.setSessionFlag).toHaveBeenCalledWith('allOperations', true);
     });
 

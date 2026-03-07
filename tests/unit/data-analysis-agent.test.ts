@@ -8,10 +8,13 @@ import { AgentTask } from '../../src/agent/specialized/types';
 import * as fs from 'fs';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', () => {
+  const impl = {
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('DataAnalysisAgent', () => {
   let agent: DataAnalysisAgent;

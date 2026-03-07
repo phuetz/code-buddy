@@ -1,0 +1,32 @@
+Lines 370-400 of src/agent/execution/agent-executor.ts:
+370:       // Agent loop
+371:       while (toolRounds < maxToolRounds) {
+372:         const assistantMessage = currentResponse.choices[0]?.message;
+373: 
+374:         if (!assistantMessage) {
+375:           throw new Error("No response received from AI. The API may be unavailable or the request was incomplete. Please try again.");
+376:         }
+377: 
+378:         // Track output tokens
+379:         if (currentResponse.usage) {
+380:           totalOutputTokens += currentResponse.usage.completion_tokens || 0;
+381:         } else if (assistantMessage.content) {
+382:           totalOutputTokens += this.deps.tokenCounter.countTokens(assistantMessage.content);
+383:         }
+384: 
+385:         // Handle tool calls
+386:         if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+387:           toolRounds++;
+388: 
+389:           // Add assistant message with tool calls
+390:           const assistantEntry: ChatEntry = {
+391:             type: "assistant",
+392:             content: assistantMessage.content || "Using tools to help you...",
+393:             timestamp: new Date(),
+394:             toolCalls: assistantMessage.tool_calls,
+395:           };
+396:           history.push(assistantEntry);
+397:           newEntries.push(assistantEntry);
+398: 
+399:           // Add assistant message to conversation
+400:           messages.push({

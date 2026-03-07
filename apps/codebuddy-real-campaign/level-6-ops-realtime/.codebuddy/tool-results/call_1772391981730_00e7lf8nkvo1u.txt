@@ -1,0 +1,4 @@
+Smoke test failed: Error: WebSocket job status not confirmed in time.
+    at Timeout._onTimeout (file:///mnt/d/CascadeProjects/grok-cli/apps/codebuddy-real-campaign/level-6-ops-realtime/smoke-test.mjs:167:37)
+    at listOnTimeout (node:internal/timers:569:17)
+    at process.processTimers (node:internal/timers:512:7)

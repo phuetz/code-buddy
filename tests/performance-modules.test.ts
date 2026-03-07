@@ -48,12 +48,19 @@ describe('LazyLoader', () => {
       expect(loader.isLoaded('test-module')).toBe(false);
     });
 
-    it('should emit module:registered event', (done) => {
-      loader.on('module:registered', (data) => {
-        expect(data.name).toBe('my-module');
-        done();
+    it('should emit module:registered event', async () => {
+      await new Promise<void>((resolve, reject) => {
+        loader.once('module:registered', (data) => {
+          try {
+            expect(data.name).toBe('my-module');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        loader.register('my-module', async () => 'value');
       });
-      loader.register('my-module', async () => 'value');
     });
   });
 
@@ -102,15 +109,23 @@ describe('LazyLoader', () => {
       expect(loadCount).toBe(1);
     });
 
-    it('should emit module:loaded event', (done) => {
-      loader.on('module:loaded', (data) => {
-        expect(data.name).toBe('event-module');
-        expect(data.loadTime).toBeGreaterThanOrEqual(0);
-        done();
+    it('should emit module:loaded event', async () => {
+      const loadedEvent = new Promise<void>((resolve, reject) => {
+        loader.once('module:loaded', (data) => {
+          try {
+            expect(data.name).toBe('event-module');
+            expect(data.loadTime).toBeGreaterThanOrEqual(0);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
       loader.register('event-module', async () => 'loaded');
-      loader.get('event-module');
+      const loading = loader.get('event-module');
+
+      await Promise.all([loadedEvent, loading]);
     });
 
     it('should handle loader errors', async () => {
@@ -163,15 +178,23 @@ describe('LazyLoader', () => {
       expect(loader.isLoaded('bad')).toBe(false);
     });
 
-    it('should emit preload:complete event', (done) => {
+    it('should emit preload:complete event', async () => {
       loader.register('preload1', async () => 'v1');
 
-      loader.on('preload:complete', (data) => {
-        expect(data.modules).toContain('preload1');
-        done();
+      const preloadEvent = new Promise<void>((resolve, reject) => {
+        loader.once('preload:complete', (data) => {
+          try {
+            expect(data.modules).toContain('preload1');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      loader.preload(['preload1']);
+      const preload = loader.preload(['preload1']);
+
+      await Promise.all([preloadEvent, preload]);
     });
   });
 
@@ -717,29 +740,45 @@ describe('RequestOptimizer', () => {
   });
 
   describe('events', () => {
-    it('should emit success event', (done) => {
-      optimizer.on('success', (data) => {
-        expect(data.key).toBe('success-event');
-        expect(data.latency).toBeGreaterThanOrEqual(0);
-        done();
+    it('should emit success event', async () => {
+      const successEvent = new Promise<void>((resolve, reject) => {
+        optimizer.once('success', (data) => {
+          try {
+            expect(data.key).toBe('success-event');
+            expect(data.latency).toBeGreaterThanOrEqual(0);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      optimizer.execute('success-event', async () => 'result');
+      const execution = optimizer.execute('success-event', async () => 'result');
+
+      await Promise.all([successEvent, execution]);
     });
 
-    it('should emit failure event', (done) => {
-      optimizer.on('failure', (data) => {
-        expect(data.key).toBe('fail-event');
-        expect(data.error).toBeDefined();
-        done();
+    it('should emit failure event', async () => {
+      const failureEvent = new Promise<void>((resolve, reject) => {
+        optimizer.once('failure', (data) => {
+          try {
+            expect(data.key).toBe('fail-event');
+            expect(data.error).toBeDefined();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      optimizer.execute('fail-event', async () => {
+      const execution = optimizer.execute('fail-event', async () => {
         throw new Error('Test error');
       }, { deduplicate: false }).catch(() => {});
+
+      await Promise.all([failureEvent, execution]);
     });
 
-    it('should emit retry event', (done) => {
+    it('should emit retry event', async () => {
       let retryEmitted = false;
 
       optimizer.on('retry', (data) => {
@@ -748,14 +787,13 @@ describe('RequestOptimizer', () => {
       });
 
       let attempts = 0;
-      optimizer.execute('retry-event', async () => {
+      await optimizer.execute('retry-event', async () => {
         attempts++;
         if (attempts < 2) throw new Error('Retry me');
         return 'success';
-      }, { deduplicate: false }).then(() => {
-        expect(retryEmitted).toBe(true);
-        done();
       });
+
+      expect(retryEmitted).toBe(true);
     });
 
     it('should emit deduplicated event', async () => {

@@ -93,19 +93,19 @@ const mockGeminiProvider = {
 
 // Mock the provider modules - jest.mock is hoisted
 jest.mock('../../src/providers/grok-provider.js', () => ({
-  GrokProvider: jest.fn().mockImplementation(() => mockGrokProvider),
+  GrokProvider: jest.fn().mockImplementation(function() { return mockGrokProvider; }),
 }));
 
 jest.mock('../../src/providers/claude-provider.js', () => ({
-  ClaudeProvider: jest.fn().mockImplementation(() => mockClaudeProvider),
+  ClaudeProvider: jest.fn().mockImplementation(function() { return mockClaudeProvider; }),
 }));
 
 jest.mock('../../src/providers/openai-provider.js', () => ({
-  OpenAIProvider: jest.fn().mockImplementation(() => mockOpenAIProvider),
+  OpenAIProvider: jest.fn().mockImplementation(function() { return mockOpenAIProvider; }),
 }));
 
 jest.mock('../../src/providers/gemini-provider.js', () => ({
-  GeminiProvider: jest.fn().mockImplementation(() => mockGeminiProvider),
+  GeminiProvider: jest.fn().mockImplementation(function() { return mockGeminiProvider; }),
 }));
 
 // Import after mocks are set up

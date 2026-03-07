@@ -1,0 +1,53 @@
+Updated smoke-test.mjs with 26 additions and 20 removals
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -215,23 +215,29 @@
+         console.error('Smoke test failed:', error);
+         process.exit(1);
+     } finally {
+-        // 8. Cleanup
+-        console.log('8. Cleaning up...');
+-        if (serverProcess) {
+-            serverProcess.kill();
+-            console.log('Server process killed.');
+-        }
+-        // Clean up the data file
+-        try {
+-            await fs.unlink(DATA_FILE);
+-            console.log('incidents.json cleaned up.');
+-        } catch (error) {
+-            if (error.code !== 'ENOENT') {
+-                console.error('Error cleaning up data file:', error);
+-            }
+-        }
+-    }
+-}
+-
+-runSmokeTest();
+-
++        // Restore original console functions
++        console.log = originalConsoleLog;
++        console.error = originalConsoleError;
++        if (logStream) {
++            await logStream.close();
++        }
++        // 8. Cleanup
++        console.log('8. Cleaning up...');
++        if (serverProcess) {
++            serverProcess.kill();
++            console.log('Server process killed.');
++        }
++        // Clean up the data file
++        try {
++            await fs.unlink(DATA_FILE);
++            console.log('incidents.json cleaned up.');
++        } catch (error) {
++            if (error.code !== 'ENOENT') {
++                console.error('Error cleaning up data file:', error);
++            }
++        }
++    }
++}
++
++runSmokeTest();
++

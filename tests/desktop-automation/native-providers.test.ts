@@ -5,34 +5,39 @@
  * and the auto-detection logic in DesktopAutomationManager.
  */
 
-import { execSync } from 'child_process';
 
 // Mock child_process before imports
-jest.mock('child_process', () => {
-  const actual = jest.requireActual('child_process');
+
+import { execSync } from 'child_process';
+import { LinuxNativeProvider } from '../../src/desktop-automation/linux-native-provider.js';
+import { WindowsNativeProvider } from '../../src/desktop-automation/windows-native-provider.js';
+import { MacOSNativeProvider } from '../../src/desktop-automation/macos-native-provider.js';
+
+jest.mock('child_process', async () => {
+  const actual = await vi.importActual('child_process');
   return {
     ...actual,
     execSync: jest.fn(),
     exec: jest.fn(),
-    spawn: jest.fn(() => ({
+    spawn: jest.fn(function() { return {
       pid: 12345,
       unref: jest.fn(),
       on: jest.fn(),
       stdout: { on: jest.fn() },
       stderr: { on: jest.fn() },
-    })),
+    }; }),
   };
 });
 
-jest.mock('util', () => {
-  const actual = jest.requireActual('util');
+jest.mock('util', async () => {
+  const actual = await vi.importActual('util');
   return {
     ...actual,
     promisify: (fn: (...args: unknown[]) => unknown) => {
       // Return a mock async exec
       return async (cmd: string, _opts?: Record<string, unknown>) => {
         // Delegate to the mocked execSync for simplicity
-        const { execSync: mockExecSync } = require('child_process');
+// const { execSync: mockExecSync } = require('child_process'); -- replaced by import
         const result = mockExecSync(cmd, { encoding: 'utf-8' });
         return { stdout: result, stderr: '' };
       };
@@ -40,9 +45,6 @@ jest.mock('util', () => {
   };
 });
 
-import { LinuxNativeProvider } from '../../src/desktop-automation/linux-native-provider.js';
-import { WindowsNativeProvider } from '../../src/desktop-automation/windows-native-provider.js';
-import { MacOSNativeProvider } from '../../src/desktop-automation/macos-native-provider.js';
 
 const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
 

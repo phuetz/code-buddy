@@ -3,7 +3,9 @@
  * Per-session settings, update channels, and elevated mode management.
  */
 
+import { readFileSync } from 'fs';
 import { logger } from './logger.js';
+import { coerce, inc, prerelease } from 'semver';
 
 export class SessionPersistentSettings {
   private static instance: SessionPersistentSettings | null = null;
@@ -52,6 +54,7 @@ export class UpdateChannelManager {
   private static instance: UpdateChannelManager | null = null;
   readonly channels = ['stable', 'beta', 'dev'] as const;
   private currentChannel: string = 'stable';
+  private releaseManifest: Partial<Record<'stable' | 'beta' | 'dev', { version: string; date?: string }>> | null = null;
 
   static getInstance(): UpdateChannelManager {
     if (!UpdateChannelManager.instance) {
@@ -80,21 +83,95 @@ export class UpdateChannelManager {
     if (!this.isValidChannel(channel)) {
       throw new Error(`Invalid channel: ${channel}`);
     }
-    // Stub implementation
-    const versions: Record<string, string> = {
-      stable: '1.0.0',
-      beta: '1.1.0-beta.1',
-      dev: '1.2.0-dev.1',
-    };
+
+    const manifest = this.getReleaseManifest();
+    const typedChannel = channel as 'stable' | 'beta' | 'dev';
+    const fromManifest = manifest?.[typedChannel];
+    const version =
+      process.env[`CODEBUDDY_${channel.toUpperCase()}_VERSION`] ||
+      fromManifest?.version ||
+      this.deriveChannelVersion(typedChannel);
+    const date =
+      process.env[`CODEBUDDY_${channel.toUpperCase()}_DATE`] ||
+      fromManifest?.date ||
+      new Date().toISOString();
+
     return {
-      version: versions[channel] || '0.0.0',
+      version,
       channel,
-      date: new Date().toISOString(),
+      date,
     };
   }
 
   isValidChannel(channel: string): boolean {
     return (this.channels as readonly string[]).includes(channel);
+  }
+
+  private getReleaseManifest(): Partial<Record<'stable' | 'beta' | 'dev', { version: string; date?: string }>> {
+    if (this.releaseManifest) {
+      return this.releaseManifest;
+    }
+
+    const manifestCandidates = [
+      new URL('../../.codebuddy/update-channels.json', import.meta.url),
+      new URL('../../package.json', import.meta.url),
+    ];
+
+    for (const manifestUrl of manifestCandidates) {
+      try {
+        const raw = readFileSync(manifestUrl, 'utf8');
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+        if (
+          typeof parsed.stable === 'object' ||
+          typeof parsed.beta === 'object' ||
+          typeof parsed.dev === 'object'
+        ) {
+          this.releaseManifest = parsed as Partial<
+            Record<'stable' | 'beta' | 'dev', { version: string; date?: string }>
+          >;
+          return this.releaseManifest;
+        }
+
+        if (typeof parsed.version === 'string') {
+          this.releaseManifest = {
+            stable: { version: parsed.version },
+          };
+          return this.releaseManifest;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    this.releaseManifest = {};
+    return this.releaseManifest;
+  }
+
+  private deriveChannelVersion(channel: 'stable' | 'beta' | 'dev'): string {
+    const stableVersion = this.getStableInstalledVersion();
+    if (channel === 'stable') {
+      return stableVersion;
+    }
+
+    const prereleaseTag = channel === 'beta' ? 'beta' : 'dev';
+    const candidate = inc(stableVersion, 'prerelease', prereleaseTag);
+    if (candidate) {
+      return candidate;
+    }
+
+    return `${stableVersion}-${prereleaseTag}.1`;
+  }
+
+  private getStableInstalledVersion(): string {
+    try {
+      const raw = readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
+      const parsed = JSON.parse(raw) as { version?: string };
+      const normalized = coerce(parsed.version || '0.0.0')?.version || '0.0.0';
+      return prerelease(parsed.version || '') ? normalized : parsed.version || normalized;
+    } catch {
+      return '0.0.0';
+    }
   }
 }
 

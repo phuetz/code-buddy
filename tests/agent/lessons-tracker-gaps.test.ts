@@ -14,7 +14,7 @@ import { logger } from '../../src/utils/logger';
 // Mock os.homedir so global ~/.codebuddy/lessons.md never contaminates tests.
 let _fakeHome = '/tmp/lessons-gaps-placeholder';
 jest.mock('os', () => {
-  const actual = jest.requireActual<typeof import('os')>('os');
+  const actual = await vi.importActual<typeof import('os')>('os');
   return { ...actual, homedir: jest.fn(() => _fakeHome) };
 });
 

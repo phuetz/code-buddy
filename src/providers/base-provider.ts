@@ -3,6 +3,12 @@
  *
  * Abstract base class and interface for AI providers.
  * Defines the contract that all LLM providers (Grok, Claude, OpenAI, etc.) must fulfill.
+ *
+ * Note: This is Code Buddy's own BaseProvider rather than extending the shared
+ * @phuetz/ai-providers BaseProvider directly, because Code Buddy uses
+ * LLMMessage.content: string (not string | null) and needs `complete()` as
+ * a public abstract method. The shared package's types, retry, and circuit
+ * breaker utilities are consumed via types.ts and retry.ts.
  */
 
 import { EventEmitter } from 'events';
@@ -226,10 +232,10 @@ export abstract class BaseProvider extends EventEmitter implements AIProvider {
   }
 
   estimateTokens(content: string | LLMMessage[]): number {
-    const text = typeof content === 'string' 
-      ? content 
+    const text = typeof content === 'string'
+      ? content
       : content.map(m => m.content).join(' ');
-      
+
     // Rough estimate: ~4 chars per token
     return Math.ceil(text.length / 4);
   }

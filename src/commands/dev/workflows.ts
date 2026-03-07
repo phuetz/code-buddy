@@ -223,7 +223,7 @@ Start with PLAN only. List exactly what you will do.`;
 
     // Extract and save patch artifact if any diff markers found
     if (patchOutput.includes('---') && patchOutput.includes('+++')) {
-      const diffMatch = patchOutput.match(/^(---.*?\+\+\+.*?^@@.*?)(?=\n---|\Z)/ms);
+      const diffMatch = patchOutput.match(/^(---.*?\+\+\+.*?^@@.*?)(?=\n---|$)/ms);
       const diffContent = diffMatch ? diffMatch[0] : patchOutput;
       const patchPath = runStore.saveArtifact(runId, 'patch.diff', diffContent);
       artifactPaths.push(patchPath);

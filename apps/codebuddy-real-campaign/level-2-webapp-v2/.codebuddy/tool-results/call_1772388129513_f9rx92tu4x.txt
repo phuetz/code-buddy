@@ -1,0 +1,12 @@
+Updated server.mjs with 1 addition and 1 removal
+--- a/server.mjs
++++ b/server.mjs
+@@ -4,7 +4,7 @@
+ import { nanoid } from 'nanoid';
+ 
+ const app = express();
+-const port = 3000;
++const port = 3001;
+ 
+ // Configure lowdb to write to JSONFile
+ const adapter = new JSONFile('db.json');

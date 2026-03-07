@@ -27,6 +27,18 @@ import { getLessonsTracker } from "../lessons-tracker.js";
 import { getObservationVariator } from "../../context/observation-variator.js";
 import { getRestorableCompressor } from "../../context/restorable-compression.js";
 import { getResponseConstraintStack, resolveToolChoice } from "../response-constraint.js";
+import type { ICMBridge } from "../../memory/icm-bridge.js";
+
+/**
+ * Register an ICM bridge provider for cross-session memory.
+ * Called by CodeBuddyAgent to wire up ICM without tight coupling.
+ */
+let _icmBridgeProvider: (() => ICMBridge | null) | null = null;
+export function setICMBridgeProvider(
+  provider: () => ICMBridge | null
+): void {
+  _icmBridgeProvider = provider;
+}
 
 /**
  * Register a decision-context provider for the executor.
@@ -86,6 +98,12 @@ export interface ExecutorConfig {
   enableAutoDiscovery?: boolean;
   /** Confidence threshold below which the auto-discovery hint is injected (default: 0.3) */
   skillDiscoveryThreshold?: number;
+  /**
+   * Single-tool mode (Manus AI pattern): only execute toolCalls[0] per iteration,
+   * re-enqueue remaining calls for the next round. Useful for complex orchestration
+   * where sequential tool execution is preferred.
+   */
+  singleToolMode?: boolean;
 }
 
 /**
@@ -102,6 +120,23 @@ export interface ExecutorConfig {
  * (processUserMessageStream) execution modes.
  */
 export class AgentExecutor {
+  private static parseTimeoutEnv(varName: string, fallbackMs: number): number {
+    const value = Number(process.env[varName]);
+    return Number.isFinite(value) && value >= 1000 ? value : fallbackMs;
+  }
+
+  private getLaneTaskTimeoutMs(isParallel: boolean): number {
+    const readTimeoutMs = AgentExecutor.parseTimeoutEnv(
+      'CODEBUDDY_LANE_READ_TIMEOUT_MS',
+      120000
+    );
+    const toolTimeoutMs = AgentExecutor.parseTimeoutEnv(
+      'CODEBUDDY_LANE_TOOL_TIMEOUT_MS',
+      300000
+    );
+    return isParallel ? readTimeoutMs : toolTimeoutMs;
+  }
+
   constructor(
     private deps: ExecutorDependencies,
     private config: ExecutorConfig
@@ -161,6 +196,7 @@ export class AgentExecutor {
       'get_file_info', 'tree', 'find_references',
     ]);
     const isParallel = readOnlyTools.has(toolCall.function.name);
+    const timeoutMs = this.getLaneTaskTimeoutMs(isParallel);
 
     return laneQueue.enqueue(
       laneId,
@@ -168,7 +204,7 @@ export class AgentExecutor {
       {
         parallel: isParallel,
         category: toolCall.function.name,
-        timeout: 120000,
+        timeout: timeoutMs,
       }
     );
   }
@@ -262,7 +298,7 @@ export class AgentExecutor {
         if (lastMsg && lastMsg.role === 'user' && typeof lastMsg.content === 'string') {
           messages.push({
             role: 'system' as const,
-            content: 'Low tool confidence for this query. Consider using the `skill_discover` tool to search the Skills Hub for relevant capabilities.',
+            content: '<context type="observation">\nLow tool confidence for this query. Consider using the `skill_discover` tool to search the Skills Hub for relevant capabilities.\n</context>',
           });
         }
       }
@@ -303,7 +339,7 @@ export class AgentExecutor {
       // --- Lessons context: inject BEFORE todo suffix (stable rules, higher priority) ---
       const lessonsBlock = getLessonsTracker(process.cwd()).buildContextBlock();
       if (lessonsBlock) {
-        preparedMessages.push({ role: 'system', content: lessonsBlock });
+        preparedMessages.push({ role: 'system', content: `<context type="lessons">\n${lessonsBlock}\n</context>` });
       }
 
       // --- Decision memory context: inject relevant past decisions ---
@@ -311,15 +347,29 @@ export class AgentExecutor {
         try {
           const decisionsBlock = await _decisionContextProvider(message);
           if (decisionsBlock) {
-            preparedMessages.push({ role: 'system', content: decisionsBlock });
+            preparedMessages.push({ role: 'system', content: `<context type="decision">\n${decisionsBlock}\n</context>` });
           }
         } catch { /* decision-memory optional */ }
+      }
+
+      // --- ICM cross-session memory: search for relevant past episodes ---
+      if (_icmBridgeProvider) {
+        try {
+          const icm = _icmBridgeProvider();
+          if (icm?.isAvailable()) {
+            const memories = await icm.searchMemory(message, { limit: 3 });
+            if (memories.length > 0) {
+              const memoryLines = memories.map(m => `- ${m.content}`).join('\n');
+              preparedMessages.push({ role: 'system', content: `<context type="memory">\nRelevant cross-session memories:\n${memoryLines}\n</context>` });
+            }
+          }
+        } catch { /* ICM search optional */ }
       }
 
       // --- Manus AI attention bias: append todo.md context at END of messages ---
       const todoSuffix = getTodoTracker(process.cwd()).buildContextSuffix();
       if (todoSuffix) {
-        preparedMessages.push({ role: 'system', content: todoSuffix });
+        preparedMessages.push({ role: 'system', content: `<context type="todo">\n${todoSuffix}\n</context>` });
       }
 
       // Check for context warnings
@@ -419,8 +469,13 @@ export class AgentExecutor {
             break;
           }
 
+          // Single-tool mode: only execute first tool call, defer rest
+          const toolCallsToExecute = this.config.singleToolMode
+            ? [assistantMessage.tool_calls[0]]
+            : assistantMessage.tool_calls;
+
           // Execute tool calls
-          for (const toolCall of assistantMessage.tool_calls) {
+          for (const toolCall of toolCallsToExecute) {
             const toolCallEntry: ChatEntry = {
               type: "tool_call",
               content: "Executing...",
@@ -500,11 +555,11 @@ export class AgentExecutor {
           // Re-inject lessons and todo context for each tool round (mirroring streaming path)
           const lessonsBlockNext = getLessonsTracker(process.cwd()).buildContextBlock();
           if (lessonsBlockNext) {
-            nextPreparedMessages.push({ role: 'system', content: lessonsBlockNext });
+            nextPreparedMessages.push({ role: 'system', content: `<context type="lessons">\n${lessonsBlockNext}\n</context>` });
           }
           const todoSuffixNext = getTodoTracker(process.cwd()).buildContextSuffix();
           if (todoSuffixNext) {
-            nextPreparedMessages.push({ role: 'system', content: todoSuffixNext });
+            nextPreparedMessages.push({ role: 'system', content: `<context type="todo">\n${todoSuffixNext}\n</context>` });
           }
 
           currentResponse = await this.deps.client.chat(
@@ -537,6 +592,21 @@ export class AgentExecutor {
               acm.processMessage('assistant', assistantMessage.content || '').catch(() => {});
             }
           } catch { /* auto-capture optional */ }
+
+          // Fire-and-forget ICM episode storage
+          if (_icmBridgeProvider) {
+            try {
+              const icm = _icmBridgeProvider();
+              if (icm?.isAvailable()) {
+                const episode = `User: ${message}\nAssistant: ${(assistantMessage.content || '').substring(0, 500)}`;
+                icm.storeEpisode(episode, {
+                  source: 'agent-executor',
+                  sessionId: process.env.CODEBUDDY_SESSION_ID,
+                  turnNumber: toolRounds,
+                }).catch(() => {});
+              }
+            } catch { /* ICM store optional */ }
+          }
 
           break;
         }
@@ -656,7 +726,7 @@ export class AgentExecutor {
         // --- Lessons context: inject BEFORE todo suffix (stable rules, higher priority) ---
         const lessonsBlockStream = getLessonsTracker(process.cwd()).buildContextBlock();
         if (lessonsBlockStream) {
-          preparedMessages.push({ role: 'system', content: lessonsBlockStream });
+          preparedMessages.push({ role: 'system', content: `<context type="lessons">\n${lessonsBlockStream}\n</context>` });
         }
 
         // --- Decision memory context: inject relevant past decisions (streaming path) ---
@@ -664,15 +734,29 @@ export class AgentExecutor {
           try {
             const decisionsBlockStream = await _decisionContextProvider(message);
             if (decisionsBlockStream) {
-              preparedMessages.push({ role: 'system', content: decisionsBlockStream });
+              preparedMessages.push({ role: 'system', content: `<context type="decision">\n${decisionsBlockStream}\n</context>` });
             }
           } catch { /* decision-memory optional */ }
+        }
+
+        // --- ICM cross-session memory: search for relevant past episodes (streaming path) ---
+        if (_icmBridgeProvider) {
+          try {
+            const icm = _icmBridgeProvider();
+            if (icm?.isAvailable()) {
+              const memories = await icm.searchMemory(message, { limit: 3 });
+              if (memories.length > 0) {
+                const memoryLines = memories.map(m => `- ${m.content}`).join('\n');
+                preparedMessages.push({ role: 'system', content: `<context type="memory">\nRelevant cross-session memories:\n${memoryLines}\n</context>` });
+              }
+            }
+          } catch { /* ICM search optional */ }
         }
 
         // --- Manus AI attention bias: append todo.md context at END of messages ---
         const todoSuffixStream = getTodoTracker(process.cwd()).buildContextSuffix();
         if (todoSuffixStream) {
-          preparedMessages.push({ role: 'system', content: todoSuffixStream });
+          preparedMessages.push({ role: 'system', content: `<context type="todo">\n${todoSuffixStream}\n</context>` });
         }
 
         // Context warning — always check regardless of pipeline state
@@ -791,11 +875,16 @@ export class AgentExecutor {
             }
           }
 
+          // Single-tool mode: only execute first tool call, defer rest
+          const streamToolCallsToExecute = this.config.singleToolMode
+            ? [toolCalls[0]]
+            : toolCalls;
+
           if (!this.deps.streamingHandler.hasYieldedToolCalls()) {
-            yield { type: "tool_calls", toolCalls: toolCalls };
+            yield { type: "tool_calls", toolCalls: streamToolCallsToExecute };
           }
 
-          for (const toolCall of toolCalls) {
+          for (const toolCall of streamToolCallsToExecute) {
             if (abortController?.signal.aborted) {
               yield { type: "content", content: "\n\n[Operation cancelled by user]" };
               yield { type: "done" };
@@ -922,6 +1011,21 @@ export class AgentExecutor {
               acm.processMessage('assistant', content || '').catch(() => {});
             }
           } catch { /* auto-capture optional */ }
+
+          // Fire-and-forget ICM episode storage (streaming path)
+          if (_icmBridgeProvider) {
+            try {
+              const icm = _icmBridgeProvider();
+              if (icm?.isAvailable()) {
+                const episode = `User: ${message}\nAssistant: ${(content || '').substring(0, 500)}`;
+                icm.storeEpisode(episode, {
+                  source: 'agent-executor-stream',
+                  sessionId: process.env.CODEBUDDY_SESSION_ID,
+                  turnNumber: toolRounds,
+                }).catch(() => {});
+              }
+            } catch { /* ICM store optional */ }
+          }
 
           break;
         }

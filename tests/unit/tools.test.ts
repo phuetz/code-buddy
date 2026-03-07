@@ -4,13 +4,18 @@
  */
 
 // Mock dependencies before imports
+
+import { MCPManager, MCPTool } from '../../src/mcp/client';
+import { loadMCPConfig } from '../../src/mcp/config';
+import { CodeBuddyTool } from '../../src/codebuddy/client';
+
 jest.mock('../../src/mcp/client', () => ({
-  MCPManager: jest.fn().mockImplementation(() => ({
+  MCPManager: jest.fn().mockImplementation(function() { return {
     getTools: jest.fn().mockReturnValue([]),
     addServer: jest.fn().mockResolvedValue(undefined),
     ensureServersInitialized: jest.fn().mockResolvedValue(undefined),
     callTool: jest.fn().mockResolvedValue({ isError: false, content: [] }),
-  })),
+  }; }),
   MCPTool: jest.fn(),
 }));
 
@@ -18,8 +23,8 @@ jest.mock('../../src/mcp/config', () => ({
   loadMCPConfig: jest.fn().mockReturnValue({ servers: [] }),
 }));
 
-jest.mock('../../src/tools/tool-selector', () => {
-  const originalModule = jest.requireActual('../../src/tools/tool-selector');
+jest.mock('../../src/tools/tool-selector', async () => {
+  const originalModule = await vi.importActual('../../src/tools/tool-selector');
   const mockSelector = {
     classifyQuery: jest.fn().mockReturnValue({
       categories: ['file_read'],
@@ -90,9 +95,6 @@ import {
 
 // Combined array matching the old CODEBUDDY_TOOLS behavior
 const ALL_TOOLS = [...CORE_TOOLS, ...SEARCH_TOOLS, ...TODO_TOOLS, ...WEB_TOOLS, ...ADVANCED_TOOLS];
-import { MCPManager, MCPTool } from '../../src/mcp/client';
-import { loadMCPConfig } from '../../src/mcp/config';
-import { CodeBuddyTool } from '../../src/codebuddy/client';
 
 describe('ALL_TOOLS', () => {
   beforeEach(() => {
@@ -535,7 +537,7 @@ describe('Tool Description Quality', () => {
 
 describe('Error Handling', () => {
   it('should handle MCP initialization errors', async () => {
-    (loadMCPConfig as jest.Mock).mockImplementation(() => {
+    (loadMCPConfig as jest.Mock).mockImplementation(function() {
       throw new Error('Config file not found');
     });
 

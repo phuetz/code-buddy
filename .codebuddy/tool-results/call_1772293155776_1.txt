@@ -1,0 +1,26 @@
+
+🔍 Résultats pour: "TypeScript 5 Compiler Configuration and Type System Enhancements"
+══════════════════════════════════════════════════
+
+1. **Documentation - TypeScript 5.0** [1]
+   TypeScript also added more uniformity to internal object types within the compiler, and also slimmed the data stored on some of these object types as well.
+
+2. **Announcing TypeScript 5.0 - Microsoft Dev Blogs** [2]
+   TypeScript also added more uniformity to internal object types within the compiler, and also slimmed the data stored on some of these object ...
+
+3. **TypeScript 5, Unpacked: 7 Features You Probably Missed - Medium** [3]
+   Practical upgrades from the 5.x era that make your types tighter, code cleaner, and builds faster — without rewriting your stack.
+
+4. **TypeScript 5.0 Updates: What's New - GeeksforGeeks** [4]
+   Explore the latest TypeScript 5.0 features like decorators, const type parameters, improved enums, module resolution, and config file ...
+
+5. **TypeScript 5: New Innovations & Breaking Changes** [5]
+   Depending on the project in question, TypeScript 5 can improve build times by up to 81%. As a result, you may receive a build about a quarter ...
+
+──────────────────────────────────────────────────
+**Sources:**
+[1] Documentation - TypeScript 5.0 — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html
+[2] Announcing TypeScript 5.0 - Microsoft Dev Blogs — https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/
+[3] TypeScript 5, Unpacked: 7 Features You Probably Missed - Medium — https://medium.com/@hadiyolworld007/typescript-5-unpacked-7-features-you-probably-missed-10ffbcb442a4
+[4] TypeScript 5.0 Updates: What's New - GeeksforGeeks — https://www.geeksforgeeks.org/typescript/typescript-5-0-updates-what-s-new/
+[5] TypeScript 5: New Innovations & Breaking Changes — https://javascript-conference.com/blog/typescript-5/

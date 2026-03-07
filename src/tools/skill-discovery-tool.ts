@@ -122,13 +122,20 @@ export class SkillDiscoveryTool {
 
   /**
    * Refresh the tool registry to pick up newly installed skills.
-   * Delegates to SkillRegistry.refresh() if available.
+   * Delegates to the unified SKILL.md registry so new managed skills become
+   * searchable without restarting the process.
    */
   private async refreshToolsFromSkills(): Promise<void> {
     try {
-      const { SkillRegistry } = await import('../skills/skill-registry.js');
-      const registry = new SkillRegistry();
-      await registry.refresh();
+      const { getSkillRegistry } = await import('../skills/registry.js');
+      const registry = getSkillRegistry();
+
+      if (typeof registry.reloadAll === 'function') {
+        await registry.reloadAll();
+      } else if (typeof registry.load === 'function') {
+        await registry.load();
+      }
+
       logger.debug('Skills refreshed after discovery install');
     } catch (err) {
       logger.warn('Failed to refresh skills after install', {

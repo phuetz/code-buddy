@@ -8,6 +8,10 @@
  * - Code chunker
  */
 
+import path from 'path';
+import mockFs from 'fs';
+import * as mockFsPromises from 'fs/promises';
+
 import {
   MultiPathRetrieval,
   getMultiPathRetrieval,
@@ -17,24 +21,30 @@ import {
 } from '../../src/context/multi-path-retrieval';
 
 // Mock fs module
-jest.mock('fs', () => ({
+jest.mock('fs', async () => {
+  const impl = {
   readFileSync: jest.fn(),
   readdirSync: jest.fn(),
   existsSync: jest.fn(),
   writeFileSync: jest.fn(),
   mkdirSync: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock fs/promises module (used by multi-path-retrieval)
-jest.mock('fs/promises', () => ({
+jest.mock('fs/promises', async () => {
+  const impl = {
   readFile: jest.fn(),
   readdir: jest.fn(),
   stat: jest.fn(),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 // Mock path module
-jest.mock('path', () => {
-  const originalPath = jest.requireActual('path');
+jest.mock('path', async () => {
+  const originalPath = await vi.importActual('path');
   return {
     ...originalPath,
     join: jest.fn((...args: string[]) => args.join('/')),
@@ -56,8 +66,8 @@ jest.mock('../../src/utils/logger', () => ({
   },
 }));
 
-const mockFs = require('fs');
-const mockFsPromises = require('fs/promises');
+// const mockFs = require('fs'); -- replaced by import
+// const mockFsPromises = require('fs/promises'); -- replaced by import
 
 describe('MultiPathRetrieval', () => {
   let retrieval: MultiPathRetrieval;
@@ -153,9 +163,7 @@ describe('MultiPathRetrieval', () => {
 
     it('should extract dependencies from imports', async () => {
       mockFsPromises.readFile.mockResolvedValue(`
-        import { something } from './other';
-        import path from 'path';
-        const fs = require('fs');
+// const fs = require('fs'); -- replaced by import
       `);
 
       await retrieval.indexFile('/test/imports.ts');

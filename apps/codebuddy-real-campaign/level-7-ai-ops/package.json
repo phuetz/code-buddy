@@ -1,0 +1,18 @@
+{
+  "name": "ai-incident-assistant",
+  "version": "1.0.0",
+  "description": "AI Incident Assistant Level 7",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "smoke-test": "node smoke-test.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.11.0",
+    "express": "^4.18.2",
+    "ws": "^8.16.0"
+  }
+}

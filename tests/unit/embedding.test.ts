@@ -40,26 +40,26 @@ import {
 // ============================================================================
 
 // Mock the database manager for EmbeddingRepository tests
-jest.mock('../../src/database/database-manager', () => {
+jest.mock('../../src/database/database-manager', async () => {
   const mockDb = {
-    prepare: jest.fn(() => ({
+    prepare: jest.fn(function() { return {
       get: jest.fn(),
       all: jest.fn(() => []),
-      run: jest.fn(() => ({ changes: 0 })),
-    })),
+      run: jest.fn(function() { return { changes: 0 }; }),
+    }; }),
     transaction: jest.fn((fn) => fn),
   };
 
   return {
-    getDatabaseManager: jest.fn(() => ({
-      getDatabase: jest.fn(() => mockDb),
-    })),
+    getDatabaseManager: jest.fn(function() { return {
+      getDatabase: jest.fn(function() { return mockDb; }),
+    }; }),
   };
 });
 
 // Mock fs for vector store persistence tests
-jest.mock('fs', () => {
-  const originalFs = jest.requireActual('fs');
+jest.mock('fs', async () => {
+  const originalFs = await vi.importActual('fs');
   return {
     ...originalFs,
     existsSync: jest.fn((path: string) => {
@@ -201,15 +201,21 @@ describe('EmbeddingProvider', () => {
       expect(results).toHaveLength(3);
     });
 
-    it('should emit initialized event', (done) => {
+    it('should emit initialized event', async () => {
       const provider = new EmbeddingProvider({ provider: 'mock' });
 
-      provider.on('initialized', (data) => {
-        expect(data.provider).toBe('mock');
-        done();
+      const initializedEvent = new Promise<void>((resolve, reject) => {
+        provider.once('initialized', (data) => {
+          try {
+            expect(data.provider).toBe('mock');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      provider.initialize();
+      await Promise.all([initializedEvent, provider.initialize()]);
     });
 
     it('should not reinitialize if already initialized', async () => {
@@ -1099,13 +1105,21 @@ describe('HNSWVectorStore', () => {
       expect(singleStore.size()).toBe(0);
     });
 
-    it('should emit delete event', (done) => {
-      store.on('delete', (data) => {
-        expect(data.id).toBe('v1');
-        done();
+    it('should emit delete event', async () => {
+      const deleteEvent = new Promise<void>((resolve, reject) => {
+        store.once('delete', (data) => {
+          try {
+            expect(data.id).toBe('v1');
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
       store.delete('v1');
+
+      await deleteEvent;
     });
   });
 
@@ -1144,12 +1158,20 @@ describe('HNSWVectorStore', () => {
       expect(store.size()).toBe(0);
     });
 
-    it('should emit clear event', (done) => {
-      store.on('clear', () => {
-        done();
+    it('should emit clear event', async () => {
+      const clearEvent = new Promise<void>((resolve, reject) => {
+        store.once('clear', () => {
+          try {
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
       store.clear();
+
+      await clearEvent;
     });
   });
 
@@ -1225,11 +1247,11 @@ describe('EmbeddingRepository', () => {
 
     // Create mock database
     mockDb = {
-      prepare: jest.fn(() => ({
+      prepare: jest.fn(function() { return {
         get: jest.fn(),
         all: jest.fn(() => []),
-        run: jest.fn(() => ({ changes: 0 })),
-      })),
+        run: jest.fn(function() { return { changes: 0 }; }),
+      }; }),
       transaction: jest.fn((fn) => fn),
     };
 
@@ -1463,7 +1485,7 @@ describe('EmbeddingRepository', () => {
     it('should return statistics', () => {
       // Track call order to return different results
       let callIndex = 0;
-      mockDb.prepare.mockImplementation(() => {
+      mockDb.prepare.mockImplementation(function() {
         callIndex++;
         // First two calls are for COUNT queries
         if (callIndex <= 2) {

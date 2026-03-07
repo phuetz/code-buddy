@@ -14,13 +14,15 @@
  * - Dispose / cleanup
  */
 
+
+// Mock logger
+
 import { TextEditorTool } from '../../src/tools/text-editor';
 import { ConfirmationService } from '../../src/utils/confirmation-service';
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 
-// Mock logger
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     debug: jest.fn(),
@@ -58,10 +60,10 @@ jest.mock('../../src/optimization/latency-optimizer', () => ({
 
 // Mock workspace isolation
 jest.mock('../../src/workspace/workspace-isolation', () => ({
-  getWorkspaceIsolation: jest.fn(() => ({
+  getWorkspaceIsolation: jest.fn(function() { return {
     getConfig: () => ({ enabled: false }),
     validatePath: jest.fn(),
-  })),
+  }; }),
 }));
 
 describe('TextEditorTool', () => {

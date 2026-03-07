@@ -34,7 +34,18 @@ export type HookType =
   | "pre-prompt"
   | "post-response"
   | "on-error"
-  | "on-tool-call";
+  | "on-tool-call"
+  | "command:new"
+  | "command:reset"
+  | "command:stop"
+  | "session:compact:before"
+  | "session:compact:after"
+  | "agent:bootstrap"
+  | "gateway:startup"
+  | "message:received"
+  | "message:transcribed"
+  | "message:preprocessed"
+  | "message:sent";
 
 /**
  * Hook execution context

@@ -1,0 +1,12 @@
+Updated smoke-test.mjs with 1 addition and 1 removal
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -42,7 +42,7 @@
+     return workerProcess;
+ };
+ 
+-const waitForWebSocketEvent = (ws, eventType, jobId, timeout = 10000) => {
++const waitForWebSocketEvent = (ws, eventType, jobId, timeout = 15000) => {
+     return new Promise((resolve, reject) => {
+         let timer;
+         const messageHandler = (message) => {

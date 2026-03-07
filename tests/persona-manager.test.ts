@@ -5,14 +5,17 @@
 import { PersonaManager, getPersonaManager, resetPersonaManager } from '../src/personas/persona-manager';
 
 // Mock fs-extra
-jest.mock('fs-extra', () => ({
+jest.mock('fs-extra', () => {
+  const impl = {
   ensureDir: jest.fn().mockResolvedValue(undefined),
   existsSync: jest.fn().mockReturnValue(false),
   readdir: jest.fn().mockResolvedValue([]),
   readJSON: jest.fn().mockResolvedValue({}),
   writeJSON: jest.fn().mockResolvedValue(undefined),
   remove: jest.fn().mockResolvedValue(undefined),
-}));
+};
+  return { ...impl, default: impl };
+});
 
 describe('PersonaManager', () => {
   let manager: PersonaManager;

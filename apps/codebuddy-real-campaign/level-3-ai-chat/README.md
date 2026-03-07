@@ -1,0 +1,55 @@
+# AI Support Desk
+
+This is an AI-powered support desk application built with Node.js (Express) and the Google Gemini API.
+
+## Features
+
+- Multi-turn conversational AI using Google Gemini.
+- Short chat history maintained for context.
+- Robust API error handling.
+- Message size limit for user input.
+- Fallback message for users in case of AI communication errors.
+- Simple web-based chat interface.
+
+## Endpoints
+
+- `GET /health`: Returns 'OK' to indicate the server is running.
+- `POST /api/chat`: Accepts user messages and returns AI responses. Expects a JSON body with `message` (string) and `history` (array of objects, optional).
+
+## Setup and Installation
+
+1.  **Clone the repository (if applicable):**
+
+    ```bash
+    git clone <repository-url>
+    cd ai-support-desk
+    ```
+
+2.  **Install Dependencies:**
+
+    ```bash
+    npm install
+    ```
+
+3.  **Configure API Key:**
+
+    Create a `.env` file in the root directory and add your Google Gemini API key:
+
+    ```
+    GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
+    ```
+
+    Replace `YOUR_GEMINI_API_KEY_HERE` with your actual Gemini API key.
+
+4.  **Run the Application:**
+
+    ```bash
+    node server.js
+    ```
+
+    The application will be accessible at `http://localhost:3000` (or the port specified in your environment variables).
+
+## Testing
+
+- **Unit/API Test:** Run `node test.js` to execute a test script that calls the `/api/chat` endpoint and verifies the response.
+- **Smoke Test:** Run `node smoke-test.mjs` to perform a basic check of the application's functionality. It will return exit code 0 on success.

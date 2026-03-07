@@ -83,7 +83,7 @@ describe('DiagramTool', () => {
 
     it('should fallback when mmdc is missing', async () => {
       mockVfs.ensureDir.mockResolvedValue(undefined);
-      mockExecSync.mockImplementation(() => { throw new Error('Command failed'); });
+      mockExecSync.mockImplementation(function() { throw new Error('Command failed'); });
 
       const result = await tool.generateFromMermaid('graph TD; A-->B;');
 
@@ -114,7 +114,7 @@ describe('DiagramTool', () => {
   describe('generateFlowchart', () => {
     it('should generate flowchart mermaid code', async () => {
       // Mock generateFromMermaid behavior (fallback mode)
-      mockExecSync.mockImplementation(() => { throw new Error('Command failed'); });
+      mockExecSync.mockImplementation(function() { throw new Error('Command failed'); });
       mockVfs.ensureDir.mockResolvedValue(undefined);
 
       const nodes = [{ id: 'A', label: 'Start', type: 'round' as const }];
@@ -131,7 +131,7 @@ describe('DiagramTool', () => {
 
   describe('generateSequenceDiagram', () => {
     it('should generate sequence diagram mermaid code', async () => {
-      mockExecSync.mockImplementation(() => { throw new Error('Command failed'); });
+      mockExecSync.mockImplementation(function() { throw new Error('Command failed'); });
       mockVfs.ensureDir.mockResolvedValue(undefined);
 
       const participants = ['Alice', 'Bob'];
@@ -148,7 +148,7 @@ describe('DiagramTool', () => {
 
   describe('generateClassDiagram', () => {
     it('should generate class diagram mermaid code', async () => {
-      mockExecSync.mockImplementation(() => { throw new Error('Command failed'); });
+      mockExecSync.mockImplementation(function() { throw new Error('Command failed'); });
       mockVfs.ensureDir.mockResolvedValue(undefined);
 
       const classes = [{ name: 'User', attributes: ['+name: string'], methods: ['+getName()'] }];
@@ -167,7 +167,7 @@ describe('DiagramTool', () => {
 
   describe('generatePieChart', () => {
     it('should generate pie chart mermaid code', async () => {
-      mockExecSync.mockImplementation(() => { throw new Error('Command failed'); });
+      mockExecSync.mockImplementation(function() { throw new Error('Command failed'); });
       mockVfs.ensureDir.mockResolvedValue(undefined);
 
       const data = [{ label: 'A', value: 10 }, { label: 'B', value: 20 }];
@@ -182,7 +182,7 @@ describe('DiagramTool', () => {
 
   describe('generateGanttChart', () => {
     it('should generate gantt chart mermaid code', async () => {
-      mockExecSync.mockImplementation(() => { throw new Error('Command failed'); });
+      mockExecSync.mockImplementation(function() { throw new Error('Command failed'); });
       mockVfs.ensureDir.mockResolvedValue(undefined);
 
       const sections = [{

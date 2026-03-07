@@ -1,0 +1,7 @@
+added 75 packages, and audited 76 packages in 3s
+
+18 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+STDERR: npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead

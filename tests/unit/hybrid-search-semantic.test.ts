@@ -2,9 +2,12 @@
  * Tests for HybridMemorySearch with semantic search integration
  */
 
-import { BM25Index, HybridMemorySearch } from '../../src/memory/hybrid-search.js';
 
 // Mock logger to suppress output
+
+import { BM25Index, HybridMemorySearch } from '../../src/memory/hybrid-search.js';
+import { vi } from 'vitest';
+
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
     debug: jest.fn(),
@@ -19,10 +22,10 @@ const mockEmbed = jest.fn();
 const mockInitialize = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('../../src/embeddings/embedding-provider.js', () => ({
-  EmbeddingProvider: jest.fn().mockImplementation(() => ({
+  EmbeddingProvider: jest.fn().mockImplementation(function() { return {
     initialize: mockInitialize,
     embed: mockEmbed,
-  })),
+  }; }),
 }));
 
 describe('BM25Index', () => {
@@ -107,7 +110,9 @@ describe('BM25Index', () => {
 });
 
 describe('HybridMemorySearch', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Allow fire-and-forget embedding tasks from prior tests to settle before resetting shared mocks.
+    await new Promise(resolve => setTimeout(resolve, 60));
     HybridMemorySearch.resetInstance();
     mockEmbed.mockReset();
     mockInitialize.mockReset();
@@ -178,12 +183,16 @@ describe('HybridMemorySearch', () => {
 
       const search = HybridMemorySearch.getInstance();
       search.index([{ key: 'k1', value: 'test document' }]);
+      await (search as unknown as {
+        embedDocuments: (entries: Array<{ key: string; value: string }>) => Promise<void>;
+      }).embedDocuments([{ key: 'k1', value: 'test document' }]);
 
-      // embedDocuments is async and non-blocking, wait for it
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      expect(mockInitialize).toHaveBeenCalled();
-      expect(mockEmbed).toHaveBeenCalledWith('test document');
+      await vi.waitFor(() => {
+        const embeddings = (search as unknown as { documentEmbeddings: Map<string, Float32Array> })
+          .documentEmbeddings;
+        expect(embeddings.has('k1')).toBe(true);
+        expect(embeddings.get('k1')).toBeInstanceOf(Float32Array);
+      }, { timeout: 1000 });
     });
 
     it('should combine BM25 and semantic scores when both are available', async () => {

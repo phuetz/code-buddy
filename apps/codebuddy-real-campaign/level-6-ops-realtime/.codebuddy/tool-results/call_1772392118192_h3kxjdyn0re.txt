@@ -1,0 +1,12 @@
+Updated smoke-test.mjs with 1 addition and 1 removal
+--- a/smoke-test.mjs
++++ b/smoke-test.mjs
+@@ -118,7 +118,7 @@
+ 
+         const jobPromise = new Promise((resolve, reject) => {
+             const checkCompletion = () => {
+-                if (ws1JobStatus === 'done' && ws2JobStatus === 'done' && jobCreatedCount >= 1 && jobUpdatedCount >= 2) {
++                if (ws1JobStatus === 'done' && ws2JobStatus === 'done' && jobCreatedCount >= 2 && jobUpdatedCount >= 4) {
+                     resolve();
+                 }
+             };

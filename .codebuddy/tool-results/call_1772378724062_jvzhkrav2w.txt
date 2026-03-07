@@ -1,0 +1,2 @@
+Contents of test.txt:
+1: SUCCESS_BASH_TEST

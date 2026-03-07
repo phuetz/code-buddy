@@ -271,6 +271,14 @@ ELEMENT TYPES:
             backgroundColor: { type: 'string' },
           },
         },
+        json: {
+          type: 'string',
+          description: 'Serialized canvas JSON to import (for import action)',
+        },
+        data: {
+          type: 'string',
+          description: 'Alias of json for import action',
+        },
       },
       required: ['action'],
     },

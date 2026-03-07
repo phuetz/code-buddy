@@ -1,0 +1,9 @@
+Tu es un agent développeur. Dans ce dossier vide, crée une mini application chatbox IA prête à l'emploi:
+- backend Node + Express avec endpoint POST /api/chat
+- frontend HTML/CSS/JS simple
+- connexion réelle à l'API Gemini via GOOGLE_API_KEY ou GEMINI_API_KEY
+- endpoint GET /health
+- gestion d'erreurs claire
+- README avec instructions de lancement
+Puis exécute les commandes nécessaires pour vérifier que ça marche.
+Réponds avec un résumé final des fichiers créés et des vérifications effectuées.

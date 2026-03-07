@@ -1,0 +1,109 @@
+Contents of realtime-collaborative-board/server.js:
+1: 
+2: const express = require('express');
+3: const http = require('http');
+4: const WebSocket = require('ws');
+5: const fs = require('fs');
+6: const path = require('path');
+7: const { v4: uuidv4 } = require('uuid');
+8: 
+9: const app = express();
+10: const server = http.createServer(app);
+11: const wss = new WebSocket.Server({ server });
+12: 
+13: const DATA_FILE = path.join(__dirname, 'items.json');
+14: 
+15: app.use(express.json());
+16: app.use(express.static('public'));
+17: 
+18: // Load items from file
+19: let items = [];
+20: try {
+21:     const data = fs.readFileSync(DATA_FILE, 'utf8');
+22:     items = JSON.parse(data);
+23: } catch (error) {
+24:     console.log('No items.json found, starting with empty array.');
+25: }
+26: 
+27: // Save items to file
+28: const saveItems = () => {
+29:     fs.writeFileSync(DATA_FILE, JSON.stringify(items, null, 2), 'utf8');
+30: };
+31: 
+32: // WebSocket broadcast function
+33: wss.broadcast = (data) => {
+34:     wss.clients.forEach(client => {
+35:         if (client.readyState === WebSocket.OPEN) {
+36:             client.send(JSON.stringify(data));
+37:         }
+38:     });
+39: };
+40: 
+41: // --- REST Endpoints ---
+42: 
+43: app.get('/health', (req, res) => {
+44:     res.status(200).send('OK');
+45: });
+46: 
+47: // GET all items
+48: app.get('/api/items', (req, res) => {
+49:     res.json(items);
+50: });
+51: 
+52: // GET item by ID
+53: app.get('/api/items/:id', (req, res) => {
+54:     const item = items.find(i => i.id === req.params.id);
+55:     if (item) {
+56:         res.json(item);
+57:     } else {
+58:         res.status(404).send('Item not found');
+59:     }
+60: });
+61: 
+62: // POST create new item
+63: app.post('/api/items', (req, res) => {
+64:     const newItem = { id: uuidv4(), ...req.body };
+65:     items.push(newItem);
+66:     saveItems();
+67:     wss.broadcast({ type: 'CREATE', payload: newItem });
+68:     res.status(201).json(newItem);
+69: });
+70: 
+71: // PUT update item
+72: app.put('/api/items/:id', (req, res) => {
+73:     const index = items.findIndex(i => i.id === req.params.id);
+74:     if (index !== -1) {
+75:         items[index] = { ...items[index], ...req.body, id: req.params.id };
+76:         saveItems();
+77:         wss.broadcast({ type: 'UPDATE', payload: items[index] });
+78:         res.json(items[index]);
+79:     } else {
+80:         res.status(404).send('Item not found');
+81:     }
+82: });
+83: 
+84: // DELETE item
+85: app.delete('/api/items/:id', (req, res) => {
+86:     const index = items.findIndex(i => i.id === req.params.id);
+87:     if (index !== -1) {
+88:         const deletedItem = items.splice(index, 1);
+89:         saveItems();
+90:         wss.broadcast({ type: 'DELETE', payload: { id: req.params.id } });
+91:         res.status(204).send();
+92:     } else {
+93:         res.status(404).send('Item not found');
+94:     }
+95: });
+96: 
+97: // --- WebSocket Connection ---
+98: wss.on('connection', ws => {
+99:     console.log('Client connected');
+100:     ws.on('close', () => console.log('Client disconnected'));
+101: });
+102: 
+103: // Start server
+104: const PORT = process.env.PORT || 0; // Use port 0 to get a random available port
+105: server.listen(PORT, () => {
+106:     console.log(`Server listening on http://localhost:${server.address().port}`);
+107: });
+108: 

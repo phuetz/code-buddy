@@ -2,10 +2,13 @@
  * Unit tests for Provider Command
  */
 
-import { createProviderCommand } from '../../src/commands/provider';
-import { Command } from 'commander';
 
 // Mock logger
+
+import { createProviderCommand } from '../../src/commands/provider';
+import { Command } from 'commander';
+import { logger } from '../../src/utils/logger';
+
 jest.mock('../../src/utils/logger', () => ({
   logger: {
     error: jest.fn(),
@@ -15,19 +18,18 @@ jest.mock('../../src/utils/logger', () => ({
   },
 }));
 
-import { logger } from '../../src/utils/logger';
 const loggerErrorSpy = logger.error as jest.Mock;
 
 // Mock settings manager
 jest.mock('../../src/utils/settings-manager', () => ({
-  getSettingsManager: jest.fn(() => ({
-    loadUserSettings: jest.fn(() => ({
+  getSettingsManager: jest.fn(function() { return {
+    loadUserSettings: jest.fn(function() { return {
       provider: 'grok',
       model: 'grok-code-fast-1',
-    })),
+    }; }),
     updateUserSetting: jest.fn(),
     getCurrentModel: jest.fn(() => 'grok-code-fast-1'),
-  })),
+  }; }),
 }));
 
 describe('Provider Command', () => {
@@ -40,7 +42,7 @@ describe('Provider Command', () => {
     command = createProviderCommand();
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    processExitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
+    processExitSpy = jest.spyOn(process, 'exit').mockImplementation(function() {
       throw new Error('process.exit called');
     });
   });

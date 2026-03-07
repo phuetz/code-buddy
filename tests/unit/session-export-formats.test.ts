@@ -2,18 +2,20 @@
  * Tests for Session Store Export Formats
  */
 
+
+// Mock the database repository
+
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { SessionStore, Session, SessionMessage } from '../../src/persistence/session-store.js';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 
-// Mock the database repository
 jest.mock('../../src/database/repositories/session-repository.js', () => ({
-  getSessionRepository: jest.fn(() => ({
+  getSessionRepository: jest.fn(function() { return {
     createSession: jest.fn(),
     addMessage: jest.fn(),
-  })),
+  }; }),
   SessionRepository: class {},
 }));
 
