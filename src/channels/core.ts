@@ -9,9 +9,9 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 import { getSessionIsolator, resetSessionIsolator, SessionIsolator } from './session-isolation.js';
 export { resetSessionIsolator, SessionIsolator };
-import { getIdentityLinker, resetIdentityLinker, IdentityLinker } from './identity-links.js';
+import { getIdentityLinker, resetIdentityLinker, IdentityLinker, type CanonicalIdentity, type ChannelIdentity } from './identity-links.js';
 export { getIdentityLinker, resetIdentityLinker, IdentityLinker };
-export type { CanonicalIdentity, ChannelIdentity } from './identity-links.js';
+export type { CanonicalIdentity, ChannelIdentity };
 
 // ============================================================================
 // Types

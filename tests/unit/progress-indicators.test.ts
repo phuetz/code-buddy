@@ -84,13 +84,13 @@ describe('CostTracker', () => {
         action: 'warn',
       });
 
-      // Record some usage (grok-3: $1/1M input, $5/1M output)
-      tracker.recordRequest('grok-3', 1000000, 200000); // $1 + $1 = $2
+      // Record some usage (grok-3: $3/1M input, $15/1M output)
+      tracker.recordRequest('grok-3', 1000000, 200000); // $3 + $3 = $6
 
       const status = tracker.getBudgetStatus();
-      expect(status.used).toBeCloseTo(2.0);
-      expect(status.percentage).toBeCloseTo(20.0);
-      expect(status.remaining).toBeCloseTo(8.0);
+      expect(status.used).toBeCloseTo(6.0);
+      expect(status.percentage).toBeCloseTo(60.0);
+      expect(status.remaining).toBeCloseTo(4.0);
     });
 
     it('should trigger warning when threshold reached', () => {
@@ -114,8 +114,8 @@ describe('CostTracker', () => {
         action: 'warn',
       });
 
-      // Use 50% of budget
-      tracker.recordRequest('grok-3', 5000000, 0); // $5
+      // Use ~30% of budget (grok-3: $3/1M input)
+      tracker.recordRequest('grok-3', 1000000, 0); // $3
 
       const status = tracker.getBudgetStatus();
       expect(status.warningTriggered).toBe(false);
@@ -162,10 +162,10 @@ describe('CostTracker', () => {
     });
 
     it('should calculate cost correctly', () => {
-      // grok-3: $1/1M input, $5/1M output
+      // grok-3: $3/1M input, $15/1M output
       const entry = tracker.recordRequest('grok-3', 1000000, 1000000);
 
-      expect(entry.cost).toBeCloseTo(6.0); // $1 + $5 = $6
+      expect(entry.cost).toBeCloseTo(18.0); // $3 + $15 = $18
     });
 
     it('should record cached tokens', () => {
@@ -186,24 +186,24 @@ describe('CostTracker', () => {
 
   describe('calculateCost', () => {
     it('should calculate input cost', () => {
-      // grok-3: $1/1M input
+      // grok-3: $3/1M input
       const cost = tracker.calculateCost('grok-3', 1000000, 0);
 
-      expect(cost).toBeCloseTo(1.0);
+      expect(cost).toBeCloseTo(3.0);
     });
 
     it('should calculate output cost', () => {
-      // grok-3: $5/1M output
+      // grok-3: $15/1M output
       const cost = tracker.calculateCost('grok-3', 0, 1000000);
 
-      expect(cost).toBeCloseTo(5.0);
+      expect(cost).toBeCloseTo(15.0);
     });
 
     it('should calculate combined cost', () => {
-      // grok-3: $1/1M input, $5/1M output
+      // grok-3: $3/1M input, $15/1M output
       const cost = tracker.calculateCost('grok-3', 500000, 500000);
 
-      expect(cost).toBeCloseTo(3.0); // $0.5 + $2.5 = $3
+      expect(cost).toBeCloseTo(9.0); // $1.5 + $7.5 = $9
     });
 
     it('should calculate cached token cost', () => {
@@ -226,14 +226,14 @@ describe('CostTracker', () => {
       const pricing = tracker.getPricing('grok-3');
 
       expect(pricing.model).toBe('grok-3');
-      expect(pricing.inputPer1M).toBe(1.0);
-      expect(pricing.outputPer1M).toBe(5.0);
+      expect(pricing.inputPer1M).toBe(3.0);
+      expect(pricing.outputPer1M).toBe(15.0);
     });
 
     it('should match by prefix', () => {
       const pricing = tracker.getPricing('grok-3-something');
 
-      expect(pricing.inputPer1M).toBe(1.0);
+      expect(pricing.inputPer1M).toBe(3.0);
     });
 
     it('should return default pricing for unknown model', () => {
@@ -252,38 +252,38 @@ describe('CostTracker', () => {
     });
 
     it('should sum all request costs', () => {
-      tracker.recordRequest('grok-3', 1000000, 0); // $1
-      tracker.recordRequest('grok-3', 1000000, 0); // $1
-      tracker.recordRequest('grok-3', 0, 1000000); // $5
+      tracker.recordRequest('grok-3', 1000000, 0); // $3
+      tracker.recordRequest('grok-3', 1000000, 0); // $3
+      tracker.recordRequest('grok-3', 0, 1000000); // $15
 
       const total = tracker.getTotalCost();
 
-      expect(total).toBeCloseTo(7.0);
+      expect(total).toBeCloseTo(21.0);
     });
   });
 
   describe('getSummary', () => {
     beforeEach(() => {
-      tracker.recordRequest('grok-3', 1000000, 500000, 0, 'chat'); // $1 + $2.5 = $3.5
+      tracker.recordRequest('grok-3', 1000000, 500000, 0, 'chat'); // $3 + $7.5 = $10.5
       tracker.recordRequest('gpt-4o', 1000000, 500000, 0, 'tool'); // $2.5 + $5 = $7.5
     });
 
     it('should calculate total cost', () => {
       const summary = tracker.getSummary();
 
-      expect(summary.totalCost).toBeCloseTo(11.0);
+      expect(summary.totalCost).toBeCloseTo(18.0);
     });
 
     it('should calculate input cost', () => {
       const summary = tracker.getSummary();
 
-      expect(summary.inputCost).toBeCloseTo(3.5); // $1 + $2.5
+      expect(summary.inputCost).toBeCloseTo(5.5); // $3 + $2.5
     });
 
     it('should calculate output cost', () => {
       const summary = tracker.getSummary();
 
-      expect(summary.outputCost).toBeCloseTo(7.5); // $2.5 + $5
+      expect(summary.outputCost).toBeCloseTo(12.5); // $7.5 + $5
     });
 
     it('should count total tokens', () => {
@@ -302,13 +302,13 @@ describe('CostTracker', () => {
     it('should calculate average cost per request', () => {
       const summary = tracker.getSummary();
 
-      expect(summary.avgCostPerRequest).toBeCloseTo(5.5);
+      expect(summary.avgCostPerRequest).toBeCloseTo(9.0);
     });
 
     it('should track cost by model', () => {
       const summary = tracker.getSummary();
 
-      expect(summary.costByModel.get('grok-3')).toBeCloseTo(3.5);
+      expect(summary.costByModel.get('grok-3')).toBeCloseTo(10.5);
       expect(summary.costByModel.get('gpt-4o')).toBeCloseTo(7.5);
     });
 
@@ -329,10 +329,10 @@ describe('CostTracker', () => {
 
   describe('estimateCost', () => {
     it('should estimate cost for future request', () => {
-      // grok-3: $1/1M input, $5/1M output
+      // grok-3: $3/1M input, $15/1M output
       const estimate = tracker.estimateCost('grok-3', 2000000, 1000000);
 
-      expect(estimate).toBeCloseTo(7.0); // $2 + $5 = $7
+      expect(estimate).toBeCloseTo(21.0); // $6 + $15 = $21
     });
   });
 
@@ -515,7 +515,7 @@ describe('CostTracker', () => {
         warningThreshold: 0.8,
         action: 'warn',
       });
-      tracker.recordRequest('grok-3', 5000000, 0); // $5 = 50%
+      tracker.recordRequest('grok-3', 1000000, 0); // $3 = 30%
 
       const line = tracker.formatStatusLine();
 
@@ -530,7 +530,7 @@ describe('CostTracker', () => {
         warningThreshold: 0.5,
         action: 'warn',
       });
-      tracker.recordRequest('grok-3', 6000000, 0); // $6 = 60%
+      tracker.recordRequest('grok-3', 2000000, 0); // $6 = 60%
 
       const line = tracker.formatStatusLine();
 
@@ -545,9 +545,9 @@ describe('MODEL_PRICING', () => {
     const modelNames = MODEL_PRICING.map((p) => p.model);
 
     expect(modelNames).toContain('grok-4-latest');
-    expect(modelNames).toContain('grok-4');
+    expect(modelNames).toContain('grok-4-fast');
     expect(modelNames).toContain('grok-3');
-    expect(modelNames).toContain('grok-beta');
+    expect(modelNames).toContain('grok-3-fast');
     expect(modelNames).toContain('gpt-4o');
     expect(modelNames).toContain('gpt-4o-mini');
   });

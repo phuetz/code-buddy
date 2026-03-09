@@ -30,7 +30,7 @@ import {
   errorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes } from './routes/index.js';
+import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes, createWorkflowApiRouter, createA2AProtocolRoutes } from './routes/index.js';
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
 import { logger } from '../utils/logger.js';
 import { initMetrics, getMetrics as _getMetrics } from '../metrics/index.js';
@@ -178,6 +178,8 @@ function createApp(config: ServerConfig): Application {
   app.use('/api/tools', toolsRoutes);
   app.use('/api/sessions', sessionsRoutes);
   app.use('/api/memory', memoryRoutes);
+  app.use('/api/workflows', createWorkflowApiRouter());
+  app.use('/api/a2a', createA2AProtocolRoutes());
 
   // OpenAI-compatible alias
   app.use('/v1/chat', chatRoutes);
@@ -678,6 +680,27 @@ function createApp(config: ServerConfig): Application {
         '/api/memory': {
           get: { summary: 'List memory entries', tags: ['Memory'] },
           post: { summary: 'Create memory entry', tags: ['Memory'] },
+        },
+        '/api/workflows': {
+          get: { summary: 'List all workflows', tags: ['Workflows'] },
+          post: { summary: 'Create a workflow', tags: ['Workflows'] },
+        },
+        '/api/workflows/{id}': {
+          get: { summary: 'Get workflow details', tags: ['Workflows'] },
+          put: { summary: 'Update a workflow', tags: ['Workflows'] },
+          delete: { summary: 'Delete a workflow', tags: ['Workflows'] },
+        },
+        '/api/workflows/{id}/run': {
+          post: { summary: 'Execute a workflow', tags: ['Workflows'] },
+        },
+        '/api/workflows/{id}/status': {
+          get: { summary: 'Get execution status', tags: ['Workflows'] },
+        },
+        '/api/workflows/validate': {
+          post: { summary: 'Validate a workflow DAG (cycles, missing deps)', tags: ['Workflows'] },
+        },
+        '/api/workflows/{id}/optimize': {
+          get: { summary: 'Run AFlow optimization on a workflow', tags: ['Workflows'] },
         },
       },
     });

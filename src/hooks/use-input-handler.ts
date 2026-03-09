@@ -34,10 +34,14 @@ interface UseInputHandlerProps {
   setIsStreaming: (streaming: boolean) => void;
   setTokenCount: (count: number) => void;
   setProcessingTime: (time: number) => void;
+  setCurrentActivity?: (activity: string) => void;
   processingStartTime: React.MutableRefObject<number>;
   isProcessing: boolean;
   isStreaming: boolean;
   isConfirmationActive?: boolean;
+  appendStreamingContent?: (content: string) => void;
+  finalizeStreamingEntry?: (updates?: Partial<ChatEntry>) => void;
+  updateToolCallEntry?: (toolCallId: string, updates: Partial<ChatEntry>) => void;
 }
 
 interface CommandSuggestion {
@@ -57,10 +61,14 @@ export function useInputHandler({
   setIsStreaming,
   setTokenCount,
   setProcessingTime,
+  setCurrentActivity,
   processingStartTime,
   isProcessing,
   isStreaming,
   isConfirmationActive = false,
+  appendStreamingContent,
+  finalizeStreamingEntry,
+  updateToolCallEntry,
 }: UseInputHandlerProps) {
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
@@ -575,6 +583,7 @@ export function useInputHandler({
     } catch (e) { logger.debug('Failed to log user message to interaction logger', { error: String(e) }); }
 
     setIsProcessing(true);
+    setCurrentActivity?.('Sending to LLM...');
     clearInput();
 
     try {
@@ -586,6 +595,7 @@ export function useInputHandler({
         switch (chunk.type) {
           case "content":
             if (chunk.content) {
+              setCurrentActivity?.('Generating response...');
               fullResponseContent += chunk.content;
               if (!streamingEntry) {
                 const newStreamingEntry = {
@@ -596,14 +606,19 @@ export function useInputHandler({
                 };
                 setChatHistory((prev) => [...prev, newStreamingEntry]);
                 streamingEntry = newStreamingEntry;
+              } else if (appendStreamingContent) {
+                appendStreamingContent(chunk.content);
               } else {
-                setChatHistory((prev) =>
-                  prev.map((entry, idx) =>
-                    idx === prev.length - 1 && entry.isStreaming
-                      ? { ...entry, content: entry.content + chunk.content }
-                      : entry
-                  )
-                );
+                setChatHistory((prev) => {
+                  const lastIndex = prev.length - 1;
+                  const lastEntry = prev[lastIndex];
+                  if (lastEntry?.isStreaming) {
+                    const updated = [...prev];
+                    updated[lastIndex] = { ...lastEntry, content: lastEntry.content + chunk.content };
+                    return updated;
+                  }
+                  return prev;
+                });
               }
             }
             break;
@@ -616,18 +631,20 @@ export function useInputHandler({
 
           case "tool_calls":
             if (chunk.toolCalls) {
-              // Stop streaming for the current assistant message
-              setChatHistory((prev) =>
-                prev.map((entry) =>
-                  entry.isStreaming
-                    ? {
-                        ...entry,
-                        isStreaming: false,
-                        toolCalls: chunk.toolCalls,
-                      }
-                    : entry
-                )
-              );
+              const toolNames = chunk.toolCalls.map((tc: any) => tc.function?.name || 'tool').join(', ');
+              setCurrentActivity?.(`Executing: ${toolNames}`);
+              // Finalize streaming entry with tool calls
+              if (finalizeStreamingEntry) {
+                finalizeStreamingEntry({ toolCalls: chunk.toolCalls });
+              } else {
+                setChatHistory((prev) =>
+                  prev.map((entry) =>
+                    entry.isStreaming
+                      ? { ...entry, isStreaming: false, toolCalls: chunk.toolCalls }
+                      : entry
+                  )
+                );
+              }
               streamingEntry = null;
 
               // Log tool calls to interaction logger
@@ -642,21 +659,20 @@ export function useInputHandler({
                 }
               } catch (e) { logger.debug('Failed to log tool calls to interaction logger', { error: String(e) }); }
 
-              // Add individual tool call entries to show tools are being executed
-              chunk.toolCalls.forEach((toolCall) => {
-                const toolCallEntry: ChatEntry = {
-                  type: "tool_call",
-                  content: "Executing...",
-                  timestamp: new Date(),
-                  toolCall: toolCall,
-                };
-                setChatHistory((prev) => [...prev, toolCallEntry]);
-              });
+              // Add ALL tool call entries in one setChatHistory call (avoids N renders)
+              const toolCallEntries: ChatEntry[] = chunk.toolCalls.map((toolCall) => ({
+                type: "tool_call" as const,
+                content: "Executing...",
+                timestamp: new Date(),
+                toolCall: toolCall,
+              }));
+              setChatHistory((prev) => [...prev, ...toolCallEntries]);
             }
             break;
 
           case "tool_result":
             if (chunk.toolCall && chunk.toolResult) {
+              setCurrentActivity?.('Processing tool results...');
               // Log tool result to interaction logger
               try {
                 const il = getInteractionLogger();
@@ -669,39 +685,59 @@ export function useInputHandler({
                 }
               } catch (e) { logger.debug('Failed to log tool result to interaction logger', { error: String(e) }); }
 
-              setChatHistory((prev) =>
-                prev.map((entry) => {
-                  if (entry.isStreaming) {
-                    return { ...entry, isStreaming: false };
-                  }
-                  // Update the existing tool_call entry with the result
-                  if (
-                    entry.type === "tool_call" &&
-                    entry.toolCall?.id === chunk.toolCall?.id
-                  ) {
-                    return {
-                      ...entry,
-                      type: "tool_result",
-                      content: chunk.toolResult?.success
-                        ? chunk.toolResult?.output || "Success"
-                        : chunk.toolResult?.error || "Error occurred",
-                      toolResult: chunk.toolResult,
-                    };
-                  }
-                  return entry;
-                })
-              );
+              // Finalize any streaming entry
+              if (finalizeStreamingEntry) {
+                finalizeStreamingEntry();
+              }
+
+              // Update the specific tool call entry with result
+              if (updateToolCallEntry) {
+                updateToolCallEntry(chunk.toolCall.id, {
+                  type: "tool_result",
+                  content: chunk.toolResult?.success
+                    ? chunk.toolResult?.output || "Success"
+                    : chunk.toolResult?.error || "Error occurred",
+                  toolResult: chunk.toolResult,
+                });
+              } else {
+                setChatHistory((prev) =>
+                  prev.map((entry) => {
+                    if (entry.isStreaming) {
+                      return { ...entry, isStreaming: false };
+                    }
+                    if (
+                      entry.type === "tool_call" &&
+                      entry.toolCall?.id === chunk.toolCall?.id
+                    ) {
+                      return {
+                        ...entry,
+                        type: "tool_result",
+                        content: chunk.toolResult?.success
+                          ? chunk.toolResult?.output || "Success"
+                          : chunk.toolResult?.error || "Error occurred",
+                        toolResult: chunk.toolResult,
+                      };
+                    }
+                    return entry;
+                  })
+                );
+              }
               streamingEntry = null;
             }
             break;
 
           case "done":
+            setCurrentActivity?.('');
             if (streamingEntry) {
-              setChatHistory((prev) =>
-                prev.map((entry) =>
-                  entry.isStreaming ? { ...entry, isStreaming: false } : entry
-                )
-              );
+              if (finalizeStreamingEntry) {
+                finalizeStreamingEntry();
+              } else {
+                setChatHistory((prev) =>
+                  prev.map((entry) =>
+                    entry.isStreaming ? { ...entry, isStreaming: false } : entry
+                  )
+                );
+              }
             }
             setIsStreaming(false);
 
@@ -746,9 +782,11 @@ export function useInputHandler({
       };
       setChatHistory((prev) => [...prev, errorEntry]);
       setIsStreaming(false);
+      setCurrentActivity?.('');
     }
 
     setIsProcessing(false);
+    setCurrentActivity?.('');
     processingStartTime.current = 0;
   };
 

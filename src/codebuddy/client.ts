@@ -45,6 +45,7 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   tools?: CodeBuddyTool[];
   tool_choice?: "auto" | "none" | "required";
   search_parameters?: SearchParameters;
+  thinking?: { type: 'enabled'; budget_tokens: number };
 }
 
 export interface CodeBuddyToolCall {
@@ -1022,6 +1023,15 @@ export class CodeBuddyClient {
         sanitizedProps[key] = this.sanitizeSchemaForGemini(value);
       }
       result.properties = sanitizedProps;
+
+      // Filter required to only include properties that actually exist
+      if (Array.isArray(result.required)) {
+        const propKeys = new Set(Object.keys(sanitizedProps));
+        result.required = (result.required as string[]).filter(r => propKeys.has(r));
+        if ((result.required as string[]).length === 0) {
+          delete result.required;
+        }
+      }
     }
 
     // Recursively sanitize items if present
@@ -1378,11 +1388,16 @@ export class CodeBuddyClient {
         ? { search_parameters: searchParameters }
         : {};
 
+      // Add extended thinking budget if enabled (same as non-streaming path)
+      const { getExtendedThinking } = await import('../agent/extended-thinking.js');
+      const thinkingConfig = getExtendedThinking().getThinkingConfig();
+
       // Create streaming request payload
       const streamingPayload: ChatRequestPayloadStreaming = {
         ...requestPayload,
         ...searchParams,
         stream: true,
+        ...(thinkingConfig.thinking ? { thinking: thinkingConfig.thinking } : {}),
       };
 
       // Use retry with exponential backoff for stream initialization

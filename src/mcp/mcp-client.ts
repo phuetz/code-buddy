@@ -449,13 +449,14 @@ class MCPServerConnection extends EventEmitter {
         reject(new Error('MCP server process not started. The server command may have failed to launch or exited unexpectedly.'));
       }
 
-      // Timeout after 30 seconds
+      // Timeout after 5 seconds (configurable via MCP_TIMEOUT env var)
+      const mcpTimeoutMs = parseInt(process.env.MCP_TIMEOUT || '5000', 10);
       const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          reject(new Error('MCP request timed out after 30 seconds. The server may be unresponsive or processing a long operation.'));
+          reject(new Error(`MCP request timed out after ${mcpTimeoutMs / 1000} seconds. The server may be unresponsive or processing a long operation.`));
         }
-      }, 30000);
+      }, mcpTimeoutMs);
 
       // Wrap resolve/reject to clear timeout when response arrives
       const originalEntry = this.pendingRequests.get(id);

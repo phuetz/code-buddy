@@ -3,29 +3,23 @@ import { Box, Text } from "ink";
 import { formatTokenCount } from "../../utils/token-counter.js";
 import { useTheme } from "../context/theme-context.js";
 
-// Constants moved outside component to avoid recreation on each render
-const SPINNER_FRAMES = ["/", "-", "\\", "|"] as const;
-const LOADING_TEXTS = [
+// Braille dot spinner — smoother animation than simple rotation
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+
+const IDLE_TEXTS = [
   "Thinking...",
-  "Computing...",
   "Analyzing...",
   "Processing...",
-  "Calculating...",
-  "Interfacing...",
-  "Optimizing...",
+  "Computing...",
   "Synthesizing...",
-  "Decrypting...",
-  "Calibrating...",
-  "Bootstrapping...",
-  "Synchronizing...",
-  "Compiling...",
-  "Downloading...",
 ] as const;
 
 interface LoadingSpinnerProps {
   isActive: boolean;
   processingTime: number;
   tokenCount: number;
+  /** Current activity description (e.g. "Executing: read_file") */
+  activity?: string;
 }
 
 // Memoized loading spinner to reduce re-renders
@@ -33,17 +27,18 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
   isActive,
   processingTime,
   tokenCount,
+  activity,
 }: LoadingSpinnerProps) {
   const { colors } = useTheme();
   const [spinnerFrame, setSpinnerFrame] = useState(0);
-  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
+  const [idleTextIndex, setIdleTextIndex] = useState(0);
 
   useEffect(() => {
     if (!isActive) return;
 
     const interval = setInterval(() => {
       setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length);
-    }, 500);
+    }, 80);
 
     return () => clearInterval(interval);
   }, [isActive]);
@@ -51,10 +46,10 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
   useEffect(() => {
     if (!isActive) return;
 
-    setLoadingTextIndex(Math.floor(Math.random() * LOADING_TEXTS.length));
+    setIdleTextIndex(Math.floor(Math.random() * IDLE_TEXTS.length));
 
     const interval = setInterval(() => {
-      setLoadingTextIndex(Math.floor(Math.random() * LOADING_TEXTS.length));
+      setIdleTextIndex(Math.floor(Math.random() * IDLE_TEXTS.length));
     }, 4000);
 
     return () => clearInterval(interval);
@@ -62,10 +57,15 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
 
   if (!isActive) return null;
 
+  const displayText = activity || IDLE_TEXTS[idleTextIndex];
+
   return (
     <Box marginTop={1}>
-      <Text color={colors.spinner}>
-        {SPINNER_FRAMES[spinnerFrame]} {LOADING_TEXTS[loadingTextIndex]}{" "}
+      <Text color={colors.spinner} bold>
+        {SPINNER_FRAMES[spinnerFrame]}{" "}
+      </Text>
+      <Text color={colors.primary}>
+        {displayText}{" "}
       </Text>
       <Text color={colors.textMuted}>
         ({processingTime}s · ↑ {formatTokenCount(tokenCount)} tokens · esc to
@@ -74,21 +74,3 @@ export const LoadingSpinner = React.memo(function LoadingSpinnerInner({
     </Box>
   );
 });
-
-// Keep for backwards compatibility (if used elsewhere)
-const _loadingTextsArray = [
-  "Thinking...",
-  "Computing...",
-  "Analyzing...",
-  "Processing...",
-  "Calculating...",
-  "Interfacing...",
-  "Optimizing...",
-  "Synthesizing...",
-  "Decrypting...",
-  "Calibrating...",
-  "Bootstrapping...",
-  "Synchronizing...",
-  "Compiling...",
-  "Downloading...",
-];

@@ -4,7 +4,7 @@
  * Serves a self-contained DAG editor UI and provides API endpoints
  * for workflow CRUD, validation, and execution ordering.
  *
- * Endpoints:
+ * UI Routes (RouteHandler pattern):
  *   GET  /__codebuddy__/workflows/           — Serve workflow builder UI
  *   GET  /__codebuddy__/workflows/api/list   — List saved workflows
  *   GET  /__codebuddy__/workflows/api/get    — Get a workflow by ID (?id=...)
@@ -12,10 +12,22 @@
  *   POST /__codebuddy__/workflows/api/validate — Validate a workflow
  *   POST /__codebuddy__/workflows/api/order  — Get execution order
  *   DELETE /__codebuddy__/workflows/api/delete — Delete a workflow (?id=...)
+ *
+ * REST API Routes (Express Router, mounted at /api/workflows):
+ *   GET    /api/workflows              — List all workflows
+ *   POST   /api/workflows              — Create a workflow
+ *   GET    /api/workflows/:id          — Get workflow details
+ *   PUT    /api/workflows/:id          — Update a workflow
+ *   DELETE /api/workflows/:id          — Delete a workflow
+ *   POST   /api/workflows/:id/run      — Execute a workflow
+ *   GET    /api/workflows/:id/status   — Get execution status
+ *   POST   /api/workflows/validate     — Validate a workflow DAG
+ *   GET    /api/workflows/:id/optimize — Run AFlow optimization
  */
 
+import { Router } from 'express';
 import { logger } from '../../utils/logger.js';
-import type { LobsterWorkflow } from '../../workflows/lobster-engine.js';
+import type { LobsterWorkflow, WorkflowRunResult } from '../../workflows/lobster-engine.js';
 import type { RouteHandler } from './canvas.js';
 
 // ============================================================================
@@ -296,6 +308,374 @@ export function createWorkflowBuilderRoutes(basePath = '/__codebuddy__'): RouteH
       },
     },
   ];
+}
+
+// ============================================================================
+// Workflow Run Tracker (in-memory)
+// ============================================================================
+
+export type RunStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'needs_approval';
+
+export interface WorkflowRunRecord {
+  runId: string;
+  workflowId: string;
+  status: RunStatus;
+  startedAt: Date;
+  finishedAt?: Date;
+  result?: WorkflowRunResult;
+  error?: string;
+}
+
+class WorkflowRunTracker {
+  private runs = new Map<string, WorkflowRunRecord>();
+  private runCounter = 0;
+
+  create(workflowId: string): WorkflowRunRecord {
+    const record: WorkflowRunRecord = {
+      runId: `run_${++this.runCounter}_${Date.now().toString(36)}`,
+      workflowId,
+      status: 'pending',
+      startedAt: new Date(),
+    };
+    this.runs.set(record.runId, record);
+    return record;
+  }
+
+  get(runId: string): WorkflowRunRecord | undefined {
+    return this.runs.get(runId);
+  }
+
+  getByWorkflow(workflowId: string): WorkflowRunRecord[] {
+    return [...this.runs.values()]
+      .filter(r => r.workflowId === workflowId)
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+  }
+
+  update(runId: string, patch: Partial<WorkflowRunRecord>): void {
+    const existing = this.runs.get(runId);
+    if (existing) {
+      Object.assign(existing, patch);
+    }
+  }
+}
+
+const runTracker = new WorkflowRunTracker();
+
+// ============================================================================
+// Express REST API Router (mounted at /api/workflows)
+// ============================================================================
+
+export function createWorkflowApiRouter(): Router {
+  const router = Router();
+
+  // GET /api/workflows — List all workflows
+  router.get('/', (_req, res) => {
+    const list = workflowStore.list().map(w => ({
+      id: w.id,
+      name: w.workflow.name,
+      version: w.workflow.version,
+      stepCount: w.workflow.steps.length,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt,
+    }));
+    res.json(list);
+  });
+
+  // POST /api/workflows/validate — Validate a workflow DAG (must be before /:id)
+  router.post('/validate', (req, res) => {
+    const workflow = req.body as LobsterWorkflow;
+    if (!workflow || !workflow.steps) {
+      res.status(400).json({ error: 'Request body must be a valid workflow object with steps' });
+      return;
+    }
+    const result = validateWorkflow(workflow);
+
+    // Also include execution order when valid
+    if (result.valid) {
+      const order = getExecutionOrder(workflow);
+      const parallelGroups = computeParallelGroups(workflow);
+      res.json({ ...result, order, parallelGroups });
+    } else {
+      res.json(result);
+    }
+  });
+
+  // POST /api/workflows — Create a workflow
+  router.post('/', (req, res) => {
+    const { workflow, positions } = req.body as {
+      workflow?: LobsterWorkflow;
+      positions?: Record<string, { x: number; y: number }>;
+    };
+
+    if (!workflow) {
+      res.status(400).json({ error: 'Missing workflow field in request body' });
+      return;
+    }
+
+    if (!workflow.name || !workflow.steps || !Array.isArray(workflow.steps)) {
+      res.status(400).json({ error: 'Workflow must have name and steps array' });
+      return;
+    }
+
+    const validation = validateWorkflow(workflow);
+    if (!validation.valid) {
+      res.status(400).json({ error: 'Invalid workflow', errors: validation.errors });
+      return;
+    }
+
+    const stored = workflowStore.save(workflow, positions ?? {});
+    logger.debug('Workflow created via REST API', { id: stored.id, name: workflow.name });
+    res.status(201).json({
+      id: stored.id,
+      name: stored.workflow.name,
+      version: stored.workflow.version,
+      stepCount: stored.workflow.steps.length,
+      createdAt: stored.createdAt,
+      updatedAt: stored.updatedAt,
+    });
+  });
+
+  // GET /api/workflows/:id — Get workflow details
+  router.get('/:id', (req, res) => {
+    const stored = workflowStore.get(req.params.id);
+    if (!stored) {
+      res.status(404).json({ error: 'Workflow not found' });
+      return;
+    }
+    res.json({
+      id: stored.id,
+      workflow: stored.workflow,
+      positions: stored.positions,
+      createdAt: stored.createdAt,
+      updatedAt: stored.updatedAt,
+    });
+  });
+
+  // PUT /api/workflows/:id — Update a workflow
+  router.put('/:id', (req, res) => {
+    const existing = workflowStore.get(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Workflow not found' });
+      return;
+    }
+
+    const { workflow, positions } = req.body as {
+      workflow?: LobsterWorkflow;
+      positions?: Record<string, { x: number; y: number }>;
+    };
+
+    if (!workflow) {
+      res.status(400).json({ error: 'Missing workflow field in request body' });
+      return;
+    }
+
+    const validation = validateWorkflow(workflow);
+    if (!validation.valid) {
+      res.status(400).json({ error: 'Invalid workflow', errors: validation.errors });
+      return;
+    }
+
+    const updated = workflowStore.save(workflow, positions ?? existing.positions, req.params.id);
+    logger.debug('Workflow updated via REST API', { id: updated.id, name: workflow.name });
+    res.json({
+      id: updated.id,
+      name: updated.workflow.name,
+      version: updated.workflow.version,
+      stepCount: updated.workflow.steps.length,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    });
+  });
+
+  // DELETE /api/workflows/:id — Delete a workflow
+  router.delete('/:id', (req, res) => {
+    const existing = workflowStore.get(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Workflow not found' });
+      return;
+    }
+    workflowStore.delete(req.params.id);
+    logger.debug('Workflow deleted via REST API', { id: req.params.id });
+    res.json({ deleted: true, id: req.params.id });
+  });
+
+  // POST /api/workflows/:id/run — Execute a workflow
+  router.post('/:id/run', async (req, res) => {
+    const stored = workflowStore.get(req.params.id);
+    if (!stored) {
+      res.status(404).json({ error: 'Workflow not found' });
+      return;
+    }
+
+    const { context, resumeToken } = (req.body ?? {}) as {
+      context?: Record<string, string>;
+      resumeToken?: string;
+    };
+
+    const run = runTracker.create(stored.id);
+    runTracker.update(run.runId, { status: 'running' });
+
+    try {
+      const { LobsterEngine } = await import('../../workflows/lobster-engine.js');
+      const engine = LobsterEngine.getInstance();
+      const result = await engine.executeWithApproval(
+        stored.workflow,
+        context ?? {},
+        undefined,
+        resumeToken,
+      );
+
+      const status: RunStatus = result.status === 'ok' ? 'success'
+        : result.status === 'needs_approval' ? 'needs_approval'
+        : result.status === 'cancelled' ? 'cancelled'
+        : 'failed';
+
+      runTracker.update(run.runId, {
+        status,
+        finishedAt: new Date(),
+        result,
+        error: result.error,
+      });
+
+      logger.debug('Workflow run completed', { runId: run.runId, workflowId: stored.id, status });
+      res.json({
+        runId: run.runId,
+        workflowId: stored.id,
+        status,
+        result,
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      runTracker.update(run.runId, {
+        status: 'failed',
+        finishedAt: new Date(),
+        error: errorMsg,
+      });
+      logger.error('Workflow run failed', { runId: run.runId, error: errorMsg });
+      res.status(500).json({
+        runId: run.runId,
+        workflowId: stored.id,
+        status: 'failed',
+        error: errorMsg,
+      });
+    }
+  });
+
+  // GET /api/workflows/:id/status — Get execution status
+  router.get('/:id/status', (req, res) => {
+    const stored = workflowStore.get(req.params.id);
+    if (!stored) {
+      res.status(404).json({ error: 'Workflow not found' });
+      return;
+    }
+
+    const runs = runTracker.getByWorkflow(req.params.id);
+    const latestRun = runs[0] ?? null;
+
+    res.json({
+      workflowId: req.params.id,
+      workflowName: stored.workflow.name,
+      totalRuns: runs.length,
+      latestRun: latestRun ? {
+        runId: latestRun.runId,
+        status: latestRun.status,
+        startedAt: latestRun.startedAt,
+        finishedAt: latestRun.finishedAt,
+        error: latestRun.error,
+        stepResults: latestRun.result?.output ?? [],
+      } : null,
+      runs: runs.map(r => ({
+        runId: r.runId,
+        status: r.status,
+        startedAt: r.startedAt,
+        finishedAt: r.finishedAt,
+      })),
+    });
+  });
+
+  // GET /api/workflows/:id/optimize — Run AFlow optimization
+  router.get('/:id/optimize', async (req, res) => {
+    const stored = workflowStore.get(req.params.id);
+    if (!stored) {
+      res.status(404).json({ error: 'Workflow not found' });
+      return;
+    }
+
+    try {
+      const { AFlowOptimizer } = await import('../../workflows/aflow-optimizer.js');
+
+      const iterations = req.query.iterations
+        ? parseInt(req.query.iterations as string, 10)
+        : undefined;
+      const maxParallelism = req.query.maxParallelism
+        ? parseInt(req.query.maxParallelism as string, 10)
+        : undefined;
+
+      const optimizer = new AFlowOptimizer({
+        ...(iterations ? { iterations } : {}),
+        ...(maxParallelism ? { maxParallelism } : {}),
+      });
+
+      // Gather historical results from past runs
+      const pastRuns = runTracker.getByWorkflow(req.params.id);
+      const historicalResults = pastRuns
+        .filter(r => r.result?.output?.length)
+        .flatMap(r => r.result!.output);
+
+      const result = await optimizer.optimize(
+        stored.workflow,
+        historicalResults.length > 0 ? historicalResults : undefined,
+      );
+
+      logger.debug('AFlow optimization completed', {
+        workflowId: stored.id,
+        score: result.score,
+        iterations: result.iterations,
+      });
+
+      res.json({
+        workflowId: stored.id,
+        workflowName: stored.workflow.name,
+        optimization: result,
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logger.error('AFlow optimization failed', { workflowId: stored.id, error: errorMsg });
+      res.status(500).json({ error: `Optimization failed: ${errorMsg}` });
+    }
+  });
+
+  return router;
+}
+
+// ============================================================================
+// Parallel Group Computation (used by validate endpoint)
+// ============================================================================
+
+function computeParallelGroups(wf: LobsterWorkflow): string[][] {
+  const order = getExecutionOrder(wf);
+  const stepMap = new Map(wf.steps.map(s => [s.id, s]));
+  const completed = new Set<string>();
+  const remaining = [...order];
+  const groups: string[][] = [];
+
+  while (remaining.length > 0) {
+    const group: string[] = [];
+    for (const id of remaining) {
+      const deps = stepMap.get(id)?.dependsOn ?? [];
+      if (deps.every(d => completed.has(d))) {
+        group.push(id);
+      }
+    }
+    if (group.length === 0) break;
+    groups.push(group);
+    for (const id of group) {
+      completed.add(id);
+      remaining.splice(remaining.indexOf(id), 1);
+    }
+  }
+
+  return groups;
 }
 
 // ============================================================================
@@ -1110,4 +1490,4 @@ updateStatus();
 // ============================================================================
 // Exports
 // ============================================================================
-export { workflowStore, WorkflowStore };
+export { workflowStore, WorkflowStore, runTracker, WorkflowRunTracker };

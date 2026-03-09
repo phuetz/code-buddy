@@ -72,7 +72,7 @@ export const API_CONFIG = {
   /** Default base URL for CodeBuddy API */
   DEFAULT_BASE_URL: 'https://api.x.ai/v1',
   /** Default model */
-  DEFAULT_MODEL: 'grok-beta',
+  DEFAULT_MODEL: 'grok-3-fast',
   /** Request timeout (ms) */
   REQUEST_TIMEOUT: 60000, // 1 minute
   /** Maximum retries for failed requests */

@@ -11,4 +11,5 @@ export { default as memoryRoutes } from './memory.js';
 export { default as healthRoutes } from './health.js';
 export { default as metricsRoutes } from './metrics.js';
 export { createCanvasRoutes } from './canvas.js';
-export { createWorkflowBuilderRoutes } from './workflow-builder.js';
+export { createWorkflowBuilderRoutes, createWorkflowApiRouter } from './workflow-builder.js';
+export { createA2AProtocolRoutes } from './a2a-protocol.js';

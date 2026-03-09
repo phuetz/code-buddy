@@ -7,6 +7,18 @@ import {
   CommandHandlerResult,
 } from '../../src/commands/handlers/session-handlers.js';
 
+vi.mock('../../src/logging/interaction-logger.js', () => ({
+  InteractionLogger: {
+    listSessions: vi.fn(() => ({ sessions: [], total: 0 })),
+    loadSession: vi.fn(() => null),
+    formatSession: vi.fn(() => ''),
+    deleteSession: vi.fn(() => false),
+    getLatestSession: vi.fn(() => null),
+    searchSessions: vi.fn(() => []),
+  },
+  getInteractionLogger: vi.fn(() => ({ getCurrentSessionId: () => null })),
+}));
+
 describe('Session Handlers', () => {
   describe('handleSessions', () => {
     describe('list action', () => {

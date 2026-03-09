@@ -40,12 +40,16 @@ export interface ModelPricing {
 
 // Model pricing (approximate, update as needed)
 const MODEL_PRICING: Record<string, ModelPricing> = {
-  "grok-3-latest": { inputPer1k: 0.005, outputPer1k: 0.015 },
-  "grok-3-fast": { inputPer1k: 0.003, outputPer1k: 0.009 },
-  "grok-code-fast-1": { inputPer1k: 0.002, outputPer1k: 0.006 },
+  "grok-4-latest": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "grok-4-fast": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "grok-4-1-fast": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "grok-3-latest": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "grok-3-fast": { inputPer1k: 0.0006, outputPer1k: 0.004 },
+  "grok-3-mini": { inputPer1k: 0.0003, outputPer1k: 0.0005 },
+  "grok-code-fast-1": { inputPer1k: 0.00015, outputPer1k: 0.0006 },
   "grok-2-latest": { inputPer1k: 0.002, outputPer1k: 0.010 },
   // Fallback for unknown models
-  "default": { inputPer1k: 0.003, outputPer1k: 0.010 },
+  "default": { inputPer1k: 0.003, outputPer1k: 0.015 },
 };
 
 const DEFAULT_CONFIG: CostConfig = {

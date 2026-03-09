@@ -1227,7 +1227,7 @@ describe('Request Timeout', () => {
     await client.dispose();
   });
 
-  it('should timeout pending requests after 30 seconds', async () => {
+  it('should timeout pending requests after 5 seconds (default)', async () => {
     const testConfig: MCPServerConfig = {
       name: 'slow-server',
       command: 'node',
@@ -1235,9 +1235,9 @@ describe('Request Timeout', () => {
 
     const connectPromise = client.connect(testConfig);
 
-    // Advance timers to trigger timeout
-    jest.advanceTimersByTime(30001);
+    // Advance timers to trigger timeout (default 5s)
+    jest.advanceTimersByTime(5001);
 
-    await expect(connectPromise).rejects.toThrow('MCP request timed out after 30 seconds');
+    await expect(connectPromise).rejects.toThrow('MCP request timed out after 5 seconds');
   });
 });

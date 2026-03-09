@@ -266,7 +266,7 @@ function detectProviderFromEnv(): DetectedProvider | null {
       provider: 'grok',
       apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
       baseURL: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
-      defaultModel: process.env.GROK_MODEL || 'grok-3-fast-latest',
+      defaultModel: process.env.GROK_MODEL || 'grok-3-fast',
     };
   }
 
@@ -1504,59 +1504,7 @@ program
         console.log("🔧 Self-healing: DISABLED");
       }
 
-      // Initialize Plugin System
-      try {
-        const { getPluginManager } = await lazyImport.pluginManager();
-        const pluginManager = getPluginManager();
-        await pluginManager.discover();
-      } catch (error) {
-        logger.warn("Failed to initialize plugin system:", { error: String(error) });
-      }
-
       console.log("🤖 Starting Code Buddy Conversational Assistant...\n");
-
-      // Initialize interaction logger for session tracking
-      try {
-        const { getInteractionLogger } = await import('./logging/interaction-logger.js');
-        const interactionLogger = getInteractionLogger();
-        const currentModel = agent.getCurrentModel?.() || model || 'unknown';
-        interactionLogger.startSession({
-          model: currentModel,
-          provider: baseURL?.includes('localhost') ? 'local' : 'xai',
-          cwd: process.cwd(),
-          tags: ['interactive'],
-        });
-        // Store logger on agent for use in message handlers
-        (agent as unknown as Record<string, unknown>).__interactionLogger = interactionLogger;
-
-        // End session on process exit
-        const cleanup = () => {
-          try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end interaction logger session', { error: String(e) }); }
-        };
-        process.on('exit', cleanup);
-        process.on('SIGINT', () => { cleanup(); process.exit(0); });
-        process.on('SIGTERM', () => { cleanup(); process.exit(0); });
-      } catch (err) {
-        logger.warn('Failed to initialize interaction logger', { error: String(err) });
-      }
-
-      // Initialize RunStore for interactive session observability
-      try {
-        const { RunStore } = await import('./observability/run-store.js');
-        const runStore = RunStore.getInstance();
-        const runId = runStore.startRun('interactive session', {
-          channel: 'terminal',
-          tags: ['interactive', model || 'unknown'],
-        });
-        agent.setRunId(runId);
-        // End run on process exit
-        const cleanupRun = () => {
-          try { runStore.endRun(runId, 'completed'); } catch (_err) { /* ignore */ }
-        };
-        process.on('exit', cleanupRun);
-      } catch (err) {
-        logger.debug('RunStore init skipped', { error: String(err) });
-      }
 
       await ensureUserSettingsDirectory();
 
@@ -1583,6 +1531,57 @@ program
       }
 
       render(React.createElement(ChatInterface, { agent, initialMessage }), inkOptions);
+
+      // Initialize plugin system in background (non-blocking)
+      setImmediate(async () => {
+        try {
+          const { getPluginManager } = await lazyImport.pluginManager();
+          const pluginManager = getPluginManager();
+          await pluginManager.discover();
+        } catch (error) {
+          logger.warn('Failed to initialize plugin system:', { error: String(error) });
+        }
+      });
+
+      // Initialize interaction logger + RunStore in background (non-blocking)
+      setImmediate(async () => {
+        try {
+          const { getInteractionLogger } = await import('./logging/interaction-logger.js');
+          const interactionLogger = getInteractionLogger();
+          const currentModel = agent.getCurrentModel?.() || model || 'unknown';
+          interactionLogger.startSession({
+            model: currentModel,
+            provider: baseURL?.includes('localhost') ? 'local' : 'xai',
+            cwd: process.cwd(),
+            tags: ['interactive'],
+          });
+          (agent as unknown as Record<string, unknown>).__interactionLogger = interactionLogger;
+          const cleanup = () => {
+            try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end interaction logger session', { error: String(e) }); }
+          };
+          process.on('exit', cleanup);
+          process.on('SIGINT', () => { cleanup(); process.exit(0); });
+          process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+        } catch (err) {
+          logger.warn('Failed to initialize interaction logger', { error: String(err) });
+        }
+
+        try {
+          const { RunStore } = await import('./observability/run-store.js');
+          const runStore = RunStore.getInstance();
+          const runId = runStore.startRun('interactive session', {
+            channel: 'terminal',
+            tags: ['interactive', model || 'unknown'],
+          });
+          agent.setRunId(runId);
+          const cleanupRun = () => {
+            try { runStore.endRun(runId, 'completed'); } catch (_err) { /* ignore */ }
+          };
+          process.on('exit', cleanupRun);
+        } catch (err) {
+          logger.debug('RunStore init skipped', { error: String(err) });
+        }
+      });
 
       // Check for updates in background after UI renders
       setImmediate(async () => {
@@ -1981,6 +1980,17 @@ addLazyCommand(
   async () => {
     const { createResearchCommand } = await import('./commands/research/index.js');
     return createResearchCommand();
+  },
+);
+
+// Planning Flow — OpenManus-compatible multi-agent orchestration
+addLazyCommand(
+  program,
+  'flow',
+  'Execute a multi-agent planning flow (OpenManus-compatible): plan → execute → synthesize',
+  async () => {
+    const { createFlowCommand } = await import('./commands/flow.js');
+    return createFlowCommand();
   },
 );
 

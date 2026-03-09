@@ -198,6 +198,13 @@ export {
   createParallelTools,
 } from './parallel-tools.js';
 
+// Tool Adapters - Control (terminate)
+export {
+  TerminateExecuteTool,
+  createControlTools,
+  resetControlInstances,
+} from './control-tools.js';
+
 // Tool Prefix Naming Convention — Codex-inspired canonical aliases
 export {
   createAliasTools,
@@ -262,6 +269,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createCanvasTools } = await import('./canvas-tools.js');
   const { createMemoryTools } = await import('./memory-tools.js');
   const { createParallelTools } = await import('./parallel-tools.js');
+  const { createControlTools } = await import('./control-tools.js');
 
   const primaryTools: ITool[] = [
     ...createTextEditorTools(),
@@ -286,6 +294,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createMultimodalTools(),
     ...createAdvancedTools(),
     ...createCanvasTools(),
+    ...createControlTools(),
   ];
 
   // Register backward-compat canonical-prefix aliases (shell_exec, file_read, etc.)

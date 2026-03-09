@@ -49,10 +49,14 @@ export interface CostBudget {
  */
 export const MODEL_PRICING: TokenPricing[] = [
   { model: 'grok-4-latest', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'grok-4', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'grok-3', inputPer1M: 1.00, outputPer1M: 5.00 },
-  { model: 'grok-beta', inputPer1M: 5.00, outputPer1M: 15.00 },
-  { model: 'grok-vision-beta', inputPer1M: 5.00, outputPer1M: 15.00 },
+  { model: 'grok-4-fast', inputPer1M: 3.00, outputPer1M: 15.00 },
+  { model: 'grok-4-1-fast', inputPer1M: 3.00, outputPer1M: 15.00 },
+  { model: 'grok-3', inputPer1M: 3.00, outputPer1M: 15.00 },
+  { model: 'grok-3-latest', inputPer1M: 3.00, outputPer1M: 15.00 },
+  { model: 'grok-3-fast', inputPer1M: 0.60, outputPer1M: 4.00 },
+  { model: 'grok-3-mini', inputPer1M: 0.30, outputPer1M: 0.50 },
+  { model: 'grok-code-fast-1', inputPer1M: 0.15, outputPer1M: 0.60 },
+  { model: 'grok-2', inputPer1M: 2.00, outputPer1M: 10.00 },
   { model: 'gpt-4o', inputPer1M: 2.50, outputPer1M: 10.00, cachedInputPer1M: 1.25 },
   { model: 'gpt-4o-mini', inputPer1M: 0.15, outputPer1M: 0.60, cachedInputPer1M: 0.075 },
   { model: 'claude-3-opus', inputPer1M: 15.00, outputPer1M: 75.00 },

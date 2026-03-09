@@ -20,8 +20,8 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
   grok: {
     name: 'Grok (xAI)',
     envVar: 'GROK_API_KEY',
-    models: ['grok-beta', 'grok-vision-beta', 'grok-code-fast-1'],
-    defaultModel: 'grok-code-fast-1',
+    models: ['grok-4-1-fast', 'grok-4-latest', 'grok-4-fast', 'grok-code-fast-1', 'grok-3-latest', 'grok-3-fast', 'grok-3-mini'],
+    defaultModel: 'grok-3-fast',
     baseURL: 'https://api.x.ai/v1',
   },
   claude: {

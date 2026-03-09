@@ -459,6 +459,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     priority: 6,
     description: 'Query code entity relationships and dependencies'
   },
+
+  // Control
+  {
+    name: 'terminate',
+    category: 'control' as ToolCategory,
+    keywords: ['terminate', 'finish', 'done', 'complete', 'end', 'stop', 'exit', 'signal'],
+    priority: 5,
+    description: 'Signal task completion and end the agent loop'
+  },
 ];
 
 /**

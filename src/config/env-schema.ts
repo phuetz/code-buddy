@@ -63,7 +63,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROK_MODEL',
     type: 'string',
-    default: 'grok-3-fast-latest',
+    default: 'grok-3-fast',
     description: 'Default LLM model to use',
     category: 'core',
   },

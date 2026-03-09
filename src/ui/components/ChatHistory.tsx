@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Box, Text, Static } from "ink";
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { DiffRenderer } from "./DiffRenderer.js";
@@ -368,80 +368,84 @@ export function ChatHistory({
 }: ChatHistoryProps) {
   const { colors, avatars } = useTheme();
 
+  // Number of entries permanently committed to <Static> (monotonically increasing)
+  // Entries start in the dynamic section and move to static AFTER being finalized
+  // for at least one render cycle. This prevents duplicate rendering during the
+  // dynamic → static transition (especially on Windows terminals).
+  const [committedCount, setCommittedCount] = useState(0);
+
   // Filter out tool_call entries with "Executing..." when confirmation is active
-  // Apply windowing to prevent performance issues with very long conversations
-  const filteredEntries = useMemo(() => {
-    const filtered = isConfirmationActive
+  const allEntries = useMemo(() => {
+    return isConfirmationActive
       ? entries.filter(
           (entry) =>
             !(entry.type === "tool_call" && entry.content === "Executing...")
         )
       : entries;
+  }, [entries, isConfirmationActive]);
 
-    // Windowing: Only show the most recent N messages
-    // This prevents performance degradation in very long conversations
-    const windowSize = Math.max(10, Math.min(maxMessages, 100)); // Clamp between 10-100
+  // If entries shrunk (shouldn't happen normally), cap committedCount
+  const safeCommitted = Math.min(committedCount, allEntries.length);
 
-    if (filtered.length > windowSize) {
-      // Show truncation indicator for long conversations
-      const truncatedCount = filtered.length - windowSize;
-      logger.debug(`[ChatHistory] Showing ${windowSize} most recent messages (${truncatedCount} older messages hidden)`);
-    }
+  // Static entries: [0, safeCommitted) — already written permanently to stdout
+  // These are never windowed because they're already in the terminal scrollback
+  const staticItems = useMemo(() => {
+    return allEntries.slice(0, safeCommitted).map((entry, index) => ({
+      ...entry,
+      uniqueKey: `s-${entry.timestamp.getTime()}-${index}`,
+    }));
+  }, [allEntries, safeCommitted]);
 
-    return filtered.slice(-windowSize);
-  }, [entries, isConfirmationActive, maxMessages]);
+  // Dynamic entries: [safeCommitted, end) — managed by Ink's live viewport
+  // Apply windowing only to the dynamic portion to prevent perf issues
+  const dynamicItems = useMemo(() => {
+    const remaining = allEntries.slice(safeCommitted);
+    const windowSize = Math.max(10, Math.min(maxMessages, 100));
+    const windowed = remaining.length > windowSize
+      ? remaining.slice(-windowSize)
+      : remaining;
+    return windowed.map((entry, index) => ({
+      ...entry,
+      uniqueKey: `d-${entry.timestamp.getTime()}-${safeCommitted + index}`,
+    }));
+  }, [allEntries, safeCommitted, maxMessages]);
 
-  // Calculate truncation info
-  const truncatedCount = useMemo(() => {
-    const totalFiltered = isConfirmationActive
-      ? entries.filter(
-          (entry) =>
-            !(entry.type === "tool_call" && entry.content === "Executing...")
-        ).length
-      : entries.length;
-    return Math.max(0, totalFiltered - filteredEntries.length);
-  }, [entries, filteredEntries, isConfirmationActive]);
-
-  // Separate completed (static) entries from streaming (dynamic) entries
-  // Static entries use Ink's Static component - they render once and never re-render
-  // This dramatically reduces flickering during streaming
-  const { staticEntries, dynamicEntries } = useMemo(() => {
-    const staticList: Array<ChatEntry & { uniqueKey: string }> = [];
-    const dynamicList: Array<ChatEntry & { uniqueKey: string }> = [];
-
-    filteredEntries.forEach((entry, index) => {
-      // Create a stable unique key based on timestamp and content hash
-      const uniqueKey = `${entry.timestamp.getTime()}-${index}`;
-      const entryWithKey = { ...entry, uniqueKey };
-
-      // Entry is dynamic if it's streaming or is a tool_call being executed
-      const isDynamic = entry.isStreaming ||
-        (entry.type === "tool_call" && entry.content === "Executing...");
-
-      if (isDynamic) {
-        dynamicList.push(entryWithKey);
+  // After each render, commit consecutive finalized entries from the dynamic
+  // section to static. This ensures entries are fully rendered in dynamic
+  // before moving to static, preventing the duplicate-render flash.
+  useEffect(() => {
+    let newCommitted = safeCommitted;
+    while (newCommitted < allEntries.length) {
+      const entry = allEntries[newCommitted];
+      const isStable = !entry.isStreaming &&
+        !(entry.type === "tool_call" && entry.content === "Executing...");
+      if (isStable) {
+        newCommitted++;
       } else {
-        staticList.push(entryWithKey);
+        break;
       }
-    });
+    }
+    if (newCommitted > safeCommitted) {
+      setCommittedCount(newCommitted);
+    }
+  }, [allEntries, safeCommitted]);
 
-    return { staticEntries: staticList, dynamicEntries: dynamicList };
-  }, [filteredEntries]);
+  // Calculate truncation for display
+  const truncatedDynamic = allEntries.length - safeCommitted - dynamicItems.length;
 
   return (
     <Box flexDirection="column">
-      {/* Truncation indicator for long conversations */}
-      {truncatedCount > 0 && (
+      {/* Truncation indicator for dynamic windowing */}
+      {truncatedDynamic > 0 && (
         <Box marginBottom={1}>
           <Text color="gray" dimColor>
-            ··· {truncatedCount} older message{truncatedCount !== 1 ? 's' : ''} hidden (showing most recent {filteredEntries.length})
+            ··· {truncatedDynamic} message{truncatedDynamic !== 1 ? 's' : ''} in scrollback
           </Text>
         </Box>
       )}
 
-      {/* Static component renders items once and never re-renders them */}
-      {/* This prevents flickering for completed messages */}
-      <Static items={staticEntries}>
+      {/* Static: permanently rendered entries (written once to stdout, never re-rendered) */}
+      <Static items={staticItems}>
         {(entry) => (
           <MemoizedChatEntry
             key={entry.uniqueKey}
@@ -453,8 +457,8 @@ export function ChatHistory({
         )}
       </Static>
 
-      {/* Dynamic entries (streaming) are rendered normally and can update */}
-      {dynamicEntries.map((entry, index) => (
+      {/* Dynamic: live entries managed by Ink (streaming, pending, or not yet committed) */}
+      {dynamicItems.map((entry, index) => (
         <MemoizedChatEntry
           key={entry.uniqueKey}
           entry={entry}

@@ -24,7 +24,9 @@ export type AgentCapability =
   | 'code-analyze'
   | 'code-review'
   | 'code-refactor'
-  | 'code-security';
+  | 'code-security'
+  | 'code-edit'
+  | 'code-debug';
 
 export interface SpecializedAgentConfig {
   /** Unique agent identifier */

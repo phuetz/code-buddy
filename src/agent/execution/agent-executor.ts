@@ -418,6 +418,7 @@ export class AgentExecutor {
       );
 
       // Agent loop
+      let terminateDetected = false;
       while (toolRounds < maxToolRounds) {
         const assistantMessage = currentResponse.choices[0]?.message;
 
@@ -522,7 +523,26 @@ export class AgentExecutor {
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
             } as CodeBuddyMessage);
+
+            // --- Terminate signal detection (OpenManus #5) ---
+            // If the tool result starts with the terminate sentinel, break the loop.
+            if (rawToolContent.startsWith('__AGENT_TERMINATE__')) {
+              const terminateMsg = rawToolContent.replace('__AGENT_TERMINATE__', '').trim();
+              const terminateEntry: ChatEntry = {
+                type: 'assistant',
+                content: terminateMsg || 'Task completed.',
+                timestamp: new Date(),
+              };
+              history.push(terminateEntry);
+              messages.push({ role: 'assistant', content: terminateEntry.content });
+              newEntries.push(terminateEntry);
+              terminateDetected = true;
+              break;
+            }
           }
+
+          // Break outer loop if terminate tool was called
+          if (terminateDetected) break;
 
           // Run after_turn middleware (sequential path)
           if (pipeline) {
@@ -690,6 +710,7 @@ export class AgentExecutor {
         getPersonaManager().autoSelectPersona({ message });
       } catch { /* persona auto-select optional */ }
 
+      let terminateDetectedStreaming = false;
       while (toolRounds < maxToolRounds) {
         if (abortController?.signal.aborted) {
           yield { type: "content", content: "\n\n[Operation cancelled by user]" };
@@ -967,7 +988,17 @@ export class AgentExecutor {
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
             } as CodeBuddyMessage);
+
+            // --- Terminate signal detection (OpenManus #5, streaming path) ---
+            if (rawStreamContent.startsWith('__AGENT_TERMINATE__')) {
+              const terminateMsg = rawStreamContent.replace('__AGENT_TERMINATE__', '').trim();
+              yield { type: "content", content: `\n\n${terminateMsg || 'Task completed.'}` };
+              terminateDetectedStreaming = true;
+              break;
+            }
           }
+
+          if (terminateDetectedStreaming) break;
 
           inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
           const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;

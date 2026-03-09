@@ -175,22 +175,22 @@ describe('CostTracker', () => {
   describe('Cost Calculation', () => {
     it('should calculate cost for grok-3-latest model', () => {
       const cost = tracker.calculateCost(1000, 1000, 'grok-3-latest');
-      // inputPer1k: 0.005, outputPer1k: 0.015
-      // (1000/1000) * 0.005 + (1000/1000) * 0.015 = 0.005 + 0.015 = 0.02
-      expect(cost).toBeCloseTo(0.02, 6);
+      // inputPer1k: 0.003, outputPer1k: 0.015
+      // (1000/1000) * 0.003 + (1000/1000) * 0.015 = 0.003 + 0.015 = 0.018
+      expect(cost).toBeCloseTo(0.018, 6);
     });
 
     it('should calculate cost for grok-3-fast model', () => {
       const cost = tracker.calculateCost(1000, 1000, 'grok-3-fast');
-      // inputPer1k: 0.003, outputPer1k: 0.009
-      // (1000/1000) * 0.003 + (1000/1000) * 0.009 = 0.003 + 0.009 = 0.012
-      expect(cost).toBeCloseTo(0.012, 6);
+      // inputPer1k: 0.0006, outputPer1k: 0.004
+      // (1000/1000) * 0.0006 + (1000/1000) * 0.004 = 0.0006 + 0.004 = 0.0046
+      expect(cost).toBeCloseTo(0.0046, 6);
     });
 
     it('should calculate cost for grok-code-fast-1 model', () => {
       const cost = tracker.calculateCost(1000, 1000, 'grok-code-fast-1');
-      // inputPer1k: 0.002, outputPer1k: 0.006
-      expect(cost).toBeCloseTo(0.008, 6);
+      // inputPer1k: 0.00015, outputPer1k: 0.0006
+      expect(cost).toBeCloseTo(0.00075, 6);
     });
 
     it('should calculate cost for grok-2-latest model', () => {
@@ -201,8 +201,8 @@ describe('CostTracker', () => {
 
     it('should use default pricing for unknown models', () => {
       const cost = tracker.calculateCost(1000, 1000, 'unknown-model');
-      // default: inputPer1k: 0.003, outputPer1k: 0.010
-      expect(cost).toBeCloseTo(0.013, 6);
+      // default: inputPer1k: 0.003, outputPer1k: 0.015
+      expect(cost).toBeCloseTo(0.018, 6);
     });
 
     it('should handle zero tokens', () => {
@@ -212,14 +212,14 @@ describe('CostTracker', () => {
 
     it('should handle large token counts', () => {
       const cost = tracker.calculateCost(1000000, 500000, 'grok-3-latest');
-      // (1000000/1000) * 0.005 + (500000/1000) * 0.015 = 5 + 7.5 = 12.5
-      expect(cost).toBeCloseTo(12.5, 6);
+      // (1000000/1000) * 0.003 + (500000/1000) * 0.015 = 3 + 7.5 = 10.5
+      expect(cost).toBeCloseTo(10.5, 6);
     });
 
     it('should handle fractional token counts', () => {
       const cost = tracker.calculateCost(500, 250, 'grok-3-latest');
-      // (500/1000) * 0.005 + (250/1000) * 0.015 = 0.0025 + 0.00375 = 0.00625
-      expect(cost).toBeCloseTo(0.00625, 6);
+      // (500/1000) * 0.003 + (250/1000) * 0.015 = 0.0015 + 0.00375 = 0.00525
+      expect(cost).toBeCloseTo(0.00525, 6);
     });
   });
 

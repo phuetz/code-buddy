@@ -49,6 +49,7 @@ function ChatInterfaceWithAgent({
   const [processingTime, setProcessingTime] = useState(0);
   const [tokenCount, setTokenCount] = useState(0);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [currentActivity, setCurrentActivity] = useState<string>('');
   const [confirmationOptions, setConfirmationOptions] =
     useState<ConfirmationOptions | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<{
@@ -152,10 +153,14 @@ function ChatInterfaceWithAgent({
     setIsStreaming,
     setTokenCount,
     setProcessingTime,
+    setCurrentActivity,
     processingStartTime,
     isProcessing,
     isStreaming,
     isConfirmationActive: !!confirmationOptions,
+    appendStreamingContent,
+    finalizeStreamingEntry,
+    updateToolCallEntry,
   });
 
   useEffect(() => {
@@ -212,12 +217,14 @@ function ChatInterfaceWithAgent({
       const processInitialMessage = async () => {
         setIsProcessing(true);
         setIsStreaming(true);
+        setCurrentActivity('Sending to LLM...');
 
         try {
           let streamingEntry: ChatEntry | null = null;
           for await (const chunk of agent.processUserMessageStream(initialMessage)) {
             switch (chunk.type) {
               case "reasoning":
+                setCurrentActivity('Reasoning...');
                 if (chunk.reasoning) {
                   // Handle reasoning/thinking content
                   setChatHistory((prev) => {
@@ -237,6 +244,7 @@ function ChatInterfaceWithAgent({
                 }
                 break;
               case "content":
+                setCurrentActivity('Generating response...');
                 if (chunk.content) {
                   // Finalize any streaming reasoning entry
                   setChatHistory((prev) => {
@@ -272,6 +280,8 @@ function ChatInterfaceWithAgent({
                 break;
               case "tool_calls":
                 if (chunk.toolCalls) {
+                  const toolNames = chunk.toolCalls.map((tc: any) => tc.function?.name || 'tool').join(', ');
+                  setCurrentActivity(`Executing: ${toolNames}`);
                   // Finalize streaming entry with tool calls
                   finalizeStreamingEntry({ toolCalls: chunk.toolCalls });
                   streamingEntry = null;
@@ -309,6 +319,7 @@ function ChatInterfaceWithAgent({
                 }
                 break;
               case "tool_result":
+                setCurrentActivity('Processing tool results...');
                 if (chunk.toolCall && chunk.toolResult) {
                   // Finalize any streaming entry
                   finalizeStreamingEntry();
@@ -370,6 +381,7 @@ function ChatInterfaceWithAgent({
                 }
                 break;
               case "done":
+                setCurrentActivity('');
                 if (streamingEntry) {
                   finalizeStreamingEntry();
                 }
@@ -561,6 +573,7 @@ function ChatInterfaceWithAgent({
             isActive={isProcessing || isStreaming}
             processingTime={processingTime}
             tokenCount={tokenCount}
+            activity={currentActivity}
           />
 
           <ChatInput

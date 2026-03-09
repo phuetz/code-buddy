@@ -541,3 +541,743 @@ Using tool
 ## Facts extracted 2026-03-07 (pre-compaction flush)
 
 Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-08 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Test response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Follow-up response
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool
+
+
+## Facts extracted 2026-03-09 (pre-compaction flush)
+
+Using tool

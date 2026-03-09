@@ -401,8 +401,20 @@ export class BrowserManager extends EventEmitter {
   private async extractElements(page: Page, options: SnapshotOptions): Promise<WebElement[]> {
     const maxElements = options.maxElements ?? 200;
 
-    // Use Playwright's accessibility tree
-    const accessibilityTree = await page.accessibility.snapshot({ interestingOnly: true });
+    // Get accessibility tree (page.accessibility removed in Playwright 1.48+)
+    let accessibilityTree: AccessibilityNode | null = null;
+    try {
+      if (page.accessibility) {
+        accessibilityTree = await page.accessibility.snapshot({ interestingOnly: true });
+      }
+    } catch {
+      // Accessibility API unavailable
+    }
+
+    // Fallback: extract via DOM when accessibility API is unavailable
+    if (!accessibilityTree) {
+      return this.extractElementsViaDOM(page, maxElements, options);
+    }
 
     const elements: WebElement[] = [];
 
@@ -476,6 +488,71 @@ export class BrowserManager extends EventEmitter {
     }
 
     return elements;
+  }
+
+  /**
+   * DOM-based element extraction fallback for Playwright 1.48+ where page.accessibility was removed
+   */
+  private async extractElementsViaDOM(page: Page, maxElements: number, options: SnapshotOptions): Promise<WebElement[]> {
+    const interactiveSelector = 'a, button, input, select, textarea, [role="button"], [role="link"], [role="textbox"], [role="checkbox"], [role="radio"], [role="combobox"], [role="listbox"], [role="menuitem"], [role="tab"], [role="switch"], [role="slider"], [role="searchbox"], [contenteditable="true"]';
+    const selector = options.interactiveOnly ? interactiveSelector : `${interactiveSelector}, h1, h2, h3, h4, h5, h6, p, img, li, td, th, label`;
+
+    const domNodes = await page.evaluate((sel: string) => {
+      const nodes = Array.from(document.querySelectorAll(sel));
+      return nodes.slice(0, 300).map((el: Element) => {
+        const rect = el.getBoundingClientRect();
+        const htmlEl = el as HTMLElement;
+        return {
+          tagName: el.tagName.toLowerCase(),
+          role: el.getAttribute('role') || '',
+          name: el.getAttribute('aria-label') || (htmlEl as HTMLInputElement).placeholder || el.textContent?.trim().slice(0, 100) || '',
+          value: (htmlEl as HTMLInputElement).value || el.getAttribute('aria-valuetext') || '',
+          disabled: (htmlEl as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true',
+          focused: document.activeElement === el,
+          checked: (htmlEl as HTMLInputElement).checked || false,
+          x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+        };
+      });
+    }, selector);
+
+    const elements: WebElement[] = [];
+    for (const node of domNodes) {
+      if (elements.length >= maxElements) break;
+      if (!options.includeHidden && node.width === 0 && node.height === 0) continue;
+
+      const role = node.role || this.tagNameToRole(node.tagName);
+      const isInteractive = this.isInteractiveRole(role);
+      if (options.interactiveOnly && !isInteractive) continue;
+
+      elements.push({
+        ref: this.nextRef++,
+        tagName: node.tagName,
+        role,
+        name: node.name,
+        text: node.name,
+        boundingBox: { x: node.x, y: node.y, width: node.width, height: node.height },
+        center: { x: node.x + node.width / 2, y: node.y + node.height / 2 },
+        visible: node.width > 0 && node.height > 0,
+        interactive: isInteractive,
+        focused: node.focused,
+        disabled: node.disabled,
+        value: node.value || undefined,
+        ariaAttributes: {},
+      });
+    }
+
+    return elements;
+  }
+
+  private tagNameToRole(tagName: string): string {
+    const tagRoleMap: Record<string, string> = {
+      a: 'link', button: 'button', input: 'textbox', select: 'combobox',
+      textarea: 'textbox', h1: 'heading', h2: 'heading', h3: 'heading',
+      h4: 'heading', h5: 'heading', h6: 'heading', img: 'img',
+      p: 'paragraph', li: 'listitem', ul: 'list', ol: 'list',
+      table: 'table', td: 'cell', th: 'columnheader', label: 'label',
+    };
+    return tagRoleMap[tagName] || 'generic';
   }
 
   private isInteractiveRole(role: string): boolean {
