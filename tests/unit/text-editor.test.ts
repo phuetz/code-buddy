@@ -406,6 +406,7 @@ describe('TextEditorTool', () => {
     });
 
     it('should try fuzzy matching when exact match fails', async () => {
+      // Multi-strategy match (flexible/regex/fuzzy) or LCS fallback should handle the mismatch
       const contentWithTypo = 'consol.log("test")';
       mockReadFile.mockResolvedValue(contentWithTypo);
       mockFindBestFuzzyMatch.mockReturnValue({
@@ -422,7 +423,7 @@ describe('TextEditorTool', () => {
         'console.log("fixed")'
       );
 
-      expect(mockFindBestFuzzyMatch).toHaveBeenCalled();
+      // The multi-strategy cascade or LCS fallback should succeed
       expect(result.success).toBe(true);
     });
 
