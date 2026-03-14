@@ -48,19 +48,18 @@ When generating a fix:
 4. Explain why your fix works
 5. Consider edge cases and potential side effects
 
-Output format:
-<fix>
-<file>path/to/file</file>
-<line_start>10</line_start>
-<line_end>15</line_end>
-<original>
-original code here
-</original>
-<fixed>
-fixed code here
-</fixed>
-<explanation>Why this fix works</explanation>
-</fix>`;
+IMPORTANT: Output your fix as JSON (and ONLY JSON, no other text):
+{
+  "file": "path/to/file",
+  "line_start": 10,
+  "line_end": 15,
+  "original": "original code here",
+  "fixed": "fixed code here",
+  "explanation": "Why this fix works"
+}
+
+For multi-line code, use \\n for newlines within the JSON strings.
+If you cannot determine a fix, return: {"file": "", "original": "", "fixed": "", "explanation": "reason"}`;
 
 const REPAIR_USER_PROMPT = `Fix the following bug:
 
@@ -391,66 +390,90 @@ export class RepairEngine extends EventEmitter {
    * Parse LLM response to extract patch
    */
   private parseLLMPatch(content: string, fault: Fault): RepairPatch | null {
-    const fixMatch = content.match(
-      /<fix>([\s\S]*?)<\/fix>/
-    );
+    // Strategy 1: JSON structured output (preferred)
+    const jsonMatch = content.match(/\{[\s\S]*?"file"[\s\S]*?"fixed"[\s\S]*?\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.fixed) {
+          const change: PatchChange = {
+            file: parsed.file || fault.location.file,
+            type: "replace",
+            startLine: typeof parsed.line_start === 'number' ? parsed.line_start : fault.location.startLine,
+            endLine: typeof parsed.line_end === 'number' ? parsed.line_end : fault.location.endLine,
+            originalCode: parsed.original || "",
+            newCode: parsed.fixed,
+          };
+          return {
+            id: `patch-llm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            fault,
+            changes: [change],
+            strategy: "llm_generated",
+            confidence: 0.8,
+            explanation: parsed.explanation || "LLM-generated fix (JSON)",
+            generatedBy: "llm",
+            validated: false,
+          };
+        }
+      } catch { /* JSON parse failed — try XML fallback */ }
+    }
 
-    if (!fixMatch) {
-      // Try to extract code blocks as fallback
-      const codeMatch = content.match(/```[\w]*\n([\s\S]*?)```/);
-      if (codeMatch) {
+    // Strategy 2: XML format (backward compatibility)
+    const fixMatch = content.match(/<fix>([\s\S]*?)<\/fix>/);
+    if (fixMatch) {
+      const fixContent = fixMatch[1];
+      const fileMatch = fixContent.match(/<file>([^<]+)<\/file>/);
+      const startMatch = fixContent.match(/<line_start>(\d+)<\/line_start>/);
+      const endMatch = fixContent.match(/<line_end>(\d+)<\/line_end>/);
+      const originalMatch = fixContent.match(/<original>([\s\S]*?)<\/original>/);
+      const fixedMatch = fixContent.match(/<fixed>([\s\S]*?)<\/fixed>/);
+      const explanationMatch = fixContent.match(/<explanation>([\s\S]*?)<\/explanation>/);
+
+      if (fixedMatch) {
+        const change: PatchChange = {
+          file: fileMatch?.[1] || fault.location.file,
+          type: "replace",
+          startLine: startMatch ? parseInt(startMatch[1], 10) : fault.location.startLine,
+          endLine: endMatch ? parseInt(endMatch[1], 10) : fault.location.endLine,
+          originalCode: originalMatch?.[1]?.trim() || "",
+          newCode: fixedMatch[1].trim(),
+        };
         return {
           id: `patch-llm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           fault,
-          changes: [{
-            file: fault.location.file,
-            type: "replace",
-            startLine: fault.location.startLine,
-            endLine: fault.location.endLine,
-            originalCode: fault.location.snippet || "",
-            newCode: codeMatch[1].trim(),
-          }],
+          changes: [change],
           strategy: "llm_generated",
-          confidence: 0.5,
-          explanation: "LLM-generated fix",
+          confidence: 0.7,
+          explanation: explanationMatch?.[1]?.trim() || "LLM-generated fix (XML)",
           generatedBy: "llm",
           validated: false,
         };
       }
-      return null;
     }
 
-    const fixContent = fixMatch[1];
+    // Strategy 3: Code block fallback
+    const codeMatch = content.match(/```[\w]*\n([\s\S]*?)```/);
+    if (codeMatch) {
+      return {
+        id: `patch-llm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        fault,
+        changes: [{
+          file: fault.location.file,
+          type: "replace",
+          startLine: fault.location.startLine,
+          endLine: fault.location.endLine,
+          originalCode: fault.location.snippet || "",
+          newCode: codeMatch[1].trim(),
+        }],
+        strategy: "llm_generated",
+        confidence: 0.5,
+        explanation: "LLM-generated fix (code block)",
+        generatedBy: "llm",
+        validated: false,
+      };
+    }
 
-    // Parse fix components
-    const fileMatch = fixContent.match(/<file>([^<]+)<\/file>/);
-    const startMatch = fixContent.match(/<line_start>(\d+)<\/line_start>/);
-    const endMatch = fixContent.match(/<line_end>(\d+)<\/line_end>/);
-    const originalMatch = fixContent.match(/<original>([\s\S]*?)<\/original>/);
-    const fixedMatch = fixContent.match(/<fixed>([\s\S]*?)<\/fixed>/);
-    const explanationMatch = fixContent.match(/<explanation>([\s\S]*?)<\/explanation>/);
-
-    if (!fixedMatch) return null;
-
-    const change: PatchChange = {
-      file: fileMatch?.[1] || fault.location.file,
-      type: "replace",
-      startLine: startMatch ? parseInt(startMatch[1], 10) : fault.location.startLine,
-      endLine: endMatch ? parseInt(endMatch[1], 10) : fault.location.endLine,
-      originalCode: originalMatch?.[1]?.trim() || "",
-      newCode: fixedMatch[1].trim(),
-    };
-
-    return {
-      id: `patch-llm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      fault,
-      changes: [change],
-      strategy: "llm_generated",
-      confidence: 0.7,
-      explanation: explanationMatch?.[1]?.trim() || "LLM-generated fix",
-      generatedBy: "llm",
-      validated: false,
-    };
+    return null;
   }
 
   /**

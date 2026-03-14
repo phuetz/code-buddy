@@ -98,6 +98,12 @@ export interface ExecutorDependencies {
   contextManager: ContextManagerV2;
   /** Counts tokens for cost calculation */
   tokenCounter: TokenCounter;
+  /** Optional: ICM cross-session memory bridge */
+  icmBridgeProvider?: () => ICMBridge | null;
+  /** Optional: Code graph context provider */
+  codeGraphContextProvider?: (message: string) => string | null;
+  /** Optional: Decision memory context provider */
+  decisionContextProvider?: (query: string) => Promise<string | null>;
   /** Optional lane queue for serialized tool execution */
   laneQueue?: LaneQueue;
   /** Lane ID for tool execution serialization (defaults to 'default') */
@@ -171,6 +177,21 @@ export class AgentExecutor {
     private deps: ExecutorDependencies,
     private config: ExecutorConfig
   ) {}
+
+  /** Get ICM bridge provider (DI first, then global fallback) */
+  private getICMBridgeProvider(): (() => ICMBridge | null) | null {
+    return this.deps.icmBridgeProvider ?? _icmBridgeProvider;
+  }
+
+  /** Get code graph context provider (DI first, then global fallback) */
+  private getCodeGraphContextProvider(): ((message: string) => string | null) | null {
+    return this.deps.codeGraphContextProvider ?? _codeGraphContextProvider;
+  }
+
+  /** Get decision context provider (DI first, then global fallback) */
+  private getDecisionContextProvider(): ((query: string) => Promise<string | null>) | null {
+    return this.deps.decisionContextProvider ?? _decisionContextProvider;
+  }
 
   /**
    * Get or set the middleware pipeline.
@@ -398,9 +419,9 @@ export class AgentExecutor {
       }
 
       // --- Decision memory context: inject relevant past decisions ---
-      if (_decisionContextProvider) {
+      if (this.getDecisionContextProvider()) {
         try {
-          const decisionsBlock = await _decisionContextProvider(message);
+          const decisionsBlock = await this.getDecisionContextProvider()!(message);
           if (decisionsBlock) {
             preparedMessages.push({ role: 'system', content: `<context type="decision">\n${decisionsBlock}\n</context>` });
           }
@@ -408,9 +429,9 @@ export class AgentExecutor {
       }
 
       // --- ICM cross-session memory: search for relevant past episodes ---
-      if (_icmBridgeProvider) {
+      if (this.getICMBridgeProvider()) {
         try {
-          const icm = _icmBridgeProvider();
+          const icm = this.getICMBridgeProvider()!();
           if (icm?.isAvailable()) {
             const memories = await icm.searchMemory(message, { limit: 3 });
             if (memories.length > 0) {
@@ -422,9 +443,9 @@ export class AgentExecutor {
       }
 
       // --- Code graph context: ego-graph of entities mentioned in message ---
-      if (_codeGraphContextProvider) {
+      if (this.getCodeGraphContextProvider()) {
         try {
-          const graphCtx = _codeGraphContextProvider(message);
+          const graphCtx = this.getCodeGraphContextProvider()!(message);
           if (graphCtx) {
             preparedMessages.push({ role: 'system', content: `<context type="code_graph">\n${graphCtx}\n</context>` });
           }
@@ -725,9 +746,9 @@ export class AgentExecutor {
           } catch { /* auto-capture optional */ }
 
           // Fire-and-forget ICM episode storage
-          if (_icmBridgeProvider) {
+          if (this.getICMBridgeProvider()) {
             try {
-              const icm = _icmBridgeProvider();
+              const icm = this.getICMBridgeProvider()!();
               if (icm?.isAvailable()) {
                 const episode = `User: ${message}\nAssistant: ${(assistantMessage.content || '').substring(0, 500)}`;
                 icm.storeEpisode(episode, {
@@ -870,9 +891,9 @@ export class AgentExecutor {
         }
 
         // --- Decision memory context: inject relevant past decisions (streaming path) ---
-        if (_decisionContextProvider) {
+        if (this.getDecisionContextProvider()) {
           try {
-            const decisionsBlockStream = await _decisionContextProvider(message);
+            const decisionsBlockStream = await this.getDecisionContextProvider()!(message);
             if (decisionsBlockStream) {
               preparedMessages.push({ role: 'system', content: `<context type="decision">\n${decisionsBlockStream}\n</context>` });
             }
@@ -894,9 +915,9 @@ export class AgentExecutor {
         }
 
         // --- Code graph context: ego-graph of entities mentioned in message (streaming path) ---
-        if (_codeGraphContextProvider) {
+        if (this.getCodeGraphContextProvider()) {
           try {
-            const graphCtxStream = _codeGraphContextProvider(message);
+            const graphCtxStream = this.getCodeGraphContextProvider()!(message);
             if (graphCtxStream) {
               preparedMessages.push({ role: 'system', content: `<context type="code_graph">\n${graphCtxStream}\n</context>` });
             }
@@ -1196,9 +1217,9 @@ export class AgentExecutor {
           } catch { /* auto-capture optional */ }
 
           // Fire-and-forget ICM episode storage (streaming path)
-          if (_icmBridgeProvider) {
+          if (this.getICMBridgeProvider()) {
             try {
-              const icm = _icmBridgeProvider();
+              const icm = this.getICMBridgeProvider()!();
               if (icm?.isAvailable()) {
                 const episode = `User: ${message}\nAssistant: ${(content || '').substring(0, 500)}`;
                 icm.storeEpisode(episode, {

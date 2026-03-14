@@ -12,6 +12,7 @@ import { multiStrategyMatch } from "../utils/multi-strategy-match.js";
 import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 import { generateDiff as sharedGenerateDiff } from "../utils/diff-generator.js";
 import { detectOmissionPlaceholders, formatOmissionError } from "./omission-placeholder-detector.js";
+import { createHash } from 'crypto';
 
 /**
  * Text Editor Tool
@@ -270,6 +271,7 @@ export class TextEditorTool implements Disposable {
         path: filePath,
         old_str: oldStr,
         new_str: newStr,
+        fileHash: this.computeHash(newContent),
       });
 
       const oldLines = content.split("\n");
@@ -367,6 +369,7 @@ export class TextEditorTool implements Disposable {
         command: "create",
         path: filePath,
         content,
+        fileHash: this.computeHash(content),
       });
 
       // Generate diff output using the same method as str_replace
@@ -470,6 +473,7 @@ export class TextEditorTool implements Disposable {
         path: filePath,
         old_str: `lines ${startLine}-${endLine}`,
         new_str: newContent,
+        fileHash: this.computeHash(newFileContent),
       });
 
       const oldLines = fileContent.split("\n");
@@ -561,11 +565,17 @@ export class TextEditorTool implements Disposable {
         path: filePath,
         insert_line: insertLine,
         content,
+        fileHash: this.computeHash(newContent),
       });
+
+      // Generate diff like strReplace for consistency
+      const oldLines = fileContent.split("\n");
+      const newLines = newContent.split("\n");
+      const diff = this.generateDiff(oldLines, newLines, filePath);
 
       return {
         success: true,
-        output: `Successfully inserted content at line ${insertLine} in ${filePath}`,
+        output: diff,
       };
     } catch (error: unknown) {
       return {
@@ -583,6 +593,11 @@ export class TextEditorTool implements Disposable {
    *
    * @returns Success message or error if no edits to undo
    */
+  /** Compute SHA-256 hash of content for undo verification */
+  private computeHash(content: string): string {
+    return createHash('sha256').update(content).digest('hex').substring(0, 16);
+  }
+
   async undoEdit(): Promise<ToolResult> {
     if (this.editHistory.length === 0) {
       return {
@@ -594,11 +609,27 @@ export class TextEditorTool implements Disposable {
     const lastEdit = this.editHistory.pop()!;
 
     try {
+      // Verify file hasn't been modified externally (hash check)
+      // Skip for 'create' undo (we're deleting the file, not reverting content)
+      if (lastEdit.path && lastEdit.fileHash && lastEdit.command !== 'create') {
+        try {
+          const currentContent = await this.vfs.readFile(lastEdit.path, "utf-8");
+          const currentHash = this.computeHash(currentContent);
+          if (currentHash !== lastEdit.fileHash) {
+            return {
+              success: false,
+              error: `Cannot undo: ${lastEdit.path} was modified externally since the last edit. Expected hash ${lastEdit.fileHash}, got ${currentHash}.`,
+            };
+          }
+        } catch {
+          return { success: false, error: `Cannot undo: ${lastEdit.path} is no longer readable.` };
+        }
+      }
+
       switch (lastEdit.command) {
         case "str_replace":
           if (lastEdit.path && lastEdit.old_str && lastEdit.new_str) {
             const content = await this.vfs.readFile(lastEdit.path, "utf-8");
-            // Use split/join to replace ALL occurrences (replaceAll equivalent)
             const revertedContent = content.split(lastEdit.new_str).join(lastEdit.old_str);
             await this.vfs.writeFile(lastEdit.path, revertedContent, "utf-8");
           }

@@ -70,17 +70,10 @@ export function isError(value: unknown): value is Error {
 }
 
 /**
- * Extract error message from unknown error
+ * Extract error message from unknown error.
+ * Canonical implementation in src/errors/index.ts — re-exported here for convenience.
  */
-export function getErrorMessage(error: unknown): string {
-  if (isError(error)) {
-    return error.message;
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  return String(error);
-}
+export { getErrorMessage } from '../errors/index.js';
 
 /**
  * Extract error code from unknown error (for filesystem errors like ENOENT)
@@ -106,6 +99,8 @@ export interface EditorCommand {
   insert_line?: number;
   view_range?: [number, number];
   replace_all?: boolean;
+  /** SHA-256 hash of file content AFTER the edit (for undo verification) */
+  fileHash?: string;
 }
 
 export interface AgentState {
