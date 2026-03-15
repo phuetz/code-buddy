@@ -294,7 +294,7 @@ export function generateDeterministicPlan(profile: ProjectProfile): DocPage[] {
     pages.push({
       id: String(nextId), slug: `${nextId}-metrics`, title: 'Code Quality Metrics',
       description: 'Dead code, coupling, and health score',
-      sourceFiles: [], relatedPages: ['2'], pageType: 'overview',
+      sourceFiles: [], relatedPages: ['2'], pageType: 'architecture',
     });
     nextId++;
   }

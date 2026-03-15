@@ -438,7 +438,11 @@ function generateIndexPage(plan: DocPlan, pages: GeneratedPage[]): string {
   ];
 
   // Smart routing table
-  const pageMap = new Map(plan.pages.map(p => [p.pageType, p]));
+  // Map by pageType — first match wins, so put canonical pages first
+  const pageMap = new Map<PageType, DocPage>();
+  for (const pg of plan.pages) {
+    if (!pageMap.has(pg.pageType)) pageMap.set(pg.pageType, pg);
+  }
   const link = (type: PageType, label: string) => {
     const pg = pageMap.get(type);
     return pg ? `[${pg.title}](./${pg.slug}.md)` : label;

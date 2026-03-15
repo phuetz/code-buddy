@@ -1,6 +1,6 @@
-# Code Buddy — Documentation
+# @phuetz/code-buddy — Documentation
 
-> A terminal-based autonomous AI coding agent, multi-provider, open-source.
+> Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.
 
 *Generated: 2026-03-15*
 
@@ -8,53 +8,50 @@
 
 | I want to... | Go to... |
 |-------------|----------|
-| Understand the architecture | [Overview](./1-overview.md) then [Architecture](./2-architecture.md) |
-| Add a new tool | [Tool System](./5-tools.md) then [Development Guide](./10-development.md) |
-| Configure an AI provider | [Configuration](./8-configuration.md) |
-| Understand security | [Security](./6-security.md) |
-| Use the CLI or API | [API Reference](./9-api-reference.md) |
-| Explore code quality | [Metrics](./4-metrics.md) |
+| Understand the project | [Overview](./1-overview.md) |
+| Get started quickly | [Getting Started](./1-1-getting-started.md) |
+| Understand the architecture | [Architecture](./2-architecture.md) |
+| Configure the project | [Configuration](./25-configuration.md) |
+| Understand security | [Security](./24-security.md) |
+| Use the CLI or API | [API Reference](./26-api-reference.md) |
+| Fix an issue | [Troubleshooting](./27-troubleshooting.md) |
 
 ## Project at a Glance
 
 | Metric | Value |
 |--------|-------|
-| Source Modules | 1 077 |
-| Classes | 907 |
-| Functions | 14 317 |
-| Code Relationships | 49 126 |
+| Modules | 1 083 |
+| Functions | 14 351 |
+| Relationships | 49 278 |
 
 ## All Sections
 
-1. [Overview](./1-overview.md)
-2. [Architecture](./2-architecture.md)
-4. [Metrics](./4-metrics.md)
-5. [Tools](./5-tools.md)
-6. [Security](./6-security.md)
-7. [Context memory](./7-context-memory.md)
-8. [Configuration](./8-configuration.md)
-9. [Api reference](./9-api-reference.md)
-10. [Development](./10-development.md)
-11. [Changelog](./11-changelog.md)
-
-### Subsystems
-
-- [Core Agent System & CLI And Slash Commands (32 modules)](./3a-core-agent-system-cli-and-slash-commands.md)
-- [CLI And Slash Commands & Shared Utilities (28 modules)](./3b-cli-and-slash-commands-shared-utilities.md)
-- [Shared Utilities & Context Window Management (23 modules)](./3c-shared-utilities-context-window.md)
-- [Tool Implementations (22 modules)](./3d-tool-implementations.md)
-- [Core Agent System & Background Daemon Service (19 modules)](./3e-core-agent-system-background-daemon.md)
-- [Performance Optimization & Core Agent System (16 modules)](./3f-performance-optimization-core-agent.md)
-- [Interpreter & Core Agent System (16 modules)](./3g-interpreter-core-agent-system.md)
-- [Code Analysis And Knowledge Graph & Documentation Generation (15 modules)](./3h-code-analysis-and-knowledge-graph.md)
-- [Model Context Protocol Servers & Tool Implementations (13 modules)](./3i-model-context-protocol-servers-tool.md)
-- [Tool Implementations & Cloud Deployment (12 modules)](./3j-tool-implementations-cloud-deployment.md)
-- [Messaging Channel Integrations (11 modules)](./3k-messaging-channel-integrations.md)
-- [Messaging Channel Integrations — Discord (10 modules)](./3l-messaging-channel-integrations.md)
-- [Tool Implementations — Archive tool (10 modules)](./3m-tool-implementations.md)
-- [Scripting & External Service Integrations (7 modules)](./3n-scripting-external-service-integrations.md)
-- [Tool Implementations & Core Agent System (6 modules)](./3o-tool-implementations-core-agent-system.md)
-- [Prompts & Context Window Management (6 modules)](./3p-prompts-context-window-management.md)
-- [Shared Utilities & CLI And Slash Commands (5 modules)](./3q-shared-utilities-cli-and-slash-commands.md)
-- [Multi-Device Management (5 modules)](./3r-multi-device-management.md)
-- [Other Subsystems (69 modules in 24 clusters)](./3s-other-subsystems.md)
+- [1. Overview](./1-overview.md)
+  - [1.1. Getting Started](./1-1-getting-started.md)
+  - [1.2. Key Concepts](./1-2-key-concepts.md)
+- [2. Architecture](./2-architecture.md)
+- [3. Channels + agent](./3-channels-agent.md)
+- [4. Commands + utils](./4-commands-utils.md)
+- [5. Knowledge + docs](./5-knowledge-docs.md)
+- [6. Tools](./6-tools.md)
+- [7. Utils + commands](./7-utils-commands.md)
+- [8. Agent + daemon](./8-agent-daemon.md)
+- [9. Optimization + agent](./9-optimization-agent.md)
+- [10. Memory + context](./10-memory-context.md)
+- [11. Agent + hooks](./11-agent-hooks.md)
+- [12. Tools](./12-tools.md)
+- [13. Tools + deploy](./13-tools-deploy.md)
+- [14. Prompts + context](./14-prompts-context.md)
+- [15. Agent + skills](./15-agent-skills.md)
+- [16. Tools + codebuddy](./16-tools-codebuddy.md)
+- [17. Memory + mcp](./17-memory-mcp.md)
+- [18. Dm pairing](./18-dm-pairing.md)
+- [19. Client](./19-client.md)
+- [20. Codebuddy agent](./20-codebuddy-agent.md)
+- [21. Cache breakpoints](./21-cache-breakpoints.md)
+- [22. Extended thinking](./22-extended-thinking.md)
+- [23. Code Quality Metrics](./23-metrics.md)
+- [24. Security](./24-security.md)
+- [25. Configuration](./25-configuration.md)
+- [26. API Reference](./26-api-reference.md)
+- [27. Troubleshooting](./27-troubleshooting.md)

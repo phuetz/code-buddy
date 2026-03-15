@@ -1,8 +1,8 @@
-# Architecture
+# [Architecture](./2-architecture.md)
 
 Architecture type: **plugin-based**
 
-## Layers
+## [Layers](./2-architecture.md#layers)
 
 | Layer | [Modules](./3-channels-agent.md#modules) |
 |-------|---------|
@@ -22,7 +22,7 @@ Architecture type: **plugin-based**
 | `src/renderers` | 16 |
 | `src/memory` | 14 |
 
-## Entry Points
+## [Entry Points](./2-architecture.md#entry-points)
 
 - `src/acp/protocol`
 - `src/advanced/conversation-branching`
@@ -32,4 +32,4 @@ Architecture type: **plugin-based**
 
 ---
 
-**See also:** [Overview](./1-overview.md)
+**See also:** [Architecture](./2-architecture.md)
