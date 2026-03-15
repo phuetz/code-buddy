@@ -263,8 +263,9 @@ export async function generateDocs(
     errors,
   };
 
-  // Post-processing: add cross-links and source citations to all files
+  // Post-processing: add cross-links, inline concept links, and source citations
   addCrossLinksAndCitations(outputDir, files, graph);
+  addInlineConceptLinks(outputDir, files);
 
   logger.info(`Docs generated: ${files.length} files in ${result.durationMs}ms, ${result.entityCount} entities`);
   return result;
@@ -636,10 +637,12 @@ async function generateArchitecture(
         }
       }
       if (bestMod) {
-        lines.push('## Core Module Dependencies', '');
-        // Bug 5 fix: cap dependency diagram to 20 nodes for readability
-        const diagram = generateModuleDependencies(graph, bestMod, 2, 20);
+        const { generateMermaidLegend } = await import('../knowledge/mermaid-generator.js');
+        // P1: max 10 nodes for macro view, with color legend
+        lines.push('## Core Module Dependencies (top 10)', '');
+        const diagram = generateModuleDependencies(graph, bestMod, 1, 10);
         lines.push('```mermaid', diagram, '```', '');
+        lines.push(generateMermaidLegend(), '');
       }
     } catch { /* mermaid optional */ }
   }
@@ -845,10 +848,16 @@ async function computeHealthScore(graph: KnowledgeGraph): Promise<{ score: numbe
 async function generateMetrics(graph: KnowledgeGraph): Promise<string> {
   // Bug 9 fix: Health score at top (async — ESM dynamic import)
   const health = await computeHealthScore(graph);
+  // P4: Contextualize metrics with meaningful comparisons
+  const stats = graph.getStats();
+  const avgConnections = stats.tripleCount > 0 ? Math.round(stats.tripleCount / stats.subjectCount) : 0;
+
   const lines = [
     '# Code Quality Metrics',
     '',
     `## Code Health: ${health.score}/100 (${health.label})`,
+    '',
+    `At ${stats.subjectCount.toLocaleString()} entities and ${stats.tripleCount.toLocaleString()} relationships, each module is connected to an average of ${avgConnections} others — ${avgConnections > 30 ? 'a highly integrated graph that warrants careful refactoring' : avgConnections > 15 ? 'a moderately coupled system' : 'a loosely coupled architecture'}.`,
     '',
   ];
   if (health.penalties.length > 0) {
@@ -1479,33 +1488,58 @@ function generateIndex(
   functionCount: number,
   titleMap: Map<string, string> = new Map(),
 ): string {
+  // P3: Landing page style — not just a list of links
   const lines = [
-    '# Documentation Index',
+    '# Code Buddy — Documentation',
     '',
-    `Generated: ${new Date().toISOString()}`,
+    '> A terminal-based autonomous AI coding agent, multi-provider, open-source.',
+    '',
+    `*Generated: ${new Date().toISOString().split('T')[0]}*`,
+    '',
+    '## Where to start?',
+    '',
+    '| I want to... | Go to... |',
+    '|-------------|----------|',
+    '| Understand the architecture | [Overview](./1-overview.md) then [Architecture](./2-architecture.md) |',
+    '| Add a new tool | [Tool System](./5-tools.md) then [Development Guide](./10-development.md) |',
+    '| Configure an AI provider | [Configuration](./8-configuration.md) |',
+    '| Understand security | [Security](./6-security.md) |',
+    '| Use the CLI or API | [API Reference](./9-api-reference.md) |',
+    '| Explore code quality | [Metrics](./4-metrics.md) |',
+    '',
+    '## Project at a Glance',
     '',
     `| Metric | Value |`,
     `|--------|-------|`,
-    `| Modules | ${moduleCount} |`,
-    `| Classes | ${classCount} |`,
-    `| Functions | ${functionCount} |`,
-    `| Relationships | ${stats.tripleCount} |`,
+    `| Source Modules | ${moduleCount.toLocaleString()} |`,
+    `| Classes | ${classCount.toLocaleString()} |`,
+    `| Functions | ${functionCount.toLocaleString()} |`,
+    `| Code Relationships | ${stats.tripleCount.toLocaleString()} |`,
     '',
-    '## Sections',
+    '## All Sections',
     '',
   ];
 
-  for (const file of files.filter(f => f !== 'index.md')) {
-    // Use titleMap for subsystem files, fallback to filename-derived title
-    const mapTitle = titleMap.get(file);
-    let title: string;
-    if (mapTitle) {
-      title = mapTitle;
-    } else {
-      const name = file.replace(/^\d+[a-z]?-/, '').replace(/\.md$/, '');
-      title = name.charAt(0).toUpperCase() + name.slice(1).replace(/-/g, ' ');
+  // Group files: main sections first, then subsystems
+  const mainFiles = files.filter(f => f !== 'index.md' && !f.startsWith('3'));
+  const subsystemFiles = files.filter(f => f.startsWith('3'));
+
+  // Main sections
+  for (const file of mainFiles) {
+    const name = file.replace(/^\d+[a-z]?-/, '').replace(/\.md$/, '');
+    const title = name.charAt(0).toUpperCase() + name.slice(1).replace(/-/g, ' ');
+    const num = file.match(/^(\d+)/)?.[1] ?? '';
+    lines.push(`${num}. [${title}](./${file})`);
+  }
+
+  // Subsystems grouped
+  if (subsystemFiles.length > 0) {
+    lines.push('', '### Subsystems', '');
+    for (const file of subsystemFiles) {
+      const mapTitle = titleMap.get(file);
+      const title = mapTitle ?? file.replace(/^\d+[a-z]?-/, '').replace(/\.md$/, '').replace(/-/g, ' ');
+      lines.push(`- [${title}](./${file})`);
     }
-    lines.push(`- [${title}](./${file})`);
   }
 
   return lines.join('\n');
@@ -1514,6 +1548,55 @@ function generateIndex(
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * P2: Add inline hyperlinks between concepts across docs.
+ * First mention of a concept that has its own section becomes a clickable link.
+ */
+function addInlineConceptLinks(outputDir: string, files: string[]): void {
+  // Build concept index from file titles and known concepts
+  const conceptIndex: Array<{ pattern: RegExp; link: string; file: string }> = [
+    { pattern: /\bKnowledge Graph\b/i, link: '[Knowledge Graph](./3h-code-analysis-and-knowledge-graph.md)', file: '3h-' },
+    { pattern: /\bRAG (?:tool |)select(?:ion|or)\b/i, link: '[RAG Tool Selector](./5-tools.md)', file: '5-tools' },
+    { pattern: /\bPageRank\b/, link: '[PageRank](./4-metrics.md)', file: '4-metrics' },
+    { pattern: /\bGuardian Agent\b/i, link: '[Guardian Agent](./6-security.md)', file: '6-security' },
+    { pattern: /\bContext(?:Manager| compression| window)\b/i, link: '[Context Management](./7-context-memory.md)', file: '7-context' },
+    { pattern: /\bMCTS(?:r|)\b/, link: '[MCTS Reasoning](./2-architecture.md)', file: '2-architecture' },
+    { pattern: /\bTree-of-Thought\b/i, link: '[Tree-of-Thought](./2-architecture.md)', file: '2-architecture' },
+    { pattern: /\bA2A (?:protocol|)\b/i, link: '[A2A Protocol](./9-api-reference.md)', file: '9-api' },
+    { pattern: /\bCodeBuddyAgent\b/, link: '[CodeBuddyAgent](./1-overview.md)', file: '1-overview' },
+    { pattern: /\bAgentExecutor\b/, link: '[AgentExecutor](./2-architecture.md)', file: '2-architecture' },
+  ];
+
+  for (const file of files) {
+    if (file === 'index.md' || file.startsWith('11-')) continue;
+    const filePath = path.join(outputDir, file);
+    if (!fs.existsSync(filePath)) continue;
+
+    let content = fs.readFileSync(filePath, 'utf-8');
+    const linked = new Set<string>();
+
+    for (const concept of conceptIndex) {
+      // Don't link to self
+      if (file.startsWith(concept.file)) continue;
+      // Only first occurrence per file
+      if (linked.has(concept.file)) continue;
+      // Don't link inside code blocks or existing links
+      if (content.match(concept.pattern)) {
+        content = content.replace(concept.pattern, (match) => {
+          // Skip if already inside a link [...](...)
+          const idx = content.indexOf(match);
+          const before = content.substring(Math.max(0, idx - 5), idx);
+          if (before.includes('[') || before.includes('`')) return match;
+          linked.add(concept.file);
+          return concept.link;
+        });
+      }
+    }
+
+    fs.writeFileSync(filePath, content);
+  }
+}
 
 /**
  * Derive a human-readable, DeepWiki-style subsystem label from community member paths.

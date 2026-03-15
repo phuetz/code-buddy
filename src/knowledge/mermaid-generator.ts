@@ -9,6 +9,50 @@ import { KnowledgeGraph } from './knowledge-graph.js';
 import type { CommunityResult } from './community-detection.js';
 
 // ============================================================================
+// Color System — consistent across all diagrams
+// ============================================================================
+
+export const MERMAID_COLORS = {
+  critical:   { fill: '#f9f', stroke: '#c0c' },  // PageRank > 0.01
+  important:  { fill: '#ffd', stroke: '#aa0' },  // PageRank 0.005-0.01
+  standard:   { fill: '#dff', stroke: '#0aa' },  // Default
+  entryPoint: { fill: '#dfd', stroke: '#0c0' },  // Entry points
+  focal:      { fill: '#f9f', stroke: '#333' },  // Focal node in query
+};
+
+/** Generate a markdown legend block to append after colored diagrams */
+export function generateMermaidLegend(): string {
+  return '> **Legend:** 🟣 Critical path (PageRank > 0.01) · 🟡 High importance · 🔵 Standard module · 🟢 Entry point';
+}
+
+/** Classify a node by PageRank score */
+function classifyNode(rank: number): keyof typeof MERMAID_COLORS {
+  if (rank > 0.01) return 'critical';
+  if (rank > 0.005) return 'important';
+  return 'standard';
+}
+
+/** Generate style lines for a set of nodes based on their PageRank */
+export function generateNodeStyles(
+  graph: KnowledgeGraph,
+  nodeIds: Map<string, string>,
+  focalEntity?: string,
+): string[] {
+  const styles: string[] = [];
+  for (const [entity, id] of nodeIds) {
+    if (entity === focalEntity) {
+      styles.push(`    style ${id} fill:${MERMAID_COLORS.focal.fill},stroke:${MERMAID_COLORS.focal.stroke},stroke-width:2px`);
+    } else {
+      const rank = graph.getEntityRank(entity);
+      const cls = classifyNode(rank);
+      const color = MERMAID_COLORS[cls];
+      styles.push(`    style ${id} fill:${color.fill},stroke:${color.stroke}`);
+    }
+  }
+  return styles;
+}
+
+// ============================================================================
 // Call Flowchart
 // ============================================================================
 
@@ -100,8 +144,8 @@ export function generateCallFlowchart(
     lines.push(`    ${nodeId(from)} --> ${nodeId(to)}`);
   }
 
-  // Style the focal node
-  lines.push(`    style ${nodeId(entity)} fill:#f9f,stroke:#333,stroke-width:2px`);
+  // Apply PageRank-based coloring to all nodes
+  lines.push(...generateNodeStyles(graph, nodeIds, entity));
 
   return lines.join('\n');
 }
@@ -196,7 +240,7 @@ export function generateClassHierarchy(
     }
   }
 
-  lines.push(`    style ${nodeId(entity)} fill:#f9f,stroke:#333,stroke-width:2px`);
+  lines.push(...generateNodeStyles(graph, nodeIds, entity));
   return lines.join('\n');
 }
 
@@ -276,7 +320,7 @@ export function generateModuleDependencies(
     lines.push(`    ${nodeId(from)} -->|imports| ${nodeId(to)}`);
   }
 
-  lines.push(`    style ${nodeId(entity)} fill:#f9f,stroke:#333,stroke-width:2px`);
+  lines.push(...generateNodeStyles(graph, nodeIds, entity));
   return lines.join('\n');
 }
 
