@@ -10,6 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { logger } from '../utils/logger.js';
 
@@ -62,6 +63,19 @@ const DEFAULT_CONFIG: BootstrapLoaderConfig = {
 };
 
 // ============================================================================
+// Hierarchical Instruction Files (Codex CLI pattern)
+// ============================================================================
+
+/** File names to search for when walking the hierarchy */
+const HIERARCHICAL_FILES = ['AGENTS.md', 'CODEBUDDY.md', 'CONTEXT.md', 'INSTRUCTIONS.md'];
+
+/** Max directory levels to walk */
+const MAX_HIERARCHY_DEPTH = 10;
+
+/** Root markers for project detection */
+const ROOT_MARKERS = ['.git', 'package.json', 'Cargo.toml', 'go.mod', 'pyproject.toml', '.hg'];
+
+// ============================================================================
 // Bootstrap Loader
 // ============================================================================
 
@@ -73,8 +87,8 @@ export class BootstrapLoader {
   }
 
   /**
-   * Load bootstrap files from project and global directories.
-   * Project files take priority over global files for the same name.
+   * Load bootstrap files from project and global directories,
+   * plus hierarchical instruction files from root to CWD.
    */
   async load(cwd: string): Promise<BootstrapResult> {
     const sources: string[] = [];
@@ -82,6 +96,7 @@ export class BootstrapLoader {
     let totalChars = 0;
     let truncated = false;
 
+    // 1. Standard bootstrap files (project dir + global dir)
     for (const fileName of this.config.fileNames) {
       if (totalChars >= this.config.maxChars) {
         truncated = true;
@@ -91,7 +106,6 @@ export class BootstrapLoader {
       const content = await this.loadFile(fileName, cwd);
       if (!content) continue;
 
-      // Validate content safety
       if (this.containsDangerousPatterns(content.text)) {
         logger.warn(`Skipping bootstrap file ${content.source}: contains dangerous patterns`);
         continue;
@@ -109,6 +123,52 @@ export class BootstrapLoader {
       totalChars += text.length;
     }
 
+    // 2. Hierarchical instruction files (Codex CLI pattern)
+    if (totalChars < this.config.maxChars) {
+      const hierarchicalResult = await this.loadHierarchical(cwd);
+      for (const entry of hierarchicalResult) {
+        if (totalChars >= this.config.maxChars) {
+          truncated = true;
+          break;
+        }
+        if (sources.includes(entry.source)) continue;
+
+        const remaining = this.config.maxChars - totalChars;
+        let text = entry.text;
+        if (text.length > remaining) {
+          text = text.slice(0, remaining) + '\n\n... (truncated)';
+          truncated = true;
+        }
+
+        const relSource = path.relative(cwd, entry.source) || entry.source;
+        sections.push(`## ${entry.fileName} (${relSource})\n\n${text}`);
+        sources.push(entry.source);
+        totalChars += text.length;
+      }
+    }
+
+    // 3. Auto-generated project knowledge (from /docs generate --with-llm)
+    if (totalChars < this.config.maxChars) {
+      const knowledgePath = path.join(cwd, '.codebuddy', 'PROJECT_KNOWLEDGE.md');
+      try {
+        if (existsSync(knowledgePath)) {
+          const knowledgeText = await fs.readFile(knowledgePath, 'utf-8');
+          if (knowledgeText.trim() && !this.containsDangerousPatterns(knowledgeText)) {
+            const remaining = this.config.maxChars - totalChars;
+            let text = knowledgeText;
+            if (text.length > remaining) {
+              text = text.slice(0, remaining) + '\n\n... (truncated)';
+              truncated = true;
+            }
+            sections.push(`## Project Knowledge (auto-generated)\n\n${text}`);
+            sources.push(knowledgePath);
+            totalChars += text.length;
+            logger.debug('Bootstrap: loaded PROJECT_KNOWLEDGE.md');
+          }
+        }
+      } catch { /* optional */ }
+    }
+
     const combinedContent = sections.join('\n\n---\n\n');
 
     return {
@@ -120,20 +180,85 @@ export class BootstrapLoader {
   }
 
   /**
+   * Walk from the detected project root to CWD, collecting instruction files
+   * at each directory level (Codex CLI pattern).
+   */
+  async loadHierarchical(
+    cwd: string,
+    rootMarkers: string[] = ROOT_MARKERS
+  ): Promise<Array<{ text: string; source: string; fileName: string }>> {
+    const root = this.findProjectRoot(cwd, rootMarkers);
+    if (!root || root === cwd) return [];
+
+    const dirs = this.getDirectoryChain(root, cwd);
+    const results: Array<{ text: string; source: string; fileName: string }> = [];
+
+    for (const dir of dirs) {
+      for (const fileName of HIERARCHICAL_FILES) {
+        const filePath = path.join(dir, fileName);
+        const content = await this.readFileSafe(filePath);
+        if (content && !this.containsDangerousPatterns(content)) {
+          results.push({ text: content, source: filePath, fileName });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Find project root by walking up from CWD.
+   */
+  private findProjectRoot(cwd: string, markers: string[]): string | null {
+    let dir = path.resolve(cwd);
+    let depth = 0;
+
+    while (depth < MAX_HIERARCHY_DEPTH) {
+      for (const marker of markers) {
+        try {
+          if (existsSync(path.join(dir, marker))) return dir;
+        } catch { /* ignore */ }
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+      depth++;
+    }
+    return null;
+  }
+
+  /**
+   * Get directory chain from root to target (inclusive).
+   */
+  private getDirectoryChain(root: string, target: string): string[] {
+    const resolved = path.resolve(target);
+    const resolvedRoot = path.resolve(root);
+    const chain: string[] = [resolvedRoot];
+
+    const relativePath = path.relative(resolvedRoot, resolved);
+    if (!relativePath || relativePath.startsWith('..')) return chain;
+
+    let current = resolvedRoot;
+    for (const seg of relativePath.split(path.sep).filter(Boolean)) {
+      current = path.join(current, seg);
+      chain.push(current);
+    }
+    return chain;
+  }
+
+  /**
    * Load a single bootstrap file, checking project dir first, then global.
    */
   private async loadFile(
     fileName: string,
     cwd: string
   ): Promise<{ text: string; source: string } | null> {
-    // Project-level (overrides global)
     const projectPath = path.join(cwd, this.config.projectDir, fileName);
     const projectContent = await this.readFileSafe(projectPath);
     if (projectContent) {
       return { text: projectContent, source: projectPath };
     }
 
-    // Global-level
     const globalPath = path.join(this.config.globalDir, fileName);
     const globalContent = await this.readFileSafe(globalPath);
     if (globalContent) {
