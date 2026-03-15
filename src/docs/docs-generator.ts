@@ -250,9 +250,13 @@ function generateOverview(
   const deps = Object.keys((pkg.dependencies ?? {}) as Record<string, string>);
   const devDeps = Object.keys((pkg.devDependencies ?? {}) as Record<string, string>);
 
-  // Find top-ranked entities
+  // Find top-ranked entities — filter to core src/ modules, skip index re-exports
   const topEntities: Array<{ entity: string; rank: number; importers: number; callers: number }> = [];
   for (const mod of modules) {
+    const name = mod.replace(/^mod:/, '');
+    // Skip non-core: test files, index re-exports with 0 functions, node_modules
+    if (!name.startsWith('src/')) continue;
+    if (name.endsWith('/index') && graph.query({ subject: mod, predicate: 'containsFunction' }).length === 0) continue;
     topEntities.push({
       entity: mod,
       rank: graph.getEntityRank(mod),
@@ -283,12 +287,15 @@ function generateOverview(
   if (modNames.some(m => m.includes('workflow'))) capabilities.push('Workflow engine with DAG execution');
   if (modNames.some(m => m.includes('deploy'))) capabilities.push('Cloud deployment (Fly.io, Railway, Render, GCP)');
 
+  // Count actual source files (not graph entities) for more accurate stats
+  const srcModules = [...modules].filter(m => m.startsWith('mod:src/')).length;
+
   const lines = [
     `# ${projectName} v${version}`,
     '',
     description ? `> ${description}` : `> Auto-generated documentation from ${stats.tripleCount} code relationships`,
     '',
-    `${projectName} is a terminal-based AI coding agent built in TypeScript/Node.js. It supports multiple LLM providers with automatic failover and provides ${functions.size.toLocaleString()} functions across ${modules.size} modules.`,
+    `${projectName} is a terminal-based AI coding agent built in TypeScript/Node.js. It supports multiple LLM providers (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio) with automatic failover. The codebase contains ${srcModules} source modules and ${classes.size} classes.`,
     '',
     '## Key Capabilities',
     '',
@@ -299,9 +306,8 @@ function generateOverview(
     `| Metric | Value |`,
     `|--------|-------|`,
     `| Version | ${version} |`,
-    `| Modules | ${modules.size} |`,
+    `| Source Modules | ${srcModules} |`,
     `| Classes | ${classes.size} |`,
-    `| Functions | ${functions.size.toLocaleString()} |`,
     `| Code Relationships | ${stats.tripleCount.toLocaleString()} |`,
     `| Dependencies | ${deps.length} |`,
     `| Dev Dependencies | ${devDeps.length} |`,
@@ -320,34 +326,74 @@ function generateOverview(
     lines.push(`| \`${name}\` | ${rank.toFixed(3)} | ${importers} | ${desc} |`);
   }
 
+  // Entry points with explicit labels for known mains
+  const entryLabels: Record<string, string> = {
+    'src/index': 'CLI entry point (Commander)',
+    'src/server/index': 'HTTP/WebSocket server (Express)',
+    'src/daemon/index': 'Background daemon service',
+    'src/channels/index': 'Multi-channel messaging hub',
+  };
   lines.push('', '## Entry Points', '');
   for (const entry of entryPoints) {
     const name = entry.entity.replace(/^mod:/, '');
-    lines.push(`- **\`${name}\`** — ${inferModuleDescription(name)} (${entry.importers} dependents)`);
+    const label = entryLabels[name] ?? inferModuleDescription(name);
+    lines.push(`- **\`${name}\`** — ${label}`);
   }
 
-  // Technology stack
-  const coreDeps = deps.filter(d => ['commander', 'openai', 'express', 'ink', 'react', 'better-sqlite3', 'zod'].includes(d));
-  if (coreDeps.length > 0) {
-    lines.push('', '## Technology Stack', '');
-    lines.push('| Category | Technologies |', '|----------|-------------|');
-    lines.push(`| CLI Framework | commander |`);
-    if (deps.includes('ink')) lines.push(`| Terminal UI | ink, react |`);
-    const llmSdks = deps.filter(d => ['openai', '@anthropic-ai/sdk', '@google/generative-ai'].includes(d));
-    if (llmSdks.length > 0) lines.push(`| LLM SDKs | ${llmSdks.join(', ')} |`);
-    if (deps.includes('express')) lines.push(`| HTTP Server | express, ws, cors |`);
-    if (deps.includes('better-sqlite3')) lines.push(`| Database | better-sqlite3 |`);
-    if (deps.includes('zod')) lines.push(`| Validation | zod |`);
-    if (deps.includes('playwright')) lines.push(`| Browser Automation | playwright |`);
+  // Technology stack — comprehensive detection
+  lines.push('', '## Technology Stack', '');
+  lines.push('| Category | Technologies |', '|----------|-------------|');
+  if (deps.includes('commander')) lines.push('| CLI Framework | commander |');
+  if (deps.includes('ink')) lines.push('| Terminal UI | ink, react |');
+
+  // LLM SDKs — check both deps and devDeps
+  const allDeps = [...deps, ...devDeps];
+  const llmSdks: string[] = [];
+  if (allDeps.some(d => d === 'openai')) llmSdks.push('openai');
+  if (allDeps.some(d => d.includes('anthropic'))) llmSdks.push('@anthropic-ai/sdk');
+  if (allDeps.some(d => d.includes('generative-ai') || d.includes('google'))) llmSdks.push('@google/generative-ai');
+  // Also detect from code: check if the project has multi-provider support
+  if (llmSdks.length === 1 && modNames.some(m => m.includes('provider') || m.includes('gemini') || m.includes('anthropic'))) {
+    llmSdks.push('(multi-provider via OpenAI-compatible API)');
   }
+  lines.push(`| LLM SDKs | ${llmSdks.length > 0 ? llmSdks.join(', ') : 'OpenAI-compatible API'} |`);
+
+  if (deps.includes('express')) lines.push('| HTTP Server | express, ws, cors |');
+  if (deps.includes('better-sqlite3')) lines.push('| Database | better-sqlite3 |');
+  if (allDeps.some(d => d.includes('tree-sitter'))) lines.push('| Code Parsing | tree-sitter, tree-sitter-bash |');
+  if (allDeps.some(d => d.includes('ripgrep'))) lines.push('| File Search | @vscode/ripgrep |');
+  if (deps.includes('zod')) lines.push('| Validation | zod |');
+  if (allDeps.some(d => d.includes('playwright'))) lines.push('| Browser Automation | playwright |');
+  if (allDeps.some(d => d.includes('modelcontextprotocol'))) lines.push('| MCP | @modelcontextprotocol/sdk |');
+  if (deps.includes('vitest') || devDeps.includes('vitest')) lines.push('| Testing | vitest |');
 
   return lines.join('\n');
 }
 
 /** Infer a human-readable description from a module path */
 function inferModuleDescription(modulePath: string): string {
-  const parts = modulePath.split('/');
-  const descMap: Record<string, string> = {
+  const parts = modulePath.replace(/^src\//, '').split('/');
+
+  // Exact path matches (most specific first)
+  const exactMap: Record<string, string> = {
+    'agent/codebuddy-agent': 'Central agent orchestrator',
+    'agent/execution/agent-executor': 'ReAct execution loop (tool calls + LLM)',
+    'codebuddy/client': 'Multi-provider LLM API client',
+    'codebuddy/tools': 'Tool definitions and RAG selection',
+    'context/context-manager-v2': 'Context window compression (4-stage)',
+    'utils/confirmation-service': 'User approval gate for destructive ops',
+    'security/shell-env-policy': 'Environment variable filtering',
+    'security/guardian-agent': 'AI-powered automatic approval reviewer',
+    'prompts/prompt-manager': 'System prompt construction',
+    'agent/specialized/agent-registry': 'Specialized agent registry (PDF, SQL, SWE...)',
+    'persistence/session-store': 'Session persistence and restore',
+    'embeddings/embedding-provider': 'Vector embedding generation',
+  };
+  const pathKey = parts.join('/');
+  if (exactMap[pathKey]) return exactMap[pathKey];
+
+  // Directory-level descriptions
+  const dirMap: Record<string, string> = {
     'agent': 'Core agent system',
     'codebuddy': 'LLM client and tool definitions',
     'tools': 'Tool implementations',
@@ -373,13 +419,30 @@ function inferModuleDescription(modulePath: string): string {
     'ui': 'Terminal UI components',
     'commands': 'CLI and slash commands',
     'checkpoints': 'Undo and snapshots',
+    'utils': 'Shared utilities',
+    'types': 'TypeScript type definitions',
+    'errors': 'Error handling',
+    'integrations': 'External service integrations',
+    'analytics': 'Usage analytics and cost tracking',
+    'optimization': 'Performance optimization',
+    'providers': 'LLM provider adapters',
+    'hooks': 'Execution hooks',
+    'streaming': 'Streaming response handling',
+    'plugins': 'Plugin system',
+    'docs': 'Documentation generation',
+    'mcp': 'Model Context Protocol servers',
+    'nodes': 'Multi-device management',
+    'database': 'Database management',
+    'renderers': 'Output rendering',
   };
   for (const part of parts) {
-    if (descMap[part]) return descMap[part];
+    if (dirMap[part]) return dirMap[part];
   }
-  // Derive from last segment
+
+  // Derive from last segment — capitalize properly
   const last = parts[parts.length - 1];
-  return last.replace(/-/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+  const humanized = last.replace(/-/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+  return humanized.charAt(0).toUpperCase() + humanized.slice(1);
 }
 
 async function generateArchitecture(
@@ -413,11 +476,20 @@ async function generateArchitecture(
   if (includeDiagrams) {
     try {
       const { generateModuleDependencies } = await import('../knowledge/mermaid-generator.js');
+      // Use the main agent module as center (not just highest connection count)
+      const preferredCenters = ['mod:src/agent/codebuddy-agent', 'mod:src/codebuddy/client', 'mod:src/agent/execution/agent-executor'];
       let bestMod = '';
-      let bestConns = 0;
-      for (const mod of modules) {
-        const conns = graph.query({ subject: mod }).length + graph.query({ object: mod }).length;
-        if (conns > bestConns) { bestConns = conns; bestMod = mod; }
+      for (const center of preferredCenters) {
+        if (modules.has(center)) { bestMod = center; break; }
+      }
+      if (!bestMod) {
+        // Fallback to most connected src/ module
+        let bestConns = 0;
+        for (const mod of modules) {
+          if (!mod.startsWith('mod:src/')) continue;
+          const conns = graph.query({ subject: mod }).length + graph.query({ object: mod }).length;
+          if (conns > bestConns) { bestConns = conns; bestMod = mod; }
+        }
       }
       if (bestMod) {
         lines.push('## Core Module Dependencies', '');
@@ -428,26 +500,8 @@ async function generateArchitecture(
   }
 
   // Layer analysis with descriptions
-  const layerDescriptions: Record<string, string> = {
-    'src/agent': 'Core agent system — orchestrator, executor, middleware, reasoning, multi-agent coordination',
-    'src/tools': 'Tool implementations — file editing, bash, search, web, planning, media',
-    'src/codebuddy': 'LLM client abstraction — multi-provider support, tool definitions, streaming',
-    'src/context': 'Context management — compression, sliding window, JIT discovery, tool masking',
-    'src/security': 'Security layer — path validation, SSRF guard, shell policy, guardian agent',
-    'src/channels': 'Messaging channels — Telegram, Discord, Slack, WhatsApp, 15+ platforms',
-    'src/server': 'HTTP/WebSocket server — REST API, real-time streaming, authentication',
-    'src/knowledge': 'Knowledge graph — code analysis, PageRank, community detection, impact analysis',
-    'src/commands': 'Command system — CLI commands, slash commands, dev workflows',
-    'src/config': 'Configuration — TOML config, model settings, hot-reload',
-    'src/memory': 'Memory — persistent memory, ICM bridge, decision memory, consolidation',
-    'src/daemon': 'Background daemon — health monitoring, cron, heartbeat',
-    'src/ui': 'Terminal UI — Ink/React components, themes, chat interface',
-    'src/skills': 'Skills — registry, marketplace, SKILL.md loading',
-    'src/workflows': 'Workflows — DAG engine, approval gates, variable resolution',
-    'src/observability': 'Observability — run store, OpenTelemetry, Sentry, tool metrics',
-    'src/deploy': 'Deployment — Fly.io, Railway, Render, Hetzner, GCP, Nix',
-    'src/sandbox': 'Sandboxing — Docker containers, OS-level isolation',
-  };
+  // Layer descriptions — derived from inferModuleDescription (no hardcoding)
+  // Just reuse the same function that describes modules
 
   const layers = new Map<string, string[]>();
   for (const mod of modules) {
@@ -463,7 +517,7 @@ async function generateArchitecture(
   lines.push('| Layer | Modules | Description |', '|-------|---------|-------------|');
   const sortedLayers = [...layers.entries()].sort((a, b) => b[1].length - a[1].length);
   for (const [layer, mods] of sortedLayers.slice(0, 25)) {
-    const desc = layerDescriptions[layer] ?? inferModuleDescription(layer);
+    const desc = inferModuleDescription(layer.replace(/^src\//, ''));
     lines.push(`| \`${layer}/\` | ${mods.length} | ${desc} |`);
   }
   lines.push('');
@@ -581,12 +635,15 @@ async function generateMetrics(graph: KnowledgeGraph): Promise<string> {
     lines.push('');
 
     if (deadCode.uncalledFunctions.length > 0) {
+      // Filter: skip exported API methods (likely used externally)
+      const exportPatterns = [/Client\./, /Server\./, /Manager\.get/, /Provider\./];
+      const isLikelyExported = (name: string) => exportPatterns.some(p => p.test(name));
+
+      const highFiltered = deadCode.byConfidence.high.filter(fn => !isLikelyExported(fn));
       lines.push('### Top Dead Code Candidates', '');
-      for (const fn of deadCode.byConfidence.high.slice(0, 15)) {
-        lines.push(`- \`${fn}\` (high confidence)`);
-      }
-      for (const fn of deadCode.byConfidence.medium.slice(0, 5)) {
-        lines.push(`- \`${fn}\` (medium confidence)`);
+      lines.push('*Note: Exported API methods and dynamic dispatch targets are excluded.*', '');
+      for (const fn of highFiltered.slice(0, 15)) {
+        lines.push(`- \`${fn.replace(/^fn:/, '')}\` (high confidence)`);
       }
       lines.push('');
     }
@@ -621,7 +678,8 @@ async function generateMetrics(graph: KnowledgeGraph): Promise<string> {
     if (suggestions.length > 0) {
       lines.push('## Refactoring Suggestions', '');
       for (const s of suggestions.slice(0, 10)) {
-        lines.push(`- **${s.entity.replace(/^(mod|fn|cls):/, '')}**: ${s.reason} (rank: ${s.pageRank.toFixed(3)}, ${s.totalCallers} callers, ${s.crossCommunityCallers} cross-community)`);
+        const name = s.entity.replace(/^(mod|fn|cls):/, '');
+        lines.push(`- **${name}**: ${s.reason} (PageRank: ${s.pageRank.toFixed(3)}, ${s.totalCallers} callers)`);
       }
       lines.push('');
     }
@@ -650,29 +708,39 @@ function generateToolSystem(graph: KnowledgeGraph, cwd: string, modules: Set<str
   lines.push('## Tool Registry', '');
   lines.push(`The tool ecosystem contains **${toolModules.length}** tool modules organized in \`src/tools/\` and \`src/tools/registry/\`.`, '');
 
-  // Categorize tools by subdirectory
-  const categories = new Map<string, string[]>();
-  for (const mod of toolModules) {
-    const parts = mod.split('/');
-    const cat = parts.length >= 3 ? parts[2] : 'core';
-    const list = categories.get(cat) ?? [];
-    list.push(mod);
-    categories.set(cat, list);
-  }
+  // Read metadata file early (used for categories and tool listing)
+  const metadataContent = readFileSafe(path.join(cwd, 'src', 'tools', 'metadata.ts'), 8000);
 
+  // Dynamic tool categories from metadata file
   lines.push('## Tool Categories', '');
-  lines.push('| Category | Tools | Key Modules |', '|----------|-------|-------------|');
-  const categoryDescriptions: Record<string, string> = {
-    'registry': 'Tool registration and factory',
-    'browser': 'Browser automation (Playwright)',
-    'vision': 'Image processing and OCR',
-    'hooks': 'Pre/post execution hooks',
-  };
-
-  for (const [cat, mods] of [...categories.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 15)) {
-    const desc = categoryDescriptions[cat] ?? cat.replace(/-/g, ' ');
-    const keyMods = mods.slice(0, 3).map(m => `\`${m.split('/').pop()}\``).join(', ');
-    lines.push(`| ${desc} | ${mods.length} | ${keyMods} |`);
+  if (metadataContent) {
+    // Extract categories from metadata
+    const catTools = new Map<string, string[]>();
+    const catMatch = metadataContent.matchAll(/category:\s*['"]([^'"]+)['"][\s\S]*?name:\s*['"]([^'"]+)['"]/g);
+    for (const m of catMatch) {
+      const list = catTools.get(m[1]) ?? [];
+      list.push(m[2]);
+      catTools.set(m[1], list);
+    }
+    // Also try name-first pattern
+    const nameFirst = metadataContent.matchAll(/name:\s*['"]([^'"]+)['"][\s\S]*?category:\s*['"]([^'"]+)['"]/g);
+    for (const m of nameFirst) {
+      const list = catTools.get(m[2]) ?? [];
+      if (!list.includes(m[1])) list.push(m[1]);
+      catTools.set(m[2], list);
+    }
+    if (catTools.size > 0) {
+      lines.push('| Category | Tools | Count |', '|----------|-------|-------|');
+      for (const [cat, tools] of [...catTools.entries()].sort((a, b) => b[1].length - a[1].length)) {
+        const displayTools = tools.slice(0, 4).map(t => `\`${t}\``).join(', ');
+        const more = tools.length > 4 ? ` +${tools.length - 4}` : '';
+        lines.push(`| ${cat} | ${displayTools}${more} | ${tools.length} |`);
+      }
+    } else {
+      lines.push('*Tool categories could not be extracted from metadata.*');
+    }
+  } else {
+    lines.push('*No tool metadata file found at `src/tools/metadata.ts`.*');
   }
 
   // Tool selection process
@@ -686,8 +754,7 @@ function generateToolSystem(graph: KnowledgeGraph, cwd: string, modules: Set<str
   lines.push('');
   lines.push('Tools have priority (3-10), keywords, and category metadata used for matching.');
 
-  // Read metadata file for tool names
-  const metadataContent = readFileSafe(path.join(cwd, 'src', 'tools', 'metadata.ts'), 8000);
+  // Tool names from already-loaded metadata
   if (metadataContent) {
     const toolNames = [...metadataContent.matchAll(/name:\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
     if (toolNames.length > 0) {
@@ -714,55 +781,53 @@ function generateToolSystem(graph: KnowledgeGraph, cwd: string, modules: Set<str
 // Section 6: Security Architecture
 // ============================================================================
 
-function generateSecurity(_cwd: string): string {
+function generateSecurity(cwd: string): string {
   const lines = [
     '# Security Architecture',
     '',
-    'The project implements a seven-layer defense-in-depth security model. Each layer catches different attack vectors, ensuring that a bypass in one layer is caught by another.',
-    '',
-    '## Security Layers',
-    '',
-    '| Layer | Component | Purpose |',
-    '|-------|-----------|---------|',
-    '| 1. Input Validation | Schema checking, sanitization | Prevents malformed data |',
-    '| 2. Authentication | JWT, API keys, DM pairing | Prevents unauthorized access |',
-    '| 3. Path Validation | Traversal detection, symlink escape | Prevents filesystem attacks |',
-    '| 4. Command Validation | Tree-sitter bash parsing | Prevents command injection |',
-    '| 5. Network Protection | SSRF guard, IP filtering | Prevents server-side request forgery |',
-    '| 6. Execution Control | Confirmation, sandbox, policies | User approval gate |',
-    '| 7. Post-Execution | Result sanitization, audit logging | Prevents data leakage |',
-    '',
   ];
 
-  // Guardian agent
-  lines.push('## Guardian Sub-Agent', '');
-  lines.push('An AI-powered automatic approval reviewer (`src/security/guardian-agent.ts`) evaluates tool calls with structured risk scoring:');
-  lines.push('');
-  lines.push('| Risk Score | Decision | Examples |');
-  lines.push('|-----------|----------|----------|');
-  lines.push('| 0-20 | Auto-approve | Read operations, standard builds |');
-  lines.push('| 20-60 | Auto-approve | File edits, package installs |');
-  lines.push('| 60-80 | Approve with warning | System modifications, network ops |');
-  lines.push('| 80-90 | Prompt user | Credential access, unknown scripts |');
-  lines.push('| 90-100 | Deny | `rm -rf /`, fork bombs, `drop database` |');
-  lines.push('');
+  // Scan for security-related files dynamically
+  const securityDir = path.join(cwd, 'src', 'security');
+  const securityFiles: string[] = [];
+  try {
+    if (fs.existsSync(securityDir)) {
+      securityFiles.push(...fs.readdirSync(securityDir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts')));
+    }
+  } catch { /* optional */ }
 
-  // Environment variable filtering
-  lines.push('## Environment Variable Filtering', '');
-  lines.push('Shell commands run in a filtered environment (`src/security/shell-env-policy.ts`):');
-  lines.push('');
-  lines.push('- Variables matching `*KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*` are stripped');
-  lines.push('- Three inheritance modes: `core` (minimal), `all` (filtered), `none` (empty)');
-  lines.push('- Provider-specific patterns: `AWS_*`, `OPENAI_*`, `STRIPE_*`, etc.');
-  lines.push('');
+  if (securityFiles.length > 0) {
+    lines.push(`The project has **${securityFiles.length}** security modules in \`src/security/\`:`, '');
+    lines.push('| Module | Purpose |', '|--------|---------|');
+    for (const file of securityFiles.sort()) {
+      const name = file.replace('.ts', '');
+      // Read first JSDoc comment for description
+      const content = readFileSafe(path.join(securityDir, file), 500);
+      const docMatch = content.match(/\/\*\*[\s\S]*?\*\s+(.+?)[\n*]/);
+      const desc = docMatch ? docMatch[1].trim() : inferModuleDescription(name);
+      lines.push(`| \`${name}\` | ${desc} |`);
+    }
+    lines.push('');
+  } else {
+    lines.push('*No security directory found.*', '');
+  }
 
-  // Policy amendments
-  lines.push('## Policy Amendments', '');
-  lines.push('When a command is blocked, the system suggests an allow rule (`src/security/policy-amendments.ts`):');
-  lines.push('');
-  lines.push('- Rules stored in `.codebuddy/rules/allow-rules.json`');
-  lines.push('- Shell operators (`&&`, `||`, `;`, `|`) after the matched prefix are blocked');
-  lines.push('- Banned prefixes: interpreters (python, node), shells (bash, sh), `sudo`, `curl`');
+  // Scan for confirmation/sandbox patterns
+  const hasConfirmation = securityFiles.some(f => f.includes('confirm'));
+  const hasSandbox = fs.existsSync(path.join(cwd, 'src', 'sandbox'));
+  const hasGuardian = securityFiles.some(f => f.includes('guardian'));
+
+  if (hasConfirmation || hasSandbox || hasGuardian) {
+    lines.push('## Security Features', '');
+    if (hasGuardian) lines.push('- **AI Guardian Agent**: Automatic approval reviewer with risk scoring');
+    if (hasConfirmation) lines.push('- **Confirmation Service**: User approval gate for destructive operations');
+    if (hasSandbox) lines.push('- **Sandbox Isolation**: Sandboxed execution environment');
+    if (securityFiles.some(f => f.includes('ssrf'))) lines.push('- **SSRF Protection**: Blocks requests to private IP ranges');
+    if (securityFiles.some(f => f.includes('shell') || f.includes('bash'))) lines.push('- **Shell Command Validation**: Dangerous pattern detection');
+    if (securityFiles.some(f => f.includes('path'))) lines.push('- **Path Validation**: Traversal and symlink escape prevention');
+    if (securityFiles.some(f => f.includes('env') || f.includes('policy'))) lines.push('- **Environment Filtering**: Sensitive variable stripping');
+    lines.push('');
+  }
 
   return lines.join('\n');
 }
@@ -771,58 +836,58 @@ function generateSecurity(_cwd: string): string {
 // Section 7: Context & Memory
 // ============================================================================
 
-function generateContextMemory(_cwd: string): string {
+function generateContextMemory(cwd: string): string {
   const lines = [
     '# Context & Memory Management',
     '',
-    'The context management system ensures conversations stay within the LLM\'s token limit while preserving the most important information.',
-    '',
-    '## Context Manager V2', '',
-    'Four-stage compression pipeline (`src/context/context-manager-v2.ts`):', '',
-    '| Stage | Strategy | Token Reduction |',
-    '|-------|----------|----------------|',
-    '| 1 | Sliding window with importance scoring | 30-50% |',
-    '| 2 | Tool result truncation | 10-30% |',
-    '| 3 | LLM-based summarization | 40-70% |',
-    '| 4 | Hard truncation (last resort) | 70-90% |',
-    '',
-    'Importance scores by content type:', '',
-    '| Content Type | Score | Preservation |',
-    '|-------------|-------|-------------|',
-    '| Error messages | 0.95 | Nearly always preserved |',
-    '| Architectural decisions | 0.90 | High priority |',
-    '| Code blocks | 0.70 | Medium-high |',
-    '| General conversation | 0.25 | First to compress |',
-    '',
-    '## Attention Bias Patterns', '',
-    '- **Todo.md**: Appended at END of context (transformer recency bias)',
-    '- **Lessons.md**: Injected BEFORE messages (high priority)',
-    '- **Decision memory**: Injected with architectural rationale',
-    '- **Code graph**: Per-turn ego-graph of mentioned entities',
-    '',
-    '## Tool Output Management', '',
-    '**Adaptive compaction**: Threshold scales to 30% of model context window (not hardcoded).', '',
-    '**TTL-based expiry** (`src/context/tool-output-masking.ts`):', '',
-    '| Age (% of max) | Treatment |',
-    '|----------------|-----------|',
-    '| 0-50% | Full content preserved |',
-    '| 50-75% | Head/tail preview (10+10 lines) |',
-    '| 75-100% | One-line stub |',
-    '| >100% | Removed entirely |',
-    '',
-    '**Backward-scanned FIFO masking**: Newest ~50K tokens protected, older outputs replaced with previews.', '',
-    '## JIT Context Discovery', '',
-    'When tools access files, the system dynamically loads context files (`CODEBUDDY.md`, `CONTEXT.md`) from the accessed subdirectory. Context grows organically as the agent explores.', '',
-    '## Memory Consolidation', '',
-    'Two-phase pipeline (`src/memory/memory-consolidation.ts`):', '',
-    '1. **Extraction**: Detect preferences, patterns, corrections from user messages',
-    '2. **Consolidation**: Merge into `.codebuddy/memory/` folder with dedup',
-    '',
-    'Output structure:', '',
-    '- `memory_summary.md` — Always loaded into system prompt',
-    '- `MEMORY.md` — Full handbook entries',
-    '- `rollout_summaries/` — Per-session distilled summaries',
   ];
+
+  // Scan context directory
+  const contextDir = path.join(cwd, 'src', 'context');
+  const memoryDir = path.join(cwd, 'src', 'memory');
+  const contextFiles: string[] = [];
+  const memoryFiles: string[] = [];
+
+  try {
+    if (fs.existsSync(contextDir)) {
+      contextFiles.push(...fs.readdirSync(contextDir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts')));
+    }
+  } catch { /* optional */ }
+  try {
+    if (fs.existsSync(memoryDir)) {
+      memoryFiles.push(...fs.readdirSync(memoryDir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts')));
+    }
+  } catch { /* optional */ }
+
+  if (contextFiles.length > 0) {
+    lines.push(`## Context Management (${contextFiles.length} modules)`, '');
+    lines.push('| Module | Purpose |', '|--------|---------|');
+    for (const file of contextFiles.sort()) {
+      const name = file.replace('.ts', '');
+      const content = readFileSafe(path.join(contextDir, file), 500);
+      const docMatch = content.match(/\/\*\*[\s\S]*?\*\s+(.+?)[\n*]/);
+      const desc = docMatch ? docMatch[1].trim() : name.replace(/-/g, ' ');
+      lines.push(`| \`${name}\` | ${desc} |`);
+    }
+    lines.push('');
+  }
+
+  if (memoryFiles.length > 0) {
+    lines.push(`## Memory System (${memoryFiles.length} modules)`, '');
+    lines.push('| Module | Purpose |', '|--------|---------|');
+    for (const file of memoryFiles.sort()) {
+      const name = file.replace('.ts', '');
+      const content = readFileSafe(path.join(memoryDir, file), 500);
+      const docMatch = content.match(/\/\*\*[\s\S]*?\*\s+(.+?)[\n*]/);
+      const desc = docMatch ? docMatch[1].trim() : name.replace(/-/g, ' ');
+      lines.push(`| \`${name}\` | ${desc} |`);
+    }
+    lines.push('');
+  }
+
+  if (contextFiles.length === 0 && memoryFiles.length === 0) {
+    lines.push('*No context or memory modules found.*');
+  }
 
   return lines.join('\n');
 }
@@ -832,13 +897,30 @@ function generateContextMemory(_cwd: string): string {
 // ============================================================================
 
 function generateConfiguration(cwd: string): string {
-  const claudeMd = readFileSafe(path.join(cwd, 'CLAUDE.md'), 2000);
-  // Extract env vars from CLAUDE.md
+  // Extract env vars from CLAUDE.md — match `VARNAME` | description | default
+  const claudeMd = readFileSafe(path.join(cwd, 'CLAUDE.md'), 10000);
   const envVars: Array<{ name: string; desc: string }> = [];
   if (claudeMd) {
-    const envMatch = claudeMd.matchAll(/\|\s*`(\w+)`\s*\|\s*([^|]+)\|/g);
+    const envMatch = claudeMd.matchAll(/\|\s*`([A-Z_]+)`\s*\|\s*([^|]+)\s*\|/g);
     for (const m of envMatch) {
-      envVars.push({ name: m[1], desc: m[2].trim() });
+      if (m[1] && m[2] && !m[1].startsWith('Variable')) { // Skip header row
+        envVars.push({ name: m[1], desc: m[2].trim() });
+      }
+    }
+  }
+  // Fallback: scan .env.example or source code for env var references
+  if (envVars.length === 0) {
+    const envExample = readFileSafe(path.join(cwd, '.env.example'), 5000);
+    if (envExample) {
+      const envLines = envExample.split('\n');
+      for (const line of envLines) {
+        const match = line.match(/^([A-Z][A-Z0-9_]+)\s*=/);
+        if (match) {
+          const comment = envLines[envLines.indexOf(line) - 1];
+          const desc = comment?.startsWith('#') ? comment.slice(1).trim() : '';
+          envVars.push({ name: match[1], desc: desc || match[1].toLowerCase().replace(/_/g, ' ') });
+        }
+      }
     }
   }
 
@@ -859,17 +941,38 @@ function generateConfiguration(cwd: string): string {
     '',
     '## Key Configuration Files',
     '',
-    '| File | Location | Purpose |',
-    '|------|----------|---------|',
-    '| `config.toml` | `~/.codebuddy/` or `.codebuddy/` | Main configuration |',
-    '| `settings.json` | `.codebuddy/` | Model, theme, max rounds |',
-    '| `mcp.json` | `.codebuddy/` | MCP server configuration |',
-    '| `hooks.json` | `.codebuddy/` | Tool execution hooks |',
-    '| `CODEBUDDY.md` | `.codebuddy/` | Project instructions |',
-    '| `CONTEXT.md` | `.codebuddy/` | Additional context |',
-    '| `PROJECT_KNOWLEDGE.md` | `.codebuddy/` | Auto-generated project knowledge |',
-    '',
   ];
+
+  // Dynamically scan for config files in project root and .codebuddy/
+  const configFiles: Array<{ file: string; location: string }> = [];
+  const configPatterns = ['*.toml', '*.json', '*.md', '*.yaml', '*.yml'];
+  const configDirs = ['.codebuddy', '.claude', '.config'];
+
+  // Root config files
+  for (const f of ['tsconfig.json', '.eslintrc.json', '.prettierrc', 'vitest.config.ts', '.env.example']) {
+    if (fs.existsSync(path.join(cwd, f))) configFiles.push({ file: f, location: 'project root' });
+  }
+
+  // .codebuddy/ config files
+  for (const dir of configDirs) {
+    const dirPath = path.join(cwd, dir);
+    if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+      try {
+        const files = fs.readdirSync(dirPath).filter(f => !f.startsWith('.') && (f.endsWith('.json') || f.endsWith('.toml') || f.endsWith('.md')));
+        for (const f of files.slice(0, 10)) {
+          configFiles.push({ file: f, location: `${dir}/` });
+        }
+      } catch { /* optional */ }
+    }
+  }
+
+  if (configFiles.length > 0) {
+    lines.push('| File | Location |', '|------|----------|');
+    for (const { file, location } of configFiles) {
+      lines.push(`| \`${file}\` | ${location} |`);
+    }
+    lines.push('');
+  }
 
   if (envVars.length > 0) {
     lines.push('## Environment Variables', '');
@@ -894,66 +997,87 @@ function generateConfiguration(cwd: string): string {
 // Section 9: API Reference
 // ============================================================================
 
-function generateApiReference(_cwd: string): string {
+function generateApiReference(cwd: string): string {
+  const pkg = readPkg(cwd);
+  const binName = Object.keys((pkg.bin ?? {}) as Record<string, string>)[0] ?? path.basename(cwd);
+
   const lines = [
     '# CLI & API Reference',
     '',
-    '## CLI Commands',
-    '',
-    '| Command | Description |',
-    '|---------|-------------|',
-    '| `buddy` | Start interactive chat |',
-    '| `buddy [message]` | Process message and enter chat |',
-    '| `buddy --prompt <text>` | Headless mode — process and exit |',
-    '| `buddy --model <name>` | Override model |',
-    '| `buddy --continue` | Resume last session |',
-    '| `buddy onboard` | Interactive setup wizard |',
-    '| `buddy doctor` | Environment diagnostics |',
-    '| `buddy dev plan\\|run\\|pr\\|fix-ci` | Dev workflows |',
-    '| `buddy research "<topic>"` | Wide research mode |',
-    '| `buddy flow "<goal>"` | Planning flow |',
-    '| `buddy daemon start\\|stop\\|status` | Background daemon |',
-    '| `buddy server --port N` | HTTP/WS server |',
-    '| `buddy hub search\\|install` | Skills marketplace |',
-    '| `buddy nodes list\\|pair` | Device management |',
-    '| `buddy secrets list\\|set\\|get` | Encrypted vault |',
-    '| `buddy deploy platforms\\|init` | Cloud deployment |',
-    '',
-    '## Slash Commands (Interactive)', '',
-    '| Command | Purpose |',
-    '|---------|---------|',
-    '| `/help` | Show available commands |',
-    '| `/clear` | Clear conversation history |',
-    '| `/models` | Switch AI model |',
-    '| `/yolo on\\|off\\|safe` | Toggle autonomy mode |',
-    '| `/think off\\|shallow\\|medium\\|deep` | Set reasoning depth |',
-    '| `/persona list\\|use\\|info` | Manage AI personas |',
-    '| `/compact [level]` | Compress conversation context |',
-    '| `/docs generate [--with-llm]` | Generate documentation |',
-    '| `/plan` | Enter read-only research mode |',
-    '',
-    '## HTTP API Endpoints', '',
-    '| Method | Endpoint | Purpose |',
-    '|--------|----------|---------|',
-    '| GET | `/api/health` | Health check |',
-    '| GET | `/api/metrics` | Usage metrics |',
-    '| POST | `/api/chat` | Send message |',
-    '| POST | `/api/chat/completions` | OpenAI-compatible |',
-    '| GET/POST | `/api/sessions` | Session management |',
-    '| GET/POST | `/api/memory` | Memory CRUD |',
-    '| GET | `/api/daemon/status` | Daemon health |',
-    '| GET | `/api/hub/search` | Skills search |',
-    '',
-    '## WebSocket Protocol', '',
-    '| Event | Direction | Purpose |',
-    '|-------|-----------|---------|',
-    '| `authenticate` | Client → Server | JWT authentication |',
-    '| `chat_stream` | Bidirectional | Streaming conversation |',
-    '| `tool_execute` | Server → Client | Tool execution notifications |',
-    '| `ping/pong` | Bidirectional | Keep-alive |',
-    '',
-    'Default ports: HTTP 3000, Gateway WS 3001.',
   ];
+
+  // CLI commands: extract from src/index.ts by scanning .command() calls
+  const indexTs = readFileSafe(path.join(cwd, 'src', 'index.ts'), 15000);
+  if (indexTs) {
+    const commands: Array<{ name: string; desc: string }> = [];
+    const cmdMatches = indexTs.matchAll(/\.command\(\s*['"]([^'"]+)['"]\s*\)\s*\n?\s*\.description\(\s*['"]([^'"]+)['"]\s*\)/g);
+    for (const m of cmdMatches) {
+      commands.push({ name: m[1], desc: m[2] });
+    }
+    // Also extract options
+    const optMatches = indexTs.matchAll(/\.option\(\s*['"](-[^'"]+)['"]\s*,\s*['"]([^'"]+)['"]/g);
+    const options: Array<{ flag: string; desc: string }> = [];
+    for (const m of optMatches) {
+      options.push({ flag: m[1], desc: m[2] });
+    }
+
+    if (commands.length > 0) {
+      lines.push('## CLI Subcommands', '');
+      lines.push('| Command | Description |', '|---------|-------------|');
+      for (const cmd of commands) {
+        lines.push(`| \`${binName} ${cmd.name}\` | ${cmd.desc} |`);
+      }
+      lines.push('');
+    }
+    if (options.length > 0) {
+      lines.push('## CLI Options', '');
+      lines.push('| Flag | Description |', '|------|-------------|');
+      for (const opt of options.slice(0, 20)) {
+        lines.push(`| \`${opt.flag}\` | ${opt.desc} |`);
+      }
+      lines.push('');
+    }
+  }
+
+  // Slash commands: scan src/commands/slash/ for command definitions
+  const slashDir = path.join(cwd, 'src', 'commands', 'slash');
+  if (fs.existsSync(slashDir)) {
+    try {
+      const slashFiles = fs.readdirSync(slashDir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+      if (slashFiles.length > 0) {
+        lines.push('## Slash Commands', '');
+        lines.push('| File | Purpose |', '|------|---------|');
+        for (const file of slashFiles.sort()) {
+          const name = file.replace('.ts', '').replace('-command', '').replace('-commands', '');
+          const content = readFileSafe(path.join(slashDir, file), 300);
+          const docMatch = content.match(/\/\*\*[\s\S]*?\*\s+(.+?)[\n*]/);
+          const desc = docMatch ? docMatch[1].trim() : name.replace(/-/g, ' ');
+          lines.push(`| \`/${name}\` | ${desc} |`);
+        }
+        lines.push('');
+      }
+    } catch { /* optional */ }
+  }
+
+  // HTTP API: scan src/server/routes/ for route files
+  const routesDir = path.join(cwd, 'src', 'server', 'routes');
+  if (fs.existsSync(routesDir)) {
+    try {
+      const routeFiles = fs.readdirSync(routesDir).filter(f => f.endsWith('.ts'));
+      if (routeFiles.length > 0) {
+        lines.push('## HTTP API Routes', '');
+        lines.push('| Route File | Endpoints |', '|------------|----------|');
+        for (const file of routeFiles.sort()) {
+          const content = readFileSafe(path.join(routesDir, file), 3000);
+          // Extract route patterns
+          const routes = [...content.matchAll(/\.(get|post|put|delete|patch)\(\s*['"]([^'"]+)['"]/gi)];
+          const endpoints = routes.slice(0, 5).map(r => `${r[1].toUpperCase()} ${r[2]}`).join(', ');
+          lines.push(`| \`${file}\` | ${endpoints || 'N/A'} |`);
+        }
+        lines.push('');
+      }
+    } catch { /* optional */ }
+  };
 
   return lines.join('\n');
 }
@@ -986,32 +1110,44 @@ function generateDevGuide(cwd: string): string {
     lines.push(`| \`npm run ${name}\` | \`${cmd}\` |`);
   }
 
-  lines.push('', '## Project Structure', '');
-  lines.push('```');
-  lines.push('src/');
-  lines.push('├── agent/           # Core agent system (orchestrator, executor, middleware)');
-  lines.push('├── codebuddy/       # LLM client, tool definitions');
-  lines.push('├── tools/           # 110+ tool implementations');
-  lines.push('├── context/         # Context window management');
-  lines.push('├── security/        # Security layers, validation');
-  lines.push('├── knowledge/       # Code graph, analysis');
-  lines.push('├── channels/        # Messaging platforms');
-  lines.push('├── server/          # HTTP/WebSocket server');
-  lines.push('├── commands/        # CLI and slash commands');
-  lines.push('├── config/          # Configuration management');
-  lines.push('├── memory/          # Persistence and memory');
-  lines.push('├── ui/              # Terminal UI (Ink/React)');
-  lines.push('├── daemon/          # Background daemon');
-  lines.push('├── docs/            # Documentation generator');
-  lines.push('└── index.ts         # CLI entry point');
-  lines.push('```', '');
+  // Dynamic project structure from filesystem
+  const srcDir = path.join(cwd, 'src');
+  if (fs.existsSync(srcDir)) {
+    lines.push('', '## Project Structure', '');
+    lines.push('```');
+    lines.push('src/');
+    try {
+      const dirs = fs.readdirSync(srcDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name)
+        .sort();
+      for (const dir of dirs) {
+        const desc = inferModuleDescription(dir);
+        const fileCount = fs.readdirSync(path.join(srcDir, dir), { recursive: true })
+          .filter((f: string | Buffer) => String(f).endsWith('.ts') && !String(f).endsWith('.test.ts')).length;
+        lines.push(`├── ${dir.padEnd(20)} # ${desc} (${fileCount} files)`);
+      }
+      // Entry file
+      if (fs.existsSync(path.join(srcDir, 'index.ts'))) {
+        lines.push('└── index.ts            # Entry point');
+      }
+    } catch { lines.push('└── (could not read directory)'); }
+    lines.push('```', '');
+  }
 
+  // Detect conventions from config files
   lines.push('## Coding Conventions', '');
-  lines.push('- TypeScript strict mode, avoid `any`');
-  lines.push('- Single quotes, semicolons, 2-space indent');
-  lines.push('- Files: kebab-case (`text-editor.ts`), components: PascalCase');
-  lines.push('- ESM imports with `.js` extension');
-  lines.push('- Conventional Commits (`feat(scope): description`)');
+  const tsConfig = readFileSafe(path.join(cwd, 'tsconfig.json'), 1000);
+  if (tsConfig.includes('"strict"')) lines.push('- TypeScript strict mode');
+  const eslintConfig = readFileSafe(path.join(cwd, '.eslintrc.json'), 500) || readFileSafe(path.join(cwd, '.eslintrc.js'), 500);
+  if (eslintConfig.includes('single') || eslintConfig.includes("'quotes'")) lines.push('- Single quotes');
+  const prettierConfig = readFileSafe(path.join(cwd, '.prettierrc'), 500);
+  if (prettierConfig.includes('semi')) lines.push('- Semicolons');
+  // Detect from package.json type
+  if (pkg.type === 'module') lines.push('- ESM modules (`"type": "module"`)');
+  // Detect commit convention from recent commits
+  const commitConvention = readFileSafe(path.join(cwd, '.commitlintrc.json'), 200);
+  if (commitConvention.includes('conventional')) lines.push('- Conventional Commits');
   lines.push('');
 
   lines.push('## Testing', '');
@@ -1022,12 +1158,15 @@ function generateDevGuide(cwd: string): string {
   lines.push('- Validate: `npm run validate` (lint + typecheck + test)');
   lines.push('');
 
-  lines.push('## Adding a New Tool', '');
-  lines.push('1. Create class in `src/tools/`');
-  lines.push('2. Add definition in `src/codebuddy/tools.ts`');
-  lines.push('3. Add execution case in `CodeBuddyAgent.executeTool()`');
-  lines.push('4. Register in `src/tools/registry/`');
-  lines.push('5. Add metadata in `src/tools/metadata.ts`');
+  // Extension patterns — detect from project structure
+  if (fs.existsSync(path.join(cwd, 'src', 'tools'))) {
+    lines.push('## Extension Points', '');
+    lines.push('- Add new tools in `src/tools/`');
+    if (fs.existsSync(path.join(cwd, 'src', 'tools', 'registry'))) lines.push('- Register tools in `src/tools/registry/`');
+    if (fs.existsSync(path.join(cwd, 'src', 'tools', 'metadata.ts'))) lines.push('- Add metadata in `src/tools/metadata.ts`');
+    if (fs.existsSync(path.join(cwd, 'src', 'channels'))) lines.push('- Add channels in `src/channels/`');
+    if (fs.existsSync(path.join(cwd, 'src', 'plugins'))) lines.push('- Add plugins in `src/plugins/`');
+  }
 
   return lines.join('\n');
 }

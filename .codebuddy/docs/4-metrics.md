@@ -4,28 +4,30 @@
 
 | Confidence | Count |
 |---|---|
-| High | 3095 |
+| High | 3096 |
 | Medium | 0 |
 | Low | 1910 |
 | **Total** | **5239** |
 
 ### Top Dead Code Candidates
 
-- `fn:A2AAgentClient.getAgentCard` (high confidence)
-- `fn:A2AAgentClient.getTask` (high confidence)
-- `fn:A2AAgentClient.listAgents` (high confidence)
-- `fn:A2AAgentClient.registerAgent` (high confidence)
-- `fn:A2AAgentClient.submitTask` (high confidence)
-- `fn:A2AAgentServer.cancelTask` (high confidence)
-- `fn:A2AAgentServer.getAgentCard` (high confidence)
-- `fn:A2AAgentServer.getTask` (high confidence)
-- `fn:A2AAgentServer.submitTask` (high confidence)
-- `fn:A2UIManager.cb` (high confidence)
-- `fn:A2UIManager.getSurface` (high confidence)
-- `fn:A2UIManager.handleUserAction` (high confidence)
-- `fn:A2UIManager.renderToHTML` (high confidence)
-- `fn:A2UIManager.renderToTerminal` (high confidence)
-- `fn:A2UIManager.sendCanvasEvent` (high confidence)
+*Note: Exported API methods and dynamic dispatch targets are excluded.*
+
+- `A2UIManager.cb` (high confidence)
+- `A2UIManager.handleUserAction` (high confidence)
+- `A2UIManager.renderToHTML` (high confidence)
+- `A2UIManager.renderToTerminal` (high confidence)
+- `A2UIManager.sendCanvasEvent` (high confidence)
+- `A2UIManager.shutdown` (high confidence)
+- `A2UITool.getManager` (high confidence)
+- `ACPRouter.clearLog` (high confidence)
+- `ACPRouter.findByCapability` (high confidence)
+- `ACPRouter.getAgent` (high confidence)
+- `ACPRouter.getAgents` (high confidence)
+- `ACPRouter.getLog` (high confidence)
+- `ACPRouter.register` (high confidence)
+- `ACPRouter.reject` (high confidence)
+- `ACPRouter.request` (high confidence)
 
 ## Module Coupling
 
@@ -52,13 +54,13 @@ Most depended-upon: `src/utils/validators`
 
 ## Refactoring Suggestions
 
-- **getErrorMessage**: Called by 155 functions — high coupling, consider interface extraction (rank: 1.000, 155 callers, 0 cross-community)
-- **isExpired**: Called by 10 functions — high coupling, consider interface extraction (rank: 0.626, 10 callers, 0 cross-community)
-- **send**: Called by 41 functions — high coupling, consider interface extraction (rank: 0.547, 41 callers, 0 cross-community)
-- **SubagentManager.spawn**: Called by 96 functions — high coupling, consider interface extraction (rank: 0.444, 96 callers, 0 cross-community)
-- **generateId**: Called by 17 functions — high coupling, consider interface extraction (rank: 0.429, 17 callers, 0 cross-community)
-- **createId**: Called by 27 functions — high coupling, consider interface extraction (rank: 0.427, 27 callers, 0 cross-community)
-- **DesktopAutomationManager.ensureProvider**: Called by 30 functions — high coupling, consider interface extraction (rank: 0.363, 30 callers, 0 cross-community)
-- **tokenize**: Called by 20 functions — high coupling, consider interface extraction (rank: 0.345, 20 callers, 0 cross-community)
-- **BrowserManager.getCurrentPage**: Called by 35 functions — high coupling, consider interface extraction (rank: 0.336, 35 callers, 0 cross-community)
-- **formatSize**: Called by 20 functions — high coupling, consider interface extraction (rank: 0.301, 20 callers, 0 cross-community)
+- **getErrorMessage**: Called by 155 functions — high coupling, consider interface extraction (PageRank: 1.000, 155 callers)
+- **isExpired**: Called by 10 functions — high coupling, consider interface extraction (PageRank: 0.630, 10 callers)
+- **send**: Called by 41 functions — high coupling, consider interface extraction (PageRank: 0.547, 41 callers)
+- **SubagentManager.spawn**: Called by 96 functions — high coupling, consider interface extraction (PageRank: 0.444, 96 callers)
+- **generateId**: Called by 17 functions — high coupling, consider interface extraction (PageRank: 0.429, 17 callers)
+- **createId**: Called by 27 functions — high coupling, consider interface extraction (PageRank: 0.427, 27 callers)
+- **DesktopAutomationManager.ensureProvider**: Called by 30 functions — high coupling, consider interface extraction (PageRank: 0.363, 30 callers)
+- **tokenize**: Called by 20 functions — high coupling, consider interface extraction (PageRank: 0.345, 20 callers)
+- **BrowserManager.getCurrentPage**: Called by 35 functions — high coupling, consider interface extraction (PageRank: 0.336, 35 callers)
+- **formatSize**: Called by 20 functions — high coupling, consider interface extraction (PageRank: 0.301, 20 callers)

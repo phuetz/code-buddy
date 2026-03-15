@@ -14,15 +14,29 @@ Three-tier configuration hierarchy with environment variable overrides:
 
 ## Key Configuration Files
 
-| File | Location | Purpose |
-|------|----------|---------|
-| `config.toml` | `~/.codebuddy/` or `.codebuddy/` | Main configuration |
-| `settings.json` | `.codebuddy/` | Model, theme, max rounds |
-| `mcp.json` | `.codebuddy/` | MCP server configuration |
-| `hooks.json` | `.codebuddy/` | Tool execution hooks |
-| `CODEBUDDY.md` | `.codebuddy/` | Project instructions |
-| `CONTEXT.md` | `.codebuddy/` | Additional context |
-| `PROJECT_KNOWLEDGE.md` | `.codebuddy/` | Auto-generated project knowledge |
+| File | Location |
+|------|----------|
+| `tsconfig.json` | project root |
+| `.prettierrc` | project root |
+| `vitest.config.ts` | project root |
+| `.env.example` | project root |
+| `AUDIT-REPORT.md` | .codebuddy/ |
+| `autonomy.json` | .codebuddy/ |
+| `code-graph-snapshot.json` | .codebuddy/ |
+| `code-graph.json` | .codebuddy/ |
+| `CODEBUDDY.md` | .codebuddy/ |
+| `CODEBUDDY_MEMORY.md` | .codebuddy/ |
+| `CONTEXT.md` | .codebuddy/ |
+| `GROK.md` | .codebuddy/ |
+| `HEARTBEAT.md` | .codebuddy/ |
+| `hooks.json` | .codebuddy/ |
+| `settings.local.json` | .claude/ |
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GROK_API_KEY` | API Key (required) |
 
 ## Model Configuration
 

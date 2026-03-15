@@ -1,62 +1,54 @@
 # Context & Memory Management
 
-The context management system ensures conversations stay within the LLM's token limit while preserving the most important information.
+## Context Management (28 modules)
 
-## Context Manager V2
+| Module | Purpose |
+|--------|---------|
+| `bootstrap-loader` | Bootstrap File Injection |
+| `codebase-map` | codebase map |
+| `compression` | Context Compression |
+| `context-files` | Context Files - Automatic Project Context (Gemini CLI inspired) |
+| `context-loader` | context loader |
+| `context-manager-v2` | Advanced Context Manager for LLM conversations (Primary) |
+| `context-manager-v3` | Context Manager V3 |
+| `cross-encoder-reranker` | Cross-Encoder Reranker for RAG |
+| `dependency-aware-rag` | Dependency-Aware RAG System |
+| `enhanced-compression` | Enhanced Context Compression |
+| `git-context` | Git Context Utility |
+| `importance-scorer` | Importance Scorer for Context Compression |
+| `index` | Context module - RAG, compression, context management, and web search |
+| `jit-context` | JIT (Just-In-Time) Context Discovery |
+| `multi-path-retrieval` | Multi-Path Code Retrieval System |
+| `observation-masking` | Observation Masking System |
+| `observation-variator` | Observation Variator — Manus AI anti-repetition pattern |
+| `partial-summarizer` | Partial Summarizer |
+| `precompaction-flush` | Pre-compaction Memory Flush — OpenClaw-inspired NO_REPLY pattern |
+| `repository-map` | Repository Map - Aider-inspired code context system |
+| `restorable-compression` | Restorable Compression — Manus AI context engineering pattern |
+| `smart-compaction` | OpenClaw-inspired Smart Context Compaction System |
+| `smart-preloader` | Smart Context Preloader |
+| `token-counter` | Token Counter |
+| `tool-output-masking` | Tool Output Masking Service |
+| `types` | Context Types |
+| `web-search-grounding` | Web Search Grounding |
+| `workspace-context` | Workspace Context Builder |
 
-Four-stage compression pipeline (`src/context/context-manager-v2.ts`):
+## Memory System (15 modules)
 
-| Stage | Strategy | Token Reduction |
-|-------|----------|----------------|
-| 1 | Sliding window with importance scoring | 30-50% |
-| 2 | Tool result truncation | 10-30% |
-| 3 | LLM-based summarization | 40-70% |
-| 4 | Hard truncation (last resort) | 70-90% |
-
-Importance scores by content type:
-
-| Content Type | Score | Preservation |
-|-------------|-------|-------------|
-| Error messages | 0.95 | Nearly always preserved |
-| Architectural decisions | 0.90 | High priority |
-| Code blocks | 0.70 | Medium-high |
-| General conversation | 0.25 | First to compress |
-
-## Attention Bias Patterns
-
-- **Todo.md**: Appended at END of context (transformer recency bias)
-- **Lessons.md**: Injected BEFORE messages (high priority)
-- **Decision memory**: Injected with architectural rationale
-- **Code graph**: Per-turn ego-graph of mentioned entities
-
-## Tool Output Management
-
-**Adaptive compaction**: Threshold scales to 30% of model context window (not hardcoded).
-
-**TTL-based expiry** (`src/context/tool-output-masking.ts`):
-
-| Age (% of max) | Treatment |
-|----------------|-----------|
-| 0-50% | Full content preserved |
-| 50-75% | Head/tail preview (10+10 lines) |
-| 75-100% | One-line stub |
-| >100% | Removed entirely |
-
-**Backward-scanned FIFO masking**: Newest ~50K tokens protected, older outputs replaced with previews.
-
-## JIT Context Discovery
-
-When tools access files, the system dynamically loads context files (`CODEBUDDY.md`, `CONTEXT.md`) from the accessed subdirectory. Context grows organically as the agent explores.
-
-## Memory Consolidation
-
-Two-phase pipeline (`src/memory/memory-consolidation.ts`):
-
-1. **Extraction**: Detect preferences, patterns, corrections from user messages
-2. **Consolidation**: Merge into `.codebuddy/memory/` folder with dedup
-
-Output structure:
-
-- `memory_summary.md` — Always loaded into system prompt
-- `MEMORY.md` — Full handbook entries
-- `rollout_summaries/` — Per-session distilled summaries
+| Module | Purpose |
+|--------|---------|
+| `auto-capture` | Auto-Capture Memory System |
+| `auto-memory` | Auto-Memory System |
+| `coding-style-analyzer` | Coding Style Analyzer |
+| `decision-memory` | Decision Memory — Extracts, persists, and retrieves architectural/design |
+| `enhanced-memory` | Enhanced Memory Persistence System |
+| `hybrid-search` | Hybrid Memory Search |
+| `icm-bridge` | ICM (Infinite Context Memory) Bridge |
+| `index` | Memory System Exports |
+| `memory-consolidation` | Session Memory Consolidation — Two-Phase Pipeline |
+| `memory-flush` | Pre-Threshold Memory Flush + Plugin Memory Backends |
+| `memory-lifecycle-hooks` | Memory Lifecycle Hooks |
+| `persistent-memory` | persistent memory |
+| `prospective-memory` | Prospective Memory System |
+| `semantic-memory-search` | OpenClaw-inspired 2-Step Memory Search System |
+| `subagent-memory` | Subagent Persistent Memory |

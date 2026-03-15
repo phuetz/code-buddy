@@ -1,43 +1,44 @@
 # Security Architecture
 
-The project implements a seven-layer defense-in-depth security model. Each layer catches different attack vectors, ensuring that a bypass in one layer is caught by another.
+The project has **30** security modules in `src/security/`:
 
-## Security Layers
+| Module | Purpose |
+|--------|---------|
+| `approval-modes` | Three-Tier Approval Modes System |
+| `audit-logger` | Audit Logger for Code Generation Operations |
+| `bash-parser` | Bash Command Parser (Vibe-inspired) |
+| `code-validator` | Generated Code Validator |
+| `credential-manager` | Secure Credential Manager |
+| `csrf-protection` | CSRF Protection Module |
+| `dangerous-patterns` | Centralized Dangerous Patterns Registry |
+| `data-redaction` | Data Redaction Engine |
+| `guardian-agent` | Guardian Sub-Agent — AI-powered automatic approval reviewer |
+| `index` | Security Module |
+| `permission-config` | Permission Configuration System |
+| `permission-modes` | Permission Modes |
+| `permission-patterns` | Pattern-based Permissions |
+| `policy-amendments` | Policy Amendment Suggestions |
+| `remote-approval` | Remote Approval Forwarding |
+| `safe-binaries` | Safe Binaries System |
+| `sandbox` | Execution sandboxing |
+| `sandboxed-terminal` | Sandboxed Terminal |
+| `security-audit` | Security Audit Tool |
+| `security-modes` | Security Modes - Inspired by OpenAI Codex CLI |
+| `sender-policies` | Per-Sender Policies & Agents List |
+| `session-encryption` | Session Encryption for secure storage of chat sessions |
+| `shell-env-policy` | Shell Environment Policy — Codex-inspired subprocess env control |
+| `skill-scanner` | Skill Code Scanner (OpenClaw-inspired) |
+| `ssrf-guard` | SSRF Guard — OpenClaw-inspired server-side request forgery protection |
+| `syntax-validator` | Pre-Write Syntax Validator |
+| `tool-permissions` | Tool Permissions System |
+| `tool-policy` | OpenClaw-inspired Tool Policy System |
+| `trust-folders` | Trust Folder Manager |
+| `write-policy` | WritePolicy — enforces diff-first writes at the tool-handler level. |
 
-| Layer | Component | Purpose |
-|-------|-----------|---------|
-| 1. Input Validation | Schema checking, sanitization | Prevents malformed data |
-| 2. Authentication | JWT, API keys, DM pairing | Prevents unauthorized access |
-| 3. Path Validation | Traversal detection, symlink escape | Prevents filesystem attacks |
-| 4. Command Validation | Tree-sitter bash parsing | Prevents command injection |
-| 5. Network Protection | SSRF guard, IP filtering | Prevents server-side request forgery |
-| 6. Execution Control | Confirmation, sandbox, policies | User approval gate |
-| 7. Post-Execution | Result sanitization, audit logging | Prevents data leakage |
+## Security Features
 
-## Guardian Sub-Agent
-
-An AI-powered automatic approval reviewer (`src/security/guardian-agent.ts`) evaluates tool calls with structured risk scoring:
-
-| Risk Score | Decision | Examples |
-|-----------|----------|----------|
-| 0-20 | Auto-approve | Read operations, standard builds |
-| 20-60 | Auto-approve | File edits, package installs |
-| 60-80 | Approve with warning | System modifications, network ops |
-| 80-90 | Prompt user | Credential access, unknown scripts |
-| 90-100 | Deny | `rm -rf /`, fork bombs, `drop database` |
-
-## Environment Variable Filtering
-
-Shell commands run in a filtered environment (`src/security/shell-env-policy.ts`):
-
-- Variables matching `*KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*` are stripped
-- Three inheritance modes: `core` (minimal), `all` (filtered), `none` (empty)
-- Provider-specific patterns: `AWS_*`, `OPENAI_*`, `STRIPE_*`, etc.
-
-## Policy Amendments
-
-When a command is blocked, the system suggests an allow rule (`src/security/policy-amendments.ts`):
-
-- Rules stored in `.codebuddy/rules/allow-rules.json`
-- Shell operators (`&&`, `||`, `;`, `|`) after the matched prefix are blocked
-- Banned prefixes: interpreters (python, node), shells (bash, sh), `sudo`, `curl`
+- **AI Guardian Agent**: Automatic approval reviewer with risk scoring
+- **Sandbox Isolation**: Sandboxed execution environment
+- **SSRF Protection**: Blocks requests to private IP ranges
+- **Shell Command Validation**: Dangerous pattern detection
+- **Environment Filtering**: Sensitive variable stripping

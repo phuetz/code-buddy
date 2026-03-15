@@ -8,23 +8,16 @@ The tool ecosystem contains **117** tool modules organized in `src/tools/` and `
 
 ## Tool Categories
 
-| Category | Tools | Key Modules |
-|----------|-------|-------------|
-| Tool registration and factory | 29 | `advanced-tools`, `attention-tools`, `bash-tools` |
-| intelligence | 5 | `ast-parser`, `code-context`, `dependency-analyzer` |
-| Pre/post execution hooks | 4 | `default-hooks`, `result-sanitizer`, `session-lanes` |
-| advanced | 2 | `multi-file-editor`, `operation-history` |
-| bash | 2 | `bash-tool`, `command-validator` |
-| Image processing and OCR | 2 | `image-processor`, `ocr-tool` |
-| apply patch | 1 | `apply-patch` |
-| archive tool | 1 | `archive-tool` |
-| ask human tool | 1 | `ask-human-tool` |
-| audio tool | 1 | `audio-tool` |
-| base tool | 1 | `base-tool` |
-| batch processor | 1 | `batch-processor` |
-| Browser automation (Playwright) | 1 | `playwright-tool` |
-| browser tool | 1 | `browser-tool` |
-| changelog generator | 1 | `changelog-generator` |
+| Category | Tools | Count |
+|----------|-------|-------|
+| system | `process`, `js_repl`, `git`, `kubernetes` +5 | 9 |
+| file_search | `find_symbols`, `find_references`, `find_definition`, `search_multi` +2 | 6 |
+| file_write | `str_replace_editor`, `edit_file`, `multi_edit`, `list_directory` +1 | 5 |
+| file_read | `create_file`, `search`, `view_file`, `list_directory` | 4 |
+| web | `web_fetch`, `browser`, `computer_control`, `web_search` | 4 |
+| planning | `get_todo_list`, `update_todo_list`, `codebase_map`, `create_todo_list` | 4 |
+| codebase | `code_graph`, `spawn_subagent`, `codebase_map` | 3 |
+| git | `docker`, `git` | 2 |
 
 ## RAG-Based Tool Selection
 

@@ -1,13 +1,13 @@
 # Documentation Index
 
-Generated: 2026-03-15T02:03:31.555Z
+Generated: 2026-03-15T02:20:28.440Z
 
 | Metric | Value |
 |--------|-------|
 | Modules | 1075 |
-| Classes | 906 |
+| Classes | 905 |
 | Functions | 14302 |
-| Relationships | 49084 |
+| Relationships | 49092 |
 
 ## Sections
 

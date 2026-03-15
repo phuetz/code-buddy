@@ -3,6 +3,8 @@
 Last 30 commits:
 
 ```
+4d056ac docs: add auto-generated documentation (12 sections, 1577 lines)
+6d62caf feat(docs): 12-section DeepWiki-parity docs generator
 cd883f1 fix(docs): DeepWiki-quality docs generator — audit pass
 bf47fec feat: LLM-powered docs generator + auto-inject project knowledge
 89987d5 feat: /docs generate — DeepWiki-style documentation generator
@@ -31,6 +33,4 @@ a20ac89 fix(low): PID permissions 0o600, deduplicate streaming tool_calls yields
 bb447a6 fix(medium): docker pin, model cache, i18n archive, flush errors, lessons merge
 29454b8 fix(high): canvas tools, PID race, fetchPage mode, shell env policy, skill validation
 8d74be5 fix(critical): race condition probe, thinking integration, archive dead code
-50c98d1 fix(tests): Windows cross-platform compatibility for 40+ test files
-5148300 fix(security): SSRF guard, auth bypass, dead commands, and 5 critical production bugs
 ```
