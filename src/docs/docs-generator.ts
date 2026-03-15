@@ -158,6 +158,20 @@ export async function generateDocs(
 // Section Generators
 // ============================================================================
 
+/** Read a file safely, returning empty string on failure. Exported for llm-docs-generator. */
+export function readFileSafe(filePath: string, maxChars: number = 5000): string {
+  try {
+    if (!fs.existsSync(filePath)) return '';
+    return fs.readFileSync(filePath, 'utf-8').substring(0, maxChars);
+  } catch { return ''; }
+}
+
+function readPkg(cwd: string): Record<string, unknown> {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf-8'));
+  } catch { return {}; }
+}
+
 function generateOverview(
   graph: KnowledgeGraph,
   cwd: string,
@@ -165,53 +179,144 @@ function generateOverview(
   classes: Set<string>,
   functions: Set<string>,
 ): string {
-  const projectName = path.basename(cwd);
+  const pkg = readPkg(cwd);
+  const projectName = (pkg.name as string) ?? path.basename(cwd);
+  const version = (pkg.version as string) ?? '0.0.0';
+  const description = (pkg.description as string) ?? '';
   const stats = graph.getStats();
+  const deps = Object.keys((pkg.dependencies ?? {}) as Record<string, string>);
+  const devDeps = Object.keys((pkg.devDependencies ?? {}) as Record<string, string>);
 
   // Find top-ranked entities
-  const topEntities: Array<{ entity: string; rank: number }> = [];
+  const topEntities: Array<{ entity: string; rank: number; importers: number; callers: number }> = [];
   for (const mod of modules) {
-    topEntities.push({ entity: mod, rank: graph.getEntityRank(mod) });
+    topEntities.push({
+      entity: mod,
+      rank: graph.getEntityRank(mod),
+      importers: graph.query({ predicate: 'imports', object: mod }).length,
+      callers: graph.query({ predicate: 'calls', object: mod }).length,
+    });
   }
   topEntities.sort((a, b) => b.rank - a.rank);
 
+  // Classify entry points (real ones, not all index files)
+  const mainEntries = ['src/index', 'src/server/index', 'src/daemon/index'];
+  const entryPoints = topEntities.filter(e => {
+    const name = e.entity.replace(/^mod:/, '');
+    return mainEntries.some(m => name === m) || (name.endsWith('index') && e.importers >= 3);
+  }).slice(0, 10);
+
+  // Detect key capabilities from module names
+  const capabilities: string[] = [];
+  const modNames = [...modules].map(m => m.replace(/^mod:/, ''));
+  if (modNames.some(m => m.includes('channel'))) capabilities.push('Multi-channel messaging (Telegram, Discord, Slack, WhatsApp, etc.)');
+  if (modNames.some(m => m.includes('daemon'))) capabilities.push('Background daemon with health monitoring');
+  if (modNames.some(m => m.includes('voice') || m.includes('tts'))) capabilities.push('Voice interaction with wake-word activation');
+  if (modNames.some(m => m.includes('sandbox') || m.includes('docker'))) capabilities.push('Sandboxed execution (Docker, OS-level)');
+  if (modNames.some(m => m.includes('reasoning') || m.includes('mcts'))) capabilities.push('Advanced reasoning (Tree-of-Thought, MCTS)');
+  if (modNames.some(m => m.includes('knowledge-graph'))) capabilities.push(`Code graph analysis (${stats.tripleCount} relationships)`);
+  if (modNames.some(m => m.includes('repair'))) capabilities.push('Automated program repair (fault localization + LLM)');
+  if (modNames.some(m => m.includes('a2a'))) capabilities.push('Agent-to-Agent protocol (Google A2A spec)');
+  if (modNames.some(m => m.includes('workflow'))) capabilities.push('Workflow engine with DAG execution');
+  if (modNames.some(m => m.includes('deploy'))) capabilities.push('Cloud deployment (Fly.io, Railway, Render, GCP)');
+
   const lines = [
-    `# ${projectName} — Documentation`,
+    `# ${projectName} v${version}`,
     '',
-    `> Auto-generated from code graph (${stats.tripleCount} relationships across ${modules.size} modules)`,
+    description ? `> ${description}` : `> Auto-generated documentation from ${stats.tripleCount} code relationships`,
+    '',
+    `${projectName} is a terminal-based AI coding agent built in TypeScript/Node.js. It supports multiple LLM providers with automatic failover and provides ${functions.size.toLocaleString()} functions across ${modules.size} modules.`,
+    '',
+    '## Key Capabilities',
+    '',
+    ...capabilities.map(c => `- ${c}`),
     '',
     '## Project Statistics',
     '',
     `| Metric | Value |`,
     `|--------|-------|`,
+    `| Version | ${version} |`,
     `| Modules | ${modules.size} |`,
     `| Classes | ${classes.size} |`,
-    `| Functions | ${functions.size} |`,
-    `| Relationships | ${stats.tripleCount} |`,
-    `| Predicates | ${stats.predicateCount} |`,
+    `| Functions | ${functions.size.toLocaleString()} |`,
+    `| Code Relationships | ${stats.tripleCount.toLocaleString()} |`,
+    `| Dependencies | ${deps.length} |`,
+    `| Dev Dependencies | ${devDeps.length} |`,
     '',
-    '## Key Modules (by PageRank)',
+    '## Core Modules (by architectural importance)',
     '',
+    'Ranked by PageRank — higher rank means more modules depend on this one:',
+    '',
+    `| Module | PageRank | Importers | Description |`,
+    `|--------|----------|-----------|-------------|`,
   ];
 
-  for (const { entity, rank } of topEntities.slice(0, 15)) {
+  for (const { entity, rank, importers } of topEntities.slice(0, 20)) {
     const name = entity.replace(/^mod:/, '');
-    const callers = graph.query({ predicate: 'calls', object: entity }).length;
-    const importers = graph.query({ predicate: 'imports', object: entity }).length;
-    lines.push(`- **${name}** (rank: ${rank.toFixed(3)}, ${importers} importers, ${callers} callers)`);
+    const desc = inferModuleDescription(name);
+    lines.push(`| \`${name}\` | ${rank.toFixed(3)} | ${importers} | ${desc} |`);
   }
 
-  // Entry points (index files)
   lines.push('', '## Entry Points', '');
-  for (const mod of modules) {
-    const name = mod.replace(/^mod:/, '');
-    if (name.endsWith('index') || name.endsWith('main') || name === 'mod:src/index') {
-      const exports = graph.query({ subject: mod, predicate: 'exports' });
-      lines.push(`- \`${name}\` (${exports.length} exports)`);
-    }
+  for (const entry of entryPoints) {
+    const name = entry.entity.replace(/^mod:/, '');
+    lines.push(`- **\`${name}\`** — ${inferModuleDescription(name)} (${entry.importers} dependents)`);
+  }
+
+  // Technology stack
+  const coreDeps = deps.filter(d => ['commander', 'openai', 'express', 'ink', 'react', 'better-sqlite3', 'zod'].includes(d));
+  if (coreDeps.length > 0) {
+    lines.push('', '## Technology Stack', '');
+    lines.push('| Category | Technologies |', '|----------|-------------|');
+    lines.push(`| CLI Framework | commander |`);
+    if (deps.includes('ink')) lines.push(`| Terminal UI | ink, react |`);
+    const llmSdks = deps.filter(d => ['openai', '@anthropic-ai/sdk', '@google/generative-ai'].includes(d));
+    if (llmSdks.length > 0) lines.push(`| LLM SDKs | ${llmSdks.join(', ')} |`);
+    if (deps.includes('express')) lines.push(`| HTTP Server | express, ws, cors |`);
+    if (deps.includes('better-sqlite3')) lines.push(`| Database | better-sqlite3 |`);
+    if (deps.includes('zod')) lines.push(`| Validation | zod |`);
+    if (deps.includes('playwright')) lines.push(`| Browser Automation | playwright |`);
   }
 
   return lines.join('\n');
+}
+
+/** Infer a human-readable description from a module path */
+function inferModuleDescription(modulePath: string): string {
+  const parts = modulePath.split('/');
+  const descMap: Record<string, string> = {
+    'agent': 'Core agent system',
+    'codebuddy': 'LLM client and tool definitions',
+    'tools': 'Tool implementations',
+    'security': 'Security and validation',
+    'context': 'Context window management',
+    'channels': 'Messaging channel integrations',
+    'knowledge': 'Code analysis and knowledge graph',
+    'server': 'HTTP/WebSocket server',
+    'daemon': 'Background daemon service',
+    'config': 'Configuration management',
+    'memory': 'Memory and persistence',
+    'middleware': 'Middleware pipeline',
+    'deploy': 'Cloud deployment',
+    'skills': 'Skill registry and marketplace',
+    'workflows': 'Workflow DAG engine',
+    'observability': 'Logging, metrics, tracing',
+    'sandbox': 'Execution sandboxing',
+    'voice': 'Voice and TTS',
+    'reasoning': 'Advanced reasoning (ToT, MCTS)',
+    'repair': 'Automated program repair',
+    'protocols': 'Agent protocols (A2A)',
+    'search': 'Search and indexing',
+    'ui': 'Terminal UI components',
+    'commands': 'CLI and slash commands',
+    'checkpoints': 'Undo and snapshots',
+  };
+  for (const part of parts) {
+    if (descMap[part]) return descMap[part];
+  }
+  // Derive from last segment
+  const last = parts[parts.length - 1];
+  return last.replace(/-/g, ' ').replace(/([A-Z])/g, ' $1').trim();
 }
 
 async function generateArchitecture(
@@ -222,15 +327,29 @@ async function generateArchitecture(
   const lines = [
     '# Architecture',
     '',
-    '## Module Dependency Graph',
+    'The project follows a layered architecture with a central agent orchestrator coordinating all interactions between user interfaces, LLM providers, tools, and infrastructure services.',
     '',
   ];
 
+  // Generate high-level layer diagram
+  lines.push('## System Layers', '', '```mermaid', 'graph TD');
+  lines.push('  UI["User Interfaces<br/>CLI, Chat UI, WebSocket, Voice, Channels"]');
+  lines.push('  AGENT["Core Agent<br/>CodeBuddyAgent → AgentExecutor"]');
+  lines.push('  TOOLS["Tool Ecosystem<br/>110+ tools, RAG selection"]');
+  lines.push('  CTX["Context & Memory<br/>Compression, Lessons, Knowledge Graph"]');
+  lines.push('  INFRA["Infrastructure<br/>Daemon, Sandbox, Config, MCP"]');
+  lines.push('  SEC["Security<br/>Path validation, SSRF guard, Confirmation"]');
+  lines.push('  UI --> AGENT');
+  lines.push('  AGENT --> TOOLS');
+  lines.push('  AGENT --> CTX');
+  lines.push('  TOOLS --> INFRA');
+  lines.push('  TOOLS --> SEC');
+  lines.push('  CTX --> INFRA');
+  lines.push('```', '');
+
   if (includeDiagrams) {
-    // Generate module dependency diagram
     try {
       const { generateModuleDependencies } = await import('../knowledge/mermaid-generator.js');
-      // Find the most connected module as center
       let bestMod = '';
       let bestConns = 0;
       for (const mod of modules) {
@@ -238,13 +357,35 @@ async function generateArchitecture(
         if (conns > bestConns) { bestConns = conns; bestMod = mod; }
       }
       if (bestMod) {
-        const diagram = generateModuleDependencies(graph, bestMod, 2, 40);
+        lines.push('## Core Module Dependencies', '');
+        const diagram = generateModuleDependencies(graph, bestMod, 2, 30);
         lines.push('```mermaid', diagram, '```', '');
       }
     } catch { /* mermaid optional */ }
   }
 
-  // Layer analysis: group modules by directory prefix
+  // Layer analysis with descriptions
+  const layerDescriptions: Record<string, string> = {
+    'src/agent': 'Core agent system — orchestrator, executor, middleware, reasoning, multi-agent coordination',
+    'src/tools': 'Tool implementations — file editing, bash, search, web, planning, media',
+    'src/codebuddy': 'LLM client abstraction — multi-provider support, tool definitions, streaming',
+    'src/context': 'Context management — compression, sliding window, JIT discovery, tool masking',
+    'src/security': 'Security layer — path validation, SSRF guard, shell policy, guardian agent',
+    'src/channels': 'Messaging channels — Telegram, Discord, Slack, WhatsApp, 15+ platforms',
+    'src/server': 'HTTP/WebSocket server — REST API, real-time streaming, authentication',
+    'src/knowledge': 'Knowledge graph — code analysis, PageRank, community detection, impact analysis',
+    'src/commands': 'Command system — CLI commands, slash commands, dev workflows',
+    'src/config': 'Configuration — TOML config, model settings, hot-reload',
+    'src/memory': 'Memory — persistent memory, ICM bridge, decision memory, consolidation',
+    'src/daemon': 'Background daemon — health monitoring, cron, heartbeat',
+    'src/ui': 'Terminal UI — Ink/React components, themes, chat interface',
+    'src/skills': 'Skills — registry, marketplace, SKILL.md loading',
+    'src/workflows': 'Workflows — DAG engine, approval gates, variable resolution',
+    'src/observability': 'Observability — run store, OpenTelemetry, Sentry, tool metrics',
+    'src/deploy': 'Deployment — Fly.io, Railway, Render, Hetzner, GCP, Nix',
+    'src/sandbox': 'Sandboxing — Docker containers, OS-level isolation',
+  };
+
   const layers = new Map<string, string[]>();
   for (const mod of modules) {
     const name = mod.replace(/^mod:/, '');
@@ -255,17 +396,31 @@ async function generateArchitecture(
     layers.set(layer, list);
   }
 
-  lines.push('## Layers', '');
+  lines.push('## Layer Breakdown', '');
+  lines.push('| Layer | Modules | Description |', '|-------|---------|-------------|');
   const sortedLayers = [...layers.entries()].sort((a, b) => b[1].length - a[1].length);
-  for (const [layer, mods] of sortedLayers.slice(0, 20)) {
-    lines.push(`### ${layer} (${mods.length} modules)`, '');
-    for (const m of mods.slice(0, 10)) {
-      const rank = graph.getEntityRank(`mod:${m}`);
-      lines.push(`- \`${m}\` ${rank > 0.01 ? `(rank: ${rank.toFixed(3)})` : ''}`);
-    }
-    if (mods.length > 10) lines.push(`- ... and ${mods.length - 10} more`);
-    lines.push('');
+  for (const [layer, mods] of sortedLayers.slice(0, 25)) {
+    const desc = layerDescriptions[layer] ?? inferModuleDescription(layer);
+    lines.push(`| \`${layer}/\` | ${mods.length} | ${desc} |`);
   }
+  lines.push('');
+
+  // Core flow
+  lines.push('## Core Agent Flow', '');
+  lines.push('```');
+  lines.push('User Input → CLI/Chat/Voice/Channel');
+  lines.push('  → CodeBuddyAgent.processUserMessage()');
+  lines.push('    → AgentExecutor (ReAct loop)');
+  lines.push('      1. RAG Tool Selection (~15 from 110+)');
+  lines.push('      2. Context Injection (lessons, decisions, graph)');
+  lines.push('      3. Middleware Before-Turn (cost, turn limit, reasoning)');
+  lines.push('      4. LLM Call (multi-provider)');
+  lines.push('      5. Tool Execution (parallel read / serial write)');
+  lines.push('      6. Result Processing (masking, TTL, compaction)');
+  lines.push('      7. Middleware After-Turn (auto-repair, metrics)');
+  lines.push('      8. Loop or Return');
+  lines.push('```');
+  lines.push('');
 
   return lines.join('\n');
 }
