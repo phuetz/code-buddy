@@ -30,10 +30,16 @@ export async function handleDocsCommand(args: string): Promise<DocsCommandResult
     const noDiagrams = parts.includes('--no-diagrams');
     const noMetrics = parts.includes('--no-metrics');
     const withLLM = parts.includes('--with-llm');
+    const useV2 = parts.includes('--v2');
 
     // Parse --thinking level
     const thinkingIdx = parts.indexOf('--thinking');
     const thinkingLevel = thinkingIdx >= 0 ? parts[thinkingIdx + 1] as 'minimal' | 'low' | 'medium' | 'high' : undefined;
+
+    // V2 pipeline — generic DeepWiki-style
+    if (useV2) {
+      return handleGenerateV2(withLLM, thinkingLevel);
+    }
 
     if (withLLM) {
       return handleGenerateWithLLM(thinkingLevel);
@@ -42,7 +48,7 @@ export async function handleDocsCommand(args: string): Promise<DocsCommandResult
   }
 
   return {
-    output: 'Usage: /docs generate [--with-llm] [--thinking minimal|low|medium|high] [--no-diagrams] [--no-metrics] | /docs status',
+    output: 'Usage: /docs generate [--v2] [--with-llm] [--thinking level] [--no-diagrams] [--no-metrics] | /docs status',
     success: false,
   };
 }
@@ -212,6 +218,89 @@ async function handleGenerateWithLLM(thinkingLevelOverride?: 'minimal' | 'low' |
     return { output, success: true };
   } catch (err) {
     return { output: `LLM docs generation failed: ${err instanceof Error ? err.message : String(err)}`, success: false };
+  }
+}
+
+async function handleGenerateV2(withLLM: boolean, thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'): Promise<DocsCommandResult> {
+  try {
+    // Populate graph
+    const { getKnowledgeGraph } = await import('../../knowledge/knowledge-graph.js');
+    const graph = getKnowledgeGraph();
+    if (graph.getStats().tripleCount === 0) {
+      try {
+        const { populateDeepCodeGraph } = await import('../../knowledge/code-graph-deep-populator.js');
+        populateDeepCodeGraph(graph, process.cwd());
+      } catch (e) {
+        return { output: `Code graph empty: ${e instanceof Error ? e.message : String(e)}`, success: false };
+      }
+    }
+
+    // Set up LLM if requested
+    let llmCall: ((sys: string, user: string, thinking?: string) => Promise<string>) | undefined;
+    if (withLLM) {
+      const apiKey = process.env.GROK_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
+      if (apiKey) {
+        const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
+        const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
+        let model = process.env.GROK_MODEL || 'grok-3-latest';
+        if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
+        if (isOpenAI) model = 'gpt-4o-mini';
+
+        if (isGemini) {
+          const baseURL = 'https://generativelanguage.googleapis.com/v1beta';
+          llmCall = async (sys: string, user: string, _thinking?: string): Promise<string> => {
+            const res = await fetch(`${baseURL}/models/${model}:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: user }] }],
+                systemInstruction: { parts: [{ text: sys }] },
+                generationConfig: { temperature: 0.2, maxOutputTokens: 8000 },
+              }),
+            });
+            if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).substring(0, 200)}`);
+            const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+            return data.candidates?.[0]?.content?.parts?.filter((p: { text?: string }) => p.text).map((p: { text?: string }) => p.text).join('') ?? '';
+          };
+        } else {
+          let baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
+          if (isOpenAI) baseURL = 'https://api.openai.com/v1';
+          const OpenAI = (await import('openai')).default;
+          const client = new OpenAI({ apiKey, baseURL });
+          llmCall = async (sys: string, user: string): Promise<string> => {
+            const r = await client.chat.completions.create({
+              model, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
+              max_tokens: 8000, temperature: 0.2,
+            });
+            return r.choices[0]?.message?.content ?? '';
+          };
+        }
+      }
+    }
+
+    // Run the V2 pipeline
+    const { runDocsPipeline } = await import('../../docs/docs-pipeline.js');
+    const result = await runDocsPipeline(graph, {
+      cwd: process.cwd(),
+      llmCall,
+      config: thinkingLevel ? { thinkingLevel } : undefined,
+      onProgress: (phase, detail) => {
+        logger.info(`[${phase}] ${detail}`);
+      },
+    });
+
+    const output = [
+      `Documentation V2 generated:`,
+      `  Pages: ${result.pagesGenerated}`,
+      `  Concepts linked: ${result.conceptsLinked}`,
+      `  Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
+      `  Output: .codebuddy/docs/`,
+      result.errors.length > 0 ? `  Errors: ${result.errors.slice(0, 5).join('; ')}` : '',
+    ].filter(Boolean).join('\n');
+
+    return { output, success: true };
+  } catch (err) {
+    return { output: `V2 pipeline failed: ${err instanceof Error ? err.message : String(err)}`, success: false };
   }
 }
 
