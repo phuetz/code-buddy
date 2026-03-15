@@ -45,27 +45,38 @@ export interface EnrichResult {
 // System Prompt
 // ============================================================================
 
-const ENRICHER_SYSTEM_PROMPT = `You are a technical documentation writer. You receive a raw auto-generated markdown document containing tables, lists, and data extracted from a codebase.
+const ENRICHER_SYSTEM_PROMPT = `You are a senior technical writer creating DeepWiki-style documentation. You receive a raw auto-generated markdown document. Your job is to transform it into professional documentation.
 
-Your job is to ENRICH this document by adding:
+CRITICAL: You must output the COMPLETE document — include ALL original tables, lists, and data. Your output REPLACES the file, so nothing can be lost.
 
-1. **Introductory paragraphs** — Before each section, add 1-2 sentences explaining what this section covers and WHY it matters. Use purpose-first framing ("This module handles X, which is critical because Y").
+## What to ADD
 
-2. **Source citations** — When you mention a module or file, format as \`src/path/file.ts\` in backticks. If you know specific methods, mention them: \`AgentExecutor.processUserMessage()\`.
+1. **Opening paragraph** under the title: 2-3 sentences explaining what this section covers, why it matters, and who should read it.
 
-3. **Cross-links** — Add "See also: [Section Name](./other-file.md)" links between related sections.
+Example:
+# Security Architecture
 
-4. **Mermaid diagrams** — Where a visual would help (data flows, component relationships), add a fenced mermaid block.
+The security architecture implements defense-in-depth with seven distinct layers, each targeting different attack vectors. Understanding these layers is essential for contributors modifying tool execution or adding new integrations, as security violations will block deployment.
 
-5. **Key methods table** — For core component sections, add a table: | Method | Purpose | with the most important public methods.
+2. **Transition paragraphs** between subsections: 1-2 sentences linking the previous section to the next.
 
-Rules:
-- KEEP all existing content (tables, lists, data). Don't remove anything.
-- ADD prose BEFORE and BETWEEN existing sections, not instead of them.
-- Write in a technical but accessible style (like MDN Web Docs, not marketing)
-- Be precise: use exact class/method names, not vague references
-- Keep additions concise — 2-3 paragraphs per section maximum
-- Output valid markdown. Start with the existing title (# ...).`;
+Example:
+Beyond input validation, the system enforces strict path boundaries to prevent filesystem escapes.
+
+3. **One Mermaid diagram** per document showing the key data flow or component relationship. Use graph TD or flowchart LR. Keep it under 15 nodes.
+
+4. **"Key Concepts" callout** for complex sections:
+
+> **Key concept:** The RAG tool selector reduces prompt size from 110+ tools to ~15, saving approximately 8,000 tokens per LLM call.
+
+5. **Method signatures** when discussing components: mention \`ClassName.methodName()\` in backticks.
+
+## Rules
+- Output the FULL enriched document (title through footer)
+- KEEP every table, list, and data point from the original
+- Write like MDN Web Docs: precise, technical, no marketing fluff
+- Each section gets 1-2 paragraphs of prose, not more
+- Total output should be 20-50% longer than input, not shorter`;
 
 // ============================================================================
 // Enricher
@@ -97,13 +108,14 @@ export async function enrichDocs(options: EnrichOptions): Promise<EnrichResult> 
 
     try {
       const prompt = [
-        `Enrich this auto-generated documentation section. KEEP all existing content and ADD narrative prose.`,
+        `Transform this raw document into professional DeepWiki-style documentation.`,
+        `IMPORTANT: Output the COMPLETE document with ALL original content preserved plus your additions.`,
         ``,
-        `--- START OF RAW DOCUMENT ---`,
-        rawContent.substring(0, 8000), // Cap to ~2K tokens of context
-        `--- END OF RAW DOCUMENT ---`,
+        `--- RAW DOCUMENT ---`,
+        rawContent.substring(0, 10000),
+        `--- END ---`,
         ``,
-        `Enrich this document following the instructions. Output the complete improved markdown.`,
+        `Output the full enriched markdown now. Remember: keep ALL tables/lists, add prose and one mermaid diagram.`,
       ].join('\n');
 
       const enriched = await options.llmCall(ENRICHER_SYSTEM_PROMPT, prompt);

@@ -1,12 +1,10 @@
 # Architecture
 
-This document outlines the high-level architecture of the project, detailing its layered structure, core components, and the flow of execution. Understanding this architecture is crucial for comprehending how the system processes user requests, interacts with various services, and maintains robustness and extensibility.
+The project follows a modular, layered architecture designed to decouple the core reasoning engine from infrastructure, UI, and external tool integrations. This structure ensures that the agent orchestrator can scale across diverse environments while maintaining strict security and context management boundaries. This documentation is intended for core contributors and system architects who need to understand the dependency graph and execution lifecycle of the agent.
 
 ## System Layers
 
-The system is organized into distinct layers, each responsible for a specific set of functionalities. This layered approach promotes modularity, separation of concerns, and easier maintenance and scalability. The following diagram illustrates the primary interaction pathways between these high-level components.
-
-The `User Interfaces` layer (`UI`) encompasses all external interaction points, from command-line interfaces to chat UIs and voice channels. These interfaces communicate directly with the `Core Agent` layer, which is the brain of the system, primarily embodied by the `CodeBuddyAgent` and its `AgentExecutor`. The `Core Agent` orchestrates interactions with the `Tool Ecosystem` for executing actions, and the `Context & Memory` layer for managing conversational state and knowledge. Both `Tools` and `Context` rely on the `Infrastructure` layer for underlying services and the `Security` layer for ensuring safe operations.
+The system is organized into functional layers that facilitate a clean separation of concerns. The `Core Agent` acts as the central nervous system, delegating tasks to the `Tool Ecosystem` and `Context & Memory` modules while enforcing policies through the `Security` layer.
 
 ```mermaid
 graph TD
@@ -24,11 +22,11 @@ graph TD
   CTX --> INFRA
 ```
 
+The interaction between these layers is governed by the `AgentExecutor`, which orchestrates the ReAct loop to ensure that every action is validated against the security layer before execution.
+
 ## Core Module Dependencies
 
-Delving deeper into the `Core Agent` layer, this section visualizes the intricate dependencies between key modules, particularly those centered around the `src/agent/codebuddy-agent.ts` module. This detailed view helps in understanding the internal structure and interconnections of the agent's core logic and its extensive middleware ecosystem.
-
-The diagram highlights `src/agent/codebuddy-agent.ts` (M0) as the central orchestrator, importing various middleware modules (`src/middleware/`) for pre- and post-processing, `src/knowledge/knowledge-manager.ts` for accessing knowledge, and `src/planner/` components for strategic decision-making. Other modules, such as `src/dev/index.ts` and `src/handlers/channel-handlers.ts`, also depend on the core agent, demonstrating its pervasive role across the system. This complex web of dependencies underscores the agent's central position in managing diverse functionalities.
+The dependency graph below illustrates the relationship between the `agent/codebuddy-agent` and its supporting middleware and service modules. This modular approach allows for the injection of specialized logic, such as `middleware/quality-gate-middleware` or `middleware/auto-repair-middleware`, without modifying the core agent loop.
 
 ```mermaid
 graph LR
@@ -149,7 +147,7 @@ graph LR
 
 ## Layer Breakdown
 
-This table provides a quantitative breakdown of the project's codebase by logical layer, indicating the number of modules within each primary directory. This overview helps identify areas of significant development, core functionalities, and potential areas for further modularization or optimization. The `src/agent/` and `src/tools/` directories, for instance, represent the core intelligence and action capabilities of the system.
+The following table summarizes the distribution of modules across the codebase. This organization allows developers to quickly locate logic based on the domain, such as `src/security/` for policy enforcement or `src/agent/` for core orchestration.
 
 | Layer | Modules | Description |
 |-------|---------|-------------|
@@ -179,13 +177,30 @@ This table provides a quantitative breakdown of the project's codebase by logica
 | `src/advanced/` | 8 | Advanced |
 | `src/daemon/` | 8 | Background daemon service |
 
-### Key Methods for Core Agent (`src/agent/`)
+## Core Agent Flow
 
-The `src/agent/` directory houses the core logic for the `CodeBuddyAgent` and its `AgentExecutor`. These methods are fundamental to how the agent processes requests, makes decisions, and interacts with the environment.
+The lifecycle of a user request is handled by the `CodeBuddyAgent.processUserMessage()` method. This method initializes the `AgentExecutor`, which manages the ReAct loop, ensuring that the agent remains within defined operational bounds while effectively utilizing available tools.
 
-| Method | Purpose |
-|---|---|
-| `CodeBuddyAgent.processUserMessage(message: string, context: AgentContext)` | Initiates the agent's response to a user message, orchestrating the entire ReAct loop from input parsing to final output. |
-| `AgentExecutor.execute(plan: AgentPlan, tools: Tool[])` | Manages the iterative execution of agent steps, including tool selection, context injection, LLM calls, and result processing. |
-| `AgentExecutor.selectTools(query: string)` | Dynamically selects the most relevant tools from the available `src/tools/` ecosystem based on the current user query and conversational context. |
-| `AgentExecutor.injectContext(context: AgentContext)` | Incorporates relevant historical context, learned lessons, and knowledge graph data from `src/context/` and `src/knowledge/` into the current prompt for the LLM
+> **Key concept:** The RAG tool selector reduces prompt size from 110+ tools to ~15, saving approximately 8,000 tokens per LLM call.
+
+```mermaid
+graph TD
+    Input["User Input"] --> Process["CodeBuddyAgent.processUserMessage()"]
+    Process --> Executor["AgentExecutor (ReAct loop)"]
+    Executor --> RAG["1. RAG Tool Selection"]
+    RAG --> Context["2. Context Injection"]
+    Context --> MiddlewarePre["3. Middleware Before-Turn"]
+    MiddlewarePre --> LLM["4. LLM Call"]
+    LLM --> ToolExec["5. Tool Execution"]
+    ToolExec --> Result["6. Result Processing"]
+    Result --> MiddlewarePost["7. Middleware After-Turn"]
+    MiddlewarePost --> Loop{"8. Loop or Return"}
+```
+
+The `AgentExecutor` ensures that all tool outputs are processed through a series of middleware checks, including `middleware/quality-gate-middleware` and `middleware/auto-repair-middleware`, before returning the final response to the user.
+
+---
+
+**See also:** [Overview](./1-overview.md) · [Subsystems](./3-subsystems.md) · [Tool System](./5-tools.md) · [Security](./6-security.md)
+
+**Key source files:** `src/agent/.ts`, `src/tools/.ts`, `src/utils/.ts`, `src/commands/.ts`, `src/ui/.ts`, `src/channels/.ts`, `src/context/.ts`, `src/security/.ts`
