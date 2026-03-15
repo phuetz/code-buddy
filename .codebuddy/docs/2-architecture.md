@@ -1,10 +1,10 @@
 # Architecture
 
-The project follows a layered architecture with a central agent orchestrator coordinating all interactions between user interfaces, LLM providers, tools, and infrastructure services. This design ensures a clean separation of concerns, allowing developers to modify specific components—such as tool integrations or middleware logic—without destabilizing the core execution engine.
+This section details the high-level architectural design of the system, focusing on the agent orchestrator and its interaction with infrastructure and tool ecosystems. It is intended for developers and system architects who need to understand the dependency graph and layer separation to implement new features or modify core agent behavior.
 
 ## System Layers
 
-The system is organized into distinct functional layers, each responsible for a specific domain of the agent's lifecycle. This modularity allows for independent scaling and testing of components, from the user-facing interfaces down to the underlying infrastructure and security guards.
+The system architecture is organized into distinct functional layers, ensuring a clean separation of concerns between user-facing interfaces and backend infrastructure.
 
 ```mermaid
 graph TD
@@ -22,11 +22,9 @@ graph TD
   CTX --> INFRA
 ```
 
-With the high-level system layers defined, we must examine the specific module dependencies that enforce this structure and dictate how data flows through the application.
-
 ## Core Module Dependencies
 
-The dependency graph illustrates the central role of `agent/codebuddy-agent`, which acts as the primary orchestrator for all middleware and service handlers. Understanding these imports is critical for contributors, as circular dependencies or improper module coupling can lead to runtime initialization failures.
+Understanding the dependency graph is critical for maintaining system stability, as changes to core modules can propagate across the entire agent lifecycle.
 
 ```mermaid
 graph LR
@@ -50,16 +48,6 @@ graph LR
     M17["mcp/mcp-server"]
     M18["scripting/builtins"]
     M19["routes/chat"]
-    M20["routes/tools"]
-    M21["websocket/handler"]
-    M22["thinking/extended-thinking"]
-    M23["repair/repair-engine"]
-    M24["repair/fault-localization"]
-    M25["specialized/agent-registry"]
-    M26["services/prompt-builder"]
-    M27["desktop-automation/index"]
-    M28["browser-automation/index"]
-    M29["codebuddy/client"]
     M0 -->|imports| M1
     M0 -->|imports| M2
     M0 -->|imports| M3
@@ -119,37 +107,12 @@ graph LR
     M17 -->|imports| M55
     M34 -->|imports| M17
     M19 -->|imports| M35
-    M20 -->|imports| M56
-    M21 -->|imports| M35
-    M26 -->|imports| M57
-    M26 -->|imports| M58
-    M26 -->|imports| M59
-    M26 -->|imports| M60
-    M26 -->|imports| M61
-    M26 -->|imports| M62
-    M26 -->|imports| M63
-    M26 -->|imports| M64
-    M26 -->|imports| M65
-    M66 -->|imports| M28
-    M29 -->|imports| M65
-    M29 -->|imports| M67
-    M68 -->|imports| M29
-    M69 -->|imports| M29
-    M70 -->|imports| M29
-    M71 -->|imports| M29
-    M72 -->|imports| M29
-    M73 -->|imports| M29
-    M74 -->|imports| M29
-    M75 -->|imports| M29
-    M76 -->|imports| M29
     style M0 fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
-Understanding these dependencies allows developers to navigate the codebase, but the distribution of logic across the filesystem provides the practical roadmap for implementation.
-
 ## Layer Breakdown
 
-The following table summarizes the distribution of modules across the project's directory structure, highlighting the breadth of the system's capabilities.
+The system is modularized into specific directories, each serving a distinct purpose in the agent's lifecycle.
 
 | Layer | Modules | Description |
 |-------|---------|-------------|
@@ -179,43 +142,25 @@ The following table summarizes the distribution of modules across the project's 
 | `src/advanced/` | 8 | Advanced |
 | `src/daemon/` | 8 | Background daemon service |
 
-While the directory structure organizes the codebase, the actual execution logic follows a specific, repeatable lifecycle managed by the agent.
+> **Key concept:** The RAG tool selector reduces prompt size from 110+ tools to ~15, saving approximately 8,000 tokens per LLM call.
 
 ## Core Agent Flow
 
-The agent lifecycle is initiated via `CodeBuddyAgent.processUserMessage()`, which triggers the `AgentExecutor` to manage the ReAct (Reasoning and Acting) loop. This loop is the heart of the system, ensuring that user intent is translated into actionable tool calls while maintaining strict context and security boundaries.
+Beyond the static layer breakdown, the runtime behavior is governed by a specific execution flow that manages state and tool invocation. The process begins when user input is received and passed to the orchestrator.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Agent as CodeBuddyAgent
-    participant Executor as AgentExecutor
-    participant LLM
-    participant Tools
-    User->>Agent: processUserMessage()
-    Agent->>Executor: run ReAct loop
-    Executor->>LLM: Tool Selection & Context
-    LLM-->>Executor: Action Request
-    Executor->>Tools: Execute Tool
-    Tools-->>Executor: Result
-    Executor->>Agent: Return Response
 ```
-
-> **Key concept:** The RAG tool selector reduces prompt size from 110+ tools to ~15, saving approximately 8,000 tokens per LLM call.
-
-The execution flow is structured as follows:
-
-1. **User Input** → CLI/Chat/Voice/Channel
-2. → `CodeBuddyAgent.processUserMessage()`
-3. → `AgentExecutor` (ReAct loop)
-    1. RAG Tool Selection (~15 from 110+)
-    2. Context Injection (lessons, decisions, graph)
-    3. Middleware Before-Turn (cost, turn limit, reasoning)
-    4. LLM Call (multi-provider)
-    5. Tool Execution (parallel read / serial write)
-    6. Result Processing (masking, TTL, compaction)
-    7. Middleware After-Turn (auto-repair, metrics)
-    8. Loop or Return
+User Input → CLI/Chat/Voice/Channel
+  → CodeBuddyAgent.processUserMessage()
+    → AgentExecutor (ReAct loop)
+      1. RAG Tool Selection (~15 from 110+)
+      2. Context Injection (lessons, decisions, graph)
+      3. Middleware Before-Turn (cost, turn limit, reasoning)
+      4. LLM Call (multi-provider)
+      5. Tool Execution (parallel read / serial write)
+      6. Result Processing (masking, TTL, compaction)
+      7. Middleware After-Turn (auto-repair, metrics)
+      8. Loop or Return
+```
 
 ---
 

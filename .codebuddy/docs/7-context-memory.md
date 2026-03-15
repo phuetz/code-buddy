@@ -1,10 +1,10 @@
 # Context & Memory Management
 
-This section details the architecture of the Context and Memory management subsystems, which are responsible for maintaining state, project awareness, and historical continuity across LLM interactions. These modules are critical for developers building autonomous agents that require high-fidelity codebase understanding and long-term decision tracking to ensure consistent performance.
+This section details the architecture of the Context and Memory subsystems, which are responsible for maintaining state, managing token budgets, and persisting long-term knowledge across sessions. Developers working on agent reasoning, RAG implementations, or session persistence should review these modules to understand how data flows from raw input to optimized, long-term memory.
 
 ## Context Management (28 modules)
 
-Context management handles the active window of information provided to the LLM during a session. It utilizes specialized modules like `context-manager-v2.process()` to ensure that only relevant, compressed, and prioritized data is injected into the prompt, preventing token overflow while maintaining semantic integrity.
+The context management layer acts as the primary interface between the raw codebase and the LLM's input window. It handles retrieval, compression, and masking to ensure the model receives relevant, high-signal information while staying within token limits. This layer is critical for maintaining the "context window" efficiency required for large-scale repository analysis.
 
 | Module | Purpose |
 |--------|---------|
@@ -37,22 +37,22 @@ Context management handles the active window of information provided to the LLM 
 | `web-search-grounding` | Web Search Grounding |
 | `workspace-context` | Workspace Context Builder |
 
-> **Key concept:** The `context-manager-v2` utilizes `ImportanceScorer.calculate()` to rank tokens, effectively reducing context window usage by up to 40% without significant loss in task-specific performance.
+Once context is retrieved and compressed, it must be integrated into the agent's persistent state. This is handled by the Memory System, which manages the lifecycle of stored information using methods such as `SessionStore.convertChatEntryToMessage` to ensure data is correctly formatted before storage.
 
 ```mermaid
 graph TD
-    A[Input Source] --> B[Context Loader]
-    B --> C[Compression Engine]
-    C --> D[Context Manager]
-    D --> E[LLM Prompt]
-    D --> F[Token Counter]
+    A[Context Loader] --> B[Compression]
+    B --> C[Memory System]
+    C --> D[Session Store]
+    D --> E[Agent]
+    C --> F[Enhanced Memory]
 ```
-
-While context management focuses on the immediate session window, the memory system provides the persistence layer required for cross-session continuity and architectural decision tracking.
 
 ## Memory System (15 modules)
 
-The memory system implements a multi-tiered storage architecture, allowing agents to recall past decisions and coding styles. Components like `decision-memory.extract()` and `memory-consolidation.run()` ensure that transient session data is distilled into durable, retrievable knowledge, enabling the agent to evolve its behavior over time.
+The Memory System provides a multi-tiered storage architecture designed to handle both short-term session data and long-term architectural knowledge. It utilizes specialized modules to consolidate, search, and flush memory, ensuring the agent maintains continuity across restarts.
+
+> **Key concept:** The `EnhancedMemory` module utilizes a two-phase pipeline to consolidate session data, ensuring that critical architectural decisions are persisted via `EnhancedMemory.saveAll` while transient data is pruned to maintain performance.
 
 | Module | Purpose |
 |--------|---------|
@@ -72,7 +72,7 @@ The memory system implements a multi-tiered storage architecture, allowing agent
 | `semantic-memory-search` | OpenClaw-inspired 2-Step Memory Search System |
 | `subagent-memory` | Subagent Persistent Memory |
 
-To interact with these systems programmatically, developers should utilize the primary interface methods: `ContextManager.update()` for refreshing the active window, `MemoryConsolidation.flush()` to commit session state to disk, and `HybridSearch.query()` for retrieving relevant historical data.
+To maintain system integrity, the memory system relies on `EnhancedMemory.loadMemories` to hydrate the agent's state upon initialization. During operation, the system continuously evaluates the relevance of stored data using `EnhancedMemory.calculateImportance`, which determines whether specific memory blocks should be retained or archived.
 
 ---
 

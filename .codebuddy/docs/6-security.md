@@ -1,8 +1,8 @@
 # Security Architecture
 
-The security architecture implements a defense-in-depth strategy across 30 distinct modules, ensuring that all code generation and execution operations remain within strictly defined safety boundaries. This documentation is intended for core contributors and security auditors who need to understand how the system mitigates risks ranging from unauthorized shell access to server-side request forgery.
+The security architecture implements a defense-in-depth strategy across 30 distinct modules within `src/security/`. This framework is critical for maintaining system integrity during code generation, tool execution, and session management, ensuring that all operations adhere to strict safety policies before reaching the host environment.
 
-The following table details the core security modules located in `src/security/`, which serve as the foundation for the system's integrity and policy enforcement.
+The project has **30** security modules in `src/security/`:
 
 | Module | Purpose |
 |--------|---------|
@@ -37,23 +37,9 @@ The following table details the core security modules located in `src/security/`
 | `trust-folders` | Trust Folder Manager |
 | `write-policy` | WritePolicy — enforces diff-first writes at the tool-handler level. |
 
-These modules are orchestrated to provide a comprehensive security layer that intercepts and validates operations before they reach the host environment. The following diagram illustrates the primary flow of a secure operation request:
-
-```mermaid
-graph TD
-    A[User Request] --> B[GuardianAgent]
-    B --> C{Risk Assessment}
-    C -->|High Risk| D[Block/Request Approval]
-    C -->|Low Risk| E[Sandbox]
-    E --> F[Execution]
-    F --> G[AuditLogger]
-```
-
-> **Key concept:** The `GuardianAgent.review()` method utilizes a risk-scoring heuristic to evaluate operations, reducing the manual approval burden by automatically flagging only high-entropy or sensitive system calls before they reach the `Sandbox.execute()` lifecycle.
+These modules collectively enforce granular control over system resources and external interactions. The following features highlight the primary mechanisms used to mitigate common attack vectors and maintain a trusted execution environment.
 
 ## Security Features
-
-Beyond the modular structure, the system enforces specific runtime protections to maintain environment isolation and prevent malicious command execution. These features are invoked during the lifecycle of any tool execution or code generation task.
 
 - **AI Guardian Agent**: Automatic approval reviewer with risk scoring
 - **Sandbox Isolation**: Sandboxed execution environment
@@ -61,10 +47,24 @@ Beyond the modular structure, the system enforces specific runtime protections t
 - **Shell Command Validation**: Dangerous pattern detection
 - **Environment Filtering**: Sensitive variable stripping
 
-To ensure consistent enforcement, developers should utilize the `AuditLogger.log()` method for all security-sensitive events, ensuring that every decision made by the `GuardianAgent` or `SSRFGuard` is captured for post-execution analysis.
+```mermaid
+graph TD
+    A[User Request] --> B[GuardianAgent]
+    B --> C{Security Policy}
+    C -->|Approved| D[Sandbox]
+    C -->|Blocked| E[AuditLogger]
+    D --> F[ToolExecution]
+    F --> G[SessionStore]
+```
+
+> **Key concept:** The security architecture relies on `DMPairingManager.isBlocked` and `DMPairingManager.isApproved` to gate communication channels, ensuring that only verified entities can trigger sensitive operations within the `src/security/` domain.
+
+The system integrates security checks directly into the tool execution lifecycle. For instance, before any sensitive operation is performed, the system verifies sender authorization using `DMPairingManager.isBlocked` and `DMPairingManager.isApproved`. If a tool requires interaction with the host environment, such as `ScreenshotTool.capture`, the security layer validates the request against `DMPairingManager.requiresPairing` to ensure the session is authorized.
 
 ---
 
 **See also:** [Overview](./1-overview.md) · [Architecture](./2-architecture.md) · [Subsystems](./3-subsystems.md) · [Tool System](./5-tools.md)
 
 **Key source files:** `src/security/.ts`
+
+--- END ---
