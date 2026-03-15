@@ -521,9 +521,20 @@ describe('AgentSDK', () => {
 
 describe('PRSessionLinker', () => {
   let linker: PRSessionLinker;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     linker = new PRSessionLinker();
+    // Mock global.fetch to prevent flakiness from other tests polluting it
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    }) as unknown as typeof global.fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
   });
 
   describe('linkToPR', () => {

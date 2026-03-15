@@ -77,7 +77,7 @@ describe('Error Handling', () => {
     it('getErrorMessage should handle various inputs', () => {
       expect(getErrorMessage(new Error('test'))).toBe('test');
       expect(getErrorMessage('string error')).toBe('string error');
-      expect(getErrorMessage({ message: 'obj' })).toBe('[object Object]');
+      expect(getErrorMessage({ message: 'obj' })).toBe('obj');
     });
 
     it('isCodeBuddyError should identify instances', () => {

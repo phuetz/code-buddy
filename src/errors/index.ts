@@ -39,7 +39,15 @@ export function getErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error;
   }
-  return String(error);
+  if (error === null || error === undefined) {
+    return 'An unknown error occurred';
+  }
+  // Objects with a message property (e.g. { message: "..." })
+  if (typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
+    return (error as { message: string }).message;
+  }
+  const str = String(error);
+  return str === '[object Object]' ? 'An unknown error occurred' : str;
 }
 
 /**
