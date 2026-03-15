@@ -20,7 +20,25 @@ import { logger } from '../utils/logger.js';
 // Types
 // ============================================================================
 
-export type LLMCall = (systemPrompt: string, userPrompt: string) => Promise<string>;
+export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+
+/** LLM call with optional thinking level */
+export type LLMCall = (systemPrompt: string, userPrompt: string, thinkingLevel?: ThinkingLevel) => Promise<string>;
+
+/** Thinking strategy per enrichment task */
+const THINKING_STRATEGY: Record<string, ThinkingLevel> = {
+  '11-changelog.md': 'minimal',       // Mechanical — just format the log
+  '5-tools.md': 'minimal',            // Data extraction, no reasoning needed
+  '8-configuration.md': 'low',        // Describe configs
+  '9-api-reference.md': 'low',        // Describe endpoints
+  '10-development.md': 'low',         // Describe setup
+  '4-metrics.md': 'medium',           // Analyze metrics, suggest actions
+  '3-subsystems.md': 'medium',        // Describe clusters
+  '7-context-memory.md': 'medium',    // Explain strategies
+  '6-security.md': 'medium',          // Explain security layers
+  '1-overview.md': 'high',            // Narrate the full project story
+  '2-architecture.md': 'high',        // Explain architectural decisions
+};
 
 export interface EnrichOptions {
   /** Directory containing raw .md files */
@@ -29,6 +47,8 @@ export interface EnrichOptions {
   llmCall: LLMCall;
   /** Project root */
   cwd?: string;
+  /** Override thinking level for all sections */
+  thinkingLevel?: ThinkingLevel;
   /** Progress callback */
   onProgress?: (file: string, current: number, total: number) => void;
 }
@@ -118,7 +138,9 @@ export async function enrichDocs(options: EnrichOptions): Promise<EnrichResult> 
         `Output the full enriched markdown now. Remember: keep ALL tables/lists, add prose and one mermaid diagram.`,
       ].join('\n');
 
-      const enriched = await options.llmCall(ENRICHER_SYSTEM_PROMPT, prompt);
+      // Select thinking level: override > per-file strategy > default medium
+      const thinkingLevel = options.thinkingLevel ?? THINKING_STRATEGY[file] ?? 'medium';
+      const enriched = await options.llmCall(ENRICHER_SYSTEM_PROMPT, prompt, thinkingLevel);
       tokensUsed += Math.ceil((prompt.length + enriched.length) / 4);
 
       // Validate: enriched should be at least 50% of raw (LLM may compress large tables)

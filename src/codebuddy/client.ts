@@ -78,12 +78,16 @@ export interface SearchOptions {
   search_parameters?: SearchParameters;
 }
 
+export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+
 export interface ChatOptions {
   model?: string;
   temperature?: number;
   searchOptions?: SearchOptions;
   /** Optional request timeout override (ms) for Gemini native API calls */
   timeoutMs?: number;
+  /** Gemini 3.x thinkingLevel — controls reasoning depth. Never mix with budget_tokens. */
+  thinkingLevel?: GeminiThinkingLevel;
   /** Internal: retry counter for Gemini malformed function-call recovery */
   geminiMalformedRetryCount?: number;
   /** Internal: guard against infinite model fallback loops on Gemini */
@@ -564,12 +568,23 @@ export class CodeBuddyClient {
     }
 
     // Build request body
+    // Build generationConfig with optional thinkingConfig for Gemini 3.x
+    const generationConfig: Record<string, unknown> = {
+      temperature: opts?.temperature ?? 0.7,
+      maxOutputTokens: this.defaultMaxTokens,
+    };
+
+    // Add thinkingLevel for Gemini 3.x models (never mix with budget_tokens)
+    if (opts?.thinkingLevel) {
+      generationConfig.thinkingConfig = {
+        thinkingLevel: opts.thinkingLevel,
+      };
+      logger.debug('Gemini thinkingLevel set', { level: opts.thinkingLevel });
+    }
+
     const body: Record<string, unknown> = {
       contents: merged,
-      generationConfig: {
-        temperature: opts?.temperature ?? 0.7,
-        maxOutputTokens: this.defaultMaxTokens,
-      },
+      generationConfig,
     };
 
     if (systemInstruction) {

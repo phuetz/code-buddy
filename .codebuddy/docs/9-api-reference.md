@@ -1,23 +1,10 @@
 # CLI & API Reference
 
-This section provides a comprehensive technical reference for the system's command-line interface (CLI) slash commands and HTTP API endpoints. It is intended for developers integrating external services, building custom agents, or extending the core command-line functionality.
-
-The system architecture relies on a modular routing and command registration pattern to ensure scalability. Below is the high-level data flow for incoming requests:
-
-```mermaid
-graph TD
-    A[Client Request] --> B{Router}
-    B -->|Slash Command| C[Slash Command Module]
-    B -->|HTTP Request| D[API Controller]
-    C --> E[Command Execution]
-    D --> F[Service Layer]
-    E --> G[(System State)]
-    F --> G
-```
+This section provides a comprehensive index of the system's interface layer, covering both the slash command architecture and the HTTP API endpoints. Developers should consult this reference when extending command functionality or integrating external services with the core platform.
 
 ## Slash Commands
 
-The CLI utilizes a modular slash command architecture, where each file in the `/commands` directory maps to specific user-facing functionality. These commands are registered via the `CommandRegistry.register()` method to ensure type safety and consistent execution context.
+The slash command system serves as the primary interface for user-driven interactions within the CLI environment. These commands are modularized to ensure that specific functional domains—such as documentation generation or prompt management—remain decoupled from the core execution loop.
 
 | File | Purpose |
 |------|---------|
@@ -27,13 +14,13 @@ The CLI utilizes a modular slash command architecture, where each file in the `/
 | `/prompts` | /prompt Slash Commands |
 | `/types` | Slash Command Types |
 
-> **Key concept:** The `/docs` command leverages the `DocumentationGenerator.generate()` method to parse existing codebase annotations, reducing manual documentation overhead by automating the extraction of metadata and interface definitions.
+> **Key concept:** The slash command architecture utilizes a centralized registry pattern. When a user invokes a command, the system routes the request through the `/index` module, which validates the command signature against the definitions in `/types` before execution.
 
-Following the command registration, the system exposes a RESTful API layer to facilitate inter-agent communication and external service integration.
+Having established the command-line interface structure, we now turn to the backend communication layer, which handles external requests and service-to-service orchestration.
 
 ## HTTP API Routes
 
-The API layer is structured to support both internal state management and external A2A (Agent-to-Agent) communication protocols. Developers should interact with these routes using the standard `ApiClient.request()` method to ensure proper authentication headers and error handling are applied.
+The HTTP API layer exposes the system's internal capabilities to external clients and agents. This layer is organized by functional domain, with each route file mapping to specific business logic, such as memory retrieval, tool discovery, or task execution.
 
 | Route File | Endpoints |
 |------------|----------|
@@ -48,7 +35,19 @@ The API layer is structured to support both internal state management and extern
 | `tools.ts` | GET /, GET /categories |
 | `workflow-builder.ts` | N/A |
 
-The `a2a-protocol.ts` file is particularly critical for distributed deployments, as it handles the discovery and task delegation logic required for multi-agent orchestration.
+To better understand how these routes interact with the underlying system, consider the following data flow for an incoming API request:
+
+```mermaid
+graph TD
+    Client[External Client] --> Router[API Router]
+    Router --> Auth{Auth Middleware}
+    Auth -->|Authorized| Handler[Route Handler]
+    Handler --> Logic[Business Logic]
+    Logic --> DB[(Database/Memory)]
+    Logic --> Response[HTTP Response]
+```
+
+When implementing new endpoints, developers should ensure that route handlers utilize the appropriate controller methods, such as `MetricsController.getSnapshot()` or `MemoryController.postEntry()`, to maintain consistency across the API surface.
 
 ---
 

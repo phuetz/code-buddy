@@ -1,64 +1,67 @@
 # Project Knowledge
 
 > Auto-generated project understanding from 10 documentation sections.
-> Last updated: 2026-03-15T08:07:01.963Z
+> Last updated: 2026-03-15T09:24:31.932Z
 
 # @phuetz/code-buddy v0.5.0
 
-The `@phuetz/code-buddy` project is a high-performance, terminal-based AI coding agent designed for complex software engineering tasks. This documentation provides an overview of the system architecture, core capabilities, and technical stack, serving as the primary reference for developers integrating with or extending the agent's functionality.
+The `@phuetz/code-buddy` project provides a terminal-based AI coding agent designed for multi-provider LLM integration and autonomous software development. This documentation serves as the primary reference for developers and contributors looking to understand the system architecture, module dependencies, and core capabilities of the v0.5.0 release.
 
-## System Overview
+> Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM S
 # Development Guide
 
-This guide provides the foundational information required to set up, build, and extend the `grok-cli` project. It is intended for new contributors and engineers looking to integrate custom tools or modify core agent behaviors.
+This guide provides the essential workflows, project structure, and coding standards required to contribute to the `grok-cli` repository. Whether you are adding new tool integrations or modifying core agent logic, following these conventions ensures consistency, maintainability, and compatibility with the existing build pipeline.
 
 ## Getting Started
 # Recent Changes
 
-This section provides a chronological audit trail of the project's evolution, tracking the transition from raw auto-generated outputs to professional DeepWiki-standard documentation. Developers and stakeholders should review this log to understand the trajectory of recent security hardening, subsystem wiring, and documentation parity efforts.
+This section provides a chronological audit of the repository's evolution, tracking the transition from raw auto-generated outputs to the current DeepWiki-standard documentation framework. Developers and project maintainers should review these logs to understand the architectural shifts, security hardening efforts, and the integration of autonomous agentic systems.
 
-The following log details the last 30 commits, highlighting the shift toward LLM-enriched documentation and the resolution of critical s
+The following list details the last 30 commits, highlighting the transition toward a fully dynamic, LLM-enriched 
 # Architecture
 
-The project follows a modular, layered architecture designed to decouple the core reasoning engine from infrastructure, UI, and external tool integrations. This structure ensures that the agent orchestrator can scale across diverse environments while maintaining strict security and context management boundaries. This documentation is intended for core contributors and system architects who need to understand the dependency graph and execution lifecycle of the agent.
+The project follows a layered architecture with a central agent orchestrator coordinating all interactions between user interfaces, LLM providers, tools, and infrastructure services. This design ensures a clean separation of concerns, allowing developers to modify specific components—such as tool integrations or middleware logic—without destabilizing the core execution engine.
 
-## System La
+## System Layers
 # Code Quality Metrics
 
-This section provides a quantitative analysis of the codebase, focusing on dead code identification, module coupling, and high-impact refactoring targets. These metrics are intended for lead developers and architects to prioritize technical debt reduction and improve system maintainability.
+This document provides a comprehensive overview of the system's technical debt, structural coupling, and dead code analysis. These metrics are essential for maintainers and architects to identify high-risk areas of the codebase, prioritize refactoring efforts, and ensure long-term system maintainability.
 
 ```mermaid
 graph TD
-    A[Codebase Analysis] --> B[Dead Code Detection]
-    A --> C[Coupling Analysis]
-    A --> D[Refactoring Candidates]
-    B --> E[Static Analysis Report]
-    C --
+    A[Source Code] --> B{Static Analysis}
+    B --> C[Dead Code Detection]
+    B --> D[Coupling Analysis]
+    C --> E[Refactoring Report]
+    D --> E
 # Tool System
 
-The tool system implements a dual-registry architecture designed to manage a high-density library of 117 distinct functional modules. This documentation is intended for developers and system architects who need to understand how the system dynamically selects, registers, and executes tools to maintain optimal performance and token efficiency.
+The tool system implements a dual-registry architecture designed to manage a high-density library of 117 distinct functional modules. This documentation is intended for developers and system architects who need to understand how tools are categorized, indexed, and dynamically retrieved to maintain optimal LLM performance.
 
 ```mermaid
 graph TD
     A[User Query] --> B[Embedding Engine]
-    B --> C{RAG Selector}
+    B --> C{Semantic Search}
     C --> D[Tool Registry]
-    D --> E[Top-K Filter
+    D --> E[Top-K Selection]
+    E --> F[P
 # Security Architecture
 
-The security architecture implements a defense-in-depth strategy across 30 specialized modules located in `src/security/`. This documentation provides a comprehensive overview of the security primitives, validation layers, and isolation mechanisms required to maintain system integrity during automated code generation and execution.
+The security architecture implements a defense-in-depth strategy across 30 distinct modules, ensuring that all code generation and execution operations remain within strictly defined safety boundaries. This documentation is intended for core contributors and security auditors who need to understand how the system mitigates risks ranging from unauthorized shell access to server-side request forgery.
 
-This guide is intended for core contributors and security auditors who need to understand how the system mitigates risks associated with AI-
+The following table details the core security modules located in `src/se
 # Context & Memory Management
 
-This section details the orchestration of the system's state, covering both transient conversational context and long-term persistent memory. These modules are critical for maintaining coherence across extended development sessions and ensuring the LLM operates with a high-fidelity understanding of the codebase. Developers working on retrieval-augmented generation (RAG) or state persistence should familiarize themselves with these components to avoid redundant cont
+This section details the architecture of the Context and Memory management subsystems, which are responsible for maintaining state, project awareness, and historical continuity across LLM interactions. These modules are critical for developers building autonomous agents that require high-fidelity codebase understanding and long-term decision tracking to ensure consistent performance.
+
+## Context Management (28 modules)
 # Configuration System
 
-The configuration system implements a multi-layered hierarchy designed to balance global defaults with granular, project-specific overrides. This documentation is intended for developers and system administrators who need to customize environment behavior, manage API credentials, or tune model parameters for specific workflows.
+This section details the multi-tier configuration architecture that governs the application's behavior, from default settings to runtime overrides. Understanding this hierarchy is critical for developers and power users who need to customize environment-specific behaviors or troubleshoot configuration conflicts.
 
 ## Configuration Hierarchy
 # CLI & API Reference
 
-This section provides a comprehensive technical reference for the system's command-line interface (CLI) slash commands and HTTP API endpoints. It is intended for developers integrating external services, building custom agents, or extending the core command-line functionality.
+This section provides a comprehensive index of the system's interface layer, covering both the slash command architecture and the HTTP API endpoints. Developers should consult this reference when extending command functionality or integrating external services with the core platform.
 
-The system architecture relies on a modular routing and command registration pattern to ensure scalability. Below is the high-level data flow for incoming requests:
+## Slash Commands

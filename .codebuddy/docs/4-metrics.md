@@ -1,20 +1,20 @@
 # Code Quality Metrics
 
-This section provides a quantitative analysis of the codebase, focusing on dead code identification, module coupling, and high-impact refactoring targets. These metrics are intended for lead developers and architects to prioritize technical debt reduction and improve system maintainability.
+This document provides a comprehensive overview of the system's technical debt, structural coupling, and dead code analysis. These metrics are essential for maintainers and architects to identify high-risk areas of the codebase, prioritize refactoring efforts, and ensure long-term system maintainability.
 
 ```mermaid
 graph TD
-    A[Codebase Analysis] --> B[Dead Code Detection]
-    A --> C[Coupling Analysis]
-    A --> D[Refactoring Candidates]
-    B --> E[Static Analysis Report]
-    C --> F[Dependency Graph]
-    D --> G[PageRank Prioritization]
+    A[Source Code] --> B{Static Analysis}
+    B --> C[Dead Code Detection]
+    B --> D[Coupling Analysis]
+    C --> E[Refactoring Report]
+    D --> E
+    E --> F[Optimization Strategy]
 ```
 
 ## Dead Code Analysis
 
-The dead code analysis identifies unreachable or unused code paths within the repository. By filtering out exported API methods and dynamic dispatch targets, we ensure that the following list represents genuine candidates for removal, thereby reducing the binary size and cognitive load for maintainers.
+The dead code analysis identifies unreachable or unused code paths that increase binary size and cognitive load for developers. The following table summarizes the confidence levels of identified dead code candidates, where "High" indicates a high probability of safe removal.
 
 | Confidence | Count |
 |---|---|
@@ -43,11 +43,11 @@ The dead code analysis identifies unreachable or unused code paths within the re
 - `ACPRouter.reject` (high confidence)
 - `ACPRouter.request` (high confidence)
 
-Following the removal of dead code, developers should examine the structural integrity of the remaining modules to ensure that inter-module dependencies remain within acceptable limits.
+While dead code removal reduces the overall footprint, structural integrity is equally dependent on how modules interact with one another.
 
 ## Module Coupling
 
-Module coupling metrics highlight the degree of interdependence between different parts of the system. High coupling often indicates a violation of the Single Responsibility Principle and can lead to fragile code where changes in one module trigger unexpected regressions in others.
+Module coupling measures the degree of interdependence between software modules. High coupling, particularly in utility modules, can lead to "ripple effects" where changes in one area necessitate broad, unintended modifications across the system.
 
 | Module A | Module B | Calls | Imports | Total |
 |---|---|---|---|---|
@@ -67,27 +67,27 @@ Module coupling metrics highlight the degree of interdependence between differen
 | src/commands/handlers/core-handlers | src/utils/autonomy-manager | 8 | 0 | 8 |
 | src/context/pruning/index | src/context/pruning/ttl-manager | 8 | 0 | 8 |
 
+> **Key concept:** The `src/utils/validators` module currently acts as a central dependency hub. High fan-in for this module suggests that any breaking change to its API will trigger a system-wide recompilation or test failure, making it a prime candidate for interface abstraction.
+
 Most dependent module: `src/utils/validators`
 Most depended-upon: `src/utils/validators`
 
-> **Key concept:** The `src/utils/validators` module acts as a central dependency hub. Because it is the most depended-upon component, any breaking change here will have a system-wide impact, necessitating strict adherence to backward compatibility.
+To mitigate these coupling risks, we identify specific methods that exhibit high PageRank scores, indicating they are critical nodes in the system's call graph.
 
 ## Refactoring Suggestions
 
-To mitigate the risks associated with high coupling, we utilize PageRank analysis to identify "hotspots"—methods that are frequently invoked across the codebase. Refactoring these into interfaces or dedicated services can significantly improve testability and modularity.
+The following methods have been identified as high-priority candidates for refactoring. By extracting these into interfaces or moving them to more specialized modules, we can reduce the complexity of the call graph and improve testability.
 
-- **getErrorMessage**: Called by 155 functions — high coupling, consider interface extraction (PageRank: 1.000, 155 callers)
-- **isExpired**: Called by 10 functions — high coupling, consider interface extraction (PageRank: 0.630, 10 callers)
-- **send**: Called by 41 functions — high coupling, consider interface extraction (PageRank: 0.547, 41 callers)
-- **SubagentManager.spawn**: Called by 96 functions — high coupling, consider interface extraction (PageRank: 0.444, 96 callers)
-- **generateId**: Called by 17 functions — high coupling, consider interface extraction (PageRank: 0.429, 17 callers)
-- **createId**: Called by 27 functions — high coupling, consider interface extraction (PageRank: 0.427, 27 callers)
-- **DesktopAutomationManager.ensureProvider**: Called by 30 functions — high coupling, consider interface extraction (PageRank: 0.363, 30 callers)
-- **tokenize**: Called by 20 functions — high coupling, consider interface extraction (PageRank: 0.345, 20 callers)
-- **BrowserManager.getCurrentPage**: Called by 35 functions — high coupling, consider interface extraction (PageRank: 0.336, 35 callers)
-- **formatSize**: Called by 20 functions — high coupling, consider interface extraction (PageRank: 0.301, 20 callers)
-
-When refactoring, developers should prioritize methods with high PageRank scores, such as `SubagentManager.spawn()`, to maximize the architectural benefit of their efforts.
+- `getErrorMessage()`: Called by 155 functions — high coupling, consider interface extraction (PageRank: 1.000, 155 callers)
+- `isExpired()`: Called by 10 functions — high coupling, consider interface extraction (PageRank: 0.630, 10 callers)
+- `send()`: Called by 41 functions — high coupling, consider interface extraction (PageRank: 0.547, 41 callers)
+- `SubagentManager.spawn()`: Called by 96 functions — high coupling, consider interface extraction (PageRank: 0.444, 96 callers)
+- `generateId()`: Called by 17 functions — high coupling, consider interface extraction (PageRank: 0.429, 17 callers)
+- `createId()`: Called by 27 functions — high coupling, consider interface extraction (PageRank: 0.427, 27 callers)
+- `DesktopAutomationManager.ensureProvider()`: Called by 30 functions — high coupling, consider interface extraction (PageRank: 0.363, 30 callers)
+- `tokenize()`: Called by 20 functions — high coupling, consider interface extraction (PageRank: 0.345, 20 callers)
+- `BrowserManager.getCurrentPage()`: Called by 35 functions — high coupling, consider interface extraction (PageRank: 0.336, 35 callers)
+- `formatSize()`: Called by 20 functions — high coupling, consider interface extraction (PageRank: 0.301, 20 callers)
 
 ---
 

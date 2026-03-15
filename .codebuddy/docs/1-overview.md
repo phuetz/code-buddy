@@ -1,27 +1,14 @@
 # @phuetz/code-buddy v0.5.0
 
-The `@phuetz/code-buddy` project is a high-performance, terminal-based AI coding agent designed for complex software engineering tasks. This documentation provides an overview of the system architecture, core capabilities, and technical stack, serving as the primary reference for developers integrating with or extending the agent's functionality.
+The `@phuetz/code-buddy` project provides a terminal-based AI coding agent designed for multi-provider LLM integration and autonomous software development. This documentation serves as the primary reference for developers and contributors looking to understand the system architecture, module dependencies, and core capabilities of the v0.5.0 release.
 
-## System Overview
+> Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.
 
-`@phuetz/code-buddy` is a TypeScript/Node.js application that leverages a modular architecture to provide multi-provider LLM support, including Grok, Claude, ChatGPT, Gemini, Ollama, and LM Studio. The system is built to handle sophisticated reasoning tasks, such as automated program repair and code graph analysis, through a robust background daemon and a comprehensive tool-use framework.
-
-```mermaid
-graph TD
-    A[CLI / User Input] --> B[src/server/index]
-    B --> C[src/agent/codebuddy-agent]
-    C --> D[src/codebuddy/client]
-    C --> E[src/agent/repo-profiler]
-    D --> F[LLM Providers]
-    C --> G[src/codebuddy/tools]
-    G --> H[Tool Execution]
-```
-
-> **Key concept:** The `src/codebuddy/client` acts as a unified abstraction layer, enabling automatic failover between providers. This ensures that if a primary LLM API experiences latency or downtime, the agent seamlessly routes requests to a secondary provider without interrupting the user session.
+@phuetz/code-buddy is a terminal-based AI coding agent built in TypeScript/Node.js. It supports multiple LLM providers (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio) with automatic failover. The codebase contains 1076 source modules and 905 classes.
 
 ## Key Capabilities
 
-The agent is designed for extensibility, supporting a wide array of operational modes ranging from voice-activated interaction to autonomous multi-agent workflows.
+The system's versatility stems from its modular design, which separates communication channels, execution environments, and reasoning engines to ensure high availability and extensibility.
 
 - Multi-channel messaging (Telegram, Discord, Slack, WhatsApp, etc.)
 - Background daemon with health monitoring
@@ -34,9 +21,22 @@ The agent is designed for extensibility, supporting a wide array of operational 
 - Workflow engine with DAG execution
 - Cloud deployment (Fly.io, Railway, Render, GCP)
 
+```mermaid
+graph TD
+    User[CLI/User] --> Agent[CodeBuddyAgent]
+    Agent --> Client[LLM Client]
+    Client --> Provider[LLM Provider]
+    Agent --> Tools[Tool System]
+    Tools --> Sandbox[Execution Sandbox]
+    Agent --> Memory[Session Store]
+    Agent --> Channels[Messaging Channels]
+```
+
+> **Key concept:** The agent utilizes a Tree-of-Thought (ToT) reasoning engine. By invoking `CodeBuddyAgent.reason()`, the system explores multiple potential code paths before committing to an execution strategy, significantly reducing hallucination rates in complex refactoring tasks.
+
 ## Project Statistics
 
-The following metrics reflect the scale of the codebase and the complexity of the dependency graph maintained within the repository.
+Understanding the codebase scale is critical for maintaining the system's stability, particularly given the high density of inter-module relationships and the complexity of the dependency graph.
 
 | Metric | Value |
 |--------|-------|
@@ -49,7 +49,9 @@ The following metrics reflect the scale of the codebase and the complexity of th
 
 ## Core Modules (by architectural importance)
 
-The core logic is organized by PageRank, identifying the most critical modules that serve as the foundation for the agent's orchestration and reasoning capabilities. Developers should exercise caution when modifying high-rank modules, as changes here propagate across the entire system.
+The architecture relies on a PageRank-weighted dependency graph to ensure that critical orchestration logic remains decoupled from specific implementation details. Developers should exercise caution when modifying modules with high PageRank scores, as these are central to the system's stability.
+
+Ranked by PageRank — higher rank means more modules depend on this one:
 
 | Module | PageRank | Importers | Description |
 |--------|----------|-----------|-------------|
@@ -74,18 +76,18 @@ The core logic is organized by PageRank, identifying the most critical modules t
 | `src/agent/thinking/extended-thinking` | 0.005 | 1 | Core agent system |
 | `src/knowledge/path` | 0.005 | 1 | Code analysis and knowledge graph |
 
-> **Key concept:** The `src/codebuddy/tools` module implements a RAG-based selector that dynamically filters available tools based on the current context, reducing prompt size from 110+ tools to ~15, saving approximately 8,000 tokens per LLM call.
+> **Key concept:** The `Client.request()` method within `src/codebuddy/client` serves as the primary gateway for all LLM interactions. It handles automatic failover between providers; if a primary provider (e.g., Claude) returns a 5xx error, the client automatically retries via the secondary provider defined in the configuration.
 
 ## Entry Points
 
-The system provides two primary entry points for interaction, depending on whether the user is running the agent as a persistent server or a transient CLI utility.
+Execution begins at distinct entry points depending on whether the agent is running as a background daemon or an interactive CLI session. These entry points initialize the dependency injection container and load the necessary environment configurations.
 
 - **`src/server/index`** — HTTP/WebSocket server (Express)
 - **`src/index`** — CLI entry point (Commander)
 
 ## Technology Stack
 
-The project utilizes a modern TypeScript stack, prioritizing type safety and performance through libraries like `zod` for validation and `better-sqlite3` for local state management.
+The stack leverages modern TypeScript ecosystem tools to ensure type safety, high-performance I/O, and seamless integration with existing AI protocols. The use of `zod` for schema validation ensures that data flowing between the agent and the LLM remains consistent.
 
 | Category | Technologies |
 |----------|-------------|
@@ -100,7 +102,7 @@ The project utilizes a modern TypeScript stack, prioritizing type safety and per
 | MCP | @modelcontextprotocol/sdk |
 | Testing | vitest |
 
-The integration of `src/codebuddy/client.ts` ensures that all LLM interactions are standardized, while `src/agent/codebuddy-agent.ts` manages the lifecycle of the agent's reasoning processes.
+---
 
 **See also:** [Architecture](./2-architecture.md) · [Subsystems](./3-subsystems.md) · [Tool System](./5-tools.md) · [Security](./6-security.md)
 

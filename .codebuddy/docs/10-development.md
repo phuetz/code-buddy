@@ -1,10 +1,10 @@
 # Development Guide
 
-This guide provides the foundational information required to set up, build, and extend the `grok-cli` project. It is intended for new contributors and engineers looking to integrate custom tools or modify core agent behaviors.
+This guide provides the essential workflows, project structure, and coding standards required to contribute to the `grok-cli` repository. Whether you are adding new tool integrations or modifying core agent logic, following these conventions ensures consistency, maintainability, and compatibility with the existing build pipeline.
 
 ## Getting Started
 
-To begin development, ensure you have [Bun](https://bun.sh/) installed, as it is the primary runtime for the development workflow. Clone the repository and initialize the environment using the following commands:
+To begin development, clone the repository and install the necessary dependencies. The project supports both Bun and Node.js environments, though Bun is recommended for faster development cycles.
 
 ```bash
 git clone <repo-url>
@@ -16,7 +16,7 @@ npm run dev:node     # Development mode (tsx/Node.js)
 
 ## Build & Development Commands
 
-The project utilizes a comprehensive suite of NPM scripts to manage the lifecycle of the application, from linting to production builds.
+The project utilizes a comprehensive set of npm scripts to manage the lifecycle of the application, from compilation to testing and linting. Use the following table as a reference for standard development operations.
 
 | Command | Description |
 |---------|-------------|
@@ -41,22 +41,11 @@ The project utilizes a comprehensive suite of NPM scripts to manage the lifecycl
 | `npm run validate` | `npm run lint && npm run typecheck && npm test` |
 | `npm run install:bun` | `bun install` |
 
+Once the environment is configured, it is helpful to understand the high-level organization of the codebase to locate specific modules.
+
 ## Project Structure
 
-The codebase is organized into modular directories, separating core agent logic from infrastructure and integration layers. The following diagram illustrates the high-level relationship between the core entry point and the primary subsystems.
-
-```mermaid
-graph TD
-    A[src/index.ts] --> B[src/agent]
-    A --> C[src/tools]
-    A --> D[src/channels]
-    B --> E[src/inference]
-    B --> F[src/memory]
-    C --> G[src/tools/registry]
-    D --> H[src/plugins]
-```
-
-Below is the directory breakdown of the `src/` folder:
+The `src/` directory is organized by domain, separating core agent logic from infrastructure, UI, and external integrations. The following tree outlines the primary directories and their responsibilities.
 
 ```
 src/
@@ -185,15 +174,31 @@ src/
 └── index.ts            # Entry point
 ```
 
+To visualize how these components interact, consider the following data flow diagram representing the core execution path from CLI input to tool execution.
+
+```mermaid
+graph TD
+    CLI[CLI Input] --> Middleware[Middleware Pipeline]
+    Middleware --> Agent[Agent Core]
+    Agent --> Tools[Tool Registry]
+    Tools --> Sandbox[Execution Sandbox]
+    Sandbox --> Output[Renderers]
+    Agent --> Memory[Memory/Persistence]
+```
+
+> **Key concept:** The `Agent` core acts as the central orchestrator, delegating tasks to the `Tool Registry` and managing state via `Memory` and `Middleware` to ensure consistent execution across different modes.
+
 ## Coding Conventions
 
-To maintain code quality and type safety, the project enforces strict TypeScript configurations. All modules must be written as ESM (`"type": "module"`), and semicolons are required for all statements.
+Adherence to strict coding standards is enforced to maintain code quality across the repository. All contributors must follow these guidelines:
 
-> **Key concept:** The project uses `tsc` for static analysis and `vitest` for unit testing. Developers should run `npm run validate` before submitting any pull requests to ensure the codebase remains in a deployable state.
+*   **TypeScript strict mode:** Enabled to prevent runtime type errors.
+*   **Semicolons:** Required for all statements.
+*   **ESM modules:** The project uses `"type": "module"` for native ESM support.
 
 ## Testing
 
-Testing is handled via **Vitest** with `happy-dom` for DOM-related simulations. Tests are either co-located with their source files (e.g., `src/agent/core.test.ts`) or stored in a dedicated `tests/` directory.
+The testing suite is built on **Vitest** with `happy-dom` to simulate browser environments where necessary. Tests should be co-located with their source files (e.g., `src/agent/core.test.ts`) or placed in the `tests/` directory for integration suites.
 
 *   **Run all tests:** `npm test`
 *   **Development mode:** `npm run test:watch`
@@ -202,11 +207,11 @@ Testing is handled via **Vitest** with `happy-dom` for DOM-related simulations. 
 
 ## Extension Points
 
-The system is designed for extensibility, allowing developers to inject new capabilities through the registry pattern.
+The system is designed to be modular, allowing for the easy addition of new capabilities. When extending the system, ensure you register your new components in the appropriate registry files to make them discoverable by the core agent.
 
-*   **Tools:** Add new implementations in `src/tools/` and register them in `src/tools/registry/`. Ensure metadata is updated in `src/tools/metadata.ts`.
-*   **Channels:** New messaging integrations should be added to `src/channels/`.
-*   **Plugins:** Extend core functionality by adding modules to `src/plugins/`.
+*   **Tools:** Add new implementations in `src/tools/`, register them in `src/tools/registry/`, and define metadata in `src/tools/metadata.ts`.
+*   **Channels:** Add new messaging integrations in `src/channels/`.
+*   **Plugins:** Add new plugins in `src/plugins/`.
 
 ---
 

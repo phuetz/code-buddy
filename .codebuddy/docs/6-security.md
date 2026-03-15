@@ -1,22 +1,8 @@
 # Security Architecture
 
-The security architecture implements a defense-in-depth strategy across 30 specialized modules located in `src/security/`. This documentation provides a comprehensive overview of the security primitives, validation layers, and isolation mechanisms required to maintain system integrity during automated code generation and execution.
+The security architecture implements a defense-in-depth strategy across 30 distinct modules, ensuring that all code generation and execution operations remain within strictly defined safety boundaries. This documentation is intended for core contributors and security auditors who need to understand how the system mitigates risks ranging from unauthorized shell access to server-side request forgery.
 
-This guide is intended for core contributors and security auditors who need to understand how the system mitigates risks associated with AI-driven tool execution and filesystem modifications.
-
-```mermaid
-graph TD
-    A[Input Request] --> B{Security Modules}
-    B --> C[Guardian Agent]
-    B --> D[Sandbox]
-    B --> E[Policy Enforcement]
-    C --> F[Risk Scoring]
-    D --> G[Isolated Execution]
-    E --> H[Tool/Shell Permissions]
-    F & G & H --> I[Final Execution]
-```
-
-The following table outlines the core modules within the `src/security/` directory, each serving a specific role in the system's threat mitigation strategy.
+The following table details the core security modules located in `src/security/`, which serve as the foundation for the system's integrity and policy enforcement.
 
 | Module | Purpose |
 |--------|---------|
@@ -51,19 +37,31 @@ The following table outlines the core modules within the `src/security/` directo
 | `trust-folders` | Trust Folder Manager |
 | `write-policy` | WritePolicy — enforces diff-first writes at the tool-handler level. |
 
+These modules are orchestrated to provide a comprehensive security layer that intercepts and validates operations before they reach the host environment. The following diagram illustrates the primary flow of a secure operation request:
+
+```mermaid
+graph TD
+    A[User Request] --> B[GuardianAgent]
+    B --> C{Risk Assessment}
+    C -->|High Risk| D[Block/Request Approval]
+    C -->|Low Risk| E[Sandbox]
+    E --> F[Execution]
+    F --> G[AuditLogger]
+```
+
+> **Key concept:** The `GuardianAgent.review()` method utilizes a risk-scoring heuristic to evaluate operations, reducing the manual approval burden by automatically flagging only high-entropy or sensitive system calls before they reach the `Sandbox.execute()` lifecycle.
+
 ## Security Features
 
-The system leverages several high-level security features to ensure that AI-generated operations remain within defined safety boundaries. These features are invoked during the lifecycle of a tool call, specifically through `GuardianAgent.review()` and `Sandbox.execute()`.
+Beyond the modular structure, the system enforces specific runtime protections to maintain environment isolation and prevent malicious command execution. These features are invoked during the lifecycle of any tool execution or code generation task.
 
-> **Key concept:** The `GuardianAgent` utilizes a risk-scoring heuristic to intercept high-stakes operations before they reach the execution layer, effectively reducing the attack surface by filtering out non-compliant shell commands and unauthorized file access attempts.
+- **AI Guardian Agent**: Automatic approval reviewer with risk scoring
+- **Sandbox Isolation**: Sandboxed execution environment
+- **SSRF Protection**: Blocks requests to private IP ranges
+- **Shell Command Validation**: Dangerous pattern detection
+- **Environment Filtering**: Sensitive variable stripping
 
-*   **AI Guardian Agent**: Automatic approval reviewer with risk scoring
-*   **Sandbox Isolation**: Sandboxed execution environment
-*   **SSRF Protection**: Blocks requests to private IP ranges
-*   **Shell Command Validation**: Dangerous pattern detection
-*   **Environment Filtering**: Sensitive variable stripping
-
-Beyond these high-level features, the system relies on granular policy enforcement to manage how tools interact with the host environment. Developers should utilize `WritePolicy.enforce()` to ensure that all filesystem modifications adhere to the required diff-first safety protocols.
+To ensure consistent enforcement, developers should utilize the `AuditLogger.log()` method for all security-sensitive events, ensuring that every decision made by the `GuardianAgent` or `SSRFGuard` is captured for post-execution analysis.
 
 ---
 

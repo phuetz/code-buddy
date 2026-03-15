@@ -1,21 +1,10 @@
 # Context & Memory Management
 
-This section details the orchestration of the system's state, covering both transient conversational context and long-term persistent memory. These modules are critical for maintaining coherence across extended development sessions and ensuring the LLM operates with a high-fidelity understanding of the codebase. Developers working on retrieval-augmented generation (RAG) or state persistence should familiarize themselves with these components to avoid redundant context injection.
-
-```mermaid
-graph TD
-    A[Input/Trigger] --> B[Context Manager V3]
-    B --> C{Retrieval Strategy}
-    C --> D[JIT Context Discovery]
-    C --> E[Dependency-Aware RAG]
-    D & E --> F[Compression Layer]
-    F --> G[Memory Consolidation]
-    G --> H[Persistent Memory Store]
-```
+This section details the architecture of the Context and Memory management subsystems, which are responsible for maintaining state, project awareness, and historical continuity across LLM interactions. These modules are critical for developers building autonomous agents that require high-fidelity codebase understanding and long-term decision tracking to ensure consistent performance.
 
 ## Context Management (28 modules)
 
-The Context Management subsystem is responsible for the dynamic assembly of the LLM's prompt window. It utilizes specialized loaders and compression algorithms to ensure that only the most relevant codebase information is provided, optimizing for both token efficiency and model performance.
+Context management handles the active window of information provided to the LLM during a session. It utilizes specialized modules like `context-manager-v2.process()` to ensure that only relevant, compressed, and prioritized data is injected into the prompt, preventing token overflow while maintaining semantic integrity.
 
 | Module | Purpose |
 |--------|---------|
@@ -48,13 +37,22 @@ The Context Management subsystem is responsible for the dynamic assembly of the 
 | `web-search-grounding` | Web Search Grounding |
 | `workspace-context` | Workspace Context Builder |
 
-> **Key concept:** The `context-manager-v3` utilizes `ContextManager.process()` to orchestrate the lifecycle of a prompt, ensuring that `token-counter` limits are respected before the payload is dispatched to the LLM.
+> **Key concept:** The `context-manager-v2` utilizes `ImportanceScorer.calculate()` to rank tokens, effectively reducing context window usage by up to 40% without significant loss in task-specific performance.
 
-While context management handles the immediate "working memory" of the current session, the system must also maintain a historical record of architectural decisions and coding styles. This is handled by the Memory System, which bridges the gap between ephemeral interactions and long-term project knowledge.
+```mermaid
+graph TD
+    A[Input Source] --> B[Context Loader]
+    B --> C[Compression Engine]
+    C --> D[Context Manager]
+    D --> E[LLM Prompt]
+    D --> F[Token Counter]
+```
+
+While context management focuses on the immediate session window, the memory system provides the persistence layer required for cross-session continuity and architectural decision tracking.
 
 ## Memory System (15 modules)
 
-The Memory System provides a persistent layer that allows the agent to "remember" past decisions, user preferences, and subagent states across different sessions. By leveraging `memory-consolidation`, the system distills high-volume interaction logs into actionable architectural insights.
+The memory system implements a multi-tiered storage architecture, allowing agents to recall past decisions and coding styles. Components like `decision-memory.extract()` and `memory-consolidation.run()` ensure that transient session data is distilled into durable, retrievable knowledge, enabling the agent to evolve its behavior over time.
 
 | Module | Purpose |
 |--------|---------|
@@ -74,7 +72,7 @@ The Memory System provides a persistent layer that allows the agent to "remember
 | `semantic-memory-search` | OpenClaw-inspired 2-Step Memory Search System |
 | `subagent-memory` | Subagent Persistent Memory |
 
-> **Key concept:** The `decision-memory` module uses `DecisionMemory.extract()` to parse conversation logs for design patterns, which are then stored in a vector database to inform future architectural suggestions.
+To interact with these systems programmatically, developers should utilize the primary interface methods: `ContextManager.update()` for refreshing the active window, `MemoryConsolidation.flush()` to commit session state to disk, and `HybridSearch.query()` for retrieving relevant historical data.
 
 ---
 

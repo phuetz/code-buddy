@@ -31,14 +31,18 @@ export async function handleDocsCommand(args: string): Promise<DocsCommandResult
     const noMetrics = parts.includes('--no-metrics');
     const withLLM = parts.includes('--with-llm');
 
+    // Parse --thinking level
+    const thinkingIdx = parts.indexOf('--thinking');
+    const thinkingLevel = thinkingIdx >= 0 ? parts[thinkingIdx + 1] as 'minimal' | 'low' | 'medium' | 'high' : undefined;
+
     if (withLLM) {
-      return handleGenerateWithLLM();
+      return handleGenerateWithLLM(thinkingLevel);
     }
     return handleGenerate(noDiagrams, noMetrics);
   }
 
   return {
-    output: 'Usage: /docs generate [--with-llm] [--no-diagrams] [--no-metrics] | /docs status',
+    output: 'Usage: /docs generate [--with-llm] [--thinking minimal|low|medium|high] [--no-diagrams] [--no-metrics] | /docs status',
     success: false,
   };
 }
@@ -86,7 +90,7 @@ async function handleGenerate(noDiagrams: boolean, noMetrics: boolean): Promise<
   }
 }
 
-async function handleGenerateWithLLM(): Promise<DocsCommandResult> {
+async function handleGenerateWithLLM(thinkingLevelOverride?: 'minimal' | 'low' | 'medium' | 'high'): Promise<DocsCommandResult> {
   try {
     // Step 1: Generate raw docs first (fast, no LLM needed)
     const rawResult = await handleGenerate(false, false);
@@ -101,34 +105,70 @@ async function handleGenerateWithLLM(): Promise<DocsCommandResult> {
       };
     }
 
-    // Determine model and base URL
+    // Determine model and provider
+    const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
+    const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
+
     let model = process.env.GROK_MODEL || 'grok-3-latest';
-    let baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
-    if (process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY) {
-      model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-      baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
-    }
-    if (process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY) {
-      model = 'gpt-4o-mini';
-      baseURL = 'https://api.openai.com/v1';
-    }
+    if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
+    if (isOpenAI) model = 'gpt-4o-mini';
 
-    // Use OpenAI SDK directly (avoids CodeBuddyClient's native Gemini routing issue)
-    const OpenAI = (await import('openai')).default;
-    const openaiClient = new OpenAI({ apiKey, baseURL });
+    let llmCall: (sys: string, user: string, thinking?: string) => Promise<string>;
 
-    const llmCall = async (systemPrompt: string, userPrompt: string): Promise<string> => {
-      const response = await openaiClient.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 3000,
-        temperature: 0.3,
-      });
-      return response.choices[0]?.message?.content ?? '';
-    };
+    if (isGemini) {
+      // Native Gemini API — supports thinkingLevel
+      const geminiBaseURL = 'https://generativelanguage.googleapis.com/v1beta';
+      llmCall = async (systemPrompt: string, userPrompt: string, thinkingLevel?: string): Promise<string> => {
+        const generationConfig: Record<string, unknown> = {
+          temperature: 0.2,
+          maxOutputTokens: 5000,
+        };
+        if (thinkingLevel) {
+          generationConfig.thinkingConfig = { thinkingLevel };
+        }
+
+        const res = await fetch(
+          `${geminiBaseURL}/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig,
+            }),
+          },
+        );
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Gemini ${res.status}: ${errText.substring(0, 200)}`);
+        }
+        const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+        return data.candidates?.[0]?.content?.parts
+          ?.filter((p: { text?: string }) => p.text)
+          .map((p: { text?: string }) => p.text)
+          .join('') ?? '';
+      };
+    } else {
+      // OpenAI-compatible (Grok, OpenAI, LM Studio)
+      let baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
+      if (isOpenAI) baseURL = 'https://api.openai.com/v1';
+      const OpenAI = (await import('openai')).default;
+      const openaiClient = new OpenAI({ apiKey, baseURL });
+
+      llmCall = async (systemPrompt: string, userPrompt: string): Promise<string> => {
+        const response = await openaiClient.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 5000,
+          temperature: 0.2,
+        });
+        return response.choices[0]?.message?.content ?? '';
+      };
+    }
 
     // Step 3: Enrich raw docs with LLM prose
     const docsDir = require('path').join(process.cwd(), '.codebuddy', 'docs');
@@ -136,6 +176,7 @@ async function handleGenerateWithLLM(): Promise<DocsCommandResult> {
     const result = await enrichDocs({
       docsDir,
       llmCall,
+      thinkingLevel: thinkingLevelOverride,
       onProgress: (file, current, total) => {
         logger.info(`Enriching [${current}/${total}] ${file}`);
       },

@@ -1,10 +1,10 @@
 # Architecture
 
-The project follows a modular, layered architecture designed to decouple the core reasoning engine from infrastructure, UI, and external tool integrations. This structure ensures that the agent orchestrator can scale across diverse environments while maintaining strict security and context management boundaries. This documentation is intended for core contributors and system architects who need to understand the dependency graph and execution lifecycle of the agent.
+The project follows a layered architecture with a central agent orchestrator coordinating all interactions between user interfaces, LLM providers, tools, and infrastructure services. This design ensures a clean separation of concerns, allowing developers to modify specific components—such as tool integrations or middleware logic—without destabilizing the core execution engine.
 
 ## System Layers
 
-The system is organized into functional layers that facilitate a clean separation of concerns. The `Core Agent` acts as the central nervous system, delegating tasks to the `Tool Ecosystem` and `Context & Memory` modules while enforcing policies through the `Security` layer.
+The system is organized into distinct functional layers, each responsible for a specific domain of the agent's lifecycle. This modularity allows for independent scaling and testing of components, from the user-facing interfaces down to the underlying infrastructure and security guards.
 
 ```mermaid
 graph TD
@@ -22,11 +22,11 @@ graph TD
   CTX --> INFRA
 ```
 
-The interaction between these layers is governed by the `AgentExecutor`, which orchestrates the ReAct loop to ensure that every action is validated against the security layer before execution.
+With the high-level system layers defined, we must examine the specific module dependencies that enforce this structure and dictate how data flows through the application.
 
 ## Core Module Dependencies
 
-The dependency graph below illustrates the relationship between the `agent/codebuddy-agent` and its supporting middleware and service modules. This modular approach allows for the injection of specialized logic, such as `middleware/quality-gate-middleware` or `middleware/auto-repair-middleware`, without modifying the core agent loop.
+The dependency graph illustrates the central role of `agent/codebuddy-agent`, which acts as the primary orchestrator for all middleware and service handlers. Understanding these imports is critical for contributors, as circular dependencies or improper module coupling can lead to runtime initialization failures.
 
 ```mermaid
 graph LR
@@ -145,9 +145,11 @@ graph LR
     style M0 fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
+Understanding these dependencies allows developers to navigate the codebase, but the distribution of logic across the filesystem provides the practical roadmap for implementation.
+
 ## Layer Breakdown
 
-The following table summarizes the distribution of modules across the codebase. This organization allows developers to quickly locate logic based on the domain, such as `src/security/` for policy enforcement or `src/agent/` for core orchestration.
+The following table summarizes the distribution of modules across the project's directory structure, highlighting the breadth of the system's capabilities.
 
 | Layer | Modules | Description |
 |-------|---------|-------------|
@@ -177,27 +179,43 @@ The following table summarizes the distribution of modules across the codebase. 
 | `src/advanced/` | 8 | Advanced |
 | `src/daemon/` | 8 | Background daemon service |
 
+While the directory structure organizes the codebase, the actual execution logic follows a specific, repeatable lifecycle managed by the agent.
+
 ## Core Agent Flow
 
-The lifecycle of a user request is handled by the `CodeBuddyAgent.processUserMessage()` method. This method initializes the `AgentExecutor`, which manages the ReAct loop, ensuring that the agent remains within defined operational bounds while effectively utilizing available tools.
+The agent lifecycle is initiated via `CodeBuddyAgent.processUserMessage()`, which triggers the `AgentExecutor` to manage the ReAct (Reasoning and Acting) loop. This loop is the heart of the system, ensuring that user intent is translated into actionable tool calls while maintaining strict context and security boundaries.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent as CodeBuddyAgent
+    participant Executor as AgentExecutor
+    participant LLM
+    participant Tools
+    User->>Agent: processUserMessage()
+    Agent->>Executor: run ReAct loop
+    Executor->>LLM: Tool Selection & Context
+    LLM-->>Executor: Action Request
+    Executor->>Tools: Execute Tool
+    Tools-->>Executor: Result
+    Executor->>Agent: Return Response
+```
 
 > **Key concept:** The RAG tool selector reduces prompt size from 110+ tools to ~15, saving approximately 8,000 tokens per LLM call.
 
-```mermaid
-graph TD
-    Input["User Input"] --> Process["CodeBuddyAgent.processUserMessage()"]
-    Process --> Executor["AgentExecutor (ReAct loop)"]
-    Executor --> RAG["1. RAG Tool Selection"]
-    RAG --> Context["2. Context Injection"]
-    Context --> MiddlewarePre["3. Middleware Before-Turn"]
-    MiddlewarePre --> LLM["4. LLM Call"]
-    LLM --> ToolExec["5. Tool Execution"]
-    ToolExec --> Result["6. Result Processing"]
-    Result --> MiddlewarePost["7. Middleware After-Turn"]
-    MiddlewarePost --> Loop{"8. Loop or Return"}
-```
+The execution flow is structured as follows:
 
-The `AgentExecutor` ensures that all tool outputs are processed through a series of middleware checks, including `middleware/quality-gate-middleware` and `middleware/auto-repair-middleware`, before returning the final response to the user.
+1. **User Input** → CLI/Chat/Voice/Channel
+2. → `CodeBuddyAgent.processUserMessage()`
+3. → `AgentExecutor` (ReAct loop)
+    1. RAG Tool Selection (~15 from 110+)
+    2. Context Injection (lessons, decisions, graph)
+    3. Middleware Before-Turn (cost, turn limit, reasoning)
+    4. LLM Call (multi-provider)
+    5. Tool Execution (parallel read / serial write)
+    6. Result Processing (masking, TTL, compaction)
+    7. Middleware After-Turn (auto-repair, metrics)
+    8. Loop or Return
 
 ---
 

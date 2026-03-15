@@ -202,6 +202,26 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'full_file',
   },
 
+  // Gemini 3.1 Flash-Lite (1M context, 64K output, thinkingLevel support)
+  {
+    model: 'gemini-3.1-flash-lite*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1000000,
+    maxOutputTokens: 64000,
+    patchFormat: 'unified',
+  },
+  // Gemini 3.x (1M context, 64K output)
+  {
+    model: 'gemini-3*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1000000,
+    maxOutputTokens: 64000,
+    patchFormat: 'unified',
+  },
   // Gemini 2.5 (1M context, 65K output)
   {
     model: 'gemini-2.5*',
