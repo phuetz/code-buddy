@@ -44,8 +44,15 @@ Codex installé et loggé. Gemini installé. Pattern multi-IA testé.
    quasi-plat de h=1 à h=20 (×3 vs ×14 000 pour V1.5). Premier checkpoint
    utilisable pour planning. Compounding error éliminé.
 
-5 commits poussés sur master (https://github.com/phuetz/world-model).
-Codex a écrit `scripts/eval.py` correctement du premier coup. Gemini a
-hangué sur le `-p` non-interactif, j'ai écrit la doc moi-même.
+6. **V2.0 — CEM/MPC planner sur V1.8** (vers 1h du matin). Le world
+   model agit en boucle fermée sur CarRacing. CEM bat random : −6.32 vs
+   −7.46 sur 3 épisodes × 400 steps. Marge modeste mais réelle.
+
+7. **Ablation V1.5+CEM** (la confirmation). CEM avec V1.5 → return
+   −20.16 (×2.7 PIRE que random). CEM avec V1.8 → −6.32. Différence
+   ×3.2. Le rollout training n'est pas optionnel pour planifier.
+
+7 commits sur world-model + 1 ici. Codex a écrit eval.py correctement
+du premier coup. Gemini a hangué sur le `-p` non-interactif.
 
 "travailler bien et toute le nuit si vous pouvez" — fait.
