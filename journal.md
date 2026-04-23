@@ -52,3 +52,15 @@ services externes, regles, cache, utilisateur, intervention, mails, message, reg
 Plus aucun module vide dans la doc Alise_v2.
 Doc : https://github.com/phuetz/alise-v2-docs
 Reset Claude ce soir 21h — ce journal permet de retrouver le fil.
+
+## 23 avril 2026 — IHM GitNexus + gitnexus inject
+
+4 sprints livrés sur gitnexus-rs :
+- **Shiki syntax highlighting** dans le chat desktop (tokyo-night, token-based sans innerHTML)
+- **Markdown complet** : tables, blockquotes, callouts [!TIP]/[!WARNING]/[!NOTE], h1/h2/h4
+- **gitnexus generate inject** : outil CLI d'injection de fragments (image, markdown, mermaid) sans régénération
+- **Stream cancellation** : bouton Stop dans le chat, chat_cancel Tauri command, AtomicBool flag
+- **HTTP /api/chat** : endpoint SSE avec history multi-turn, signal [DONE], CORS
+- **![alt](url)** : support images dans le markdown généré
+
+Commits : f30913c, efee954, 554cb93, 5c725a6 — pushés sur master.
