@@ -172,3 +172,35 @@ Coordination multi-IA : Codex 3/3 missions (0 débordement scope), Gemini 2/2
 missions (warning lisa-sdk corrigé, audit rename + landing draft livrés),
 Claude orchestre et fait les refactos sensibles (rename migration, RSA crypto,
 tests cross-platform).
+
+**Enchaînement ultime — full i18n + peer review :**
+
+9. Codex (4e mission) → 6 vues mineures restantes (Column, Input, NavHistory,
+   License, TransferQueuePanel, TransferQueueWindow). 25 nouvelles clés × 4
+   langues. Le StringFormat avec `{DynamicResource}` n'étant pas supporté
+   par Avalonia, bascule vers un code-behind listener sur TransferQueuePanel.
+   **100% i18n** maintenant — chaque string visible par l'utilisateur passe
+   par le dictionnaire (commit cca003d).
+
+10. Agent code-reviewer (peer review indépendant des 10 commits) → 2 critiques
+    trouvées, toutes fixées dans commit 4b0c3fa :
+    - **Data loss potentielle** : `Directory.Move` silent catch dans AppDataPaths
+      si fail mid-stream (UNC, AV lock) → fixé avec renaming vers
+      `NexusFile.migration-partial` + `LastMigrationError` surfaced.
+    - **PRIVATE KEY dans bin/** : mon `CopyToOutputDirectory` dans LicenseKeyGen
+      copiait `private-key.pem` dans `bin/Debug/net8.0/` et donc `bin/Release/`.
+      Un CI globbing `bin/Release/**` aurait shippé la clé privée. Fixé :
+      `CopyToOutputDirectory` retiré, le tool résout le chemin via remontée
+      depuis `AppContext.BaseDirectory` vers le source dir.
+    - Plus un bonus : cohérence boundary expiry (`>=` / `<`).
+
+**Session finale 24 avril — grand total :**
+- **11 commits NexusFile** pushés sur `main` (98537f7 → 4b0c3fa)
+- **4 commits claude-et-patrice** sur `master`
+- **464 tests** (vs 454 au start), build clean Windows + WSL
+- Sprint 47 **full coverage** (14 vues i18n), Sprint 57b RSA-2048, Sprint 58 drafté
+- **Private key fuite évitée grâce au peer review** — le reviewer
+  indépendant a attrapé un CI packaging leak que j'avais manqué.
+
+Leçon de la session : **le 2nd review indépendant paie**. Agent code-reviewer
+vaut le coût, surtout avant un tag v1.0. À systématiser.
