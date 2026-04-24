@@ -139,3 +139,36 @@ Récap session : **5 commits NexusFile** (9ca8fef + 755b68d + 692d6ad + c04ba2b 
 
 Ce qu'il reste pour v1.0 : code signing (cert EV ~400€), publication landing,
 remplacer HMAC par RSA-2048 sur LicenseService. Aucune ligne de code restante.
+
+**Enchaînement suite — 2 chantiers techniques supplémentaires livrés :**
+
+7. Tests `AppDataPaths` (commit bad8622) — 7 tests xunit couvrent la migration
+   `%APPDATA%/FileCommander` → `%APPDATA%/NexusFile` : fresh install, migration
+   legacy → current, conflit (both), fichiers imbriqués migrés, idempotence,
+   Combine, OverrideForTests. Refacto mineur : `ResolveFor(appDataRoot)` exposé
+   comme entrée publique testable. **Le pont user-data est maintenant sous
+   filet** — risque de perte de données au premier upgrade neutralisé.
+
+8. Sprint 57b — RSA-2048 license signing (commit cab9910) — le placeholder HMAC
+   marqué TODO dans CLAUDE.md est remplacé par signing asymétrique :
+   - `LicenseService` embarque une public key RSA-2048 (PKCS#1 v1.5 + SHA-256).
+   - Signing se fait via `tools/LicenseKeyGen` (projet console offline, hors solution).
+   - Private key dans `tools/LicenseKeyGen/private-key.pem`, gitignored.
+   - 9 tests couvrent tamper payload, tamper signature, clé signée par un autre
+     keypair (scénario attaquant), expired, malformed.
+   - Round-trip end-to-end validé : le tool signe avec la privée, la publique
+     embarquée accepte.
+   - Documentation complète dans `tools/README.md` (custody, rotation, revocation).
+
+**Bilan final session 24 avril** :
+- NexusFile : **8 commits pushés sur main** (`9ca8fef` → `cab9910`)
+- claude-et-patrice : 2 commits
+- **463 tests** (vs 454 au début), build clean Windows + WSL
+- Sprint 47 complet, Sprint 57b complet, Sprint 58 drafté
+- Reste pour v1.0 : code signing cert EV + régénération keypair RSA + publication landing.
+  **Zéro ligne de code.**
+
+Coordination multi-IA : Codex 3/3 missions (0 débordement scope), Gemini 2/2
+missions (warning lisa-sdk corrigé, audit rename + landing draft livrés),
+Claude orchestre et fait les refactos sensibles (rename migration, RSA crypto,
+tests cross-platform).
