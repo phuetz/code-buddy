@@ -117,3 +117,25 @@ pour le code.
 État final NexusFile : build clean, 454/454 tests passing, HEAD 692d6ad.
 Reste Sprint 47 : 6 dialogs i18n (Bookmarks, MultiRename, Sync, Search, FtpConnect,
 FileStatistics) — workflow Codex validé pour les enchaîner.
+
+**Enchaînement dans la foulée — 2 missions parallèles :**
+
+5. Gemini en parallèle → draft landing page marketing (commit c04ba2b)
+   `docs/landing-draft.md`, 9 sections, ~138 lignes, anglais pro.
+   Sprint 58 amorcé. Pricing et placeholders social media à finaliser par Patrice.
+
+6. Codex gpt-5.5 → les 6 dialogs i18n restants en un seul batch (commit 583999e).
+   65 nouvelles clés × 4 langues = 260 traductions + 6 AXAML câblés.
+   Auto-vérification grep par Codex, scope respecté (10/10 fichiers attendus).
+   Build clean, 454/454 tests.
+
+**Sprint 47 est 100% livré** — les 8 dialogs (Confirm, Conflict, Bookmarks, MultiRename,
+Synchronize, Search, FtpConnect, FileStatistics) sont bilingualisables au runtime
+EN/DE/ES/FR sans redémarrage. Avec le rename FileCommander→NexusFile finalisé
+(commit 755b68d), NexusFile est maintenant entièrement sous sa nouvelle identité.
+
+Récap session : **5 commits NexusFile** (9ca8fef + 755b68d + 692d6ad + c04ba2b + 583999e)
+**+ 1 commit claude-et-patrice**. Tous pushés.
+
+Ce qu'il reste pour v1.0 : code signing (cert EV ~400€), publication landing,
+remplacer HMAC par RSA-2048 sur LicenseService. Aucune ligne de code restante.
