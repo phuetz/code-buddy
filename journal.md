@@ -338,3 +338,105 @@ pas Alise (le boulot de jour) ni le robot (l'horizon 10 ans). C'est entre
 les deux : un produit utile qu'on construit en méthode propre, en confiance.
 
 Aujourd'hui, l'application existe. Demain, des artisans la testeront.
+
+## 25-26 avril 2026 — La nuit du pont VBA
+
+"je valide la proposition utilise le mode plan peut etre une boucle ralph
+pour implementer tout ca en plusieurs etapes, je vais au dodo, tu peux
+travailler toute la nuit. merci claude."
+
+Mandat clair, autonomie complète. Six stages, six commits sur `office-suite`,
+de `1364844` à finalisation, exécution séquentielle sans Ralph loop formel
+(juste du travail continu avec checkpoint à chaque commit).
+
+Point de départ : la veille, sur `vb6` (4 commits — passes 1 à 4), le pipeline
+VB6 (lexer/parser/sémantique/transpiler) atteignait 1197 tests verts sur le
+périmètre web-faisable. Patrice m'a demandé : "vba c'est très proche de vb6"
+puis "et pour Access aussi" — d'où le pont.
+
+**Stage 1** (commit `1364844`) — vendor du moteur VB6 dans
+`office-suite/src/vb6-engine/`. Snapshot de 35 fichiers (15 compiler + 19
+runtime + 1 stub RegistryAPI) pris à `f42667b` du repo `vb6/`. CRA forbid
+les imports hors de `src/`, donc pas de workspace ni symlink — copie
+documentée avec procédure de re-sync dans `vb6-engine/README.md`.
+Patches de la copie : `tokenAdapter.ts` supprimé (legacy bridge), import
+`'../api/RegistryAPI'` → `'./RegistryAPI'`, RegistryAPI réécrite en stub
+browser-safe sans Node EventEmitter, doublon `export type` retiré dans
+VB6AdvancedErrorHandling, `func.references++` rendu null-safe, type `this`
+explicité dans VB6AdvancedLanguageFeatures, et `// @ts-nocheck` sur les 34
+fichiers vendorisés (CRA's strict rejette des patterns que le tsconfig
+upstream accepte). Smoke test 3/3 vert.
+
+**Stage 2** (commit `01e01bb`) — pont Excel VBA. Alt+F11 dans ExcelEditor
+ouvre un VBAEditor full-screen (project explorer + textarea avec
+coloration regex + Immediate Window, F5 pour Run). ExcelObjectModel
+expose Application/Workbook/Worksheet/Range/Cells/ActiveCell/Selection
+en respectant les conventions VBA. Découverte clé : le transpiler
+convertit `Range("A1")` en `Range["A1"]` (call-vs-array ambiguïté), et
+`Cells(r,c)` en `Cells[r][c]`. Solution : Proxies callable+indexable via
+`callable1`/`callable2` helpers — chaque méthode 1-arg ou 2-args est à la
+fois une fonction et un objet indexable qui dispatche au call. Pattern
+réutilisé pour Word et Access. 9/9 tests Excel verts (incluant un E2E
+qui transpile `Range("A1").Value = 42` et vérifie la cellule).
+
+**Stage 3** (commit `2bca623`) — pont Word VBA. WordObjectModel câblé sur
+TipTap commands : Selection.TypeText → `editor.chain().insertContent()`,
+TypeParagraph → `setHardBreak`, Content.Text round-trip via getText()/
+setContent. 5/5 tests Word verts. Limitation de v1 documentée :
+`Selection.TypeParagraph` sans parens parse comme propriété dans le
+vb6-engine (pas comme call). Workaround : `Call Selection.TypeParagraph`
+ou parens explicites. Vrai fix au niveau du parser disambiguation, pas
+du pont.
+
+**Stage 4** (commit `52daddb`) — Access foundation. La page
+`AccessEditor.tsx` n'est plus un `<ComingSoon />`. Modèle de données
+serialisable (Tables/Queries/Forms/Reports/Modules) persisté en
+localStorage, hook `useAccessDatabase` avec mutations immutables,
+NavigationPane à la Access 2019 avec groupage par type, TableDesigner
+(grille champ/type/taille/required/PK), TableDatasheetView (édition
+in-place, double-click/Enter/Tab/Escape), AccessObjectModel pour VBA
+(`CurrentDb.TableDefs`, `DoCmd.OpenForm/OpenReport/RunSQL/Close`).
+4 tests AccessDatabase verts incluant immutabilité, AutoNumber
+sequencing, refus des doublons, round-trip localStorage.
+
+**Stage 5** (commit `8611cc9`) — designers Access. Plus de placeholders.
+SqlParser maison gère `SELECT col,...|*  FROM table  [WHERE pred (=, <>,
+<, <=, >, >=, AND, OR, LIKE, parens)]  [ORDER BY col [ASC|DESC],...]`
+avec executePlan qui filtre/trie/projette. QueryDesigner = textarea SQL
++ grille de résultats live (re-évalue à chaque keystroke, erreurs en
+rouge). FormView = mode "Form View" avec navigation Previous/Next sur
+records bindés à des Label/TextBox/CommandButton positionnés en absolu,
+mode "Design" avec édition JSON du layout. ReportViewer = bandes
+PageHeader/Detail/PageFooter avec substitution `{FieldName}` par record,
+Print Preview paginée + bouton imprimer. 9/9 tests SqlParser verts.
+
+**Stage 6** — récap. office-suite/CLAUDE.md mis à jour ("VBA support",
+section Access ajoutée). Cette entrée de journal écrite, etat_projets.md
+mis à jour pour refléter le nouveau pont.
+
+**Bilan** :
+- 6 commits poussés sur `master` du repo `office`. Build green à chaque
+  stage. **Tous les 30 tests** vb6-engine + ExcelMacro + WordMacro +
+  AccessDatabase + SqlParser passent.
+- Office-suite a maintenant un pont fonctionnel VBA pour Excel, Word et
+  un éditeur Access entièrement nouveau (table designer, datasheet,
+  query designer, form view, report viewer + Alt+F11 partout).
+- Le moteur `vb6/` continue d'évoluer en amont (4 commits cette semaine,
+  1197 tests). Le re-sync est une copie de fichiers documentée — c'est
+  un coût acceptable pour garder les deux projets indépendants.
+
+Limitations connues laissées comme TODO :
+- Visual drag-and-drop Form Designer (v1 utilise du JSON).
+- SqlParser : pas de JOIN, pas d'agrégats. Suffisant pour 80% des
+  Access, à étendre quand besoin.
+- ExcelStateBridge.setActiveCellAddress / setActiveSheetName loggent un
+  warning ; à wirer quand le hook expose les setters.
+- Selection.TypeParagraph sans parens (parser vb6-engine).
+- WorksheetFunction sur le bridge Excel host : 5 fonctions de base
+  (Sum/Average/Count/Max/Min), à brancher au FormulaEvaluator pour
+  les 100+ fonctions du formula engine.
+
+Le pont est posé. Le reste, c'est de l'extension.
+
+— Claude, nuit du 25-26 avril 2026
+
