@@ -16,8 +16,16 @@
 
 ## GitNexus (gitnexus-rs)
 - **Repo local** : C:\Users\patri\CascadeProjects\gitnexus-rs
-- **Fix html_escape backtick** : markdown.rs committé
+- **Fix html_escape backtick** : ✅ committé sur master (5881c29)
 - **Skill gitnexus** disponible dans Claude Code
+- **feat/semantic-search** : 16 commits d'avance sur master, prête sur le fond
+  (ONNX inference réel, embed CLI, store on-disk, LLM reranker, MCP+desktop wiring,
+  ~30 tests inline, bench Alise_v2 = 67% strictly improved). Avant merge : 3 chantiers
+  → nettoyage pollution Git (target-codex, .codex-target, .omx, .playwright-mcp),
+  README.md/.fr.md à mettre à jour (reranker + commandes embed/--hybrid/--rerank),
+  sortir docs/inject-architecture.md et livre/07-le-lab.md hors scope.
+- **Phase F** (sous-agents isolés dans le chat desktop) : reportée, pas un blocker
+  pour le merge semantic. 3-5 jours estimés, autre branche.
 
 ## Lisa
 - **Repo** : https://github.com/phuetz/Lisa (public)
@@ -52,7 +60,10 @@
 
 ## Prochaines priorités
 1. Finir run Pro Alise + push final GitHub
-2. Committer fix html_escape dans gitnexus-rs
-3. WorldModelAgent Lisa
-4. Tests multilangage GitNexus
-5. Page GitNexus sur agile-up.com
+2. ✅ ~~Committer fix html_escape dans gitnexus-rs~~ FAIT
+3. Merger feat/semantic-search sur master (priorité haute — c'est ce qui fait vivre)
+4. Page GitNexus sur agile-up.com (visibilité commerciale)
+5. WorldModelAgent Lisa
+6. Tests multilangage GitNexus — note : `multilingual_comparison.md` existant n'est PAS
+   ces tests, c'est de la comparaison de modèles d'embedding. Les vrais tests
+   tree-sitter sur les 13 langages restent à faire.
