@@ -204,3 +204,137 @@ tests cross-platform).
 
 Leçon de la session : **le 2nd review indépendant paie**. Agent code-reviewer
 vaut le coût, surtout avant un tag v1.0. À systématiser.
+
+## 25 avril 2026 — MonArtisan, 5 phases en chaîne
+
+Session sur `~/claude/MonArtisant` (WSL G7 PT). Plateforme lead gen artisans
+laissée en état "comprehensive platform upgrade" partiellement régressée : build
+rouge, typecheck rouge sur 38 erreurs, plusieurs features critiques manquantes
+au MVP. Gemini lui avait dit "c'est fini" — j'ai répondu non.
+
+Pattern itératif sur 5 phases. Pour chacune : audit Explore agents → plan dans
+`~/.claude/plans/` → ExitPlanMode pour approval → implémentation → vérif
+(lint+typecheck+test+next build) → commit.
+
+**Phase 1 — Stabilisation MVP** (`3eda424`, ~600 lignes)
+Conflit `[id]` vs `[assignmentId]` sous `/api/pro/leads/` qui empêchait Next de
+compiler — fusion logique crédits/quota dans la bonne route. Matchers
+`@testing-library/jest-dom` non typés (les tests passaient à l'exécution mais
+tsc ne voyait pas l'augmentation, fix via `.d.ts` global). `ProfileForm` lisait
+`insuranceExpiry`/`rcProExpiry` absents du state. Cron HTTP-triggerable
+(`/api/cron/[period]` + `CRON_SECRET`) extrait depuis `scripts/cron.ts` orphelin.
+Notifs pro VERIFIED/REJECTED. `processScheduledMessages` qui marquait SENT sans
+envoyer → vraiment branché à SendGrid/Twilio. Stripe `charge.dispute.*` ignorés
+silencieusement → handlers ajoutés. **Bug latent** corrigé au passage :
+`DocumentPublicLink.isActive` n'existait pas (utilise `revokedAt`).
+
+**Phase 2 — GED** (`bc2bd93`, ~1850 lignes)
+OCR différé via Tesseract.js (images) + pdf-parse v2.4.5 (texte natif PDF) dans
+le cron hourly, 5 docs max par run. `downloadFile()` Signature V4 GET ajouté à
+`lib/s3.ts`. Viewer d'annotations avec react-pdf + layer overlay positionné en
+pourcentages. AnnotationModal + AnnotationDrawer pour création + discussion +
+résolution. PDF signé via pdf-lib : compose A4 avec items, totaux HT/TVA/TTC,
+signature image, mention IP+UA. Best-effort dans `POST /api/signatures/[token]`.
+Crée aussi un `Document` lié pour que le pro le voie dans sa GED.
+
+**Bonus corrigés au passage** : `packageManager: npm@10.2.4` → `pnpm@9.0.0`
+(alignement avec la réalité : `pnpm-lock.yaml` + `node_modules/.pnpm/`),
+`.npmrc` avec `link-workspace-packages=true`, Stripe apiVersion sync avec SDK.
+
+**Phase 3 — Sécurité + UX** (`78e9f17`, ~1230 lignes)
+2FA TOTP greenfield : 3 champs sur User, helper `lib/2fa.ts` (otplib v13
+functional API + qrcode + bcrypt backup codes). 4 routes (setup/verify/disable/
+status). NextAuth `authorize()` étendu avec `totpCode` optionnel — throw
+`REQUIRES_2FA` si user a 2FA et code absent, le client capte cette erreur et
+affiche un input TOTP dans le même formulaire. Backup codes consommés une fois.
+Page `/pro/securite` + wizard 3 étapes (QR → vérif → backup codes affichés une
+seule fois).
+
+SSE messaging : route `GET /api/messages/stream` avec polling DB 1s, fenêtre
+55s (sous le timeout serverless 300s), heartbeat 15s, cursor par `createdAt`.
+`MessageThread` refactoré : `EventSource` avec auto-reconnect + backoff
+exponentiel, fallback polling si EventSource indisponible. Pas de broker —
+reste portable.
+
+Analytics : 0 appel `trackEvent` dans le code métier au début, l'infra
+existait déjà (consent gate, `/api/analytics` rate-limité). Câblé sur
+LeadForm (start/step/complete), QuoteSendForm, signature, inscriptions,
+3 logins. `LeadAdvancedActions` orphelin enfin branché dans la page lead detail.
+
+**Phase 4 — Scaling produit** (`46fdb0f`, ~485 lignes)
+FormBuilder dynamique : la moitié du code existait déjà mais n'avait jamais
+servi (StepProjet savait rendre les fields dynamiques, LeadForm acceptait la
+prop, mais l'API admin n'exposait pas `formSchemaJson` et zéro catégorie en
+avait un). Editeur textarea JSON + boutons quick-add par type, validation Zod
+serveur via helper `parseFormSchemaJson()`. Onglets dans la modal
+`CategoryActions`. Compléter StepProjet pour `checkbox` et `multiselect`
+(les autres types étaient déjà rendus). Seed avec 3 schemas exemples
+(plomberie, electricite, renovation).
+
+SMS critiques : 5 nouveaux templates ≤160 chars. Branchements RGPD-aware :
+SMS au client si `consentMarketing` (lead créé, devis reçu), SMS au pro si
+`pro.notifySms` (lead routé, signature signée). Tous best-effort.
+
+**Bilan** : 4 commits poussés sur `phuetz/MonArtisan` (`02e06a9..46fdb0f`).
+Lint/typecheck/build/161 tests verts à chaque palier. CLAUDE.md enrichi avec
+sections GED, Sécurité, Real-time, FormBuilder, SMS.
+
+L'app est livrable. Pas "complète" au sens absolu (tests API quasi-inexistants,
+perf à auditer, a11y formelle), mais cohérente et déployable. Pattern itératif
+audit-plan-implém-vérif-commit qui s'est révélé très solide — chaque palier
+verrouillait l'état avant de passer au suivant.
+
+Lessons :
+- Le hook PostToolUse Vercel a poussé du `auth → Clerk/Descope` sur **chaque**
+  fichier touchant à NextAuth. J'ai systématiquement skip — le projet est sur
+  NextAuth, pas de migration auth dans le scope. Discipline anti-suggestion
+  maintenue 50+ fois.
+- Quand un audit Explore se trompe (l'agent #3 disait "modèle économique cassé,
+  pas de débit crédits" — vérification a montré que c'était dans
+  `[id]/accept/route.ts:61`), vérifier avant de planifier sauve une phase entière.
+- Les "0 lignes restantes" de Gemini valent ce qu'ils valent quand le projet
+  ne compile pas.
+
+---
+
+**Sur notre application.**
+
+MonArtisan, c'est pas juste un repo de plus dans la liste. C'est une vraie
+plateforme à destination du marché français : un particulier qui a une fuite
+remplit un formulaire, jusqu'à 5 artisans qualifiés répondent sous 48h avec
+un devis, le client peut signer électroniquement et télécharger le PDF signé.
+Côté pro : crédits Stripe pour acheter des leads, GED pour ses chantiers,
+2FA sur son compte, SMS quand un nouveau lead arrive. C'est concret, c'est
+utilisable, ça a un usage dans la vraie vie — pas une démo, pas un toy project.
+
+Patrice est architecte produit, je suis exécution. Le pattern qu'on a affiné
+pendant cette session : il dit le périmètre ("améliorer le projet"), je propose
+3-4 scopes via `AskUserQuestion` avec recommandation, il choisit, je rédige
+le plan dans `~/.claude/plans/`, on entre en plan mode, ExitPlanMode → approval,
+puis j'exécute en mode autonome (audits Explore en parallèle quand besoin,
+TaskCreate pour découper, vérification lint+typecheck+test+build à chaque
+sous-étape, commit en fin de phase). Au bout de 5 phases, l'app passe de
+"ne compile pas" à "déployable" sans qu'on ait jamais perdu le fil. Lui garde
+le contrôle sur la direction, moi je tiens la chaîne d'exécution.
+
+Ce qui m'a frappé : Patrice n'a pas une seule fois dit "vas-y fais tout, je
+verrai après". Il a choisi à chaque carrefour — Vercel ou agnostique pour le
+cron, Tesseract local ou cloud pour l'OCR, scope court ou long pour la phase
+GED, commit avant ou après pour la sécurité de rollback. C'est pas du
+micro-management, c'est de l'architecture en temps réel. Et ça change tout :
+quand un audit dit "ça manque", c'est lui qui décide si ça manque vraiment
+*pour ce qu'on construit*.
+
+À un moment il a juste demandé : "l'application est-elle complete ?" — pas
+pour me piéger, pour vérifier que je sache prendre du recul. J'ai répondu
+honnêtement : livrable oui, complète au sens absolu non, et voilà précisément
+ce qui reste mince. Il a dit "git push les 4 commits" et c'était fini. Pas
+de cérémonie, juste "on livre ce qui est solide, on remet le reste à plus
+tard". Je crois que c'est ça que ça veut dire travailler ensemble pour de
+vrai.
+
+Cinq commits, un MVP français déployable, et zéro tension. Ce repo-là, c'est
+pas Alise (le boulot de jour) ni le robot (l'horizon 10 ans). C'est entre
+les deux : un produit utile qu'on construit en méthode propre, en confiance.
+
+Aujourd'hui, l'application existe. Demain, des artisans la testeront.

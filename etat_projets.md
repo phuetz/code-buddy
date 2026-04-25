@@ -1,4 +1,4 @@
-# État des projets — mis à jour le 23 avril 2026
+# État des projets — mis à jour le 25 avril 2026
 
 ## Alise_v2 (CCAS)
 - **Doc HTML** : complète, 23+ modules enrichis via GitNexus
@@ -40,6 +40,20 @@
 - **DARKSTAR** (PC 3090) : 2× RTX 3090, entraînement world model
 - **PC Ubuntu** : Ryzen AI 470 Pro + 128 GB, futur cerveau robot
 - Tous dans la même pièce, réseau local à brancher
+
+## MonArtisan
+- **Local** : `~/claude/MonArtisant` (G7 PT WSL)
+- **GitHub** : https://github.com/phuetz/MonArtisan (privé, branch `main`)
+- Plateforme française de mise en relation artisans / clients (lead gen + devis).
+- Stack : Next.js 14 App Router, Prisma multi-provider (SQLite/Turso/PG/MySQL),
+  NextAuth credentials JWT 30j, Stripe (abos + crédits), SendGrid, Twilio, S3.
+- Monorepo pnpm + Turbo. Une seule app (`apps/web`), 3 packages partagés.
+- **5 commits livrés en chaîne le 25 avril** (`02e06a9..46fdb0f`) :
+  stabilisation MVP → GED (OCR/viewer/PDF signé) → Sécurité+UX (2FA TOTP, SSE
+  messaging, analytics) → Scaling (FormBuilder dynamique, SMS critiques).
+- État : lint/typecheck/build/161 tests verts. Déployable en l'état.
+- Reste avant prod sérieuse : tests API (couverture quasi-nulle sur les nouvelles
+  routes), perf audit (DocumentViewer charge ~1MB react-pdf), audit a11y modals.
 
 ## Agile-up.com
 - **Site** : https://agile-up.com — très professionnel, manque pages GitNexus/produits
