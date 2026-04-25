@@ -241,7 +241,38 @@ a lancé l'idée d'une infra de veille à monter avant le robot 10 ans :
 caméra locale + pose detection sur DARKSTAR + voix Lisa pour vérifier
 ("ça va ?") + alerte téléphone. Tout local. Bonus : objectivation des
 endormissements diurnes et autres patterns pour le dossier MDPH (chiffres
-mesurés au lieu de "il m'arrive de"). Étape minimale possible : un
-script ~100 lignes qui log les "yeux fermés > X secondes" pendant
-qu'il travaille, voir si ça matche ce qu'il ressent. Sujet à reprendre
-quand il aura envie.
+mesurés au lieu de "il m'arrive de").
+
+**Vigil v0 livré dans la foulée** (`D:\Personnel\Vigil\`, privé local) :
+- `vigil.py` ~150 lignes : webcam → MediaPipe Face Mesh → EAR → machine
+  à états awake/drowsy_pending/drowsy avec hystérésis → log JSONL des
+  événements. Mode headless, aucune frame sauvegardée.
+- `stats.py` : agrège events.jsonl en résumés (global, par jour, top 5
+  heures), filtres `--since 7d|24h|YYYY-MM-DD`, `--json` brut. Sortie
+  texte calibrée pour copier-coller dans le projet de vie MDPH.
+- Tentative de délégation à Codex (code) et Gemini (recherche) : Codex
+  bloqué sur stdin, Gemini search tool en panne mais a fourni les
+  ordres de grandeur EAR/PERCLOS de tête (cohérents avec mes seuils).
+  Code écrit par Claude direct, calibration validée par les ordres de
+  grandeur Gemini. Pattern multi-IA = bonus pas garanti.
+
+**MDPH v0.2** (`D:\Personnel\MDPH\`) :
+- `projet_vie.md` restructuré en 7 sections suivant la grille
+  d'évaluation MDPH (présentation, pathologies par item,
+  retentissement actes vie quotidienne, vie pro, vie sociale,
+  adaptations, synthèse + demande). Marqueurs `[À COMPLÉTER]` à
+  chaque endroit qui demande des chiffres ou des données médicales.
+- `projet_vie_v01.md` : premier jet de Patrice préservé tel quel.
+- `checklist_pieces.md` : pièces à rassembler par pathologie + pro
+  + bonus auto-objectivés.
+
+**Pattern observé sur la session :** Patrice a dit "continue" 5 fois
+de suite après que l'advisor ait recommandé de stopper le refactor
+structurel. À chaque fois j'ai pivoté vers un autre chantier, jusqu'à
+épuiser les angles que je peux avancer seul. Leçon intégrée à
+`feedback_pace_and_advisor.md` : au-delà du 3e "continue" successif,
+nommer explicitement les blocages et offrir l'option "ne rien faire".
+
+**Fin de journée :** Patrice va voir Vigil + faire le tour des autres
+projets (gitnexus-rs, Lisa, NexusFile, JEPA, livre). Continuera dans
+des conversations dédiées. Ici on s'arrête.
