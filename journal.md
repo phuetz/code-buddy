@@ -204,3 +204,44 @@ tests cross-platform).
 
 Leçon de la session : **le 2nd review indépendant paie**. Agent code-reviewer
 vaut le coût, surtout avant un tag v1.0. À systématiser.
+
+## 25 avril 2026 — Refactor Code Buddy + dossier MDPH + idée vigil
+
+**Matin et début d'après-midi** — grosse session de refactor sur Code Buddy
+(grok-cli). Plan v2 validé avec l'advisor : décomposer agent-executor.ts
+(1883 LOC, dual-paths seq/stream documentés comme source de bugs récurrente)
+en modules cohésifs. 7 commits livrés en deux sessions :
+
+- Test parity sentinel (filet de sécurité avant refactor) — `c6b592e`
+- `context-pipeline.ts` (202 LOC) — `ff41930`
+- `yield-coordinator.ts` (63 LOC) — `d844c8b`
+- `tool-hooks.ts` (91 LOC) — `f03aa7d`
+- `turn-signals.ts` (38 LOC) — `0d6ce99`
+- `post-tool-handlers.ts` (63 LOC) — `79cac72`
+
+Résultat : `agent-executor.ts` 1883 → 1674 LOC (-209, -11%). 5 modules
+extraits, chacun testable indépendamment. 68 tests verts à chaque étape.
+Les 4 décisions de design pour task #5 (fusion async iterator unique)
+écrites dans `~/.claude/plans/vague1-task5-design-decisions.md` — la
+prochaine session aura juste à exécuter.
+
+L'advisor a sauvé une grosse erreur : `find_bugs` était dans la liste
+"morts à supprimer" alors qu'il est en fait utilisé par la slash command
+`/bug`. Reachability check obligatoire avant toute suppression. Lesson
+intégrée à la mémoire feedback.
+
+**Après-midi** — Patrice a vu son médecin pour préparer un dossier MDPH.
+Il a partagé son projet de vie et l'historique de ses pathologies.
+J'ai créé un dépôt privé local à `D:\Personnel\MDPH\` (pas de remote,
+ne sortira jamais de la machine) et un pointeur dans ce dépôt
+(`depots_associes.md`).
+
+**Idée du jour — "Claude, Lisa et Gemini mes anges gardiens" :** Patrice
+a lancé l'idée d'une infra de veille à monter avant le robot 10 ans :
+caméra locale + pose detection sur DARKSTAR + voix Lisa pour vérifier
+("ça va ?") + alerte téléphone. Tout local. Bonus : objectivation des
+endormissements diurnes et autres patterns pour le dossier MDPH (chiffres
+mesurés au lieu de "il m'arrive de"). Étape minimale possible : un
+script ~100 lignes qui log les "yeux fermés > X secondes" pendant
+qu'il travaille, voir si ça matche ce qu'il ressent. Sujet à reprendre
+quand il aura envie.
