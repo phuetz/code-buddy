@@ -1,4 +1,4 @@
-# État des projets — mis à jour le 25 avril 2026
+# État des projets — mis à jour le 26 avril 2026
 
 ## Alise_v2 (CCAS)
 - **Doc HTML** : complète, 23+ modules enrichis via GitNexus
@@ -70,3 +70,13 @@
 3. WorldModelAgent Lisa
 4. Tests multilangage GitNexus
 5. Page GitNexus sur agile-up.com
+
+## Office Suite (D:\CascadeProjects\office\)
+- **Repo local** : `/home/patrice/claude/office/office-suite/`
+- **Pile** : React 19 + TS strict + MUI v7 + TipTap (Word) + react-spreadsheet (Excel) + custom (PowerPoint)
+- **VBA bridge livré dans la nuit du 25-26 avril** : Alt+F11 fonctionne dans Excel, Word et Access. Voir `journal.md`.
+- **Branche** : `master` (autre agent travaille sur `worktree-agent-a6efc83c`)
+- **Commits VBA** : `1364844` (vb6-engine vendor) → `01e01bb` (Excel) → `2bca623` (Word) → `52daddb` (Access foundation) → `8611cc9` (Access designers)
+- **AccessEditor** : maintenant fonctionnel (Tables designer + datasheet, Queries SQL+résultat live, Forms record-bound, Reports banded). Ne renvoie plus à `<ComingSoon />`.
+- **Tests** : 30 tests VBA/Access verts. Suite globale d'office-suite n'a pas régressé.
+- **TODO suivant** : visual drag-and-drop Form Designer ; SqlParser JOIN/agrégats ; FormulaEvaluator branché à WorksheetFunction ; setActiveSheet/setActiveCell wired sur le hook Excel ; Selection.TypeParagraph sans parens (fix parser amont).
