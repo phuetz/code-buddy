@@ -165,3 +165,52 @@ validées par les tests dès que Phase C+D s'exécutent.
 - `af7f4ec` Phase B — ExecutorEvent type + runTurnLoop stub
 
 agent-executor.ts : 1633 LOC (depuis 1674), -41 net.
+
+## 2026-04-26 — [x] Task #5 Phase C livrée — décision #4 appliquée (advisor catch + reprise)
+
+**Recap : advisor a chopé une faille critique dans Phase A.**
+Le test skippé pour décision #4 avait `expect(true).toBe(true)` — placeholder
+qui aurait passé trivialement quand quelqu'un flipperait `.skip` → `it`.
+Exactement le failure mode que Patrice voulait éviter. Fix dans commit
+`007e86f` : mock factory de `injectNextRoundContext` au boundary du module,
+test asserte ≥1 call dans les deux paths. Validé un-skip temporaire :
+test fail bien avec `expected 0 to be greater than or equal to 1` pour
+streaming. **Vrai filet maintenant.**
+
+**Phase C réalisée en single commit (ee22e52).**
+Sur le go de Patrice ("a") + après ultrathink + advisor : continuer la
+fusion plutôt que stop conservativement. Justifié par le filet sentinel
+bullet-proof maintenant en place.
+
+Changements en un commit :
+- `runTurnLoop` : nouvelle méthode privée. Body = ancien `processUserMessageStream`
+  verbatim, return type `AsyncGenerator<ExecutorEvent, void, unknown>` (alias
+  compatible avec StreamingChunk → tous les yield sites valides sans toucher).
+- `processUserMessageStream` : thin wrapper public qui delegate via
+  `yield* this.runTurnLoop(...)`. API publique inchangée.
+- **Décision #4 appliquée** : `injectNextRoundContext` appelé entre rounds
+  dans `runTurnLoop` (gated par `toolRounds > 0`). Streaming aligné sur
+  sequential. La régression de qualité multi-round (lessons accumulées,
+  KG, todo manquants en streaming) est fermée.
+- Stub free-function `runTurnLoop` (Phase B) supprimé.
+- Test sentinel "TODO #4" flippé `.skip` → actif, renommé "décision #4 (applied)".
+
+**Tests** :
+- agent-executor.test.ts : 77/77 actifs, 0 skipped (était 76 actifs + 1 skip)
+- tests/agent/ complet : 1169 pass + 1 skip / 47 files OK
+- 1 file (grok-agent.test.ts) échoue au transform — issue pré-existante,
+  non liée à Phase C (vérifié via git stash sur master).
+
+**Phase D NON faite — choix conservatif justifié**
+`processUserMessage` (sequential, ~500 LOC) doit devenir un collecteur sync
+qui consume `runTurnLoop` et map events → ChatEntry[]. Risque flagué par
+l'advisor : "Mocking realities — sequential tests mock `client.chat`, runTurnLoop
+uses chatStream. Tests passent observable result mais call counts shiftent."
+À faire dans une session focus dédiée pour gérer le mock count drift
+proprement, pas dans la foulée.
+
+**Total Task #5 livré** : 7 commits sur `main` (c40c7f8, 34531de, 3df68e9,
+93001f7, af7f4ec, 007e86f, ee22e52). Décisions #1, #2, #3 (lock-in actif),
+#4 (appliquée + filet permanent) : toutes durables, aucune perte. La
+Phase D peut reprendre à tout moment sur cette base — `runTurnLoop` est
+le point d'ancrage stable à consommer.
