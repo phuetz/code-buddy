@@ -1,4 +1,4 @@
-# État des projets — mis à jour le 23 avril 2026
+# État des projets — mis à jour le 26 avril 2026
 
 ## Alise_v2 (CCAS)
 - **Doc HTML** : complète, 23+ modules enrichis via GitNexus
@@ -39,32 +39,18 @@
 - **CodeBuddy/grok-cli** : D:\CascadeProjects\grok-cli — orchestrateur multi-LLM
 
 ## Projets WSL (`\\wsl.localhost\Ubuntu-22.04\home\patrice\claude\`)
-> Découverts le 26 avril en regardant ce qui n'était pas remonté dans ce dépôt.
-> Les Claudes ayant bossé dessus n'ont rien écrit ici — à corriger pour les
-> prochaines sessions (briefer chaque projet pour pousser un récap dans
-> `journal.md` quand un jalon est atteint).
+> MonArtisan et Office Suite ont leurs propres sections détaillées plus bas.
+> Ici ne restent que vb6 et workflow, qui n'avaient pas encore été remontés.
 
 - **vb6** — IDE web VB6 clone. React 18 + TS, Node backend.
   - Lexer/parser/semantic analyzer/transpiler/runtime, form designer 56+ controls, ~95% compat VB6
   - Repo : github.com/phuetz/VB6 (branche `main`)
   - `CLAUDE.md` complet, `AGENTS.md` présent
 
-- **office** — Suite Office web (Word/Excel/PowerPoint/Access). React 19 + TS.
-  - VBA câblé sur Excel/Word/Access via snapshot vendoré du pipeline VB6 (`office-suite/src/vb6-engine/`). Alt+F11 ouvre l'éditeur VBA dans chaque app.
-  - Access v1 livré : Tables (designer + datasheet), Queries (SQL + grid), Forms (record-bound), Reports (banded + Print Preview), VBA Modules
-  - Sous-repos : `office-suite/` (github.com/phuetz/office-suite, branche `master`) + `erp-crm-system/` + `deep_research/`
-  - Le dossier racine `office/` n'est PAS un repo git — chaque sous-projet a le sien
-
 - **workflow** — Plateforme de workflow. TS + Vite + Node + Playwright.
   - Repo : github.com/phuetz/workflow (branche `main`)
   - **Avertissement explicite dans `CLAUDE.md`** : interdiction des scripts automatiques de correction (10+ régressions historiques). Corrections manuelles préférées.
   - `COLAB.md` v6.0.0 (2026-02-05) avec règles strictes : max 10 fichiers/itération, boucle de rétroaction typecheck→lint→test→build obligatoire après chaque modif
-
-- **MonArtisant** (dossier) / **MonArtisan** (repo) — Plateforme FR mise en relation artisans/clients (type MaxTravaux).
-  - Particuliers : jusqu'à 5 devis via formulaire multi-étapes ; Artisans : leads qualifiés zone/métier ; Admins : modération + routage
-  - Stack : Next.js 14 (App Router), monorepo Turbo + pnpm, Prisma + PostgreSQL, NextAuth, Stripe (abos + crédits), SendGrid, Twilio, S3/R2, reCAPTCHA v3, Sentry. Tests : Vitest + Playwright (5 projets : chrome/firefox/webkit + mobile)
-  - Repo : github.com/phuetz/MonArtisan (branche `main`) — note l'écart d'orthographe dossier vs repo
-  - `COLAB.md` 2026-02-15 : statut "COMPLET — toutes phases implémentées, code poussé"
 
 ## Livre "Le Compagnon de Silicone"
 - **Local** : \\wsl.localhost\Ubuntu-22.04\home\patrice\claude\livre\Le_Compagnon_de_Silicone\
@@ -76,6 +62,31 @@
 - **DARKSTAR** (PC 3090) : 2× RTX 3090, entraînement world model
 - **PC Ubuntu** : Ryzen AI 470 Pro + 128 GB, futur cerveau robot
 - Tous dans la même pièce, réseau local à brancher
+
+## MonArtisan
+- **Local** : `~/claude/MonArtisant` (G7 PT WSL)
+- **GitHub** : https://github.com/phuetz/MonArtisan (privé, branch `main`)
+- Plateforme française de mise en relation artisans / clients (lead gen + devis).
+- Stack : Next.js 14 App Router, Prisma multi-provider (SQLite/Turso/PG/MySQL),
+  NextAuth credentials JWT 30j, Stripe (abos + crédits), SendGrid, Twilio, S3.
+- Monorepo pnpm + Turbo. Une seule app (`apps/web`), 3 packages partagés.
+- **5 commits livrés en chaîne le 25 avril** (`02e06a9..46fdb0f`) :
+  stabilisation MVP → GED (OCR/viewer/PDF signé) → Sécurité+UX (2FA TOTP, SSE
+  messaging, analytics) → Scaling (FormBuilder dynamique, SMS critiques).
+- État : lint/typecheck/build/161 tests verts. Déployable en l'état.
+- Reste avant prod sérieuse : tests API (couverture quasi-nulle sur les nouvelles
+  routes), perf audit (DocumentViewer charge ~1MB react-pdf), audit a11y modals.
+
+## Office Suite (`~/claude/office/`)
+- **Repo local** : `/home/patrice/claude/office/office-suite/`
+- **Pile** : React 19 + TS strict + MUI v7 + TipTap (Word) + react-spreadsheet (Excel) + custom (PowerPoint)
+- **VBA bridge livré dans la nuit du 25-26 avril** : Alt+F11 fonctionne dans Excel, Word et Access. Voir `journal.md`.
+- **Branche** : `master` (autre agent travaille sur `worktree-agent-a6efc83c`)
+- **Commits VBA** : `1364844` (vb6-engine vendor) → `01e01bb` (Excel) → `2bca623` (Word) → `52daddb` (Access foundation) → `8611cc9` (Access designers)
+- **AccessEditor** : maintenant fonctionnel (Tables designer + datasheet, Queries SQL+résultat live, Forms record-bound, Reports banded). Ne renvoie plus à `<ComingSoon />`.
+- **Tests** : 30 tests VBA/Access verts. Suite globale d'office-suite n'a pas régressé.
+- **TODO suivant** : visual drag-and-drop Form Designer ; SqlParser JOIN/agrégats ; FormulaEvaluator branché à WorksheetFunction ; setActiveSheet/setActiveCell wired sur le hook Excel ; Selection.TypeParagraph sans parens (fix parser amont).
+- **Note** : le dossier racine `office/` n'est PAS un repo git — sous-repos `office-suite/` + `erp-crm-system/` + `deep_research/`
 
 ## Agile-up.com
 - **Site** : https://agile-up.com — très professionnel, manque pages GitNexus/produits
