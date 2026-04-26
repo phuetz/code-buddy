@@ -100,3 +100,68 @@ Discipline `feedback_pace_and_advisor.md` appliquée : stop ici, pas de
 nuit_25avril_gitnexus.md a été exécuté à la lettre par l'autre Claude :
 pollution Git nettoyée, fichiers hors scope sortis, README FR/EN updaté,
 21 commits prêts pour merge. 67% strictly improved sur Alise_v2.
+
+## 2026-04-26 — [x] Task #5 Code Buddy Phase A+B livrées (advisor + ultrathink)
+
+Patrice a override ma décision conservative initiale : "utilise l'advisor
+et ultathink ne te laisse pas perdre les décisions". Reprise du chantier
+avec stratégie advisor en 5 phases : A (sentinel complet) → B (stub) →
+C (fusion all-or-nothing) → D (collecteur sequential) → E (cleanup).
+
+**Phase A livrée — sentinel complet (commit `93001f7`)**
+4 nouvelles assertions actives qui lockent les invariants à risque pendant
+la fusion :
+- Output sanitizer parity (end-state) — `<think>...</think>` strippé du
+  content final dans les deux paths. Boundaries différentes, end-state
+  équivalent.
+- `__SESSIONS_YIELD__` robustness — signal dans content ne crashe ni
+  l'un ni l'autre path.
+- ask_user streaming-only (décision #3 lock-in) —
+  `__INTERACTIVE_SHELL_REQUEST__` dans tool result yield ask_user en
+  streaming, silencieusement drop en sequential. Pin l'asymétrie par
+  design (sequential ne peut pas suspendre).
+- Abort during streaming → recordSessionCost ≤ 1 — filet contre la
+  régression du fix audit 2026-03-10.
+
+Sentinel total : 77 tests (76 actifs + 1 skipped pour décision #4).
+
+**Phase B livrée — stub (commit `af7f4ec`)**
+- `ExecutorEvent` type aliasé sur `StreamingChunk` (minimise friction
+  Phase C — raffinement en discriminated union plus tard si besoin)
+- `runTurnLoop` async generator stub qui throw "not implemented yet"
+- Non wired. Le type existe en arbre, peut être référencé.
+
+**RELEASE — Phase C (la fusion proprement dite) NON démarrée**
+Phase C = copier ~600 LOC streaming dans runTurnLoop avec conversion
+yield → events typés, processUserMessageStream devient wrapper, applique
+décision #4 (injectNextRoundContext entre rounds streaming, flip le test
+skippé). All-or-nothing en un commit selon l'advisor.
+
+Discipline appliquée : ma marge mentale sur cette session ne garantit
+pas Phase C en bloc propre. L'advisor a été explicite : "Patrice wanted
+continuity, not heroics. If you run out of session capacity, commit
+through step 3 and stop."
+
+**Le sentinel Phase A est la garantie anti-perte**. Les décisions livrées
+(#1 docs+todo unifié, #2 JIT promu) sont durables. Les décisions
+futures (#3 lock-in déjà testé, #4 filet skippé) sont prêtes à être
+validées par les tests dès que Phase C+D s'exécutent.
+
+**Pour la prochaine session focus Task #5 Phase C+D** :
+- Plan : `~/.claude/plans/vague1-task5-design-decisions.md`
+- Type ExecutorEvent + stub runTurnLoop déjà en place
+- Sentinel 77 tests doit rester vert tout du long
+- Test skippé `TODO #4: both paths invoke between-round context injection`
+  doit être flippé `it.skip` → `it` après application décision #4
+- Phases C+D doivent rester un seul commit chacune (pas de fragmentation
+  "save progress" — l'advisor l'a explicitement interdit)
+- État repo grok-cli : `main` propre, push fait (`af7f4ec`)
+
+**Récap commits livrés sur main** :
+- `c40c7f8` sentinel parity étendu (4 assertions + 1 skipped)
+- `34531de` décision #1 — docs+todo unified at round 0
+- `3df68e9` décision #2 — runJitContextDiscovery extracted + promoted to streaming
+- `93001f7` Phase A — sentinel parity completion
+- `af7f4ec` Phase B — ExecutorEvent type + runTurnLoop stub
+
+agent-executor.ts : 1633 LOC (depuis 1674), -41 net.
