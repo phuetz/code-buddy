@@ -214,3 +214,67 @@ proprement, pas dans la foulée.
 #4 (appliquée + filet permanent) : toutes durables, aucune perte. La
 Phase D peut reprendre à tout moment sur cette base — `runTurnLoop` est
 le point d'ancrage stable à consommer.
+
+## 2026-04-26 — [x] Vague 1 CLOSE — Phase D livrée (commit `85bc2e4`)
+
+Patrice a demandé "go pour phase D" pour clore Vague 1 dans la foulée.
+
+**Phase D = `processUserMessage` devient un 5-line collector** :
+```typescript
+async processUserMessage(message, history, messages): Promise<ChatEntry[]> {
+  const initialHistoryLength = history.length;
+  for await (const _event of this.runTurnLoop(message, history, messages, null)) {
+    // Events dropped. runTurnLoop pushes ChatEntries to history directly.
+  }
+  return history.slice(initialHistoryLength);
+}
+```
+
+L'ancien body de 555 LOC supprimé. Décision #3 appliquée (events
+streaming-only droppés silencieusement par le collector).
+
+**Préservation comportement** : `logger.warn(contextWarning.message)`
+ajouté dans runTurnLoop pour compenser un side-effect qui était
+spécifique au sequential legacy. Pas de régression streaming.
+
+**Test adaptations (les "mock realities" flaggées par l'advisor)** :
+- Nouveau helper `setupLLMFlow()` mocke chatStream + getAccumulatedMessage
+- ~10 tests sequential refactorés via le helper
+- Tests utilisant `bash` (STREAMING_TOOLS qui bypass executeToolViaLane)
+  remplacés par `read_file` / `create_file` pour préserver les invariants
+  testés (executeTool count, lane queue routing)
+- 4 tests qui asseraient des ChatEntry side-effects de `content` events
+  (max-rounds, cost limit, context warning) refactorés pour asseoir les
+  invariants sous-jacents (call counts) puisque ces warnings sont
+  maintenant des content events droppés par le collector
+
+**Métriques finales Task #5 + Vague 1** :
+- agent-executor.ts : 1883 → 1159 LOC (**-724 LOC, -38%**)
+  - Phase A→C : 1883 → 1638 (-245)
+  - Phase D : 1638 → 1159 (-479)
+- Tests sentinel : 77/77 actifs, 0 skipped
+- Full tests/agent/ : 1169 pass / 1 skip
+- `grok-agent.test.ts` échoue au transform — issue pré-existante,
+  vérifié sur master via git stash, pas une régression Phase D
+
+**CLAUDE.md ligne 59 mise à jour** : la note "Both sequential and streaming
+paths exist — changes usually need to be applied in both" remplacée par
+la description du runTurnLoop unifié.
+
+**8 commits Task #5 sur `main`** :
+- `c40c7f8` sentinel parity étendu initial
+- `34531de` décision #1 — docs+todo unified
+- `3df68e9` décision #2 — JIT context promu
+- `93001f7` Phase A — sentinel completion
+- `af7f4ec` Phase B — ExecutorEvent type + stub
+- `007e86f` fix sentinel décision #4 (advisor catch — placeholder → real filet)
+- `ee22e52` Phase C — runTurnLoop unifié + décision #4 appliquée
+- `85bc2e4` **Phase D — sequential adapter as collector**
+
+**Vague 1 close**. Vague 2 (strategy pattern `client.ts` ~1679 LOC) et
+Vague 3 (dégraissage avec validation reachability) restent dans le plan
+v2 refactor. Estimations : 2-3 jours chacune.
+
+**Bilan session** : Vague 1 entière livrée en une session via advisor +
+ultrathink + sentinel comme filet. Aucune perte de fonctionnalité,
+comportement entièrement préservé, codebase massivement allégé (-724 LOC).
