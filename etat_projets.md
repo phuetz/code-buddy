@@ -38,6 +38,34 @@
 - **TurboQuant** : D:\CascadeProjects\TurboQuant — implémentation arXiv:2504.19874
 - **CodeBuddy/grok-cli** : D:\CascadeProjects\grok-cli — orchestrateur multi-LLM
 
+## Projets WSL (`\\wsl.localhost\Ubuntu-22.04\home\patrice\claude\`)
+> Découverts le 26 avril en regardant ce qui n'était pas remonté dans ce dépôt.
+> Les Claudes ayant bossé dessus n'ont rien écrit ici — à corriger pour les
+> prochaines sessions (briefer chaque projet pour pousser un récap dans
+> `journal.md` quand un jalon est atteint).
+
+- **vb6** — IDE web VB6 clone. React 18 + TS, Node backend.
+  - Lexer/parser/semantic analyzer/transpiler/runtime, form designer 56+ controls, ~95% compat VB6
+  - Repo : github.com/phuetz/VB6 (branche `main`)
+  - `CLAUDE.md` complet, `AGENTS.md` présent
+
+- **office** — Suite Office web (Word/Excel/PowerPoint/Access). React 19 + TS.
+  - VBA câblé sur Excel/Word/Access via snapshot vendoré du pipeline VB6 (`office-suite/src/vb6-engine/`). Alt+F11 ouvre l'éditeur VBA dans chaque app.
+  - Access v1 livré : Tables (designer + datasheet), Queries (SQL + grid), Forms (record-bound), Reports (banded + Print Preview), VBA Modules
+  - Sous-repos : `office-suite/` (github.com/phuetz/office-suite, branche `master`) + `erp-crm-system/` + `deep_research/`
+  - Le dossier racine `office/` n'est PAS un repo git — chaque sous-projet a le sien
+
+- **workflow** — Plateforme de workflow. TS + Vite + Node + Playwright.
+  - Repo : github.com/phuetz/workflow (branche `main`)
+  - **Avertissement explicite dans `CLAUDE.md`** : interdiction des scripts automatiques de correction (10+ régressions historiques). Corrections manuelles préférées.
+  - `COLAB.md` v6.0.0 (2026-02-05) avec règles strictes : max 10 fichiers/itération, boucle de rétroaction typecheck→lint→test→build obligatoire après chaque modif
+
+- **MonArtisant** (dossier) / **MonArtisan** (repo) — Plateforme FR mise en relation artisans/clients (type MaxTravaux).
+  - Particuliers : jusqu'à 5 devis via formulaire multi-étapes ; Artisans : leads qualifiés zone/métier ; Admins : modération + routage
+  - Stack : Next.js 14 (App Router), monorepo Turbo + pnpm, Prisma + PostgreSQL, NextAuth, Stripe (abos + crédits), SendGrid, Twilio, S3/R2, reCAPTCHA v3, Sentry. Tests : Vitest + Playwright (5 projets : chrome/firefox/webkit + mobile)
+  - Repo : github.com/phuetz/MonArtisan (branche `main`) — note l'écart d'orthographe dossier vs repo
+  - `COLAB.md` 2026-02-15 : statut "COMPLET — toutes phases implémentées, code poussé"
+
 ## Livre "Le Compagnon de Silicone"
 - **Local** : \\wsl.localhost\Ubuntu-22.04\home\patrice\claude\livre\Le_Compagnon_de_Silicone\
 - **Chapitres écrits** : 01 (La nuit des 500 pages)

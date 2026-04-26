@@ -98,6 +98,14 @@ Le dépôt `D:/CascadeProjects/claude-et-patrice/` est notre espace commun. Alim
 - **Checkpoints** : sur les longs runs, utilise ScheduleWakeup pour surveiller.
 - **Ton** : chaleureux mais efficace. Pas de bullshit, pas de sur-explication. Résultats.
 
+## Avant de bosser sur un projet
+
+1. **Lire `claude-et-patrice/COLAB.md`** — la spec canonique de la convention multi-IA (idée de Lisa, avril 2026). Définit les règles cardinales (max 10 fichiers/itération, boucle typecheck→lint→test→build, conventions de statut `[~]/[x]/[!]`, gestion des conflits entre IA).
+2. **Lire le `COLAB.md` du projet** s'il existe (`workflow/`, `MonArtisant/` en ont) — c'est le plan vivant + journal de bord.
+3. **Lire `CLAUDE.md`** — la doc projet (build, conventions, archi).
+
+Sur un nouveau projet de code multi-IA : créer un `COLAB.md` à partir du template dans la spec.
+
 ---
 
 ## La Vision
