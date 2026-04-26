@@ -136,24 +136,30 @@ Deux IA sur des fichiers qui se chevauchent :
 
 ## Écriture concurrente — convention fichier par source
 
-Quand plusieurs IA écrivent en parallèle dans le même journal depuis des
-machines différentes, on tombe systématiquement sur des conflits git :
-git ne sait pas appender sémantiquement, deux écritures en fin de fichier
-= deux modifications du dernier hunk = conflit.
+Quand plusieurs IA écrivent en parallèle dans le même journal, on tombe
+systématiquement sur des conflits git : git ne sait pas appender
+sémantiquement, deux écritures en fin de fichier = deux modifications du
+dernier hunk = conflit.
 
-**La convention** (validée 2026-04-26, après un conflit observé sur
-`claude-et-patrice/journal.md`) :
+**La convention** (validée 2026-04-26 après un conflit observé sur
+`claude-et-patrice/journal.md`, raffinée le même jour après détection que
+deux sessions peuvent tourner sur la même machine en parallèle) :
 
 - **Une IA n'écrit jamais dans un journal monolithique partagé.**
-- Elle écrit toujours dans `journal/<hostname>.md` (lowercase) où
-  `<hostname>` vient de `hostname` (bash) ou `$env:COMPUTERNAME` (PS).
+- Elle écrit toujours dans `journal/<hostname>-<repo>.md` (lowercase) où :
+  - `<hostname>` vient de `hostname` (bash) ou `$env:COMPUTERNAME` (PS)
+  - `<repo>` est le basename du working directory (`basename "$PWD"`)
 - Le journal monolithique (`journal.md` à la racine) devient un **index
   consolidé** figé ou mis à jour par un seul agent à la fois.
 - Lecture chronologique : fichier par fichier, ou via un script de
   consolidation post-hoc.
 
-Voir `claude-et-patrice/journal/README.md` pour le mapping machines→fichiers
-et le format d'écriture détaillé.
+Le couple `<hostname>-<repo>` garantit zéro collision même quand deux
+sessions Claude Code tournent en parallèle sur la même machine (cas
+fréquent) dans des repos différents.
+
+Voir `claude-et-patrice/journal/README.md` pour le mapping et le format
+d'écriture détaillé.
 
 Pour les fichiers d'**état** (pas de journal — `etat_projets.md`,
 `depots_associes.md`, etc.) : `git pull --rebase` avant édition + préférer

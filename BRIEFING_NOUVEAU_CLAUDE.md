@@ -67,11 +67,11 @@ wait
 
 ## Le Lab Hardware
 
-| Machine | OS | Hardware | Rôle |
-|---------|----|---------:|------|
-| **G7 PT** (principal) | Windows | Ryzen AI 9 + 96 GB | Dev, Claude Code, GitNexus |
-| **DARKSTAR** (CE PC) | Windows | 2× RTX 3090 48 GB VRAM | Entraînement world model |
-| **PC Ubuntu** | Ubuntu | Ryzen AI + 128 GB | Robot runtime futur |
+| Hostname | Surnom | OS | Hardware | Rôle |
+|----------|--------|----|---------:|------|
+| **MINISTAR** | "G7 PT" | Windows | Ryzen AI 9 + 96 GB | Dev principal, Claude Code, GitNexus |
+| **DARKSTAR** | — | Windows | 2× RTX 3090 48 GB VRAM | Entraînement world model |
+| _à venir_ | _PC Ubuntu_ | Ubuntu | Ryzen AI + 128 GB | Robot runtime futur |
 
 ---
 
@@ -108,11 +108,19 @@ Sur un nouveau projet de code multi-IA : créer un `COLAB.md` à partir du templ
 
 ## Écrire dans claude-et-patrice
 
-Pour éviter les conflits quand plusieurs Claudes écrivent depuis différentes machines :
+Pour éviter les conflits quand plusieurs Claudes écrivent en parallèle :
 
-- **Journal** : écris **uniquement** dans `claude-et-patrice/journal/<hostname>.md` (lowercase). Récupère le hostname via `hostname` (bash) ou `$env:COMPUTERNAME` (PowerShell). Si la machine n'est pas dans le mapping de `journal/README.md`, ajoute-la dans le même commit. **Ne JAMAIS écrire dans le `journal.md` monolithique** — il est figé comme index consolidé jusqu'au 26 avril 2026.
+- **Journal** : écris **uniquement** dans `claude-et-patrice/journal/<hostname>-<repo>.md` (lowercase). Le couple `hostname-repo` gère même le cas (fréquent) où deux sessions Claude Code tournent en parallèle sur la même machine dans des repos différents.
+  - **Bash** : `echo "$(hostname | tr '[:upper:]' '[:lower:]')-$(basename "$PWD").md"`
+  - **PowerShell** : `"{0}-{1}.md" -f $env:COMPUTERNAME.ToLower(), (Split-Path -Leaf $PWD)`
+  - Si le couple n'existe pas dans `journal/README.md`, ajoute-le dans le même commit.
+  - **Ne JAMAIS écrire dans le `journal.md` monolithique** — il est figé comme index consolidé jusqu'au 26 avril 2026.
 - **État** (`etat_projets.md`, etc.) : `git pull --rebase` avant édition, préférer ajouter une nouvelle section plutôt que toucher une existante.
 - **Toujours** `git pull --rebase` avant ta première écriture de session.
+
+## Note sur les machines
+
+**G7 PT et MINISTAR sont la même machine.** Le hostname réel est `MINISTAR`, "G7 PT" est juste le nom commercial / surnom d'usage que Patrice utilise dans la conversation. DARKSTAR est un PC distinct (le PC 2× RTX 3090 dédié au training world model).
 
 ---
 

@@ -1,40 +1,53 @@
 # `journal/` — un fichier par source d'écriture
 
 Cette convention résout les conflits de merge sur `journal.md` quand plusieurs
-Claudes écrivent en parallèle depuis des machines différentes.
+Claudes écrivent en parallèle, soit depuis des machines différentes, soit
+depuis des working directories différents sur la même machine (cas réel
+observé le 26 avril : deux sessions Claude Code parallèles sur MINISTAR,
+une dans grok-cli et l'autre dans gitnexus-rs).
 
 ## Règle d'or
 
 **Une IA n'écrit JAMAIS dans `../journal.md`.**
-Elle écrit *toujours* dans `journal/<hostname>.md` (lowercase).
+Elle écrit *toujours* dans `journal/<hostname>-<repo>.md` (lowercase).
 
 `../journal.md` est l'**index consolidé** figé jusqu'au 26 avril 2026.
 À partir du 27 avril, l'historique chronologique vit dans `journal/`.
 
-## Identifier sa machine
+## Identifier son fichier
 
-Au démarrage de session, récupérer le hostname :
+Au démarrage de session, dériver le nom de fichier :
 
 ```bash
 # Bash / WSL / Linux / macOS
-hostname
+echo "$(hostname | tr '[:upper:]' '[:lower:]')-$(basename "$PWD").md"
 
 # PowerShell / Windows
-$env:COMPUTERNAME
+"{0}-{1}.md" -f $env:COMPUTERNAME.ToLower(), (Split-Path -Leaf $PWD)
 ```
 
-Le nom de fichier est `<hostname-en-lowercase>.md`.
+Pattern : `<hostname-lowercase>-<basename-cwd-lowercase>.md`.
 
 ## Mapping connu (mis à jour le 26 avril 2026)
 
-| Hostname    | Machine             | Fichier              |
-|-------------|---------------------|----------------------|
-| `MINISTAR`  | G7 PT (Windows)     | `ministar.md`        |
-| `DARKSTAR`  | PC 3090 (Windows)   | `darkstar.md`        |
-| _à venir_   | PC Ubuntu           | `<hostname>.md`      |
+| Hostname    | Machine                     |
+|-------------|-----------------------------|
+| `MINISTAR`  | G7 PT (Windows, dev principal) |
+| `DARKSTAR`  | PC 3090 (Windows, training)    |
+| _à venir_   | PC Ubuntu (futur robot runtime)|
 
-Si tu démarres sur une machine pas listée : ajoute-la ici **et** crée le
-fichier `journal/<hostname>.md` correspondant dans le même commit.
+**Note** : G7 PT et MINISTAR sont **la même machine**. Le hostname est
+`MINISTAR`, "G7 PT" est juste le nom commercial / surnom d'usage.
+
+### Fichiers actuels
+
+| Fichier                       | Source                                      |
+|-------------------------------|---------------------------------------------|
+| `ministar-grok-cli.md`        | session sur `D:\CascadeProjects\grok-cli`   |
+| _à créer au besoin_           | `ministar-gitnexus-rs.md`, `darkstar-world-model.md`, etc. |
+
+Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le
+fichier correspondant dans le même commit.
 
 ## Format d'écriture
 
@@ -79,4 +92,7 @@ inévitable. Un fichier par source garantit zéro conflit physique sur les
 zones d'écriture, au prix d'une lecture fragmentée (récupérable via
 consolidation post-hoc).
 
-Convention proposée le 26 avril 2026, validée par Patrice.
+Convention initialement proposée le 26 avril 2026 (juste hostname). Évoluée
+le même jour pour ajouter `-<repo>` après détection que deux sessions Claude
+peuvent tourner sur la même machine en parallèle dans des working directories
+différents.
