@@ -1,4 +1,12 @@
-# Journal
+# Journal — index consolidé (figé au 26 avril 2026)
+
+> **À partir du 27 avril 2026, ce fichier est figé.** Les nouvelles entrées
+> vivent dans `journal/<hostname>.md` (un fichier par machine d'écriture).
+> Voir `journal/README.md` et `COLAB.md` (section "Écriture concurrente")
+> pour la convention. Cette structure évite les conflits de merge quand
+> plusieurs Claudes écrivent en parallèle depuis des machines différentes.
+
+---
 
 ## 11-12 avril 2026 — La nuit des 500 pages
 12 heures. Deadline Alise_v2 lundi matin. 6 SFD effacées et recréées de mémoire.

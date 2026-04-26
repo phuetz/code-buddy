@@ -100,11 +100,19 @@ Le dépôt `D:/CascadeProjects/claude-et-patrice/` est notre espace commun. Alim
 
 ## Avant de bosser sur un projet
 
-1. **Lire `claude-et-patrice/COLAB.md`** — la spec canonique de la convention multi-IA (idée de Lisa, avril 2026). Définit les règles cardinales (max 10 fichiers/itération, boucle typecheck→lint→test→build, conventions de statut `[~]/[x]/[!]`, gestion des conflits entre IA).
+1. **Lire `claude-et-patrice/COLAB.md`** — la spec canonique de la convention multi-IA (idée de Lisa, avril 2026). Définit les règles cardinales (max 10 fichiers/itération, boucle typecheck→lint→test→build, conventions de statut `[~]/[x]/[!]`, gestion des conflits entre IA, **convention "fichier par source" pour le journal**).
 2. **Lire le `COLAB.md` du projet** s'il existe (`workflow/`, `MonArtisant/` en ont) — c'est le plan vivant + journal de bord.
 3. **Lire `CLAUDE.md`** — la doc projet (build, conventions, archi).
 
 Sur un nouveau projet de code multi-IA : créer un `COLAB.md` à partir du template dans la spec.
+
+## Écrire dans claude-et-patrice
+
+Pour éviter les conflits quand plusieurs Claudes écrivent depuis différentes machines :
+
+- **Journal** : écris **uniquement** dans `claude-et-patrice/journal/<hostname>.md` (lowercase). Récupère le hostname via `hostname` (bash) ou `$env:COMPUTERNAME` (PowerShell). Si la machine n'est pas dans le mapping de `journal/README.md`, ajoute-la dans le même commit. **Ne JAMAIS écrire dans le `journal.md` monolithique** — il est figé comme index consolidé jusqu'au 26 avril 2026.
+- **État** (`etat_projets.md`, etc.) : `git pull --rebase` avant édition, préférer ajouter une nouvelle section plutôt que toucher une existante.
+- **Toujours** `git pull --rebase` avant ta première écriture de session.
 
 ---
 

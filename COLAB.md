@@ -134,18 +134,46 @@ Deux IA sur des fichiers qui se chevauchent :
 
 ---
 
+## Écriture concurrente — convention fichier par source
+
+Quand plusieurs IA écrivent en parallèle dans le même journal depuis des
+machines différentes, on tombe systématiquement sur des conflits git :
+git ne sait pas appender sémantiquement, deux écritures en fin de fichier
+= deux modifications du dernier hunk = conflit.
+
+**La convention** (validée 2026-04-26, après un conflit observé sur
+`claude-et-patrice/journal.md`) :
+
+- **Une IA n'écrit jamais dans un journal monolithique partagé.**
+- Elle écrit toujours dans `journal/<hostname>.md` (lowercase) où
+  `<hostname>` vient de `hostname` (bash) ou `$env:COMPUTERNAME` (PS).
+- Le journal monolithique (`journal.md` à la racine) devient un **index
+  consolidé** figé ou mis à jour par un seul agent à la fois.
+- Lecture chronologique : fichier par fichier, ou via un script de
+  consolidation post-hoc.
+
+Voir `claude-et-patrice/journal/README.md` pour le mapping machines→fichiers
+et le format d'écriture détaillé.
+
+Pour les fichiers d'**état** (pas de journal — `etat_projets.md`,
+`depots_associes.md`, etc.) : `git pull --rebase` avant édition + préférer
+ajouter une nouvelle section plutôt que toucher une existante. Les conflits
+y sont rares, cette discipline simple suffit.
+
+---
+
 ## Limites connues (à ne pas oublier)
 
-- **Pas de locking** sur le fichier `COLAB.md` lui-même : si deux IA écrivent
-  en parallèle, le journal peut être corrompu. Atténuation : sections par IA
-  ou append-only strict.
+- **La convention "fichier par source" résout le conflit de journal** mais
+  pas le claim/release atomique sur le code (qui bosse sur quel fichier
+  *en ce moment* reste implicite dans le journal). Pour de la concurrence
+  réelle sur le code, il manque encore une brique (probablement à backer
+  par GitNexus).
 - **Repose sur la discipline** : pas de forcing automatique. Une IA qui oublie
   de logger rend l'asynchronie invisible.
-- **Bit-rot à l'échelle** : à 200+ entrées, parsing au démarrage devient lourd.
-  Prévoir rotation/archivage (`COLAB.archive.md` par trimestre).
-- **Pas de claim/release atomique** sur le code : qui bosse sur quel fichier
-  *en ce moment* reste implicite dans le journal. Pour de la concurrence
-  réelle, il manque encore une brique (probablement à backer par GitNexus).
+- **Bit-rot à l'échelle** : à 200+ entrées par fichier, parsing au démarrage
+  devient lourd. Prévoir rotation/archivage (par trimestre, par exemple
+  `journal/<hostname>-2026q2.md`).
 
 ---
 
