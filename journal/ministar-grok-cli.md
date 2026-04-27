@@ -278,3 +278,44 @@ v2 refactor. Estimations : 2-3 jours chacune.
 **Bilan session** : Vague 1 entière livrée en une session via advisor +
 ultrathink + sentinel comme filet. Aucune perte de fonctionnalité,
 comportement entièrement préservé, codebase massivement allégé (-724 LOC).
+
+## 2026-04-27 — [~] Vague 2 démarrée — strategy pattern client.ts
+
+**Claim** : je prends la Vague 2 du plan v2 refactor sur
+`D:\CascadeProjects\grok-cli`. Plan dédié écrit en mode plan validé par
+Patrice : `~/.claude/plans/delightful-cuddling-rainbow.md`.
+
+**Corrections de scope vs plan parent** (vérifiées empiriquement dans
+cette session) :
+- Bedrock + Azure NE SONT PAS dans `client.ts` — déjà extraits comme
+  plugins dans `src/plugins/bundled/{bedrock,azure}-provider.ts`. Hors
+  scope V2.
+- Anthropic n'a pas de chemin natif — il passe par l'OpenAI SDK
+  (`this.client.chat.completions.create`). Les "anthropic-isms" (cache
+  breakpoints L1059-1066, JSON system prompt L1100-1112, service_tier
+  L1092-1094) deviendront des hooks **nommés** dans `provider-openai-compat`,
+  pas une stratégie séparée.
+- Seul vrai chemin non-OpenAI-compat dans `client.ts` : Gemini natif
+  (~700 LOC). V2 réelle = 2 strategies à extraire, pas 5.
+
+**Phases planifiées (1 commit chacune)** :
+- Phase A — sentinel parity (≥6 nouvelles assertions sur 4 fichiers tests
+  existants). Filet de sécurité avant extraction.
+- Phase B — `provider-interface.ts` + `provider-gemini-native.ts`.
+  Self-contained, frontière nette via `isGeminiProvider`.
+- Phase C — `provider-openai-compat.ts` + hooks Anthropic nommés
+  (`injectAnthropicCacheBreakpoints`, `injectJsonSystemPromptForAnthropic`,
+  `applyServiceTier`). **Advisor checkpoint OBLIGATOIRE avant ce commit.**
+- Phase D — `provider-registry.ts` + `client.ts` thin dispatcher
+  (<300 LOC vs 1679). API publique strictement inchangée.
+
+**Vague 3** (dégraissage) : session séparée après V2. Plan v2 dit
+`organize_imports` mort confirmé (revérifié — 4 références, **aucune**
+dans `tools/registry/index.ts` malgré rapport contradictoire d'Explore
+agent ; les blocs adapters L245/252/259 concernent autres tools).
+3 candidats à valider via procédure reachability au runtime
+(`analyze_logs`, `generate_openapi`, `scan_licenses`). Legacy
+`src/providers/*-provider.ts` est VIVANT via `buddy provider test`
+(`src/commands/provider.ts:254`) — décision séparée après V2.
+
+Démarrage Phase A maintenant.
