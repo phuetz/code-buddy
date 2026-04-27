@@ -319,3 +319,48 @@ agent ; les blocs adapters L245/252/259 concernent autres tools).
 (`src/commands/provider.ts:254`) — décision séparée après V2.
 
 Démarrage Phase A maintenant.
+
+## 2026-04-27 — [x] V2 Phase A livrée (2 commits) + bug latéral fixé
+
+**Bug latéral découvert pendant l'écriture du sentinel** : le hack
+JSON-mode Anthropic dans `client.ts` chat() L1097-1112 réassignait
+`finalMessages = [...finalMessages]` après que `requestPayload.messages`
+ait été assigné L1070 — l'ancienne référence restait dans le payload.
+Le warning "IMPORTANT: You must respond with valid JSON only" n'arrivait
+jamais à l'API Anthropic. Dead code en production.
+
+Patrice (option recommandée) : fix d'abord en commit séparé, puis sentinel.
+
+**Commits livrés** :
+- `7f6853b` `fix(client): json mode anthropic hack now reaches the API payload`
+  — 1 ligne ajoutée : `requestPayload.messages = finalMessages` après le
+  bloc responseFormat. Défensif contre toute mutation post-payload future.
+- `17b148d` `test(client): vague 2 phase A — sentinel parity completion before extraction`
+  — 6 nouvelles assertions actives dans `codebuddy-client.test.ts`
+  (167 LOC, nouveau describe block "Sentinel — Vague 2 Pre-Refactor
+  Invariants"). End-state assertions sur le payload SDK / fetch (pas
+  spy-on-helpers) → restent valides quand l'implem migre dans
+  src/codebuddy/providers/.
+
+**6 sentinel assertions actives** :
+1. Dispatch Gemini → fetch native (mockCreate NOT called)
+2. Dispatch OpenAI-compat → mockCreate (Gemini fetch NOT called)
+3. Anthropic cache_control sur dernière system message
+4. Anthropic JSON-mode IMPORTANT JSON sur dernière system (relies on fix)
+5. service_tier passthrough OpenAI-compat
+6. service_tier ne fuit pas dans Gemini fetch
+
+**Tests** :
+- codebuddy-client.test.ts : 101/101 pass
+- gemini-malformed + search-compat + gemini-vision : 14/14 pass
+
+**Note** : la version streaming de chat() (`chatStream`) n'a même pas
+le hack JSON Anthropic — c'est un trou séparé (missing feature, pas
+broken feature) à combler en Phase C quand les deux paths sont unifiés
+via `provider-openai-compat.ts` avec hooks nommés.
+
+**Prochaine étape** : Phase B = créer `provider-interface.ts` +
+`provider-gemini-native.ts` (~700 LOC migrés de client.ts). Self-contained,
+frontière nette via `isGeminiProvider`. Pas d'advisor checkpoint requis
+(le plan le réserve pour avant Phase C, point de non-retour). Stop ici
+pour respecter la discipline pacing — Phase B sur le go de Patrice.
