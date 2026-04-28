@@ -656,3 +656,95 @@ MINISTAR). Détecter "untracked work in main" avant de réorienter.
 
 **Demande pour Patrice** : C4 (fix GAP Anthropic streaming) ou D
 (registry cosmétique) — laquelle (si l'une) ? Ou stop V2, passer à V3 ?
+
+## 2026-04-28 — [x] V2 Phase C4 livrée + Vague 2 close
+
+Patrice : "demande à advisor quelle est la suite". Advisor a tranché :
+**C4 d'abord** (fix court, libère la mémoire collective qui le
+flague depuis 2 commits) + **Phase D skip** (rendue caduque par la
+réduction de scope V2 — 2 strategies au lieu de 5, le if/else
+constructor reste plus lisible qu'un registry pour 2 cases) + **V3
+session séparée** (irréversible, pas à fatigue accumulée).
+
+**Pattern advisor pour C4** : test rouge d'abord, fix ensuite.
+J'ai ajouté 2 nouvelles assertions sentinel (cache_control + IMPORTANT
+JSON sur le payload streaming Anthropic), vérifié qu'elles failent
+contre le code pré-C4, puis appliqué les 5 lignes de fix dans
+`provider-openai-compat.ts` chatStream(). Tests passent.
+
+**Commit livré** : `7fb2b6c` `fix(client): vague 2 phase C4 — close chatStream anthropic asymmetry`
+
+Changements :
+- `provider-openai-compat.ts` chatStream() : appel
+  `injectAnthropicCacheBreakpoints` + `injectJsonSystemPromptForAnthropic`
+  (conditionnel sur `responseFormat: 'json'`) après
+  `convertToolMessagesForLocalModels`. Symétrie complète avec chat().
+- 2 nouvelles assertions sentinel dans `codebuddy-client.test.ts`
+- `CLAUDE.md` ligne 60 : description de `client.ts` réécrite pour
+  refléter le pattern strategy actuel (mention des hooks comme seam
+  load-bearing pour les anthropic-isms)
+
+**Tests** :
+- `codebuddy-client.test.ts` : 108/108 pass (was 106 + 2 new)
+- 4 fichiers sentinel + hooks unit : 132/132 pass
+- Wider `tests/codebuddy/` + `tests/agent/` : 1188 pass, 1 skip,
+  1 file fail (`grok-agent.test.ts` transform pré-existant — pas
+  une régression vs Phase B)
+
+---
+
+**🎯 Vague 2 fermée — bilan complet** :
+
+**7 commits sur `main`** :
+1. `7f6853b` fix JSON mode Anthropic dead hack (catch sentinel A)
+2. `17b148d` Phase A sentinel parity (chat side, 6 assertions)
+3. `bfa2440` Phase A streaming-side parity extension (4 assertions)
+4. `81324c7` Phase B Gemini extraction (interface + provider class)
+5. `eb922f3` Phase C1 hooks Anthropic en pure fns
+6. `03127c1` Phase C2+C3 OpenAI-compat extraction (chat + chatStream)
+7. `7fb2b6c` Phase C4 chatStream Anthropic asymmetry fix
+
+**Métriques** :
+- `client.ts` : 1683 → 403 LOC (**-1280 LOC, -76%**)
+- 4 fichiers sous `src/codebuddy/providers/` : 1583 LOC de code strategy
+- 14 nouvelles assertions sentinel (12 chat side + 2 chatStream side)
+- 10 unit tests directs sur les hooks pure fns
+- 0 régression sur la suite wider (1188/1189 actifs verts, seul fail
+  pré-existant)
+
+**Bug fixe en route** : 7f6853b (JSON mode Anthropic dead hack)
+n'aurait jamais été détecté sans l'écriture du sentinel — illustration
+parfaite de pourquoi le sentinel-first pattern marche.
+
+**Phase D officiellement caduque** : `client.ts` à 403 LOC est sous
+l'esprit de la cible Phase D (<300). Le travail restant
+(`provider-registry.ts`) ferait passer un if/else à 2 branches en
+appel de fonction — gain cosmétique pas load-bearing. À introduire
+quand un 3ème provider arrivera (provider local pour le robot, par
+exemple), pas avant.
+
+**Catches advisor appliqués durant V2** :
+1. **Sentinel-first pattern** (Phase A) → bug `7f6853b` détecté
+2. **Grep `this.X`** avant copy/paste (Phase B) → confirmation que
+   `trackPromptCache`/`withCircuitBreaker` ne s'appliquent pas à Gemini
+3. **Tests : ajouter, pas déplacer** (Phase B) → 4 fichiers sentinel
+   préservés via API publique, vision test seul migré vers le provider
+4. **`setModel` chain** (Phase B) → test direct ajouté
+5. **`setCircuitBreakerConfig` getter pattern** (Phase C2) → 0
+   consumer aujourd'hui mais pattern future-proof
+6. **Helper-sharing analysis** (Phase C2) → décision de collapse
+   C2+C3 justifiée par absence de séparation propre
+7. **Test rouge avant fix** (Phase C4) → behavior fix isolé du
+   refactor, pattern bug fix vs refactor respecté
+8. **Phase D skip + document** (advisor finale) → pas de spéculation
+
+**Next steps possibles (session séparée recommandée)** :
+- **Vague 3** : dégraissage validé. `organize_imports` mort confirmé +
+  procédure reachability pour `analyze_logs`/`generate_openapi`/
+  `scan_licenses` + consolidation des 8 handlers triviaux + 4 routes
+  serveur orphelines + décision legacy `src/providers/*-provider.ts`
+  (option a/b/c selon le plan). Estimation : 2-3 jours focalisés.
+
+**Mémoire à mettre à jour** : `code_buddy_v2_refactor.md` doit
+basculer "V1 livrée, V2 quasi bouclée" → "V1 + V2 livrées, V3 pending
+session dédiée".
