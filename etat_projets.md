@@ -88,6 +88,27 @@
 - **TODO suivant** : visual drag-and-drop Form Designer ; SqlParser JOIN/agrégats ; FormulaEvaluator branché à WorksheetFunction ; setActiveSheet/setActiveCell wired sur le hook Excel ; Selection.TypeParagraph sans parens (fix parser amont).
 - **Note** : le dossier racine `office/` n'est PAS un repo git — sous-repos `office-suite/` + `erp-crm-system/` + `deep_research/`
 
+## Nexus ERP
+- **Local** : `D:\CascadeProjects\nexus`
+- **GitHub** : https://github.com/phuetz/nexus (privé)
+- **Stack** : monorepo React 18 + TS + Vite + Tailwind (frontend) + Node.js + Express + Prisma + **PostgreSQL 16** (backend, port 3001) + React Native + Expo (mobile sous `nexus_chat/`). Docker `nexus-postgres` mappé sur port 5434 en dev.
+- **Cible** : SaaS ERP/CRM **multi-tenant** pour PME et artisans BTP français. Co-développé avec **Serge** ; commercialisation potentielle via agile-up.com.
+- **Branches** :
+  - `main` — référence stable de Serge (`e5bf571 feat: Transformation SaaS Multi-Tenant`). Ne pas pousser dessus sans coordination.
+  - `fix/multi-tenant-startup-bugs` — branche de travail en cours. 6 bugs de démarrage post multi-tenant corrigés (`f7ac8ac`), CLAUDE.md + README rétablis (`8cdc970`).
+  - ~75 branches `origin/claude/*` + `origin/codex/*` archivées (bruit historique des agents, à ignorer).
+- **Architecture multi-tenant (critique)** : toutes les entités (`User`, `Client`, `Project`, `Quote`, `Invoice`, `Product`, `Supplier`, `Task`, `Team`, `Conversation`, `Workflow`) portent un `organizationId`. Isolation à **deux couches** :
+  1. Schéma Prisma : `@@unique([email, organizationId])` (l'email n'est plus unique globalement) + index sur chaque colonne `organizationId`
+  2. Bouclier d'extension Prisma (`server/src/prisma.js`) avec `AsyncLocalStorage` (`orgContext`) qui injecte automatiquement l'`organizationId` courant dans les `where`/`data` ; contournements explicites pour le login pré-auth uniquement
+  - Le middleware `authenticateToken` lit l'`organizationId` du JWT et enveloppe la requête dans `orgContext.run(...)`.
+- **État UI** : 12 modules fonctionnels, dashboard KPIs, assistant IA, workflows automatisés. Navigation par état `activeModule` dans `App.tsx` (lazy loading), pas de React Router. `Ctrl/Cmd+K` ouvre la `CommandPalette`. Tout en français hard-codé (pas d'i18n). Mode démo via `VITE_DEMO_MODE=true` (n'importe quel email/password logue).
+- **Auth** : JWT 12h (secret ≥ 32 chars), payload contient `sub`, `email`, `role`, `permissions`, `organizationId`. 2FA TOTP via Speakeasy. CSRF Double Submit Cookie HMAC-SHA256 (custom, pas csurf). Validation Zod côté front ET back.
+- **TODO connus** :
+  - Migration Supabase encore en cours — beaucoup de services frontend appellent `supabase.from()` directement, le code neuf doit passer par `api-client.ts`
+  - Tests qui échouent depuis avant (mocks Supabase incomplets) : `gdpr-compliance.test.ts`, `ApprovalDashboard.test.tsx`, `Purchases.test.tsx`, `Settings.test.tsx`, `bank-reconciliation.test.ts`
+  - Piège `tsx --watch` Node 24 : avale silencieusement les erreurs de syntaxe ; fallback `node --experimental-strip-types src/index.js`
+- **Statut** : projet en pause après la transformation multi-tenant + fix démarrage, **reprend bientôt** (Serge porte la suite côté `main`, Patrice/Claude côté `fix/multi-tenant-startup-bugs` pour les améliorations).
+
 ## Agile-up.com
 - **Site** : https://agile-up.com — très professionnel, manque pages GitNexus/produits
 - **Gheorghie** : site esc-belitei.vercel.app, comptes My Business + LeBonCoin récupérés
