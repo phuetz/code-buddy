@@ -364,3 +364,51 @@ via `provider-openai-compat.ts` avec hooks nommés.
 frontière nette via `isGeminiProvider`. Pas d'advisor checkpoint requis
 (le plan le réserve pour avant Phase C, point de non-retour). Stop ici
 pour respecter la discipline pacing — Phase B sur le go de Patrice.
+
+## 2026-04-28 — [x] V2 Phase A étendue côté streaming (commit `bfa2440`)
+
+Reprise propre après orientation : `git log` montrait que la session
+précédente avait déjà livré Phase A (`17b148d`) + le fix latéral
+(`7f6853b`) hier soir 23h55-23h56. J'arrivais avec le sentiment d'avoir
+"tout à faire" alors que la base était en place. Lecture du plan
+`delightful-cuddling-rainbow.md` + commits récents avant écriture.
+
+**Premier piège évité grâce à l'advisor** : ma première version du
+sentinel pinait 4 divergences `chat()`/`chatStream()` comme
+"intentionnelles" (cache breakpoints, JSON-mode Anthropic, tool_choice
+override, conv tool messages). L'advisor a chopé que ces "divergences"
+sont en fait des **GAPs** documentées par `7f6853b` → fermées en Phase
+C. Pinner leur absence aurait bloqué Phase C de faire son travail.
+
+Pivot conseillé par advisor + corroboré par le plan file (qui ne demande
+pas ces pins) : drop les 4 anti-Phase-C pins, garder uniquement les
+4 parity passthrough côté streaming qui survivent l'unification.
+
+**Commit livré (`bfa2440`)** : 4 nouvelles assertions actives ajoutées
+en bas du `describe('Sentinel — Vague 2 Pre-Refactor Invariants')`
+de `codebuddy-client.test.ts` (sans nouveau fichier — single sentinel,
+one place, conformément à la recommandation advisor) :
+1. `chatStream()` service_tier passthrough OpenAI-compat
+2. `chatStream()` service_tier ne fuit pas Gemini
+3. `chatStream()` responseFormat=json → response_format OpenAI-compat
+4. `chatStream()` Gemini → streamGenerateContent fetch, mockCreate NOT called
+
+Le commit body explicite ce qui n'est **pas** pinné et pourquoi (les 3
+GAPs Anthropic+tool_choice qui doivent rester ouvertes pour Phase C),
+avec pointer vers le plan file.
+
+**Tests** :
+- `codebuddy-client.test.ts` : 105/105 pass (101 + 4)
+- Suite client complète : 178/178 pass (5 fichiers)
+
+**Pre-existing typecheck errors** vérifiées préexistantes via `git stash`
+sur master : `src/skills/{registry,types}.ts` + `src/workflows/lobster-engine.ts`
+ont des erreurs TS de syntaxe non liées à client.ts ni à ce commit.
+À traiter dans une session dédiée si Patrice veut.
+
+**Phase A close pour Vague 2** (les deux sessions cumulées : 6 + 4 = 10
+assertions sentinel sur le contrat de `client.ts`). Phase B
+(`provider-gemini-native.ts` extraction) reste à démarrer — commit
+isolé, pas d'advisor checkpoint requis selon plan, ~700 LOC à migrer.
+
+Stop ici, discipline pacing respectée. Phase B sur le go de Patrice.
