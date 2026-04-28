@@ -485,6 +485,78 @@ isolés et testés, prêts à être consommés par la classe en C2.
 **5 commits Vague 2 sur main pushés** : `7f6853b` → `17b148d` →
 `bfa2440` → `81324c7` → `eb922f3`
 
+## 2026-04-28 — [x] V2 Phase C2+C3 livrée — OpenAICompatProvider extrait
+
+Patrice : "fait ce que propose advisor". L'advisor avait recommandé une
+décomposition C1 → C2 (chat()) → C3 (chatStream()) → C4 (optionnel,
+fermer gap streaming Anthropic). En analysant le code, séparer C2 et
+C3 aurait forcé une duplication massive des helpers (isLocalInference,
+shouldIncludeSearchParameters, withCircuitBreaker, convertToolMessagesForLocalModels)
+ou laissé chatStream() cassé entre commits. Décision : collapser C2+C3
+en un commit (même précédent que Phase B Gemini qui a migré chat() +
+chatStream() ensemble). C4 reste séparé et optionnel.
+
+**Commit livré** : `03127c1` `refactor(client): vague 2 phase C2+C3 — extract openai-compat provider`
+
+Changements :
+- Nouveau `src/codebuddy/providers/provider-openai-compat.ts` (611 LOC)
+  - Migration verbatim de probeToolSupport, performToolProbe,
+    FUNCTION_CALLING_MODELS, modelSupportsFunctionCalling,
+    withCircuitBreaker, isLocalInference, isXaiProvider,
+    shouldIncludeSearchParameters, trackPromptCache, detectProviderLabel,
+    convertToolMessagesForLocalModels, chat(), chatStream(),
+    getPromptCacheStats()
+  - Hooks Anthropic appelés depuis le module C1
+  - Logger sources renamed CodeBuddyClient → OpenAICompatProvider
+- `client.ts` : 898 → 403 LOC (**-495, -55%**)
+  - State migré : client (OpenAI SDK), toolSupportProbed/Detected,
+    probePromise, _promptCacheHits/Misses
+  - State ajouté : openaiCompatProvider (mirror de geminiProvider)
+  - Constructor instancie le provider non-Gemini
+  - chat()/chatStream() collapsent en delegators ~10 lignes chacun
+  - probeToolSupport(), getPromptCacheStats(), setModel() délèguent
+  - getProviderName() reste sur le client (pure heuristique baseURL)
+
+**Catch advisor appliqué — getter pattern circuitBreakerConfig** :
+`setCircuitBreakerConfig` a 0 consumer aujourd'hui (vérifié par grep)
+mais le pattern getter est implémenté quand même. Le provider reçoit
+`getCircuitBreakerConfig: () => this.circuitBreakerConfig`, lu au
+moment de l'appel. Si un futur caller mute la config après
+construction, ça propage automatiquement. Coût zéro, bénéfice :
+pas de footgun snapshot-staleness plus tard.
+
+**Gap préservé délibérément (Phase C4 si Patrice opt-in)** :
+chatStream() n'appelle PAS les hooks Anthropic (ni cache breakpoints
+ni JSON system-prompt). Asymétrie inchangée vs avant extraction —
+flag dans le commit body de `7f6853b`. Phase C est extract-only,
+behavior fix dans un commit séparé optionnel.
+
+**Tests** :
+- 4 fichiers sentinel : 120/120 pass
+- hooks unit : 10/10 pass
+- Wider `tests/codebuddy/` + `tests/agent/` : 1188 pass, 1 skip, 1 file
+  fail (`grok-agent.test.ts` transform pré-existant, identique Phase B)
+
+**Stop par discipline pacing** — l'advisor : *"C2+C3+C4 en une session
+= mauvaise idée"*. J'ai fait C1 + C2+C3 collapsé en cette session. C4
+serait C2+C3+C4 — pile ce qui était déconseillé. Je m'arrête.
+
+**6 commits Vague 2 sur main pushés** : `7f6853b` → `17b148d` →
+`bfa2440` → `81324c7` → `eb922f3` → `03127c1`
+
+**Phase D évaluation** : `client.ts` à 403 LOC, déjà sous l'esprit
+de la cible Phase D (<300). Le travail restant pour Phase D est
+principalement créer `provider-registry.ts` pour centraliser le
+branchement isGemini-vs-openai qui vit dans le constructor. Gain
+cosmétique, pas load-bearing. À discuter avant commit.
+
+**Prochaine session possible (au choix de Patrice)** :
+- C4 : fermer le gap chatStream Anthropic (behavior change documentée)
+- D : provider-registry.ts + cleanup dispatch ladder dans setModel()/
+  probeToolSupport()/getPromptCacheStats()
+- Vague 3 : dégraissage validé (organize_imports + reachability check
+  pour analyze_logs/generate_openapi/scan_licenses)
+
 ## 2026-04-28 — [x] V2 Phase A étendue côté streaming (commit `bfa2440`)
 
 Reprise propre après orientation : `git log` montrait que la session
