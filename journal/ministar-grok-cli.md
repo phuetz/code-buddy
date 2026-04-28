@@ -748,3 +748,69 @@ exemple), pas avant.
 **Mémoire à mettre à jour** : `code_buddy_v2_refactor.md` doit
 basculer "V1 livrée, V2 quasi bouclée" → "V1 + V2 livrées, V3 pending
 session dédiée".
+
+## 2026-04-28 — [x] V3.A livrée — organize_imports supprimé (HARD STOP)
+
+Patrice : "continue". Advisor consulté pour cadrer Vague 3 (irréversible).
+Verdict advisor : flip "wait for tomorrow" → **3.A seul** (smallest, safest,
+manuellement vérifié dans la session). Justification : 3.A est uniquement
+sûre vs 3.B/C/D/E qui demandent runtime probe / cross-checks / décisions
+séparées. Surface bornée (3 fichiers + 3 modifs), réversible via git.
+
+**Pattern advisor pour 3.A** : 4 greps de vérification AVANT toute
+suppression. Si un export est utilisé ailleurs en prod → STOP et report,
+pas de demi-suppression.
+
+**Verdict des greps** :
+- `auto-import-tool.ts` exporte 9 symboles (interfaces + fonctions)
+- TOUS consommés UNIQUEMENT par `tests/unit/auto-import.test.ts`
+- Aucun code prod n'importe quoi que ce soit du fichier
+- `tools/registry/index.ts` : 0 adapter pour `organize_imports`
+  (les blocs L245/252/259 concernent autres tools)
+- MAIS `IMPORT_TOOLS` est registered via `registerGroup` dans
+  `src/codebuddy/tools.ts:133` — le LLM voyait le tool dans la liste,
+  mais sans adapter d'exécution. Pattern "registered-but-not-implemented".
+  Suppression toujours safe : aucun consommateur réel.
+
+**Commit livré** : `65e06cf` `chore(tools): remove dead organize_imports tool (V3.A)`
+
+Suppressions (3 fichiers, 972 LOC) :
+- `src/tools/auto-import-tool.ts` (692 LOC)
+- `src/codebuddy/tool-definitions/import-tools.ts` (36 LOC)
+- `tests/unit/auto-import.test.ts` (244 LOC)
+
+Modifications (3 fichiers, 19 LOC retirées) :
+- `src/codebuddy/tool-definitions/index.ts` : retrait du re-export
+- `src/codebuddy/tools.ts` : retrait import + registerGroup
+- `src/tools/metadata.ts` : retrait entry organize_imports
+
+**Total : -991 LOC** (tools layer).
+
+**Tests** :
+- `npx tsc --noEmit | grep "import-tool|organize_imports"` → empty
+- `tests/codebuddy/` + `tests/agent/` : 1188 pass, 1 skip, 1 file fail
+  (toujours `grok-agent.test.ts` transform pré-existant — pas une
+  régression)
+
+**HARD STOP** appliqué — pas de 3.B/C/D/E enchaîné en cette session.
+L'advisor : *"La discipline est de ne pas chaîner des catégories
+irréversibles — une suppression bornée OK, deux d'affilée = pattern
+d'échec."*
+
+**Pour la prochaine session V3** :
+- 3.B : reachability verification de `analyze_logs`, `generate_openapi`,
+  `scan_licenses` (procédure runtime probe + grep handlers + middleware
+  + agent dispatch). Ces 3 ont des adapters dans `tools/registry/index.ts`
+  contrairement à 3.A — registered ET implemented, donc verdict moins
+  trivial.
+- 3.C : consolidation des 8 handlers triviaux dans `lightweight.ts`
+- 3.D : 4 routes serveur orphelines (vérifier via `src/server/server.ts`)
+- 3.E : décision séparée legacy `src/providers/*-provider.ts`
+  (a) migrer `buddy provider test` vers nouvelles strategies
+  (b) laisser tel quel
+  (c) supprimer `buddy provider test`
+  À arbitrer avec Patrice.
+
+**État repo `main`** : 8 commits sur main depuis Phase A
+(`7f6853b` → `17b148d` → `bfa2440` → `81324c7` → `eb922f3` → `03127c1`
+→ `7fb2b6c` → `65e06cf`).
