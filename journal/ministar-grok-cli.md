@@ -814,3 +814,83 @@ d'échec."*
 **État repo `main`** : 8 commits sur main depuis Phase A
 (`7f6853b` → `17b148d` → `bfa2440` → `81324c7` → `eb922f3` → `03127c1`
 → `7fb2b6c` → `65e06cf`).
+
+## 2026-04-28 — [x] V3.C livrée — handlers consolidés dans lightweight.ts
+
+Patrice : "continue" après V3.A. Re-consultation advisor d'abord (pattern
+discipline `feedback_pace_and_advisor.md`). Verdict advisor : **HARD STOP
+maintenu sur 3.B** (deletion sans runtime probe = "smuggle de
+demi-vérification"). Mais propose **Option A : 3.C consolidation** —
+refactor pas suppression, behavior préservé par définition.
+
+**Justification advisor** : "Two prior advisor calls today flipped to
+your favor. This one doesn't, and that's the system working — not
+malfunctioning." Vague 1 override Patrice = "think harder, not check
+less". Skipping the procedure n'est pas du pacing, c'est silently
+lowering the bar.
+
+**Catch advisor appliqué — hidden state check** : sur les 8 handlers
+prévus (quota, voice-code, track, lessons, coverage, telemetry, btw,
+vulns), 2 ont du module-level singleton state :
+- `voice-code-handler.ts` : `let pipeline` (createVoiceToCodePipeline singleton)
+- `btw-handler.ts` : `let clientRef` + `setBtwClient` setter exporté
+
+→ Exclus du périmètre 3.C. Refactor de fichiers stateful = changement
+subtil de lifecycle init/teardown, pas behavior-neutral.
+
+**Commit livré** : `e2c9568` `refactor(handlers): consolidate 6 trivial handlers into lightweight.ts (V3.C)`
+
+Création de `src/commands/handlers/lightweight.ts` (306 LOC) regroupant :
+- `handleQuota` (17 LOC)
+- `handleLessonsCommand` (68 LOC)
+- `handleCoverage` (69 LOC)
+- `handleTelemetry` (69 LOC)
+- `handleVulns` (30 LOC)
+- `handleTrack` (55 LOC)
+
+Total source : 308 LOC (6 fichiers) → 306 LOC (1 fichier). Net ≈ neutre
+en LOC. Bénéfice : -6 fichiers dans `handlers/` (était 30+, navigation
+allégée).
+
+Wiring :
+- `handlers/index.ts` : 5 re-export blocks redirigés vers `./lightweight.js`,
+  + nouveau re-export `handleLessonsCommand` (était importé direct, jamais
+  re-exporté via le barrel)
+- `enhanced-command-handler.ts:159` : import direct `lessons-handler.js`
+  → `handlers/index.js` (passe par le barrel)
+
+Suppressions : 6 fichiers (quota/lessons/coverage/telemetry/vulns/track-handler).
+
+**Tests** :
+- `tests/codebuddy/` + `tests/agent/` : 1188 pass, 1 skip, 1 file fail
+  (`grok-agent.test.ts` toujours pré-existant)
+- `tests/commands/` : 7 failures **pré-existantes** vérifiées par
+  `git stash` + re-run sur baseline → pattern identique. Le coupable
+  est `src/skills/adapters/legacy-skill-adapter.ts:203-211` qui a un
+  artefact Word ("metadata.Native Engine?" avec un espace littéral).
+  Esbuild transform fail à chaque test qui charge ce module
+  transitivement.
+
+**Tech debt à signaler à Patrice** : `legacy-skill-adapter.ts` syntax
+error pré-existant — fix séparé hors scope V3. Bloque actuellement les
+tests de `tests/commands/*` et `tests/agent/grok-agent.test.ts`.
+
+**HARD STOP appliqué** — pas de 3.B/3.D/3.E enchaîné. Advisor explicite
+que c'est exactement le pattern à éviter ("ne pas chaîner des catégories
+irréversibles"). 3.B en particulier demande runtime probe non faisable
+en batch agent à 19h après 14h de session.
+
+**État repo `main`** : 9 commits sur main depuis Phase A
+(`7f6853b` → `17b148d` → `bfa2440` → `81324c7` → `eb922f3` → `03127c1`
+→ `7fb2b6c` → `65e06cf` → `e2c9568`).
+
+**Reste pour la prochaine session V3** :
+- 3.B : reachability runtime probe pour `analyze_logs` / `generate_openapi`
+  / `scan_licenses` (nécessite Code Buddy local + `/tools` runtime + test
+  prompt LLM — pas batch-friendly)
+- 3.D : 4 routes serveur (`cloud-tasks`, `gemini-agent`, `tools`,
+  `webhooks`) — vérifier registration via `src/server/server.ts`
+- 3.E : décision (a/b/c) pour legacy `src/providers/*-provider.ts` —
+  arbitrage Patrice
+- Tech debt : fix `legacy-skill-adapter.ts` syntax error (déchifrer
+  l'artefact "Native Engine" en clean property name)
