@@ -428,6 +428,63 @@ les Anthropic-isms refactorés en hooks nommés exportables et testables
 individuellement. Phase C = point de non-retour selon le plan, pacing
 discipline impose un checkpoint avant. Sur le go de Patrice après l'advisor.
 
+## 2026-04-28 — [x] V2 Phase C1 livrée — hooks Anthropic en pure fns
+
+Patrice : "continue utilse advisor". Advisor consulté avant de toucher
+le code — points clés retenus :
+
+- **Phase C ≠ client.ts <300 LOC** (c'est Phase D). Phase C laisse
+  client.ts ~400-500 LOC.
+- **Sous-étapes** : C1 (hooks pures fns) → C2 (OpenAICompatProvider,
+  chat()) → C3 (chatStream()) → C4 optionnel (fermer le gap streaming
+  Anthropic flag dans 7f6853b).
+- **Stop après C1 ou C2 = checkpoint valide** (advisor explicite). C2+C3+C4
+  en une session = mauvaise idée.
+- `setCircuitBreakerConfig` a 0 consumer (vérifié par grep). Pattern
+  getter inutile. `getProviderName` utilisé seulement en interne →
+  migrera avec OpenAI-compat. `getPromptCacheStats` 1 consumer dans
+  `infrastructure-facade.ts` → reste sur le client, déléguera au provider.
+- **`applyServiceTier` n'est PAS un hook Anthropic** (OpenAI le prend
+  aussi). Reste inline dans le payload, pas un hook nommé.
+- **Phase C est extract-only** : le gap `chatStream()` Anthropic
+  (cache breakpoints + JSON system-prompt) reste verbatim. C4 optionnel
+  séparé pour le fermer après C2/C3.
+
+**Commit livré** : `eb922f3` `refactor(client): vague 2 phase C1 — extract anthropic message hooks as pure fns`
+
+Changements :
+- Nouveau `src/codebuddy/providers/provider-openai-compat-hooks.ts` (56 LOC) :
+  - Re-export de `injectAnthropicCacheBreakpoints` (live dans
+    `src/optimization/cache-breakpoints.ts`)
+  - Nouvelle pure fn `injectJsonSystemPromptForAnthropic` extraite du
+    bloc inline L657-673 de client.ts. Pattern "return new array" rend
+    impossible le bug 7f6853b (la version inlined réassignait une var
+    locale mais le payload gardait l'ancienne ref).
+- `client.ts` : -22 lignes
+  - Static imports remplacent le `await import('../optimization/...')`
+    dynamique pour les cache breakpoints + drop du try/catch défensif
+    devenu inutile.
+  - Le hack JSON inline de 13 lignes devient 1 appel de fonction.
+- Nouveau `tests/codebuddy/providers/provider-openai-compat-hooks.test.ts`
+  (149 LOC, 10 tests) : couverture directe des deux pure fns +
+  régression test 7f6853b explicite.
+
+**Tests** :
+- 4 fichiers sentinel : 120/120 pass
+- hooks unit : 10/10 pass
+- Wider `tests/codebuddy/` + `tests/agent/` : 1188 pass (+10 vs Phase B),
+  1 skip, 1 file fail (`grok-agent.test.ts` transform pré-existant —
+  inchangé depuis Vague 1)
+
+**Stop ici** — l'advisor était clair : "tu travailles depuis tôt ce
+matin (commits 05:42, 05:43, 05:46). C2+C3+C4 en une session =
+mauvaise idée". Phase C2 (OpenAICompatProvider class) sur un autre go
+de Patrice. Point de reprise propre : `eb922f3` sur `main`, hooks
+isolés et testés, prêts à être consommés par la classe en C2.
+
+**5 commits Vague 2 sur main pushés** : `7f6853b` → `17b148d` →
+`bfa2440` → `81324c7` → `eb922f3`
+
 ## 2026-04-28 — [x] V2 Phase A étendue côté streaming (commit `bfa2440`)
 
 Reprise propre après orientation : `git log` montrait que la session
