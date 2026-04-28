@@ -365,6 +365,69 @@ frontière nette via `isGeminiProvider`. Pas d'advisor checkpoint requis
 (le plan le réserve pour avant Phase C, point de non-retour). Stop ici
 pour respecter la discipline pacing — Phase B sur le go de Patrice.
 
+## 2026-04-28 — [x] V2 Phase B livrée — Gemini native provider extrait
+
+Patrice a override : "continuze utilse advisor". Reprise avec advisor en
+amont pour cadrer Phase B.
+
+**Advisor catch avant copy/paste** : grep `this\.` dans toutes les
+méthodes Gemini avant migration → confirmation que `trackPromptCache`
+n'est PAS appelé depuis Gemini (pure OpenAI-compat concern), que
+`withCircuitBreaker` n'est PAS appliqué côté Gemini (raw retry seulement
+— asymétrie connue à addresser en Phase C). Constructor params provider
+finalisés : 6 explicites (apiKey, baseURL, model, defaultMaxTokens,
+geminiRequestTimeoutMs, defaultThinkingLevel?).
+
+**Tests : ajouter, pas déplacer** (correction advisor sur mon plan).
+Les 4 fichiers sentinel restent et testent via API publique. Le seul
+fichier qui a dû être modifié : `tests/codebuddy/client-gemini-vision.test.ts`
+qui violait déjà l'encapsulation pour tester des privates → adapté
+pour instancier `GeminiNativeProvider` directement (les privates ont
+migré avec les méthodes).
+
+**Pendant que je travaillais** : Patrice + autre Claude (Opus 4.7 1M)
+ont commité `bfa2440` localement — extension du sentinel avec 4
+assertions chatStream-side (parité streaming des 6 chat-side de Phase A).
+Aucun conflit avec mes changements, le commit est compatible.
+
+**Commit livré** : `81324c7` `refactor(client): vague 2 phase B — extract gemini native provider`
+
+Changements :
+- 2 nouveaux fichiers sous `src/codebuddy/providers/` :
+  - `provider-interface.ts` (44 LOC) : Provider { chat, chatStream, setModel, setDefaultThinkingLevel? }
+  - `provider-gemini-native.ts` (857 LOC) : verbatim migration des 8 méthodes + GEMINI_TYPE_MAP
+- `client.ts` : 1683 → 907 LOC (-776)
+  - Nouveau field `private geminiProvider: GeminiNativeProvider | null`
+  - Constructor instancie la strategy si `isGeminiProvider`
+  - `chat()` / `chatStream()` délèguent via `if (this.geminiProvider) return ...`
+  - `setModel()` et `setDefaultThinkingLevel()` forward à la strategy
+  - 8 méthodes Gemini supprimées + GEMINI_TYPE_MAP static + redundant logger.info
+- 1 nouvel assertion sentinel : `setModel forwards to GeminiNativeProvider`
+  (catch advisor : silent-breakage spot que le sentinel existant ne couvrait pas)
+
+**Tests** :
+- `codebuddy-client.test.ts` : 106/106 pass (105 + 1 setModel chain)
+- 4 fichiers sentinel ensemble : 119/119 pass (toutes Phase A + Phase B sentinel)
+- Wider `tests/codebuddy/` + `tests/agent/` : 1178 pass, 1 skip, 1 file fail
+  (`grok-agent.test.ts` — issue de transform pré-existante, déjà constatée
+  pendant Vague 1, pas une régression)
+
+**Asymétries préservées** (à fermer Phase C ou plus tard) :
+- Circuit breaker : Gemini raw retry, OpenAI-compat wrapped
+- `trackPromptCache` : OpenAI-compat-only (Gemini n'a pas cached_tokens)
+- `parseRateLimitHeaders` : OpenAI-compat-only
+- chatStream() Anthropic-isms gap (cache breakpoints, JSON system-prompt
+  hack) flaggé dans `7f6853b` reste ouvert — sera fermé Phase C avec
+  hooks nommés `injectAnthropicCacheBreakpoints`, etc.
+
+**4 commits sur main pushés** : `7f6853b` → `17b148d` → `bfa2440` → `81324c7`
+
+**Prochaine étape — Phase C (advisor checkpoint OBLIGATOIRE avant)**.
+Plan : extraire OpenAI-compat path dans `provider-openai-compat.ts` avec
+les Anthropic-isms refactorés en hooks nommés exportables et testables
+individuellement. Phase C = point de non-retour selon le plan, pacing
+discipline impose un checkpoint avant. Sur le go de Patrice après l'advisor.
+
 ## 2026-04-28 — [x] V2 Phase A étendue côté streaming (commit `bfa2440`)
 
 Reprise propre après orientation : `git log` montrait que la session
