@@ -604,3 +604,55 @@ assertions sentinel sur le contrat de `client.ts`). Phase B
 isolé, pas d'advisor checkpoint requis selon plan, ~700 LOC à migrer.
 
 Stop ici, discipline pacing respectée. Phase B sur le go de Patrice.
+
+## 2026-04-28 — [!] Collision avec session Claude parallèle — V2 quasi bouclée
+
+Patrice m'a relancé avec "continue avec la phase B" depuis ma session
+précédente. J'allais entrer dans la cartographie quand `wc -l client.ts`
+a renvoyé **404 lignes** au lieu des 1683 attendues. `git log` montre
+qu'une **session Claude parallèle** (depuis le briefing "Patrice Huetz"
+auteur, donc même utilisateur) a livré pendant que je rédigeais ma
+session d'extension Phase A :
+
+- `81324c7` Phase B — extract `provider-gemini-native.ts` (857 LOC) +
+  `provider-interface.ts` (44 LOC). 820 LOC retirés de `client.ts`.
+- `eb922f3` Phase C1 — extract `provider-openai-compat-hooks.ts`
+  (Anthropic hooks comme pures fns).
+- `03127c1` Phase C2+C3 — extract `provider-openai-compat.ts` (611 LOC).
+  Fusion C2/C3 motivée par helpers partagés (commit body explicite).
+  `client.ts` : 898 → 403 LOC.
+
+**Bilan Vague 2** : `src/codebuddy/client.ts` 1683 → **403 LOC** (-1280, -76%).
+Architecture livrée : `client.ts` thin dispatcher + `providers/{interface,
+gemini-native,openai-compat,openai-compat-hooks}.ts`.
+
+**Mes 4 sentinels streaming-side (`bfa2440`) ont survécu au refactor** :
+106/106 tests verts dans codebuddy-client.test.ts (101 base + 4 sentinels
++ 1 ajouté par session parallèle). Le dispatcher préserve la forme de
+`mockCreate.mock.calls[0][0]` — pas de silent break.
+
+**2 items opt-in restants (consent gates explicites)** :
+- **Phase C4** : fermer la GAP Anthropic en streaming (`chatStream()` ne
+  câble pas les hooks que `chat()` câble depuis C1). Fix comportemental,
+  pas refactor. Petit commit, sentinel `bfa2440` non-pinne déliberément
+  cette GAP pour autoriser le fix. Commit body C2+C3 dit "if Patrice opts in".
+- **Phase D** : `provider-registry.ts` pour centraliser le branching
+  `isGemini` (constructor + setModel + probeToolSupport + getPromptCacheStats).
+  Cosmétique. Commit body dit "discussion before commit".
+
+**Travail durable que je peux faire sans aval** (fait dans cette session) :
+- Memory `code_buddy_v2_refactor.md` mise à jour (était stale "Vague 1
+  démarrée" → réalité "V1 livrée, V2 quasi bouclée").
+- Cette entrée journal documentant la collision.
+
+**Coût de la collision** : ~5 minutes de réorientation. Pas de travail
+perdu — ma Phase A extension de ce matin (`bfa2440`) restait nécessaire
+puisque la session parallèle n'a pas couvert le côté streaming en Phase A.
+
+**Note pacing** : à ajouter au pattern `feedback_pace_and_advisor.md` —
+**toujours `git log --oneline` au début de session** quand on sait que
+plusieurs IA tournent en parallèle (cas de plus en plus fréquent sur
+MINISTAR). Détecter "untracked work in main" avant de réorienter.
+
+**Demande pour Patrice** : C4 (fix GAP Anthropic streaming) ou D
+(registry cosmétique) — laquelle (si l'une) ? Ou stop V2, passer à V3 ?
