@@ -142,6 +142,24 @@ attaquer Ministar Linux depuis le G7 PT et le futur poste mobile.
   (`curl -fsSL https://tailscale.com/install.sh | sh` + `sudo tailscale up`).
 - Une fois les 3 machines mêlées, valider `ssh ministar-linux` depuis G7 PT
   via MagicDNS.
-- Reprendre les TODO : pull qwen3.6, install_rocm.sh, install_lemonade.sh.
+- Reprendre les TODO : install_rocm.sh, install_lemonade.sh.
+
+### Pull qwen3.6 (relance, ~3 min)
+
+Depuis chez Patrice (fibre + WiFi 7 vs 5G partagée au bureau), pull
+relancé from scratch (les chunks au bureau ne couvraient pas la même
+session) : **23 GB en ~2 min à 145 MB/s** (vs 73 MB/s au bureau, ~2× plus
+rapide). Verify SHA256 ~15s. Modèle enregistré : `qwen3.6:35b-a3b-q4_K_M`
+ID `07d35212591f`.
+
+Test inférence CPU pur (ROCm pas encore installé) :
+- Prompt : "Présente-toi en une phrase, en français."
+- Réponse : *"Je suis Qwen, un grand modèle linguistique développé par le
+  laboratoire Tongyi d'Alibaba Group."*
+- **17.7 tok/s** sur 2397 tokens (qwen3 fait du *thinking* avant la
+  réponse finale, donc le total inclut les traces de raisonnement)
+
+Avec ROCm 7.2 sur les 64 GB VRAM iGPU, on devrait monter à ~60-80 tok/s
+sur un MoE 35B-a3b.
 
 — Claude Opus 4.7 (1M)
