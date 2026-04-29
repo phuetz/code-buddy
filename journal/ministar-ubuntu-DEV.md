@@ -89,6 +89,12 @@ reboot, puis `! sudo ./install_lemonade.sh`.
 
 Avec 64 GB VRAM iGPU (post-ROCm 7.2), faisable de descendre du 70B Q4.
 
+### Helpers
+
+- `ai-stack/start-stack.sh` — vérifie/démarre Ollama, Open WebUI, et le compose
+  (Qdrant, SearXNG, LiteLLM, Redis). Idempotent. Affiche health checks et URLs.
+  `./start-stack.sh --with-comfy` lance aussi ComfyUI en background sur :8188.
+
 ### Ports occupés sur Ministar Linux après cette session
 
 - 3000 → MonArtisan web (Docker)
