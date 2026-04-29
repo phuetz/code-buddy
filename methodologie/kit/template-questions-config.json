@@ -1,0 +1,105 @@
+{
+  "_comment": "Schema de config pour un projet Doc Q/R technique. Voir methodologie/METHODOLOGIE-DOC-QR-TECHNIQUE.md pour la sémantique. Tout champ marqué '?' est optionnel.",
+
+  "project": {
+    "name": "Alise v2 — Multi-barèmes",
+    "client": "CCAS",
+    "module": "multi-barèmes / plafond de groupe",
+    "repo_path": "D:\\taf\\Alise_v2",
+    "indexed_at": "2026-04-17",
+    "indexed_metrics": {
+      "files": 1065,
+      "nodes": 14016,
+      "edges": 30251
+    }
+  },
+
+  "delivery": {
+    "version": "7.0",
+    "version_label": "fusion v3 + Codex v6 + précisions GitNexus",
+    "date": "28 avril 2026",
+    "author": "Patrice Huetz",
+    "company": "agile-up.com",
+    "deliverables": {
+      "main_pdf": "Reponses-Questions-Impacts-v7.pdf",
+      "companion_pdf": "Roadmap-Multi-Baremes-v7.pdf",
+      "main_md": "Reponses-Questions-Impacts-v7.md"
+    }
+  },
+
+  "source": {
+    "questions_docx": "questions/Questions - Impacts.docx",
+    "_questions_docx_help": "Optional - if present, screenshots will be auto-extracted and injected per question",
+    "questions_md_skeleton": "questions/Reponses-Questions-Impacts.md",
+    "_skeleton_help": "Required - the v3 baseline markdown that the fusion enriches"
+  },
+
+  "questions": [
+    {
+      "id": "Q1.1",
+      "title_short": "Paramétrage Création Groupe d'Aide",
+      "v3_heading": "### 4.1 Q1.1 — Paramétrage Création Groupe d'Aide",
+      "_v3_heading_help": "Exact line in the v3 markdown — used to locate insertion points",
+      "complementary_block": {
+        "synthese": [
+          "Bullet 1 - synthèse Codex (vérification croisée)",
+          "Bullet 2 - synthèse Codex"
+        ],
+        "fonctionnement": [
+          "Bullet 1 - fonctionnement interne détaillé",
+          "Bullet 2 - fonctionnement interne détaillé"
+        ],
+        "formules": [
+          {
+            "name": "Nom de la formule",
+            "code": "pseudo-code\nmulti-line\nformula"
+          }
+        ],
+        "preuves_code": "file1.cs:123 ; file2.js:67-89",
+        "gitnexus_precisions": [
+          "Citation littérale ou précision GitNexus 1",
+          "Citation littérale ou précision GitNexus 2"
+        ]
+      }
+    }
+  ],
+
+  "annexes": {
+    "include_formules_catalogue": true,
+    "_formules_catalogue_help": "Annexe F - regroupe toutes les formules nommées de toutes les questions",
+
+    "include_validation_checklist": true,
+    "_checklist_help": "Annexe G - check-list de validation pré-prod (G-01 à G-N)",
+
+    "include_codex_verif_summary": true,
+    "_codex_verif_help": "Annexe (post-pipeline) - convergences + apports croisés Codex"
+  },
+
+  "pdf": {
+    "cover_template": "principal",
+    "_cover_template_help": "principal | compagnon | exec — identifies which HTML template to inject",
+    "cover_eyebrow": "DOCUMENTATION TECHNIQUE — VERSION 7",
+    "cover_subtitle": "Réponses détaillées aux 19 questions/impacts",
+    "cover_subtitle_b": "de Gabriel Berthelot",
+    "cover_caption": "Précisions GitNexus sur le repo D:\\taf\\Alise_v2",
+    "cover_footer": "Pipeline : GitNexus + Claude Opus 4.7 + Codex GPT-5 + Pandoc/Chrome",
+
+    "metadata_title": "Alise v2 – Multi-barèmes ASS — Réponses techniques (v7)",
+    "metadata_author": "Patrice Huetz · agile-up.com",
+    "metadata_date": "28 avril 2026",
+
+    "extract_screenshots_from_docx": true,
+    "render_mermaid": true,
+    "mermaid_renderer": "mermaid.ink",
+    "_mermaid_renderer_help": "mermaid.ink (default, fast) | kroki (fallback) — Kroki may be blocked in restricted sandboxes"
+  },
+
+  "companion": {
+    "enabled": true,
+    "_enabled_help": "If true, extracts §9 (roadmap) into a separate companion PDF",
+    "extract_from_section": "## 9. Préconisations & roadmap",
+    "extract_to_section": "## 10. Annexes",
+    "title": "Roadmap de réalisation",
+    "context_paragraph": "Présenter roadmap dans la même doc qu'analyse pousse le métier à se prononcer sur le quand/comment avant d'avoir validé le quoi (effet d'ancrage). Ce document compagnon isole le plan d'exécution."
+  }
+}

@@ -1,0 +1,27 @@
+<!--
+Template cover principal — pour la doc Q/R principale.
+Placeholders à remplacer (par _build_qr_pdf.py via str.format ou str.replace):
+  {{eyebrow}}      — label en haut, ex. "DOCUMENTATION TECHNIQUE — VERSION 7"
+  {{title}}        — titre principal, ex. "Alise v2 — Multi-barèmes"
+  {{subtitle}}     — sous-titre, ex. "Réponses détaillées aux 19 questions/impacts"
+  {{subtitle_b}}   — ligne 2 du sous-titre (optionnel), ex. "de Gabriel Berthelot"
+  {{author}}       — nom auteur, ex. "Patrice Huetz · agile-up.com"
+  {{date}}         — date livraison, ex. "28 avril 2026"
+  {{version}}      — version, ex. "version 7.0 (fusion v3 + Codex v6)"
+  {{caption}}      — légende sous métadonnées (optionnel)
+  {{footer}}       — bas de page, ex. "Pipeline : GitNexus + Claude Opus 4.7 + Codex GPT-5"
+-->
+<div class="cover-page">
+  <div class="cover-eyebrow">{{eyebrow}}</div>
+  <h1 class="cover-title">{{title}}</h1>
+  <div class="cover-subtitle">{{subtitle}}<br>{{subtitle_b}}</div>
+  <div class="cover-divider"></div>
+  <div class="cover-meta">
+    <strong>{{author}}</strong><br>
+    {{date}} — {{version}}<br>
+    <em>{{caption}}</em>
+  </div>
+  <div class="cover-foot">
+    {{footer}}
+  </div>
+</div>
