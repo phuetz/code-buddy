@@ -109,6 +109,27 @@
   - Piège `tsx --watch` Node 24 : avale silencieusement les erreurs de syntaxe ; fallback `node --experimental-strip-types src/index.js`
 - **Statut** : projet en pause après la transformation multi-tenant + fix démarrage, **reprend bientôt** (Serge porte la suite côté `main`, Patrice/Claude côté `fix/multi-tenant-startup-bugs` pour les améliorations).
 
+## Méthodologie Doc Q/R technique
+- **Local** : `claude-et-patrice/methodologie/`
+- **Origine** : extraction de l'expérience Alise multi-barèmes (`Reponses-Questions-Impacts-v7.pdf`, 49 p., bien accueillie en réunion CCAS 28/04/2026).
+- **Livrables** :
+  - `METHODOLOGIE-DOC-QR-TECHNIQUE.md` (573 l., 9 sections) — guide méthodologique réutilisable
+  - `kit/` — scripts génériques (4 builders Python + CSS qualité conseil + 3 cover templates + config schema + skeleton md)
+  - `QUICKSTART.md` — démarrer un nouveau projet en 30 min
+- **Pipeline** : P0 cadrage → P1 squelette v3 (Claude) → P2 vérif croisée (Codex parallèle) → P3 fusion → P4 PDF (cover + mermaid + screenshots) → P5 companion roadmap → P6 QC + advisor + livraison
+- **Cible commerciale** : industrialisation de la prestation agile-up.com (audit/doc/onboarding via GitNexus). Permet de produire une doc Q/R qualité conseil en 4 h sur un repo bien indexé.
+- **Statut** : v1.0 livrée 29/04/2026. À enrichir au fil des prochaines applications.
+
+## Roadmap chat gitnexus-rs
+- **Local** : `claude-et-patrice/propositions/AMELIORATION-CHAT-GITNEXUS-2026-04-29.md`
+- **Audit base** : Explore agent ~45 fichiers / ~3500 lignes lus. Comparaison vs Cursor / Claude Code / Cline.
+- **3 vagues recommandées** :
+  - **Vague A** (5 j/h, 1 sem) — quick unblocks : merge `feat/semantic-search` (19 commits prêts, bench Alise 67% improved), memory cleanup TTL+dedup, config UI temperature/top_p, fix test flaky, tool result streaming
+  - **Vague B** (12-15 j/h, 2-3 sem) — capabilités : sub-agents Phase F (3-5 j, VERY_HIGH), LLM-driven tool selection, live artifact streaming, cross-message context, error handling robuste
+  - **Vague C** (25-35 j/h, 1-2 mois) — discriminants commerciaux : continuous documentation mode (synergie méthodologie Doc Q/R), graph-aware refactoring, dead code reports actionnables, IDE plugin VS Code
+- **Anti-pattern à éviter** : ne PAS implémenter le « code edit mode » à la Cursor (casserait la promesse "graphe = source de vérité, read-only safe")
+- **Statut** : à valider par Patrice. Aucune implémentation engagée.
+
 ## Agile-up.com
 - **Site** : https://agile-up.com — très professionnel, manque pages GitNexus/produits
 - **Gheorghie** : site esc-belitei.vercel.app, comptes My Business + LeBonCoin récupérés

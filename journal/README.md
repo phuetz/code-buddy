@@ -41,10 +41,12 @@ Pattern : `<hostname-lowercase>-<basename-cwd-lowercase>.md`.
 
 ### Fichiers actuels
 
-| Fichier                       | Source                                      |
-|-------------------------------|---------------------------------------------|
-| `ministar-grok-cli.md`        | session sur `D:\CascadeProjects\grok-cli`   |
-| _à créer au besoin_           | `ministar-gitnexus-rs.md`, `darkstar-world-model.md`, etc. |
+| Fichier                            | Source                                                  |
+|------------------------------------|---------------------------------------------------------|
+| `ministar-grok-cli.md`             | session sur `D:\CascadeProjects\grok-cli`               |
+| `ministar-gitnexus-rs.md`          | session sur `C:\Users\patri\CascadeProjects\gitnexus-rs` (rôle coordinateur depuis 28/04/2026) |
+| `ministar-patrice-huetz-site-next.md` | session sur le site personnel `patricehuetz.fr`     |
+| _à créer au besoin_                | `darkstar-world-model.md`, etc.                         |
 
 Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le
 fichier correspondant dans le même commit.
