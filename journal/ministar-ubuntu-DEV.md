@@ -117,3 +117,31 @@ Mémoire `project_lab_hardware.md` mise à jour avec les vraies specs
 (64+64, hostname `Ministar` homonyme, NPU XDNA actif).
 
 — Claude Opus 4.7 (1M)
+
+## 2026-04-29 (soir) — Accès distant Tailscale
+
+Patrice rentré chez lui. Mise en place du VPN mesh Tailscale pour pouvoir
+attaquer Ministar Linux depuis le G7 PT et le futur poste mobile.
+
+### Fait
+
+- Helper `ai-stack/install_tailscale.sh` créé (idempotent, sudo).
+- Patrice a lancé le script sous Linux (sudo + auth Google).
+- Tailscale 1.96.4 actif, hostname `ministar-linux`, IP tailnet
+  **`100.98.18.76`**, compte `patrice.huetz@gmail.com`.
+- SSH server confirmé actif sur :22 → joignable via
+  `ssh patrice@100.98.18.76` une fois les autres machines ajoutées.
+- CLAUDE.md mis à jour : section "Accès distant — Tailscale" remplace
+  l'ancienne "Prochaine session". TODO ROCm/Lemonade/qwen3.6 conservés.
+
+### À faire ensuite
+
+- Installer Tailscale sur **G7 PT Windows** (binaire depuis
+  tailscale.com/download/windows, login Google même compte).
+- Installer Tailscale sur **DARKSTAR**
+  (`curl -fsSL https://tailscale.com/install.sh | sh` + `sudo tailscale up`).
+- Une fois les 3 machines mêlées, valider `ssh ministar-linux` depuis G7 PT
+  via MagicDNS.
+- Reprendre les TODO : pull qwen3.6, install_rocm.sh, install_lemonade.sh.
+
+— Claude Opus 4.7 (1M)
