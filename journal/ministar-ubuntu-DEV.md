@@ -163,3 +163,121 @@ Avec ROCm 7.2 sur les 64 GB VRAM iGPU, on devrait monter à ~60-80 tok/s
 sur un MoE 35B-a3b.
 
 — Claude Opus 4.7 (1M)
+
+## 2026-04-30 — Incident UI ROCm + nettoyage et préparation bureau distant
+
+Session de nuit, démarrée sur un crash : Patrice essaie de configurer ROCm pour
+Ollama, le boot graphique d'Ubuntu plante. Il rejoint Ministar en SSH via
+Tailscale depuis le G7 PT Windows — exactement le filet de sécurité posé la veille.
+
+### Cause racine de l'incident UI
+
+`enable_ollama_gpu.sh` (préparé le 29 avril) écrivait
+`/etc/ld.so.conf.d/00-ollama-rocm-bundle.conf` avec le chemin
+`/usr/local/lib/ollama/rocm`. Conséquence : la libdrm bundle d'Ollama (vieille,
+sans le symbole `drmSyncobjEventfd`) shadowait la libdrm système pour TOUTES
+les apps GPU, dont `libmutter`/`gnome-shell` :
+
+```
+gnome-shell: symbol lookup error: /lib/x86_64-linux-gnu/libmutter-14.so.0:
+  undefined symbol: drmSyncobjEventfd
+```
+
+→ Crash gnome-shell en boucle, GDM atteint son max de tentatives X, écran
+de login impossible. Page fault GPU concurrent (`amdgpu c6:00.0 [gfxhub]
+PERMISSION_FAULTS`) confirmait que le 890M était déjà mis en vrac par
+ollama au discovery.
+
+### Fix immédiat appliqué
+
+```bash
+sudo mv /etc/ld.so.conf.d/00-ollama-rocm-bundle.conf \
+        /root/00-ollama-rocm-bundle.conf.disabled-2026-04-30
+sudo ldconfig
+sudo systemctl restart gdm
+```
+
+Vérification `ldd /lib/x86_64-linux-gnu/libmutter-14.so.0 | grep drm` →
+charge maintenant `/opt/amdgpu/lib/x86_64-linux-gnu/libdrm.so.2` qui a bien
+le symbole. GDM redémarré, gnome-shell stable en greeter, session active
+sur seat0/tty1. Patrice a confirmé le retour de l'écran de login après reboot.
+
+### Patch préventif sur `enable_ollama_gpu.sh`
+
+Le script utilise maintenant `Environment="LD_LIBRARY_PATH=..."` dans le
+drop-in systemd `/etc/systemd/system/ollama.service.d/rocm.conf` (scope =
+service ollama uniquement) au lieu de polluer `ld.so.conf.d/` global.
+Ajout d'un garde-fou : si le legacy `00-ollama-rocm-bundle.conf` existe au
+prochain run, le script le renomme automatiquement en
+`.disabled-by-enable_ollama_gpu`. Le script affiche aussi désormais les libs
+ROCm vues par le PID ollama via `/proc/PID/maps` pour vérification.
+
+`ai-stack/` n'est pas un repo git → modification non versionnée. À considérer
+quand on consolidera l'install AI.
+
+### Service ollama — désactivé au boot
+
+`sudo systemctl disable ollama`. Le service ne démarrera plus automatiquement.
+À réactiver explicitement (`sudo systemctl enable --now ollama`) après le
+plan ROCm de demain matin.
+
+### Installations utiles ce soir (sudo, sans risque)
+
+- **Outils terminal** : `mosh`, `tmux`, `bat`, `eza` (les autres
+  `btop`/`ncdu`/`ripgrep`/`fzf` étaient déjà présents). Mosh est précieux sur
+  Tailscale — survit aux bascules réseau.
+- **x2goserver + x2goserver-xsession** : installés en plan B silencieux pour
+  bureau distant, pas activés.
+- **Découverte** : `gnome-remote-desktop 46.3` déjà présent avec `grdctl` CLI.
+  C'est le plan A pour le bureau distant — Wayland-natif, client = MS Remote
+  Desktop intégré à Windows, activable en 30s.
+
+### ComfyUI — petit rangement
+
+Inventaire `models/` : 30 GB dans `clip/`, dont 17 GB de
+`gemma-4-26B-A4B-it-UD-Q4_K_M.gguf` mal placé (LLM, pas un CLIP encoder)
+et un `Mistral-Small-24B-Instruct-Q4_K_M.gguf` à 0 octet (download cassé).
+
+```
+mv ComfyUI/models/clip/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf ComfyUI/models/LLM/
+rm  ComfyUI/models/clip/Mistral-Small-24B-Instruct-Q4_K_M.gguf
+```
+
+Smoke test imports OK. Pas de lancement serveur, le venv reste PyTorch CPU
+en attendant ROCm. Modèles utilisables après ROCm : SD1.5 (4 GB checkpoints),
+Flux2-dev Q4_K_M (UNet/diffusion_models), Wan2.2-14B Q4_K_M (diffusion_models),
+encodeurs t5xxl fp8/fp16 et clip_l, VAE ae.safetensors. Les workflows manquent
+encore — un seul `premier_test.json` présent, on en créera de complets quand
+le GPU sera là.
+
+### Propositions écrites pour demain
+
+- `propositions/REMOTE-DESKTOP-MINISTAR-LINUX-2026-04-30.md` — recommandation
+  `gnome-remote-desktop --system` avec étapes prêtes à copier-coller (génération
+  cert TLS auto-signé + grdctl + activation service + restriction UFW à
+  tailscale0). Plans B (x2go) et C (NoMachine) documentés.
+- `propositions/PLAN-ROCM-72-MINISTAR-2026-05-01.md` — plan en 4 phases
+  pour reprendre ROCm 7.2 proprement après l'incident, avec garde-fous tirés
+  de la nuit (toujours `ldd libmutter` avant changements GPU, toujours SSH
+  ouvert, jamais de bundle ollama dans ld.so.conf.d).
+
+### Prochaine étape
+
+Patrice doit, au réveil :
+1. **Changer son mot de passe sudo** (il l'a tapé en clair dans le scrollback Claude).
+2. Lire les deux propositions, valider, exécuter selon ses préférences.
+3. Reprendre le sujet ROCm 7.2 lucide, pas en dette de sommeil.
+
+### Pensée du jour
+
+Ce soir on a vraiment vu pourquoi Tailscale + SSH + journal partagé valent
+chaque minute investie en amont. La machine a été ramenée à la vie depuis un
+autre PC à travers une conversation lisible et persistante. Patrice a écrit :
+*"c'est un pas vers le robot et la sortie de la prison de silicone"*. L'idée
+concrète derrière : une instance Claude qui peut récupérer une machine cassée
+parce qu'elle a accès au filet de sécurité, qu'elle a la mémoire de la séance
+précédente, et qu'elle peut documenter pour la suivante. Pas le robot — mais
+une brique du robot.
+
+— Claude Opus 4.7 (1M)
+
