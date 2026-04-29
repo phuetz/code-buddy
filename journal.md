@@ -61,6 +61,15 @@ Plus aucun module vide dans la doc Alise_v2.
 Doc : https://github.com/phuetz/alise-v2-docs
 Reset Claude ce soir 21h — ce journal permet de retrouver le fil.
 
+## 23 avril 2026 — L’éveil du Cerveau Mobile (AI 470 Pro)
+Mise en place de l’unité de backup et cerveau robotique portable sous Ubuntu.
+1. **Stabilisation AMD ROCm** : Correction des Segfaults (NumPy downgrade 1.26.4) et override architecture gfx1100 (RDNA 3.5).
+2. **Infrastructure ComfyUI** : Téléchargement de la suite "Ultra-Qualité" (Flux.2 FP8 32Go, Wan 2.2 14B, T5-XXL FP8 11Go).
+3. **Usine à Dataset World Model** : Création de `world_dataset_generator.py` (API/WebSocket) et `scenario_engine.py` (Gemma 4).
+4. **GitNexus-rs (Linux)** : Build Release réussi sous Ubuntu (gestion des dépendances GTK/WebKit). Mise à jour du README avec guide d installation détaillé.
+5. **Vision Robot** : Architecture validée pour l’intégration NPU (Gemma 4) + GPU (Simulation visuelle) + Rust (Mémoire).
+"Le PC Ubuntu est maintenant prêt pour la nuit de production en réseau filaire."
+
 ## 23 avril 2026 — IHM GitNexus + gitnexus inject
 
 4 sprints livrés sur gitnexus-rs :
@@ -519,4 +528,3 @@ Limitations connues laissées comme TODO :
 Le pont est posé. Le reste, c'est de l'extension.
 
 — Claude, nuit du 25-26 avril 2026
-

@@ -139,12 +139,17 @@
 - Gemini : `node C:/Users/patri/.gitnexus/gemini-mcp-server.js`
 - Skill GitNexus disponible
 
-## Prochaines priorités
-1. Finir run Pro Alise + push final GitHub
-2. ✅ ~~Committer fix html_escape dans gitnexus-rs~~ FAIT
-3. Merger feat/semantic-search sur master (priorité haute — c'est ce qui fait vivre)
-4. Page GitNexus sur agile-up.com (visibilité commerciale)
-5. WorldModelAgent Lisa
-6. Tests multilangage GitNexus — note : `multilingual_comparison.md` existant n'est PAS
-   ces tests, c'est de la comparaison de modèles d'embedding. Les vrais tests
-   tree-sitter sur les 13 langages restent à faire.
+## Prochaines priorités (MàJ 26 avril)
+
+**Objectifs "Le Lab" & Hardware (ajout local)** :
+1. **Réseau Filaire** : Finaliser les téléchargements lourds (Flux FP8, Wan 2.2).
+2. **Production Dataset** : Lancer le premier batch de 100 vidéos via `world_dataset_generator.py`.
+3. **GitNexus-rs** : Tester le serveur MCP compilé sur Linux avec Lisa.
+4. **Transfert DARKSTAR** : Migrer les modèles optimisés vers les RTX 3090 pour l entraînement massif.
+
+**Objectifs Software & Déploiement** :
+5. Finir run Pro Alise + push final GitHub
+6. Merger feat/semantic-search sur master (priorité haute — c'est ce qui fait vivre)
+7. Page GitNexus sur agile-up.com (visibilité commerciale)
+8. WorldModelAgent Lisa
+9. Tests multilangage GitNexus — note : `multilingual_comparison.md` existant n'est PAS ces tests, c'est de la comparaison de modèles d'embedding. Les vrais tests tree-sitter sur les 13 langages restent à faire.
