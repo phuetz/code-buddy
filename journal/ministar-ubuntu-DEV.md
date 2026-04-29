@@ -268,6 +268,32 @@ Patrice doit, au réveil :
 2. Lire les deux propositions, valider, exécuter selon ses préférences.
 3. Reprendre le sujet ROCm 7.2 lucide, pas en dette de sommeil.
 
+### Mise à jour ComfyUI core + custom_nodes (en bonus)
+
+`git pull --ff-only` sur le core ComfyUI : **33 commits récupérés**. Notamment
+arrivée d'un dossier `blueprints/` avec **50+ workflows prêts à l'emploi**,
+dont plusieurs pertinents pour les modèles déjà téléchargés :
+
+- `Text to Video (Wan 2.2).json` et `Image to Video (Wan 2.2).json` →
+  utilisables direct avec `models/diffusion_models/wan2.2-14b-Q4_K_M.gguf`
+- `Image Edit (Flux.2 Klein 4B).json` → cohérent avec `models/unet/flux2-dev-Q4_K_M.gguf`
+- Blueprints Z-Image-Turbo, LTX 2.0/2.3, Qwen-Image, ACE-Step audio,
+  Hunyuan3D, Lotus depth, etc. — large couverture pour explorer.
+
+ComfyUI-Manager mis à jour (491f847b → 03272b1f). Les 9 autres custom_nodes
+étaient déjà à jour.
+
+Note : le pull peut avoir introduit de nouvelles dépendances Python dans
+`requirements.txt` — à vérifier au prochain `python main.py` (le venv est
+PyTorch CPU, ça peut nécessiter un `pip install -r requirements.txt --upgrade`).
+
+### État du stack runtime à la fin de la session
+
+- `open-webui` Docker : **healthy** sur :8080
+- `ollama` service : **inactive + disabled** (à réactiver après plan ROCm demain)
+- `qdrant`, `searxng`, `litellm`, `ai-redis` : **non démarrés** depuis le reboot.
+  Patrice peut tout relancer en une commande : `cd ~/DEV/ai-stack && ./start-stack.sh`.
+
 ### Pensée du jour
 
 Ce soir on a vraiment vu pourquoi Tailscale + SSH + journal partagé valent
