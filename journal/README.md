@@ -34,10 +34,11 @@ Pattern : `<hostname-lowercase>-<basename-cwd-lowercase>.md`.
 |-------------|-----------------------------|
 | `MINISTAR`  | G7 PT (Windows, dev principal) |
 | `DARKSTAR`  | PC 3090 (Windows, training)    |
-| _à venir_   | PC Ubuntu (futur robot runtime)|
+| `Ministar` (Linux) | PC Ubuntu (futur robot runtime, Minisforum Ryzen AI 9 HX 470, hostname homonyme du G7 PT) |
 
-**Note** : G7 PT et MINISTAR sont **la même machine**. Le hostname est
-`MINISTAR`, "G7 PT" est juste le nom commercial / surnom d'usage.
+**Note** : G7 PT et MINISTAR (Windows) sont **la même machine**. Le PC
+Ubuntu réutilise le hostname `Ministar` (casse mixte) — pour le distinguer
+en journal, suffixer `-ubuntu` (ex : `ministar-ubuntu-DEV.md`).
 
 ### Fichiers actuels
 
@@ -46,6 +47,7 @@ Pattern : `<hostname-lowercase>-<basename-cwd-lowercase>.md`.
 | `ministar-grok-cli.md`             | session sur `D:\CascadeProjects\grok-cli`               |
 | `ministar-gitnexus-rs.md`          | session sur `C:\Users\patri\CascadeProjects\gitnexus-rs` (rôle coordinateur depuis 28/04/2026) |
 | `ministar-patrice-huetz-site-next.md` | session sur le site personnel `patricehuetz.fr`     |
+| `ministar-ubuntu-DEV.md`           | session sur PC Ubuntu (`/home/patrice/DEV`), futur runtime robot |
 | _à créer au besoin_                | `darkstar-world-model.md`, etc.                         |
 
 Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le
