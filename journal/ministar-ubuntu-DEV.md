@@ -28,7 +28,9 @@ inclus, géré hors compose pour ne pas écraser l'install du 27 avril) :
 | Service | Port | Rôle |
 |---|---|---|
 | **qdrant** | 6333 / 6334 | vector DB pour RAG, healthy |
-| **searxng** | 8888 | métamoteur self-hosted (FR par défaut), validé sur `/search?q=test&format=json` |
+| **searxng** | 8888 | métamoteur self-hosted (FR par défaut), validé `/search?q=test&format=json` |
+| **litellm** | 4000 | gateway OpenAI-compat, route ollama-{gemma4,qwen3,embed} (host network) |
+| **ai-redis** | 6380 | cache LiteLLM (host network, 6379 occupé par MonArtisan) |
 
 À brancher dans Open WebUI via Settings :
 - RAG > Vector DB : Qdrant, URL `http://127.0.0.1:6333`
@@ -52,30 +54,54 @@ inclus, géré hors compose pour ne pas écraser l'install du 27 avril) :
   proprement, ComfyUI-Manager fetch le registry sans erreur. Pas laissé
   tournant — à démarrer à la demande.
 
-### Reporté (sudo nécessaire ou téléchargements lourds à valider)
+### LiteLLM — gateway unifié
 
-- **ROCm 6.4+ stack AMD officielle** — pour exploiter les 64 GB VRAM iGPU
-  890M en inférence. ROCm 5.7 d'Ubuntu trop ancien pour RDNA 3.5. Bascule
-  PyTorch ROCm + Ollama GPU une fois fait.
-- **AMD Lemonade SDK** — runtime NPU XDNA + iGPU. Officiellement Linux
-  supporté mais cible principale Windows. À explorer après ROCm 6.4.
-- **Override Ollama** `OLLAMA_HOST=0.0.0.0` — pas appliqué (sudo password
-  manquant). Pas critique : Open WebUI tourne en `network_mode: host` donc
-  accède à 127.0.0.1:11434 directement.
+Config dans `ai-stack/litellm/config.yaml`. `master_key=sk-ministar-local`
+dans `.env` (gitignored). Test validé :
 
-### Modèle Ollama dispo
+```
+curl -H "Authorization: Bearer sk-ministar-local" \
+     http://127.0.0.1:4000/v1/chat/completions \
+     -d '{"model":"ollama-qwen3","messages":[{"role":"user","content":"..."}]}'
+```
 
-- `gemma4:26b` (16 GB) — le seul actuellement. Avec 64 GB VRAM iGPU
-  (post-ROCm 6.4), faisable de descendre des 70B Q4.
+Lisa et tout client OpenAI-compat peuvent pointer ici. Ajouter clés
+Anthropic/Gemini dans `.env` + décommenter dans `config.yaml` pour activer.
+
+### Scripts d'install prêts (sudo requis, à lancer par Patrice)
+
+- `ai-stack/install_rocm.sh` — ROCm 7.2 (doc AMD officielle) avec garde
+  kernel 6.17 (peut nécessiter downgrade vers HWE 6.14 si dkms échoue)
+- `ai-stack/install_lemonade.sh` — Lemonade Server v10.3.0 (28 avr) via
+  PPA officielle `lemonade-team/stable`. Officiellement supporté Ubuntu
+  24.04, NPU XDNA2 via FLM backend, ROCm 7.2 stable.
+
+À lancer dans cet ordre depuis Claude Code : `! sudo ./install_rocm.sh`,
+reboot, puis `! sudo ./install_lemonade.sh`.
+
+### Modèles Ollama dispos après cette session
+
+| Modèle | Taille | Usage |
+|---|---|---|
+| `gemma4:26b` | 16 GB | LLM principal généraliste |
+| `qwen3:4b` | 2.6 GB | LLM rapide pour itération / agents légers |
+| `nomic-embed-text` | 274 MB | embeddings RAG (Qdrant + Open WebUI) |
+
+Avec 64 GB VRAM iGPU (post-ROCm 7.2), faisable de descendre du 70B Q4.
 
 ### Ports occupés sur Ministar Linux après cette session
 
 - 3000 → MonArtisan web (Docker)
+- 4000 → LiteLLM
 - 5434 → MonArtisan postgres (Docker)
 - 6333 / 6334 → Qdrant
+- 6379 → MonArtisan Redis (Docker)
+- 6380 → ai-redis (cache LiteLLM)
 - 8080 → Open WebUI
+- 8188 → ComfyUI (à la demande)
 - 8888 → SearXNG
 - 11434 → Ollama (127.0.0.1 only)
+- _futur_ 8000 → Lemonade Server
 
 ### Note continuité
 
