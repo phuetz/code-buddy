@@ -809,3 +809,75 @@ Si un jour Patrice veut aller plus loin :
 - `zellij` (multiplexer alternatif à tmux, optionnel)
 
 — Claude Opus 4.7 (1M)
+
+## 2026-05-01 (nuit, suite 4) — Webmin installé
+
+Patrice : *"webmin oui"*. Install Webmin sur Ministar avec garde-fous
+(pas Virtualmin — disproportionné pour cette machine).
+
+### Repo + install
+
+Premier essai via clé jcameron historique → erreur apt
+`untrusted public key algorithm: dsa1024` (Ubuntu 24.04 refuse DSA-1024).
+Fallback sur le script officiel `setup-repos.sh` du repo `webmin/webmin`
+qui pose la nouvelle clé "Webmin Developers" RSA-4096. Puis
+`apt install --install-recommends webmin` standard.
+
+### Sécurité — bind tailnet uniquement
+
+Par défaut Webmin écoute sur `0.0.0.0:10000` SSL. Trop exposé pour le LAN
+domestique + non-sens vis-à-vis de la stratégie "tailnet first". J'ai modifié
+`/etc/webmin/miniserv.conf` :
+
+```
+bind=100.98.18.76
+```
+
+→ écoute uniquement sur l'IP Tailscale. Ni le LAN ni internet ne voient le
+port. Vérification : `ss -tlnp | grep :10000` → bind sur 100.98.18.76 only.
+
+Pas pu utiliser `tailscale serve --https` parce que MagicDNS et HTTPS
+Certificates ne sont pas activés dans l'Admin Console Tailscale (toggle à
+faire par Patrice dans `https://login.tailscale.com/admin/dns`). Le bind
+direct sur l'IP tailnet est tout aussi sûr et plus simple.
+
+### Auth — user patrice via PAM Unix
+
+Default Webmin : seul `root` autorisé, et root est lock sur Ubuntu. J'ai
+ajouté `patrice` à `/etc/webmin/miniserv.users` avec le format `patrice:x:0`
+(`x` = délégué à PAM Unix), activé `pam=webmin` + `pam_test=1` dans
+`miniserv.conf`. Login validé : POST `/session_login.cgi` → HTTP 302
+(success), suivi GET `/` → HTTP 200 avec `<title>Webmin</title>`.
+
+### Accès depuis G7 PT Windows
+
+```
+URL    : https://100.98.18.76:10000/
+User   : patrice
+Pass   : password sudo (à changer demain matin via passwd ou Webmin lui-même)
+Cert   : self-signed Webmin → accepter exception au premier login
+```
+
+Le browser râlera sur le cert auto-signé (CN=ministar-linux), accepter
+définitivement. Ou bien activer MagicDNS+HTTPS dans Tailscale et utiliser
+`tailscale serve` plus tard pour avoir un cert propre Tailscale.
+
+### Pas fait (et c'est OK)
+
+- Virtualmin : skip volontaire, pas adapté à Ministar (Docker gère déjà
+  l'orchestration des services, Virtualmin entrerait en conflit avec
+  Apache/nginx system).
+- Reverse proxy Webmin : pas nécessaire avec bind tailnet direct.
+- Cert TLS propre : possible plus tard via Tailscale HTTPS toggle.
+
+### Recommandation suivante
+
+Quand Patrice se logge la première fois :
+1. Webmin → System → Change Passwords → set un password Webmin distinct du
+   sudo (plus de fuite par scrollback Claude).
+2. Webmin → Webmin Configuration → Authentication → activer "Logout after
+   X minutes idle".
+3. Webmin → Webmin Configuration → IP Access Control → restreindre encore
+   à `100.0.0.0/8` (range Tailscale CGNAT) en plus du bind interface.
+
+— Claude Opus 4.7 (1M)
