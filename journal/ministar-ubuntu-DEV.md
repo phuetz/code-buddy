@@ -753,3 +753,59 @@ dépendances). Réutilisable comme template pour d'autres prompts/modèles.
   Hunyuan3D, ACE-Step audio, etc.) selon les priorités de Patrice.
 
 — Claude Opus 4.7 (1M)
+
+## 2026-05-01 (nuit, suite 3) — Pack outils Linux essentiels
+
+Patrice : *"quelles applications sont incontournables sur linux"*. Inventaire
+de ce qui était déjà là vs manquant pour son profil dev / stack AI / robot,
+puis install groupée du pack manquant.
+
+### Installé via apt
+
+`ffmpeg imagemagick ripgrep fd-find bat git-delta httpie miller tldr zoxide
+nmap iftop duf` (~14 packages, ~150 MB).
+
+Aliases ajoutés à `~/.bashrc` (idempotent, garde `# === Claude additions ===`
+comme marker) :
+- `alias bat='batcat'` (Ubuntu renomme bat en batcat)
+- `alias fd='fdfind'` (idem fd-find)
+- `eval "$(zoxide init bash)"` pour `cd` intelligent
+
+### Installé hors apt (binaires GitHub releases)
+
+Récupérés via API GitHub + curl, installés dans `/usr/local/bin/` :
+- `lazygit 0.61.1` — git TUI (Patrice commit beaucoup, va le servir)
+- `lazydocker 0.25.2` — docker TUI (gère ai-stack visuellement)
+- `dive 0.13.1` — inspecter les couches Docker
+- `yq 4.53.2` (Mike Farah, Go) — équivalent jq pour YAML
+
+À noter : le paquet apt `yq` pointe vers la version Python d'Andrey Kislyuk,
+moins répandue. La version Mike Farah Go est le standard de facto.
+
+### tldr cache offline KO
+
+`tldr --update` plante avec une erreur Haskell binary parser (bug connu de
+la version Ubuntu, mainteneur l'a tagué noble). Fallback online fonctionne.
+Si Patrice veut le cache offline propre : remplacer par `tealdeer` (Rust)
+ou `tldr++` plus tard. Pas urgent.
+
+### Récap final outils Ministar
+
+```
+✓ tmux htop btop glances ncdu fzf eza jq gh gpg mtr iotop nvtop
+✓ powertop radeontop ollama zsh curl wget mosh fail2ban
+✓ ffmpeg imagemagick ripgrep fd-find bat git-delta httpie miller
+✓ tldr zoxide nmap iftop duf
+✓ lazygit lazydocker dive yq
+```
+
+Si un jour Patrice veut aller plus loin :
+- `starship` (prompt cross-shell)
+- `atuin` (history fuzzy + sync optionnel)
+- `tealdeer` (tldr en Rust, remplace celui d'apt qui est cassé)
+- `age` (chiffrement moderne, alt. à gpg)
+- `pass` (gestion de mots de passe via gpg)
+- `fish` (shell alternatif, optionnel)
+- `zellij` (multiplexer alternatif à tmux, optionnel)
+
+— Claude Opus 4.7 (1M)
