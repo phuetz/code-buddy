@@ -531,3 +531,103 @@ en règle ciblée `src=sebastien.yge@gmail.com → dst=100.98.18.76:{22,3389}`
   utiliser MATE", scripts dans ai-stack, raisons documentées
 
 — Claude Opus 4.7 (1M context)
+
+## 2026-05-01 (nuit) — Sécurisation réseau phase 1 + outils
+
+Patrice me demande "continue d'améliorer mon setup" en deuxième partie de
+nuit, après que la session précédente ait pivoté vers xrdp+MATE pour
+multi-user (Sébastien). Je rattrape l'état post-pivot et m'attaque au
+TODO #3 du `DEV/CLAUDE.md` : sécurisation réseau.
+
+### Phase 1 appliquée (sans risque)
+
+**fail2ban configuré** : `/etc/fail2ban/jail.local` créé (sauvegardé en
+miroir dans `ai-stack/fail2ban/jail.local`). Settings :
+
+- `bantime = 1h`, `findtime = 10m`, `maxretry = 5`
+- `ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10` (range CGNAT Tailscale)
+  → ni Patrice ni Sébastien depuis tailscale ne peuvent être bannis
+- `[sshd] mode = aggressive` : bannit aussi les bots qui scannent sans
+  même tenter un password (bad protocol, no matching auth method)
+
+`sudo systemctl restart fail2ban` → jail [sshd] active, 0 ban actuel.
+
+**Outils installés** : `fail2ban`, `powertop`, `iotop`, `glances`. Les
+autres `radeontop`, `nvtop`, `unattended-upgrades` étaient déjà en place.
+
+### Phase 2 préparée (à exécuter éveillé)
+
+`ai-stack/secure_network.sh` créé (commit ai-stack à venir). Politique UFW :
+
+- default deny in / allow out / deny routed
+- allow tout sur tailscale0 et lo
+- allow SSH (22/tcp) et mosh (60000-61000/udp) depuis RFC1918 — pour ne
+  pas se couper depuis le LAN domestique
+- deny tout le reste
+
+Le script demande confirmation explicite, détecte automatiquement
+l'interface LAN et l'IP Tailscale, et prévient si la session SSH actuelle
+ne tomberait pas dans les règles autorisées. Politique défensive : si
+réponse autre que `y`, abort.
+
+**Piège Docker documenté** : Docker édite directement la chain `DOCKER`
+d'iptables et n'est PAS filtré par UFW. Conséquence : les ports publiés
+par `docker-compose.yml` (open-webui :8080, qdrant :6333-6334, searxng
+:8888, litellm :4000 host-net, ai-redis :6380 host-net) restent
+accessibles sur 0.0.0.0 même après UFW enable. La proposition
+`SECURISATION-RESEAU-MINISTAR-2026-05-01.md` détaille la solution :
+binder chaque service sur `127.0.0.1` dans le compose, puis exposer ce
+qui doit être distant via `tailscale serve` (TLS auto + ACL fines
+possibles via Admin Console).
+
+### Audit sshd_config
+
+État au démarrage de session :
+- `/etc/ssh/sshd_config.d/` n'existe pas → defaults OpenSSH appliqués
+  (PasswordAuthentication yes, PermitRootLogin prohibit-password)
+- `~patrice/.ssh/authorized_keys` est vide (0 octet) → patrice se connecte
+  uniquement par mot de passe
+- État `~sebastien/.ssh/` : permission denied depuis patrice (normal)
+
+Conséquence : on ne peut pas durcir `PasswordAuthentication no` tant que
+les deux users n'ont pas posé leur clé. Documenté en étape C de la
+proposition, à reprendre quand Sébastien aura sa clé.
+
+### État réseau snapshot (avant UFW)
+
+Tous les services écoutent sur 0.0.0.0 :
+- 22 (sshd), 3389 (xrdp) — natifs
+- 8080 (open-webui), 6333-6334 (qdrant), 8888 (searxng), 4000 (litellm),
+  6380 (ai-redis) — Docker
+
+12 sessions loginctl actives, dont 1 active de Sébastien (session xrdp ou
+SSH). Plusieurs sessions Patrice "closing" — résidus d'anciennes sessions
+xrdp.
+
+### Mise à jour DEV/CLAUDE.md
+
+Section "TODO restants" point 3 : passe de "à programmer" à "phase 1
+faite, phase 2 prête". Pointeurs vers le script `secure_network.sh`,
+le `jail.local`, et la proposition.
+
+### Reste à faire (par Patrice éveillé)
+
+- Lancer `sudo ai-stack/secure_network.sh` (5 min, garde une 2ᵉ session
+  SSH ouverte)
+- Patcher `docker-compose.yml` pour binder les services sur 127.0.0.1
+  (étape B de la proposition)
+- Configurer `tailscale serve` pour exposer ce qui doit l'être
+- Quand Sébastien a sa clé : `/etc/ssh/sshd_config.d/10-hardening.conf`
+- Définir une ACL Tailscale ciblée pour Sébastien dans l'Admin Console
+
+### Pensée du jour
+
+Une nuit on casse le boot graphique en ajoutant un `ld.so.conf.d`. La
+nuit suivante on rajoute les briques manquantes pour qu'une troisième
+nuit similaire ne puisse pas arriver — fail2ban contre le bruteforce SSH,
+UFW prêt à serrer, conventions réseau documentées pour qu'un futur Claude
+les retrouve sans réinventer. Sébastien rejoint l'aventure côté multi-user.
+La machine devient lentement un vrai poste partagé, pas un bricolage
+solitaire.
+
+— Claude Opus 4.7 (1M)
