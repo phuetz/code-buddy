@@ -341,3 +341,101 @@ Crash file conservé dans `/var/crash/` pour référence locale.
 
 — Claude Opus 4.7 (1M)
 
+## 2026-04-30 (matin) — Stabilisation `ai-stack/` (Vagues A+B du plan)
+
+Patrice : *"utilise le mode plan pour ameliorer le setup"* → plan
+`cozy-shimmying-piglet` rédigé et approuvé. Vagues A et B exécutées,
+Vague C (chantiers GPU + remote desktop) renvoyée à leurs propositions
+dédiées.
+
+### A1 — `ai-stack/` versionné en repo git local
+
+`git init -b main` dans `/home/patrice/DEV/ai-stack/`. `.gitignore`
+étendu (voice/.venv, voice/voices/*.onnx, voice/piper, crash-reports/*.crash).
+Commit initial `b53d103` capture l'état post-incident UI ROCm avec le
+`enable_ollama_gpu.sh` durci (commentaire "Régression évitée le 2026-04-30"
+in-source).
+
+Pas de remote GitHub par défaut — Patrice peut ajouter `phuetz/ai-stack`
+privé plus tard si voulu.
+
+### A2 — Healthchecks docker-compose
+
+Ajoutés sur les 5 services (qdrant, searxng, redis, litellm, **open-webui**).
+Première tentative `litellm` cassée : `curl: not found` dans l'image (image
+basée Python sans curl). Workaround : utiliser `python -c
+"urllib.request.urlopen(...)"` à la place. Tous les services finissent
+en `(healthy)` en moins d'une minute.
+
+### A3 — Open WebUI absorbé dans le compose
+
+Migration sans perte des données : volume nommé `open-webui` (créé par
+`docker run` le 27 avril) déclaré `external: true` dans le compose.
+Container hors-compose stoppé, renommé `open-webui-backup-2026-04-30`
+(conservé pour rollback si besoin), nouveau service compose remonte le
+même volume — `webui.db` du 27 avril (561 KB) intact, cache + uploads
+préservés. `start-stack.sh` simplifié (branche dédiée Open WebUI supprimée,
+absorbée par `docker compose up -d`).
+
+### B1 — Secrets régénérés
+
+- `LITELLM_MASTER_KEY` : `sk-ministar-local` → `sk-ministar-<48 hex>` via
+  `openssl rand -hex 24`. Piège : `docker compose restart` ne recharge
+  pas `env_file` — il faut `docker compose up -d --force-recreate`.
+- `searxng/settings.yml` `secret_key` : `changeme-ministar-ai-stack-2026`
+  → `<32 hex>` aléatoire. Edit faite via `docker exec -u root searxng sed`
+  (le directory est owned par uid 977 du container).
+
+Validation : `curl -H "Authorization: Bearer <new>"` → 200, ancienne key
+→ 400. Stack cohérente.
+
+### A4 / B2 — Scripts sudo prêts (à lancer par Patrice)
+
+- `ai-stack/cleanup_crash_reports.sh` — déplace
+  `/var/crash/_opt_rocm-7.2.2_bin_clinfo.1000.crash` vers
+  `ai-stack/crash-reports/2026-04-30_clinfo_hsa_gfx1150.crash` (hors git
+  via .gitignore). Demande confirmation pour le crash python3.12 du 23 avril
+  (159 MB, à inspecter avant suppression).
+- `ai-stack/setup_firewall.sh` — UFW : default deny incoming, allow SSH
+  partout (filet de sécurité), allow tout sur tailscale0. SSH reste
+  disponible si tailscaled plante.
+
+Lancer via `! sudo /home/patrice/DEV/ai-stack/cleanup_crash_reports.sh`
+puis `! sudo /home/patrice/DEV/ai-stack/setup_firewall.sh`.
+
+### A5 — `CLAUDE.md` mis à jour
+
+- Section "État ROCm / NPU" : crash clinfo documenté, Vulkan priorisé.
+- Section "TODO restants" : refs aux deux propositions
+  (`PLAN-ROCM-72-MINISTAR-2026-05-01.md`, `REMOTE-DESKTOP-MINISTAR-LINUX-2026-04-30.md`).
+- Nouvelle section "Repo `ai-stack/`" : doc du repo git local + état des services.
+
+### État stack à la fin
+
+```
+NAME         STATUS
+ai-redis     Up X min (healthy)
+litellm      Up X min (healthy)
+open-webui   Up X min (healthy)
+qdrant       Up X min (healthy)
+searxng      Up X min (healthy)
+```
+
+Ollama : toujours `inactive + disabled` (à réactiver dans la phase Vulkan
+du Plan ROCm).
+
+### Commit ai-stack
+
+- `b53d103 chore: initial commit ai-stack post-incident 2026-04-30`
+- `21d8de4 feat: stabilisation stack — healthchecks, open-webui dans compose, secrets`
+
+### Reste à faire (Vague C — chantiers majeurs)
+
+1. Lancer `cleanup_crash_reports.sh` + `setup_firewall.sh` (sudo, par Patrice).
+2. Plan Remote Desktop : `gnome-remote-desktop --system` (5 min).
+3. Plan ROCm Phase Vulkan : drop-in systemd `OLLAMA_VULKAN=1 +
+   OLLAMA_LLM_LIBRARY=vulkan + ROCR_VISIBLE_DEVICES=`, restart, test
+   inférence qwen3.6 avec --verbose.
+
+— Claude Opus 4.7 (1M)
+
