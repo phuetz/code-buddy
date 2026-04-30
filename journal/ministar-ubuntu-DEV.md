@@ -881,3 +881,89 @@ Quand Patrice se logge la première fois :
    à `100.0.0.0/8` (range Tailscale CGNAT) en plus du bind interface.
 
 — Claude Opus 4.7 (1M)
+
+## 2026-05-01 (soir) — LTX-2.3 : étude, décision DARKSTAR, plan demain
+
+Patrice : *"j'ai entendu parler de ltx 2.3"*. Étude rapide du modèle puis
+décision stratégique de bascule sur DARKSTAR.
+
+### Ce qu'est LTX-2.3 (Lightricks, sortie 5 mars 2026)
+
+- Modèle vidéo open-weights **22B params**, 4K natif jusqu'à 50 fps, clips
+  ~20 s, **audio synchronisé en single forward pass** (video+audio).
+- Architecture Diffusion Transformer, VAE refait, gated attention text
+  connector, vocoder amélioré.
+- Variantes : `dev` (full), `distilled-1.1` (~8 steps), `fast`, `pro`.
+- Repos : `Lightricks/LTX-2` (modèle), `Lightricks/ComfyUI-LTXVideo` (nodes),
+  `Lightricks/LTX-Desktop` (éditeur officiel `.deb` Linux), poids sur HF
+  `Lightricks/LTX-2.3`.
+- Text encoder : Gemma-3 12B (Q4 unquantized).
+
+### Pourquoi PAS Ministar (et pourquoi DARKSTAR)
+
+- Recommandation officielle : **NVIDIA 32 GB+ VRAM CUDA**. Variante FP8 ≈
+  20 GB poids, BF16 ≈ 42 GB.
+- LTX-Desktop officiel : **AMD Linux pas supporté** en local (mode API
+  cloud payant uniquement). Le fork `LTX-Desktop-WanGP` (deepbeepmeep)
+  réduit à 6 GB VRAM mais reste **NVIDIA-only** (pas de mention ROCm/Vulkan).
+- Ministar = iGPU Radeon 890M (gfx1150), ROCm 7.2.2 bloqué par bug HSA
+  (cf `PLAN-ROCM-72-MINISTAR-2026-05-01.md`), PyTorch venv ComfyUI
+  actuellement `2.11.0+cpu`. Sur CPU pur, 22B params = générations en
+  heures/jour pour 5 s de clip. **Pas utilisable**.
+- DARKSTAR = 2× RTX 3090 (48 GB VRAM total CUDA). 1× 3090 tient FP8
+  distilled, 2× model-parallel tiennent BF16 dev. Support officiel direct.
+
+### Décision
+
+**DARKSTAR devient la machine principale stack vidéo-gen + briques robot**
+(en plus de l'entraînement world-model JEPA déjà prévu là). Ministar
+reste la stack secondaire : services persistants (Ollama, Open WebUI,
+Qdrant, SearXNG, LiteLLM, Redis), voix Piper/faster-whisper, accès
+distant xrdp+MATE, services edge.
+
+Patrice : *"on fait ça demain, demain j'allume darkstar et on mettera
+comfyUI et tout ce qui peut etre util pour le robot"*.
+
+### Plan écrit pour demain (2026-05-02)
+
+`propositions/PLAN-DARKSTAR-INSTALL-2026-05-02.md` — 7 phases :
+
+1. **Audit hardware** (nvidia-smi, CUDA version, espace disque, RAM,
+   état du venv `world-model/` à ne pas casser)
+2. **Tailscale** (pour bosser à distance les jours suivants — DARKSTAR
+   pas encore sur le tailnet)
+3. **Outils système** (uv, pnpm, node, ffmpeg)
+4. **ComfyUI + venv CUDA** (PyTorch CUDA 12.4, vérif `torch.cuda.is_available()`,
+   ComfyUI-Manager)
+5. **Custom nodes vidéo** (ComfyUI-LTXVideo, ComfyUI-WanVideoWrapper,
+   essentials, VideoHelperSuite, rgthree, GGUF)
+6. **LTX-Desktop officiel** (.deb amd64) + **DL poids LTX-2.3**
+   (~50-60 GB : distilled + upscalers + Gemma-3 12B Q4)
+7. **Briques robot** — reco minimum : faster-whisper CUDA (gain ~10×
+   vs Ministar CPU) + SAM 2 + Depth Anything v2. OpenVLA / MuJoCo MJX
+   / Genesis à activer plus tard selon cas d'usage robot concret.
+
+### Mémoire mise à jour
+
+- `project_darkstar_robot_stack.md` — DARKSTAR = stack robot/vidéo-gen
+  principale, Ministar = secondaire/edge. Index `MEMORY.md` mis à jour.
+
+### Bilan personnel des 24h Ministar Linux
+
+Marathon depuis hier :
+- Stack AI complète live (Ollama + Open WebUI + Qdrant + SearXNG +
+  LiteLLM + Redis) avec `start-stack.sh` idempotent
+- Voix robot validée FR (Piper + faster-whisper, boucle TTS→STT OK)
+- Tailscale up (`100.98.18.76`)
+- Bureau distant multi-user xrdp+MATE après tranchage GNOME/mutter
+- ROCm 7.2 essuyé son incident UI, fix appliqué, plan de relance
+  Vulkan-first cross-checké 3/3
+- fail2ban en place, plan `secure_network` prêt
+- Repo `ai-stack/` git local
+- Et ce soir : décision DARKSTAR pour LTX-2.3 + plan demain prêt
+
+Leçon générale qui guidera DARKSTAR demain : **isoler les briques**
+(drop-in scoped pas global, venv séparés, services 127.0.0.1).
+
+— Claude Opus 4.7 (1M)
+
