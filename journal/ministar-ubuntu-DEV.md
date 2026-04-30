@@ -700,3 +700,56 @@ de toute façon, pointer vers du vide n'apporte rien).
   requiert tester impact sur tous les custom_nodes
 
 — Claude Opus 4.7 (1M)
+
+## 2026-05-01 (nuit, suite 2) — Modèles compacts + gen test CPU validé
+
+Patrice : *"Pré-télécharger Z-Image-Turbo ou autres modèles compacts pour
+pouvoir tester un blueprint en CPU sans attendre ROCm"*. Choix éditorial :
+Z-Image-Turbo demande 14 GB (UNet bf16 + qwen_3_4b text encoder), trop
+lourd pour un test CPU rapide. Pivot vers du **vraiment compact**.
+
+### Modèles téléchargés
+
+- **LCM-LoRA SDv1.5** dans `models/loras/lcm-lora-sdv1-5.safetensors` (134 MB)
+  → permet de transformer le SD 1.5 existant en pipeline 4-steps. Source :
+  `latent-consistency/lcm-lora-sdv1-5` sur HuggingFace.
+- **SD-Turbo** dans `models/checkpoints/sd_turbo.safetensors` (1.47 GB)
+  → modèle dédié 1-step. Source : `stabilityai/sd-turbo` HF.
+
+Pas de Z-Image-Turbo cette nuit (14 GB trop pour test CPU rapide ; à
+re-considérer quand ROCm Vulkan sera up).
+
+### Gen end-to-end CPU validé ✓
+
+Test soumis via API ComfyUI `/prompt` avec workflow minimal SD-Turbo
+(CheckpointLoaderSimple + EmptyLatent 512×512 + 2× CLIPTextEncode +
+KSampler 1 step CFG 1.0 sampler euler_ancestral + VAEDecode + SaveImage).
+
+Prompt : *"a serene robotic owl perched in a moonlit forest, cinematic,
+highly detailed"*.
+
+**Résultat : 6.2 secondes en CPU pur** (24 cœurs Ryzen AI 9 HX 470).
+Image 512×512 PNG générée dans `output/robot_owl_sd_turbo_00001_.png`,
+qualité honnête (chouette détaillée, forêt lunaire), pipeline ComfyUI
+0.20.1 + torch 2.11.0+cpu validé end-to-end **sans ROCm**.
+
+Script de test : `/tmp/comfy_test_sd_turbo.py` (urllib + json, pas de
+dépendances). Réutilisable comme template pour d'autres prompts/modèles.
+
+### Implications
+
+- La stack image fonctionne déjà sans GPU. Toute amélioration ROCm/Vulkan
+  sera un bonus (~10-20× speedup attendu pour les modèles plus gros).
+- Patrice peut tester ses blueprints SD 1.5 / SD-Turbo dès maintenant via
+  l'UI ComfyUI sur `:8188` (lancer via `start-stack.sh --with-comfy`).
+- Pour les blueprints plus lourds (Flux.2, Wan 2.2), il vaut mieux attendre
+  ROCm ou Vulkan — un step Flux.2 14B en CPU ferait probablement 3-5 min.
+
+### Côté disque
+
+- ComfyUI/models occupe maintenant ~50 GB total (modèles existants + ajouts)
+- 3.2 TB encore libres → place pour Z-Image-Turbo (14 GB), SDXL-Turbo
+  (7 GB), ou n'importe quel modèle de la liste blueprints (LTX, Qwen-Image,
+  Hunyuan3D, ACE-Step audio, etc.) selon les priorités de Patrice.
+
+— Claude Opus 4.7 (1M)
