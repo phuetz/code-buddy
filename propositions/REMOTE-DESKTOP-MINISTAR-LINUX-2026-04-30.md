@@ -150,3 +150,60 @@ sudo apt install /tmp/nomachine.deb
 L'incident UI de cette nuit (libdrm shadow par ld.so.conf.d) est un rappel : sur cette
 machine, **toujours** garder un accès SSH pendant qu'on touche au stack graphique.
 Tailscale + SSH = filet de sécurité. RDP s'ajoute par-dessus, mais ne le remplace pas.
+
+---
+
+## 2026-04-30 (soir) — Bascule vers xrdp + MATE (plan A abandonné)
+
+**Statut** : ce plan A (`gnome-remote-desktop --system`) a été appliqué le matin,
+puis abandonné le soir au profit de **xrdp + MATE Desktop**.
+
+### Pourquoi
+
+`gnome-remote-desktop --system` est **mono-utilisateur** : sa SAM ne stocke
+qu'un seul couple username/password (`grdctl set-credentials` écrase à chaque
+appel). Patrice ajoute Sébastien comme collaborateur le soir → besoin
+multi-user → GRD inadéquat.
+
+### Ce qui a été tenté avant le pivot
+
+- xrdp + GNOME 46 Xorg : `gnome-shell` (mutter) ne s'enregistre pas sur le
+  DBus session quand lancé via xrdp, même avec `dbus-run-session` puis avec
+  le DBus du systemd --user instance. La condition systemd
+  `XDG_SESSION_TYPE=x11` du service `org.gnome.Shell@x11.service` ne se
+  remplit pas de manière fiable. Écran "Oh no! Something has gone wrong".
+
+### Solution retenue
+
+- xrdp + xorgxrdp + **MATE Desktop** (mate-desktop-environment-core).
+  Marche immédiatement, multi-user via PAM, layouts modulables avec
+  `mate-tweak`, look correct avec Yaru-MATE-dark.
+
+### Scripts d'install/rollback
+
+Tous dans `/home/patrice/DEV/ai-stack/` (commit `43ae9f4`) :
+
+- `install_xrdp.sh` — migration GRD → xrdp idempotente
+- `rollback_xrdp_to_grd.sh` — rollback en 4 commandes (les configs SAM GRD
+  sont gardées intactes, juste désactivées)
+- `xrdp/startwm.sh` — lance `mate-session` avec env Xorg correct + `xhost`
+  pour les apps snap (Firefox)
+- `xrdp/02-allow-colord.rules` — polkit qui coupe les popups récurrentes
+  (color-manager, NetworkManager Wi-Fi scans, packagekit)
+- `mate-style.sh` — applique le look (Yaru-MATE-dark, polices Ubuntu, layout)
+  per-user (à lancer dans un terminal MATE, pas SSH)
+
+### Plan B (x2go) reste valide
+
+Si xrdp + MATE pose un jour problème (latence, audio, multi-monitor), x2go
+reste installé et utilisable. Voir Plan B plus haut dans ce document.
+
+### Plan C (NoMachine) toujours dispo
+
+Pas activé. Reste l'option si x2go aussi est insuffisant un jour.
+
+### Détails complets
+
+Voir l'entrée `## 2026-04-30 (soir/nuit)` dans
+`claude-et-patrice/journal/ministar-ubuntu-DEV.md` (pièges traversés,
+décisions, tests réalisés, reste à faire).

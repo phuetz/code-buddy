@@ -439,3 +439,95 @@ du Plan ROCm).
 
 — Claude Opus 4.7 (1M)
 
+
+## 2026-04-30 (soir/nuit) — Bascule GRD → xrdp + MATE pour multi-user
+
+### Contexte
+
+Patrice ajoute Sébastien comme collaborateur (compte Linux `sebastien` UID 1001,
+groupes sudo + docker, Tailscale `pc-asus-seb`). `gnome-remote-desktop --system`
+posé hier soir s'avère **mono-utilisateur** : sa SAM ne stocke qu'un couple
+username/password via `grdctl set-credentials`. Sébastien bloque sur
+`Could not find user in SAM database` → erreur mstsc 0xd06 / 0x0.
+
+Décision : bascule vers **xrdp + xorgxrdp** pour multi-user via PAM.
+
+### Pièges traversés (long, mais documenté pour la prochaine fois)
+
+1. **GNOME via xrdp ne fonctionne pas sur Ubuntu 24.04**. Tentatives successives :
+   - `dbus-launch` → exit code 127 (paquet `dbus-x11` plus installé en 24.04)
+   - `dbus-run-session` → bus DBus isolé, gnome-session ne joint pas systemd1
+   - DBus du systemd --user (`/run/user/$UID/bus`) + `import-environment` →
+     mutter ne s'enregistre pas (`Name "org.gnome.Mutter.DisplayConfig" does
+     not exist`), `org.gnome.Shell@x11.service` skipped car
+     `ConditionEnvironment=XDG_SESSION_TYPE=x11` non remplie. Écran "Oh no!".
+
+2. **Pivot vers MATE** : marche immédiatement avec un startwm.sh trivial.
+   - Layout Mutiny initial → mate-panel crashe en boucle (zombies 335124 →
+     606835 → 661896) parce que `mate-applet-brisk-menu` et `mate-dock-applet`
+     pas installés. Reset via `dconf reset -f /org/mate/panel/`, retour à
+     Familiar par défaut, stable.
+
+3. **Picom + xrdp = freeze immédiat** (compositing GLX sur xorgxrdp). Désactivé
+   par défaut dans `mate-style.sh`, réactivable via `WITH_PICOM=1`.
+
+4. **Firefox snap ne lance pas en RDP** : `cannot open display: :10.0`
+   (snap-confine bloque). Fix: `xhost +SI:localuser:$(id -un)` dans le
+   startwm.sh (donc auto pour tout user xrdp).
+
+5. **Bug refcount GNOME 46.x** (avant la bascule) : `g_atomic_ref_count_dec
+   assertion 'old_value > 0' failed` dans gnome-remote-desktop. Workaround
+   `grd-watchdog` posé puis devenu obsolète après pivot xrdp. Gardé désactivé
+   pour rollback éventuel.
+
+### Scripts ajoutés dans `ai-stack/` (commit `43ae9f4`)
+
+```
+ai-stack/
+├── add_collaborator.sh                     # +flag --no-key
+├── grd-watchdog.{sh,service}               # bug refcount GRD (legacy)
+├── install_grd_watchdog.sh                 # legacy
+├── install_xrdp.sh                         # migration GRD→xrdp idempotente
+├── rollback_xrdp_to_grd.sh                 # rollback en 4 lignes
+├── xrdp/
+│   ├── startwm.sh                          # session MATE Xorg + xhost snap
+│   └── 02-allow-colord.rules               # polkit anti-popups RDP
+├── mate-style.sh                           # setup MATE per-user
+└── mate-config/
+    ├── picom.conf                          # config tear-free (désactivée)
+    ├── plank-autostart.desktop
+    └── picom-autostart.desktop
+```
+
+### Tailscale ACL temporaire
+
+`autogroup:admin` posé pour débloquer Sébastien rapidement → à restreindre
+en règle ciblée `src=sebastien.yge@gmail.com → dst=100.98.18.76:{22,3389}`
++ rétrograder Member.
+
+### Tests réalisés
+
+- Patrice : mstsc → MATE Familiar avec Yaru-MATE-dark, polices Ubuntu OK
+- Multi-session simultané : non testé (Sébastien pas encore connecté)
+- Audio RDP : non installé (`pipewire-module-xrdp` pas dans noble standard)
+- Firefox via icône : OK après `xhost` dans startwm.sh
+
+### Reste à faire
+
+1. Sébastien teste mstsc (mdp Linux à lui transmettre par canal sécurisé)
+2. Restreindre Tailscale ACL (cf. ci-dessus)
+3. UFW activé avec règles tailscale0 only (le plan original le prévoyait,
+   pas appliqué — services AI Open WebUI/Qdrant/etc. exposés sur LAN)
+4. sshd_config durci (PasswordAuthentication no) après que Sébastien ait
+   posé sa clé
+5. Audio RDP (PPA pipewire-xrdp ou compile from source) — bloquant si lecture
+   audio dans la session distante
+6. Auto-application de `mate-style.sh` à la 1ère connexion (autostart .desktop
+   global avec marqueur `~/.config/.mate-styled`)
+
+### Mémoires créées
+
+- `project_remote_desktop_ministar.md` : règle "ne plus tenter GNOME via xrdp,
+  utiliser MATE", scripts dans ai-stack, raisons documentées
+
+— Claude Opus 4.7 (1M context)
