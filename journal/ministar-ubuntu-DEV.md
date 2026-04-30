@@ -631,3 +631,72 @@ La machine devient lentement un vrai poste partagé, pas un bricolage
 solitaire.
 
 — Claude Opus 4.7 (1M)
+
+## 2026-05-01 (nuit, suite) — Améliorations stack AI + ComfyUI
+
+Patrice : *"améliore mon stack AI et ComfyUI"*. Sans risque, sans toucher
+au système.
+
+### ComfyUI — venv healthcheck
+
+`uv pip list --outdated` → 17 packages mineurs en retard (rien de critique,
+ni torch, ni custom_nodes). Upgrade groupé en une commande : `aiofiles`,
+`pillow`, `numpy`, `setuptools`, `comfyui-frontend-package`, et la grosse
+famille `comfyui-workflow-templates*` (qui aligne ce que voit l'UI avec les
+50+ blueprints pullés hier).
+
+**Régression introduite** par l'upgrade : `tokenizers==0.23.1` dépasse la
+borne `<=0.23.0` de `transformers` actuellement installé →
+`ImportError: tokenizers>=0.22.0,<=0.23.0` au démarrage.
+
+**Fix** : downgrade `tokenizers==0.22.2` (la version 0.23.0 pile n'existe
+pas sur PyPI, donc retour à la précédente). Smoke test après fix :
+ComfyUI démarre sur `:8188`, `Total VRAM 63941 MB` détectée, ComfyUI-Manager
+fetch le registry sans erreur, `system_stats` répond `200 OK`. RAS.
+
+**Leçon** : les upgrades de venv ComfyUI doivent être sélectifs — éviter
+`tokenizers` tant que `transformers` n'est pas mis à jour en parallèle.
+
+### Voice — voix masculine FR ajoutée
+
+`fr_FR-tom-medium.onnx` (60 MB) téléchargée depuis rhasspy/piper-voices.
+Test synthèse 8.31s audio à 44.1 kHz en 0.56s CPU → real-time factor 0.07
+(sur les 24 cœurs Ryzen AI, c'est très confortable même sans GPU).
+
+```bash
+echo "Bonjour Patrice." | ./piper/piper/piper \
+  --model voices/fr_FR-tom-medium.onnx --output_file /tmp/out.wav
+```
+
+Le futur robot peut maintenant alterner Siwis (féminin) et Tom (masculin)
+selon le contexte. Les deux voix coûtent 60 MB chacune, négligeable.
+
+### LiteLLM — config inspectée
+
+`litellm/config.yaml` est correct, expose 4 modèles Ollama via aliases
+`ollama-{gemma4,qwen3,qwen36,embed}`. Routes Anthropic/Gemini préparées
+en commentaires, prêtes à activer quand les clés seront posées dans
+`litellm/.env`. Pas de modif nécessaire cette nuit (Ollama disabled
+de toute façon, pointer vers du vide n'apporte rien).
+
+### Récap stack à ce point
+
+- **ComfyUI** : démarre OK en CPU, 50+ blueprints prêts, modèles déjà
+  téléchargés couvrent Flux.2-dev, Wan 2.2, SD 1.5
+- **Voice** : Siwis (F) + Tom (M) en français, real-time CPU
+- **Open WebUI** : 2 instances actives (live + backup-2026-04-30)
+- **Docker stack** : qdrant, searxng, litellm, ai-redis healthy (10h up)
+- **Ollama** : disabled, à reprendre via plan ROCm Vulkan
+- **Sécurité** : fail2ban actif (whitelist Tailscale), UFW prêt à activer
+  via `secure_network.sh`
+
+### Pas fait (besoin Patrice présent)
+
+- Pré-téléchargement de modèles lourds (SDXL, Z-Image-Turbo, etc.) :
+  choix éditorial, à valider
+- Activation `tailscale serve` pour exposer Open WebUI/ComfyUI en HTTPS
+  sur le tailnet : nécessite décision sur ce qu'on expose et à qui
+- Regen `transformers` pour pouvoir bumper `tokenizers` proprement :
+  requiert tester impact sur tous les custom_nodes
+
+— Claude Opus 4.7 (1M)
