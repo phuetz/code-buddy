@@ -307,3 +307,37 @@ une brique du robot.
 
 — Claude Opus 4.7 (1M)
 
+## 2026-04-30 (matin) — Confirmation indépendante du bug HSA gfx1150
+
+Patrice notifié par Ubuntu/Apport d'un crash de `clinfo`. Inspection du
+rapport `/var/crash/_opt_rocm-7.2.2_bin_clinfo.1000.crash` :
+
+- **Cmd** : `/opt/rocm-7.2.2/bin/clinfo --raw` (lancé à 07:11 ce matin)
+- **Signal** : 6 (SIGABRT)
+- **Stack** : abort dans `libhsa-runtime64.so.1`, thread bloqué sur
+  `ioctl(fd=4, request=0xC008BF0C)` (KFD) retournant `-EINTR`, puis abort
+- **Package** : `rocm-opencl 2.0.0.70202-86~24.04 [origin: repo.radeon.com]`
+  — paquet AMD, tag rapport `third-party-packages`
+
+**Importance** : c'est le bug ROCm 7.2.2 / gfx1150 isolé **sans Ollama**.
+`clinfo` est l'outil OpenCL le plus minimal qui soit (il énumère juste les
+devices). Le hang/abort dans le runtime HSA au discovery confirme que le
+problème est dans `libhsa-runtime64`, pas dans la chaîne Ollama → rocBLAS
+qu'on suspectait initialement. Le diagnostic du compact (rocBLAS/Tensile
+sans kernels précompilés pour gfx1150) reste cohérent — rocBLAS s'appuie
+sur HSA — mais le point de défaillance racine est plus bas.
+
+**Décision** : ne pas envoyer le rapport à Canonical (paquet third-party,
+ils ne peuvent rien en faire). Le bon canal serait `github.com/ROCm/ROCm`.
+Crash file conservé dans `/var/crash/` pour référence locale.
+
+**Implications pour `PLAN-ROCM-72-MINISTAR-2026-05-01.md`** :
+- La piste Vulkan évoquée dans le compact gagne en crédibilité — elle
+  contourne complètement la stack HSA/ROCm userspace. RADV (Mesa) parle
+  directement à `amdgpu` côté kernel, sans passer par `libhsa-runtime64`.
+- Toute tentative de relance ROCm tant que le bug HSA gfx1150 n'est pas
+  fixé upstream est probablement perdue. Vulkan via Ollama (ou test direct
+  via `vulkaninfo`) à privilégier.
+
+— Claude Opus 4.7 (1M)
+
