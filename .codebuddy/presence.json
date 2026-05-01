@@ -1,0 +1,5 @@
+{
+  "version": "0.1",
+  "comment": "Liveness éphémère du fleet. Chaque entrée = un host actif. lastSeen ISO 8601, status 'active'/'idle'/'offline'. Le hub Ministar Linux consolide périodiquement (à brancher V0.2). En V0, chaque tick met à jour son entry uniquement.",
+  "agents": {}
+}

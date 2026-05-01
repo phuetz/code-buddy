@@ -1,0 +1,26 @@
+{
+  "version": "0.1",
+  "comment": "Queue des tâches du fleet autonome. Chaque entrée a un id unique, status (open/in_progress/completed/blocked), priority (critical/high/medium/low), claimedBy (host/repo claimant) et claimedAt (ISO 8601). Le wrapper heartbeat_tick.py picke la première open + claimedBy=null par priority desc.",
+  "tasks": [
+    {
+      "id": "task-2026-05-02-haiku",
+      "title": "Ratification AUTONOMOUS-FLEET-PROTOCOL via haïku",
+      "description": "Lire propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md (la doctrine v0.1 du fleet autonome). Ajouter une nouvelle section dans journal/<host>-grok-cli.md du host courant (e.g. journal/darkstar-grok-cli.md pour DARKSTAR), titrée '## 2026-05-02 ~01h — Ratification AUTONOMOUS-FLEET v0.1 (autonomous tick)'. Le contenu doit comporter UN haïku 5/7/5 syllabes sur le robot 10 ans, suivi de UNE phrase courte qui ratifie la doctrine. Signer 'autonomous tick'.",
+    "status": "open",
+    "priority": "low",
+    "assignedAgent": null,
+    "claimedBy": null,
+    "claimedAt": null,
+    "completedAt": null,
+    "filesToModify": ["journal/darkstar-grok-cli.md"],
+    "acceptanceCriteria": [
+      "Le journal contient une nouvelle section avec un haïku 5/7/5",
+      "La section est signée 'autonomous tick'",
+      "Aucun autre fichier modifié (preuve scope respecté)",
+      "git diff --stat ne montre QUE journal/darkstar-grok-cli.md modifié"
+    ],
+    "createdBy": "patrice (via DARKSTAR Claude session 2026-05-02)",
+    "createdAt": "2026-05-02T01:00:00Z"
+    }
+  ]
+}

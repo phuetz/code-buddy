@@ -1,0 +1,5 @@
+{
+  "version": "0.1",
+  "comment": "Worklog append-only. Chaque entrée = un cycle complet (ou tentative) d'un host sur une tâche. Format inspiré de WorkLogEntry de src/collaboration/ai-colab-manager.ts dans grok-cli.",
+  "entries": []
+}
