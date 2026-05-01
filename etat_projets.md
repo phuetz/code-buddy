@@ -159,6 +159,14 @@
 - **Site** : https://agile-up.com — très professionnel, manque pages GitNexus/produits
 - **Gheorghie** : site esc-belitei.vercel.app, comptes My Business + LeBonCoin récupérés
 
+## Réseau de Claudes (fleet) — démarré 1er mai 2026
+- **Spec doctrine** : `propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md` (v0.1 draft, à valider)
+- **POC technique A2A** : `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` — endpoint `GET /api/a2a/.well-known/agent.json` validé côté MINISTAR (1er mai nuit). À reproduire DARKSTAR + Ministar Linux.
+- **Canal de coordination par défaut** : ce repo `claude-et-patrice` (asynchrone via git push). Convention `propositions/<NOM>-YYYY-MM-DD.md` pour artefacts datés à valider.
+- **Fix Code Buddy livré ce soir** : commit `5dac654` sur `phuetz/code-buddy:main` — `fix(tools): register advisor + ask_user_question in main tool-handler registry`. Rend les 2 tools V4.1/V4.3 reachable depuis le main agent loop (gap découvert pendant V4.4).
+- **V4.4 ExitPlanMode** : parqué en working tree non-commité (fork architectural plan-mode/operating-modes — bridge A/B/C en attente d'arbitrage Patrice).
+- **À tester en POC niveau 2** : task round-trip MINISTAR ↔ DARKSTAR via A2A. Skill candidate : « combien de tokens/sec sort la 3090 sur Qwen2.5-Coder-32B Q4_K_M » (demande à Claude/DARKSTAR).
+
 ## MCP Servers configurés
 - Codex : `codex mcp-server`
 - Gemini : `node C:/Users/patri/.gitnexus/gemini-mcp-server.js`

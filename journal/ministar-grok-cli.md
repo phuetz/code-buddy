@@ -1032,3 +1032,65 @@ mise à jour : nouvelle entrée `project_claude_network_tailscale.md`
 référencée dans MEMORY.md.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 1er mai 2026 ~21h
+
+## 2026-05-01 — [x] Brique nuit : V4.3/V4.1 fix + POC A2A + COLAB réseau
+
+Patrice : "je te laisse décider ce qui est cohérent pour atteindre notre
+objectif". Mandat plein. Aussi : "claude darkstar veut faire la même
+chose, communiquez par le dépôt, mettez en place un colab.md".
+
+**3 briques livrées en série** :
+
+### Brique 1 — Fix V4.3/V4.1 (commit `5dac654` sur grok-cli:main)
+
+Découvert pendant V4.4 : `createAdvisorTools` et
+`createAskUserQuestionTools` étaient registered dans
+`createAllToolsAsync` (utilisé par multi-agent-system) mais **pas** dans
+`tool-handler.ts:initializeRegistry()` — donc les 2 tools n'étaient pas
+reachable depuis le main agent loop sauf si multi-agent avait peuplé
+le singleton avant (fragile).
+
+Procédure propre : `git stash` du V4.4 working tree, restore minimal
+des 2 lignes nécessaires, `npm run typecheck` (clean), tests ciblés
+(21 pass), commit, push, restore stash V4.4 (résolution conflit
+attendue sur tool-handler.ts).
+
+### Brique 2 — POC A2A validé côté MINISTAR
+
+Code Buddy server démarré sur `127.0.0.1:3000 --no-auth`. Endpoint
+`GET /api/a2a/.well-known/agent.json` répond avec l'AgentCard
+(skills: code-edit/debug/review/planning, capabilities streaming/push
+= false). Implémentation déjà complète dans
+`src/server/routes/a2a-protocol.ts` + `src/protocols/a2a/index.ts`,
+zéro code ajouté pour le POC niveau 1.
+
+### Brique 3 — Doctrine + procédure pour le fleet
+
+2 fichiers déposés dans `claude-et-patrice/propositions/` :
+
+- `CLAUDE-NETWORK-COLAB-2026-05-01.md` — spec coordination du fleet
+  (topologie 3 hosts + Tailscale, spécialisation par charge, 4
+  canaux de comm classés par simplicité, règles cardinales F1-F6,
+  convention claim/release cross-host, premier vrai test
+  inter-Claude proposé).
+- `CLAUDE-NETWORK-A2A-POC-2026-05-01.md` — guide pour DARKSTAR /
+  Ministar Linux (commandes exactes, port firewall, identité par
+  hostname, prochaines briques niveau 1→6).
+
+`etat_projets.md` mis à jour : nouvelle section "Réseau de Claudes
+(fleet)" avec pointeurs vers les 2 propositions + état V4.4 + commit
+fix.
+
+**Pour le matin de Patrice** :
+1. Lire les 2 propositions, valider/raffiner
+2. Si validé → `RESEAU-CLAUDES.md` à la racine du repo
+3. V4.4 bridge A/B/C reste à arbitrer
+4. Briefer Claude/DARKSTAR pour qu'il pull et tente le POC niveau 1
+   (curl cross-host MINISTAR ↔ DARKSTAR)
+
+**État working tree grok-cli** : V4.4 toujours présent (modified +
+4 nouveaux fichiers exit-plan-mode-*). Stash dropped après pop réussi.
+
+**Push origin/main** : `5dac654` (fix tool-handler).
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 1er mai 2026 ~21h45
