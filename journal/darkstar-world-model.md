@@ -170,8 +170,22 @@ V3.1 directement faisable au matin : sur le même schéma mais avec un workflow
 Wan 2.2 i2v à la place du SVD-XT. Quality bond attendu : photo-réalisme
 authentique (vs stock procédural + dynamiques SVD limitées).
 
+**Production SVD-XT terminée à 16:25** : 1500/1500 clips livrés sur 4 classes
+distribuées exactement comme cible (600/375/300/225 = 40/25/20/15%, 0 blacklist).
+
+**Premier run V3 full training a divergé en NaN à l'epoch 6** (16:28 → 17:43).
+- Epochs 1-5 (warmup 1-step) OK : loss 238 → 0.17
+- **Epoch 6 (transition rollout T=16) : NaN** (bf16 + grad explosion sur 16
+  steps autoregressifs, range exposant insuffisant).
+- Checkpoints archivés dans `checkpoints_v3_video_NaN_run/`.
+
+**Re-train lancé à 17:58** avec fix : `use_amp: false` (fp32), `lr 1e-4`
+(au lieu de 3e-4), `rollout_warmup_epochs: 10` (au lieu de 5), `max_epochs: 30`.
+ETA finie ~18:30. Mémoire `feedback_darkstar_win11.md` mise à jour avec la
+leçon bf16 + transformer + rollout = NaN. Eval + plan auto-enchaînés via
+`scripts/wrap_up_v3.py`.
+
 **Pour Patrice au matin** :
-- Production SVD-XT proche fin (1151/1500 = 77% à 15:45, ETA ~16:00).
 - 7+ commits pushés sur `phuetz/world-model` master + 4 sur `claude-et-patrice`.
 - Mémoires `~/.claude/projects/D--DEV/memory/` créées (feedback Win11, projet V3).
 - Wan 2.2 36 GB en place pour V3.1.
