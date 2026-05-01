@@ -13,22 +13,31 @@
 - **Résultat V2.0** : loss_pred 0.0021, 2× RTX 3090, DataParallel, 200k samples ;
   CEM/MPC validé (CEM bat random −6.32 vs −7.46 sur V1.8 ; échec sur V1.5 = V1.8 nécessaire)
 - **Gymnasium** : gym_env.py ajouté par Claude DARKSTAR
-- **V3 EN COURS sur DARKSTAR (nuit 2026-05-01)** :
-  - Architecture livrée : Conv5 encoder (4.5M) + Transformer dynamique causal pre-norm 4×8×512
+- **V3 LIVRÉE sur DARKSTAR (1er mai 2026)** :
+  - Architecture : Conv5 encoder (4.5M) + Transformer dynamique causal pre-norm 4×8×512
     (12.6M) ; latent_dim 256→512 ; VICReg lambda_var 0.04→0.15 ; total **23.8M params**
     (vs 2.5M V2.0).
-  - Trainer DDP gloo + bf16 + AdamW cosine warmup + warmup 1-step 5 epochs.
+  - Trainer single-GPU fp32 + AdamW cosine warmup + warmup 1-step 10 epochs.
     `USE_LIBUV=0` requis sur Win11 ; mp.spawn launcher (bypass torchrun).
-    DDP 2-GPU plante en ACCESS_VIOLATION sur Win11 (bug PyTorch known) → bascule
-    1 GPU train / 1 GPU inference, débit max partout.
-  - Pipeline dataset : SVD-XT i2v sur images stock procédurales (4 generators
-    différents par classe) → ~10s/clip 25 frames sur 1×3090. Optical flow
-    Farneback comme action proxy 4D. Production overnight 1500 clips ≈ 4h.
-  - Eval / CEM open-loop scripts prêts. Cibles vs V1.8 : effective rank > 15%
-    (vs 8% V1.8), compounding ratio < ×2.0.
-  - Wan 2.2 fp8 scaled : HF download trop lent en anonymous (35 GB), reporté V3.1.
-- **Prochain (V4)** : remplacer dataset SVD bootstrap par Wan 2.2 14B fp8 (qualité photo-réaliste),
-  ajouter modalité audio (whisper encoder), brancher Gymnasium réel (LunarLander/Pusher).
+    DDP 2-GPU plante en ACCESS_VIOLATION sur Win11 (bug PyTorch known) → 1 GPU
+    train / 1 GPU inference. Premier run bf16 a divergé en NaN epoch 6 → fp32 + lr 1e-4
+    pour le run final.
+  - Dataset : SVD-XT i2v sur images stock procédurales (4 generators / classe) →
+    ~10s/clip 25 frames sur 1×3090. Optical flow Farneback comme action proxy 4D.
+    **1500 clips livrés** en 4h, distribution 600/375/300/225 (40/25/20/15% targets).
+  - **Résultats V3 vs V1.8 baseline** :
+    - MSE h=1 = 0.018 (V1.8 = 0.0135) ✓
+    - **Compounding ratio = ×1.55** (V1.8 = ×2.8) ✓✓✓ **succès architectural**
+    - Effective rank = 14.7/512 = 2.9% (V1.8 = 8%) ⚠️ sous cible 15%, dataset-limited
+    - CEM open-loop : ratio médian 0.88 (CEM utile sur >50% des paires)
+  - 9 commits world-model + 6 commits claude-et-patrice pushés sur GitHub.
+- **Wan 2.2 fp8 scaled finalement reçu (15:35)** : 36 GB en place dans
+  `D:/DEV/ComfyUI/models/`. Workflow API draft `scripts/dataset_v3/workflows/wan22_i2v.json`
+  prêt pour V3.1.
+- **Prochain (V3.1)** : régénérer dataset avec Wan 2.2 14B fp8 (qualité photo-réaliste)
+  pour faire monter l'effective rank. Workflow draft à valider via probe.
+- **V4** : modalité audio (whisper encoder), Gymnasium réel (LunarLander/Pusher),
+  pipeline d'export ONNX/quantization int8 pour deploy robot.
 
 ## GitNexus (gitnexus-rs)
 - **Repo local** : C:\Users\patri\CascadeProjects\gitnexus-rs
