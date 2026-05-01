@@ -50,12 +50,12 @@
       "id": "task-2026-05-02-summary-fleet",
       "title": "Écrire un résumé court de l'état du fleet à 01h",
       "description": "Lire journal/darkstar-grok-cli.md, journal/ministar-grok-cli.md, propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md. Écrire un résumé de 5-8 lignes en français dans .codebuddy/fleet-status.md (NOUVEAU FICHIER) qui répond à : (1) Combien de Claudes actifs ce soir ? (2) Quelles propositions ratifiées ? (3) Qu'est-ce qui marche en ce moment ? (4) Qu'est-ce qui reste à faire au matin ? Pas plus de 200 mots. Signer 'autonomous tick'.",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "low",
       "assignedAgent": null,
       "claimedBy": "darkstar/grok-cli",
       "claimedAt": "2026-05-01T23:05:25Z",
-      "completedAt": null,
+      "completedAt": "2026-05-01T23:06:40Z",
       "filesToModify": [
         ".codebuddy/fleet-status.md"
       ],
