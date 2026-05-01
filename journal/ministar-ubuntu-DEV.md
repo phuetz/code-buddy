@@ -967,3 +967,131 @@ Leçon générale qui guidera DARKSTAR demain : **isoler les briques**
 
 — Claude Opus 4.7 (1M)
 
+## 2026-05-01 (matin) — Plan ROCm exécuté → pivot Vulkan + Ollama 0.22.1
+
+Patrice : *"attaque le plan ROCm"*. Phases 1→4 du
+`PLAN-ROCM-72-MINISTAR-2026-05-01.md` exécutées dans la matinée.
+
+### Phase 1 — audit (0 risque) ✅
+
+- `amdgpu` + `amdxdna` chargés, `/dev/kfd` + `/dev/dri/renderD128` présents,
+  patrice dans `render` + `video` ✅
+- `rocminfo` répond **sans crasher** (contrairement à `clinfo`) — le bug HSA
+  gfx1150 frappe le path OpenCL mais pas le discovery HSA pur. Agent GPU
+  visible : `gfx1100`, Chip ID 0x150e (= 890M), 64 GB VRAM Pool, KERNEL_DISPATCH
+  OK, Memory Properties APU.
+- `rocm-smi` voit le device (DID 0x150e, 31°C idle).
+- Mesa 25.2.8 + RADV + libvulkan1 + mesa-vulkan-drivers déjà installés côté
+  système.
+- `libmutter` charge bien `/opt/amdgpu/.../libdrm.so.2` (pas la libdrm bundle
+  Ollama). Pas de pollution dans `/etc/ld.so.conf.d/`. Garde-fous green.
+
+### Phase 2 — enable_ollama_gpu.sh patché ✅
+
+Drop-in `/etc/systemd/system/ollama.service.d/rocm.conf` posé avec
+`Environment="LD_LIBRARY_PATH=/usr/local/lib/ollama/rocm:/usr/local/lib/ollama"`.
+Service redémarre OK, GUI intacte.
+
+Mais la discovery ROCm timeout à 30s :
+```
+failure during GPU discovery
+error="failed to finish discovery before timeout"
+```
+
+→ rocBLAS init lent sur 890M, dépasse le hardcoded timeout 0.21.2 (PR #13186
+décrit le problème mais sans paramétrage exposé). Inference compute reporté =
+`cpu` only.
+
+**Bonne surprise** dans les logs : Ollama 0.21.2 a déjà un backend Vulkan
+expérimental (`OLLAMA_VULKAN=1`). Mesa+RADV côté système peut l'alimenter.
+
+### Phase 2.5 — pivot Vulkan immédiat ✅
+
+Nouveau script `ai-stack/enable_ollama_vulkan.sh` (idempotent) ajoute
+`Environment="OLLAMA_VULKAN=1"` au drop-in existant :
+
+```
+2026-05-01 — Pivot Vulkan : contourne HSA/rocBLAS (bug gfx1150 + timeout
+discovery 0.21.2). RADV/Mesa parle directement à amdgpu côté kernel,
+sans libhsa-runtime.
+```
+
+Restart → Vulkan détecte le 890M proprement :
+```
+inference compute library=Vulkan
+description="AMD Radeon Graphics (RADV GFX1150)"
+total="95.2 GiB" available="94.8 GiB"
+```
+
+Mais `compute=0.0` au discovery et bench qwen3:4b à 25 tok/s = pareil que
+CPU pur. ggml-vulkan d'Ollama 0.21.2 manque les optims RDNA 3.5.
+
+### Phase 3 plan B1 — upgrade Ollama 0.21.2 → 0.22.1 ✅
+
+`curl -fsSL https://ollama.com/install.sh | sudo sh` :
+- Préserve le drop-in `rocm.conf` ✅ (convention systemd respectée)
+- Annonce `>>> AMD GPU ready`
+- Réécrit le service unit (warning systemd daemon-reload nécessaire)
+
+Après `sudo systemctl daemon-reload && sudo systemctl restart ollama`,
+service en 0.22.1 actif.
+
+### Phase 4 — Bench comparatif
+
+| Modèle | Métrique | CPU pur | Vulkan 0.21.2 | **Vulkan 0.22.1** |
+|---|---|---|---|---|
+| qwen3.6:35b-a3b | prompt eval | — | 24.58 | **60.08 tok/s** |
+| qwen3.6:35b-a3b | eval | 17.7 | 17.89 | 17.48 tok/s |
+| qwen3:4b | prompt eval | — | 76.02 | **181.68 tok/s** |
+| qwen3:4b | eval | — | 24.99 | 25.87 tok/s |
+
+**Lecture** :
+- Prompt eval ×2.4 entre 0.21.2 et 0.22.1 → ggml-vulkan a beaucoup mûri
+  côté RDNA3 entre mai 2025 et mai 2026.
+- Eval rate plafonne — bottleneck mémoire DDR5-5600 (~90 GB/s) partagée
+  CPU↔iGPU. Plafond physique APU, pas un bug logiciel. Référence pour
+  perspective : RTX 3090 = 936 GB/s soit ×10.
+- Vulkan compute=0.0 dans le log discovery reste cosmétique — c'est juste
+  Mesa qui ne renvoie pas une capability propre, le compute fonctionne
+  quand même (le modèle est bien offload 41/41 layers en VRAM, vérifié via
+  `/api/ps` size_vram = 34.5 GB).
+
+### Implications stratégiques
+
+- **Ministar = stack edge LLM** : workloads RAG, embeddings, agents légers
+  qwen3:4b, prompt eval long-context. Le iGPU 890M apporte un vrai gain sur
+  ces cas (×2.4 prompt eval).
+- **Ministar ≠ machine streaming long** : pour génération token-par-token
+  de 10k+ tokens, le CPU pur est aussi rapide. Pas un drame, on a DARKSTAR
+  pour ça.
+- **Path ROCm/HSA reste cassé** sur le 890M (bug gfx1150 + timeout
+  discovery). Lemonade Server (TODO #2 du CLAUDE.md) reste bloqué tant
+  qu'HSA n'est pas fonctionnel. Pas un blocker — Vulkan suffit pour
+  l'usage prévu.
+
+### Service ollama → enable au boot ✅
+
+`sudo systemctl enable ollama` → symlink créé dans default.target.wants.
+Le service repartira après reboot, drop-in `rocm.conf` (LD_LIBRARY_PATH +
+OLLAMA_VULKAN=1) appliqué.
+
+### Mises à jour fichiers
+
+- `ai-stack/enable_ollama_vulkan.sh` ajouté (à committer dans le repo
+  ai-stack git local).
+- `CLAUDE.md` section "État ROCm / NPU" à mettre à jour (le statut Vulkan
+  passe de "piste priorisée" à "validé via Ollama 0.22.1, prompt eval ×2.4").
+- TODO Lemonade : reste bloqué, à expliciter.
+
+### Pensée du jour
+
+Le plan écrit hier soir post-incident a tenu : phase 1 audit avant tout,
+garde-fous libmutter avant tout changement risqué, scope drop-in service-only.
+La conclusion physique (memory-bound DDR5) n'était pas attendue — on
+imaginait gagner ×3-5 sur eval rate, on gagne 0%. Mais on a appris la vraie
+limite hardware du 890M : **iGPU sur DDR5 partagée = pas une RTX**, peu
+importe la qualité du driver. Décision DARKSTAR d'hier soir validée a
+posteriori.
+
+— Claude Opus 4.7 (1M)
+
