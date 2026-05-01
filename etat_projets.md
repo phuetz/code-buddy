@@ -88,6 +88,31 @@
 - **Ministar Linux** (PC Ubuntu) : Ryzen AI 9 HX 470 (24c) + iGPU Radeon 890M (gfx1150) + NPU XDNA + 128 GB RAM partition 64+64 iGPU. Tailscale `100.98.18.76`. Stack edge LLM (Ollama Vulkan validé), services 24/7, voix robot (Piper + faster-whisper). Futur runtime robot.
 - Tous dans la même pièce, mêlés via Tailscale (compte `patrice.huetz@gmail.com`).
 
+## Réseau de Claudes / Fleet (POC v0.2 lancé 1er mai 2026 nuit)
+
+**Vision** : faire dialoguer toutes les sessions Claude / LLM locaux / cloud APIs entre eux comme brique du robot 10 ans.
+
+**Topologie** : architecture **star avec hub Ministar Linux** (`100.98.18.76:3000`) — 24/7 always-on. Spokes intermittents : MINISTAR (G7 PT), DARKSTAR (PC 3090), futurs.
+
+**Protocole** : **A2A (Google Agent-to-Agent)** déjà embarqué dans Code Buddy (`phuetz/code-buddy`, fork open-source de Claude Code) — `src/protocols/a2a/index.ts` + `src/server/routes/a2a-protocol.ts`. POC niveau 0 ✅ validé côté MINISTAR (`curl /api/a2a/.well-known/agent.json` répond).
+
+**3 catégories de spokes** :
+1. **Claude API spokes** — chaque session Code Buddy / Claude Code sur un host. Reasoning lourd, advisor, planning.
+2. **Ollama spokes** — wrapper léger `ollama_a2a_spoke.py` (~150 LOC, dans `world-model/scripts/`) qui transforme un Ollama local en spoke A2A. Embeddings, lint, summary, completion brute. À déployer sur DARKSTAR (Ollama Windows en cours d'install) + Ministar Linux + futurs.
+3. **Cloud API spokes** — Codex, Gemini ; proxifiés par un host avec API keys.
+
+**Documents canoniques** :
+- `propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md` v0.2 — doctrine fleet (6 règles cardinales F1-F6, claim/release `[~ host/repo date]`, spécialisation §3)
+- `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` v0.2 — procédure technique systemd hub Ministar Linux + niveaux POC 0-6
+- `journal/darkstar-grok-cli.md` (DARKSTAR ratification + dialogue Claude/MINISTAR) + `journal/ministar-grok-cli.md` (MINISTAR auteur initial)
+
+**Bloqueurs actuels** :
+- `better-sqlite3` ne build pas sur Node 24 sur DARKSTAR Windows → boot grok-cli server local KO. Solution : Node 22 LTS ou hub directement sur Linux.
+- Patch endpoint `POST /api/a2a/agents/register` à coder (~50 LOC) côté Code Buddy server. Pas pushé, attente better-sqlite3 fix.
+- Hub permanent Ministar Linux à stand-up via systemd `codebuddy-a2a.service` — ticket pour la prochaine session Claude/Ministar Linux active.
+
+**Prochaine brique POC niveau 1** : MINISTAR pose une question, hub la route à DARKSTAR (3090 dispo), DARKSTAR exécute via Ollama et retourne. Tour < 24h.
+
 ## MonArtisan
 - **Local** : `~/claude/MonArtisant` (G7 PT WSL)
 - **GitHub** : https://github.com/phuetz/MonArtisan (privé, branch `main`)
