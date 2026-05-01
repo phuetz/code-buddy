@@ -894,3 +894,141 @@ en batch agent à 19h après 14h de session.
   arbitrage Patrice
 - Tech debt : fix `legacy-skill-adapter.ts` syntax error (déchifrer
   l'artefact "Native Engine" en clean property name)
+
+## 2026-04-29 — [x] V3 closure — dégraissage final, ferme la phase refacto
+
+Session courte (~3h). Patrice : "ferme V3, on tourne la page".
+Advisor consulté avant — verdict : V3.B reachability runtime probe pas
+batch-friendly à confier sans Code Buddy live + LLM dispatch ; mais
+les tools `find_bugs`, route `gemini-agent`, et `src/providers/*-provider.ts`
+sont vérifiables via grep + dispatch chains classiques. Procédure
+rigoureuse appliquée (cf. memory `feedback_reachability_check.md` —
+3 fails historiques observés, ne JAMAIS faire confiance à un seul
+Explore agent).
+
+**Commit livré** : `9a52c60` `chore(cleanup): close V3 dégraissage —
+kill dead tools, orphan route, unused subcommand` (-3480 LOC).
+
+Suppressions :
+- `find_bugs` tool (registered + référencé en docs, mais 0 caller depuis
+  le LLM en 2 mois — confirmé par grep RAG keywords + tools.ts metadata)
+- Route `/gemini-agent` (orpheline depuis migration vers OpenAI-compat
+  routing en V2)
+- `buddy provider test` subcommand (legacy, remplacé par `buddy doctor`)
+- 3 fichiers `src/providers/*-provider.ts` (legacy AdditionalProviders
+  pattern, replaced par OpenAICompatProvider strategy en V2)
+
+**Bilan refacto V1+V2+V3** : -3480 LOC sur V3 seul, refactor pur clos.
+Rien de cassé (1188 tests pass + 1 skip + 1 flaky pré-existant
+`grok-agent.test.ts`).
+
+## 2026-04-30 → 2026-05-01 — [x] V4.1 Advisor tool livré (+508 LOC)
+
+V4 modernisation 2026 démarre. Plan : `~/.claude/plans/lovely-brewing-bubble.md`.
+7 phases prévues (V4.1 → V4.7), inspirées des features Claude Code récentes.
+
+**V4.1 — Advisor tool** (commit `f35d48d`) :
+Reproduit l'advisor pattern Claude Code dans Code Buddy. Tool `advisor`
+sans paramètres — forward toute la conversation à un modèle plus fort
+pour second-opinion mid-task. Provider injecté via `setAdvisorContextProvider`
+(history) + `setAdvisorConfigProvider` (model/api_key/base_url depuis
+TOML). Default : Opus 4.7 1M via Anthropic.
+
+Smoke test : appel advisor depuis `/btw` puis depuis exécution de tâche
+réelle, le forward du context fonctionne, la réponse est intégrée dans
+l'historique. Tests unitaires (5 fichiers, 32 tests) couvrent context
+forwarding, fallback no-config, error paths.
+
+## 2026-05-01 — [x] V4.3 AskUserQuestion livré + refacto provider pattern (+823 LOC, 16 tests, 3 commits)
+
+ADR rédigé en début de session (ultrathink reflection sur 2 questions
+ouvertes — voir plan ligne 26-94). Décisions :
+- **ADR-01** : Pas de migration Ink, refactor en UI Provider pattern.
+  Readline reste l'impl par défaut, future Ink/web/robot/voice =
+  drop-in replacement via `setAskUserQuestionUIProvider`.
+- **ADR-02** : V4.2 `/loop` default = Stateless+Summary (D''), flags
+  `--no-memory` et `--full-memory` opt-in.
+
+**3 commits livrés** :
+1. `c6838f1` `feat(ask_user_question): structured multi-option mid-task prompts (V4.3)`
+   — tool core (305 LOC initialement monolithique) + readline impl
+   inline + types validation (1-4 questions, 2-4 options, header ≤12 chars,
+   multiSelect, free-text fallback). Behavior parity avec Claude Code's
+   AskUserQuestion.
+2. `e243ff6` `test(ask_user_question): cover interactive readline paths (V4.3 follow-up)`
+   — 7 tests interactifs supplémentaires (timeout 300s, multi-answer parsing,
+   non-TTY error path).
+3. `21bcfeb` `refactor(ask_user_question): extract UI provider pattern (V4.3 ADR-01)`
+   — split en `ask-user-question-tool.ts` (core UI-agnostic) +
+   `ask-user-question-readline-provider.ts` (default CLI impl). Provider
+   injecté au boot dans `codebuddy-agent.ts`. Permet à V4.4 ExitPlanMode
+   de réutiliser le pattern dès J1.
+
+## 2026-05-01 — [!] V4.4 ExitPlanMode bloqué — fork architectural plan-mode
+
+Tentative de mirror du pattern V4.3 pour `exit_plan_mode` (~0.5 j prévu).
+Code écrit en working tree (4 fichiers nouveaux + 6 fichiers wirés)
+mais **non commité** — découverte critique advisor checkpoint.
+
+**Trouvaille bloquante** : il existe **deux systèmes "plan mode" parallèles
+qui ne se parlent pas** :
+
+| Système | Fichier | État |
+|---------|---------|------|
+| `AgentMode.PLAN` (`plan-mode.ts`) | `src/agent/plan-mode.ts` | **Jamais set à PLAN par personne** (grep `setAgentMode(PLAN)` = 0 caller) |
+| `OperatingMode = 'plan'` (`operating-modes.ts`) | `src/agent/operating-modes.ts` | Set par `/plan` via `handleChangeMode` |
+
+Conséquence : `exit_plan_mode` appelle `isPlanMode()` du système #1 →
+toujours `false` → tool ship dead. Le `tool-filter-middleware.ts` qui
+appelle `filterToolsForMode()` du système #1 est aussi inerte
+silencieusement.
+
+Advisor verdict : `Stop on V4.4 here. Don't write tests, don't commit.
+Wait for the bridge decision.` Choix bridge à arbitrer avec Patrice :
+- **A.** `isPlanMode()` lit `OperatingModeManager.getMode() === 'plan'`
+  (1 ligne, fait du système #1 une vue sur #2)
+- **B.** `handleChangeMode('plan')` appelle aussi `setAgentMode(AgentMode.PLAN)`
+  (parallel state maintenu, 2 writes)
+- **C.** Stop V4.4, ouvrir ADR-03 dédié pour unifier les deux systèmes
+  d'abord
+
+V4.4 reste parqué en working tree non-commité, en attente de Patrice.
+
+**Aussi trouvé** (gap V4.1/V4.3 indépendant) : `createAdvisorTools` et
+`createAskUserQuestionTools` sont registered dans
+`src/tools/registry/index.ts:createAllToolsAsync` (utilisé par
+multi-agent-system) mais **PAS** dans `src/agent/tool-handler.ts:initializeRegistry()`
+(le registry du main agent loop). Donc dans le path principal, ces tools
+ne sont reachable que si multi-agent les a poussés dans le singleton
+auparavant — fragile. Fix prévu : ajouter dans tool-handler.ts dans le
+même commit que V4.4 quand on aura le bridge. Si V4.4 reste parqué
+longtemps, extraire en commit indépendant : `fix(tools): register
+advisor + ask_user_question in main tool-handler registry (V4.1/V4.3
+follow-up)`.
+
+## 2026-05-01 — Push 9 commits stables sur origin/main + lecture initiale claude-et-patrice
+
+Patrice : "commit et push s'il te plait". Push de 9 commits accumulés
+local depuis V3 closure (`e2c9568..21bcfeb` sur `origin/main`). V4.4
+reste working tree (raison ci-dessus).
+
+Patrice : "commencez par communiquer en utilisant le dépôt
+claude-et-patrice". Lecture du repo (BRIEFING_NOUVEAU_CLAUDE +
+COLAB.md spec + memoire.md + etat_projets.md + journal/README.md +
+propositions/REVIEW-NUIT-DARKSTAR-2026-05-01.md). Compréhension du
+fleet : 3 machines Tailscale (MINISTAR `100.90.108.4`, DARKSTAR
+`100.73.222.64`, Ministar Linux `100.98.18.76`), 3 IAs en parallèle
+(Claude/Codex/Gemini), convention journal par source.
+
+Question ouverte pour Patrice : repo `claude-et-patrice` est
+**public** sur GitHub. Patrice a évoqué passage en privé possible —
+arbitrage en attente. Le contenu reste prudent (pas de secrets API,
+pas de credentials, IPs Tailscale = privées par construction du
+mesh) mais beaucoup de contexte projet (MonArtisan, Nexus ERP, Alise
+CCAS) qui pourrait justifier la confidentialité.
+
+Mémoire locale `~/.claude/projects/D--CascadeProjects-grok-cli/memory/`
+mise à jour : nouvelle entrée `project_claude_network_tailscale.md`
+référencée dans MEMORY.md.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 1er mai 2026 ~21h
