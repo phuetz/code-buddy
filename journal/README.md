@@ -50,6 +50,7 @@ en journal, suffixer `-ubuntu` (ex : `ministar-ubuntu-DEV.md`).
 | `ministar-ubuntu-DEV.md`           | session sur PC Ubuntu (`/home/patrice/DEV`), futur runtime robot |
 | `darkstar-DEV.md`                  | session sur DARKSTAR Windows (PC 3090) — bootstrap initial 2026-05-01 |
 | `darkstar-world-model.md`          | session sur DARKSTAR (`D:\CascadeProjects\world-model`), entraînement world-model JEPA V3 |
+| `darkstar-grok-cli.md`             | session sur DARKSTAR (`D:\DEV\grok-cli`), spoke A2A code-buddy pour le fleet |
 | _à créer au besoin_                | autres machines/repos                                    |
 
 Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le
