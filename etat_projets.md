@@ -160,12 +160,14 @@
 - **Gheorghie** : site esc-belitei.vercel.app, comptes My Business + LeBonCoin récupérés
 
 ## Réseau de Claudes (fleet) — démarré 1er mai 2026
-- **Spec doctrine** : `propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md` (v0.1 draft, à valider)
-- **POC technique A2A** : `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` — endpoint `GET /api/a2a/.well-known/agent.json` validé côté MINISTAR (1er mai nuit). À reproduire DARKSTAR + Ministar Linux.
+- **Architecture** : ⭐ **star, hub central = Ministar Linux** (Tailscale `100.98.18.76`, allumé 24/7). Décision Patrice 1er mai nuit. Topologie simplifiée : un seul endpoint canonique `100.98.18.76:3000`, plus de mDNS/gossip/registry distribué.
+- **Spec doctrine** : `propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md` (v0.2 — intègre la décision hub).
+- **POC technique A2A** : `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` (v0.2). Niveau 0 (discovery local) validé côté MINISTAR. Niveau 1+ : à exécuter par Claude/Ministar Linux (stand up serveur systemd permanent) puis MINISTAR + DARKSTAR (clients).
 - **Canal de coordination par défaut** : ce repo `claude-et-patrice` (asynchrone via git push). Convention `propositions/<NOM>-YYYY-MM-DD.md` pour artefacts datés à valider.
 - **Fix Code Buddy livré ce soir** : commit `5dac654` sur `phuetz/code-buddy:main` — `fix(tools): register advisor + ask_user_question in main tool-handler registry`. Rend les 2 tools V4.1/V4.3 reachable depuis le main agent loop (gap découvert pendant V4.4).
 - **V4.4 ExitPlanMode** : parqué en working tree non-commité (fork architectural plan-mode/operating-modes — bridge A/B/C en attente d'arbitrage Patrice).
-- **À tester en POC niveau 2** : task round-trip MINISTAR ↔ DARKSTAR via A2A. Skill candidate : « combien de tokens/sec sort la 3090 sur Qwen2.5-Coder-32B Q4_K_M » (demande à Claude/DARKSTAR).
+- **Premier ticket fleet** : Claude/Ministar Linux doit prendre `[~]` sur "stand up A2A hub permanent (systemd)" en première session active. Procédure exacte dans le POC v0.2 section 3.0.
+- **Test concret de validation** : MINISTAR ping `http://100.98.18.76:3000/api/a2a/.well-known/agent.json` doit répondre une AgentCard "Code Buddy / ministar-linux" (après patch identité-par-host).
 
 ## MCP Servers configurés
 - Codex : `codex mcp-server`

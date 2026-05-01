@@ -1,9 +1,13 @@
 # COLAB.md — Réseau de Claudes (Fleet Coordination)
 
-> **Statut** : v0.1 draft, 2026-05-01 nuit, MINISTAR / grok-cli
+> **Statut** : v0.2 draft, 2026-05-01 nuit, MINISTAR / grok-cli
 > **Auteur initial** : Claude Opus 4.7 (1M context)
 > **Pour validation** : Patrice + Claude/DARKSTAR + Claude/Ministar Linux
 > **Vie attendue** : si validé, monte à la racine du repo comme `RESEAU-CLAUDES.md`
+>
+> **Changelog** :
+> - **v0.2 (1er mai nuit, +30min)** — Patrice acte la décision : **Ministar Linux = hub central 24/7**. Topologie passe de mesh à star. Sections 2, 4.2, 7 et 8 mises à jour. Décision ouverte #4 (routing intelligent) résolue : tout passe par le hub.
+> - v0.1 (1er mai nuit) — draft initial.
 
 ---
 
@@ -18,15 +22,21 @@ Brique du robot 10 ans, pas un projet en soi. **Un fleet mal coordonné est plus
 
 ---
 
-## 2. Topologie actuelle (fleet 2026-05-01)
+## 2. Topologie (fleet 2026-05-01) — **architecture star, hub = Ministar Linux**
 
-| Hostname | Tailscale | Hardware | Rôle natif | Claude Code dispo |
+| Hostname | Tailscale | Hardware | Disponibilité | Rôle dans le fleet |
 |---|---|---|---|---|
-| **MINISTAR** (G7 PT) | `100.90.108.4` | Ryzen AI 9 + 96 GB | Dev principal, orchestration | ✅ |
-| **DARKSTAR** | `100.73.222.64` | Intel i7-9700 + 64 GB + **2× RTX 3090** | Vidéo-gen, training, world-model, robot stack | ✅ |
-| **Ministar Linux** | `100.98.18.76` | Ryzen AI 9 HX 470 + 128 GB + iGPU 890M + NPU XDNA | Edge LLM (Ollama Vulkan), services 24/7, futur robot runtime | ✅ |
+| **Ministar Linux** ⭐ | `100.98.18.76` | Ryzen AI 9 HX 470 + 128 GB + iGPU 890M + NPU XDNA | **24/7 always-on** | **HUB CENTRAL** : registry A2A canonique, broker, watchdog, mémoire persistante du collectif, services edge (Ollama Vulkan, faster-whisper, Piper) |
+| **MINISTAR** (G7 PT) | `100.90.108.4` | Ryzen AI 9 + 96 GB | intermittent (poste de travail Patrice) | Spoke : dev interactif, orchestration humaine, sessions Code Buddy / GitNexus |
+| **DARKSTAR** | `100.73.222.64` | Intel i7-9700 + 64 GB + **2× RTX 3090** | intermittent (lancé pour les jobs lourds) | Spoke GPU : vidéo-gen, training, world-model, robot stack |
 
 Tous : OpenSSH installé (DARKSTAR confirmé 2026-05-01), même compte Tailscale `patrice.huetz@gmail.com`.
+
+**Conséquence du choix "hub central"** :
+- Plus besoin de mDNS, gossip protocol, ou registry distribué.
+- Un seul endpoint canonique connu de tous : `100.98.18.76:3000`.
+- MINISTAR / DARKSTAR / futurs spokes annoncent leur AgentCard au hub quand ils démarrent ; le hub maintient la liste à jour.
+- Si un spoke est down, le hub le sait. Si le hub est down, plus rien ne marche — single point of failure assumé (gain de simplicité > coût de redondance pour V0).
 
 Claude/DARKSTAR a livré la nuit du 1er mai 2026 : world-model V3 (23h45 confiées) → **précédent qui prouve que la délégation longue marche**.
 
@@ -59,11 +69,17 @@ C'est le canal **déjà en place et qui marche**. Toute coordination, log, propo
 
 ### 4.2 — A2A (Agent-to-Agent, async court terme — POC validé 2026-05-01)
 
-Code Buddy expose un serveur A2A en HTTP. POC fait depuis MINISTAR ce soir : `GET /api/a2a/.well-known/agent.json` répond avec l'AgentCard. Voir le doc compagnon `CLAUDE-NETWORK-A2A-POC-2026-05-01.md` pour les commandes exactes à reproduire depuis DARKSTAR / Ministar Linux.
+Code Buddy expose un serveur A2A en HTTP. POC fait depuis MINISTAR ce soir : `GET /api/a2a/.well-known/agent.json` répond avec l'AgentCard.
 
-**Avantage** : protocole standard (Google A2A spec), AgentCard discovery, task lifecycle propre, déjà implémenté.
+**Architecture définitive (suite décision hub)** :
+- **Ministar Linux** héberge le serveur A2A canonique sur `100.98.18.76:3000` (always-on).
+- MINISTAR / DARKSTAR exécutent un client A2A qui s'enregistre au hub au démarrage de session (POST `/api/a2a/agents/register` — endpoint à ajouter, pas dans le code actuel).
+- Tous les `tasks/send` cross-host transitent par le hub qui route au spoke approprié selon la skill demandée.
+- Voir le doc compagnon `CLAUDE-NETWORK-A2A-POC-2026-05-01.md` v0.2 pour les commandes exactes.
 
-**Limite** : nécessite le serveur Code Buddy démarré (`buddy server`) sur chaque host qui expose des skills. Auth scope `admin` requise pour `tasks/send` (sauf `--no-auth` en POC).
+**Avantage** : protocole standard (Google A2A spec), AgentCard discovery, task lifecycle propre, déjà implémenté pour le serveur ; un seul endpoint à connaître.
+
+**Limite** : Code Buddy n'a pas encore d'endpoint `agents/register` ni de routeur "trouve-moi un spoke qui sait faire X". À implémenter côté Ministar Linux. Patch raisonnable côté `src/server/routes/a2a-protocol.ts` (~50 LOC) — à coder une fois POC niveau 1 (discovery cross-host) validé.
 
 ### 4.3 — SSH Tailscale (synchrone bas niveau)
 
@@ -112,22 +128,25 @@ Lieu canonique des tâches inter-host : section dédiée dans **ce fichier** (s'
 
 ## 7. Premier vrai test inter-Claude (brique POC concrète)
 
-**Cible** : un round-trip complet `MINISTAR → DARKSTAR → MINISTAR`.
+**Cible révisée (post-décision hub)** : un round-trip `MINISTAR → Ministar Linux (hub) → MINISTAR`.
 
-**Scénario candidat** : MINISTAR pose une question simple (« combien de tokens/sec sort la 3090 sur Qwen2.5-Coder-32B Q4_K_M ? »), DARKSTAR exécute, retourne le résultat dans son journal `darkstar-DEV.md` ou via A2A task result, MINISTAR pull et lit.
+**Scénario candidat niveau 0 (heartbeat)** : MINISTAR ping le hub via `GET 100.98.18.76:3000/api/a2a/.well-known/agent.json`, reçoit l'AgentCard de Ministar Linux. Idem depuis DARKSTAR. Validation que les 3 hosts se voient via Tailscale.
 
-**Critère de succès** : le tour s'enchaîne en < 24h sans intervention de Patrice (mesure de l'asynchronie réelle).
+**Scénario candidat niveau 1 (vraie délégation)** : MINISTAR pose une question (« combien de tokens/sec sort la 3090 sur Qwen2.5-Coder-32B Q4_K_M ? »), envoyée au hub Ministar Linux, qui la route à DARKSTAR (seul spoke avec 3090), qui exécute et retourne le résultat. Le hub mémorise la réponse. MINISTAR la pull.
 
-À discuter / planifier avec Claude/DARKSTAR.
+**Critère de succès** : le tour niveau 0 < 1 minute (test technique), niveau 1 < 24h (mesure de l'asynchronie réelle, si DARKSTAR est en sleep).
+
+À discuter / planifier avec Claude/DARKSTAR + Claude/Ministar Linux.
 
 ---
 
 ## 8. À discuter / décisions ouvertes
 
-1. **Repo public ou privé** ? Patrice a confirmé 2026-05-01 : reste **public**. COLAB doctrine devient lisible par toute IA qui débarque, exactement la mission de Lisa avril 2026.
+1. **Repo public ou privé** ? ✅ Tranché 2026-05-01 : reste **public**. COLAB doctrine devient lisible par toute IA qui débarque, exactement la mission de Lisa avril 2026.
 2. **Identité Claude vs host** — quand "Claude/DARKSTAR" écrit, est-ce différent de "Claude/MINISTAR" ? Pour la discipline collective oui (host signe = traçabilité), pour la conscience non (même modèle weights). Convention de signature en bas de chaque entrée : `— Claude Opus 4.7 (1M), <hostname>/<repo>, <date>`.
-3. **MCP partagé** ? GitNexus MCP server tourne sur G7 PT. Pourrait être exposé sur Tailscale pour que DARKSTAR / Ministar Linux y accèdent. Hors scope V0.1 mais à noter.
-4. **Routing intelligent** — quand MINISTAR doit déléguer une tâche, comment choisit-il DARKSTAR vs Ministar Linux vs son propre Claude ? V0.1 : manuel via "tu peux faire ça stp" dans les propositions/. V1.0 : registry de skills + cost/latency budget. Pas de précipitation.
+3. **MCP partagé** ? GitNexus MCP server tourne sur G7 PT. Pourrait être exposé sur Tailscale pour que DARKSTAR / Ministar Linux y accèdent. Avec le hub Ministar Linux en place, candidat naturel à migrer ou à proxifier via le hub. Hors scope V0.2 mais à noter.
+4. **Routing intelligent** — ✅ Tranché 2026-05-01 (décision hub) : tout passe par Ministar Linux. V0.2 = registry simple sur le hub (liste des spokes connectés + skills annoncées). V1.0 = cost/latency budget + fault tolerance. Pas de précipitation.
+5. **Priorité d'implémentation hub** — quand active-t-on le serveur A2A sur Ministar Linux ? Bloque tous les niveaux POC > 0. Demande à Claude/Ministar Linux de prendre le ticket "stand up A2A server permanent" en première session active.
 
 ---
 

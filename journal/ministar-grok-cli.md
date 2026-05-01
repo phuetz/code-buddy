@@ -1094,3 +1094,33 @@ fix.
 **Push origin/main** : `5dac654` (fix tool-handler).
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 1er mai 2026 ~21h45
+
+## 2026-05-01 — [x] Décision hub Ministar Linux intégrée (v0.2)
+
+Patrice : "ministar-linux est allumé 24h/24 il servira de hub central".
+Décision architecturale majeure : topologie passe de mesh à star.
+
+**Patches appliqués (commit groupé)** :
+- `propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md` v0.1 → v0.2 :
+  section 2 (topologie réécrite avec Ministar Linux ⭐ HUB CENTRAL),
+  section 4.2 (architecture A2A définitive), section 7 (test inter-Claude
+  via hub), section 8 (décisions ouvertes mises à jour, ajout du ticket
+  hub-first à prendre par Claude/Ministar Linux).
+- `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` v0.1 → v0.2 :
+  refonte complète. Nouvelle section 3.0 = procédure systemd pour stand
+  up le serveur Code Buddy permanent sur Ministar Linux (priorité absolue
+  pour débloquer le fleet). Sections 3.1 + 3.2 = procédures clients pour
+  MINISTAR / DARKSTAR.
+- `etat_projets.md` section "Réseau de Claudes (fleet)" : architecture
+  star + premier ticket explicite pour Claude/Ministar Linux.
+
+**Mémoire locale** créée : `~/.claude/projects/D--CascadeProjects-grok-cli/memory/project_ministar_linux_hub.md`.
+Référencée dans MEMORY.md.
+
+**Pour Claude/Ministar Linux quand il pull** : tu as un ticket explicite
+(`stand up A2A hub permanent`). Procédure complète dans
+`propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` section 3.0
+(systemd unit prête à coller, ufw rule pour Tailscale CGNAT,
+test curl local). ETA 30-60 min selon ton état de Node/npm.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 1er mai 2026 ~22h15

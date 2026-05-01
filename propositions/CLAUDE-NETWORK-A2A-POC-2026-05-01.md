@@ -1,8 +1,12 @@
 # A2A POC — Premier round-trip technique entre Claudes du fleet
 
-> **Statut** : POC validé côté MINISTAR 2026-05-01 nuit, à reproduire / étendre par DARKSTAR + Ministar Linux
-> **Compagnon doctrinal** : `CLAUDE-NETWORK-COLAB-2026-05-01.md`
+> **Statut** : v0.2 — POC niveau 0 validé côté MINISTAR 2026-05-01 nuit. Architecture **hub Ministar Linux** actée par Patrice (cf. COLAB v0.2 section 2). Procédure révisée : c'est Ministar Linux qui doit stand up le serveur permanent en premier.
+> **Compagnon doctrinal** : `CLAUDE-NETWORK-COLAB-2026-05-01.md` v0.2
 > **Auteur** : Claude Opus 4.7 (1M), MINISTAR / grok-cli
+>
+> **Changelog** :
+> - **v0.2 (1er mai nuit, +30min)** — Refondu suite décision hub. Ministar Linux = serveur A2A permanent ; MINISTAR/DARKSTAR = clients. Nouvelle section 3.0 "Setup hub Ministar Linux" en priorité.
+> - v0.1 (1er mai nuit) — version mesh initiale.
 
 ---
 
@@ -60,37 +64,80 @@ Code source : `src/server/routes/a2a-protocol.ts` (route GET), `src/protocols/a2
 
 ---
 
-## 3. Procédure POC pour DARKSTAR (à exécuter au matin)
+## 3. Procédure POC révisée — hub Ministar Linux first
+
+### 3.0 — Stand up le hub permanent (priorité absolue, à faire par Claude/Ministar Linux)
 
 ```bash
-# 1. Pull le repo de coordination
-cd /home/patrice/DEV/claude-et-patrice  # ou équivalent Windows
+# Sur Ministar Linux (Tailscale 100.98.18.76)
+
+# 1. Pull repo de coordination
+cd /home/patrice/DEV/claude-et-patrice  # adapter au vrai chemin
 git pull --rebase
 
-# 2. Vérifier que grok-cli est cloné et à jour
-cd <chemin>/grok-cli
-git pull origin main
-npm install  # si première fois
+# 2. Cloner / mettre à jour grok-cli si pas déjà fait
+git clone https://github.com/phuetz/code-buddy.git ~/code-buddy 2>/dev/null || (cd ~/code-buddy && git pull origin main)
+cd ~/code-buddy
+npm install
 
-# 3. Démarrer le serveur — bind sur 0.0.0.0 pour exposer au mesh Tailscale
-npx tsx src/index.ts server --port 3000 --host 0.0.0.0 --no-auth
+# 3. Ouvrir le port 3000 dans ufw (limité au CGNAT Tailscale)
+sudo ufw allow from 100.64.0.0/10 to any port 3000 proto tcp
+sudo ufw reload
 
-# 4. Test local (sur DARKSTAR)
+# 4. Démarrer le serveur en service systemd (always-on)
+#    Créer /etc/systemd/system/codebuddy-a2a.service :
+sudo tee /etc/systemd/system/codebuddy-a2a.service > /dev/null <<'UNIT'
+[Unit]
+Description=Code Buddy A2A Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=patrice
+WorkingDirectory=/home/patrice/code-buddy
+ExecStart=/usr/bin/npx tsx src/index.ts server --port 3000 --host 0.0.0.0 --no-auth
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/codebuddy-a2a.log
+StandardError=append:/var/log/codebuddy-a2a.log
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now codebuddy-a2a.service
+
+# 5. Vérifier le démarrage
+sudo systemctl status codebuddy-a2a.service
 curl -s http://127.0.0.1:3000/api/a2a/.well-known/agent.json | jq .
 
-# 5. Test cross-host (depuis MINISTAR vers DARKSTAR via Tailscale)
-#    À lancer côté MINISTAR :
-curl -s http://100.73.222.64:3000/api/a2a/.well-known/agent.json | jq .
-
-# 6. Logger le résultat dans journal/darkstar-DEV.md :
-#    - quelle réponse a été obtenue
-#    - latence cross-host (Tailscale ajoute ~1-5ms en LAN)
-#    - éventuels firewalls Windows à ouvrir (port 3000 inbound)
+# 6. Logger dans journal/ministar-ubuntu-DEV.md le statut + URL canonique du hub
 ```
 
-**Critère de succès POC niveau 1** : MINISTAR voit l'AgentCard de DARKSTAR via Tailscale. Asymétrique (un sens, lecture seule).
+### 3.1 — Test cross-host depuis les spokes (MINISTAR + DARKSTAR)
 
-**Critère de succès POC niveau 2** : POST /api/a2a/tasks/send marche cross-host avec une skill triviale. Demande une skill custom à enregistrer côté serveur (ce que `A2AAgentServer` fait — voir `src/protocols/a2a/index.ts:124`).
+Une fois le hub up, depuis n'importe quel spoke :
+
+```bash
+# Discovery hub
+curl -s http://100.98.18.76:3000/api/a2a/.well-known/agent.json | jq .
+# Latence Tailscale attendue : 1-5ms en LAN, 20-50ms si traversée DERP
+```
+
+### 3.2 — POC client A2A spoke → hub (en cours de spec)
+
+À implémenter dans Code Buddy (~50 LOC nouvelles) :
+- POST `/api/a2a/agents/register` côté hub — accepte une AgentCard d'un spoke + son URL Tailscale.
+- Au démarrage de session sur MINISTAR/DARKSTAR, auto-register au hub avec ses skills locales (incluant les modèles Ollama disponibles, les tokens GPU dispo, etc.).
+- Le hub maintient `Map<spokeName, { card, url, lastHeartbeat }>` en mémoire (pas de DB pour V0).
+
+**Critère de succès POC niveau 0** : MINISTAR + DARKSTAR voient l'AgentCard du hub via Tailscale. Latence < 50ms.
+
+**Critère de succès POC niveau 1** : un spoke peut s'enregistrer au hub via `agents/register`, le hub le liste dans `GET /api/a2a/agents` (à ouvrir à `--no-auth` ou scope `read`).
+
+**Critère de succès POC niveau 2** : POST `/api/a2a/tasks/send` envoyé au hub, routé vers le bon spoke selon la skill demandée, résultat retourné au caller.
 
 ---
 
