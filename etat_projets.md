@@ -58,10 +58,10 @@
 - **En cours** : Gemini écrit ch.3,4,5,6,7,8,9,10,11
 
 ## Hardware Lab
-- **G7 PT** (ce PC) : Ryzen AI 9 + 96 GB, dev principal
-- **DARKSTAR** (PC 3090) : 2× RTX 3090, entraînement world model
-- **PC Ubuntu** : Ryzen AI 470 Pro + 128 GB, futur cerveau robot
-- Tous dans la même pièce, réseau local à brancher
+- **G7 PT** (= MINISTAR Windows) : Ryzen AI 9 + 96 GB, dev principal. Tailscale `100.90.108.4`.
+- **DARKSTAR** (PC 3090) : Intel **i7-9700** (8c/8t, AVX2 only, PCIe 3.0) + **64 GB DDR4** + **2× RTX 3090** (24 GB chacune, NVLink à vérifier), Windows. Tailscale `100.73.222.64`. Stack vidéo-gen + briques robot (LTX-2.3, ComfyUI CUDA, SAM 2, Depth Anything v2, faster-whisper CUDA, world-model JEPA).
+- **Ministar Linux** (PC Ubuntu) : Ryzen AI 9 HX 470 (24c) + iGPU Radeon 890M (gfx1150) + NPU XDNA + 128 GB RAM partition 64+64 iGPU. Tailscale `100.98.18.76`. Stack edge LLM (Ollama Vulkan validé), services 24/7, voix robot (Piper + faster-whisper). Futur runtime robot.
+- Tous dans la même pièce, mêlés via Tailscale (compte `patrice.huetz@gmail.com`).
 
 ## MonArtisan
 - **Local** : `~/claude/MonArtisant` (G7 PT WSL)
