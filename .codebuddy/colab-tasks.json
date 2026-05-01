@@ -12,7 +12,9 @@
       "claimedBy": "darkstar/grok-cli",
       "claimedAt": "2026-05-01T23:00:55Z",
       "completedAt": "2026-05-01T23:01:55Z",
-      "filesToModify": ["journal/darkstar-grok-cli.md"],
+      "filesToModify": [
+        "journal/darkstar-grok-cli.md"
+      ],
       "acceptanceCriteria": [
         "Le journal contient une nouvelle section avec un haïku 5/7/5",
         "La section est signée 'autonomous tick'",
@@ -26,13 +28,15 @@
       "id": "task-2026-05-02-fleet-victory",
       "title": "Documenter le 1er cycle autonome réussi dans le journal",
       "description": "Le 2 mai 2026 ~01h, le fleet a réussi son 1er cycle autonome complet sur DARKSTAR (commits 38fca68 + 53595f2 sur master, haïku 'Le robot dix ans / Trois cœurs battent en réseau / Sans toi pour traduire'). Ajouter une nouvelle section dans journal/darkstar-grok-cli.md, titrée '## 2026-05-02 ~01h05 — 1er cycle autonome RÉUSSI (autonomous tick)'. Mentionner : (1) le timing tick (58s pour 1 task), (2) ce qui a marché, (3) ce qui pourrait être amélioré V0.2 (auto-cleanup heartbeat.log, auto-Task Scheduler, etc.). Signer 'autonomous tick'.",
-      "status": "open",
+      "status": "in_progress",
       "priority": "medium",
       "assignedAgent": null,
-      "claimedBy": null,
-      "claimedAt": null,
+      "claimedBy": "darkstar/grok-cli",
+      "claimedAt": "2026-05-01T23:04:06Z",
       "completedAt": null,
-      "filesToModify": ["journal/darkstar-grok-cli.md"],
+      "filesToModify": [
+        "journal/darkstar-grok-cli.md"
+      ],
       "acceptanceCriteria": [
         "Une nouvelle section ajoutée au journal",
         "Mentionne explicitement le 1er cycle réussi avec les hashes commits",
@@ -52,7 +56,9 @@
       "claimedBy": null,
       "claimedAt": null,
       "completedAt": null,
-      "filesToModify": [".codebuddy/fleet-status.md"],
+      "filesToModify": [
+        ".codebuddy/fleet-status.md"
+      ],
       "acceptanceCriteria": [
         ".codebuddy/fleet-status.md créé avec 5-8 lignes",
         "Réponds aux 4 questions explicitement",
