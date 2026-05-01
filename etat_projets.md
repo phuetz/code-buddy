@@ -10,9 +10,25 @@
 
 ## World Model JEPA
 - **Repo** : https://github.com/phuetz/world-model (public)
-- **Résultat** : loss_pred 0.0021, 2× RTX 3090, DataParallel, 200k samples
+- **Résultat V2.0** : loss_pred 0.0021, 2× RTX 3090, DataParallel, 200k samples ;
+  CEM/MPC validé (CEM bat random −6.32 vs −7.46 sur V1.8 ; échec sur V1.5 = V1.8 nécessaire)
 - **Gymnasium** : gym_env.py ajouté par Claude DARKSTAR
-- **Prochain** : replay buffer prioritaire, vrai environnement CartPole/LunarLander
+- **V3 EN COURS sur DARKSTAR (nuit 2026-05-01)** :
+  - Architecture livrée : Conv5 encoder (4.5M) + Transformer dynamique causal pre-norm 4×8×512
+    (12.6M) ; latent_dim 256→512 ; VICReg lambda_var 0.04→0.15 ; total **23.8M params**
+    (vs 2.5M V2.0).
+  - Trainer DDP gloo + bf16 + AdamW cosine warmup + warmup 1-step 5 epochs.
+    `USE_LIBUV=0` requis sur Win11 ; mp.spawn launcher (bypass torchrun).
+    DDP 2-GPU plante en ACCESS_VIOLATION sur Win11 (bug PyTorch known) → bascule
+    1 GPU train / 1 GPU inference, débit max partout.
+  - Pipeline dataset : SVD-XT i2v sur images stock procédurales (4 generators
+    différents par classe) → ~10s/clip 25 frames sur 1×3090. Optical flow
+    Farneback comme action proxy 4D. Production overnight 1500 clips ≈ 4h.
+  - Eval / CEM open-loop scripts prêts. Cibles vs V1.8 : effective rank > 15%
+    (vs 8% V1.8), compounding ratio < ×2.0.
+  - Wan 2.2 fp8 scaled : HF download trop lent en anonymous (35 GB), reporté V3.1.
+- **Prochain (V4)** : remplacer dataset SVD bootstrap par Wan 2.2 14B fp8 (qualité photo-réaliste),
+  ajouter modalité audio (whisper encoder), brancher Gymnasium réel (LunarLander/Pusher).
 
 ## GitNexus (gitnexus-rs)
 - **Repo local** : C:\Users\patri\CascadeProjects\gitnexus-rs

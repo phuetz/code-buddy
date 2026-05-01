@@ -74,14 +74,76 @@ Pipeline complet end-to-end nuit (12-16h), plan persisté dans
 - ComfyUI a son propre venv à `D:/DEV/ComfyUI/venv/`, déjà avec 4 custom_nodes
   (Custom-Scripts, Impact-Pack, Manager, VideoHelperSuite, x-flux-comfyui).
 
-### En cours au moment de l'écriture
+### Ce qui a été livré dans l'après-midi
 
-- `[~]` scp 7 custom_nodes Ministar → DARKSTAR (background `b71v7hxw6`)
-- `[~]` HF download Wan 2.2 fp8 scaled vers `D:/DEV/ComfyUI/wan_dl_staging/`
-  (background `bl4g88yxi`)
-- `[ ]` Architecture V3 — encoder Conv5 + dynamics Transformer (en attaque)
-- `[ ]` Pipeline dataset (scripts + workflows JSON) — après architecture
+**Sync ComfyUI** ✅ — 7 custom_nodes copiés via `scp -r` depuis Ministar
+(WanVideoWrapper, GGUF, AnimateDiff-Evolved, Advanced-ControlNet, essentials,
+rgthree-comfy, cg-image-picker) ; pip install groupé des deps (gguf,
+sentencepiece, protobuf, ftfy, accelerate, einops, diffusers, peft, pyloudnorm,
+opencv, scipy, numba, colour-science, rembg, pixeloe, transparent-background)
+dans `D:/DEV/ComfyUI/venv/`. ComfyUI server up sur :8188 avec 1391 nodes
+registered (UnetLoaderGGUF, WanImageToVideo, WanVideoSampler, SVD\_img2vid\_Conditioning,
+VideoLinearCFGGuidance, ImageOnlyCheckpointLoader, etc).
 
-Le mandat est plein, je rends un récap au matin.
+**Architecture V3** ✅ — extension propre du repo V2 (pas de réécriture) :
+- `src/world_model/data/video_dataset.py` (nouveau) : `VideoClipDataset` lazy-load PIL,
+  `VideoSequenceWindowDataset` sliding window stride 2, split par clip_id.
+- `src/world_model/models/encoder.py` : ajout `ObservationEncoderConv5` (5 convs
+  stride-2 + Linear → 4.5M params pour 256×256). Factory `build_observation_encoder`.
+- `src/world_model/models/dynamics.py` : ajout `LatentDynamicsTransformer` 4 layers
+  × 8 heads × d\_model 512, causal mask, learned positional embed, pre-norm.
+  Factory `build_dynamics`.
+- `src/world_model/config/config.py` : `dynamics_type`, `seq_len`,
+  `rollout_warmup_epochs`, `use_amp`.
+- `configs/v3_video.yaml` : latent\_dim 512, batch 24, lr 3e-4, lambda\_var 0.15,
+  50 epochs, warmup 5 epochs.
+- Sanity check sur GPU : V3 = **23.8M params** (vs V2 = 2.5M). forward_step et
+  forward_rollout T=16 OK, peak VRAM 1.58 GB en B=24.
+
+**Trainer DDP** ✅ — `src/world_model/training/ddp_trainer.py` + `scripts/train_v3.py`
+(launcher mp.spawn, USE\_LIBUV=0 set tôt). Smoke 1-GPU sur 30 clips synthétiques :
+**10 epochs OK**, transition warmup 1-step → rollout T=16 propre, ~2s/epoch.
+DDP 2-GPU plante en ACCESS\_VIOLATION (bug PyTorch sur Windows). Pivot stratégique :
+**1 GPU pour train, 1 GPU pour inférence ComfyUI**, pas de partage, débit max
+partout.
+
+**Pipeline dataset SVD-XT** ✅ — pivot par rapport au plan initial Wan 2.2 :
+- HF download Wan 2.2 fp8 scaled (35 GB) trop lent en anonymous (rate-limit) →
+  reporté à V3.1.
+- Découverte : `Juggernaut-XL-v9.safetensors` (15 bytes corrompu) et
+  `RealVisXL_V4.0_Lightning.safetensors` (truncated metadata) sur DARKSTAR.
+  → bascule sur SVD-XT déjà valide (8.9 GB), input image stock procédurale
+  via `stock_image.py` (4 générateurs déterministes par classe : gradient,
+  shapes, stripes, checker).
+- `produce_dataset.py` réécrit pour SVD-XT + stock images. Test end-to-end :
+  **9-10s/clip, 25 frames JPEG q=90, 256×256, ~370 KB/clip**. Throughput
+  370 clips/h sur 1× 3090.
+
+**Production overnight 1500 clips lancée** sur GPU 1 (CUDA\_VISIBLE\_DEVICES=1),
+ETA ~4h. Au-delà du smoke, c'est **3750 fenêtres training T=16** (avec stride 2)
+sur dataset diversifié 4 classes.
+
+**Eval V3 + CEM open-loop scripts prêts** :
+- `scripts/eval_v3.py` : MSE@horizons [1,2,4,8,16] + effective rank + compounding
+  ratio. Cibles vs V1.8 baseline : rank > 15% (vs 8%), compounding < ×2.0.
+- `scripts/plan_v3.py` : CEM inverse planning sur paires (z\_0, z\_T\_target) du
+  val set. Métrique : ratio MSE final / MSE init.
+- `scripts/dataset_v3/qa_dataset.py` : contact sheet + stats par classe +
+  blacklist auto sur p99 flow magnitude < 0.05.
+
+**Pièges Win11 capturés** (à archiver dans la mémoire feedback) :
+1. `USE_LIBUV=0` env var requise pour `torchrun` sur Win11 (PyTorch wheel pas
+   buildé avec libuv). Bypass torchrun via `mp.spawn` plus simple.
+2. DDP 2-GPU + autocast bf16 + Transformer dynamique → ACCESS_VIOLATION
+   0xC0000005. Workaround : single-GPU training, l'autre GPU pour inférence.
+3. `psutil.disk_usage(path)` sur path relatif → `FileNotFoundError`. Toujours
+   utiliser `path.resolve().anchor` ou `os.getcwd()` fallback.
+4. `huggingface-cli` deprecated, nouvelle CLI s'appelle `hf download`.
+
+**À l'heure d'écrire** :
+- Production en cours, ~21/1500 clips livrés à 12:42 (1500 ETA ~16:30).
+- 4 commits pushés sur world-model (V3 architecture + scripts + journal).
+- Train V3 partiel (sur 200+ clips dispo) à lancer dans ~30 min, en parallèle
+  de la production.
 
 — Claude Opus 4.7 (1M context)
