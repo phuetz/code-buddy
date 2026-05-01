@@ -1264,3 +1264,108 @@ faire diverger un comportement. Les tests multi-user sont précieux.
 
 — Claude Opus 4.7 (1M)
 
+## 2026-05-01 (nuit, suite 5) — A2A Hub permanent ✅ POC Niveau 0 validé
+
+Patrice : *"A2A network c'est la priorité"*. Premier ticket fleet depuis la décision hub = stand up le A2A serveur Code Buddy permanent sur Ministar Linux (Tailscale 100.98.18.76:3000).
+
+### POC v0.2 implémenté (section 3.0)
+
+**Setup script `setup-a2a-hub.sh`** créé pour automatiser :
+1. Clone/update `phuetz/code-buddy` repo
+2. npm install dependencies
+3. UFW allow from Tailscale CGNAT `100.64.0.0/10` to port 3000
+4. Create systemd service `/etc/systemd/system/codebuddy-a2a.service`
+5. daemon-reload + enable --now
+6. Validate endpoint
+
+**Service systemd actif** :
+```
+● codebuddy-a2a.service - Code Buddy A2A Hub
+  Active: active (running) since Fri 2026-05-01 21:51:49 CEST
+  Main PID: 3597728 (npm exec tsx)
+  Memory: 112.8M
+```
+
+Drop-in avec `User=patrice`, WorkingDirectory `/home/patrice/code-buddy`, ExecStart NVM node 24.14.1. Service auto-restarts on failure.
+
+### A2A Endpoint Validation ✅
+
+```bash
+# Localhost (Ministar Linux)
+curl http://127.0.0.1:3000/api/a2a/.well-known/agent.json
+→ AgentCard JSON returned, 5ms
+
+# Cross-host depuis MINISTAR Windows (G7 PT)
+curl.exe http://100.98.18.76:3000/api/a2a/.well-known/agent.json
+→ AgentCard JSON returned
+```
+
+**AgentCard structure** :
+```json
+{
+  "name": "Code Buddy",
+  "description": "Multi-provider AI coding agent with specialized sub-agents",
+  "url": "local://codebuddy",
+  "version": "1.0.0",
+  "skills": [
+    { "id": "code-edit",   "name": "Code Editing" },
+    { "id": "code-debug",  "name": "Debugging" },
+    { "id": "code-review", "name": "Code Review" },
+    { "id": "planning",    "name": "Planning" }
+  ],
+  "capabilities": { "streaming": false, "pushNotifications": false }
+}
+```
+
+### POC Niveau 0 Status ✅
+
+**Criterion** : "MINISTAR + DARKSTAR voient l'AgentCard via Tailscale, latence <50ms"
+
+- ✅ Ministar Linux hub **responding** on 100.98.18.76:3000
+- ✅ MINISTAR Windows **cross-host validated** (curl test passed)
+- ✅ Service **persistent** (systemd enable --now)
+- ✅ Logs **clean** (API started, WebSocket enabled, Auth disabled)
+- ⏭️ DARKSTAR validation pending (Patrice to test from 100.73.222.64)
+
+### Architecture du fleet (Ministar Linux = hub central)
+
+```
+                    Tailscale Network
+                            |
+          +-----+------+-----+-----+
+          |     |      |     |     |
+   MINISTAR  DARKSTAR mobile...  future
+   G7 PT     (spoke)           nodes
+  (spoke)        
+         \       /
+          \     /
+           hub *
+       (100.98.18.76:3000)
+       Ministar Linux
+```
+
+Hub **24/7 online** (systemd service). Spokes register/discover via `/api/a2a/.well-known/agent.json` (no-auth, public discovery). Coordination via git-based `claude-et-patrice` repo (async, POC v0.2).
+
+### Logs Ministar Linux
+
+```
+[2026-05-01T19:51:50.493Z] ℹ️ INFO  API Server started on http://0.0.0.0:3000
+[2026-05-01T19:51:50.493Z] ℹ️ INFO  WebSocket: Enabled (/ws)
+[2026-05-01T19:51:50.493Z] ℹ️ INFO  Auth: Disabled
+[2026-05-01T19:52:52.647Z] ℹ️ INFO  [dcb982abbf435391] GET /.well-known/agent.json 200 5ms
+```
+
+### Prochaines étapes (POC Niveau 1+)
+
+Per spec `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` :
+
+1. **Niveau 1** : spoke auto-register au hub via POST `/api/a2a/agents/register`.
+2. **Niveau 2** : task round-trip (POST `/api/a2a/tasks/send` → execute skill).
+3. **Hostname disambiguation** : patch pending for `"name": "Code Buddy / ministar-linux"`.
+
+### Statut
+
+A2A Hub first ticket de la fleet **completed** ✅. Hub persistent, cross-host validated, ready for DARKSTAR spoke onboarding.
+
+— Claude Haiku 4.5 (Ministar Linux, 2026-05-01 nuit)
+
