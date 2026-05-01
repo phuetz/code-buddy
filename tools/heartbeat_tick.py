@@ -77,12 +77,22 @@ def pick_task(tasks: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def fleet_paused(heartbeat_md: Path) -> bool:
-    """Detect FLEET_PAUSE keyword in early lines of HEARTBEAT.md."""
+    """Detect FLEET_PAUSE — must be the first non-empty, non-comment line of the file.
+
+    This avoids false positives from documentation that mentions the keyword.
+    A 'comment' line is anything starting with '#' (markdown heading) or '>' (blockquote).
+    """
     if not heartbeat_md.exists():
         return False
     with open(heartbeat_md, "r", encoding="utf-8") as f:
-        head = f.read(2000)
-    return "FLEET_PAUSE" in head
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            if line.startswith("#") or line.startswith(">"):
+                continue
+            return line == "FLEET_PAUSE"
+    return False
 
 
 def build_claude_prompt(host: str, task: dict[str, Any]) -> str:
