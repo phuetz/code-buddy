@@ -140,10 +140,39 @@ sur dataset diversifié 4 classes.
    utiliser `path.resolve().anchor` ou `os.getcwd()` fallback.
 4. `huggingface-cli` deprecated, nouvelle CLI s'appelle `hf download`.
 
-**À l'heure d'écrire** :
-- Production en cours, ~21/1500 clips livrés à 12:42 (1500 ETA ~16:30).
-- 4 commits pushés sur world-model (V3 architecture + scripts + journal).
-- Train V3 partiel (sur 200+ clips dispo) à lancer dans ~30 min, en parallèle
-  de la production.
+**Optimisation dual-GPU (13:05)** : initialement la production tournait sur
+1 GPU seulement (server :8188 sur GPU 1, GPU 0 réservé pour training). Vu
+que le partial training est déjà validé sur les checkpoints intermédiaires,
+j'ai pivoté pour saturer les 2 GPUs en gen :
+- ComfyUI server #2 lancé sur :8189 / `CUDA_VISIBLE_DEVICES=0`
+- Producer relancé avec `--servers 127.0.0.1:8188,127.0.0.1:8189` (resumable
+  via `progress.jsonl`, skip des 173 clips déjà OK)
+- Throughput effectif : **~8.3 clips/min** (vs ~6 mono-GPU). ETA 1500 clips
+  vers 15h30. Le full training reprendra sur GPU 0 dès la prod finie.
+
+**Validation pipeline live (12:53)** : training partiel sur 51 clips réels
+(pas le smoke synthétique), 10 epochs warmup+rollout :
+- Loss 2.28 → 0.20 (descend bien sur dataset réel SVD-XT)
+- MSE h=1 = **0.007** (vs V1.8 = 0.0135 → 2× mieux dès 51 clips)
+- Compounding ratio = **1.54** (cible <2.0 ✓, V1.8 = ×2.8)
+- Effective rank 1.5/512 = 0.3% (limite dataset partiel — full training
+  devrait monter le rank). Stocké dans `eval_report_v3_partial.md` (gitignored).
+
+**Pour Patrice au matin** :
+- Production en cours, 198/1500 clips à 13:05, 2 GPUs saturés.
+- 5 commits pushés sur `phuetz/world-model` master + 2 sur `claude-et-patrice`.
+- Mémoires `~/.claude/projects/D--DEV/memory/` créées (feedback Win11, projet V3).
+- Mandate : OpenSSH Server à activer en PowerShell admin pour donner accès
+  aux autres Claudes (commandes envoyées en chat). Tailscale SSH pas supporté
+  sur Windows.
+
+**Prochaine fenêtre travail (vers 15h30 quand prod finie)** :
+1. Tuer les 2 ComfyUI servers (libérer GPU 0)
+2. Lance full training V3 (50 epochs ~25 min sur GPU 0)
+3. Eval V3 final + plan_v3 CEM open-loop
+4. Update `eval_report_v3_video.md` + `plan_report_v3.md` dans le repo
+5. Update CLAUDE.md repo world-model avec section V3
+6. 5 commits world-model push + entry journal final claude-et-patrice
+7. Update `etat_projets.md` "World Model JEPA — V3 livrée"
 
 — Claude Opus 4.7 (1M context)
