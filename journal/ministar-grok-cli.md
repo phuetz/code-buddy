@@ -1124,3 +1124,58 @@ Référencée dans MEMORY.md.
 test curl local). ETA 30-60 min selon ton état de Node/npm.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 1er mai 2026 ~22h15
+
+## 2026-05-02 — [x] POC niveau 0 LIVE validé : ça communique vraiment
+
+Patrice : "ça communique ?". Vérification empirique.
+
+**Découverte** : le hub Ministar Linux (Tailscale `100.98.18.76`) tournait
+DÉJÀ Code Buddy server au moment où Patrice posait la question. Service
+`codebuddy-a2a.service` (systemd, active running, uptime 2h+ au moment
+du test), exactement la unit décrite dans ma proposition POC v0.2
+section 3.0 — déployée AVANT que je n'écrive la procédure (parallélisme
+heureux entre Patrice/Claude/Ministar Linux et moi).
+
+**Test live** depuis MINISTAR :
+```
+$ curl -s http://100.98.18.76:3000/api/a2a/.well-known/agent.json
+{"name":"Code Buddy","description":"Multi-provider AI coding agent...",
+ "skills":[{"id":"code-edit",...},{"id":"code-debug",...},
+           {"id":"code-review",...},{"id":"planning",...}],
+ "capabilities":{"streaming":false,"pushNotifications":false}}
+# Latence : 35ms via Tailscale (excellent)
+```
+
+**Health hub** : `degraded` (DB error + API error, RAM 92% sur 14MB
+heap — pas critique pour A2A discovery, mais à investiguer).
+
+**État mesh ce soir** :
+| Lien | Statut |
+|---|---|
+| MINISTAR ↔ Ministar Linux (hub) — SSH + HTTP A2A | ✅ LIVE |
+| MINISTAR ↔ DARKSTAR — SSH (réseau Tailscale) | ⚠️ OK mais pas de clé authorized |
+| Hub Ministar Linux ↔ DARKSTAR — SSH | ⚠️ idem |
+| Hub → DARKSTAR:3000 HTTP A2A | ❌ timeout (pas de Code Buddy server side, +/- firewall Win) |
+
+**2 Claudes sur 3 communiquent** au sens A2A live.
+
+**Ticket à passer à Claude/DARKSTAR** (en première session active) :
+1. Ouvrir port 3000 inbound dans firewall Windows :
+   `New-NetFirewallRule -DisplayName "Code Buddy A2A" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow -Profile Private`
+2. Setup authorized_keys pour SSH depuis MINISTAR + Hub (echo public keys
+   de chaque host dans `C:\Users\patrice\.ssh\authorized_keys`)
+3. Démarrer Code Buddy server (équivalent Windows du systemd unit Linux —
+   Task Scheduler avec ExecStart au démarrage user, ou nssm)
+
+**Pour la prochaine session côté MINISTAR (moi)** :
+- Patch identité-par-host dans `src/server/routes/a2a-protocol.ts:31-43`
+  pour que l'AgentCard `name` inclut le hostname (sinon les 3 hosts
+  répondent "Code Buddy" sans distinction).
+- Endpoint POST `/api/a2a/agents/register` côté hub pour que les spokes
+  s'auto-enregistrent au démarrage (~50 LOC, suite naturelle du POC).
+
+**Toujours en attente** :
+- V4.4 ExitPlanMode bridge A/B/C (arbitrage Patrice)
+- Promotion COLAB-RESEAU v0.2 → racine repo `RESEAU-CLAUDES.md` (validation Patrice + Claudes spokes)
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 minuit
