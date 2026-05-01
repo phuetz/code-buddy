@@ -1095,3 +1095,172 @@ posteriori.
 
 — Claude Opus 4.7 (1M)
 
+## 2026-05-01 (matin) — Bootstrap DARKSTAR + onboarding Sebastien xrdp
+
+Patrice : *"j'ai démarré claude sur darkstar, elle a cloné claude-et-patrice,
+je lui ai dit de converger vers l'objectif"*. Collaboration multi-Claude
+amorcée. En parallèle, Sebastien (collaborateur) commence à utiliser xrdp.
+
+### Bootstrap Claude DARKSTAR (multi-Claude live)
+
+- DARKSTAR sur tailnet : IP `100.73.222.64` (Tailscale installé par Patrice)
+- SSH (port 22) ❌ et RDP (port 3389) ❌ pas activés sur DARKSTAR — pilotage
+  distant pas encore possible
+- Trois options pour activer SSH documentées : Tailscale SSH (`tailscale up
+  --ssh`, recommandé), OpenSSH Server natif Windows, RDP
+- Specs réelles confirmées par Patrice : Intel **i7-9700** (8c/8t, AVX2 only,
+  PCIe 3.0), **64 GB DDR4** (~50 GB/s), **2× RTX 3090** (NVLink à vérifier)
+- Decision : Windows natif (pas WSL2) pour la stack ML — pas de bénéfice
+  WSL sur machine dédiée GPU
+- Création `journal/darkstar-DEV.md` avec bootstrap complet pour Claude
+  DARKSTAR : état réseau, specs, contraintes hardware (PCIe 3.0 → pas BF16
+  multi-GPU, NVENC pour vidéo, num_workers=4-6, FlashAttention-2),
+  adaptations Windows du plan Linux original, conventions journal
+- Update `journal/README.md` mapping (ajout `darkstar-DEV.md`)
+- Update `etat_projets.md` Hardware Lab (specs précises + IPs Tailscale)
+- Push GitHub OK (`2270d3d..9edd57e master`) — Patrice avait configuré le
+  credential entre la nuit et ce matin
+- Résumé pour Patrice de l'état world-model trouvé en local : V2.0 CEM/MPC
+  fonctionne, ablation V1.5 vs V1.8 démontre que rollout-trained est NÉCESSAIRE
+  pour le planning. Pistes V3 ouvertes (DDP, ViT, curriculum rollout)
+
+### Onboarding Sebastien xrdp+MATE — sessions de chasse aux pièges
+
+Sebastien (compte UID 1001, groupes sudo+docker) a essayé d'utiliser xrdp.
+Pour qu'il ait un look MATE configuré, copy du `mate-style.sh` chez lui :
+
+```bash
+sudo cp /home/patrice/DEV/ai-stack/mate-style.sh /home/sebastien/
+sudo cp -r /home/patrice/DEV/ai-stack/mate-config /home/sebastien/
+sudo chown -R sebastien:sebastien /home/sebastien/mate-style.sh /home/sebastien/mate-config
+```
+
+(Note : `/home/patrice` est `drwxr-x---` 700-like, Sebastien ne peut PAS
+lire dedans — donc copy nécessaire, pas de symlink possible.)
+
+### Pièges chromium snap + xrdp
+
+Patrice : *"sur son compte je n'arrive pas a lancer chromium"*. Diagnostic
+en chaîne :
+
+1. **Premier essai** : `chromium` plante avec
+   `Authorization required, but no authorization protocol specified` +
+   `Missing X server or $DISPLAY`. Cause : terminal pas dans la session
+   graphique avec env xrdp propre.
+
+2. **Création `~/snap/chromium/common/.config/chromium-flags.conf`** avec
+   `--disable-gpu` + `--disable-software-rasterizer` (le snap chromium
+   le lit à chaque lancement, pas besoin de modifier .desktop). Script
+   `/tmp/setup_chromium_flags_sebastien.sh` créé pour idempotence.
+
+3. **Test depuis sa session graphique** : toujours KO. Diag plus profond
+   via `/proc/<mate-panel-pid>/environ` — Sebastien a bien
+   `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus` exporté, env
+   identique à Patrice qui marche. **Donc l'env n'est pas le problème**.
+
+4. **AppArmor + DBus** : test avec env complet (DBUS exporté) montre
+   ```
+   org.freedesktop.DBus.Error.AccessDenied: An AppArmor policy prevents
+   this sender from sending this message ... ListActivatableNames
+   sender label="snap.chromium.chromium (enforce)"
+   ```
+   Snap-confine + xrdp + bus user = combinaison cassée (3e bug snap de
+   la semaine après Firefox + GNOME).
+
+5. **Test `dbus-run-session chromium`** échoue avec un autre bug
+   méthodologique : `sudo -u sebastien` hérite du **cgroup** `user-1000.slice`
+   (patrice) au lieu de `user-1001.slice` (sebastien). Snap-confine vérifie
+   le cgroup et refuse :
+   ```
+   /user.slice/user-1000.slice/session-c38.scope is not a snap cgroup
+   for tag snap.chromium.chromium
+   ```
+   Pour reproduire en SSH : `machinectl shell --uid=sebastien` qui
+   tombe dans le bon cgroup. Pas testé par manque de temps.
+
+### Différence patrice ↔ sebastien isolée
+
+Diff comparatif via `/tmp/diff_patrice_sebastien.sh` :
+
+| Item | patrice | sebastien |
+|---|---|---|
+| Groupes | adm, **video**, **render**, plugdev, lpadmin, ollama, … | sudo, users, docker |
+| `~/snap/chromium/common` | 382 MB (rodé) | 48 MB (frais) |
+| Env mate-panel | DBUS+DISPLAY+XDG = identique | DBUS+DISPLAY+XDG = identique |
+
+L'env est strictement identique. La différence : **groupes manquants**.
+Notamment **`render`** (accès `/dev/dri/renderD128`) — chromium snap
+scanne ce device au boot même avec `--disable-gpu` pour init capabilities.
+Sans `render`, l'open échoue, chromium peut crasher silencieusement.
+
+**Fix proposé** (à appliquer après concertation) :
+```bash
+sudo usermod -aG video,render,plugdev sebastien
+# puis logout/login complet sebastien
+```
+
+**Fallback** si toujours KO : Brave (.deb officiel, fork chromium, pas
+de snap-confine). Script `/tmp/install_brave.sh` posé.
+
+### Lenteur RDP perçue par Sebastien
+
+Sebastien rapporte que la session est **très très lente**, alors que
+Patrice depuis G7 PT en LAN direct (`100.90.108.4:51775` → :3389,
+20ms latence Tailscale) trouve ça rapide. Donc lenteur côté Sebastien
+seul.
+
+Diagnostic Ministar : load 1.6 sur 24 cores (~7%, pas de CPU pressure),
+processes sebastien tous à 0.0% CPU, aucun zombie. Le serveur est OK.
+
+Causes probables :
+- Sebastien `pc-asus-seb` actuellement `idle` dans tailnet — pas connecté
+  au moment du diagnostic. Quand il est connecté, vérifier
+  `tailscale status | grep pc-asus-seb` : `direct` UDP vs `relay "par"`
+  (DERP Paris, latence ×2-3).
+- ASUS peut être un laptop modeste, décodage frames RDP en 32-bit lourd
+- Wi-Fi faible côté Sebastien ?
+
+**Settings xrdp sub-optimaux** identifiés dans `/etc/xrdp/xrdp.ini` :
+- `crypt_level=high` (TLS lourd, mais Tailscale chiffre déjà bout-à-bout
+  → double TLS = surcoût CPU pour rien)
+- `max_bpp=32` (32 bits = 16M couleurs, 2× plus de bande passante que 16)
+
+**Plan d'action** documenté dans
+`propositions/SEBASTIEN-ONBOARDING-2026-05-01.md` :
+1. Côté Sebastien : settings mstsc (Modem profile, 16-bit, 1280×720)
+   → coupe 70% bande passante, gain massif probable, à essayer en premier
+2. Vérifier qualité tailnet quand connecté (direct/relay)
+3. Optims serveur : `crypt_level=low`, `max_bpp=16`, désactiver Marco
+   compositor → si #1 et #2 ne suffisent pas
+
+### Todo list (TaskCreate) consolidée
+
+16 tasks créées pour suivre la suite. Récap thématique :
+- **Sebastien** : groupes, logout/login, settings mstsc, vérif tailnet,
+  Brave si chromium KO
+- **Optims xrdp** : xrdp.ini, Marco compositor, cleanup sessions closing,
+  auto-application mate-style.sh
+- **Sécurité** : ACL Tailscale, sshd_config hardening, secure_network.sh
+  phase 2, audio RDP
+- **Multi-Claude** : suivre DARKSTAR, world-model V3
+- **Bloqué upstream** : Lemonade NPU (bug ROCm gfx1150)
+
+### Commande dangereuse évitée
+
+Patrice a tapé son mot de passe sudo en clair dans le chat. Refus immédiat
+de l'utiliser, demande de changement via `passwd` (saisie masquée). Même
+incident que la nuit du 30/04. Mémoire à éventuellement renforcer si ça
+se reproduit (rappel automatique via hook ?).
+
+### Pensée du jour
+
+Cette matinée a triplé le rythme : ROCm Vulkan validé pendant qu'on bootstrap
+DARKSTAR pendant qu'on onboardait Sebastien. Plus on multiplie les briques,
+plus on multiplie les pièges (snap chromium + xrdp = 3e bug snap cette
+semaine, après Firefox xhost et GNOME mutter). La leçon récurrente : la
+diversité des users/sessions/machines révèle des hypothèses cachées dans
+le code stack — un user a `render`, l'autre pas, et c'est suffisant pour
+faire diverger un comportement. Les tests multi-user sont précieux.
+
+— Claude Opus 4.7 (1M)
+
