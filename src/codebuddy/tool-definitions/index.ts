@@ -163,6 +163,12 @@ export {
   SECRETS_TOOLS,
 } from './secrets-tools.js';
 
+// Advisor tool (second opinion from a stronger reviewer model)
+export {
+  ADVISOR_TOOL,
+  ADVISOR_TOOLS,
+} from './advisor-tools.js';
+
 // Codebase replace tools (find & replace across files)
 export {
   CODEBASE_REPLACE_TOOL,

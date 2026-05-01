@@ -553,6 +553,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Scan source files for hardcoded secrets, credentials, and API keys'
   },
 
+  // Advisor (second opinion from a stronger reviewer model)
+  {
+    name: 'advisor',
+    category: 'utility' as ToolCategory,
+    keywords: ['advisor', 'review', 'second opinion', 'consult', 'check', 'validate', 'expert', 'critique', 'feedback'],
+    priority: 6,
+    description: 'Consult a stronger reviewer model for a second opinion (full conversation forwarded)'
+  },
+
   // Codebase replace
   {
     name: 'codebase_replace',

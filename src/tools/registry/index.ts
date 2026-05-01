@@ -242,6 +242,15 @@ export {
   resetVulnScannerInstances,
 } from './vuln-scanner-tools.js';
 
+// Tool Adapters - Advisor (advisor)
+export {
+  AdvisorExecuteTool,
+  createAdvisorTools,
+  resetAdvisorInstances,
+  setAdvisorConfigProvider,
+  resetAdvisorConfigProvider,
+} from './advisor-tools.js';
+
 // Tool Adapters - Codebase Replace (codebase_replace)
 export {
   CodebaseReplaceTool,
@@ -329,6 +338,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createBugFinderTools } = await import('./bug-finder-tools.js');
   const { createMergeConflictTools } = await import('./merge-conflict-tools.js');
   const { createVulnScannerTools } = await import('./vuln-scanner-tools.js');
+  const { createAdvisorTools } = await import('./advisor-tools.js');
   
   // Await MCP Manager initialization before registering its tools
   const { getMcpManager } = await import('../mcp/mcp-manager.js');
@@ -364,6 +374,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createBugFinderTools(),
     ...createMergeConflictTools(),
     ...createVulnScannerTools(),
+    ...createAdvisorTools(),
     ...createMcpTools(),
   ];
 

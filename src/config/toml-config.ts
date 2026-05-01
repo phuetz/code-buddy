@@ -227,6 +227,20 @@ export interface AgentDefaultsConfig {
 }
 
 /**
+ * Advisor tool configuration (V4.1) — second opinion from a stronger reviewer model
+ */
+export interface AdvisorToolConfig {
+  /** Whether the advisor tool is enabled (default: true) */
+  enabled?: boolean;
+  /** Model to use for the advisor call (default: claude-opus-4-7) */
+  model?: string;
+  /** Environment variable name for the API key (default: ANTHROPIC_API_KEY) */
+  api_key_env?: string;
+  /** Custom base URL (optional — overrides provider default) */
+  base_url?: string;
+}
+
+/**
  * LSP AI completion configuration
  */
 export interface LSPAICompletionConfig {
@@ -288,6 +302,8 @@ export interface CodeBuddyConfig {
   model_pairs?: ModelPairsConfig;
   /** Agent defaults (model preferences) — Native Engine v2026.3.14 */
   agent_defaults?: AgentDefaultsConfig;
+  /** Advisor tool settings (second opinion model) — V4.1 */
+  advisor?: AdvisorToolConfig;
   /** LSP server settings (AI completions, etc.) */
   lsp?: LSPConfig;
   /** Named configuration profiles (activated via --profile <name>) */

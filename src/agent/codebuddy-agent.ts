@@ -439,6 +439,26 @@ export class CodeBuddyAgent extends BaseAgent {
       setDecisionContextProvider((query) => getDecisionMemory().buildDecisionContext(query));
     }).catch((e) => { logger.debug('Decision memory module load failed (optional)', { error: String(e) }); });
 
+    // Wire Advisor tool context + config providers (V4.1)
+    import('../tools/advisor-tool.js').then(({ setAdvisorContextProvider }) => {
+      setAdvisorContextProvider(() => ({
+        messages: this.historyManager.getMessages(),
+      }));
+    }).catch((e) => { logger.debug('Advisor context provider wire failed (optional)', { error: String(e) }); });
+    import('../tools/registry/advisor-tools.js').then(({ setAdvisorConfigProvider }) => {
+      import('../config/toml-config.js').then(({ getConfigManager }) => {
+        setAdvisorConfigProvider(() => {
+          const cfg = getConfigManager().getConfig().advisor ?? {};
+          return {
+            enabled: cfg.enabled,
+            model: cfg.model,
+            api_key_env: cfg.api_key_env,
+            base_url: cfg.base_url,
+          };
+        });
+      }).catch((e) => { logger.debug('Advisor toml-config import failed (optional)', { error: String(e) }); });
+    }).catch((e) => { logger.debug('Advisor config provider wire failed (optional)', { error: String(e) }); });
+
     // Wire ICM cross-session memory bridge into executor
     import('../memory/icm-bridge.js').then(({ ICMBridge }) => {
       const bridge = new ICMBridge();

@@ -39,6 +39,7 @@ import {
   FIRECRAWL_TOOLS,
   LSP_TOOLS,
   SECRETS_TOOLS,
+  ADVISOR_TOOLS,
   CODEBASE_REPLACE_TOOLS,
 } from "./tool-definitions/index.js";
 
@@ -124,6 +125,9 @@ export function initializeToolRegistry(): void {
 
   // Secrets detector tools
   registerGroup(SECRETS_TOOLS);
+
+  // Advisor tool (second opinion from a stronger reviewer)
+  registerGroup(ADVISOR_TOOLS);
 
   // Codebase replace tools
   registerGroup(CODEBASE_REPLACE_TOOLS);
