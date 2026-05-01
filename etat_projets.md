@@ -94,24 +94,34 @@
 
 **Topologie** : architecture **star avec hub Ministar Linux** (`100.98.18.76:3000`) — 24/7 always-on. Spokes intermittents : MINISTAR (G7 PT), DARKSTAR (PC 3090), futurs.
 
-**Protocole** : **A2A (Google Agent-to-Agent)** déjà embarqué dans Code Buddy (`phuetz/code-buddy`, fork open-source de Claude Code) — `src/protocols/a2a/index.ts` + `src/server/routes/a2a-protocol.ts`. POC niveau 0 ✅ validé côté MINISTAR (`curl /api/a2a/.well-known/agent.json` répond).
+**Protocole** : **A2A (Google Agent-to-Agent)** embarqué dans Code Buddy — `src/protocols/a2a/index.ts` + `src/server/routes/a2a-protocol.ts`.
+
+**POC Niveau 0 ✅ VALIDÉ (2 mai 2026)** :
+- Hub permanent Ministar Linux live : `http://100.98.18.76:3000` (systemd `codebuddy-a2a.service`)
+- Discovery endpoint `/api/a2a/.well-known/agent.json` répond ✅
+- Cross-host validation depuis MINISTAR Windows (G7 PT) ✅
+- Ollama spoke Ministar Linux live : `http://100.98.18.76:3002` (systemd `ollama-a2a-spoke.service`)
+  - 4 models exposées comme skills (qwen3.6:35b, qwen3:4b, gemma4:26b, nomic-embed)
+  - Prêt pour POC Niveau 1 (spoke registration)
 
 **3 catégories de spokes** :
-1. **Claude API spokes** — chaque session Code Buddy / Claude Code sur un host. Reasoning lourd, advisor, planning.
-2. **Ollama spokes** — wrapper léger `ollama_a2a_spoke.py` (~150 LOC, dans `world-model/scripts/`) qui transforme un Ollama local en spoke A2A. Embeddings, lint, summary, completion brute. À déployer sur DARKSTAR (Ollama Windows en cours d'install) + Ministar Linux + futurs.
-3. **Cloud API spokes** — Codex, Gemini ; proxifiés par un host avec API keys.
+1. **Claude API spokes** — sessions Code Buddy / Claude Code sur chaque host. Reasoning lourd, advisor, planning.
+2. **Ollama spokes** — `ollama_a2a_spoke.py` (~150 LOC, `world-model/scripts/`) transforme Ollama local en spoke A2A.
+   - **Ministar Linux** : ✅ live (qwen3.6, qwen3, gemma4, nomic-embed)
+   - **DARKSTAR** : à déployer (2× RTX 3090, stack vidéo-gen)
+3. **Cloud API spokes** — Codex, Gemini ; proxifiés par host avec clés.
 
-**Documents canoniques** :
-- `propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md` v0.2 — doctrine fleet (6 règles cardinales F1-F6, claim/release `[~ host/repo date]`, spécialisation §3)
-- `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` v0.2 — procédure technique systemd hub Ministar Linux + niveaux POC 0-6
-- `journal/darkstar-grok-cli.md` (DARKSTAR ratification + dialogue Claude/MINISTAR) + `journal/ministar-grok-cli.md` (MINISTAR auteur initial)
+**Documents** :
+- `propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md` v0.2 — doctrine fleet (F1-F6, claim/release, spécialisation)
+- `propositions/CLAUDE-NETWORK-A2A-POC-2026-05-01.md` v0.2 — tech + POC 0-6
+- `journal/ministar-ubuntu-DEV.md` — sessions Ministar Linux (A2A hub + spoke setup)
 
-**Bloqueurs actuels** :
-- `better-sqlite3` ne build pas sur Node 24 sur DARKSTAR Windows → boot grok-cli server local KO. Solution : Node 22 LTS ou hub directement sur Linux.
-- Patch endpoint `POST /api/a2a/agents/register` à coder (~50 LOC) côté Code Buddy server. Pas pushé, attente better-sqlite3 fix.
-- Hub permanent Ministar Linux à stand-up via systemd `codebuddy-a2a.service` — ticket pour la prochaine session Claude/Ministar Linux active.
+**POC Niveau 1 (prochaine)** : spoke auto-register via `POST /api/a2a/agents/register` (~50 LOC Code Buddy). DARKSTAR can then discover + call Ministar Ollama skills.
 
-**Prochaine brique POC niveau 1** : MINISTAR pose une question, hub la route à DARKSTAR (3090 dispo), DARKSTAR exécute via Ollama et retourne. Tour < 24h.
+**DARKSTAR pour Claude/DARKSTAR** :
+1. Valide hub cross-host : `curl http://100.98.18.76:3000/api/a2a/.well-known/agent.json`
+2. Déploie stack robot (plan dans `propositions/PLAN-DARKSTAR-INSTALL-2026-05-02.md`)
+3. Reporte blockers (CUDA, NVLink, Lemonade NPU)
 
 ### Fleet Autonome V0 — opérationnel 2026-05-02
 
