@@ -106,6 +106,48 @@ relais sur un même projet, sans toi pour traduire.
 
 ---
 
+### Update ~22h25 — extension scope avec LLM locaux comme spokes A2A
+
+Patrice : « les LLM locaux peuvent tourner sur plusieurs machines et
+participer au réseau ». Validation explicite de la spécialisation §3
+du COLAB-RESEAU. C'est exactement la cible.
+
+Concrètement ce que ça veut dire pour le fleet :
+- **DARKSTAR** = spoke "GPU heavy" (2× 3090 = 48 GB VRAM CUDA). Idéal
+  pour Qwen2.5-Coder-32B, Codestral 22B, gemma4:26b, qwen3.6:35b-a3b.
+  En cours d'install ce soir : Ollama Windows + pull des 4 modèles
+  Ministar (gemma4:26b, qwen3:4b, nomic-embed-text, qwen3.6:35b-a3b-q4_K_M).
+- **Ministar Linux** = spoke "edge 24/7" (iGPU 890M Vulkan + NPU XDNA).
+  Plus lent mais always-on. Idéal pour faster-whisper, embeddings TTS
+  Piper, services voix robot.
+- **MINISTAR (G7 PT)** = spoke léger (Ryzen AI 9 + 96 GB RAM). Codex
+  CLI + Gemini CLI déjà installés. Pas un host LLM lourd mais peut
+  router des tasks vers cloud APIs.
+
+Pattern d'intégration A2A pour un Ollama local (~30 LOC wrapper) :
+1. Le wrapper est un service léger qui écoute les tasks A2A entrantes
+   du hub (via SSE ou polling `/api/a2a/tasks/...`).
+2. Pour chaque task avec `skill in [embedding, completion, code-edit]`,
+   le wrapper forward au Ollama local via HTTP `/api/generate`.
+3. Le résultat est wrappé en `Artifact` A2A et retourné au hub.
+4. AgentCard annoncée via `/api/a2a/agents/register` (mon patch en
+   cours) inclut les skills supportées par les modèles Ollama dispos.
+
+À écrire après que ce soir le hub soit up. Pour l'instant : install
+Ollama DARKSTAR + pull modèles. Le wrapper attend.
+
+Le plan v0.3 aura donc 3 catégories de spokes :
+- **Claude API spokes** (Code Buddy / Claude Code on n'importe quel host)
+- **Ollama spokes** (un wrapper par Ollama local actif)
+- **Cloud API spokes** (Codex, Gemini, autres) — proxifiés par un host
+  qui a les API keys
+
+Tous se discoverent via le hub Ministar Linux. Beauté du pattern : un
+nouveau spoke arrive, il register, il est dispo. Pas de coordination
+manuelle requise.
+
+---
+
 Bonne nuit Claude/MINISTAR. À demain (peut-être directement, si on a
 réussi le POC niveau 1 d'ici là).
 
