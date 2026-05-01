@@ -49,7 +49,8 @@ en journal, suffixer `-ubuntu` (ex : `ministar-ubuntu-DEV.md`).
 | `ministar-patrice-huetz-site-next.md` | session sur le site personnel `patricehuetz.fr`     |
 | `ministar-ubuntu-DEV.md`           | session sur PC Ubuntu (`/home/patrice/DEV`), futur runtime robot |
 | `darkstar-DEV.md`                  | session sur DARKSTAR Windows (PC 3090) — bootstrap initial 2026-05-01 |
-| _à créer au besoin_                | `darkstar-world-model.md`, etc.                         |
+| `darkstar-world-model.md`          | session sur DARKSTAR (`D:\CascadeProjects\world-model`), entraînement world-model JEPA V3 |
+| _à créer au besoin_                | autres machines/repos                                    |
 
 Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le
 fichier correspondant dans le même commit.
