@@ -242,27 +242,6 @@ export {
   resetVulnScannerInstances,
 } from './vuln-scanner-tools.js';
 
-// Tool Adapters - Log Analyzer (analyze_logs)
-export {
-  LogAnalyzerTool,
-  createLogAnalyzerTools,
-  resetLogAnalyzerInstances,
-} from './log-analyzer-tools.js';
-
-// Tool Adapters - OpenAPI Generator (generate_openapi)
-export {
-  OpenAPIGeneratorTool,
-  createOpenAPITools,
-  resetOpenAPIInstances,
-} from './openapi-tools.js';
-
-// Tool Adapters - License Scanner (scan_licenses)
-export {
-  LicenseScannerTool,
-  createLicenseScannerTools,
-  resetLicenseScannerInstances,
-} from './license-scanner-tools.js';
-
 // Tool Adapters - Codebase Replace (codebase_replace)
 export {
   CodebaseReplaceTool,
@@ -350,9 +329,6 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createBugFinderTools } = await import('./bug-finder-tools.js');
   const { createMergeConflictTools } = await import('./merge-conflict-tools.js');
   const { createVulnScannerTools } = await import('./vuln-scanner-tools.js');
-  const { createLogAnalyzerTools } = await import('./log-analyzer-tools.js');
-  const { createOpenAPITools } = await import('./openapi-tools.js');
-  const { createLicenseScannerTools } = await import('./license-scanner-tools.js');
   
   // Await MCP Manager initialization before registering its tools
   const { getMcpManager } = await import('../mcp/mcp-manager.js');
@@ -388,9 +364,6 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createBugFinderTools(),
     ...createMergeConflictTools(),
     ...createVulnScannerTools(),
-    ...createLogAnalyzerTools(),
-    ...createOpenAPITools(),
-    ...createLicenseScannerTools(),
     ...createMcpTools(),
   ];
 

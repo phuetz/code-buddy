@@ -14,8 +14,8 @@ Code Buddy includes ~110 tools organized into categories. Tools are selected per
 | **Planning** | `plan`, `create_todo_list`, `get_todo_list`, `update_todo_list`, `reason` (ToT/MCTS) | Task planning and structured reasoning |
 | **Media** | `screenshot`, `audio`, `video`, `ocr_extract`, `image_process`, `clipboard` | Screen capture, OCR (Tesseract.js), image processing (Sharp) |
 | **Documents** | `pdf`, `document`, `archive`, `execute_cell`, `execute_all` | PDF/Excel processing, Jupyter notebook execution |
-| **Security** | `scan_secrets`, `scan_vulnerabilities`, `scan_licenses`, `find_bugs` | Secret detection (14 patterns), CVE scanning, license compliance, bug finder (25+ patterns, 6 languages) |
-| **Code Quality** | `organize_imports`, `analyze_logs`, `generate_openapi`, `resolve_conflicts` | Auto-import management, log analysis, OpenAPI generation, merge conflict resolution |
+| **Security** | `scan_secrets`, `scan_vulnerabilities`, `find_bugs` | Secret detection (14 patterns), CVE scanning, bug finder (25+ patterns, 6 languages) |
+| **Code Quality** | `resolve_conflicts` | Merge conflict resolution |
 | **Knowledge** | `knowledge_search`, `knowledge_add` | Search and add knowledge base entries |
 | **Agent** | `spawn_agent`, `send_input`, `wait_agent`, `close_agent`, `resume_agent` | Multi-agent orchestration ([details](agents.md)) |
 | **Self-Extension** | `create_skill`, `lessons_add`, `lessons_search` | Create new skills at runtime, persist learned patterns |

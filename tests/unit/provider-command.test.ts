@@ -68,7 +68,6 @@ describe('Provider Command', () => {
       expect(subcommands).toContain('set');
       expect(subcommands).toContain('models');
       expect(subcommands).toContain('model');
-      expect(subcommands).toContain('test');
     });
   });
 

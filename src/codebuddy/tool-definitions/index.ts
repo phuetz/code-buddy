@@ -163,24 +163,6 @@ export {
   SECRETS_TOOLS,
 } from './secrets-tools.js';
 
-// Log analyzer tools
-export {
-  ANALYZE_LOGS_TOOL,
-  LOG_ANALYZER_TOOLS,
-} from './log-analyzer-tools.js';
-
-// OpenAPI generator tools
-export {
-  GENERATE_OPENAPI_TOOL,
-  OPENAPI_TOOLS,
-} from './openapi-tools.js';
-
-// License scanner tools
-export {
-  SCAN_LICENSES_TOOL,
-  LICENSE_SCANNER_TOOLS,
-} from './license-scanner-tools.js';
-
 // Codebase replace tools (find & replace across files)
 export {
   CODEBASE_REPLACE_TOOL,

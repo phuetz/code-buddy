@@ -553,33 +553,6 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Scan source files for hardcoded secrets, credentials, and API keys'
   },
 
-  // Log analyzer
-  {
-    name: 'analyze_logs',
-    category: 'utility' as ToolCategory,
-    keywords: ['log', 'analyze', 'parse', 'error', 'warn', 'debug', 'trace', 'pattern', 'anomaly', 'syslog', 'json', 'tail', 'grep', 'monitor'],
-    priority: 7,
-    description: 'Analyze log files — parse entries, detect patterns, find anomalies'
-  },
-
-  // OpenAPI generator
-  {
-    name: 'generate_openapi',
-    category: 'codebase' as ToolCategory,
-    keywords: ['openapi', 'swagger', 'api', 'documentation', 'rest', 'endpoint', 'route', 'spec', 'generate', 'express', 'flask', 'fastapi', 'spring'],
-    priority: 6,
-    description: 'Auto-generate OpenAPI 3.0.3 spec from project source code'
-  },
-
-  // License scanner
-  {
-    name: 'scan_licenses',
-    category: 'codebase' as ToolCategory,
-    keywords: ['license', 'compliance', 'scan', 'spdx', 'dependency', 'copyleft', 'gpl', 'mit', 'legal', 'audit', 'npm'],
-    priority: 6,
-    description: 'Scan project dependencies for license compliance'
-  },
-
   // Codebase replace
   {
     name: 'codebase_replace',

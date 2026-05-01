@@ -30,7 +30,7 @@ import {
   errorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes, createWorkflowApiRouter, createA2AProtocolRoutes, createACPRoutes, createK8sHealthAliases, createDashboardRouter, createGeminiAgentRouter, createCloudTaskRoutes, createWebhookRoutes } from './routes/index.js';
+import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes, createWorkflowApiRouter, createA2AProtocolRoutes, createACPRoutes, createK8sHealthAliases, createDashboardRouter, createCloudTaskRoutes, createWebhookRoutes } from './routes/index.js';
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
 import { logger } from '../utils/logger.js';
 import { initMetrics, getMetrics as _getMetrics } from '../metrics/index.js';
@@ -759,9 +759,6 @@ function createApp(config: ServerConfig): Application {
 
   // Dashboard SPA
   app.use('/__codebuddy__/dashboard', createDashboardRouter());
-  
-  // Gemini Native Agent V2
-  app.use('/__codebuddy__/agent-v2', createGeminiAgentRouter());
 
   // 404 handler
   app.use(notFoundHandler);

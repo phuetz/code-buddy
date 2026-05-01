@@ -117,10 +117,6 @@ When commands are blocked, the system suggests allow rules. Rules persist to `.c
 
 Runs npm/pip/cargo/go audit and parses JSON output. Available via `scan_vulnerabilities` tool and `/vulns` command.
 
-## License Compliance
-
-SPDX classification with compatibility checking across npm dependency trees. Available via `scan_licenses` tool.
-
 ## Loop Detection (3-Tier)
 
 | Tier | Mechanism | Threshold |

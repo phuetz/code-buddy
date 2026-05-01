@@ -15,6 +15,5 @@ export { createWorkflowBuilderRoutes, createWorkflowApiRouter } from './workflow
 export { createA2AProtocolRoutes } from './a2a-protocol.js';
 export { createACPRoutes } from './acp.js';
 export { createDashboardRouter } from './dashboard.js';
-export { createGeminiAgentRouter } from './gemini-agent.js';
 export { createCloudTaskRoutes } from './cloud-tasks.js';
 export { createWebhookRoutes } from './webhooks.js';

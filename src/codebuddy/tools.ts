@@ -39,9 +39,6 @@ import {
   FIRECRAWL_TOOLS,
   LSP_TOOLS,
   SECRETS_TOOLS,
-  LOG_ANALYZER_TOOLS,
-  OPENAPI_TOOLS,
-  LICENSE_SCANNER_TOOLS,
   CODEBASE_REPLACE_TOOLS,
 } from "./tool-definitions/index.js";
 
@@ -127,15 +124,6 @@ export function initializeToolRegistry(): void {
 
   // Secrets detector tools
   registerGroup(SECRETS_TOOLS);
-
-  // Log analyzer tools
-  registerGroup(LOG_ANALYZER_TOOLS);
-
-  // OpenAPI generator tools
-  registerGroup(OPENAPI_TOOLS);
-
-  // License scanner tools
-  registerGroup(LICENSE_SCANNER_TOOLS);
 
   // Codebase replace tools
   registerGroup(CODEBASE_REPLACE_TOOLS);

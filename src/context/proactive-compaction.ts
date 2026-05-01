@@ -51,9 +51,6 @@ const TOOL_TOKEN_ESTIMATES: Record<string, number> = {
   reason: 3000,
   plan: 500,
   find_bugs: 2000,
-  analyze_logs: 2000,
-  generate_openapi: 1500,
-  scan_licenses: 1500,
 };
 
 /** Default estimate for unknown tools */

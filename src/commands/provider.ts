@@ -228,69 +228,6 @@ export function createProviderCommand(): Command {
       console.log(`✅ Model set to: ${model}`);
     });
 
-  // Test connection
-  provider
-    .command('test [provider]')
-    .description('Test connection to a provider')
-    .action(async (providerKey?: string) => {
-      const key = (providerKey || getCurrentProvider()).toLowerCase();
-
-      if (!PROVIDERS[key]) {
-        logger.error(`❌ Unknown provider: ${providerKey}`);
-        process.exit(1);
-      }
-
-      const info = PROVIDERS[key];
-      console.log(`\nTesting connection to ${info.name}...`);
-
-      const configured = getConfiguredProviders();
-      if (!configured.includes(key)) {
-        logger.error(`❌ ${info.envVar} not set`);
-        process.exit(1);
-      }
-
-      try {
-        // Dynamic import of provider manager
-        const { getProviderManager } = await import('../providers/provider-manager.js');
-        const manager = getProviderManager();
-
-        // Get API key
-        let apiKey = process.env[info.envVar] || '';
-        if (key === 'grok' && !apiKey) {
-          apiKey = process.env.XAI_API_KEY || '';
-        }
-        if (key === 'gemini' && !apiKey) {
-          apiKey = process.env.GEMINI_API_KEY || '';
-        }
-
-        // Register and test provider
-        await manager.registerProvider(key as 'grok' | 'claude' | 'openai' | 'gemini', {
-          apiKey,
-        });
-
-        const provider = manager.getProvider(key as 'grok' | 'claude' | 'openai' | 'gemini');
-        if (!provider) {
-          throw new Error('Failed to initialize provider');
-        }
-
-        const response = await provider.complete({
-          messages: [{ role: 'user', content: 'Say "Connection successful" in exactly those words.' }],
-          maxTokens: 20,
-        });
-
-        if (response.content) {
-          console.log(`✅ Connection successful!`);
-          console.log(`   Model: ${response.model}`);
-          console.log(`   Response: "${response.content.trim()}"`);
-        } else {
-          throw new Error('Empty response');
-        }
-      } catch (error) {
-        logger.error(`❌ Connection failed: ${error instanceof Error ? error.message : error}`);
-        process.exit(1);
-      }
-    });
-
   return provider;
 }
 
