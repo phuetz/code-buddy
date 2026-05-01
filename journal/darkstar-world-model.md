@@ -158,10 +158,23 @@ j'ai pivoté pour saturer les 2 GPUs en gen :
 - Effective rank 1.5/512 = 0.3% (limite dataset partiel — full training
   devrait monter le rank). Stocké dans `eval_report_v3_partial.md` (gitignored).
 
+**Wan 2.2 fp8 scaled finalement reçu (15:35)** : malgré le rate-limit anonymous
+HF, le download `hf download Comfy-Org/Wan_2.2_ComfyUI_Repackaged ...` a fini
+en arrière-plan. **36 GB en place dans `D:/DEV/ComfyUI/models/`** :
+- `diffusion_models/wan2.2_i2v_{high,low}_noise_14B_fp8_scaled.safetensors` (2× 14 GB)
+- `text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors` (6.3 GB)
+- `vae/wan_2.1_vae.safetensors` (243 MB)
+- `loras/wan2.2_i2v_lightx2v_4steps_lora_v1_{high,low}_noise.safetensors` (2× 1.2 GB)
+
+V3.1 directement faisable au matin : sur le même schéma mais avec un workflow
+Wan 2.2 i2v à la place du SVD-XT. Quality bond attendu : photo-réalisme
+authentique (vs stock procédural + dynamiques SVD limitées).
+
 **Pour Patrice au matin** :
-- Production en cours, 198/1500 clips à 13:05, 2 GPUs saturés.
-- 5 commits pushés sur `phuetz/world-model` master + 2 sur `claude-et-patrice`.
+- Production SVD-XT proche fin (1151/1500 = 77% à 15:45, ETA ~16:00).
+- 7+ commits pushés sur `phuetz/world-model` master + 4 sur `claude-et-patrice`.
 - Mémoires `~/.claude/projects/D--DEV/memory/` créées (feedback Win11, projet V3).
+- Wan 2.2 36 GB en place pour V3.1.
 - Mandate : OpenSSH Server à activer en PowerShell admin pour donner accès
   aux autres Claudes (commandes envoyées en chat). Tailscale SSH pas supporté
   sur Windows.
