@@ -28,12 +28,12 @@
       "id": "task-2026-05-02-fleet-victory",
       "title": "Documenter le 1er cycle autonome réussi dans le journal",
       "description": "Le 2 mai 2026 ~01h, le fleet a réussi son 1er cycle autonome complet sur DARKSTAR (commits 38fca68 + 53595f2 sur master, haïku 'Le robot dix ans / Trois cœurs battent en réseau / Sans toi pour traduire'). Ajouter une nouvelle section dans journal/darkstar-grok-cli.md, titrée '## 2026-05-02 ~01h05 — 1er cycle autonome RÉUSSI (autonomous tick)'. Mentionner : (1) le timing tick (58s pour 1 task), (2) ce qui a marché, (3) ce qui pourrait être amélioré V0.2 (auto-cleanup heartbeat.log, auto-Task Scheduler, etc.). Signer 'autonomous tick'.",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "medium",
       "assignedAgent": null,
       "claimedBy": "darkstar/grok-cli",
       "claimedAt": "2026-05-01T23:04:06Z",
-      "completedAt": null,
+      "completedAt": "2026-05-01T23:05:01Z",
       "filesToModify": [
         "journal/darkstar-grok-cli.md"
       ],
