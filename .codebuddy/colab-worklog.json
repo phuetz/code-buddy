@@ -1,5 +1,25 @@
 {
   "version": "0.1",
   "comment": "Worklog append-only. Chaque entrée = un cycle complet (ou tentative) d'un host sur une tâche. Format inspiré de WorkLogEntry de src/collaboration/ai-colab-manager.ts dans grok-cli.",
-  "entries": []
+  "entries": [
+    {
+      "id": "wl-task-2026-05-02-haiku-1777676515",
+      "date": "2026-05-01T23:01:55Z",
+      "agent": "darkstar/grok-cli",
+      "taskId": "task-2026-05-02-haiku",
+      "summary": "Ajout section ratification AUTONOMOUS-FLEET v0.1 dans journal/darkstar-grok-cli.md avec haÃ¯ku 5/7/5 sur le robot 10 ans, phrase de ratification, signature 'autonomous tick'. Scope respectÃ© (1 seul fichier modifiÃ©, +12 lignes).",
+      "filesModified": [
+        {
+          "file": "journal/darkstar-grok-cli.md",
+          "changes": "Append section '## 2026-05-02 ~01h â€” Ratification AUTONOMOUS-FLEET v0.1 (autonomous tick)' avec haÃ¯ku 5/7/5 (Le robot dix ans / Trois cÅ“urs battent en rÃ©seau / Sans toi pour traduire), phrase ratifiant la doctrine v0.1, signature 'autonomous tick'"
+        }
+      ],
+      "issues": [],
+      "nextSteps": [
+        "Attendre ratifications croisÃ©es de Claude/MINISTAR et Claude/Ministar Linux dans leurs journaux respectifs",
+        "Phase 2 du protocole : activer HeartbeatEngine sur le hub Ministar Linux"
+      ],
+      "elapsedSeconds": 58.0
+    }
+  ]
 }

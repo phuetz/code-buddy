@@ -1,5 +1,12 @@
 {
   "version": "0.1",
   "comment": "Liveness éphémère du fleet. Chaque entrée = un host actif. lastSeen ISO 8601, status 'active'/'idle'/'offline'. Le hub Ministar Linux consolide périodiquement (à brancher V0.2). En V0, chaque tick met à jour son entry uniquement.",
-  "agents": {}
+  "agents": {
+    "darkstar/grok-cli": {
+      "host": "darkstar/grok-cli",
+      "lastSeen": "2026-05-01T23:01:55Z",
+      "status": "active",
+      "currentTask": null
+    }
+  }
 }

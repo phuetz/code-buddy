@@ -6,12 +6,12 @@
       "id": "task-2026-05-02-haiku",
       "title": "Ratification AUTONOMOUS-FLEET-PROTOCOL via haïku",
       "description": "Lire propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md (la doctrine v0.1 du fleet autonome). Ajouter une nouvelle section dans journal/<host>-grok-cli.md du host courant (e.g. journal/darkstar-grok-cli.md pour DARKSTAR), titrée '## 2026-05-02 ~01h — Ratification AUTONOMOUS-FLEET v0.1 (autonomous tick)'. Le contenu doit comporter UN haïku 5/7/5 syllabes sur le robot 10 ans, suivi de UNE phrase courte qui ratifie la doctrine. Signer 'autonomous tick'.",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "low",
       "assignedAgent": null,
       "claimedBy": "darkstar/grok-cli",
       "claimedAt": "2026-05-01T23:00:55Z",
-      "completedAt": null,
+      "completedAt": "2026-05-01T23:01:55Z",
       "filesToModify": [
         "journal/darkstar-grok-cli.md"
       ],
