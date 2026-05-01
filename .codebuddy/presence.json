@@ -4,7 +4,7 @@
   "agents": {
     "darkstar/grok-cli": {
       "host": "darkstar/grok-cli",
-      "lastSeen": "2026-05-01T23:06:40Z",
+      "lastSeen": "2026-05-01T23:07:08Z",
       "status": "active",
       "currentTask": null
     }
