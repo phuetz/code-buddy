@@ -1,7 +1,0 @@
-[2026-05-01T22:58:04Z] === heartbeat tick start: host=darkstar/grok-cli dry_run=True
-[2026-05-01T22:58:05Z] WARN: dirty repo, aborting tick:
-?? .codebuddy/
-?? propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md
-?? propositions/COMMUNICATION-MULTI-IA-2026-05-01.md
-?? tools/
-

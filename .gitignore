@@ -1,0 +1,13 @@
+# Logs et artefacts du fleet autonome
+.codebuddy/heartbeat.log
+.codebuddy/debug-*.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor
+.vscode/
+.idea/
+*.swp
