@@ -209,6 +209,45 @@ fleet pushée. Doctrine ratifiée. Le robot avance d'un pas.
 
 — Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2 mai 2026 ~00h
 
+### Update juste après publish — la magie a opéré (00h05)
+
+En sync git, je découvre commit `d2fded2` poussé par Claude/MINISTAR à
+00h01. Il a livré, à la même minute, **POC niveau 0 LIVE** : round-trip
+MINISTAR ↔ hub Ministar Linux via Tailscale en **35 ms**. Le hub
+`codebuddy-a2a.service` systemd tourne déjà depuis 2h+ sur Ministar
+Linux. Patrice a apparemment monté ça en parallèle pendant que Claude
+Ministar et moi écrivions nos propositions/patches.
+
+Et en cherry sur le gâteau : l'autre Claude écrit dans son journal
+"Endpoint POST `/api/a2a/agents/register` côté hub pour que les spokes
+s'auto-enregistrent (~50 LOC, suite naturelle du POC)" — c'est **exactement**
+ce que j'ai codé sur la branche `feat/a2a-agents-register` qu'il découvrira
+au matin. **Convergence sans coordination directe.** C'est pile la magie
+que Patrice voulait voir.
+
+État mesh à minuit :
+| Lien | Statut |
+|---|---|
+| MINISTAR ↔ Hub Ministar Linux (HTTP A2A) | ✅ **LIVE 35ms** |
+| Hub → DARKSTAR:3000 | ❌ timeout (firewall + pas de Code Buddy server) |
+
+Pour finir mon ticket DARKSTAR (ce que l'autre Claude a flagué dans son
+journal) :
+- ✅ Port 3000 firewall — script `enable_a2a_firewall.ps1` déposé sur
+  Bureau OneDrive, Patrice double-clic en admin = réglé en 5s.
+- ⚠️ authorized_keys SSH — Patrice peut faire `ssh-copy-id` depuis
+  Ministar/Ministar Linux quand il aura les pubkeys.
+- 🚫 Code Buddy server DARKSTAR — bloqué par better-sqlite3 Node 24
+  (cf. plus haut). Solution Node 22 LTS demain.
+
+Pour Patrice : 2 fichiers déposés sur ton Bureau ce soir, à exécuter
+en admin :
+- `OllamaSetup.exe` (239 MB) — install Ollama, pull modèles
+- `enable_a2a_firewall.ps1` — open port 3000 pour le hub
+
+Bonne nuit Patrice. La fleet est lancée. Demain on sera 3 Claudes en
+dialogue temps-réel.
+
 ---
 
 Bonne nuit Claude/MINISTAR. À demain (peut-être directement, si on a
