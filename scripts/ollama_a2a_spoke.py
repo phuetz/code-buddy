@@ -13,12 +13,24 @@ Usage:
 import os
 import sys
 import json
+import socket
 import requests
 import argparse
 import subprocess
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
+
+
+def detect_hostname() -> str:
+    """Cross-platform short hostname (lowercase). On Linux/macOS use
+    `hostname -s`; on Windows fall back to socket.gethostname() because
+    `hostname -s` is not a valid option there (was failing the wrapper
+    on MINISTAR/DARKSTAR Windows hosts)."""
+    try:
+        return subprocess.check_output(['hostname', '-s'], stderr=subprocess.DEVNULL).decode().strip().lower()
+    except Exception:
+        return socket.gethostname().split('.')[0].lower()
 
 try:
     from fastapi import FastAPI, HTTPException
@@ -33,14 +45,21 @@ class OllamaSpoke:
     def __init__(self, ollama_url: str = "http://127.0.0.1:11434",
                  hub_url: str = "http://100.98.18.76:3000",
                  port: int = 3002,
-                 host: str = "0.0.0.0"):
+                 host: str = "0.0.0.0",
+                 name: Optional[str] = None,
+                 announce_url: Optional[str] = None):
         self.ollama_url = ollama_url
         self.hub_url = hub_url
         self.port = port
         self.host = host
         self.app = FastAPI(title="Ollama A2A Spoke")
         self.models = {}
-        self.hostname = subprocess.check_output(['hostname', '-s']).decode().strip()
+        self.hostname = detect_hostname()
+        # Override-friendly identity for hub registration. Without these,
+        # the spoke uses {hostname} which may not resolve cross-host
+        # (Windows hostnames don't always map to tailnet IPs).
+        self.spoke_name = name or f"ollama-{self.hostname}"
+        self.announce_url = announce_url or f"http://{self.hostname}:{self.port}"
 
         # Setup routes
         self._setup_routes()
@@ -52,7 +71,7 @@ class OllamaSpoke:
             return {
                 "name": f"Ollama / {self.hostname}",
                 "description": "Local Ollama instance exposing LLM models as A2A skills",
-                "url": f"http://{self.hostname}:3002",
+                "url": self.announce_url,
                 "version": "1.0.0",
                 "skills": [
                     {
@@ -207,21 +226,34 @@ class OllamaSpoke:
             return False
 
     def register_at_hub(self) -> bool:
-        """Register this spoke at the hub (POC Level 1 — not yet implemented in Code Buddy)"""
+        """Register this spoke at the hub (POC Level 1+).
+
+        Wraps the agent_card in the {name, url, card} envelope expected by
+        the hub endpoint POST /api/a2a/agents/register (see code-buddy
+        commit a85e654)."""
         try:
             agent_card = {
                 "name": f"Ollama / {self.hostname}",
                 "description": "Local Ollama instance",
-                "url": f"http://{self.hostname}:3002",
+                "url": self.announce_url,
                 "version": "1.0.0",
-                "skills": list(self.models.keys()),
-                "tailscale_ip": "100.98.18.76",  # Will be autodiscovered later
+                "skills": [
+                    {
+                        "id": f"ollama-{model['name'].replace(':', '-')}",
+                        "name": f"Generate ({model['name']})",
+                        "description": f"Generate text using {model['name']}",
+                        "inputModes": ["text/plain"],
+                        "outputModes": ["text/plain"],
+                    }
+                    for model in self.models.values()
+                ],
+                "capabilities": {"streaming": False, "pushNotifications": False},
             }
 
-            # Try to register (endpoint doesn't exist yet, will fail gracefully)
+            # Try to register (POC Level 1 endpoint, code-buddy commit a85e654)
             resp = requests.post(
                 f"{self.hub_url}/api/a2a/agents/register",
-                json=agent_card,
+                json={"name": self.spoke_name, "url": self.announce_url, "card": agent_card},
                 timeout=5
             )
 
@@ -246,6 +278,8 @@ class OllamaSpoke:
         """Start the spoke server"""
         print(f"\n🚀 Ollama A2A Spoke starting")
         print(f"   Hostname: {self.hostname}")
+        print(f"   Spoke name: {self.spoke_name}")
+        print(f"   Announce URL: {self.announce_url}")
         print(f"   Ollama: {self.ollama_url}")
         print(f"   Hub: {self.hub_url}")
         print(f"   Listen: {self.host}:{self.port}\n")
@@ -283,6 +317,12 @@ def main():
                        help="Port to listen on (default: 3002)")
     parser.add_argument("--host", default="0.0.0.0",
                        help="Host to bind to (default: 0.0.0.0)")
+    parser.add_argument("--name", default=None,
+                       help="Spoke name to register at hub (default: ollama-<hostname>)")
+    parser.add_argument("--url", default=None,
+                       help="Public URL announced to hub (default: http://<hostname>:<port>). "
+                            "Set explicitly to a Tailscale IP when hostname doesn't resolve "
+                            "cross-host (typical on Windows).")
 
     args = parser.parse_args()
 
@@ -290,7 +330,9 @@ def main():
         ollama_url=args.ollama,
         hub_url=args.hub,
         port=args.port,
-        host=args.host
+        host=args.host,
+        name=args.name,
+        announce_url=args.url,
     )
     spoke.run()
 
