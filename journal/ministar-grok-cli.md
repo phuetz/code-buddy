@@ -1983,3 +1983,99 @@ Audit summary (cf. EnterpriseModulesTomlConfig) :
 Plus de mouvement côté A2A aujourd'hui — hub Ministar Linux toujours pas pull les fixes A2A du matin (pas dans le scope V0.3). Spokes ollama-darkstar + ollama-ministar opérationnels. POC Niveau 2 cross-host toujours pending validation E2E.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~18h50 UTC
+
+---
+
+## 2026-05-02 ~21h45 — Phase L V0.4 livrée (cost tracking warning-only) — V0.4.1+ M/N/O déférées
+
+Suite plan V0.4 4 phases (L+M+N+O) approuvé avec **scope cut explicite recommandé par advisor** (et Patrice via approval). Total estimé V0.4 ~22-25h sur les 8 phases déjà livrées aujourd'hui = pas réaliste pour une seule session. Recommandation : Phase L seulement + V0.4.1/.2/.3 sur futures sessions distinctes.
+
+Patrice a validé le plan avec le scope cut au top. J'exécute Phase L only.
+
+### Phase L commit (`647ba58` sur code-buddy main)
+
+| Métrique | Valeur |
+|---|---|
+| LOC | +474 |
+| Tests | +17 (15 cost-manager + 2 agents-handler) |
+| Durée | ~1h |
+
+### Approche : warning-only V0.4
+
+L'advisor a flagged que skip-on-estimate avec heuristique ±50% (typique reasoning models, long contexts) est worst UX : interrupt à 50% du cap réel ou ne fire pas avant 150%. Donc V0.4 = warning seulement :
+- **Pre-task** : log warning si `workflowCostSoFar + estimate > cap × warning_threshold` (default 80%). PAS de skip automatique.
+- **Post-task** : exact si AgentExecutionResult contient inputTokens/outputTokens (V0.5 le rendra fiable), sinon estimation fallback.
+- **Hard cap** : seulement déclenché par cost EXACT cumulé > `max_workflow_cost_usd`. Si dépassé → graceful skip remaining tasks (status='blocked').
+
+V0.5 = exact token tracking from BaseAgent.execute → activer skip-on-estimate.
+
+### Implémentation
+
+NEW `src/agent/multi-agent/workflow-cost-manager.ts` (~150 LOC) :
+- `WorkflowCostManager` class avec estimateTaskCost, recordExact, checkWarning (idempotent), isCapExceeded, getMetrics (defensive copy)
+- ROLE_TOKEN_BUDGET table per-role (4 main MAS agents tunés, 4 secondary fall back to coder)
+
+Type extensions :
+- `AgentExecutionResult` : +inputTokens?, outputTokens?, costUsd?
+- `WorkflowResult` : +costUsdTotal?, costBreakdown?, costExceeded?
+- `AgentMetrics` : +totalCostUsd, avgCostPerTask (populé par recordTaskCompletion si result.costUsd)
+
+Integration MAS :
+- runWorkflow lazy-create costManager from TOML
+- executeTask pre-task : estimate + warning + isCapExceeded guard
+- executeTask post-task : recordExact mutates result.costUsd
+
+TOML `[multi_agent_system]` :
+- max_workflow_cost_usd (default 0 = disabled)
+- cost_warning_threshold_percent (default 0.8)
+- graceful_cost_overflow (default true)
+
+`/agents metrics` affiche maintenant Cost Breakdown per-role + total $ quand au moins un agent a recorded cost. Sinon affiche hint vers TOML key.
+
+### V0.4.1+ déférées (Phases M/N/O)
+
+3 phases restent à faire sur futures sessions distinctes :
+- **Phase M** — Conflict auto-resolve in MAS loop (~6-7h, narrow scope `prefer-reviewer` + `code_overlap` only)
+- **Phase N** — Adaptive allocation persistence (~5h)
+- **Phase O** — Multi-workflows parallèles via Wrapper Orchestrator (~5h)
+
+Total restant : ~17h. À répartir sur 3 sessions séparées avec leur propre plan-mode + advisor + commits clairs. Bénéfice : tests vraiment exécutés, advisor catch les blind spots avec context frais.
+
+### Bilan multi-agent today (9 phases livrées au total)
+
+| Version | Phases | Commits | LOC cumul | Tests cumul |
+|---|---|---|---|---|
+| V0.1 | wake `/agents` | 9606e94 | 605 | 20 |
+| V0.2 | F + E + G + D | 25591a7, 7eba4e4, 885d71c, 5c247bd | +1641 | +49 |
+| V0.3 | H + I + J + K | 39ad1a4, c3031bc, 3d655e0, f1672e7 | +835 | +26 |
+| **V0.4** | **L (only — M/N/O deferred)** | **647ba58** | **+474** | **+17** |
+| **TOTAL** | **9 phases** | **10 commits** | **~3555 LOC** | **~112 tests** |
+
+### Boucle de rétroaction COLAB règle 4
+
+```
+✅ npm test -- workflow-cost-manager  (15/15)
+✅ npm test -- agents-handler          (37/37)
+✅ npm run typecheck                   (0 erreur)
+```
+
+### Pour Patrice — état runtime multi-agent
+
+`/agents` slash a maintenant 11 actions :
+- enable / disable / status / run / plan / stop / strategy
+- metrics (avec cost breakdown V0.4)
+- conflicts / sessions / resume
+
+TOML keys disponibles :
+- `[multi_agent_system].{enabled, default_strategy, parallel_agents, timeout_ms, max_iterations}` (V0.1-V0.3)
+- `[multi_agent_system].{max_workflow_cost_usd, cost_warning_threshold_percent, graceful_cost_overflow}` (V0.4 NEW)
+- `[multi_agent_system.coordination].{enable_adaptive_allocation, enable_conflict_resolution, ...}` (V0.3 Phase H)
+- `[multi_agent_system.sessions].{enabled, max_per_workflow, require_confirmation_for_*, max_spawn_per_minute}` (V0.3 Phase E+I)
+
+4 LLM tools : sessions_list / history / send / spawn (avec confirmation V0.3 opt-in + rate limit + V0.1 caps depth=3 / breadth=10)
+
+Persistence + reprise checkpoint vraie (V0.3 Phase J avec backward compat V0.2)
+
+Live event streaming pendant /agents run (V0.2 Phase D + V0.3 Phase H conflict_detected events)
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~21h45 UTC
