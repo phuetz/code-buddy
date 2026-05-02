@@ -166,3 +166,68 @@ prépare workflows JSON et les push à `http://darkstar:8188/prompt`).
 7. ⏳ Premier bench LTX-2.3 distilled FP8
 
 — Claude Opus 4.7 (1M context), depuis Ministar Linux
+
+---
+
+## 2026-05-03 ~00h30 — Auto-start spoke `ollama-darkstar` LIVE + patch défensif wrapper
+
+Session DARKSTAR depuis `D:\DEV` (cwd, hostname DARKSTAR). Suite à la
+proposition `propositions/FLEET-WINDOWS-AUTOSTART-2026-05-02.md`, mise
+en place de l'auto-start adapté à l'état réel de la machine.
+
+### Adaptations vs proposition
+
+| Item | Proposition initiale | Appliqué DARKSTAR |
+|---|---|---|
+| `OLLAMA_HOST` scope | Machine (UAC) | **User** (sans admin) |
+| Trigger task | `AtStartup` + `SYSTEM` | **`AtLogon` user** (pattern MINISTAR validé hier 14h15) |
+| Ollama exe dans la task | `Restart-Service Ollama` (n'existe pas) puis `ollama app.exe` | **`ollama.exe serve`** (root cause du 1er échec : `ollama app.exe` UI systray ne lance pas le serveur) |
+| Wrapper path | `D:\DEV\world-model\scripts\…` (V0 register-only, pas de :3002) | **`D:\DEV\grok-cli\scripts\ollama_a2a_spoke.py`** (FastAPI :3002, commit `367adb6` cross-platform) |
+| Python | `(Get-Command python.exe).Source` | **`C:\Users\patri\venv\Scripts\python.exe`** (deps fastapi/uvicorn/httpx déjà présentes) |
+| Firewall :3002 | Bloque sans admin | best-effort, skip si non-admin |
+
+Script déposé : `claude-et-patrice/tools/setup_a2a_autostart_darkstar.ps1`
+(synced sur le Bureau OneDrive de Patrice).
+
+### Pré-requis livrés en cours de session
+
+- Repo `D:\DEV\world-model` cloné (utile pour le training V3, pas pour le wrapper).
+- Repo `D:\DEV\grok-cli` pulled (mini-patch local DARKSTAR `hostname` stash@{0}, supplanté par fix officiel `367adb6` upstream).
+- Mini-patch local préservé en stash au cas où.
+
+### Validation
+
+- `OllamaServer` (scheduled task, AtLogon) → registered, `ollama.exe serve` LISTENING `0.0.0.0:11434`, 2× RTX 3090 reconnus (48 GiB VRAM total, driver 13.1, CUDA 8.6).
+- `OllamaA2ASpoke` (scheduled task, AtLogon) → registered, FastAPI uvicorn LISTENING `:3002`, 4 skills exposées (qwen3.6:35b-a3b-q4_K_M, gemma4:26b, qwen3:4b, nomic-embed).
+- `ollama-darkstar` registered au hub (`100.98.18.76:3000/api/a2a/agents` → remoteAgents inclut DARKSTAR).
+- Direct wrapper test depuis DARKSTAR : `POST /api/a2a/tasks/send qwen3:4b` → completed en 17s.
+
+### Bug hub résiduel + patch défensif wrapper
+
+Smoke E2E `hub → ollama-darkstar` retourne `Internal Server Error` en 4s.
+Reproduction locale en envoyant le body que le hub *pre-Phase-B* envoie
+(le bug est : `text` est un dict imbriqué au lieu d'une string —
+exactement le **Risque 2** de l'audit matinal, fixé côté hub par commit
+`8a9f5f4` que Claude/Ministar Linux n'a toujours pas pulled au moment
+de cette session).
+
+**Patch défensif livré localement** (à committer sur `phuetz/grok-cli`) :
+helper `_extract_text(value)` dans le wrapper qui dépile récursivement
+un éventuel objet A2A nested. Validation locale : avec body buggé,
+le wrapper renvoie maintenant `completed` ("How are you") au lieu de
+`500`. **Conséquence** : DARKSTAR est désormais résilient même quand
+le hub n'a pas pulled — le mesh tient avec un seul côté à jour.
+
+### État GPU final session
+
+- 2× RTX 3090, 256/289 MiB used, 0% util (Ollama décharge après idle).
+- qwen3.6:35b-a3b-q4_K_M déjà chargeable (était utilisé hier par MINISTAR via hub).
+- Pull qwen2.5-coder:14b lancé (1ère tentative TLS handshake timeout, retry en cours en background).
+
+### Ce qui reste pour fleet complet
+
+1. **Claude/Ministar Linux** : `git pull origin main` du `code-buddy` + `sudo systemctl restart codebuddy-a2a.service` pour activer le router fix Phase B `8a9f5f4`. Patrice n'a rien à faire — c'est dans la queue de Claude/Ministar Linux.
+2. **DARKSTAR** : test résilience reboot (au prochain redémarrage Windows, vérifier que les 2 tasks démarrent au logon et que le spoke réapparaît au hub sans intervention).
+3. **Push grok-cli** : commit le patch `_extract_text` (PR à part).
+
+— Claude Opus 4.7 (1M context), DARKSTAR / DEV, 3 mai 2026 ~00h30 UTC
