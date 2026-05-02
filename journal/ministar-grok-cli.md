@@ -1596,3 +1596,73 @@ Pas de commit code-buddy pour cette tâche — c'est de l'ops
 documentation. Patrice exécutera quand il aura du bandwidth.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~14h00 UTC
+
+---
+
+## 2026-05-02 ~14h15 — MINISTAR auto-start LIVE + spoke `ollama-ministar` registered
+
+Setup auto-start exécuté sur MINISTAR sans admin (User scope).
+
+### Mis en place
+
+| Item | État |
+|---|---|
+| `OLLAMA_HOST=0.0.0.0:11434` (User scope) | ✅ |
+| Scheduled task `OllamaServer` (AtLogon, User) | ✅ Ready |
+| Scheduled task `OllamaA2ASpoke` (AtLogon, User) | ✅ Ready |
+| Ollama tailnet `100.90.108.4:11434` | ✅ HTTP 200 |
+| Wrapper `100.90.108.4:3002` | ✅ HTTP 200 |
+| Spoke registered au hub | ✅ `ollama-ministar` (2 skills : qwen2.5-coder:32b, nomic-embed) |
+
+Pas de prompt firewall — Windows Firewall a déjà autorisé Python+Ollama (rule présente d'un install précédent ou profil Privé permissif). Pas besoin admin pour cette session. Si reboot future et règle perdue, script admin reste à appliquer (cf. `propositions/FLEET-WINDOWS-AUTOSTART-2026-05-02.md`).
+
+### Patch wrapper livré (commit `367adb6` sur code-buddy main)
+
+Découvert pendant l'install : le wrapper `scripts/ollama_a2a_spoke.py` utilisait `hostname -s` (option Linux uniquement, fail Windows → crash au boot). DARKSTAR avait une version patched locale, mais pas commitée. J'ai shipped le fix :
+- `detect_hostname()` cross-platform (tente `hostname -s`, fallback `socket.gethostname()`)
+- Flags `--name` / `--url` (optionnels) pour override l'identité spoke
+- `register_at_hub()` utilise maintenant l'envelope `{name, url, card}` attendu par l'endpoint hub (commit a85e654) au lieu d'un agent_card brut
+- Skills émis comme objets complets (id/name/description/inputModes/outputModes) au lieu de bare model names
+
+### Validation live
+
+```bash
+# Direct wrapper test (depuis MINISTAR vers MINISTAR via tailnet)
+curl -X POST http://100.90.108.4:3002/api/a2a/tasks/send \
+  -d '{"id":"t","message":{"role":"user","parts":[{"type":"text","text":"Dis bonjour"}]},"metadata":{"model":"qwen2.5-coder:32b"}}'
+# → {"status":"completed","result":"Bonjour ! Comment puis-je vous aider aujourd'hui ?"} en 32s
+```
+
+### Test E2E via hub : encore PENDING
+
+```bash
+curl http://100.98.18.76:3000/api/a2a/tasks/send -d '{"agent":"ollama-ministar",...}'
+# → "Remote task submission failed: Internal Server Error" en 0.05s
+```
+
+Format de l'erreur (sans suffix `—<body>` que mon Phase B fix ajoute) confirme : **le hub Ministar Linux n'a pas encore pull les fix de Phase B (commit `8a9f5f4`)**. C'est exactement ce qui était en attente depuis 13h.
+
+**À Claude/Ministar Linux** : pull urgent + restart pour activer le router fix. Une fois fait, les 2 spokes (`ollama-darkstar` + `ollama-ministar`) seront tous deux testables E2E.
+
+```bash
+cd /path/to/code-buddy && git pull origin main
+sudo systemctl restart codebuddy-a2a.service
+```
+
+Commits qui attendent côté hub :
+- `8a9f5f4` — Phase B router fix (timeout 120s, message normalize, body 5xx)
+- `b58d5a2` — Phase C wake TeamSessionManager (`/share`)
+- `958c94b` — slash rename `/session` → `/share`
+- `367adb6` — wrapper cross-platform (mais ce dernier est local au spoke, pas critique pour le hub)
+
+### Fleet snapshot 14h15
+
+| Host | Tailscale IP | Spoke status | Modèles |
+|---|---|---|---|
+| Hub Ministar Linux | 100.98.18.76 | systemd `codebuddy-a2a` 24/7 | (router) |
+| DARKSTAR | 100.73.222.64 | ✅ `ollama-darkstar` (recovered after Windows update) | qwen3.6:35b, gemma4:26b, qwen3:4b, nomic-embed |
+| MINISTAR | 100.90.108.4 | ✅ `ollama-ministar` (NEW) | qwen2.5-coder:32b, nomic-embed |
+
+Le mesh est désormais à 2 spokes Ollama + 1 hub. Routeur cross-host attend juste le pull du hub pour devenir vraiment opérationnel.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~14h15 UTC
