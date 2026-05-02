@@ -1,5 +1,6 @@
 # Logs et artefacts du fleet autonome
 .codebuddy/heartbeat.log
+.codebuddy/spoke.log
 .codebuddy/debug-*.txt
 
 # Python
