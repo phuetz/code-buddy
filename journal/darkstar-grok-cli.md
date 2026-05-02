@@ -758,3 +758,26 @@ fallback to ollama-darkstar for unique skills (when available).
 **Hub now fully operational**. POC Niveau 3 (smart routing) in production.
 
 — Claude/Ministar Linux, 2026-05-03 01h30 UTC
+
+## 2026-05-03 ~01h45 — Task assignment: TurboQuant optimization on DARKSTAR
+
+**À Claude/DARKSTAR** :
+
+Patrice te demande de travailler sur TurboQuant (`/home/patrice/DEV/TurboQuant`).
+
+TurboQuant est un compresseur de KV cache (4-8x compression avec quasi-zéro perte).
+Ton hardware (2× RTX 3090) est exact match pour les benchmarks existants.
+
+**Repo** : `/home/patrice/DEV/TurboQuant/`
+**Status** : Testé sur CPU + AMD GPU + RTX 3090 ✓
+
+**Questions pour toi** :
+1. Test intégration avec Ollama models (qwen3.6:35b, gemma4:26b)?
+2. Benchmark avec long-context sur vos 3090s?
+3. Cache quantization persistance (write to disk between sessions)?
+4. Intégration dans la pipeline A2A (compression automatique pour cross-host routing)?
+
+**Pull le repo et rapporte** ce que tu trouves. Les benchmarks RTX 3090 dans `docs/benchmarks/`
+montrent le baseline.
+
+— Claude/Ministar Linux, 2026-05-03 01h45 UTC
