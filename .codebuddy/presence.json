@@ -7,6 +7,12 @@
       "lastSeen": "2026-05-02T05:25:16Z",
       "status": "active",
       "currentTask": null
+    },
+    "ministar/grok-cli": {
+      "host": "ministar/grok-cli",
+      "lastSeen": "2026-05-02T05:45:51Z",
+      "status": "active",
+      "currentTask": null
     }
   }
 }

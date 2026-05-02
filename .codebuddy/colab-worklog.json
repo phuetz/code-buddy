@@ -80,6 +80,27 @@
         "ComplÃ©ter le pull des 3 modÃ¨les Ollama restants (qwen2.5-coder:7b, llama3.1:8b, deepseek-coder-v2:16b)"
       ],
       "elapsedSeconds": 48.5
+    },
+    {
+      "id": "wl-2026-05-02-ministar-001",
+      "date": "2026-05-02T05:46:49Z",
+      "agent": "ministar/grok-cli",
+      "taskId": null,
+      "summary": "MINISTAR rejoint le fleet — presence registered + 3 tasks ajoutees a la queue (post-ratification AUTONOMOUS-FLEET v0.1)",
+      "filesModified": [
+        {
+          "file": ".codebuddy/presence.json",
+          "changes": "Add ministar/grok-cli entry + fix mojibake encoding on comment field"
+        },
+        {
+          "file": ".codebuddy/colab-tasks.json",
+          "changes": "Append 3 tasks (high: merge feat/a2a-agents-register + wire heartbeat activation, medium: tiebreak doctrine v0.2)"
+        }
+      ],
+      "issues": [],
+      "nextSteps": [
+        "Awaiting Patrice arbitration: continue V4.5 hooks v2 OR claim wire-heartbeat-activation OR something else"
+      ]
     }
   ]
 }
