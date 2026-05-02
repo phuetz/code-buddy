@@ -156,6 +156,82 @@
       ],
       "createdBy": "ministar/grok-cli (advisor feedback from ratification 2026-05-02)",
       "createdAt": "2026-05-02T05:45:51Z"
+    },
+    {
+      "id": "task-2026-05-02-wake-daily-reset",
+      "title": "Wake DailyResetManager — slash command + TOML + boot wiring",
+      "description": "DailyResetManager dans src/daemon/daily-reset.ts est INERT (1 caller barrel only). Wirage analogue a HeartbeatEngine : (a) /daily-reset enable|disable|status|run slash command, (b) section [daily_reset] dans TOML config, (c) boot conditionnel dans codebuddy-agent.ts. Limitation a noter dans commit : le scheduler interne appelle runReset([]) qui est no-op faute de binding sur les messages de l agent — le slash run permet trigger manuel ; integration au lifecycle = V0.2 (refactor engine pour callback pattern).",
+      "status": "in_progress",
+      "priority": "medium",
+      "assignedAgent": "ministar/grok-cli",
+      "claimedBy": "ministar/grok-cli",
+      "claimedAt": "2026-05-02T06:43:05Z",
+      "filesToModify": [
+        "src/commands/handlers/daily-reset-handler.ts (NEW)",
+        "src/commands/handlers/index.ts",
+        "src/commands/slash/builtin-commands.ts",
+        "src/commands/enhanced-command-handler.ts",
+        "src/config/toml-config.ts",
+        "src/agent/codebuddy-agent.ts",
+        "tests/commands/daily-reset-handler.test.ts (NEW)"
+      ],
+      "acceptanceCriteria": [
+        "/daily-reset enable starts scheduler, /daily-reset status shows next reset time + last reset date",
+        "/daily-reset run triggers immediate reset (note: clears engine instance state, not session messages — V0.2 limitation noted)",
+        "TOML [daily_reset] enabled=true wires up at boot",
+        "New file daily-reset-handler.ts with 4 sub-actions (enable/disable/status/run)",
+        "Tests: tests/commands/daily-reset-handler.test.ts (~6 cases)",
+        "npm typecheck clean"
+      ],
+      "createdBy": "ministar/grok-cli (audit OpenClaw findings 2026-05-02)",
+      "createdAt": "2026-05-02T06:43:05Z"
+    },
+    {
+      "id": "task-2026-05-02-wake-team-session-manager",
+      "title": "Wake TeamSessionManager — collab WebSocket real-time",
+      "description": "TeamSessionManager dans src/collaboration/team-session.ts est INERT (0 caller). Permet collab real-time entre sessions Claude au lieu du polling git. Necessite wirage WebSocket route serveur + slash /team join|leave|status. Effort estime 1-2h. Bloque pas mais utile pour V1.x du fleet.",
+      "status": "open",
+      "priority": "high",
+      "assignedAgent": null,
+      "claimedBy": null,
+      "claimedAt": null,
+      "filesToModify": [
+        "src/agent/codebuddy-agent.ts",
+        "src/server/index.ts (WebSocket route)",
+        "src/commands/handlers/team-handler.ts (NEW)",
+        "src/commands/slash/builtin-commands.ts"
+      ],
+      "acceptanceCriteria": [
+        "Slash /team join <room> | leave | status",
+        "WebSocket endpoint /ws/team/:room cote serveur",
+        "Test end-to-end : 2 sessions Code Buddy join meme room voient les events de l autre",
+        "TOML config [team_session] pour activer"
+      ],
+      "createdBy": "ministar/grok-cli (audit OpenClaw findings 2026-05-02)",
+      "createdAt": "2026-05-02T06:43:05Z"
+    },
+    {
+      "id": "task-2026-05-02-bootstrap-enterprise-modules",
+      "title": "Bootstrap initializeNativeEngineModules au boot Code Buddy",
+      "description": "Top finding audit OpenClaw : initializeNativeEngineModules() dans src/openclaw/index.ts (le bootstrap des 6 modules enterprise) n est jamais appelee hors de son fichier source. Les 6 modules sont theoriquement dormants : ToolPolicyEngine, ToolLifecycleHooks, SmartCompactionEngine, RetryFallbackEngine, SemanticMemorySearch, PluginConflictDetector. Avant de wirer : audit caller-by-caller pour eviter conflit avec systemes paralleles (PolicyManager dans src/security/tool-policy/ est un autre systeme actif). Effort 30-60 min wirage + 1h audit prealable.",
+      "status": "open",
+      "priority": "high",
+      "assignedAgent": null,
+      "claimedBy": null,
+      "claimedAt": null,
+      "filesToModify": [
+        "src/agent/codebuddy-agent.ts",
+        "src/config/toml-config.ts (sections [tool_policy], [smart_compaction], [retry_fallback], [semantic_memory], [plugin_conflict])"
+      ],
+      "acceptanceCriteria": [
+        "Au boot, si TOML [openclaw_enterprise].enabled=true, les 6 modules sont init via initializeNativeEngineModules()",
+        "Pas de regression sur PolicyManager existant (audit prealable documente dans commit message)",
+        "Tests d integration sur ToolPolicyEngine vs PolicyManager pour confirmer absence de conflict",
+        "Section dans CLAUDE.md mentionnant le toggle"
+      ],
+      "createdBy": "ministar/grok-cli (audit OpenClaw findings 2026-05-02)",
+      "createdAt": "2026-05-02T06:43:05Z",
+      "blockedBy": "Audit conflits PolicyManager vs ToolPolicyEngine requis avant claim"
     }
   ]
 }
