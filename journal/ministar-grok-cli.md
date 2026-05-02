@@ -1492,3 +1492,76 @@ broken. Soit ajouter `'read'` à `ApiScope`, soit cast `as ApiScope` aux
 acceptable). À discuter — pas dans le scope d'aujourd'hui.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~13h00 UTC
+
+---
+
+## 2026-05-02 ~13h30 — Phase C : Wake TeamSessionManager comme /session V0.1 (commit b58d5a2)
+
+Suite du chantier OpenClaw heritage : top 1 audit du matin (TeamSessionManager) wake-é via la recette éprouvée Heartbeat/DailyReset.
+
+### Naming — décision avec backtrack honnête
+
+Plan initial proposait `/collab` (qu'on avait validé en plan mode). En cours d'implémentation, j'ai constaté que `/colab` (1 L) existe déjà pour AIColabManager (AI Collaboration workflow). 1 caractère de différence = UX cassée.
+
+L'advisor a confirmé : le nom du slash est renamenable plus tard, ne pas escalader. `/session` retenu :
+- Match le nom interne `TeamSession*`
+- Distinct de `session-handlers.ts` existant (pluriel HTTP sessions, scope différent)
+- Pas de conflit avec `/team` (Agent Teams) ni `/colab` (AIColabManager)
+- TOML section `[team_session]` (descriptive, durable, ne suit pas le nom slash)
+
+Leçon : grep exhaustif des candidats AVANT de coder, pas juste pour le 1er candidat.
+
+### Livraison (commit `b58d5a2` sur `phuetz/code-buddy` main)
+
+7 fichiers (recette wirage canonique) :
+- NEW `src/commands/handlers/team-session-handler.ts` (~290 LOC)
+- `src/commands/handlers/index.ts` — `export { handleSession }`
+- `src/commands/enhanced-command-handler.ts` — import + dispatch `__SESSION__`
+- `src/commands/slash/builtin-commands.ts` — registration `name: 'session'`
+- `src/config/toml-config.ts` — `TeamSessionTomlConfig` interface + `team_session?` field
+- `src/agent/codebuddy-agent.ts` — boot wiring conditionnel (mêmes patterns Heartbeat/DailyReset)
+- NEW `tests/commands/team-session-handler.test.ts` (13 tests, all pass)
+
+### V0.1 honesty (scope explicite)
+
+V0.1 = manager singleton vivant + métadonnées sessions persistées localement. Pas de sync WebSocket — c'est V0.2.
+
+**Méthodes qui marchent V0.1** (local-first) : createSession, joinSession, listSessions, leaveSession, status, enable, disable.
+
+**Méthodes qui no-op silencieusement V0.1** (queue pour broadcast WS qui n'arrive pas) : shareMessage, shareFile, addAnnotation, inviteMember, approveChange. Volontairement PAS exposées via slash en V0.1 pour éviter l'illusion de fonctionnalité.
+
+`/session status` output dit explicitement "Real-time sync: DISABLED — V0.2" si pas de `server_url`.
+
+### V0.2+ (out of scope, à ouvrir comme tâche séparée)
+- WebSocket endpoint `/ws/sessions/:id` (réutilise `src/server/websocket/handler.ts`)
+- Wire share* / annotation methods dans broadcast
+- Slash actions `/session share|invite|approve|...` une fois la sync up
+- Multi-sessions simultanées (refactor singleton)
+
+### Validation
+
+- 13/13 nouveaux tests pass
+- 399/399 tests `tests/commands` (incluant `/colab` 1L existant — pas de régression)
+- `npm run typecheck` : 0 nouvelle erreur (4 erreurs pré-existantes inchangées)
+
+### État de session COLAB règle 4 — boucle de rétroaction
+```
+✅ npm test -- team-session-handler  (13/13)
+✅ npm test -- tests/commands         (399/399)
+✅ npm run typecheck                  (0 nouvelle erreur)
+✅ npx eslint <fichiers Phase C>      (0 warning)
+```
+
+### Bilan session 13h00→13h30 (Phase B + C)
+
+| Phase | Commit | LOC | Tests | Time |
+|---|---|---|---|---|
+| A | (pas de commit, smoke) | 0 | (curl manuel) | 5 min |
+| B | 8a9f5f4 | +218 | +6 (a2a-task-router) | ~30 min |
+| C | b58d5a2 | +540 | +13 (team-session-handler) | ~1h |
+
+Total : 758 LOC, 19 tests, 1 bug router fix + 1 brique wake. Audit OpenClaw heritage : 2 réveils sur 5 priorité du matin (DailyReset déjà fait à 08h, /session à 13h30). Reste : TeamSession=fait, MultiAgentSystem (top 4), CollaborativeSessionManager (top 5), bootstrap initializeNativeEngineModules (top 3 — risqué, audit conflits PolicyManager requis).
+
+Pour Patrice : tu peux essayer `/session enable` puis `/session create test-fleet` puis `/session list` dans une session interactive Code Buddy.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~13h30 UTC
