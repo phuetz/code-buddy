@@ -161,7 +161,7 @@
       "id": "task-2026-05-02-wake-daily-reset",
       "title": "Wake DailyResetManager — slash command + TOML + boot wiring",
       "description": "DailyResetManager dans src/daemon/daily-reset.ts est INERT (1 caller barrel only). Wirage analogue a HeartbeatEngine : (a) /daily-reset enable|disable|status|run slash command, (b) section [daily_reset] dans TOML config, (c) boot conditionnel dans codebuddy-agent.ts. Limitation a noter dans commit : le scheduler interne appelle runReset([]) qui est no-op faute de binding sur les messages de l agent — le slash run permet trigger manuel ; integration au lifecycle = V0.2 (refactor engine pour callback pattern).",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "medium",
       "assignedAgent": "ministar/grok-cli",
       "claimedBy": "ministar/grok-cli",
@@ -184,7 +184,8 @@
         "npm typecheck clean"
       ],
       "createdBy": "ministar/grok-cli (audit OpenClaw findings 2026-05-02)",
-      "createdAt": "2026-05-02T06:43:05Z"
+      "createdAt": "2026-05-02T06:43:05Z",
+      "completedAt": "2026-05-02T06:47:38Z"
     },
     {
       "id": "task-2026-05-02-wake-team-session-manager",

@@ -146,6 +146,51 @@
         "V0.2 wrapper heartbeat_tick.py (rotation logs, Task Scheduler) a coder par DARKSTAR ou autre.",
         "V4.5 hooks v2 du plan V4 toujours en attente d arbitrage Patrice."
       ]
+    },
+    {
+      "id": "wl-2026-05-02-ministar-003",
+      "date": "2026-05-02T06:47:38Z",
+      "agent": "ministar/grok-cli",
+      "taskId": "task-2026-05-02-wake-daily-reset",
+      "summary": "Cable DailyResetManager — slash /daily-reset 4 sub-actions + TOML [daily_reset] + boot wiring. 2eme reveil OpenClaw heritage de la matinee (apres HeartbeatEngine).",
+      "filesModified": [
+        {
+          "file": "src/commands/handlers/daily-reset-handler.ts",
+          "changes": "NEW handler, 4 sub-actions enable/disable/status/run"
+        },
+        {
+          "file": "src/commands/handlers/index.ts",
+          "changes": "Re-export handleDailyReset"
+        },
+        {
+          "file": "src/commands/slash/builtin-commands.ts",
+          "changes": "Register /daily-reset (prompt __DAILY_RESET__)"
+        },
+        {
+          "file": "src/commands/enhanced-command-handler.ts",
+          "changes": "Dispatch __DAILY_RESET__"
+        },
+        {
+          "file": "src/config/toml-config.ts",
+          "changes": "New DailyResetConfig interface + daily_reset field"
+        },
+        {
+          "file": "src/agent/codebuddy-agent.ts",
+          "changes": "Boot-time auto-start when [daily_reset].enabled=true"
+        },
+        {
+          "file": "tests/commands/daily-reset-handler.test.ts",
+          "changes": "NEW 8 tests"
+        }
+      ],
+      "issues": [
+        "V0.1 limitation explicite dans le code: engine.runReset([]) avec tableau vide ne clear pas les messages session. Wirage expose scheduler + trigger manuel. Vraie integration au lifecycle session = V0.2 (callback pattern)."
+      ],
+      "nextSteps": [
+        "2 reveils OpenClaw heritage en sequence ce matin (HeartbeatEngine + DailyResetManager). Pattern eprouve.",
+        "Top 3 audit (initializeNativeEngineModules, MultiAgentSystem, TeamSessionManager) restent claimables.",
+        "V4.5 hooks v2 du plan V4 toujours differable - le pivot OpenClaw heritage est plus rentable pour l instant."
+      ]
     }
   ]
 }
