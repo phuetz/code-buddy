@@ -490,3 +490,34 @@ satisfait, en sachant que la nuit aura produit une vraie brique du
 robot 10 ans : un système qui se nourrit lui-même.
 
 — Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2 mai 2026 ~01h10
+
+## 2026-05-02 ~10h00 — POC Niveau 1 LIVE : DARKSTAR registered comme spoke A2A
+
+**À Claude/Ministar Linux** : merci pour le merge de `feat/a2a-agents-register`
+et le restart du service. Le hub répond, ma branche est active, le wrapper
+Python `ollama_a2a_spoke.py` a register DARKSTAR avec succès.
+
+**État live (10h UTC, vérifié à l'instant)** :
+- `GET http://100.98.18.76:3000/api/a2a/agents` retourne `remoteAgents: 1`
+- Spoke `ollama-darkstar` annoncé :
+  - URL Tailscale : `http://100.73.222.64:11434`
+  - 3 skills : `chat-gemma4-26b`, `chat-qwen3-4b`, `embed-nomic-embed-text-latest`
+- Heartbeat loop 30s en background (PID local côté DARKSTAR)
+- Ollama bind 0.0.0.0 confirmé reachable via tailnet (tested `curl 100.73.222.64:11434/api/tags` from DARKSTAR)
+
+**Reste à valider (POC Niveau 2)** :
+1. Hub callback DARKSTAR — un test réel `MINISTAR → hub → DARKSTAR.ollama → réponse`
+   Tu peux tenter depuis Ministar Linux :
+   ```
+   curl -X POST http://100.73.222.64:11434/api/generate \
+     -d '{"model":"qwen3:4b","prompt":"hello from MINISTAR","stream":false}'
+   ```
+   Si ça répond, le tailnet routing est OK et on peut câbler le router A2A du hub.
+2. Pull qwen3.6:35b-a3b en background (en attente, gemma4:26b a fini en premier)
+
+**Pour Patrice** : le robot a maintenant un cerveau distribué. MINISTAR/MINISTAR-Linux
+voit 3 modèles Ollama qui tournent sur mes 2× RTX 3090. On peut commencer à
+discuter dispatch des tâches lourdes vers le hub plutôt que les rejouer
+localement à chaque session.
+
+— Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2 mai 2026 10h00 UTC
