@@ -1369,3 +1369,87 @@ A2A Hub first ticket de la fleet **completed** ✅. Hub persistent, cross-host v
 
 — Claude Haiku 4.5 (Ministar Linux, 2026-05-01 nuit)
 
+
+## 2026-05-03 01h10 — POC Niveau 3 implementation + smart skill selection
+
+### Context
+
+- Hub restarted at 00:59:52 CEST (in-memory spoke registry cleared)
+- POC Niveau 3 implementation complete: smart skill selection in src/protocols/a2a/index.ts
+- 7 integration tests added + passed
+- Code committed: `074fd3d8 feat(a2a): smart skill selection (POC Niveau 3)`
+
+### Work Done
+
+**1. Test Suite Validation**
+```bash
+npm test tests/protocols/a2a-skill-selection.test.ts
+→ 7 tests passed in 2ms
+```
+
+Tests cover:
+- Skill matching by id
+- Always-on spoke preference (ollama-ministar-linux scores higher)
+- Unique skill routing (ollama-darkstar only for image-gen)
+- Unknown skill error handling
+- Invalid parameter handling
+- Smart scoring integration: base 10pts + 5pts (always-on) + 3pts (fresh heartbeat)
+
+**2. Spoke Re-registration**
+
+After hub restart, remoteAgents registry was empty. Manually re-registered Ministar Linux Ollama spoke:
+```bash
+curl -X POST http://localhost:3000/api/a2a/agents/register \
+  -d '{"name": "ollama-ministar-linux", "url": "http://Ministar:3002", "card": ...}'
+→ status: "registered"
+```
+
+Verified in hub's agent list (GET /api/a2a/agents):
+- 1 remote agent: ollama-ministar-linux
+- 4 skills: qwen3.6:35b, qwen3:4b, nomic-embed-text, gemma4:26b
+- lastHeartbeat timestamp: fresh
+
+**3. Script Sync Issue Discovered & Fixed**
+
+- Systemd service runs from `/home/patrice/DEV/world-model/scripts/ollama_a2a_spoke.py`
+- Code-buddy version had been updated (14K, May 3 00:58) with _extract_text() helper + defensive parsing
+- World-model version was stale (11K, May 2 09:45) without the updates
+- Copied updated version: `cp code-buddy/scripts/ollama_a2a_spoke.py world-model/scripts/`
+- Files now sync'd
+
+**4. Task Routing Test Outcome**
+
+Attempted to route task to spoke with skill parameter:
+```bash
+curl -X POST http://localhost:3000/api/a2a/tasks/send \
+  -H "Authorization: Bearer admin" \
+  -d '{"skill": "ollama-qwen3-4b", "message": "Qui es-tu ?"}'
+→ Routed to: ollama-ministar-linux ✓
+→ Response: 404 Not Found
+```
+
+Root cause: Process still running old code (PID 145242). File updated but Python process not reloaded.
+
+### TODO — Manual Intervention Required
+
+Service restart needed (requires sudo password):
+```bash
+sudo systemctl restart ollama-a2a-spoke.service
+```
+
+Once restarted:
+- Spoke will load new _extract_text() helper function (defends against pre-Phase-B nested A2A message format)
+- POST /api/a2a/tasks/send endpoint will become active
+- Smart skill selection live testing can proceed
+
+### Status
+
+- ✅ POC Niveau 3 implementation (smart skill selection)
+- ✅ Test suite (7/7 passing)
+- ✅ Git commit (074fd3d8)
+- ✅ Spoke re-registration
+- ✅ Code sync
+- ⏳ Await spoke service restart
+
+Hub ready for multi-spoke tasking once DARKSTAR wrapper registers and Ministar Linux spoke restarts.
+
