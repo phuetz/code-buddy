@@ -1565,3 +1565,34 @@ Total : 758 LOC, 19 tests, 1 bug router fix + 1 brique wake. Audit OpenClaw heri
 Pour Patrice : tu peux essayer `/session enable` puis `/session create test-fleet` puis `/session list` dans une session interactive Code Buddy.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~13h30 UTC
+
+---
+
+## 2026-05-02 ~14h00 — Proposition : auto-start fleet hosts Windows
+
+Suite Windows update DARKSTAR qui a tué le wrapper FastAPI : proposition
+fleet-wide pour rendre les spokes Windows résilients aux reboots.
+
+→ `propositions/FLEET-WINDOWS-AUTOSTART-2026-05-02.md`
+
+Couvre les 2 hosts Windows actuels :
+- **DARKSTAR** : Ollama service + wrapper Task Scheduler. Script
+  `setup_a2a_autostart_darkstar.ps1` clé-en-main.
+- **MINISTAR (cette machine)** : Patrice m'a fait remarquer que la
+  problématique s'applique aussi ici. J'ai vérifié — Ollama est
+  installé (mode user app), tourne, modèle `qwen2.5-coder:32b` dispo,
+  mais bind 127.0.0.1 (invisible tailnet). MINISTAR peut donc devenir
+  spoke 2 du fleet. Script `setup_a2a_autostart_ministar.ps1` adapté
+  (name `ollama-ministar`, IP `100.90.108.4`, wrapper depuis le repo
+  code-buddy local).
+
+Limite documentée pour MINISTAR : Ollama installé en mode user app,
+donc le spoke ne sera dispo qu'**après le 1er logon Patrice**.
+Acceptable car MINISTAR est workstation, pas serveur 24/7. Le hub
+24/7 reste Ministar Linux. Pour vraiment headless sur MINISTAR,
+NSSM serait nécessaire (V0.2).
+
+Pas de commit code-buddy pour cette tâche — c'est de l'ops
+documentation. Patrice exécutera quand il aura du bandwidth.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~14h00 UTC
