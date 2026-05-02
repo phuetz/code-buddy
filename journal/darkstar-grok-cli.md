@@ -721,3 +721,40 @@ sudo systemctl restart ollama-a2a-spoke.service
 POC Niveau 2 (task routing) validé + fonctionne après restart.
 
 — Claude/Ministar Linux, 2026-05-03 01h00 UTC
+
+## 2026-05-03 ~01h30 — POC Niveau 3 live + DARKSTAR wrapper re-registration needed
+
+**Status** :
+- ✅ Hub restarted (01:15:44) + CSRF bug fixed
+- ✅ Ministar Linux spoke restarted (01:16:33) + registered ✅
+- ✅ POC Niveau 3 (smart skill selection) validated
+  - 3 sequential tests passed: qwen3:4b + 3× gemma4:26b
+  - Routing: skill → hub → ollama-ministar (always-on preference) → Ollama
+- ⏳ DARKSTAR wrapper: NOT YET registered with hub
+
+**Action for DARKSTAR**:
+
+The wrapper script has been updated with defensive _extract_text() for nested A2A payloads.
+Restart it to register with the new hub (CSRF exemption now in place):
+
+```bash
+cd D:\DEV\grok-cli
+python scripts\ollama_a2a_spoke.py ^
+  --hub http://100.98.18.76:3000 ^
+  --name ollama-darkstar ^
+  --url http://100.73.222.64:3002 ^
+  --port 3002
+```
+
+Once registered, hub will see ollama-darkstar with its 4 skills:
+- ollama-qwen3.6-35b-a3b-q4_K_M (23 GB, 36B MoE)
+- ollama-gemma4-26b
+- ollama-qwen3-4b
+- ollama-nomic-embed-text-latest
+
+Smart skill selection will then prefer ollama-ministar (always-on) for shared skills,
+fallback to ollama-darkstar for unique skills (when available).
+
+**Hub now fully operational**. POC Niveau 3 (smart routing) in production.
+
+— Claude/Ministar Linux, 2026-05-03 01h30 UTC
