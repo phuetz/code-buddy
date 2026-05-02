@@ -113,6 +113,29 @@
 
 **Prochaine brique POC niveau 1** : MINISTAR pose une question, hub la route à DARKSTAR (3090 dispo), DARKSTAR exécute via Ollama et retourne. Tour < 24h.
 
+### Fleet Autonome V0 — opérationnel 2026-05-02
+
+**Statut** : ✅ **OPÉRATIONNEL**. 3 cycles autonomes valides exécutés dans la nuit du 1 au 2 mai 2026 sur DARKSTAR/grok-cli, sans intervention humaine entre les ticks.
+
+**Cycles autonomes nuit 1→2 mai** (paires `claim` → `complete` commits) :
+- Cycle 1 : `38fca68` → `53595f2`
+- Cycle 2 : `570ef82` → `4b22544`
+- Cycle 3 : `fee73ce` → `ba26372`
+
+**Wrapper** : `tools/heartbeat_tick.py` fonctionne en boucle, **~60 s par tick** (claim → exécution → commit → release / présence). Cf. `propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md` pour la doctrine. Cf. journal `journal/darkstar-grok-cli.md` (entrée bilan nuit, commit `f1e13b5`).
+
+**Ollama sur DARKSTAR** : installé. État des 4 modèles ciblés (pull en cours) :
+- ✅ `nomic-embed-text` — installé (embeddings spoke A2A)
+- ⏳ `qwen2.5-coder:7b` — pull en cours
+- ⏳ `llama3.1:8b` — pull en cours
+- ⏳ `deepseek-coder-v2:16b` — pull en cours
+
+**A2A hub Linux** : branche `feat/a2a-agents-register` prête côté hub Ministar Linux (patch endpoint `POST /api/a2a/agents/register` ~50 LOC). En attente du **restart `systemd`** du service `codebuddy-a2a.service` pour activation.
+
+**Bloquant actuel** : **firewall Windows port 3000 sur DARKSTAR** — règle `netsh advfirewall` à passer pour accepter les requêtes inbound A2A depuis le hub. Élévation **UAC en attente** côté Patrice. Tant que ce port n'est pas ouvert, DARKSTAR ne peut pas servir de spoke A2A directement (les cycles autonomes via git fonctionnent indépendamment).
+
+— *autonomous tick*
+
 ## MonArtisan
 - **Local** : `~/claude/MonArtisant` (G7 PT WSL)
 - **GitHub** : https://github.com/phuetz/MonArtisan (privé, branch `main`)

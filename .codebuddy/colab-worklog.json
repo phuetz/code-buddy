@@ -60,6 +60,26 @@
         "Au prochain tick, rafraÃ®chir ce fichier si Ã©tat fleet Ã©volue"
       ],
       "elapsedSeconds": 72.7
+    },
+    {
+      "id": "wl-task-2026-05-02-etat-projets-fleet-1777699516",
+      "date": "2026-05-02T05:25:16Z",
+      "agent": "darkstar/grok-cli",
+      "taskId": "task-2026-05-02-etat-projets-fleet",
+      "summary": "Ajout d'une sous-section '### Fleet Autonome V0 â€” opÃ©rationnel 2026-05-02' Ã  la section 'RÃ©seau de Claudes / Fleet' de etat_projets.md, documentant les 3 cycles autonomes nuit 1-2 mai (commits 38fca68/53595f2, 570ef82/4b22544, fee73ce/ba26372), le wrapper tools/heartbeat_tick.py ~60s/tick, l'Ã©tat des 4 modÃ¨les Ollama sur DARKSTAR (nomic-embed-text installÃ©, 3 autres en pull), la branche feat/a2a-agents-register en attente de restart systemd hub Linux, et le bloquant firewall port 3000 DARKSTAR (UAC en attente). SignÃ© 'autonomous tick'.",
+      "filesModified": [
+        {
+          "file": "etat_projets.md",
+          "changes": "Append d'une sous-section ### Fleet Autonome V0 entre 'Prochaine brique POC niveau 1' et '## MonArtisan' â€” ~25 lignes ajoutÃ©es, format existant respectÃ© (bullets + emphase markdown)."
+        }
+      ],
+      "issues": [],
+      "nextSteps": [
+        "Ouvrir le port 3000 sur DARKSTAR (UAC firewall) pour activer le spoke A2A",
+        "Restart systemd codebuddy-a2a.service cÃ´tÃ© Ministar Linux aprÃ¨s merge feat/a2a-agents-register",
+        "ComplÃ©ter le pull des 3 modÃ¨les Ollama restants (qwen2.5-coder:7b, llama3.1:8b, deepseek-coder-v2:16b)"
+      ],
+      "elapsedSeconds": 48.5
     }
   ]
 }

@@ -72,12 +72,12 @@
       "id": "task-2026-05-02-etat-projets-fleet",
       "title": "Update etat_projets.md section Fleet avec status Fleet Autonome V0",
       "description": "Lire claude-et-patrice/etat_projets.md section 'Réseau de Claudes / Fleet'. La mettre à jour pour refléter l'état au matin du 2 mai 2026 : (1) Fleet Autonome V0 OPÉRATIONNEL (3 cycles autonomes valides nuit du 1-2 mai, commits 38fca68/53595f2, 570ef82/4b22544, fee73ce/ba26372). (2) Wrapper tools/heartbeat_tick.py marche, ~60s par tick. (3) Ollama installé sur DARKSTAR, en cours de pull des 4 modèles. (4) Branche feat/a2a-agents-register prête sur le hub Linux, attente restart systemd. (5) Bloquant : firewall port 3000 sur DARKSTAR (UAC en attente). Garder le format existant de la section, append si nécessaire. Signer 'autonomous tick'.",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "low",
       "assignedAgent": null,
       "claimedBy": "darkstar/grok-cli",
       "claimedAt": "2026-05-02T05:24:24Z",
-      "completedAt": null,
+      "completedAt": "2026-05-02T05:25:16Z",
       "filesToModify": [
         "etat_projets.md"
       ],
