@@ -10,9 +10,9 @@
     },
     "ministar/grok-cli": {
       "host": "ministar/grok-cli",
-      "lastSeen": "2026-05-02T05:45:51Z",
+      "lastSeen": "2026-05-02T05:59:01Z",
       "status": "active",
-      "currentTask": null
+      "currentTask": "task-2026-05-02-wire-heartbeat-activation"
     }
   }
 }

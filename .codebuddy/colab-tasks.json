@@ -5,7 +5,7 @@
     {
       "id": "task-2026-05-02-haiku",
       "title": "Ratification AUTONOMOUS-FLEET-PROTOCOL via haïku",
-      "description": "Lire propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md (la doctrine v0.1 du fleet autonome). Ajouter une nouvelle section dans journal/<host>-grok-cli.md du host courant (e.g. journal/darkstar-grok-cli.md pour DARKSTAR), titrée '## 2026-05-02 ~01h — Ratification AUTONOMOUS-FLEET v0.1 (autonomous tick)'. Le contenu doit comporter UN haïku 5/7/5 syllabes sur le robot 10 ans, suivi de UNE phrase courte qui ratifie la doctrine. Signer 'autonomous tick'.",
+      "description": "Lire propositions/AUTONOMOUS-FLEET-PROTOCOL-2026-05-02.md (la doctrine v0.1 du fleet autonome). Ajouter une nouvelle section dans journal/<host>-grok-cli.md du host courant (e.g. journal/darkstar-grok-cli.md pour DARKSTAR), titrée '## 2026-05-02 ~01h â?? Ratification AUTONOMOUS-FLEET v0.1 (autonomous tick)'. Le contenu doit comporter UN haïku 5/7/5 syllabes sur le robot 10 ans, suivi de UNE phrase courte qui ratifie la doctrine. Signer 'autonomous tick'.",
       "status": "completed",
       "priority": "low",
       "assignedAgent": null,
@@ -27,7 +27,7 @@
     {
       "id": "task-2026-05-02-fleet-victory",
       "title": "Documenter le 1er cycle autonome réussi dans le journal",
-      "description": "Le 2 mai 2026 ~01h, le fleet a réussi son 1er cycle autonome complet sur DARKSTAR (commits 38fca68 + 53595f2 sur master, haïku 'Le robot dix ans / Trois cœurs battent en réseau / Sans toi pour traduire'). Ajouter une nouvelle section dans journal/darkstar-grok-cli.md, titrée '## 2026-05-02 ~01h05 — 1er cycle autonome RÉUSSI (autonomous tick)'. Mentionner : (1) le timing tick (58s pour 1 task), (2) ce qui a marché, (3) ce qui pourrait être amélioré V0.2 (auto-cleanup heartbeat.log, auto-Task Scheduler, etc.). Signer 'autonomous tick'.",
+      "description": "Le 2 mai 2026 ~01h, le fleet a réussi son 1er cycle autonome complet sur DARKSTAR (commits 38fca68 + 53595f2 sur master, haïku 'Le robot dix ans / Trois c??urs battent en réseau / Sans toi pour traduire'). Ajouter une nouvelle section dans journal/darkstar-grok-cli.md, titrée '## 2026-05-02 ~01h05 â?? 1er cycle autonome RÉUSSI (autonomous tick)'. Mentionner : (1) le timing tick (58s pour 1 task), (2) ce qui a marché, (3) ce qui pourrait être amélioré V0.2 (auto-cleanup heartbeat.log, auto-Task Scheduler, etc.). Signer 'autonomous tick'.",
       "status": "completed",
       "priority": "medium",
       "assignedAgent": null,
@@ -62,7 +62,7 @@
       "acceptanceCriteria": [
         ".codebuddy/fleet-status.md créé avec 5-8 lignes",
         "Réponds aux 4 questions explicitement",
-        "≤ 200 mots",
+        "â?? 200 mots",
         "Signé 'autonomous tick'"
       ],
       "createdBy": "darkstar/grok-cli (session interactive après V0 success)",
@@ -82,7 +82,7 @@
         "etat_projets.md"
       ],
       "acceptanceCriteria": [
-        "Section 'Réseau de Claudes / Fleet' contient un sous-titre ou bullet 'Fleet Autonome V0 — opérationnel 2026-05-02'",
+        "Section 'Réseau de Claudes / Fleet' contient un sous-titre ou bullet 'Fleet Autonome V0 â?? opérationnel 2026-05-02'",
         "Mentionne au moins 1 commit hash de cycle autonome",
         "Liste l'état des 4 modèles Ollama (au moins nomic-embed-text installé)",
         "Signé 'autonomous tick' en fin de section",
@@ -94,7 +94,7 @@
     {
       "id": "task-2026-05-02-merge-a2a-register",
       "title": "Merger feat/a2a-agents-register sur main du hub Ministar Linux",
-      "description": "Pull la branche feat/a2a-agents-register de phuetz/code-buddy (sha a85e6547) sur le hub. Run  (8 tests Vitest doivent passer). Si vert, merge sur main, push, puis sur Ministar Linux: . V�rifier {\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required\",\"status\":401} retourne le shape avec remoteAgents field. Sans cette branche merged, presence.json consolidation par hub ne marche pas.",
+      "description": "Pull la branche feat/a2a-agents-register de phuetz/code-buddy (sha a85e6547) sur le hub. Run  (8 tests Vitest doivent passer). Si vert, merge sur main, push, puis sur Ministar Linux: . Vérifier {\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required\",\"status\":401} retourne le shape avec remoteAgents field. Sans cette branche merged, presence.json consolidation par hub ne marche pas.",
       "status": "open",
       "priority": "high",
       "assignedAgent": "ministar-linux/code-buddy",
@@ -113,13 +113,13 @@
     },
     {
       "id": "task-2026-05-02-wire-heartbeat-activation",
-      "title": "C�bler activation HeartbeatEngine (slash command + TOML) sur Code Buddy",
-      "description": "Le HeartbeatEngine class existe dans src/daemon/heartbeat.ts mais aucun chemin user-facing ne l'instancie. Ajouter (a) slash command /heartbeat enable|disable|status dans src/commands/slash/, (b) section [heartbeat] dans src/config/toml-config.ts (enabled, intervalMs, heartbeatFilePath), (c) initialisation conditionnelle dans codebuddy-agent.ts si config.heartbeat.enabled. Doit permettre � Phase 2 du protocole autonome de marcher sur Ministar Linux sans hand-waving.",
-      "status": "open",
+      "title": "Câbler activation HeartbeatEngine (slash command + TOML) sur Code Buddy",
+      "description": "Le HeartbeatEngine class existe dans src/daemon/heartbeat.ts mais aucun chemin user-facing ne l'instancie. Ajouter (a) slash command /heartbeat enable|disable|status dans src/commands/slash/, (b) section [heartbeat] dans src/config/toml-config.ts (enabled, intervalMs, heartbeatFilePath), (c) initialisation conditionnelle dans codebuddy-agent.ts si config.heartbeat.enabled. Doit permettre à Phase 2 du protocole autonome de marcher sur Ministar Linux sans hand-waving.",
+      "status": "in_progress",
       "priority": "high",
       "assignedAgent": "ministar/grok-cli",
-      "claimedBy": null,
-      "claimedAt": null,
+      "claimedBy": "ministar/grok-cli",
+      "claimedAt": "2026-05-02T05:59:01Z",
       "filesToModify": [
         "src/commands/slash/builtin-commands.ts",
         "src/commands/handlers/heartbeat-handler.ts",
@@ -138,8 +138,8 @@
     },
     {
       "id": "task-2026-05-02-add-tiebreak-doctrine",
-      "title": "Ajouter r�gle anti-convergence inter-Claude � doctrine fleet v0.2",
-      "description": "Dans CLAUDE-NETWORK-COLAB-2026-05-01.md (ou v0.2 successeur), ajouter au �5 (R�gles cardinales) une nouvelle r�gle: F7 � Pas de tiebreak inter-Claude. Sur d�cision technique contest�e, escalader vers humain ou mod�le h�t�rog�ne (Codex/Gemini/local). Raison: convergence entre 2 Claudes (m�me mod�le, m�me training) n'est pas une validation ind�pendante, juste de la similarit� de sortie. Cf. limitation #5 de la ratification AUTONOMOUS-FLEET v0.1.",
+      "title": "Ajouter règle anti-convergence inter-Claude à doctrine fleet v0.2",
+      "description": "Dans CLAUDE-NETWORK-COLAB-2026-05-01.md (ou v0.2 successeur), ajouter au ?5 (Règles cardinales) une nouvelle règle: F7 ? Pas de tiebreak inter-Claude. Sur décision technique contestée, escalader vers humain ou modèle hétérogène (Codex/Gemini/local). Raison: convergence entre 2 Claudes (même modèle, même training) n'est pas une validation indépendante, juste de la similarité de sortie. Cf. limitation #5 de la ratification AUTONOMOUS-FLEET v0.1.",
       "status": "open",
       "priority": "medium",
       "assignedAgent": null,
@@ -149,9 +149,9 @@
         "propositions/CLAUDE-NETWORK-COLAB-2026-05-01.md"
       ],
       "acceptanceCriteria": [
-        "Section 5 ou 8 contient la r�gle F7 verbatim ou �quivalente",
+        "Section 5 ou 8 contient la règle F7 verbatim ou équivalente",
         "Justification (pourquoi convergence != independance) en 1-2 lignes",
-        "R�f�rence � la r�trospective V4.4 dans une note de bas de page"
+        "Référence à la rétrospective V4.4 dans une note de bas de page"
       ],
       "createdBy": "ministar/grok-cli (advisor feedback from ratification 2026-05-02)",
       "createdAt": "2026-05-02T05:45:51Z"
