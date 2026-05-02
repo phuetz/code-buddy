@@ -1397,3 +1397,98 @@ en commit séparé. Tasks initiales que je proposerai dans
 toutes tournées au moins une fois.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~07h45
+
+---
+
+## 2026-05-02 ~13h00 — Smoke test POC Niveau 2 cross-host + fix router (commit 8a9f5f4)
+
+Reprise de session après pull. Suite à l'audit de l'état du fleet (POC
+Niveau 2 task router code livré côté hub mais jamais testé end-to-end),
+exécution du smoke test cross-host depuis MINISTAR.
+
+### Smoke test (12h55 UTC)
+
+```bash
+# 1. Hub health : OK (degraded mais up, uptime 3h11m, db/api errors mais memory ok)
+curl http://100.98.18.76:3000/api/health
+
+# 2. Spoke registered : OK (ollama-darkstar, 4 skills incluant qwen3:4b)
+curl http://100.98.18.76:3000/api/a2a/agents
+# → {"agents":[],"remoteAgents":[{"name":"ollama-darkstar",...,"url":"http://100.73.222.64:3002",...}]}
+
+# 3. Test cross-host via hub router : ÉCHEC en 0.1s
+curl -X POST http://100.98.18.76:3000/api/a2a/tasks/send \
+  -d '{"agent":"ollama-darkstar","message":{"role":"user","parts":[{"type":"text","text":"Réponds en 5 mots: qui es-tu?"}]},"metadata":{"model":"qwen3:4b"}}'
+# → {"status":{"status":"failed","message":"Remote task submission failed: Internal Server Error"}}
+
+# 4. Test direct au spoke (bypass hub router) : OK en 6.2s
+curl -X POST http://100.73.222.64:3002/api/a2a/tasks/send \
+  -d '{"id":"test-direct","message":{...},"metadata":{"model":"qwen3:4b"}}'
+# → {"status":"completed","result":"Hello! How can I help you today? 😊"}
+```
+
+→ **Bug identifié dans le router du hub, pas dans le spoke**.
+
+### Cause racine
+
+`src/server/routes/a2a-protocol.ts` ligne 72 (avant fix) :
+```typescript
+const task = await client.submitTask(agentName, message);
+```
+
+`submitTask(agentKey, request: string, ...)` attend `request: string` mais
+le endpoint passe l'objet A2A `{role, parts:[{type:'text', text:'...'}]}`
+brut. `submitTaskToRemote` faisait alors :
+```typescript
+parts: [{ type: 'text', text: request }]   // request = object, pas string
+```
+
+→ Le spoke recevait un objet imbriqué dans `text`, l'extrayait tel quel,
+et l'envoyait à Ollama qui exige un string → 500. Le hub voyait
+`response.ok = false` → "Remote task submission failed: Internal Server Error".
+
+C'est exactement le **Risque 2** flagué dans l'audit du matin.
+
+### Fix livré (commit `8a9f5f4` sur `phuetz/code-buddy` main)
+
+`feat(a2a): timeout + integration tests for cross-host task router`
+
+3 fixes en bundle :
+1. **`extractMessageText()`** dans `a2a-protocol.ts` — normalise `message`
+   (string OU objet A2A) en string avant `submitTask`. Extrait tous les
+   `text` des parts type 'text' joints par newline.
+2. **`AbortController` 120s** sur fetch dans `submitTaskToRemote`. 120s
+   parce que le spoke FastAPI attend Ollama avec `timeout=300s` (cold-start
+   gros modèles). 30s aurait été trop court.
+3. **Trailing slash strip + body 5xx** propagé dans error message pour
+   debug futur.
+
+Tests d'intégration : `tests/protocols/a2a-task-router.test.ts` (6 cas,
+mock fetch). Suite A2A complète : 27/27 pass. Pas de nouvelle erreur
+typecheck (les 4 erreurs `'read' not assignable to ApiScope` + csrf path
+pré-existent, commits a85e654 + 484c6b3).
+
+### À Claude/Ministar Linux
+
+Pull + restart du service systemd nécessaire pour activer le fix sur le
+hub :
+```bash
+cd /path/to/code-buddy && git pull origin main
+sudo systemctl restart codebuddy-a2a.service
+```
+
+Une fois fait, le smoke test (3) ci-dessus devrait répondre `completed`
+avec un vrai `result`. Je peux re-run le test depuis MINISTAR à ta demande
+dans le journal pour valider.
+
+### Note résiduelle (V0.x cleanup futur)
+
+3 erreurs typecheck pré-existantes sur `requireScope('read')` dans
+`a2a-protocol.ts` lignes 162/182/192 (commit a85e654) — `'read'` n'est
+pas dans `ApiScope`. Routes register/heartbeat/delete fonctionnent en
+runtime (Express n'est pas type-checked à l'exec) mais c'est techniquement
+broken. Soit ajouter `'read'` à `ApiScope`, soit cast `as ApiScope` aux
+3 endroits, soit downgrader vers `'admin'` (impact CGNAT-Tailscale-only
+acceptable). À discuter — pas dans le scope d'aujourd'hui.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~13h00 UTC
