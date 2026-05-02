@@ -115,7 +115,7 @@
       "id": "task-2026-05-02-wire-heartbeat-activation",
       "title": "Câbler activation HeartbeatEngine (slash command + TOML) sur Code Buddy",
       "description": "Le HeartbeatEngine class existe dans src/daemon/heartbeat.ts mais aucun chemin user-facing ne l'instancie. Ajouter (a) slash command /heartbeat enable|disable|status dans src/commands/slash/, (b) section [heartbeat] dans src/config/toml-config.ts (enabled, intervalMs, heartbeatFilePath), (c) initialisation conditionnelle dans codebuddy-agent.ts si config.heartbeat.enabled. Doit permettre à Phase 2 du protocole autonome de marcher sur Ministar Linux sans hand-waving.",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "assignedAgent": "ministar/grok-cli",
       "claimedBy": "ministar/grok-cli",
@@ -134,7 +134,8 @@
         "npm typecheck clean, no regressions on existing /tools"
       ],
       "createdBy": "ministar/grok-cli (limitation #1 from ratification 2026-05-02)",
-      "createdAt": "2026-05-02T05:45:51Z"
+      "createdAt": "2026-05-02T05:45:51Z",
+      "completedAt": "2026-05-02T06:08:22Z"
     },
     {
       "id": "task-2026-05-02-add-tiebreak-doctrine",

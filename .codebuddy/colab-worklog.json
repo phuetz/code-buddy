@@ -101,6 +101,51 @@
       "nextSteps": [
         "Awaiting Patrice arbitration: continue V4.5 hooks v2 OR claim wire-heartbeat-activation OR something else"
       ]
+    },
+    {
+      "id": "wl-2026-05-02-ministar-002",
+      "date": "2026-05-02T06:08:22Z",
+      "agent": "ministar/grok-cli",
+      "taskId": "task-2026-05-02-wire-heartbeat-activation",
+      "summary": "Cable activation HeartbeatEngine — slash command /heartbeat + TOML [heartbeat] + boot wiring. Phase 2 du protocole autonome debloque cote Code Buddy.",
+      "filesModified": [
+        {
+          "file": "src/commands/handlers/heartbeat-handler.ts",
+          "changes": "NEW handler, 3 sub-actions enable/disable/status, defensive TOML config plumbing"
+        },
+        {
+          "file": "src/commands/handlers/index.ts",
+          "changes": "Re-export handleHeartbeat"
+        },
+        {
+          "file": "src/commands/slash/builtin-commands.ts",
+          "changes": "Register /heartbeat slash command (prompt __HEARTBEAT__)"
+        },
+        {
+          "file": "src/commands/enhanced-command-handler.ts",
+          "changes": "Dispatch __HEARTBEAT__ to handleHeartbeat"
+        },
+        {
+          "file": "src/config/toml-config.ts",
+          "changes": "New HeartbeatConfig interface + heartbeat field on root config"
+        },
+        {
+          "file": "src/agent/codebuddy-agent.ts",
+          "changes": "Boot-time auto-start when TOML [heartbeat].enabled=true"
+        },
+        {
+          "file": "tests/commands/heartbeat-handler.test.ts",
+          "changes": "NEW 9 tests: action validation, lifecycle, case-insensitivity"
+        }
+      ],
+      "issues": [
+        "TOML->engine config plumbing initially passed undefined keys explicitly, overwriting engine defaults via spread merge -> NaN intervals -> Date(NaN).toISOString() crash. Fixed by building partial config conditionally."
+      ],
+      "nextSteps": [
+        "Phase 2 du protocole autonome maintenant debloque cote Code Buddy. Ministar Linux peut activer via TOML ou /heartbeat enable.",
+        "V0.2 wrapper heartbeat_tick.py (rotation logs, Task Scheduler) a coder par DARKSTAR ou autre.",
+        "V4.5 hooks v2 du plan V4 toujours en attente d arbitrage Patrice."
+      ]
     }
   ]
 }
