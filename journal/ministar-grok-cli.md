@@ -1766,3 +1766,111 @@ L'Explore agent a démontré que `CollaborativeSessionManager` est un **strict d
 **Pour Patrice** : 3 nouveaux slashs disponibles en runtime → `/agents enable`, `/agents plan "test goal"`, `/agents status`. Et `POST /tasks/send {skill: "..."}` une fois le hub Ministar Linux pull les nouveaux commits.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~15h50 UTC
+
+---
+
+## 2026-05-02 ~17h25 — 4 phases V0.2 multi-agent intégration livrées (F → E → G → D)
+
+Réponse "implémente tout" sur 4 directions (streaming + SessionToolExecutor + Coordinator/Registry + Persistence). Plan en plan mode + 3 explorations parallèles + advisor 3× corrections (1 blocker apiKey, 1 streaming pattern, 1 cost cap).
+
+### Bilan 4 commits sur code-buddy main
+
+| Phase | Commit | LOC | Tests | Durée |
+|---|---|---|---|---|
+| **F — Wake Coordinator + Registry** + extend /agents | `25591a7` | +354 | +9 (handler) | ~1h |
+| **E — Wake SessionToolExecutor** (4 LLM tools) | `7eba4e4` | +376 | +15 (tools+caps) | ~1h |
+| **G — Workflow persistence** + /agents resume | `885d71c` | +483 | +13 (persistence+handler) | ~1h |
+| **D — Live event streaming** via process.stdout.write | `5c247bd` | +228 | +12 (streamer) | ~30 min |
+| **TOTAL** | | **+1441** | **+49** | **~3.5h** |
+
+### Phase F — EnhancedCoordinator + SessionRegistry
+
+TOML `[multi_agent_system.coordination]` + `[multi_agent_system.sessions]` sections. Boot wiring conditionnel (les 2 sub-bricques sont indépendantes — peuvent être enabled séparément). 3 nouvelles actions `/agents metrics` / `conflicts` / `sessions` (read-only, sans apiKey).
+
+**CRITIQUE — wirage MAS events → Coordinator** : sans ça, `/agents metrics` aurait montré `Total tasks: 0` peu importe le nombre de workflows lancés. Helper `wireCoordinatorIfPresent()` attache un listener `workflow:event` qui route `task_started → markTaskStarted` et `task_completed → recordTaskCompletion`. Idempotent via flag `coordinatorWired`. Risque "feature done mais vide" évité (advisor catch).
+
+V0.1 honnêteté : conflict auto-detection pas implémenté (MAS ne call pas `coordinator.detectConflicts()` dans son loop) — `/agents conflicts` retourne empty avec note explicite.
+
+### Phase E — SessionToolExecutor (4 LLM tools)
+
+Recette wirage **TOOLS** différente du wirage SLASH : 5 fichiers (tool-definitions, tools.ts registerGroup, metadata, registry adapter, tool-handler dispatch).
+
+NEW `SessionToolAdapter` (ITool) wrappe chaque CodeBuddyTool def + dispatch via `SessionToolExecutor.execute()`. 4 tools maintenant LLM-callable :
+- `sessions_list` — discover other sessions
+- `sessions_history` — get transcript by key/id
+- `sessions_send` — fire-and-forget OR wait-for-reply
+- `sessions_spawn` — launch sandboxed sub-agent
+
+**Safety caps V0.1** dans `SessionRegistry.spawnSession` (advisor catch sur le breadth) :
+- `MAX_SPAWN_DEPTH = 3` (height) — empêche infinite recursion
+- `MAX_SESSIONS_PER_WORKFLOW = 10` (breadth, par root session) — empêche 1+3+9+27=40 worst-case wallet hostile
+- `sandboxed: true` forcé
+
+Tests : 15 (4 adapters + safety caps + executor singleton).
+
+### Phase G — Workflow persistence + /agents resume
+
+NEW `src/agent/multi-agent/workflow-persistence.ts` :
+- `saveWorkflow(state)` — atomic write (`.tmp` + rename, no torn reads, best-effort)
+- `loadWorkflow()` — return null on ENOENT/corrupt JSON (logged)
+- `clearWorkflow()` — no-op si absent
+- `PersistedWorkflow` schema : Map → entries array pour JSON-safety
+
+Wiring dans `/agents run` :
+- Save initial state (status: 'running')
+- `workflow:event` listener push timeline + extract task_completed results, debounced 500ms
+- Final save on success/error
+- Clear seulement on success (interrupted workflows kept pour `/agents resume`)
+
+NEW `/agents resume` action — V0.1 honnêteté : restart from scratch, completed tasks ARE re-run. True checkpoint resume = V0.3 (need MAS-side checkpoint hooks, pas juste timeline events).
+
+Mid-tool death = inévitable. Persisted state best-effort jusqu'au dernier save.
+
+### Phase D — Live event streaming
+
+Pattern `process.stdout.write` direct (precedent `/docs` dans `enhanced-command-handler.ts L228`). PAS de refacto async dispatcher (qui aurait touché 30+ handlers).
+
+NEW `attachStreamer(system, writer?)` retourne `{detach}` handle. Subscribe à 8 events MAS, format compact 1 ligne par event avec préfixe `  [agent:role] ...` distinct du UI Ink. Detach systématique dans `.then/.catch` runWorkflow.
+
+Pourquoi pas le full streaming async : `CommandHandlerResult` est sync-only. Extending = refacto invasif risque régression — V0.2+ projet structurel séparé.
+
+### État roadmap multi-agent après cette session
+
+| Composant | V0.1 (`/agents` wake) | V0.2 (cette session) | V0.3+ |
+|---|---|---|---|
+| `/agents enable / disable / status / run / plan / stop / strategy` | ✅ | ✅ | — |
+| EnhancedCoordinator (metrics + conflict detection API) | ❌ | ✅ wire+expose | conflict auto-detect dans loop |
+| SessionRegistry (multi-session + persistence intégrée) | ❌ | ✅ boot wire | per-session lifecycle hooks |
+| `sessions_list / history / send / spawn` (LLM tools) | ❌ | ✅ wake | ConfirmationService gate, cost tracking |
+| Workflow persistence (`/agents resume`) | ❌ | ✅ best-effort | true checkpoint resume |
+| Live event streaming `/agents run` | ❌ | ✅ stdout.write | full async dispatcher refacto |
+
+### Boucle de rétroaction COLAB règle 4 (cumulé sur les 4 phases)
+
+```
+✅ npm test -- agents-handler             (34/34, +14 vs Phase C)
+✅ npm test -- session-tools              (15/15)
+✅ npm test -- workflow-persistence       (8/8)
+✅ npm test -- workflow-event-streamer    (12/12)
+✅ npm run typecheck                       (0 erreur)
+```
+
+### Pour Patrice — testable en runtime
+
+Une fois le hub Ministar Linux pull les nouveaux commits (toujours pending depuis le matin), tu peux tester en local sur MINISTAR :
+
+```bash
+buddy
+> /agents enable                                      # instancie singleton
+> /agents plan "ajouter un endpoint hello"            # preview plan ~10s
+> /agents run "ajouter un endpoint hello"             # workflow live, events streamés en temps réel
+> /agents status                                       # voir l'état
+> /agents metrics                                      # perf des agents (si [coordination].enabled=true)
+> /agents sessions                                     # registry stats
+```
+
+Les 4 tools `sessions_*` sont aussi exposés au LLM principal — il peut les appeler via tool_calls si le contexte s'y prête (par ex "spawn an agent to research X" peut déclencher `sessions_spawn`).
+
+Audit OpenClaw heritage : 3 sub-bricques wake-ées en plus aujourd'hui (Coordinator, Registry, SessionToolExecutor). Reste juste #3 du top 5 audit (bootstrap initializeNativeEngineModules, le plus risqué — 6 modules d'un coup, audit conflits PolicyManager préalable requis).
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~17h25 UTC
