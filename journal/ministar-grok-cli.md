@@ -1874,3 +1874,112 @@ Les 4 tools `sessions_*` sont aussi exposés au LLM principal — il peut les ap
 Audit OpenClaw heritage : 3 sub-bricques wake-ées en plus aujourd'hui (Coordinator, Registry, SessionToolExecutor). Reste juste #3 du top 5 audit (bootstrap initializeNativeEngineModules, le plus risqué — 6 modules d'un coup, audit conflits PolicyManager préalable requis).
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~17h25 UTC
+
+---
+
+## 2026-05-02 ~18h50 — 4 phases V0.3 multi-agent livrées (H+I+J+K)
+
+Réponse "implémente tout en mode plan" sur 4 directions V0.3 du plan ouvert. Plan en plan mode + 3 explorations parallèles + advisor 4 corrections (1 blocker apiKey reformulation, 1 streaming pattern, 1 schema test, 1 task.status orchestrator).
+
+### Bilan 4 commits sur code-buddy main
+
+| Phase | Commit | LOC | Tests | Durée |
+|---|---|---|---|---|
+| **H — Coordinator dans MAS loop** (adaptive allocation + conflict detection) | `39ad1a4` | +319 | +10 | ~1h |
+| **I — ConfirmationService gates** + per-minute spawn cap | `c3031bc` | +125 | +3 | ~30 min |
+| **J — True per-task checkpoint resume** + schema versioning v0.3 | `3d655e0` | +223 | +6 | ~1h |
+| **K — Wake PluginConflictDetector** + TOML stubs A-E | `f1672e7` | +168 | +7 | ~30 min |
+| **TOTAL** | | **+835** | **+26** | **~3h** |
+
+### Phase H — Coordinator wired INTO MAS loop
+
+EnhancedCoordinator était passive en V0.2 (recordTaskCompletion via Phase F event listeners) mais jamais consulté pendant l'exécution. Phase H : MAS UTILISE le coordinator au runtime.
+
+3 nouvelles méthodes privées sur MultiAgentSystem :
+- `getCoordinationConfig()` — lazy TOML load + cache
+- `getAssignedAgent(task)` — consulte `coordinator.allocateTask()` si TOML enabled. Reassign task.assignedTo si confidence ≥ threshold (0.6 default). Mute la task pour que orchestrator/persistence voient la nouvelle assignation.
+- `detectAndEmitConflicts(tasks)` — appelle `coordinator.detectConflicts()` + emit `workflow:event` type `conflict_detected` pour chaque conflit.
+
+5 strategies (sequential/parallel/hierarchical/peer_review/iterative) appellent maintenant `detectAndEmitConflicts` après chaque `phase_completed`. Streamer formate `[conflict:high] code_overlap — auth.ts`. `/agents conflicts` message updated avec V0.3 hint.
+
+Defaults TOML conservatifs : `enable_adaptive_allocation = false`, `enable_conflict_resolution = false`. Backward compat = MAS inchangé sans opt-in.
+
+### Phase I — ConfirmationService gates Phase E
+
+Sécurise les tools sensibles. TOML opt-in par défaut OFF (back-compat V0.2 auto-approve).
+
+3 features :
+- **Confirmation prompt** avant `sessions_send` : preview message → user confirme
+- **Confirmation prompt** avant `sessions_spawn` : task + label + timeout → user confirme
+- **Per-minute spawn rate limit** : `max_spawn_per_minute` cap dans SessionRegistry (sliding window 60s)
+
+Independent des caps existants depth=3 + breadth=10. Refus = soft failure visible au LLM, pas exception.
+
+### Phase J — True per-task checkpoint resume
+
+Phase G (V0.2) sauvait state mais `/agents resume` restartait from scratch. Phase J : skip vraiment les tasks completed.
+
+Schema versioning :
+- `schemaVersion: 'v0.1' | 'v0.3'` field
+- `completedTaskIds: string[]` field
+- `saveWorkflow` auto-stamp v0.3 + dérive completedTaskIds des results
+- `loadWorkflow` auto-migre les sauvegardes pre-v0.3 (treat as v0.1, dérive completedTaskIds)
+
+WorkflowOptions.resumeFrom param (additif, optionnel, no breaking change).
+
+MAS.runWorkflow handles resumeFrom :
+- Pre-populate in-memory `results` Map
+- Restore artifacts to sharedContext
+- **CRITIQUE** : marque `task.status = 'completed'` sur les plan tasks (sinon orchestrator.getNextTasks via hierarchical les re-emit comme "next" — orchestrator regarde task.status, pas un side-set)
+
+5 strategies skip task.status==='completed'. /agents resume réécrit pour appeler runWorkflow avec resumeFrom (was status-display only en V0.1).
+
+V0.3 limitations honnêtement documentées : half-done tasks re-run, LLM non-déterminisme, spawned sub-sessions out of scope, dependencies safe via results map pre-populated.
+
+### Phase K — SCOPE RÉDUIT (1 wake + 5 stubs déférés)
+
+**Décision controversée**. Patrice a dit "implémente tout" → j'ai livré ~10% de la surface initiale après audit révélant 5/6 modules conflictuels. Reduction flaggée au top du plan + advisor validé l'approche.
+
+Audit summary (cf. EnterpriseModulesTomlConfig) :
+| Module | Status | Conflit |
+|---|---|---|
+| tool_policy_engine | DEFERRED V0.4 | PolicyManager actif |
+| tool_lifecycle_hooks | DEFERRED V0.4 | 3 hook systems |
+| smart_compaction_engine | DEFERRED V0.4 | ContextManagerV2 doublon |
+| retry_fallback_engine | DEFERRED V0.4 | CircuitBreaker conflict + dep on smart_compaction |
+| semantic_memory_search | DEFERRED V0.4 | ICM + hybrid-search overlap |
+| **plugin_conflict_detector** | ✅ **WAKED V0.3** | Aucun (complementary à PluginManager) |
+
+**Wake Module F** : Inject `detector.checkConflicts()` dans `PluginManager.loadPlugin` après manifest validation, avant `this.plugins.set`. Blocker conflicts (plugin_id_vs_tool, duplicate_tool) → loadPlugin returns false. Non-blocker (dependency_missing) → log warning, proceed.
+
+5 modules déférés ont des TOML stubs `enabled: false` + commentaires citant l'audit. V0.4 = décisions architecturales requises (PolicyManager dépréciation, ContextManager role clarification, etc.).
+
+### Audit OpenClaw — top 5 priorités finales
+
+| # | Brique | Status | Commit |
+|---|---|---|---|
+| 1 | TeamSessionManager (`/share`) | ✅ V0.1 + V0.2 wave | b58d5a2 + 958c94b |
+| 2 | DailyResetManager (`/daily-reset`) | ✅ DONE matin | b4e9961 |
+| 3 | initializeNativeEngineModules (6 modules) | ✅ **PARTIEL Phase K — F waked, A-E stubbed** | f1672e7 |
+| 4 | MultiAgentSystem (`/agents`) | ✅ V0.1 + V0.2 + V0.3 | 9606e94 + 25591a7 + 7eba4e4 + 885d71c + 5c247bd + 39ad1a4 + c3031bc + 3d655e0 |
+| 5 | CollaborativeSessionManager | ❌ SKIP confirmé doublon TSM | (no commit, validated) |
+
+**4/5 priorités traitées**. Reste seulement les 5 sub-modules de #3 (A-E) pour V0.4 — décisions archi requises avant.
+
+### Boucle de rétroaction COLAB règle 4
+
+```
+✅ npm test -- coordinator-integration  (10/10)
+✅ npm test -- session-tools             (18/18)
+✅ npm test -- workflow-persistence      (12/12)
+✅ npm test -- plugin-conflict-detector  (7/7)
+✅ npm test -- agents-handler            (35/35)
+✅ npm test -- tests/plugins             (184/184 — no regression)
+✅ npm run typecheck                     (0 erreur)
+```
+
+### Fleet snapshot 18h50
+
+Plus de mouvement côté A2A aujourd'hui — hub Ministar Linux toujours pas pull les fixes A2A du matin (pas dans le scope V0.3). Spokes ollama-darkstar + ollama-ministar opérationnels. POC Niveau 2 cross-host toujours pending validation E2E.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~18h50 UTC
