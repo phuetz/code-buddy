@@ -1666,3 +1666,103 @@ Commits qui attendent côté hub :
 Le mesh est désormais à 2 spokes Ollama + 1 hub. Routeur cross-host attend juste le pull du hub pour devenir vraiment opérationnel.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~14h15 UTC
+
+---
+
+## 2026-05-02 ~15h50 — 3 phases livrées : POC Niveau 3 + Polish typecheck + /agents wake
+
+Continuation roadmap Code Buddy (4 chantiers demandés "1 2 3 4", #3 CSM skip validé après Explore).
+
+### Bilan 3 commits sur code-buddy main
+
+| Phase | Commit | LOC | Tests | Durée |
+|---|---|---|---|---|
+| **A — POC A2A Niveau 3** (skill routing) | `677a146` | +204 | +10 (a2a-skill-routing) | ~30 min |
+| **B — Polish typecheck** | `b71bd01` | +4 | (0 régression) | ~10 min |
+| **C — Wake MultiAgentSystem comme `/agents`** | `9606e94` | +605 | +20 (agents-handler) | ~1h |
+
+Total : 813 LOC, 30 nouveaux tests, 4 erreurs typecheck pré-existantes ÉLIMINÉES.
+
+### Phase A — POC A2A Niveau 3 (skill-based routing)
+
+`POST /api/a2a/tasks/send` accepte maintenant `{skill, message}` en plus de `{agent, message}`. Hub résout skill→spoke automatiquement via `findAgentsWithSkill()` + helper `selectAgent()` (V0.1 strategy = `first` only).
+
+Design clé :
+- Logique de résolution extraite dans `A2AAgentClient.resolveTarget({agent?, skill?})` → fonction pure unit-testable, le handler Express devient thin wrapper.
+- Back-compat préservée : `{agent, message}` (Niveau 2) marche identique.
+- Response inclut `routedTo` field — caller voit où le hub a dispatché.
+- Tests : 10 cas (selectAgent edge cases + resolveTarget toutes shapes + E2E mock fetch).
+
+V0.1 limitation : `skill = exact model ID` (ex: `ollama-qwen2.5-coder-32b`). Pas de mapping abstrait — V0.2.
+
+**Test E2E live possible dès que** Ministar Linux pull commit `677a146` (et plus loin `b71bd01` + `9606e94`) puis restart `codebuddy-a2a.service` :
+```bash
+curl -X POST http://100.98.18.76:3000/api/a2a/tasks/send \
+  -d '{"skill":"ollama-qwen2.5-coder-32b","message":{"role":"user","parts":[{"type":"text","text":"hello"}]}}'
+# Doit retourner status: completed + routedTo: ollama-ministar
+```
+
+### Phase B — Polish typecheck (4 → 0 erreurs)
+
+Élimine 4 erreurs TS pré-existantes qui bloquaient `tsc --noEmit` clean depuis le début du chantier fleet :
+
+1. **`'read'` ajouté à `ApiScope` enum** (`src/server/types.ts` L134-144). Le commit `a85e654` utilisait `requireScope('read')` pour les routes register/heartbeat/delete avec l'intention "scope plus bas qu'admin", mais le type union ne le permettait pas. 3 erreurs résolues d'un coup.
+2. **`path?: string` ajouté à `CSRFRequest`** (`src/security/csrf-protection.ts` L383). Le commit `484c6b3` (csrf exempt A2A) utilisait `req.path?.startsWith('/api/a2a')` mais le type local n'avait pas `path`. Fix typage uniquement, pas de changement runtime.
+
+`npm run typecheck` : 0 erreur (était 4). `npm test -- a2a` : 41/41. `npm test -- csrf` : 27/27.
+
+### Phase C — Wake MultiAgentSystem comme `/actions`
+
+Recette wirage 4ème wake de la semaine (après V4.4 plan-mode, Heartbeat, DailyReset, TeamSessionManager). MultiAgentSystem orchestre 4 agents spécialisés (Orchestrator/Coder/Reviewer/Tester) avec 5 stratégies (sequential/parallel/hierarchical/peer_review/iterative).
+
+**Slash `/agents`** (libre, grep-confirmed). Pas de collision avec `/team` (Agent Teams lightweight, scope orthogonal).
+
+Actions V0.1 :
+- `enable / disable / status` — lifecycle classique
+- `run <goal>` — **FIRE-AND-FORGET** : retourne immédiatement, workflow async
+- `plan <goal>` — sync dryRun ~10s, preview du plan sans coût LLM complet
+- `stop` — interrompt workflow actif
+- `strategy <name>` — change la stratégie pour le prochain run
+
+Décisions V0.1 importantes :
+- **apiKey** depuis `process.env.GROK_API_KEY` (pattern think-handlers.ts L210). Premier wake qui touche LLM directement — on prend la solution la plus simple. V0.2 = injection via `setAgentsClient(client)` à la `setBtwClient` pattern.
+- **Singleton 1 workflow at a time** : pas de registry de workflowId. 2e `run` pendant qu'un autre tourne → refuse poliment.
+- **Pas de streaming events terminal** en V0.1 : events log via `logger.info` (visible dans `~/.codebuddy/logs/`).
+- **Process exit kills workflow** : pas de persistence V0.1.
+
+TOML `[multi_agent_system]` avec caps explicites (parallel_agents=3, timeout_ms=600000, max_iterations=5) pour mitiger le risque coût LLM (4 agents × N rounds).
+
+20 tests pass : lifecycle + args validation + env guard + fire-and-forget + strategy setter + plan dry-run + case-insensitive.
+
+### CSM (#3 demandé) — SKIP officialisé
+
+L'Explore agent a démontré que `CollaborativeSessionManager` est un **strict doublon de TeamSessionManager** (qu'on a wake hier comme `/share`). TSM a 10 features production (persistence, encryption, WebSocket, audit, profils, export, etc.) que CSM n'a pas. Le barrel `src/collaboration/index.ts` documente déjà l'overlap. Patrice a validé le skip explicitement.
+
+À reconsidérer si scope se clarifie un jour (par ex. ephemeral in-memory sessions, ou file locking distinct de TSM). Pour l'instant : ne perd pas de temps sur un doublon.
+
+### État roadmap audit OpenClaw 5 réveils prioritaires
+
+| # | Brique | Status |
+|---|---|---|
+| 1 | TeamSessionManager (`/share`) | ✅ DONE 2026-05-02 13h30 (commit b58d5a2 + 958c94b rename) |
+| 2 | DailyResetManager (`/daily-reset`) | ✅ DONE 2026-05-02 08h (commit b4e9961) |
+| 3 | initializeNativeEngineModules() bootstrap (6 modules enterprise) | ⏳ NEXT (audit conflits PolicyManager requis avant) |
+| 4 | MultiAgentSystem (`/agents`) | ✅ DONE 2026-05-02 15h50 (commit 9606e94) |
+| 5 | CollaborativeSessionManager | ❌ SKIP (doublon TSM, validé 2026-05-02) |
+
+3/5 priorités traitées en 1 journée. Reste #3 (le plus risqué, audit préalable nécessaire). Les sub-bricques inertes (`EnhancedCoordinator`, `SessionRegistry`, `SessionToolExecutor`) restent inertes — wake séparé V0.2 si besoin.
+
+### Boucle de rétroaction (COLAB règle 4)
+
+```
+✅ npm test -- a2a-skill-routing       (10/10)
+✅ npm test -- agents-handler          (20/20)
+✅ npm test -- "tests/commands"         (419/419)
+✅ npm test -- "a2a"                    (41/41)
+✅ npm test -- "csrf"                   (27/27)
+✅ npm run typecheck                    (0 erreurs, était 4)
+```
+
+**Pour Patrice** : 3 nouveaux slashs disponibles en runtime → `/agents enable`, `/agents plan "test goal"`, `/agents status`. Et `POST /tasks/send {skill: "..."}` une fois le hub Ministar Linux pull les nouveaux commits.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~15h50 UTC
