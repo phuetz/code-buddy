@@ -354,6 +354,16 @@ export interface CoordinationTomlConfig {
    *  orchestrator on code_overlap conflicts). 'none' = annotation only.
    *  Default 'none'. */
   auto_resolve_strategy?: 'prefer-reviewer' | 'none';
+  /** Phase N (V0.4.1) — when true, EnhancedCoordinator persists agentMetrics
+   *  to ~/.codebuddy/agents/metrics.json across process restarts. Adaptive
+   *  allocation gets a warm-start from prior task completions instead of
+   *  starting at neutral 0.5 success rates. Default false. Effective only
+   *  when enable_learning = true (otherwise persisted metrics are ignored
+   *  by the allocator). */
+  enable_persistence?: boolean;
+  /** Phase N — days after which persisted metrics are flagged as stale.
+   *  V0.4.1 logs a warning at load time; V0.5+ will auto-clear. Default 30. */
+  metrics_ttl_days?: number;
 }
 
 /**

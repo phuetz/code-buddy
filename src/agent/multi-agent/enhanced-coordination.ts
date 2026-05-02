@@ -178,6 +178,20 @@ export interface Checkpoint {
 }
 
 /**
+ * Phase N (V0.4.1) — disk persistence options for adaptive allocation
+ * warm-start. Passed to `enablePersistence()`. See `metrics-persistence.ts`
+ * for the storage envelope and atomic-write behaviour.
+ */
+export interface PersistenceOptions {
+  /** Days after which persisted metrics are considered stale. V0.4.1 logs a
+   *  warning at load time; V0.5+ will enforce by clearing the file. Default 30. */
+  metricsTtlDays?: number;
+  /** Debounce interval for save-on-update (ms). Default 5000. Tests use a
+   *  much smaller value with vi.useFakeTimers(). */
+  saveDebounceMs?: number;
+}
+
+/**
  * Enhanced Coordination Manager
  */
 export class EnhancedCoordinator extends EventEmitter {
@@ -189,6 +203,15 @@ export class EnhancedCoordinator extends EventEmitter {
   private checkpoints: Checkpoint[] = [];
   private taskHistory: Array<{ task: AgentTask; result: AgentExecutionResult }> = [];
   private activeTasksPerAgent: Map<AgentRole, Set<string>> = new Map();
+
+  // ─── Phase N (V0.4.1) — disk persistence ────────────────────────────────
+  private persistenceEnabled = false;
+  private saveDebounceTimer: NodeJS.Timeout | null = null;
+  private saveDebounceMs = 5000;
+  private metricsTtlDays = 30;
+  /** ISO timestamp of last successful save (or load). null = never persisted. */
+  private metricsSavedAt: Date | null = null;
+  private metricsUpdatedListener: (() => void) | null = null;
 
   constructor(config: Partial<CoordinationConfig> = {}) {
     super();
@@ -845,10 +868,128 @@ export class EnhancedCoordinator extends EventEmitter {
     this.emit('coordinator:reset');
   }
 
+  // ─── Phase N (V0.4.1) — disk persistence API ───────────────────────────
+
   /**
-   * Dispose and cleanup
+   * Enable disk persistence for adaptive allocation warm-start.
+   *
+   * - Loads `~/.codebuddy/agents/metrics.json` (if present) and merges
+   *   into `agentMetrics`. Each role's metrics are replaced atomically:
+   *   the persisted entry wins over the freshly-initialised default
+   *   (totalTasks=0, successRate=0.5).
+   * - Subscribes to the `metrics:updated` event with a debounced save
+   *   (default 5s) so a burst of recordTaskCompletion calls produces a
+   *   single write.
+   * - Idempotent — subsequent calls are no-ops.
+   *
+   * Side-effects:
+   * - Logs a warning if the persisted file is older than `metricsTtlDays`
+   *   (V0.4.1 = warning only; V0.5 will clear stale automatically).
+   * - Caller may `await` the returned promise to know that the in-memory
+   *   metrics reflect disk state before scheduling work — this avoids the
+   *   race where allocateTask runs against fresh defaults while disk load
+   *   is still pending.
+   */
+  async enablePersistence(opts: PersistenceOptions = {}): Promise<void> {
+    if (this.persistenceEnabled) return;
+    this.persistenceEnabled = true;
+    this.metricsTtlDays = opts.metricsTtlDays ?? 30;
+    this.saveDebounceMs = opts.saveDebounceMs ?? 5000;
+
+    // Load disk state when learning is enabled (otherwise persisted
+    // metrics would be ignored anyway since the allocator skips them).
+    if (this.config.enableLearning) {
+      try {
+        const { loadMetrics } = await import('./metrics-persistence.js');
+        const loaded = await loadMetrics();
+        if (loaded) {
+          for (const [role, metrics] of loaded.metrics) {
+            this.agentMetrics.set(role, metrics);
+          }
+          this.metricsSavedAt = loaded.savedAt;
+
+          // V0.4.1 — warning only, V0.5 will enforce.
+          const ageMs = Date.now() - loaded.savedAt.getTime();
+          const ageDays = ageMs / (1000 * 60 * 60 * 24);
+          if (ageDays > this.metricsTtlDays) {
+            logger.warn(
+              `[multi-agent] persisted metrics are ${Math.floor(ageDays)} days old (TTL ${this.metricsTtlDays}d). ` +
+              `Allocation may be biased by stale data. V0.4.1 = warning only; V0.5 will auto-clear.`
+            );
+          }
+        }
+      } catch (err) {
+        logger.warn('[multi-agent] enablePersistence load failed (best-effort)', { error: String(err) });
+      }
+    }
+
+    // Wire debounced save listener. Stored as a field so disable can `.off()`.
+    this.metricsUpdatedListener = () => this.scheduleSave();
+    this.on('metrics:updated', this.metricsUpdatedListener);
+  }
+
+  /**
+   * Schedule a debounced save. Each call resets the timer; only the last
+   * burst of updates within the debounce window triggers a write.
+   */
+  private scheduleSave(): void {
+    if (!this.persistenceEnabled) return;
+    if (this.saveDebounceTimer) clearTimeout(this.saveDebounceTimer);
+    this.saveDebounceTimer = setTimeout(() => {
+      this.saveDebounceTimer = null;
+      this.flushSave().catch((err) =>
+        logger.warn('[multi-agent] metrics scheduled save failed', { error: String(err) })
+      );
+    }, this.saveDebounceMs);
+  }
+
+  /**
+   * Flush any pending debounced save synchronously. Tests use this to
+   * await disk writes deterministically. Production code calls it from
+   * dispose() to avoid losing the last burst of metrics updates when
+   * the process exits between debounce ticks.
+   */
+  async flushSave(): Promise<void> {
+    if (!this.persistenceEnabled) return;
+    if (this.saveDebounceTimer) {
+      clearTimeout(this.saveDebounceTimer);
+      this.saveDebounceTimer = null;
+    }
+    try {
+      const { saveMetrics } = await import('./metrics-persistence.js');
+      await saveMetrics(this.agentMetrics);
+      this.metricsSavedAt = new Date();
+    } catch (err) {
+      logger.warn('[multi-agent] metrics flush save failed', { error: String(err) });
+    }
+  }
+
+  /** Returns the timestamp of the last successful save/load, or null if
+   *  persistence has never run successfully. Used by /agents metrics. */
+  getMetricsSavedAt(): Date | null {
+    return this.metricsSavedAt;
+  }
+
+  /** Whether disk persistence is currently active. */
+  isPersistenceEnabled(): boolean {
+    return this.persistenceEnabled;
+  }
+
+  /**
+   * Dispose and cleanup. Phase N — clears the debounce timer to prevent
+   * leaked timers in tests; if a save was pending, it is dropped (caller
+   * must call `flushSave()` first if they need the last burst persisted).
    */
   dispose(): void {
+    if (this.saveDebounceTimer) {
+      clearTimeout(this.saveDebounceTimer);
+      this.saveDebounceTimer = null;
+    }
+    if (this.metricsUpdatedListener) {
+      this.off('metrics:updated', this.metricsUpdatedListener);
+      this.metricsUpdatedListener = null;
+    }
+    this.persistenceEnabled = false;
     this.reset();
     this.removeAllListeners();
   }

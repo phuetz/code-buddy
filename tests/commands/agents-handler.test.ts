@@ -38,12 +38,17 @@ const mocks = vi.hoisted(() => {
   const getConflictsMock = vi.fn(() => []);
   // Phase L (V0.4) — getAgentMetrics returns null by default (no cost recorded)
   const getAgentMetricsMock = vi.fn(() => null);
+  // Phase N (V0.4.1) — persistence introspection mocks
+  const isPersistenceEnabledMock = vi.fn(() => false);
+  const getMetricsSavedAtMock = vi.fn(() => null);
   const fakeCoordinator = {
     markTaskStarted: markTaskStartedMock,
     recordTaskCompletion: recordTaskCompletionMock,
     getPerformanceReport: getPerformanceReportMock,
     getConflicts: getConflictsMock,
     getAgentMetrics: getAgentMetricsMock,
+    isPersistenceEnabled: isPersistenceEnabledMock,
+    getMetricsSavedAt: getMetricsSavedAtMock,
   };
   const getEnhancedCoordinatorMock = vi.fn(() => fakeCoordinator);
 
@@ -61,6 +66,7 @@ const mocks = vi.hoisted(() => {
     fakeSystem, getMultiAgentSystemMock, resetMultiAgentSystemMock,
     markTaskStartedMock, recordTaskCompletionMock, getPerformanceReportMock, getConflictsMock,
     getAgentMetricsMock,
+    isPersistenceEnabledMock, getMetricsSavedAtMock,
     fakeCoordinator, getEnhancedCoordinatorMock,
     getStatsMock, fakeRegistry, getSessionRegistryMock,
   };

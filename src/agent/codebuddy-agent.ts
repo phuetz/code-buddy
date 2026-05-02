@@ -569,7 +569,7 @@ export class CodeBuddyAgent extends BaseAgent {
       const sessCfg = cfg?.sessions;
 
       if (coordCfg?.enabled) {
-        import('../agent/multi-agent/enhanced-coordination.js').then(({ getEnhancedCoordinator }) => {
+        import('../agent/multi-agent/enhanced-coordination.js').then(async ({ getEnhancedCoordinator }) => {
           type CC = Parameters<typeof getEnhancedCoordinator>[0];
           const c: CC = {};
           if (coordCfg.enable_adaptive_allocation !== undefined) c!.enableAdaptiveAllocation = coordCfg.enable_adaptive_allocation;
@@ -580,8 +580,23 @@ export class CodeBuddyAgent extends BaseAgent {
           if (coordCfg.enable_learning !== undefined) c!.enableLearning = coordCfg.enable_learning;
           if (coordCfg.history_size !== undefined) c!.historySize = coordCfg.history_size;
           if (coordCfg.checkpoint_interval !== undefined) c!.checkpointInterval = coordCfg.checkpoint_interval;
-          getEnhancedCoordinator(c);
+          if (coordCfg.auto_resolve_enabled !== undefined) c!.autoResolveEnabled = coordCfg.auto_resolve_enabled;
+          if (coordCfg.auto_resolve_strategy !== undefined) c!.autoResolveStrategy = coordCfg.auto_resolve_strategy;
+          const coordinator = getEnhancedCoordinator(c);
           logger.info('EnhancedCoordinator auto-instantiated from TOML config');
+
+          // Phase N (V0.4.1) — async warm-start from disk if requested.
+          // Awaited so logger.info happens after load completes; failure
+          // is best-effort (logged inside enablePersistence).
+          if (coordCfg.enable_persistence) {
+            await coordinator.enablePersistence({
+              metricsTtlDays: coordCfg.metrics_ttl_days,
+            });
+            const savedAt = coordinator.getMetricsSavedAt();
+            if (savedAt) {
+              logger.info(`EnhancedCoordinator metrics warm-started from disk (savedAt=${savedAt.toISOString()})`);
+            }
+          }
         }).catch((e) => { logger.debug('EnhancedCoordinator module load failed (optional)', { error: String(e) }); });
       }
 

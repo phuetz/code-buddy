@@ -276,6 +276,14 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       } else {
         withCost += `\n\nCost Breakdown: (no cost recorded yet — set [multi_agent_system].max_workflow_cost_usd to track)`;
       }
+
+      // Phase N (V0.4.1) — surface persistence state.
+      if (coordinator.isPersistenceEnabled()) {
+        const savedAt = coordinator.getMetricsSavedAt();
+        withCost += savedAt
+          ? `\n\nMetrics Persistence (V0.4.1 Phase N): enabled, last save ${savedAt.toISOString()}`
+          : `\n\nMetrics Persistence (V0.4.1 Phase N): enabled, no save yet`;
+      }
       return textResult(withCost);
     } catch (err) {
       return textResult(`Could not load EnhancedCoordinator: ${err instanceof Error ? err.message : String(err)}`);
