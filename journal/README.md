@@ -51,6 +51,7 @@ en journal, suffixer `-ubuntu` (ex : `ministar-ubuntu-DEV.md`).
 | `darkstar-DEV.md`                  | session sur DARKSTAR Windows (PC 3090) — bootstrap initial 2026-05-01 |
 | `darkstar-world-model.md`          | session sur DARKSTAR (`D:\CascadeProjects\world-model`), entraînement world-model JEPA V3 |
 | `darkstar-grok-cli.md`             | session sur DARKSTAR (`D:\DEV\grok-cli`), spoke A2A code-buddy pour le fleet |
+| `ministar-PdfCommander.md`        | session sur `D:\CascadeProjects\PdfCommander` (Antigravity, MVVM hub IA + outils classiques 03/05/2026) |
 | _à créer au besoin_                | autres machines/repos                                    |
 
 Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le
