@@ -306,4 +306,296 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
       await expect(l.disconnect()).resolves.toBeUndefined();
     });
   });
+
+  // ==========================================================================
+  // Phase (d).6 — auto-reconnect with exponential backoff
+  // ==========================================================================
+  describe('auto-reconnect (Phase (d).6)', () => {
+    /**
+     * Drive a brand-new FakeWebSocket through the open → connected →
+     * authenticated handshake. Used by every reconnect test to put the
+     * listener in a "post-auth, ready to drop" state.
+     */
+    async function driveAuth(fake: ReturnType<typeof getWs>): Promise<void> {
+      fake.open();
+      await flush();
+      fake.receive({ type: 'connected' });
+      await flush();
+      fake.receive({ type: 'authenticated', payload: {} });
+    }
+
+    function getWs(idx: number) {
+      const fake = wsMock.instances[idx];
+      if (!fake) throw new Error(`No ws at index ${idx} (have ${wsMock.instances.length})`);
+      return fake;
+    }
+
+    /** Wait one microtask + one immediate tick. */
+    function flush(): Promise<void> {
+      return new Promise((r) => setImmediate(r));
+    }
+
+    it('reconnects after ws drop with backoff and emits reconnected', async () => {
+      // Exclude setImmediate from fake timers — FakeWebSocket.close()
+      // and our flush() helper rely on it firing on the real event loop.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({
+          url: 'ws://peer/ws',
+          apiKey: 'k',
+          autoReconnect: true,
+          reconnect: { initialDelayMs: 100, maxDelayMs: 1000, jitterMs: 0 },
+        });
+        const reconnectingEvents: Array<{ attempt: number; delayMs: number }> = [];
+        const reconnectedEvents: Array<{ attempt: number }> = [];
+        l.on('reconnecting', (e) => reconnectingEvents.push(e));
+        l.on('reconnected', (e) => reconnectedEvents.push(e));
+
+        // Initial connect + auth
+        const cp = l.connect();
+        await flush();
+        await driveAuth(getWs(0));
+        await cp;
+        expect(l.isAuthenticated()).toBe(true);
+
+        // Spontaneous drop (not user-initiated)
+        getWs(0).emit('close');
+        await flush();
+
+        // Manager should have scheduled a reconnect
+        expect(l.isReconnecting()).toBe(true);
+        expect(reconnectingEvents).toHaveLength(1);
+        expect(reconnectingEvents[0].attempt).toBe(1);
+        expect(reconnectingEvents[0].delayMs).toBe(100); // initial * 2^0, no jitter
+
+        // Advance the timer: the connectFn fires, opens a new ws.
+        await vi.advanceTimersByTimeAsync(150);
+        // The new FakeWebSocket has been constructed at index 1
+        await driveAuth(getWs(1));
+        // Let the connectFn resolve and the manager's onConnected fire
+        await flush();
+
+        expect(reconnectedEvents).toHaveLength(1);
+        expect(reconnectedEvents[0].attempt).toBe(1);
+        expect(l.getReconnectAttempts()).toBe(0); // reset after onConnected
+        expect(l.isReconnecting()).toBe(false);
+        expect(l.isAuthenticated()).toBe(true);
+
+        await l.disconnect();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('emits exhausted after max retries and stops trying', async () => {
+      // Exclude setImmediate from fake timers — FakeWebSocket.close()
+      // and our flush() helper rely on it firing on the real event loop.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({
+          url: 'ws://peer/ws',
+          apiKey: 'k',
+          autoReconnect: true,
+          reconnect: { maxRetries: 2, initialDelayMs: 50, jitterMs: 0 },
+        });
+        const exhaustedEvents: Array<{ totalAttempts: number }> = [];
+        l.on('exhausted', (e) => exhaustedEvents.push(e));
+
+        const cp = l.connect();
+        await flush();
+        await driveAuth(getWs(0));
+        await cp;
+
+        // Drop #1 — schedules retry 1
+        getWs(0).emit('close');
+        await flush();
+        await vi.advanceTimersByTimeAsync(100);
+        // Retry 1 opens ws[1]; we drop it before auth → close handler
+        // fires again → schedules retry 2
+        getWs(1).open();
+        await flush();
+        getWs(1).emit('close');
+        await flush();
+        await vi.advanceTimersByTimeAsync(200);
+        // Retry 2 opens ws[2]; drop it too → no more retries (cap=2),
+        // exhausted should fire on the next schedule attempt
+        getWs(2).open();
+        await flush();
+        getWs(2).emit('close');
+        await flush();
+
+        expect(exhaustedEvents).toHaveLength(1);
+        expect(exhaustedEvents[0].totalAttempts).toBe(2);
+
+        await l.disconnect();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('user disconnect cancels a pending reconnect timer', async () => {
+      // Exclude setImmediate from fake timers — FakeWebSocket.close()
+      // and our flush() helper rely on it firing on the real event loop.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({
+          url: 'ws://peer/ws',
+          apiKey: 'k',
+          autoReconnect: true,
+          reconnect: { initialDelayMs: 5000, jitterMs: 0 },
+        });
+        const reconnectedEvents: Array<unknown> = [];
+        l.on('reconnected', (e) => reconnectedEvents.push(e));
+
+        const cp = l.connect();
+        await flush();
+        await driveAuth(getWs(0));
+        await cp;
+
+        // Drop — schedules retry in 5000ms
+        getWs(0).emit('close');
+        await flush();
+        expect(l.isReconnecting()).toBe(true);
+        const wsCountBefore = wsMock.instances.length;
+
+        // User cancels mid-wait
+        await l.disconnect();
+
+        // Advance past the would-be retry window
+        await vi.advanceTimersByTimeAsync(10_000);
+        await flush();
+
+        // No new ws should have been constructed
+        expect(wsMock.instances.length).toBe(wsCountBefore);
+        expect(reconnectedEvents).toHaveLength(0);
+        expect(l.isReconnecting()).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('resets the attempt counter after a successful reconnect', async () => {
+      // Exclude setImmediate from fake timers — FakeWebSocket.close()
+      // and our flush() helper rely on it firing on the real event loop.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({
+          url: 'ws://peer/ws',
+          apiKey: 'k',
+          autoReconnect: true,
+          reconnect: { initialDelayMs: 50, jitterMs: 0 },
+        });
+
+        const cp = l.connect();
+        await flush();
+        await driveAuth(getWs(0));
+        await cp;
+
+        // First drop + reconnect
+        getWs(0).emit('close');
+        await flush();
+        await vi.advanceTimersByTimeAsync(100);
+        await driveAuth(getWs(1));
+        await flush();
+        expect(l.getReconnectAttempts()).toBe(0);
+
+        // Second drop — counter should start from 1 again, not 2
+        const reconnectingEvents: Array<{ attempt: number }> = [];
+        l.on('reconnecting', (e) => reconnectingEvents.push(e));
+        getWs(1).emit('close');
+        await flush();
+        expect(reconnectingEvents).toHaveLength(1);
+        expect(reconnectingEvents[0].attempt).toBe(1);
+
+        await l.disconnect();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('AUTH_FAILED during reconnect is terminal — no further retry', async () => {
+      // Exclude setImmediate from fake timers — FakeWebSocket.close()
+      // and our flush() helper rely on it firing on the real event loop.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({
+          url: 'ws://peer/ws',
+          apiKey: 'k',
+          autoReconnect: true,
+          reconnect: { maxRetries: 5, initialDelayMs: 50, jitterMs: 0 },
+        });
+        const exhaustedEvents: unknown[] = [];
+        const reconnectingEvents: unknown[] = [];
+        l.on('exhausted', (e) => exhaustedEvents.push(e));
+        l.on('reconnecting', (e) => reconnectingEvents.push(e));
+
+        const cp = l.connect();
+        await flush();
+        await driveAuth(getWs(0));
+        await cp;
+
+        // Drop → schedules retry
+        getWs(0).emit('close');
+        await flush();
+        expect(reconnectingEvents).toHaveLength(1);
+
+        // Retry fires, opens ws[1], server returns AUTH_FAILED
+        await vi.advanceTimersByTimeAsync(100);
+        const ws1 = getWs(1);
+        ws1.open();
+        await flush();
+        ws1.receive({ type: 'connected' });
+        await flush();
+        ws1.receive({
+          type: 'error',
+          error: { code: 'AUTH_FAILED', message: 'key revoked' },
+        });
+        await flush();
+        // The ws would close server-side; simulate
+        ws1.emit('close');
+        await flush();
+
+        // No new schedule should fire — userDisconnected was set by the
+        // AUTH_FAILED branch.
+        await vi.advanceTimersByTimeAsync(5000);
+        await flush();
+
+        // Only the original retry → no further reconnecting events
+        expect(reconnectingEvents).toHaveLength(1);
+        expect(exhaustedEvents).toHaveLength(0); // we cancelled, not exhausted
+        // No third ws constructed
+        expect(wsMock.instances.length).toBe(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('default (autoReconnect off) preserves V0.4.1 behavior — no retry', async () => {
+      // Exclude setImmediate from fake timers — FakeWebSocket.close()
+      // and our flush() helper rely on it firing on the real event loop.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const l = new FleetListener({ url: 'ws://peer/ws', apiKey: 'k' });
+        const reconnectingEvents: unknown[] = [];
+        l.on('reconnecting', (e) => reconnectingEvents.push(e));
+
+        const cp = l.connect();
+        await flush();
+        await driveAuth(getWs(0));
+        await cp;
+
+        getWs(0).emit('close');
+        await flush();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await flush();
+
+        expect(reconnectingEvents).toHaveLength(0);
+        expect(wsMock.instances.length).toBe(1);
+        expect(l.getReconnectAttempts()).toBe(0);
+        expect(l.isReconnecting()).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
