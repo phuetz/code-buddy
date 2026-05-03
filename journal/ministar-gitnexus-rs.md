@@ -70,3 +70,50 @@ Tout en local pour l'instant. Push à valider par Patrice au réveil (discipline
 ---
 
 *Coordinateur depuis 28-29/04/2026 (MINISTAR · gitnexus-rs).*
+
+---
+
+## 2026-05-04 — Modernisation gitnexus-rs (nuit, mode économie)
+
+Patrice a lancé un "moderniser gitnexus-rs" avec **17% de limites Claude restantes** + reset dans 3h. Mandat : utiliser un max de tokens sans cramer pour rien.
+
+### Plan initial annulé après diagnostic
+
+Plan proposé : commit branche actuelle + merger `feat/semantic-search` (priorité haute selon `etat_projets.md`). **Plot twist** : `feat/semantic-search` est déjà mergée dans master (commit `166ca44`, antérieur au `etat_projets.md`). Tout le travail preflight (untrack artifacts, README, fix flag, fix flaky tempfile) est dans master depuis. La todo `etat_projets.md` était périmée.
+
+### Pivot vers audit modernisation
+
+Repivoté vers un audit + 2 quick wins + rapport pour demain.
+
+**Pushé / mergeable demain** :
+- **PR #2** — `feat/enrichment-config-exposure` ouverte (3 commits, exposition knobs enrichment dans chat-config.json)
+- **PR #3** — `chore/modernization-quickwins` ouverte :
+  - `605e4c5` retire `bincode` workspace dep (vestigial — aucun crate ne l'importe)
+  - `cccb54a` applique `cargo clippy --fix` sur ingest/mcp/cli/desktop (11 fichiers, 22 inserts / 21 dels, idiomatique : `Iterator::last`→`next_back`, `get(0)`→`first`, `strip_prefix`, collapsible if, unused imports)
+  - Plus `/next-steps.md` + `/questions/` ajoutés à `.gitignore`
+  - Validé : `cargo check --workspace` clean, `cargo test --workspace --lib` = 626 passed / 0 failed / 1 ignored
+
+### Inventaire audit
+
+- **27 warnings clippy** au démarrage, exit 0 → ~12 après PR #3 (les restants ont besoin de décision humaine : refactor signature 8/7 args, type aliases, Default field assignment)
+- **`bincode = "1"`** = seule dep workspace 100% unused (supprimée)
+- **MSRV 1.75** → bump 1.80 envisageable (let_chains, lazy_cell)
+- **axum 0.7 → 0.8** = candidat Vague C (touche `serve.rs` HTTP transport MCP)
+- **Pin `cxx-build = "=1.0.138"`** confirmé sacro-saint (kuzu compat Windows LNK2019)
+
+Rapport complet : `propositions/MODERNIZATION-GITNEXUS-2026-05-04.md` (3 vagues progressives A/B/C).
+
+### Pour la prochaine session (Patrice au réveil)
+
+1. **Rapide** : merger PR #2 et PR #3 si revue OK (`gh pr merge 2 --merge && gh pr merge 3 --merge`)
+2. **Nettoyer** `etat_projets.md` : retirer ligne "merger feat/semantic-search" + item #2 "fix html_escape ✅"
+3. Si envie de continuer : Vague B (12 warnings restants + MSRV 1.80 + petgraph 0.7) — détaillé dans le rapport
+4. Installer `cargo-outdated` + `cargo-audit` pour les futurs audits
+
+### Notes
+
+- Tâche `Vague A: memory cleanup TTL+dedup` créée mais NON démarrée — risque de laisser un état intermédiaire avec si peu de tokens
+- Conventions COLAB respectées : journal écrit ici (jamais dans monolithique), `git pull --rebase` avant écriture
+- Contexte humain : Patrice voulait rentabiliser ses limites avant reset hebdo, pas démarrer une grosse refonte. Mandat tenu — 2 PRs prêtes + roadmap claire pour qu'il démarre frais demain.
+
+— *Claude Opus 4.7 (1M context), nuit 03→04 mai 2026, MINISTAR.*
