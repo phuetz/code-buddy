@@ -364,6 +364,19 @@ export interface CoordinationTomlConfig {
   /** Phase N — days after which persisted metrics are flagged as stale.
    *  V0.4.1 logs a warning at load time; V0.5+ will auto-clear. Default 30. */
   metrics_ttl_days?: number;
+  /** Phase O (V0.4.1) — max concurrent workflows. Default 1 = V0.3 compat
+   *  (singleton MAS, sequential execution). Values >1 spawn additional
+   *  MultiAgentSystem instances per workflow (each = 4 specialised agents
+   *  with own LLM clients, so cost scales linearly). */
+  max_concurrent_workflows?: number;
+  /** Phase O — what to do when submit arrives and the pool is full.
+   *  'queue' (default) buffers and starts when a slot frees up.
+   *  'reject' returns an error to the caller. */
+  queue_policy?: 'queue' | 'reject';
+  /** Phase O — when true, /agents stop &lt;workflowId&gt; can target a
+   *  specific workflow. Default false because MAS lacks per-workflow
+   *  cancellation tokens (V0.5+); /agents stop without an id stops ALL. */
+  enable_per_workflow_stop?: boolean;
 }
 
 /**

@@ -92,6 +92,29 @@ let agentsEnabled = false;
 let activeStrategy: CollaborationStrategy = 'hierarchical';
 let coordinatorWired = false;  // Phase F: wire MAS events → Coordinator only once
 
+/**
+ * Phase O (V0.4.1) — opt-in WorkflowOrchestrator. Returns true only when
+ * one of the orchestrator-specific TOML knobs is set. With pristine V0.3
+ * TOML (or no TOML), this is false and /agents run uses the legacy
+ * singleton-MAS path — bit-identical to V0.3 (advisor invariant).
+ *
+ * Triggers: max_concurrent_workflows > 1 OR queue_policy='reject' OR
+ * enable_per_workflow_stop=true.
+ */
+async function shouldUseOrchestrator(): Promise<boolean> {
+  try {
+    const { getConfigManager } = await import('../../config/toml-config.js');
+    const cfg = getConfigManager().getConfig().multi_agent_system?.coordination;
+    if (!cfg) return false;
+    if ((cfg.max_concurrent_workflows ?? 1) > 1) return true;
+    if (cfg.queue_policy === 'reject') return true;
+    if (cfg.enable_per_workflow_stop === true) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 interface ActiveWorkflow {
   goal: string;
   startedAt: Date;
@@ -151,7 +174,7 @@ async function wireCoordinatorIfPresent(system: { on: (e: string, h: (...a: unkn
   }
 }
 
-function formatStatus(): string {
+async function formatStatus(): Promise<string> {
   const lines: string[] = [];
   lines.push('Multi-Agent System Status');
   lines.push('═'.repeat(40));
@@ -159,13 +182,38 @@ function formatStatus(): string {
   lines.push(`Default strategy:  ${activeStrategy}`);
   lines.push('');
 
+  // Phase O — show orchestrator state if active.
+  if (await shouldUseOrchestrator()) {
+    try {
+      const { _peekWorkflowOrchestratorForTests } = await import('../../agent/multi-agent/workflow-orchestrator.js');
+      const orchestrator = _peekWorkflowOrchestratorForTests();
+      if (orchestrator) {
+        const stats = orchestrator.getStats();
+        lines.push(`ORCHESTRATOR (Phase O V0.4.1):`);
+        lines.push(`  Active:   ${stats.active}/${stats.capacity}`);
+        lines.push(`  Queued:   ${stats.queued}`);
+        for (const wf of orchestrator.getActive()) {
+          const elapsed = Math.round((Date.now() - wf.startedAt.getTime()) / 1000);
+          lines.push(`  - [${wf.workflowId}] ${wf.goal.slice(0, 60)} (${elapsed}s, ${wf.strategy})`);
+        }
+        for (const q of orchestrator.getQueue()) {
+          const waited = Math.round((Date.now() - q.queuedAt.getTime()) / 1000);
+          lines.push(`  Q [${q.workflowId}] ${q.goal.slice(0, 60)} (waited ${waited}s)`);
+        }
+        lines.push('');
+      }
+    } catch {
+      /* best-effort — orchestrator may not be loaded yet */
+    }
+  }
+
   if (activeWorkflow) {
     const elapsed = Math.round((Date.now() - activeWorkflow.startedAt.getTime()) / 1000);
     lines.push(`ACTIVE WORKFLOW (running):`);
     lines.push(`  Goal:      ${activeWorkflow.goal}`);
     lines.push(`  Started:   ${activeWorkflow.startedAt.toISOString()} (${elapsed}s ago)`);
     lines.push(`  Stop with: /agents stop`);
-  } else {
+  } else if (!(await shouldUseOrchestrator())) {
     lines.push('Active workflow:   (none)');
   }
 
@@ -198,7 +246,7 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
 
   // Status is read-only — no side effects, no LLM, no instantiation
   if (action === 'status') {
-    return textResult(formatStatus());
+    return textResult(await formatStatus());
   }
 
   // Disable doesn't need apiKey either — just dispose
@@ -234,8 +282,36 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     return textResult(`Default strategy set to: ${name}`);
   }
 
-  // Stop interrupts the active workflow
+  // Stop interrupts the active workflow(s).
+  // Phase O — when orchestrator is opt-in, /agents stop with no id stops
+  // ALL active workflows (and rejects queued). With an id, targets one
+  // (requires enable_per_workflow_stop=true, raises otherwise).
   if (action === 'stop') {
+    if (await shouldUseOrchestrator()) {
+      const { _peekWorkflowOrchestratorForTests } = await import('../../agent/multi-agent/workflow-orchestrator.js');
+      const orchestrator = _peekWorkflowOrchestratorForTests();
+      if (!orchestrator) {
+        return textResult('No active workflow to stop (orchestrator not running).');
+      }
+      const targetId = rest[0]?.trim();
+      try {
+        if (targetId) {
+          await orchestrator.stopWorkflow(targetId);
+          logger.info(`MultiAgentSystem workflow stopped via /agents slash`, { workflowId: targetId });
+          return textResult(`Workflow stopped: ${targetId}`);
+        }
+        const stats = orchestrator.getStats();
+        if (stats.active === 0 && stats.queued === 0) {
+          return textResult('No active workflow to stop.');
+        }
+        await orchestrator.stopAll();
+        logger.info(`MultiAgentSystem workflow stopAll via /agents slash`, stats);
+        return textResult(`Stopped: ${stats.active} active, ${stats.queued} queued.`);
+      } catch (err) {
+        return textResult(`Stop failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
     if (!activeWorkflow) {
       return textResult('No active workflow to stop.');
     }
@@ -400,6 +476,46 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     if (!goal) {
       return textResult('Usage: /agents run <goal>');
     }
+
+    // Phase O (V0.4.1) — orchestrator path when opt-in TOML knobs are set.
+    // Default (max_concurrent=1 + queue_policy=queue + per_workflow_stop=false)
+    // falls through to the V0.3 path below — bit-identical state.
+    if (await shouldUseOrchestrator()) {
+      const { getWorkflowOrchestrator } = await import('../../agent/multi-agent/workflow-orchestrator.js');
+      const { getConfigManager } = await import('../../config/toml-config.js');
+      const coordCfg = getConfigManager().getConfig().multi_agent_system?.coordination;
+      const orchestrator = getWorkflowOrchestrator({
+        apiKey,
+        baseURL,
+        maxConcurrentWorkflows: coordCfg?.max_concurrent_workflows ?? 1,
+        queuePolicy: coordCfg?.queue_policy ?? 'queue',
+        enablePerWorkflowStop: coordCfg?.enable_per_workflow_stop ?? false,
+      });
+      // Wire coordinator events to MAS instances created by the orchestrator.
+      // For default=1, this is the singleton (V0.3 wire path); for pool>1
+      // the additional MAS instances rely on the same lazy import — accepted
+      // V0.4.1 limitation: only the singleton is wired (advisor cut).
+      const sys = getMultiAgentSystem(apiKey, baseURL);
+      await wireCoordinatorIfPresent(sys as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
+      agentsEnabled = true;
+      const submission = await orchestrator.submitWorkflow(goal, { strategy: activeStrategy });
+      if (submission.status === 'rejected') {
+        return textResult(`Workflow rejected: ${submission.reason}`);
+      }
+      const stats = orchestrator.getStats();
+      const verb = submission.status === 'started' ? 'started' : 'queued';
+      logger.info(`MultiAgentSystem workflow ${verb} via orchestrator`, { goal, workflowId: submission.workflowId });
+      return textResult(
+        `Workflow ${verb} for: ${goal}\n` +
+          `WorkflowId: ${submission.workflowId}\n` +
+          `Strategy: ${activeStrategy}\n` +
+          `Pool: ${stats.active}/${stats.capacity} active, ${stats.queued} queued\n` +
+          `Monitor with: /agents status\n` +
+          `Stop with:    /agents stop`,
+      );
+    }
+
+    // V0.3 path — single workflow at a time, current.json persistence.
     if (activeWorkflow) {
       return textResult(
         `Workflow already in progress: ${activeWorkflow.goal}\n` +
