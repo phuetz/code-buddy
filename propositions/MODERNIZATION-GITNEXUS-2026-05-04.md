@@ -29,7 +29,7 @@
 | `gitnexus-cli` | 12 | 9 | auto: 4× `Iterator::last`, get(0), splitn, range, unused import, unused var ; **NON-auto: 2× too_many_arguments (8/7) sur `enrichment.rs:1275 + :2794`** |
 | `gitnexus-desktop` | 5 | 4 | auto: 3× `Iterator::last`, unused Ordering, clone vs from_ref ; non-auto: 3× field assignment outside Default |
 
-**Après PR #3** : ~12 warnings restent, tous nécessitent une décision humaine (refactor de signature, extraction de type alias, ou usage de `Default::default { ..init }` syntax).
+**Après PR #3** : **13 warnings uniques restent** (vérifié post-merge sim avec `cargo clippy --workspace --all-targets`), tous nécessitent une décision humaine (refactor de signature, extraction de type alias, ou usage de `Default::default { ..init }` syntax).
 
 ---
 
@@ -86,7 +86,7 @@ Versions courantes connues à janvier 2026. Sans `cargo outdated` installé, vé
 
 ### Vague B — Refactors ciblés (~3-6 h, moyen risque)
 
-- [ ] **Resolve les 12 warnings clippy résiduels** — chaque crate, commit séparé
+- [ ] **Resolve les 13 warnings clippy résiduels** — chaque crate, commit séparé
   - `enrichment.rs` `too_many_arguments` (8/7) sur 2 fns : extraire un struct Config (déjà partiellement amorcé avec `EnrichmentConfig`)
   - `cycles.rs` + `config_inventory.rs` : type aliases pour les retours `Vec<(String, Declaration)>` etc
   - Field assignment outside Default : remplacer `let mut x = T::default(); x.field = ...;` par `T { field: ..., ..Default::default() }`
