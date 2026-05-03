@@ -1,13 +1,15 @@
 # CLAUDE.md
 
-> **Status: 1.0.0-rc.4 — V1 release candidate** (May 2026). Multi-AI fleet hub
-> (Phases (d).1 → (d).16a) is the headline feature. Through rc.4: auto-memory
+> **Status: 1.0.0-rc.5 — V1 release candidate** (May 2026). Multi-AI fleet hub
+> (Phases (d).1 → (d).16a) is the headline feature. Through rc.5: auto-memory
 > writeback, `/memory recent`, `AGENTS.md` cross-CLI scaffold, opt-in
 > mid-stream retry, history curation API (Gemini CLI audit reco #3, 3/3
 > closed), `Explore` read-only subagent + `disallowedTools` field
 > (Claude Code audit Phase A+C), `/subagent` discovery slash, **`/swarm
-> <task>`** team-lead UX inspired by Korben (no patch needed — Code
-> Buddy ships the MultiAgentSystem infra built-in). Read
+> <task>`** team-lead UX inspired by Korben, **lessons feature activated**
+> + **`<writing_rules>` directive** (Manus AI structured blocks pattern,
+> @renschni gist) — completes the persistence trilogy auto-memory +
+> lessons + writing discipline. Read
 > [`docs/getting-started.md`](docs/getting-started.md) first. See
 > [`docs/fleet-guide.md`](docs/fleet-guide.md) and
 > [`CHANGELOG.md`](CHANGELOG.md).

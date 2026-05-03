@@ -15,7 +15,23 @@ Heading toward `1.0.0` final. Backlog tracked under `## [Unreleased]`'s
 [`docs/fleet-guide.md`](docs/fleet-guide.md) (V1.x roadmap section)
 and the audit follow-ups noted under `## [0.5.1-fleet]`.
 
-### Added since rc.4
+---
+
+## [1.0.0-rc.5] — 2026-05-04
+
+**Fifth release candidate** — convergence Manus AI. Two ships post-rc.4
+that complete the persistence trilogy (auto-memory + lessons + writing
+discipline) and adopt Manus AI's structured prompt blocks pattern. Both
+ships followed the now-established "wake dormant code via system
+directive + RAG always-include" recipe — 7th and 8th iterations of the
+session pattern.
+
+The session as a whole: 4 release candidates (rc.2 = 6 ships, rc.3 = 3
+ships, rc.4 = 4 ships, rc.5 = 2 ships) = 15 functional commits + 4
+release commits + 2 audit docs. The releases pattern is now an operating
+rhythm: ship narrow → bump version → repeat.
+
+### Added
 - **`<writing_rules>` system prompt directive** — proactive output
   discipline inspired by Manus AI's structured prompt blocks pattern
   (gist `renschni/4fbc70b...`, May 2026 reverse-engineering of Manus AI).
