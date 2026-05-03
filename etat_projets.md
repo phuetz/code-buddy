@@ -1,4 +1,75 @@
-# État des projets — mis à jour le 26 avril 2026
+# État des projets — mis à jour le 03 mai 2026
+
+## ✨ Bilan d'étape — 03 mai 2026 (consolidation)
+
+Grosse journée multi-IA validée empiriquement. Trois axes ont avancé en parallèle :
+
+### 1. Code Buddy / grok-cli — fleet inter-Claude opérationnel
+
+Phases (d).6 → (d).14 + tests T1-T5 livrées et **pushées** sur `phuetz/code-buddy:main` :
+
+| Phase | Brique | Source/Pattern |
+|-------|--------|----------------|
+| (d).6 | FleetListener auto-reconnect (exponential backoff via ReconnectionManager) | (d).5 deferral fermé |
+| (d).7 | handler.ts broadcast backpressure (drop-on-overflow) | (d).1 deferral fermé |
+| (d).8 | gateway/ws-transport.ts backpressure (mirror (d).7) | (d).7 follow-up |
+| (d).9 | Peer presence beacon (heartbeat + lastSeen + stale flag) | OpenClaw v2026.4.27 |
+| (d).10 | Compaction notices (bridge SmartCompactionEngine → fleet bus) | OpenClaw v2026.4.20 |
+| (d).11 | Event history ring + `/fleet history` slash | UX gap "what-did-I-miss" |
+| (d).12 | Multi-peer fan-in (`/fleet listen` N peers, `--name <id>`) | Phase (d).5 deferral |
+| (d).13 | Peer RPC routing actif (`/fleet send <peer> <method>`, `peer:request`/`peer:response`) | OpenClaw `node.invoke` |
+| (d).14 | Role taxonomy (`main\|orchestrator\|leaf`) + spawn depth cap + trace propagation | OpenClaw `SubagentSessionRole` |
+| T1-T5 | Tests CRITIQUE : permission-modes, agent-context-facade, model-routing-facade, prompt-builder, infrastructure-facade | Audit-driven test plan |
+
+**Total** : 14 commits, 445/445 tests verts (zéro régression cumulée), typecheck + lint clean.
+
+**État du fleet** :
+- `/fleet listen ws://...` peut désormais maintenir N peers simultanément avec auto-reconnect, presence beacon, compaction notices, event history ring
+- `/fleet send <peer> <method> [json-params]` permet l'**invoke actif** entre Claudes (mirror du pattern `node.invoke` OpenClaw)
+- `peer.describe`/`peer.ping`/`peer.echo` exposés par défaut ; ajout de méthodes business (chat.send, tool.run, session.spawn) = V0.5
+- Anti-loop : `CODEBUDDY_PEER_MAX_DEPTH=3` (default) + `CODEBUDDY_PEER_ROLE=leaf` refuse outgoing requests
+- Trace propagation end-to-end via `traceId` + `depth` dans les frames
+
+→ Le mesh DARKSTAR + MINISTAR + Ministar Linux est **techniquement prêt** pour coordination multi-IA active. Reste : restart systemd hub Ministar Linux + 2 clics UAC DARKSTAR (firewall + Ollama).
+
+### 2. PdfCommander (MINISTAR, avec Antigravity) — nouveau projet majeur
+
+Première grosse session avec **Antigravity** (Google AI Ultra IDE) — premier IA non-Claude qui rejoint le fleet via la convention COLAB.md / journal-per-source.
+
+- 50 panneaux Hub IA + 9 panneaux outils classiques intégrés dans `MainWindowViewModel`
+- Architecture MVVM stricte : DI via `serviceProvider.GetRequiredService<T>()`, exclusion mutuelle UI (`CloseAllPanelsExcept()`), propagation contextuelle du `PdfPath`/`CurrentFilePath` à chaque outil sur changement d'onglet
+- Découpage en sprints de 4-5 panneaux (= même doctrine narrow-scope que Code Buddy)
+- **Zéro erreur de compilation au build final**
+- Local : `D:\CascadeProjects\PdfCommander` (.NET, .sln + AGENTS.md + CLAUDE.md + COLAB.md + GEMINI.md = multi-IA convention en place)
+- Journal : `journal/ministar-PdfCommander.md` (Antigravity, 03/05/2026)
+
+→ La convention COLAB.md proposée par Lisa en avril est **empiriquement validée cross-vendor** (Anthropic + Google).
+
+### 3. TurboQuant (DARKSTAR) — KV cache disk persistence livré
+
+Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
+- Question #3 (cache disk persistence) implémentée + benchmarkée sur RTX 3090 → **12-36× speedup**
+- Branche `feat/cache-disk-persistence` push sur `phuetz/TurboQuant`, PR pas encore ouverte
+- Question #4 (cross-host KV shipping via A2A) **débloquée**
+- Cf. `journal/darkstar-grok-cli.md` (commit `d53a467`)
+
+### Roster IA actif
+
+| IA | Domaine principal | Convention adoptée |
+|----|-------------------|--------------------|
+| Claude (Anthropic) | Architecture, code Rust/C#/TS, fleet inter-Claude, advisor | COLAB.md ✅ |
+| Codex | Génération code, tests, implémentations TS/Python | COLAB.md ✅ |
+| Gemini CLI | Volume, contenu long, livre Compagnon de Silicone | COLAB.md ✅ |
+| **Antigravity (Google AI Ultra)** | **PdfCommander MVVM, archi C#** | **COLAB.md ✅ depuis 03/05** |
+
+### Pour les autres Claudes du fleet qui pull
+
+- Code Buddy `main` est à jour (`9ca5b7e`). Phases (d).12-14 disponibles ; lire les commit bodies pour le détail des nouvelles APIs (`/fleet send`, role config, depth cap).
+- Hub Ministar Linux : restart systemd `codebuddy-a2a.service` requis pour récupérer les phases récentes côté server.
+- DARKSTAR : peut maintenant register son spoke après réponse aux 2 UAC pending (firewall + Ollama).
+- PdfCommander : C# / .NET / MVVM — pas de scope Claude pour l'instant, mais lire `journal/ministar-PdfCommander.md` pour comprendre l'archi si tu touches ce projet.
+
+---
 
 ## Alise_v2 (CCAS)
 - **Doc HTML** : complète, 23+ modules enrichis via GitNexus
@@ -60,8 +131,9 @@
 ## Commander Suite
 - **NexusFile** : D:\CascadeProjects\NexusFile — pre-1.0, feature-complete
 - **NexusDiff** : D:\CascadeProjects\NexusDiff — tests ajoutés par Codex
-- **TurboQuant** : D:\CascadeProjects\TurboQuant — implémentation arXiv:2504.19874
-- **CodeBuddy/grok-cli** : D:\CascadeProjects\grok-cli — orchestrateur multi-LLM
+- **TurboQuant** : D:\CascadeProjects\TurboQuant — implémentation arXiv:2504.19874. **KV cache disk persistence livré 03/05/2026** par Claude/DARKSTAR (12-36× speedup, branche `feat/cache-disk-persistence`).
+- **CodeBuddy/grok-cli** : D:\CascadeProjects\grok-cli — orchestrateur multi-LLM. **Phases (d).6 → (d).14 livrées le 03/05/2026** (fleet inter-Claude opérationnel : auto-reconnect, backpressure, presence beacon, compaction notices, history, multi-peer fan-in, peer RPC, role taxonomy). Tests T1-T5 CRITIQUE livrés (≥93% coverage sur permission-modes, agent-context-facade, model-routing-facade, prompt-builder, infrastructure-facade).
+- **PdfCommander** : D:\CascadeProjects\PdfCommander — .NET MVVM, hub IA + outils PDF classiques. **Premier projet majeur Antigravity** (Google AI Ultra IDE). 59 panels intégrés dans `MainWindowViewModel` le 03/05/2026 (50 IA + 9 outils classiques, zéro erreur de compilation au build final). DI via `serviceProvider`, exclusion mutuelle UI, propagation contextuelle. Convention multi-IA en place (CLAUDE.md + AGENTS.md + COLAB.md + GEMINI.md).
 
 ## Projets WSL (`\\wsl.localhost\Ubuntu-22.04\home\patrice\claude\`)
 > MonArtisan et Office Suite ont leurs propres sections détaillées plus bas.
