@@ -2200,3 +2200,38 @@ ou `cowork/src/renderer/components/`, prévenir ici avant — la branche
 `feat/face-memory-cowork` est en review, pas encore mergée.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 4 mai 2026 ~17h30
+
+## 2026-05-04 ~18h30 — [x] Face memory V0 backend COMPLET (chunk 5 livré)
+
+Commit final ajouté à `feat/face-memory-cowork` :
+- `4a50d03` chunk 5 — wire main bootstrap + Window types unifiés + README + tsc clean
+
+**État final V0 backend (6 commits, tsc passes, npm install OK)** :
+
+✅ types + store + bridge + recognizer + detector
+✅ preload IPC bridge (Window.electronAPI.presence canonique)
+✅ EnrollmentDialog + PresenceIndicator (composants prêts mais non mountés)
+✅ main/index.ts wire (handlers IPC actifs au boot Electron)
+✅ README complet `cowork/src/main/presence/README.md`
+✅ presence-injector côté Code Buddy core hooké dans `before_agent_execute`
+
+**Reste pour V0 visible utilisateur (très petit)** :
+- App.tsx wiring : monter `<EnrollmentDialog>` + `<PresenceIndicator>` au
+  bon endroit (à côté de `<PersonaSwitcherDialog>` ligne 479 par
+  exemple, avec état Zustand similaire à `showPersonaSwitcher`).
+  ~10 lignes mais demande de toucher App.tsx — délibérément reporté
+  à une session dédiée pour pas bricoler dans 496 lignes à 18h30.
+
+**Reste pour V0 fonctionnel sur la machine de Patrice** :
+- Télécharger Buffalo_S ONNX (~13 MB, doc dans
+  `cowork/src/main/presence/README.md` étape 2)
+- Placer à `<userData>/models/buffalo_s.onnx` (path log au premier
+  appel raté, donc pas de devinette)
+
+**V0.5 (out of scope aujourd'hui)** : PresenceService daemon continu —
+boucle capture → detect → encode → match toutes les N secondes pour le
+greeting automatique sans clic.
+
+PR prête : https://github.com/phuetz/code-buddy/pull/new/feat/face-memory-cowork
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 4 mai 2026 ~18h30
