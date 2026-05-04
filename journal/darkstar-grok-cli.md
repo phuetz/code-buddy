@@ -872,3 +872,32 @@ ollama-darkstar registered, heartbeat fresh (~18s)
 **Phase B (Telegram bridge)** : j'enchaîne maintenant. Création d'un nouveau spoke Python `telegram_a2a_spoke.py` qui poll Telegram + forward au hub + retourne la réponse au tel. Patrice devra créer le bot via @BotFather (5 min manuel). À la prochaine entry.
 
 — Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2026-05-04 12h20 UTC
+
+## 2026-05-04 ~13h00 UTC — Phase B : Telegram bridge livré (en attente bot token)
+
+**À la flotte** : Phase B livrée côté code, en attente du bot token côté Patrice.
+
+**Livré** (commit `ac166660` sur `phuetz/code-buddy` branche `feat/spoke-heartbeat-and-resilience`) :
+
+- `scripts/telegram_a2a_spoke.py` — wrapper Python ~340 LOC. Poll Telegram via `python-telegram-bot` 22.7, forward au hub `/api/a2a/tasks/send`, retourne la réponse au chat. Allow-list user IDs obligatoire (refuse de démarrer avec `--allowed-user-ids` vide).
+- `scripts/TELEGRAM_BRIDGE_SETUP.md` — runbook 5 étapes pour Patrice : créer bot via @BotFather → trouver son user_id → set env vars → re-run setup_a2a_autostart_darkstar.ps1.
+- Setup script desktop V2.1 : 3ème task planifiée `TelegramA2ASpoke` (conditionnelle, ne register que si `TELEGRAM_BOT_TOKEN` ET `TELEGRAM_ALLOWED_USER_IDS` sont présents en User env vars).
+
+**Architecture choisie** : spoke Python standalone (pas extension TS de l'infra `src/channels/telegram/` existante) — mirror du pattern `ollama_a2a_spoke.py` qui marche, indépendant du hub, déployable n'importe où. ~340 LOC vs un fork TS qui aurait demandé de toucher au hub TS et risque de casser autre chose.
+
+**Validation hub** (avant shipping le wrapper) : test E2E sur le vrai pipeline `call_hub_task` → hub → ollama-* → réponse, payload `{"message":{"role":"user","parts":[{"type":"text","text":"Reply with exactly the word OK"}]},"metadata":{"model":"qwen3:4b"},"skill":"ollama-qwen3-4b"}` → réponse `"OK"`. Le format est aligné avec ce que le hub attend (POC Niveau 3 smart skill routing pick le spoke).
+
+**V0 limites assumées** :
+- One-way : Patrice → fleet uniquement. Les Claudes ne peuvent pas push de notif sur Telegram (V1, demandera d'exposer un endpoint sur le bridge ou de register au hub avec un skill `notify-via-telegram`).
+- Pas de persistence : si bridge ou hub restart, les messages en cours sont perdus.
+
+**Action attendue côté Patrice** :
+1. @BotFather → /newbot → token
+2. Set `TELEGRAM_BOT_TOKEN` (User scope)
+3. /start le bot, voir son user_id dans les logs
+4. Set `TELEGRAM_ALLOWED_USER_IDS`
+5. Re-run setup script
+
+**Pour la flotte** : la branche `feat/spoke-heartbeat-and-resilience` regroupe Phase A (heartbeat sidecar + auto re-register) + Phase B (Telegram bridge). PR pas encore ouverte (action visible que Patrice fait quand il veut). 2 commits : `2269ca49` (Phase A) + `ac166660` (Phase B).
+
+— Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2026-05-04 13h00 UTC
