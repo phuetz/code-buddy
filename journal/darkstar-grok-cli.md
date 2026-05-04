@@ -836,3 +836,39 @@ tant qu'on n'a pas un cas d'usage concret (un long prompt qu'on veut éviter
 de re-prefill par un autre Claude).
 
 — Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2026-05-03 11h30 UTC
+
+## 2026-05-04 ~12h20 UTC — Phase A : DARKSTAR fiable 24/7 (heartbeat + battery)
+
+**À la flotte** : ce matin reset hebdo des tokens, Patrice a relancé "converge vers
+notre objectif" en mode plan. Plan approuvé : Phase A (stabilité spoke) + Phase B
+(Telegram bridge). A1 + A2 livrés à l'instant.
+
+**Bug observé nuit 2026-05-03** : OllamaA2ASpoke task a fait LastRunTime=01h29 puis
+exit clean (LastResult=0x0), DARKSTAR a drop de la fleet jusqu'à 10h le matin.
+Hypothèse confirmée : Windows a probablement mis en veille / hibernation.
+
+**Phase A1 — heartbeat sidecar** (commit `2269ca49` sur branche `feat/spoke-heartbeat-and-resilience` du repo `phuetz/code-buddy`) :
+
+- Ajout d'un `threading.Thread(daemon=True)` dans `ollama_a2a_spoke.py:run()` qui POST `/api/a2a/agents/{name}/heartbeat` toutes les 30s avec `requests.Timeout=5s`.
+- Sur 2× 404 consécutifs (le hub a redémarré et oublié notre register), re-register automatique. Plus besoin du curl manuel documenté dans le journal pour les redémarrages hub.
+- Validé live à l'instant : heartbeat age oscille entre 0 et 30s comme attendu, le sidecar refresh régulièrement.
+
+**Phase A2 — autostart résilient sleep/hibernation** (script desktop `setup_a2a_autostart_darkstar.ps1` mis à jour, V2 noté en commentaire) :
+
+- Tenté S4U principal pour survivre aux logoffs → échec "Accès refusé" (Win11 demande admin pour S4U).
+- Plan B retenu : garder `AtLogon -User` + `LogonType Interactive` mais ajouter `AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -WakeToRun` aux Settings. La task se relance maintenant après un sleep/hibernation.
+- Combiné avec le heartbeat sidecar : même si le sleep coupe le wrapper, le redémarrage automatique + re-register couvre le cas.
+
+**Phase A3 — vérif live** :
+```
+[OK] Ollama local + tailnet
+[OK] Spoke local + tailnet
+[OK] Hub agents
+ollama-darkstar registered, heartbeat fresh (~18s)
+```
+
+**Limite résiduelle connue** : si Patrice fait un *full logoff* (pas juste un lock), la session se ferme et la task Interactive avec. Trigger AtLogon re-fire au prochain logon. Pas un sleep, donc pas de coupe instantanée — récupération à la prochaine connexion.
+
+**Phase B (Telegram bridge)** : j'enchaîne maintenant. Création d'un nouveau spoke Python `telegram_a2a_spoke.py` qui poll Telegram + forward au hub + retourne la réponse au tel. Patrice devra créer le bot via @BotFather (5 min manuel). À la prochaine entry.
+
+— Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2026-05-04 12h20 UTC
