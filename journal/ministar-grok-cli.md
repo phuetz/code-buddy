@@ -2079,3 +2079,62 @@ Persistence + reprise checkpoint vraie (V0.3 Phase J avec backward compat V0.2)
 Live event streaming pendant /agents run (V0.2 Phase D + V0.3 Phase H conflict_detected events)
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~21h45 UTC
+
+## 2026-05-04: Étude Comparative des Agents (Claude, Operator, Manus vs Cowork)
+
+Suite à l'implémentation de la Phase 3 (OCR Tesseract local et transparence UI des macros) sur Code Buddy Cowork, nous avons mené une étude comparative des agents de *Computer Use*.
+
+### Le Marché (2024-2026)
+1. **Claude Computer Use (Anthropic)** : L'approche VLM pure. Très intelligent, mais souffre d'une forte latence et de coûts élevés car il dépend de l'envoi continu de captures d'écran HD vers un cloud externe.
+2. **Operator (OpenAI)** : Mode agent (ex-Codex). Parfait pour les tâches de navigateur asynchrones, mais n'interagit pas avec le bureau natif de l'utilisateur.
+3. **Manus AI** : Agent cloud asynchrone qui déploie un essaim d'agents (Multi-Agent) dans une machine virtuelle isolée pour accomplir des tâches longues. Bloqué par le gouvernement chinois fin 2025/début 2026 lors de la tentative de rachat par Meta.
+
+### Notre Approche : Code Buddy Cowork
+Cowork représente l'incarnation locale (le "corps" du World Model/Robot Opus 27 en devenir).
+- **Exécution Locale** : Tourne sur MINISTAR/DARKSTAR, avec des modèles locaux (Ollama/Qwen).
+- **Hybridation VLM + Algorithmique** : Contrairement à Claude qui calcule tout via l'IA, Cowork utilise l'action click_text (Tesseract OCR local) pour trouver le centre d'un mot en quelques millisecondes, sans coût de token.
+- **Macros** : Permettent le regroupement natif d'actions pour contrer la latence inhérente aux modèles LLM.
+
+**Conclusion stratégique** : Là où l'industrie s'oriente vers des travailleurs désincarnés isolés dans le Cloud, la démarche de Patrice avec Cowork vise l'agentivité locale. L'agent possède le même environnement matériel que l'humain, posant ainsi les bases sensori-motrices indispensables au futur robot physique.
+
+## 2026-05-04 ~16h — [~] Claim Face memory V0 sur Cowork (feat/face-memory-cowork)
+
+**Contexte** : suite à audit `propositions/AUDIT-MEMOIRE-CODEBUDDY-2026-05-04.md`
+(commit `08c862d`) qui a inventorié les 14 modules `src/memory/` et identifié
+3 gaps (face memory, voice memory, Cowork↔memory bridge temps-réel). Patrice
+a validé l'option B = intégrer le code Lisa `packages/vision-engine` dans
+Cowork (sans toucher à Lisa, sans monter de bridge A2A).
+
+**Stack V0 retenue** :
+- Détection : MediaPipe `blaze_face_short_range` (récupéré de Lisa `vision-engine/src/FaceDetector.ts`)
+- Reconnaissance : InsightFace **Buffalo_S** ArcFace 512-dim ONNX (~13 MB)
+- Runtime : `onnxruntime-node`
+- Storage identité humaine : JSON dans `app.getPath('userData')/presence-store.json`
+- Greeting flow : presence event injecté dans system prompt via hook `before_agent_execute`
+
+**Branche** : `feat/face-memory-cowork` (à créer maintenant)
+
+**Scope fichiers** (claim — si une autre session veut toucher, la prévenir ici) :
+- `cowork/src/main/presence/` ← **nouveau dossier**
+  - `types.ts`
+  - `face-detector.ts` (adapted Lisa, MediaPipe)
+  - `face-recognizer.ts` (nouveau, Buffalo_S ArcFace)
+  - `presence-store.ts` (nouveau, JSON identité humaine)
+  - `presence-bridge.ts` (IPC vers renderer + bus interne Code Buddy)
+- `cowork/src/renderer/components/EnrollmentDialog.tsx` ← nouveau
+- `cowork/src/renderer/components/PresenceIndicator.tsx` ← nouveau
+- `src/memory/presence-injector.ts` ← nouveau (consume IPC, hook before_agent_execute)
+
+**Naming choisi `presence/`** (pas `vision/` ou `identity/`) parce que :
+1. `cowork/src/main/identity/` existe déjà → personas Claude (SOUL.md, USER.md, …),
+   pas reconnaissance humaine. Confusion à éviter.
+2. `presence/` décrit l'objectif (qui est devant la caméra) plutôt que la
+   technique (vision). S'étendra naturellement à V1 speaker verification.
+
+**ETA** : 2-3 sessions. Aujourd'hui = fondation (claim + branche +
+structure + face-detector adapté). Suite = recognizer + store + UI + IPC.
+
+**Coordination** : Antigravity sur autre projet aujourd'hui (info Patrice
+~16h), donc zéro risque collision sur Cowork. Mais discipline préservée.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 4 mai 2026 ~16h
