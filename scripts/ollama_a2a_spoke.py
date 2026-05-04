@@ -12,14 +12,19 @@ Usage:
 
 import os
 import sys
+import time
 import json
 import socket
 import requests
 import argparse
+import threading
 import subprocess
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
+
+HEARTBEAT_INTERVAL_S = 30
+HEARTBEAT_TIMEOUT_S = 5
 
 
 def detect_hostname() -> str:
@@ -292,6 +297,33 @@ class OllamaSpoke:
             print(f"⚠️  Registration error: {e}")
             return False
 
+    def _heartbeat_loop(self):
+        """Daemon loop posting to /api/a2a/agents/{name}/heartbeat every
+        HEARTBEAT_INTERVAL_S seconds. On hub restart (registry wiped) we
+        silently re-register so we don't disappear from the fleet.
+
+        Runs in a background thread; uvicorn keeps the main thread busy.
+        """
+        url = f"{self.hub_url}/api/a2a/agents/{self.spoke_name}/heartbeat"
+        consecutive_404 = 0
+        while True:
+            try:
+                resp = requests.post(url, timeout=HEARTBEAT_TIMEOUT_S)
+                if resp.status_code == 404:
+                    consecutive_404 += 1
+                    # Hub forgot us (likely restart). Try to re-register.
+                    if consecutive_404 >= 2:
+                        print(f"💓 Heartbeat 404 — hub lost registration, re-registering")
+                        self.register_at_hub()
+                        consecutive_404 = 0
+                elif resp.status_code >= 500:
+                    pass  # transient hub error, just retry next tick
+                else:
+                    consecutive_404 = 0
+            except requests.RequestException:
+                pass  # hub unreachable, retry next tick (silent)
+            time.sleep(HEARTBEAT_INTERVAL_S)
+
     def run(self):
         """Start the spoke server"""
         print(f"\n🚀 Ollama A2A Spoke starting")
@@ -314,6 +346,14 @@ class OllamaSpoke:
 
         # Try to register (will fail gracefully if endpoint not ready)
         self.register_at_hub()
+
+        # Heartbeat sidecar — keeps the hub from expiring this spoke after
+        # ~5-15 min and recovers automatically from hub restarts (re-register
+        # on repeated 404). Daemon thread so it dies with uvicorn.
+        threading.Thread(
+            target=self._heartbeat_loop, name="a2a-heartbeat", daemon=True
+        ).start()
+        print(f"💓 Heartbeat: every {HEARTBEAT_INTERVAL_S}s -> {self.hub_url}/api/a2a/agents/{self.spoke_name}/heartbeat")
 
         print(f"\n📡 Endpoints ready:")
         print(f"   Discovery: http://{self.hostname}:3002/api/a2a/.well-known/agent.json")
