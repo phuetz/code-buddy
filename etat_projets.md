@@ -71,6 +71,18 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
 
 ---
 
+## GitNexus Chat — démarré 2026-05-04 (nuit MINISTAR)
+- **Local** : `D:\CascadeProjects\gitnexus-chat`
+- **Statut** : V0 squelette UI mock livré (commit `6f74bac`). Pas de remote GitHub encore (à confirmer demain par Patrice).
+- **Pourquoi** : licence fair-source d'Open WebUI bloquante pour commercialisation agile-up (cf `propositions/CHAT-OPENWEBUI-2026-05-04.md`). Décision Patrice nuit 03→04 mai : "développe notre propre version en React".
+- **Stack** : Vite 7 + React 19 + TS strict (erasableSyntaxOnly) + Tailwind CSS v4 + Zustand persist + react-markdown + lucide-react. License MIT.
+- **Livré V0** : layout 3-zones (sidebar sessions / messages avec scroll auto / input Shift+Enter), store Zustand persisté localStorage, mock chat (delay 800ms + message canned), markdown GFM. Build clean `tsc -b && vite build` = 357 KB / 110 KB gzip.
+- **Roadmap** :
+  - **V1** : brancher `mcp-client.ts` au vrai backend `gitnexus serve --http 8080` via JSON-RPC 2.0, streaming SSE réel, multi-provider config UI, tool_calls inline avec status, citations sources.
+  - **V2** : palette prompts Cmd+K, Shiki+Mermaid, fork/pin sessions, slot modèle visible.
+  - **V3** : Dockerfile + docker-compose (gitnexus-chat + gitnexus-mcp ensemble), auth basique, push GitHub `phuetz/gitnexus-chat` public sous MIT.
+- **À faire au réveil Patrice** : `cd D:\CascadeProjects\gitnexus-chat && npm run dev` → http://localhost:5174 pour valider l'UI ; décider si on push sur GitHub maintenant.
+
 ## Alise_v2 (CCAS)
 - **Doc HTML** : complète, 23+ modules enrichis via GitNexus
 - **GitHub** : https://github.com/phuetz/alise-v2-docs (privé)

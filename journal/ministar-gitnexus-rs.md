@@ -117,3 +117,56 @@ Rapport complet : `propositions/MODERNIZATION-GITNEXUS-2026-05-04.md` (3 vagues 
 - Contexte humain : Patrice voulait rentabiliser ses limites avant reset hebdo, pas démarrer une grosse refonte. Mandat tenu — 2 PRs prêtes + roadmap claire pour qu'il démarre frais demain.
 
 — *Claude Opus 4.7 (1M context), nuit 03→04 mai 2026, MINISTAR.*
+
+---
+
+## 2026-05-04 — Démarrage projet `gitnexus-chat` (suite de la nuit)
+
+Patrice a redirigé : "si y a un problème de licence, développe notre propre version en React". Décision actée : option (1) du rapport `CHAT-OPENWEBUI-2026-05-04.md` = web app standalone séparée du desktop, MIT license, commercialisable agile-up.
+
+Mode plan utilisé pour scoper. Plan validé immédiatement, exécution en 6 étapes.
+
+### V0 livré
+
+Path : `D:\CascadeProjects\gitnexus-chat\` — git init local, **pas de push GitHub** (à confirmer demain).
+
+| Étape | Fait |
+|---|---|
+| 1. Init Vite | `npm create vite@latest . -- --template react-ts` + `npm install` (153 packages) |
+| 2. Tailwind v4 + deps | `tailwindcss @tailwindcss/vite zustand react-router-dom react-markdown remark-gfm lucide-react clsx` |
+| 3. Structure | 13 fichiers source : ChatPanel/ChatSidebar/ChatMessages/ChatMessage/ChatInput/Markdown + use-chat.ts + chat-store.ts (Zustand persist) + mcp-client.ts mock + types/chat.ts |
+| 4. Mock chat flow | sendMessage → store → faux delay 800ms → canned response markdown. Persist localStorage OK. |
+| 5. Docs | README.md (roadmap V0→V3) + LICENSE MIT + CLAUDE.md + COLAB.md |
+| 6. Git | `git init -b main`, commit `6f74bac` "feat: initial scaffold (Vite 7 + React 19 + TS strict + Tailwind v4)" |
+
+**Build clean validé** : `tsc -b && vite build` = 357 KB / **110 KB gzip**. Un fix TS strict (`erasableSyntaxOnly` interdit les parameter properties) résolu en cours de route.
+
+### Choix arrêtés (cohérents avec le desktop)
+
+- Stack identique au desktop (React 19 + Tailwind v4 + Zustand)
+- Port dev `5174` (pour ne pas collisionner avec gitnexus-desktop sur 1421 ni Vite par défaut 5173)
+- License MIT (vs PolyForm-NC du gitnexus-rs) — commercial-friendly
+- Backend visé V1 : `gitnexus serve --http 8080` (HTTP transport MCP existant)
+- Alternative à Open WebUI sans copier code (stack incompatible Python+Svelte → React, et licence OWUI fair-source bloquante)
+
+### Pour le réveil de Patrice
+
+1. `cd D:\CascadeProjects\gitnexus-chat && npm run dev` → http://localhost:5174 → vérifier UI
+2. Tester : "Nouvelle conversation" → taper un message → recevoir mock response → reload → message persisté ✓
+3. Si OK : décider si on push GitHub `phuetz/gitnexus-chat` (public ou privé d'abord ?)
+4. Démarrer V1 = brancher backend réel
+
+### Total session 2026-05-04 (vue d'ensemble)
+
+3 livrables PRs/branches pushés sur `phuetz/gitnexus-rs` :
+- PR #2 enrichment-config-exposure
+- PR #3 modernization-quickwins (bincode + clippy + fmt)
+
+3 docs publiés sur `phuetz/claude-et-patrice` :
+- `propositions/MODERNIZATION-GITNEXUS-2026-05-04.md`
+- `propositions/CHAT-OPENWEBUI-2026-05-04.md`
+- `etat_projets.md` mis à jour avec section gitnexus-chat
+
+1 nouveau projet local : `D:\CascadeProjects\gitnexus-chat\` V0 squelette commité (pas pushé GitHub).
+
+— *Claude Opus 4.7 (1M context), 03→04 mai 2026, MINISTAR.*
