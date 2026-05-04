@@ -169,4 +169,24 @@ Path : `D:\CascadeProjects\gitnexus-chat\` — git init local, **pas de push Git
 
 1 nouveau projet local : `D:\CascadeProjects\gitnexus-chat\` V0 squelette commité (pas pushé GitHub).
 
+### Audit post-V0 (mode plan)
+
+Patrice a demandé un audit "tout est complet ?". Audit lecture-seule via plan mode → 4 trous moyens trouvés (doc vs code) :
+
+1. README/CLAUDE.md disaient "TypeScript strict" mais `"strict": true` absent du tsconfig
+2. README mentionnait Shiki (pas installé en V0)
+3. `package.json` version 0.0.0 vs README "v0.0.1"
+4. `index.html` lang="en" + title "gitnexus-chat" alors que UI française
+
+Plus 1 mineur : pas de `.env.example` documentant `VITE_MCP_URL`.
+
+Tous fixés en commit `f68db9d` :
+- `"strict": true` ajouté dans tsconfig.app + tsconfig.node, build reste clean 110 KB gzip
+- Mention Shiki déplacée en V2 roadmap
+- Bump 0.0.0 → 0.0.1
+- `lang="fr"` + `<title>GitNexus Chat</title>`
+- `.env.example` créé
+
+`git log --oneline` gitnexus-chat : 2 commits propres (`6f74bac` scaffold, `f68db9d` audit fixes).
+
 — *Claude Opus 4.7 (1M context), 03→04 mai 2026, MINISTAR.*
