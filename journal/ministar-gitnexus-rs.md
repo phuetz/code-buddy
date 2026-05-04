@@ -189,4 +189,51 @@ Tous fixés en commit `f68db9d` :
 
 `git log --oneline` gitnexus-chat : 2 commits propres (`6f74bac` scaffold, `f68db9d` audit fixes).
 
+### V1 puis V1.1 : passage au backend réel + audit
+
+Patrice a redirigé : "je ne veux pas des mocks dans le chat, le but est de lancer des requêtes dans gitnexus-rs". Pivot vers V1 réel.
+
+Lancée mission Explore vers Lisa (vide — rien à reprendre) + gitnexus-mcp. Trouvé que `gitnexus serve --port 3000` expose **`/api/chat` SSE** qui fait déjà tout (LLM + contexte graphe via `ask_question`), pas besoin d'orchestrer côté chat.
+
+**V1 (commit `39c6e99`)** :
+- `mcp-client.ts` réécrit : `listRepos()` GET `/api/repos` + `chatStream()` POST `/api/chat` SSE avec parser de deltas + AbortController
+- `ProjectSelector.tsx` : dropdown qui charge les repos au boot, refresh manuel, gère error/empty
+- `chat-store.ts` : ajout `selectedRepo` + `updateMessage` (streaming en place) + `inputDraft`
+- `useChat` : crée message assistant vide puis stream les deltas dans `updateMessage`
+- `ChatInput` : placeholder dynamique + bouton Stop pendant streaming
+- `vite.config.ts` : proxy `/api`, `/health`, `/mcp` → localhost:3000 (contourne CORS sans rebuild)
+
+`gitnexus serve` lancé en background (PID `bxugsciyg`), répond `/health` + `/api/repos` (grok-cli, gitnexus-rs, Alise_v2, etc.).
+
+**Audit V1 en mode plan → V1.1 (commits `b3c960c` + `f2c0578`)** :
+
+P0 bugs correctness :
+- **SSE parser non conforme** au RFC : ne réassemblait pas les events multi-ligne `data:`, ignorait `event: error`. Réécrit selon spec : accumulation `dataLines[]`, flush sur ligne vide, tracker `eventType`, `ChatStreamError` structurée pour `event: error`, sentinel `SseDone` pour `[DONE]`. Aurait cassé dès qu'un delta contient un `\n` (genre bloc de code).
+- Fix lint react-hooks/set-state-in-effect : ChatInput n'a plus de useState local (value vient directement du store), ProjectSelector passe fetchRepos en useCallback.
+
+P1 quick wins :
+- Auto-resize textarea (44px → 200px)
+- Empty state avec 4 cartes cliquables (Hotspots, Architecture, Endpoints, Code mort) qui pré-remplissent via `setInputDraft`
+- Erreurs SSE distinctes affichées en blockquote markdown (`> ❌ Erreur serveur` vs `> ⚠️ Requête annulée`)
+
+Bug serveur identifié (pas fixé, à reporter) : `serve.rs:110-119` fallback silencieusement au 1er repo si le nom demandé n'existe pas. Devrait retourner 404. Documenté dans `propositions/CHAT-V1-ROADMAP-2026-05-04.md`.
+
+Build final : 366 KB / 113 KB gzip, lint 0 warning, build clean.
+
+### Roadmap publiée
+
+`propositions/CHAT-V1-ROADMAP-2026-05-04.md` — backlog priorisé P1/P2/P3 + section backend-coupled (modifs Rust nécessaires : tool_call events, sources structurées, repo strict 404, token usage, endpoint cancel).
+
+### Récap commits gitnexus-chat ce soir
+
+```
+f2c0578 fix(lint): satisfy react-hooks/set-state-in-effect
+b3c960c feat(v1.1): SSE parser conforme + auto-resize + suggestions empty state
+39c6e99 feat(v1): real backend — ProjectSelector + SSE streaming chat
+f68db9d chore: audit fixes V0 (strict TS, fr lang, version bump, .env.example)
+6f74bac feat: initial scaffold (Vite 7 + React 19 + TS strict + Tailwind v4)
+```
+
+5 commits propres, local. Pas pushé GitHub (à confirmer Patrice — `phuetz/gitnexus-chat` à créer).
+
 — *Claude Opus 4.7 (1M context), 03→04 mai 2026, MINISTAR.*
