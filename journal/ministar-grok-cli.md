@@ -2138,3 +2138,65 @@ structure + face-detector adapté). Suite = recognizer + store + UI + IPC.
 ~16h), donc zéro risque collision sur Cowork. Mais discipline préservée.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 4 mai 2026 ~16h
+
+## 2026-05-04 ~17h30 — [x] Face memory V0 fondation livrée + pushée
+
+5 commits sur branche `feat/face-memory-cowork` (poussée sur GitHub
+`phuetz/code-buddy`, ~1500 LOC) :
+
+| Commit | Chunk | Contenu |
+|--------|-------|---------|
+| `ab9e250` | 1 | Scaffold + types.ts + face-detector.ts (Lisa-adapted) + dep mediapipe |
+| `fde9ab9` | 2 | presence-store.ts (JSON + cosine match) + presence-bridge.ts (IPC + event bus) |
+| `4cc695e` | 3 | face-recognizer.ts (ONNX Buffalo_S) + restructure shared/renderer/main + dep onnxruntime-node |
+| `c492ab7` | 4a | cross-process bridge (~/.codebuddy/presence/current.json) + presence-injector core hook |
+| `350de0a` | 4b | Preload IPC bridge + EnrollmentDialog.tsx + PresenceIndicator.tsx |
+
+**Architecture finale V0** :
+```
+[webcam] -> [renderer detect (MediaPipe BlazeFace)] -> [crop 112x112 RGB]
+                                                            |
+                                                        IPC encode
+                                                            v
+[main encode (ONNX Buffalo_S 512-dim)] -> [presence-store cosine match]
+                                                            |
+                                              [presence-bridge event bus]
+                                                            |
+                                       writes ~/.codebuddy/presence/current.json
+                                                            |
+                              [Code Buddy core: presence-injector reads file]
+                                                            |
+                                  injects <presence> in system prompt
+                                                            |
+                                       LLM picks the right tone naturally
+```
+
+**TODO restants pour V0 complet** :
+1. **Wiring `cowork/src/main/index.ts`** : appeler `getPresenceBridge()`
+   au boot Electron pour activer les handlers IPC. Petit (~3 lignes)
+   mais touche à un fichier déjà modifié par Antigravity — à faire
+   prudemment.
+2. **Wiring `cowork/src/renderer/App.tsx`** : monter `<EnrollmentDialog>`
+   dans le modal system existant + ajouter `<PresenceIndicator>` au
+   header. Demande compréhension de l'archi modal Cowork (key bindings,
+   state management). À faire dans une session dédiée.
+3. **Documenter le download du modèle Buffalo_S** : ~13 MB ONNX à
+   télécharger depuis https://github.com/deepinsight/insightface (page
+   Buffalo_S) et placer à `<userData>/models/buffalo_s.onnx`. Étape
+   manuelle V0 — auto-download à l'install pourra venir en V0.2.
+4. **`npm install`** dans `cowork/` pour résoudre les 2 nouvelles deps
+   (`@mediapipe/tasks-vision`, `onnxruntime-node`). Tsc rouge sur la
+   branche tant que ça n'a pas été fait — attendu.
+5. **PresenceService** (V0.5) : daemon continu côté renderer qui boucle
+   capture → detect → encode → match toutes les N secondes. Aujourd'hui
+   on a juste l'enrollment manuel ; le greeting "bonjour Patrice"
+   automatique au boot Cowork demande le daemon.
+
+**Stratégie** : merge sur main *après* (1) + (2) + (4) faits. Les
+points (3) et (5) peuvent suivre en V0.5/V0.6 sans bloquer le merge V0.
+
+**Coordination future** : si une autre session touche `cowork/src/main/`
+ou `cowork/src/renderer/components/`, prévenir ici avant — la branche
+`feat/face-memory-cowork` est en review, pas encore mergée.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 4 mai 2026 ~17h30
