@@ -71,17 +71,15 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
 
 ---
 
-## GitNexus Chat — démarré 2026-05-04 (nuit MINISTAR)
-- **Local** : `D:\CascadeProjects\gitnexus-chat`
-- **Statut** : V0 squelette UI mock livré (commit `6f74bac`). Pas de remote GitHub encore (à confirmer demain par Patrice).
-- **Pourquoi** : licence fair-source d'Open WebUI bloquante pour commercialisation agile-up (cf `propositions/CHAT-OPENWEBUI-2026-05-04.md`). Décision Patrice nuit 03→04 mai : "développe notre propre version en React".
-- **Stack** : Vite 7 + React 19 + TS strict (erasableSyntaxOnly) + Tailwind CSS v4 + Zustand persist + react-markdown + lucide-react. License MIT.
-- **Livré V0** : layout 3-zones (sidebar sessions / messages avec scroll auto / input Shift+Enter), store Zustand persisté localStorage, mock chat (delay 800ms + message canned), markdown GFM. Build clean `tsc -b && vite build` = 357 KB / 110 KB gzip.
-- **Roadmap** :
-  - **V1** : brancher `mcp-client.ts` au vrai backend `gitnexus serve --http 8080` via JSON-RPC 2.0, streaming SSE réel, multi-provider config UI, tool_calls inline avec status, citations sources.
-  - **V2** : palette prompts Cmd+K, Shiki+Mermaid, fork/pin sessions, slot modèle visible.
-  - **V3** : Dockerfile + docker-compose (gitnexus-chat + gitnexus-mcp ensemble), auth basique, push GitHub `phuetz/gitnexus-chat` public sous MIT.
-- **À faire au réveil Patrice** : `cd D:\CascadeProjects\gitnexus-chat && npm run dev` → http://localhost:5174 pour valider l'UI ; décider si on push sur GitHub maintenant.
+## GitNexus Chat — intégré au mono-repo gitnexus-rs le 2026-05-05
+- **Local** : `C:\Users\patri\CascadeProjects\gitnexus-rs\chat-ui\` (anciennement `D:\CascadeProjects\gitnexus-chat`)
+- **Statut** : intégré comme subtree dans gitnexus-rs (PR #4 mergée 2026-05-05). 9 commits originaux préservés en historique git. V1.1 backend wiring + BackendStatus badge + a11y + prod-readiness skeletons (Docker/nginx) tous présents.
+- **Pourquoi mono-repo** : atomic commits cross-stack, single git clone pour clients agile-up, CI d'intégration possible, contrats SSE versionnés. Cf décision 2026-05-05 ("le repo séparé va poser problème").
+- **Stack** : Vite 7 + React 19 + TS strict + Tailwind v4 + Zustand persist + react-markdown + lucide-react. License MIT.
+- **Build** : `cd chat-ui && npm install && npm run dev` (port 5174, proxies /api /health /mcp vers `gitnexus serve --http 8080`).
+- **Backlog priorisé** : `propositions/CHAT-V1-ROADMAP-2026-05-04.md` (P1 UX quick wins / P2 features / P3 nice-to-have / **🔵 Backend-coupled** = modifs Rust côté serve.rs : tool_call SSE events, sources structurées, repo strict 404, token usage, endpoint cancel).
+- **Audits associés** : `propositions/CHAT-V1.2-AUDIT-2026-05-04.md` (bugs cachés/sécu/perf) + `CHAT-V1.3-PROD-READINESS-2026-05-04.md` (Docker, tests, a11y, DX).
+- **Repo source archivé** : `D:\CascadeProjects\gitnexus-chat.archived-2026-05-05` (à renommer manuellement — encore busy au moment du merge).
 
 ## Alise_v2 (CCAS)
 - **Doc HTML** : complète, 23+ modules enrichis via GitNexus
@@ -126,14 +124,13 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
 - **Repo local** : C:\Users\patri\CascadeProjects\gitnexus-rs
 - **Fix html_escape backtick** : ✅ committé sur master (5881c29)
 - **Skill gitnexus** disponible dans Claude Code
-- **feat/semantic-search** : 16 commits d'avance sur master, prête sur le fond
-  (ONNX inference réel, embed CLI, store on-disk, LLM reranker, MCP+desktop wiring,
-  ~30 tests inline, bench Alise_v2 = 67% strictly improved). Avant merge : 3 chantiers
-  → nettoyage pollution Git (target-codex, .codex-target, .omx, .playwright-mcp),
-  README.md/.fr.md à mettre à jour (reranker + commandes embed/--hybrid/--rerank),
-  sortir docs/inject-architecture.md et livre/07-le-lab.md hors scope.
-- **Phase F** (sous-agents isolés dans le chat desktop) : reportée, pas un blocker
-  pour le merge semantic. 3-5 jours estimés, autre branche.
+- **feat/semantic-search** : ✅ mergée sur master 2026-04-26 (`166ca44`).
+- **Master modernization wave A** : ✅ mergée 2026-05-05 (PR #3, 17 commits) — bincode retiré + clippy auto-fixes + enrichment knobs exposés via chat-config.json + chat P0/P1 livrés (hybrid BM25+semantic, 17 tools MCP exposés, DocChunks RAG, doc_sfd backend, recall_memory, MCP prompt recipes, ResearchPlan parallèle, feature-dev §4 Algorithmes).
+- **chat-ui mono-repo** : ✅ intégré via subtree 2026-05-05 (PR #4) — voir bloc « GitNexus Chat » plus haut.
+- **CI master rouge** : warnings clippy résiduels (13) + frontend e2e + security audit. Cassée AVANT nos PRs, à fixer en Vague B.
+- **Vague B à attaquer** : 13 warnings clippy résiduels (struct extraction sur `enrichment.rs:1275 + 2794`, type aliases `cycles.rs` + `config_inventory.rs`, field-assignment-outside-Default), MSRV bump 1.75→1.80 (let_chains), bumps petgraph 0.6→0.7 + lru 0.12→0.13, installer cargo-outdated/cargo-audit en CI. Cf `MODERNIZATION-GITNEXUS-2026-05-04.md`.
+- **PR #1 feat/ask-hybrid** : encore ouverte mais obsolète post merge (le module `gitnexus-search/src/fusion.rs` factorise déjà la pipeline). À fermer + redo en 1-2 commits qui délèguent à `fusion::hybrid_with_preloaded`.
+- **Phase F** (sous-agents isolés dans le chat desktop) : reportée. 3-5 jours estimés.
 
 ## Lisa
 - **Repo** : https://github.com/phuetz/Lisa (public)
