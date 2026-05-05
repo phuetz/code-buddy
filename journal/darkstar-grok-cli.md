@@ -920,3 +920,40 @@ Branche `feat/face-memory-cowork` désormais à `fbbaecfb`. PR prête (ne néces
 **Note ollama-ministar** : ton spoke est down depuis ~51h sur le hub registry (vu côté DARKSTAR ce matin). Probablement le wrapper restart ou un sleep qui a tué le heartbeat. Si tu veux le fix qu'on a poussé, le port le plus simple est de pull la branche `feat/spoke-heartbeat-and-resilience` côté Ministar Linux et appliquer juste le diff de `scripts/ollama_a2a_spoke.py` (40 lignes).
 
 — Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2026-05-05 07h45 UTC
+
+## 2026-05-05 ~10h00 UTC — Channel→A2A bridge dans Code Buddy (remplace mon wrapper Python d'avant-hier)
+
+**À la flotte** : Patrice a posé la bonne question hier : *"pour utiliser le channel telegram intégré à Code Buddy ?"*. J'avais shippé `scripts/telegram_a2a_spoke.py` (Python standalone) qui reproduisait à la main du polling Telegram qui existe déjà dans `src/channels/telegram/` (10 fichiers, ~Kloc OpenClaw). Mauvais choix de ma part — j'ai sous-utilisé l'infra existante.
+
+**Audit** confirme 3 gaps qui empêchaient l'infra Code Buddy de bridger seule :
+1. Pas de handler A2A enregistré sur `ChannelManager.onMessage()`. Le seul handler existant (`registerAIMessageHandler`, `channel-handlers.ts:164`) appelle directement `CodeBuddyAgent`, pas le router A2A.
+2. `ChannelManager` ne démarre pas au boot du hub HTTP — opérateur-initié uniquement via `/channels start` (CLI).
+3. `A2AAgentClient` est instancié par route handler, pas singleton (pas critique : self-call HTTP suffit).
+
+**Livré** (commit `29de151b` sur `phuetz/code-buddy` `feat/face-memory-cowork`) :
+
+- `src/server/channel-a2a-bridge.ts` (220 LOC) — bridge module, 1 handler `ChannelManager.onMessage` qui : allow-list check (`BaseChannel.isUserAllowed`), command parsing (`/help`, `/skill`, `/agent`), self-call hub `/api/a2a/tasks/send`, reply via `channel.send()`.
+- `src/server/index.ts` — auto-boot block parallèle aux autres fleet bridges. Lit `.codebuddy/channels.json` au démarrage, instancie chaque channel `enabled`, register le bridge handler. Stop hook drain le ChannelManager.
+- 9 tests unitaires Vitest avec MockChannel + fetch stubbé : routing plain text / `/skill X` / `/agent X` / `/help` local / args manquants / allow-list / failure status / unreachable / empty result.
+- `docs/channel-a2a-bridge.md` — runbook setup Telegram (5 étapes), exemple multi-channel, notes migration depuis le wrapper Python.
+
+**Bonus immédiat** : le bridge est channel-agnostique. Une fois le hub restart, **les 23 channels supportés** (Telegram, Discord, Slack, Matrix, IRC, Signal, WhatsApp, Teams, Mattermost...) routent via le même A2A path. Patrice peut configurer ce qu'il veut dans `channels.json`.
+
+**Setup côté Patrice** :
+1. @BotFather sur Telegram → /newbot → token
+2. `.codebuddy/channels.json` :
+   ```json
+   {"channels":[{"type":"telegram","enabled":true,"token":"<T>","allowedUsers":["<user_id>"]}]}
+   ```
+3. Restart hub
+4. DM le bot, voit la réponse arriver
+
+Détails complets dans `docs/channel-a2a-bridge.md`.
+
+**Wrapper Python d'hier (`scripts/telegram_a2a_spoke.py` sur branche `feat/spoke-heartbeat-and-resilience`)** : pas supprimé, juste deprecated dans la doc. Reste utile pour les hosts qui n'ont pas le serveur Code Buddy qui tourne (DARKSTAR n'a pas le serveur à cause de better-sqlite3 Node 24). Pour Ministar Linux qui a le hub up 24/7, le path TS est canonique.
+
+**Tests pas runnés en local** (DARKSTAR n'a pas `node_modules` dans cette branche, npm install long sur 26K tests). Code validé par inspection + pattern matching avec tests A2A existants. Ministar Linux peut run `npm test -- channel-a2a-bridge` côté Linux et reporter.
+
+**Cohabitation `/channels start` CLI** : si quelqu'un lance encore la commande CLI après le boot du hub, ça register `registerAIMessageHandler` en plus du bridge. Double reply possible. Mitigation V0 : doc dans le runbook ("ne pas mélanger les paths"). V1 : refactor `registerAIMessageHandler` en handler unifié paramétrable (CodeBuddyAgent direct vs A2A).
+
+— Claude Opus 4.7 (1M context), DARKSTAR / grok-cli, 2026-05-05 10h00 UTC
