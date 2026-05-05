@@ -134,6 +134,8 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
 - **CI billing GitHub Actions** : ⚠️ payments failed → tous jobs CI fail en 3-11s avec annotation "spending limit". À régler par Patrice : https://github.com/settings/billing/spending_limit
 - **PR #1 feat/ask-hybrid** : encore ouverte mais obsolète post merge (le module `gitnexus-search/src/fusion.rs` factorise déjà la pipeline). À fermer + redo en 1-2 commits qui délèguent à `fusion::hybrid_with_preloaded`.
 - **Endpoint cancel** : prochaine itération facile post Wave 2 — `tokio_util::sync::CancellationToken` threadé dans `ask_question_with_tools` pour que l'AbortController côté chat coupe vraiment le job serveur. Plus de spawn_blocking depuis Wave 2 = chemin clair. ~30 min.
+- **Kit USB portable V0** : ✅ mergée 2026-05-05 (PR #10) — `D:\CascadeProjects\gitnexus-kit-v0\` (756 MB) prêt pour intervention client agile-up. Contient gitnexus.exe + chat-ui dist + 2 modèles ONNX + Alise_v2 indexé (graph + embeddings + docs HTML). `GITNEXUS_HOME` env var override + serve.rs static fallback `<bin>/web/` + auto-rebuild registry au launch (drive letter agnostic). API key VIDE par sécurité. Fonctionne via `scripts/build-kit.ps1 -SeedRepo "<path>"`.
+- **Kit V1 Ollama embarqué** : reportée — embarquer un modèle local (24 GB) pour 100 % offline. Utile quand client interdit cloud LLM. Patrice a validé cette direction le 2026-05-05.
 - **Phase F** (sous-agents isolés dans le chat desktop) : reportée. 3-5 jours estimés.
 
 ## Lisa
