@@ -130,9 +130,10 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
 - **Wave B clippy** : ✅ mergée 2026-05-05 (PR #5) — `cargo clippy --workspace --all-targets -- -D warnings` exit 0 en local. CI Check & Clippy débloquée le jour où le billing GitHub Actions sera réglé.
 - **SFD doc-authoring** : ✅ Phase 1 (PR #6 backend portable via `gitnexus-rag::sfd` + `LocalBackend::dispatch_tool`) + Phase 2 (PR #7 panel chat-ui : pages/drafts list, validation report) mergées 2026-05-05. Phase 3 (port Tauri) reportée.
 - **Wave 1 chat-ui clients** : ✅ mergée 2026-05-05 (PR #8) — system prompt enrichi côté `ask.rs` (bénéficie aux 2 UIs), Mermaid SVG render, syntax highlighting Prism, Copy + Regenerate buttons.
+- **Wave 2 chat tool calling** : ✅ mergée 2026-05-05 (PR #9) — `ask_question_with_tools` async (8 itérations max, dispatch via `LocalBackend::call_tool`), SSE typé `event: tool_call`, chat-ui badges inline (running/done/error). Le LLM invoque réellement les 30 tools MCP au lieu de juste consommer le contexte. Bénéfice partagé aux 2 UIs.
 - **CI billing GitHub Actions** : ⚠️ payments failed → tous jobs CI fail en 3-11s avec annotation "spending limit". À régler par Patrice : https://github.com/settings/billing/spending_limit
 - **PR #1 feat/ask-hybrid** : encore ouverte mais obsolète post merge (le module `gitnexus-search/src/fusion.rs` factorise déjà la pipeline). À fermer + redo en 1-2 commits qui délèguent à `fusion::hybrid_with_preloaded`.
-- **Wave 2 chat tool calling** : prochaine itération planifiée — câbler `tool_choice: "auto"` dans `ask_question` (`ask.rs`) pour que le LLM **invoque** les 30 tools MCP au lieu de just consommer le contexte. Bénéfice partagé aux 2 UIs (architecture core-shared validée 2026-05-05). 1-2 jours estimés.
+- **Endpoint cancel** : prochaine itération facile post Wave 2 — `tokio_util::sync::CancellationToken` threadé dans `ask_question_with_tools` pour que l'AbortController côté chat coupe vraiment le job serveur. Plus de spawn_blocking depuis Wave 2 = chemin clair. ~30 min.
 - **Phase F** (sous-agents isolés dans le chat desktop) : reportée. 3-5 jours estimés.
 
 ## Lisa
