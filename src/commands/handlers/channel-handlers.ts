@@ -28,7 +28,7 @@ interface ChannelsConfig {
   channels: ChannelConfigEntry[];
 }
 
-function loadChannelConfig(configPath?: string): ChannelsConfig | null {
+export function loadChannelConfig(configPath?: string): ChannelsConfig | null {
   const paths = configPath
     ? [configPath]
     : [
@@ -189,7 +189,7 @@ async function registerAIMessageHandler(manager: import('../../channels/index.js
   });
 }
 
-async function instantiateChannel(config: ChannelConfigEntry): Promise<import('../../channels/index.js').BaseChannel | null> {
+export async function instantiateChannel(config: ChannelConfigEntry): Promise<import('../../channels/index.js').BaseChannel | null> {
   const opts = config.options ?? {};
   const channelConfig = {
     type: config.type as import('../../channels/index.js').ChannelType,

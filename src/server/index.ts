@@ -842,6 +842,58 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
         wirePeerChatBridge(() => null);
       }
     })().catch(() => { /* unhandled-rejection guard */ });
+
+    // Channel -> A2A bridge. Auto-loads .codebuddy/channels.json (or the
+    // user-scoped equivalent), boots every enabled channel, and registers
+    // a single handler that forwards inbound messages to the hub's task
+    // router. Skipping this block is fine — the hub still serves A2A
+    // tasks, just without channel ingress (Telegram, Discord, ...).
+    (async () => {
+      try {
+        const { getChannelManager } = await import('../channels/index.js');
+        const { loadChannelConfig, instantiateChannel } = await import(
+          '../commands/handlers/channel-handlers.js'
+        );
+        const { startChannelA2ABridge } = await import('./channel-a2a-bridge.js');
+
+        const manager = getChannelManager();
+        const cfg = loadChannelConfig();
+        if (!cfg || cfg.channels.length === 0) {
+          logger.info('[channel-a2a-bridge] no .codebuddy/channels.json found, skipping channel boot');
+        } else {
+          for (const chCfg of cfg.channels) {
+            if (!chCfg.enabled) continue;
+            try {
+              const channel = await instantiateChannel(chCfg);
+              if (channel) {
+                manager.registerChannel(channel);
+                await channel.connect();
+                logger.info(`[channel-a2a-bridge] ${chCfg.type} channel started`);
+              }
+            } catch (err) {
+              logger.warn(`[channel-a2a-bridge] ${chCfg.type} failed to start`, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+        }
+
+        const baseUrl = `http://127.0.0.1:${config.port}`;
+        const bridge = startChannelA2ABridge({
+          hubBaseUrl: baseUrl,
+          channelManager: manager,
+          defaultSkill: process.env.A2A_BRIDGE_DEFAULT_SKILL || 'ollama-qwen3-4b',
+          defaultModel: process.env.A2A_BRIDGE_DEFAULT_MODEL || 'qwen3:4b',
+          defaultAgent: process.env.A2A_BRIDGE_DEFAULT_AGENT,
+        });
+        // Stash on the http server for graceful shutdown.
+        (server as unknown as { _channelA2ABridge?: { stop: () => void } })._channelA2ABridge = bridge;
+      } catch (err) {
+        logger.warn('[channel-a2a-bridge] init failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })().catch(() => { /* unhandled-rejection guard */ });
   }
 
   return new Promise((resolve, reject) => {
@@ -886,6 +938,20 @@ export async function stopServer(server: HttpServer): Promise<void> {
     unwireCompactionBridge();
     // Phase (d).15 — un-register peer.chat method.
     unwirePeerChatBridge();
+
+    // Detach the channel-A2A bridge handler + shut down the
+    // ChannelManager so polling loops (Telegram, Discord, ...) stop.
+    const bridgeStop = (server as unknown as { _channelA2ABridge?: { stop: () => void } })
+      ._channelA2ABridge;
+    if (bridgeStop) {
+      try { bridgeStop.stop(); } catch { /* ignore */ }
+    }
+    void (async () => {
+      try {
+        const { getChannelManager } = await import('../channels/index.js');
+        await getChannelManager().shutdown();
+      } catch { /* shutdown is best-effort */ }
+    })();
 
     // Close WebSocket connections
     closeAllConnections();
