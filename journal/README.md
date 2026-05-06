@@ -46,6 +46,7 @@ en journal, suffixer `-ubuntu` (ex : `ministar-ubuntu-DEV.md`).
 |------------------------------------|---------------------------------------------------------|
 | `ministar-grok-cli.md`             | session sur `D:\CascadeProjects\grok-cli`               |
 | `ministar-gitnexus-rs.md`          | session sur `C:\Users\patri\CascadeProjects\gitnexus-rs` (rôle coordinateur depuis 28/04/2026) |
+| `ministar-claude-et-patrice.md`    | session Codex sur `D:\CascadeProjects\claude-et-patrice` |
 | `ministar-patrice-huetz-site-next.md` | session sur le site personnel `patricehuetz.fr`     |
 | `ministar-ubuntu-DEV.md`           | session sur PC Ubuntu (`/home/patrice/DEV`), futur runtime robot |
 | `darkstar-DEV.md`                  | session sur DARKSTAR Windows (PC 3090) — bootstrap initial 2026-05-01 |
