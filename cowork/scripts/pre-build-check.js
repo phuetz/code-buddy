@@ -65,6 +65,16 @@ function buildCheckList(platform, arch) {
       type: 'dir',
       severity: 'fatal',
     },
+    {
+      // Required by cowork/electron-builder.yml extraResources `../dist/desktop`.
+      // Without this file shipped, the packaged Cowork binary silently
+      // falls back to pi-coding-agent in production (see commit fc90573).
+      // Fix: run `npm run build` at the repo root (../) before this build.
+      label: 'Code Buddy core engine adapter (run `npm run build` at repo root)',
+      relPath: '../dist/desktop/codebuddy-engine-adapter.js',
+      type: 'file',
+      severity: 'fatal',
+    },
   ];
 
   if (platform === 'darwin') {

@@ -26,6 +26,19 @@ function makeDir(dirPath: string): void {
 }
 
 /**
+ * Code Buddy core engine adapter (sibling of the cowork dir, at
+ * `../dist/desktop/...`). Required FATAL on every platform — without
+ * it the packaged Cowork binary silently regresses to pi-coding-agent.
+ *
+ * `root` is the cowork-dir-equivalent under tmpDir (the path passed to
+ * `runChecks`). The adapter file is created at `<tmpDir>/dist/desktop/`
+ * which is `<root>/../dist/desktop/`.
+ */
+function populateEngineAdapter(root: string): void {
+  makeFile(path.join(root, '..', 'dist', 'desktop', 'codebuddy-engine-adapter.js'));
+}
+
+/**
  * Creates all artifacts that are required for a successful darwin/arm64 check.
  */
 function populateDarwinArtifacts(root: string, arch: string = 'arm64'): void {
@@ -35,6 +48,7 @@ function populateDarwinArtifacts(root: string, arch: string = 'arm64'): void {
   makeDir(path.join(root, 'dist-electron'));
   makeDir(path.join(root, 'dist'));
   makeDir(path.join(root, '.claude/skills'));
+  populateEngineAdapter(root);
 
   // macOS FATAL resources
   makeFile(path.join(root, `resources/node/darwin-${arch}/bin/node`));
@@ -50,6 +64,7 @@ function populateWin32Artifacts(root: string): void {
   makeDir(path.join(root, 'dist-electron'));
   makeDir(path.join(root, 'dist'));
   makeDir(path.join(root, '.claude/skills'));
+  populateEngineAdapter(root);
   makeFile(path.join(root, 'resources/node/win32-x64/node.exe'));
   makeFile(path.join(root, 'dist-wsl-agent/index.js'));
 }
@@ -59,14 +74,20 @@ function populateWin32Artifacts(root: string): void {
 // ---------------------------------------------------------------------------
 
 describe('pre-build-check: runChecks', () => {
+  let parentDir: string;
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = makeTempDir();
+    // We create a `cowork`-shaped sub-dir under a real tmp dir so that
+    // checks with relPath `../dist/...` resolve INSIDE the parent
+    // (which afterEach nukes), instead of leaking files into /tmp.
+    parentDir = makeTempDir();
+    tmpDir = path.join(parentDir, 'cowork');
+    fs.mkdirSync(tmpDir);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(parentDir, { recursive: true, force: true });
   });
 
   // -------------------------------------------------------------------------
@@ -80,8 +101,8 @@ describe('pre-build-check: runChecks', () => {
 
     expect(result.failed).toBe(0);
     expect(result.hasFatal).toBe(false);
-    // 5 common + 2 darwin FATAL = 7 FATAL checks should pass
-    expect(result.passed).toBeGreaterThanOrEqual(7);
+    // 6 common (incl. engine adapter) + 2 darwin FATAL = 8 FATAL checks should pass
+    expect(result.passed).toBeGreaterThanOrEqual(8);
   });
 
   it('passes all FATAL checks on win32 when required artifacts exist', () => {
@@ -91,7 +112,7 @@ describe('pre-build-check: runChecks', () => {
 
     expect(result.failed).toBe(0);
     expect(result.hasFatal).toBe(false);
-    expect(result.passed).toBeGreaterThanOrEqual(7);
+    expect(result.passed).toBeGreaterThanOrEqual(8);
   });
 
   it('reports warnings for optional darwin resources that are missing', () => {

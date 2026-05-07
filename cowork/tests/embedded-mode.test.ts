@@ -8,10 +8,12 @@
  * correctly.
  */
 
+import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   classifyEngineLoadError,
   isEmbeddedOptOut,
+  resolveEnginePath,
 } from '../src/main/engine/embedded-mode';
 
 describe('isEmbeddedOptOut', () => {
@@ -66,4 +68,95 @@ describe('classifyEngineLoadError', () => {
     expect(classifyEngineLoadError('string error')).toBe('broken');
     expect(classifyEngineLoadError(42)).toBe('broken');
   });
+});
+
+describe('resolveEnginePath', () => {
+  it('uses envOverride verbatim when explicitly set', () => {
+    expect(
+      resolveEnginePath({
+        envOverride: '/custom/dist',
+        isPackaged: true,
+        resourcesPath: '/should/be/ignored',
+        appPath: '/should/be/ignored',
+      }),
+    ).toBe('/custom/dist');
+  });
+
+  it("ignores empty envOverride (treats '' as unset, not as override)", () => {
+    // '' might happen if the user sets `CODEBUDDY_ENGINE_PATH=` to
+    // "unset" the variable from a parent shell — we should respect the
+    // packaged/dev fallback rather than silently routing to root.
+    expect(
+      resolveEnginePath({
+        envOverride: '',
+        isPackaged: true,
+        resourcesPath: '/app/resources',
+        appPath: '/app/resources/app.asar',
+      }),
+    ).toBe(path.join('/app/resources', 'dist'));
+  });
+
+  it('uses resourcesPath/dist when packaged', () => {
+    // This is the production case: the packaged Electron app has the
+    // engine shipped via electron-builder extraResources.
+    expect(
+      resolveEnginePath({
+        isPackaged: true,
+        resourcesPath: '/Applications/Cowork.app/Contents/Resources',
+        appPath: '/Applications/Cowork.app/Contents/Resources/app.asar',
+      }),
+    ).toBe(path.join('/Applications/Cowork.app/Contents/Resources', 'dist'));
+  });
+
+  it('uses appPath/../dist when not packaged (dev / npm run dev)', () => {
+    // Dev mode: app.getAppPath() points to the cowork/ source dir; the
+    // sibling dist/ at the repo root holds the built parent CLI.
+    expect(
+      resolveEnginePath({
+        isPackaged: false,
+        resourcesPath: '/should/be/ignored',
+        appPath: '/repo/cowork',
+      }),
+    ).toBe(path.resolve('/repo/cowork', '..', 'dist'));
+  });
+
+  it('respects envOverride priority even in packaged mode', () => {
+    // Sanity check: if a packaged build wants to point at a custom
+    // location (e.g. a remotely-loaded engine for staging), the env
+    // var still wins.
+    expect(
+      resolveEnginePath({
+        envOverride: '/staging/engine',
+        isPackaged: true,
+        resourcesPath: '/app/resources',
+        appPath: '/app/resources/app.asar',
+      }),
+    ).toBe('/staging/engine');
+  });
+});
+
+describe('pre-build-check engine adapter entry', () => {
+  // Lightweight regression test: verify that the engine adapter is on
+  // the fatal-checks list across all platforms. If this entry is ever
+  // removed by accident, packaged Cowork binaries silently regress to
+  // pi-coding-agent in production — exactly the bug we just fixed.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { buildCheckList } = require('../scripts/pre-build-check.js') as {
+    buildCheckList: (
+      platform: string,
+      arch: string,
+    ) => Array<{ label: string; relPath: string; severity: 'fatal' | 'warn' }>;
+  };
+
+  it.each(['darwin', 'win32', 'linux'])(
+    'lists the Code Buddy core engine adapter as a fatal check on %s',
+    (platform) => {
+      const checks = buildCheckList(platform, 'x64');
+      const entry = checks.find((c) =>
+        c.relPath.includes('dist/desktop/codebuddy-engine-adapter'),
+      );
+      expect(entry).toBeDefined();
+      expect(entry?.severity).toBe('fatal');
+    },
+  );
 });

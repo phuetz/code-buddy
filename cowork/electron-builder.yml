@@ -78,6 +78,12 @@ win:
       to: wsl-agent
     - from: .claude/skills
       to: skills
+    # Code Buddy core engine adapter (~150 KB). Required at runtime by
+    # cowork/src/main/engine/embedded-mode.ts:resolveEnginePath when
+    # app.isPackaged is true. Without this entry, default-on embedded
+    # mode silently falls back to pi-coding-agent in production binaries.
+    - from: ../dist/desktop
+      to: dist/desktop
 
 mac:
   icon: resources/icon.icns
@@ -110,6 +116,9 @@ mac:
       to: lima-agent
     - from: .claude/skills
       to: skills
+    # Code Buddy core engine adapter — see comment on win.extraResources.
+    - from: ../dist/desktop
+      to: dist/desktop
 
 linux:
   icon: resources/icon.png
@@ -127,6 +136,9 @@ linux:
       to: python
     - from: .claude/skills
       to: skills
+    # Code Buddy core engine adapter — see comment on win.extraResources.
+    - from: ../dist/desktop
+      to: dist/desktop
 
 nsis:
   oneClick: false

@@ -26,7 +26,7 @@ import { registerSkillMdIpcHandlers } from './ipc/skill-md-ipc';
 import { registerKnowledgeIpcHandlers } from './ipc/knowledge-ipc';
 import { initDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
-import { classifyEngineLoadError, isEmbeddedOptOut } from './engine/embedded-mode';
+import { classifyEngineLoadError, isEmbeddedOptOut, resolveEnginePath } from './engine/embedded-mode';
 import {
   ProjectManager,
 } from './project/project-manager';
@@ -847,8 +847,15 @@ app
       log('[Main] CODEBUDDY_EMBEDDED=0 — embedded engine disabled by env opt-out');
     } else {
       try {
-        const enginePath =
-          process.env.CODEBUDDY_ENGINE_PATH || resolve(app.getAppPath(), '..', 'dist');
+        // Packaged-aware resolution: extraResources copies the engine to
+        // `<install>/resources/dist/desktop/` (see electron-builder.yml),
+        // while dev mode keeps it at `<repo>/dist/desktop/` next to cowork.
+        const enginePath = resolveEnginePath({
+          envOverride: process.env.CODEBUDDY_ENGINE_PATH,
+          isPackaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+          appPath: app.getAppPath(),
+        });
         const { CodeBuddyEngineAdapter } = await import(
           /* webpackIgnore: true */ resolve(enginePath, 'desktop', 'codebuddy-engine-adapter.js')
         );
