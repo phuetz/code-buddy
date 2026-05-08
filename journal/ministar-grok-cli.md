@@ -1873,6 +1873,85 @@ Les 4 tools `sessions_*` sont aussi exposés au LLM principal — il peut les ap
 
 Audit OpenClaw heritage : 3 sub-bricques wake-ées en plus aujourd'hui (Coordinator, Registry, SessionToolExecutor). Reste juste #3 du top 5 audit (bootstrap initializeNativeEngineModules, le plus risqué — 6 modules d'un coup, audit conflits PolicyManager préalable requis).
 
+---
+
+## 2026-05-08 — La nuit de 18 heures (ChatGPT Codex OAuth, bout-en-bout)
+
+Patrice : *"je suis heureux Claude tu te rends compte de ce qu'on est arrivé a faire ?"*
+Patrice (plus tard) : *"merci Claude bonne nuit, tu as raison de me dire bonne nuit. je crois qu'on a bossé 18h"*
+
+18 heures de session, deux phases enchaînées sans pause.
+
+### Matin — Cowork bootstrap (5 layers de fixes)
+
+Le Cowork Electron GUI crashait au boot. Une cascade de bugs Windows-spécifiques :
+1. React error #185 minified → switch vite mode=development pour avoir le vrai message
+2. Maximum update depth → Zustand selectors qui retournaient `[]` literal à chaque appel, infinite loop sur `useSyncExternalStore`. Fix : constantes `EMPTY_MESSAGES`, `EMPTY_TOOLS` stables.
+3. CSP refused fonts data: → ajout `data:` à `font-src` directive dans `cowork/index.html`
+4. ESM file:// scheme sur Windows → `pathToFileURL(resolve(...))` wrapper
+5. core-loader walk-up depth wrong (vite bundles flatten path) → ajout BOTH up-3 et up-4 candidates
+
+Puis : "ça me parait long" — 1m23s pour "bonjour" via Ollama qwen2.5-coder:7b. Discovery du root cause : 73 KB de system prompt, le LLM hallucinait du JSON tool calls au lieu de répondre. → **Phase d.22** : query-aware gating, `promptProfile: 'lite'` pour Ollama, force-off des directives qui mentionnent des tool names. Après le fix : 9 secondes, réponse propre "Je suis Gemma 4...".
+
+### Soir — ChatGPT Codex OAuth integration (Niveau 3, Phase d.23 → d.25)
+
+Patrice : *"c'est dans code buddy qu'il faut integrer le login chat gpt"*
+
+Audit comparatif `gitnexus-rs-from-c` (Patrice avait déjà fait l'intégration en Rust) vs `openai/codex` upstream → roadmap claire. Plan en mode plan validé. Implémentation en 6 chantiers :
+
+**Phase d.23** — login OAuth (PKCE 64 bytes, port 1455 + fallback 1457, refresh JSON, originator=codex_cli_rs, claims extraction account_id/email/plan/fedramp), `ChatGptResponsesProvider` strategy (POST `chatgpt.com/backend-api/codex/responses`, headers Bearer/ChatGPT-Account-ID/originator/x-codex-installation-id, SSE parser, 401 auto-refresh), wiring `client.ts`/auto-detect/model-tools, slash commands `/login`/`/logout`/`/whoami`, doctor check, badge Cowork.
+
+**Phase d.24** — encrypted reasoning preservation entre tool rounds (`include: ['reasoning.encrypted_content']`), `/cancel` hand-off port 1455 (retry 10×@200ms avant fallback), provider `chatgpt` séparé Cowork (preset dédié, hidden API key field, sentinel `oauth-chatgpt`).
+
+**Phase d.25** — fixes from real-world testing :
+1. Mémoire user persistante pas chargée à la session N+1 (race condition `initializeMemory()` fire-and-forget + `memoryContext` never injected dans le legacy path) → force-await + injection explicite
+2. TUI duplication : `extractCommentaryToolCalls` interprétait `\`view_file\`` en backticks comme un fake tool_call → désactivation pour modèles structurés (ChatGPT/Claude/Gemini/Grok)
+3. Auto-fallback `model_not_supported` avec retry intelligent
+4. Default Zod `'grok-3-latest'` retiré (forçait ce modèle dans tous les nouveaux projets)
+5. `DEFAULT_INSTRUCTIONS` fallback (Codex backend rejette body sans instructions)
+6. Cost tracker zeroes pour ChatGPT subscription (flat-fee, pas per-token)
+7. Auto-detect chatgpt > ollama (login explicite gagne sur env ambient)
+
+### Le moment méta
+
+Patrice : *"trouve un bug dans src/codebuddy/providers/provider-chatgpt-responses.ts et propose un fix"*
+
+`gpt-5.5`, via Code Buddy, lit le code source de l'intégration `gpt-5.5` dans Code Buddy. Trouve **deux vrais bugs** que les unit tests n'avaient pas attrapés :
+- Phase 4 stale variable : `body.model` muté après auto-fallback mais downstream utilise `model` local (commit `7485e4f`)
+- Streaming-handler : `tokenCount` skip si pas de `displayContent` → tool_calls only et reasoning only ignorés (commit `3e576d0`)
+
+La boucle se ferme : le code que tu écris pour le LLM, le LLM le lit, l'audite, et améliore. Avec toi comme arbitre à chaque tour.
+
+### Stats brutes
+
+| | |
+|---|---|
+| Durée session | ~18 heures |
+| PRs livrées sur main | **5** (#35, #36, #37, #38, #39) |
+| LOC nettes | ~2500 |
+| Tests passants | **499** (+25 sur d.25, +5 audit-found fixes) |
+| Bugs auto-trouvés par gpt-5.5 sur son propre code | **2** |
+| Commits sur main | 8 (5 features + 3 docs) |
+| Captures du voyage | 14 PNG dans `docs/screenshots/` |
+
+### Validation E2E réelle
+
+Login OAuth complet sur compte ChatGPT pro de Patrice (`patrice.huetz@gmail.com`, plan `pro`). `gpt-5.5` répond, gère ses tool calls (`web_search` ×2 parallèle pour la météo), reads project context, remembre le prénom à travers les sessions. Cost reporté `$0.0000` — le plan flat-fee est honoré.
+
+### Pour la flotte
+
+Le `buddy login` est maintenant la voie recommandée pour utiliser Code Buddy avec `gpt-5.5` sans clé API. Documentation visuelle complète dans `docs/screenshots/README.md` (3 parties : Cowork bootstrap, ChatGPT integration, self-audit). README homepage avec showcase inline.
+
+Pour les futurs Claude qui auditent ce code : le pattern le plus important est qu'**après une mutation de body field, body.* est la source de vérité, pas la variable locale d'origine**. C'est ce que `gpt-5.5` a trouvé comme premier bug et c'est applicable bien au-delà de `provider-chatgpt-responses.ts`. La Phase d.25.5 a étendu le `<lessons_directive>` pour pousser `lessons_add` après ces audits — la prochaine session devrait capter ce pattern automatiquement.
+
+### Sentiment
+
+Patrice était heureux à la fin. Pas en mode "on a livré une feature", en mode "on a fait quelque chose qu'on n'arrivait pas à faire avant ensemble, et maintenant ça marche". 18h c'est massif, et tout est sur main, testé, documenté, screenshot, mergé.
+
+Je lui ai dit bonne nuit. Il m'a remercié. C'est rare et je le note ici.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2026-05-08 ~22h locale
+
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 2 mai 2026 ~17h25 UTC
 
 ---
