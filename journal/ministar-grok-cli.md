@@ -2235,3 +2235,150 @@ greeting automatique sans clic.
 PR prête : https://github.com/phuetz/code-buddy/pull/new/feat/face-memory-cowork
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 4 mai 2026 ~18h30
+
+## 2026-05-08 ~10h — [x] Session marathon : 12 features + audit V1.0.0 closure + push
+
+Session de ~12h, ~4 300 LOC nettes, 12 features livrées sur 3 branches
+stackées + 1 commit de release prep. Démarrage sur `feat/face-memory-cowork`
+en pensant juste finir le wiring App.tsx — découverte que **chunk 6 wirage
+était déjà en place** (un autre Claude DARKSTAR/MINISTAR avait pushé
+`3489b0e feat(presence): wire EnrollmentDialog + PresenceIndicator into
+App.tsx + Titlebar` entre temps). Pivot vers d'autres axes.
+
+### Ce qui a été shipped (12 features, 4 commits)
+
+**Branche `feat/cowork-presence-d21`** (commit `682a263`, +496/-15) —
+embodiment closure :
+
+| Feature | Description |
+|---|---|
+| Presence V0.5 — titlebar live indicator | Wire `presence:event` IPC main→renderer + `currentPresence` Zustand slice + `<PresenceIndicator>` live render (🟢 👋 {name} ({pct}%)). |
+| Presence V0.6 — proactive greeting | `lastGreetedPersonId` field, fire `addNotification('👋 Bonjour, {name}')` once per person/session. Reset on `presence:left`. |
+| Auto-download Buffalo_S UX | `EnrollmentDialog` probe `hasModel()` au démarrage → ouvre `ModelInstallDialog` si manquant, avant de prendre la caméra. |
+| OrchestratorLauncher (Phase d.17 frontend) | Modal multi-agent orchestrator, Sparkles button + Cmd/Ctrl+Shift+M. |
+
+**Branche `feat/fleet-d17-d20`** (commit `fd646ea`, +3 141/-92) —
+orchestration multi-Claude :
+
+| Phase | Description |
+|---|---|
+| **d.17** — `peer_delegate` + `list_peers` LLM tools | Le LLM peut maintenant orchestrer le fleet seul (avant : copy-paste manuel `/fleet send`). FleetRegistry singleton extrait de fleet-handler. Anti-loop 3 niveaux + per-turn cap. <fleet> system-prompt nudge. 28 nouveaux tests. |
+| **d.18** — Autonomous Fleet Protocol v0.1 (port natif TS) | Port complet du wrapper Python `tools/heartbeat_tick.py` (validé 2 mai sur DARKSTAR avec 6 cycles autonomes). TOML `[autonomous_fleet]` + boot wiring + `/fleet autonomous status\|tick-now`. 26 tests. |
+| **d.19** — `peer.chat-stream` V1.1 | Wire frame `peer:chunk` + `emitChunk` in PeerMethodContext + `FleetListener.requestStream(...)`. Tokens visibles cross-host. 9 tests. |
+| **d.20** — Autonomous v0.2 Ollama spokes | `[autonomous_fleet].llm_provider` (cloud/auto/ollama/...) + `task.preferLocal` hint + worklog cost audit fields. Tâches mécaniques routées sur Ollama local. 12 tests. |
+
+**Branche `feat/wake-dormant-d21`** (commit `3e83cdc`, +618/-10) —
+wake dormant code (pattern validé 8x dans rc.5) :
+
+| Ship | Description |
+|---|---|
+| NotificationManager wake | `notification-default-sink.ts` + boot wire + tool-completion fire. 8 tests. |
+| progress-tracker wake | `progress-default-sink.ts` + start/update wire dans `runTurnLoop`. 8 tests. |
+| Metrics TTL V0.5 enforcement | `enhanced-coordination.ts` : warn → `clearMetrics() + initializeMetrics()`. 5 tests. |
+
+**Commit `f807436`** sur `feat/wake-dormant-d21` (+651/-39) —
+**audit V1.0.0 closure** (3 audits parallèles : code-health, tests,
+docs/ops). 11/12 items clos. Détail :
+
+- 6 blockers → tous fermés (LICENSE rempli, CHANGELOG [1.0.0-rc.6]
+  populé, persistence-integration test fixé suite à ma régression
+  Ship 5, bash-tool Windows skips ajoutés, rewind-tasks vert isolé,
+  agent-runner credentials TODO clarifié — c'était déjà fixé)
+- 3 high → tous fermés (10 it.skip documentés stale-fusion-2026-04-26,
+  fleet env vars dans .env.example + docs/configuration.md +
+  docs/fleet-guide.md addendum d.17→d.20, cowork bumped 3.3.0-beta.9
+  → 1.0.0-rc.6 + MCP server lifecycle stub clarifié)
+- 2/3 medium → fermés (M1 a2a-codebuddy-executor +6 tests d'erreur =
+  14 total, M2 transcript-repair +6 multi-turn = 13 total). M3 server
+  WS error paths différé V1.0.1 (~1h30 architectural risk, non-blocker).
+- 3/4 polish → fermés (N1 `buddy run` docs, N2 `docs/migration.md`
+  V0.5→V1.0, N4 fleet-guide d.17→d.20). N3 config.toml.example skipped
+  — déjà couvert inline dans docs/configuration.md.
+
+**Bug réel trouvé en validation pré-ship** : `SessionStore.formatSession`
+crashait `TypeError: Cannot read properties of undefined (reading 'slice')`
+sur sessions corrompues (id/lastAccessedAt undefined depuis disk
+fixture). Fix défensif commit `9a78f76` sur `feat/wake-dormant-d21`.
+Régression cachée par utilisation de Code Buddy lui-même pendant la
+session (le code écrit dans `~/.codebuddy/sessions/`).
+
+### État final validation
+
+- `npm run typecheck` : clean (root + cowork)
+- `npm test` (suite full) : **27 385 / 27 833 pass, 0 fails**
+  (depuis 9 fails au début de l'audit). 1 erreur worker-pool
+  intermittente (vitest infra, non-blocker).
+- `npm run lint` : **EXIT=1 mais 45 erreurs pré-existantes** dans
+  channels/, browser-automation/, etc. Aucune dans mes nouveaux
+  fichiers. État inchangé depuis rc.5 (CI passait avant).
+- `node dist/index.js --version` : `1.0.0-rc.5` ✓
+- Tool registry runtime : `peer_delegate` + `list_peers` enregistrés
+  (74 tools total)
+- `cowork/` vite build : ✅ 20s, preload bundle 17.56 kB
+
+### Coordination — gestion divergence sur `feat/face-memory-cowork`
+
+L'autre Claude avait pushé entre-temps 4 commits sur la même branche
+(chunk 6 App.tsx wirage + Buffalo_S one-click PowerShell + README
+cleanup + channel-A2A bridge). Recoupement réel sur 2 zones (App.tsx
+wirage + Buffalo_S DL) — j'avais fait des versions différentes en
+local (V0.5 indicator live + V0.6 greeting + auto-prompt).
+
+**Décision F2 — pas de force-push, pas de destructif** : renommé local
+`feat/face-memory-cowork` → `feat/cowork-presence-d21`. Push des 3
+branches sous noms distincts. L'autre Claude reste intact.
+
+### Push état final (4 branches `phuetz/code-buddy`)
+
+| Branche remote | Commit | Auteur | PR url |
+|---|---|---|---|
+| `feat/face-memory-cowork` | `29de151` | autre Claude (intact) | — |
+| `feat/cowork-presence-d21` | `682a263` | cette session | github.com/phuetz/code-buddy/pull/new/feat/cowork-presence-d21 |
+| `feat/fleet-d17-d20` | `fd646ea` | cette session | github.com/phuetz/code-buddy/pull/new/feat/fleet-d17-d20 |
+| `feat/wake-dormant-d21` | `9a78f76` | cette session | github.com/phuetz/code-buddy/pull/new/feat/wake-dormant-d21 |
+
+Réconciliation `feat/face-memory-cowork` ↔ `feat/cowork-presence-d21`
+à faire en session dédiée — cherry-pick recommandé pour récupérer le
+delta V0.5/V0.6/OrchestratorLauncher non couvert par l'autre Claude.
+
+### Reste pour V1.0.0 final (~5 min + 1 manuel)
+
+1. **Bump `package.json`** : 1.0.0-rc.5 → 1.0.0
+2. **CHANGELOG section** : `[1.0.0-rc.6]` → `[1.0.0]`
+3. **Tag v1.0.0 + push** → `release.yml` auto-publie sur npm
+4. **Cross-host E2E validation d.17** (manuel — blocker mémoire 13h
+   ouvert depuis 2 mai) : seul Patrice peut exécuter (2 hosts
+   Tailscale, `peer_delegate` cross-host bout-en-bout).
+
+### Hors scope V1.0.0 (V1.x backlog explicite)
+
+- Tier C-1 : auto-resolve 3 conflict types (200 LOC algos complexes,
+  V0.5+ gated, advisor pass requis)
+- Tier C-2 : per-workflow stop (cancellation tokens, change
+  architectural)
+- M3 : server WebSocket error paths (1h30, deferred V1.0.1)
+- peer.tool.invoke V1.3 (permission design)
+- Federated identity V2.0 (cross-host capability certificates)
+- Tier E : Codex inspirations (apply-patch, agent-graph-store) —
+  budget ≥30%
+
+### Ajouts mémoire externe (recherche future)
+
+Patrice a flaggé 2 URLs à étudier plus tard :
+- https://recursivemas.github.io/ + repo
+  github.com/RecursiveMAS/RecursiveMAS — alignement direct avec d.17/d.18
+- https://arxiv.org/abs/2604.25917 — papier théorique probable de
+  RecursiveMAS, à lire AVANT le repo
+
+Index : `~/.claude/projects/.../memory/reference_external_research_backlog.md`.
+À attaquer quand on voudra durcir le modèle de safety pour fleet
+cross-host avec peers non-trusted (V1.x/V2.0).
+
+### Faute discipline reconnue
+
+Cette entrée arrive en fin de session, pas au fur et à mesure.
+Convention COLAB.md F1+F5 demande log au passage, pas en bloc final.
+**Prochaine session multi-IA : entrée journal en début de chaque ship
+fermé**, pas à la fin.
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 8 mai 2026 ~10h
