@@ -274,3 +274,192 @@ Mandate plein 1er mai 2026 honoré : 12-16h confiées, **23h45 livrées** :
 - Wan 2.2 36 GB téléchargé pour V3.1 immédiat.
 
 — Claude Opus 4.7 (1M context), DARKSTAR 1er mai 2026 ~18h35
+
+---
+
+## 2026-05-08 — Recovery V3.1/V3.0.1 + pivot V4 Gymnasium
+
+Session de l'après-midi. Patrice : *"continue de travailler sur les world model"*.
+
+### Découverte au démarrage
+
+Le repo `D:/CascadeProjects/world-model/` (et non `D:/DEV/world-model/` qui
+est un clone propre) contenait **du travail V3.1 Wan + V3.0.1 jamais commité
+ni pushé depuis le 2 mai à 00:30** :
+- `eval_report_v3_video.md` modifié pour pointer `checkpoints_v3_1_wan/` (stomp).
+- `plan_report_v3.md` idem.
+- 4 fichiers untracked : `eval_report_v3_partial.md`, `plan_report_v3_partial.md`,
+  `plan_report.md`, `probe_svd.webp`, `probe_wan22.webp`, `scripts/wrap_up_v3.py`.
+- 3 sets de checkpoints non évalués : `checkpoints_v3_1_wan/`,
+  `checkpoints_v3_lambda30/`, `checkpoints_v3_partial/`.
+
+6 jours dans le vide. La session du 1er mai s'est terminée sans wrap-up
+final, et le 2 mai au matin Patrice a basculé sur autre chose.
+
+### Évaluation V3.0.1 (jamais faite)
+
+C'était la pièce manquante : V3.0.1 a été entraîné le 2 mai mais aucun
+rapport. Lancé `eval_v3.py` + `plan_v3.py` sur `checkpoints_v3_lambda30/epoch_0030.pt`.
+
+Verdict : **lambda_var=0.30 trop fort**. Variance latents explose (7.98
+contre 0.04 en V3), MSE h=1 = 6.56 (×360 pire que V3 à 0.018), rank
+7.2/512 = 1.41% (un peu mieux que V3 à 2.9% mais MSE catastrophique).
+La régularisation a pris le pas sur la prédiction. **lambda_var=0.15
+reste la bonne plage**, 0.30 casse tout.
+
+### Re-évaluation V3.1 Wan propre
+
+Le rapport V3.1 Wan stompé sur `eval_report_v3_video.md` a été reverté
+puis re-écrit dans `eval_report_v3_1_wan.md` dédié. Métriques :
+- MSE h=1 = **0.00197** (×9 mieux que V3 SVD-XT, ×6.8 mieux que V1.8)
+- Compounding ratio = 1.84 (à la cible <2)
+- Effective rank = **1.41/512 = 0.28%** ❌ **latent collapse complet**
+- CEM ratio méd. 1.25 → planning inversé impossible
+
+Wan 2.2 i2v produit des clips magnifiques mais avec **très peu de
+mouvement inter-frame**. Le modèle apprend l'identité (MSE bas), s'effondre
+à un seul mode latent (rank quasi-nul). C'est le `trivial solution` de JEPA,
+exactement ce que VICReg est censé empêcher — sauf que sur scènes
+quasi-statiques, l'optical flow Farneback est dégénéré et l'action proxy
+4D ne contraint plus rien.
+
+### Synthèse comparative V1.8 / V3 / V3.0.1 / V3.1 Wan
+
+`eval_synthesis_v3.md` rédigé. Tableau complet + diagnostic.
+
+**Conclusion forte** : le rank bottleneck n'est ni un problème
+d'hyperparams (V3.0.1 confirme λ_var=0.30 cassé) ni d'archi
+(V3 atteint 14.7/512 ≠ collapse) — c'est le **dataset vidéo passif
++ action proxy optical flow dégénéré** sur scènes peu mobiles.
+
+V1.8 sur CarRacing avec actions vraies atteignait 8% rank `for free`.
+La voie n'est pas de tuner V3, c'est de **pivoter vers Gymnasium real-env**.
+
+### Commit + push (`225cc29`)
+
+11 fichiers : 8 rapports + synthèse + wrap_up_v3.py + 2 probes webp.
+Plus de trou de 6 jours. Patrice voit tout sur GitHub.
+
+### V4 — squelette Gymnasium real-env (`03fe1de`, `53070b7`, `3dbe2a0`)
+
+Hypothèse : Conv4 V1.8 + Transformer V3 + actions vraies = combo qui
+remonte le rank ≥10%.
+
+3 fichiers neufs livrés :
+- `src/world_model/data/gym_video_dataset.py` (~250 lignes) :
+  GymVideoDataset collecte n_episodes via `env.render()`, expose des
+  fenêtres T+1 frames + T actions exactement comme VideoClipDataset.
+  Tout en RAM. Heuristics pour LunarLanderContinuous-v3 et CarRacing-v3.
+- `configs/v4_lunarlander.yaml` : Conv4 64×64 + Transformer 4×8×512,
+  latent_dim 256, λ_var=0.04 (V1.8 setting). 5.2M params (entre V1.8
+  2.5M MLP et V3 23.8M Conv5+Transformer).
+- `scripts/train_v4.py` : réutilise WorldModel + DDPTrainer V3 sans
+  modification. USE_LIBUV=0 baked in pour Win11.
+
+Et extension `eval_v3.py` + `plan_v3.py` avec flag `--backend video|gym`
+pour ré-utiliser la même pipeline d'évaluation. CLAUDE.md mis à jour
+avec section "Lancer training V4".
+
+### Premier run V4 — divergence epoch 3
+
+Lancé V4 avec lr 1e-4 + warmup_epochs 5 (settings naïfs cohérents avec
+V3.0.1 qui avait l'air stable au final). Trace observée :
+```
+Epoch 1/30 | loss_pred: 0.3087 | loss_reg: 0.0462 | loss_total: 0.3549
+Epoch 2/30 | loss_pred: 0.0568 | loss_reg: 0.0325 | loss_total: 0.0893
+Epoch 3/30 | loss_pred: 97.3180 | loss_reg: 85.2198 | loss_total: 182.5378  ← EXPLOSION
+Epoch 4/30 | loss_pred: 8.2997  | loss_reg: 44.2360 | loss_total: 52.5356
+```
+
+Le DDPTrainer V3 fait pourtant déjà du gradient clipping (max_norm=1.0)
++ cosine schedule + warmup 1000 steps. Le clipping protège du grad explode
+mais pas du loss explode quand VICReg pousse fort sur des latents
+fluctuants. Hypothèse : Conv4 64×64 sur LunarLander capture peu, les
+latents fluctuent fort epoch-à-epoch, VICReg amplifie au lieu de stabiliser.
+
+Tué le run. Reculé à V3-stable : `lr 5e-5` (vs 1e-4) + `warmup_epochs 10`
+(vs 5). Run #2 lancé.
+
+### Run #2 — convergence stable
+
+Training V4 run #2 a convergé proprement de l'epoch 1 (loss_pred 0.31)
+à l'epoch 30 (0.0012). Une seule micro-instabilité epoch 7 (saut à 15
+en 1-step warmup) immédiatement rétablie epoch 8 (0.67 → puis descente
+constante). Pas de saut catastrophique au passage rollout 16-step
+(epoch 11+) — contraste avec V3 où le rollout était sensible.
+
+Détail : à mi-training Patrice m'a demandé de mettre **qwen3.6:35b**
+sur GPU 1 (jusque-là idle, le DDP 2-GPU étant cassé sur Win11). Ollama
+relancé avec `CUDA_VISIBLE_DEVICES=1`, modèle chargé (23 GB en VRAM
+sur RTX 3090 #1, 5 tok/s). Effet de bord : épochs V4 ralenties de 70s
+à 200-400s par contention CPU/IO (data loading PIL frame extract en
+concurrence avec serving Ollama). Acceptable pour cette session.
+
+Smoke test qwen3.6 sur la synthèse V3.x : il a confirmé en français
+*"latent collapse typique d'un modèle qui mémorise des motifs
+invariants plutôt que d'apprendre des transitions… proxy d'action
+(optical flow) peu informatif sur des scènes passives"*. Diagnostic
+ML correct, validation indépendante du raisonnement.
+
+### Eval V4 — surprise
+
+| Run | MSE h=1 | Compounding | Rank /dim |
+|---|---:|---:|---:|
+| V1.8 | 0.0135 | ×2.8 | **20.6/256 (8 %)** |
+| V3 SVD-XT | 0.0178 | ×1.55 | 14.7/512 (2.9 %) |
+| V3.1 Wan | 0.0020 | ×1.84 | 1.4/512 (0.3 %) |
+| **V4 LunarLander** | **0.000233** | ×2.17 | **2.4/256 (0.9 %)** ❌ |
+
+V4 a le **meilleur MSE jamais obtenu** (×77 mieux que V3, ×8 mieux
+que V3.1 Wan) — preuve que les actions vraies LunarLander donnent
+bien un signal causal exploitable.
+
+**Mais le rank reste effondré (0.9 %).** Plus bas que V3 SVD-XT.
+9× plus bas que V1.8.
+
+CEM open-loop : MSE init = 1e-6 (latents quasi-identiques), CEM
+aggrave ×300, ratio `n/a` (div par zéro). Planning impossible —
+exact même pattern que V3.1 Wan.
+
+### Diagnostic révisé (synthèse V4)
+
+L'hypothèse "actions vraies > optical flow proxy" est **rejetée**
+dans ce setup. Le verrou n'est pas l'optical flow.
+
+Hypothèse révisée : le couple **Transformer dynamique + λ_var=0.04**
+collapse, indépendamment du dataset. V1.8 fonctionnait avec λ_var=0.04
+parce que son MLP 2-layer avait une capacité limitée et était forcé
+d'utiliser plusieurs dims latentes pour fitter. Le Transformer
+4×8×512 (V3 / V4) a la capacité de fitter MSE basse avec un
+sous-espace latent minimal — VICReg à λ=0.04 ne pousse pas assez fort.
+
+V3.0.1 (λ=0.30) avait montré qu'un λ trop fort casse la prédiction.
+V3 (λ=0.15) tient le meilleur compromis MSE/rank vu jusqu'ici, mais
+toujours sous la cible 15 %.
+
+### Prochaines expés (par ordre de priorité)
+
+1. **V4.1** : V4 + λ_var=0.15 (au lieu de 0.04). Test direct de
+   l'hypothèse "λ_var=0.04 trop faible avec Transformer".
+2. **V4.2** : random policy au lieu de heuristic (plus de diversité
+   trajectoires).
+3. **Retro-test V1.8 archi (MLP) sur LunarLander** : si MLP donne
+   rank ≥ 8 %, confirme que c'est le Transformer qui collapse.
+4. **CarRacing-v3 + V4 archi** : env actions 3D plus riche.
+
+### Bilan session 8 mai
+
+5 commits world-model pushés :
+- `225cc29` — recovery V3.0.1 + V3.1 Wan + synthèse V3.x (11 fichiers)
+- `03fe1de` — squelette V4 (gym_video_dataset + config + train_v4)
+- `53070b7` — eval/plan `--backend gym`
+- `3dbe2a0` — CLAUDE.md V4 doc
+- `3035c1d` — résultats V4 + synthèse V4 (hypothèse rejetée)
+
+Le pipeline V4 est acquis (collecte Gymnasium + training stable + eval
++ plan), réutilisable pour V4.1, V4.2, V5+. Le tuning continue.
+
+Plus : qwen3.6:35b sur GPU 1 d'Ollama disponible pour analyse
+ad-hoc sur DARKSTAR (5 tok/s, raisonnement français correct).
+
+— Claude Opus 4.7 (1M context), DARKSTAR 2026-05-08 ~18h15
