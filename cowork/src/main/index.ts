@@ -14,6 +14,7 @@
  */
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, Tray, globalShortcut } from 'electron';
 import { join, resolve, dirname, isAbsolute, basename } from 'path';
+import { pathToFileURL } from 'url';
 import * as fs from 'fs';
 import { execFileSync } from 'child_process';
 import { config } from 'dotenv';
@@ -869,8 +870,15 @@ app
           resourcesPath: process.resourcesPath,
           appPath: app.getAppPath(),
         });
+        // Node's ESM loader on Windows REQUIRES file:// URLs for absolute
+        // paths (`d:\...` is rejected with ERR_UNSUPPORTED_ESM_URL_SCHEME).
+        // pathToFileURL produces a cross-platform-safe `file:///D:/...`
+        // form that the loader accepts on every platform.
+        const adapterUrl = pathToFileURL(
+          resolve(enginePath, 'desktop', 'codebuddy-engine-adapter.js'),
+        ).href;
         const { CodeBuddyEngineAdapter } = await import(
-          /* webpackIgnore: true */ resolve(enginePath, 'desktop', 'codebuddy-engine-adapter.js')
+          /* webpackIgnore: true */ /* @vite-ignore */ adapterUrl
         );
         const apiConfig = configStore.getAll();
         engineAdapter = new CodeBuddyEngineAdapter({
@@ -882,8 +890,11 @@ app
         }) as EngineAdapterLike;
         // Wire permission bridge for engine tool approvals
         try {
+          const permBridgeUrl = pathToFileURL(
+            resolve(enginePath, 'desktop', 'permission-bridge.js'),
+          ).href;
           const { DesktopPermissionBridge } = await import(
-            /* webpackIgnore: true */ resolve(enginePath, 'desktop', 'permission-bridge.js')
+            /* webpackIgnore: true */ /* @vite-ignore */ permBridgeUrl
           );
           const permissionBridge = new DesktopPermissionBridge(sendToRenderer);
           const adapterWithPerm = engineAdapter as unknown as {

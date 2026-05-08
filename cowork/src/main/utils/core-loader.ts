@@ -46,16 +46,24 @@ function candidateRoots(): string[] {
     /* not in Electron context yet */
   }
 
-  // Walk up from this file — works when running TS via tsx or when vite
-  // inlines source maps.
+  // Walk up from this file — handle BOTH cases:
+  //   - Source (tsx dev / unbundled): `cowork/src/main/utils/core-loader.ts`
+  //     → up 4 = cowork/ → up 1 → grok-cli/{dist,src}/
+  //   - Vite-bundled (production): `cowork/dist-electron/main/index-X.js`
+  //     → up 3 = cowork/ → up 1 → grok-cli/{dist,src}/
+  // Vite inlines `core-loader.ts` into the same bundle as the rest of
+  // main/, so `import.meta.url` after build points at the bundled
+  // `index-X.js` (3-deep), not the original source location (4-deep).
+  // Push both candidate depths to support either case.
   try {
     const here = fileURLToPath(import.meta.url);
-    // dist-electron/main/utils/core-loader.js → up 4 = cowork/ → up 1 → grok-cli/dist/
-    const candidate1 = resolve(dirname(here), '..', '..', '..', '..', 'dist');
-    roots.push(candidate1);
-    // src path (tsx dev mode)
-    const candidate2 = resolve(dirname(here), '..', '..', '..', '..', 'src');
-    roots.push(candidate2);
+    const dir = dirname(here);
+    // Up 4 levels (source / unbundled).
+    roots.push(resolve(dir, '..', '..', '..', '..', 'dist'));
+    roots.push(resolve(dir, '..', '..', '..', '..', 'src'));
+    // Up 3 levels (vite-bundled production).
+    roots.push(resolve(dir, '..', '..', '..', 'dist'));
+    roots.push(resolve(dir, '..', '..', '..', 'src'));
   } catch {
     /* no import.meta.url (CJS) */
   }
