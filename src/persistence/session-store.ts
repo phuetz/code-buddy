@@ -866,13 +866,21 @@ export class SessionStore {
   }
 
   /**
-   * Format session for display
+   * Format session for display. Defensive against legacy/corrupted
+   * sessions on disk where id, name, messages, or lastAccessedAt may
+   * be missing — display layer must never crash on bad fixture data.
    */
   formatSession(session: Session): string {
-    const messageCount = session.messages.length;
-    const date = session.lastAccessedAt.toLocaleDateString();
-    const time = session.lastAccessedAt.toLocaleTimeString();
-    return `[${session.id.slice(0, 8)}] ${session.name} - ${messageCount} messages - ${date} ${time}`;
+    const id = typeof session.id === 'string' ? session.id : '????????';
+    const name = session.name ?? '(unnamed)';
+    const messageCount = Array.isArray(session.messages) ? session.messages.length : 0;
+    const lastAccessed =
+      session.lastAccessedAt instanceof Date && !Number.isNaN(session.lastAccessedAt.getTime())
+        ? session.lastAccessedAt
+        : null;
+    const date = lastAccessed?.toLocaleDateString() ?? '(no date)';
+    const time = lastAccessed?.toLocaleTimeString() ?? '';
+    return `[${id.slice(0, 8)}] ${name} - ${messageCount} messages - ${date} ${time}`.trimEnd();
   }
 
   /**
