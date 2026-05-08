@@ -309,7 +309,11 @@ export class ChatGptResponsesProvider implements Provider {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      throw enrichError(response.status, errorText, model);
+      // Report the model that was ACTUALLY rejected by the final
+      // request — `body.model` may have been mutated by the auto-fallback
+      // branch above. The local `model` variable is the original
+      // request, which is misleading after a fallback.
+      throw enrichError(response.status, errorText, body.model);
     }
 
     if (!response.body) {
@@ -319,9 +323,11 @@ export class ChatGptResponsesProvider implements Provider {
     // Reset capture buffer for THIS response — only successful new
     // reasoning blobs should populate `lastTurnReasoningItems`. We swap
     // in a fresh array so the SSE parser can push without races.
+    // Pass `body.model` (post-fallback) so streaming chunks are labelled
+    // with the model that actually served the response.
     const capturedReasoning: ResponsesReasoningItem[] = [];
     try {
-      yield* parseSseStream(response.body, model, (item) => {
+      yield* parseSseStream(response.body, body.model, (item) => {
         capturedReasoning.push(item);
       });
     } finally {

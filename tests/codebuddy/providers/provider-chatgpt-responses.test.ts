@@ -770,6 +770,9 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
       authProvider: async () => authBundle(),
       model: 'gpt-5.5',
       defaultMaxTokens: 1000,
+      // Disable auto-fallback so the rejection message references the
+      // exact model the caller used, not the post-fallback retry slug.
+      disableModelFallback: true,
     });
 
     let caught: Error | null = null;
