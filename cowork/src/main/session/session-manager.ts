@@ -410,6 +410,29 @@ export class SessionManager {
   }
 
   /**
+   * Phase 3 — surface which agent runner is active so the renderer can
+   * display a status badge. The `engineAdapter` field is populated at
+   * boot (`cowork/src/main/index.ts:870-905`) when the embedded engine
+   * bundle resolves; otherwise it stays undefined and we fall back to
+   * pi. We also expose how many sessions the engine currently caches
+   * so power users can spot leaks.
+   */
+  getRunnerStatus(): {
+    runner: 'engine' | 'pi';
+    engineReady: boolean;
+    bootError: string | null;
+  } {
+    if (this.engineAdapter) {
+      const adapter = this.engineAdapter as EngineAdapterLike & {
+        isReady?: () => boolean;
+      };
+      const ready = typeof adapter.isReady === 'function' ? adapter.isReady() : true;
+      return { runner: 'engine', engineReady: ready, bootError: null };
+    }
+    return { runner: 'pi', engineReady: false, bootError: null };
+  }
+
+  /**
    * Get sandbox adapter instance
    */
   getSandboxAdapter(): SandboxAdapter {

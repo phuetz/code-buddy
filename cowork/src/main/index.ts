@@ -2749,6 +2749,18 @@ ipcMain.handle('activity.clear', async () => {
 });
 
 /**
+ * Runner status — used by the titlebar `RunnerBadge` to surface
+ * which agentic loop is active (engine = core CodeBuddyAgent,
+ * pi = legacy fallback).
+ */
+ipcMain.handle('runner.status', async () => {
+  if (!sessionManager) {
+    return { runner: 'pi', engineReady: false, bootError: null };
+  }
+  return sessionManager.getRunnerStatus();
+});
+
+/**
  * Voice → text transcription (Phase 8 — mic button in ChatView).
  * Accepts a Buffer of audio (webm/opus from MediaRecorder works out of
  * the box), forwards it to the long-running faster-whisper worker, and

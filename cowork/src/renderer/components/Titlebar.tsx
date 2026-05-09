@@ -6,6 +6,7 @@ import { useUnreadNotificationCount } from '../store/selectors';
 import { TabBar } from './TabBar';
 import { PresenceIndicator } from './PresenceIndicator';
 import { ServerDashboard } from './ServerDashboard';
+import { RunnerBadge } from './RunnerBadge';
 
 const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
 
@@ -114,6 +115,9 @@ export function Titlebar() {
       >
         <Focus className="w-4 h-4 text-text-secondary" />
       </button>
+
+      {/* Runner badge — shows engine vs pi status (Cowork-on-core migration P3) */}
+      <RunnerBadge />
 
       {/* Code Buddy HTTP server toggle — boots `src/server/index.ts` in-process */}
       <ServerToggle />

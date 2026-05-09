@@ -682,6 +682,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     > => ipcRenderer.invoke('sessions.searchContent', query, limit),
   },
 
+  /**
+   * Runner status (Phase 3 of the cowork-on-core migration).
+   * Tells the renderer whether the embedded Code Buddy core engine
+   * is active or whether we fell back to pi-coding-agent.
+   */
+  runner: {
+    status: (): Promise<{
+      runner: 'engine' | 'pi';
+      engineReady: boolean;
+      bootError: string | null;
+    }> => ipcRenderer.invoke('runner.status'),
+  },
+
   // Phase 8 — voice input. The renderer captures audio via MediaRecorder
   // and ships the resulting Blob (as ArrayBuffer) to the main process for
   // transcription via faster-whisper.
@@ -2280,6 +2293,13 @@ declare global {
             projectId: string | null;
           }>
         >;
+      };
+      runner: {
+        status: () => Promise<{
+          runner: 'engine' | 'pi';
+          engineReady: boolean;
+          bootError: string | null;
+        }>;
       };
       voice: {
         transcribe: (
