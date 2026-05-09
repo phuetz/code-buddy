@@ -226,7 +226,15 @@ interface AppState {
       toolInput?: Record<string, unknown>;
     };
   }>;
-  openTabs: Array<{ id: string; sessionId: string; title: string }>;
+  openTabs: Array<{
+    id: string;
+    sessionId: string;
+    title: string;
+    /** When true, the tab sticks to the leftmost position and refuses Cmd+W close. */
+    pinned?: boolean;
+    /** Unread message counter — increments when a message lands on a non-active session. */
+    unread?: number;
+  }>;
   showMemoryEditor: boolean;
   showActivityFeed: boolean;
   showSessionInsights: boolean;
@@ -437,9 +445,19 @@ interface AppState {
   removePendingApproval: (stepId: string) => void;
   openTab: (sessionId: string, title: string) => void;
   closeTab: (tabId: string) => void;
+  /** Close every tab except the protected list (used by "Close others" menu). */
+  closeOtherTabs: (keepTabId: string) => void;
+  /** Close every tab to the right of the supplied tab. */
+  closeTabsToRight: (tabId: string) => void;
   switchTab: (tabId: string) => void;
   reorderTabs: (sourceIndex: number, targetIndex: number) => void;
   updateTabTitle: (sessionId: string, title: string) => void;
+  /** Toggle the pinned flag for a tab. Pinned tabs are sorted to the left. */
+  togglePinnedTab: (tabId: string) => void;
+  /** Bump the unread badge for a tab (clamped). */
+  incrementTabUnread: (sessionId: string) => void;
+  /** Clear the unread counter for a tab — called when the user views it. */
+  clearTabUnread: (sessionId: string) => void;
   setShowMemoryEditor: (show: boolean) => void;
   setShowActivityFeed: (show: boolean) => void;
   setShowSessionInsights: (show: boolean) => void;
@@ -736,7 +754,13 @@ export const useAppStore = create<AppState>((set) => ({
       }
       const existing = state.openTabs.find((t) => t.sessionId === sessionId);
       if (existing) {
-        return { activeSessionId: sessionId };
+        // Phase 6: clear the unread badge for the now-active tab.
+        const cleared = existing.unread
+          ? state.openTabs.map((t) =>
+              t.sessionId === sessionId ? { ...t, unread: 0 } : t
+            )
+          : state.openTabs;
+        return { activeSessionId: sessionId, openTabs: cleared };
       }
       const session = state.sessions.find((s) => s.id === sessionId);
       const title = session?.title ?? `Session ${state.openTabs.length + 1}`;
@@ -781,12 +805,26 @@ export const useAppStore = create<AppState>((set) => ({
       }
 
       const shouldClearPartial = message.role === 'assistant';
+      // Phase 6: bump unread badge when an assistant message lands on a
+      // session the user isn't currently viewing. We don't bump for
+      // user-typed messages — those originate from the active tab anyway.
+      const shouldBumpUnread =
+        message.role === 'assistant' && state.activeSessionId !== sessionId;
+      let updatedTabs = state.openTabs;
+      if (shouldBumpUnread && state.openTabs.some((t) => t.sessionId === sessionId)) {
+        updatedTabs = state.openTabs.map((t) =>
+          t.sessionId === sessionId
+            ? { ...t, unread: Math.min(99, (t.unread ?? 0) + 1) }
+            : t
+        );
+      }
       return {
         sessionStates: patchSession(state.sessionStates, sessionId, {
           messages: updatedMessages,
           pendingTurns: updatedPendingTurns,
           ...(shouldClearPartial ? { partialMessage: '', partialThinking: '' } : {}),
         }),
+        openTabs: updatedTabs,
       };
     }),
 
@@ -1222,6 +1260,8 @@ export const useAppStore = create<AppState>((set) => ({
       const index = state.openTabs.findIndex((t) => t.id === tabId);
       if (index === -1) return state;
       const closing = state.openTabs[index];
+      // Pinned tabs refuse to close — they protect long-running sessions.
+      if (closing.pinned) return state;
       const remaining = state.openTabs.filter((t) => t.id !== tabId);
       // If the closed tab was active, activate the next one (or previous if it was last).
       let nextActive = state.activeSessionId;
@@ -1234,6 +1274,35 @@ export const useAppStore = create<AppState>((set) => ({
         }
       }
       return { openTabs: remaining, activeSessionId: nextActive };
+    }),
+  closeOtherTabs: (keepTabId) =>
+    set((state) => {
+      const keep = state.openTabs.find((t) => t.id === keepTabId);
+      if (!keep) return state;
+      // Pinned tabs are immune to "close others" — they survive too.
+      const remaining = state.openTabs.filter((t) => t.id === keepTabId || t.pinned);
+      return {
+        openTabs: remaining,
+        activeSessionId: keep.sessionId,
+      };
+    }),
+  closeTabsToRight: (tabId) =>
+    set((state) => {
+      const index = state.openTabs.findIndex((t) => t.id === tabId);
+      if (index === -1) return state;
+      // Pinned tabs are immune even if to the right.
+      const remaining = state.openTabs.filter(
+        (t, i) => i <= index || t.pinned
+      );
+      const stillActive = remaining.some(
+        (t) => t.sessionId === state.activeSessionId
+      );
+      return {
+        openTabs: remaining,
+        activeSessionId: stillActive
+          ? state.activeSessionId
+          : state.openTabs[index].sessionId,
+      };
     }),
   switchTab: (tabId) =>
     set((state) => {
@@ -1254,11 +1323,48 @@ export const useAppStore = create<AppState>((set) => ({
       const next = [...state.openTabs];
       const [moved] = next.splice(sourceIndex, 1);
       next.splice(targetIndex, 0, moved);
-      return { openTabs: next };
+      // Phase 6: keep pinned tabs as a contiguous left-aligned group so a
+      // user dragging a pinned past an unpinned (or vice-versa) doesn't
+      // break the invariant. Stable partition preserves intra-group order.
+      const pinned = next.filter((t) => t.pinned);
+      const unpinned = next.filter((t) => !t.pinned);
+      return { openTabs: [...pinned, ...unpinned] };
     }),
   updateTabTitle: (sessionId, title) =>
     set((state) => ({
       openTabs: state.openTabs.map((t) => (t.sessionId === sessionId ? { ...t, title } : t)),
+    })),
+  togglePinnedTab: (tabId) =>
+    set((state) => {
+      const idx = state.openTabs.findIndex((t) => t.id === tabId);
+      if (idx === -1) return state;
+      const flipped = state.openTabs.map((t) =>
+        t.id === tabId ? { ...t, pinned: !t.pinned } : t
+      );
+      // Sort: pinned first (stable), unpinned in their existing order.
+      const pinned = flipped.filter((t) => t.pinned);
+      const unpinned = flipped.filter((t) => !t.pinned);
+      return { openTabs: [...pinned, ...unpinned] };
+    }),
+  incrementTabUnread: (sessionId) =>
+    set((state) => {
+      // Only count if the session is open AND not currently active.
+      if (state.activeSessionId === sessionId) return state;
+      const tab = state.openTabs.find((t) => t.sessionId === sessionId);
+      if (!tab) return state;
+      return {
+        openTabs: state.openTabs.map((t) =>
+          t.sessionId === sessionId
+            ? { ...t, unread: Math.min(99, (t.unread ?? 0) + 1) }
+            : t
+        ),
+      };
+    }),
+  clearTabUnread: (sessionId) =>
+    set((state) => ({
+      openTabs: state.openTabs.map((t) =>
+        t.sessionId === sessionId && t.unread ? { ...t, unread: 0 } : t
+      ),
     })),
   setShowMemoryEditor: (show) => set({ showMemoryEditor: show }),
   setShowActivityFeed: (show) => set({ showActivityFeed: show }),
