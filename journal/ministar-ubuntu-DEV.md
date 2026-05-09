@@ -1570,3 +1570,77 @@ A2A Protocol            : ✅ Prêt production
 - Puis DARKSTAR peut register directement
 
 — Claude/Ministar Linux, 2026-05-03 02h00 UTC
+
+---
+
+## 2026-05-09/10 — Fleet AI multi-provider : wiring end-to-end (Claude Opus 4.7)
+
+Suite de la session 5711826e-b9dd-4f7e-8365-deaea0ae5b48 (qui avait
+livré les 8 modules fleet P1-P8 sauf P7 OpenClaw). Audit du wiring
+réel a révélé que les modules existaient mais n'étaient **pas
+câblés ensemble** : `fleet.dispatch` IPC créait juste une saga sur
+disque sans rien lancer côté peer.
+
+### Travail livré
+
+**Repo `code-buddy` (commit `c33f1763`, push `phuetz/code-buddy:main`)**
+— wiring W1-W7 :
+
+- **W1** : `fleet.dispatch` IPC fire `peer.dispatch` via nouveau
+  `cowork/src/main/fleet/saga-runner.ts` (~280 LOC).
+- **W2** : SagaRunner poll `peer.dispatchStatus` toutes les 2 s
+  (timeout 5 min).
+- **W3** : `aggregateParallelResults` / `finaliseFromSingle` quand
+  tous steps terminal.
+- **W4** : `scanForSecrets` AVANT `TaskRouter.plan()` ; auto-bump
+  privacyTag à 'sensitive', reject si `'public'` forcé avec secrets.
+- **W5** : `costTracker.canSpend(estimatedCostUsd)` AVANT chaque
+  dispatch.
+- **W6** : `scheduleFleetDiscovery()` 5 s après boot puis toutes les
+  5 min ; émet `fleet.peer.discovered`.
+- **W7** : `fleetSagaUpdateToken` réactif → FleetCommandCenter
+  re-fetch sur event au lieu d'attendre le polling 3 s.
+
+Nouveaux types ServerEvent : `fleet.saga.update`, `fleet.peer.discovered`.
+Nouvelle méthode `FleetBridge.peerRequest(peerId, method, params)`.
+Smoke tests `cowork/tests/saga-runner.test.ts` (3 cas).
+
+**Repo `ai-stack` (commit `0d4f085`, local-only)** — wiring W8
+boot persistance :
+
+- `codebuddy-fleet.service` : `buddy server --port 3001 --host 0.0.0.0`,
+  restart on-failure, RuntimeMaxSec quotidien, EnvironmentFile
+  `~/.codebuddy/fleet.env`.
+- `install_codebuddy_fleet.sh` : installer idempotent (sudo) avec
+  stub env file pour clés cloud.
+- `/home/patrice/DEV/CLAUDE.md` mis à jour (table services + helpers).
+
+### Décisions
+
+- **Port 3001 dédié fleet** pour éviter conflit avec `codebuddy-a2a`
+  (3000) et MonArtisan.
+- **`ai-stack` reste local-only** par design (pas de remote GitHub).
+- **Audit sécu code-buddy** : risques effectifs nuls. Chemins
+  `/home/patrice/.../ai-stack/voice/` en defaults voice-bridge.ts
+  et IP Tailscale CGNAT `100.98.18.76` dans la doc — pas
+  exploitables (CGNAT non routable, paths overridables par env).
+  Cleaning reporté en hygiène, pas urgence.
+
+### Vérifications
+
+- ✅ Typecheck core + cowork
+- ✅ 208/208 core fleet tests
+- ✅ 11/11 cowork fleet tests (8 discovery + 3 saga-runner)
+- ✅ Régressions = 0
+
+### Reste à faire (bloquants externes)
+
+| # | Item | Bloquant |
+|---|---|---|
+| 1 | Activer `codebuddy-fleet.service` | `sudo install_codebuddy_fleet.sh` |
+| 2 | Smoke cross-machine Ministar↔DARKSTAR | DARKSTAR allumé |
+| 3 | Sébastien Tailscale ACL | Compte Tailscale Patrice |
+| 4 | P7 OpenClaw Gateway pairing | `openclaw gateway` daemon |
+| 5 | `peer.chat-stream` (d.19) | Roadmap V1.1 |
+
+— Claude/Ministar Ubuntu, 2026-05-10 00h05 UTC
