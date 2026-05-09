@@ -110,6 +110,17 @@ export interface EngineAdapter {
   setMcpServers?(configs: EngineMcpServerConfig[]): Promise<void>;
 
   /**
+   * Reload the engine's skills registry from disk so a SKILL.md
+   * installed / removed by the host is picked up without restarting
+   * the process. Called from `SessionManager.invalidateSkillsSetup`
+   * (Cowork) right after a marketplace install or a manual file edit
+   * in `~/.codebuddy/skills/`.
+   *
+   * Optional — adapters without a skills system can omit this.
+   */
+  reloadSkills?(): Promise<void>;
+
+  /**
    * Release all resources. Called when the app is shutting down.
    */
   dispose(): void;

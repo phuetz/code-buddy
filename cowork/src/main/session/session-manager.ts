@@ -102,6 +102,12 @@ export interface EngineAdapterLike {
       enabled?: boolean;
     }>,
   ) => Promise<void>;
+  /**
+   * Reload the engine's skills registry. Called by Cowork after a
+   * skill is installed / removed / toggled in Settings.
+   * Optional — older bundles without skills hot-reload don't expose it.
+   */
+  reloadSkills?: () => Promise<void>;
 }
 
 /** Minimal interface for the project memory service */
@@ -355,6 +361,22 @@ export class SessionManager {
   invalidateSkillsSetup(): void {
     if (this.agentRunner && 'invalidateSkillsSetup' in this.agentRunner) {
       (this.agentRunner as ClaudeAgentRunner).invalidateSkillsSetup();
+    }
+    // Phase 10 — hot-reload the engine's skills registry too. Pi
+    // rebuilds skills per query (above); engine caches a global
+    // SKILL.md registry that needs an explicit reload after install.
+    void this.reloadSkillsOnEngine();
+  }
+
+  private async reloadSkillsOnEngine(): Promise<void> {
+    if (!this.engineAdapter || typeof this.engineAdapter.reloadSkills !== 'function') {
+      return;
+    }
+    try {
+      await this.engineAdapter.reloadSkills();
+      log('[SessionManager] reloaded skills on engine');
+    } catch (err) {
+      logError('[SessionManager] reloadSkillsOnEngine failed:', err);
     }
   }
 

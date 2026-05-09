@@ -81,7 +81,7 @@ better), **N/A** (pi-specific quirk that doesn't apply to engine).
 | Disposal on session close | yes | yes (`clearSession`) | OK | — |
 | Restore prior history | `existingMessages` pushed to pi history | `convertMessages` pushes to core `chatHistory` | OK | — |
 | **Skills / Plugins** |  |  |  |  |
-| Skills hot-reload after install | `invalidateSkillsSetup()` rebuilds resourceLoader | not ported (engine reloads only on agent recreate) | GAP | low |
+| Skills hot-reload after install | `invalidateSkillsSetup()` rebuilds resourceLoader | `EngineAdapter.reloadSkills()` (Phase 10) calls `getSkillRegistry().reloadAll()` from `SessionManager.invalidateSkillsSetup`. | OK (Phase 10) | — |
 | Plugin runtime service | `_pluginRuntimeService` stored | core has its own plugin system | DIFF | — |
 | **Reasoning / Middlewares** |  |  |  |  |
 | 7 conversation middlewares (turn limit / cost / context warning / reasoning / workflow guard / auto-repair / quality gate) | n/a (pi has its own retry only) | active in core | DIFF (engine wins) | — |
@@ -141,7 +141,11 @@ better), **N/A** (pi-specific quirk that doesn't apply to engine).
 
 4. **Bash sudo password injection** — rare use case in Cowork,
    document as missing.
-5. **Skills/plugins hot-reload** — restart workaround acceptable.
+5. ~~**Skills/plugins hot-reload**~~ — **fixed in Phase 10
+   (2026-05-09)**. New `EngineAdapter.reloadSkills()` reloads the
+   global SKILL.md registry. Cowork's `SessionManager.invalidateSkillsSetup`
+   fires it after install/uninstall/toggle. 4 tests in
+   `cowork/tests/engine-skills-reload.test.ts`.
 6. ~~**Session cache LRU**~~ — **fixed in Phase 9 (2026-05-09)**.
    `MAX_CACHED_SESSIONS = 50` matches pi. Insertion-ordered `Map`
    is touch-on-access; oldest evicted on overflow with `dispose()`

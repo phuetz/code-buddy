@@ -363,6 +363,25 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
   }
 
   /**
+   * Reload the global SKILL.md registry. Called by Cowork after the
+   * user installs / uninstalls / toggles a skill in Settings (Phase 10).
+   *
+   * Failures are logged but never thrown — a broken skills load
+   * shouldn't break the host. The next `findSkill()` call simply
+   * returns whatever survived the previous load.
+   */
+  async reloadSkills(): Promise<void> {
+    try {
+      const { getSkillRegistry } = await import('../skills/registry.js');
+      const registry = getSkillRegistry();
+      await registry.reloadAll();
+      logger.info('[CodeBuddyEngineAdapter] skills registry reloaded');
+    } catch (err) {
+      logger.warn('[CodeBuddyEngineAdapter] reloadSkills failed', { err });
+    }
+  }
+
+  /**
    * Synchronise the core MCPManager singleton with the host's view of
    * the MCP servers. Called by Cowork at boot and after any
    * add/update/delete/enable/disable.
