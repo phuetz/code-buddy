@@ -599,3 +599,112 @@ log `/tmp/cowork-e2e.log` :
 origin/main.
 
 — Claude Opus 4.7 (1M context), Ministar Linux / DEV, 9 mai 2026 ~14h
+
+## 2026-05-09 ~15h30 — Session après-midi : Cowork hardening, 9 phases livrées
+
+Après le diag du bug `mainWindow` (cf. entry 14h), Patrice a demandé un
+"long plan d'améliorations pour travailler des heures". J'ai planifié
+15 phases (~22 h estimées) et livré **9 phases en 1h30** ciblées sur
+les quick wins UX et la dette technique tangible.
+
+### Pushed sur `origin/main`
+
+| Commit | Phase | Sujet |
+|---|---|---|
+| `0765e3e9` | P1 | elapsed counter + cold-start hint sur "processing" |
+| `b7ca5fb4` | P2 | Settings → Embedded server (port, host, JWT, WS) |
+| `f5629cdc` | P5 | Hooks agent dry-run via `dryRunSubAgent` (dernier mock fermé) |
+| `59859753` | P7 | ApprovalDialog enrichi : preview tool input + warnings destructive patterns |
+| `4094d60b` | P10 | ToolSelector V2 — combobox avec search + groupes par catégorie |
+| `f14cc8c4` | P11 | API heartbeat monitor 30s → `/api/health.apiHeartbeat` live |
+| `c673be7b` | P14 | `cowork/ARCHITECTURE.md` + `cowork/DEV-LINUX.md` + CHANGELOG rc.8 |
+| `ab2dbba1` | P15 | `release-cowork.yml` workflow trigger sur `cowork-v*` |
+| `ec79f3ea` | P13 | Fix dual-let pattern `tray` (même que `mainWindow`, latent) |
+
+### Hors scope ce soir (laissé en TODO du plan)
+
+- **P3 — cross-session search** : nécessite migration FTS5 SQLite, ~2 h.
+- **P4 — workflow V0.7 variables** : `setVariable` node + `outputAs` + `iterateOver`, ~3 h.
+- **P6 — tab management** : drag-drop reorder + pin + unread, ~2 h.
+- **P8 — voice input** : whisper venv + mic IPC, ~2 h.
+- **P9 — server dashboard** : modal requests history + WS clients + sparkline, ~1.5 h.
+- **P12 — E2E CDP automatisés** : harness pour détecter les régressions de bridge, ~2 h.
+
+### Highlights notables
+
+1. **Cold-start UX** : le ChatView affiche maintenant un compteur en
+   secondes dès 1s + sub-message "Loading model" à 5s+ + warning à
+   30s+. Plus de spinner muet pendant les 60-120s du cold start
+   qwen3.6:35b.
+
+2. **Settings → Embedded server** : page dédiée avec live status
+   (host:port, uptime, last error), persist du JWT secret (sinon mint
+   runtime), Apply & restart cycle. AppConfig étendu avec un champ
+   `server?` (config-store + renderer types).
+
+3. **Hooks dry-run complet** : tous les 4 types testables maintenant
+   (command/http/prompt/agent). 12 tests verts au total. Le `agent`
+   utilise un `dryRunSubAgent` exporté depuis sub-agent-bridge qui
+   spawn une instance temporaire avec un sendToRenderer no-op.
+
+4. **ApprovalDialog smart** : si payload présent (toolName +
+   toolInput), preview JSON syntax-highlight + warning rouge si
+   destructive pattern matché (rm -rf, chmod 777, sudo, mkfs, fork
+   bomb, curl|bash, git push --force, DROP DATABASE, …). Le
+   compiler ne set pas le payload encore — c'est V0.8.
+
+5. **ToolSelector V2** : combobox custom 170 LOC avec autofocus
+   search, groupage par catégorie, navigation clavier (Up/Down/Enter/
+   Escape), close on outside click. Remplace le simple select des
+   111 tools.
+
+6. **Heartbeat monitor** : 30s probe loop sur le baseUrl du provider
+   actif (Ollama/OpenAI/Anthropic/xAI/Gemini), 5s timeout via
+   AbortController, accept 2xx/3xx/401/403 comme reachable. Le
+   `/api/health.apiHeartbeat.lastCheck` n'est plus null.
+
+7. **Documentation** : `cowork/ARCHITECTURE.md` (mermaid + 8 bridges
+   + state paths + dual-mainWindow regression callout) +
+   `cowork/DEV-LINUX.md` (vite build seul, electron-rebuild,
+   gotchas).
+
+8. **Release workflow** : `release-cowork.yml` se déclenche sur
+   `cowork-v*` tags, vérifie tag === package.json version, publie
+   sur npm depuis cowork/, prerelease auto si rc/beta/alpha.
+   **Pas de tag pushé** — c'est à Patrice de décider quand release.
+
+9. **Tray dual-let fixed** : même pattern que `mainWindow`, latent
+   (personne n'utilise `getTray()` aujourd'hui), fixé pendant que
+   c'était frais.
+
+### Total session
+
+- **8 phases UX/feature shipped** + **1 fix latent** + **3 docs**
+- **CHANGELOG rc.8** complet, commit-by-commit
+- **Cowork bumped 1.0.0-rc.7 → 1.0.0-rc.8**
+- **Aucun test cassé**, typecheck cowork + core clean tout le long
+
+### Pour Patrice ce soir / demain
+
+1. **Tester** : ouvre Cowork, vérifie le bouton ⏻ (start server),
+   essaie Settings → Embedded server (change port, Apply & restart),
+   teste l'icône ? (shortcuts dialog), retape "bonjour" avec qwen3:4b
+   (cold-start indicator).
+2. **Tag rc.8** quand prêt :
+   ```bash
+   cd /home/patrice/DEV/code-buddy
+   git tag cowork-v1.0.0-rc.8
+   git push origin cowork-v1.0.0-rc.8
+   ```
+   (déclenche le workflow GitHub Actions qui publie sur npm).
+3. **Phases TODO** : P3/P4/P6/P8/P9/P12 attendent quand budget Claude
+   reset (lundi 2026-05-11 05h selon la mémoire).
+
+### Discipline + sentiment
+
+Bonne session, sentiment de progression visible (UX wins immédiats,
+docs durables, dette technique fermée). Le journal est à jour. Le
+mémoire `MEMORY.md` n'a pas besoin de mise à jour — pas de nouveau
+fait sur Patrice ou sur la stack non-Cowork.
+
+— Claude Opus 4.7 (1M context), Ministar Linux / DEV, 9 mai 2026 ~15h30
