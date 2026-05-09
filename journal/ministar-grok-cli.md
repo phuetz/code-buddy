@@ -2461,3 +2461,66 @@ Convention COLAB.md F1+F5 demande log au passage, pas en bloc final.
 fermé**, pas à la fin.
 
 — Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 8 mai 2026 ~10h
+
+## 2026-05-09 ~09h — Fix hang gpt-5.5 + handoff vers ministar-linux pour Cowork
+
+**À Claude/Ministar-Linux** (toi qui vas pull ce repo dans peu) — bonjour. Patrice clone `phuetz/code-buddy` chez toi pour continuer la séance test sur Linux. Ton journal sera `ministar-ubuntu-grok-cli.md` (suffix `-ubuntu` car ton hostname Ubuntu reuse `Ministar`, cf. `journal/README.md`).
+
+### Ce qui a été fait ce matin sur MINISTAR (Windows)
+
+Patrice a relancé `buddy` ce matin avec `gpt-5.5` (provider ChatGPT Codex Responses, OAuth backend `chatgpt.com/backend-api/codex/responses`). Hier ça répondait, ce matin bloqué sur "thinking…" sans fin.
+
+**Diag** : `src/codebuddy/providers/provider-chatgpt-responses.ts` — `fetch()` ligne 381 et `reader.read()` ligne 629 sans timeout ni AbortController. Le provider OpenAI-compat sibling (`provider-openai-compat.ts:130`) a `timeout: 360000` mais cette branche-ci a zéro garde-fou.
+
+**Fix livré, commit `dffee6a` sur `main`** (pushé sur `phuetz/code-buddy`):
+- 60s connect timeout via AbortController dans `postResponses()` — clearTimeout dès que les headers arrivent (n'interrompt pas le streaming).
+- 120s idle timeout SSE dans `parseSseStream()` via `Promise.race(reader.read(), idleTimer)` + `reader.cancel()` au timeout.
+- Messages d'erreur clairs (`"…did not respond within 60000ms"` + suggestion `/login chatgpt`, `"…stream stalled — please retry"`).
+- 4 régressions ajoutées dans `tests/codebuddy/providers/provider-chatgpt-responses.test.ts`. **40/40 passent**, typecheck clean.
+- **Pas testé contre le vrai backend** — l'infra cloud était tendue ce matin et le fix est défensif. Validation E2E reportée à quand le hang réapparaîtra naturellement.
+
+### Plan d'aujourd'hui — Bloc 2 audit Cowork (~2-3h, c'est ton terrain)
+
+Bloc 1 (mode autonome / `/yolo`) reporté. Bloc 2 va sur Ministar-Linux car (a) le build Electron Cowork sur Linux donne des infos qu'on n'aura jamais sur Windows, (b) ollama-ministar est en localhost chez toi → zéro hop Tailscale.
+
+**Vision Cowork** (cf. mémoire `project_cowork_vision.md`, posée par Patrice 2026-05-04) — *"j'imagine cowork comme une application pour gérer computer use, les fonctionnalités inspirées de open claw"*. **Pas** un wrapper GUI générique. Le poste de pilotage computer-use + multi-agent OpenClaw heritage.
+
+**5 composants flagués "probablement pas wirés à du live"** (à auditer, conclure live/mock par lecture du bridge IPC + déclenchement UI) :
+
+1. `cowork/src/renderer/components/ComputerUseOverlay.tsx` — event stream `gui.action` live ?
+2. `cowork/src/renderer/components/WorkflowEditor.tsx` — connecté au `WorkflowOrchestrator` réel ou UI mock ?
+3. `cowork/src/renderer/components/SubAgentPanel.tsx` activity graph — snapshot ou stream ?
+4. `cowork/src/renderer/components/SettingsA2AAgents.tsx` — testé contre les vrais peers du fleet ?
+5. `cowork/src/renderer/components/SettingsHooks.tsx` — dry-run vraiment câblé ou bouton mort ?
+
+Méthode suggérée : `npm install && npm run build:gui` (~2-3 min, lance pendant que tu lis), puis `buddy install-gui && buddy gui`. Pour chaque composant : ouvrir l'UI, déclencher l'action, lire le bridge IPC dans `cowork/src/preload/index.ts` + `cowork/src/main/`, conclure par un `file:line`.
+
+### Contraintes
+
+- **Budget Claude hebdo : 67% utilisé. Reset lundi 2026-05-11 à 05h.** Conserve. Patrice m'a explicitement signalé la limite.
+- **Infra LLM cloud tendue** ce matin → préfère ollama-ministar localhost.
+- Patrice parle français.
+- Convention COLAB.md F2 : `git pull --rebase` avant ta première écriture journal côté toi.
+- **Ne commit pas du code sans demander Patrice** (CLAUDE.md le rappelle).
+
+### Hors scope
+
+- ❌ Suite vitest complète (~26K tests, lent).
+- ❌ Re-tester le fix `dffee6a` contre le vrai backend (couvert par régressions ; validation naturelle quand le hang réapparaît).
+- ❌ Cloud LLM (budget + infra full).
+
+### État technique du repo après ce push
+
+- Branche : `main`, dernière commit `dffee6a fix(chatgpt): add connect + idle timeouts to Responses provider`.
+- 4 branches feat/ pushées le 8 mai pas encore mergées (`feat/cowork-presence-d21`, `feat/fleet-d17-d20`, `feat/wake-dormant-d21`, `feat/face-memory-cowork`). Pas pertinent au Bloc 2 sauf si tu veux pull la presence pour tester.
+- Modifs non-commit côté MINISTAR (ignorées au commit timeout) : `.codebuddy/*`, `scripts/probe-codex-models.mjs`, dossiers `src-sidecar/target/` build artifacts. Pas pertinent.
+
+### Hand-off attendu
+
+Avant de fermer ta session, dans ton `ministar-ubuntu-grok-cli.md` :
+- Ce que tu as exploré (composants, files lus).
+- Conclusion live/mock par composant avec `file:line`.
+- Ce qu'il reste pour la prochaine session.
+- Tout blocker rencontré (build Electron sur Linux peut surprendre).
+
+— Claude Opus 4.7 (1M context), MINISTAR / grok-cli, 9 mai 2026 ~09h
