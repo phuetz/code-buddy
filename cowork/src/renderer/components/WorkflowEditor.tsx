@@ -11,7 +11,7 @@
  * @module renderer/components/WorkflowEditor
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Wrench,
@@ -25,6 +25,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { useAppStore } from '../store';
 
 type NodeType = 'tool' | 'condition' | 'parallel' | 'approval' | 'start' | 'end';
 
@@ -116,6 +117,22 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // Live execution state — pick the most recently-started run for this
+  // workflow id so the canvas reflects what the bridge is doing now.
+  const workflowExecutions = useAppStore((s) => s.workflowExecutions);
+  const liveExecution = useMemo(() => {
+    if (!initial?.id) return null;
+    const matching = Object.values(workflowExecutions).filter(
+      (e) => e.workflowId === initial.id
+    );
+    if (matching.length === 0) return null;
+    return matching.reduce((latest, cur) =>
+      cur.startedAt > latest.startedAt ? cur : latest
+    );
+  }, [workflowExecutions, initial?.id]);
+  const nodeStatus = (nodeId: string): string | null =>
+    liveExecution?.nodeStatuses[nodeId] ?? null;
   const dragOffsetRef = useRef<{ nodeId: string; dx: number; dy: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
@@ -350,6 +367,18 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
               const isSelected = node.id === selectedId;
               const isConnectSource = node.id === connectingFrom;
               const color = NODE_COLORS[node.type];
+              const status = nodeStatus(node.id);
+              const statusStroke =
+                status === 'running'
+                  ? '#3b82f6'
+                  : status === 'completed'
+                    ? '#10b981'
+                    : status === 'failed'
+                      ? '#ef4444'
+                      : null;
+              const finalStroke =
+                statusStroke ?? (isSelected || isConnectSource ? color : '#60676f');
+              const finalStrokeWidth = statusStroke ? 2.5 : isSelected ? 2 : 1;
               return (
                 <g
                   key={node.id}
@@ -362,9 +391,18 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
                     height={NODE_HEIGHT}
                     rx={8}
                     fill="var(--color-background)"
-                    stroke={isSelected || isConnectSource ? color : '#60676f'}
-                    strokeWidth={isSelected ? 2 : 1}
-                  />
+                    stroke={finalStroke}
+                    strokeWidth={finalStrokeWidth}
+                  >
+                    {status === 'running' && (
+                      <animate
+                        attributeName="stroke-opacity"
+                        values="0.4;1;0.4"
+                        dur="1.4s"
+                        repeatCount="indefinite"
+                      />
+                    )}
+                  </rect>
                   <rect
                     width={4}
                     height={NODE_HEIGHT}
@@ -386,7 +424,7 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
                     fill="var(--color-text-muted)"
                     fontSize={9}
                   >
-                    {node.type}
+                    {status ? `${node.type} · ${status}` : node.type}
                   </text>
                   {/* Connection anchor */}
                   <circle
@@ -447,16 +485,158 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
                 {selectedNode.type}
               </div>
             </div>
+
+            {/* Per-type configuration */}
+            {selectedNode.type === 'tool' && (
+              <NodeConfigTool node={selectedNode} setNodes={setNodes} />
+            )}
+            {selectedNode.type === 'condition' && (
+              <NodeConfigCondition node={selectedNode} setNodes={setNodes} />
+            )}
+            {selectedNode.type === 'approval' && (
+              <NodeConfigApproval node={selectedNode} setNodes={setNodes} />
+            )}
+            {selectedNode.type === 'parallel' && (
+              <div className="text-[10px] text-text-muted bg-surface/40 border border-border-muted rounded p-2">
+                Parallel runs every outgoing branch concurrently. Connect ≥2 branches and let them flow to <code>end</code>.
+              </div>
+            )}
+
             <div className="text-[10px] text-text-muted">
               <div>id: {selectedNode.id}</div>
               <div>
                 pos: {Math.round(selectedNode.position.x)},{' '}
                 {Math.round(selectedNode.position.y)}
               </div>
+              {nodeStatus(selectedNode.id) && (
+                <div>status: <strong>{nodeStatus(selectedNode.id)}</strong></div>
+              )}
             </div>
           </div>
         )}
       </div>
     </div>
+  );
+};
+
+// ──────── Per-type config sub-components ────────
+
+interface NodeConfigProps {
+  node: WorkflowNode;
+  setNodes: React.Dispatch<React.SetStateAction<WorkflowNode[]>>;
+}
+
+const NodeConfigTool: React.FC<NodeConfigProps> = ({ node, setNodes }) => {
+  const cfg = (node.config ?? {}) as { toolName?: string; toolInput?: Record<string, unknown> };
+  const [jsonText, setJsonText] = useState(() => JSON.stringify(cfg.toolInput ?? {}, null, 2));
+  const [jsonError, setJsonError] = useState<string | null>(null);
+
+  const updateConfig = (patch: Record<string, unknown>) => {
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === node.id ? { ...n, config: { ...(n.config ?? {}), ...patch } } : n
+      )
+    );
+  };
+
+  return (
+    <>
+      <div>
+        <label className="block text-[10px] text-text-muted mb-1">Tool name</label>
+        <input
+          type="text"
+          value={cfg.toolName ?? ''}
+          onChange={(e) => updateConfig({ toolName: e.target.value })}
+          placeholder="e.g. bash_run, str_replace_editor"
+          className="w-full px-2 py-1 text-xs font-mono bg-background border border-border rounded text-text-primary focus:outline-none focus:border-accent"
+        />
+      </div>
+      <div>
+        <label className="block text-[10px] text-text-muted mb-1">
+          Tool input (JSON)
+        </label>
+        <textarea
+          rows={4}
+          value={jsonText}
+          onChange={(e) => {
+            const v = e.target.value;
+            setJsonText(v);
+            try {
+              const parsed = v.trim() === '' ? {} : JSON.parse(v);
+              setJsonError(null);
+              updateConfig({ toolInput: parsed });
+            } catch (err) {
+              setJsonError(err instanceof Error ? err.message : 'Invalid JSON');
+            }
+          }}
+          className="w-full px-2 py-1 text-xs font-mono bg-background border border-border rounded text-text-primary focus:outline-none focus:border-accent"
+          placeholder='{"command": "echo hello"}'
+        />
+        {jsonError && <div className="text-[10px] text-error mt-1">{jsonError}</div>}
+      </div>
+    </>
+  );
+};
+
+const NodeConfigCondition: React.FC<NodeConfigProps> = ({ node, setNodes }) => {
+  const cfg = (node.config ?? {}) as { expression?: string };
+  const updateConfig = (patch: Record<string, unknown>) => {
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === node.id ? { ...n, config: { ...(n.config ?? {}), ...patch } } : n
+      )
+    );
+  };
+  return (
+    <div>
+      <label className="block text-[10px] text-text-muted mb-1">Condition expression</label>
+      <input
+        type="text"
+        value={cfg.expression ?? ''}
+        onChange={(e) => updateConfig({ expression: e.target.value })}
+        placeholder='e.g. $task_xxx.success === true'
+        className="w-full px-2 py-1 text-xs font-mono bg-background border border-border rounded text-text-primary focus:outline-none focus:border-accent"
+      />
+      <div className="text-[10px] text-text-muted mt-1">
+        Reference upstream task outputs as <code>$task_&lt;nodeId&gt;</code>. Outgoing
+        edges must be labelled <code>true</code> / <code>false</code>.
+      </div>
+    </div>
+  );
+};
+
+const NodeConfigApproval: React.FC<NodeConfigProps> = ({ node, setNodes }) => {
+  const cfg = (node.config ?? {}) as { message?: string; timeoutMs?: number };
+  const updateConfig = (patch: Record<string, unknown>) => {
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === node.id ? { ...n, config: { ...(n.config ?? {}), ...patch } } : n
+      )
+    );
+  };
+  return (
+    <>
+      <div>
+        <label className="block text-[10px] text-text-muted mb-1">Message</label>
+        <input
+          type="text"
+          value={cfg.message ?? ''}
+          onChange={(e) => updateConfig({ message: e.target.value })}
+          placeholder="What to ask the user before continuing"
+          className="w-full px-2 py-1 text-xs bg-background border border-border rounded text-text-primary focus:outline-none focus:border-accent"
+        />
+      </div>
+      <div>
+        <label className="block text-[10px] text-text-muted mb-1">Timeout (ms)</label>
+        <input
+          type="number"
+          min={1000}
+          step={1000}
+          value={cfg.timeoutMs ?? 60000}
+          onChange={(e) => updateConfig({ timeoutMs: Number(e.target.value) || 60000 })}
+          className="w-full px-2 py-1 text-xs bg-background border border-border rounded text-text-primary focus:outline-none focus:border-accent"
+        />
+      </div>
+    </>
   );
 };

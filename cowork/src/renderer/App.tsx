@@ -32,6 +32,7 @@ import { GlobalSearchDialog } from './components/GlobalSearchDialog';
 import { FilePreviewPane } from './components/FilePreviewPane';
 import { ArtifactPanel } from './components/ArtifactPanel';
 import { ComputerUseOverlay } from './components/ComputerUseOverlay';
+import { ApprovalDialog } from './components/ApprovalDialog';
 import { ActivityFeed } from './components/ActivityFeed';
 import { SessionInsightsPanel } from './components/SessionInsightsPanel';
 import { SessionResumeDialog } from './components/SessionResumeDialog';
@@ -492,6 +493,9 @@ function App() {
 
       {/* Computer Use Overlay — Phase 2 step 13 */}
       <ComputerUseOverlay />
+
+      {/* Workflow approval modal — driven by store.pendingApprovals */}
+      <ApprovalDialog />
 
       {/* Activity Feed — Phase 2 step 18 */}
       <ActivityFeed open={showActivityFeed} onClose={() => setShowActivityFeed(false)} />
