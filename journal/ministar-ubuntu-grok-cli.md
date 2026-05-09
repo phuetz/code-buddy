@@ -341,3 +341,124 @@ Plan validé : 4 axes restants à attaquer :
 - **Hooks HTTP dry-run** — combler le mock de `hooks-bridge.ts:198-206`.
 
 — Claude Opus 4.7 (1M context), Ministar Linux / DEV, 9 mai 2026 ~12h
+
+## 2026-05-09 ~13h — Phase 2 : V0.5 + Hooks HTTP + réconciliation face-memory
+
+Suite de la Phase 1 (WorkflowEditor V1 livré sur `feat/workflow-execution`).
+Cette session a attaqué les 3 axes restants identifiés par l'audit + le
+plan « Phase 2 post-impl ». Tout exécuté en ~1h30.
+
+### Axe 2 — Réconciliation `feat/face-memory-cowork` (sur `main`)
+
+Découverte clé : seul `face-memory-cowork` (4 commits orphelins) restait
+à traiter. Les 3 autres branches (`cowork-presence-d21`,
+`wake-dormant-d21`, `chatgpt-polish-d25`) sont **déjà mergées dans
+main** — vérifié par `git merge-base --is-ancestor`.
+
+Sur les 4 commits orphelins :
+- **GARDÉS** (cherry-pick sur `main`) :
+  - `f3b9b984` (ex-`29de151b`) `feat(server): channel-A2A bridge` —
+    `src/server/channel-a2a-bridge.ts` (220 LOC) + 9 tests verts.
+  - `15e1e9f8` (ex-`96db314b`) `feat(presence): one-click Buffalo_S
+    downloader` — scripts `cowork/scripts/download-buffalo-s.{ps1,sh}`,
+    README mergé manuellement (3 paths : in-app dialog + CLI scripts +
+    file picker, avec install path cross-platform commun).
+- **ABANDONNÉS** :
+  - `fbbaecfb` README cleanup — trivial, obsolète après le merge ci-dessus.
+  - `3489b0ec` App.tsx + Titlebar wiring — déjà fait par D21 dans `main`.
+
+Pushé sur `main` (`dffee6aa..15e1e9f8`).
+
+### Axe 3 — V0.5 WorkflowEditor (sur `feat/workflow-execution`, commit `2dd2d987`)
+
+Deux features V0.5 qui débloquent les workflows réels :
+
+**Loop nodes**. Nouveau `WorkflowNodeType = 'loop'`. L'éditeur trace
+2 edges `'body'` / `'exit'`. Le compiler produit un `WorkflowStep` de
+type `'loop'` avec `loopCondition` + `loopBody` (chaîne linéaire) et
+exit comme `continueFrom`. Découverte du *one-tick lag* dans le core
+engine : `context.iteration` est mis à jour DANS le body, donc une
+condition `iteration < N` exécute le body N+1 fois si on seed
+`iteration: 0` en initialContext. Documenté dans le test
+d'intégration ; on utilise `iteration < 2` pour 3 itérations exactes.
+
+**Convergence**. `parallel` et `condition` peuvent maintenant se rejoindre
+sur un nœud commun (« join ») avant de continuer le main chain. Algo
+`findJoinTarget` walks chaque branche en avant, repère le 1er node
+avec `incoming.length > 1` (= join) ou `end`. Toutes les branches
+doivent converger sur le *même* join (ou toutes finir en `end`),
+sinon `CompilationError` "branches converge on different nodes".
+
+Refactor : `compileSingle` retourne désormais `CompiledStep`
+(`{ step, continueFrom?: Node | null }`). Sémantique :
+- `undefined` → fallback sur l'edge classique (tool/approval)
+- `null` → fin de main chain (parallel/condition avec branches → end)
+- `Node` → continuation explicite (loop exit, parallel/condition join)
+
+15 tests compilation (V1: 9 + V0.5: 6) + 6 tests intégration
+(V1: 4 + V0.5: 2) = **21 tests workflow verts**.
+
+### Axe 4 — Hooks HTTP dry-run (commit `bbe7a5f5`)
+
+Comble le mock de `hooks-bridge.ts:198-206` pour le type `'http'` (les
+types `prompt`/`agent` restent mockés — ils impliquent un round-trip
+LLM, hors scope d'un test d'authoring).
+
+`testHttpHandler` : POST réel avec body `{ tool, event, dryRun: true,
+cwd }`, header `X-CodeBuddy-Hook-DryRun: 1`, AbortController +
+timeout, body capé à 64 KB, headers user forwardés (ex. authorization).
+
+`SettingsHooks.tsx` : le bouton **Test** apparaît maintenant pour
+`command` ET `http` (était command-only). Disabled gating mis à jour.
+
+5 tests : 200, 404, timeout, invalid URL, custom headers — tous verts
+(globalThis.fetch stubbé pour pas hit le réseau).
+
+### État final feat/workflow-execution
+
+8 commits :
+- `776eb645` types/compiler/agent
+- `5c5f499a` bridge wrapper Orchestrator
+- `7966a6c4` IPC + store
+- `bf053182` UI Inspector + ApprovalDialog
+- `c51c1dcf` tests V1 (21)
+- `9f67e4a0` doc README
+- `2dd2d987` V0.5 loop + convergence
+- `bbe7a5f5` Hooks HTTP dry-run
+
+**26 tests verts** au total (21 workflow + 5 hooks HTTP).
+Typecheck propre (root + cowork).
+
+### État `main`
+
+`origin/main` à jour avec 2 cherry-picks de Phase 2 :
+- `f3b9b984 feat(server): channel-A2A bridge`
+- `15e1e9f8 feat(presence): one-click Buffalo_S downloader`
+
+### Reste pour Patrice
+
+1. **PR review** — la branche `feat/workflow-execution` (8 commits)
+   est prête : https://github.com/phuetz/code-buddy/pull/new/feat/workflow-execution
+2. **Smoke E2E GUI** — toujours non lancé (build cowork complet =
+   5-10min de pré-steps lourds : download:node, build:wsl-agent, …).
+   Si tu veux un test live, je peux le lancer dans une session dédiée
+   avec budget alloué exprès. Sinon les 6 tests d'intégration
+   (qui boot un *vrai* Orchestrator core) couvrent la chaîne main
+   process bout-en-bout.
+3. **`feat/face-memory-cowork` peut être supprimée du remote** —
+   tous ses commits utiles sont mergés (D21 + 2 cherry-picks).
+   Commande : `git push origin --delete feat/face-memory-cowork`
+   (à ta discrétion ; je n'efface pas sans OK explicit).
+4. **Hors scope ce soir** (V1.x backlog) :
+   - Smoke E2E GUI manuel.
+   - Sécurité réseau Ministar phase 2 (`secure_network.sh`, CLAUDE.md TODO #3).
+   - Lemonade Server / NPU XDNA (CLAUDE.md TODO #2 — bloqué par bug HSA gfx1150 upstream).
+
+### Discipline
+
+Cette entrée arrive en milieu de session, après chaque axe (au lieu
+de en bloc final comme la précédente). Mieux. Coût budget Claude
+hebdo : ~10-15% de plus consommé sur cette session, total approchant
+80% pour la semaine — penser au reset lundi.
+
+— Claude Opus 4.7 (1M context), Ministar Linux / DEV, 9 mai 2026 ~13h
