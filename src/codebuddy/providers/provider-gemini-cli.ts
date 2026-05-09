@@ -72,14 +72,34 @@ const KILL_GRACE_MS = 5_000;
 
 interface GeminiCliJsonOutput {
   response?: string;
+  /**
+   * Stats schema observed on gemini-cli >= v0.11 (Gemini 3 era):
+   * `stats.models[<modelId>].tokens.{input, candidates, total, thoughts, ...}`.
+   * Older builds emitted flatter `{ input, output }` keys. We parse both
+   * shapes so the cost tracker stays accurate across versions.
+   */
   stats?: {
-    /** Token counts — exact field names vary across versions, parse defensively. */
     input?: number;
     output?: number;
     inputTokens?: number;
     outputTokens?: number;
     promptTokens?: number;
     completionTokens?: number;
+    models?: Record<
+      string,
+      {
+        tokens?: {
+          input?: number;
+          prompt?: number;
+          candidates?: number;
+          output?: number;
+          total?: number;
+          cached?: number;
+          thoughts?: number;
+          tool?: number;
+        };
+      }
+    >;
   };
   error?: { message?: string; code?: string } | string;
 }
@@ -356,8 +376,27 @@ function mapStatsToUsage(
   stats: GeminiCliJsonOutput['stats'] | undefined,
 ): CodeBuddyResponse['usage'] {
   if (!stats) return undefined;
-  const input = stats.input ?? stats.inputTokens ?? stats.promptTokens ?? 0;
-  const output = stats.output ?? stats.outputTokens ?? stats.completionTokens ?? 0;
+
+  // Modern shape: stats.models[<id>].tokens.{input, candidates, ...}.
+  // Sum across all models referenced in the call (sub-agents + main).
+  let nestedInput = 0;
+  let nestedOutput = 0;
+  if (stats.models) {
+    for (const m of Object.values(stats.models)) {
+      const t = m?.tokens ?? {};
+      nestedInput += t.input ?? t.prompt ?? 0;
+      nestedOutput += t.candidates ?? t.output ?? 0;
+    }
+  }
+
+  // Flat shape (older builds and our own tests).
+  const flatInput = stats.input ?? stats.inputTokens ?? stats.promptTokens ?? 0;
+  const flatOutput = stats.output ?? stats.outputTokens ?? stats.completionTokens ?? 0;
+
+  const input = nestedInput || flatInput;
+  const output = nestedOutput || flatOutput;
+  if (!input && !output) return undefined;
+
   return {
     prompt_tokens: input,
     completion_tokens: output,

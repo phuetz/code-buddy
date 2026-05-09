@@ -149,7 +149,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       expect(result).not.toBeNull();
       expect(result!.info.provider).toBe('gemini-cli');
       expect(result!.info.isLocal).toBe(true);
-      expect(result!.info.model).toBe('gemini-2.5-pro');
+      expect(result!.info.model).toBe('gemini-3-pro-preview');
     });
 
     it('returns null when GEMINI_CLI_PATH points at a missing file', () => {

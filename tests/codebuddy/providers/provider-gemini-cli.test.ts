@@ -221,6 +221,49 @@ describe('GeminiCliProvider — chat() (non-streaming)', () => {
     expect(result.choices[0].message.content).toBe('plain');
     expect(result.usage).toBeUndefined();
   });
+
+  it('parses the nested stats.models[name].tokens shape (Gemini 3 era)', async () => {
+    // Real gemini-cli >= v0.11 emits stats nested per model.
+    state.nextRun.stdout = JSON.stringify({
+      response: 'hi',
+      stats: {
+        models: {
+          'gemini-3.1-pro-preview': {
+            tokens: { input: 9340, candidates: 35, total: 9583, thoughts: 208 },
+          },
+        },
+      },
+    });
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-3-pro-preview',
+      defaultMaxTokens: 1024,
+    });
+    const result = await provider.chat([{ role: 'user', content: 'x' }]);
+    expect(result.usage?.prompt_tokens).toBe(9340);
+    expect(result.usage?.completion_tokens).toBe(35);
+    expect(result.usage?.total_tokens).toBe(9375);
+  });
+
+  it('sums tokens across multiple models in stats.models (sub-agents)', async () => {
+    state.nextRun.stdout = JSON.stringify({
+      response: 'ok',
+      stats: {
+        models: {
+          'gemini-3.1-pro-preview': { tokens: { input: 100, candidates: 20 } },
+          'gemini-2.5-flash': { tokens: { input: 50, candidates: 10 } },
+        },
+      },
+    });
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-3-pro-preview',
+      defaultMaxTokens: 1024,
+    });
+    const result = await provider.chat([{ role: 'user', content: 'x' }]);
+    expect(result.usage?.prompt_tokens).toBe(150);
+    expect(result.usage?.completion_tokens).toBe(30);
+  });
 });
 
 describe('GeminiCliProvider — chatStream() (JSONL events)', () => {

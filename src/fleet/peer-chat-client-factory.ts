@@ -74,7 +74,10 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   // for the privacy router (the binary contacts Google servers).
   'gemini-cli': {
     id: 'gemini-cli',
-    defaultModel: 'gemini-2.5-pro',
+    // Gemini 3 Pro Preview — alias accepted by gemini-cli, served as
+    // gemini-3.1-pro-preview by Google (visible in stats.models). Use
+    // CODEBUDDY_PEER_MODEL to fall back to gemini-2.5-pro / -flash.
+    defaultModel: 'gemini-3-pro-preview',
     defaultBaseUrl: GEMINI_CLI_BASE_URL,
     isLocal: true,
     resolve: () => {

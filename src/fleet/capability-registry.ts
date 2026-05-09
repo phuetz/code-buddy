@@ -260,7 +260,14 @@ function buildGeminiCatalog(): FleetModelDescriptor[] {
  * can avoid this peer.
  */
 function buildGeminiCliCatalog(): FleetModelDescriptor[] {
-  const ids = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+  // gemini-cli accepts the public aliases below. The Ultra-tier
+  // subscription unlocks the 3.x preview models in addition to 2.5.
+  const ids = [
+    'gemini-3-pro-preview',
+    'gemini-3-flash-preview',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+  ];
   return ids.map((id) => ({
     id,
     contextWindow: 1_000_000,
