@@ -33,6 +33,7 @@ import {
 import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes, createWorkflowApiRouter, createA2AProtocolRoutes, createACPRoutes, createK8sHealthAliases, createDashboardRouter, createCloudTaskRoutes, createWebhookRoutes } from './routes/index.js';
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
 import { startFleetHeartbeat, stopFleetHeartbeat } from '../fleet/heartbeat-broadcaster.js';
+import { startApiHeartbeatMonitor, stopApiHeartbeatMonitor } from './heartbeat-monitor.js';
 import { wireCompactionBridge, unwireCompactionBridge } from '../fleet/compaction-bridge.js';
 import { wirePeerChatBridge, unwirePeerChatBridge } from '../fleet/peer-chat-bridge.js';
 import { logger } from '../utils/logger.js';
@@ -813,6 +814,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     // fleet:peer:heartbeat events let remote FleetListener clients flag
     // a peer as stale when they stop arriving. Idempotent + unref'd.
     startFleetHeartbeat();
+    // /api/health apiHeartbeat — periodically pings the configured LLM
+    // base URL so the dashboard shows a live latency + reachability
+    // status instead of `lastCheck: null`.
+    startApiHeartbeatMonitor();
     // Phase (d).10 — bridge SmartCompactionEngine lifecycle events to
     // fleet:peer:compacting:* so remote Claudes know when this peer is
     // briefly indisposed by a summarization pass.
@@ -933,6 +938,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
     // Phase (d).9 — cancel the heartbeat timer so it doesn't keep
     // emitting against a half-shut server. Idempotent.
     stopFleetHeartbeat();
+    stopApiHeartbeatMonitor();
     // Phase (d).10 — detach the compaction-event bridge so the
     // SmartCompactionEngine doesn't retain dangling listener refs.
     unwireCompactionBridge();
