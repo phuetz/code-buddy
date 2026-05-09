@@ -1134,8 +1134,11 @@ app
       templateService = new TemplateService(skillMdBridge);
     }
 
-    // Workflow bridge — visual editor + execution
+    // Workflow bridge — visual editor + execution.
+    // The bridge needs `sendToRenderer` so it can stream `workflow.event`
+    // and `workflow.approval_required` events back to the UI during a run.
     workflowBridge = new WorkflowBridge();
+    workflowBridge.setSendToRenderer(sendToRenderer);
 
     // Session export — enhanced formats (markdown/json/html) with redaction
     const sessionInsightsSource = sessionManager;
@@ -2835,6 +2838,14 @@ ipcMain.handle(
       };
     }
     return workflowBridge.run(id, initialContext ?? {});
+  }
+);
+
+ipcMain.handle(
+  'workflow.approve',
+  async (_event, stepId: string, approved: boolean): Promise<boolean> => {
+    if (!workflowBridge) return false;
+    return workflowBridge.approveStep(stepId, approved);
   }
 );
 
