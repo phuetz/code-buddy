@@ -1089,6 +1089,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       totalSteps: number;
       error?: string;
     }> => ipcRenderer.invoke('workflow.run', id, initialContext),
+    approve: (stepId: string, approved: boolean): Promise<boolean> =>
+      ipcRenderer.invoke('workflow.approve', stepId, approved),
   },
 
   // Project templates (Claude Cowork parity Phase 2 step 12)
@@ -2543,6 +2545,7 @@ declare global {
           totalSteps: number;
           error?: string;
         }>;
+        approve: (stepId: string, approved: boolean) => Promise<boolean>;
       };
       template: {
         list: () => Promise<

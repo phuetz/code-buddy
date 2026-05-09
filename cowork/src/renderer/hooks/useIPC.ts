@@ -443,6 +443,14 @@ export function useIPC() {
             store.appendGuiAction(event.payload);
             break;
 
+          case 'workflow.event':
+            store.applyWorkflowEvent(event.payload);
+            break;
+
+          case 'workflow.approval_required':
+            store.pushPendingApproval(event.payload);
+            break;
+
           case 'panic-stop': {
             const currentSessionId = store.activeSessionId;
             if (currentSessionId) {

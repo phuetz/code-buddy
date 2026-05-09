@@ -668,6 +668,8 @@ export type ServerEvent =
   | { type: 'test.complete'; payload: unknown }
   | { type: 'test.cancelled'; payload: null }
   | { type: 'gui.action'; payload: GuiActionEvent }
+  | { type: 'workflow.event'; payload: import('../../shared/workflow-types').WorkflowEventPayload }
+  | { type: 'workflow.approval_required'; payload: import('../../shared/workflow-types').PendingApproval }
   | { type: 'panic-stop'; payload: Record<string, never> };
 
 // Computer Use overlay events (Claude Cowork parity Phase 2 step 13)

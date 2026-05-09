@@ -198,6 +198,30 @@ interface AppState {
     timestamp: number;
   }>;
   showComputerUseOverlay: boolean;
+  /**
+   * Visual workflow executions, keyed by Orchestrator instanceId. The bridge
+   * emits `workflow.event` and the useIPC hook merges them in here so the
+   * `WorkflowEditor` inspector can color nodes by their runtime status.
+   */
+  workflowExecutions: Record<
+    string,
+    {
+      workflowId: string;
+      instanceId: string;
+      status: 'running' | 'completed' | 'failed';
+      startedAt: number;
+      completedAt?: number;
+      nodeStatuses: Record<string, 'pending' | 'running' | 'completed' | 'failed' | 'skipped'>;
+      error?: string;
+    }
+  >;
+  /** Approvals waiting for the user to click Approve/Reject. */
+  pendingApprovals: Array<{
+    workflowInstanceId: string;
+    stepId: string;
+    message: string;
+    expiresAt?: number;
+  }>;
   openTabs: Array<{ id: string; sessionId: string; title: string }>;
   showMemoryEditor: boolean;
   showActivityFeed: boolean;
@@ -400,6 +424,13 @@ interface AppState {
     timestamp: number;
   }) => void;
   setShowComputerUseOverlay: (show: boolean) => void;
+  applyWorkflowEvent: (
+    payload: import('../../shared/workflow-types').WorkflowEventPayload
+  ) => void;
+  pushPendingApproval: (
+    approval: import('../../shared/workflow-types').PendingApproval
+  ) => void;
+  removePendingApproval: (stepId: string) => void;
   openTab: (sessionId: string, title: string) => void;
   closeTab: (tabId: string) => void;
   switchTab: (tabId: string) => void;
@@ -557,6 +588,8 @@ export const useAppStore = create<AppState>((set) => ({
   activeArtifact: null,
   guiActions: [],
   showComputerUseOverlay: false,
+  workflowExecutions: {},
+  pendingApprovals: [],
   openTabs: [],
   showMemoryEditor: false,
   showActivityFeed: false,
@@ -1085,6 +1118,88 @@ export const useAppStore = create<AppState>((set) => ({
       return { guiActions: next, showComputerUseOverlay: true };
     }),
   setShowComputerUseOverlay: (show) => set({ showComputerUseOverlay: show }),
+  applyWorkflowEvent: (payload) =>
+    set((state) => {
+      const existing = state.workflowExecutions[payload.instanceId];
+      const base =
+        existing ??
+        {
+          workflowId: payload.workflowId,
+          instanceId: payload.instanceId,
+          status: 'running' as const,
+          startedAt: Date.now(),
+          nodeStatuses: {} as Record<string, 'pending' | 'running' | 'completed' | 'failed' | 'skipped'>,
+        };
+      switch (payload.type) {
+        case 'started':
+          return {
+            workflowExecutions: {
+              ...state.workflowExecutions,
+              [payload.instanceId]: { ...base, status: 'running', startedAt: Date.now() },
+            },
+          };
+        case 'node_started':
+          return {
+            workflowExecutions: {
+              ...state.workflowExecutions,
+              [payload.instanceId]: {
+                ...base,
+                nodeStatuses: { ...base.nodeStatuses, [payload.nodeId]: 'running' },
+              },
+            },
+          };
+        case 'node_completed':
+          return {
+            workflowExecutions: {
+              ...state.workflowExecutions,
+              [payload.instanceId]: {
+                ...base,
+                nodeStatuses: { ...base.nodeStatuses, [payload.nodeId]: 'completed' },
+              },
+            },
+          };
+        case 'node_failed':
+          return {
+            workflowExecutions: {
+              ...state.workflowExecutions,
+              [payload.instanceId]: {
+                ...base,
+                nodeStatuses: { ...base.nodeStatuses, [payload.nodeId]: 'failed' },
+              },
+            },
+          };
+        case 'completed':
+          return {
+            workflowExecutions: {
+              ...state.workflowExecutions,
+              [payload.instanceId]: { ...base, status: 'completed', completedAt: Date.now() },
+            },
+          };
+        case 'failed':
+          return {
+            workflowExecutions: {
+              ...state.workflowExecutions,
+              [payload.instanceId]: {
+                ...base,
+                status: 'failed',
+                completedAt: Date.now(),
+                error: payload.error,
+              },
+            },
+          };
+        default:
+          return {};
+      }
+    }),
+  pushPendingApproval: (approval) =>
+    set((state) => {
+      const filtered = state.pendingApprovals.filter((a) => a.stepId !== approval.stepId);
+      return { pendingApprovals: [...filtered, approval] };
+    }),
+  removePendingApproval: (stepId) =>
+    set((state) => ({
+      pendingApprovals: state.pendingApprovals.filter((a) => a.stepId !== stepId),
+    })),
   openTab: (sessionId, title) =>
     set((state) => {
       // Dedupe: if already open, just activate it.
