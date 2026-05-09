@@ -17,6 +17,99 @@ Heading toward `1.0.0` final. Open audit blockers tracked in
 
 ---
 
+## [1.0.0-rc.8] — 2026-05-09 (afternoon)
+
+**Cowork hardening session** — eight commits aimed at making the
+end-to-end experience trustworthy after the rc.7 ship. Highlights:
+
+### Fixed — critical regression
+
+- **Dual-`mainWindow` bug** (commit `751f7eb6`). `cowork/src/main/index.ts`
+  and `cowork/src/main/window-management.ts` each kept their own
+  `let mainWindow: BrowserWindow | null = null`. Only the former was
+  ever set; the latter's `getMainWindow()` (used by
+  `ipc-main-bridge.ts:sendToRenderer()`) always returned `null`, so
+  every IPC push from main to renderer (`stream.message`,
+  `session.status`, `trace.step`, …) was silently dropped. The chat
+  UI froze on "processing" forever; the only recovery was clicking
+  "Repair transcript" which re-fetched messages over a different
+  channel. Fixed by exporting `setMainWindow()` from
+  `window-management.ts` and calling it after the BrowserWindow is
+  created. The bridge now emits an error log if a future regression
+  reintroduces the same shape.
+
+### Fixed — server lifecycle
+
+- **`@phuetz/ai-providers` inlined** (commit `5757b197`) into
+  `src/providers/_shared/`. The workspace symlink was a footgun on
+  any host that didn't have the sibling repo cloned (e.g. fresh
+  Ministar Linux): `loadCoreModule('tools/registry/index.js')` failed
+  silently because `utils/retry.js` couldn't resolve the import.
+- **Core DB initialization before startServer** (commit `cc2d2260`).
+  `ServerBridge.start()` now calls `getDatabaseManager().initialize()`
+  before `startServer()` so `/api/health.checks.database` doesn't
+  return 'error' on first boot.
+- **Runtime JWT_SECRET fallback**. Auth middleware throws at
+  module-load under `NODE_ENV=production` if the env var is missing.
+  ServerBridge mints a 64-byte hex secret at boot if none is
+  persisted (single-user fallback; tokens don't survive a Cowork
+  restart unless the user persists a secret in Settings → Server).
+- **`health.checkApi` accepts every provider** (commit `cc2d2260`).
+  The original check returned 'error' for any user not setting
+  `GROK_API_KEY`. Now accepts `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+  `GEMINI_API_KEY`, `XAI_API_KEY`, or any loopback `OPENAI_BASE_URL`
+  (Ollama / LM Studio).
+
+### Added — UX
+
+- **Live API heartbeat monitor** (commit `f14cc8c4`). `/api/health.apiHeartbeat`
+  now shows real `lastCheck` + `latencyMs` + status. A 30 s probe
+  loop in `src/server/heartbeat-monitor.ts` pings the configured
+  provider and stamps `updateApiHeartbeat`.
+- **Settings → Embedded server** (commit `b7ca5fb4`). New
+  `SettingsServer.tsx` lets users configure port, host, websocket,
+  and a persistent JWT secret. Apply triggers a stop/start cycle.
+- **Cold-start indicator + elapsed counter** (commit `0765e3e9`).
+  The "processing" spinner now shows live elapsed seconds and an
+  italic sub-line at 5 s+ ("Loading model or generating thinking")
+  + a warning at 30 s+ ("Cold start in progress"). Particularly
+  useful with Ollama qwen3.6:35b which routinely takes 60–120 s on
+  first run.
+- **Help icon (?) in titlebar** + keyboard shortcuts dialog rewrite
+  (commits `e419862a`, `cbaeada9`). 24 shortcuts across 6 sections
+  with autofocus search, filter, and platform-aware glyphs (⌘/⌥/⇧).
+- **Power button (⏻) in titlebar** (commit `45c4bb60`). Toggles the
+  embedded HTTP server; visual indicator shows running/stopped/error.
+- **Tool selector V2 in WorkflowEditor** (commit `4094d60b`).
+  Combobox with autofocus search, grouping by category, keyboard
+  navigation, and inline descriptions.
+- **ApprovalDialog enriched** (commit `59859753`). When a workflow
+  approval payload includes the upcoming tool name + JSON input, the
+  dialog renders a preview and flags destructive patterns
+  (rm -r[Rf], chmod 777, eval, sudo, mkfs, fork bomb, curl|bash,
+  `git push --force`, DROP DATABASE, …).
+- **Hooks `agent` dry-run** (commit `f5629cdc`). The last mock branch
+  in `hooks-bridge.ts:test()` is closed: `agent` handlers now spawn
+  a real sub-agent via `dryRunSubAgent()` with a 10 s timeout.
+
+### Added — docs
+
+- `cowork/docs/architecture.md` — mermaid diagram of main/preload/
+  renderer + bridges + core, listing every IPC namespace, persistent
+  state path, and the dual-mainWindow regression.
+- `cowork/docs/dev-linux.md` — iterative dev loop on Linux: skip
+  `npm run build`, use `npx vite build` (~30 s), boot Electron with
+  `--no-sandbox --disable-gpu`, electron-rebuild instructions, and
+  common gotcha table.
+
+### Tests
+
+- 12 hooks dry-run cases (3 command + 5 http + 4 prompt + 3 agent).
+- Cowork E2E smoke driven via CDP confirmed all chat + workflow
+  paths in real Electron after the mainWindow fix.
+
+---
+
 ## [1.0.0-rc.7] — 2026-05-09
 
 **Cowork visual workflows now executable** — closes the gap identified
