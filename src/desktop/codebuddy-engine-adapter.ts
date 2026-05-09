@@ -31,6 +31,13 @@ import type {
  */
 export class CodeBuddyEngineAdapter implements EngineAdapter {
   private config: EngineSessionConfig;
+  /**
+   * Cached `CodeBuddyAgent` per session, ordered by last access.
+   * `Map` preserves insertion order, so we re-insert on access to keep
+   * the LRU semantics: oldest entries (least-recently-used) sit at the
+   * head, freshly-touched entries at the tail. When `agents.size >
+   * MAX_CACHED_SESSIONS`, we evict from the head (Phase 9).
+   */
   private agents: Map<string, unknown> = new Map();
   private abortControllers: Map<string, AbortController> = new Map();
   private permissionCallback: EnginePermissionCallback | null = null;
@@ -46,6 +53,14 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
    * effect on the next turn (Phase 8).
    */
   private agentIdentities: Map<string, string> = new Map();
+
+  /**
+   * Hard cap on cached agents — matches the pi-runner's
+   * `MAX_CACHED_SESSIONS` (50) so memory pressure is comparable
+   * across runners. Long-running Cowork sessions used to grow the
+   * agent registry without bound (Phase 9 fixes that).
+   */
+  static readonly MAX_CACHED_SESSIONS = 50;
 
   constructor(config: EngineSessionConfig) {
     this.config = config;
@@ -107,6 +122,10 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
           config.maxToolRounds,
         );
 
+        // Phase 9 — enforce LRU before insertion so we never exceed
+        // the cap. Evict the least-recently-used (head of the
+        // insertion-ordered Map) until there's room.
+        this.evictUntilUnderCap(CodeBuddyEngineAdapter.MAX_CACHED_SESSIONS - 1);
         this.agents.set(sessionId, agent);
         this.agentIdentities.set(sessionId, desiredIdentity);
 
@@ -124,6 +143,12 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
             }
           }
         }
+      } else {
+        // Phase 9 — touch the LRU position by re-inserting at the
+        // tail. `Map.set` on an existing key is a no-op for value but
+        // doesn't reorder; we have to delete + re-set.
+        this.agents.delete(sessionId);
+        this.agents.set(sessionId, agent);
       }
 
       // The last message must be the user's current prompt
@@ -289,6 +314,30 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
     this.abortControllers.delete(sessionId);
     this.agentIdentities.delete(sessionId);
     logger.debug('[CodeBuddyEngineAdapter] cleared session', { sessionId });
+  }
+
+  /**
+   * Drop oldest cached agents until `agents.size <= maxRetained`.
+   * `Map` iterates in insertion order, so the first key is the LRU
+   * one. Disposes each evicted agent and clears its identity entry
+   * so the next runSession for that session id will reconstruct.
+   */
+  private evictUntilUnderCap(maxRetained: number): void {
+    while (this.agents.size > maxRetained) {
+      const oldestKey = this.agents.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      const evicted = this.agents.get(oldestKey);
+      this.agents.delete(oldestKey);
+      this.agentIdentities.delete(oldestKey);
+      if (evicted && typeof (evicted as { dispose?: () => void }).dispose === 'function') {
+        try {
+          (evicted as { dispose: () => void }).dispose();
+        } catch (err) {
+          logger.warn('[CodeBuddyEngineAdapter] dispose failed during LRU eviction', { err });
+        }
+      }
+      logger.info('[CodeBuddyEngineAdapter] LRU evicted agent', { sessionId: oldestKey });
+    }
   }
 
   async getModels(): Promise<EngineModelInfo[]> {

@@ -74,7 +74,7 @@ better), **N/A** (pi-specific quirk that doesn't apply to engine).
 | Allow-once / allow-always | yes | yes (`allow` / `allow_always` / `deny`) | OK | — |
 | Auto-approve session flags | `ConfirmationService` session flags | `ConfirmationService` session flags (same singleton) | OK | — |
 | **Session lifecycle** |  |  |  |  |
-| Session cache (per Cowork session) | `Map piSessions, MAX 50` | `Map agents, no max` (eviction TBD) | GAP | low (no leak observed yet) |
+| Session cache (per Cowork session) | `Map piSessions, MAX 50` | `Map agents, MAX 50 LRU eviction` (Phase 9). Insertion-ordered Map, touch-on-access, dispose evicted. | OK (Phase 9) | — |
 | Hot-swap model | `piSession.setModel()` native | Auto-dispose + recreate on next runSession when `apiKey:baseURL:model` identity changes (Phase 8). History rehydrated from `messages`. | OK (Phase 8) | — |
 | Hot-swap thinking level | `piSession.setThinkingLevel()` native | not exposed yet | GAP | low |
 | AbortController for cancel | yes | yes | OK | — |
@@ -142,8 +142,11 @@ better), **N/A** (pi-specific quirk that doesn't apply to engine).
 4. **Bash sudo password injection** — rare use case in Cowork,
    document as missing.
 5. **Skills/plugins hot-reload** — restart workaround acceptable.
-6. **Session cache LRU** — add max=10 + eviction to CodeBuddyEngineAdapter
-   to match pi's behavior.
+6. ~~**Session cache LRU**~~ — **fixed in Phase 9 (2026-05-09)**.
+   `MAX_CACHED_SESSIONS = 50` matches pi. Insertion-ordered `Map`
+   is touch-on-access; oldest evicted on overflow with `dispose()`
+   called. 7 tests in
+   `tests/desktop/codebuddy-engine-adapter-lru.test.ts`.
 7. **`steer` / `run_event` chunks** — log-only is fine, no UI needed.
 
 ---
