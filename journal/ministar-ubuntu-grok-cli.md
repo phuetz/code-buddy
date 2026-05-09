@@ -462,3 +462,140 @@ hebdo : ~10-15% de plus consommé sur cette session, total approchant
 80% pour la semaine — penser au reset lundi.
 
 — Claude Opus 4.7 (1M context), Ministar Linux / DEV, 9 mai 2026 ~13h
+
+## 2026-05-09 ~14h — E2E réel + V0.6 + ai-providers inline + diagnostic Ollama
+
+Phase 1 (smoke E2E GUI Cowork) **livrée pour de vrai cette fois** —
+build cowork via `vite build` (le full `npm run build` foire sur
+`prepare:python:all` HTTP 504 GitHub API mais on n'en a pas besoin),
+Electron lancé sur DISPLAY=:10.0 avec `--no-sandbox` (suid sandbox
+non configuré) + `--remote-debugging-port=9222`, test injecté via CDP
+WebSocket en CommonJS Node.
+
+### 3 bugs runtime trouvés par le E2E réel
+
+1. **Symlink `@phuetz/ai-providers` dangling** — le `node_modules`
+   pointait vers `/home/patrice/DEV/ai-providers/` qui n'existait pas
+   sur Ministar Linux (workspace setup local jamais cloné ici). 3
+   fichiers du core import dessus (`utils/retry.ts`,
+   `providers/types.ts`, `providers/base-provider.ts` doc), donc
+   `loadCoreModule('tools/registry/index.js')` échouait silencieusement
+   et le WorkflowBridge tombait en "Orchestrator unavailable".
+   - **Fix court** : clone du repo + `npm run build`.
+   - **Fix permanent** : commit `5757b197` — inline le contenu (52K, 0
+     deps) dans `src/providers/_shared/`, retire la dep workspace.
+
+2. **`FormalToolRegistry` vide côté Cowork** — `getFormalToolRegistry()`
+   retourne le singleton mais le seul registrar est `ToolHandler.
+   initializeRegistry()` (`src/agent/tool-handler.ts:174`), instancié
+   uniquement par `CodeBuddyAgent` au boot d'une session. Le
+   WorkflowBridge tournant indépendamment, le registry restait vide.
+   - **Fix** : commit `6c5e39f6` — `registerBuiltinTools(registry)`
+     ajouté à `src/tools/registry/index.ts` + appelé depuis
+     `WorkflowBridge.ensureOrchestrator()`. 111 tools enregistrés au
+     boot.
+
+3. **Cowork build chain Linux-hostile** — `npm run build` enchaîne
+   `download:node` + `build:wsl-agent` + `build:lima-agent` +
+   `prepare:python:all` (HTTP 504 sur l'API GitHub depuis Ministar) +
+   `prepare:gui-tools` (macOS-only, skipped) + `build:tray-icon` +
+   `tsc` + `vite build` + `electron-builder`. Pour un E2E renderer↔main,
+   `vite build` seul suffit (le plugin electron-vite construit le
+   bundle main + preload). À documenter pour la prochaine fois.
+
+### Smoke E2E v2 — 7/7 verts via CDP
+
+Avec `shell_exec` et `list_directory` (les vrais noms canoniques —
+pas `bash_run` que j'avais inventé) :
+
+| Workflow | Result |
+|---|---|
+| linéaire (shell_exec echo hello) | ✅ |
+| parallel (2 list_directory concurrent) | ✅ |
+| conditional (true branch) | ✅ |
+| approval (renderer→main→resume, approved=true) | ✅ |
+| loop V0.5 (3 iter avec iteration<2 + lag) | ✅ |
+| convergence V0.5 (parallel-join-tool) | ✅ |
+| Hooks HTTP dry-run | 405 capté propre (endpoint health attend GET) |
+
+Toute la chaîne electronAPI → preload → main IPC → WorkflowBridge →
+Orchestrator → CoworkToolAgent → FormalToolRegistry → real tool
+exécution + workflow.event events → renderer store, **validée en
+runtime Electron**.
+
+### Phase 2 — Cleanup git + release rc.7
+
+- Branches remote supprimées : `feat/face-memory-cowork`,
+  `feat/workflow-execution`.
+- `cowork/package.json` bumped `1.0.0-rc.6` → `1.0.0-rc.7`.
+- CHANGELOG entry `[1.0.0-rc.7]` rédigée (3 axes principaux + tests).
+- **Pas de tag** : `release.yml` trigger sur `v*` et publierait le
+  *root* `@phuetz/code-buddy`, pas Cowork. À tag manuellement quand
+  Cowork doit être releasé séparément (ou narrow le trigger à
+  `v*-cowork`).
+
+### Phase 3 — V0.6 WorkflowEditor + Hooks prompt
+
+- **Nested parallel** confirmé (test ajouté, le V0.5 compiler
+  supporte récursivement déjà).
+- **`maxRetries`** exposé sur `ToolNodeConfig`, compilé dans le
+  `TaskDefinition` core qui re-queue automatiquement sur fail.
+- **Tool dropdown** dans `NodeConfigTool` via nouvelle IPC `tools.list`
+  (les 111 tools de la registry, fallback text input si IPC fail).
+- **Hooks `prompt` dry-run** via nouveau `dryRunPromptHook` exporté
+  depuis `claude-sdk-one-shot.ts`. Test button apparaît pour
+  `prompt` (en plus de command/http). `agent` reste mocké (sub-agent
+  spawn = trop lourd pour authoring dry-run).
+
+41 tests Cowork verts (15 compilation + 8 agent + 6 intégration + 5
+hooks HTTP + 4 hooks prompt + 3 dans nested-parallel/maxRetries).
+
+### Phase 4 — Bug Ollama qwen3.6 prompt UI
+
+Patrice a observé "processing 3 min" sur "bonjour" avec
+`qwen3.6:35b-a3b-q4_K_M` via Ollama localhost. Diagnostic depuis le
+log `/tmp/cowork-e2e.log` :
+
+- La réponse **arrive** : `[OneShot] Response: Salutations blocks: 2
+  textBlocks: 1 thinkingBlocks: 1`.
+- L'agent termine : `[ClaudeAgentRunner] Agent finished` +
+  `prompt() returned: "void"` + `[TIMING] pi-coding-agent prompt
+  completed: 70146ms`.
+- Le `void` return + thinking blocks suggère que pi-coding-agent SDK
+  considère la conversation terminée mais sans assistant message
+  pousser dans l'history.
+- 70s ≠ 3min → cold start Ollama (loading 23 GB qwen3.6) + thinking
+  long (qwen3 peut produire 500+ tokens de raisonnement) probables.
+
+**Causes probables** :
+1. **Cold start Ollama** : 23 GB à loader la première fois (~30-60s).
+2. **Thinking long** : qwen3.6 produit du `<think>...</think>` parfois
+   très verbeux (1000+ tokens à 17.7 tok/s = 60s+).
+3. **UI ne montre pas le thinking en streaming** : `stream.thinking`
+   est émis (`agent-runner.ts:2179`) mais le ChatView peut ne pas
+   l'afficher par défaut → user voit juste un spinner.
+4. **`prompt() returned: "void"`** suggère que la réponse pourrait ne
+   pas être correctement attachée au session log.
+
+**Fixes recommandés** (à tester par Patrice, hors scope ce soir) :
+- Switch `qwen3:4b` (2.5 GB, <10s) pour validation rapide.
+- Si toujours bug : vérifier que le ChatView affiche `stream.thinking`
+  en temps réel (collapsable). Sinon, ajouter un indicateur "thinking…"
+  dans le UI.
+- Vérifier dans `pi-coding-agent` SDK que les `textBlocks` du
+  response sont bien push dans `messages[]` avant `agent_end`.
+
+### État final main
+
+- `5757b197` chore(providers): inline ai-providers
+- `9b2fbbc3` feat(cowork-hooks): prompt dry-run
+- `daa8cefb` feat(cowork): tools.list IPC
+- `1c6556d7` feat(cowork-workflows): V0.6 — tool dropdown + retries + nested
+- `42e8ff77` chore(cowork): bump rc.7 + CHANGELOG
+- `6c5e39f6` fix(workflows): registerBuiltinTools
+- (avant) `c764730c` Merge feat/workflow-execution
+
+41 tests workflow + hooks verts. Typecheck clean. Tous pushed sur
+origin/main.
+
+— Claude Opus 4.7 (1M context), Ministar Linux / DEV, 9 mai 2026 ~14h
