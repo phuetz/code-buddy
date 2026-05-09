@@ -228,3 +228,116 @@ entry du 8 mai.
 
 — Claude Opus 4.7 (1M context), Ministar Linux / DEV (audit code-buddy
 Bloc 2), 9 mai 2026 ~10h
+
+## 2026-05-09 ~12h — Implémentation WorkflowEditor V1 + 2 bugs runtime fixés
+
+Faisant suite au gap #2 identifié par l'audit Bloc 2 (WorkflowEditor :
+DAG visuel sauvé en JSON mais exécution = noop côté engine). Plan
+discuté avec Patrice : scope **Full** (tool + condition + parallel +
+approval), UI enrichie dans la même tâche, stratégie **wrapper
+`Orchestrator` core** plutôt qu'étendre le séquentiel `WorkflowEngine`.
+
+### Pipeline livré
+
+```
+visual DAG (nodes + edges)
+  └─ workflow-bridge.ts                 persist → <userData>/workflows.json
+       └─ dag-compiler.ts               topo + branches → core WorkflowDefinition
+            └─ Orchestrator.startWorkflow()
+                 └─ task_assigned (cowork-tool-runner pool of 4)
+                      ├─ runToolInvoke()    → FormalToolRegistry.execute()
+                      └─ runApprovalWait()  → IPC promise + workflow.approve
+                 └─ workflow.event / workflow.approval_required → renderer store
+```
+
+### Branche `feat/workflow-execution` (6 commits)
+
+- `776eb645` feat(cowork-workflows): visual DAG compiler + tool/approval agent
+- `5c5f499a` feat(cowork-workflows): wrap core Orchestrator in WorkflowBridge
+- `7966a6c4` feat(cowork-workflows): IPC + renderer store for live execution events
+- `bf053182` feat(cowork-workflows): UI inspector configs + approval dialog + live status
+- `c51c1dcf` test(cowork-workflows): 21 cases — compilation, agent, integration
+- `9f67e4a0` docs(cowork-workflows): README — pipeline + node types + V1 limits
+
+Files clés :
+
+| Type | Fichier |
+|---|---|
+| nouveau | `cowork/src/shared/workflow-types.ts` (~140 LOC) |
+| nouveau | `cowork/src/main/workflows/dag-compiler.ts` (~280) |
+| nouveau | `cowork/src/main/workflows/cowork-tool-agent.ts` (~180) |
+| réécrit | `cowork/src/main/workflows/workflow-bridge.ts` (~440 LOC) |
+| nouveau | `cowork/src/renderer/components/ApprovalDialog.tsx` (~95) |
+| nouveau | `cowork/src/main/workflows/README.md` |
+| patch | `cowork/src/main/index.ts` (IPC `workflow.approve` + sendToRenderer wire) |
+| patch | `cowork/src/preload/index.ts` (`workflow.approve`) |
+| patch | `cowork/src/renderer/types/index.ts` (2 ServerEvent) |
+| patch | `cowork/src/renderer/hooks/useIPC.ts` (handlers) |
+| patch | `cowork/src/renderer/store/index.ts` (`workflowExecutions` + `pendingApprovals` slices) |
+| patch | `cowork/src/renderer/components/WorkflowEditor.tsx` (Inspector configs + statut runtime) |
+| patch | `cowork/src/renderer/App.tsx` (mount ApprovalDialog) |
+| nouveau | `cowork/tests/workflow-bridge-compilation.test.ts` (9 cas) |
+| nouveau | `cowork/tests/cowork-tool-agent.test.ts` (8 cas) |
+| nouveau | `cowork/tests/workflow-bridge-integration.test.ts` (4 cas vrai Orchestrator) |
+
+### 2 bugs runtime trouvés par advisor pass et fixés
+
+1. **Deadlock orchestrator** : la classe core `Orchestrator` n'appelle
+   `processQueue()` que depuis `start()`/`completeTask()`/`failTask()`.
+   `queueTask()` ne le déclenche pas — donc la première task d'un
+   workflow restait en queue jusqu'au timeout 5min de `waitForTask`.
+   Fix : listener `task_created` qui appelle `queueMicrotask(() =>
+   orchestrator.processQueue())`. Le `queueMicrotask` est essentiel —
+   `task_created` fire synchronement *avant* `queueTask`, donc on doit
+   différer pour que la task soit dans la queue avant qu'on demande à
+   processer.
+
+2. **`workflowId` vide sur le premier event** : ordre des listeners.
+   Le listener global `workflow_started` était enregistré au boot
+   (`ensureOrchestrator`) et lisait `instanceToWorkflowId.get(...)` —
+   mais à ce moment-là le mapping n'était pas encore set car le
+   captureHandler run-scoped dans `run()` était registered APRÈS.
+   Fix : `prependListener` pour le captureHandler dans `run()` —
+   garantit qu'il run avant le global, donc le mapping est populé
+   quand le global lit.
+
+Les 2 bugs ne déclenchent ni en typecheck ni dans les tests
+unitaires (compiler ou agent isolé). Test d'intégration ajouté qui
+boot un vrai `Orchestrator` core + stub registry et exécute un
+workflow E2E — couvre les 2 bugs.
+
+### Validation
+
+- ✅ `npx tsc --noEmit` cowork : clean.
+- ✅ **21/21 tests** : 9 compilation + 8 agent + 4 intégration.
+- ⚠️ Smoke E2E GUI **non lancé** — le full `npm run build` cowork
+  enchaîne `download:node`, `build:wsl-agent`, `build:lima-agent`,
+  `prepare:python:all`, `prepare:gui-tools`, `build:tray-icon`, `tsc`,
+  `vite build`, `electron-builder` → 5-10min minimum, mauvais ROI vu
+  le budget Claude hebdo (67% déjà utilisé). Les tests d'intégration
+  couvrent la chaîne main process bout-en-bout (Orchestrator + bridge
+  + agent + approval lifecycle), seule la layer IPC renderer↔main
+  Electron n'est pas testée en GUI réelle. Reportée à un test manuel
+  de Patrice ou à une session ultérieure.
+
+### Limitations V1 (documentées dans README)
+
+- `parallel` et `condition` sont des "leaves" du main chain. Pas de
+  convergence avant `end` (V0.5).
+- `condition` requiert 2 outgoing edges labellisés `'true'`/`'false'`.
+- `safeEvalCondition` du core impose une whitelist d'opérateurs.
+- 1 workflow à la fois (single-tenant V1, mapping instanceId↔workflowId
+  scope par run actif).
+- Tool node config = JSON brut, validation à l'invocation.
+- Approval timeout = hard fail.
+
+### Reste pour cette session (Phase 2 + V0.5 + Hooks HTTP)
+
+Plan validé : 4 axes restants à attaquer :
+- **Réconciliation `feat/face-memory-cowork`** — 4 commits orphelins
+  dont 2 méritent cherry-pick (channel-A2A + Buffalo_S scripts), 2
+  abandonnés (docs + wiring déjà fait par D21).
+- **V0.5 WorkflowEditor** — loop nodes + convergence post-parallel.
+- **Hooks HTTP dry-run** — combler le mock de `hooks-bridge.ts:198-206`.
+
+— Claude Opus 4.7 (1M context), Ministar Linux / DEV, 9 mai 2026 ~12h
