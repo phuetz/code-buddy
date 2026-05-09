@@ -393,6 +393,49 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(reasoningChunks).toEqual(['Let me think...', 'Plan: search code']);
     expect(contentChunks).toEqual(['answer']);
   });
+
+  // Regression: the Codex backend has been observed to stall mid-stream
+  // (TCP open, headers received, then no SSE event ever arrives). Without
+  // the idle timeout the agent loop hangs on "thinking…" forever.
+  it('throws a clear error when no SSE event arrives within idleTimeoutMs', async () => {
+    // Stream that never enqueues anything and never closes.
+    const stallingStream = new ReadableStream<Uint8Array>({
+      start() { /* intentionally idle */ },
+    });
+
+    const start = Date.now();
+    let caught: Error | null = null;
+    try {
+      for await (const _ of parseSseStream(stallingStream, 'gpt-5.5', undefined, 50)) {
+        /* drain */
+      }
+    } catch (err) {
+      caught = err as Error;
+    }
+    const elapsed = Date.now() - start;
+
+    expect(caught).toBeTruthy();
+    expect(caught!.message).toMatch(/stalled/i);
+    expect(caught!.message).toMatch(/50ms/);
+    // Must actually wait for the timer, not return synchronously.
+    expect(elapsed).toBeGreaterThanOrEqual(40);
+    // And must not wait orders of magnitude longer (catches a bug where
+    // the timer is cleared by accident).
+    expect(elapsed).toBeLessThan(2000);
+  });
+
+  it('does not trip the idle timeout when events arrive fast enough', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      'data: {"type":"response.completed"}\n\n',
+    ]);
+    const chunks: string[] = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5', undefined, 1000)) {
+      const c = chunk.choices[0]?.delta?.content;
+      if (c) chunks.push(c);
+    }
+    expect(chunks).toEqual(['ok']);
+  });
 });
 
 // ─── 3. End-to-end (mocked fetch) ───────────────────────────────────
@@ -788,5 +831,84 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     }
     expect(caught?.message).toContain('gpt-5.5');
     expect(caught?.message).toMatch(/gpt-5\.1-codex/);
+  });
+
+  // Regression: prior versions called fetch() with no AbortController,
+  // so a stalled TLS/auth phase would hang the agent loop indefinitely.
+  it('passes an AbortSignal to fetch (so connect timeout can fire)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      streamingResponse(['data: {"type":"response.completed"}\n\n']),
+    );
+
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      model: 'gpt-5.5',
+      defaultMaxTokens: 1000,
+    });
+
+    for await (const _ of provider.chatStream(
+      [{ role: 'user', content: 'X' } as CodeBuddyMessage],
+      [],
+      {},
+    )) { /* drain */ }
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(init.signal).toBeDefined();
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('surfaces a friendly connect-timeout error when fetch aborts', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      // Mimic a real fetch that respects the AbortSignal: when it fires,
+      // throw a DOMException-like AbortError.
+      const signal = (init as RequestInit | undefined)?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        if (signal?.aborted) {
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          return;
+        }
+        signal?.addEventListener('abort', () => {
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+        });
+      });
+    });
+
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      model: 'gpt-5.5',
+      defaultMaxTokens: 1000,
+    });
+
+    // Trigger abort artificially via global AbortController hijack: easier
+    // path is to rely on the real connect timeout, but 60s is too slow for
+    // tests. So we patch AbortController to abort immediately.
+    const RealAbortController = globalThis.AbortController;
+    class InstantAbortController extends RealAbortController {
+      constructor() {
+        super();
+        // Abort on next microtask so the fetch implementation has time to
+        // attach its abort listener.
+        queueMicrotask(() => this.abort());
+      }
+    }
+    globalThis.AbortController = InstantAbortController as typeof AbortController;
+
+    let caught: Error | null = null;
+    try {
+      const gen = provider.chatStream(
+        [{ role: 'user', content: 'X' } as CodeBuddyMessage],
+        [],
+        {},
+      );
+      for await (const _ of gen) { /* drain */ }
+    } catch (err) {
+      caught = err as Error;
+    } finally {
+      globalThis.AbortController = RealAbortController;
+    }
+
+    expect(caught).toBeTruthy();
+    expect(caught!.message).toMatch(/did not respond/i);
+    expect(caught!.message).toMatch(/login chatgpt/i);
   });
 });

@@ -40,6 +40,14 @@ import { getInstallationId } from '../../utils/installation-id.js';
 const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
 const ORIGINATOR = 'codex_cli_rs';
 
+// The Codex backend has no documented SLA and has been observed to silently
+// stall (TLS handshake completes, no headers ever arrive). Without these the
+// agent loop hangs on "thinking…" forever. Keep them generous enough to
+// cover slow networks but tight enough to surface a clear error before the
+// user gives up.
+const CONNECT_TIMEOUT_MS = 60_000;       // until response headers
+const STREAM_IDLE_TIMEOUT_MS = 120_000;  // between SSE events
+
 /** Models the Codex backend exposes. The default `gpt-5.5` is what Patrice
  *  asked for; if the backend rejects it with `model_not_found`, the error
  *  surfaces these as suggested fallbacks. */
@@ -378,11 +386,32 @@ export class ChatGptResponsesProvider implements Provider {
       })`,
     );
 
-    return fetch(RESPONSES_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    // Connect timeout: bounds the wait for response headers only. Cleared
+    // as soon as fetch resolves, so it does not interrupt body streaming —
+    // the SSE reader has its own idle timeout for that.
+    const controller = new AbortController();
+    const connectTimer = setTimeout(
+      () => controller.abort(),
+      CONNECT_TIMEOUT_MS,
+    );
+    try {
+      return await fetch(RESPONSES_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') {
+        throw new Error(
+          `ChatGPT Responses backend did not respond within ${CONNECT_TIMEOUT_MS}ms. ` +
+            `Likely a network issue or stalled backend — try again, or run \`/login chatgpt\` to refresh credentials.`,
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(connectTimer);
+    }
   }
 }
 
@@ -606,6 +635,7 @@ export async function* parseSseStream(
   body: ReadableStream<Uint8Array>,
   model: string,
   onReasoningItem?: (item: ResponsesReasoningItem) => void,
+  idleTimeoutMs: number = STREAM_IDLE_TIMEOUT_MS,
 ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -626,7 +656,30 @@ export async function* parseSseStream(
 
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      // Idle timeout: race reader.read() against a timer. If no SSE event
+      // arrives within idleTimeoutMs we cancel the reader (releases the
+      // socket) and surface a clear error instead of hanging.
+      let idleTimer: ReturnType<typeof setTimeout> | undefined;
+      const idlePromise = new Promise<never>((_, reject) => {
+        idleTimer = setTimeout(() => {
+          reject(
+            new Error(
+              `ChatGPT Responses stream stalled — no SSE event for ${idleTimeoutMs}ms. ` +
+                `The backend likely dropped the connection mid-stream; please retry.`,
+            ),
+          );
+        }, idleTimeoutMs);
+      });
+      let readResult: ReadableStreamReadResult<Uint8Array>;
+      try {
+        readResult = await Promise.race([reader.read(), idlePromise]);
+      } catch (err) {
+        try { await reader.cancel(); } catch { /* socket may already be dead */ }
+        throw err;
+      } finally {
+        if (idleTimer) clearTimeout(idleTimer);
+      }
+      const { value, done } = readResult;
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
