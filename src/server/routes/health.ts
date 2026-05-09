@@ -72,10 +72,30 @@ function checkDatabase(): 'ok' | 'error' {
 }
 
 /**
- * Check if API key is configured
+ * Check if at least one LLM provider is reachable. The original check
+ * only looked at `GROK_API_KEY`, which falsely reported "error" for
+ * users running Ollama/OpenAI/Anthropic/Gemini. We now accept any of:
+ *  - GROK_API_KEY / XAI_API_KEY (xAI)
+ *  - OPENAI_API_KEY (OpenAI)
+ *  - ANTHROPIC_API_KEY (Anthropic)
+ *  - GEMINI_API_KEY (Google)
+ *  - OPENAI_BASE_URL pointing at a local Ollama / LM-Studio (no key needed)
  */
 function checkApi(): 'ok' | 'error' {
-  return process.env.GROK_API_KEY ? 'ok' : 'error';
+  if (
+    process.env.GROK_API_KEY ||
+    process.env.XAI_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.GEMINI_API_KEY
+  ) {
+    return 'ok';
+  }
+  // Local provider (Ollama, LM Studio, …) — accept loopback baseUrls
+  // even without an API key.
+  const baseUrl = process.env.OPENAI_BASE_URL ?? '';
+  if (/(127\.0\.0\.1|localhost|0\.0\.0\.0|::1)/i.test(baseUrl)) return 'ok';
+  return 'error';
 }
 
 /**

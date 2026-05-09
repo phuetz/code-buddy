@@ -20,6 +20,13 @@ interface CoreServerModule {
   stopServer: (server: { close: (cb?: (err?: Error) => void) => void }) => Promise<void>;
 }
 
+interface CoreDatabaseModule {
+  getDatabaseManager: (config?: { dbPath?: string }) => {
+    isInitialized(): boolean;
+    initialize(): Promise<void>;
+  };
+}
+
 export interface ServerStatus {
   running: boolean;
   port: number | null;
@@ -60,6 +67,25 @@ export class ServerBridge {
     this.lastError = null;
     this.bootInFlight = (async () => {
       try {
+        // Boot the core SQLite DB first — `getDatabaseManager()` is the
+        // singleton consumed by `health.ts:checkDatabase` and by every
+        // repository class. Default path is `~/.codebuddy/codebuddy.db`
+        // (created on first call). Idempotent.
+        try {
+          const dbModule = await loadCoreModule<CoreDatabaseModule>('database/database-manager.js');
+          if (dbModule) {
+            const dbManager = dbModule.getDatabaseManager();
+            if (!dbManager.isInitialized()) {
+              await dbManager.initialize();
+              log('[ServerBridge] core DatabaseManager initialized');
+            }
+          } else {
+            logError('[ServerBridge] core database-manager module unavailable; health.checks.database will be "error"');
+          }
+        } catch (dbErr) {
+          logError('[ServerBridge] DB init failed (server boot continues):', dbErr);
+        }
+
         if (!this.module) {
           this.module = await loadCoreModule<CoreServerModule>('server/index.js');
         }
