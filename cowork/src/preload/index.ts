@@ -682,6 +682,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     > => ipcRenderer.invoke('sessions.searchContent', query, limit),
   },
 
+  // Phase 8 — voice input. The renderer captures audio via MediaRecorder
+  // and ships the resulting Blob (as ArrayBuffer) to the main process for
+  // transcription via faster-whisper.
+  voice: {
+    transcribe: (
+      audio: ArrayBuffer,
+      options?: { language?: string }
+    ): Promise<{ ok: boolean; text?: string; durationMs?: number; error?: string }> =>
+      ipcRenderer.invoke('voice.transcribe', { audio, language: options?.language }),
+    status: (): Promise<{ available: boolean; bootError: string | null }> =>
+      ipcRenderer.invoke('voice.status'),
+  },
+
   // Auto-update
   update: {
     check: () => ipcRenderer.invoke('update.check'),
@@ -2267,6 +2280,13 @@ declare global {
             projectId: string | null;
           }>
         >;
+      };
+      voice: {
+        transcribe: (
+          audio: ArrayBuffer,
+          options?: { language?: string }
+        ) => Promise<{ ok: boolean; text?: string; durationMs?: number; error?: string }>;
+        status: () => Promise<{ available: boolean; bootError: string | null }>;
       };
       update: {
         check: () => Promise<unknown>;

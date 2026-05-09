@@ -54,6 +54,7 @@ import { getGitBridge } from './git/git-bridge';
 import { getModelCapabilities } from './config/model-capability-bridge';
 import { TemplateService } from './project/template-service';
 import { WorkflowBridge } from './workflows/workflow-bridge';
+import { VoiceBridge } from './voice/voice-bridge';
 import { SessionExportService } from './session/session-export-service';
 import { SessionInsightsBridge } from './session/session-insights-bridge';
 import { ActivityFeed } from './activity/activity-feed';
@@ -183,6 +184,7 @@ let globalSearchService: GlobalSearchService | null = null;
 let previewService: PreviewService | null = null;
 let templateService: TemplateService | null = null;
 let workflowBridge: WorkflowBridge | null = null;
+let voiceBridge: VoiceBridge | null = null;
 let sessionExportService: SessionExportService | null = null;
 let sessionInsightsBridge: SessionInsightsBridge | null = null;
 let activityFeed: ActivityFeed | null = null;
@@ -1147,6 +1149,11 @@ app
     workflowBridge = new WorkflowBridge();
     workflowBridge.setSendToRenderer(sendToRenderer);
 
+    // Voice bridge — lazy-spawned faster-whisper worker. The model is
+    // loaded on first transcription, not at boot, so cold-start UX is
+    // unaffected if the user never clicks the mic.
+    voiceBridge = new VoiceBridge();
+
     // Session export — enhanced formats (markdown/json/html) with redaction
     const sessionInsightsSource = sessionManager;
     sessionExportService = new SessionExportService(sessionInsightsSource);
@@ -1471,6 +1478,13 @@ async function cleanupSandboxResources(): Promise<void> {
     }
   } catch (error) {
     logError('[App] Error shutting down MCP servers:', error);
+  }
+
+  // Shutdown voice bridge (kills the Python worker if any).
+  try {
+    voiceBridge?.shutdown();
+  } catch (error) {
+    logError('[App] Error shutting down voice bridge:', error);
   }
 
   try {
@@ -2732,6 +2746,53 @@ ipcMain.handle('activity.clear', async () => {
   if (!activityFeed) return { success: false };
   activityFeed.clear();
   return { success: true };
+});
+
+/**
+ * Voice → text transcription (Phase 8 — mic button in ChatView).
+ * Accepts a Buffer of audio (webm/opus from MediaRecorder works out of
+ * the box), forwards it to the long-running faster-whisper worker, and
+ * returns the recognized text. Errors are surfaced as `{ ok: false }`
+ * so the renderer can show a clean toast without try/catch noise.
+ */
+ipcMain.handle(
+  'voice.transcribe',
+  async (
+    _event,
+    payload: { audio: ArrayBuffer | Uint8Array; language?: string }
+  ): Promise<{
+    ok: boolean;
+    text?: string;
+    durationMs?: number;
+    error?: string;
+  }> => {
+    if (!voiceBridge) {
+      return { ok: false, error: 'voice bridge not initialized' };
+    }
+    try {
+      const buf = Buffer.isBuffer(payload.audio)
+        ? payload.audio
+        : Buffer.from(payload.audio as ArrayBuffer);
+      const { text, durationMs } = await voiceBridge.transcribe(buf, {
+        language: payload.language,
+      });
+      return { ok: true, text, durationMs };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logError('[voice.transcribe] failed:', message);
+      return { ok: false, error: message };
+    }
+  }
+);
+
+ipcMain.handle('voice.status', async () => {
+  if (!voiceBridge) {
+    return { available: false, error: 'bridge not initialized' };
+  }
+  return {
+    available: voiceBridge.isReady() || voiceBridge.getBootError() === null,
+    bootError: voiceBridge.getBootError(),
+  };
 });
 
 /**

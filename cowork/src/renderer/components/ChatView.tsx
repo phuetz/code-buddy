@@ -21,7 +21,7 @@ import { MentionAutocomplete, type MentionItem } from './MentionAutocomplete';
 import { SlashCommandPalette, type SlashCommandItem } from './SlashCommandPalette';
 import { BranchSwitcher } from './BranchSwitcher';
 import { TaskModeToggle } from './TaskModeToggle';
-import { VoiceButton } from './VoiceButton';
+import { MicButton } from './MicButton';
 import { VoiceOutputToggle, speakText } from './VoiceOutputToggle';
 import { MemoryEditCard } from './MemoryEditCard';
 import { FileAttachmentChip } from './FileAttachmentChip';
@@ -1267,11 +1267,16 @@ export function ChatView() {
               />
 
               <div className="flex items-center gap-2">
-                {/* Voice input (Phase 2 step 11) */}
-                <VoiceButton
+                {/* Phase 8 — local voice transcription via faster-whisper.
+                    Replaces the Web-Speech-API VoiceButton which required
+                    network. MicButton appends the transcript to the
+                    current prompt instead of overwriting it, so users
+                    can dictate fragments. */}
+                <MicButton
+                  language="fr"
                   onTranscript={(text) => {
-                    setPrompt(text);
-                    if (textareaRef.current) textareaRef.current.value = text;
+                    setPrompt((current) => (current ? `${current} ${text}` : text));
+                    textareaRef.current?.focus();
                   }}
                 />
 

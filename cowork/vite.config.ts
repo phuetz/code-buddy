@@ -1,8 +1,33 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import { resolve } from 'path';
 import { builtinModules } from 'module';
+import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
+
+/**
+ * Copy auxiliary main-process assets (Python workers, native helpers)
+ * next to the compiled main bundle. Vite/rollup ignores anything that
+ * isn't reachable from the JS entry, so we copy here.
+ */
+function copyMainAssets(): Plugin {
+  const sources = [
+    {
+      from: resolve(__dirname, 'src/main/voice/transcribe-worker.py'),
+      to: resolve(__dirname, 'dist-electron/main/transcribe-worker.py'),
+    },
+  ];
+  return {
+    name: 'cowork-copy-main-assets',
+    closeBundle() {
+      for (const { from, to } of sources) {
+        if (!existsSync(from)) continue;
+        mkdirSync(resolve(to, '..'), { recursive: true });
+        copyFileSync(from, to);
+      }
+    },
+  };
+}
 
 // Node built-in modules must be external for Electron main process
 const nodeBuiltins = builtinModules.flatMap(m => [m, `node:${m}`]);
@@ -25,6 +50,7 @@ export default defineConfig({
           args.startup();
         },
         vite: {
+          plugins: [copyMainAssets()],
           build: {
             outDir: 'dist-electron/main',
             rollupOptions: {
