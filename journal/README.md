@@ -53,6 +53,7 @@ en journal, suffixer `-ubuntu` (ex : `ministar-ubuntu-DEV.md`).
 | `darkstar-world-model.md`          | session sur DARKSTAR (`D:\CascadeProjects\world-model`), entraînement world-model JEPA V3 |
 | `darkstar-grok-cli.md`             | session sur DARKSTAR (`D:\DEV\grok-cli`), spoke A2A code-buddy pour le fleet |
 | `ministar-PdfCommander.md`        | session sur `D:\CascadeProjects\PdfCommander` (Antigravity, MVVM hub IA + outils classiques 03/05/2026) |
+| `ministar-ubuntu-grok-cli.md`     | session Linux Ubuntu (`/home/patrice/DEV`) en continuité topic du `ministar-grok-cli.md` Windows — audit code-buddy / Cowork |
 | _à créer au besoin_                | autres machines/repos                                    |
 
 Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le
