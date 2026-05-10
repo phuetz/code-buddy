@@ -40,6 +40,23 @@ Heading toward `1.0.0` final. Open audit blockers tracked in
     `peer.tool.invoke` design), no cross-restart durability
     (saga-store backing is a possible follow-up).
 
+### Added — Fleet V1.2.1 (`/fleet chat` slash helper)
+
+- **`/fleet chat start|say|end|list`** — UX wrapper around
+  `peer.chat-session.*` so users don't have to copy `sessionId` between
+  turns. Aliases default to `<peer>-1`, `<peer>-2`, … and can be set
+  with `--name <alias>`. The "active" session resolves to the unique
+  one when there's only one open, or to the last `start` otherwise;
+  `--session <alias>` overrides on `say`/`end`.
+  - Errors propagate cleanly from the server: `SESSION_NOT_FOUND` /
+    `SESSION_EXPIRED` purge the local handle so the user sees the error
+    once and can restart cleanly.
+  - `/fleet stop <peer>` and `/fleet stop --all` auto-purge any chat
+    sessions tied to the peer being closed (server-side will TTL out).
+  - Implementation in `src/commands/handlers/fleet-handler.ts` (~280
+    LOC for the new sub-action + state). 18 unit tests in
+    `tests/fleet/fleet-chat-helper.test.ts`.
+
 ---
 
 ## [1.0.0-rc.8] — 2026-05-09 (afternoon)

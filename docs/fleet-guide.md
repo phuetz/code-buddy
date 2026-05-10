@@ -617,6 +617,41 @@ on shared `messages` history. Different sessions run independently.
 # → { closed: true }
 ```
 
+#### `/fleet chat` slash helper (V1.2.1)
+
+UX wrapper over `peer.chat-session.*` that drops the need to copy
+`sessionId` between turns. Sub-actions: `start`, `say`, `end`, `list`.
+
+```bash
+> /fleet chat start ministar-linux --system "Tu es un expert Rust" --model qwen2.5-coder:7b
+# → Chat session "ministar-linux-1" opened with ministar-linux (sessionId=sess_lpz4xy_h2k…).
+#   Send turns with /fleet chat say <message>.
+
+> /fleet chat say Donne-moi un exemple de borrow checker
+# ← ministar-linux-1 (ministar-linux) [turn 1, 2300ms]:
+# Voici un exemple...
+
+> /fleet chat say Maintenant montre comment le fixer avec des lifetimes
+# ← ministar-linux-1 (ministar-linux) [turn 2, 3100ms]:
+# Tu peux écrire...
+
+> /fleet chat list
+# Active chat sessions (1):
+#   ministar-linux-1     → ministar-linux     [turn 2, 5s ago, model qwen2.5-coder:7b]   ← active
+
+> /fleet chat end
+# Chat session "ministar-linux-1" closed.
+```
+
+Aliases default to `<peer>-1`, `<peer>-2`, … and can be overridden with
+`--name <alias>`. The "active" session resolves to the unique one when
+there's only one open, or to the last `start` otherwise. Pass
+`--session <alias>` on `say` / `end` to disambiguate.
+
+`/fleet stop <peer>` and `/fleet stop --all` auto-purge any chat
+sessions tied to the peer being closed (server-side will TTL out within
+the `CODEBUDDY_PEER_SESSION_IDLE_MS` window).
+
 ### Autonomous v0.2 — Ollama spokes (Phase d.20)
 
 Per-task or per-host LLM routing for the autonomous protocol:

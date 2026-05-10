@@ -70,6 +70,16 @@ Actions:
                                       "peer.echo". The peer's apiKey must
                                       have peer:invoke scope. Default
                                       timeout is 30000ms.
+  chat start <peer>                   (V1.2.1) UX wrapper around
+       [--system "<prompt>"]          peer.chat-session.* — opens a
+       [--model <id>]                 multi-turn session with stable alias
+       [--name <alias>]               so you don't have to copy sessionId
+                                      between turns.
+  chat say <message>                  Send the next user turn. Uses the
+       [--session <alias>]            single active session, the last
+                                      started one, or --session override.
+  chat end [<alias>] | --all          Close one (or all) chat sessions.
+  chat list                           Show open chat sessions.
   autonomous status                   (Phase (d).18) Show Autonomous Fleet
             tick-now                  Protocol v0.1 config + state. tick-now
                                       fires a one-shot tick (pull, claim a
@@ -313,6 +323,344 @@ function pickDefaultPeer(): ActiveListener | null {
   return reg.list()[0] ?? null;
 }
 
+// ──────────────────────────────────────────────────────────────────
+// V1.2.1 — `/fleet chat` slash helper
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Local handle around a `peer.chat-session.*` session. The serverside
+ * sessionId is opaque (`sess_…`) and gets re-quoted in every continue;
+ * we keep a user-friendly alias on top so people don't have to copy it.
+ */
+interface ChatSessionRef {
+  alias: string;
+  peerName: string;
+  sessionId: string;
+  systemPrompt?: string;
+  model?: string;
+  turnCount: number;
+  startedAt: number;
+  lastUsedAt: number;
+}
+
+/** Module-level state. Mirror of `dispatchedTasks` in peer-chat-bridge. */
+const chatSessions: Map<string, ChatSessionRef> = new Map();
+let activeAlias: string | null = null;
+
+/** Test-only — reset state between cases. Not exported in the index. */
+export function _resetChatSessionsForTests(): void {
+  chatSessions.clear();
+  activeAlias = null;
+}
+
+function deriveDefaultAlias(peerName: string): string {
+  let n = 1;
+  while (chatSessions.has(`${peerName}-${n}`)) n++;
+  return `${peerName}-${n}`;
+}
+
+interface ParsedChatStartArgs {
+  peerName: string | null;
+  systemPrompt: string | null;
+  model: string | null;
+  alias: string | null;
+}
+
+function parseChatStartArgs(rest: string[]): ParsedChatStartArgs {
+  let peerName: string | null = null;
+  let systemPrompt: string | null = null;
+  let model: string | null = null;
+  let alias: string | null = null;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if ((arg === '--system' || arg === '--system-prompt') && i + 1 < rest.length) {
+      systemPrompt = rest[i + 1];
+      i++;
+    } else if (arg === '--model' && i + 1 < rest.length) {
+      model = rest[i + 1];
+      i++;
+    } else if (arg === '--name' && i + 1 < rest.length) {
+      alias = rest[i + 1];
+      i++;
+    } else if (!peerName) {
+      peerName = arg;
+    }
+  }
+  return { peerName, systemPrompt, model, alias };
+}
+
+interface ParsedChatSayArgs {
+  message: string;
+  alias: string | null;
+}
+
+function parseChatSayArgs(rest: string[]): ParsedChatSayArgs {
+  let alias: string | null = null;
+  const messageParts: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (arg === '--session' && i + 1 < rest.length) {
+      alias = rest[i + 1];
+      i++;
+    } else {
+      messageParts.push(arg);
+    }
+  }
+  return { message: messageParts.join(' ').trim(), alias };
+}
+
+/**
+ * Resolve which chat session a `say`/`end` command targets. Returns
+ * either the alias or null + an error message when ambiguity prevents
+ * a unique pick. Order: explicit `--session`, single existing, last
+ * `start` (`activeAlias`).
+ */
+function resolveChatAlias(explicit: string | null): { alias: string | null; error: string | null } {
+  if (explicit) {
+    if (!chatSessions.has(explicit)) {
+      return {
+        alias: null,
+        error: `No chat session named "${explicit}". Active: ${[...chatSessions.keys()].join(', ') || '(none)'}`,
+      };
+    }
+    return { alias: explicit, error: null };
+  }
+  if (chatSessions.size === 0) {
+    return { alias: null, error: 'No active chat sessions. Open one with /fleet chat start <peer>.' };
+  }
+  if (chatSessions.size === 1) {
+    return { alias: [...chatSessions.keys()][0], error: null };
+  }
+  if (activeAlias && chatSessions.has(activeAlias)) {
+    return { alias: activeAlias, error: null };
+  }
+  return {
+    alias: null,
+    error: `Multiple chat sessions active (${chatSessions.size}). Specify --session <alias>. Active: ${[...chatSessions.keys()].join(', ')}`,
+  };
+}
+
+function formatRelativeAge(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h`;
+}
+
+/**
+ * Drop any chat sessions tied to a peer that's been stopped. Called
+ * from the `stop` branch right after `unregister`. The peer's
+ * connection is gone so we can't politely `peer.chat-session.end` —
+ * server-side sessions will idle out within 30 min anyway.
+ */
+function purgeChatSessionsForPeer(peerName: string): number {
+  let dropped = 0;
+  for (const [alias, ref] of chatSessions) {
+    if (ref.peerName === peerName) {
+      chatSessions.delete(alias);
+      dropped++;
+      if (activeAlias === alias) activeAlias = null;
+    }
+  }
+  if (!activeAlias && chatSessions.size > 0) {
+    activeAlias = [...chatSessions.keys()][chatSessions.size - 1] ?? null;
+  }
+  return dropped;
+}
+
+async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
+  const sub = (rest[0] || 'list').trim().toLowerCase();
+  const inner = rest.slice(1);
+
+  if (sub === 'list') {
+    if (chatSessions.size === 0) {
+      return textResult('No active chat sessions. Open one with /fleet chat start <peer>.');
+    }
+    const lines: string[] = [];
+    lines.push(`Active chat sessions (${chatSessions.size}):`);
+    const now = Date.now();
+    for (const ref of chatSessions.values()) {
+      const age = formatRelativeAge(now - ref.lastUsedAt);
+      const modelTxt = ref.model ? `model ${ref.model}` : 'default model';
+      const isActive = ref.alias === activeAlias ? '   ← active' : '';
+      lines.push(
+        `  ${ref.alias.padEnd(20)} → ${ref.peerName.padEnd(18)} [turn ${ref.turnCount}, ${age} ago, ${modelTxt}]${isActive}`,
+      );
+    }
+    return textResult(lines.join('\n'));
+  }
+
+  if (sub === 'start') {
+    const { peerName, systemPrompt, model, alias: explicitAlias } = parseChatStartArgs(inner);
+    if (!peerName) {
+      return textResult(
+        'Usage: /fleet chat start <peer> [--system "<prompt>"] [--model <id>] [--name <alias>]',
+      );
+    }
+    const target = getFleetRegistry().get(peerName);
+    if (!target) {
+      return textResult(
+        `No fleet peer named "${peerName}". Active peers: ${getFleetRegistry().ids().join(', ') || '(none — /fleet listen first)'}`,
+      );
+    }
+    const alias = explicitAlias ?? deriveDefaultAlias(peerName);
+    if (chatSessions.has(alias)) {
+      return textResult(
+        `Chat alias "${alias}" already in use. End it first with /fleet chat end ${alias}, or pick another --name.`,
+      );
+    }
+    const params: Record<string, unknown> = {};
+    if (systemPrompt) params.systemPrompt = systemPrompt;
+    if (model) params.model = model;
+
+    try {
+      const result = (await target.listener.request('peer.chat-session.start', params, {
+        timeoutMs: 30_000,
+      })) as { sessionId?: string };
+      const sessionId = result?.sessionId;
+      if (typeof sessionId !== 'string' || !sessionId) {
+        return textResult(
+          `Peer "${peerName}" → peer.chat-session.start returned no sessionId. Got: ${JSON.stringify(result)}`,
+        );
+      }
+      const now = Date.now();
+      chatSessions.set(alias, {
+        alias,
+        peerName,
+        sessionId,
+        systemPrompt: systemPrompt ?? undefined,
+        model: model ?? undefined,
+        turnCount: 0,
+        startedAt: now,
+        lastUsedAt: now,
+      });
+      activeAlias = alias;
+      const sidShort = sessionId.length > 14 ? `${sessionId.slice(0, 14)}…` : sessionId;
+      return textResult(
+        `Chat session "${alias}" opened with ${peerName} (sessionId=${sidShort}). ` +
+          `Send turns with /fleet chat say <message>.`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return textResult(`Peer "${peerName}" → peer.chat-session.start FAILED:\n  ${message}`);
+    }
+  }
+
+  if (sub === 'say' || sub === 'send') {
+    const { message, alias: explicitAlias } = parseChatSayArgs(inner);
+    if (!message) {
+      return textResult('Usage: /fleet chat say <message> [--session <alias>]');
+    }
+    const { alias, error } = resolveChatAlias(explicitAlias);
+    if (!alias) {
+      return textResult(error ?? 'Unable to resolve chat session.');
+    }
+    const ref = chatSessions.get(alias)!;
+    const target = getFleetRegistry().get(ref.peerName);
+    if (!target) {
+      // Peer disconnected behind our back. Drop the local handle.
+      chatSessions.delete(alias);
+      if (activeAlias === alias) activeAlias = null;
+      return textResult(
+        `Peer "${ref.peerName}" is no longer connected. Chat session "${alias}" dropped locally.`,
+      );
+    }
+    try {
+      const t0 = Date.now();
+      const result = (await target.listener.request(
+        'peer.chat-session.continue',
+        { sessionId: ref.sessionId, prompt: message },
+        { timeoutMs: 120_000 },
+      )) as { text?: string };
+      const elapsed = Date.now() - t0;
+      ref.turnCount++;
+      ref.lastUsedAt = Date.now();
+      activeAlias = alias;
+      const text = result?.text ?? '';
+      return textResult(
+        `← ${alias} (${ref.peerName}) [turn ${ref.turnCount}, ${elapsed}ms]:\n${text}`,
+      );
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : String(err);
+      // Server-side TTL or alias drift — drop our local handle so the
+      // user sees the error once and can restart cleanly.
+      if (messageText.includes('SESSION_NOT_FOUND') || messageText.includes('SESSION_EXPIRED')) {
+        chatSessions.delete(alias);
+        if (activeAlias === alias) activeAlias = null;
+        return textResult(
+          `Chat session "${alias}" expired or was dropped on ${ref.peerName}. ` +
+            `Reopen with /fleet chat start ${ref.peerName} (--name ${alias}).`,
+        );
+      }
+      return textResult(`Peer "${ref.peerName}" → peer.chat-session.continue FAILED:\n  ${messageText}`);
+    }
+  }
+
+  if (sub === 'end') {
+    const all = inner.includes('--all');
+    if (all) {
+      let closed = 0;
+      const failures: string[] = [];
+      for (const ref of [...chatSessions.values()]) {
+        const target = getFleetRegistry().get(ref.peerName);
+        if (target) {
+          try {
+            await target.listener.request(
+              'peer.chat-session.end',
+              { sessionId: ref.sessionId },
+              { timeoutMs: 5_000 },
+            );
+          } catch (err) {
+            failures.push(`${ref.alias}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+        chatSessions.delete(ref.alias);
+        closed++;
+      }
+      activeAlias = null;
+      const failTxt = failures.length > 0 ? ` (${failures.length} server-side close failure(s) — sessions will TTL out)` : '';
+      return textResult(`Closed ${closed} chat session(s)${failTxt}.`);
+    }
+
+    const explicitAlias = inner.find((a) => !a.startsWith('--')) ?? null;
+    const { alias, error } = resolveChatAlias(explicitAlias);
+    if (!alias) {
+      return textResult(error ?? 'Unable to resolve chat session.');
+    }
+    const ref = chatSessions.get(alias)!;
+    const target = getFleetRegistry().get(ref.peerName);
+    let serverWarn = '';
+    if (target) {
+      try {
+        await target.listener.request(
+          'peer.chat-session.end',
+          { sessionId: ref.sessionId },
+          { timeoutMs: 5_000 },
+        );
+      } catch (err) {
+        serverWarn = ` (server-side close failed: ${err instanceof Error ? err.message : String(err)} — session will TTL out)`;
+      }
+    }
+    chatSessions.delete(alias);
+    if (activeAlias === alias) {
+      activeAlias = chatSessions.size > 0 ? [...chatSessions.keys()][chatSessions.size - 1] : null;
+    }
+    return textResult(`Chat session "${alias}" closed${serverWarn}.`);
+  }
+
+  return textResult(
+    `Unknown chat sub-action: ${sub}\n` +
+      `Usage: /fleet chat (start|say|end|list) ...\n` +
+      `  start <peer> [--system <s>] [--model <m>] [--name <alias>]\n` +
+      `  say <message> [--session <alias>]\n` +
+      `  end [<alias>] | --all\n` +
+      `  list`,
+  );
+}
+
 export async function handleFleet(args: string[]): Promise<CommandHandlerResult> {
   const action = (args[0] || 'status').trim().toLowerCase();
   const rest = args.slice(1);
@@ -343,6 +691,7 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
     const { name, all } = parseStopArgs(rest);
     if (all) {
       const stopped: string[] = [];
+      let chatPurged = 0;
       for (const peer of getFleetRegistry().list()) {
         try {
           await peer.listener.disconnect();
@@ -350,9 +699,11 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
           logger.debug('Fleet listener disconnect error (ignored)', { error: String(err) });
         }
         getFleetRegistry().unregister(peer.id);
+        chatPurged += purgeChatSessionsForPeer(peer.id);
         stopped.push(`${peer.id} (${peer.eventCount} event(s))`);
       }
-      return textResult(`Fleet stopped ${stopped.length} listener(s): ${stopped.join(', ')}`);
+      const chatTxt = chatPurged > 0 ? ` Dropped ${chatPurged} chat session(s).` : '';
+      return textResult(`Fleet stopped ${stopped.length} listener(s): ${stopped.join(', ')}.${chatTxt}`);
     }
     let target: ActiveListener | null = null;
     if (name) {
@@ -380,7 +731,9 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
       logger.debug('Fleet listener disconnect error (ignored)', { error: String(err) });
     }
     getFleetRegistry().unregister(id);
-    return textResult(`Fleet listener "${id}" stopped. URL: ${url}\nReceived ${count} event(s) total.`);
+    const chatPurged = purgeChatSessionsForPeer(id);
+    const chatTxt = chatPurged > 0 ? `\nDropped ${chatPurged} chat session(s) tied to "${id}".` : '';
+    return textResult(`Fleet listener "${id}" stopped. URL: ${url}\nReceived ${count} event(s) total.${chatTxt}`);
   }
 
   if (action === 'listen') {
@@ -590,6 +943,10 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
       const message = err instanceof Error ? err.message : String(err);
       return textResult(`Peer "${peerName}" → ${method} FAILED:\n  ${message}`);
     }
+  }
+
+  if (action === 'chat') {
+    return await handleChat(rest);
   }
 
   if (action === 'autonomous') {
