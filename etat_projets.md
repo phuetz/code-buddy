@@ -1,4 +1,41 @@
-# État des projets — mis à jour le 03 mai 2026
+# État des projets — mis à jour le 09 mai 2026
+
+## ✨ Bilan d'étape — 09 mai 2026 (Cowork-on-core + collab CLI ↔ GUI)
+
+**Migration Cowork-on-core complète** (11 phases livrées, ~2 300 lignes,
+0 régression sur 1553 tests). Cowork tourne désormais sur le core de
+Code Buddy par défaut via `CodeBuddyEngineAdapter`. Pi-coding-agent
+ne sert plus que de fallback. Toutes les capacités héritées d'OpenClaw
+(Tool Policy, Lifecycle Hooks, Smart Compaction, Plugin Conflict
+Detection, `node.*` RPC) sont automatiquement disponibles côté Cowork.
+
+Highlights des 11 phases (commits sur `phuetz/code-buddy:main`) :
+- P1-P6 : audit + MCP runtime sync + badge UI + Settings toggle + tests
+- **P7 ship-blocker** : permission UI deadlock entre engine et pi
+  (renderer attendait pi shape, engine envoyait sa shape native).
+  Sans ce fix l'engine était inutilisable en pratique.
+- P8 hot-swap modèle, P9 LRU cache, P10 skills hot-reload, P11 E2E.
+
+**Lisa #1 + #2 portées dans Cowork** :
+- ClipboardSummaryPanel adapté (Electron clipboard API + `runPiAiOneShot`)
+- VoiceChatOverlay consolidé (mic faster-whisper + TTS Piper FR)
+- Fix mic permission Electron (setPermissionRequestHandler)
+
+**Plan Cowork ↔ Code Buddy CLI ↔ OpenClaw Gateway** (designé en mode
+plan, exécution à venir) :
+- Architecture cible : pair `buddy` CLI et Cowork comme nœuds WS
+  d'un Gateway OpenClaw partagé. Le pattern `node.*` RPC est déjà
+  intégré dans Code Buddy via `src/openclaw/index.ts` — pas besoin
+  d'inventer un protocole.
+- Multi-channel "for free" : Telegram/WhatsApp/Discord pour Patrice
+  via le routing OpenClaw.
+- Plan complet : `~/.claude/plans/delightful-spinning-pebble.md`.
+- 6 phases incrémentales, ~15 h ; Phases 1-4 = fallback filesystem,
+  Phase 5 = pairing Gateway, Phase 6 = multi-channel.
+
+**Repos affectés** : `phuetz/code-buddy` (root + `cowork/`).
+
+---
 
 ## ✨ Bilan d'étape — 03 mai 2026 (consolidation)
 
