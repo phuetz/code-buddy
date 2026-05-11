@@ -395,3 +395,28 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
   3. Réparer la CI — soit ajouter un vrai script `test` racine qui boucle sur les workspaces (`npm test --workspaces --if-present`), soit passer à des jobs CI par workspace.
   4. Marquer le README comme "marketing" et pointer vers `CLAUDE.md` pour la doc technique, ou réécrire le README pour qu'il reflète la réalité (monorepo, état effectif des features).
 - **Note pour les sessions futures** : sur ce projet, **faire confiance au `CLAUDE.md` et au code, pas au README**. Le `TODO.md` est aussi plus honnête que le README (des items admin/déploiement non cochés). Vérifier toujours quelle version d'un service doublonné est réellement importée avant de l'éditer.
+
+### ⚠️ Correctif (même jour, 2026-05-11 plus tard) — l'analyse ci-dessus portait sur un fork local mort
+
+En tentant de pousser un commit de nettoyage côté MySoulmate (commits `2498b22`, `c0eaae2`, `3e49258`), git a rejeté le push : le remote avait 20+ commits d'avance signés Patrice (i18n, voice calls, Redis, social feed, video calls avatar, voice cloning, etc.) sur l'**ancienne arborescence plate** (`app/`, `components/`, `services/`, `server.js` à la racine — comme dans le README). Le `main` local sur MINISTAR était sur une **migration monorepo** (`apps/mobile/`, `apps/backend/`, `packages/ui/`) qui n'a **jamais été pushée**, et sur laquelle Patrice avait continué à itérer localement (commits `1770aab` "save uncommitted work", `0508611` "Phase 15-17 Cron+ComfyUI+Store") du 5 au 8 mai. Les deux branches `main` ont divergé depuis `7c08bf6` (Merge PR #81, 14 juillet 2025) — 10 mois de drift silencieux.
+
+**Décision Patrice 2026-05-11** : remote = vérité. Reset hard local sur `origin/main`. Travail local préservé via tag `claude-session-2026-05-11` (récupérable via `git show claude-session-2026-05-11`).
+
+**Ce qui change dans l'analyse ci-dessus** :
+- **Stack réelle** : pas monorepo. Architecture plate à la racine — `server.js` (Express), `app/(tabs)/` (Expo Router file-based), `components/`, `services/`, `context/`, `__tests__/`. SQLite dev / PostgreSQL prod auto-détecté via `DATABASE_URL`. Socket.IO pour WebRTC signaling.
+- **Tests** : la suite Jest **fonctionne et passe** sur le remote — 101 suites, ~1573 tests, 0 failure, coverage 78% statements / 70% branches / 90% functions (cf. CLAUDE.md remote commit `2d4c968`). Pas "aucun test backend" comme dit ci-dessus.
+- **CI** : workflow `ci.yml` officiel sur remote fait `npm ci` + `npm run lint` + `npm test -- --coverage` + `npm run typecheck` (continue-on-error). Pas le "bidon" mentionné.
+- **Doublons de services** : le pattern `*ServiceComplete.ts` n'existe **pas** sur main remote — c'était dans le fork monorepo local. Le remote a ses propres choses (`services/*.ultra.ts`, 14 fichiers ~207 KB d'expérimental qui peut référencer Pinecone/Neo4j/TF non installés — documenté dans CLAUDE.md remote comme "Safe to ignore TypeScript errors").
+- **README désynchronisé** : faux. Le README décrit l'archi plate qui est bien la vraie main. La fausse impression venait de mon orphan monorepo.
+- **`node-v20.zip` / binaires Node** : présents en local uniquement (jamais trackés), pas sur main remote.
+
+**Ce qui reste valable** :
+- Le `llmService` qui throw sans `OPENAI_API_KEY` (signal en mai 2026 — à reconfirmer sur remote, peut-être déjà corrigé entre-temps)
+- Le cron proactif env-driven (1 min en dev, 24h en prod)
+- La dépendance à un serveur UE5 externe pour MetaHuman
+- Pas de `COLAB.md`, pas connecté au hub A2A
+- Le README est sur-vendu en marketing — mais sur la **bonne** archi
+
+**Leçon écosystème** : 10 mois de drift `main` local vs `main` remote signés du même `phuetz`, jamais détectés. Pour MySoulmate spécifiquement : **toujours `git fetch && git status -uno` en début de session** avant d'analyser quoi que ce soit. Plus généralement : sur les projets de Patrice qui ont plusieurs machines/agents, le local peut être un fork de fait.
+
+**Le vrai CLAUDE.md sur main remote** (commit `2d4c968`) est honnête et factuel : décrit l'archi plate, mentionne les "~3100 non-blocking TS errors", désigne `components/ui/DesignSystem.tsx v4.0` comme single source of truth (les anciens `UnifiedDesignSystem`, `CoreDesignSystem`, `RevolutionaryDesignSystem` sont marqués deprecated mais conservés), liste les "ULTRA Services" experimentaux. **C'est ce CLAUDE.md qu'il faut lire**, pas celui que j'avais créé en local sur l'orphan monorepo.

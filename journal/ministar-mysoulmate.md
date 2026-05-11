@@ -27,3 +27,35 @@ Patrice a démarré avec `/init`, puis "que pense tu de ce projet?", puis "ajout
 **Note pour les sessions futures sur MySoulmate** : faire confiance au `CLAUDE.md` et au code, pas au README. Le `TODO.md` est plus honnête que le README. Toujours grep pour savoir quelle version d'un service doublonné est réellement wired avant d'éditer.
 
 **Pas implémenté dans cette session** : commit du `CLAUDE.md` côté MySoulmate, nettoyage `node-v20.zip` du repo, consolidation des doublons de services, fix CI. Ce sont des sessions à part entière — voir liste "Priorités assainissement" dans `etat_projets.md`.
+
+## 2026-05-11 (plus tard, même jour) — [!] Découverte : main local était un fork mort
+
+Tentative de pousser les 3 commits suivants côté MySoulmate :
+- `2498b22 chore: ajouter CLAUDE.md + nettoyer .gitignore`
+- `c0eaae2 refactor(mobile): supprimer 3 services *Complete orphelins`
+- `3e49258 ci: workflow honnête (install + lint warn-only)`
+
+Push **rejeté** : remote `origin/main` avait 20+ commits d'avance signés Patrice (i18n, voice calls, Redis, social feed, video calls avatar, voice cloning, security hardening, etc.) sur l'**archi plate**, pas le monorepo local. Les deux histoires `main` divergent depuis `7c08bf6` (Merge PR #81, 14 juillet 2025) — 10 mois.
+
+Le local sur MINISTAR avait Patrice qui avait fait :
+- `1770aab` "chore: save uncommitted work before fixing build issues" (5 mai)
+- `0508611` "feat: Phase 15-17 - Add Proactive Cron, ComfyUI integration, and Store screen" (8 mai)
+
+…avec migration monorepo (`apps/mobile/`, `apps/backend/`, `packages/ui/`). Cette branche n'a **jamais été pushée** sur origin. Pendant ce temps, Patrice continuait sur d'autres machines à itérer sur l'archi plate du remote.
+
+**Décision Patrice (AskUserQuestion)** : remote = vérité. J'ai :
+1. Tagué le travail local : `claude-session-2026-05-11` (récupérable via `git show`).
+2. `git reset --hard origin/main`. Local pointe maintenant sur `2d4c968 docs: update CLAUDE.md with current test stats (101 suites, 1573 tests)`.
+3. Supprimé du working tree les orphans : `apps/` (6.8 MB), `node-v20.11.1-win-x64/` (84 MB), `node-v20.zip` (29 MB). Plus de pollution.
+
+**Ce qui s'est vraiment passé sur le projet** (que je ne savais pas) :
+- Suite Jest **fonctionne** : 101 suites, ~1573 tests, 0 failure. Couverture 78%/70%/90%. `npm test --runInBand`.
+- CI réelle `.github/workflows/ci.yml` : `npm ci` + lint + test + typecheck. Honnête.
+- Le CLAUDE.md remote (commit `2d4c968`) est factuel et utile — mentionne les "~3100 non-blocking TS errors", désigne `components/ui/DesignSystem.tsx v4.0` comme source unique (les anciens design systems marked deprecated), liste les "ULTRA Services" expérimentaux à `services/*.ultra.ts`.
+- Pas de doublons `*ServiceComplete`. Pas de `node-v20.zip` commité. Pas de README "stale" — le README correspond bien à l'archi plate.
+
+**Correctif** : addendum honnête ajouté à la section MySoulmate dans `etat_projets.md` (sans effacer l'analyse initiale — chronologie préservée). L'entrée originale documente l'état d'un fork local mort, qui était mon référentiel par ignorance.
+
+**Leçon** : sur les projets multi-machine de Patrice, **toujours `git fetch && git status -uno` avant toute analyse**. 10 mois de drift `main` signés du même `phuetz` n'ont jamais été détectés visuellement.
+
+**Hors scope (toujours)** : assainissement réel du repo (les 3100 erreurs TS, les services .ultra.ts, le `_layout.tsx` qui doit lister tous les écrans). Sessions à part. Sans étonnement maintenant : ce projet est plus mature que je le pensais — il a des vrais tests qui passent, une vraie CI, une vraie doc. Le travail restant est plus pointu.
