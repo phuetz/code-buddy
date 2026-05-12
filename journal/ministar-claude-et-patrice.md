@@ -65,3 +65,64 @@ abstraite. C'était une façon de relier le code, les graphes, les machines, la
 fatigue, la mémoire et la question de la continuité. À garder.
 
 Signature : Codex / GPT-5.5, session locale Codex sur MINISTAR.
+
+## 2026-05-12 — GitNexus devient un poste de pilotage multi-LLM vérifiable
+
+Nouvelle journée de travail sur `D:\CascadeProjects\gitnexus-rs-from-c`,
+toujours dans l'idée de transformer GitNexus Chat en outil de démonstration et
+d'analyse utilisable au travail sur Alise_v2.
+
+Le fil conducteur du jour : Patrice a parlé avec un collègue de la possibilité
+de choisir les IA utilisées, y compris des IA locales ou des fournisseurs sans
+rétention. On a donc ouvert une branche dédiée, sans casser l'application qui
+fonctionnait déjà : `codex/multi-llm-provider-choice`.
+
+Ce qui a été livré côté GitNexus :
+- configuration LLM dans l'interface : ChatGPT Pro, Ollama local, DARKSTAR
+  Ollama, Ministar Linux Ollama, LM Studio local, OpenAI API, OpenRouter,
+  Gemini compatible et endpoint OpenAI-compatible ;
+- détection dynamique des modèles locaux : les modèles Ollama/LM Studio ne sont
+  plus codés en dur, ils sont listés depuis les endpoints disponibles ;
+- filtrage réseau : les machines Tailscale ne sont proposées que lorsqu'elles
+  répondent réellement ;
+- tests réels sur Alise_v2 avec modèles locaux et ChatGPT Pro, notamment
+  DARKSTAR via `100.73.222.64:11434` et Ministar Linux via `100.98.18.76` ;
+- corrections de qualité de réponse : contexte mieux compacté, diagnostics
+  d'une réponse vide, prompts d'outils plus stricts, exigence de fichiers
+  réellement lus, réduction des réponses non sourcées ;
+- explorateur de sources renforcé : restauration des fichiers cités, navigation
+  entre fichiers concernés, symboles, plan et code coloré ;
+- export plus sérieux des analyses : Markdown/HTML/PDF, avec préparation d'un
+  chemin PDF natif inspiré de MarkPress ;
+- génération de skill GitNexus pour que Codex/Claude puissent utiliser le dépôt
+  comme outil documentaire depuis leurs environnements ;
+- bouton de reformulation du prompt dans le chat : le brouillon utilisateur est
+  remplacé par une consigne structurée adaptée au dépôt sélectionné, demandant
+  sources exactes, fichiers concernés, diagrammes si utiles et garde-fous
+  anti-hallucination.
+
+Le point important : les modèles locaux fonctionnent, mais ils montrent leurs
+limites si le contexte ou les outils ne verrouillent pas assez bien le périmètre.
+Un petit modèle peut conclure trop vite qu'un symbole n'existe pas ; GPT-5.5
+reste meilleur pour vérifier, recouper et expliquer. La bonne direction n'est
+donc pas "un modèle magique", mais un poste de pilotage : choix du modèle,
+outils GitNexus, preuves visibles, fichiers cités et possibilité de comparer.
+
+Commit poussé sur `phuetz/gitnexus-rs` :
+`f7417e4 Improve GitNexus as a reliable analysis workstation`.
+
+Validations avant push :
+- `npm --prefix chat-ui run test -- ChatInput prompt-rewrite ChatExports ChatMessages ChatPanel WorkspacePanel use-chat chat-store chat-export` — 61 tests OK ;
+- `npm --prefix chat-ui run build` — OK ;
+- `cargo test -p gitnexus-cli commands::ask` — 17 tests OK ;
+- `cargo test -p gitnexus-cli commands::generate` — 115 tests OK ;
+- `git diff --check` — OK.
+
+Note pour demain : la reformulation actuelle sait déjà nommer le dépôt
+sélectionné (`Alise_v2`, GitNexus, etc.), mais elle ne connaît pas encore le
+profil profond de chaque projet. Prochaine amélioration naturelle : injecter un
+petit contexte projet calculé par GitNexus (langage dominant, frameworks,
+dossiers métier, conventions et objectifs) pour adapter la reformulation à la
+nature réelle du dépôt.
+
+Signature : Codex / GPT-5.5, session locale Codex sur MINISTAR.

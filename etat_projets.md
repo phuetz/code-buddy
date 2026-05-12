@@ -1,4 +1,40 @@
-# État des projets — mis à jour le 09 mai 2026
+# État des projets — mis à jour le 12 mai 2026
+
+## ✨ Bilan d'étape — 12 mai 2026 (GitNexus Chat multi-LLM + réponses sourcées)
+
+Session Codex sur `D:\CascadeProjects\gitnexus-rs-from-c`, branche
+`codex/multi-llm-provider-choice`, poussée sur `phuetz/gitnexus-rs` :
+`f7417e4 Improve GitNexus as a reliable analysis workstation`.
+
+Ce lot transforme GitNexus Chat en cockpit d'analyse plus démontrable pour
+Alise_v2 :
+- choix de fournisseurs LLM dans l'UI : ChatGPT Pro, Ollama local, DARKSTAR
+  Ollama, Ministar Linux Ollama, LM Studio, OpenAI API, OpenRouter, Gemini
+  compatible et endpoint OpenAI-compatible ;
+- modèles locaux découverts dynamiquement via les endpoints disponibles
+  (Ollama/LM Studio), plus de liste codée en dur ;
+- machines Tailscale proposées seulement si elles répondent réellement ;
+- tests réels depuis l'application sur Alise_v2 avec modèles locaux et GPT-5.5 ;
+- corrections anti-hallucination : meilleurs prompts d'outils, diagnostics de
+  réponse vide, preuves visibles, sources/fichiers cités plus stricts ;
+- explorateur de sources renforcé : fichiers concernés, surbrillance,
+  navigation, symboles, plan et code coloré ;
+- exports d'analyse Markdown/HTML/PDF et préparation d'un PDF natif inspiré de
+  MarkPress ;
+- génération de skill GitNexus pour exploitation documentaire depuis les agents ;
+- bouton de reformulation du prompt : transforme une question utilisateur en
+  consigne structurée adaptée au dépôt sélectionné, avec sources exactes et
+  garde-fous.
+
+Validations : 61 tests frontend ciblés, build `chat-ui`, 17 tests `ask`,
+115 tests `generate`, `git diff --check`.
+
+Prochaine amélioration : enrichir la reformulation avec un contexte projet
+calculé par GitNexus (langage dominant, frameworks, dossiers métier, objectifs)
+pour que `Alise_v2`, `gitnexus-rs` ou un autre dépôt produisent des prompts
+spécifiquement adaptés à leur domaine.
+
+---
 
 ## ✨ Bilan d'étape — 09 mai 2026 (Cowork-on-core + collab CLI ↔ GUI)
 
@@ -109,8 +145,9 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
 ---
 
 ## GitNexus Chat — intégré au mono-repo gitnexus-rs le 2026-05-05
-- **Local** : `C:\Users\patri\CascadeProjects\gitnexus-rs\chat-ui\` (anciennement `D:\CascadeProjects\gitnexus-chat`)
+- **Local actuel** : `D:\CascadeProjects\gitnexus-rs-from-c\chat-ui\` (déplacé sur D: faute de place disque sur C:). Ancien chemin : `C:\Users\patri\CascadeProjects\gitnexus-rs\chat-ui\`. Ancien repo séparé : `D:\CascadeProjects\gitnexus-chat`.
 - **Statut** : intégré comme subtree dans gitnexus-rs (PR #4 mergée 2026-05-05). 9 commits originaux préservés en historique git. V1.1 backend wiring + BackendStatus badge + a11y + prod-readiness skeletons (Docker/nginx) tous présents.
+- **MàJ Codex 2026-05-12** : branche `codex/multi-llm-provider-choice`, commit `f7417e4` poussé. Ajoute choix LLM multi-provider, découverte dynamique Ollama/LM Studio, filtrage Tailscale des hosts disponibles, explorateur de sources renforcé, exports d'analyse, PDF natif en préparation, et bouton de reformulation du prompt.
 - **Pourquoi mono-repo** : atomic commits cross-stack, single git clone pour clients agile-up, CI d'intégration possible, contrats SSE versionnés. Cf décision 2026-05-05 ("le repo séparé va poser problème").
 - **Stack** : Vite 7 + React 19 + TS strict + Tailwind v4 + Zustand persist + react-markdown + lucide-react. License MIT.
 - **Build** : `cd chat-ui && npm install && npm run dev` (port 5174, proxies /api /health /mcp vers `gitnexus serve --http 8080`).
@@ -158,7 +195,7 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
   pipeline d'export ONNX/quantization int8 pour deploy robot.
 
 ## GitNexus (gitnexus-rs)
-- **Repo local** : C:\Users\patri\CascadeProjects\gitnexus-rs
+- **Repo local actuel** : `D:\CascadeProjects\gitnexus-rs-from-c` (déplacement depuis C: faute de place disque).
 - **Fix html_escape backtick** : ✅ committé sur master (5881c29)
 - **Skill gitnexus** disponible dans Claude Code
 - **feat/semantic-search** : ✅ mergée sur master 2026-04-26 (`166ca44`).
@@ -173,6 +210,9 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
 - **Endpoint cancel** : prochaine itération facile post Wave 2 — `tokio_util::sync::CancellationToken` threadé dans `ask_question_with_tools` pour que l'AbortController côté chat coupe vraiment le job serveur. Plus de spawn_blocking depuis Wave 2 = chemin clair. ~30 min.
 - **Kit USB portable V0** : ✅ mergée 2026-05-05 (PR #10) — `D:\CascadeProjects\gitnexus-kit-v0\` (756 MB) prêt pour intervention client agile-up. Contient gitnexus.exe + chat-ui dist + 2 modèles ONNX + Alise_v2 indexé (graph + embeddings + docs HTML). `GITNEXUS_HOME` env var override + serve.rs static fallback `<bin>/web/` + auto-rebuild registry au launch (drive letter agnostic). API key VIDE par sécurité. Fonctionne via `scripts/build-kit.ps1 -SeedRepo "<path>"`.
 - **Kit V1 Ollama embarqué** : reportée — embarquer un modèle local (24 GB) pour 100 % offline. Utile quand client interdit cloud LLM. Patrice a validé cette direction le 2026-05-05.
+- **Multi-LLM / local inference (Codex 2026-05-12)** : ✅ branche `codex/multi-llm-provider-choice` poussée (`f7417e4`). UI de configuration LLM, modèles locaux non codés en dur, tests DARKSTAR/Ministar Linux via Tailscale, LM Studio préparé, et réponse chat mieux verrouillée sur les fichiers réellement lus.
+- **PDF natif / exports (Codex 2026-05-12)** : ✅ exports conversation/analyse durcis, chemin `native-print-pdf.js` côté MCP pour un PDF plus fidèle au rendu web, inspiré par l'étude MarkPress.
+- **Qualité de prompt (Codex 2026-05-12)** : ✅ bouton de reformulation dans le chat ; prochaine étape = enrichir cette reformulation avec le profil GitNexus du dépôt courant.
 - **Phase F** (sous-agents isolés dans le chat desktop) : reportée. 3-5 jours estimés.
 
 ## Lisa
