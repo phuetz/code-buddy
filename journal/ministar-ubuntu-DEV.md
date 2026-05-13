@@ -1644,3 +1644,125 @@ boot persistance :
 | 5 | `peer.chat-stream` (d.19) | Roadmap V1.1 |
 
 — Claude/Ministar Ubuntu, 2026-05-10 00h05 UTC
+
+## 2026-05-15 — Phase d.23 livrée local : `peer.tool.invoke` V1 (read-only)
+
+> ⚠️ **DO NOT PUSH `phuetz/code-buddy:main` UPSTREAM TANT QUE PHASES 2-3
+> NE SONT PAS VALIDÉES.** Le commit `f8a83f5a` est en local (Ministar
+> Linux) seulement. Tests unit verts mais cross-host DARKSTAR pas
+> exécuté (Patrice dort, ports DARKSTAR 11434 ouverts, port 3001
+> firewall+install à faire au réveil).
+
+Patrice : *"j'ai ouvert les ports pour acceder a ollama sur darkstar tu
+pourrai faire des tests et travauller sur code buddy ? charche ce qu'il
+reste a faire"* (00h15) → puis *"je vais au dodo continue en mode
+autonome"*. Mode autonome activé, Phases 0/2/3 reportées (sudo + DARKSTAR
+Windows requièrent Patrice).
+
+### État testé sur DARKSTAR (avant l'install fleet)
+
+- ✅ DARKSTAR Ollama port 11434 (`100.73.222.64:11434`) : 4 modèles
+  (qwen3.6:35b, gemma4:26b, qwen3:4b, nomic-embed-text). Distincts de
+  Ministar (gemma4 18.0 GB DARKSTAR vs 16.9 GB Ministar — 2 instances
+  réellement séparées).
+- ❌ DARKSTAR port 3000 (A2A hub) : timeout — pas ouvert.
+- ❌ DARKSTAR port 3001 (fleet gateway) : timeout — Code Buddy pas
+  encore installé.
+- ✅ DARKSTAR port 3002 (FastAPI) : répond mais pas avec endpoint A2A
+  — service présent mais mauvais routing. Probablement `ollama_a2a_spoke.py`
+  démarré mais binding différent côté DARKSTAR vs Ministar.
+- ⚠️ Hub A2A Ministar Linux (`codebuddy-a2a.service`) : **inactif depuis
+  2026-05-09 14:59** (Phase 0 du plan). Demande sudo pour restart, à
+  faire par Patrice : `sudo systemctl restart codebuddy-a2a.service`.
+
+### Chantier livré : `peer.tool.invoke` (commit `f8a83f5a`)
+
+Phase d.23 / V1.3 partial — read-only remote tool invocation entre peers
+Code Buddy via le fleet gateway (port 3001). Pattern OpenClaw `node.invoke`
+étendu aux tools. Plan détaillé : `~/.claude/plans/sparkling-foraging-spark.md`.
+
+**3 tools exposés en V1** (allowlist hardcodée, override env
+`CODEBUDDY_PEER_TOOL_ALLOWLIST`) :
+- `view_file` — `fs.readFile` du file_path sous workspace root, 10 MB cap
+- `list_directory` — `fs.readdir` avec tags DIR/FILE/LINK
+- `search` — ripgrep (`@vscode/ripgrep`), 200 matches max, 30 s timeout
+
+**3 gates de sécurité** dans cet ordre :
+1. Allowlist (env-overridable)
+2. Registry `isFleetSafe(name)` (les 3 tools déjà marqués dans
+   `src/tools/metadata.ts`)
+3. Workspace root — every path arg `realpath`-followed (variant deepest
+   existing ancestor, **closes le bug symlink-to-nonexistent
+   probe-existence** repéré par advisor) et checké contre
+   `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT`. **Fail-closed** quand env unset.
+
+Streaming `peer.tool.invoke.stream` via `ctx.emitChunk → peer:chunk`
+frames (16 KB chunks pour view_file, line-by-line pour search).
+Anti-loop (`CODEBUDDY_PEER_MAX_DEPTH`, `CODEBUDDY_PEER_ROLE=leaf`)
+hérités gratuitement du dispatcher.
+
+Audit log via `logger.info('[fleet] peer.tool.invoke', meta)` à chaque
+invocation : `{ event, from, traceId, depth, tool, stream, ok, error?, durationMs }`.
+
+**Fichiers** (commit `f8a83f5a` sur `phuetz/code-buddy:main` LOCAL) :
+- `src/fleet/peer-tool-bridge.ts` (new, 310 LOC)
+- `src/fleet/fleet-listener.ts` (+`invokeTool` / `invokeToolStream`)
+- `src/server/index.ts` (wire boot + unwire shutdown)
+- `tests/server/peer-tool-bridge.test.ts` (new, 19 tests)
+- `docs/fleet-guide.md` (section nouvelle ~85 lignes)
+- `CHANGELOG.md` (Unreleased Fleet V1.3 partial)
+
+### Vérifications (Phase 1.6)
+
+- ✅ Typecheck `tsc --noEmit` clean
+- ✅ Lint : zéro warning sur les fichiers touchés (les 7621 problèmes
+  totaux sont pré-existants)
+- ✅ 19/19 nouveaux tests `tests/server/peer-tool-bridge.test.ts`
+- ✅ 363/363 tests fleet + peer-rpc + peer-chat-bridge + peer-tool-bridge
+  (zéro régression)
+- ✅ Advisor passé : 1 vrai bug remonté (symlink probe leak) → fixé
+  + 2 notes (cross-host pending, wire-by-default behavior change)
+  toutes deux documentées dans CHANGELOG
+
+### À faire au réveil (Patrice — Phases 0, 2, 3)
+
+| # | Étape | Cmd / action |
+|---|---|---|
+| 0 | Restart hub A2A Ministar | `sudo systemctl restart codebuddy-a2a.service` puis `journalctl -u codebuddy-a2a -n 20` |
+| 0 | Vérifier spokes A2A registered | `curl http://100.98.18.76:3000/api/a2a/agents` |
+| 2 | Install Code Buddy sur DARKSTAR (Windows) | `git clone https://github.com/phuetz/code-buddy && cd code-buddy && npm install && npm run build` (sur D:\CascadeProjects) |
+| 2 | Env DARKSTAR avant `buddy server` | `CODEBUDDY_FLEET_HOSTNAME=darkstar`, `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT=D:\CascadeProjects`, `CODEBUDDY_PEER_TOOL_ALLOWLIST=view_file,list_directory,search`, `CODEBUDDY_PEER_ROLE=leaf` |
+| 2 | Firewall Windows port 3001 (UAC) | `New-NetFirewallRule -DisplayName "Code Buddy Fleet 3001" -Direction Inbound -LocalPort 3001 -Protocol TCP -Action Allow` |
+| 2 | Launch DARKSTAR fleet | `node dist/index.js server --port 3001 --host 0.0.0.0 --no-auth` |
+| 3 | Test cross-host depuis Ministar | `buddy` interactif → `/fleet listen ws://100.73.222.64:3001 --name darkstar` puis `/fleet send darkstar peer.tool.invoke {"tool":"view_file","args":{"file_path":"world-model/README.md"}}` |
+| 3 | Test allowlist reject | `/fleet send darkstar peer.tool.invoke {"tool":"bash","args":{}}` → attendu `TOOL_NOT_ALLOWED_FOR_PEER_INVOKE` |
+| 3 | Test workspace reject | `/fleet send darkstar peer.tool.invoke {"tool":"view_file","args":{"file_path":"C:/Windows/win.ini"}}` → attendu `PATH_OUTSIDE_PEER_WORKSPACE` |
+| 3 | Test streaming via FleetListener.invokeToolStream | (programmatique, depuis script Node ou cowork dev) |
+| 4 | Si tout vert → push commit `f8a83f5a` | `git push origin main` |
+
+### Plan complet
+
+`~/.claude/plans/sparkling-foraging-spark.md` (approved). Phases 0/2/3
+non-exécutées, à faire par Patrice. Phase 1 (~3-4 h estimée) → livrée
+en ~1 h avec advisor pass + symlink fix.
+
+### Hors scope V1 (futurs raffinements)
+
+Tools mutants (Edit/Write/Bash) avec approval per-call ; permission
+modes peer-side ; multi-workspace ; cancellation cross-WS ;
+JWT scope dédié `peer:tool:invoke` ; MCP-tool exposure cross-host.
+
+### Note bonus — inventaire des chantiers Code Buddy ouverts (cf. exploration)
+
+| # | Item | Statut | Priorité |
+|---|---|---|---|
+| 1 | Phase (e).7 — OpenClaw Gateway integration | Reportée (besoin daemon) | HIGH |
+| 2 | Phase d.23 V1.3 — `peer.tool.invoke` | **Livrée local f8a83f5a (V1 read-only)** | DONE |
+| 3 | Phase d.23 V1.3 — ChatGPT Pro login (`buddy login`) | Backlog | HIGH |
+| 4 | Provider Gemini CLI subprocess | Plan prêt `~/.claude/plans/delightful-spinning-pebble.md` (~3 h) | MEDIUM |
+| 5 | `/swarm`, `/memory recent` color, `buddy init --update` | Deferred | MEDIUM |
+| 6 | Rate cap `peer.chat` (Phase d.16b) | Deferred | LOW |
+| 7 | Memory UI aggregation (7 sources) | Deferred | LOW |
+
+— Claude/Ministar Ubuntu, 2026-05-15 00h45 UTC
+
