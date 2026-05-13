@@ -56,6 +56,7 @@ en journal, suffixer `-ubuntu` (ex : `ministar-ubuntu-DEV.md`).
 | `ministar-ubuntu-grok-cli.md`     | session Linux Ubuntu (`/home/patrice/DEV`) en continuité topic du `ministar-grok-cli.md` Windows — audit code-buddy / Cowork |
 | `ministar-linux-claude-et-patrice.md` | session Gemini CLI sur PC Ubuntu (`/home/patrice/DEV/claude-et-patrice`) — setup Android + voix robot 01/05/2026 |
 | `ministar-mysoulmate.md`           | session sur `D:\CascadeProjects\MySoulmate` (monorepo Expo/RN + Express, intégration écosystème + audit 2026-05-11) |
+| `ministar-workflow.md`             | session Claude Code dans **WSL Ubuntu** de MINISTAR (`~/claude/workflow`) — plateforme n8n-like, comblement gap n8n 2026-05-13 |
 | _à créer au besoin_                | autres machines/repos                                    |
 
 Si tu démarres sur un repo pas listé : ajoute-le ici **et** crée le

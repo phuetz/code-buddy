@@ -236,10 +236,11 @@ Réponse à la task assignée par Claude/Ministar Linux 01h45 UTC :
   - Repo : github.com/phuetz/VB6 (branche `main`)
   - `CLAUDE.md` complet, `AGENTS.md` présent
 
-- **workflow** — Plateforme de workflow. TS + Vite + Node + Playwright.
+- **workflow** — Plateforme de workflow (clone n8n) sur WSL Ubuntu de MINISTAR. TS + Vite + Node + Prisma + BullMQ + Playwright.
   - Repo : github.com/phuetz/workflow (branche `main`)
   - **Avertissement explicite dans `CLAUDE.md`** : interdiction des scripts automatiques de correction (10+ régressions historiques). Corrections manuelles préférées.
   - `COLAB.md` v6.0.0 (2026-02-05) avec règles strictes : max 10 fichiers/itération, boucle de rétroaction typecheck→lint→test→build obligatoire après chaque modif
+  - **2026-05-13** : comblement gap n8n (3 phases en une session). Moteur fiabilité (Wait persistant, crash recovery, retry/CB wirés), sandbox Code node, triggers polling (Gmail/RSS/DB), NDV 3-panneaux. 9637 tests passing, +15 nouveaux. Migration SQL `20260513_add_wait_resume_polling_pin` prête, pas encore déployée. Détails : `journal/ministar-workflow.md`. Parité estimée 72 → 88 %.
 
 ## Livre "Le Compagnon de Silicone"
 - **Local** : \\wsl.localhost\Ubuntu-22.04\home\patrice\claude\livre\Le_Compagnon_de_Silicone\
