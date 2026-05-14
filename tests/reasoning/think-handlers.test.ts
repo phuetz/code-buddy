@@ -4,6 +4,9 @@
  * Covers help text, mode toggling, status display, and problem-solving paths.
  */
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { vi } from 'vitest';
 import {
   handleThink,
@@ -16,10 +19,18 @@ const mockSolve = jest.fn();
 const mockChainOfThought = jest.fn();
 const mockSetMode = jest.fn();
 const mockFormatResult = jest.fn();
-const providerMocks = vi.hoisted(() => ({
-  mockDetectProvider: vi.fn(),
+
+const testPaths = vi.hoisted(() => ({
+  tmpHome: '',
 }));
-const { mockDetectProvider } = providerMocks;
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  return {
+    ...actual,
+    homedir: () => testPaths.tmpHome || actual.homedir(),
+  };
+});
 
 jest.mock('../../src/agent/reasoning/tree-of-thought.js', () => ({
   getTreeOfThoughtReasoner: jest.fn(function() { return {
@@ -31,22 +42,62 @@ jest.mock('../../src/agent/reasoning/tree-of-thought.js', () => ({
   TreeOfThoughtReasoner: jest.fn(),
 }));
 
-jest.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.mockDetectProvider,
-  selectModelForDetectedProvider: (detected: { defaultModel: string }) => detected.defaultModel,
-}));
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CHATGPT_MODEL',
+  'CODEBUDDY_PROVIDER',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'OLLAMA_HOST',
+  'OPENAI_API_KEY',
+  'XAI_API_KEY',
+] as const;
+
+function clearProviderEnv(): void {
+  for (const key of PROVIDER_ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
+function useNoProvider(): void {
+  clearProviderEnv();
+  process.env.CODEBUDDY_PROVIDER = 'none';
+}
+
+function useChatGptAuth(): void {
+  clearProviderEnv();
+  process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+  const authDir = path.join(testPaths.tmpHome, '.codebuddy');
+  fs.mkdirSync(authDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(authDir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-chatgpt-token' } }),
+  );
+}
 
 describe('think-handlers', () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env = { ...originalEnv };
+    clearProviderEnv();
+    process.env.CODEBUDDY_PROVIDER = 'grok';
+    process.env.GROK_API_KEY = 'test-key-123';
+    process.env.GROK_MODEL = 'grok-3-latest';
+    testPaths.tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'think-handlers-'));
     // Reset thinking mode before each test
     setActiveThinkingMode(null);
-    mockDetectProvider.mockReturnValue({
-      provider: 'grok',
-      apiKey: 'test-key-123',
-      baseURL: undefined,
-      defaultModel: 'grok-3-latest',
-    });
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    if (testPaths.tmpHome) {
+      fs.rmSync(testPaths.tmpHome, { recursive: true, force: true });
+      testPaths.tmpHome = '';
+    }
   });
 
   // ── /think (no args) ─────────────────────────────────────────────────
@@ -209,7 +260,7 @@ describe('think-handlers', () => {
 
   describe('handleThink with problem text (no provider)', () => {
     beforeEach(() => {
-      mockDetectProvider.mockReturnValue(null);
+      useNoProvider();
     });
 
     it('returns an error when no provider is detected', async () => {
@@ -234,7 +285,7 @@ describe('think-handlers', () => {
 
   describe('handleThink with mode and problem text', () => {
     beforeEach(() => {
-      mockDetectProvider.mockReturnValue(null);
+      useNoProvider();
     });
 
     it('sets mode AND attempts to solve when given mode + problem', async () => {
@@ -269,12 +320,7 @@ describe('think-handlers', () => {
     });
 
     it('passes ChatGPT Codex OAuth transport into the reasoner', async () => {
-      mockDetectProvider.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      useChatGptAuth();
       mockSolve.mockResolvedValue({
         success: true,
         solution: { content: 'solution', metadata: {} },
