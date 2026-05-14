@@ -21,7 +21,7 @@ Terminal 1:
 npm run build
 $env:GOOGLE_API_KEY="..."
 $env:CODEBUDDY_FLEET_API_KEY=(node dist/index.js api-key create --name "Fleet smoke" --scope fleet:listen --scope peer:invoke --json | ConvertFrom-Json).key
-node dist/index.js server --port 3001
+node dist/index.js server --port 3000
 ```
 
 La commande `api-key create` imprime la cle brute une seule fois et stocke
@@ -49,7 +49,7 @@ node dist/index.js
 Dans la session:
 
 ```text
-> /fleet listen ws://localhost:3001/ws --api-key cb_sk_... --name self --auto-reconnect
+> /fleet listen ws://localhost:3000/ws --api-key cb_sk_... --name self --auto-reconnect
 > /fleet status
 > /fleet send self peer.ping
 > /fleet send self peer.describe
@@ -68,13 +68,13 @@ Sur la machine serveur, exposer uniquement sur reseau prive ou Tailscale:
 ```bash
 $env:GOOGLE_API_KEY="..."
 $env:CODEBUDDY_FLEET_API_KEY=(node dist/index.js api-key create --name "Tailscale peer" --scope fleet:listen --scope peer:invoke --json | ConvertFrom-Json).key
-node dist/index.js server --host 0.0.0.0 --port 3001
+node dist/index.js server --host 0.0.0.0 --port 3000
 ```
 
 Sur la machine cliente:
 
 ```text
-> /fleet listen ws://100.x.y.z:3001/ws --api-key cb_sk_... --name ministar-linux --auto-reconnect
+> /fleet listen ws://100.x.y.z:3000/ws --api-key cb_sk_... --name ministar-linux --auto-reconnect
 > /fleet send ministar-linux peer.ping
 > /fleet send ministar-linux peer.describe
 > /fleet tool ministar-linux view_file {"file_path":"README.md","limit":2000}

@@ -1195,7 +1195,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /**
    * Code Buddy HTTP server (core `src/server/index.ts`) lifecycle —
    * exposes start/stop/status so the Cowork UI can boot the server
-   * (default port 3000, WS gateway 3001) from a button in the titlebar.
+   * (default port 3000, WebSocket on the same port) from a button in the titlebar.
    */
   server: {
     status: (): Promise<{

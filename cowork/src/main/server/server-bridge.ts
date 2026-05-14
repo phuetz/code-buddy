@@ -1,7 +1,7 @@
 /**
  * ServerBridge — wraps the core `src/server/index.ts:startServer/stopServer`
  * so the Cowork UI can boot/stop the Code Buddy HTTP server (default port
- * 3000, WS gateway 3001) from a button in the titlebar.
+ * 3000, WebSocket on the same port) from a button in the titlebar.
  *
  * Single instance per Cowork process. The server runs in-process (no child
  * fork) so all IPC handlers, hooks, and tools share the same registries.

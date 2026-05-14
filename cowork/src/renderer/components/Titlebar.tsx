@@ -294,7 +294,7 @@ function VoiceOverlayButton() {
 
 /**
  * Power button + dot indicator for the Code Buddy HTTP server. Click to
- * toggle (start uses default ports 3000/3001 + WS). Polls every 5s while
+ * toggle (start uses default port 3000 + WS). Polls every 5s while
  * idle so the UI stays in sync if the server is stopped from elsewhere.
  */
 function ServerToggle() {
@@ -345,7 +345,7 @@ function ServerToggle() {
       }) — right-click for activity dashboard`
     : status.error
       ? `Start Code Buddy server — last error: ${status.error}`
-      : 'Start Code Buddy server (port 3000 + WS gateway 3001) — right-click for dashboard';
+      : 'Start Code Buddy server (port 3000 with WebSocket) — right-click for dashboard';
 
   return (
     <>

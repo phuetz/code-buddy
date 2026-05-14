@@ -228,7 +228,7 @@ export function SettingsServer() {
               className="w-full px-2 py-1.5 text-xs font-mono bg-surface border border-border rounded-md text-text-primary focus:outline-none focus:border-accent"
             />
             <div className="text-[10px] text-text-muted mt-1">
-              {t('settingsServer.portHint', 'WebSocket gateway runs on port + 1.')}
+              {t('settingsServer.portHint', 'WebSocket uses the same port at /ws.')}
             </div>
           </div>
 

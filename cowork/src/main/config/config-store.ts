@@ -159,7 +159,7 @@ export interface AppConfig {
   /**
    * Embedded Code Buddy HTTP server (the one started by the titlebar
    * power button). Persisted so settings survive Cowork restarts.
-   * If absent, defaults are 127.0.0.1:3000 with WS on 3001 and a
+   * If absent, defaults are 127.0.0.1:3000 with WS on the same port and a
    * runtime-generated JWT secret.
    */
   server?: {

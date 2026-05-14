@@ -247,6 +247,9 @@ npm run build
 - La discovery Cowork probe le port `3000` de `buddy server` puis le port
   legacy `3001`, avec override `CODEBUDDY_FLEET_DISCOVERY_PORTS`. Cela aligne
   le scan Tailscale avec les exemples `/fleet listen ws://...:3000/ws`.
+- Les libelles Cowork du serveur embarque ne parlent plus d'un faux port
+  WebSocket `3001`: le bouton serveur et Settings -> Server indiquent que
+  WebSocket utilise le meme port HTTP, chemin `/ws`.
 - Le registre de capabilities Fleet annonce maintenant ChatGPT Codex OAuth
   (`chatgpt-oauth`) quand le login Codex/ChatGPT existe. Un peer qui utilise
   ton abonnement ChatGPT Pro n'apparait donc plus avec `peerChatProvider`
