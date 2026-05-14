@@ -16,7 +16,7 @@ import {
   getTreeOfThoughtReasoner,
   TreeOfThoughtReasoner,
 } from '../../agent/reasoning/tree-of-thought.js';
-import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../../utils/provider-detector.js';
 
 // ── Module-level state ──────────────────────────────────────────────────
 
@@ -224,7 +224,7 @@ async function runReasoning(
   const reasoner: TreeOfThoughtReasoner = getTreeOfThoughtReasoner(
     provider.apiKey,
     provider.baseURL,
-    { mode },
+    { mode, model: selectModelForDetectedProvider(provider) },
   );
   reasoner.setMode(mode);
 

@@ -33,6 +33,7 @@ jest.mock('../../src/agent/reasoning/tree-of-thought.js', () => ({
 
 jest.mock('../../src/utils/provider-detector.js', () => ({
   detectProviderFromEnv: providerMocks.mockDetectProvider,
+  selectModelForDetectedProvider: (detected: { defaultModel: string }) => detected.defaultModel,
 }));
 
 describe('think-handlers', () => {
@@ -299,7 +300,7 @@ describe('think-handlers', () => {
       expect(getTreeOfThoughtReasoner).toHaveBeenCalledWith(
         'oauth-chatgpt',
         'https://chatgpt.com/backend-api/codex',
-        { mode: 'deep' }
+        { mode: 'deep', model: 'gpt-5.5' }
       );
     });
 

@@ -8,6 +8,7 @@
 import { ToolResult } from "../types/index.js";
 import { getTreeOfThoughtReasoner, TreeOfThoughtReasoner, ThinkingMode } from "../agent/reasoning/index.js";
 import { Tool } from "./tool-manager.js";
+import { detectProviderFromEnv, selectModelForDetectedProvider } from "../utils/provider-detector.js";
 
 export class ReasoningTool implements Tool {
   name = "reason";
@@ -42,9 +43,15 @@ export class ReasoningTool implements Tool {
 
   private getReasoner(): TreeOfThoughtReasoner {
     if (!this.reasoner) {
-      const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || "";
-      const baseURL = process.env.GROK_BASE_URL;
-      this.reasoner = getTreeOfThoughtReasoner(apiKey, baseURL);
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        throw new Error("No LLM provider configured. Run `buddy login chatgpt` or set a provider API key.");
+      }
+      this.reasoner = getTreeOfThoughtReasoner(
+        provider.apiKey,
+        provider.baseURL,
+        { model: selectModelForDetectedProvider(provider) },
+      );
     }
     return this.reasoner;
   }

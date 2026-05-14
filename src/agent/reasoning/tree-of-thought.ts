@@ -632,14 +632,25 @@ export function createTreeOfThoughtReasoner(
 
 // Singleton instance
 let totReasonerInstance: TreeOfThoughtReasoner | null = null;
+let totReasonerKey: string | null = null;
+
+function buildReasonerKey(apiKey: string, baseURL?: string, config: Partial<ToTConfig> = {}): string {
+  return JSON.stringify({
+    apiKey,
+    baseURL: baseURL ?? '',
+    model: config.model ?? '',
+  });
+}
 
 export function getTreeOfThoughtReasoner(
   apiKey: string,
   baseURL?: string,
   config: Partial<ToTConfig> = {}
 ): TreeOfThoughtReasoner {
-  if (!totReasonerInstance) {
+  const key = buildReasonerKey(apiKey, baseURL, config);
+  if (!totReasonerInstance || totReasonerKey !== key) {
     totReasonerInstance = createTreeOfThoughtReasoner(apiKey, baseURL, config);
+    totReasonerKey = key;
   } else if (config.mode) {
     // Re-apply mode when singleton already exists but caller requests a different mode
     totReasonerInstance.setMode(config.mode);
@@ -649,4 +660,5 @@ export function getTreeOfThoughtReasoner(
 
 export function resetTreeOfThoughtReasoner(): void {
   totReasonerInstance = null;
+  totReasonerKey = null;
 }

@@ -20,6 +20,20 @@ jest.mock('../../src/agent/reasoning/index', () => ({
   getTreeOfThoughtReasoner: jest.fn(function() { return mockReasoner; }),
 }));
 
+jest.mock('../../src/utils/provider-detector', () => ({
+  detectProviderFromEnv: jest.fn(function() {
+    return {
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    };
+  }),
+  selectModelForDetectedProvider: jest.fn(function(detected: { defaultModel: string }) {
+    return detected.defaultModel;
+  }),
+}));
+
 describe('ReasoningTool', () => {
   let tool: ReasoningTool;
 
@@ -103,7 +117,11 @@ describe('ReasoningTool', () => {
 
       await tool.execute({ problem: 'Test' });
 
-      expect(reasoningModule.getTreeOfThoughtReasoner).toHaveBeenCalled();
+      expect(reasoningModule.getTreeOfThoughtReasoner).toHaveBeenCalledWith(
+        'oauth-chatgpt',
+        'https://chatgpt.com/backend-api/codex',
+        { model: 'gpt-5.5' },
+      );
     });
   });
 });

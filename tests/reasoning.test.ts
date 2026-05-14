@@ -320,6 +320,13 @@ describe('TreeOfThoughtReasoner', () => {
       const reasoner2 = getTreeOfThoughtReasoner('test-key');
       expect(reasoner1).toBe(reasoner2);
     });
+
+    it('should rebuild singleton when transport model changes', () => {
+      const reasoner1 = getTreeOfThoughtReasoner('test-key', 'https://api.x.ai/v1', { model: 'grok-3-fast' });
+      const reasoner2 = getTreeOfThoughtReasoner('test-key', 'https://chatgpt.com/backend-api/codex', { model: 'gpt-5.5' });
+      expect(reasoner1).not.toBe(reasoner2);
+      expect(reasoner2.getConfig().model).toBe('gpt-5.5');
+    });
   });
 
   describe('resetTreeOfThoughtReasoner', () => {

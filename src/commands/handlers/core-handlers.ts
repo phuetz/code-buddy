@@ -3,6 +3,7 @@ import { getAutonomyManager, SAFE_MODE_PATHS, type AutonomyLevel } from "../../u
 import { getSlashCommandManager } from "../slash-commands.js";
 import { getSkillManager } from "../../skills/skill-manager.js";
 import { getConversationExporter } from "../../utils/conversation-export.js";
+import { detectProviderFromEnv, selectModelForDetectedProvider } from "../../utils/provider-detector.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -426,16 +427,19 @@ Use the spawn_parallel_agents tool to launch them concurrently.`,
     
     // Lazy-load wide research
     const { runWideResearch } = await import('../../agent/wide-research.js');
-    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+    const provider = detectProviderFromEnv();
     
-    if (!apiKey) {
+    if (!provider) {
       return {
         handled: true,
-        entry: { type: 'assistant', content: '❌ API key missing for research.', timestamp: new Date() },
+        entry: { type: 'assistant', content: '❌ No AI provider configured. Run `buddy login chatgpt` or set a provider API key.', timestamp: new Date() },
       };
     }
 
-    const result = await runWideResearch(topic, apiKey);
+    const result = await runWideResearch(topic, provider.apiKey, undefined, {
+      model: selectModelForDetectedProvider(provider),
+      baseURL: provider.baseURL,
+    });
     return {
       handled: true,
       entry: {

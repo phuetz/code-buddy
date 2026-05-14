@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import { CodeBuddyClient, CodeBuddyMessage } from '../codebuddy/client.js';
 import { BashTool } from './bash/index.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 import * as path from 'path';
 
 export interface ReviewIssue {
@@ -143,8 +144,15 @@ export class CodeReviewTool extends EventEmitter {
    */
   private ensureClient(): CodeBuddyClient {
     if (!this.client) {
-      const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
-      this.client = new CodeBuddyClient(apiKey, this.config.model);
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        throw new Error('No LLM provider configured. Run `buddy login chatgpt` or set a provider API key.');
+      }
+      this.client = new CodeBuddyClient(
+        provider.apiKey,
+        selectModelForDetectedProvider(provider, this.config.model),
+        provider.baseURL,
+      );
     }
     return this.client;
   }

@@ -81,6 +81,7 @@ import {
 } from "../tools/hooks/index.js";
 import { WritePolicy, WRITE_TOOL_NAMES } from "../security/write-policy.js";
 import { RunStore } from "../observability/run-store.js";
+import { detectProviderFromEnv, selectModelForDetectedProvider } from "../utils/provider-detector.js";
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -765,13 +766,19 @@ export class ToolHandler {
       try {
         const args = JSON.parse(toolCall.function.arguments);
         const { getTreeOfThoughtReasoner } = await import('./reasoning/index.js');
-        const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
-        const baseURL = process.env.GROK_BASE_URL;
+        const provider = detectProviderFromEnv();
+        if (!provider) {
+          return {
+            success: false,
+            error: 'Reasoning error: no LLM provider configured. Run `buddy login chatgpt` or set a provider API key.',
+          };
+        }
         const mode = (args.mode as string) || 'medium';
 
         type ThinkingMode = import('./reasoning/types.js').ThinkingMode;
-        const reasoner = getTreeOfThoughtReasoner(apiKey, baseURL, {
+        const reasoner = getTreeOfThoughtReasoner(provider.apiKey, provider.baseURL, {
           mode: mode as ThinkingMode,
+          model: selectModelForDetectedProvider(provider),
         });
         reasoner.setMode(mode as ThinkingMode);
 
