@@ -118,6 +118,15 @@ export interface PruningConfig {
   dryRun: boolean;
   /** Session-specific configurations */
   sessionConfigs?: Record<string, SessionPruningConfig>;
+  /** Optional real summarizer for summarize actions */
+  summarizer?: PruningSummarizer;
+}
+
+export interface PruningSummarizer {
+  summarize(
+    item: PrunableItem,
+    options: { targetTokens?: number; reason: string }
+  ): Promise<{ content: string; tokens?: number }>;
 }
 
 export interface SessionPruningConfig {

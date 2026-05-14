@@ -347,6 +347,9 @@ npm run build
 - `GitNexusMCPClient` ne se declare plus connecte en mode stub et ne renvoie
   plus de graphes vides par defaut. Les requetes GitNexus exigent maintenant un
   transport MCP explicite.
+- L'action `summarize` du `PruningManager` ne fabrique plus un faux resume par
+  troncature. Elle exige maintenant un summarizer explicite; `compact` reste
+  l'action adaptee pour couper du contenu sans pretendre le resumer.
 
 ## Blocage leve
 

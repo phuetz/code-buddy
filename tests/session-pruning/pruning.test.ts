@@ -336,7 +336,7 @@ describe('Session Pruning', () => {
       expect(manager.getArchivedItems().length).toBe(1);
     });
 
-    it('should summarize items', async () => {
+    it('should fail summarize actions without a configured summarizer', async () => {
       const rule: PruningRule = {
         id: 'summarize-rule',
         name: 'Summarize Rule',
@@ -354,10 +354,45 @@ describe('Session Pruning', () => {
       });
       manager.addItem(item);
 
-      await manager.prune();
+      const result = await manager.prune();
+
+      expect(result.success).toBe(false);
+      expect(result.errors[0].error).toContain('requires a configured summarizer');
+      expect(manager.getItem(item.id)?.content).toBe(item.content);
+    });
+
+    it('should summarize items with a configured summarizer', async () => {
+      manager.updateConfig({
+        summarizer: {
+          summarize: async (_item, options) => ({
+            content: `Real summary for target ${options.targetTokens}`,
+            tokens: options.targetTokens,
+          }),
+        },
+      });
+      const rule: PruningRule = {
+        id: 'summarize-rule',
+        name: 'Summarize Rule',
+        priority: 100,
+        enabled: true,
+        conditions: [{ type: 'size', maxBytes: 50 }],
+        action: { type: 'summarize', targetTokens: 25 },
+      };
+      manager.addRule(rule);
+
+      const item = createItem({
+        sizeBytes: 100,
+        tokens: 100,
+        content: 'This is a long content that should be summarized to a shorter version.',
+      });
+      manager.addItem(item);
+
+      const result = await manager.prune();
 
       const prunedItem = manager.getItem(item.id);
-      expect(prunedItem?.content).toContain('[summarized]');
+      expect(result.success).toBe(true);
+      expect(prunedItem?.content).toBe('Real summary for target 25');
+      expect(prunedItem?.tokens).toBe(25);
     });
 
     it('should compact items', async () => {

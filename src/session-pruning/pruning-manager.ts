@@ -606,14 +606,29 @@ export class PruningManager extends EventEmitter {
         break;
 
       case 'summarize':
-        // In real implementation, this would call the summarization service
-        // For now, we simulate by keeping a truncated version
         if (item.content) {
-          const targetLength = Math.floor(item.content.length * 0.5);
-          const summarized = item.content.substring(0, targetLength) + '... [summarized]';
+          if (!this.config.summarizer) {
+            throw new Error(
+              'Summarize pruning action requires a configured summarizer. Configure config.summarizer or use action type "compact" for truncation.'
+            );
+          }
+
+          const summary = await this.config.summarizer.summarize(item, {
+            targetTokens: action.targetTokens,
+            reason,
+          });
+          const summarized = summary.content.trim();
+          if (!summarized) {
+            throw new Error('Summarize pruning action returned empty content.');
+          }
+
           item.content = summarized;
-          item.sizeBytes = summarized.length;
-          item.tokens = Math.floor((item.tokens ?? 0) * 0.5);
+          item.sizeBytes = Buffer.byteLength(summarized, 'utf8');
+          if (summary.tokens !== undefined) {
+            item.tokens = summary.tokens;
+          } else if (action.targetTokens !== undefined) {
+            item.tokens = Math.min(item.tokens ?? action.targetTokens, action.targetTokens);
+          }
         }
         break;
 

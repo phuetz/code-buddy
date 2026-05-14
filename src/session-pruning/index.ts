@@ -20,6 +20,7 @@ export type {
   SummarizePruningAction,
   CompactPruningAction,
   PruningConfig,
+  PruningSummarizer,
   SessionPruningConfig,
   PruningThresholds,
   PrunableItem,
