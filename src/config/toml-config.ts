@@ -821,8 +821,19 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
 export function parseTOML(content: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const lines = content.split('\n');
-  let currentSection = '';
-  let currentSubSection = '';
+  let currentSectionPath: string[] = [];
+
+  const ensureSection = (pathParts: string[]): Record<string, unknown> => {
+    let target = result;
+    for (const part of pathParts) {
+      const current = target[part];
+      if (!current || typeof current !== 'object' || Array.isArray(current)) {
+        target[part] = {};
+      }
+      target = target[part] as Record<string, unknown>;
+    }
+    return target;
+  };
 
   for (let line of lines) {
     line = line.trim();
@@ -833,20 +844,8 @@ export function parseTOML(content: string): Record<string, unknown> {
     // Section header [section] or [section.subsection]
     const sectionMatch = line.match(/^\[([^\]]+)\]$/);
     if (sectionMatch) {
-      const parts = sectionMatch[1].split('.');
-      currentSection = parts[0];
-      currentSubSection = parts.slice(1).join('.');
-
-      // Initialize section if needed
-      if (!result[currentSection]) {
-        result[currentSection] = {};
-      }
-      if (currentSubSection) {
-        const sectionObj = result[currentSection] as Record<string, unknown>;
-        if (!sectionObj[currentSubSection]) {
-          sectionObj[currentSubSection] = {};
-        }
-      }
+      currentSectionPath = sectionMatch[1].split('.');
+      ensureSection(currentSectionPath);
       continue;
     }
 
@@ -879,20 +878,32 @@ export function parseTOML(content: string): Record<string, unknown> {
         }).filter(item => item !== '');
       }
 
-      // Store value
-      if (currentSubSection) {
-        const sectionObj = result[currentSection] as Record<string, unknown>;
-        const subSectionObj = sectionObj[currentSubSection] as Record<string, unknown>;
-        subSectionObj[key] = value;
-      } else if (currentSection) {
-        (result[currentSection] as Record<string, unknown>)[key] = value;
-      } else {
-        result[key] = value;
-      }
+      const target = currentSectionPath.length > 0 ? ensureSection(currentSectionPath) : result;
+      target[key] = value;
     }
   }
 
   return result;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function deepMergeConfig<T extends Record<string, unknown>>(
+  base: T | undefined,
+  partial: Partial<T>,
+): T {
+  const result: Record<string, unknown> = { ...(base ?? {}) };
+
+  for (const [key, value] of Object.entries(partial)) {
+    const existing = result[key];
+    result[key] = isPlainRecord(existing) && isPlainRecord(value)
+      ? deepMergeConfig(existing, value)
+      : value;
+  }
+
+  return result as T;
 }
 
 /**
@@ -1049,18 +1060,13 @@ class ConfigManager {
       this.config.active_model = partial.active_model;
     }
     if (partial.providers) {
-      this.config.providers = { ...this.config.providers, ...partial.providers };
+      this.config.providers = deepMergeConfig(this.config.providers, partial.providers);
     }
     if (partial.models) {
-      this.config.models = { ...this.config.models, ...partial.models };
+      this.config.models = deepMergeConfig(this.config.models, partial.models);
     }
     if (partial.tool_config) {
-      for (const [name, toolConfig] of Object.entries(partial.tool_config)) {
-        this.config.tool_config[name] = {
-          ...this.config.tool_config[name],
-          ...toolConfig,
-        };
-      }
+      this.config.tool_config = deepMergeConfig(this.config.tool_config, partial.tool_config);
     }
     if (partial.middleware) {
       this.config.middleware = { ...this.config.middleware, ...partial.middleware };
@@ -1076,6 +1082,51 @@ class ConfigManager {
     }
     if (partial.model_pairs) {
       this.config.model_pairs = { ...this.config.model_pairs, ...partial.model_pairs };
+    }
+    if (partial.agent_defaults) {
+      this.config.agent_defaults = deepMergeConfig(
+        this.config.agent_defaults as Record<string, unknown> | undefined,
+        partial.agent_defaults as Record<string, unknown>,
+      ) as AgentDefaultsConfig;
+    }
+    if (partial.advisor) {
+      this.config.advisor = { ...this.config.advisor, ...partial.advisor };
+    }
+    if (partial.lsp) {
+      this.config.lsp = deepMergeConfig(
+        this.config.lsp as Record<string, unknown> | undefined,
+        partial.lsp as Record<string, unknown>,
+      ) as LSPConfig;
+    }
+    if (partial.heartbeat) {
+      this.config.heartbeat = { ...this.config.heartbeat, ...partial.heartbeat };
+    }
+    if (partial.autonomous_fleet) {
+      this.config.autonomous_fleet = { ...this.config.autonomous_fleet, ...partial.autonomous_fleet };
+    }
+    if (partial.daily_reset) {
+      this.config.daily_reset = { ...this.config.daily_reset, ...partial.daily_reset };
+    }
+    if (partial.team_session) {
+      this.config.team_session = { ...this.config.team_session, ...partial.team_session };
+    }
+    if (partial.multi_agent_system) {
+      this.config.multi_agent_system = deepMergeConfig(
+        this.config.multi_agent_system as Record<string, unknown> | undefined,
+        partial.multi_agent_system as Record<string, unknown>,
+      ) as MultiAgentSystemConfig;
+    }
+    if (partial.enterprise_modules) {
+      this.config.enterprise_modules = deepMergeConfig(
+        this.config.enterprise_modules as Record<string, unknown> | undefined,
+        partial.enterprise_modules as Record<string, unknown>,
+      ) as EnterpriseModulesTomlConfig;
+    }
+    if (partial.profiles) {
+      this.config.profiles = deepMergeConfig(
+        this.config.profiles as Record<string, unknown> | undefined,
+        partial.profiles as Record<string, unknown>,
+      ) as Record<string, ProfileConfig>;
     }
   }
 

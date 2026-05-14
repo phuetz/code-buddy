@@ -8,6 +8,9 @@ import {
   DEFAULT_CONFIG,
   getConfigManager,
 } from '../src/config/toml-config.js';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 // ============================================================================
 // TOML Parser Tests
@@ -73,6 +76,32 @@ type = "anthropic"
       anthropic: {
         api_key_env: 'ANTHROPIC_API_KEY',
         type: 'anthropic',
+      },
+    });
+  });
+
+  it('should parse deeply nested sections', () => {
+    const toml = `
+[profiles.night.agent]
+yolo_mode = true
+
+[multi_agent_system.coordination]
+enabled = true
+queue_policy = "reject"
+`;
+    const result = parseTOML(toml);
+
+    expect(result.profiles).toEqual({
+      night: {
+        agent: {
+          yolo_mode: true,
+        },
+      },
+    });
+    expect(result.multi_agent_system).toEqual({
+      coordination: {
+        enabled: true,
+        queue_policy: 'reject',
       },
     });
   });
@@ -248,6 +277,60 @@ describe('ConfigManager', () => {
     const config = manager.getToolConfig('unknown-tool');
 
     expect(config).toBeUndefined();
+  });
+
+  it('should load runtime and profile sections from project config', () => {
+    const originalCwd = process.cwd();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-config-'));
+    const projectConfigDir = path.join(tmpDir, '.codebuddy');
+    fs.mkdirSync(projectConfigDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectConfigDir, 'config.toml'),
+      `
+[multi_agent_system]
+enabled = true
+default_strategy = "parallel"
+max_workflow_cost_usd = 1.5
+
+[multi_agent_system.coordination]
+enabled = true
+max_concurrent_workflows = 3
+queue_policy = "reject"
+
+[heartbeat]
+enabled = true
+interval_minutes = 15
+
+[autonomous_fleet]
+enabled = true
+repo_path = "D:/fleet"
+host = "test-host"
+
+[profiles.night.agent]
+yolo_mode = true
+`,
+    );
+
+    const manager = getConfigManager();
+    try {
+      process.chdir(tmpDir);
+      const config = manager.reload();
+
+      expect(config.multi_agent_system?.enabled).toBe(true);
+      expect(config.multi_agent_system?.default_strategy).toBe('parallel');
+      expect(config.multi_agent_system?.coordination?.enabled).toBe(true);
+      expect(config.multi_agent_system?.coordination?.max_concurrent_workflows).toBe(3);
+      expect(config.multi_agent_system?.coordination?.queue_policy).toBe('reject');
+      expect(config.heartbeat?.enabled).toBe(true);
+      expect(config.heartbeat?.interval_minutes).toBe(15);
+      expect(config.autonomous_fleet?.repo_path).toBe('D:/fleet');
+      expect(config.autonomous_fleet?.host).toBe('test-host');
+      expect(config.profiles?.night?.agent?.yolo_mode).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+      manager.reload();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 
