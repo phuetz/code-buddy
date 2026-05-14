@@ -189,6 +189,15 @@ npx eslint src/tools/message-tool.ts tests/features/tailscale-dashboard-nodes.te
 
 npm run typecheck
 # passed
+
+npm test -- tests/desktop-automation/screen-recorder.test.ts
+# 2 tests passed after screen recorder placeholder removal
+
+npx eslint src/desktop-automation/screen-recorder.ts tests/desktop-automation/screen-recorder.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -391,6 +400,9 @@ npm run typecheck
   moderation pretendument reussies. Les actions cross-channel exigent
   maintenant un transport explicite; sans transport, l'outil echoue clairement
   et n'enregistre pas l'action.
+- `ScreenRecorder` ne produit plus de video noire placeholder sur Wayland et
+  ne declare plus un enregistrement reussi si le fichier de sortie est absent
+  ou vide.
 
 ## Blocage leve
 

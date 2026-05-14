@@ -227,12 +227,24 @@ export class ScreenRecorder extends EventEmitter {
       const duration = this.calculateDuration();
 
       // Get file stats
-      let fileSize = 0;
+      let fileSize: number | null = null;
       try {
         const stats = await fs.stat(recording.outputPath);
         fileSize = stats.size;
       } catch {
-        // File might not exist if recording failed
+        const error = `Recording output was not created: ${recording.outputPath}`;
+        this.emit('recording-error', { recording, error: new Error(error) });
+        logger.error('Screen recording failed', { id: recording.id, error });
+        this.clearRecordingState();
+        return { success: false, error, outputPath: recording.outputPath, duration };
+      }
+
+      if (fileSize <= 0) {
+        const error = `Recording output is empty: ${recording.outputPath}`;
+        this.emit('recording-error', { recording, error: new Error(error) });
+        logger.error('Screen recording failed', { id: recording.id, error });
+        this.clearRecordingState();
+        return { success: false, error, outputPath: recording.outputPath, duration, fileSize };
       }
 
       // Update state
@@ -259,8 +271,7 @@ export class ScreenRecorder extends EventEmitter {
         fileSize,
       };
 
-      this.currentRecording = null;
-      this.recordingStartTime = null;
+      this.clearRecordingState();
 
       return result;
     } catch (error) {
@@ -496,9 +507,9 @@ export class ScreenRecorder extends EventEmitter {
 
     // Check if using Wayland or X11
     if (process.env.WAYLAND_DISPLAY) {
-      // Wayland: use pipewire-record or wf-recorder output
-      args.push('-f', 'lavfi', '-i', 'color=c=black:s=1920x1080:r=30');
-      logger.warn('Wayland screen recording requires pipewire. Using placeholder.');
+      throw new Error(
+        'Wayland screen recording requires a real PipeWire/wf-recorder backend. Placeholder video capture is disabled.'
+      );
     } else {
       // X11: use x11grab
       args.push('-f', 'x11grab');
@@ -632,6 +643,13 @@ export class ScreenRecorder extends EventEmitter {
     }
 
     return Math.max(0, elapsed / 1000);
+  }
+
+  private clearRecordingState(): void {
+    this.currentRecording = null;
+    this.recordingStartTime = null;
+    this.pauseStartTime = null;
+    this.pausedDuration = 0;
   }
 }
 
