@@ -9,6 +9,7 @@ import { ServerDashboard } from './ServerDashboard';
 import { RunnerBadge } from './RunnerBadge';
 import { ClipboardSummaryPanel } from './ClipboardSummaryPanel';
 import { VoiceChatOverlay } from './VoiceChatOverlay';
+import { HealthBadge } from './HealthBadge';
 
 const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
 
@@ -45,8 +46,15 @@ export function Titlebar() {
         <TabBar />
       </div>
 
-      {/* Presence indicator (face memory) — opens EnrollmentDialog on click. */}
+      {/* Backend health badge (Phase d.23 polish — chat-ui parity).
+          Auto-polls /api/health every 10s with backoff on failures.
+          Hidden when CodeBuddy integration is disabled. */}
       <div className="titlebar-no-drag px-2 flex items-center ml-auto">
+        <HealthBadge />
+      </div>
+
+      {/* Presence indicator (face memory) — opens EnrollmentDialog on click. */}
+      <div className="titlebar-no-drag px-2 flex items-center">
         <PresenceIndicator
           onEnrollClicked={() => useAppStore.getState().setShowEnrollmentDialog(true)}
         />
