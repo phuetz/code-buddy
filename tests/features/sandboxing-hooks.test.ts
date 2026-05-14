@@ -321,6 +321,7 @@ describe('OSSandbox', () => {
 // ============================================================================
 
 describe('SmartHookRunner', () => {
+  const originalEnv = process.env;
   let SmartHookRunner: typeof import('../../src/hooks/smart-hooks').SmartHookRunner;
   type SmartHookConfig = import('../../src/hooks/smart-hooks').SmartHookConfig;
 
@@ -330,7 +331,12 @@ describe('SmartHookRunner', () => {
   });
 
   beforeEach(() => {
+    process.env = { ...originalEnv, CODEBUDDY_PROVIDER: 'none' };
     mockSpawn.mockReset();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   describe('template rendering', () => {
@@ -957,6 +963,7 @@ describe('EnvPersistence', () => {
 // ============================================================================
 
 describe('AsyncHookManager', () => {
+  const originalEnv = process.env;
   let AsyncHookManager: typeof import('../../src/hooks/async-hooks').AsyncHookManager;
   type SmartHookConfig = import('../../src/hooks/smart-hooks').SmartHookConfig;
 
@@ -966,7 +973,12 @@ describe('AsyncHookManager', () => {
   });
 
   beforeEach(() => {
+    process.env = { ...originalEnv, CODEBUDDY_PROVIDER: 'none' };
     mockSpawn.mockReset();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   describe('constructor', () => {

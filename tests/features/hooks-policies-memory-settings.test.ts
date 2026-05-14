@@ -90,10 +90,16 @@ describe('AdvancedHookSystem', () => {
   });
 
   describe('AdvancedHookRunner', () => {
+    const originalEnv = process.env;
     let runner: InstanceType<typeof AdvancedHookRunner>;
 
     beforeEach(() => {
+      process.env = { ...originalEnv, CODEBUDDY_PROVIDER: 'none' };
       runner = new AdvancedHookRunner(os.tmpdir());
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
     });
 
     (process.platform === 'win32' ? it.skip : it)('should run a command hook that returns JSON decision', async () => {

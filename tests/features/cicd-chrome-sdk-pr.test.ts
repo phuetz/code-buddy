@@ -412,10 +412,16 @@ describe('ChromeBridge', () => {
 // ============================================================================
 
 describe('AgentSDK', () => {
+  const originalEnv = process.env;
   let sdk: AgentSDK;
 
   beforeEach(() => {
+    process.env = { ...originalEnv, CODEBUDDY_PROVIDER: 'none' };
     sdk = new AgentSDK({ model: 'test-model', maxTurns: 5 });
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   describe('constructor', () => {
