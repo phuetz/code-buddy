@@ -1,31 +1,59 @@
 import fs from 'fs';
-import os from 'os';
+import * as os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const providerMocks = vi.hoisted(() => ({
-  detectProviderFromEnv: vi.fn(),
+const testPaths = vi.hoisted(() => ({
+  homeDir: '',
 }));
 
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderFromEnv,
-}));
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  const mocked = {
+    ...actual,
+    homedir: () => testPaths.homeDir || actual.homedir(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+});
 
 import { validateStartupConfigWithZod } from '../../src/utils/config-validation/validators.js';
 
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CHATGPT_MODEL',
+  'CODEBUDDY_PROVIDER',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GROK_API_KEY',
+  'OLLAMA_HOST',
+  'OPENAI_API_KEY',
+  'XAI_API_KEY',
+] as const;
+
 describe('validateStartupConfigWithZod provider warnings', () => {
+  const originalEnv = process.env;
   let projectDir: string;
   let userDir: string;
 
   beforeEach(() => {
+    process.env = { ...originalEnv };
+    for (const key of PROVIDER_ENV_KEYS) {
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'none';
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-startup-project-'));
     userDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-startup-user-'));
-    providerMocks.detectProviderFromEnv.mockReturnValue(null);
+    testPaths.homeDir = userDir;
   });
 
   afterEach(() => {
+    process.env = originalEnv;
     fs.rmSync(projectDir, { recursive: true, force: true });
     fs.rmSync(userDir, { recursive: true, force: true });
+    testPaths.homeDir = '';
   });
 
   it('warns when no user setting or detected provider is available', async () => {
@@ -37,12 +65,13 @@ describe('validateStartupConfigWithZod provider warnings', () => {
   });
 
   it('does not warn when ChatGPT OAuth is detected', async () => {
-    providerMocks.detectProviderFromEnv.mockReturnValue({
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    });
+    process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+    const authDir = path.join(userDir, '.codebuddy');
+    fs.mkdirSync(authDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(authDir, 'codex-auth.json'),
+      JSON.stringify({ tokens: { access_token: 'test-chatgpt-token' } }),
+    );
 
     const result = await validateStartupConfigWithZod(projectDir, userDir);
 
