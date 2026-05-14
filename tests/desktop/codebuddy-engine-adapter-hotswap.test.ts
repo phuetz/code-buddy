@@ -4,17 +4,20 @@
  * next turn picks up the new config. Without this, mid-session model
  * switches in Cowork's Settings were silently ignored.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 let constructorCalls: Array<{ apiKey: string; baseURL?: string; model?: string }> = [];
 let disposedCount = 0;
 let processedPrompts: string[] = [];
-let detectedProvider: {
-  provider: string;
-  apiKey: string;
-  baseURL: string;
-  defaultModel: string;
-} | null = null;
+let tmpHome: string;
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => tmpHome };
+});
 
 class FakeCodeBuddyAgent {
   apiKey: string;
@@ -57,27 +60,59 @@ vi.mock('../../src/codebuddy/tools.js', () => ({
   getMCPManager: () => ({ addServer: vi.fn(), removeServer: vi.fn() }),
 }));
 
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: () => detectedProvider,
-}));
-
 import { CodeBuddyEngineAdapter } from '../../src/desktop/codebuddy-engine-adapter';
+
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+const envBackup: Record<string, string | undefined> = {};
+
+function writeChatGptAuth(): void {
+  const dir = path.join(tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
 
 describe('CodeBuddyEngineAdapter — hot-swap on config change (Phase 8)', () => {
   beforeEach(() => {
     constructorCalls = [];
     disposedCount = 0;
     processedPrompts = [];
-    detectedProvider = null;
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'none';
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cowork-hotswap-'));
+  });
+
+  afterEach(() => {
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   it('uses detected ChatGPT credentials when Cowork has no saved API key', async () => {
-    detectedProvider = {
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    };
+    process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+    writeChatGptAuth();
     const adapter = new CodeBuddyEngineAdapter({ apiKey: '', embedded: true });
 
     await adapter.runSession(
