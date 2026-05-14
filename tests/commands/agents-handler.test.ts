@@ -9,6 +9,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 // Hoist mock targets so the vi.mock factory can reference them.
 const mocks = vi.hoisted(() => {
@@ -60,7 +63,6 @@ const mocks = vi.hoisted(() => {
   }));
   const fakeRegistry = { getStats: getStatsMock };
   const getSessionRegistryMock = vi.fn(() => fakeRegistry);
-  const detectProviderMock = vi.fn();
 
   return {
     runWorkflowMock, stopMock, disposeMock, onMock, listenerCountMock, removeAllListenersMock,
@@ -70,8 +72,14 @@ const mocks = vi.hoisted(() => {
     isPersistenceEnabledMock, getMetricsSavedAtMock,
     fakeCoordinator, getEnhancedCoordinatorMock,
     getStatsMock, fakeRegistry, getSessionRegistryMock,
-    detectProviderMock,
   };
+});
+
+const testPaths = vi.hoisted(() => ({ tmpHome: '' }));
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => testPaths.tmpHome || actual.homedir() };
 });
 
 vi.mock('../../src/agent/multi-agent/multi-agent-system.js', () => ({
@@ -85,10 +93,6 @@ vi.mock('../../src/agent/multi-agent/enhanced-coordination.js', () => ({
 
 vi.mock('../../src/agent/multi-agent/session-registry.js', () => ({
   getSessionRegistry: mocks.getSessionRegistryMock,
-}));
-
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: mocks.detectProviderMock,
 }));
 
 // Phase G — workflow persistence mocks
@@ -106,15 +110,56 @@ vi.mock('../../src/agent/multi-agent/workflow-persistence.js', () => ({
 
 import { handleAgents, _resetAgentsHandlerForTests } from '../../src/commands/handlers/agents-handler.js';
 
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_BASE_URL',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+
+function configureDefaultGrokProvider(): void {
+  process.env.CODEBUDDY_PROVIDER = 'grok';
+  process.env.GROK_API_KEY = 'test-key';
+  process.env.GROK_MODEL = 'grok-3-latest';
+}
+
+function clearProviderEnv(): void {
+  process.env.CODEBUDDY_PROVIDER = 'none';
+  for (const key of envKeysToReset) {
+    if (key !== 'CODEBUDDY_PROVIDER') delete process.env[key];
+  }
+}
+
+function configureChatGptProvider(): void {
+  process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+  const dir = path.join(testPaths.tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
+
 describe('handleAgents (/agents)', () => {
+  let envBackup: NodeJS.ProcessEnv;
+
   beforeEach(() => {
     _resetAgentsHandlerForTests();
-    mocks.detectProviderMock.mockReset().mockReturnValue({
-      provider: 'grok',
-      apiKey: 'test-key',
-      baseURL: undefined,
-      defaultModel: 'grok-3-latest',
-    });
+    envBackup = { ...process.env };
+    for (const key of envKeysToReset) delete process.env[key];
+    testPaths.tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-handler-'));
+    configureDefaultGrokProvider();
     mocks.runWorkflowMock.mockReset();
     mocks.stopMock.mockReset();
     mocks.disposeMock.mockReset();
@@ -143,6 +188,9 @@ describe('handleAgents (/agents)', () => {
 
   afterEach(() => {
     _resetAgentsHandlerForTests();
+    process.env = envBackup;
+    fs.rmSync(testPaths.tmpHome, { recursive: true, force: true });
+    testPaths.tmpHome = '';
   });
 
   it('rejects unknown action with help text', async () => {
@@ -174,7 +222,7 @@ describe('handleAgents (/agents)', () => {
   it('enable instantiates the singleton', async () => {
     const r = await handleAgents(['enable']);
     expect(r.entry?.content).toContain('Multi-agent system started');
-    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('test-key', undefined);
+    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('test-key', 'https://api.x.ai/v1');
 
     const status = await handleAgents(['status']);
     expect(status.entry?.content).toMatch(/Enabled:\s+yes/);
@@ -187,18 +235,13 @@ describe('handleAgents (/agents)', () => {
   });
 
   it('enable without a detected provider returns clear error', async () => {
-    mocks.detectProviderMock.mockReturnValue(null);
+    clearProviderEnv();
     const r = await handleAgents(['enable']);
     expect(r.entry?.content).toContain('no LLM provider configured');
   });
 
   it('enable uses ChatGPT Codex OAuth when detected', async () => {
-    mocks.detectProviderMock.mockReturnValue({
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    });
+    configureChatGptProvider();
 
     await handleAgents(['enable']);
 
@@ -329,7 +372,7 @@ describe('handleAgents (/agents)', () => {
   // ────────────────────────────────────────────────────────────
 
   it('metrics returns coordinator performance report (no apiKey needed)', async () => {
-    mocks.detectProviderMock.mockReturnValue(null);
+    clearProviderEnv();
     const r = await handleAgents(['metrics']);
     expect(r.entry?.content).toContain('Performance Report');
     expect(mocks.getEnhancedCoordinatorMock).toHaveBeenCalled();
@@ -358,7 +401,7 @@ describe('handleAgents (/agents)', () => {
   });
 
   it('conflicts returns empty message + Phase H V0.3 hint when none detected', async () => {
-    mocks.detectProviderMock.mockReturnValue(null);
+    clearProviderEnv();
     const r = await handleAgents(['conflicts']);
     expect(r.entry?.content).toContain('No conflicts detected');
     // Phase H rewrote the empty-state message to point at the new V0.3 wiring
@@ -377,7 +420,7 @@ describe('handleAgents (/agents)', () => {
   });
 
   it('sessions returns registry stats (no apiKey needed)', async () => {
-    mocks.detectProviderMock.mockReturnValue(null);
+    clearProviderEnv();
     const r = await handleAgents(['sessions']);
     expect(r.entry?.content).toContain('Session Registry Stats');
     expect(r.entry?.content).toContain('Total sessions:   0');
