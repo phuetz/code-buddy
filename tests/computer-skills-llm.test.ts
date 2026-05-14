@@ -4,14 +4,6 @@
 
 // We mock the LLM client to avoid real API calls
 
-const providerMocks = vi.hoisted(() => ({
-  detectProviderMock: vi.fn(),
-}));
-
-vi.mock('../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderMock,
-}));
-
 import { ComputerSkills } from '../src/interpreter/computer/skills.js';
 
 jest.mock('../src/codebuddy/client.js', () => ({
@@ -23,18 +15,30 @@ jest.mock('../src/codebuddy/client.js', () => ({
   }; }),
 }));
 
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CHATGPT_MODEL',
+  'CODEBUDDY_PROVIDER',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'OLLAMA_HOST',
+  'OPENAI_API_KEY',
+  'XAI_API_KEY',
+] as const;
+
 describe('ComputerSkills — LLM step', () => {
   const OLD_ENV = process.env;
 
   beforeEach(() => {
-    process.env = { ...OLD_ENV, GROK_API_KEY: 'test-key' };
-    providerMocks.detectProviderMock.mockReset();
-    providerMocks.detectProviderMock.mockReturnValue({
-      provider: 'grok',
-      apiKey: 'test-key',
-      baseURL: 'https://api.x.ai/v1',
-      defaultModel: 'grok-code-fast-1',
-    });
+    process.env = { ...OLD_ENV };
+    for (const key of PROVIDER_ENV_KEYS) {
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'grok';
+    process.env.GROK_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-code-fast-1';
   });
 
   afterEach(() => {
@@ -96,7 +100,8 @@ describe('ComputerSkills — LLM step', () => {
   });
 
   it('throws when no provider is configured', async () => {
-    providerMocks.detectProviderMock.mockReturnValue(null);
+    process.env.CODEBUDDY_PROVIDER = 'none';
+    delete process.env.GROK_API_KEY;
     const skills = new ComputerSkills();
     await skills.load();
 
