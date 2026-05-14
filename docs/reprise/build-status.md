@@ -341,6 +341,9 @@ npm run build
 - `TTSManager` n'installe plus le provider `mock` quand aucun provider voix
   n'est configure. Le provider mock reste disponible pour les tests, mais doit
   etre demande explicitement via `provider: "mock"`.
+- `MessagePreprocessor` n'injecte plus de pseudo-transcription audio dans les
+  messages entrants. Une transcription n'est ajoutee au contexte que si un vrai
+  transcripteur est configure explicitement.
 
 ## Blocage leve
 

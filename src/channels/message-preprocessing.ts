@@ -36,6 +36,12 @@ export interface PreprocessingConfig {
   maxLinkSummaryLength: number;
   maxTranscriptionLength: number;
   transcriptionProvider: 'whisper' | 'deepgram' | 'browser';
+  audioTranscriber?: AudioTranscriber;
+}
+
+export interface AudioTranscriber {
+  readonly provider: PreprocessingConfig['transcriptionProvider'] | string;
+  transcribe(attachment: MessageAttachment): Promise<{ text: string; language?: string }>;
 }
 
 // ============================================================================
@@ -55,6 +61,7 @@ export class MessagePreprocessor extends EventEmitter {
       maxLinkSummaryLength: config?.maxLinkSummaryLength ?? 500,
       maxTranscriptionLength: config?.maxTranscriptionLength ?? 5000,
       transcriptionProvider: config?.transcriptionProvider ?? 'whisper',
+      audioTranscriber: config?.audioTranscriber,
     };
   }
 
@@ -149,22 +156,42 @@ export class MessagePreprocessor extends EventEmitter {
   ): Promise<Array<{ attachmentIndex: number; text: string; language?: string }>> {
     const results: Array<{ attachmentIndex: number; text: string; language?: string }> = [];
 
+    if (!this.config.audioTranscriber) {
+      logger.warn('MessagePreprocessor: audio transcription requested but no transcriber is configured', {
+        provider: this.config.transcriptionProvider,
+        attachments: audioAttachments.length,
+      });
+      return results;
+    }
+
     for (const att of audioAttachments) {
       const index = allAttachments.indexOf(att);
-      // In production, this would call Whisper/Deepgram API
-      // For now, return placeholder indicating transcription would happen
       logger.debug('MessagePreprocessor: transcribing audio', {
         index,
         mimeType: att.mimeType,
         size: att.size,
-        provider: this.config.transcriptionProvider,
+        provider: this.config.audioTranscriber.provider,
       });
 
-      results.push({
-        attachmentIndex: index,
-        text: att.caption || '[Audio content — transcription pending]',
-        language: 'en',
-      });
+      try {
+        const transcription = await this.config.audioTranscriber.transcribe(att);
+        const text = transcription.text.trim().slice(0, this.config.maxTranscriptionLength);
+        if (!text) {
+          continue;
+        }
+
+        results.push({
+          attachmentIndex: index,
+          text,
+          language: transcription.language,
+        });
+      } catch (error) {
+        logger.warn('MessagePreprocessor: audio transcription failed', {
+          index,
+          provider: this.config.audioTranscriber.provider,
+          error,
+        });
+      }
     }
 
     return results;
