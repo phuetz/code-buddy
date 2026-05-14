@@ -39,12 +39,24 @@ jest.mock("../../src/codebuddy/client.js", () => ({
   }; }),
 }));
 
+jest.mock("../../src/utils/provider-detector.js", () => ({
+  detectProviderFromEnv: jest.fn(() => null),
+  selectModelForDetectedProvider: jest.fn((detected: { provider: string; defaultModel: string }, configured?: string) => {
+    if (detected.provider !== "grok" && configured?.startsWith("grok-")) {
+      return detected.defaultModel;
+    }
+    return configured || detected.defaultModel;
+  }),
+}));
+
 jest.mock("../../src/types/index.js", () => ({
   getErrorMessage: jest.fn().mockImplementation((err) => err?.message || String(err)),
 }));
 
 import { CodeBuddyClient as _CodeBuddyClient } from "../../src/codebuddy/client.js";
-const CodeBuddyClient = _CodeBuddyClient as any;
+import { detectProviderFromEnv as _detectProviderFromEnv } from "../../src/utils/provider-detector.js";
+const CodeBuddyClient = _CodeBuddyClient as unknown as jest.Mock;
+const detectProviderFromEnv = _detectProviderFromEnv as unknown as jest.Mock;
 
 // Helper to create mock model configs
 function createMockModels(count: number = 3): ModelConfig[] {
@@ -79,6 +91,7 @@ describe("ParallelExecutor", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    detectProviderFromEnv.mockReturnValue(null);
     resetParallelExecutor();
     executor = new ParallelExecutor(createMockConfig());
   });
@@ -127,6 +140,57 @@ describe("ParallelExecutor", () => {
       new ParallelExecutor(config);
 
       expect(CodeBuddyClient).toHaveBeenCalledTimes(1);
+    });
+
+    it("should use detected provider credentials for codebuddy models without explicit keys", () => {
+      jest.clearAllMocks();
+      detectProviderFromEnv.mockReturnValue({
+        provider: "chatgpt",
+        apiKey: "oauth-chatgpt",
+        baseURL: "https://chatgpt.com/backend-api/codex",
+        defaultModel: "gpt-5.5",
+      });
+
+      const config = createMockConfig({
+        models: [{ ...createMockModels(1)[0], model: "grok-code-fast-1" }],
+      });
+      new ParallelExecutor(config);
+
+      expect(CodeBuddyClient).toHaveBeenCalledWith(
+        "oauth-chatgpt",
+        "gpt-5.5",
+        "https://chatgpt.com/backend-api/codex"
+      );
+    });
+
+    it("should resolve provider-specific environment credentials", () => {
+      const previousOpenAIKey = process.env.OPENAI_API_KEY;
+      const previousOpenAIBaseURL = process.env.OPENAI_BASE_URL;
+      try {
+        process.env.OPENAI_API_KEY = "openai-key";
+        process.env.OPENAI_BASE_URL = "https://openai.example/v1";
+        jest.clearAllMocks();
+
+        const config = createMockConfig({
+          models: [{
+            ...createMockModels(1)[0],
+            provider: "openai",
+            model: "gpt-4o",
+          }],
+        });
+        new ParallelExecutor(config);
+
+        expect(CodeBuddyClient).toHaveBeenCalledWith(
+          "openai-key",
+          "gpt-4o",
+          "https://openai.example/v1"
+        );
+      } finally {
+        if (previousOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = previousOpenAIKey;
+        if (previousOpenAIBaseURL === undefined) delete process.env.OPENAI_BASE_URL;
+        else process.env.OPENAI_BASE_URL = previousOpenAIBaseURL;
+      }
     });
   });
 

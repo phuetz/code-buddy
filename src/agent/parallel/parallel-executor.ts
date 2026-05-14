@@ -13,6 +13,7 @@
 import { EventEmitter } from "events";
 import { CodeBuddyClient, CodeBuddyMessage } from "../../codebuddy/client.js";
 import { getErrorMessage } from "../../types/index.js";
+import { detectProviderFromEnv, selectModelForDetectedProvider } from "../../utils/provider-detector.js";
 import {
   ModelConfig,
   ParallelConfig,
@@ -55,14 +56,68 @@ export class ParallelExecutor extends EventEmitter {
     for (const model of this.config.models) {
       if (!model.enabled) continue;
 
-      // For now, we primarily support Grok but structure allows expansion
-      const client = new CodeBuddyClient(
-        model.apiKey || process.env.XAI_API_KEY || "",
-        model.model,
-        model.baseURL
-      );
+      const client = this.createClient(model);
       this.clients.set(model.id, client);
     }
+  }
+
+  private createClient(model: ModelConfig): CodeBuddyClient {
+    const target = this.resolveClientTarget(model);
+    return new CodeBuddyClient(target.apiKey, target.model, target.baseURL);
+  }
+
+  private resolveClientTarget(model: ModelConfig): { apiKey: string; model: string; baseURL?: string } {
+    const detected = detectProviderFromEnv();
+    if (model.provider === "codebuddy" && !model.apiKey && detected) {
+      return {
+        apiKey: detected.apiKey,
+        model: selectModelForDetectedProvider(detected, model.model) || detected.defaultModel,
+        baseURL: model.baseURL || detected.baseURL,
+      };
+    }
+
+    return {
+      apiKey: model.apiKey || this.getProviderApiKey(model.provider),
+      model: model.model,
+      baseURL: model.baseURL || this.getProviderBaseURL(model.provider),
+    };
+  }
+
+  private getProviderApiKey(provider: ModelConfig["provider"]): string {
+    switch (provider) {
+      case "codebuddy":
+        return process.env.GROK_API_KEY || process.env.XAI_API_KEY || "";
+      case "openai":
+        return process.env.OPENAI_API_KEY || "";
+      case "anthropic":
+        return process.env.ANTHROPIC_API_KEY || "";
+      case "local":
+        return "ollama";
+      case "custom":
+        return process.env.CODEBUDDY_CUSTOM_API_KEY || "";
+    }
+  }
+
+  private getProviderBaseURL(provider: ModelConfig["provider"]): string | undefined {
+    switch (provider) {
+      case "codebuddy":
+        return process.env.GROK_BASE_URL;
+      case "openai":
+        return process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+      case "anthropic":
+        return process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1";
+      case "local":
+        return this.getOllamaBaseURL();
+      case "custom":
+        return process.env.CODEBUDDY_CUSTOM_BASE_URL;
+    }
+  }
+
+  private getOllamaBaseURL(): string {
+    let host = process.env.OLLAMA_HOST || "http://localhost:11434";
+    if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
+    if (!host.endsWith("/v1")) host = host.replace(/\/+$/, "") + "/v1";
+    return host;
   }
 
   /**
@@ -923,11 +978,7 @@ Synthesize these responses into a single, comprehensive answer that:
     }
 
     if (model.enabled) {
-      const client = new CodeBuddyClient(
-        model.apiKey || process.env.XAI_API_KEY || "",
-        model.model,
-        model.baseURL
-      );
+      const client = this.createClient(model);
       this.clients.set(model.id, client);
     }
   }
