@@ -1,7 +1,7 @@
 
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as path from 'path';
 import type { KnowledgeGraph } from '../knowledge/knowledge-graph.js';
 

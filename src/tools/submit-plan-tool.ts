@@ -1,8 +1,6 @@
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
-import { setAgentMode, AgentMode } from '../agent/plan-mode.js';
-import { getOperatingModeManager } from '../agent/operating-modes.js';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
 
@@ -36,7 +34,7 @@ export class SubmitPlanTool extends BaseTool {
       const planDir = path.join(process.cwd(), '.codebuddy', 'plans');
       await fs.ensureDir(planDir);
       await fs.writeFile(path.join(planDir, 'current.md'), planContent);
-    } catch (e) {
+    } catch {
       logger.warn('Failed to write plan file to disk');
     }
 

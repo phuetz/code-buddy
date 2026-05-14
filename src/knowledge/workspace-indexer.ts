@@ -7,7 +7,7 @@
  * over the entire codebase, bypassing the limitations of context windows.
  */
 
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
@@ -22,6 +22,10 @@ class BruteForceIndex {
 
   add(id: number, vector: number[] | Float32Array): void {
     this.vectors.set(id, Array.from(vector));
+  }
+
+  clear(): void {
+    this.vectors.clear();
   }
 
   search(query: number[] | Float32Array, k: number): Array<{ id: number; score: number }> {
@@ -58,6 +62,58 @@ class BruteForceIndex {
   }
 }
 
+interface VectorIndexLike {
+  add(id: number, vector: number[] | Float32Array): Promise<void> | void;
+  search(
+    query: number[] | Float32Array,
+    k: number
+  ): Promise<Array<{ id: number; score: number }>> | Array<{ id: number; score: number }>;
+  save?: (filePath: string) => Promise<void> | void;
+  load?: (filePath: string) => Promise<void> | void;
+  clear?: () => void;
+}
+
+interface USearchWorkspaceAdapterTarget {
+  initialize(): Promise<void>;
+  add(vector: { id: string; embedding: number[] | Float32Array }): Promise<void>;
+  search(
+    query: number[] | Float32Array,
+    k: number
+  ): Promise<Array<{ id: string; score: number }>>;
+  save(path?: string): Promise<void>;
+  load(path: string): Promise<void>;
+  clear(): void;
+}
+
+class USearchWorkspaceIndex implements VectorIndexLike {
+  constructor(private readonly index: USearchWorkspaceAdapterTarget) {}
+
+  async add(id: number, vector: number[] | Float32Array): Promise<void> {
+    await this.index.add({ id: String(id), embedding: vector });
+  }
+
+  async search(
+    query: number[] | Float32Array,
+    k: number
+  ): Promise<Array<{ id: number; score: number }>> {
+    const results = await this.index.search(query, k);
+    return results.map((result) => ({ id: Number(result.id), score: result.score }));
+  }
+
+  async save(filePath: string): Promise<void> {
+    await this.index.save(filePath);
+  }
+
+  async load(filePath: string): Promise<void> {
+    await this.index.initialize();
+    await this.index.load(filePath);
+  }
+
+  clear(): void {
+    this.index.clear();
+  }
+}
+
 export interface WorkspaceIndexerConfig {
   workspaceRoot: string;
   indexPath: string;
@@ -86,7 +142,7 @@ export interface IndexEntry {
 export class WorkspaceIndexer extends EventEmitter {
   private config: WorkspaceIndexerConfig;
   private isIndexing = false;
-  private vectorIndex: any = null;
+  private vectorIndex: VectorIndexLike | null = null;
   private entries: Map<number, IndexEntry> = new Map();
   private embeddingProvider: EmbeddingProvider | null = null;
   private nextId = 0;
@@ -105,14 +161,16 @@ export class WorkspaceIndexer extends EventEmitter {
       
       try {
         const { USearchVectorIndex } = await import('../search/usearch-index.js');
-        this.vectorIndex = new USearchVectorIndex({ dimensions: dim });
+        this.vectorIndex = new USearchWorkspaceIndex(
+          new USearchVectorIndex({ dimensions: dim }),
+        );
       } catch {
         logger.debug('USearch not found, falling back to BruteForceIndex for Workspace');
         this.vectorIndex = new BruteForceIndex(dim);
       }
       
       await fs.ensureDir(path.dirname(this.config.indexPath));
-      this.loadIndexMetadata();
+      await this.loadIndexMetadata();
       
     } catch (err) {
       this.embeddingProvider = null;
@@ -121,38 +179,41 @@ export class WorkspaceIndexer extends EventEmitter {
     }
   }
   
-  private loadIndexMetadata() {
+  private async loadIndexMetadata(): Promise<void> {
       const metaPath = this.config.indexPath + '.meta.json';
       if (fs.existsSync(metaPath)) {
           try {
               const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
               this.entries = new Map(meta.entries);
               this.nextId = meta.nextId;
+              const vectorIndex = this.vectorIndex;
               
-              if (this.vectorIndex.load) {
-                  this.vectorIndex.load(this.config.indexPath);
+              if (vectorIndex?.load) {
+                  await vectorIndex.load(this.config.indexPath);
               }
               logger.info(`Loaded workspace index with ${this.entries.size} chunks.`);
-          } catch (e) {
+          } catch {
               logger.warn('Failed to load index metadata, starting fresh.');
           }
       }
   }
   
-  private saveIndexMetadata() {
+  private async saveIndexMetadata(): Promise<void> {
       const metaPath = this.config.indexPath + '.meta.json';
       const meta = {
           entries: Array.from(this.entries.entries()),
           nextId: this.nextId
       };
       fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
-      if (this.vectorIndex.save) {
-          this.vectorIndex.save(this.config.indexPath);
+      const vectorIndex = this.vectorIndex;
+      if (vectorIndex?.save) {
+          await vectorIndex.save(this.config.indexPath);
       }
   }
 
   async startIndexing(): Promise<void> {
     if (this.isIndexing || !this.embeddingProvider || !this.vectorIndex) return;
+    const vectorIndex = this.vectorIndex;
     this.isIndexing = true;
     this.emit('indexing:start');
     logger.info('Starting background workspace semantic indexing...');
@@ -171,8 +232,7 @@ export class WorkspaceIndexer extends EventEmitter {
       // For this PoC, we rebuild the index.
       this.entries.clear();
       this.nextId = 0;
-      if (this.vectorIndex.clear) this.vectorIndex.clear();
-      else if (this.vectorIndex instanceof BruteForceIndex) this.vectorIndex = new BruteForceIndex(384);
+      vectorIndex.clear?.();
 
       for (const file of files) {
         const fullPath = path.join(this.config.workspaceRoot, file);
@@ -193,7 +253,7 @@ export class WorkspaceIndexer extends EventEmitter {
                       chunkIndex: i,
                       text: chunks[i]
                   });
-                  this.vectorIndex.add(id, embeddings.embeddings[i]);
+                  await vectorIndex.add(id, embeddings.embeddings[i]);
                   totalChunks++;
               }
           }
@@ -205,12 +265,12 @@ export class WorkspaceIndexer extends EventEmitter {
               await new Promise(r => setTimeout(r, 10));
           }
           
-        } catch (fileErr) {
+        } catch {
             // Skip unreadable files
         }
       }
 
-      this.saveIndexMetadata();
+      await this.saveIndexMetadata();
       logger.info(`Workspace indexing complete: ${processedFiles} files, ${totalChunks} chunks.`);
       this.emit('indexing:complete', { files: processedFiles, chunks: totalChunks });
     } catch (err) {
@@ -240,7 +300,7 @@ export class WorkspaceIndexer extends EventEmitter {
       const queryEmbedding = await this.embeddingProvider.embed(query);
       if (!queryEmbedding) return [];
 
-      const results = this.vectorIndex.search(queryEmbedding, k);
+      const results = await this.vectorIndex.search(queryEmbedding.embedding, k);
 
       return results.map((r: { id: number; score: number }) => {
           const entry = this.entries.get(r.id);
