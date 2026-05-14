@@ -288,6 +288,10 @@ npm run build
 - Le meme loopback appelle maintenant vraiment `peer.chat` via ChatGPT Pro:
   prompt exact `Reply exactly: Fleet peer chat OK.` -> reponse
   `Fleet peer chat OK.`, `finishReason: stop`, traceId present.
+- Cowork renderer ne cree plus de sessions, reponses ou chemins de travail
+  factices quand `window.electronAPI` est absent. Le hook signale maintenant
+  explicitement que le bridge desktop est indisponible, et l'utilisateur ne voit
+  plus une conversation simulee comme si Code Buddy avait repondu.
 
 ## Blocage leve
 

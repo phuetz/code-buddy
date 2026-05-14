@@ -14,4 +14,17 @@ describe('useIPC session start error handling', () => {
     );
     expect(source).not.toContain('throw e;');
   });
+
+  it('does not synthesize browser-mode sessions, answers, or working directories', () => {
+    const source = fs.readFileSync(useIPCPath, 'utf8');
+
+    expect(source).toContain('Cowork desktop bridge unavailable');
+    expect(source).toContain('return null;');
+    expect(source).toContain('success: false');
+    expect(source).not.toContain('Mock response to:');
+    expect(source).not.toContain('mock-session-');
+    expect(source).not.toContain('mock-step-');
+    expect(source).not.toContain("'/mock/folder/path'");
+    expect(source).not.toContain("'/mock/working/dir'");
+  });
 });

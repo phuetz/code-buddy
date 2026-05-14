@@ -14,6 +14,16 @@ import i18n from '../i18n/config';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+const DESKTOP_BRIDGE_UNAVAILABLE =
+  'Cowork desktop bridge unavailable. Open the Electron app to run Code Buddy.';
+
+function notifyDesktopBridgeUnavailable(): void {
+  useAppStore.getState().setGlobalNotice({
+    id: `notice-desktop-bridge-${Date.now()}`,
+    type: 'error',
+    message: DESKTOP_BRIDGE_UNAVAILABLE,
+  });
+}
 
 export function useIPC() {
   // Handle incoming server events - only setup once
@@ -167,7 +177,7 @@ export function useIPC() {
               if (pending.length > 0) {
                 store.activateNextTurn(event.payload.sessionId, event.payload.step.id);
               } else if (activeTurn) {
-                // 绑定真实 stepId，避免 mock stepId 导致无法清理
+                // Bind the real stepId so the temporary pending turn can be cleared.
                 store.updateActiveTurnStep(event.payload.sessionId, event.payload.step.id);
               }
             }
@@ -542,7 +552,8 @@ export function useIPC() {
   // Send event to main process
   const send = useCallback((event: ClientEvent) => {
     if (!isElectron) {
-      console.log('[useIPC] Browser mode - would send:', event.type);
+      console.warn('[useIPC] Desktop bridge unavailable, cannot send:', event.type);
+      notifyDesktopBridgeUnavailable();
       return;
     }
     console.log('[useIPC] Sending:', event.type);
@@ -552,8 +563,9 @@ export function useIPC() {
   // Invoke and wait for response
   const invoke = useCallback(async <T>(event: ClientEvent): Promise<T> => {
     if (!isElectron) {
-      console.log('[useIPC] Browser mode - would invoke:', event.type);
-      return null as T;
+      console.warn('[useIPC] Desktop bridge unavailable, cannot invoke:', event.type);
+      notifyDesktopBridgeUnavailable();
+      throw new Error(DESKTOP_BRIDGE_UNAVAILABLE);
     }
     console.log('[useIPC] Invoking:', event.type);
     return window.electronAPI.invoke<T>(event);
@@ -581,62 +593,10 @@ export function useIPC() {
       const textContent = content.find((block) => block.type === 'text');
       const prompt = textContent && 'text' in textContent ? textContent.text : '';
 
-      // Browser mode mock
       if (!isElectron) {
-        const sessionId = `mock-session-${Date.now()}`;
-        const session: Session = {
-          id: sessionId,
-          title: title || 'New Session',
-          status: 'running',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          cwd: cwd || '',
-          projectId: projectId ?? null,
-          mountedPaths: [],
-          allowedTools: [
-            'webfetch',
-            'websearch',
-            'read',
-            'write',
-            'edit',
-            'list_directory',
-            'glob',
-            'grep',
-          ],
-          memoryEnabled: false,
-        };
-
-        addSession(session);
-        useAppStore.getState().setActiveSession(sessionId);
-
-        const userMessage: Message = {
-          id: `msg-user-${Date.now()}`,
-          sessionId,
-          role: 'user',
-          content,
-          timestamp: Date.now(),
-        };
-        addMessage(sessionId, userMessage);
-        startExecutionClock(sessionId, userMessage.timestamp);
-        const mockStepId = `mock-step-${Date.now()}`;
-        activateNextTurn(sessionId, mockStepId);
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        const assistantMessage: Message = {
-          id: `msg-assistant-${Date.now()}`,
-          sessionId,
-          role: 'assistant',
-          content: [{ type: 'text', text: `Mock response to: "${prompt}"` }],
-          timestamp: Date.now(),
-        };
-        addMessage(sessionId, assistantMessage);
-
-        updateSession(sessionId, { status: 'idle' });
-        clearActiveTurn(sessionId, mockStepId);
+        notifyDesktopBridgeUnavailable();
         setLoading(false);
-
-        return session;
+        return null;
       }
 
       // Electron mode
@@ -668,8 +628,8 @@ export function useIPC() {
           startExecutionClock(session.id, userMessage.timestamp);
 
           // Immediately activate turn to show processing indicator while waiting for API
-          const mockStepId = `pending-step-${Date.now()}`;
-          activateNextTurn(session.id, mockStepId);
+          const pendingStepId = `pending-step-${Date.now()}`;
+          activateNextTurn(session.id, pendingStepId);
         }
         // Loading will be reset when we receive session.status event
         return session;
@@ -688,10 +648,8 @@ export function useIPC() {
       invoke,
       addSession,
       addMessage,
-      updateSession,
       setLoading,
       activateNextTurn,
-      clearActiveTurn,
       startExecutionClock,
     ]
   );
@@ -712,7 +670,13 @@ export function useIPC() {
       const textContent = content.find((block) => block.type === 'text');
       const prompt = textContent && 'text' in textContent ? textContent.text : '';
 
-      // Immediately add user message to UI (for both modes)
+      if (!isElectron) {
+        notifyDesktopBridgeUnavailable();
+        setLoading(false);
+        return;
+      }
+
+      // Immediately add user message to UI in Electron mode.
       const store = useAppStore.getState();
       const isSessionRunning =
         store.sessions.find((session) => session.id === sessionId)?.status === 'running';
@@ -731,35 +695,11 @@ export function useIPC() {
       addMessage(sessionId, userMessage);
       startExecutionClock(sessionId, userMessage.timestamp);
 
-      // Browser mode mock
-      if (!isElectron) {
-        updateSession(sessionId, { status: 'running' });
-        const mockStepId = `mock-step-${Date.now()}`;
-        activateNextTurn(sessionId, mockStepId);
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        const assistantMessage: Message = {
-          id: `msg-assistant-${Date.now()}`,
-          sessionId,
-          role: 'assistant',
-          content: [{ type: 'text', text: `Mock response to: "${prompt}"` }],
-          timestamp: Date.now(),
-        };
-        addMessage(sessionId, assistantMessage);
-
-        updateSession(sessionId, { status: 'idle' });
-        clearActiveTurn(sessionId, mockStepId);
-        clearPendingTurns(sessionId);
-        setLoading(false);
-        return;
-      }
-
       // Electron mode - send to backend (user message already added above)
       // Immediately activate turn to show processing indicator while waiting for API
       if (!shouldQueue) {
-        const mockStepId = `pending-step-${Date.now()}`;
-        activateNextTurn(sessionId, mockStepId);
+        const pendingStepId = `pending-step-${Date.now()}`;
+        activateNextTurn(sessionId, pendingStepId);
       }
 
       try {
@@ -785,11 +725,8 @@ export function useIPC() {
     [
       send,
       addMessage,
-      updateSession,
       setLoading,
       activateNextTurn,
-      clearActiveTurn,
-      clearPendingTurns,
       startExecutionClock,
     ]
   );
@@ -911,14 +848,15 @@ export function useIPC() {
 
   const selectFolder = useCallback(async (): Promise<string | null> => {
     if (!isElectron) {
-      return '/mock/folder/path';
+      notifyDesktopBridgeUnavailable();
+      return null;
     }
     return invoke<string | null>({ type: 'folder.select', payload: {} });
   }, [invoke]);
 
   const getWorkingDir = useCallback(async (): Promise<string | null> => {
     if (!isElectron) {
-      return '/mock/working/dir';
+      return null;
     }
     return invoke<string | null>({ type: 'workdir.get', payload: {} });
   }, [invoke]);
@@ -929,7 +867,12 @@ export function useIPC() {
       currentPath?: string
     ): Promise<{ success: boolean; path: string; error?: string }> => {
       if (!isElectron) {
-        return { success: true, path: '/mock/working/dir' };
+        notifyDesktopBridgeUnavailable();
+        return {
+          success: false,
+          path: currentPath || '',
+          error: DESKTOP_BRIDGE_UNAVAILABLE,
+        };
       }
       return invoke<{ success: boolean; path: string; error?: string }>({
         type: 'workdir.select',
