@@ -2,8 +2,23 @@
  * Unit tests for ReasoningTool
  */
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { ReasoningTool } from '../../src/tools/reasoning-tool';
 import * as reasoningModule from '../../src/agent/reasoning/index';
+
+const testPaths = vi.hoisted(() => ({
+  tmpHome: '',
+}));
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  return {
+    ...actual,
+    homedir: () => testPaths.tmpHome || actual.homedir(),
+  };
+});
 
 // Mock reasoning module
 const mockSolve = jest.fn();
@@ -20,26 +35,31 @@ jest.mock('../../src/agent/reasoning/index', () => ({
   getTreeOfThoughtReasoner: jest.fn(function() { return mockReasoner; }),
 }));
 
-jest.mock('../../src/utils/provider-detector', () => ({
-  detectProviderFromEnv: jest.fn(function() {
-    return {
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    };
-  }),
-  selectModelForDetectedProvider: jest.fn(function(detected: { defaultModel: string }) {
-    return detected.defaultModel;
-  }),
-}));
-
 describe('ReasoningTool', () => {
+  const originalEnv = process.env;
   let tool: ReasoningTool;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env = { ...originalEnv };
+    process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+    delete process.env.CHATGPT_MODEL;
+    testPaths.tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'reasoning-tool-'));
+    const authDir = path.join(testPaths.tmpHome, '.codebuddy');
+    fs.mkdirSync(authDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(authDir, 'codex-auth.json'),
+      JSON.stringify({ tokens: { access_token: 'test-chatgpt-token' } }),
+    );
     tool = new ReasoningTool();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    if (testPaths.tmpHome) {
+      fs.rmSync(testPaths.tmpHome, { recursive: true, force: true });
+      testPaths.tmpHome = '';
+    }
   });
 
   describe('execute()', () => {
