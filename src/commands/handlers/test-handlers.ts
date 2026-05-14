@@ -11,6 +11,25 @@ export interface CommandHandlerResult {
   prompt?: string;
 }
 
+function getModelEnvForProvider(provider: ReturnType<typeof detectProviderFromEnv>): string | undefined {
+  switch (provider?.provider) {
+    case 'chatgpt':
+      return process.env.CHATGPT_MODEL;
+    case 'grok':
+      return process.env.GROK_MODEL;
+    case 'openai':
+      return process.env.OPENAI_MODEL;
+    case 'anthropic':
+      return process.env.ANTHROPIC_MODEL;
+    case 'gemini':
+      return process.env.GEMINI_MODEL;
+    case 'ollama':
+      return process.env.OLLAMA_MODEL;
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Generate Tests - Create test scaffolds
  */
@@ -82,7 +101,7 @@ Run \`buddy login chatgpt\` or configure a provider API key to run integration t
 
     const model = selectModelForDetectedProvider(
       provider,
-      process.env.GROK_MODEL || process.env.OPENAI_MODEL || process.env.CHATGPT_MODEL,
+      getModelEnvForProvider(provider),
     );
     client = new CodeBuddyClient(provider.apiKey, model, provider.baseURL);
   }

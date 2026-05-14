@@ -44,8 +44,15 @@ vi.mock('../../../src/testing/ai-integration-tests.js', () => ({
 }));
 
 describe('handleAITest provider detection', () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env = { ...originalEnv };
+    delete process.env.CHATGPT_MODEL;
+    delete process.env.GEMINI_MODEL;
+    delete process.env.GROK_MODEL;
+    delete process.env.OPENAI_MODEL;
     mocks.constructedClients.length = 0;
     mocks.detectProviderFromEnv.mockReturnValue(null);
     mocks.createAITestRunner.mockReturnValue({
@@ -56,6 +63,7 @@ describe('handleAITest provider detection', () => {
   });
 
   afterEach(() => {
+    process.env = originalEnv;
     vi.restoreAllMocks();
   });
 
@@ -93,5 +101,28 @@ describe('handleAITest provider detection', () => {
       expect.objectContaining({ skipExpensive: true }),
     );
     expect(result.entry?.content).toBe('formatted ai test results');
+  });
+
+  it('ignores stale model env vars from other providers', async () => {
+    process.env.OPENAI_MODEL = 'gpt-4o';
+    mocks.detectProviderFromEnv.mockReturnValue({
+      provider: 'gemini',
+      apiKey: 'gemini-key',
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+      defaultModel: 'gemini-2.5-flash',
+    });
+    const { handleAITest } = await import('../../../src/commands/handlers/test-handlers.js');
+
+    await handleAITest(['quick'], null);
+
+    expect(mocks.constructedClients[0]).toMatchObject({
+      apiKey: 'gemini-key',
+      model: 'gemini-2.5-flash',
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+    });
+    expect(mocks.selectModelForDetectedProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({ provider: 'gemini' }),
+      undefined,
+    );
   });
 });
