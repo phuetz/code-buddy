@@ -777,7 +777,7 @@ describe('AdvancedParallelExecutor (Multi-Agent)', () => {
       expect(handler).toHaveBeenCalledTimes(2);
     });
 
-    it('should emit agent:complete for successful agents', async () => {
+    it('should emit agent:complete for finished agents without a runner', async () => {
       const handler = jest.fn();
       executor.on('agent:complete', handler);
 
@@ -788,7 +788,8 @@ describe('AdvancedParallelExecutor (Multi-Agent)', () => {
       expect(handler).toHaveBeenCalledWith({
         result: expect.objectContaining({
           agentId: 'agent-1',
-          success: true,
+          success: false,
+          error: expect.stringContaining('No parallel agent runner configured'),
         }),
       });
     });

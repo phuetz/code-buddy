@@ -305,6 +305,9 @@ npm run build
 - Le service de localisation ne renvoie plus Paris comme fausse geolocalisation
   IP par defaut. La source `ip` exige maintenant `ipGeoApiUrl`; `gps` et
   `network` echouent explicitement tant qu'ils ne sont pas implementes.
+- `AdvancedParallelExecutor` ne simule plus des agents reussis avec
+  `Completed task`. Sans runner reel injecte, chaque tache echoue clairement;
+  avec un `agentRunner`, l'execution parallele utilise le resultat fourni.
 
 ## Blocage leve
 

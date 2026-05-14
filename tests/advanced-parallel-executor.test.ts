@@ -55,6 +55,31 @@ describe('AdvancedParallelExecutor', () => {
       const agentIds = results.map(r => r.agentId);
       expect(agentIds).toContain('agent1');
       expect(agentIds).toContain('agent2');
+      expect(results.every(r => !r.success)).toBe(true);
+      expect(results[0].error).toContain('No parallel agent runner configured');
+    });
+
+    it('should use a configured agent runner for real execution', async () => {
+      const runnerExecutor = new AdvancedParallelExecutor({
+        maxConcurrent: 2,
+        useWorktrees: false,
+        agentRunner: async (task) => ({
+          success: true,
+          output: `ran ${task.task}`,
+          tokensUsed: 12,
+          filesModified: ['src/example.ts'],
+        }),
+      });
+
+      const results = await runnerExecutor.executeParallel([
+        { id: 'agent1', name: 'Agent 1', task: 'Do task 1' },
+      ]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(true);
+      expect(results[0].output).toBe('ran Do task 1');
+      expect(results[0].tokensUsed).toBe(12);
+      expect(results[0].filesModified).toEqual(['src/example.ts']);
     });
 
     it('should handle priority ordering', async () => {

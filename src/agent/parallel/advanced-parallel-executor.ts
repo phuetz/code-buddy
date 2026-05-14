@@ -39,6 +39,19 @@ export interface AgentResult {
   worktree?: string;
 }
 
+interface AgentRunnerResult {
+  success: boolean;
+  output: string;
+  error?: string;
+  tokensUsed?: number;
+  filesModified?: string[];
+}
+
+export type ParallelAgentRunner = (
+  task: ParallelAgentConfig,
+  workdir: string
+) => Promise<AgentRunnerResult>;
+
 export interface ParallelExecutionConfig {
   maxConcurrent: number;
   useWorktrees: boolean;
@@ -47,6 +60,7 @@ export interface ParallelExecutionConfig {
   conflictResolution: 'first' | 'merge' | 'manual' | 'smart';
   timeout: number;
   workspaceRoot: string;
+  agentRunner?: ParallelAgentRunner;
 }
 
 export interface WorktreeInfo {
@@ -218,44 +232,42 @@ export class AdvancedParallelExecutor extends EventEmitter {
   }
 
   /**
-   * Run agent task (mock implementation - integrate with actual agent)
+   * Run agent task through the configured runner.
    */
   private async runAgentTask(
     task: ParallelAgentConfig,
-    _workdir: string
-  ): Promise<{
-    success: boolean;
-    output: string;
-    error?: string;
-    tokensUsed?: number;
-    filesModified?: string[];
-  }> {
-    // This should integrate with the actual CodeBuddyAgent
-    // For now, we simulate the execution
+    workdir: string
+  ): Promise<AgentRunnerResult> {
+    if (!this.config.agentRunner) {
+      return {
+        success: false,
+        output: '',
+        error:
+          'No parallel agent runner configured; AdvancedParallelExecutor cannot execute real agent tasks yet.',
+      };
+    }
 
-    return new Promise((resolve) => {
-      const timeout = task.timeout || this.config.timeout;
+    const timeout = task.timeout || this.config.timeout;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-      const timer = setTimeout(() => {
-        resolve({
-          success: false,
-          error: 'Task timed out',
-          output: '',
-        });
-      }, timeout);
-
-      // Simulate agent execution
-      // In real implementation, this would call the CodeBuddyAgent
-      setTimeout(() => {
+    try {
+      return await Promise.race([
+        this.config.agentRunner(task, workdir),
+        new Promise<AgentRunnerResult>((resolve) => {
+          timer = setTimeout(() => {
+            resolve({
+              success: false,
+              error: 'Task timed out',
+              output: '',
+            });
+          }, timeout);
+        }),
+      ]);
+    } finally {
+      if (timer) {
         clearTimeout(timer);
-        resolve({
-          success: true,
-          output: `Completed task: ${task.task}`,
-          tokensUsed: Math.floor(Math.random() * 1000) + 500,
-          filesModified: [],
-        });
-      }, 1000);
-    });
+      }
+    }
   }
 
   /**
