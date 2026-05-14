@@ -265,7 +265,7 @@ export async function checkVoiceAvailability(): Promise<{
     hasLocalWhisper(),
   ]);
 
-  const apiAvailable = !!process.env.OPENAI_API_KEY || !!process.env.GROK_API_KEY;
+  const apiAvailable = !!process.env.OPENAI_API_KEY;
 
   return {
     available: recording && (localWhisper || apiAvailable),

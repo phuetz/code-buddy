@@ -152,11 +152,22 @@ describe('ExtendedThinkingManager', () => {
 
 describe('PromptSuggestionEngine', () => {
   let PromptSuggestionEngine: typeof import('../../src/agent/prompt-suggestions').PromptSuggestionEngine;
+  let previousProvider: string | undefined;
 
   beforeEach(async () => {
+    previousProvider = process.env.CODEBUDDY_PROVIDER;
+    process.env.CODEBUDDY_PROVIDER = 'not-a-provider';
     jest.resetModules();
     const mod = await import('../../src/agent/prompt-suggestions');
     PromptSuggestionEngine = mod.PromptSuggestionEngine;
+  });
+
+  afterEach(() => {
+    if (previousProvider === undefined) {
+      delete process.env.CODEBUDDY_PROVIDER;
+    } else {
+      process.env.CODEBUDDY_PROVIDER = previousProvider;
+    }
   });
 
   it('should default to enabled', () => {

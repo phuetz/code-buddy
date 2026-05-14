@@ -77,12 +77,11 @@ export class OCRTool {
       if (hasTesseract) {
         return await this.runTesseract(resolvedPath, options);
       } else {
-        // Try alternative: use online OCR API if available
-        const codebuddyKey = process.env.GROK_API_KEY;
+        // Try alternative: use OpenAI vision OCR if an API key is available.
         const openaiKey = process.env.OPENAI_API_KEY;
 
-        if (codebuddyKey || openaiKey) {
-          return await this.runVisionOCR(resolvedPath, (openaiKey || codebuddyKey) as string);
+        if (openaiKey) {
+          return await this.runVisionOCR(resolvedPath, openaiKey);
         }
 
         return {

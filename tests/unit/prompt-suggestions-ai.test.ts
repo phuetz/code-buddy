@@ -1,29 +1,34 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const chatMock = vi.fn();
 
 vi.mock('../../src/codebuddy/client.js', () => ({
   CodeBuddyClient: vi.fn(class MockCodeBuddyClient {
+    constructor(
+      public apiKey: string,
+      public model?: string,
+      public baseURL?: string,
+    ) {}
+
     chat = chatMock;
   }),
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: vi.fn(() => ({
+    provider: 'chatgpt',
+    apiKey: 'oauth-chatgpt',
+    baseURL: 'https://chatgpt.com/backend-api/codex',
+    defaultModel: 'gpt-5.5',
+  })),
+  selectModelForDetectedProvider: vi.fn((detected: { defaultModel: string }) => detected.defaultModel),
 }));
 
 import { PromptSuggestionEngine } from '../../src/agent/prompt-suggestions.js';
 
 describe('PromptSuggestionEngine AI integration', () => {
-  const originalApiKey = process.env.GROK_API_KEY;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.GROK_API_KEY = 'test-key';
-  });
-
-  afterEach(() => {
-    if (originalApiKey === undefined) {
-      delete process.env.GROK_API_KEY;
-    } else {
-      process.env.GROK_API_KEY = originalApiKey;
-    }
   });
 
   it('parses AI-generated suggestions into a short deduplicated list', async () => {

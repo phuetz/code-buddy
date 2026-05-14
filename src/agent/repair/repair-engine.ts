@@ -100,13 +100,14 @@ export class RepairEngine extends EventEmitter {
   constructor(
     config: Partial<RepairConfig> = {},
     apiKey?: string,
-    baseURL?: string
+    baseURL?: string,
+    model?: string
   ) {
     super();
     this.config = { ...DEFAULT_REPAIR_CONFIG, ...config };
 
     if (apiKey) {
-      this.client = new CodeBuddyClient(apiKey, "grok-3-latest", baseURL);
+      this.client = new CodeBuddyClient(apiKey, model || 'grok-3-latest', baseURL);
     }
 
     this.faultLocalizer = createFaultLocalizer(
@@ -849,20 +850,34 @@ Please provide an improved fix that addresses the issues with the previous attem
 export function createRepairEngine(
   config?: Partial<RepairConfig>,
   apiKey?: string,
-  baseURL?: string
+  baseURL?: string,
+  model?: string
 ): RepairEngine {
-  return new RepairEngine(config, apiKey, baseURL);
+  return new RepairEngine(config, apiKey, baseURL, model);
 }
 
 // Singleton instance
 let repairEngineInstance: RepairEngine | null = null;
+let repairEngineKey: string | null = null;
+
+function buildRepairEngineKey(apiKey?: string, baseURL?: string, model?: string): string {
+  return JSON.stringify({
+    apiKey: apiKey ?? '',
+    baseURL: baseURL ?? '',
+    model: model ?? '',
+  });
+}
 
 export function getRepairEngine(
   apiKey?: string,
-  baseURL?: string
+  baseURL?: string,
+  model?: string
 ): RepairEngine {
-  if (!repairEngineInstance) {
-    repairEngineInstance = createRepairEngine({}, apiKey, baseURL);
+  const key = buildRepairEngineKey(apiKey, baseURL, model);
+  if (!repairEngineInstance || repairEngineKey !== key) {
+    repairEngineInstance?.dispose();
+    repairEngineInstance = createRepairEngine({}, apiKey, baseURL, model);
+    repairEngineKey = key;
   }
   return repairEngineInstance;
 }
@@ -872,4 +887,5 @@ export function resetRepairEngine(): void {
     repairEngineInstance.dispose();
   }
   repairEngineInstance = null;
+  repairEngineKey = null;
 }

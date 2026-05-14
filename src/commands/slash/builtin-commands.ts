@@ -1362,7 +1362,7 @@ const agentControlCommands: SlashCommand[] = [
   },
   {
     name: 'agents',
-    description: 'Multi-agent orchestration (run/plan/status/stop/strategy) — 4 specialised agents (orchestrator/coder/reviewer/tester), 5 strategies. Requires GROK_API_KEY.',
+    description: 'Multi-agent orchestration (run/plan/status/stop/strategy) — 4 specialised agents, 5 strategies. Uses the active Code Buddy provider.',
     prompt: '__AGENTS__',
     filePath: '',
     isBuiltin: true,

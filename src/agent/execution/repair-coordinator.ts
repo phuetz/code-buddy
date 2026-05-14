@@ -111,7 +111,8 @@ export class RepairCoordinator extends EventEmitter {
   constructor(
     config: Partial<RepairConfig> = {},
     private apiKey?: string,
-    private baseURL?: string
+    private baseURL?: string,
+    private model?: string
   ) {
     super();
     this.config = { ...DEFAULT_REPAIR_CONFIG, ...config };
@@ -125,7 +126,8 @@ export class RepairCoordinator extends EventEmitter {
       this.repairEngine = createRepairEngine(
         this.config.engineConfig,
         this.apiKey,
-        this.baseURL
+        this.baseURL,
+        this.model
       );
     }
     return this.repairEngine;
@@ -454,23 +456,37 @@ export class RepairCoordinator extends EventEmitter {
 export function createRepairCoordinator(
   config?: Partial<RepairConfig>,
   apiKey?: string,
-  baseURL?: string
+  baseURL?: string,
+  model?: string
 ): RepairCoordinator {
-  return new RepairCoordinator(config, apiKey, baseURL);
+  return new RepairCoordinator(config, apiKey, baseURL, model);
 }
 
 // Singleton instance for global access
 let coordinatorInstance: RepairCoordinator | null = null;
+let coordinatorKey: string | null = null;
+
+function buildCoordinatorKey(apiKey?: string, baseURL?: string, model?: string): string {
+  return JSON.stringify({
+    apiKey: apiKey ?? '',
+    baseURL: baseURL ?? '',
+    model: model ?? '',
+  });
+}
 
 /**
  * Get the global RepairCoordinator instance
  */
 export function getRepairCoordinator(
   apiKey?: string,
-  baseURL?: string
+  baseURL?: string,
+  model?: string
 ): RepairCoordinator {
-  if (!coordinatorInstance) {
-    coordinatorInstance = createRepairCoordinator({}, apiKey, baseURL);
+  const key = buildCoordinatorKey(apiKey, baseURL, model);
+  if (!coordinatorInstance || coordinatorKey !== key) {
+    coordinatorInstance?.dispose();
+    coordinatorInstance = createRepairCoordinator({}, apiKey, baseURL, model);
+    coordinatorKey = key;
   }
   return coordinatorInstance;
 }
@@ -483,6 +499,7 @@ export function resetRepairCoordinator(): void {
     coordinatorInstance.dispose();
   }
   coordinatorInstance = null;
+  coordinatorKey = null;
 }
 
 // Re-export types from repair module for convenience

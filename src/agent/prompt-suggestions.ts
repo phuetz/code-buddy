@@ -9,6 +9,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 
 type SuggestionMessage = {
   role: 'system' | 'user';
@@ -159,13 +160,17 @@ export class PromptSuggestionEngine {
       return this.client;
     }
 
-    const apiKey = process.env.GROK_API_KEY?.trim();
-    if (!apiKey) {
+    const provider = detectProviderFromEnv();
+    if (!provider) {
       return null;
     }
 
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
-    this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || 'grok-code-fast-1') as SuggestionClient;
+    this.client = new CodeBuddyClient(
+      provider.apiKey,
+      selectModelForDetectedProvider(provider),
+      provider.baseURL,
+    ) as SuggestionClient;
     return this.client;
   }
 

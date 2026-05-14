@@ -348,6 +348,15 @@ describe('RepairEngine', () => {
       expect(instance1).toBe(instance2);
     });
 
+    test('should rebuild singleton when provider model changes', () => {
+      resetRepairEngine();
+
+      const instance1 = getRepairEngine('test-key', 'https://api.x.ai/v1', 'grok-3-fast');
+      const instance2 = getRepairEngine('test-key', 'https://chatgpt.com/backend-api/codex', 'gpt-5.5');
+
+      expect(instance2).not.toBe(instance1);
+    });
+
     test('should reset singleton', () => {
       const instance1 = getRepairEngine();
       resetRepairEngine();

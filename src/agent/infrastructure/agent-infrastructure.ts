@@ -505,7 +505,7 @@ export async function createAgentInfrastructure(
     moltbotHooksManager: getMoltbotHooksManager(process.cwd()),
     modelRouter: getModelRouter(),
     marketplace: getPluginMarketplace(),
-    repairCoordinator: getRepairCoordinator(apiKey, baseURL),
+    repairCoordinator: getRepairCoordinator(apiKey, baseURL, model),
   };
 
   return new AgentInfrastructure(deps, config);
@@ -621,7 +621,7 @@ export function createAgentInfrastructureSync(
     moltbotHooksManager: getMoltbotHooksManager(process.cwd()),
     modelRouter: getModelRouter(),
     marketplace: getPluginMarketplace(),
-    repairCoordinator: getRepairCoordinator(options.apiKey, options.baseURL),
+    repairCoordinator: getRepairCoordinator(options.apiKey, options.baseURL, options.model),
   };
 
   return new AgentInfrastructure(deps, config);
