@@ -8,6 +8,10 @@ import { validateModel, getModelInfo } from "../utils/model-utils.js";
 import { getModelToolConfig } from "../config/model-tools.js";
 import { logger } from "../utils/logger.js";
 import { normalizeBaseURL, DEFAULT_BASE_URL } from "../utils/base-url.js";
+import {
+  inferProviderFromBaseURL,
+  selectModelForExplicitBaseURL,
+} from "../utils/provider-detector.js";
 import type { CircuitBreakerConfig } from "../providers/circuit-breaker.js";
 import { GeminiNativeProvider } from "./providers/provider-gemini-native.js";
 import { OpenAICompatProvider } from "./providers/provider-openai-compat.js";
@@ -235,6 +239,26 @@ export class CodeBuddyClient {
     return model.toLowerCase().includes('gemini');
   }
 
+  private resolveInitialModel(model?: string): string {
+    const provider = inferProviderFromBaseURL(this.baseURL);
+    if (!model?.trim() && provider === 'grok') {
+      return process.env.GROK_MODEL || this.currentModel;
+    }
+
+    const selected = selectModelForExplicitBaseURL(this.baseURL, model);
+
+    if (this.isGeminiProvider) {
+      if (selected && CodeBuddyClient.isGeminiModelName(selected)) return selected;
+      return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    }
+
+    if (this.isGeminiCliProvider) {
+      return selected || process.env.GEMINI_CLI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    }
+
+    return selected || model || this.currentModel;
+  }
+
   constructor(apiKey: string, model?: string, baseURL?: string) {
     // Validate API key
     if (!apiKey || typeof apiKey !== 'string') {
@@ -244,7 +268,12 @@ export class CodeBuddyClient {
       throw new Error('API key cannot be empty or whitespace only');
     }
 
-    const selectedBaseURL = baseURL ?? process.env.GROK_BASE_URL ?? DEFAULT_BASE_URL;
+    const selectedBaseURL = baseURL ??
+      (apiKey === CHATGPT_OAUTH_SENTINEL
+        ? CHATGPT_RESPONSES_BASE_URL
+        : apiKey === GEMINI_CLI_SENTINEL
+          ? GEMINI_CLI_BASE_URL
+          : process.env.GROK_BASE_URL ?? DEFAULT_BASE_URL);
     // Subprocess providers (gemini-cli) use synthetic baseURL strings that
     // don't pass URL validation. Skip normalization in that case — the
     // baseURL is informational only, the actual transport is the local
@@ -269,6 +298,8 @@ export class CodeBuddyClient {
     this.isGeminiCliProvider =
       apiKey === GEMINI_CLI_SENTINEL ||
       this.baseURL.startsWith('gemini-cli://');
+    const effectiveModel = this.resolveInitialModel(model);
+    this.currentModel = effectiveModel;
     const envGeminiTimeout = Number(
       process.env.CODEBUDDY_GEMINI_TIMEOUT_MS || process.env.CODEBUDDY_REQUEST_TIMEOUT_MS
     );
@@ -287,7 +318,7 @@ export class CodeBuddyClient {
     if (Number.isFinite(envMax) && envMax > 0) {
       this.defaultMaxTokens = envMax;
     } else {
-      const toolConfig = getModelToolConfig(model || this.currentModel);
+      const toolConfig = getModelToolConfig(effectiveModel);
       this.defaultMaxTokens = toolConfig.maxOutputTokens ?? 16384;
     }
 
@@ -299,7 +330,7 @@ export class CodeBuddyClient {
       this.geminiProvider = new GeminiNativeProvider({
         apiKey: this.apiKey,
         baseURL: this.baseURL,
-        model: model || this.currentModel,
+        model: effectiveModel,
         defaultMaxTokens: this.defaultMaxTokens,
         geminiRequestTimeoutMs: this.geminiRequestTimeoutMs,
         defaultThinkingLevel: this.defaultThinkingLevel,
@@ -320,7 +351,7 @@ export class CodeBuddyClient {
           const { getChatGptAuth } = await import('../providers/codex-oauth.js');
           return getChatGptAuth();
         },
-        model: model || this.currentModel,
+        model: effectiveModel,
         defaultMaxTokens: this.defaultMaxTokens,
       });
     } else if (this.isGeminiCliProvider) {
@@ -331,14 +362,14 @@ export class CodeBuddyClient {
       const binaryPath = process.env.GEMINI_CLI_PATH || 'gemini';
       this.geminiCliProvider = new GeminiCliProvider({
         binaryPath,
-        model: model || this.currentModel,
+        model: effectiveModel,
         defaultMaxTokens: this.defaultMaxTokens,
       });
     } else {
       this.openaiCompatProvider = new OpenAICompatProvider({
         apiKey: this.apiKey,
         baseURL: this.baseURL,
-        model: model || this.currentModel,
+        model: effectiveModel,
         defaultMaxTokens: this.defaultMaxTokens,
         // Read at call-time so changes from setCircuitBreakerConfig() propagate.
         getCircuitBreakerConfig: () => this.circuitBreakerConfig,
@@ -356,11 +387,8 @@ export class CodeBuddyClient {
       // leads to hard 404 errors at runtime.
       if (this.isGeminiProvider && !CodeBuddyClient.isGeminiModelName(model)) {
         logger.warn(
-          `Model '${model}' is incompatible with Gemini provider. Falling back to 'gemini-2.5-flash'.`
+          `Model '${model}' is incompatible with Gemini provider. Falling back to '${effectiveModel}'.`
         );
-        this.currentModel = 'gemini-2.5-flash';
-      } else {
-        this.currentModel = model;
       }
 
       // Log warning if model is not officially supported
