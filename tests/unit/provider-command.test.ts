@@ -3,28 +3,20 @@
  */
 
 import { vi } from 'vitest';
-
-const providerMocks = vi.hoisted(() => ({
-  detectProviderFromEnv: vi.fn(),
-}));
-
-jest.mock('../../src/utils/provider-detector', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderFromEnv,
-  selectModelForDetectedProvider: (
-    detected: { provider: string; defaultModel: string } | null,
-    configured?: string,
-  ) => {
-    if (!detected) return configured;
-    if (configured && !(detected.provider !== 'grok' && /^grok[-_]/i.test(configured))) {
-      return configured;
-    }
-    return detected.defaultModel;
-  },
-}));
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import { createProviderCommand } from '../../src/commands/provider';
 import { Command } from 'commander';
 import { logger } from '../../src/utils/logger';
+
+let tmpHome: string;
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => tmpHome };
+});
 
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -36,6 +28,33 @@ jest.mock('../../src/utils/logger', () => ({
 }));
 
 const loggerErrorSpy = logger.error as jest.Mock;
+
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+const envBackup: Record<string, string | undefined> = {};
+
+function writeChatGptAuth(): void {
+  const dir = path.join(tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
 
 // Mock settings manager
 jest.mock('../../src/utils/settings-manager', () => ({
@@ -56,8 +75,13 @@ describe('Provider Command', () => {
   let processExitSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-provider-command-'));
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'none';
     command = createProviderCommand();
-    providerMocks.detectProviderFromEnv.mockReturnValue(null);
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation(function() {
@@ -69,6 +93,11 @@ describe('Provider Command', () => {
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
     processExitSpy.mockRestore();
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
     jest.clearAllMocks();
   });
 
@@ -134,12 +163,8 @@ describe('Provider Command', () => {
     });
 
     it('should show detected ChatGPT subscription instead of stored Grok defaults', () => {
-      providerMocks.detectProviderFromEnv.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+      writeChatGptAuth();
 
       command.parse(['current'], { from: 'user' });
 
