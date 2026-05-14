@@ -299,6 +299,9 @@ npm run build
 - Les providers cloud `s3`, `gcs` et `azure` ne simulent plus des uploads/listes
   vides. Tant que les adaptateurs reels ne sont pas branches, la factory echoue
   explicitement; seul le provider `local` reste operationnel pour sync/backup.
+- `buddy nodes invoke` ne renvoie plus un succes `dispatched` sans transport
+  compagnon branche. Une invocation de node valide mais non cablee echoue
+  maintenant explicitement au lieu de masquer l'absence de WebSocket/device.
 
 ## Blocage leve
 

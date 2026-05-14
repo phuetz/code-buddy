@@ -296,13 +296,15 @@ export class NodeManager extends EventEmitter {
     const start = Date.now();
     logger.debug(`Node invoke: ${node.name} → ${invocation.capability}`, invocation.params);
 
-    // In production, this would send a WS message to the node and await response.
-    // For now, return a placeholder indicating the capability was dispatched.
     this.emit('node:invoke', { node, invocation });
 
+    const error =
+      `Node ${node.name} has no live transport for ${invocation.capability}; companion node invocation is not wired in this process.`;
+    logger.warn(error);
+
     return {
-      success: true,
-      data: { dispatched: true, capability: invocation.capability },
+      success: false,
+      error,
       durationMs: Date.now() - start,
     };
   }
