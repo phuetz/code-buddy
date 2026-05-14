@@ -2,6 +2,7 @@
  * Application Factory Tests
  */
 
+import { vi } from 'vitest';
 import {
   loadApiKey,
   loadBaseURL,
@@ -13,14 +14,29 @@ import {
   type CommandLineOptions,
 } from '../../src/app/index.js';
 
+const providerMocks = vi.hoisted(() => ({
+  mockDetectProvider: vi.fn(),
+}));
+const { mockDetectProvider } = providerMocks;
+
+const settingsMocks = vi.hoisted(() => {
+  const manager = {
+    loadUserSettings: vi.fn().mockReturnValue({}),
+    getApiKey: vi.fn().mockReturnValue('settings-api-key'),
+    getBaseURL: vi.fn().mockReturnValue('https://settings.api.com'),
+    getCurrentModel: vi.fn().mockReturnValue('settings-model'),
+    updateUserSetting: vi.fn(),
+  };
+
+  return {
+    manager,
+    getSettingsManager: vi.fn(() => manager),
+  };
+});
+
 // Mock dependencies
 jest.mock('../../src/utils/settings-manager.js', () => ({
-  getSettingsManager: jest.fn(function() { return {
-    loadUserSettings: jest.fn().mockReturnValue({}),
-    getApiKey: jest.fn().mockReturnValue('settings-api-key'),
-    getBaseURL: jest.fn().mockReturnValue('https://settings.api.com'),
-    getCurrentModel: jest.fn().mockReturnValue('settings-model'),
-  }; }),
+  getSettingsManager: settingsMocks.getSettingsManager,
 }));
 
 jest.mock('../../src/security/credential-manager.js', () => ({
@@ -52,12 +68,21 @@ jest.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
+jest.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.mockDetectProvider,
+}));
+
 describe('Application Factory', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+    mockDetectProvider.mockReturnValue(null);
+    settingsMocks.manager.loadUserSettings.mockReturnValue({});
+    settingsMocks.manager.getApiKey.mockReturnValue('settings-api-key');
+    settingsMocks.manager.getBaseURL.mockReturnValue('https://settings.api.com');
+    settingsMocks.manager.getCurrentModel.mockReturnValue('settings-model');
   });
 
   afterEach(() => {
@@ -67,6 +92,12 @@ describe('Application Factory', () => {
   describe('loadApiKey', () => {
     it('should prioritize environment variable', () => {
       process.env.GROK_API_KEY = 'env-api-key';
+      mockDetectProvider.mockReturnValue({
+        provider: 'grok',
+        apiKey: 'env-api-key',
+        baseURL: 'https://api.x.ai/v1',
+        defaultModel: 'grok-3-latest',
+      });
 
       const key = loadApiKey();
 
@@ -80,11 +111,28 @@ describe('Application Factory', () => {
 
       expect(key).toBe('settings-api-key');
     });
+
+    it('should use detected ChatGPT OAuth credentials', () => {
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadApiKey()).toBe('oauth-chatgpt');
+    });
   });
 
   describe('loadBaseURL', () => {
     it('should prioritize environment variable', () => {
       process.env.GROK_BASE_URL = 'https://env.api.com';
+      mockDetectProvider.mockReturnValue({
+        provider: 'grok',
+        apiKey: 'env-api-key',
+        baseURL: 'https://env.api.com',
+        defaultModel: 'grok-3-latest',
+      });
 
       const url = loadBaseURL();
 
@@ -97,6 +145,17 @@ describe('Application Factory', () => {
       const url = loadBaseURL();
 
       expect(url).toBe('https://settings.api.com');
+    });
+
+    it('should use detected ChatGPT base URL', () => {
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadBaseURL()).toBe('https://chatgpt.com/backend-api/codex');
     });
   });
 
@@ -115,6 +174,18 @@ describe('Application Factory', () => {
       const model = loadModel();
 
       expect(model).toBe('settings-model');
+    });
+
+    it('should use detected provider default when no env or settings model exists', () => {
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+      settingsMocks.manager.getCurrentModel.mockReturnValueOnce(undefined);
+
+      expect(loadModel()).toBe('gpt-5.5');
     });
   });
 
@@ -169,7 +240,7 @@ describe('Application Factory', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain(
-        'API key is required. Set GROK_API_KEY environment variable or use --api-key option.'
+        'Provider credentials are required. Run `buddy login chatgpt`, set a provider API key, or use --api-key.'
       );
     });
   });

@@ -29,8 +29,17 @@ const { mockManager, getSettingsManager } = vi.hoisted(() => {
   };
 });
 
+const providerMocks = vi.hoisted(() => ({
+  mockDetectProvider: vi.fn(),
+}));
+const { mockDetectProvider } = providerMocks;
+
 vi.mock('../../src/utils/settings-manager.js', () => ({
   getSettingsManager,
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.mockDetectProvider,
 }));
 
 describe('config-loader', () => {
@@ -43,6 +52,7 @@ describe('config-loader', () => {
     delete process.env.GROK_API_KEY;
     delete process.env.GROK_MODEL;
     delete process.env.GROK_BASE_URL;
+    mockDetectProvider.mockReturnValue(null);
   });
 
   afterAll(() => {
@@ -80,6 +90,19 @@ describe('config-loader', () => {
       expect(mockManager.getApiKey).toHaveBeenCalled();
     });
 
+    it('should return detected ChatGPT OAuth key before settings', () => {
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+      mockManager.getApiKey.mockReturnValue('settings-key');
+
+      expect(loadApiKey()).toBe('oauth-chatgpt');
+      expect(mockManager.getApiKey).not.toHaveBeenCalled();
+    });
+
     it('should return undefined when no API key is set', () => {
       mockManager.getApiKey.mockReturnValue(undefined);
 
@@ -98,6 +121,19 @@ describe('config-loader', () => {
 
       expect(result).toBe(expectedURL);
       expect(mockManager.getBaseURL).toHaveBeenCalled();
+    });
+
+    it('should return detected ChatGPT base URL before settings', () => {
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+      mockManager.getBaseURL.mockReturnValue('https://settings.example');
+
+      expect(loadBaseURL()).toBe('https://chatgpt.com/backend-api/codex');
+      expect(mockManager.getBaseURL).not.toHaveBeenCalled();
     });
 
     it('should return default URL when not configured', () => {
@@ -140,6 +176,19 @@ describe('config-loader', () => {
       const result = loadModel();
 
       expect(result).toBeUndefined();
+    });
+
+    it('should return detected provider model when env and settings are absent', () => {
+      delete process.env.GROK_MODEL;
+      mockManager.getCurrentModel.mockReturnValue(undefined);
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadModel()).toBe('gpt-5.5');
     });
 
     it('should handle settings manager errors gracefully', () => {
@@ -345,7 +394,7 @@ describe('config-loader', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('API key required');
+      expect(result.errors[0]).toContain('Provider credentials required');
     });
 
     it('should return invalid when API key is empty string', () => {
@@ -373,7 +422,7 @@ describe('config-loader', () => {
 
       const result = validateConfig(config);
 
-      expect(result.errors[0]).toContain('GROK_API_KEY');
+      expect(result.errors[0]).toContain('buddy login chatgpt');
       expect(result.errors[0]).toContain('--api-key');
       expect(result.errors[0]).toContain('~/.codebuddy/user-settings.json');
     });

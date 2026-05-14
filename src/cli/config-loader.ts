@@ -8,6 +8,7 @@
  */
 
 import { getSettingsManager } from '../utils/settings-manager.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 
 export interface CLIConfig {
   apiKey?: string;
@@ -34,6 +35,9 @@ export function ensureUserSettingsDirectory(): void {
  * Load API key from environment or user settings
  */
 export function loadApiKey(): string | undefined {
+  const detected = detectProviderFromEnv();
+  if (detected) return detected.apiKey;
+
   const manager = getSettingsManager();
   return manager.getApiKey();
 }
@@ -42,6 +46,9 @@ export function loadApiKey(): string | undefined {
  * Load base URL from environment or user settings
  */
 export function loadBaseURL(): string {
+  const detected = detectProviderFromEnv();
+  if (detected) return detected.baseURL;
+
   const manager = getSettingsManager();
   return manager.getBaseURL();
 }
@@ -63,7 +70,7 @@ export function loadModel(): string | undefined {
     }
   }
 
-  return model;
+  return model || detectProviderFromEnv()?.defaultModel;
 }
 
 /**
@@ -118,7 +125,7 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
 
   if (!config.apiKey) {
     errors.push(
-      'API key required. Set GROK_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json'
+      'Provider credentials required. Run `buddy login chatgpt`, set a provider API key, use --api-key, or save to ~/.codebuddy/user-settings.json'
     );
   }
 

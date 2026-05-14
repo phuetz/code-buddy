@@ -11,6 +11,7 @@ import { getCredentialManager } from '../security/credential-manager.js';
 import { getCrashHandler } from '../errors/crash-handler.js';
 import { disposeAll } from '../utils/disposable.js';
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 import type { ApplicationConfig, CommandLineOptions } from './types.js';
 
 // ============================================================================
@@ -29,6 +30,9 @@ export function loadEnvironment(): void {
  * Priority: environment > secure credential storage > legacy settings
  */
 export function loadApiKey(): string | undefined {
+  const detected = detectProviderFromEnv();
+  if (detected) return detected.apiKey;
+
   // Check environment first
   const envKey = process.env.GROK_API_KEY;
   if (envKey) return envKey;
@@ -47,6 +51,9 @@ export function loadApiKey(): string | undefined {
  * Load base URL from settings or environment
  */
 export function loadBaseURL(): string {
+  const detected = detectProviderFromEnv();
+  if (detected) return detected.baseURL;
+
   const envURL = process.env.GROK_BASE_URL;
   if (envURL) return envURL;
 
@@ -63,10 +70,13 @@ export function loadModel(): string | undefined {
 
   try {
     const manager = getSettingsManager();
-    return manager.getCurrentModel();
+    const configured = manager.getCurrentModel();
+    if (configured) return configured;
   } catch {
-    return undefined;
+    // Fall through to provider default.
   }
+
+  return detectProviderFromEnv()?.defaultModel;
 }
 
 /**
@@ -161,7 +171,7 @@ export function validateConfig(config: ApplicationConfig): { valid: boolean; err
   const errors: string[] = [];
 
   if (!config.apiKey) {
-    errors.push('API key is required. Set GROK_API_KEY environment variable or use --api-key option.');
+    errors.push('Provider credentials are required. Run `buddy login chatgpt`, set a provider API key, or use --api-key.');
   }
 
   return {
