@@ -1,7 +1,7 @@
 /**
  * /agents slash handler tests (MultiAgentSystem wake — top 4 audit OpenClaw).
  *
- * Covers: action validation, status output, env GROK_API_KEY guard,
+ * Covers: action validation, status output, provider guard,
  * fire-and-forget run lifecycle (single workflow at a time), strategy
  * setter validation, stop/disable propagation.
  *
@@ -60,6 +60,7 @@ const mocks = vi.hoisted(() => {
   }));
   const fakeRegistry = { getStats: getStatsMock };
   const getSessionRegistryMock = vi.fn(() => fakeRegistry);
+  const detectProviderMock = vi.fn();
 
   return {
     runWorkflowMock, stopMock, disposeMock, onMock, listenerCountMock, removeAllListenersMock,
@@ -69,6 +70,7 @@ const mocks = vi.hoisted(() => {
     isPersistenceEnabledMock, getMetricsSavedAtMock,
     fakeCoordinator, getEnhancedCoordinatorMock,
     getStatsMock, fakeRegistry, getSessionRegistryMock,
+    detectProviderMock,
   };
 });
 
@@ -83,6 +85,10 @@ vi.mock('../../src/agent/multi-agent/enhanced-coordination.js', () => ({
 
 vi.mock('../../src/agent/multi-agent/session-registry.js', () => ({
   getSessionRegistry: mocks.getSessionRegistryMock,
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: mocks.detectProviderMock,
 }));
 
 // Phase G — workflow persistence mocks
@@ -101,11 +107,14 @@ vi.mock('../../src/agent/multi-agent/workflow-persistence.js', () => ({
 import { handleAgents, _resetAgentsHandlerForTests } from '../../src/commands/handlers/agents-handler.js';
 
 describe('handleAgents (/agents)', () => {
-  const originalApiKey = process.env.GROK_API_KEY;
-
   beforeEach(() => {
-    process.env.GROK_API_KEY = 'test-key';
     _resetAgentsHandlerForTests();
+    mocks.detectProviderMock.mockReset().mockReturnValue({
+      provider: 'grok',
+      apiKey: 'test-key',
+      baseURL: undefined,
+      defaultModel: 'grok-3-latest',
+    });
     mocks.runWorkflowMock.mockReset();
     mocks.stopMock.mockReset();
     mocks.disposeMock.mockReset();
@@ -133,8 +142,6 @@ describe('handleAgents (/agents)', () => {
   });
 
   afterEach(() => {
-    if (originalApiKey === undefined) delete process.env.GROK_API_KEY;
-    else process.env.GROK_API_KEY = originalApiKey;
     _resetAgentsHandlerForTests();
   });
 
@@ -179,10 +186,26 @@ describe('handleAgents (/agents)', () => {
     expect(r.entry?.content).toContain('already enabled');
   });
 
-  it('enable without GROK_API_KEY returns clear error', async () => {
-    delete process.env.GROK_API_KEY;
+  it('enable without a detected provider returns clear error', async () => {
+    mocks.detectProviderMock.mockReturnValue(null);
     const r = await handleAgents(['enable']);
-    expect(r.entry?.content).toContain('GROK_API_KEY is not set');
+    expect(r.entry?.content).toContain('no LLM provider configured');
+  });
+
+  it('enable uses ChatGPT Codex OAuth when detected', async () => {
+    mocks.detectProviderMock.mockReturnValue({
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    });
+
+    await handleAgents(['enable']);
+
+    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith(
+      'oauth-chatgpt',
+      'https://chatgpt.com/backend-api/codex'
+    );
   });
 
   it('disable resets the system when enabled', async () => {
@@ -306,7 +329,7 @@ describe('handleAgents (/agents)', () => {
   // ────────────────────────────────────────────────────────────
 
   it('metrics returns coordinator performance report (no apiKey needed)', async () => {
-    delete process.env.GROK_API_KEY;
+    mocks.detectProviderMock.mockReturnValue(null);
     const r = await handleAgents(['metrics']);
     expect(r.entry?.content).toContain('Performance Report');
     expect(mocks.getEnhancedCoordinatorMock).toHaveBeenCalled();
@@ -335,7 +358,7 @@ describe('handleAgents (/agents)', () => {
   });
 
   it('conflicts returns empty message + Phase H V0.3 hint when none detected', async () => {
-    delete process.env.GROK_API_KEY;
+    mocks.detectProviderMock.mockReturnValue(null);
     const r = await handleAgents(['conflicts']);
     expect(r.entry?.content).toContain('No conflicts detected');
     // Phase H rewrote the empty-state message to point at the new V0.3 wiring
@@ -354,7 +377,7 @@ describe('handleAgents (/agents)', () => {
   });
 
   it('sessions returns registry stats (no apiKey needed)', async () => {
-    delete process.env.GROK_API_KEY;
+    mocks.detectProviderMock.mockReturnValue(null);
     const r = await handleAgents(['sessions']);
     expect(r.entry?.content).toContain('Session Registry Stats');
     expect(r.entry?.content).toContain('Total sessions:   0');

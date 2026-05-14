@@ -18,8 +18,8 @@
  *   /agents strategy <name>        — set default strategy for next run
  *
  * **V0.1 design decisions** (see plan idempotent-meandering-giraffe.md):
- * - apiKey from `process.env.GROK_API_KEY` (think-handlers.ts pattern).
- *   V0.2 = inject the configured Code Buddy client via `setAgentsClient`.
+ * - Provider config from `detectProviderFromEnv()` so subscription auth
+ *   (ChatGPT Codex OAuth, Gemini CLI) works without a provider API key.
  * - Fire-and-forget for `run`: singleton + 1 workflow at a time. If user
  *   `run`s while one is active → refuse politely.
  * - Events forwarded to logger.info (visible in ~/.codebuddy/logs/).
@@ -34,6 +34,7 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import type { CollaborationStrategy, WorkflowResult, WorkflowEvent, AgentTask, AgentExecutionResult } from '../../agent/multi-agent/types.js';
 import type { PersistedWorkflow } from '../../agent/multi-agent/workflow-persistence.js';
 
@@ -86,7 +87,7 @@ Configure defaults in TOML under [multi_agent_system]:
 
 Cost note: a workflow runs 4 agents (orchestrator + coder + reviewer + tester)
 with up to N iterations of LLM calls each. Use /agents plan first to preview.
-Requires GROK_API_KEY env var.`;
+Requires a configured provider (run \`buddy login chatgpt\` or set a provider API key).`;
 
 let agentsEnabled = false;
 let activeStrategy: CollaborationStrategy = 'hierarchical';
@@ -328,10 +329,9 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       return textResult('No active workflow to stop.');
     }
     const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-    const apiKey = process.env.GROK_API_KEY ?? '';
-    const baseURL = process.env.GROK_BASE_URL;
-    if (apiKey) {
-      const system = getMultiAgentSystem(apiKey, baseURL);
+    const provider = detectProviderFromEnv();
+    if (provider) {
+      const system = getMultiAgentSystem(provider.apiKey, provider.baseURL);
       system.stop();
     }
     const stoppedGoal = activeWorkflow.goal;
@@ -434,12 +434,15 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     }
   }
 
-  // From here on (enable/run/plan), apiKey is needed — pattern from think-handlers.ts L210
-  const apiKey = process.env.GROK_API_KEY ?? '';
-  const baseURL = process.env.GROK_BASE_URL;
-  if (!apiKey) {
-    return textResult('Error: GROK_API_KEY is not set. Cannot run multi-agent workflow.');
+  // From here on (enable/run/plan/resume), an LLM provider is needed.
+  const provider = detectProviderFromEnv();
+  if (!provider) {
+    return textResult(
+      'Error: no LLM provider configured. Run `buddy login chatgpt` or set a provider API key.'
+    );
   }
+  const apiKey = provider.apiKey;
+  const baseURL = provider.baseURL;
 
   const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
 

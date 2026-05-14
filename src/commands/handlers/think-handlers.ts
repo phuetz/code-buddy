@@ -16,6 +16,7 @@ import {
   getTreeOfThoughtReasoner,
   TreeOfThoughtReasoner,
 } from '../../agent/reasoning/tree-of-thought.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 // ── Module-level state ──────────────────────────────────────────────────
 
@@ -207,23 +208,22 @@ async function runReasoning(
   problemText: string,
 ): Promise<CommandHandlerResult> {
   const mode = activeThinkingMode ?? 'medium';
-  const apiKey = process.env.GROK_API_KEY ?? '';
-  const baseURL = process.env.GROK_BASE_URL;
+  const provider = detectProviderFromEnv();
 
-  if (!apiKey) {
+  if (!provider) {
     return {
       handled: true,
       entry: {
         type: 'assistant',
-        content: 'Error: GROK_API_KEY is not set. Cannot run reasoning.',
+        content: 'Error: no LLM provider configured. Run `buddy login chatgpt` or set a provider API key.',
         timestamp: new Date(),
       },
     };
   }
 
   const reasoner: TreeOfThoughtReasoner = getTreeOfThoughtReasoner(
-    apiKey,
-    baseURL,
+    provider.apiKey,
+    provider.baseURL,
     { mode },
   );
   reasoner.setMode(mode);

@@ -4,6 +4,7 @@
  * Covers help text, mode toggling, status display, and problem-solving paths.
  */
 
+import { vi } from 'vitest';
 import {
   handleThink,
   getActiveThinkingMode,
@@ -15,6 +16,10 @@ const mockSolve = jest.fn();
 const mockChainOfThought = jest.fn();
 const mockSetMode = jest.fn();
 const mockFormatResult = jest.fn();
+const providerMocks = vi.hoisted(() => ({
+  mockDetectProvider: vi.fn(),
+}));
+const { mockDetectProvider } = providerMocks;
 
 jest.mock('../../src/agent/reasoning/tree-of-thought.js', () => ({
   getTreeOfThoughtReasoner: jest.fn(function() { return {
@@ -26,11 +31,21 @@ jest.mock('../../src/agent/reasoning/tree-of-thought.js', () => ({
   TreeOfThoughtReasoner: jest.fn(),
 }));
 
+jest.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.mockDetectProvider,
+}));
+
 describe('think-handlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset thinking mode before each test
     setActiveThinkingMode(null);
+    mockDetectProvider.mockReturnValue({
+      provider: 'grok',
+      apiKey: 'test-key-123',
+      baseURL: undefined,
+      defaultModel: 'grok-3-latest',
+    });
   });
 
   // ── /think (no args) ─────────────────────────────────────────────────
@@ -189,28 +204,18 @@ describe('think-handlers', () => {
     });
   });
 
-  // ── /think <problem> — problem solving (no API key) ───────────────────
+  // ── /think <problem> — problem solving (no provider) ──────────────────
 
-  describe('handleThink with problem text (no API key)', () => {
-    const originalEnv = process.env.GROK_API_KEY;
-
+  describe('handleThink with problem text (no provider)', () => {
     beforeEach(() => {
-      delete process.env.GROK_API_KEY;
+      mockDetectProvider.mockReturnValue(null);
     });
 
-    afterEach(() => {
-      if (originalEnv !== undefined) {
-        process.env.GROK_API_KEY = originalEnv;
-      } else {
-        delete process.env.GROK_API_KEY;
-      }
-    });
-
-    it('returns an error when GROK_API_KEY is not set', async () => {
+    it('returns an error when no provider is detected', async () => {
       const result = await handleThink(['how', 'do', 'I', 'center', 'a', 'div?']);
 
       expect(result.handled).toBe(true);
-      expect(result.entry!.content).toContain('GROK_API_KEY');
+      expect(result.entry!.content).toContain('no LLM provider configured');
       expect(result.entry!.timestamp).toBeInstanceOf(Date);
     });
 
@@ -218,8 +223,8 @@ describe('think-handlers', () => {
       const result = await handleThink(['invalidmode', 'some', 'text']);
 
       expect(result.handled).toBe(true);
-      // Without API key it should fail with the API key error
-      expect(result.entry!.content).toContain('GROK_API_KEY');
+      // Without a provider it should fail with the provider setup error
+      expect(result.entry!.content).toContain('no LLM provider configured');
       expect(result.entry!.timestamp).toBeInstanceOf(Date);
     });
   });
@@ -227,18 +232,8 @@ describe('think-handlers', () => {
   // ── /think <mode> <problem> — mode + problem ──────────────────────────
 
   describe('handleThink with mode and problem text', () => {
-    const originalEnv = process.env.GROK_API_KEY;
-
     beforeEach(() => {
-      delete process.env.GROK_API_KEY;
-    });
-
-    afterEach(() => {
-      if (originalEnv !== undefined) {
-        process.env.GROK_API_KEY = originalEnv;
-      } else {
-        delete process.env.GROK_API_KEY;
-      }
+      mockDetectProvider.mockReturnValue(null);
     });
 
     it('sets mode AND attempts to solve when given mode + problem', async () => {
@@ -247,28 +242,14 @@ describe('think-handlers', () => {
       expect(result.handled).toBe(true);
       // Mode should be set even though solving will fail
       expect(getActiveThinkingMode()).toBe('deep');
-      // Without API key it should fail
-      expect(result.entry!.content).toContain('GROK_API_KEY');
+      // Without a provider it should fail
+      expect(result.entry!.content).toContain('no LLM provider configured');
     });
   });
 
-  // ── /think <mode> <problem> — with mock API key ───────────────────────
+  // ── /think <mode> <problem> — with mock provider ─────────────────────
 
   describe('handleThink with problem solving (mocked API)', () => {
-    const originalEnv = process.env.GROK_API_KEY;
-
-    beforeEach(() => {
-      process.env.GROK_API_KEY = 'test-key-123';
-    });
-
-    afterEach(() => {
-      if (originalEnv !== undefined) {
-        process.env.GROK_API_KEY = originalEnv;
-      } else {
-        delete process.env.GROK_API_KEY;
-      }
-    });
-
     it('runs chain-of-thought for shallow mode with problem text', async () => {
       mockChainOfThought.mockResolvedValue({
         steps: [{ step: 1, thought: 'think about it', action: 'none', observation: 'ok' }],
@@ -284,6 +265,42 @@ describe('think-handlers', () => {
       expect(result.entry!.content).toContain('the answer');
       expect(result.entry!.content).toContain('90%');
       expect(result.entry!.timestamp).toBeInstanceOf(Date);
+    });
+
+    it('passes ChatGPT Codex OAuth transport into the reasoner', async () => {
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+      mockSolve.mockResolvedValue({
+        success: true,
+        solution: { content: 'solution', metadata: {} },
+        path: [],
+        alternatives: [],
+        stats: {
+          iterations: 1,
+          nodesCreated: 1,
+          nodesEvaluated: 1,
+          nodesRefined: 0,
+          maxDepthReached: 1,
+          totalTime: 100,
+          bestScore: 0.9,
+          tokensUsed: 10,
+        },
+        tree: { id: 'root', content: 'root' },
+      });
+      mockFormatResult.mockReturnValue('ok');
+
+      await handleThink(['deep', 'problem']);
+
+      const { getTreeOfThoughtReasoner } = await import('../../src/agent/reasoning/tree-of-thought.js');
+      expect(getTreeOfThoughtReasoner).toHaveBeenCalledWith(
+        'oauth-chatgpt',
+        'https://chatgpt.com/backend-api/codex',
+        { mode: 'deep' }
+      );
     });
 
     it('runs full tree-of-thought for non-shallow modes', async () => {
