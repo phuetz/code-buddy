@@ -13,6 +13,7 @@
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 
 // ============================================================================
 // Types
@@ -188,13 +189,13 @@ export class SmartHookRunner {
 
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
-      if (!apiKey) {
-        logger.warn('No GROK_API_KEY set, prompt hook returning rendered prompt', { source: 'SmartHookRunner' });
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        logger.warn('No AI provider configured, prompt hook returning rendered prompt', { source: 'SmartHookRunner' });
         return { ok: true, output: renderedPrompt };
       }
 
-      const client = new CodeBuddyClient(apiKey);
+      const client = new CodeBuddyClient(provider.apiKey, hook.model || provider.defaultModel, provider.baseURL);
       const response = await client.chat(
         [{ role: 'user', content: renderedPrompt }],
         [],
@@ -232,13 +233,13 @@ export class SmartHookRunner {
 
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
-      if (!apiKey) {
-        logger.warn('No GROK_API_KEY set, agent hook returning rendered prompt', { source: 'SmartHookRunner' });
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        logger.warn('No AI provider configured, agent hook returning rendered prompt', { source: 'SmartHookRunner' });
         return { ok: true, output: renderedPrompt };
       }
 
-      const client = new CodeBuddyClient(apiKey);
+      const client = new CodeBuddyClient(provider.apiKey, hook.model || provider.defaultModel, provider.baseURL);
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         { role: 'system', content: renderedPrompt },
         { role: 'user', content: `Context:\n${JSON.stringify(input, null, 2)}\n\nEvaluate this context and respond with your decision. Include "ALLOW" or "DENY" in your response.` },

@@ -12,6 +12,7 @@
 
 import { spawn } from 'child_process';
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 
 // ============================================================================
 // Types
@@ -204,13 +205,13 @@ export class AdvancedHookRunner {
 
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
-      if (!apiKey) {
-        logger.warn(`Prompt hook "${hook.name}": no GROK_API_KEY, allowing`, { source: 'AdvancedHookRunner' });
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        logger.warn(`Prompt hook "${hook.name}": no AI provider configured, allowing`, { source: 'AdvancedHookRunner' });
         return { action: 'allow', additionalContext: hook.prompt };
       }
 
-      const client = new CodeBuddyClient(apiKey);
+      const client = new CodeBuddyClient(provider.apiKey, provider.defaultModel, provider.baseURL);
       const prompt = `${hook.prompt}\n\nContext:\n${JSON.stringify(context, null, 2)}\n\nRespond with exactly one of: ALLOW, DENY, or ASK. Then explain your reasoning.`;
 
       const response = await client.chat([{ role: 'user', content: prompt }], []);
@@ -234,13 +235,13 @@ export class AdvancedHookRunner {
   private async runAgentHook(hook: AdvancedHook, context: HookContext): Promise<HookDecision> {
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
-      if (!apiKey) {
-        logger.warn(`Agent hook "${hook.name}": no GROK_API_KEY, allowing`, { source: 'AdvancedHookRunner' });
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        logger.warn(`Agent hook "${hook.name}": no AI provider configured, allowing`, { source: 'AdvancedHookRunner' });
         return { action: 'allow' };
       }
 
-      const client = new CodeBuddyClient(apiKey);
+      const client = new CodeBuddyClient(provider.apiKey, provider.defaultModel, provider.baseURL);
       const systemPrompt = hook.prompt || `You are a security evaluation agent for hook "${hook.name}".`;
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         { role: 'system', content: systemPrompt },

@@ -231,7 +231,8 @@ export class Subagent extends EventEmitter {
   constructor(
     apiKey: string,
     config: SubagentConfig,
-    baseURL?: string
+    baseURL?: string,
+    defaultModel?: string
   ) {
     super();
     this.config = {
@@ -239,11 +240,22 @@ export class Subagent extends EventEmitter {
       timeout: 300000,  // 5 minutes default
       ...config,
     };
+    const model = this.resolveModel(this.config.model, defaultModel);
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || "grok-code-fast-1",
+      model,
       baseURL
     );
+  }
+
+  private resolveModel(configModel?: string, defaultModel?: string): string {
+    if (!configModel) {
+      return defaultModel || "grok-code-fast-1";
+    }
+    if (defaultModel && configModel.startsWith("grok-") && !defaultModel.startsWith("grok-")) {
+      return defaultModel;
+    }
+    return configModel;
   }
 
   async run(
@@ -424,12 +436,14 @@ export class Subagent extends EventEmitter {
 export class SubagentManager {
   private apiKey: string;
   private baseURL?: string;
+  private defaultModel?: string;
   private runningAgents: Map<string, Subagent> = new Map();
   private customConfigs: Map<string, SubagentConfig> = new Map();
 
-  constructor(apiKey: string, baseURL?: string) {
+  constructor(apiKey: string, baseURL?: string, defaultModel?: string) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
+    this.defaultModel = defaultModel;
   }
 
   registerSubagent(config: SubagentConfig): void {
@@ -457,7 +471,7 @@ export class SubagentManager {
       return null;
     }
 
-    const agent = new Subagent(this.apiKey, config, this.baseURL);
+    const agent = new Subagent(this.apiKey, config, this.baseURL, this.defaultModel);
     this.runningAgents.set(`${name}-${Date.now()}`, agent);
     return agent;
   }
@@ -763,13 +777,18 @@ export class ParallelSubagentRunner extends EventEmitter {
 // Singleton instance
 let subagentManagerInstance: SubagentManager | null = null;
 let parallelRunnerInstance: ParallelSubagentRunner | null = null;
+let subagentManagerKey: string | null = null;
 
 export function getSubagentManager(
   apiKey: string,
-  baseURL?: string
+  baseURL?: string,
+  defaultModel?: string
 ): SubagentManager {
-  if (!subagentManagerInstance) {
-    subagentManagerInstance = new SubagentManager(apiKey, baseURL);
+  const key = `${apiKey}\0${baseURL || ""}\0${defaultModel || ""}`;
+  if (!subagentManagerInstance || subagentManagerKey !== key) {
+    subagentManagerInstance = new SubagentManager(apiKey, baseURL, defaultModel);
+    subagentManagerKey = key;
+    parallelRunnerInstance = null;
   }
   return subagentManagerInstance;
 }
@@ -777,10 +796,11 @@ export function getSubagentManager(
 export function getParallelSubagentRunner(
   apiKey: string,
   baseURL?: string,
+  defaultModel?: string,
   maxConcurrent: number = 10
 ): ParallelSubagentRunner {
+  const manager = getSubagentManager(apiKey, baseURL, defaultModel);
   if (!parallelRunnerInstance) {
-    const manager = getSubagentManager(apiKey, baseURL);
     parallelRunnerInstance = new ParallelSubagentRunner(manager, maxConcurrent);
   }
   return parallelRunnerInstance;
@@ -792,4 +812,6 @@ export function resetParallelRunner(): void {
     parallelRunnerInstance.removeAllListeners();
   }
   parallelRunnerInstance = null;
+  subagentManagerInstance = null;
+  subagentManagerKey = null;
 }

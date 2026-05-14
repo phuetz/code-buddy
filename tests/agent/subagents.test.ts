@@ -15,6 +15,7 @@ import {
   getParallelSubagentRunner,
   resetParallelRunner,
 } from "../../src/agent/subagents";
+import { CodeBuddyClient } from "../../src/codebuddy/client";
 
 // Mock CodeBuddyClient
 jest.mock("../../src/codebuddy/client.js", () => ({
@@ -77,6 +78,30 @@ describe("Subagent", () => {
       });
       const config = agentWithDefaults.getConfig();
       expect(config.timeout).toBe(300000);
+    });
+
+    it("should use detected provider default model for bundled grok presets", () => {
+      (CodeBuddyClient as unknown as jest.Mock).mockClear();
+
+      new Subagent("key", mockConfig, "https://chatgpt.com/backend-api/codex", "gpt-5.5");
+
+      expect(CodeBuddyClient).toHaveBeenCalledWith(
+        "key",
+        "gpt-5.5",
+        "https://chatgpt.com/backend-api/codex"
+      );
+    });
+
+    it("should preserve bundled grok model when the detected provider is also grok", () => {
+      (CodeBuddyClient as unknown as jest.Mock).mockClear();
+
+      new Subagent("key", mockConfig, "https://api.x.ai/v1", "grok-3-fast");
+
+      expect(CodeBuddyClient).toHaveBeenCalledWith(
+        "key",
+        "grok-code-fast-1",
+        "https://api.x.ai/v1"
+      );
     });
   });
 
@@ -527,6 +552,12 @@ describe("Singleton Functions", () => {
       const manager1 = getSubagentManager("key");
       const manager2 = getSubagentManager("key");
       expect(manager1).toBe(manager2);
+    });
+
+    it("should refresh singleton when provider defaults change", () => {
+      const manager1 = getSubagentManager("key", undefined, "gpt-5.5");
+      const manager2 = getSubagentManager("key", undefined, "gemini-2.5-flash");
+      expect(manager1).not.toBe(manager2);
     });
   });
 

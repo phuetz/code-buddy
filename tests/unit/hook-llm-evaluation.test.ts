@@ -5,6 +5,14 @@
  * system invokes the LLM via CodeBuddyClient.
  */
 
+const providerMocks = vi.hoisted(() => ({
+  detectProviderMock: vi.fn(),
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.detectProviderMock,
+}));
+
 import { SmartHookRunner, SmartHookConfig } from '../../src/hooks/smart-hooks.js';
 
 import {
@@ -61,6 +69,13 @@ let savedApiKey: string | undefined;
 beforeEach(() => {
   savedApiKey = process.env.GROK_API_KEY;
   mockChat.mockReset();
+  providerMocks.detectProviderMock.mockReset();
+  providerMocks.detectProviderMock.mockReturnValue({
+    provider: 'grok',
+    apiKey: 'test-key',
+    baseURL: 'https://api.x.ai/v1',
+    defaultModel: 'grok-code-fast-1',
+  });
 });
 
 afterEach(() => {
@@ -124,8 +139,8 @@ describe('SmartHookRunner', () => {
       expect(result.reason).toMatch(/no prompt/i);
     });
 
-    it('should return rendered prompt when GROK_API_KEY is missing', async () => {
-      delete process.env.GROK_API_KEY;
+    it('should return rendered prompt when no provider is configured', async () => {
+      providerMocks.detectProviderMock.mockReturnValue(null);
       const result = await runner.runHook(baseHook, { command: 'rm -rf /' });
       expect(result.ok).toBe(true);
       expect(result.output).toBe('Evaluate rm -rf /');
@@ -179,8 +194,8 @@ describe('SmartHookRunner', () => {
       expect(result.reason).toMatch(/no agent prompt/i);
     });
 
-    it('should return rendered prompt when GROK_API_KEY is missing', async () => {
-      delete process.env.GROK_API_KEY;
+    it('should return rendered prompt when no provider is configured', async () => {
+      providerMocks.detectProviderMock.mockReturnValue(null);
       const result = await runner.runHook(baseHook, { tool: 'bash' });
       expect(result.ok).toBe(true);
       expect(result.output).toBe('You are a security guard for bash.');
@@ -309,8 +324,8 @@ describe('AdvancedHookRunner', () => {
       expect(decision.additionalContext).toBeUndefined();
     });
 
-    it('should allow with additionalContext when GROK_API_KEY is missing', async () => {
-      delete process.env.GROK_API_KEY;
+    it('should allow with additionalContext when no provider is configured', async () => {
+      providerMocks.detectProviderMock.mockReturnValue(null);
       const hook: AdvancedHook = {
         name: 'check-safety',
         event: HookEvent.PreToolUse,
@@ -394,8 +409,8 @@ describe('AdvancedHookRunner', () => {
       input: { command: 'npm install' },
     };
 
-    it('should allow when GROK_API_KEY is missing', async () => {
-      delete process.env.GROK_API_KEY;
+    it('should allow when no provider is configured', async () => {
+      providerMocks.detectProviderMock.mockReturnValue(null);
       const hook: AdvancedHook = {
         name: 'agent-guard',
         event: HookEvent.PreBash,

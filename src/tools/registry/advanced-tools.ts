@@ -7,6 +7,7 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 // ============================================================================
 // Lazy-loaded instances
@@ -256,7 +257,7 @@ export class CodebaseMapExecuteTool implements ITool {
             const { saveCodeGraph } = await import('../../knowledge/code-graph-persistence.js');
             saveCodeGraph(graph, process.cwd());
           }
-        } catch (err) {
+        } catch {
           // Deep population optional — continue with existing graph
         }
       }
@@ -498,12 +499,12 @@ export class SpawnSubagentExecuteTool implements ITool {
     // Parallel execution: run multiple subagents concurrently
     if (parallel && tasks && tasks.length > 0) {
       try {
-        const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
-        if (!apiKey) {
-          return { success: false, error: 'No API key available for parallel subagents (GROK_API_KEY or XAI_API_KEY)' };
+        const provider = detectProviderFromEnv();
+        if (!provider) {
+          return { success: false, error: 'No AI provider configured for parallel subagents. Run `buddy login chatgpt` or set a provider API key.' };
         }
         const { getParallelSubagentRunner } = await import('../../agent/subagents.js');
-        const runner = getParallelSubagentRunner(apiKey, process.env.GROK_BASE_URL);
+        const runner = getParallelSubagentRunner(provider.apiKey, provider.baseURL, provider.defaultModel);
 
         const parallelTasks = tasks.map((t: { type: string; task: string; context?: string }, i: number) => ({
           id: `parallel-${i}`,
@@ -534,16 +535,16 @@ export class SpawnSubagentExecuteTool implements ITool {
       return { success: false, error: `Unknown subagent type: ${type}. Available: ${Object.keys(PREDEFINED_SUBAGENTS).join(', ')}` };
     }
 
-    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
-    if (!apiKey) {
-      return { success: false, error: 'No API key available for subagent (GROK_API_KEY or XAI_API_KEY)' };
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      return { success: false, error: 'No AI provider configured for subagent. Run `buddy login chatgpt` or set a provider API key.' };
     }
 
     // Pipeline integration: use _input as task if task is generic, and _context as context
     const finalTask = (task === 'process' || !task) ? (input._input as string || task) : task;
     const finalContext = context || (input._context as string) || (input._input as string);
 
-    const subagent = new Subagent(apiKey, config, process.env.GROK_BASE_URL);
+    const subagent = new Subagent(provider.apiKey, config, provider.baseURL, provider.defaultModel);
     const result = await subagent.run(finalTask, finalContext);
 
     return {

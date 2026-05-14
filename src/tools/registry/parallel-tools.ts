@@ -9,6 +9,7 @@ import { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType }
 import { ToolResult } from '../../types/index.js';
 import { getParallelSubagentRunner, ParallelTask } from '../../agent/subagents.js';
 import { logger } from '../../utils/logger.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 export class ParallelAgentTool implements ITool {
   readonly name = 'spawn_parallel_agents';
@@ -27,12 +28,12 @@ export class ParallelAgentTool implements ITool {
       return { success: false, error: 'No tasks provided for parallel execution.' };
     }
 
-    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
-    if (!apiKey) {
-      return { success: false, error: 'No API key available for sub-agents.' };
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      return { success: false, error: 'No AI provider configured for sub-agents. Run `buddy login chatgpt` or set a provider API key.' };
     }
 
-    const runner = getParallelSubagentRunner(apiKey, process.env.GROK_BASE_URL);
+    const runner = getParallelSubagentRunner(provider.apiKey, provider.baseURL, provider.defaultModel);
     
     // Pipeline integration: if no tasks but has _input, treat _input as a list of tasks or a single task
     let finalTasks = tasks;

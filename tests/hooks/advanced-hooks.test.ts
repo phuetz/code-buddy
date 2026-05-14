@@ -279,9 +279,11 @@ describe('AdvancedHookRunner', () => {
   // ── runHook() — prompt and agent types ───────────────────────────────────
 
   describe('runHook() with prompt / agent hook types', () => {
-    it('returns allow for a prompt hook when GROK_API_KEY is absent', async () => {
+    it('returns allow for a prompt hook when no provider is configured', async () => {
       const savedKey = process.env.GROK_API_KEY;
+      const savedProvider = process.env.CODEBUDDY_PROVIDER;
       delete process.env.GROK_API_KEY;
+      process.env.CODEBUDDY_PROVIDER = 'not-a-provider';
 
       const hook: AdvancedHook = {
         name: 'prompt-hook',
@@ -294,12 +296,17 @@ describe('AdvancedHookRunner', () => {
 
       expect(decision.action).toBe('allow');
 
-      process.env.GROK_API_KEY = savedKey;
+      if (savedKey === undefined) delete process.env.GROK_API_KEY;
+      else process.env.GROK_API_KEY = savedKey;
+      if (savedProvider === undefined) delete process.env.CODEBUDDY_PROVIDER;
+      else process.env.CODEBUDDY_PROVIDER = savedProvider;
     });
 
-    it('returns allow for an agent hook when GROK_API_KEY is absent', async () => {
+    it('returns allow for an agent hook when no provider is configured', async () => {
       const savedKey = process.env.GROK_API_KEY;
+      const savedProvider = process.env.CODEBUDDY_PROVIDER;
       delete process.env.GROK_API_KEY;
+      process.env.CODEBUDDY_PROVIDER = 'not-a-provider';
 
       const hook: AdvancedHook = {
         name: 'agent-hook',
@@ -311,7 +318,10 @@ describe('AdvancedHookRunner', () => {
 
       expect(decision.action).toBe('allow');
 
-      process.env.GROK_API_KEY = savedKey;
+      if (savedKey === undefined) delete process.env.GROK_API_KEY;
+      else process.env.GROK_API_KEY = savedKey;
+      if (savedProvider === undefined) delete process.env.CODEBUDDY_PROVIDER;
+      else process.env.CODEBUDDY_PROVIDER = savedProvider;
     });
   });
 
