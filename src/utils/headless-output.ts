@@ -5,6 +5,17 @@
 
 export type OutputFormat = 'json' | 'stream-json' | 'text' | 'markdown';
 
+export function resolveHeadlessOutputFormatOption(options: {
+  output?: string;
+  outputFormat?: string;
+}): string {
+  const outputFormat = options.outputFormat?.trim();
+  if (outputFormat) return outputFormat.toLowerCase();
+
+  const output = options.output?.trim();
+  return output ? output.toLowerCase() : 'json';
+}
+
 export interface HeadlessResult {
   success: boolean;
   exitCode: number;

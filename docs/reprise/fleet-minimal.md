@@ -99,6 +99,17 @@ Le chemin WebSocket reel est couvert par
 `tests/server/peer-websocket-smoke.test.ts` pour `peer.ping`, `peer.tool.invoke`
 et le refus de scope correle.
 
+Depuis un build local, le meme rail peut etre rejoue sans session interactive:
+
+```bash
+npm run build
+node scripts/fleet-loopback-smoke.mjs
+node scripts/fleet-loopback-smoke.mjs --chat
+```
+
+Le mode `--chat` consomme le provider detecte pour `peer.chat`; sur cette
+reprise il valide l'abonnement ChatGPT Pro via `gpt-5.5`.
+
 Si ce rail passe en loopback puis sur Tailscale, Fleet minimal est pret pour une
 beta controlee. Les workflows autonomes, OpenClaw et Cowork Fleet peuvent alors
 etre durcis au-dessus de ce socle.

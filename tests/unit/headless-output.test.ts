@@ -17,6 +17,7 @@ import {
   formatAsMarkdown,
   createHeadlessResult,
   formatOutput,
+  resolveHeadlessOutputFormatOption,
   HeadlessResult,
   HeadlessMessage,
   ResultSummary,
@@ -772,6 +773,27 @@ describe('Headless Output', () => {
       const output = formatOutput(sampleResult, 'unknown' as OutputFormat);
 
       expect(() => JSON.parse(output)).not.toThrow();
+    });
+  });
+
+  describe('resolveHeadlessOutputFormatOption', () => {
+    it('should default to json', () => {
+      expect(resolveHeadlessOutputFormatOption({})).toBe('json');
+    });
+
+    it('should use legacy --output when --output-format is absent', () => {
+      expect(resolveHeadlessOutputFormatOption({ output: 'text' })).toBe('text');
+    });
+
+    it('should prefer --output-format over --output default', () => {
+      expect(resolveHeadlessOutputFormatOption({
+        output: 'json',
+        outputFormat: 'text',
+      })).toBe('text');
+    });
+
+    it('should normalize casing and whitespace', () => {
+      expect(resolveHeadlessOutputFormatOption({ outputFormat: ' Markdown ' })).toBe('markdown');
     });
   });
 

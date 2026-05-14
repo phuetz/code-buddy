@@ -25,7 +25,8 @@ process.env.CODEBUDDY_CLI = '1';
 process.env.CODEBUDDY_CLI_VERSION = packageJson.version;
 
 // Import logger statically since it's used throughout the file synchronously
-import { logger } from "./utils/logger.js";
+import { logger, getLogger } from "./utils/logger.js";
+import { resolveHeadlessOutputFormatOption } from "./utils/headless-output.js";
 // Import graceful shutdown for clean application termination
 import {
   initializeGracefulShutdown,
@@ -1090,10 +1091,12 @@ program
     // Apply --quiet / --verbose flags
     if (options.quiet) {
       process.env.LOG_LEVEL = 'error';
+      getLogger().setLevel('error');
     }
     if (options.verbose) {
       process.env.VERBOSE = 'true';
       process.env.DEBUG = 'true';
+      getLogger().setLevel('debug');
     }
     // Apply named configuration profile (--profile <name>) before anything else
     if (options.profile) {
@@ -1455,7 +1458,7 @@ program
           model,
           maxToolRounds,
           options.selfHeal !== false,
-          options.output || options.outputFormat || 'json',
+          resolveHeadlessOutputFormatOption(options),
           options.outputSchema
         );
         await finalizeHeadlessRun(0);

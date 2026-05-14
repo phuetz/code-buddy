@@ -274,6 +274,17 @@ npm run build
   provider. La source de verite est maintenant uniquement
   `src/utils/provider-detector.ts`, ce qui reduit la confusion entre heritage
   Grok et provider ChatGPT/Codex actif.
+- Le mode headless respecte maintenant `--output-format` avant l'alias
+  compatible `--output`. Un smoke live avec ton login ChatGPT Pro a confirme
+  `node dist/index.js --print ... --output-format text --quiet`: stdout ne
+  contient plus que la reponse modele attendue.
+- Le runtime Fleet loopback a ete valide hors mock via `dist`: serveur
+  WebSocket local avec auth activee, cle admin ephemere, `peer.ping`,
+  `peer.describe`, `peer.tool.invoke list_directory` sur `docs/reprise`, et
+  annonce `peerChatProvider: { provider: "chatgpt", model: "gpt-5.5" }`.
+- Le meme loopback appelle maintenant vraiment `peer.chat` via ChatGPT Pro:
+  prompt exact `Reply exactly: Fleet peer chat OK.` -> reponse
+  `Fleet peer chat OK.`, `finishReason: stop`, traceId present.
 
 ## Blocage leve
 
@@ -306,12 +317,14 @@ avec le binaire racine remonte des erreurs historiques hors du patch Fleet.
 ## Lecture produit
 
 - Le CLI est dans une zone beta proche: build, help, typecheck et tests Fleet
-  cibles passent.
+  cibles passent. Le chemin headless ChatGPT Pro est aussi valide en runtime
+  (`--output-format text --quiet`).
 - Cowork compile, bundle et package son installeur Windows.
 - Fleet minimal a de meilleurs garde-fous: lecture fichier bornee sans charger
   tout le fichier en memoire, listing plafonne, sortie `/fleet tool` nettoyee
   avant affichage, refus d'autorisation renvoye au bon appelant, et creation
-  de cles `fleet:listen` / `peer:invoke` testable depuis la CLI.
+  de cles `fleet:listen` / `peer:invoke` testable depuis la CLI. Le loopback
+  `peer.chat` -> ChatGPT Pro passe maintenant en smoke manuel sur `dist`.
 - Le bloc OpenClaw dans `docs/fleet-guide.md` reste une architecture cible, pas
   un chemin runtime termine: aujourd'hui le code actif et teste couvre le hub
   A2A Code Buddy, le bridge Channel -> A2A et le bridge A2A Cowork. Le daemon
