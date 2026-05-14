@@ -21,6 +21,26 @@ import type {
   EngineModelInfo,
   EngineMcpServerConfig,
 } from '../shared/engine-types.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
+
+const MISSING_PROVIDER_MESSAGE =
+  'Provider credentials not configured (run `buddy login chatgpt` or set a provider API key)';
+
+function resolveSessionConfig(config: EngineSessionConfig): EngineSessionConfig {
+  if (config.apiKey) return config;
+
+  const provider = detectProviderFromEnv();
+  if (!provider) {
+    throw new Error(MISSING_PROVIDER_MESSAGE);
+  }
+
+  return {
+    ...config,
+    apiKey: provider.apiKey,
+    baseURL: config.baseURL || provider.baseURL,
+    model: config.model || provider.defaultModel,
+  };
+}
 
 /**
  * Concrete implementation of EngineAdapter that wraps CodeBuddyAgent.
@@ -85,7 +105,7 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
       throw new Error('Engine adapter has been disposed');
     }
 
-    const config = { ...this.config, ...options };
+    const config = resolveSessionConfig({ ...this.config, ...options });
     let fullContent = '';
     let totalTokens = 0;
     let toolCallCount = 0;

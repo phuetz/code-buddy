@@ -965,8 +965,8 @@ app
         );
         const apiConfig = configStore.getAll();
         engineAdapter = new CodeBuddyEngineAdapter({
-          apiKey: apiConfig.apiKey || process.env.GROK_API_KEY || '',
-          baseURL: apiConfig.baseUrl || process.env.GROK_BASE_URL,
+          apiKey: apiConfig.apiKey || '',
+          baseURL: apiConfig.baseUrl,
           model: apiConfig.model,
           workingDirectory: currentWorkingDir || process.cwd(),
           embedded: true,
@@ -1079,8 +1079,8 @@ app
     // Initialize orchestrator bridge for multi-agent workflows
     orchestratorBridge = new OrchestratorBridge(
       sendToRenderer,
-      () => configStore.get('apiKey') || process.env.GROK_API_KEY || '',
-      () => configStore.get('baseUrl') || process.env.GROK_BASE_URL
+      () => configStore.get('apiKey') || '',
+      () => configStore.get('baseUrl')
     );
 
     // Initialize fleet bridge — multi-host Code Buddy listener (GAP 3)

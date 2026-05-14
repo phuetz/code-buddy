@@ -9,6 +9,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 let constructorCalls: Array<{ apiKey: string; baseURL?: string; model?: string }> = [];
 let disposedCount = 0;
 let processedPrompts: string[] = [];
+let detectedProvider: {
+  provider: string;
+  apiKey: string;
+  baseURL: string;
+  defaultModel: string;
+} | null = null;
 
 class FakeCodeBuddyAgent {
   apiKey: string;
@@ -51,6 +57,10 @@ vi.mock('../../src/codebuddy/tools.js', () => ({
   getMCPManager: () => ({ addServer: vi.fn(), removeServer: vi.fn() }),
 }));
 
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: () => detectedProvider,
+}));
+
 import { CodeBuddyEngineAdapter } from '../../src/desktop/codebuddy-engine-adapter';
 
 describe('CodeBuddyEngineAdapter — hot-swap on config change (Phase 8)', () => {
@@ -58,6 +68,29 @@ describe('CodeBuddyEngineAdapter — hot-swap on config change (Phase 8)', () =>
     constructorCalls = [];
     disposedCount = 0;
     processedPrompts = [];
+    detectedProvider = null;
+  });
+
+  it('uses detected ChatGPT credentials when Cowork has no saved API key', async () => {
+    detectedProvider = {
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    };
+    const adapter = new CodeBuddyEngineAdapter({ apiKey: '', embedded: true });
+
+    await adapter.runSession(
+      'sess-1',
+      [{ role: 'user', content: 'hi' }],
+      () => undefined,
+    );
+
+    expect(constructorCalls[0]).toEqual({
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      model: 'gpt-5.5',
+    });
   });
 
   it('reuses the cached agent when config is unchanged across turns', async () => {

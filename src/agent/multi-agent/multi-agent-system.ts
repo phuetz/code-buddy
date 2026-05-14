@@ -35,6 +35,7 @@ import { OrchestratorAgent, createOrchestratorAgent } from "./agents/orchestrato
 import { CoderAgent, createCoderAgent } from "./agents/coder-agent.js";
 import { ReviewerAgent, createReviewerAgent } from "./agents/reviewer-agent.js";
 import { TesterAgent, createTesterAgent } from "./agents/tester-agent.js";
+import { detectProviderFromEnv } from "../../utils/provider-detector.js";
 
 /**
  * Default workflow options
@@ -49,6 +50,46 @@ const DEFAULT_WORKFLOW_OPTIONS: WorkflowOptions = {
   dryRun: false,
   autoApprove: false,
 };
+
+interface ResolvedSystemProvider {
+  apiKey: string;
+  baseURL?: string;
+  model?: string;
+}
+
+function resolveSystemProvider(apiKey: string, baseURL?: string): ResolvedSystemProvider {
+  const detected = detectProviderFromEnv();
+  if (
+    detected &&
+    (!apiKey || (apiKey === detected.apiKey && (!baseURL || baseURL === detected.baseURL)))
+  ) {
+    return {
+      apiKey: detected.apiKey,
+      baseURL: baseURL || detected.baseURL,
+      model: detected.defaultModel,
+    };
+  }
+
+  return { apiKey, baseURL };
+}
+
+function mergeProviderDefault(
+  provider: ResolvedSystemProvider,
+  overrides?: Partial<AgentConfig>,
+): Partial<AgentConfig> | undefined {
+  if (!provider.model) return overrides;
+
+  return {
+    model: provider.model,
+    ...(overrides ?? {}),
+    providerOverride: {
+      apiKey: provider.apiKey,
+      baseURL: provider.baseURL,
+      model: provider.model,
+      ...(overrides?.providerOverride ?? {}),
+    },
+  };
+}
 
 /**
  * Main Multi-Agent System class
@@ -99,28 +140,41 @@ export class MultiAgentSystem extends EventEmitter {
     },
   ) {
     super();
-    this.apiKey = apiKey;
-    this.baseURL = baseURL;
+    const provider = resolveSystemProvider(apiKey, baseURL);
+    this.apiKey = provider.apiKey;
+    this.baseURL = provider.baseURL;
 
     // Initialize agents
     this.agents = new Map();
     this.orchestrator = createOrchestratorAgent(
-      apiKey,
-      baseURL,
-      perAgentOverrides?.orchestrator,
+      provider.apiKey,
+      provider.baseURL,
+      mergeProviderDefault(provider, perAgentOverrides?.orchestrator),
     );
     this.agents.set("orchestrator", this.orchestrator);
     this.agents.set(
       "coder",
-      createCoderAgent(apiKey, baseURL, perAgentOverrides?.coder),
+      createCoderAgent(
+        provider.apiKey,
+        provider.baseURL,
+        mergeProviderDefault(provider, perAgentOverrides?.coder),
+      ),
     );
     this.agents.set(
       "reviewer",
-      createReviewerAgent(apiKey, baseURL, perAgentOverrides?.reviewer),
+      createReviewerAgent(
+        provider.apiKey,
+        provider.baseURL,
+        mergeProviderDefault(provider, perAgentOverrides?.reviewer),
+      ),
     );
     this.agents.set(
       "tester",
-      createTesterAgent(apiKey, baseURL, perAgentOverrides?.tester),
+      createTesterAgent(
+        provider.apiKey,
+        provider.baseURL,
+        mergeProviderDefault(provider, perAgentOverrides?.tester),
+      ),
     );
 
     // Initialize shared context

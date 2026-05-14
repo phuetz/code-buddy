@@ -27,6 +27,7 @@ import { CostPredictor } from "../analytics/cost-predictor.js";
 import { BudgetAlertManager } from "../analytics/budget-alerts.js";
 import { initializeMemory, getMemoryManager } from "../memory/persistent-memory.js";
 import { getUserHooksManager } from "../hooks/user-hooks.js";
+import { detectProviderFromEnv } from "../utils/provider-detector.js";
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -664,19 +665,21 @@ export class CodeBuddyAgent extends BaseAgent {
     // enabled=true. The /agents slash command can also instantiate it manually
     // at runtime. Wired via audit OpenClaw heritage findings (2026-05-02 — top 4).
     // V0.1: only instantiates the singleton (boot does NOT auto-run a workflow).
-    // Requires GROK_API_KEY env var; logs a warning and skips if absent.
+    // Uses the same subscription-aware provider detector as the CLI.
     import('../config/toml-config.js').then(({ getConfigManager }) => {
       const masCfg = getConfigManager().getConfig().multi_agent_system;
       if (!masCfg?.enabled) return;
-      const apiKey = process.env.GROK_API_KEY;
-      if (!apiKey) {
-        logger.warn('MultiAgentSystem boot skipped: GROK_API_KEY not set');
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        logger.warn('MultiAgentSystem boot skipped: no LLM provider configured');
         return;
       }
       import('../agent/multi-agent/multi-agent-system.js').then(({ getMultiAgentSystem }) => {
-        getMultiAgentSystem(apiKey, process.env.GROK_BASE_URL);
+        getMultiAgentSystem(provider.apiKey, provider.baseURL);
         logger.info('MultiAgentSystem auto-instantiated from TOML config', {
           default_strategy: masCfg.default_strategy ?? 'hierarchical',
+          provider: provider.provider,
+          model: provider.defaultModel,
         });
       }).catch((e) => { logger.debug('MultiAgentSystem module load failed (optional)', { error: String(e) }); });
     }).catch((e) => { logger.debug('Multi-agent system config check failed (optional)', { error: String(e) }); });

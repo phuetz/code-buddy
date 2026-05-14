@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 interface ChannelOptions {
   type?: string;
@@ -158,6 +159,25 @@ export async function handleChannels(action: string, options: ChannelOptions): P
 
 let aiHandlerRegistered = false;
 
+interface ChannelAIAgent {
+  processUserMessage(input: string): Promise<Array<{ content: unknown }>>;
+}
+
+export async function createChannelAIAgent(): Promise<ChannelAIAgent | null> {
+  const provider = detectProviderFromEnv();
+  if (!provider) {
+    logger.warn('No provider for channel AI responses');
+    return null;
+  }
+
+  const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
+  return new CodeBuddyAgent(
+    provider.apiKey,
+    provider.baseURL,
+    provider.defaultModel
+  ) as unknown as ChannelAIAgent;
+}
+
 /**
  * Register a message handler that processes incoming messages through the AI agent
  */
@@ -167,14 +187,11 @@ async function registerAIMessageHandler(manager: import('../../channels/index.js
 
   manager.onMessage(async (message, channel) => {
     try {
-      const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
-      if (!apiKey) {
-        logger.warn('No API key for channel AI responses');
+      const agent = await createChannelAIAgent();
+      if (!agent) {
         return;
       }
 
-      const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-      const agent = new CodeBuddyAgent(apiKey, process.env.GROK_BASE_URL, process.env.GROK_MODEL || 'grok-3-latest');
       const entries = await agent.processUserMessage(message.content);
       const response = entries.length > 0 ? String(entries[entries.length - 1].content) : '';
 
