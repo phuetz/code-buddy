@@ -335,6 +335,9 @@ npm run build
 - `DesktopAutomationManager` n'enregistre plus le provider `mock` par defaut et
   ne tombe plus dessus quand les providers reels sont absents. Le provider mock
   reste disponible uniquement si `provider: "mock"` est demande explicitement.
+- `SmartSnapshotManager` ne retourne plus des elements UI inventes quand
+  AT-SPI/UIAutomation/AX echoue. Les erreurs d'accessibilite donnent maintenant
+  une liste vide ou les elements OCR reels, sans boutons `OK`/`Cancel` factices.
 
 ## Blocage leve
 

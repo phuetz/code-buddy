@@ -615,12 +615,10 @@ export class SmartSnapshotManager extends EventEmitter {
 
       const names = output.split(', ').filter(n => n.trim());
       for (const name of names.slice(0, this.config.maxElements)) {
-        elements.push(this.createMockElement(name, this.nextRef++));
+        elements.push(this.createNameOnlyElement(name, this.nextRef++));
       }
     } catch (error) {
       logger.debug('macOS accessibility detection failed', { error });
-      // Return mock elements for testing
-      elements.push(...this.getMockElements());
     }
 
     return elements;
@@ -824,12 +822,11 @@ print(json.dumps(all_elements[:100]))
           });
         }
       } catch (_err) {
-        // Intentionally ignored: AT-SPI parsing may fail, fallback to mock elements
-        elements.push(...this.getMockElements());
+        // AT-SPI parsing may fail when the accessibility stack is unavailable.
+        logger.debug('Linux AT-SPI parsing failed');
       }
     } catch (error) {
       logger.debug('Linux accessibility detection failed', { error });
-      elements.push(...this.getMockElements());
     }
 
     return elements;
@@ -913,12 +910,11 @@ if ($focused) {
           });
         }
       } catch (_err) {
-        // Intentionally ignored: UIAutomation JSON parsing may fail, fallback to mock elements
-        elements.push(...this.getMockElements());
+        // UIAutomation can return empty or non-JSON output depending on focus.
+        logger.debug('Windows UIAutomation parsing failed');
       }
     } catch (error) {
       logger.debug('Windows accessibility detection failed', { error });
-      elements.push(...this.getMockElements());
     }
 
     return elements;
@@ -1188,81 +1184,18 @@ if ($focused) {
     return { width: 1920, height: 1080 }; // Default fallback
   }
 
-  private createMockElement(name: string, ref: number): UIElement {
+  private createNameOnlyElement(name: string, ref: number): UIElement {
     return {
       ref,
-      role: 'button',
+      role: 'unknown',
       name: name.trim() || `Element ${ref}`,
-      bounds: { x: 100 * ref, y: 100, width: 100, height: 30 },
-      center: { x: 100 * ref + 50, y: 115 },
-      interactive: true,
+      bounds: { x: 0, y: 0, width: 0, height: 0 },
+      center: { x: 0, y: 0 },
+      interactive: false,
       focused: false,
       enabled: true,
-      visible: true,
+      visible: false,
     };
-  }
-
-  private getMockElements(): UIElement[] {
-    // Return sample mock elements for testing
-    return [
-      {
-        ref: this.nextRef++,
-        role: 'button',
-        name: 'OK',
-        bounds: { x: 200, y: 300, width: 80, height: 30 },
-        center: { x: 240, y: 315 },
-        interactive: true,
-        focused: false,
-        enabled: true,
-        visible: true,
-      },
-      {
-        ref: this.nextRef++,
-        role: 'button',
-        name: 'Cancel',
-        bounds: { x: 300, y: 300, width: 80, height: 30 },
-        center: { x: 340, y: 315 },
-        interactive: true,
-        focused: false,
-        enabled: true,
-        visible: true,
-      },
-      {
-        ref: this.nextRef++,
-        role: 'text-field',
-        name: 'Search',
-        bounds: { x: 100, y: 100, width: 300, height: 30 },
-        center: { x: 250, y: 115 },
-        interactive: true,
-        focused: true,
-        enabled: true,
-        visible: true,
-        placeholder: 'Type to search...',
-      },
-      {
-        ref: this.nextRef++,
-        role: 'checkbox',
-        name: 'Remember me',
-        bounds: { x: 100, y: 150, width: 150, height: 20 },
-        center: { x: 175, y: 160 },
-        interactive: true,
-        focused: false,
-        enabled: true,
-        visible: true,
-        value: 'false',
-      },
-      {
-        ref: this.nextRef++,
-        role: 'link',
-        name: 'Forgot password?',
-        bounds: { x: 100, y: 200, width: 120, height: 20 },
-        center: { x: 160, y: 210 },
-        interactive: true,
-        focused: false,
-        enabled: true,
-        visible: true,
-      },
-    ];
   }
 }
 
