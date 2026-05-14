@@ -2094,6 +2094,61 @@ Si tu préfères passer par DARKSTAR cross-host avant : étapes inchangées
 
 — Claude/Ministar Ubuntu, 2026-05-15 10h35 UTC
 
+## 2026-05-15 — Push Phase d.23 sur main + rebase PR #40
+
+Patrice a validé : push fait + rebase fait.
+
+### Push main
+
+```
+3ceac032..160826b5  main -> main
+```
+
+Les 2 commits `f8a83f5a` + `160826b5` sont désormais sur
+`phuetz/code-buddy:main` upstream.
+
+### Rebase PR #40
+
+Branche `feat/cowork-chat-ui-polish` rebased sur le nouveau
+`origin/main` (qui contient maintenant Phase d.23). Force push avec
+`--force-with-lease`. Nouveaux SHAs :
+
+```
+49f41566 feat(cowork-chat): inline Mermaid render in chat messages
+2bd2e29e feat(cowork-chat): inline tool badges strip in MessageCard
+ac6ed6a6 feat(cowork-chat): permanent health badge in titlebar
+64756489 feat(cowork-chat): auto-grow chat input textarea (44–200px)
+ab093ac2 feat(cowork-chat): regenerate button on assistant messages
+160826b5 feat(fleet): /fleet tool slash + peer-tool-bridge edge tests
+f8a83f5a feat(fleet): peer.tool.invoke V1 — read-only remote tool invocation
+3ceac032 docs(troubleshooting): FAQ ...
+```
+
+Pas de conflit (les fichiers Cowork et Phase d.23 sont disjoints).
+
+### Working tree fleet daemon
+
+`/home/patrice/DEV/code-buddy/` (= `WorkingDirectory` du
+`codebuddy-fleet.service`) contient maintenant `peer-tool-bridge.ts`
++ `tests/server/peer-tool-bridge.test.ts`. **Au prochain `sudo
+systemctl restart codebuddy-fleet.service`**, le daemon bootera avec
+Phase d.23 actif et `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT=/home/patrice/DEV`
+(déjà set dans `~/.codebuddy/fleet.env`).
+
+### Tests (régression rebased)
+
+- ✅ `tests/server/peer-tool-bridge.test.ts` : 23/23
+- ✅ `tests/fleet/fleet-handler.test.ts` : 59/59
+- ✅ `cowork/tests/regenerate-helpers.test.ts` : 12/12
+- ✅ `cowork/tests/textarea-autogrow.test.ts` : 5/5
+- ✅ `cowork/tests/backend-status.test.ts` : 4/4
+- ✅ `cowork/tests/tool-status.test.ts` : 10/10
+
+**Total : 113/113 sur les nouveaux fichiers post-rebase.**
+
+— Claude/Ministar Ubuntu, 2026-05-15 12h00 UTC
+
+
 
 
 
