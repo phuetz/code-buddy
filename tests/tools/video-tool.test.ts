@@ -34,6 +34,7 @@ describe('VideoTool', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockVfs.stat.mockResolvedValue({ size: 1024 });
     tool = new VideoTool();
   });
 
@@ -171,6 +172,36 @@ describe('VideoTool', () => {
       expect((result.data as any).totalFrames).toBe(1);
     });
 
+    it('should fail if ffmpeg exits successfully without creating a frame', async () => {
+      mockVfs.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      mockVfs.ensureDir.mockResolvedValue(undefined);
+
+      const ffmpegVersionProc = mockProcess();
+      const ffprobeProc = mockProcess();
+      const ffmpegExtractProc = mockProcess();
+
+      mockSpawn
+        .mockReturnValueOnce(ffmpegVersionProc)
+        .mockReturnValueOnce(ffprobeProc)
+        .mockReturnValueOnce(ffmpegExtractProc);
+
+      const promise = tool.extractFrames('test.mp4', { count: 1 });
+
+      setTimeout(() => ffmpegVersionProc.emit('close', 0), 10);
+      setTimeout(() => {
+        ffprobeProc.stdout.emit('data', JSON.stringify({ format: { duration: '10' } }));
+        ffprobeProc.emit('close', 0);
+      }, 20);
+      setTimeout(() => ffmpegExtractProc.emit('close', 0), 30);
+
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Extracted frame was not created');
+    });
+
     it('should return error if ffmpeg is missing', async () => {
       mockVfs.exists.mockResolvedValue(true);
       
@@ -209,6 +240,28 @@ describe('VideoTool', () => {
       expect(result.success).toBe(true);
       expect(result.output).toContain('Thumbnail created');
     });
+
+    it('should fail if ffmpeg creates an empty thumbnail', async () => {
+      mockVfs.exists.mockResolvedValue(true);
+      mockVfs.stat.mockResolvedValue({ size: 0 });
+
+      const versionProc = mockProcess();
+      const extractProc = mockProcess();
+
+      mockSpawn
+        .mockReturnValueOnce(versionProc)
+        .mockReturnValueOnce(extractProc);
+
+      const promise = tool.createThumbnail('test.mp4', 5);
+
+      setTimeout(() => versionProc.emit('close', 0), 10);
+      setTimeout(() => extractProc.emit('close', 0), 20);
+
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Extracted frame is empty');
+    });
   });
 
   describe('extractAudio', () => {
@@ -231,6 +284,29 @@ describe('VideoTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.output).toContain('Audio extracted');
+    });
+
+    it('should fail if ffmpeg exits successfully without creating audio', async () => {
+      mockVfs.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+
+      const versionProc = mockProcess();
+      const extractProc = mockProcess();
+
+      mockSpawn
+        .mockReturnValueOnce(versionProc)
+        .mockReturnValueOnce(extractProc);
+
+      const promise = tool.extractAudio('test.mp4');
+
+      setTimeout(() => versionProc.emit('close', 0), 10);
+      setTimeout(() => extractProc.emit('close', 0), 20);
+
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Extracted audio was not created');
     });
   });
 

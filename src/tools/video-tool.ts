@@ -279,8 +279,8 @@ export class VideoTool {
   /**
    * Extract a single frame at a specific timestamp
    */
-  private extractFrameAtTimestamp(videoPath: string, timestamp: number, outputPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
+  private async extractFrameAtTimestamp(videoPath: string, timestamp: number, outputPath: string): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
       const ffmpeg = spawn('ffmpeg', [
         '-y',
         '-ss', timestamp.toString(),
@@ -290,22 +290,43 @@ export class VideoTool {
         outputPath
       ]);
 
+      let settled = false;
+      const finish = (callback: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        callback();
+      };
+
       ffmpeg.on('close', (code) => {
         if (code === 0) {
-          resolve();
+          finish(resolve);
         } else {
-          reject(new Error(`ffmpeg exited with code ${code}`));
+          finish(() => reject(new Error(`ffmpeg exited with code ${code}`)));
         }
       });
 
-      ffmpeg.on('error', reject);
+      ffmpeg.on('error', (error) => finish(() => reject(error)));
 
       // Timeout after 30 seconds
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         ffmpeg.kill();
-        reject(new Error('Frame extraction timeout'));
+        finish(() => reject(new Error('Frame extraction timeout')));
       }, 30000);
     });
+
+    await this.assertGeneratedFile(outputPath, 'Extracted frame');
+  }
+
+  private async assertGeneratedFile(filePath: string, artifactName: string): Promise<void> {
+    if (!await this.vfs.exists(filePath)) {
+      throw new Error(`${artifactName} was not created: ${filePath}`);
+    }
+
+    const stats = await this.vfs.stat(filePath);
+    if (!stats || stats.size <= 0) {
+      throw new Error(`${artifactName} is empty: ${filePath}`);
+    }
   }
 
   /**
@@ -392,16 +413,24 @@ export class VideoTool {
           }
         }, 120000);
 
-        ffmpeg.on('close', (code) => {
+        ffmpeg.on('close', async (code) => {
           if (!settled) {
             settled = true;
             clearTimeout(timeout);
             if (code === 0) {
-              resolve({
-                success: true,
-                output: `Audio extracted to: ${audioPath}`,
-                data: { path: audioPath }
-              });
+              try {
+                await this.assertGeneratedFile(audioPath, 'Extracted audio');
+                resolve({
+                  success: true,
+                  output: `Audio extracted to: ${audioPath}`,
+                  data: { path: audioPath }
+                });
+              } catch (error: unknown) {
+                resolve({
+                  success: false,
+                  error: `Audio extraction failed: ${getErrorMessage(error)}`
+                });
+              }
             } else {
               resolve({
                 success: false,

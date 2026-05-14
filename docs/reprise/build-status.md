@@ -207,6 +207,15 @@ npx eslint src/tools/test-generator.ts tests/unit/analysis-utility-tools.test.ts
 
 npm run typecheck
 # passed
+
+npm test -- tests/tools/video-tool.test.ts
+# 13 tests passed after VideoTool output verification
+
+npx eslint src/tools/video-tool.ts tests/tools/video-tool.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -415,6 +424,9 @@ npm run typecheck
 - Le generateur de tests ne pretend plus produire des tests LLM avec vraies
   assertions quand aucun callback LLM n'est disponible ou quand celui-ci echoue.
   Le scaffold TODO reste disponible uniquement via le chemin scaffold explicite.
+- `VideoTool` ne se contente plus d'un code retour `ffmpeg` a zero pour les
+  extractions. Les frames, miniatures et pistes audio doivent maintenant
+  exister et etre non vides avant que l'outil annonce un succes.
 
 ## Blocage leve
 
