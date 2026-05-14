@@ -16,6 +16,7 @@ import { EventEmitter } from "events";
 import { logger } from '../../utils/logger.js';
 import { getErrorMessage } from "../../types/index.js";
 import { CodeBuddyClient, CodeBuddyMessage } from "../../codebuddy/client.js";
+import { resolveClientTargetForDetectedProvider } from "../../utils/provider-detector.js";
 import {
   Fault,
   RepairConfig,
@@ -107,7 +108,13 @@ export class RepairEngine extends EventEmitter {
     this.config = { ...DEFAULT_REPAIR_CONFIG, ...config };
 
     if (apiKey) {
-      this.client = new CodeBuddyClient(apiKey, model || 'grok-3-latest', baseURL);
+      const clientTarget = resolveClientTargetForDetectedProvider(
+        apiKey,
+        baseURL,
+        model,
+        'grok-3-latest',
+      );
+      this.client = new CodeBuddyClient(apiKey, clientTarget.model, clientTarget.baseURL);
     }
 
     this.faultLocalizer = createFaultLocalizer(

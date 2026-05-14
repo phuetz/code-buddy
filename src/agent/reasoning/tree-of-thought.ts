@@ -31,6 +31,7 @@ import {
 } from "./types.js";
 import { createMCTS } from "./mcts.js";
 import type { MCTSProgressEvent } from "./types.js";
+import { resolveClientTargetForDetectedProvider } from "../../utils/provider-detector.js";
 
 /**
  * Format an MCTSProgressEvent into a human-readable progress line.
@@ -97,10 +98,16 @@ export class TreeOfThoughtReasoner extends EventEmitter {
       ...DEFAULT_MCTS_CONFIG,
       ...THINKING_MODE_CONFIG[this.config.mode],
     };
+    const clientTarget = resolveClientTargetForDetectedProvider(
+      apiKey,
+      baseURL,
+      config.model,
+      "grok-3-latest",
+    );
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || "grok-3-latest",
-      baseURL
+      clientTarget.model,
+      clientTarget.baseURL
     );
     this.executeCommand = executeCommand;
   }
