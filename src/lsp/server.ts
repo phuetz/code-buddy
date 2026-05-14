@@ -38,13 +38,11 @@ import { logger } from '../utils/logger.js';
 import { CompletionCache } from './completion-cache.js';
 import { gatherCompletionContext } from './context-gatherer.js';
 import { AICompletionProvider } from './ai-completion-provider.js';
-import type { AICompletionConfig } from './ai-completion-provider.js';
 import { registerInlineCompletionHandler } from './inline-completion-handler.js';
 import {
-  detectProviderFromEnv,
-  selectModelForDetectedProvider,
-  selectModelForExplicitBaseURL,
-} from '../utils/provider-detector.js';
+  resolveCodeBuddyLSPClientTarget,
+  type CodeBuddyLSPSettings,
+} from './client-target.js';
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
@@ -54,18 +52,6 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 // Code Buddy client
 let codebuddyClient: CodeBuddyClient | null = null;
-
-// Settings
-export interface CodeBuddyLSPSettings {
-  apiKey: string;
-  baseURL?: string;
-  model: string;
-  enableDiagnostics: boolean;
-  enableCompletions: boolean;
-  maxTokens: number;
-  /** AI inline completion settings */
-  aiCompletion?: Partial<AICompletionConfig>;
-}
 
 const defaultSettings: CodeBuddyLSPSettings = {
   apiKey: '',
@@ -93,35 +79,6 @@ const aiCompletionProvider = new AICompletionProvider(
   completionCacheLRU,
   defaultSettings.aiCompletion,
 );
-
-export interface CodeBuddyLSPClientTarget {
-  apiKey: string;
-  model?: string;
-  baseURL?: string;
-}
-
-export function resolveCodeBuddyLSPClientTarget(
-  settings: CodeBuddyLSPSettings,
-): CodeBuddyLSPClientTarget | null {
-  if (settings.apiKey) {
-    return {
-      apiKey: settings.apiKey,
-      model: selectModelForExplicitBaseURL(settings.baseURL, settings.model) || settings.model,
-      baseURL: settings.baseURL,
-    };
-  }
-
-  const provider = detectProviderFromEnv();
-  if (!provider) {
-    return null;
-  }
-
-  return {
-    apiKey: provider.apiKey,
-    model: selectModelForDetectedProvider(provider, settings.model),
-    baseURL: provider.baseURL,
-  };
-}
 
 function createConfiguredClient(): CodeBuddyClient | null {
   const target = resolveCodeBuddyLSPClientTarget(globalSettings);

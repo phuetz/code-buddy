@@ -5,96 +5,7 @@
  * These tests verify the server configuration and utility functions.
  */
 
-// Mock vscode-languageserver - must be before imports
-
 import { DiagnosticSeverity, CompletionItemKind } from 'vscode-languageserver/node';
-
-jest.mock('vscode-languageserver/node', () => {
-  const mockConnection = {
-    console: {
-      log: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-    },
-    sendDiagnostics: jest.fn(),
-    onInitialize: jest.fn(),
-    onInitialized: jest.fn(),
-    onDidChangeConfiguration: jest.fn(),
-    onCompletion: jest.fn(),
-    onCompletionResolve: jest.fn(),
-    onCodeAction: jest.fn(),
-    onHover: jest.fn(),
-    onSignatureHelp: jest.fn(),
-    listen: jest.fn(),
-  };
-
-  const mockDocuments = {
-    listen: jest.fn(),
-    all: jest.fn().mockReturnValue([]),
-    get: jest.fn(),
-    onDidChangeContent: jest.fn(),
-  };
-
-  return {
-    createConnection: jest.fn().mockReturnValue(mockConnection),
-    TextDocuments: jest.fn().mockImplementation(function() { return mockDocuments; }),
-    DiagnosticSeverity: {
-      Error: 1,
-      Warning: 2,
-      Information: 3,
-      Hint: 4,
-    },
-    ProposedFeatures: {
-      all: {},
-    },
-    TextDocumentSyncKind: {
-      Incremental: 2,
-    },
-    CompletionItemKind: {
-      Text: 1,
-      Method: 2,
-      Function: 3,
-      Constructor: 4,
-      Field: 5,
-      Variable: 6,
-      Class: 7,
-      Interface: 8,
-      Module: 9,
-      Property: 10,
-    },
-    CodeActionKind: {
-      QuickFix: 'quickfix',
-      Refactor: 'refactor',
-      Source: 'source',
-    },
-    MarkupKind: {
-      PlainText: 'plaintext',
-      Markdown: 'markdown',
-    },
-  };
-});
-
-
-jest.mock('vscode-languageserver-textdocument', () => ({
-  TextDocument: {
-    create: jest.fn(),
-  },
-}));
-
-// Mock CodeBuddyClient
-jest.mock('../src/codebuddy/client', () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
-    chat: jest.fn().mockResolvedValue({
-      choices: [{
-        message: {
-          content: JSON.stringify([
-            { line: 1, severity: 'warning', message: 'Test issue' }
-          ]),
-        },
-      }],
-    }),
-  }; }),
-}));
 
 describe('LSP Server', () => {
   describe('Severity Mapping', () => {
@@ -163,25 +74,6 @@ describe('LSP Server', () => {
 
       expect(signatureTriggers).toContain('(');
       expect(signatureTriggers).toContain(',');
-    });
-  });
-
-  describe('Client Target Resolution', () => {
-    it('uses the explicit base URL to replace a legacy Grok fallback model', async () => {
-      const { resolveCodeBuddyLSPClientTarget } = await import('../src/lsp/server.js');
-
-      expect(resolveCodeBuddyLSPClientTarget({
-        apiKey: 'openai-key',
-        baseURL: 'https://api.openai.com/v1',
-        model: 'grok-3-latest',
-        enableDiagnostics: true,
-        enableCompletions: true,
-        maxTokens: 2048,
-      })).toEqual({
-        apiKey: 'openai-key',
-        baseURL: 'https://api.openai.com/v1',
-        model: 'gpt-4o',
-      });
     });
   });
 

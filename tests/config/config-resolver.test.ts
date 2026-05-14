@@ -17,8 +17,6 @@ import {
 import {
   ConnectionConfig,
   ConnectionProfile,
-  DEFAULT_PROFILES,
-  DEFAULT_CONNECTION_CONFIG,
 } from '../../src/config/types.js';
 
 describe('ConfigResolver', () => {
@@ -32,10 +30,12 @@ describe('ConfigResolver', () => {
     delete process.env.GROK_BASE_URL;
     delete process.env.GROK_MODEL;
     delete process.env.XAI_API_KEY;
+    delete process.env.CODEBUDDY_PROVIDER;
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GEMINI_MODEL;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_MODEL;
@@ -116,6 +116,7 @@ describe('ConfigResolver', () => {
     });
 
     it('should fall back to env vars when no profile active', () => {
+      process.env.CODEBUDDY_PROVIDER = 'grok';
       process.env.GROK_API_KEY = 'env-key';
       process.env.GROK_BASE_URL = 'https://env.api.com/v1';
       process.env.GROK_MODEL = 'env-model';
@@ -135,7 +136,24 @@ describe('ConfigResolver', () => {
       expect(result.source).toBe('environment');
     });
 
+    it('should prefer detected env provider over unconfigured built-in Grok default', () => {
+      process.env.CODEBUDDY_PROVIDER = 'openai';
+      process.env.OPENAI_API_KEY = 'openai-key';
+      process.env.OPENAI_BASE_URL = 'https://openai.proxy.test/v1';
+      process.env.OPENAI_MODEL = 'gpt-5.1-codex';
+
+      const resolver = new ConfigResolver();
+      const result = resolver.resolve();
+
+      expect(result.baseURL).toBe('https://openai.proxy.test/v1');
+      expect(result.apiKey).toBe('openai-key');
+      expect(result.model).toBe('gpt-5.1-codex');
+      expect(result.provider).toBe('openai');
+      expect(result.source).toBe('environment');
+    });
+
     it('should use defaults when nothing else available', () => {
+      process.env.CODEBUDDY_PROVIDER = 'grok';
       const config: ConnectionConfig = {
         profiles: [],
         activeProfileId: 'nonexistent',

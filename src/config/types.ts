@@ -14,7 +14,7 @@ import { AIProvider } from '../utils/config-validator.js';
 /**
  * Extended provider type including local inference servers
  */
-export type ProviderType = AIProvider | 'anthropic' | 'deepseek' | 'mistral' | 'groq' | 'together' | 'fireworks';
+export type ProviderType = AIProvider | 'chatgpt' | 'anthropic' | 'deepseek' | 'mistral' | 'groq' | 'together' | 'fireworks';
 
 /**
  * Auto-detection configuration for local servers

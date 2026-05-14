@@ -23,6 +23,7 @@ import {
   ProviderType,
   ProfileEvents,
 } from './types.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider, type DetectedProvider } from '../utils/provider-detector.js';
 
 // ============================================================================
 // Config Resolver
@@ -93,6 +94,13 @@ export class ConfigResolver extends EventEmitter {
     // 3. Try active profile
     const activeProfile = this.profiles.get(this.activeProfileId);
     if (activeProfile && activeProfile.enabled !== false) {
+      if (this.shouldPreferEnvironmentOverProfile(activeProfile)) {
+        const envConfig = this.resolveFromEnv();
+        if (envConfig.apiKey) {
+          return envConfig;
+        }
+      }
+
       return this.resolveFromProfile(activeProfile, cliOverrides, 'profile');
     }
 
@@ -118,11 +126,12 @@ export class ConfigResolver extends EventEmitter {
    * Resolve from CLI arguments
    */
   private resolveFromCLI(cli: CLIOverrides): ResolvedConfig {
+    const provider = cli.provider || this.detectProvider(cli.baseURL) || 'grok';
     return {
       baseURL: cli.baseURL || process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
       apiKey: cli.apiKey || process.env.GROK_API_KEY || '',
-      model: cli.model || process.env.GROK_MODEL || 'grok-code-fast-1',
-      provider: cli.provider || this.detectProvider(cli.baseURL) || 'grok',
+      model: cli.model || this.defaultModelForProvider(provider),
+      provider,
       source: 'cli',
     };
   }
@@ -156,49 +165,13 @@ export class ConfigResolver extends EventEmitter {
    * Priority: Gemini > Grok > OpenAI > Anthropic
    */
   private resolveFromEnv(): ResolvedConfig {
-    // Check Gemini first (preferred)
-    const geminiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-    if (geminiKey) {
+    const detected = detectProviderFromEnv();
+    if (detected) {
       return {
-        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-        apiKey: geminiKey,
-        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-        provider: 'gemini',
-        source: 'environment',
-      };
-    }
-
-    // Check Grok
-    const grokKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
-    if (grokKey) {
-      const baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
-      return {
-        baseURL,
-        apiKey: grokKey,
-        model: process.env.GROK_MODEL || 'grok-code-fast-1',
-        provider: 'grok',
-        source: 'environment',
-      };
-    }
-
-    // Check OpenAI
-    if (process.env.OPENAI_API_KEY) {
-      return {
-        baseURL: 'https://api.openai.com/v1',
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_MODEL || 'gpt-4o',
-        provider: 'openai',
-        source: 'environment',
-      };
-    }
-
-    // Check Anthropic
-    if (process.env.ANTHROPIC_API_KEY) {
-      return {
-        baseURL: 'https://api.anthropic.com/v1',
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-        provider: 'claude',
+        baseURL: detected.baseURL,
+        apiKey: detected.apiKey,
+        model: selectModelForDetectedProvider(detected) || detected.defaultModel,
+        provider: this.toConfigProvider(detected.provider),
         source: 'environment',
       };
     }
@@ -254,6 +227,40 @@ export class ConfigResolver extends EventEmitter {
     if (urlLower.includes('localhost') || urlLower.includes('127.0.0.1')) return 'local';
 
     return null;
+  }
+
+  private defaultModelForProvider(provider: ProviderType): string {
+    switch (provider) {
+      case 'chatgpt':
+        return process.env.CHATGPT_MODEL || 'gpt-5.5';
+      case 'openai':
+        return process.env.OPENAI_MODEL || 'gpt-4o';
+      case 'claude':
+      case 'anthropic':
+        return process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
+      case 'gemini':
+        return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      case 'ollama':
+        return process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
+      case 'lmstudio':
+      case 'local':
+        return 'local-model';
+      case 'grok':
+      default:
+        return process.env.GROK_MODEL || 'grok-code-fast-1';
+    }
+  }
+
+  private shouldPreferEnvironmentOverProfile(profile: ConnectionProfile): boolean {
+    return profile.id === 'grok' &&
+      profile.isDefault === true &&
+      !profile.apiKey &&
+      this.envVarsFallback;
+  }
+
+  private toConfigProvider(provider: DetectedProvider['provider']): ProviderType {
+    if (provider === 'unknown') return 'grok';
+    return provider;
   }
 
   // ============================================================================
@@ -453,7 +460,7 @@ export class ConfigResolver extends EventEmitter {
             models,
           };
         }
-      } catch (error) {
+      } catch (_error) {
         // Server not available on this port, try next
         continue;
       }
