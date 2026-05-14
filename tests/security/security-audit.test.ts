@@ -493,6 +493,18 @@ describe('SecurityAuditor - configuration', () => {
     const configFindings = findByCategory(result.findings, 'configuration');
     expect(configFindings).toHaveLength(0);
   });
+
+  it('should check non-Grok model env vars for legacy model warnings', async () => {
+    process.env.GROK_MODEL = 'grok-3-fast';
+    process.env.OPENAI_MODEL = 'gpt-3.5-turbo';
+
+    const auditor = createMinimalAuditor();
+    const result = await auditor.audit();
+
+    const finding = findByTitle(result.findings, 'Legacy or poorly instruction-tuned model');
+    expect(finding).toBeDefined();
+    expect(finding!.details?.model).toBe('gpt-3.5-turbo');
+  });
 });
 
 // ==========================================================================

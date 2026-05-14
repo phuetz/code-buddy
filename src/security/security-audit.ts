@@ -760,9 +760,17 @@ export class SecurityAuditor {
     } catch { /* skip */ }
 
     // 5. Model quality — warn for models known to be poorly instruction-tuned
-    const modelEnv = process.env.GROK_MODEL || process.env.OPENAI_MODEL || '';
+    const configuredModels = [
+      process.env.CHATGPT_MODEL,
+      process.env.OPENAI_MODEL,
+      process.env.ANTHROPIC_MODEL,
+      process.env.GEMINI_MODEL,
+      process.env.OLLAMA_MODEL,
+      process.env.GROK_MODEL,
+    ].filter((value): value is string => Boolean(value));
     const legacyPatterns = ['gpt-3.5', 'davinci', 'curie', 'babbage', 'ada'];
-    if (legacyPatterns.some(p => modelEnv.includes(p))) {
+    for (const modelEnv of new Set(configuredModels)) {
+      if (!legacyPatterns.some(p => modelEnv.includes(p))) continue;
       this.addFinding({
         category: 'configuration',
         severity: 'medium',
