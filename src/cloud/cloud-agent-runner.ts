@@ -337,12 +337,6 @@ export class CloudAgentRunner extends EventEmitter {
       // Get tool definitions
       const tools = await getAllCodeBuddyTools();
 
-      // Create client
-      const apiKey = process.env.GROK_API_KEY || process.env.OPENAI_API_KEY || '';
-      const model = config.model || process.env.GROK_MODEL || 'grok-3-latest';
-      const client = new CodeBuddyClient(apiKey, model);
-      const maxRounds = config.maxToolRounds ?? MAX_TOOL_ROUNDS_DEFAULT;
-
       // Set environment overrides
       if (config.environment) {
         for (const [key, value] of Object.entries(config.environment)) {
@@ -352,6 +346,17 @@ export class CloudAgentRunner extends EventEmitter {
           }
         }
       }
+
+      // Create client after environment overrides so background tasks can
+      // provide provider credentials without mutating the parent process first.
+      const { detectProviderFromEnv, selectModelForDetectedProvider } = await import('../utils/provider-detector.js');
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        throw new Error('No AI provider configured. Run `buddy login chatgpt` or set a provider API key.');
+      }
+      const model = selectModelForDetectedProvider(provider, config.model) || provider.defaultModel;
+      const client = new CodeBuddyClient(provider.apiKey, model, provider.baseURL);
+      const maxRounds = config.maxToolRounds ?? MAX_TOOL_ROUNDS_DEFAULT;
 
       // Agent loop — simplified headless version
       let round = 0;

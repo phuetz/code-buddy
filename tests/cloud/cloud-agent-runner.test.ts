@@ -12,7 +12,6 @@ import os from 'os';
 import {
   CloudAgentRunner,
   resetCloudAgentRunner,
-  type CloudTaskConfig,
 } from '../../src/cloud/cloud-agent-runner.js';
 
 // ──────────────────────────────────────────────────────────────────
@@ -57,22 +56,42 @@ vi.mock('../../src/cloud/headless-tool-executor.js', () => ({
 
 // Mock the LLM client — returns a response with no tool calls (single turn)
 vi.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: vi.fn().mockImplementation(() => ({
-    chat: vi.fn().mockResolvedValue({
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: 'Task completed successfully. I have analyzed the code.',
-          tool_calls: undefined,
-        },
-      }],
-      usage: { prompt_tokens: 100, completion_tokens: 50 },
-    }),
+  CodeBuddyClient: vi.fn().mockImplementation(function () {
+    return {
+      chat: vi.fn().mockResolvedValue({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: 'Task completed successfully. I have analyzed the code.',
+            tool_calls: undefined,
+          },
+        }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+      }),
+    };
+  }),
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: vi.fn(() => ({
+    provider: 'chatgpt',
+    apiKey: 'oauth-chatgpt',
+    baseURL: 'https://chatgpt.com/backend-api/codex',
+    defaultModel: 'gpt-5.5',
   })),
+  selectModelForDetectedProvider: vi.fn((detected: { provider: string; defaultModel: string }, configured?: string) => {
+    if (detected.provider !== 'grok' && configured?.startsWith('grok-')) {
+      return detected.defaultModel;
+    }
+    return configured || detected.defaultModel;
+  }),
 }));
 
 // Mock the tool definitions
 vi.mock('../../src/codebuddy/tools.js', () => ({
+  getAllCodeBuddyTools: vi.fn().mockResolvedValue([
+    { type: 'function', function: { name: 'read_file', description: 'Read a file', parameters: { type: 'object', properties: {}, required: [] } } },
+  ]),
   getToolDefinitions: vi.fn().mockReturnValue([
     { type: 'function', function: { name: 'read_file', description: 'Read a file' } },
   ]),
@@ -82,6 +101,10 @@ vi.mock('../../src/codebuddy/tools.js', () => ({
 vi.mock('../../src/prompts/system-base.js', () => ({
   getSystemPromptForMode: vi.fn().mockReturnValue('You are a helpful coding assistant.'),
 }));
+
+import { CodeBuddyClient } from '../../src/codebuddy/client.js';
+
+const MockCodeBuddyClient = CodeBuddyClient as unknown as ReturnType<typeof vi.fn>;
 
 // ──────────────────────────────────────────────────────────────────
 // Test Suite
@@ -166,6 +189,17 @@ describe('CloudAgentRunner', () => {
       });
       const status = await runner.getTaskStatus(taskId);
       expect(status.model).toBe('grok-3-mini');
+    });
+
+    it('should create the LLM client from the detected provider', async () => {
+      const taskId = await runner.submitTask({ goal: 'Provider routing test' });
+      await waitForCompletion(runner, taskId, 5000);
+
+      expect(MockCodeBuddyClient).toHaveBeenCalledWith(
+        'oauth-chatgpt',
+        'gpt-5.5',
+        'https://chatgpt.com/backend-api/codex',
+      );
     });
   });
 
