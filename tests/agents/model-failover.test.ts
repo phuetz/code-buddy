@@ -1,19 +1,53 @@
 import { vi } from 'vitest';
-import { ModelFailoverChain, FailoverEntry } from '../../src/agents/model-failover.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import type {
+  FailoverEntry,
+  ModelFailoverChain as ModelFailoverChainType,
+} from '../../src/agents/model-failover.js';
 
-const oauthMocks = vi.hoisted(() => ({
-  hasCodexCredentials: vi.fn(() => false),
-}));
+let ModelFailoverChain: typeof import('../../src/agents/model-failover.js').ModelFailoverChain;
 
-vi.mock('../../src/providers/codex-oauth.js', () => ({
-  hasCodexCredentials: oauthMocks.hasCodexCredentials,
-}));
+function writeCodexCredentials(home: string): void {
+  const dir = path.join(home, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({
+      tokens: {
+        access_token: 'test-access-token',
+        id_token: 'test-id-token',
+        refresh_token: 'test-refresh-token',
+      },
+    }),
+    'utf-8',
+  );
+}
 
 describe('ModelFailoverChain', () => {
-  let chain: ModelFailoverChain;
+  let chain: ModelFailoverChainType;
+  let tmpHome: string;
+  let originalHome: string | undefined;
+  let originalUserProfile: string | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    originalHome = process.env.HOME;
+    originalUserProfile = process.env.USERPROFILE;
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-failover-home-'));
+    process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
+    vi.resetModules();
+    ({ ModelFailoverChain } = await import('../../src/agents/model-failover.js'));
     chain = new ModelFailoverChain();
+  });
+
+  afterEach(() => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = originalUserProfile;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   it('should create chain with defaults', () => {
@@ -129,7 +163,6 @@ describe('ModelFailoverChain', () => {
       delete process.env.GROK_BASE_URL;
       delete process.env.CODEBUDDY_PROVIDER;
       delete process.env.CHATGPT_MODEL;
-      oauthMocks.hasCodexCredentials.mockReturnValue(false);
     });
 
     afterEach(() => {
@@ -162,7 +195,7 @@ describe('ModelFailoverChain', () => {
     });
 
     it('should prefer ChatGPT OAuth when Codex credentials are available', () => {
-      oauthMocks.hasCodexCredentials.mockReturnValue(true);
+      writeCodexCredentials(tmpHome);
       process.env.GROK_API_KEY = 'k';
 
       const c = ModelFailoverChain.fromEnvironment();
@@ -178,7 +211,7 @@ describe('ModelFailoverChain', () => {
     });
 
     it('should skip ChatGPT OAuth when another provider is explicitly selected', () => {
-      oauthMocks.hasCodexCredentials.mockReturnValue(true);
+      writeCodexCredentials(tmpHome);
       process.env.CODEBUDDY_PROVIDER = 'grok';
       process.env.GROK_API_KEY = 'k';
 
