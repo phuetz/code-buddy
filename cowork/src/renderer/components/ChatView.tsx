@@ -12,6 +12,7 @@ import {
 } from '../store/selectors';
 import { useAppStore } from '../store';
 import { useIPC } from '../hooks/useIPC';
+import { useTextareaAutogrow } from '../hooks/use-textarea-autogrow';
 import { MessageCard } from './MessageCard';
 import { ModelSwitcher } from './ModelSwitcher';
 import { PermissionModeSelector } from './PermissionModeSelector';
@@ -126,6 +127,10 @@ export function ChatView() {
   const isUserAtBottomRef = useRef(true);
   const isComposingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Auto-grow the textarea between 44 and 200 px as the user types or
+  // pastes multi-line content. Mirrors the chat-ui gitnexus-rs ChatInput
+  // pattern so multi-line drafts don't push the chat history out of view.
+  useTextareaAutogrow(textareaRef, prompt);
   const prevMessageCountRef = useRef(0);
   const prevPartialLengthRef = useRef(0);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1200,6 +1205,7 @@ export function ChatView() {
               <textarea
                 ref={textareaRef}
                 value={prompt}
+                style={{ minHeight: 44 }}
                 onChange={(e) => {
                   const newValue = e.target.value;
                   setPrompt(newValue);
