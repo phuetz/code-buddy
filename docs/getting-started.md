@@ -227,9 +227,11 @@ Confirm `.codebuddy/CODEBUDDY_MEMORY.md` exists in your project. If not, run `bu
 ### Fleet: "AUTH_FAILED" when connecting to a peer
 The peer's API key needs the `fleet:listen` scope. On the peer, regenerate with:
 ```
-buddy api-keys create --scope fleet:listen
+buddy api-key create --name "Fleet peer" --scope fleet:listen --scope peer:invoke
 ```
 Then pass the new key with `--api-key` to `/fleet listen` on the connecting instance.
+The command stores only a hash in `~/.codebuddy/server-api-keys.json`, and the
+running server reloads the store when it changes.
 
 ### Fleet: connection drops repeatedly
 Auto-reconnect is opt-in (`autoReconnect: true` in the listener options). Without it, a single drop ends the session. With it, the listener uses exponential backoff. Check `/fleet status` for the current state. Persistent drops usually indicate an apiKey scope issue or a network/firewall problem (Tailscale ACLs, port 3000 reachable?).

@@ -20,17 +20,14 @@ Terminal 1:
 ```bash
 npm run build
 $env:GOOGLE_API_KEY="..."
-$env:NODE_ENV="development"
+$env:CODEBUDDY_FLEET_API_KEY=(node dist/index.js api-key create --name "Fleet smoke" --scope fleet:listen --scope peer:invoke --json | ConvertFrom-Json).key
 node dist/index.js server --port 3001
 ```
 
-Noter la cle admin de developpement imprimee par le serveur si l'authentification
-est active, puis la passer au client comme `CODEBUDDY_FLEET_API_KEY`.
-
-Point a corriger avant release: la documentation existante mentionne des formes
-`buddy api-key create` / `buddy api-keys create`, mais la commande CLI n'est pas
-encore exposee de maniere fiable dans l'index principal. Pour le smoke local,
-utiliser la cle de developpement ou une cle deja provisionnee.
+La commande `api-key create` imprime la cle brute une seule fois et stocke
+seulement son hash dans `~/.codebuddy/server-api-keys.json`. Le serveur recharge
+ce store quand il change, donc il est possible de creer une nouvelle cle sans
+redemarrer le serveur.
 
 ## Test loopback
 
@@ -62,6 +59,7 @@ Sur la machine serveur, exposer uniquement sur reseau prive ou Tailscale:
 
 ```bash
 $env:GOOGLE_API_KEY="..."
+$env:CODEBUDDY_FLEET_API_KEY=(node dist/index.js api-key create --name "Tailscale peer" --scope fleet:listen --scope peer:invoke --json | ConvertFrom-Json).key
 node dist/index.js server --host 0.0.0.0 --port 3001
 ```
 

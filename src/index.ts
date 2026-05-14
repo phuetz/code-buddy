@@ -1961,6 +1961,31 @@ function addLazyCommand(
   });
 }
 
+function addLazyCommandWithAliases(
+  parent: typeof program,
+  name: string,
+  aliases: string[],
+  description: string,
+  loader: () => Promise<import('commander').Command>,
+): void {
+  const names = [name, ...aliases];
+  for (const commandName of names) {
+    const stub = parent
+      .command(commandName)
+      .description(description)
+      .allowUnknownOption(true)
+      .allowExcessArguments(true)
+      .helpOption(false);
+
+    stub.action(async () => {
+      const realCommand = await loader();
+      removeCommands(parent, names);
+      parent.addCommand(realCommand);
+      await parent.parseAsync(process.argv);
+    });
+  }
+}
+
 addLazyCommand(
   program,
   'provider',
@@ -1988,6 +2013,17 @@ addLazyCommand(
   async () => {
     const { createPipelineCommand } = await import('./commands/pipeline.js');
     return createPipelineCommand();
+  },
+);
+
+addLazyCommandWithAliases(
+  program,
+  'api-key',
+  ['api-keys'],
+  'Manage Code Buddy server API keys for Fleet and peer tools',
+  async () => {
+    const { createApiKeyCommand } = await import('./commands/cli/api-key-command.js');
+    return createApiKeyCommand();
   },
 );
 

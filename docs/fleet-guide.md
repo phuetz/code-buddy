@@ -423,10 +423,16 @@ provider is selected.
 
 - **`CODEBUDDY_FLEET_API_KEY`** (caller side) — default key passed
   to `/fleet listen` when `--api-key` is omitted.
-- API keys are configured server-side via the existing key management
-  (see `docs/security.md`). Keys for fleet usage need the
-  `fleet:listen` scope (read-only events) and/or `peer:invoke` scope
-  (active RPC).
+- Server API keys are configured on the peer with:
+
+  ```bash
+  buddy api-key create --name "Fleet peer" --scope fleet:listen --scope peer:invoke
+  buddy api-key list
+  ```
+
+  Only a hash is stored in `~/.codebuddy/server-api-keys.json`; the full key is
+  printed once. Fleet usage needs the `fleet:listen` scope (read-only events)
+  and/or `peer:invoke` scope (active RPC).
 
 ### Hostname identification (Phase (d).1)
 

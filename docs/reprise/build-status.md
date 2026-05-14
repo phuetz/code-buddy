@@ -24,6 +24,13 @@ npm run build
 npm run validate
 # passed: lint + typecheck + 852 test files
 
+npm test -- tests/server/api-keys-store.test.ts tests/server/peer-websocket-smoke.test.ts
+# 6 tests passed
+
+node dist/index.js api-key create --name "Fleet smoke" --scope fleet:listen --scope peer:invoke --json
+node dist/index.js api-keys list --all-users --json
+# passed with CODEBUDDY_API_KEYS_FILE pointing at a temporary store
+
 node dist/index.js whoami
 # ChatGPT connected; plan pro; source .codebuddy/codex-auth.json
 
@@ -91,6 +98,9 @@ npm --prefix cowork run build
   POSIX strictes restent Unix-only dans le test de securite legacy, les env vars
   controlees sont propagees a WSL via `WSLENV`, et les tests de taches de fond
   attendent les sorties par polling plutot que par sleeps fixes.
+- Les cles API serveur Fleet sortent du mode "memoire du process": elles sont
+  stockees sous forme de hash local, rechargees par le serveur quand le store
+  change, et gerables par `buddy api-key` / `buddy api-keys`.
 
 ## Blocage leve
 
@@ -123,4 +133,5 @@ outils optionnels absents comme `nvidia-smi`).
 - Cowork compile, bundle et package son installeur Windows.
 - Fleet minimal a de meilleurs garde-fous: lecture fichier bornee sans charger
   tout le fichier en memoire, listing plafonne, sortie `/fleet tool` nettoyee
-  avant affichage, et refus d'autorisation renvoye au bon appelant.
+  avant affichage, refus d'autorisation renvoye au bon appelant, et creation
+  de cles `fleet:listen` / `peer:invoke` testable depuis la CLI.

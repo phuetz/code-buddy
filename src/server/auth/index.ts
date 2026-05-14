@@ -13,10 +13,13 @@ export {
   hasAnyScope,
   revokeApiKey,
   listApiKeys,
+  listAllApiKeys,
   deleteApiKey,
   getApiKeyById,
   updateApiKeyScopes,
   getApiKeyStats,
+  getApiKeyStorePath,
+  reloadApiKeyStore,
 } from './api-keys.js';
 
 export {

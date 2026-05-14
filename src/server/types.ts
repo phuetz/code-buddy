@@ -113,6 +113,8 @@ export interface ApiKey {
   id: string;
   /** Hashed API key */
   keyHash: string;
+  /** Non-secret display preview of the original key */
+  keyPreview?: string;
   /** Key name/description */
   name: string;
   /** User/owner ID */

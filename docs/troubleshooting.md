@@ -129,10 +129,10 @@ tailscale ping <peer-hostname>
 nc -zv <peer-ip> 3000
 
 # 2. Key + scopes (on the peer)
-buddy api-key create --scopes fleet:listen,peer:invoke
+buddy api-key create --name "Fleet peer" --scopes fleet:listen,peer:invoke
 
 # 3. CORS (on the peer)
-CODEBUDDY_FLEET_CORS_ORIGINS=http://<listener-host>:* buddy serve
+CODEBUDDY_FLEET_CORS_ORIGINS=http://<listener-host>:* buddy server
 ```
 
 See [`docs/fleet-guide.md`](fleet-guide.md) for the full scope

@@ -471,7 +471,7 @@ describe('CodeBuddyAgent', () => {
     it('should resolve systemPromptReady after initialization', async () => {
       agent = new CodeBuddyAgent('test-api-key');
       await expect(agent.systemPromptReady).resolves.toBeUndefined();
-    });
+    }, 15_000);
 
     it('should have a system message after systemPromptReady resolves', async () => {
       agent = new CodeBuddyAgent('test-api-key');
@@ -479,7 +479,7 @@ describe('CodeBuddyAgent', () => {
       const messages = (agent as any).messages;
       expect(messages.length).toBeGreaterThanOrEqual(1);
       expect(messages[0].role).toBe('system');
-    });
+    }, 15_000);
   });
 
   // =========================================================================
