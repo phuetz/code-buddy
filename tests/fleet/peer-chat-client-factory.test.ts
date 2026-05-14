@@ -7,22 +7,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  hasCodexCredentialsMock: vi.fn(),
-}));
-
-vi.mock('../../src/providers/codex-oauth.js', () => ({
-  hasCodexCredentials: mocks.hasCodexCredentialsMock,
-}));
-
-import {
-  createPeerChatClientFromEnv,
-  _getDetectionOrderForTests,
-  resolveProviderFromEnv,
-} from '../../src/fleet/peer-chat-client-factory.js';
-
-const { hasCodexCredentialsMock } = mocks;
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import type * as PeerFactory from '../../src/fleet/peer-chat-client-factory.js';
 
 /** Snapshot env vars we touch so each test can reset them cleanly. */
 const ENV_KEYS_TO_PRESERVE = [
@@ -46,20 +34,27 @@ const ENV_KEYS_TO_PRESERVE = [
 ];
 
 let originalEnv: Record<string, string | undefined>;
+let tmpHome: string;
+let factory: typeof PeerFactory;
 
-beforeEach(() => {
+beforeEach(async () => {
   originalEnv = {};
   for (const key of ENV_KEYS_TO_PRESERVE) {
     originalEnv[key] = process.env[key];
     delete process.env[key];
   }
-  hasCodexCredentialsMock.mockReset();
-  hasCodexCredentialsMock.mockReturnValue(false);
+  originalEnv.HOME = process.env.HOME;
+  originalEnv.USERPROFILE = process.env.USERPROFILE;
+  tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-peer-home-'));
+  process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome;
   // Disable gemini-cli auto-detect by default so tests that don't
   // explicitly opt-in aren't influenced by a real `gemini` binary
   // installed on the test host. A non-existent path short-circuits
   // the PATH walk in `resolveGeminiCliBinary()`.
   process.env.GEMINI_CLI_PATH = '/tmp/__no_gemini_cli_in_tests__';
+  vi.resetModules();
+  factory = await import('../../src/fleet/peer-chat-client-factory.js');
 });
 
 afterEach(() => {
@@ -67,7 +62,42 @@ afterEach(() => {
     if (originalEnv[key] === undefined) delete process.env[key];
     else process.env[key] = originalEnv[key];
   }
+  if (originalEnv.HOME === undefined) delete process.env.HOME;
+  else process.env.HOME = originalEnv.HOME;
+  if (originalEnv.USERPROFILE === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = originalEnv.USERPROFILE;
+  fs.rmSync(tmpHome, { recursive: true, force: true });
 });
+
+function createPeerChatClientFromEnv(): ReturnType<typeof factory.createPeerChatClientFromEnv> {
+  return factory.createPeerChatClientFromEnv();
+}
+
+function resolveProviderFromEnv(
+  preferred?: Parameters<typeof factory.resolveProviderFromEnv>[0],
+): ReturnType<typeof factory.resolveProviderFromEnv> {
+  return factory.resolveProviderFromEnv(preferred);
+}
+
+function _getDetectionOrderForTests(): ReturnType<typeof factory._getDetectionOrderForTests> {
+  return factory._getDetectionOrderForTests();
+}
+
+function writeCodexCredentials(): void {
+  const dir = path.join(tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({
+      tokens: {
+        access_token: 'test-access-token',
+        id_token: 'test-id-token',
+        refresh_token: 'test-refresh-token',
+      },
+    }),
+    'utf-8',
+  );
+}
 
 describe('peer-chat-client-factory — Phase (d).16a', () => {
   describe('detection order constant', () => {
@@ -111,7 +141,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
     it('honors explicit CODEBUDDY_PEER_PROVIDER=chatgpt when Codex OAuth exists', () => {
       process.env.OLLAMA_HOST = 'localhost:11434';
       process.env.CODEBUDDY_PEER_PROVIDER = 'chatgpt';
-      hasCodexCredentialsMock.mockReturnValue(true);
+      writeCodexCredentials();
 
       const result = createPeerChatClientFromEnv();
 
@@ -130,7 +160,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
 
   describe('auto-detection priority order', () => {
     it('ChatGPT Codex OAuth beats ambient local/API providers once the user is logged in', () => {
-      hasCodexCredentialsMock.mockReturnValue(true);
+      writeCodexCredentials();
       process.env.OLLAMA_HOST = 'localhost:11434';
       process.env.GROK_API_KEY = 'grok-x';
       process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
@@ -232,9 +262,9 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
 
   describe('isLocal flag', () => {
     it('is true for local/subprocess providers, false for cloud providers', () => {
-      hasCodexCredentialsMock.mockReturnValue(true);
+      writeCodexCredentials();
       expect(createPeerChatClientFromEnv()!.info.isLocal).toBe(false);
-      hasCodexCredentialsMock.mockReturnValue(false);
+      fs.rmSync(path.join(tmpHome, '.codebuddy'), { recursive: true, force: true });
 
       process.env.OLLAMA_HOST = 'localhost:11434';
       expect(createPeerChatClientFromEnv()!.info.isLocal).toBe(true);
@@ -280,7 +310,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
     });
 
     it('uses CHATGPT_MODEL as the ChatGPT subscription default before the generic peer override', () => {
-      hasCodexCredentialsMock.mockReturnValue(true);
+      writeCodexCredentials();
       process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
       let result = createPeerChatClientFromEnv();
       expect(result!.info.model).toBe('gpt-5.1-codex');
@@ -291,7 +321,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
     });
 
     it('uses CHATGPT_MODEL when resolving a raw ChatGPT provider tuple', () => {
-      hasCodexCredentialsMock.mockReturnValue(true);
+      writeCodexCredentials();
       process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
 
       expect(resolveProviderFromEnv('chatgpt')?.model).toBe('gpt-5.1-codex');

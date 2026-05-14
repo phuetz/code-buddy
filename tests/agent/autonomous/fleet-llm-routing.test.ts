@@ -13,19 +13,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  hasCodexCredentialsMock: vi.fn(),
-}));
-
-vi.mock('../../../src/providers/codex-oauth.js', () => ({
-  hasCodexCredentials: mocks.hasCodexCredentialsMock,
-}));
-
-import { resolveTickProvider } from '../../../src/agent/autonomous/fleet-tick-handler.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import type * as FleetTick from '../../../src/agent/autonomous/fleet-tick-handler.js';
 import type { FleetTask } from '../../../src/agent/autonomous/fleet-task-types.js';
-
-const { hasCodexCredentialsMock } = mocks;
 
 const ENV_KEYS = [
   'OLLAMA_HOST',
@@ -40,21 +32,28 @@ const ENV_KEYS = [
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
   'CHATGPT_MODEL',
+  'HOME',
+  'USERPROFILE',
 ];
 
 let saved: Record<string, string | undefined>;
+let tmpHome: string;
+let fleetTick: typeof FleetTick;
 
-beforeEach(() => {
+beforeEach(async () => {
   saved = {};
   for (const k of ENV_KEYS) {
     saved[k] = process.env[k];
     delete process.env[k];
   }
-  hasCodexCredentialsMock.mockReset();
-  hasCodexCredentialsMock.mockReturnValue(false);
+  tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-fleet-home-'));
+  process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome;
   // Keep these tests hermetic on developer machines that have `gemini`
   // installed globally; an explicit missing path disables PATH probing.
   process.env.GEMINI_CLI_PATH = '__codebuddy_missing_gemini_cli_for_tests__';
+  vi.resetModules();
+  fleetTick = await import('../../../src/agent/autonomous/fleet-tick-handler.js');
 });
 
 afterEach(() => {
@@ -62,7 +61,31 @@ afterEach(() => {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
   }
+  fs.rmSync(tmpHome, { recursive: true, force: true });
 });
+
+function resolveTickProvider(
+  task: Pick<FleetTask, 'preferLocal'>,
+  configProvider: Parameters<typeof fleetTick.resolveTickProvider>[1],
+): ReturnType<typeof fleetTick.resolveTickProvider> {
+  return fleetTick.resolveTickProvider(task, configProvider);
+}
+
+function writeCodexCredentials(): void {
+  const dir = path.join(tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({
+      tokens: {
+        access_token: 'test-access-token',
+        id_token: 'test-id-token',
+        refresh_token: 'test-refresh-token',
+      },
+    }),
+    'utf-8',
+  );
+}
 
 const taskBase = (overrides: Partial<FleetTask> = {}): Pick<FleetTask, 'preferLocal'> => ({
   preferLocal: false,
@@ -107,7 +130,7 @@ describe('resolveTickProvider — priority cascade', () => {
   });
 
   it('llm_provider="cloud" prefers ChatGPT subscription auth over legacy Grok env', () => {
-    hasCodexCredentialsMock.mockReturnValue(true);
+    writeCodexCredentials();
     process.env.GROK_API_KEY = 'sk-grok';
     process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
 
