@@ -993,6 +993,22 @@ describe('PluginMarketplace', () => {
       expect(startHandler).toHaveBeenCalledWith({ pluginId: 'test-plugin' });
       expect(errorHandler).toHaveBeenCalled();
     });
+
+    it('should not fabricate an installed plugin from an unextracted archive', async () => {
+      const plugin = createMockPlugin();
+      mockAxios.get
+        .mockResolvedValueOnce({ data: plugin })
+        .mockResolvedValueOnce({ data: Buffer.from('tgz bytes'), headers: {} });
+
+      marketplace = new PluginMarketplace({ autoUpdate: false });
+
+      await expect(marketplace.install('test-plugin')).rejects.toThrow(
+        'Plugin archive extraction is not implemented'
+      );
+
+      expect(marketplace.getInstalled()).toEqual([]);
+      expect(fsExtra.remove).toHaveBeenCalled();
+    });
   });
 
   describe('uninstall', () => {

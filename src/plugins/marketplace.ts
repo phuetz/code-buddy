@@ -297,6 +297,7 @@ export class PluginMarketplace extends EventEmitter {
     }
 
     this.emit('install:start', { pluginId });
+    let installPath: string | null = null;
 
     try {
       // Get plugin info
@@ -330,13 +331,12 @@ export class PluginMarketplace extends EventEmitter {
       }
 
       // Extract to plugins directory
-      const installPath = path.join(this.pluginsDir, 'installed', pluginId);
+      installPath = path.join(this.pluginsDir, 'installed', pluginId);
       await fs.ensureDir(installPath);
 
-      // Write plugin data (in real implementation, would extract tarball)
+      // Keep the downloaded artifact for diagnostics until extraction succeeds.
       await fs.writeFile(path.join(installPath, 'plugin.tgz'), response.data);
 
-      // For now, simulate extraction by creating a simple module
       await this.extractPlugin(installPath, response.data);
 
       // Create installed plugin record
@@ -359,6 +359,9 @@ export class PluginMarketplace extends EventEmitter {
 
       return installed;
     } catch (error) {
+      if (installPath) {
+        await fs.remove(installPath).catch(() => undefined);
+      }
       this.emit('install:error', { pluginId, error });
       throw error;
     }
@@ -367,21 +370,8 @@ export class PluginMarketplace extends EventEmitter {
   /**
    * Extract plugin archive
    */
-  private async extractPlugin(installPath: string, _data: Buffer): Promise<void> {
-    // In a real implementation, this would extract a tarball
-    // For now, create a placeholder module
-
-    const indexPath = path.join(installPath, 'index.js');
-    await fs.writeFile(indexPath, `
-      module.exports = {
-        activate: function(api) {
-          api.log('info', 'Plugin activated');
-        },
-        deactivate: function() {
-          // Cleanup
-        }
-      };
-    `);
+  private async extractPlugin(_installPath: string, _data: Buffer): Promise<void> {
+    throw new Error('Plugin archive extraction is not implemented. Add a real archive extractor before enabling marketplace installs.');
   }
 
   /**

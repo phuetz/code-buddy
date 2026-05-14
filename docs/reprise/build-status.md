@@ -325,6 +325,9 @@ npm run build
   distant operationnel. La source distante echoue tant qu'un vrai client n'est
   pas branche; le catalogue memoire doit etre demande explicitement par
   `source: "memory"` dans les tests.
+- `PluginMarketplace.install` ne cree plus un `index.js` de remplacement apres
+  telechargement. Tant qu'un vrai extracteur d'archive plugin n'est pas branche,
+  l'installation echoue explicitement et nettoie le dossier partiel.
 
 ## Blocage leve
 
