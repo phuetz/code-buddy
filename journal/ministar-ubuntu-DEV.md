@@ -1766,3 +1766,77 @@ JWT scope dédié `peer:tool:invoke` ; MCP-tool exposure cross-host.
 
 — Claude/Ministar Ubuntu, 2026-05-15 00h45 UTC
 
+## 2026-05-15 (suite) — Polish `peer.tool.invoke` (commit `160826b5`)
+
+> ⚠️ **Toujours DO NOT PUSH** — même règle que `f8a83f5a`. Deux commits
+> en local Ministar empilés, à push ensemble une fois Phase 2-3 vertes.
+
+Patrice toujours au dodo, j'ai continué en autonome sur les polish points
+de l'advisor + UX du slash. Tout est low-risk, zéro régression sur 649
+tests fleet+server.
+
+### Ce qui a été ajouté (commit `160826b5`)
+
+**1. Slash `/fleet tool <peer> <name> [json-args] [--timeout <ms>] [--stream]`**
+
+UX wrapper autour de `peer.tool.invoke` — au lieu de devoir taper
+`/fleet send darkstar peer.tool.invoke {"tool":"view_file","args":{"file_path":"..."}}`,
+on tape directement `/fleet tool darkstar view_file {"file_path":"..."}`.
+Avec `--stream`, les chunks `peer:chunk` sont print live via
+`process.stdout.write` pendant l'invocation, suivis d'une summary line
+terse `<bytes> bytes`.
+
+**2. Tests edge-case (advisor tertiary points)**
+- `search` avec zero matches → ripgrep exit 1 mapped en ok=true output
+  vide (pas en SEARCH_FAILED)
+- `view_file` > 10 MB → `truncated=true`, output cap à 10 MB exact
+- `CODEBUDDY_PEER_TOOL_ALLOWLIST=view_file` restreint à 1 tool
+- `CODEBUDDY_PEER_TOOL_ALLOWLIST="   "` (whitespace) fallback V1 default
+
+**Fichiers (commit `160826b5`)**
+- `src/commands/handlers/fleet-handler.ts` (+HELP entry + handleTool ~95 LOC)
+- `src/fleet/fleet-registry.ts` (+invokeTool/invokeToolStream optional dans FleetListenerPublicAPI)
+- `tests/fleet/fleet-handler.test.ts` (+11 tests couvrant le slash)
+- `tests/server/peer-tool-bridge.test.ts` (+4 edge cases)
+
+### Recommandation pour Phase 3 (tests E2E DARKSTAR)
+
+Une fois DARKSTAR fleet gateway up + peer registered en `/fleet listen`,
+préférer le slash dédié (plus court à taper) :
+
+```
+/fleet tool darkstar view_file {"file_path":"world-model/README.md"}
+/fleet tool darkstar list_directory {"path":"."}
+/fleet tool darkstar search {"query":"loss_pred","path":"."}
+/fleet tool darkstar view_file {"file_path":"big.txt"} --stream
+/fleet tool darkstar bash {}    # attendu: TOOL_NOT_ALLOWED_FOR_PEER_INVOKE
+/fleet tool darkstar view_file {"file_path":"C:/Windows/win.ini"}    # PATH_OUTSIDE
+```
+
+L'ancien `/fleet send darkstar peer.tool.invoke {...}` reste dispo pour
+debug (au cas où le wrapper aurait un bug, on a un escape hatch direct
+sur le RPC de bas niveau).
+
+### Vérifications
+
+- ✅ Typecheck clean
+- ✅ 649/649 tests fleet+server (vs 363 hier — +59 fleet-handler avec
+  les 11 nouveaux + 23 peer-tool-bridge avec les 4 nouveaux)
+- ✅ Zéro régression sur les autres suites
+- ✅ Lint clean sur les 4 fichiers touchés
+- ✅ Conservé l'optionalité `invokeTool?` dans l'interface pour
+  rétrocompatibilité avec les mocks de tests existants — le slash
+  retourne un message clair "older Code Buddy build" si la méthode
+  manque (jamais en prod, juste pour la robustesse)
+
+### Stack des 2 commits locaux à push (en bloc, après Phase 2-3 verts)
+
+```
+160826b5  feat(fleet): /fleet tool slash + peer-tool-bridge edge tests
+f8a83f5a  feat(fleet): peer.tool.invoke V1 — read-only remote tool invocation
+3ceac032  docs(troubleshooting): FAQ for boot, peer, JWT, Ollama, sessions, CI   ← origin/main
+```
+
+— Claude/Ministar Ubuntu, 2026-05-15 02h25 UTC
+
+
