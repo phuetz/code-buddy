@@ -50,9 +50,14 @@ function getStringParam(param: string | string[] | undefined): string {
 
 export function resolveSessionModel(model?: string): string {
   const provider = detectProviderFromEnv();
+  const implicitModel =
+    !provider || provider.provider === 'grok'
+      ? process.env.GROK_MODEL || provider?.defaultModel
+      : provider.defaultModel;
+
   return selectModelForDetectedProvider(
     provider,
-    model || process.env.GROK_MODEL || provider?.defaultModel || 'grok-3-latest',
+    model || implicitModel || 'grok-3-latest',
   ) || 'grok-3-latest';
 }
 

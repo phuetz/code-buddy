@@ -92,6 +92,18 @@ describe('interactive provider setup', () => {
     expect(resolveSessionModel()).toBe('gpt-5.5');
   });
 
+  it('does not treat GROK_MODEL as a ChatGPT session model override', () => {
+    providerMocks.detectProviderFromEnv.mockReturnValue({
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    });
+    process.env.GROK_MODEL = 'gpt-5.1-codex';
+
+    expect(resolveSessionModel()).toBe('gpt-5.5');
+  });
+
   it('preserves explicit non-Grok session model overrides', () => {
     providerMocks.detectProviderFromEnv.mockReturnValue({
       provider: 'chatgpt',
