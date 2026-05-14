@@ -1504,6 +1504,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       store?: string;
       error?: string;
     }> => ipcRenderer.invoke('fleet.listApiKeys', input),
+    discoverPeers: (): Promise<{
+      ok: boolean;
+      peers: Array<{
+        label: string;
+        url: string;
+        source: 'tailscale' | 'manual';
+        apiKey?: string;
+      }>;
+      total?: number;
+      error?: string;
+    }> => ipcRenderer.invoke('fleet.discoverPeers'),
     /**
      * Fleet P5 — dispatch a goal across the fleet via the task router.
      * Returns the saga id once the dispatch is queued; sagas are
@@ -3068,6 +3079,17 @@ declare global {
             lastUsedAt?: string;
           }>;
           store?: string;
+          error?: string;
+        }>;
+        discoverPeers: () => Promise<{
+          ok: boolean;
+          peers: Array<{
+            label: string;
+            url: string;
+            source: 'tailscale' | 'manual';
+            apiKey?: string;
+          }>;
+          total?: number;
           error?: string;
         }>;
         dispatch: (input: {

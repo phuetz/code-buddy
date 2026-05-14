@@ -24,6 +24,7 @@ import {
   KeyRound,
   Copy,
   Check,
+  Search,
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { FleetPeerStatus } from '../types';
@@ -36,6 +37,13 @@ const STATUS_TOKEN: Record<FleetPeerStatus, string> = {
   reconnecting: 'text-warning',
   error: 'text-error',
 };
+
+interface DiscoveredFleetPeer {
+  label: string;
+  url: string;
+  source: 'tailscale' | 'manual';
+  apiKey?: string;
+}
 
 function StatusIcon({ status }: { status: FleetPeerStatus }) {
   const cls = STATUS_TOKEN[status] ?? 'text-text-muted';
@@ -69,6 +77,9 @@ export function FleetPanel() {
   const events = useAppStore((s) => s.fleetEvents);
   const setFleetPeers = useAppStore((s) => s.setFleetPeers);
   const removeFleetPeer = useAppStore((s) => s.removeFleetPeer);
+  const discoveredPeers = useAppStore((s) => s.fleetDiscoveredPeers);
+  const setFleetDiscoveredPeers = useAppStore((s) => s.setFleetDiscoveredPeers);
+  const dismissFleetDiscoveredPeer = useAppStore((s) => s.dismissFleetDiscoveredPeer);
 
   const [showAdd, setShowAdd] = useState(false);
   const [filterPeer, setFilterPeer] = useState<string | null>(null);
@@ -80,6 +91,11 @@ export function FleetPanel() {
   const [localKeyError, setLocalKeyError] = useState<string | null>(null);
   const [localKeyBusy, setLocalKeyBusy] = useState(false);
   const [localKeyCopied, setLocalKeyCopied] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverNotice, setDiscoverNotice] = useState<{
+    kind: 'info' | 'error';
+    text: string;
+  } | null>(null);
 
   const peers = useMemo(() => Object.values(peersMap), [peersMap]);
 
@@ -143,6 +159,51 @@ export function FleetPanel() {
     await window.electronAPI.fleet.reconnect(peerId);
   };
 
+  const runDiscovery = async () => {
+    if (discovering) return;
+    setDiscovering(true);
+    setDiscoverNotice(null);
+    try {
+      const result = await window.electronAPI.fleet.discoverPeers();
+      if (!result.ok) {
+        setDiscoverNotice({ kind: 'error', text: result.error || 'Discovery failed' });
+        return;
+      }
+      setFleetDiscoveredPeers(result.peers);
+      if (result.peers.length === 0) {
+        setDiscoverNotice({ kind: 'info', text: 'No new peers found' });
+      }
+    } catch (err) {
+      setDiscoverNotice({
+        kind: 'error',
+        text: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const connectDiscoveredPeer = async (peer: DiscoveredFleetPeer) => {
+    if (!peer.apiKey?.trim()) {
+      setAddUrl(peer.url);
+      setAddLabel(peer.label);
+      setShowAdd(true);
+      setAddError('API key required');
+      return;
+    }
+
+    const result = await window.electronAPI.fleet.addPeer({
+      url: peer.url,
+      apiKey: peer.apiKey,
+      label: peer.label,
+    });
+    if (!result.success) {
+      setDiscoverNotice({ kind: 'error', text: result.error || 'Failed to add peer' });
+      return;
+    }
+    dismissFleetDiscoveredPeer(peer.url);
+  };
+
   const createLocalKey = async () => {
     if (localKeyBusy) return;
     setLocalKeyBusy(true);
@@ -200,6 +261,15 @@ export function FleetPanel() {
             </span>
             <div className="flex items-center gap-1.5">
               <button
+                onClick={runDiscovery}
+                disabled={discovering}
+                className="rounded p-1.5 text-text-muted hover:bg-surface hover:text-text-primary disabled:opacity-50 transition-colors"
+                title="Discover Fleet peers"
+                aria-label="Discover Fleet peers"
+              >
+                <Search className={`w-3.5 h-3.5 ${discovering ? 'animate-pulse' : ''}`} />
+              </button>
+              <button
                 onClick={createLocalKey}
                 disabled={localKeyBusy}
                 className="rounded p-1.5 text-text-muted hover:bg-surface hover:text-text-primary disabled:opacity-50 transition-colors"
@@ -244,6 +314,61 @@ export function FleetPanel() {
                   <AlertCircle className="h-3 w-3" />
                   {localKeyError}
                 </p>
+              )}
+            </div>
+          )}
+
+          {(discoveredPeers.length > 0 || discoverNotice) && (
+            <div className="border-t border-border px-4 py-2">
+              {discoverNotice && (
+                <p
+                  className={`mb-2 flex items-center gap-1 text-xs ${
+                    discoverNotice.kind === 'error' ? 'text-error' : 'text-text-muted'
+                  }`}
+                >
+                  <AlertCircle className="h-3 w-3" />
+                  {discoverNotice.text}
+                </p>
+              )}
+              {discoveredPeers.length > 0 && (
+                <ul className="space-y-1">
+                  {discoveredPeers.map((peer) => (
+                    <li
+                      key={peer.url}
+                      className="flex items-center gap-2 rounded border border-border bg-surface px-2 py-1.5 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate font-medium text-text-primary">
+                            {peer.label}
+                          </span>
+                          <span className="shrink-0 rounded bg-background-secondary px-1.5 py-0.5 text-[10px] text-text-muted">
+                            {peer.source}
+                          </span>
+                        </div>
+                        <div className="truncate font-mono text-[10px] text-text-muted">
+                          {peer.url}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => void connectDiscoveredPeer(peer)}
+                        className="rounded p-1 text-text-muted hover:bg-background-secondary hover:text-text-primary transition-colors"
+                        title={peer.apiKey ? 'Add peer' : 'Use in add form'}
+                        aria-label={peer.apiKey ? 'Add peer' : 'Use in add form'}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => dismissFleetDiscoveredPeer(peer.url)}
+                        className="rounded p-1 text-text-muted hover:bg-background-secondary hover:text-error transition-colors"
+                        title="Dismiss"
+                        aria-label="Dismiss"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           )}

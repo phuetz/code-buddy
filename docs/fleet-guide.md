@@ -436,6 +436,9 @@ provider is selected.
 - In Cowork, the Fleet panel's key button creates the same local server key
   through the embedded Code Buddy engine and shows the full value once for
   copying to another peer.
+- The Fleet panel's scan button runs the same Tailscale/manual YAML discovery
+  path as the boot-time background scan. Manual YAML entries that include an
+  `apiKey` can be added directly; peers without a key prefill the add form.
 
 ### Hostname identification (Phase (d).1)
 

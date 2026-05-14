@@ -276,7 +276,7 @@ export function registerFleetIpcHandlers(fleetBridge: FleetBridge | null) {
           return {
             ok: false,
             error:
-              'No peer with known capabilities — wait for the next heartbeat or add peers via Settings → A2A.',
+              'No peer with known capabilities — wait for the next heartbeat or add peers from the Fleet panel.',
           };
         }
 

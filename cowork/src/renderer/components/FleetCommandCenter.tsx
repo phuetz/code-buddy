@@ -189,11 +189,11 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
             {peers.length === 0 ? (
               <div className="p-6 text-xs text-zinc-500 text-center">
-                {t(
-                  'fleet.noPeers',
-                  'Aucun peer configuré. Utilise Settings → A2A pour en ajouter, ou démarre un Code Buddy avec --serve sur le tailnet.',
-                )}
-              </div>
+                  {t(
+                    'fleet.noPeers',
+                    'Aucun peer configuré. Ouvre le panneau Fleet pour scanner ou ajouter un peer Code Buddy.',
+                  )}
+                </div>
             ) : (
               <ul>
                 {peers.map((p) => (

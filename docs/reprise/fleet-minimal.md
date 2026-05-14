@@ -33,6 +33,10 @@ Depuis Cowork, le panneau Fleet expose aussi un bouton de creation de cle locale
 Il passe par le meme store serveur et affiche la cle complete une seule fois
 pour la copier vers l'autre peer.
 
+Le meme panneau peut lancer la decouverte Tailscale / `fleet-peers.yaml`.
+Une entree YAML avec `apiKey` peut etre ajoutee directement; sinon Cowork
+prefill le formulaire et attend la cle du peer.
+
 ## Test loopback
 
 Terminal 2:
