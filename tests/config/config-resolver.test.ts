@@ -38,7 +38,9 @@ describe('ConfigResolver', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_BASE_URL;
     delete process.env.ANTHROPIC_MODEL;
+    delete process.env.OLLAMA_HOST;
   });
 
   afterEach(() => {
@@ -150,6 +152,43 @@ describe('ConfigResolver', () => {
       expect(result.model).toBe('gpt-5.1-codex');
       expect(result.provider).toBe('openai');
       expect(result.source).toBe('environment');
+    });
+
+    it('should use CLI provider defaults instead of Grok base URL', () => {
+      process.env.OPENAI_API_KEY = 'openai-env-key';
+
+      const resolver = new ConfigResolver();
+      const result = resolver.resolve({ provider: 'openai' });
+
+      expect(result.baseURL).toBe('https://api.openai.com/v1');
+      expect(result.apiKey).toBe('openai-env-key');
+      expect(result.model).toBe('gpt-4o');
+      expect(result.provider).toBe('openai');
+      expect(result.source).toBe('cli');
+    });
+
+    it('should use profile provider model defaults when model is omitted', () => {
+      const config: ConnectionConfig = {
+        profiles: [
+          {
+            id: 'openai-profile',
+            name: 'OpenAI Profile',
+            provider: 'openai',
+            baseURL: 'https://api.openai.com/v1',
+            apiKey: 'profile-openai-key',
+            enabled: true,
+          },
+        ],
+        activeProfileId: 'openai-profile',
+        envVarsFallback: false,
+      };
+
+      const resolver = new ConfigResolver(config);
+      const result = resolver.resolve();
+
+      expect(result.model).toBe('gpt-4o');
+      expect(result.provider).toBe('openai');
+      expect(result.source).toBe('profile');
     });
 
     it('should use defaults when nothing else available', () => {

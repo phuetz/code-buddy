@@ -87,7 +87,7 @@ export class ConfigResolver extends EventEmitter {
     }
 
     // 2. If CLI provides direct config values, use those
-    if (cliOverrides?.baseURL || cliOverrides?.apiKey) {
+    if (cliOverrides?.baseURL || cliOverrides?.apiKey || cliOverrides?.provider) {
       return this.resolveFromCLI(cliOverrides);
     }
 
@@ -128,8 +128,8 @@ export class ConfigResolver extends EventEmitter {
   private resolveFromCLI(cli: CLIOverrides): ResolvedConfig {
     const provider = cli.provider || this.detectProvider(cli.baseURL) || 'grok';
     return {
-      baseURL: cli.baseURL || process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
-      apiKey: cli.apiKey || process.env.GROK_API_KEY || '',
+      baseURL: cli.baseURL || this.defaultBaseURLForProvider(provider),
+      apiKey: cli.apiKey || this.envApiKeyForProvider(provider) || '',
       model: cli.model || this.defaultModelForProvider(provider),
       provider,
       source: 'cli',
@@ -150,7 +150,7 @@ export class ConfigResolver extends EventEmitter {
     return {
       baseURL: cli?.baseURL || profile.baseURL,
       apiKey: cli?.apiKey || profile.apiKey || '',
-      model: cli?.model || profile.model || 'grok-code-fast-1',
+      model: cli?.model || profile.model || this.defaultModelForProvider(profile.provider),
       provider: cli?.provider || profile.provider,
       profileId: profile.id,
       profileName: profile.name,
@@ -248,6 +248,53 @@ export class ConfigResolver extends EventEmitter {
       case 'grok':
       default:
         return process.env.GROK_MODEL || 'grok-code-fast-1';
+    }
+  }
+
+  private defaultBaseURLForProvider(provider: ProviderType): string {
+    switch (provider) {
+      case 'chatgpt':
+        return 'https://chatgpt.com/backend-api/codex';
+      case 'openai':
+        return process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+      case 'claude':
+      case 'anthropic':
+        return process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1';
+      case 'gemini':
+        return 'https://generativelanguage.googleapis.com/v1beta';
+      case 'ollama': {
+        let host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+        if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
+        return host.endsWith('/v1') ? host : host.replace(/\/+$/, '') + '/v1';
+      }
+      case 'lmstudio':
+      case 'local':
+        return 'http://localhost:1234/v1';
+      case 'grok':
+      default:
+        return process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
+    }
+  }
+
+  private envApiKeyForProvider(provider: ProviderType): string | undefined {
+    switch (provider) {
+      case 'chatgpt':
+        return undefined;
+      case 'openai':
+        return process.env.OPENAI_API_KEY;
+      case 'claude':
+      case 'anthropic':
+        return process.env.ANTHROPIC_API_KEY;
+      case 'gemini':
+        return process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+      case 'ollama':
+        return 'ollama';
+      case 'lmstudio':
+      case 'local':
+        return 'local';
+      case 'grok':
+      default:
+        return process.env.GROK_API_KEY || process.env.XAI_API_KEY;
     }
   }
 
