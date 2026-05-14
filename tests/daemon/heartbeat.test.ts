@@ -1,3 +1,32 @@
+const providerMocks = vi.hoisted(() => ({
+  detectProviderMock: vi.fn(),
+  agentConstructorMock: vi.fn(),
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.detectProviderMock,
+}));
+
+vi.mock('../../src/agent/codebuddy-agent.js', () => {
+  class MockCodeBuddyAgent {
+    constructor(
+      apiKey: string,
+      baseURL?: string,
+      model?: string,
+      maxToolRounds?: number,
+      useRAG?: boolean
+    ) {
+      providerMocks.agentConstructorMock(apiKey, baseURL, model, maxToolRounds, useRAG);
+    }
+
+    async processUserMessage() {
+      return [{ type: 'assistant', content: 'HEARTBEAT_OK' }];
+    }
+  }
+
+  return { CodeBuddyAgent: MockCodeBuddyAgent };
+});
+
 import { HeartbeatEngine, resetHeartbeatEngine, getHeartbeatEngine } from '../../src/daemon/heartbeat.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -13,6 +42,8 @@ describe('HeartbeatEngine', () => {
 
   beforeEach(async () => {
     resetHeartbeatEngine();
+    providerMocks.detectProviderMock.mockReset();
+    providerMocks.agentConstructorMock.mockReset();
     mockAgentReview.mockClear();
     mockAgentReview.mockResolvedValue('HEARTBEAT_OK');
 
@@ -376,6 +407,33 @@ describe('HeartbeatEngine', () => {
       expect(status.lastResult).toBe('HEARTBEAT_OK');
       expect(status.lastRunTime).not.toBeNull();
       alwaysActiveEngine.stop();
+    });
+
+    it('uses the detected provider for live agent reviews', async () => {
+      providerMocks.detectProviderMock.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      const liveEngine = new HeartbeatEngine({
+        heartbeatFilePath,
+        activeHoursStart: 0,
+        activeHoursEnd: 24,
+      });
+
+      const result = await liveEngine.tick();
+
+      expect(result.suppressed).toBe(true);
+      expect(providerMocks.agentConstructorMock).toHaveBeenCalledWith(
+        'oauth-chatgpt',
+        'https://chatgpt.com/backend-api/codex',
+        'gpt-5.5',
+        10,
+        false
+      );
+      liveEngine.stop();
     });
   });
 

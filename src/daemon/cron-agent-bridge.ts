@@ -7,7 +7,8 @@
 
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
-import type { CronJob, JobRun } from '../scheduler/cron-scheduler.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import type { CronJob } from '../scheduler/cron-scheduler.js';
 
 // ============================================================================
 // Types
@@ -15,7 +16,7 @@ import type { CronJob, JobRun } from '../scheduler/cron-scheduler.js';
 
 export interface BridgeConfig {
   /** Default API key for agent instances */
-  apiKey: string;
+  apiKey?: string;
   /** Default base URL */
   baseURL?: string;
   /** Default model */
@@ -41,6 +42,12 @@ const DEFAULT_BRIDGE_CONFIG: Partial<BridgeConfig> = {
   jobTimeoutMs: 300000, // 5 minutes
 };
 
+interface ResolvedAgentConfig {
+  apiKey: string;
+  baseURL?: string;
+  model?: string;
+}
+
 // ============================================================================
 // Cron Agent Bridge
 // ============================================================================
@@ -52,6 +59,27 @@ export class CronAgentBridge extends EventEmitter {
   constructor(config: BridgeConfig) {
     super();
     this.config = { ...DEFAULT_BRIDGE_CONFIG, ...config } as BridgeConfig;
+  }
+
+  private resolveAgentConfig(modelOverride?: string): ResolvedAgentConfig {
+    if (this.config.apiKey) {
+      return {
+        apiKey: this.config.apiKey,
+        baseURL: this.config.baseURL,
+        model: modelOverride || this.config.model,
+      };
+    }
+
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      throw new Error('No AI provider configured for cron job execution. Run `buddy login chatgpt` or set a provider API key.');
+    }
+
+    return {
+      apiKey: provider.apiKey,
+      baseURL: this.config.baseURL || provider.baseURL,
+      model: modelOverride || this.config.model || provider.defaultModel,
+    };
   }
 
   /**
@@ -149,11 +177,12 @@ export class CronAgentBridge extends EventEmitter {
     }
 
     // Lazy load agent to avoid circular deps
+    const agentConfig = this.resolveAgentConfig(job.task.model);
     const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
     const agent = new CodeBuddyAgent(
-      this.config.apiKey,
-      this.config.baseURL,
-      job.task.model || this.config.model,
+      agentConfig.apiKey,
+      agentConfig.baseURL,
+      agentConfig.model,
       this.config.maxToolRounds,
       false // no RAG for cron jobs
     );

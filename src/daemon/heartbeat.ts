@@ -16,6 +16,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 
 // ============================================================================
 // Types
@@ -331,9 +332,10 @@ export class HeartbeatEngine extends EventEmitter {
       return this.config.agentReviewFn(checklistContent);
     }
 
-    const apiKey = process.env.GROK_API_KEY || '';
-    const baseURL = process.env.GROK_BASE_URL;
-    const model = process.env.GROK_MODEL;
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      throw new Error('No AI provider configured for heartbeat review. Run `buddy login chatgpt` or set a provider API key.');
+    }
 
     const forceReview = this.consecutiveSuppressions >= this.config.maxConsecutiveSuppressions - 1;
     const suppressionContext = forceReview
@@ -355,9 +357,9 @@ export class HeartbeatEngine extends EventEmitter {
     // Lazy load agent to avoid circular deps
     const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
     const agent = new CodeBuddyAgent(
-      apiKey,
-      baseURL,
-      model,
+      provider.apiKey,
+      provider.baseURL,
+      provider.defaultModel,
       10, // limited tool rounds for heartbeat review
       false // no RAG for heartbeat
     );
