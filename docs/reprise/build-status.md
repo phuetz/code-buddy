@@ -120,6 +120,18 @@ npx eslint src/server/channel-a2a-bridge.ts src/server/index.ts tests/server/cha
 
 npm run build
 # passed
+
+npm test -- tests/server/server-channel-shutdown.test.ts tests/server/peer-websocket-smoke.test.ts tests/server/channel-a2a-bridge.test.ts
+# 14 tests passed after stopServer awaited ChannelManager shutdown
+
+npx eslint src/server/index.ts tests/server/server-channel-shutdown.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
+
+npm run build
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -215,6 +227,9 @@ npm run build
   ses self-calls loopback avec un JWT admin court genere cote serveur. Les
   canaux externes ne se bloquent donc plus sur `requireScope('admin')` en
   production.
+- `stopServer()` attend maintenant la fin de `ChannelManager.shutdown()` avant
+  de rendre la main. Les pollers/listeners de channels ne restent donc pas en
+  arriere-plan pendant un redemarrage rapide.
 
 ## Blocage leve
 

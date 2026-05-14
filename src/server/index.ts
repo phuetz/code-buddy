@@ -976,7 +976,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
     if (bridgeStop) {
       try { bridgeStop.stop(); } catch { /* ignore */ }
     }
-    void (async () => {
+    const channelShutdown = (async () => {
       try {
         const { getChannelManager } = await import('../channels/index.js');
         await getChannelManager().shutdown();
@@ -988,12 +988,15 @@ export async function stopServer(server: HttpServer): Promise<void> {
 
     // Close HTTP server
     server.close((err) => {
-      if (err) {
-        reject(err);
-      } else {
-        logger.info('Server stopped');
-        resolve();
-      }
+      void (async () => {
+        await channelShutdown;
+        if (err) {
+          reject(err);
+        } else {
+          logger.info('Server stopped');
+          resolve();
+        }
+      })();
     });
   });
 }
