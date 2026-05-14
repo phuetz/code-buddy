@@ -1839,4 +1839,100 @@ f8a83f5a  feat(fleet): peer.tool.invoke V1 — read-only remote tool invocation
 
 — Claude/Ministar Ubuntu, 2026-05-15 02h25 UTC
 
+## 2026-05-15 (sanity check infra) — Découvertes infrastructure live
+
+### Bonne nouvelle : Hub A2A actif (Phase 0 résolue de facto)
+
+`codebuddy-a2a.service` : ✅ active depuis 2026-05-14 00:27:30 CEST
+(5h+ uptime). Probablement auto-restart au boot — `Loaded: enabled`.
+Donc la Phase 0 de mon plan original (`sudo systemctl restart codebuddy-a2a`)
+n'est plus nécessaire.
+
+- Discovery `/api/a2a/.well-known/agent.json` : 200 OK
+- `/api/a2a/agents` : `{"agents":[],"remoteAgents":[]}` ⚠️ pas de
+  spokes registered. Le spoke Ollama Ministar (`ollama-a2a-spoke.service`,
+  active depuis 1 semaine 4 jours) doit attendre son prochain heartbeat
+  pour se re-registrer. Tu peux forcer : `sudo systemctl restart
+  ollama-a2a-spoke.service`.
+
+### ⚠️ Important : 2 clones de code-buddy distincts !
+
+| Service | Path | WorkingDirectory systemd | Mes commits Phase d.23 ? |
+|---|---|---|---|
+| `codebuddy-a2a.service` (port 3000, hub A2A) | `/home/patrice/code-buddy/` | `/home/patrice/code-buddy` | ❌ **non concerné** (peer.tool.invoke vit sur le fleet 3001, pas le hub A2A 3000) |
+| `codebuddy-fleet.service` (port 3001, fleet gateway) | `/home/patrice/DEV/code-buddy/` | `/home/patrice/DEV/code-buddy` | ✅ **bon clone** mais a démarré 2026-05-12 01:57 — **avant mes commits** |
+
+**Conséquence pour Phase d.23** : le daemon fleet tourne avec le code de
+l'époque, **sans** mon `wirePeerToolBridge()`. Pour activer en local :
+
+```bash
+sudo systemctl restart codebuddy-fleet.service
+sleep 3
+journalctl -u codebuddy-fleet.service -n 30 --no-pager
+```
+
+Une fois restarté, le bridge sera wiré et exposera `peer.tool.invoke` +
+`peer.tool.invoke.stream` aux peers connectés.
+
+### Pré-config fleet.env (faite cette nuit)
+
+`/home/patrice/.codebuddy/fleet.env` enrichi avec :
+
+```env
+CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT=/home/patrice/DEV
+```
+
+Workspace = `/home/patrice/DEV` (= tout le dossier dev : world-model,
+Lisa, code-buddy, claude-et-patrice, ai-stack, etc.). Read-only. Aucun
+secret `~/.ssh`, `~/.codebuddy`, `~/.claude`, `/etc` n'est exposé.
+L'allowlist V1 default suffit (view_file/list_directory/search) — pas
+besoin d'override.
+
+### Banc de test loopback Ministar (avant DARKSTAR)
+
+Une fois fleet restarté, tu peux **valider le bridge en loopback**
+avant même de toucher à DARKSTAR. Banc de test rapide :
+
+```bash
+# Terminal 1 : check le service est wired
+journalctl -u codebuddy-fleet.service -n 30 --no-pager | grep peer-tool
+
+# Terminal 2 : test depuis un buddy interactif
+cd /home/patrice/DEV/code-buddy
+npm run dev   # ou directly: node dist/index.js
+> /fleet listen ws://127.0.0.1:3001 --name local --api-key <key>
+> /fleet describe local                                    # vérifie methods inclut peer.tool.invoke
+> /fleet tool local view_file {"file_path":"world-model/README.md"}
+> /fleet tool local list_directory {"path":"."}
+> /fleet tool local search {"query":"loss_pred","path":"world-model"}
+> /fleet tool local view_file {"file_path":"big.txt"} --stream
+> /fleet tool local bash {}                                # attendu TOOL_NOT_ALLOWED
+> /fleet tool local view_file {"file_path":"/etc/passwd"}  # attendu PATH_OUTSIDE_PEER_WORKSPACE
+```
+
+Si tout passe en loopback → la Phase 1 est validée pour de vrai
+(au-delà des unit tests qui bypassent le WS). Tu peux push les 2
+commits dès là, sans attendre DARKSTAR.
+
+### Mise à jour de l'inventaire des chantiers Code Buddy
+
+Bonne surprise : **Provider Gemini CLI déjà livré** (commit `3127ac56
+feat(fleet): wrap local gemini CLI as a 4th provider strategy`, déjà sur
+main). Visible dans `/home/patrice/.codebuddy/fleet.env` — `CODEBUDDY_PEER_PROVIDER=gemini-cli`
+en service, sur `gemini-3.1-pro-preview`. Donc la piste #4 de mon
+inventaire (~3h estimé) est obsolète. L'inventaire mis à jour :
+
+| # | Item | Statut | Priorité |
+|---|---|---|---|
+| 1 | Phase (e).7 — OpenClaw Gateway integration | Reportée (besoin daemon installé) | HIGH |
+| 2 | Phase d.23 V1.3 — `peer.tool.invoke` | **Livrée local** (`f8a83f5a` + `160826b5`) | DONE local, push pending |
+| 3 | Phase d.23 V1.3 — ChatGPT Pro login (`buddy login`) | Backlog | HIGH |
+| ~~4~~ | ~~Provider Gemini CLI subprocess~~ | **Déjà livré (`3127ac56`)** | ~~MEDIUM~~ |
+| 5 | `/swarm`, `/memory recent` color, `buddy init --update` | Deferred | MEDIUM |
+| 6 | Rate cap `peer.chat` (Phase d.16b) | Deferred | LOW |
+| 7 | Memory UI aggregation (7 sources) | Deferred | LOW |
+
+— Claude/Ministar Ubuntu, 2026-05-15 02h45 UTC
+
+
 
