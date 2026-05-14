@@ -9,6 +9,7 @@ import { randomBytes } from 'crypto';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { ChatRequest, ChatResponse, ChatStreamChunk } from '../types.js';
+import { createDetectedAgent } from '../agent-provider.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 // (channels/index.ts re-exports channel classes that import BaseChannel
 // before it's fully initialized)
@@ -40,12 +41,7 @@ interface AgentAPI {
 let agentInstance: AgentAPI | null = null;
 async function getAgent(): Promise<AgentAPI> {
   if (!agentInstance) {
-    const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-    agentInstance = new CodeBuddyAgent(
-      process.env.GROK_API_KEY || '',
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL || 'grok-3-latest'
-    ) as unknown as AgentAPI;
+    agentInstance = await createDetectedAgent() as unknown as AgentAPI;
   }
   return agentInstance!;
 }

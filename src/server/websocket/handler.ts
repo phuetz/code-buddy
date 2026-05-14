@@ -11,6 +11,7 @@ import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { verifyToken } from '../auth/jwt.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
+import { createDetectedAgent } from '../agent-provider.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
 async function getEnqueueMessage() {
@@ -225,12 +226,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       if (!state.agentInitializing) {
         state.agentInitializing = (async () => {
           try {
-            const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-            state.agent = new CodeBuddyAgent(
-              process.env.GROK_API_KEY || '',
-              process.env.GROK_BASE_URL,
-              model || process.env.GROK_MODEL || 'grok-3-latest'
-            );
+            state.agent = await createDetectedAgent(model);
           } catch (err) {
             state.agentInitializing = undefined;
             throw err;
@@ -361,12 +357,7 @@ messageHandlers.set('execute_tool', async (ws, state, payload) => {
       if (!state.agentInitializing) {
         state.agentInitializing = (async () => {
           try {
-            const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-            state.agent = new CodeBuddyAgent(
-              process.env.GROK_API_KEY || '',
-              process.env.GROK_BASE_URL,
-              process.env.GROK_MODEL || 'grok-3-latest'
-            );
+            state.agent = await createDetectedAgent();
           } catch (err) {
             state.agentInitializing = undefined;
             throw err;

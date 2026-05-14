@@ -12,6 +12,7 @@ import { getRequestStats } from '../middleware/logging.js';
 import { getDatabaseManager } from '../../database/database-manager.js';
 import { getConnectionStats } from '../websocket/handler.js';
 import type { ServerStats } from '../types.js';
+import { getServerProvider } from '../agent-provider.js';
 
 const require = createRequire(import.meta.url);
 
@@ -72,30 +73,12 @@ function checkDatabase(): 'ok' | 'error' {
 }
 
 /**
- * Check if at least one LLM provider is reachable. The original check
- * only looked at `GROK_API_KEY`, which falsely reported "error" for
- * users running Ollama/OpenAI/Anthropic/Gemini. We now accept any of:
- *  - GROK_API_KEY / XAI_API_KEY (xAI)
- *  - OPENAI_API_KEY (OpenAI)
- *  - ANTHROPIC_API_KEY (Anthropic)
- *  - GEMINI_API_KEY (Google)
- *  - OPENAI_BASE_URL pointing at a local Ollama / LM-Studio (no key needed)
+ * Check if at least one LLM provider is configured. This shares the
+ * subscription-aware detector with chat/runtime entrypoints so ChatGPT
+ * Codex OAuth and local providers are reported accurately.
  */
 function checkApi(): 'ok' | 'error' {
-  if (
-    process.env.GROK_API_KEY ||
-    process.env.XAI_API_KEY ||
-    process.env.OPENAI_API_KEY ||
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.GEMINI_API_KEY
-  ) {
-    return 'ok';
-  }
-  // Local provider (Ollama, LM Studio, …) — accept loopback baseUrls
-  // even without an API key.
-  const baseUrl = process.env.OPENAI_BASE_URL ?? '';
-  if (/(127\.0\.0\.1|localhost|0\.0\.0\.0|::1)/i.test(baseUrl)) return 'ok';
-  return 'error';
+  return getServerProvider() ? 'ok' : 'error';
 }
 
 /**
@@ -242,11 +225,13 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const checks: Record<string, { ready: boolean; message?: string; latencyMs?: number }> = {};
 
-    // Check API key configuration
-    const apiKeyConfigured = !!process.env.GROK_API_KEY;
-    checks.apiKey = {
-      ready: apiKeyConfigured,
-      message: apiKeyConfigured ? 'API key configured' : 'GROK_API_KEY not set',
+    // Check provider configuration
+    const provider = getServerProvider();
+    checks.llmProvider = {
+      ready: provider !== null,
+      message: provider
+        ? `LLM provider configured (${provider.provider})`
+        : 'No LLM provider configured (run `buddy login chatgpt` or set a provider API key)',
     };
 
     // Check database connection
@@ -269,37 +254,8 @@ router.get(
         : `Memory pressure (${Math.round(memUsage.heapUsed / 1024 / 1024)}MB exceeds threshold)`,
     };
 
-    // Check Grok API connectivity (with timeout)
-    const apiStart = Date.now();
-    try {
-      const response = await fetch('https://api.x.ai/v1/models', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${process.env.GROK_API_KEY || ''}`,
-        },
-        signal: AbortSignal.timeout(3000),
-      });
-      const apiLatency = Date.now() - apiStart;
-
-      if (response.ok) {
-        updateApiHeartbeat(apiLatency);
-      }
-
-      checks.grokApi = {
-        ready: response.ok,
-        message: response.ok ? 'Grok API reachable' : `Grok API returned ${response.status}`,
-        latencyMs: apiLatency,
-      };
-    } catch (error) {
-      checks.grokApi = {
-        ready: false,
-        message: `Grok API unreachable: ${error instanceof Error ? error.message : String(error)}`,
-        latencyMs: Date.now() - apiStart,
-      };
-    }
-
     const allPassing = Object.values(checks).every((c) => c.ready);
-    const criticalPassing = checks.apiKey.ready && checks.memory.ready;
+    const criticalPassing = checks.llmProvider.ready && checks.memory.ready;
 
     const response = {
       ready: criticalPassing,
@@ -457,9 +413,11 @@ router.get(
 router.get(
   '/config',
   asyncHandler(async (_req: Request, res: Response) => {
+    const provider = getServerProvider();
     res.json({
-      model: process.env.GROK_MODEL || 'grok-3-latest',
-      baseUrl: process.env.GROK_BASE_URL ? '(custom)' : 'https://api.x.ai',
+      provider: provider?.provider || 'none',
+      model: provider?.model || 'not configured',
+      baseUrl: provider?.baseURL || 'not configured',
       features: {
         yoloMode: process.env.YOLO_MODE === 'true',
         maxCost: process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : 10,
@@ -513,33 +471,13 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const checks: Record<string, { status: string; latency?: number; error?: string }> = {};
 
-    // Check Grok API
-    const grokStart = Date.now();
-    try {
-      const response = await fetch('https://api.x.ai/v1/models', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${process.env.GROK_API_KEY || ''}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      const grokLatency = Date.now() - grokStart;
-
-      if (response.ok) {
-        updateApiHeartbeat(grokLatency);
-      }
-
-      checks.grokApi = {
-        status: response.ok ? 'healthy' : 'degraded',
-        latency: grokLatency,
-      };
-    } catch (error) {
-      checks.grokApi = {
-        status: 'unhealthy',
-        latency: Date.now() - grokStart,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
+    const provider = getServerProvider();
+    checks.llmProvider = provider
+      ? { status: 'healthy' }
+      : {
+          status: 'unhealthy',
+          error: 'No LLM provider configured',
+        };
 
     // Check database
     const dbStart = Date.now();
@@ -588,12 +526,12 @@ export function createK8sHealthAliases(): Router {
 
   // /readyz → same as GET /api/health/ready (lightweight)
   k8s.get('/readyz', asyncHandler(async (_req: Request, res: Response) => {
-    const apiKeyOk = !!process.env.GROK_API_KEY;
+    const providerOk = getServerProvider() !== null;
     const memOk = process.memoryUsage().heapUsed < 1024 * 1024 * 1024;
-    const ready = apiKeyOk && memOk;
+    const ready = providerOk && memOk;
     res.status(ready ? 200 : 503).json({
       ready,
-      checks: { apiKey: apiKeyOk, memory: memOk },
+      checks: { llmProvider: providerOk, memory: memOk },
     });
   }));
 

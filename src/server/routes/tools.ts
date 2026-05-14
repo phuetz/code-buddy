@@ -7,10 +7,12 @@
 import { Router, Request, Response } from 'express';
 import { requireScope, asyncHandler, ApiServerError } from '../middleware/index.js';
 import type { ToolExecutionRequest, ToolExecutionResponse, ToolInfo } from '../types.js';
+import { createDetectedAgent } from '../agent-provider.js';
 
 // CodeBuddyTool shape from registry (OpenAI function-calling format)
 interface CodeBuddyToolShape {
   type: string;
+  requiresConfirmation?: boolean;
   function: {
     name: string;
     description: string;
@@ -57,12 +59,7 @@ async function getToolRegistry(): Promise<ToolRegistryAPI> {
 let agentInstance: AgentAPI | null = null;
 async function getAgent(): Promise<AgentAPI> {
   if (!agentInstance) {
-    const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-    agentInstance = new CodeBuddyAgent(
-      process.env.GROK_API_KEY || '',
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL || 'grok-3-latest'
-    ) as unknown as AgentAPI;
+    agentInstance = await createDetectedAgent() as unknown as AgentAPI;
   }
   return agentInstance!;
 }
@@ -101,11 +98,7 @@ router.get(
     const registry = await getToolRegistry();
     const tools = registry.getAllTools();
 
-    const categories = new Map<string, number>();
-    for (const tool of tools) {
-      const category = 'general';
-      categories.set(category, (categories.get(category) || 0) + 1);
-    }
+    const categories = new Map<string, number>([['general', tools.length]]);
 
     res.json({
       categories: Object.fromEntries(categories),
@@ -158,7 +151,7 @@ router.post(
     }
 
     // Check if tool requires confirmation and it wasn't provided
-    if ((tool as any).requiresConfirmation && !body.confirmed) {
+    if (tool.requiresConfirmation && !body.confirmed) {
       res.status(200).json({
         toolName: name,
         success: false,
