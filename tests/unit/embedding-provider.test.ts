@@ -162,20 +162,21 @@ describe('EmbeddingProvider', () => {
         expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp/new-cache-dir', { recursive: true });
       });
 
-      it('should fall back to mock provider if local model fails', async () => {
+      it('should fail fast if local model fails', async () => {
         mockPipeline.mockRejectedValue(new Error('Model load failed'));
 
         const provider = new EmbeddingProvider({ provider: 'local' });
         const errorHandler = jest.fn();
         provider.on('error', errorHandler);
 
-        await provider.initialize();
+        await expect(provider.initialize()).rejects.toThrow('Model load failed');
 
-        expect(provider.getProviderType()).toBe('mock');
-        expect(provider.isReady()).toBe(true);
+        expect(provider.getProviderType()).toBe('local');
+        expect(provider.isReady()).toBe(false);
+        expect(errorHandler).toHaveBeenCalled();
       });
 
-      it('should fall back to mock when transformers module not found', async () => {
+      it('should surface a helpful error when transformers module is not found', async () => {
         // This error triggers the special path that re-throws with a helpful message
         mockPipeline.mockRejectedValue(new Error('Cannot find module @xenova/transformers'));
 
@@ -185,8 +186,9 @@ describe('EmbeddingProvider', () => {
         const errorHandler = jest.fn();
         provider.on('error', errorHandler);
 
-        // Should not throw - falls back to mock
-        await provider.initialize();
+        await expect(provider.initialize()).rejects.toThrow(
+          'Local embeddings require @xenova/transformers'
+        );
 
         // Error should be emitted
         expect(errorHandler).toHaveBeenCalled();
@@ -194,20 +196,21 @@ describe('EmbeddingProvider', () => {
         expect(errorHandler.mock.calls[0][0].message).toContain(
           'Local embeddings require @xenova/transformers'
         );
-        // Should fall back to mock
-        expect(provider.getProviderType()).toBe('mock');
-        expect(provider.isReady()).toBe(true);
+        expect(provider.getProviderType()).toBe('local');
+        expect(provider.isReady()).toBe(false);
       });
 
-      it('should fall back to mock without requiring an error listener', async () => {
+      it('should reject local initialization without requiring an error listener', async () => {
         mockPipeline.mockRejectedValue(new Error('Cannot find module @xenova/transformers'));
 
         const provider = new EmbeddingProvider({ provider: 'local' });
 
-        await expect(provider.initialize()).resolves.toBeUndefined();
+        await expect(provider.initialize()).rejects.toThrow(
+          'Local embeddings require @xenova/transformers'
+        );
 
-        expect(provider.getProviderType()).toBe('mock');
-        expect(provider.isReady()).toBe(true);
+        expect(provider.getProviderType()).toBe('local');
+        expect(provider.isReady()).toBe(false);
       });
     });
 

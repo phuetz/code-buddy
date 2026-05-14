@@ -328,6 +328,10 @@ npm run build
 - `PluginMarketplace.install` ne cree plus un `index.js` de remplacement apres
   telechargement. Tant qu'un vrai extracteur d'archive plugin n'est pas branche,
   l'installation echoue explicitement et nettoie le dossier partiel.
+- Les embeddings locaux ne basculent plus automatiquement sur des vecteurs
+  `mock` quand le modele local ne charge pas. L'echec est propage; l'integration
+  base de donnees peut continuer sans vecteurs mais signale que les embeddings
+  sont indisponibles.
 
 ## Blocage leve
 

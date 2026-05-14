@@ -12,7 +12,6 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { logger } from '../utils/logger.js';
 
 // ============================================================================
 // Types
@@ -101,14 +100,7 @@ export class EmbeddingProvider extends EventEmitter {
       if (this.listenerCount('error') > 0) {
         this.emit('error', error);
       }
-      // Fall back to mock provider if local fails
-      if (this.config.provider === 'local') {
-        logger.warn('Local embedding model failed to load, using mock embeddings');
-        this.config.provider = 'mock';
-        this.initialized = true;
-      } else {
-        throw error;
-      }
+      throw error;
     }
   }
 
@@ -387,7 +379,7 @@ export class EmbeddingProvider extends EventEmitter {
   }
 
   // ============================================================================
-  // Mock Methods (for testing and fallback)
+  // Deterministic Test Provider Methods
   // ============================================================================
 
   private embedMock(text: string): EmbeddingResult {

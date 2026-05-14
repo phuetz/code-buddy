@@ -81,14 +81,17 @@ export class DatabaseIntegration extends EventEmitter {
       this.emit('migration:complete', result);
     }
 
-    // Initialize embedding provider (will fall back to mock if local fails)
+    // Initialize embedding provider when available. If it is unavailable, memory
+    // writes continue without vectors and semantic search will surface the error.
     try {
       await initializeEmbeddingProvider({
         provider: this.config.embeddingProvider || 'local',
       });
-    } catch {
-      // Continue without embeddings - mock will be used
-      this.emit('warning', { type: 'embeddings', message: 'Using mock embeddings' });
+    } catch (error) {
+      this.emit('warning', {
+        type: 'embeddings',
+        message: `Embeddings unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      });
     }
 
     this.initialized = true;
