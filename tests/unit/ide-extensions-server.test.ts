@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IDEConnection, IDERequest, IDEResponse } from '../../src/integrations/ide/types.js';
 
@@ -8,21 +11,63 @@ const mocks = vi.hoisted(() => {
     codeBuddyClientMock: vi.fn(class MockCodeBuddyClient {
       chat = chatMock;
     }),
-    detectProviderMock: vi.fn(),
   };
 });
 
-const { chatMock, codeBuddyClientMock, detectProviderMock } = mocks;
+const { chatMock, codeBuddyClientMock } = mocks;
+
+const testPaths = vi.hoisted(() => ({
+  tmpHome: '',
+}));
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  return {
+    ...actual,
+    homedir: () => testPaths.tmpHome || actual.homedir(),
+  };
+});
 
 vi.mock('../../src/codebuddy/client.js', () => ({
   CodeBuddyClient: mocks.codeBuddyClientMock,
 }));
 
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: mocks.detectProviderMock,
-}));
-
 import { IDEExtensionsServer } from '../../src/integrations/ide/server.js';
+
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CHATGPT_MODEL',
+  'CODEBUDDY_PROVIDER',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'OLLAMA_HOST',
+  'OPENAI_API_KEY',
+  'XAI_API_KEY',
+] as const;
+
+function clearProviderEnv(): void {
+  for (const key of PROVIDER_ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
+function useNoProvider(): void {
+  clearProviderEnv();
+  process.env.CODEBUDDY_PROVIDER = 'none';
+}
+
+function useChatGptAuth(): void {
+  clearProviderEnv();
+  process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+  const authDir = path.join(testPaths.tmpHome, '.codebuddy');
+  fs.mkdirSync(authDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(authDir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-chatgpt-token' } }),
+  );
+}
 
 function createConnection(): IDEConnection {
   return {
@@ -51,32 +96,23 @@ async function invoke(
 }
 
 describe('IDEExtensionsServer', () => {
-  const originalApiKey = process.env.GROK_API_KEY;
-  const originalModel = process.env.GROK_MODEL;
+  const originalEnv = process.env;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    detectProviderMock.mockReturnValue({
-      provider: 'grok',
-      apiKey: 'test-key',
-      baseURL: 'https://api.x.ai/v1',
-      defaultModel: 'grok-code-fast-1',
-    });
+    process.env = { ...originalEnv };
+    clearProviderEnv();
+    process.env.CODEBUDDY_PROVIDER = 'grok';
     process.env.GROK_API_KEY = 'test-key';
     process.env.GROK_MODEL = 'grok-code-fast-1';
+    testPaths.tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ide-extensions-server-'));
   });
 
   afterEach(() => {
-    if (originalApiKey === undefined) {
-      delete process.env.GROK_API_KEY;
-    } else {
-      process.env.GROK_API_KEY = originalApiKey;
-    }
-
-    if (originalModel === undefined) {
-      delete process.env.GROK_MODEL;
-    } else {
-      process.env.GROK_MODEL = originalModel;
+    process.env = originalEnv;
+    if (testPaths.tmpHome) {
+      fs.rmSync(testPaths.tmpHome, { recursive: true, force: true });
+      testPaths.tmpHome = '';
     }
   });
 
@@ -144,7 +180,7 @@ describe('IDEExtensionsServer', () => {
   });
 
   it('falls back to lexical completions when no API key is configured', async () => {
-    detectProviderMock.mockReturnValue(null);
+    useNoProvider();
 
     const server = new IDEExtensionsServer();
     const response = await invoke(server, 'completion', {
@@ -160,12 +196,7 @@ describe('IDEExtensionsServer', () => {
   });
 
   it('constructs IDE AI clients from the detected provider', async () => {
-    detectProviderMock.mockReturnValue({
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    });
+    useChatGptAuth();
     chatMock.mockResolvedValueOnce({
       choices: [{ message: { content: 'Use a boundary interface.' } }],
     });
