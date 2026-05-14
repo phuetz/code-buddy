@@ -8,7 +8,8 @@
  *   2. Stores the returned `runId` on the saga step
  *   3. Polls `peer.dispatchStatus` every 2 s until each step is terminal
  *   4. Calls `saga.completeStep` / `saga.failStep` accordingly
- *   5. When all parallel steps are terminal, calls the result aggregator
+ *   5. Clears the remote peer's in-memory dispatch cache
+ *   6. When all parallel steps are terminal, calls the result aggregator
  *      and `saga.finalise`
  *
  * For sequential primary+fallback sagas, only the active lane is
@@ -233,6 +234,7 @@ export class SagaRunner {
       // 'cancelled' or polling timeout — record as failed for now.
       await store.failStep(sagaId, laneIndex, `poll_terminal_unknown: ${result.status}`);
     }
+    await this.clearRemoteDispatch(step.peerId, runId);
     this.emitSagaUpdate(sagaId);
   }
 
@@ -274,6 +276,24 @@ export class SagaRunner {
       await sleep(POLL_INTERVAL_MS);
     }
     return { status: 'failed', error: 'poll_timeout' };
+  }
+
+  private async clearRemoteDispatch(peerId: string, runId: string): Promise<void> {
+    try {
+      await this.fleetBridge.peerRequest(
+        peerId,
+        'peer.dispatchClear',
+        { runId },
+        { timeoutMs: 5_000 },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logWarn('[saga-runner] dispatchClear failed', {
+        peerId,
+        runId,
+        error: message,
+      });
+    }
   }
 
   private async maybeFinalise(store: SagaStoreShape, sagaId: string): Promise<void> {

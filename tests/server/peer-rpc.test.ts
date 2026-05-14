@@ -31,10 +31,13 @@ describe('peer-rpc — Phase (d).13', () => {
   });
 
   describe('registry', () => {
-    it('exposes the 3 built-in methods after reset', () => {
+    it('exposes the built-in methods after reset', () => {
       const methods = listPeerMethods();
       expect(methods).toContain('peer.describe');
       expect(methods).toContain('peer.ping');
+      expect(methods).toContain('peer.dispatch');
+      expect(methods).toContain('peer.dispatchStatus');
+      expect(methods).toContain('peer.dispatchClear');
       expect(methods).toContain('peer.echo');
     });
 

@@ -44,6 +44,22 @@ const baseCtx: PeerMethodContext = {
   depth: 0,
 };
 
+async function waitForDispatch(
+  runId: string,
+  status: 'completed' | 'failed',
+) {
+  for (let i = 0; i < 20; i++) {
+    const r = await dispatchPeerRequest(
+      { id: `poll-${i}`, method: 'peer.dispatchStatus', params: { runId } },
+      baseCtx,
+    );
+    const payload = r.payload as { status?: string } | undefined;
+    if (r.ok && payload?.status === status) return r;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`dispatch ${runId} did not reach ${status}`);
+}
+
 // ---- tests -----------------------------------------------------------
 
 describe('peer-chat-bridge — Phase (d).15', () => {
@@ -249,6 +265,58 @@ describe('peer-chat-bridge — Phase (d).15', () => {
         model: 'gemini-2.5-flash',
         isLocal: false,
       });
+    });
+  });
+
+  describe('peer.dispatch lifecycle', () => {
+    it('queues a background run, exposes status, then clears the cache entry', async () => {
+      const { client, chat } = makeMockClient();
+      wirePeerChatBridge(() => client as never);
+
+      const accepted = await dispatchPeerRequest(
+        {
+          id: 'disp-accept',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-test-1',
+            prompt: 'Summarise the fleet state',
+            model: 'grok-3-mini-fast',
+          },
+          traceId: 'trace-dispatch-test',
+        },
+        baseCtx,
+      );
+
+      expect(accepted.ok).toBe(true);
+      expect(accepted.payload).toMatchObject({ runId: 'run-test-1' });
+
+      const completed = await waitForDispatch('run-test-1', 'completed');
+      expect(chat).toHaveBeenCalledOnce();
+      const payload = completed.payload as {
+        status: string;
+        result: string;
+        runId: string;
+        traceId: string;
+      };
+      expect(payload).toMatchObject({
+        runId: 'run-test-1',
+        status: 'completed',
+        result: 'mocked answer',
+        traceId: 'trace-dispatch-test',
+      });
+
+      const cleared = await dispatchPeerRequest(
+        { id: 'clear-1', method: 'peer.dispatchClear', params: { runId: 'run-test-1' } },
+        baseCtx,
+      );
+      expect(cleared.ok).toBe(true);
+      expect(cleared.payload).toEqual({ runId: 'run-test-1', cleared: true });
+
+      const afterClear = await dispatchPeerRequest(
+        { id: 'poll-after-clear', method: 'peer.dispatchStatus', params: { runId: 'run-test-1' } },
+        baseCtx,
+      );
+      expect(afterClear.payload).toEqual({ found: false });
     });
   });
 });

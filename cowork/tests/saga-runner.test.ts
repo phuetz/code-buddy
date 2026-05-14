@@ -151,6 +151,7 @@ describe('SagaRunner — sequential primary success', () => {
     const fleetBridge = makeFleetBridgeMock({
       'peer.dispatch': async () => ({ runId: 'run-1' }),
       'peer.dispatchStatus': async () => ({ found: true, status: 'completed', result: 'OK' }),
+      'peer.dispatchClear': async () => ({ runId: 'run-1', cleared: true }),
     });
 
     const runner = new SagaRunner(fleetBridge as never, sendToRenderer);
@@ -164,6 +165,12 @@ describe('SagaRunner — sequential primary success', () => {
     expect(saga.finalResult).toBe('SINGLE_FINAL');
     expect(state.finaliseFromSingleCalls.length).toBe(1);
     expect(state.aggregateCalls.length).toBe(0);
+    expect(fleetBridge.peerRequest).toHaveBeenCalledWith(
+      'peer-a',
+      'peer.dispatchClear',
+      { runId: 'run-1' },
+      { timeoutMs: 5_000 },
+    );
     expect(sendToRenderer).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'fleet.saga.update' }),
     );

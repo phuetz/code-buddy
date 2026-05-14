@@ -214,7 +214,7 @@ function registerBuiltInMethods(): void {
     try {
       const { getLocalCapabilities } = await import('../../fleet/capability-registry.js');
       capabilities = await getLocalCapabilities();
-    } catch (err) {
+    } catch (_err) {
       // Capability detection is best-effort — never fail describe.
       capabilities = null;
     }
@@ -246,7 +246,7 @@ function registerBuiltInMethods(): void {
   // already wraps the local agent for `peer.chat` one-shots) — this
   // method is a thin async wrapper so the caller doesn't block waiting
   // for the LLM response.
-  registerPeerMethod('peer.dispatch', async (params) => {
+  registerPeerMethod('peer.dispatch', async (params, ctx) => {
     const { id, prompt, model, traceId, parentRunId } = (params ?? {}) as {
       id?: string;
       prompt?: string;
@@ -269,7 +269,7 @@ function registerBuiltInMethods(): void {
       runId: dispatchId,
       prompt,
       model,
-      traceId,
+      traceId: traceId ?? ctx.traceId,
       parentRunId,
     });
     return {
@@ -298,8 +298,24 @@ function registerBuiltInMethods(): void {
       status: state.status,
       result: state.result,
       error: state.error,
+      traceId: state.traceId,
+      parentRunId: state.parentRunId,
       startedAt: state.startedAt,
       completedAt: state.completedAt,
+    };
+  });
+
+  // Fleet P3 — clear a completed/failed dispatch from the peer's
+  // in-memory result cache once the caller has persisted the saga step.
+  registerPeerMethod('peer.dispatchClear', async (params) => {
+    const runId = (params ?? {}).runId;
+    if (typeof runId !== 'string' || runId.length === 0) {
+      throw new Error('peer.dispatchClear: missing string runId');
+    }
+    const { clearDispatch } = await import('../../fleet/peer-chat-bridge.js');
+    return {
+      runId,
+      cleared: clearDispatch(runId),
     };
   });
 

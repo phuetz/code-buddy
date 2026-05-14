@@ -235,6 +235,34 @@ hasn't set any provider env var). Probe before sending.
 
 Use for round-trip latency measurement and connectivity smoke tests.
 
+#### `peer.dispatch` / `peer.dispatchStatus` / `peer.dispatchClear`
+
+Fire-and-forget task execution used by Cowork sagas. `peer.dispatch`
+returns immediately with a `runId`; the caller polls
+`peer.dispatchStatus` until the task is terminal, persists the result,
+then calls `peer.dispatchClear` to remove the peer's in-memory cache
+entry.
+
+```json
+// Request
+{ "prompt": "Review this plan", "model": "qwen3:4b" }
+
+// peer.dispatch response
+{ "runId": "disp_abc123", "acceptedAt": 1714670345123 }
+
+// peer.dispatchStatus terminal response
+{
+  "found": true,
+  "runId": "disp_abc123",
+  "status": "completed",
+  "result": "Looks good...",
+  "traceId": "trace-..."
+}
+
+// peer.dispatchClear response
+{ "runId": "disp_abc123", "cleared": true }
+```
+
 #### `peer.echo`
 ```json
 // Request: { "prompt": "...", "n": 42 }
