@@ -51,8 +51,42 @@ export interface JsonRpcServerOptions {
   verbose?: boolean;
   /** Custom API key (overrides env) */
   apiKey?: string;
+  /** Custom API base URL for explicit API-key mode */
+  baseURL?: string;
+  /** Custom model for explicit API-key mode */
+  model?: string;
   /** Working directory */
   workdir?: string;
+}
+
+export interface JsonRpcClientTarget {
+  apiKey: string;
+  baseURL?: string;
+  model?: string;
+}
+
+export function resolveJsonRpcClientTarget(options: JsonRpcServerOptions): JsonRpcClientTarget | null {
+  if (!options.apiKey) return null;
+
+  return {
+    apiKey: options.apiKey,
+    baseURL: options.baseURL,
+    model: options.model || inferDefaultModelFromBaseURL(options.baseURL),
+  };
+}
+
+function inferDefaultModelFromBaseURL(baseURL?: string): string | undefined {
+  const url = baseURL?.toLowerCase() ?? '';
+  if (!url) return undefined;
+  if (url.includes('chatgpt.com')) return process.env.CHATGPT_MODEL || 'gpt-5.5';
+  if (url.includes('openai.com')) return process.env.OPENAI_MODEL || 'gpt-4o';
+  if (url.includes('anthropic.com')) return process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
+  if (url.includes('generativelanguage.googleapis.com') || url.includes('gemini')) {
+    return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  }
+  if (url.includes(':11434') || url.includes('ollama')) return process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
+  if (url.includes('api.x.ai') || url.includes('xai')) return process.env.GROK_MODEL || 'grok-3-fast';
+  return undefined;
 }
 
 export class JsonRpcServer {
@@ -271,9 +305,14 @@ export class JsonRpcServer {
   private async getCodeBuddyClient(): Promise<JsonRpcChatClient> {
     if (!codebuddyClient) {
       const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-      if (this.options.apiKey) {
-        codebuddyClient = new CodeBuddyClient(this.options.apiKey);
-        codebuddyClientModel = undefined;
+      const explicitTarget = resolveJsonRpcClientTarget(this.options);
+      if (explicitTarget) {
+        codebuddyClient = new CodeBuddyClient(
+          explicitTarget.apiKey,
+          explicitTarget.model,
+          explicitTarget.baseURL,
+        );
+        codebuddyClientModel = explicitTarget.model;
       } else {
         const provider = detectProviderFromEnv();
         if (!provider) {

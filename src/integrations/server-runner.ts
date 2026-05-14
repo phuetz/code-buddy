@@ -22,13 +22,15 @@ export interface ServerRunnerOptions {
   verbose?: boolean;
   workdir?: string;
   apiKey?: string;
+  baseURL?: string;
+  model?: string;
 }
 
 /**
  * Run code-buddy in server mode
  */
 export async function runServer(options: ServerRunnerOptions): Promise<void> {
-  const { mode, verbose, workdir, apiKey } = options;
+  const { mode, verbose, workdir, apiKey, baseURL, model } = options;
 
   // Log to stderr so stdout is clean for protocol messages
   const log = (msg: string) => {
@@ -46,6 +48,8 @@ export async function runServer(options: ServerRunnerOptions): Promise<void> {
           verbose,
           workdir,
           apiKey,
+          baseURL,
+          model,
         };
         const server = createJsonRpcServer(serverOptions);
         await server.start();
@@ -81,6 +85,8 @@ export function parseServerArgs(args: string[]): ServerRunnerOptions | null {
   let verbose = false;
   let workdir: string | undefined;
   let apiKey: string | undefined;
+  let baseURL: string | undefined;
+  let model: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -102,6 +108,10 @@ export function parseServerArgs(args: string[]): ServerRunnerOptions | null {
       workdir = args[++i];
     } else if (arg === '--api-key') {
       apiKey = args[++i];
+    } else if (arg === '--base-url' || arg === '--baseURL' || arg === '-u') {
+      baseURL = args[++i];
+    } else if (arg === '--model' || arg === '-m') {
+      model = args[++i];
     }
   }
 
@@ -109,7 +119,7 @@ export function parseServerArgs(args: string[]): ServerRunnerOptions | null {
     return null;
   }
 
-  return { mode, verbose, workdir, apiKey };
+  return { mode, verbose, workdir, apiKey, baseURL, model };
 }
 
 /**
@@ -142,6 +152,8 @@ Options:
   --verbose, -v     Enable verbose logging (to stderr)
   --workdir, -d     Set working directory
   --api-key         Override detected provider credentials for this process
+  --base-url, -u    API base URL used with --api-key
+  --model, -m       Model used with --api-key
 
 JSON-RPC Mode:
   Listens on stdin for JSON-RPC 2.0 requests, responds on stdout.

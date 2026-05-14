@@ -15,6 +15,7 @@ import {
   JsonRpcRequest,
   JsonRpcResponse,
 } from '../../src/integrations/json-rpc/protocol.js';
+import { resolveJsonRpcClientTarget } from '../../src/integrations/json-rpc/server.js';
 
 describe('JSON-RPC Protocol', () => {
   describe('createRequest', () => {
@@ -337,12 +338,16 @@ describe('Server Runner', () => {
       '--verbose',
       '--workdir', '/tmp/test',
       '--api-key', 'test-key',
+      '--base-url', 'https://api.openai.com/v1',
+      '--model', 'gpt-4o',
     ]);
 
     expect(options).not.toBeNull();
     expect(options?.verbose).toBe(true);
     expect(options?.workdir).toBe('/tmp/test');
     expect(options?.apiKey).toBe('test-key');
+    expect(options?.baseURL).toBe('https://api.openai.com/v1');
+    expect(options?.model).toBe('gpt-4o');
   });
 
   it('should return null for non-server args', async () => {
@@ -360,5 +365,30 @@ describe('Server Runner', () => {
     expect(isServerMode(['--server', 'mcp'])).toBe(true);
     expect(isServerMode(['--help'])).toBe(false);
     expect(isServerMode([])).toBe(false);
+  });
+});
+
+describe('JSON-RPC explicit client target', () => {
+  it('passes explicit model and base URL with an API key', () => {
+    expect(resolveJsonRpcClientTarget({
+      apiKey: 'openai-key',
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+    })).toEqual({
+      apiKey: 'openai-key',
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+    });
+  });
+
+  it('infers a provider default model from explicit base URL', () => {
+    expect(resolveJsonRpcClientTarget({
+      apiKey: 'openai-key',
+      baseURL: 'https://api.openai.com/v1',
+    })).toEqual({
+      apiKey: 'openai-key',
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+    });
   });
 });
