@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Copy, Check, Clock, XCircle, Code2, Star, RotateCcw } from 'lucide-react';
 import type { Message, ContentBlock, ToolUseContent, ToolResultContent } from '../types';
 import { ContentBlockView } from './message/ContentBlockView';
+import { ToolBadgeStrip } from './message/ToolBadgeStrip';
 import { detectArtifacts } from '../utils/artifact-detector';
 import { useAppStore } from '../store';
 import { useRegenerate } from '../hooks/use-regenerate';
@@ -214,6 +215,7 @@ export const MessageCard = memo(function MessageCard({
             />
           </button>
           <RegenerateAction message={message} isStreaming={isStreaming} />
+          <ToolBadgeStrip blocks={contentBlocks} message={message} />
           {contentBlocks.map((block, index) => {
             // Skip tool_result blocks that are merged into their tool_use card
             if (

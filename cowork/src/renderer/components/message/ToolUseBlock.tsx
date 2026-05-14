@@ -99,6 +99,7 @@ export const ToolUseBlock = memo(function ToolUseBlock({
 
   return (
     <div
+      id={`tool-${block.id}`}
       className={`rounded-2xl border overflow-hidden transition-colors ${
         isError
           ? 'border-error/25 bg-error/5'
