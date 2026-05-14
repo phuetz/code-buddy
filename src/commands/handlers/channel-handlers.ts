@@ -204,15 +204,30 @@ export async function instantiateChannel(config: ChannelConfigEntry): Promise<im
   switch (config.type) {
     case 'telegram': {
       const { TelegramChannel } = await import('../../channels/telegram/index.js');
-      return new TelegramChannel({ botToken: config.token || '', ...opts } as unknown as import('../../channels/index.js').TelegramConfig);
+      return new TelegramChannel({
+        ...opts,
+        ...channelConfig,
+        type: 'telegram',
+        token: String(config.token ?? opts.token ?? opts.botToken ?? ''),
+      } as import('../../channels/index.js').TelegramConfig);
     }
     case 'discord': {
       const { DiscordChannel } = await import('../../channels/discord/index.js');
-      return new DiscordChannel({ token: config.token || '', ...opts } as unknown as import('../../channels/index.js').DiscordConfig);
+      return new DiscordChannel({
+        ...opts,
+        ...channelConfig,
+        type: 'discord',
+        token: String(config.token ?? opts.token ?? ''),
+      } as import('../../channels/index.js').DiscordConfig);
     }
     case 'slack': {
       const { SlackChannel } = await import('../../channels/slack/index.js');
-      return new SlackChannel({ botToken: config.token || '', ...opts } as unknown as import('../../channels/index.js').SlackConfig);
+      return new SlackChannel({
+        ...opts,
+        ...channelConfig,
+        type: 'slack',
+        token: String(config.token ?? opts.token ?? opts.botToken ?? ''),
+      } as import('../../channels/index.js').SlackConfig);
     }
     case 'whatsapp': {
       const { WhatsAppChannel } = await import('../../channels/whatsapp/index.js');
@@ -279,7 +294,11 @@ export async function instantiateChannel(config: ChannelConfigEntry): Promise<im
     }
     case 'webchat': {
       const { WebChatChannel } = await import('../../channels/webchat/index.js');
-      return new WebChatChannel({ ...opts } as unknown as import('../../channels/index.js').WebChatConfig);
+      return new WebChatChannel({
+        ...opts,
+        ...channelConfig,
+        type: 'webchat',
+      } as import('../../channels/index.js').WebChatConfig);
     }
     case 'line': {
       const { LINEChannel } = await import('../../channels/line/index.js');

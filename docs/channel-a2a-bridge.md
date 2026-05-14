@@ -113,6 +113,16 @@ The hub logs should show:
 [channel-a2a-bridge] active hubBaseUrl=http://127.0.0.1:3000 …
 ```
 
+You can also check the runtime state through the hub API:
+```bash
+curl -H "Authorization: Bearer <admin-or-api-key>" \
+  http://127.0.0.1:3000/api/channels/status
+```
+
+The response lists registered channel types, connectivity, authentication
+state, last activity, and any runtime error. It does not include bot tokens
+or channel secrets.
+
 DM your bot from your phone. You should get a reply within a few
 seconds.
 

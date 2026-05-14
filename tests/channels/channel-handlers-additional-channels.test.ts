@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { handleChannels } from '../../src/commands/handlers/channel-handlers.js';
+import { handleChannels, instantiateChannel } from '../../src/commands/handlers/channel-handlers.js';
 import { getChannelManager, resetChannelManager } from '../../src/channels/index.js';
 import type { ChannelType } from '../../src/channels/index.js';
 
@@ -232,6 +232,40 @@ describe('handleChannels additional channel activation', () => {
       expect(channel?.getStatus().connected).toBe(true);
 
       await handleChannels('stop', { type: channelCase.type });
+    });
+  }
+});
+
+describe('instantiateChannel common channel config', () => {
+  afterEach(async () => {
+    await getChannelManager().shutdown();
+    resetChannelManager();
+  });
+
+  const coreChannelCases = [
+    { type: 'telegram', token: 'telegram-token' },
+    { type: 'discord', token: 'discord-token' },
+    { type: 'slack', token: 'slack-token' },
+    { type: 'webchat', token: undefined },
+  ] as const;
+
+  for (const channelCase of coreChannelCases) {
+    it(`preserves auth allow-lists for ${channelCase.type}`, async () => {
+      const channel = await instantiateChannel({
+        type: channelCase.type,
+        enabled: true,
+        token: channelCase.token,
+        allowedUsers: ['allowed-user'],
+        allowedChannels: ['allowed-channel'],
+        options: channelCase.type === 'webchat' ? { port: 0 } : {},
+      });
+
+      expect(channel).toBeDefined();
+      expect(channel?.type).toBe(channelCase.type);
+      expect(channel?.isUserAllowed('allowed-user')).toBe(true);
+      expect(channel?.isUserAllowed('blocked-user')).toBe(false);
+      expect(channel?.isChannelAllowed('allowed-channel')).toBe(true);
+      expect(channel?.isChannelAllowed('blocked-channel')).toBe(false);
     });
   }
 });

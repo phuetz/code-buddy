@@ -14,6 +14,7 @@ export { createCanvasRoutes } from './canvas.js';
 export { createWorkflowBuilderRoutes, createWorkflowApiRouter } from './workflow-builder.js';
 export { createA2AProtocolRoutes } from './a2a-protocol.js';
 export { createACPRoutes } from './acp.js';
+export { createChannelRoutes } from './channels.js';
 export { createDashboardRouter } from './dashboard.js';
 export { createCloudTaskRoutes } from './cloud-tasks.js';
 export { createWebhookRoutes } from './webhooks.js';

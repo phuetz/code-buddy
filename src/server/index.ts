@@ -30,7 +30,7 @@ import {
   errorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes, createWorkflowApiRouter, createA2AProtocolRoutes, createACPRoutes, createK8sHealthAliases, createDashboardRouter, createCloudTaskRoutes, createWebhookRoutes } from './routes/index.js';
+import { chatRoutes, toolsRoutes, sessionsRoutes, memoryRoutes, healthRoutes, metricsRoutes, createWorkflowApiRouter, createA2AProtocolRoutes, createACPRoutes, createK8sHealthAliases, createDashboardRouter, createCloudTaskRoutes, createWebhookRoutes, createChannelRoutes } from './routes/index.js';
 import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
 import { startFleetHeartbeat, stopFleetHeartbeat } from '../fleet/heartbeat-broadcaster.js';
 import { startApiHeartbeatMonitor, stopApiHeartbeatMonitor } from './heartbeat-monitor.js';
@@ -191,6 +191,7 @@ function createApp(config: ServerConfig): Application {
   app.use('/api/memory', memoryRoutes);
   app.use('/api/workflows', createWorkflowApiRouter());
   app.use('/api/acp', createACPRoutes());
+  app.use('/api/channels', createChannelRoutes());
   app.use('/api/cloud/tasks', createCloudTaskRoutes());
   app.use('/api/webhooks', createWebhookRoutes());
 
