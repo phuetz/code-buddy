@@ -360,16 +360,14 @@ export class TestGeneratorTool {
 
   /**
    * Generate tests using LLM for real assertions (not TODO stubs).
-   * Falls back to scaffold if LLM callback is not provided or fails.
    */
   async generateTestWithLLM(
     sourceFile: string,
     config: TestGeneratorConfig = {},
     llmCallback?: (prompt: string) => Promise<string>,
   ): Promise<{ testFile: string; content: string }> {
-    // Fallback to scaffold if no LLM
     if (!llmCallback) {
-      return this.generateTestScaffold(sourceFile, config);
+      throw new Error('LLM test generation requires an LLM callback. Use generateTestScaffold() for scaffold output.');
     }
 
     const framework = config.framework === 'auto' || !config.framework
@@ -406,18 +404,13 @@ ${sourceContent.substring(0, 8000)}
 - Import from './${relativePath}'
 - Output ONLY the test file content, no markdown fences or explanation`;
 
-    try {
-      const content = await llmCallback(prompt);
-      // Strip markdown fences if LLM wraps output
-      const cleaned = content
-        .replace(/^```(?:typescript|ts|javascript|js)?\n/m, '')
-        .replace(/\n```\s*$/m, '')
-        .trim();
-      return { testFile, content: cleaned + '\n' };
-    } catch {
-      // Fallback to scaffold on LLM failure
-      return this.generateTestScaffold(sourceFile, config);
-    }
+    const content = await llmCallback(prompt);
+    // Strip markdown fences if LLM wraps output
+    const cleaned = content
+      .replace(/^```(?:typescript|ts|javascript|js)?\n/m, '')
+      .replace(/\n```\s*$/m, '')
+      .trim();
+    return { testFile, content: cleaned + '\n' };
   }
 
   /**

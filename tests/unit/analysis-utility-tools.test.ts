@@ -99,5 +99,26 @@ describe('Analysis and Utility Tools VFS Migration', () => {
       expect(mockExists).toHaveBeenCalledWith(expect.stringContaining('package.json'));
       expect(framework).toBe('jest');
     });
+
+    it('should not silently fall back to scaffold when LLM callback is missing', async () => {
+      const generator = new TestGeneratorTool();
+
+      await expect(generator.generateTestWithLLM('src/example.ts', { framework: 'vitest' }))
+        .rejects.toThrow('LLM test generation requires an LLM callback');
+    });
+
+    it('should not silently fall back to scaffold when LLM callback fails', async () => {
+      const generator = new TestGeneratorTool();
+      mockExists.mockResolvedValue(false);
+      mockReadFile
+        .mockResolvedValueOnce('export function add(a: number, b: number) { return a + b; }')
+        .mockResolvedValueOnce('export function add(a: number, b: number) { return a + b; }');
+
+      await expect(generator.generateTestWithLLM(
+        'src/example.ts',
+        { framework: 'vitest' },
+        async () => { throw new Error('model unavailable'); },
+      )).rejects.toThrow('model unavailable');
+    });
   });
 });

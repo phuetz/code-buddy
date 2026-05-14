@@ -198,6 +198,15 @@ npx eslint src/desktop-automation/screen-recorder.ts tests/desktop-automation/sc
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/analysis-utility-tools.test.ts
+# 7 tests passed after LLM test generation fallback removal
+
+npx eslint src/tools/test-generator.ts tests/unit/analysis-utility-tools.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -403,6 +412,9 @@ npm run typecheck
 - `ScreenRecorder` ne produit plus de video noire placeholder sur Wayland et
   ne declare plus un enregistrement reussi si le fichier de sortie est absent
   ou vide.
+- Le generateur de tests ne pretend plus produire des tests LLM avec vraies
+  assertions quand aucun callback LLM n'est disponible ou quand celui-ci echoue.
+  Le scaffold TODO reste disponible uniquement via le chemin scaffold explicite.
 
 ## Blocage leve
 
