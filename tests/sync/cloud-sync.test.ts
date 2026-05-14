@@ -12,7 +12,6 @@ import { EventEmitter } from 'events';
 // Direct imports (no mocking for integration tests)
 import {
   LocalStorage,
-  CloudStorage,
   createCloudStorage,
 } from '../../src/sync/cloud/storage.js';
 import {
@@ -166,18 +165,20 @@ describe('Cloud Storage', () => {
       expect(storage).toBeInstanceOf(LocalStorage);
     });
 
-    it('should create cloud storage for gcs and azure providers', () => {
-      const gcs = createCloudStorage({
-        provider: 'gcs',
-        bucket: 'test',
-      });
-      const azure = createCloudStorage({
-        provider: 'azure',
-        bucket: 'test',
-      });
+    it('should fail fast for cloud providers without real adapters', () => {
+      expect(() =>
+        createCloudStorage({
+          provider: 'gcs',
+          bucket: 'test',
+        })
+      ).toThrow('Cloud provider "gcs" is not implemented');
 
-      expect(gcs).toBeInstanceOf(CloudStorage);
-      expect(azure).toBeInstanceOf(CloudStorage);
+      expect(() =>
+        createCloudStorage({
+          provider: 'azure',
+          bucket: 'test',
+        })
+      ).toThrow('Cloud provider "azure" is not implemented');
     });
   });
 });

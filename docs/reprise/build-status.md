@@ -296,6 +296,9 @@ npm run build
   plus de reponses artificielles sans client Code Buddy ou manager MCP. Le
   runtime de script propage aussi maintenant `success: false` quand l'execution
   echoue apres un parse reussi.
+- Les providers cloud `s3`, `gcs` et `azure` ne simulent plus des uploads/listes
+  vides. Tant que les adaptateurs reels ne sont pas branches, la factory echoue
+  explicitement; seul le provider `local` reste operationnel pour sync/backup.
 
 ## Blocage leve
 

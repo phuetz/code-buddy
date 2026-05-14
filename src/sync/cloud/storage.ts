@@ -17,6 +17,12 @@ import type {
 } from './types.js';
 import { logger } from '../../utils/logger.js';
 
+function unsupportedCloudProvider(provider: string): Error {
+  return new Error(
+    `Cloud provider "${provider}" is not implemented. Use provider "local" or add a real provider adapter before enabling remote sync.`
+  );
+}
+
 // ============================================================================
 // Storage Interface
 // ============================================================================
@@ -264,69 +270,37 @@ export class LocalStorage extends CloudStorage {
 // ============================================================================
 
 export class S3Storage extends CloudStorage {
-  // Note: In production, this would use @aws-sdk/client-s3
-  // For now, we provide a mock implementation
-
-  async upload(key: string, data: Buffer, _metadata?: Record<string, string>): Promise<void> {
-    const fullKey = this.getFullKey(key);
-    let processedData = data;
-
-    if (this.encryptionKey) {
-      processedData = this.encrypt(data);
-    }
-
-    // Mock S3 upload - in production, use S3 SDK
-    logger.debug(`[S3] Uploading ${fullKey}`, { bytes: processedData.length });
-
-    // Simulate network latency
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  private unsupported(): never {
+    throw unsupportedCloudProvider(this.config.provider);
   }
 
-  async download(key: string): Promise<Buffer> {
-    const fullKey = this.getFullKey(key);
-
-    // Mock S3 download - in production, use S3 SDK
-    logger.debug(`[S3] Downloading ${fullKey}`);
-
-    // Simulate network latency
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Return empty buffer for mock
-    return Buffer.alloc(0);
+  async upload(_key: string, _data: Buffer, _metadata?: Record<string, string>): Promise<void> {
+    this.unsupported();
   }
 
-  async delete(key: string): Promise<void> {
-    const fullKey = this.getFullKey(key);
-    logger.debug(`[S3] Deleting ${fullKey}`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  async download(_key: string): Promise<Buffer> {
+    this.unsupported();
   }
 
-  async list(options: ListOptions = {}): Promise<ListResult> {
-    logger.debug(`[S3] Listing objects`, { prefix: options.prefix });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    return {
-      objects: [],
-      truncated: false,
-    };
+  async delete(_key: string): Promise<void> {
+    this.unsupported();
   }
 
-  async exists(key: string): Promise<boolean> {
-    const fullKey = this.getFullKey(key);
-    logger.debug(`[S3] Checking existence: ${fullKey}`);
-    return false;
+  async list(_options: ListOptions = {}): Promise<ListResult> {
+    this.unsupported();
   }
 
-  async getMetadata(key: string): Promise<StorageObject | null> {
-    const fullKey = this.getFullKey(key);
-    logger.debug(`[S3] Getting metadata: ${fullKey}`);
-    return null;
+  async exists(_key: string): Promise<boolean> {
+    this.unsupported();
+  }
+
+  async getMetadata(_key: string): Promise<StorageObject | null> {
+    this.unsupported();
   }
 }
 
-// GCS and Azure currently share the same mock-object-storage behavior as S3.
-// This keeps all configured providers operational until provider-specific SDK
-// integrations are introduced.
+// These classes remain exported for API compatibility, but factory creation is
+// blocked until provider-specific SDK integrations are implemented.
 export class GCSStorage extends S3Storage {}
 
 export class AzureBlobStorage extends S3Storage {}
@@ -340,11 +314,9 @@ export function createCloudStorage(config: CloudConfig): CloudStorage {
     case 'local':
       return new LocalStorage(config);
     case 's3':
-      return new S3Storage(config);
     case 'gcs':
-      return new GCSStorage(config);
     case 'azure':
-      return new AzureBlobStorage(config);
+      throw unsupportedCloudProvider(config.provider);
     default:
       throw new Error(`Unknown cloud provider: ${config.provider}`);
   }
