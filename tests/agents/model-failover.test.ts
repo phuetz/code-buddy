@@ -1,4 +1,13 @@
+import { vi } from 'vitest';
 import { ModelFailoverChain, FailoverEntry } from '../../src/agents/model-failover.js';
+
+const oauthMocks = vi.hoisted(() => ({
+  hasCodexCredentials: vi.fn(() => false),
+}));
+
+vi.mock('../../src/providers/codex-oauth.js', () => ({
+  hasCodexCredentials: oauthMocks.hasCodexCredentials,
+}));
 
 describe('ModelFailoverChain', () => {
   let chain: ModelFailoverChain;
@@ -78,7 +87,7 @@ describe('ModelFailoverChain', () => {
     expect(status[0].healthy).toBe(false);
 
     // Simulate cooldown expiry by manipulating lastChecked
-    const entry = (chain as any).chain[0] as FailoverEntry;
+    const entry = (chain as unknown as { chain: FailoverEntry[] }).chain[0];
     entry.lastChecked = Date.now() - 200;
 
     const provider = chain.getNextProvider();
@@ -118,6 +127,9 @@ describe('ModelFailoverChain', () => {
       delete process.env.OPENAI_API_KEY;
       delete process.env.GOOGLE_API_KEY;
       delete process.env.GROK_BASE_URL;
+      delete process.env.CODEBUDDY_PROVIDER;
+      delete process.env.CHATGPT_MODEL;
+      oauthMocks.hasCodexCredentials.mockReturnValue(false);
     });
 
     afterEach(() => {
@@ -146,7 +158,33 @@ describe('ModelFailoverChain', () => {
       process.env.GOOGLE_API_KEY = 'k';
       const c = ModelFailoverChain.fromEnvironment();
       expect(c.getStatus()).toHaveLength(4);
-      expect(c.getStatus().map(s => s.provider)).toEqual(['grok', 'claude', 'chatgpt', 'gemini']);
+      expect(c.getStatus().map(s => s.provider)).toEqual(['grok', 'claude', 'openai', 'gemini']);
+    });
+
+    it('should prefer ChatGPT OAuth when Codex credentials are available', () => {
+      oauthMocks.hasCodexCredentials.mockReturnValue(true);
+      process.env.GROK_API_KEY = 'k';
+
+      const c = ModelFailoverChain.fromEnvironment();
+      const next = c.getNextProvider();
+
+      expect(c.getStatus().map(s => s.provider)).toEqual(['chatgpt', 'grok']);
+      expect(next).toMatchObject({
+        provider: 'chatgpt',
+        model: 'gpt-5.5',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+      });
+    });
+
+    it('should skip ChatGPT OAuth when another provider is explicitly selected', () => {
+      oauthMocks.hasCodexCredentials.mockReturnValue(true);
+      process.env.CODEBUDDY_PROVIDER = 'grok';
+      process.env.GROK_API_KEY = 'k';
+
+      const c = ModelFailoverChain.fromEnvironment();
+
+      expect(c.getStatus().map(s => s.provider)).toEqual(['grok']);
     });
   });
 });

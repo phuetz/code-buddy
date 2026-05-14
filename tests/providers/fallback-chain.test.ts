@@ -19,6 +19,10 @@ jest.mock('../../src/utils/logger', () => ({
   },
 }));
 
+jest.mock('../../src/providers/codex-oauth', () => ({
+  hasCodexCredentials: jest.fn(() => false),
+}));
+
 import {
   ProviderFallbackChain,
   getFallbackChain,

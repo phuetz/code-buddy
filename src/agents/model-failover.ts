@@ -1,3 +1,6 @@
+import { CHATGPT_OAUTH_SENTINEL, CHATGPT_RESPONSES_BASE_URL } from '../codebuddy/client.js';
+import { hasCodexCredentials } from '../providers/codex-oauth.js';
+
 export interface FailoverEntry {
   provider: string;
   model: string;
@@ -20,6 +23,12 @@ const DEFAULT_CONFIG: FailoverConfig = {
   cooldownMs: 60000,
   healthCheckIntervalMs: 300000,
 };
+
+function shouldUseChatGptOAuth(): boolean {
+  const override = process.env.CODEBUDDY_PROVIDER?.toLowerCase();
+  if (override && override !== 'chatgpt') return false;
+  return hasCodexCredentials();
+}
 
 export class ModelFailoverChain {
   private chain: FailoverEntry[];
@@ -101,6 +110,15 @@ export class ModelFailoverChain {
   static fromEnvironment(): ModelFailoverChain {
     const chain = new ModelFailoverChain();
 
+    if (shouldUseChatGptOAuth()) {
+      chain.addProvider({
+        provider: 'chatgpt',
+        model: process.env.CHATGPT_MODEL || 'gpt-5.5',
+        apiKey: CHATGPT_OAUTH_SENTINEL,
+        baseURL: CHATGPT_RESPONSES_BASE_URL,
+      });
+    }
+
     if (process.env.GROK_API_KEY) {
       chain.addProvider({
         provider: 'grok',
@@ -120,9 +138,10 @@ export class ModelFailoverChain {
 
     if (process.env.OPENAI_API_KEY) {
       chain.addProvider({
-        provider: 'chatgpt',
+        provider: 'openai',
         model: 'gpt-4o',
         apiKey: 'OPENAI_API_KEY',
+        baseURL: 'https://api.openai.com/v1',
       });
     }
 
