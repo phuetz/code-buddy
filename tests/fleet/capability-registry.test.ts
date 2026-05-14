@@ -19,6 +19,14 @@ vi.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
+const codexOAuthMock = vi.hoisted(() => ({
+  hasCodexCredentials: vi.fn(() => false),
+}));
+
+vi.mock('../../src/providers/codex-oauth.js', () => ({
+  hasCodexCredentials: codexOAuthMock.hasCodexCredentials,
+}));
+
 import {
   getLocalCapabilities,
   resetCapabilityCache,
@@ -36,6 +44,7 @@ function clearProviderEnv() {
     'GOOGLE_API_KEY',
     'GROK_API_KEY',
     'MISTRAL_API_KEY',
+    'CHATGPT_MODEL',
     'CODEBUDDY_FLEET_HOSTNAME',
     'CODEBUDDY_FLEET_MACHINE_LABEL',
     'CODEBUDDY_FLEET_GPU',
@@ -48,6 +57,8 @@ function clearProviderEnv() {
 
 beforeEach(() => {
   clearProviderEnv();
+  codexOAuthMock.hasCodexCredentials.mockReset();
+  codexOAuthMock.hasCodexCredentials.mockReturnValue(false);
   resetCapabilityCache();
   // Disable gemini-cli auto-detect by default (a real `gemini` binary
   // installed on the test host would otherwise produce 2 extra models
@@ -88,6 +99,20 @@ describe('capability-registry — env-based detection', () => {
     const ids = cap.models.map((m) => m.id);
     expect(ids).toContain('gpt-5-codex');
     expect(cap.models.find((m) => m.id === 'gpt-5-codex')?.strengths).toContain('code');
+  });
+
+  it('detects ChatGPT Codex OAuth as a zero-marginal-cost cloud provider', async () => {
+    codexOAuthMock.hasCodexCredentials.mockReturnValue(true);
+    process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
+
+    const cap = await getLocalCapabilities();
+    const chatgpt = cap.models.filter((m) => m.provider === 'chatgpt-oauth');
+
+    expect(chatgpt.map((m) => m.id)).toContain('gpt-5.1-codex');
+    expect(chatgpt.map((m) => m.id)).toContain('gpt-5.5');
+    expect(chatgpt[0].costInputUsdPerMtok).toBe(0);
+    expect(chatgpt[0].costOutputUsdPerMtok).toBe(0);
+    expect(cap.egress).toBe('cloud');
   });
 
   it('Gemini detection uses GEMINI_API_KEY or GOOGLE_API_KEY', async () => {

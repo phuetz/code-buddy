@@ -8,12 +8,13 @@
  *
  * Detection layers, in order:
  *   1. Explicit `CODEBUDDY_FLEET_*` env vars (machineLabel, gpu, ram)
- *   2. Configured cloud keys (`process.env.ANTHROPIC_API_KEY`,
+ *   2. ChatGPT Codex OAuth subscription login, when present
+ *   3. Configured cloud keys (`process.env.ANTHROPIC_API_KEY`,
  *      `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROK_API_KEY`,
  *      `MISTRAL_API_KEY`)
- *   3. Local Ollama daemon — best-effort `GET http://127.0.0.1:11434/api/tags`
+ *   4. Local Ollama daemon — best-effort `GET http://127.0.0.1:11434/api/tags`
  *      (fails silently when Ollama isn't running)
- *   4. Local LM Studio — best-effort `GET http://127.0.0.1:1234/v1/models`
+ *   5. Local LM Studio — best-effort `GET http://127.0.0.1:1234/v1/models`
  *
  * The registry is **opportunistic** — it only advertises providers
  * that are actually reachable at boot time. A 5-min refresh keeps
@@ -27,6 +28,7 @@ import * as os from 'os';
 import * as path from 'node:path';
 import { logger } from '../utils/logger.js';
 import { getModelToolConfig } from '../config/model-tools.js';
+import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import type {
   FleetModelDescriptor,
   ModelStrength,
@@ -85,6 +87,9 @@ async function buildCapabilitySnapshot(): Promise<PeerCapability> {
   // Layer 1 — cloud keys. Each detection adds 1-3 representative model
   // descriptors (we don't enumerate every Anthropic model, just a
   // handful that the router can route to).
+  if (hasCodexCredentials()) {
+    models.push(...buildChatGptCatalog());
+  }
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) {
     models.push(...buildAnthropicCatalog());
   }
@@ -214,6 +219,27 @@ function parseConcurrency(raw: string | undefined): number | undefined {
 }
 
 // ─── Catalogs ───────────────────────────────────────────────────────
+
+/** ChatGPT subscription models served through the Codex OAuth backend. */
+function buildChatGptCatalog(): FleetModelDescriptor[] {
+  const ids = Array.from(
+    new Set([
+      process.env.CHATGPT_MODEL?.trim() || 'gpt-5.5',
+      'gpt-5.5',
+      'gpt-5.1-codex',
+      'gpt-5-codex',
+    ]),
+  ).filter((id) => id.length > 0);
+
+  return ids.map((id) => ({
+    id,
+    contextWindow: getModelToolConfig(id).contextWindow ?? 200_000,
+    strengths: deriveStrengths(id, 'chatgpt-oauth'),
+    costInputUsdPerMtok: 0,
+    costOutputUsdPerMtok: 0,
+    provider: 'chatgpt-oauth',
+  }));
+}
 
 /** Representative Anthropic models the router knows about. */
 function buildAnthropicCatalog(): FleetModelDescriptor[] {

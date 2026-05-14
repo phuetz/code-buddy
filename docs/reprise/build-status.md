@@ -75,6 +75,12 @@ npm --prefix cowork test -- run tests/fleet-discovery.test.ts tests/fleet-bridge
 
 npm --prefix cowork run typecheck
 # passed
+
+npm test -- tests/fleet/capability-registry.test.ts tests/fleet/task-router.test.ts tests/server/peer-websocket-smoke.test.ts
+# 34 tests passed
+
+npx eslint src/fleet/capability-registry.ts tests/fleet/capability-registry.test.ts --quiet
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -154,6 +160,10 @@ npm --prefix cowork run typecheck
 - La discovery Cowork probe le port `3000` de `buddy server` puis le port
   legacy `3001`, avec override `CODEBUDDY_FLEET_DISCOVERY_PORTS`. Cela aligne
   le scan Tailscale avec les exemples `/fleet listen ws://...:3000/ws`.
+- Le registre de capabilities Fleet annonce maintenant ChatGPT Codex OAuth
+  (`chatgpt-oauth`) quand le login Codex/ChatGPT existe. Un peer qui utilise
+  ton abonnement ChatGPT Pro n'apparait donc plus avec `peerChatProvider`
+  renseigne mais zero modele routable.
 
 ## Blocage leve
 
