@@ -18,7 +18,7 @@ describe('Talk Mode', () => {
     await resetTTSManager();
     manager = new TTSManager({
       enabled: true,
-      providers: [],
+      providers: [{ provider: 'mock', enabled: true, priority: 0 }],
       defaultLanguage: 'en-US',
       queueConfig: {
         maxSize: 10,
@@ -35,6 +35,28 @@ describe('Talk Mode', () => {
   afterEach(async () => {
     await manager.shutdown();
     await resetTTSManager();
+  });
+
+  describe('Default provider behavior', () => {
+    it('should not auto-register the mock provider', async () => {
+      await manager.shutdown();
+      manager = new TTSManager({
+        providers: [],
+        queueConfig: {
+          maxSize: 10,
+          preSynthesize: false,
+          preSynthesizeCount: 3,
+          autoPlay: false,
+          gapMs: 0,
+        },
+      });
+
+      await manager.initialize();
+
+      expect(await manager.listProviders()).toEqual([]);
+      expect(manager.getActiveProvider()).toBeNull();
+      await expect(manager.synthesize('Hello')).rejects.toThrow('No TTS provider available');
+    });
   });
 
   describe('MockTTSProvider', () => {
@@ -157,6 +179,7 @@ describe('Talk Mode', () => {
     beforeEach(async () => {
       await manager.shutdown();
       manager = new TTSManager({
+        providers: [{ provider: 'mock', enabled: true, priority: 0 }],
         cacheEnabled: true,
         cacheMaxBytes: 1024 * 1024,
         cacheTTLMs: 60000,

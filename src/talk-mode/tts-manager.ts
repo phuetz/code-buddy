@@ -19,6 +19,12 @@ import type {
   AudioFormat,
 } from './types.js';
 import { DEFAULT_TALK_MODE_CONFIG, DEFAULT_QUEUE_CONFIG } from './types.js';
+import {
+  AudioReaderTTSProvider,
+  EdgeTTSProvider,
+  ElevenLabsProvider,
+  OpenAITTSProvider,
+} from './providers/index.js';
 
 // ============================================================================
 // TTS Provider Interface
@@ -187,29 +193,20 @@ export class TTSManager extends EventEmitter {
    * Initialize providers
    */
   async initialize(): Promise<void> {
-    // Register mock provider by default
-    if (!this.providers.has('mock')) {
-      this.registerProvider(new MockTTSProvider());
-    }
-
     // Initialize configured providers
     for (const providerConfig of this.config.providers) {
-      const provider = this.providers.get(providerConfig.provider);
-      if (provider && providerConfig.enabled) {
-        await provider.initialize(providerConfig);
+      if (!providerConfig.enabled) {
+        continue;
       }
-    }
 
-    // Initialize mock if no providers configured
-    if (this.config.providers.length === 0) {
-      const mockProvider = this.providers.get('mock');
-      if (mockProvider) {
-        await mockProvider.initialize({
-          provider: 'mock',
-          enabled: true,
-          priority: 0,
-        });
+      const provider = this.ensureProvider(providerConfig.provider);
+      if (!provider) {
+        throw new Error(
+          `TTS provider "${providerConfig.provider}" is not implemented. Register a real provider before using it, or use provider: "mock" only in tests.`
+        );
       }
+
+      await provider.initialize(providerConfig);
     }
 
     // Select best available provider
@@ -217,6 +214,33 @@ export class TTSManager extends EventEmitter {
 
     // Load voices
     await this.loadVoices();
+  }
+
+  private ensureProvider(providerId: TTSProvider): ITTSProvider | undefined {
+    const existingProvider = this.providers.get(providerId);
+    if (existingProvider) {
+      return existingProvider;
+    }
+
+    switch (providerId) {
+      case 'audioreader':
+        return this.registerAndReturnProvider(new AudioReaderTTSProvider());
+      case 'edge':
+        return this.registerAndReturnProvider(new EdgeTTSProvider());
+      case 'elevenlabs':
+        return this.registerAndReturnProvider(new ElevenLabsProvider());
+      case 'mock':
+        return this.registerAndReturnProvider(new MockTTSProvider());
+      case 'openai':
+        return this.registerAndReturnProvider(new OpenAITTSProvider());
+      default:
+        return undefined;
+    }
+  }
+
+  private registerAndReturnProvider(provider: ITTSProvider): ITTSProvider {
+    this.registerProvider(provider);
+    return provider;
   }
 
   /**

@@ -338,6 +338,9 @@ npm run build
 - `SmartSnapshotManager` ne retourne plus des elements UI inventes quand
   AT-SPI/UIAutomation/AX echoue. Les erreurs d'accessibilite donnent maintenant
   une liste vide ou les elements OCR reels, sans boutons `OK`/`Cancel` factices.
+- `TTSManager` n'installe plus le provider `mock` quand aucun provider voix
+  n'est configure. Le provider mock reste disponible pour les tests, mais doit
+  etre demande explicitement via `provider: "mock"`.
 
 ## Blocage leve
 
