@@ -1934,5 +1934,98 @@ inventaire (~3h estimé) est obsolète. L'inventaire mis à jour :
 
 — Claude/Ministar Ubuntu, 2026-05-15 02h45 UTC
 
+## 2026-05-15 — Cowork chat-ui parity (PR #40 draft)
+
+5 commits livrés sur la branche `feat/cowork-chat-ui-polish` (poussée),
+**PR draft #40** : https://github.com/phuetz/code-buddy/pull/40
+
+### Contexte
+
+Tu m'as demandé d'étudier le **chat React de gitnexus-rs** (`chat-ui/`)
+que tu as développé from scratch parce que le chat de l'app Desktop
+Tauri ne te convenait pas, **pour identifier ce qui peut être porté
+dans Code Buddy / Cowork** (pas l'inverse — pas de modif gitnexus).
+Premier Explore : 5 vrais gaps confirmés dans Cowork :
+
+1. ❌ Pas de **Regenerate** (juste Copy + Bookmark sur les messages assistant)
+2. ❌ Textarea `rows={1}` fixe (pas d'auto-grow)
+3. ⚠️ HealthStatus enterré dans Settings (pas de badge permanent visible)
+4. ⚠️ Tool calls en cards collapsibles séparées (pas de bande inline)
+5. ⚠️ Mermaid via ArtifactPanel séparé (pas inline dans la bulle)
+
+### 5 commits indépendants (~795 LOC, 31 tests)
+
+| # | Commit | Gap | LOC | Tests |
+|---|---|---|---|---|
+| 1 | `19742e02` | Regenerate button au hover MessageCard | ~50 | 12 ✓ |
+| 2 | `3ddfef98` | Textarea auto-grow 44→200 px | ~70 | 5 ✓ |
+| 3 | `bc8c121a` | HealthBadge permanent dans Titlebar | ~320 | 4 ✓ |
+| 4 | `cf4cb429` | Tool badges inline strip + scroll-to ToolUseBlock | ~240 | 10 ✓ |
+| 5 | `0f7b4f58` | MermaidBlock inline (lazy + DOMPurify) | ~115 | 0 (smoke) |
+
+### Patterns volés au chat-ui gitnexus
+
+- Lazy `import('mermaid')` + DOMPurify strict SVG profile
+- `useBackendStatus` chained-setTimeout + backoff (10s → 60s ceiling)
+- Textarea auto-grow via `scrollHeight` reset-to-auto-clamp
+- Regenerate via slice-and-replay (`continueSession()` re-add le user
+  message, donc on trim depuis `userIndex` inclus)
+- Tool badges status taxonomy : amber=running animate-spin, success=done, error=fail
+
+### Validation
+
+- ✅ `npm test` Cowork : **1079/1079** passing (170 fichiers, **zéro régression**)
+- ✅ `npm run typecheck` clean
+- ✅ `npm run build:e2e` OK, **mermaid chunké à part** (~500 KB lazy,
+  vu dans `dist/assets/mermaid.core-*.js`)
+- ⏸️ `npm run build` complet échoue sur `prepare:python:all` (GitHub API
+  504 rate-limit sur python-build-standalone) — **indépendant** de cette
+  PR, c'est un step d'infra packaging Electron
+- ⏸️ `npm run lint` script du repo cassé (eslint 8 vs 9 config mismatch
+  — `--ext` flag déprécié) — **pré-existant**, pas modifié dans cette PR
+- 🔵 **Smoke test manuel à faire dans Cowork live** (5 cases listés
+  dans la PR description)
+
+### Branche stratégie
+
+Partie de `origin/main` (`3ceac032`) directement, pas de la branche
+`main` locale qui contient les 2 commits Phase d.23 non pushés
+(`f8a83f5a` + `160826b5`). PR #40 totalement indépendante.
+
+Donc tu as maintenant **2 stacks séparés** en local Ministar :
+- Branche `main` : Phase d.23 (peer.tool.invoke V1 + slash /fleet tool)
+- Branche `feat/cowork-chat-ui-polish` : ces 5 commits (pushée + PR #40 draft)
+
+### Helpers purs extraits (testables en node env)
+
+Pour contourner la limite que les composants React DOM-bound ne sont
+pas testables en `vitest environment: 'node'`, j'ai extrait toute la
+logique métier en utility functions pures :
+
+- `regenerate-helpers.ts` — `findPrecedingUserIndex`, `computeRegenerationPlan`
+- `tool-status.ts` — `resolveToolStatus`, `compactToolLabel`
+- `use-textarea-autogrow.ts` — `computeAutogrowHeight`
+- `use-backend-status.ts` — `computeNextPollDelay`
+
+Les hooks/composants React eux ne sont que la glue (storerefs,
+useEffect, lifecycle). MermaidBlock et HealthBadge restent au smoke
+test manuel pour V1.
+
+### Inventaire mis à jour
+
+| # | Item | Statut | Priorité |
+|---|---|---|---|
+| 1 | Phase (e).7 — OpenClaw Gateway integration | Reportée | HIGH |
+| 2 | Phase d.23 V1.3 — `peer.tool.invoke` | Local Ministar (commits `f8a83f5a` + `160826b5`) | DONE local, push pending |
+| 3 | Phase d.23 V1.3 — ChatGPT Pro login | **Déjà livré** (commit `fe73591e` dispatch + `codex-oauth.ts` + `provider-chatgpt-responses.ts`) | DONE |
+| ~~4~~ | ~~Provider Gemini CLI subprocess~~ | **Déjà livré** (`3127ac56`) | ~~MEDIUM~~ |
+| 5 | `/swarm`, `/memory recent` color, `buddy init --update` | Deferred | MEDIUM |
+| 6 | Rate cap `peer.chat` (Phase d.16b) | Deferred | LOW |
+| 7 | Memory UI aggregation (7 sources) | Deferred | LOW |
+| **8** | **Cowork chat-ui parity (5 gaps)** | **PR #40 draft** | **DONE pending review** |
+
+— Claude/Ministar Ubuntu, 2026-05-15 06h25 UTC
+
+
 
 
