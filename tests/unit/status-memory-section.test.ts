@@ -15,11 +15,29 @@ const memoryMocks = vi.hoisted(() => ({
   getRecentMemories: vi.fn(),
 }));
 
+const providerMocks = vi.hoisted(() => ({
+  detectProviderFromEnv: vi.fn(),
+}));
+
 vi.mock('../../src/memory/persistent-memory.js', () => ({
   getMemoryManager: () => ({
     getStats: memoryMocks.getStats,
     getRecentMemories: memoryMocks.getRecentMemories,
   }),
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.detectProviderFromEnv,
+  selectModelForDetectedProvider: (
+    detected: { provider: string; defaultModel: string } | null,
+    configured?: string,
+  ) => {
+    if (!detected) return configured;
+    if (configured && !(detected.provider !== 'grok' && /^grok[-_]/i.test(configured))) {
+      return configured;
+    }
+    return detected.defaultModel;
+  },
 }));
 
 // Heavy optional deps the handler tries to import — no-op them so we don't
@@ -53,6 +71,8 @@ describe('handleStatus — Memory section (rc.2 extension)', () => {
   beforeEach(() => {
     envBackup = { ...process.env };
     delete process.env.YOLO_MODE;
+    delete process.env.GROK_MODEL;
+    providerMocks.detectProviderFromEnv.mockReturnValue(null);
     memoryMocks.getStats.mockReset();
     memoryMocks.getRecentMemories.mockReset();
   });
@@ -112,5 +132,21 @@ describe('handleStatus — Memory section (rc.2 extension)', () => {
 
     const c = (await handleStatus()).entry?.content as string;
     expect(c).toContain('/memory recent');
+  });
+
+  it('shows the detected ChatGPT model instead of a stale Grok env default', async () => {
+    process.env.GROK_MODEL = 'grok-code-fast-1';
+    providerMocks.detectProviderFromEnv.mockReturnValue({
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    });
+    memoryMocks.getStats.mockReturnValue({ project: 0, user: 0, total: 0 });
+    memoryMocks.getRecentMemories.mockReturnValue([]);
+
+    const c = (await handleStatus()).entry?.content as string;
+
+    expect(c).toContain('Model:           gpt-5.5');
   });
 });

@@ -24,13 +24,17 @@ import { handleColabCommand } from './colab-handler.js';
 export async function handleChangeModel(args: string[]): Promise<CommandHandlerResult> {
   const { getSupportedModels, getModelInfo, suggestModel } = await import('../../utils/model-utils.js');
   const { getSettingsManager } = await import('../../utils/settings-manager.js');
+  const { detectProviderFromEnv, selectModelForDetectedProvider } = await import('../../utils/provider-detector.js');
 
   const modelName = args[0];
   const settingsManager = getSettingsManager();
 
   // If no model specified, show current model and list available models
   if (!modelName || modelName === 'list') {
-    const currentModel = process.env.GROK_MODEL || 'grok-beta';
+    const currentModel = selectModelForDetectedProvider(
+      detectProviderFromEnv(),
+      settingsManager.getCurrentModel(),
+    ) || 'grok-beta';
     const supportedModels = getSupportedModels();
 
     // Group models by provider
@@ -74,9 +78,9 @@ export async function handleChangeModel(args: string[]): Promise<CommandHandlerR
     lines.push('Usage: /model <model-name> or /model auto');
     lines.push('');
     lines.push('Examples:');
-    lines.push('  /model grok-beta');
-    lines.push('  /model grok-3-latest');
-    lines.push('  /model llama3.2 (requires GROK_BASE_URL for Ollama)');
+    lines.push('  /model gpt-5.5');
+    lines.push('  /model grok-3-fast');
+    lines.push('  /model llama3.2 (requires OLLAMA_HOST or a local OpenAI-compatible base URL)');
     lines.push('  /model auto          (enable automatic routing by task complexity)');
     lines.push('  /model auto off      (disable automatic routing)');
 
@@ -151,8 +155,8 @@ Use /model auto off to disable, or /model <name> to switch to a specific model.`
         content: `Model changed to: ${modelName}
 
 Note: This model is not in the supported list. It may work if:
-- You have a custom GROK_BASE_URL set
-- The model is available on your provider
+- You have a custom provider/base URL configured
+- The model is available on your active provider
 
 Use /model list to see supported models.`,
         timestamp: new Date(),
@@ -860,7 +864,11 @@ export async function handleStatus(): Promise<CommandHandlerResult> {
   lines.push('');
 
   // Current model
-  const currentModel = process.env.GROK_MODEL || 'grok-beta';
+  const { detectProviderFromEnv, selectModelForDetectedProvider } = await import('../../utils/provider-detector.js');
+  const currentModel = selectModelForDetectedProvider(
+    detectProviderFromEnv(),
+    process.env.GROK_MODEL,
+  ) || process.env.GROK_MODEL || 'grok-beta';
   lines.push(`  Model:           ${currentModel}`);
 
   // Agent mode
