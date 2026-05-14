@@ -21,6 +21,18 @@ npm --prefix cowork run typecheck
 npm run build
 # passed
 
+node dist/index.js whoami
+# ChatGPT connected; plan pro; source .codebuddy/codex-auth.json
+
+$env:CODEBUDDY_PROVIDER="chatgpt"; node dist/index.js --print "Reponds exactement: Code Buddy utilise ChatGPT Pro." --output-format text --no-color --no-emoji
+# returned "Code Buddy utilise ChatGPT Pro."; model gpt-5.5; cost 0
+
+npm test -- tests/codebuddy/providers/provider-chatgpt-responses.test.ts tests/utils/cost-chatgpt-subscription.test.ts tests/providers/codex-oauth.test.ts tests/providers/codex-oauth-storage.test.ts tests/providers/codex-oauth-e2e.test.ts tests/utils/provider-detector.test.ts tests/commands/handlers/auth-handlers.test.ts tests/doctor/chatgpt-oauth-check.test.ts tests/unit/models-snapshot.test.ts tests/utils/model-utils.test.ts tests/unit/embedding-provider.test.ts tests/knowledge/workspace-indexer.test.ts
+# 194 tests passed
+
+npx eslint src/providers/codex-oauth.ts src/utils/provider-detector.ts src/commands/handlers/auth-handlers.ts src/doctor/index.ts src/embeddings/embedding-provider.ts src/knowledge/workspace-indexer.ts src/config/constants.ts src/config/model-tools.ts src/index.ts tests/providers/codex-oauth-storage.test.ts tests/utils/provider-detector.test.ts tests/commands/handlers/auth-handlers.test.ts tests/unit/embedding-provider.test.ts tests/knowledge/workspace-indexer.test.ts tests/unit/models-snapshot.test.ts tests/utils/model-utils.test.ts
+# passed with existing warnings only; 0 errors
+
 node dist/index.js --help
 # passed
 
@@ -50,6 +62,15 @@ npm --prefix cowork run build
 - `peer:request` accepte maintenant les cles `admin` pour les appels Fleet
   d'administration et renvoie une reponse `peer:response` correlee sur refus de
   scope, au lieu de laisser le client expirer en timeout.
+- Code Buddy reutilise maintenant les credentials ChatGPT du Codex CLI
+  (`~/.codex/auth.json`) quand son fichier local est absent. Le logout Code
+  Buddy ne supprime pas ce login partage.
+- `gpt-5.5` et les modeles Codex subscription (`gpt-5.1-codex`,
+  `gpt-5-codex`) sont reconnus comme modeles supportes, ce qui retire le
+  warning inutile pendant les appels ChatGPT Pro.
+- L'indexeur workspace ne demarre plus apres une initialisation incomplete des
+  embeddings, et le fallback mock des embeddings ne plante plus quand aucun
+  listener `error` n'est attache.
 
 ## Blocage leve
 
@@ -64,6 +85,14 @@ node-gyp failed to rebuild ... cowork\node_modules\bufferutil
 Le build complet passe maintenant sans Visual Studio Build Tools dans cet
 environnement. Les warnings restants sont des warnings Vite de taille de chunks
 et de dynamic/static import; ils ne bloquent pas le packaging.
+
+## Toujours rouge hors reprise
+
+`npm run lint` reste rouge sur de la dette preexistante hors scope de cette
+reprise, notamment `scripts/tests/cat-rate-history-cache.ts` (`no-empty`) et
+`src/agent/multi-agent/workflow-event-streamer.ts`
+(`no-constant-binary-expression`). Le lint limite aux fichiers modifies passe
+avec warnings uniquement.
 
 ## Lecture produit
 

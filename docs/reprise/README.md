@@ -22,6 +22,8 @@ laboratoire.
 
 - [CLI smoke](cli-smoke.md) - prouve que le CLI tient une vraie session de
   travail, y compris une longue serie de prompts avec outils.
+- [ChatGPT Pro](chatgpt-pro.md) - prouve que le CLI reutilise le login Codex
+  local et l'abonnement ChatGPT sans cle API.
 - [Fleet minimal](fleet-minimal.md) - prouve la boucle Code Buddy vers Code
   Buddy: `listen`, `ping`, `describe`, `peer.chat` et outils read-only.
 - [Build status](build-status.md) - garde la preuve des validations locales et

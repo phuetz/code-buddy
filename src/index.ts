@@ -2088,6 +2088,7 @@ program
       if (auth.plan_type) cli.stdout(`   Plan:       ${auth.plan_type}`);
       if (auth.is_fedramp) cli.stdout(`   FedRAMP:    yes`);
       if (auth.account_id) cli.stdout(`   Account ID: ${auth.account_id}`);
+      if (auth.auth_file_path) cli.stdout(`   Source:     ${auth.auth_file_path}`);
       cli.stdout(`\nTokens stored at: ${getCodexAuthFilePath()}`);
       cli.stdout("Run `buddy --print \"hello\"` to test, or just `buddy` for a chat session.");
     } catch (err) {
@@ -2105,14 +2106,33 @@ program
       cli.stdout(`Unknown provider: "${provider}". Only \`chatgpt\` is supported.`);
       process.exit(1);
     }
-    const { hasCodexCredentials, clearCodexCredentials, getCodexAuthFilePath } =
-      await import("./providers/codex-oauth.js");
+    const {
+      hasCodexCredentials,
+      hasCodeBuddyCodexCredentials,
+      clearCodexCredentials,
+      getActiveCodexAuthFilePath,
+      getCodexAuthFilePath,
+      getSharedCodexAuthFilePath,
+    } = await import("./providers/codex-oauth.js");
     if (!hasCodexCredentials()) {
       cli.stdout("No ChatGPT credentials on disk — already logged out.");
       return;
     }
-    clearCodexCredentials();
-    cli.stdout(`✅ ChatGPT credentials cleared (${getCodexAuthFilePath()})`);
+    if (hasCodeBuddyCodexCredentials()) {
+      clearCodexCredentials();
+      cli.stdout(`✅ Code Buddy ChatGPT credentials cleared (${getCodexAuthFilePath()})`);
+    } else {
+      cli.stdout("No Code Buddy-specific ChatGPT credentials to remove.");
+    }
+
+    const activePath = getActiveCodexAuthFilePath();
+    if (activePath) {
+      cli.stdout("Shared Codex ChatGPT credentials are still available.");
+      cli.stdout(`  Active source: ${activePath}`);
+      cli.stdout(`  Shared source: ${getSharedCodexAuthFilePath()}`);
+    } else {
+      cli.stdout("Run `buddy login chatgpt` to authenticate again.");
+    }
   });
 
 program
@@ -2137,6 +2157,7 @@ program
       if (auth.plan_type) cli.stdout(`  Plan:       ${auth.plan_type}`);
       if (auth.account_id) cli.stdout(`  Account ID: ${auth.account_id}`);
       if (auth.is_fedramp) cli.stdout(`  FedRAMP:    yes`);
+      if (auth.auth_file_path) cli.stdout(`  Source:     ${auth.auth_file_path}`);
     } catch (err) {
       cli.error(`Error reading credentials: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);

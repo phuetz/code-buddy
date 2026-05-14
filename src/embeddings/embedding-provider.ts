@@ -98,7 +98,9 @@ export class EmbeddingProvider extends EventEmitter {
       this.initialized = true;
       this.emit('initialized', { provider: this.config.provider });
     } catch (error) {
-      this.emit('error', error);
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', error);
+      }
       // Fall back to mock provider if local fails
       if (this.config.provider === 'local') {
         logger.warn('Local embedding model failed to load, using mock embeddings');

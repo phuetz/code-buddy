@@ -36,6 +36,13 @@ describe('Model Utilities', () => {
       expect(info.provider).toBe('xai');
     });
 
+    it('should return info for ChatGPT Codex subscription models', () => {
+      const info = getModelInfo('gpt-5.5');
+      expect(info.isSupported).toBe(true);
+      expect(info.maxTokens).toBe(200000);
+      expect(info.provider).toBe('openai');
+    });
+
     it('should return default info for unsupported models', () => {
       const info = getModelInfo('unknown-model');
       expect(info.isSupported).toBe(false);
@@ -80,6 +87,7 @@ describe('Model Utilities', () => {
       expect(models).toContain('grok-4-latest');
       expect(models).toContain('claude-opus-4-6');
       expect(models).toContain('gemini-2.5-pro');
+      expect(models).toContain('gpt-5.5');
       expect(models.length).toBeGreaterThan(0);
     });
   });

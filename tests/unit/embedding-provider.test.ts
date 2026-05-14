@@ -198,6 +198,17 @@ describe('EmbeddingProvider', () => {
         expect(provider.getProviderType()).toBe('mock');
         expect(provider.isReady()).toBe(true);
       });
+
+      it('should fall back to mock without requiring an error listener', async () => {
+        mockPipeline.mockRejectedValue(new Error('Cannot find module @xenova/transformers'));
+
+        const provider = new EmbeddingProvider({ provider: 'local' });
+
+        await expect(provider.initialize()).resolves.toBeUndefined();
+
+        expect(provider.getProviderType()).toBe('mock');
+        expect(provider.isReady()).toBe(true);
+      });
     });
 
     describe('API Provider Initialization', () => {

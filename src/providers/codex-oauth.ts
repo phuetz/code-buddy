@@ -14,6 +14,10 @@
  *     refresh_token}` against `https://auth.openai.com/oauth/token`.
  *  7. Tokens land on disk under `~/.codebuddy/codex-auth.json`.
  *
+ * Existing Codex CLI credentials under `~/.codex/auth.json` are also
+ * accepted as a read/write fallback. This lets Code Buddy reuse the same
+ * ChatGPT Pro subscription login the user already uses through Codex.
+ *
  * The access_token grants access to the **ChatGPT Codex Responses backend**
  * (`chatgpt.com/backend-api/codex/responses`), NOT the standard OpenAI
  * `/v1/chat/completions` API. See `provider-chatgpt-responses.ts` for the
@@ -56,7 +60,8 @@ const SCOPES =
 /** Refresh threshold: re-fetch tokens when last_refresh is older than this. */
 const TOKEN_REFRESH_AGE_MS = 60 * 60 * 1000; // 1 hour
 
-const AUTH_FILE_PATH = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
+const CODEBUDDY_AUTH_FILE_PATH = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
+const CODEX_CLI_AUTH_FILE_PATH = path.join(os.homedir(), '.codex', 'auth.json');
 
 /** Token bundle returned by `https://auth.openai.com/oauth/token`. */
 interface OauthTokens {
@@ -87,38 +92,67 @@ export interface ChatGptAuth {
   email?: string;
   plan_type?: string;
   is_fedramp: boolean;
+  auth_file_path?: string;
+  auth_source?: 'codebuddy' | 'codex-cli';
 }
 
 // ─────────────────────────────────────────────────────────────────────
 // Storage
 // ─────────────────────────────────────────────────────────────────────
 
-function ensureConfigDir(): void {
-  const dir = path.dirname(AUTH_FILE_PATH);
+interface AuthCandidate {
+  path: string;
+  source: 'codebuddy' | 'codex-cli';
+}
+
+interface LoadedAuthFile {
+  path: string;
+  source: 'codebuddy' | 'codex-cli';
+  auth: CodexAuthDotJson;
+}
+
+function getAuthCandidates(): AuthCandidate[] {
+  return [
+    { path: CODEBUDDY_AUTH_FILE_PATH, source: 'codebuddy' },
+    { path: CODEX_CLI_AUTH_FILE_PATH, source: 'codex-cli' },
+  ];
+}
+
+function ensureConfigDir(filePath: string = CODEBUDDY_AUTH_FILE_PATH): void {
+  const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
 
-function loadAuthFile(): CodexAuthDotJson | null {
+function readCandidate(candidate: AuthCandidate): LoadedAuthFile | null {
+  if (!fs.existsSync(candidate.path)) return null;
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return null;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8');
-    return JSON.parse(raw) as CodexAuthDotJson;
+    const raw = fs.readFileSync(candidate.path, 'utf-8');
+    const auth = JSON.parse(raw) as CodexAuthDotJson;
+    return { path: candidate.path, source: candidate.source, auth };
   } catch (err) {
-    console.error('Error reading codex-auth.json:', err);
+    console.error(`Error reading ${candidate.path}:`, err);
     return null;
   }
 }
 
-function saveAuthFile(auth: CodexAuthDotJson): void {
+function loadAuthFile(): LoadedAuthFile | null {
+  for (const candidate of getAuthCandidates()) {
+    const loaded = readCandidate(candidate);
+    if (loaded?.auth.tokens?.access_token) return loaded;
+  }
+  return null;
+}
+
+function saveAuthFile(auth: CodexAuthDotJson, filePath: string = CODEBUDDY_AUTH_FILE_PATH): void {
   try {
-    ensureConfigDir();
-    fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify(auth, null, 2), 'utf-8');
+    ensureConfigDir(filePath);
+    fs.writeFileSync(filePath, JSON.stringify(auth, null, 2), 'utf-8');
     // Restrict permissions on Unix (0o600 = owner read/write only).
     if (process.platform !== 'win32') {
       try {
-        fs.chmodSync(AUTH_FILE_PATH, 0o600);
+        fs.chmodSync(filePath, 0o600);
       } catch { /* non-fatal */ }
     }
   } catch (err) {
@@ -129,31 +163,45 @@ function saveAuthFile(auth: CodexAuthDotJson): void {
 /** Remove cached tokens. `/logout chatgpt` calls this. */
 export function clearCodexCredentials(): void {
   try {
-    if (fs.existsSync(AUTH_FILE_PATH)) {
-      fs.unlinkSync(AUTH_FILE_PATH);
+    if (fs.existsSync(CODEBUDDY_AUTH_FILE_PATH)) {
+      fs.unlinkSync(CODEBUDDY_AUTH_FILE_PATH);
     }
   } catch (err) {
     console.error('Error clearing codex credentials:', err);
   }
 }
 
-/** Whether a non-empty auth file exists. Used by `src/index.ts` for
- *  provider auto-detection (no token loading, just file presence). */
-export function hasCodexCredentials(): boolean {
+/** Whether Code Buddy's own auth file exists. Does not count the shared
+ *  Codex CLI fallback, so `/logout chatgpt` can avoid deleting Codex's
+ *  global login. */
+export function hasCodeBuddyCodexCredentials(): boolean {
   try {
-    if (!fs.existsSync(AUTH_FILE_PATH)) return false;
-    const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8').trim();
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as CodexAuthDotJson;
-    return Boolean(parsed.tokens?.access_token);
+    const loaded = readCandidate({ path: CODEBUDDY_AUTH_FILE_PATH, source: 'codebuddy' });
+    return Boolean(loaded?.auth.tokens?.access_token);
   } catch {
     return false;
   }
 }
 
-/** Absolute path to the auth file. Exposed for doctor / debug. */
+/** Whether a non-empty auth file exists. Used by `src/index.ts` for
+ *  provider auto-detection (no token loading, just file presence). */
+export function hasCodexCredentials(): boolean {
+  return loadAuthFile() !== null;
+}
+
+/** Absolute path where Code Buddy writes credentials on `buddy login`. */
 export function getCodexAuthFilePath(): string {
-  return AUTH_FILE_PATH;
+  return CODEBUDDY_AUTH_FILE_PATH;
+}
+
+/** Absolute path to Codex CLI's shared ChatGPT subscription login file. */
+export function getSharedCodexAuthFilePath(): string {
+  return CODEX_CLI_AUTH_FILE_PATH;
+}
+
+/** Absolute path currently used for auth, if any. */
+export function getActiveCodexAuthFilePath(): string | null {
+  return loadAuthFile()?.path ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -228,7 +276,7 @@ function decodeIdTokenClaims(idToken: string): IdTokenClaims | null {
   }
 }
 
-function chatGptAuthFromTokens(tokens: OauthTokens): ChatGptAuth {
+function chatGptAuthFromTokens(tokens: OauthTokens, source?: LoadedAuthFile): ChatGptAuth {
   const claims = decodeIdTokenClaims(tokens.id_token);
   const authClaims = claims?.['https://api.openai.com/auth'];
   const profileClaims = claims?.['https://api.openai.com/profile'];
@@ -239,6 +287,8 @@ function chatGptAuthFromTokens(tokens: OauthTokens): ChatGptAuth {
     email: profileClaims?.email ?? claims?.email,
     plan_type: authClaims?.chatgpt_plan_type,
     is_fedramp: authClaims?.chatgpt_account_is_fedramp ?? false,
+    auth_file_path: source?.path,
+    auth_source: source?.source,
   };
 }
 
@@ -558,8 +608,9 @@ export async function loginInteractive(): Promise<ChatGptAuth> {
  * credentials are on disk yet — caller should run `loginInteractive()`.
  */
 export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
-  const file = loadAuthFile();
-  if (!file?.tokens?.access_token) return null;
+  const loaded = loadAuthFile();
+  const file = loaded?.auth;
+  if (!loaded || !file?.tokens?.access_token) return null;
 
   const lastRefreshMs = file.last_refresh
     ? new Date(file.last_refresh).getTime()
@@ -577,8 +628,8 @@ export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
         },
         last_refresh: new Date().toISOString(),
       };
-      saveAuthFile(updated);
-      return chatGptAuthFromTokens(updated.tokens!);
+      saveAuthFile(updated, loaded.path);
+      return chatGptAuthFromTokens(updated.tokens!, { ...loaded, auth: updated });
     } catch (err) {
       // Refresh failed — token may have been revoked. Surface to caller
       // so they can decide whether to clear credentials.
@@ -587,7 +638,7 @@ export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
     }
   }
 
-  return chatGptAuthFromTokens(file.tokens);
+  return chatGptAuthFromTokens(file.tokens, loaded);
 }
 
 /**

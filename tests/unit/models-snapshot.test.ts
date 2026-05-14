@@ -55,4 +55,12 @@ describe('Model Tool Config', () => {
     expect(config.supportsToolCalls).toBe(true);
     expect(config.contextWindow).toBeGreaterThan(0);
   });
+
+  it('should match ChatGPT Codex subscription models before generic GPT-5', () => {
+    const config = getModelToolConfig('gpt-5.5');
+    expect(config.model).toBe('gpt-5.5*');
+    expect(config.contextWindow).toBe(200000);
+    expect(config.maxOutputTokens).toBe(64000);
+    expect(config.patchFormat).toBe('search_replace');
+  });
 });

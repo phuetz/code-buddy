@@ -102,6 +102,39 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 16384,
     patchFormat: 'unified',
   },
+  // ChatGPT Codex backend (OAuth subscription auth at
+  // chatgpt.com/backend-api/codex/responses). Keep these specific patterns
+  // before the generic `gpt-5*` entry below because matching is first-win.
+  {
+    model: 'gpt-5.5*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 64000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  {
+    model: 'gpt-5.1-codex*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 200000,
+    maxOutputTokens: 64000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  {
+    model: 'gpt-5-codex*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 200000,
+    maxOutputTokens: 64000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
   // GPT-5 (400K context, 128K output)
   {
     model: 'gpt-5*',
@@ -185,62 +218,6 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     contextWindow: 200000,
     maxOutputTokens: 64000,
     patchFormat: 'search_replace',
-  },
-
-  // ChatGPT Codex backend (Phase d.23) — exposed via OAuth subscription
-  // auth at chatgpt.com/backend-api/codex/responses. Slugs taken from the
-  // upstream `openai/codex` catalog. `gpt-5.5` is Patrice's default — if
-  // the backend rejects it with `model_not_found`, the chatgpt-responses
-  // provider surfaces these as suggested fallbacks.
-  {
-    model: 'gpt-5.5*',
-    supportsReasoning: true,
-    supportsToolCalls: true,
-    supportsVision: true,
-    contextWindow: 200000,
-    maxOutputTokens: 64000,
-    patchFormat: 'search_replace',
-    promptProfile: 'rich',
-  },
-  {
-    model: 'gpt-5.1-codex*',
-    supportsReasoning: true,
-    supportsToolCalls: true,
-    supportsVision: false,
-    contextWindow: 200000,
-    maxOutputTokens: 64000,
-    patchFormat: 'search_replace',
-    promptProfile: 'rich',
-  },
-  {
-    model: 'gpt-5-codex*',
-    supportsReasoning: true,
-    supportsToolCalls: true,
-    supportsVision: false,
-    contextWindow: 200000,
-    maxOutputTokens: 64000,
-    patchFormat: 'search_replace',
-    promptProfile: 'rich',
-  },
-  {
-    model: 'gpt-5.1*',
-    supportsReasoning: true,
-    supportsToolCalls: true,
-    supportsVision: true,
-    contextWindow: 200000,
-    maxOutputTokens: 64000,
-    patchFormat: 'search_replace',
-    promptProfile: 'rich',
-  },
-  {
-    model: 'gpt-5*',
-    supportsReasoning: true,
-    supportsToolCalls: true,
-    supportsVision: true,
-    contextWindow: 200000,
-    maxOutputTokens: 64000,
-    patchFormat: 'search_replace',
-    promptProfile: 'rich',
   },
 
   // Grok 4.1 Fast (2M context)

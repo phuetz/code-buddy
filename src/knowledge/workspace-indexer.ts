@@ -115,6 +115,8 @@ export class WorkspaceIndexer extends EventEmitter {
       this.loadIndexMetadata();
       
     } catch (err) {
+      this.embeddingProvider = null;
+      this.vectorIndex = null;
       logger.error('Failed to initialize WorkspaceIndexer', { error: String(err) });
     }
   }
@@ -150,7 +152,7 @@ export class WorkspaceIndexer extends EventEmitter {
   }
 
   async startIndexing(): Promise<void> {
-    if (this.isIndexing || !this.embeddingProvider) return;
+    if (this.isIndexing || !this.embeddingProvider || !this.vectorIndex) return;
     this.isIndexing = true;
     this.emit('indexing:start');
     logger.info('Starting background workspace semantic indexing...');

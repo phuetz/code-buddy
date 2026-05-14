@@ -4,7 +4,8 @@
  * - `/login chatgpt` — opens the browser, runs the OAuth Authorization
  *   Code + PKCE flow against `auth.openai.com`, persists tokens to
  *   `~/.codebuddy/codex-auth.json`, displays email/plan.
- * - `/logout chatgpt` — wipes the credential file.
+ * - `/logout chatgpt` — wipes Code Buddy's credential file. Shared Codex
+ *   CLI credentials under `~/.codex/auth.json` are never deleted here.
  * - `/whoami` — shows the current ChatGPT auth state (email, plan,
  *   FedRAMP marker) or "Anonymous".
  *
@@ -18,8 +19,11 @@ import {
   loginInteractive,
   clearCodexCredentials,
   getChatGptAuth,
+  hasCodeBuddyCodexCredentials,
   hasCodexCredentials,
+  getActiveCodexAuthFilePath,
   getCodexAuthFilePath,
+  getSharedCodexAuthFilePath,
 } from '../../providers/codex-oauth.js';
 
 function makeEntry(content: string): ChatEntry {
@@ -65,14 +69,15 @@ export async function handleLogin(args: string[]): Promise<CommandHandlerResult>
     if (auth.plan_type) lines.push(`   Plan:    ${auth.plan_type}`);
     if (auth.is_fedramp) lines.push(`   FedRAMP: yes`);
     if (auth.account_id) lines.push(`   Account ID: ${auth.account_id}`);
+    if (auth.auth_file_path) lines.push(`   Source: ${auth.auth_file_path}`);
     lines.push('');
     lines.push(`Tokens stored at: ${getCodexAuthFilePath()}`);
-    lines.push('Use \`gpt-5.5\` or another Codex model. Try a message now.');
+    lines.push('Use `gpt-5.5` or another Codex model. Try a message now.');
   } catch (err) {
     lines.push('❌ Login failed');
     lines.push(`   ${err instanceof Error ? err.message : String(err)}`);
     lines.push('');
-    lines.push('Run \`/login chatgpt\` again to retry.');
+    lines.push('Run `/login chatgpt` again to retry.');
   }
 
   return { handled: true, entry: makeEntry(lines.join('\n')) };
@@ -87,7 +92,7 @@ export async function handleLogout(args: string[]): Promise<CommandHandlerResult
   const lines: string[] = [];
 
   if (provider !== 'chatgpt') {
-    lines.push(`Unknown provider: "${args[0]}". Only \`chatgpt\` is supported.`);
+    lines.push('Unknown provider: "' + args[0] + '". Only `chatgpt` is supported.');
     return { handled: true, entry: makeEntry(lines.join('\n')) };
   }
 
@@ -96,10 +101,24 @@ export async function handleLogout(args: string[]): Promise<CommandHandlerResult
     return { handled: true, entry: makeEntry(lines.join('\n')) };
   }
 
-  clearCodexCredentials();
-  lines.push('✅ ChatGPT credentials cleared');
-  lines.push(`   Removed: ${getCodexAuthFilePath()}`);
-  lines.push('Run \`/login chatgpt\` to authenticate again.');
+  if (hasCodeBuddyCodexCredentials()) {
+    clearCodexCredentials();
+    lines.push('✅ Code Buddy ChatGPT credentials cleared');
+    lines.push(`   Removed: ${getCodexAuthFilePath()}`);
+  } else {
+    lines.push('No Code Buddy-specific ChatGPT credentials to remove.');
+  }
+
+  const activePath = getActiveCodexAuthFilePath();
+  if (activePath) {
+    lines.push('');
+    lines.push('Shared Codex ChatGPT credentials are still available.');
+    lines.push(`   Active source: ${activePath}`);
+    lines.push(`   Shared source: ${getSharedCodexAuthFilePath()}`);
+    lines.push('Remove the shared Codex login separately if you want Code Buddy fully disconnected.');
+  } else {
+    lines.push('Run `/login chatgpt` to authenticate again.');
+  }
 
   return { handled: true, entry: makeEntry(lines.join('\n')) };
 }
@@ -114,7 +133,7 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
   lines.push('='.repeat(50));
 
   if (!hasCodexCredentials()) {
-    lines.push('ChatGPT: not connected (run \`/login chatgpt\`)');
+    lines.push('ChatGPT: not connected (run `/login chatgpt`)');
     return { handled: true, entry: makeEntry(lines.join('\n')) };
   }
 
@@ -122,7 +141,7 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
     const auth = await getChatGptAuth();
     if (!auth) {
       lines.push('ChatGPT: token unreadable (file present but no access_token).');
-      lines.push('  Try \`/logout chatgpt\` then \`/login chatgpt\`.');
+      lines.push('  Try `/logout chatgpt` then `/login chatgpt`.');
       return { handled: true, entry: makeEntry(lines.join('\n')) };
     }
     lines.push('ChatGPT: ✅ connected');
@@ -130,6 +149,7 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
     if (auth.plan_type) lines.push(`  Plan:    ${auth.plan_type}`);
     if (auth.account_id) lines.push(`  Account ID: ${auth.account_id}`);
     if (auth.is_fedramp) lines.push(`  FedRAMP: yes`);
+    if (auth.auth_file_path) lines.push(`  Source: ${auth.auth_file_path}`);
   } catch (err) {
     lines.push('ChatGPT: ⚠️  error reading credentials');
     lines.push(`  ${err instanceof Error ? err.message : String(err)}`);

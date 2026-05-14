@@ -10,8 +10,11 @@ const oauthMock = vi.hoisted(() => ({
   loginInteractive: vi.fn(),
   clearCodexCredentials: vi.fn(),
   getChatGptAuth: vi.fn(),
+  hasCodeBuddyCodexCredentials: vi.fn(),
   hasCodexCredentials: vi.fn(),
+  getActiveCodexAuthFilePath: vi.fn(() => null),
   getCodexAuthFilePath: vi.fn(() => '/tmp/codex-auth.json'),
+  getSharedCodexAuthFilePath: vi.fn(() => '/tmp/shared-codex-auth.json'),
 }));
 
 vi.mock('../../../src/providers/codex-oauth.js', () => oauthMock);
@@ -80,9 +83,21 @@ describe('handleLogout', () => {
 
   it('clears credentials when present and confirms', async () => {
     oauthMock.hasCodexCredentials.mockReturnValueOnce(true);
+    oauthMock.hasCodeBuddyCodexCredentials.mockReturnValueOnce(true);
+    oauthMock.getActiveCodexAuthFilePath.mockReturnValueOnce(null);
     const result = await handleLogout(['chatgpt']);
     expect(oauthMock.clearCodexCredentials).toHaveBeenCalledTimes(1);
-    expect(result.entry?.content).toContain('✅ ChatGPT credentials cleared');
+    expect(result.entry?.content).toContain('✅ Code Buddy ChatGPT credentials cleared');
+  });
+
+  it('does not delete shared Codex credentials when only shared auth is active', async () => {
+    oauthMock.hasCodexCredentials.mockReturnValueOnce(true);
+    oauthMock.hasCodeBuddyCodexCredentials.mockReturnValueOnce(false);
+    oauthMock.getActiveCodexAuthFilePath.mockReturnValueOnce('/tmp/shared-codex-auth.json');
+    const result = await handleLogout(['chatgpt']);
+    expect(oauthMock.clearCodexCredentials).not.toHaveBeenCalled();
+    expect(result.entry?.content).toContain('Shared Codex ChatGPT credentials are still available');
+    expect(result.entry?.content).toContain('/tmp/shared-codex-auth.json');
   });
 });
 

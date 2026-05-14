@@ -89,14 +89,19 @@ function checkApiKeys(): DoctorCheck[] {
  */
 async function checkChatGptOAuth(): Promise<DoctorCheck> {
   try {
-    const { hasCodexCredentials, getChatGptAuth, getCodexAuthFilePath } = await import(
+    const {
+      hasCodexCredentials,
+      getChatGptAuth,
+      getCodexAuthFilePath,
+      getSharedCodexAuthFilePath,
+    } = await import(
       '../providers/codex-oauth.js'
     );
     if (!hasCodexCredentials()) {
       return {
         name: 'ChatGPT OAuth',
         status: 'warn',
-        message: `not signed in (run \`/login chatgpt\` to use your ChatGPT subscription) — file: ${getCodexAuthFilePath()}`,
+        message: `not signed in (run \`/login chatgpt\` to use your ChatGPT subscription) — checked: ${getCodexAuthFilePath()} and ${getSharedCodexAuthFilePath()}`,
       };
     }
     const auth = await getChatGptAuth();
@@ -111,6 +116,7 @@ async function checkChatGptOAuth(): Promise<DoctorCheck> {
     if (auth.email) parts.push(auth.email);
     if (auth.plan_type) parts.push(`Plan: ${auth.plan_type}`);
     if (auth.is_fedramp) parts.push('FedRAMP');
+    if (auth.auth_source) parts.push(`Source: ${auth.auth_source}`);
     return {
       name: 'ChatGPT OAuth',
       status: 'ok',

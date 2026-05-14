@@ -63,11 +63,15 @@ afterEach(() => {
   try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 
-function writeAuth(content: unknown = { tokens: { access_token: 'tok' } }): void {
-  const dir = path.join(tmpHome, '.codebuddy');
+function writeAuth(
+  content: unknown = { tokens: { access_token: 'tok' } },
+  relativeDir: '.codebuddy' | '.codex' = '.codebuddy',
+  fileName: 'codex-auth.json' | 'auth.json' = 'codex-auth.json',
+): void {
+  const dir = path.join(tmpHome, relativeDir);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
-    path.join(dir, 'codex-auth.json'),
+    path.join(dir, fileName),
     typeof content === 'string' ? content : JSON.stringify(content),
   );
 }
@@ -87,6 +91,16 @@ describe('detectProviderFromEnv — priority chain', () => {
     expect(detected?.provider).toBe('chatgpt');
     expect(detected?.apiKey).toBe('oauth-chatgpt');
     expect(detected?.baseURL).toBe('https://chatgpt.com/backend-api/codex');
+    expect(detected?.defaultModel).toBe('gpt-5.5');
+  });
+
+  it('uses shared Codex CLI credentials when Code Buddy credentials are absent', async () => {
+    writeAuth({ tokens: { access_token: 'codex-shared-token' } }, '.codex', 'auth.json');
+    process.env.GROK_API_KEY = 'should-not-be-used';
+    const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
+    const detected = detectProviderFromEnv();
+    expect(detected?.provider).toBe('chatgpt');
+    expect(detected?.apiKey).toBe('oauth-chatgpt');
     expect(detected?.defaultModel).toBe('gpt-5.5');
   });
 

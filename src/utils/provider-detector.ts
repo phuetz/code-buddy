@@ -8,6 +8,7 @@
  * Priority order:
  *   0. CODEBUDDY_PROVIDER override (always wins when set + valid)
  *   1. ChatGPT OAuth credentials present (~/.codebuddy/codex-auth.json)
+ *      or shared Codex CLI credentials present (~/.codex/auth.json)
  *      → explicit "I logged in" act beats ambient env vars
  *   2. OLLAMA_HOST    → ollama (local, free, unlimited)
  *   3. GROK_API_KEY   → grok / OpenAI-compat (incl. xAI)
@@ -28,6 +29,18 @@ export interface DetectedProvider {
   defaultModel: string;
 }
 
+function hasChatGptAccessToken(filePath: string): boolean {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const raw = fs.readFileSync(filePath, 'utf-8').trim();
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { tokens?: { access_token?: unknown } };
+    return typeof parsed.tokens?.access_token === 'string' && parsed.tokens.access_token.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function detectProviderFromEnv(): DetectedProvider | null {
   const override = process.env.CODEBUDDY_PROVIDER?.toLowerCase();
 
@@ -36,22 +49,19 @@ export function detectProviderFromEnv(): DetectedProvider | null {
   // expects subsequent calls to route through their ChatGPT plan, not
   // get hijacked by an OLLAMA_HOST set in their shell rc weeks ago.
   if (override === 'chatgpt' || !override) {
-    try {
-      const authPath = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
-      if (fs.existsSync(authPath)) {
-        const raw = fs.readFileSync(authPath, 'utf-8').trim();
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed?.tokens?.access_token) {
-          return {
-            provider: 'chatgpt',
-            apiKey: 'oauth-chatgpt',
-            baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.5',
-          };
-        }
+    const authPaths = [
+      path.join(os.homedir(), '.codebuddy', 'codex-auth.json'),
+      path.join(os.homedir(), '.codex', 'auth.json'),
+    ];
+    for (const authPath of authPaths) {
+      if (hasChatGptAccessToken(authPath)) {
+        return {
+          provider: 'chatgpt',
+          apiKey: 'oauth-chatgpt',
+          baseURL: 'https://chatgpt.com/backend-api/codex',
+          defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.5',
+        };
       }
-    } catch {
-      // Malformed auth file or unexpected — fall through.
     }
   }
 
