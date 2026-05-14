@@ -17,6 +17,7 @@ import { normalizeLatexDelimiters } from '../../utils/latex-delimiters';
 import type { ToolUseContent, ToolResultContent, FileAttachmentContent } from '../../types';
 import { FileText } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
+import { MermaidBlock } from './MermaidBlock';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolUseBlock } from './ToolUseBlock';
 import { ToolResultBlock } from './ToolResultBlock';
@@ -195,6 +196,13 @@ export const ContentBlockView = memo(function ContentBlockView({
               {children}
             </code>
           );
+        }
+
+        // Mermaid diagrams render inline (lazy mermaid + DOMPurify).
+        // The existing ArtifactPanel still picks them up for the "Open
+        // in panel" affordance — this just adds preview-in-flow.
+        if (match[1].toLowerCase() === 'mermaid') {
+          return <MermaidBlock text={String(children).replace(/\n$/, '')} />;
         }
 
         return <CodeBlock language={match[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>;
