@@ -2026,6 +2026,75 @@ test manuel pour V1.
 
 — Claude/Ministar Ubuntu, 2026-05-15 06h25 UTC
 
+## 2026-05-15 — Phase d.23 validée loopback Ministar (8/8 E2E)
+
+> ✅ **Update DO-NOT-PUSH** : Phase d.23 V1 est désormais **validée
+> end-to-end via WebSocket réel** (loopback Ministar, sans DARKSTAR).
+> Les commits `f8a83f5a` + `160826b5` sont **safe to push** dès que
+> tu veux — DARKSTAR cross-host devient un nice-to-have plutôt qu'un
+> pré-requis.
+
+### Méthode
+
+Worktree git temporaire isolé (`/tmp/cb-test-d23` depuis `main`),
+node_modules symlinké, daemon `tsx src/index.ts server --port 3010
+--no-auth` lancé en background avec `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT=/home/patrice/DEV`
++ `JWT_SECRET=test-jwt-secret-must-be-at-least-32-chars-long-test`.
+Script `scripts/test-peer-tool-invoke.ts` qui :
+1. Génère un JWT scoped `['fleet:listen', 'peer:invoke', 'admin', 'chat']`
+2. Connect via `FleetListener` (real WS)
+3. Exerce `peer.describe` + `invokeTool` + `invokeToolStream` + cas reject
+
+Exit final : worktree démonté proprement, daemon arrêté.
+
+### Résultats
+
+```
+✓ connected and authenticated
+✓ peer.describe returns peer.tool.invoke in methods list — methods count=14
+✓ peer.describe returns peer.tool.invoke.stream
+  hostname: ministar-test
+✓ view_file world-model/README.md — 14465 bytes, durationMs=1
+✓ list_directory . — 31 entries
+✓ search compounding ratio in world-model — 0 matches, durationMs=5
+✓ bash rejected with TOOL_NOT_ALLOWED_FOR_PEER_INVOKE
+✓ view_file /etc/passwd rejected with PATH_OUTSIDE_PEER_WORKSPACE
+✓ invokeToolStream view_file journal.md emits chunks — 2 chunks, 29929 bytes streamed
+
+Total: 8 passed, 0 failed.
+```
+
+Couvre les 7 cas critiques :
+- Auth WS via JWT (scope `peer:invoke`)
+- Discovery `peer.tool.invoke` + `.stream` dans `peer.describe.methods`
+- Happy path : view_file (read fichier réel), list_directory (31 entrées), search (ripgrep cross-process)
+- Allowlist gate : `bash` rejeté avec le bon code
+- Workspace gate : `/etc/passwd` rejeté avec le bon code
+- **Streaming via `peer:chunk` frames cross-process : 2 chunks pour 29929 bytes journal.md**
+
+Le streaming end-to-end est la validation la plus importante — c'était
+le seul gap des unit tests (qui dispatchent direct via `dispatchPeerRequest`,
+bypassant le transport WS). Le `ctx.emitChunk → peer:chunk` wiring
+dans `handler.ts` est désormais validé.
+
+### Recommandation push
+
+**Tu peux push les 2 commits Phase d.23** (`f8a83f5a` + `160826b5`)
+sur `phuetz/code-buddy:main` quand tu veux :
+
+```bash
+cd /home/patrice/DEV/code-buddy
+git checkout main
+git push origin main
+```
+
+Si tu préfères passer par DARKSTAR cross-host avant : étapes inchangées
+(install Code Buddy + firewall + tests). Mais c'est plus une validation
+"belt-and-suspenders" qu'un pré-requis fonctionnel maintenant.
+
+— Claude/Ministar Ubuntu, 2026-05-15 10h35 UTC
+
+
 
 
 
