@@ -13,6 +13,7 @@ import { logger } from "./logger.js";
 import path from 'path';
 import readline from 'readline';
 import { getCodeBuddyHome, ensureCodeBuddyHome } from './codebuddy-home.js';
+import { detectProviderFromEnv, type DetectedProvider } from './provider-detector.js';
 
 // ============================================================================
 // Types
@@ -22,6 +23,7 @@ export interface SetupConfig {
   apiKey?: string;
   baseURL?: string;
   model?: string;
+  provider?: DetectedProvider['provider'];
   theme?: string;
 }
 
@@ -105,6 +107,7 @@ function questionHidden(prompt: string): Promise<string> {
 export async function runSetup(): Promise<SetupConfig> {
   const rl = createInterface();
   const config: SetupConfig = {};
+  const detectedProvider = detectProviderFromEnv();
 
   console.log('\n' + '='.repeat(60));
   console.log('  Code Buddy - Interactive Setup');
@@ -115,41 +118,58 @@ export async function runSetup(): Promise<SetupConfig> {
   // Step 1: API Key
   console.log('Step 1/4: API Key Configuration');
   console.log('--------------------------------');
-  console.log('You need a CodeBuddy API key from https://x.ai');
-  console.log('The key will be stored in ~/.codebuddy/user-settings.json\n');
+  console.log('Code Buddy can use ChatGPT login, xAI/Grok, OpenAI, Gemini, Anthropic, or a local provider.');
+  console.log('xAI/Grok API keys are stored in ~/.codebuddy/user-settings.json when entered here.\n');
 
-  const existingKey = process.env.GROK_API_KEY || loadExistingApiKey();
-  if (existingKey) {
-    const masked = existingKey.slice(0, 8) + '...' + existingKey.slice(-4);
-    console.log(`Existing API key found: ${masked}`);
-    const useExisting = await question(rl, 'Use existing key? (Y/n): ');
-    if (useExisting.toLowerCase() !== 'n') {
-      config.apiKey = existingKey;
+  if (detectedProvider && detectedProvider.provider !== 'grok') {
+    config.provider = detectedProvider.provider;
+    console.log(`Existing provider detected: ${detectedProvider.provider}`);
+    if (detectedProvider.provider === 'chatgpt') {
+      console.log('Using your ChatGPT login; no API key will be stored by setup.');
+    } else {
+      console.log('Using provider credentials from your environment.');
     }
-  }
-
-  if (!config.apiKey) {
     rl.close();
-    config.apiKey = await questionHidden('Enter your CodeBuddy API key: ');
-    const rl2 = createInterface();
+  } else {
+    const existingKey = detectedProvider?.apiKey || process.env.GROK_API_KEY || loadExistingApiKey();
+    if (existingKey) {
+      const masked = existingKey.slice(0, 8) + '...' + existingKey.slice(-4);
+      console.log(`Existing xAI/Grok API key found: ${masked}`);
+      const useExisting = await question(rl, 'Use existing key? (Y/n): ');
+      if (useExisting.toLowerCase() !== 'n') {
+        config.apiKey = existingKey;
+        config.provider = 'grok';
+      }
+    }
 
     if (!config.apiKey) {
-      console.log('No API key provided. You can set it later with:');
-      console.log('  export GROK_API_KEY=your-key');
-      console.log('  or in ~/.codebuddy/user-settings.json\n');
-    }
+      rl.close();
+      config.apiKey = await questionHidden('Enter your xAI/Grok API key: ');
+      const rl2 = createInterface();
 
-    rl2.close();
-  } else {
-    rl.close();
+      if (config.apiKey) {
+        config.provider = 'grok';
+      } else {
+        console.log('No API key provided. You can set credentials later with:');
+        console.log('  buddy login chatgpt');
+        console.log('  export GROK_API_KEY=your-key');
+        console.log('  or another provider API key such as OPENAI_API_KEY / GEMINI_API_KEY\n');
+      }
+
+      rl2.close();
+    } else {
+      rl.close();
+    }
   }
 
   const rl3 = createInterface();
+  const defaultBaseURL = detectedProvider?.baseURL || 'https://api.x.ai/v1';
+  const modelChoices = getModelChoices(detectedProvider);
 
   // Step 2: Base URL
   console.log('\nStep 2/4: API Base URL');
   console.log('----------------------');
-  console.log('Default: https://api.x.ai/v1');
+  console.log(`Default: ${defaultBaseURL}`);
   console.log('For local models (LM Studio, Ollama), use: http://localhost:1234/v1\n');
 
   const baseURL = await question(rl3, 'Base URL (press Enter for default): ');
@@ -161,23 +181,23 @@ export async function runSetup(): Promise<SetupConfig> {
   console.log('\nStep 3/4: Default Model');
   console.log('-----------------------');
   console.log('Available models:');
-  console.log('  1. grok-3-latest (most capable)');
-  console.log('  2. grok-4-latest (latest)');
-  console.log('  3. grok-code-fast-1 (fast code generation)');
+  console.log(`  1. ${modelChoices[0].model} (${modelChoices[0].label})`);
+  console.log(`  2. ${modelChoices[1].model} (${modelChoices[1].label})`);
+  console.log(`  3. ${modelChoices[2].model} (${modelChoices[2].label})`);
   console.log('  4. Custom model name\n');
 
-  const modelChoice = await question(rl3, 'Select model (1-4, or press Enter for grok-3-latest): ');
+  const modelChoice = await question(rl3, `Select model (1-4, or press Enter for ${modelChoices[0].model}): `);
 
   switch (modelChoice) {
     case '1':
     case '':
-      config.model = 'grok-3-latest';
+      config.model = modelChoices[0].model;
       break;
     case '2':
-      config.model = 'grok-4-latest';
+      config.model = modelChoices[1].model;
       break;
     case '3':
-      config.model = 'grok-3-fast';
+      config.model = modelChoices[2].model;
       break;
     case '4':
       config.model = await question(rl3, 'Enter custom model name: ');
@@ -186,7 +206,7 @@ export async function runSetup(): Promise<SetupConfig> {
       if (modelChoice) {
         config.model = modelChoice;
       } else {
-        config.model = 'grok-3-latest';
+        config.model = modelChoices[0].model;
       }
   }
 
@@ -243,6 +263,49 @@ export async function runSetup(): Promise<SetupConfig> {
   return config;
 }
 
+function getModelChoices(provider?: DetectedProvider | null): Array<{ model: string; label: string }> {
+  const defaultModel = provider?.defaultModel;
+
+  switch (provider?.provider) {
+    case 'chatgpt':
+      return [
+        { model: defaultModel || 'gpt-5.5', label: 'ChatGPT Pro default' },
+        { model: 'gpt-5.4', label: 'frontier coding' },
+        { model: 'gpt-5.4-mini', label: 'fast secondary model' },
+      ];
+    case 'openai':
+      return [
+        { model: defaultModel || 'gpt-4o', label: 'OpenAI default' },
+        { model: 'gpt-4o-mini', label: 'fast OpenAI model' },
+        { model: 'gpt-4.1', label: 'larger OpenAI model' },
+      ];
+    case 'gemini':
+      return [
+        { model: defaultModel || 'gemini-2.5-flash', label: 'Gemini default' },
+        { model: 'gemini-2.5-pro', label: 'larger Gemini model' },
+        { model: 'gemini-2.0-flash', label: 'fast Gemini model' },
+      ];
+    case 'anthropic':
+      return [
+        { model: defaultModel || 'claude-sonnet-4-20250514', label: 'Anthropic default' },
+        { model: 'claude-opus-4-20250514', label: 'larger Claude model' },
+        { model: 'claude-3-5-haiku-20241022', label: 'fast Claude model' },
+      ];
+    case 'ollama':
+      return [
+        { model: defaultModel || 'qwen2.5-coder:7b', label: 'local default' },
+        { model: 'llama3.2', label: 'local general model' },
+        { model: 'codellama', label: 'local code model' },
+      ];
+    default:
+      return [
+        { model: defaultModel || 'grok-3-latest', label: 'xAI capable model' },
+        { model: 'grok-4-latest', label: 'latest xAI model' },
+        { model: 'grok-code-fast-1', label: 'fast code generation' },
+      ];
+  }
+}
+
 /**
  * Load existing API key from settings
  */
@@ -290,9 +353,10 @@ async function saveConfig(config: SetupConfig): Promise<void> {
     // Save
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
-    console.log('  API Key: ' + (config.apiKey ? 'Saved' : 'Not set'));
-    console.log('  Base URL: ' + (config.baseURL || 'https://api.x.ai/v1 (default)'));
-    console.log('  Model: ' + (config.model || 'grok-3-latest'));
+    console.log('  Provider: ' + (config.provider || 'grok'));
+    console.log('  API Key: ' + (config.apiKey ? 'Saved' : config.provider ? 'Using detected credentials' : 'Not set'));
+    console.log('  Base URL: ' + (config.baseURL || 'provider default'));
+    console.log('  Model: ' + (config.model || 'provider default'));
     console.log('  Theme: ' + (config.theme || 'default'));
   } catch (error) {
     logger.error('Failed to save configuration:', error as Error);
@@ -303,6 +367,10 @@ async function saveConfig(config: SetupConfig): Promise<void> {
  * Check if setup is needed (no API key configured)
  */
 export function needsSetup(): boolean {
+  if (detectProviderFromEnv()) {
+    return false;
+  }
+
   if (process.env.GROK_API_KEY) {
     return false;
   }

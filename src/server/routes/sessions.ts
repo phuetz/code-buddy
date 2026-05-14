@@ -7,6 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { SessionInfo, SessionListResponse } from '../types.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../../utils/provider-detector.js';
 
 // Session interface for server routes
 interface SessionData {
@@ -45,6 +46,14 @@ const router = Router();
 // Helper to extract string param (Express params can be string | string[])
 function getStringParam(param: string | string[] | undefined): string {
   return Array.isArray(param) ? param[0] : param || '';
+}
+
+export function resolveSessionModel(model?: string): string {
+  const provider = detectProviderFromEnv();
+  return selectModelForDetectedProvider(
+    provider,
+    model || process.env.GROK_MODEL || provider?.defaultModel || 'grok-3-latest',
+  ) || 'grok-3-latest';
 }
 
 /**
@@ -228,7 +237,7 @@ router.post(
     const session = await store.createSession({
       name: name || `Session ${Date.now()}`,
       description,
-      model: model || process.env.GROK_MODEL || 'grok-3-latest',
+      model: resolveSessionModel(model),
       metadata,
     });
 
