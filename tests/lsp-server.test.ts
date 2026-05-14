@@ -37,7 +37,7 @@ jest.mock('vscode-languageserver/node', () => {
 
   return {
     createConnection: jest.fn().mockReturnValue(mockConnection),
-    TextDocuments: jest.fn().mockReturnValue(mockDocuments),
+    TextDocuments: jest.fn().mockImplementation(function() { return mockDocuments; }),
     DiagnosticSeverity: {
       Error: 1,
       Warning: 2,
@@ -163,6 +163,25 @@ describe('LSP Server', () => {
 
       expect(signatureTriggers).toContain('(');
       expect(signatureTriggers).toContain(',');
+    });
+  });
+
+  describe('Client Target Resolution', () => {
+    it('uses the explicit base URL to replace a legacy Grok fallback model', async () => {
+      const { resolveCodeBuddyLSPClientTarget } = await import('../src/lsp/server.js');
+
+      expect(resolveCodeBuddyLSPClientTarget({
+        apiKey: 'openai-key',
+        baseURL: 'https://api.openai.com/v1',
+        model: 'grok-3-latest',
+        enableDiagnostics: true,
+        enableCompletions: true,
+        maxTokens: 2048,
+      })).toEqual({
+        apiKey: 'openai-key',
+        baseURL: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+      });
     });
   });
 

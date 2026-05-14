@@ -40,7 +40,11 @@ import { gatherCompletionContext } from './context-gatherer.js';
 import { AICompletionProvider } from './ai-completion-provider.js';
 import type { AICompletionConfig } from './ai-completion-provider.js';
 import { registerInlineCompletionHandler } from './inline-completion-handler.js';
-import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
+import {
+  detectProviderFromEnv,
+  selectModelForDetectedProvider,
+  selectModelForExplicitBaseURL,
+} from '../utils/provider-detector.js';
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
@@ -52,8 +56,9 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 let codebuddyClient: CodeBuddyClient | null = null;
 
 // Settings
-interface CodeBuddyLSPSettings {
+export interface CodeBuddyLSPSettings {
   apiKey: string;
+  baseURL?: string;
   model: string;
   enableDiagnostics: boolean;
   enableCompletions: boolean;
@@ -64,6 +69,7 @@ interface CodeBuddyLSPSettings {
 
 const defaultSettings: CodeBuddyLSPSettings = {
   apiKey: '',
+  baseURL: undefined,
   model: 'grok-3-latest',
   enableDiagnostics: true,
   enableCompletions: true,
@@ -88,9 +94,21 @@ const aiCompletionProvider = new AICompletionProvider(
   defaultSettings.aiCompletion,
 );
 
-function createConfiguredClient(): CodeBuddyClient | null {
-  if (globalSettings.apiKey) {
-    return new CodeBuddyClient(globalSettings.apiKey, globalSettings.model);
+export interface CodeBuddyLSPClientTarget {
+  apiKey: string;
+  model?: string;
+  baseURL?: string;
+}
+
+export function resolveCodeBuddyLSPClientTarget(
+  settings: CodeBuddyLSPSettings,
+): CodeBuddyLSPClientTarget | null {
+  if (settings.apiKey) {
+    return {
+      apiKey: settings.apiKey,
+      model: selectModelForExplicitBaseURL(settings.baseURL, settings.model) || settings.model,
+      baseURL: settings.baseURL,
+    };
   }
 
   const provider = detectProviderFromEnv();
@@ -98,11 +116,17 @@ function createConfiguredClient(): CodeBuddyClient | null {
     return null;
   }
 
-  return new CodeBuddyClient(
-    provider.apiKey,
-    selectModelForDetectedProvider(provider, globalSettings.model),
-    provider.baseURL,
-  );
+  return {
+    apiKey: provider.apiKey,
+    model: selectModelForDetectedProvider(provider, settings.model),
+    baseURL: provider.baseURL,
+  };
+}
+
+function createConfiguredClient(): CodeBuddyClient | null {
+  const target = resolveCodeBuddyLSPClientTarget(globalSettings);
+  if (!target) return null;
+  return new CodeBuddyClient(target.apiKey, target.model, target.baseURL);
 }
 
 function initializeCodeBuddyClient(): void {

@@ -32,7 +32,7 @@ import {
   ToolDefinition,
   ServerCapabilities,
 } from './protocol.js';
-import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { detectProviderFromEnv, selectModelForExplicitBaseURL } from '../../utils/provider-detector.js';
 
 // Import code-buddy internals (lazy loaded to reduce startup time)
 let codebuddyClient: unknown = null;
@@ -71,22 +71,8 @@ export function resolveJsonRpcClientTarget(options: JsonRpcServerOptions): JsonR
   return {
     apiKey: options.apiKey,
     baseURL: options.baseURL,
-    model: options.model || inferDefaultModelFromBaseURL(options.baseURL),
+    model: selectModelForExplicitBaseURL(options.baseURL, options.model),
   };
-}
-
-function inferDefaultModelFromBaseURL(baseURL?: string): string | undefined {
-  const url = baseURL?.toLowerCase() ?? '';
-  if (!url) return undefined;
-  if (url.includes('chatgpt.com')) return process.env.CHATGPT_MODEL || 'gpt-5.5';
-  if (url.includes('openai.com')) return process.env.OPENAI_MODEL || 'gpt-4o';
-  if (url.includes('anthropic.com')) return process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
-  if (url.includes('generativelanguage.googleapis.com') || url.includes('gemini')) {
-    return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  }
-  if (url.includes(':11434') || url.includes('ollama')) return process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
-  if (url.includes('api.x.ai') || url.includes('xai')) return process.env.GROK_MODEL || 'grok-3-fast';
-  return undefined;
 }
 
 export class JsonRpcServer {

@@ -56,6 +56,52 @@ export interface ClientTargetForDetectedProvider {
   matchedDetectedProvider: boolean;
 }
 
+export function inferProviderFromBaseURL(baseURL?: string): DetectedProvider['provider'] | null {
+  const url = baseURL?.toLowerCase() ?? '';
+  if (!url) return null;
+  if (url.includes('chatgpt.com')) return 'chatgpt';
+  if (url.includes('openai.com')) return 'openai';
+  if (url.includes('anthropic.com')) return 'anthropic';
+  if (url.includes('generativelanguage.googleapis.com') || url.includes('gemini')) return 'gemini';
+  if (url.includes(':11434') || url.includes('ollama')) return 'ollama';
+  if (url.includes('api.x.ai') || url.includes('x.ai') || url.includes('xai')) return 'grok';
+  return null;
+}
+
+export function getDefaultModelForProvider(provider: DetectedProvider['provider']): string | undefined {
+  switch (provider) {
+    case 'chatgpt':
+      return process.env.CHATGPT_MODEL || 'gpt-5.5';
+    case 'openai':
+      return process.env.OPENAI_MODEL || 'gpt-4o';
+    case 'anthropic':
+      return process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
+    case 'gemini':
+      return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    case 'ollama':
+      return process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
+    case 'grok':
+      return process.env.GROK_MODEL || 'grok-3-fast';
+    default:
+      return undefined;
+  }
+}
+
+export function selectModelForExplicitBaseURL(
+  baseURL: string | undefined,
+  configuredModel?: string,
+): string | undefined {
+  const model = configuredModel?.trim();
+  const provider = inferProviderFromBaseURL(baseURL);
+  if (!provider) return model || undefined;
+
+  if (provider !== 'grok' && model && isLikelyGrokModel(model)) {
+    return getDefaultModelForProvider(provider);
+  }
+
+  return model || getDefaultModelForProvider(provider);
+}
+
 /**
  * Resolve the model/baseURL for a caller that already has an api key and
  * may have been handed the active provider tuple by the detection chain.

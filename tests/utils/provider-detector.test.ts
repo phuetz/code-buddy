@@ -220,6 +220,29 @@ describe('selectModelForDetectedProvider', () => {
   });
 });
 
+describe('selectModelForExplicitBaseURL', () => {
+  it('infers OpenAI default when an explicit base URL only has a legacy Grok fallback model', async () => {
+    const { selectModelForExplicitBaseURL } = await import('../../src/utils/provider-detector.js');
+    expect(selectModelForExplicitBaseURL(
+      'https://api.openai.com/v1',
+      'grok-3-latest',
+    )).toBe('gpt-4o');
+  });
+
+  it('preserves explicit non-Grok model for an OpenAI-compatible base URL', async () => {
+    const { selectModelForExplicitBaseURL } = await import('../../src/utils/provider-detector.js');
+    expect(selectModelForExplicitBaseURL(
+      'https://api.openai.com/v1',
+      'gpt-4.1',
+    )).toBe('gpt-4.1');
+  });
+
+  it('keeps bare API-key historical behavior when no base URL is supplied', async () => {
+    const { selectModelForExplicitBaseURL } = await import('../../src/utils/provider-detector.js');
+    expect(selectModelForExplicitBaseURL(undefined, 'grok-3-latest')).toBe('grok-3-latest');
+  });
+});
+
 describe('resolveClientTargetForDetectedProvider', () => {
   it('fills baseURL and replaces a legacy Grok fallback when the active OpenAI provider matches', async () => {
     process.env.CODEBUDDY_PROVIDER = 'openai';
