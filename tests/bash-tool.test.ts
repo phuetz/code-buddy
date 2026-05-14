@@ -115,7 +115,7 @@ describe('BashTool', () => {
   });
 
   describe('Safe Commands', () => {
-    it('should allow ls command', async () => {
+    itUnix('should allow ls command', async () => {
       const result = await bashTool.execute('ls -la');
       expect(result.success).toBe(true);
     });

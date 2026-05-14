@@ -35,6 +35,36 @@ import { SafeBinariesChecker } from '../../security/safe-binaries.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { auditLogger } from '../../security/audit-logger.js';
 
+const CONTROLLED_WSL_ENV_VARS = [
+  'CI',
+  'NO_COLOR',
+  'TERM',
+  'NO_TTY',
+  'GIT_TERMINAL_PROMPT',
+  'NPM_CONFIG_YES',
+  'YARN_ENABLE_PROGRESS_BARS',
+  'LC_ALL',
+  'LANG',
+  'PYTHONIOENCODING',
+  'DEBIAN_FRONTEND',
+  'HISTFILE',
+  'HISTSIZE',
+];
+
+function mergeWslEnv(existing: string | undefined, names: string[]): string {
+  const entries = existing?.split(':').filter(Boolean) ?? [];
+  const hasEntry = (name: string): boolean =>
+    entries.some(entry => entry.split('/')[0] === name);
+
+  for (const name of names) {
+    if (!hasEntry(name)) {
+      entries.push(name);
+    }
+  }
+
+  return entries.join(':');
+}
+
 export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
   private confirmationService = ConfirmationService.getInstance();
@@ -145,6 +175,13 @@ export class BashTool implements Disposable {
         // Force non-interactive for common tools
         DEBIAN_FRONTEND: 'noninteractive',
       };
+
+      if (isWindows) {
+        // Windows `bash.exe` is often the WSL launcher. WSL only imports
+        // ad-hoc Windows env vars listed in WSLENV, so export our safe,
+        // deterministic subprocess controls explicitly.
+        controlledEnv.WSLENV = mergeWslEnv(policyEnv.WSLENV, CONTROLLED_WSL_ENV_VARS);
+      }
 
       const spawnOptions: SpawnOptions = {
         // IMPORTANT: shell must be false when using bash -c

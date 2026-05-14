@@ -32,6 +32,20 @@ import { getUserHooksManager } from "../hooks/user-hooks.js";
 export type { ChatEntry, StreamingChunk } from "./types.js";
 import type { ChatEntry, StreamingChunk } from "./types.js";
 
+function isTestRuntime(): boolean {
+  if (typeof process === 'undefined') return false;
+  return Boolean(
+    process.env.NODE_ENV === 'test' ||
+    process.env.VITEST ||
+    process.env.VITEST_WORKER_ID ||
+    process.env.JEST_WORKER_ID
+  );
+}
+
+function isLightweightAgentTestRuntime(): boolean {
+  return isTestRuntime() && process.env.CODEBUDDY_TEST_LIGHTWEIGHT_AGENT === 'true';
+}
+
 /**
  * Main agent class that orchestrates conversation with CodeBuddy AI and tool execution
  *
@@ -151,10 +165,15 @@ export class CodeBuddyAgent extends BaseAgent {
     this.marketplace = this.infrastructure.marketplace;
     this.repairCoordinator = this.infrastructure.repairCoordinator;
 
+    const testRuntime = isTestRuntime();
+    const lightweightAgentTest = isLightweightAgentTestRuntime();
+
     // Initialize Persistent Memory (CLAUDE.md style)
-    initializeMemory().catch(err => {
-      logger.error('Failed to initialize persistent memory', { error: String(err) });
-    });
+    if (!testRuntime) {
+      initializeMemory().catch(err => {
+        logger.error('Failed to initialize persistent memory', { error: String(err) });
+      });
+    }
 
     // Initialize cost prediction and budget alerts
     this.costPredictor = new CostPredictor(this.costTracker);
@@ -173,14 +192,16 @@ export class CodeBuddyAgent extends BaseAgent {
     this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
 
     // Apply thinkingLevel from settings if configured
-    try {
-      import('../utils/settings-manager.js').then(({ getSettingsManager }) => {
-        const settings = getSettingsManager().loadProjectSettings();
-        if (settings?.thinkingLevel) {
-          this.codebuddyClient.setDefaultThinkingLevel(settings.thinkingLevel as import('../codebuddy/client.js').GeminiThinkingLevel);
-        }
-      }).catch(() => { /* settings optional */ });
-    } catch { /* settings optional */ }
+    if (!testRuntime) {
+      try {
+        import('../utils/settings-manager.js').then(({ getSettingsManager }) => {
+          const settings = getSettingsManager().loadProjectSettings();
+          if (settings?.thinkingLevel) {
+            this.codebuddyClient.setDefaultThinkingLevel(settings.thinkingLevel as import('../codebuddy/client.js').GeminiThinkingLevel);
+          }
+        }).catch(() => { /* settings optional */ });
+      } catch { /* settings optional */ }
+    }
 
     // Forward repair events from RepairCoordinator (store refs for cleanup)
     this.repairListeners = {
@@ -246,7 +267,7 @@ export class CodeBuddyAgent extends BaseAgent {
       // models (Ollama qwen, llama, deepseek) get a minimal SP (~9 KB)
       // instead of the full 73 KB rich prompt that confuses small models
       // into hallucinating JSON tool calls.
-      rebuildSystemPromptForQuery: async (msg: string) => {
+      rebuildSystemPromptForQuery: lightweightAgentTest ? undefined : async (msg: string) => {
         try {
           if (!this.promptBuilder) return null;
           const customInstructions = loadCustomInstructions();
@@ -279,77 +300,81 @@ export class CodeBuddyAgent extends BaseAgent {
     // Without this, setContextEngineProvider was defined but never called, leaving
     // the three call sites in agent-tools.ts (prepareSubagentSpawn, completeAgent,
     // closeAgent) as no-ops — same dead-wiring pattern as the prior ICM bridge bug.
-    import('./multi-agent/agent-tools.js').then(({ setContextEngineProvider }) => {
-      setContextEngineProvider(() => this.contextManager.getContextEngine?.() ?? null);
-    }).catch(err => {
-      logger.warn('Failed to wire ContextEngine provider for sub-agents', {
-        error: err instanceof Error ? err.message : String(err),
+    if (!testRuntime) {
+      import('./multi-agent/agent-tools.js').then(({ setContextEngineProvider }) => {
+        setContextEngineProvider(() => this.contextManager.getContextEngine?.() ?? null);
+      }).catch(err => {
+        logger.warn('Failed to wire ContextEngine provider for sub-agents', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
+    }
 
     // Initialize default middleware pipeline with WorkflowGuardMiddleware + ReasoningMiddleware
-    import('./middleware/index.js').then(async ({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
-      if (!this.executor.getMiddlewarePipeline()) {
-        const pipeline = new MiddlewarePipeline();
-        // Turn limit middleware (priority 10) — enforces max turns per session
-        try {
-          const { TurnLimitMiddleware } = await import('./middleware/turn-limit.js');
-          pipeline.use(new TurnLimitMiddleware());
-          logger.debug('TurnLimitMiddleware registered in pipeline (priority 10)');
-        } catch (err) {
-          logger.debug('Failed to register TurnLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+    if (!testRuntime) {
+      import('./middleware/index.js').then(async ({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
+        if (!this.executor.getMiddlewarePipeline()) {
+          const pipeline = new MiddlewarePipeline();
+          // Turn limit middleware (priority 10) — enforces max turns per session
+          try {
+            const { TurnLimitMiddleware } = await import('./middleware/turn-limit.js');
+            pipeline.use(new TurnLimitMiddleware());
+            logger.debug('TurnLimitMiddleware registered in pipeline (priority 10)');
+          } catch (err) {
+            logger.debug('Failed to register TurnLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+          }
+          // Cost limit middleware (priority 20) — enforces session cost budget
+          try {
+            const { CostLimitMiddleware } = await import('./middleware/cost-limit.js');
+            pipeline.use(new CostLimitMiddleware({
+              recordSessionCost: this.recordSessionCost.bind(this),
+              isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
+            }));
+            logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');
+          } catch (err) {
+            logger.debug('Failed to register CostLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+          }
+          // Context warning middleware (priority 30) — warns when nearing context limits
+          try {
+            const { ContextWarningMiddleware } = await import('./middleware/context-warning.js');
+            pipeline.use(new ContextWarningMiddleware(this.contextManager));
+            logger.debug('ContextWarningMiddleware registered in pipeline (priority 30)');
+          } catch (err) {
+            logger.debug('Failed to register ContextWarningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+          }
+          // Reasoning middleware (priority 42) — auto-detects complex queries
+          try {
+            const { createReasoningMiddleware } = await import('./middleware/reasoning-middleware.js');
+            pipeline.use(createReasoningMiddleware());
+            logger.debug('ReasoningMiddleware registered in pipeline (priority 42)');
+          } catch (err) {
+            logger.debug('Failed to register ReasoningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+          }
+          // Workflow guard (priority 45)
+          pipeline.use(new WorkflowGuardMiddleware());
+          // Auto-repair middleware (priority 150) — detects tool failures, invokes repair engine
+          try {
+            const { createAutoRepairMiddleware } = await import('./middleware/auto-repair-middleware.js');
+            pipeline.use(createAutoRepairMiddleware());
+            logger.debug('AutoRepairMiddleware registered in pipeline (priority 150)');
+          } catch (err) {
+            logger.debug('Failed to register AutoRepairMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+          }
+          // Quality gate middleware (priority 200) — auto-delegates to specialized agents
+          try {
+            const { createQualityGateMiddleware } = await import('./middleware/quality-gate-middleware.js');
+            pipeline.use(createQualityGateMiddleware());
+            logger.debug('QualityGateMiddleware registered in pipeline (priority 200)');
+          } catch (err) {
+            logger.debug('Failed to register QualityGateMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+          }
+          this.executor.setMiddlewarePipeline(pipeline);
+          logger.debug('WorkflowGuardMiddleware registered in default pipeline');
         }
-        // Cost limit middleware (priority 20) — enforces session cost budget
-        try {
-          const { CostLimitMiddleware } = await import('./middleware/cost-limit.js');
-          pipeline.use(new CostLimitMiddleware({
-            recordSessionCost: this.recordSessionCost.bind(this),
-            isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
-          }));
-          logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');
-        } catch (err) {
-          logger.debug('Failed to register CostLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
-        }
-        // Context warning middleware (priority 30) — warns when nearing context limits
-        try {
-          const { ContextWarningMiddleware } = await import('./middleware/context-warning.js');
-          pipeline.use(new ContextWarningMiddleware(this.contextManager));
-          logger.debug('ContextWarningMiddleware registered in pipeline (priority 30)');
-        } catch (err) {
-          logger.debug('Failed to register ContextWarningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
-        }
-        // Reasoning middleware (priority 42) — auto-detects complex queries
-        try {
-          const { createReasoningMiddleware } = await import('./middleware/reasoning-middleware.js');
-          pipeline.use(createReasoningMiddleware());
-          logger.debug('ReasoningMiddleware registered in pipeline (priority 42)');
-        } catch (err) {
-          logger.debug('Failed to register ReasoningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
-        }
-        // Workflow guard (priority 45)
-        pipeline.use(new WorkflowGuardMiddleware());
-        // Auto-repair middleware (priority 150) — detects tool failures, invokes repair engine
-        try {
-          const { createAutoRepairMiddleware } = await import('./middleware/auto-repair-middleware.js');
-          pipeline.use(createAutoRepairMiddleware());
-          logger.debug('AutoRepairMiddleware registered in pipeline (priority 150)');
-        } catch (err) {
-          logger.debug('Failed to register AutoRepairMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
-        }
-        // Quality gate middleware (priority 200) — auto-delegates to specialized agents
-        try {
-          const { createQualityGateMiddleware } = await import('./middleware/quality-gate-middleware.js');
-          pipeline.use(createQualityGateMiddleware());
-          logger.debug('QualityGateMiddleware registered in pipeline (priority 200)');
-        } catch (err) {
-          logger.debug('Failed to register QualityGateMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
-        }
-        this.executor.setMiddlewarePipeline(pipeline);
-        logger.debug('WorkflowGuardMiddleware registered in default pipeline');
-      }
-    }).catch(err => {
-      logger.debug('Failed to register middleware pipeline (non-critical)', err);
-    });
+      }).catch(err => {
+        logger.debug('Failed to register middleware pipeline (non-critical)', err);
+      });
+    }
 
     // Initialize PromptBuilder with Moltbot hooks for intro injection
     this.promptBuilder = new PromptBuilder({
@@ -383,19 +408,23 @@ export class CodeBuddyAgent extends BaseAgent {
     this.initializeFacades();
 
     // Initialize specialized agent registry (PDF, Excel, SQL, etc.)
-    import('./specialized/agent-registry.js').then(({ initializeAgentRegistry }) => {
-      initializeAgentRegistry().catch(err => {
-        logger.debug('Agent registry init skipped', { error: err instanceof Error ? err.message : String(err) });
-      });
-    }).catch((e) => { logger.debug('Agent registry module load failed (optional)', { error: String(e) }); });
+    if (!testRuntime) {
+      import('./specialized/agent-registry.js').then(({ initializeAgentRegistry }) => {
+        initializeAgentRegistry().catch(err => {
+          logger.debug('Agent registry init skipped', { error: err instanceof Error ? err.message : String(err) });
+        });
+      }).catch((e) => { logger.debug('Agent registry module load failed (optional)', { error: String(e) }); });
+    }
 
     // Load SKILL.md skills so findSkill() returns results
-    import('../skills/index.js').then(({ initializeSkills }) => {
-      initializeSkills().catch((e) => { logger.debug('Skills initialization failed (optional)', { error: String(e) }); });
-    }).catch((e) => { logger.debug('Skills module load failed (optional)', { error: String(e) }); });
+    if (!testRuntime) {
+      import('../skills/index.js').then(({ initializeSkills }) => {
+        initializeSkills().catch((e) => { logger.debug('Skills initialization failed (optional)', { error: String(e) }); });
+      }).catch((e) => { logger.debug('Skills module load failed (optional)', { error: String(e) }); });
+    }
 
     // Initialize MCP servers if configured (can be disabled for headless/one-shot runs).
-    if (process.env.CODEBUDDY_DISABLE_MCP !== 'true') {
+    if (!testRuntime && process.env.CODEBUDDY_DISABLE_MCP !== 'true') {
       this.initializeMCP();
     }
 
@@ -403,12 +432,16 @@ export class CodeBuddyAgent extends BaseAgent {
     const customInstructions = loadCustomInstructions();
 
     // Initialize system prompt (async operation) — track readiness
-    this.systemPromptReady = this.initializeAgentSystemPrompt(systemPromptId, modelToUse, customInstructions);
+    this.systemPromptReady = lightweightAgentTest
+      ? Promise.resolve()
+      : this.initializeAgentSystemPrompt(systemPromptId, modelToUse, customInstructions);
 
     // Fire SessionStart user hook (non-blocking)
-    getUserHooksManager(process.cwd()).executeHooks('SessionStart', {}).catch(
-      (err) => logger.debug(`[user-hooks] SessionStart error: ${err}`)
-    );
+    if (!testRuntime) {
+      getUserHooksManager(process.cwd()).executeHooks('SessionStart', {}).catch(
+        (err) => logger.debug(`[user-hooks] SessionStart error: ${err}`)
+      );
+    }
   }
 
   /** Resolves when the system prompt has been loaded (or failed gracefully). */
@@ -475,7 +508,7 @@ export class CodeBuddyAgent extends BaseAgent {
     if (this._dmProviderWired) return;
     this._dmProviderWired = true;
     // Skip in test environment to avoid expensive module loading
-    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') return;
+    if (isTestRuntime()) return;
     // Fire-and-forget: wires the provider once the module is loaded.
     // The executor will skip decision memory injection until the provider is set.
     import('../memory/decision-memory.js').then(({ getDecisionMemory }) => {
@@ -770,6 +803,11 @@ export class CodeBuddyAgent extends BaseAgent {
 
   private applySkillMatching(message: string): void {
     try {
+      if (isLightweightAgentTestRuntime()) {
+        this.toolSelectionStrategy.setActiveSkill(null);
+        return;
+      }
+
       // Guard: if the message was already injected by /starter, skip re-matching
       if (message.startsWith('[Starter Pack:')) {
         return;

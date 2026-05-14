@@ -390,11 +390,46 @@ describe("Agent Core Module Tests", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockChatResponse.mockReset();
+    mockChatResponse.mockResolvedValue({
+      choices: [{ message: { content: "Test response", tool_calls: null } }],
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+    });
+    mockChatStreamResponse.mockReset();
+    mockChatStreamResponse.mockImplementation(async function* () {
+      yield { choices: [{ delta: { content: "Hello " } }] };
+      yield { choices: [{ delta: { content: "World" } }] };
+    });
+    mockViewFile.mockReset();
+    mockViewFile.mockResolvedValue({ success: true, output: "file content" });
+    mockCreateFile.mockReset();
+    mockCreateFile.mockResolvedValue({ success: true, output: "File created" });
+    mockStrReplace.mockReset();
+    mockStrReplace.mockResolvedValue({ success: true, output: "Text replaced" });
+    mockBashExecute.mockReset();
+    mockBashExecute.mockResolvedValue({ success: true, output: "command output" });
+    mockSearchTool.mockReset();
+    mockSearchTool.mockResolvedValue({ success: true, output: "search results" });
+    mockWebSearch.mockReset();
+    mockWebSearch.mockResolvedValue({ success: true, output: "web results" });
+    mockFetchPage.mockReset();
+    mockFetchPage.mockResolvedValue({ success: true, output: "page content" });
+    mockCalculateCost.mockReset();
+    mockCalculateCost.mockReturnValue(0.001);
+    mockRecordUsage.mockReset();
+    mockRecordUsage.mockReturnValue(undefined);
+    mockPrepareMessages.mockReset();
+    mockPrepareMessages.mockImplementation((messages: any) => messages);
+    mockShouldWarn.mockReset();
+    mockShouldWarn.mockReturnValue({ warn: false });
+    mockExecuteHooks.mockReset();
+    mockExecuteHooks.mockResolvedValue(undefined);
     process.env = { ...originalEnv };
     delete process.env.YOLO_MODE;
     delete process.env.MAX_COST;
     delete process.env.MORPH_API_KEY;
     delete process.env.CODEBUDDY_MAX_CONTEXT;
+    process.env.CODEBUDDY_TEST_LIGHTWEIGHT_AGENT = 'true';
     mockIsYOLOEnabled.mockReturnValue(false);
   });
 

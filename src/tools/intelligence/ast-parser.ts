@@ -66,6 +66,8 @@ interface LanguagePatterns {
   };
 }
 
+const NO_LANGUAGE_PATTERN = /a^/g;
+
 /**
  * TypeScript/JavaScript patterns
  */
@@ -108,7 +110,7 @@ const PYTHON_PATTERNS: LanguagePatterns = {
     /(?:async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^:]+))?:/g,
   methodPattern:
     /(?:async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^:]+))?:/g,
-  interfacePattern: /$/g, // No interfaces in Python
+  interfacePattern: NO_LANGUAGE_PATTERN, // No interfaces in Python
   typePattern:
     /(\w+)(?:\s*:\s*TypeAlias)?\s*=\s*(?:TypeVar|Union|Optional|List|Dict|Tuple|Callable)/g,
   enumPattern:
@@ -119,7 +121,7 @@ const PYTHON_PATTERNS: LanguagePatterns = {
     /^([A-Z][A-Z0-9_]*)\s*(?::\s*([^=]+))?\s*=/gm,
   importPattern:
     /(?:from\s+(\S+)\s+)?import\s+([^#\n]+)/g,
-  exportPattern: /$/g, // Python uses __all__
+  exportPattern: NO_LANGUAGE_PATTERN, // Python uses __all__
   commentPatterns: {
     single: /#.*/g,
     multiStart: /'''/,
@@ -142,14 +144,14 @@ const GO_PATTERNS: LanguagePatterns = {
     /type\s+(\w+)\s+interface\s*\{/g,
   typePattern:
     /type\s+(\w+)\s+/g,
-  enumPattern: /$/g, // Go uses const blocks
+  enumPattern: NO_LANGUAGE_PATTERN, // Go uses const blocks
   variablePattern:
     /(?:var|const)\s+(\w+)(?:\s+(\w+))?\s*=/g,
   constantPattern:
     /const\s+(\w+)(?:\s+(\w+))?\s*=/g,
   importPattern:
     /import\s+(?:\(\s*)?"([^"]+)"(?:\s*\))?/g,
-  exportPattern: /$/g, // Go uses capitalization
+  exportPattern: NO_LANGUAGE_PATTERN, // Go uses capitalization
   commentPatterns: {
     single: /\/\/.*/g,
     multiStart: /\/\*/,

@@ -71,6 +71,16 @@ function jestCompatTransform() {
   };
 }
 
+const workerConfig =
+  process.platform === 'win32'
+    ? {
+        execArgv: ['--max-old-space-size=8192'],
+        maxWorkers: 2,
+      }
+    : {
+        execArgv: ['--max-old-space-size=8192'],
+      };
+
 export default defineConfig({
   plugins: [jestCompatTransform()],
   test: {
@@ -98,11 +108,8 @@ export default defineConfig({
     include: ['tests/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'tests/_archived/**'],
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        execArgv: ['--max-old-space-size=8192'],
-      },
-    },
+    vmMemoryLimit: '2048MB',
+    ...workerConfig,
   },
   resolve: {
     alias: {

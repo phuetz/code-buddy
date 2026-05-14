@@ -328,7 +328,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
           };
         }
       }
-    } catch {
+    } catch (_err) {
       // Malformed auth file or unexpected — fall through to other providers.
     }
   }

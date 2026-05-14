@@ -24,6 +24,7 @@ const ENV_KEYS = [
   'ANTHROPIC_API_KEY',
   'GOOGLE_API_KEY',
   'GEMINI_API_KEY',
+  'GEMINI_CLI_PATH',
   'OPENAI_API_KEY',
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
@@ -37,6 +38,9 @@ beforeEach(() => {
     saved[k] = process.env[k];
     delete process.env[k];
   }
+  // Keep these tests hermetic on developer machines that have `gemini`
+  // installed globally; an explicit missing path disables PATH probing.
+  process.env.GEMINI_CLI_PATH = '__codebuddy_missing_gemini_cli_for_tests__';
 });
 
 afterEach(() => {

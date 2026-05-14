@@ -17,6 +17,7 @@ jest.mock('fs-extra', () => {
 });
 
 jest.mock('fast-glob', () => ({
+  default: mockGlob,
   glob: mockGlob,
 }));
 

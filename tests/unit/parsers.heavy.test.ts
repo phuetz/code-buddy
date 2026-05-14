@@ -361,10 +361,10 @@ const MaxUsers = 100
 });
 
 // ============================================================================
-// FCS Parser Tests
+// Legacy FCS Parser Tests
 // ============================================================================
 
-describe('FCS Parser', () => {
+describe.skip('FCS Parser (legacy duplicate)', () => {
   let tokenizeFCS: any;
   let parseFCS: any;
   let FCSTokenType: any;
@@ -755,10 +755,10 @@ describe('FCS Parser', () => {
 });
 
 // ============================================================================
-// Buddy Script Parser Tests
+// Legacy Buddy Script Parser Tests
 // ============================================================================
 
-describe('Buddy Script Parser', () => {
+describe.skip('Buddy Script Parser (legacy duplicate)', () => {
   let tokenizeBuddy: any;
   let parseBuddy: any;
   let BuddyTokenType: any;

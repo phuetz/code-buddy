@@ -21,6 +21,9 @@ npm --prefix cowork run typecheck
 npm run build
 # passed
 
+npm run validate
+# passed: lint + typecheck + 852 test files
+
 node dist/index.js whoami
 # ChatGPT connected; plan pro; source .codebuddy/codex-auth.json
 
@@ -78,6 +81,16 @@ npm --prefix cowork run build
   `npm run lint -- --quiet` passe. Les corrections gardent le comportement
   existant: catches attendus documentes, regex de controle construites sans
   litteraux de controle, et detection Unicode reformulee sans classes ambigues.
+- La suite Vitest complete ne tombe plus en OOM sur Windows. Le crash venait du
+  parseur AST: les patterns "non supporte" utilisaient `/$/g`, ce qui creait des
+  boucles infinies sur matches vides pour Python/Go. Ils sont remplaces par un
+  pattern impossible, et les anciens blocs FCS/Buddy du test lourd sont marques
+  comme doublons legacy car `tests/unit/fcs-parser.test.ts` couvre deja le
+  parseur canonique.
+- Les tests Windows instables autour de BashTool sont stabilises: les commandes
+  POSIX strictes restent Unix-only dans le test de securite legacy, les env vars
+  controlees sont propagees a WSL via `WSLENV`, et les tests de taches de fond
+  attendent les sorties par polling plutot que par sleeps fixes.
 
 ## Blocage leve
 
@@ -98,6 +111,10 @@ et de dynamic/static import; ils ne bloquent pas le packaging.
 `npm run lint -- --quiet` est vert. Le lint complet garde de nombreux warnings
 historiques (`no-explicit-any`, variables inutilisees dans des tests/scripts),
 mais plus d'erreurs bloquantes connues.
+
+`npm run validate` est vert dans ce worktree. Les warnings restants pendant le
+run sont historiques ou attendus par les tests (logs stderr, warnings Node,
+outils optionnels absents comme `nvidia-smi`).
 
 ## Lecture produit
 

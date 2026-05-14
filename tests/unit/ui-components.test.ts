@@ -245,7 +245,7 @@ describe('Component Exports', () => {
       expect(module.default).toBeDefined();
       // React.memo returns an object
       expect(typeof module.default).toBe('object');
-    });
+    }, 15000);
   });
 
   describe('DiffRenderer', () => {

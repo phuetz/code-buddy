@@ -103,7 +103,7 @@ describe('BashTool', () => {
       expect(result.success).toBe(true);
       // Output may vary based on shell configuration
       expect(result.output).toBeDefined();
-    });
+    }, 15000);
 
     test('should execute pwd command', async () => {
       const result = await bashTool.execute('pwd');

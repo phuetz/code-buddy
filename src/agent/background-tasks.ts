@@ -46,8 +46,8 @@ export class BackgroundTaskManager {
     this.tasks.set(id, task);
 
     const isWindows = process.platform === 'win32';
-    const shell = isWindows ? (process.env.COMSPEC || 'cmd.exe') : 'sh';
-    const shellArgs = isWindows ? ['/d', '/s', '/c', command] : ['-c', command];
+    const shell = isWindows ? 'bash' : 'sh';
+    const shellArgs = ['-c', command];
 
     const child = spawn(shell, shellArgs, {
       detached: !isWindows,

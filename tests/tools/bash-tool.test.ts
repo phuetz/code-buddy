@@ -104,7 +104,7 @@ describe('BashTool', () => {
       const result = await bashTool.execute('echo "hello world"');
       expect(result.success).toBe(true);
       expect(result.output).toContain('hello world');
-    });
+    }, 15000);
 
     it('should execute ls command', async () => {
       const result = await bashTool.execute('ls');

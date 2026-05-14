@@ -5,13 +5,14 @@
  * Supports text and regex patterns, dry-run preview, and safety limits.
  */
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../utils/logger.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // ============================================================================
 // Types
@@ -67,34 +68,34 @@ export async function codebaseReplace(
     throw new Error('searchPattern is required');
   }
 
-  // Build ripgrep command to find matching files
-  const rgFlags: string[] = ['-l', '--no-messages'];
+  // Build ripgrep args to find matching files. Use execFile so patterns,
+  // globs, and replacements do not go through cmd.exe / sh quoting.
+  const rgArgs: string[] = ['-l', '--no-messages'];
 
   if (!isRegex) {
-    rgFlags.push('-F'); // Fixed string (literal)
+    rgArgs.push('-F'); // Fixed string (literal)
   }
 
   // Add glob filter
   if (glob !== '**/*') {
-    rgFlags.push(`--glob "${glob}"`);
+    rgArgs.push('--glob', glob);
   }
 
   // Exclude common non-text directories
-  rgFlags.push('--glob "!node_modules"');
-  rgFlags.push('--glob "!.git"');
-  rgFlags.push('--glob "!dist"');
-  rgFlags.push('--glob "!build"');
-  rgFlags.push('--glob "!*.min.*"');
-  rgFlags.push('--glob "!.codebuddy/screenshots"');
-  rgFlags.push('--glob "!.codebuddy/tool-results"');
-
-  // Escape the search pattern for shell
-  const escapedPattern = searchPattern.replace(/"/g, '\\"');
-  const rgCommand = `rg ${rgFlags.join(' ')} "${escapedPattern}"`;
+  rgArgs.push('--glob', '!node_modules');
+  rgArgs.push('--glob', '!.git');
+  rgArgs.push('--glob', '!dist');
+  rgArgs.push('--glob', '!build');
+  rgArgs.push('--glob', '!*.min.*');
+  rgArgs.push('--glob', '!.codebuddy/screenshots');
+  rgArgs.push('--glob', '!.codebuddy/tool-results');
+  // Force a path argument so ripgrep searches the working directory instead
+  // of waiting on stdin when the process is spawned without a TTY.
+  rgArgs.push('--', searchPattern, '.');
 
   let matchingFiles: string[];
   try {
-    const { stdout } = await execAsync(rgCommand, {
+    const { stdout } = await execFileAsync(rgPath, rgArgs, {
       cwd: process.cwd(),
       maxBuffer: 1024 * 1024,
     });

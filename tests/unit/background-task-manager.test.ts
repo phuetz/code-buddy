@@ -51,8 +51,8 @@ describe('BackgroundTaskManager (agent)', () => {
     const [cmd, args, options] = mockSpawn.mock.calls[0];
 
     if (process.platform === 'win32') {
-      expect(String(cmd).toLowerCase()).toContain('cmd');
-      expect(args).toEqual(['/d', '/s', '/c', 'echo hello']);
+      expect(cmd).toBe('bash');
+      expect(args).toEqual(['-c', 'echo hello']);
       expect(options?.detached).toBe(false);
     } else {
       expect(cmd).toBe('sh');
@@ -111,4 +111,3 @@ describe('BackgroundTaskManager (agent)', () => {
     expect(manager.killTask('bg-999')).toBe(false);
   });
 });
-
