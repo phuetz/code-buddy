@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 /**
  * Tests for the Memory section added to `/status` in this commit.
@@ -15,29 +18,18 @@ const memoryMocks = vi.hoisted(() => ({
   getRecentMemories: vi.fn(),
 }));
 
-const providerMocks = vi.hoisted(() => ({
-  detectProviderFromEnv: vi.fn(),
-}));
+const testPaths = vi.hoisted(() => ({ tmpHome: '' }));
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => testPaths.tmpHome || actual.homedir() };
+});
 
 vi.mock('../../src/memory/persistent-memory.js', () => ({
   getMemoryManager: () => ({
     getStats: memoryMocks.getStats,
     getRecentMemories: memoryMocks.getRecentMemories,
   }),
-}));
-
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderFromEnv,
-  selectModelForDetectedProvider: (
-    detected: { provider: string; defaultModel: string } | null,
-    configured?: string,
-  ) => {
-    if (!detected) return configured;
-    if (configured && !(detected.provider !== 'grok' && /^grok[-_]/i.test(configured))) {
-      return configured;
-    }
-    return detected.defaultModel;
-  },
 }));
 
 // Heavy optional deps the handler tries to import — no-op them so we don't
@@ -65,20 +57,54 @@ vi.mock('../../src/utils/autonomy-manager.js', () => ({
 
 import { handleStatus } from '../../src/commands/handlers/missing-handlers.js';
 
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+
+function writeChatGptAuth(): void {
+  const dir = path.join(testPaths.tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
+
+function configureChatGptProvider(): void {
+  process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+  writeChatGptAuth();
+}
+
 describe('handleStatus — Memory section (rc.2 extension)', () => {
   let envBackup: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     envBackup = { ...process.env };
+    for (const key of envKeysToReset) delete process.env[key];
+    process.env.CODEBUDDY_PROVIDER = 'none';
     delete process.env.YOLO_MODE;
-    delete process.env.GROK_MODEL;
-    providerMocks.detectProviderFromEnv.mockReturnValue(null);
+    testPaths.tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'status-memory-section-'));
     memoryMocks.getStats.mockReset();
     memoryMocks.getRecentMemories.mockReset();
   });
 
   afterEach(() => {
     process.env = envBackup;
+    fs.rmSync(testPaths.tmpHome, { recursive: true, force: true });
+    testPaths.tmpHome = '';
   });
 
   it('renders a Memory line with project + user counts and "never" when no entries', async () => {
@@ -136,12 +162,7 @@ describe('handleStatus — Memory section (rc.2 extension)', () => {
 
   it('shows the detected ChatGPT model instead of a stale Grok env default', async () => {
     process.env.GROK_MODEL = 'grok-code-fast-1';
-    providerMocks.detectProviderFromEnv.mockReturnValue({
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    });
+    configureChatGptProvider();
     memoryMocks.getStats.mockReturnValue({ project: 0, user: 0, total: 0 });
     memoryMocks.getRecentMemories.mockReturnValue([]);
 
