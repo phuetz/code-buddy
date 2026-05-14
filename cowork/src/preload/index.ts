@@ -1360,7 +1360,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       agent?: unknown;
       error?: string;
     }> => ipcRenderer.invoke('a2a.add', url),
-    remove: (id: string): Promise<{ success: boolean }> => ipcRenderer.invoke('a2a.remove', id),
+    remove: (id: string): Promise<{ success: boolean; removedTaskIds?: string[] }> =>
+      ipcRenderer.invoke('a2a.remove', id),
     ping: (
       id: string
     ): Promise<{
@@ -1379,6 +1380,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }> => ipcRenderer.invoke('a2a.invoke', { id, message }),
     cancelTask: (id: string, taskId: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('a2a.cancelTask', { id, taskId }),
+    clearTask: (taskId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('a2a.clearTask', taskId),
     listTasks: (): Promise<
       Array<{
         taskId: string;
@@ -2967,7 +2970,7 @@ declare global {
           agent?: unknown;
           error?: string;
         }>;
-        remove: (id: string) => Promise<{ success: boolean }>;
+        remove: (id: string) => Promise<{ success: boolean; removedTaskIds?: string[] }>;
         ping: (id: string) => Promise<{
           success: boolean;
           status?: string;
@@ -2987,6 +2990,7 @@ declare global {
           id: string,
           taskId: string
         ) => Promise<{ success: boolean; error?: string }>;
+        clearTask: (taskId: string) => Promise<{ success: boolean }>;
         listTasks: () => Promise<
           Array<{
             taskId: string;

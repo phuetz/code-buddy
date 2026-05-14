@@ -113,13 +113,18 @@ export function SettingsA2AAgents() {
     }
   }, [load, normalizedUrl, t]);
 
+  const removeA2ATask = useAppStore((s) => s.removeA2ATask);
+
   const handleRemove = useCallback(
     async (id: string) => {
       if (!window.confirm(t('a2a.removeConfirm', 'Remove this agent?'))) return;
-      await window.electronAPI?.a2a?.remove(id);
+      const result = await window.electronAPI?.a2a?.remove(id);
+      for (const taskId of result?.removedTaskIds ?? []) {
+        removeA2ATask(taskId);
+      }
       await load();
     },
-    [load, t]
+    [load, removeA2ATask, t]
   );
 
   const handlePing = useCallback(
@@ -151,7 +156,6 @@ export function SettingsA2AAgents() {
   // GAP 1 — Active tasks tracking via store (events flow from main bridge)
   const a2aTasks = useAppStore((s) => s.a2aTasks);
   const upsertA2ATask = useAppStore((s) => s.upsertA2ATask);
-  const removeA2ATask = useAppStore((s) => s.removeA2ATask);
   const tasks = useMemo<A2ATask[]>(
     () =>
       Object.values(a2aTasks).sort((a, b) => b.startedAt - a.startedAt),
@@ -175,7 +179,12 @@ export function SettingsA2AAgents() {
   );
 
   const handleClearTask = useCallback(
-    (taskId: string) => removeA2ATask(taskId),
+    async (taskId: string) => {
+      const result = await window.electronAPI?.a2a?.clearTask?.(taskId);
+      if (result?.success !== false) {
+        removeA2ATask(taskId);
+      }
+    },
     [removeA2ATask]
   );
 
@@ -474,7 +483,7 @@ export function SettingsA2AAgents() {
                     )}
                     {isTerminal && (
                       <button
-                        onClick={() => handleClearTask(task.taskId)}
+                        onClick={() => void handleClearTask(task.taskId)}
                         className="rounded p-1 text-text-muted hover:bg-surface-hover hover:text-text-primary"
                         title={t('a2a.clear', 'Remove from list')}
                       >

@@ -3390,6 +3390,15 @@ ipcMain.handle('a2a.listTasks', async () => {
   }
 });
 
+ipcMain.handle('a2a.clearTask', async (_event, taskId: string) => {
+  try {
+    const { getA2ABridge } = await import('./a2a/a2a-bridge');
+    return await getA2ABridge().clearTask(taskId);
+  } catch (err) {
+    return { success: false };
+  }
+});
+
 // Reasoning trace viewer — Claude Cowork parity Phase 3 step 17
 ipcMain.handle('reasoning.listTraces', async () => {
   try {

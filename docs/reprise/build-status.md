@@ -132,6 +132,18 @@ npm run typecheck
 
 npm run build
 # passed
+
+npm --prefix cowork test -- run tests/a2a-bridge-polling.test.ts
+# 7 tests passed after A2A task clear/remove cleanup
+
+npm --prefix cowork run typecheck
+# passed
+
+npx eslint cowork/src/main/a2a/a2a-bridge.ts cowork/src/main/index.ts cowork/src/preload/index.ts cowork/src/renderer/components/settings/SettingsA2AAgents.tsx cowork/tests/a2a-bridge-polling.test.ts --quiet
+# passed
+
+npm --prefix cowork run build:e2e
+# passed; existing Vite chunk-size/dynamic-import warnings only
 ```
 
 ## Debloque pendant la reprise
@@ -230,6 +242,10 @@ npm run build
 - `stopServer()` attend maintenant la fin de `ChannelManager.shutdown()` avant
   de rendre la main. Les pollers/listeners de channels ne restent donc pas en
   arriere-plan pendant un redemarrage rapide.
+- Cowork A2A expose maintenant un vrai `clearTask` cote main process. Le bouton
+  "Remove from list" ne supprime plus seulement l'etat React local, et retirer
+  un agent nettoie aussi les taches suivies de cet agent pour eviter les lignes
+  orphelines apres rechargement.
 
 ## Blocage leve
 

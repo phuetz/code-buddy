@@ -250,4 +250,43 @@ describe('A2ABridge — task polling (GAP 1)', () => {
     expect(list.length).toBe(2);
     expect(list[0].startedAt).toBeGreaterThanOrEqual(list[1].startedAt);
   });
+
+  it('clearTask removes a tracked task from the main-process list', async () => {
+    const events: ServerEvent[] = [];
+    const { bridge, agentId } = await bootstrapBridge(events);
+
+    const { fn } = makeFetchMock({
+      '/tasks/send': () =>
+        jsonResponse({ id: 'task-clear', status: { status: 'completed' } }),
+    });
+    global.fetch = fn as unknown as typeof fetch;
+
+    await bridge.invoke(agentId, 'clear me');
+    expect(await bridge.listTasks()).toHaveLength(1);
+
+    const cleared = await bridge.clearTask('task-clear');
+    expect(cleared.success).toBe(true);
+    expect(await bridge.listTasks()).toHaveLength(0);
+  });
+
+  it('remove drops tasks owned by the removed agent', async () => {
+    const events: ServerEvent[] = [];
+    const { bridge, agentId } = await bootstrapBridge(events);
+
+    const { fn } = makeFetchMock({
+      '/tasks/send': () =>
+        jsonResponse({ id: 'task-orphan', status: { status: 'working' } }),
+      '/tasks/task-orphan': () =>
+        jsonResponse({ id: 'task-orphan', status: { status: 'working' } }),
+    });
+    global.fetch = fn as unknown as typeof fetch;
+
+    await bridge.invoke(agentId, 'long-running');
+    expect(await bridge.listTasks()).toHaveLength(1);
+
+    const removed = await bridge.remove(agentId);
+    expect(removed.success).toBe(true);
+    expect(removed.removedTaskIds).toEqual(['task-orphan']);
+    expect(await bridge.listTasks()).toHaveLength(0);
+  });
 });

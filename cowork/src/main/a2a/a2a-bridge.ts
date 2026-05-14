@@ -205,20 +205,23 @@ export class A2ABridge {
     return { success: true, agent: registered };
   }
 
-  async remove(id: string): Promise<{ success: boolean }> {
+  async remove(id: string): Promise<{ success: boolean; removedTaskIds?: string[] }> {
     await this.load();
     if (!this.agents.has(id)) {
       return { success: false };
     }
-    // Cancel any tasks owned by this agent
+    // Drop tasks owned by this agent so removed agents do not reappear in task history.
+    const removedTaskIds: string[] = [];
     for (const [taskId, tracked] of this.tasks.entries()) {
       if (tracked.task.agentId === id) {
         this.stopPolling(taskId);
+        this.tasks.delete(taskId);
+        removedTaskIds.push(taskId);
       }
     }
     this.agents.delete(id);
     await this.save();
-    return { success: true };
+    return { success: true, removedTaskIds };
   }
 
   async ping(id: string): Promise<{ success: boolean; status?: string; error?: string }> {
@@ -334,6 +337,14 @@ export class A2ABridge {
     return Array.from(this.tasks.values())
       .map((t) => ({ ...t.task }))
       .sort((a, b) => b.startedAt - a.startedAt);
+  }
+
+  async clearTask(taskId: string): Promise<{ success: boolean }> {
+    const tracked = this.tasks.get(taskId);
+    if (!tracked) return { success: false };
+    this.stopPolling(taskId);
+    this.tasks.delete(taskId);
+    return { success: true };
   }
 
   private emitTaskUpdate(task: A2ATask): void {
