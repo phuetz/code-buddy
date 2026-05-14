@@ -20,6 +20,7 @@ import type {
 import { DEFAULT_IDE_CONFIG } from './types.js';
 import { generateVSCodeExtension } from './vscode-generator.js';
 import { generateNeovimPlugin } from './neovim-generator.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 type IDEChatMessage = {
   role: 'system' | 'user';
@@ -459,20 +460,24 @@ Return a focused replacement for the problematic range only.`,
       return this.codebuddyClient;
     }
 
-    const apiKey = process.env.GROK_API_KEY?.trim();
-    if (!apiKey) {
+    const provider = detectProviderFromEnv();
+    if (!provider) {
       return null;
     }
 
     const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-    this.codebuddyClient = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || 'grok-code-fast-1') as IDEChatClient;
+    this.codebuddyClient = new CodeBuddyClient(
+      provider.apiKey,
+      provider.defaultModel,
+      provider.baseURL
+    ) as IDEChatClient;
     return this.codebuddyClient;
   }
 
   private async requireCodeBuddyClient(): Promise<IDEChatClient> {
     const client = await this.getCodeBuddyClient();
     if (!client) {
-      throw new Error('GROK_API_KEY is required for IDE AI features');
+      throw new Error('No AI provider configured for IDE AI features. Run `buddy login chatgpt` or set a provider API key.');
     }
     return client;
   }

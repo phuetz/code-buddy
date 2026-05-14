@@ -1,13 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IDEConnection, IDERequest, IDEResponse } from '../../src/integrations/ide/types.js';
 
-const chatMock = vi.fn();
-const codeBuddyClientMock = vi.fn(class MockCodeBuddyClient {
-  chat = chatMock;
+const mocks = vi.hoisted(() => {
+  const chatMock = vi.fn();
+  return {
+    chatMock,
+    codeBuddyClientMock: vi.fn(class MockCodeBuddyClient {
+      chat = chatMock;
+    }),
+    detectProviderMock: vi.fn(),
+  };
 });
 
+const { chatMock, codeBuddyClientMock, detectProviderMock } = mocks;
+
 vi.mock('../../src/codebuddy/client.js', () => ({
-  CodeBuddyClient: codeBuddyClientMock,
+  CodeBuddyClient: mocks.codeBuddyClientMock,
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: mocks.detectProviderMock,
 }));
 
 import { IDEExtensionsServer } from '../../src/integrations/ide/server.js';
@@ -44,6 +56,12 @@ describe('IDEExtensionsServer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    detectProviderMock.mockReturnValue({
+      provider: 'grok',
+      apiKey: 'test-key',
+      baseURL: 'https://api.x.ai/v1',
+      defaultModel: 'grok-code-fast-1',
+    });
     process.env.GROK_API_KEY = 'test-key';
     process.env.GROK_MODEL = 'grok-code-fast-1';
   });
@@ -126,7 +144,7 @@ describe('IDEExtensionsServer', () => {
   });
 
   it('falls back to lexical completions when no API key is configured', async () => {
-    delete process.env.GROK_API_KEY;
+    detectProviderMock.mockReturnValue(null);
 
     const server = new IDEExtensionsServer();
     const response = await invoke(server, 'completion', {
@@ -139,6 +157,29 @@ describe('IDEExtensionsServer', () => {
     expect(items.map((item) => item.label)).toContain('calculateValue');
     expect(items.map((item) => item.label)).toContain('calculateVelocity');
     expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('constructs IDE AI clients from the detected provider', async () => {
+    detectProviderMock.mockReturnValue({
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    });
+    chatMock.mockResolvedValueOnce({
+      choices: [{ message: { content: 'Use a boundary interface.' } }],
+    });
+
+    const server = new IDEExtensionsServer();
+    await invoke(server, 'ask', {
+      question: 'How should I isolate the file system?',
+    });
+
+    expect(codeBuddyClientMock).toHaveBeenCalledWith(
+      'oauth-chatgpt',
+      'gpt-5.5',
+      'https://chatgpt.com/backend-api/codex'
+    );
   });
 
   it('answers ask requests through CodeBuddyClient', async () => {

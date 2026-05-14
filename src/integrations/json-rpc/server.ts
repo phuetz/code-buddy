@@ -32,10 +32,19 @@ import {
   ToolDefinition,
   ServerCapabilities,
 } from './protocol.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 // Import code-buddy internals (lazy loaded to reduce startup time)
 let codebuddyClient: unknown = null;
+let codebuddyClientModel: string | undefined;
 let fcsRuntime: unknown = null;
+
+interface JsonRpcChatClient {
+  chat: (messages: Array<{ role: string; content: string }>) => Promise<{
+    choices: Array<{ message: { content: string } }>;
+    usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  }>;
+}
 
 export interface JsonRpcServerOptions {
   /** Enable verbose logging */
@@ -259,15 +268,27 @@ export class JsonRpcServer {
     return null;
   }
 
-  private async handleAiComplete(params: AiCompleteParams): Promise<AiCompleteResult> {
-    // Lazy load grok client
+  private async getCodeBuddyClient(): Promise<JsonRpcChatClient> {
     if (!codebuddyClient) {
       const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-      const apiKey = this.options.apiKey || process.env.GROK_API_KEY || '';
-      codebuddyClient = new CodeBuddyClient(apiKey);
+      if (this.options.apiKey) {
+        codebuddyClient = new CodeBuddyClient(this.options.apiKey);
+        codebuddyClientModel = undefined;
+      } else {
+        const provider = detectProviderFromEnv();
+        if (!provider) {
+          throw new Error('No AI provider configured. Run `buddy login chatgpt` or set a provider API key.');
+        }
+        codebuddyClient = new CodeBuddyClient(provider.apiKey, provider.defaultModel, provider.baseURL);
+        codebuddyClientModel = provider.defaultModel;
+      }
     }
 
-    const client = codebuddyClient as { chat: (messages: Array<{ role: string; content: string }>) => Promise<{ choices: Array<{ message: { content: string } }>; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number } }> };
+    return codebuddyClient as JsonRpcChatClient;
+  }
+
+  private async handleAiComplete(params: AiCompleteParams): Promise<AiCompleteResult> {
+    const client = await this.getCodeBuddyClient();
 
     const systemPrompt = params.context?.language
       ? `You are a code completion assistant for ${params.context.language}. Provide only the code to complete, no explanations.`
@@ -287,7 +308,7 @@ export class JsonRpcServer {
 
     return {
       text: content,
-      model: params.options?.model || 'grok-2',
+      model: params.options?.model || codebuddyClientModel || 'codebuddy-default',
       usage: response.usage ? {
         promptTokens: response.usage.prompt_tokens,
         completionTokens: response.usage.completion_tokens,
@@ -308,14 +329,7 @@ export class JsonRpcServer {
     // Add user message
     history.push({ role: 'user', content: params.message });
 
-    // Lazy load grok client
-    if (!codebuddyClient) {
-      const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-      const apiKey = this.options.apiKey || process.env.GROK_API_KEY || '';
-      codebuddyClient = new CodeBuddyClient(apiKey);
-    }
-
-    const client = codebuddyClient as { chat: (messages: Array<{ role: string; content: string }>) => Promise<{ choices: Array<{ message: { content: string } }> }> };
+    const client = await this.getCodeBuddyClient();
 
     // Build context from files
     let contextPrompt = '';

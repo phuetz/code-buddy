@@ -12,6 +12,7 @@ import * as path from 'path';
 import { execSync, spawn } from 'child_process';
 import { CodeBuddyScriptConfig, CodeBuddyValue, CodeBuddyFunction, ScriptAgentInterface } from './types.js';
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 
 type PrintFn = (msg: string) => void;
 
@@ -33,18 +34,18 @@ async function getOrCreateAgent(config: CodeBuddyScriptConfig): Promise<ScriptAg
     return cachedAgent;
   }
 
-  const apiKey = process.env.GROK_API_KEY;
-  if (!apiKey) {
-    logger.warn('GROK_API_KEY not set, AI operations will not be available');
+  const provider = detectProviderFromEnv();
+  if (!provider) {
+    logger.warn('No AI provider configured, scripting AI operations will not be available');
     return null;
   }
 
   try {
     const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
     cachedAgent = new CodeBuddyAgent(
-      apiKey,
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL || 'grok-3-latest'
+      provider.apiKey,
+      provider.baseURL,
+      provider.defaultModel
     ) as unknown as ScriptAgentInterface;
     return cachedAgent;
   } catch (error) {
@@ -596,21 +597,21 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
       ask: async (prompt: CodeBuddyValue) => {
         if (config.dryRun) { print(`[DRY RUN] ai.ask: ${prompt}`); return '[AI Response Placeholder]'; }
         const agent = await getOrCreateAgent(config);
-        if (!agent) throw new Error('AI agent not available. Ensure GROK_API_KEY is set.');
+        if (!agent) throw new Error('AI agent not available. Run `buddy login chatgpt` or set a provider API key.');
         const result = await agent.processUserInput(String(prompt));
         return result.content || '';
       },
       chat: async (message: CodeBuddyValue) => {
         if (config.dryRun) { print(`[DRY RUN] ai.chat: ${message}`); return '[AI Response Placeholder]'; }
         const agent = await getOrCreateAgent(config);
-        if (!agent) throw new Error('AI agent not available. Ensure GROK_API_KEY is set.');
+        if (!agent) throw new Error('AI agent not available. Run `buddy login chatgpt` or set a provider API key.');
         const result = await agent.processUserInput(String(message));
         return result.content || '';
       },
       complete: async (prompt: CodeBuddyValue, options?: CodeBuddyValue) => {
         if (config.dryRun) { print(`[DRY RUN] ai.complete: ${prompt}`); return '[AI Response Placeholder]'; }
         const agent = await getOrCreateAgent(config);
-        if (!agent) throw new Error('AI agent not available. Ensure GROK_API_KEY is set.');
+        if (!agent) throw new Error('AI agent not available. Run `buddy login chatgpt` or set a provider API key.');
         const opts = typeof options === 'object' && options !== null ? options as Record<string, unknown> : {};
         const result = await agent.processUserInput(String(prompt), opts);
         return result.content || '';

@@ -186,6 +186,8 @@ jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 
 describe('MCP Agent Intelligence Layer', () => {
   let server: CodeBuddyMCPServer;
+  const originalProvider = process.env.CODEBUDDY_PROVIDER;
+  const originalApiKey = process.env.GROK_API_KEY;
 
   beforeEach(() => {
     registeredTools.clear();
@@ -194,6 +196,7 @@ describe('MCP Agent Intelligence Layer', () => {
     jest.clearAllMocks();
 
     // Set env for agent init
+    process.env.CODEBUDDY_PROVIDER = 'grok';
     process.env.GROK_API_KEY = 'test-key-123';
 
     server = new CodeBuddyMCPServer();
@@ -203,7 +206,16 @@ describe('MCP Agent Intelligence Layer', () => {
     if (server.isRunning()) {
       await server.stop();
     }
-    delete process.env.GROK_API_KEY;
+    if (originalProvider === undefined) {
+      delete process.env.CODEBUDDY_PROVIDER;
+    } else {
+      process.env.CODEBUDDY_PROVIDER = originalProvider;
+    }
+    if (originalApiKey === undefined) {
+      delete process.env.GROK_API_KEY;
+    } else {
+      process.env.GROK_API_KEY = originalApiKey;
+    }
   });
 
   // =========================================================================
@@ -627,18 +639,20 @@ describe('MCP Agent Intelligence Layer', () => {
       delete process.env.GROK_API_KEY;
       delete process.env.OPENAI_API_KEY;
       delete process.env.ANTHROPIC_API_KEY;
+      process.env.CODEBUDDY_PROVIDER = 'not-a-provider';
 
       // Create new server without API key
       registeredTools.clear();
-      const noKeyServer = new CodeBuddyMCPServer();
+      new CodeBuddyMCPServer();
 
       const handler = registeredTools.get('agent_chat')!.handler;
       const result = await handler({ message: 'test' });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('No API key found');
+      expect(result.content[0].text).toContain('No AI provider configured');
 
       // Restore for other tests
+      process.env.CODEBUDDY_PROVIDER = 'grok';
       process.env.GROK_API_KEY = 'test-key-123';
     });
   });

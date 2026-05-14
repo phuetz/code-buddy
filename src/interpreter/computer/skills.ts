@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { EventEmitter } from 'events';
 import { safeEval, safeEvalAsync, safeInterpolate } from '../../sandbox/safe-eval.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 // ============================================================================
 // Types
@@ -706,12 +707,12 @@ export class ComputerSkills extends EventEmitter {
 
   private async getLLMClient(): Promise<import('../../codebuddy/client.js').CodeBuddyClient> {
     if (this.llmClient) return this.llmClient;
-    const apiKey = process.env.GROK_API_KEY;
-    if (!apiKey) {
-      throw new Error('GROK_API_KEY is required for LLM skill steps.');
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      throw new Error('No AI provider configured for LLM skill steps. Run `buddy login chatgpt` or set a provider API key.');
     }
     const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-    this.llmClient = new CodeBuddyClient(apiKey);
+    this.llmClient = new CodeBuddyClient(provider.apiKey, provider.defaultModel, provider.baseURL);
     return this.llmClient;
   }
 

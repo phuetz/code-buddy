@@ -33,6 +33,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'yaml';
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv, type DetectedProvider } from '../utils/provider-detector.js';
 
 import type {
   SafeMode,
@@ -678,18 +679,33 @@ export class InterpreterService extends EventEmitter {
   }
 
   private llmClient: import('../codebuddy/client.js').CodeBuddyClient | null = null;
+  private llmProvider: DetectedProvider | null = null;
 
   private async getLLMClient(): Promise<import('../codebuddy/client.js').CodeBuddyClient> {
     if (this.llmClient) return this.llmClient;
 
-    const apiKey = process.env.GROK_API_KEY;
-    if (!apiKey) {
-      throw new Error('GROK_API_KEY environment variable is required for LLM calls. Set it with: export GROK_API_KEY=your-key');
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      throw new Error('No AI provider configured for interpreter LLM calls. Run `buddy login chatgpt` or set a provider API key.');
     }
 
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
-    this.llmClient = new CodeBuddyClient(apiKey);
+    this.llmProvider = provider;
+    this.llmClient = new CodeBuddyClient(provider.apiKey, provider.defaultModel, provider.baseURL);
     return this.llmClient;
+  }
+
+  private resolveActiveModel(): string {
+    const profile = this.state.activeProfile;
+    const profileModel = profile.model;
+    const provider = this.llmProvider;
+    if (!provider) return profileModel;
+
+    if (profile.id === 'default' && profile.provider !== provider.provider) {
+      return provider.defaultModel;
+    }
+
+    return profileModel;
   }
 
   private async processMessage(message: string): Promise<ChatResult> {
@@ -721,7 +737,7 @@ export class InterpreterService extends EventEmitter {
       messages.push({ role: 'user', content: message });
 
       // Call the LLM
-      const model = this.state.activeProfile.model;
+      const model = this.resolveActiveModel();
       const response = await client.chat(messages, [], {
         model,
         temperature: this.state.activeProfile.temperature,

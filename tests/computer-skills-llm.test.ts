@@ -4,6 +4,14 @@
 
 // We mock the LLM client to avoid real API calls
 
+const providerMocks = vi.hoisted(() => ({
+  detectProviderMock: vi.fn(),
+}));
+
+vi.mock('../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.detectProviderMock,
+}));
+
 import { ComputerSkills } from '../src/interpreter/computer/skills.js';
 
 jest.mock('../src/codebuddy/client.js', () => ({
@@ -20,6 +28,13 @@ describe('ComputerSkills — LLM step', () => {
 
   beforeEach(() => {
     process.env = { ...OLD_ENV, GROK_API_KEY: 'test-key' };
+    providerMocks.detectProviderMock.mockReset();
+    providerMocks.detectProviderMock.mockReturnValue({
+      provider: 'grok',
+      apiKey: 'test-key',
+      baseURL: 'https://api.x.ai/v1',
+      defaultModel: 'grok-code-fast-1',
+    });
   });
 
   afterEach(() => {
@@ -80,14 +95,14 @@ describe('ComputerSkills — LLM step', () => {
     expect(output.content).toBe('Paris');
   });
 
-  it('throws when GROK_API_KEY is missing', async () => {
-    delete process.env.GROK_API_KEY;
+  it('throws when no provider is configured', async () => {
+    providerMocks.detectProviderMock.mockReturnValue(null);
     const skills = new ComputerSkills();
     await skills.load();
 
     const result = await skills.run('llm-ask', { prompt: 'test' });
     expect(result.success).toBe(false);
-    expect(result.error).toContain('GROK_API_KEY');
+    expect(result.error).toContain('No AI provider configured');
   });
 
   it('lists llm-ask in available skills', async () => {

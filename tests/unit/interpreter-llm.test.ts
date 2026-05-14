@@ -4,6 +4,13 @@
  * Covers processMessage(), getLLMClient(), and calculateCost()
  */
 
+const providerMocks = vi.hoisted(() => ({
+  detectProviderMock: vi.fn(),
+}));
+
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: providerMocks.detectProviderMock,
+}));
 
 // Mock the dynamic import of CodeBuddyClient
 
@@ -47,6 +54,13 @@ describe('InterpreterService LLM Integration', () => {
   beforeEach(() => {
     originalApiKey = process.env.GROK_API_KEY;
     jest.clearAllMocks();
+    providerMocks.detectProviderMock.mockReset();
+    providerMocks.detectProviderMock.mockReturnValue({
+      provider: 'grok',
+      apiKey: 'test-key-123',
+      baseURL: 'https://api.x.ai/v1',
+      defaultModel: 'grok-code-fast-1',
+    });
 
     // Create service with persistence disabled to avoid filesystem ops
     service = new InterpreterService({
@@ -68,12 +82,12 @@ describe('InterpreterService LLM Integration', () => {
   // ==========================================================================
 
   describe('processMessage()', () => {
-    it('should return error message when GROK_API_KEY is not set', async () => {
-      delete process.env.GROK_API_KEY;
+    it('should return error message when no provider is configured', async () => {
+      providerMocks.detectProviderMock.mockReturnValue(null);
 
       const result = await service.chat('Hello');
 
-      expect(result.content).toContain('GROK_API_KEY');
+      expect(result.content).toContain('No AI provider configured');
       expect(result.content).toContain('Error');
       expect(result.tokens).toEqual({ input: 0, output: 0, total: 0 });
       expect(result.cost).toBe(0);
@@ -166,6 +180,29 @@ describe('InterpreterService LLM Integration', () => {
       expect(callOptions).toEqual(
         expect.objectContaining({
           model: service.profile.model,
+        })
+      );
+    });
+
+    it('uses detected provider model when the active profile model is incompatible', async () => {
+      providerMocks.detectProviderMock.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      mockChat.mockResolvedValueOnce({
+        choices: [{ message: { content: 'chatgpt response' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+
+      await service.chat('test');
+
+      const callOptions = mockChat.mock.calls[0][2];
+      expect(callOptions).toEqual(
+        expect.objectContaining({
+          model: 'gpt-5.5',
         })
       );
     });
@@ -268,7 +305,11 @@ describe('InterpreterService LLM Integration', () => {
 
       // The CodeBuddyClient constructor should be called exactly once
       expect(CodeBuddyClient).toHaveBeenCalledTimes(1);
-      expect(CodeBuddyClient).toHaveBeenCalledWith('test-key-123');
+      expect(CodeBuddyClient).toHaveBeenCalledWith(
+        'test-key-123',
+        'grok-code-fast-1',
+        'https://api.x.ai/v1'
+      );
 
       // But chat should be called three times
       expect(mockChat).toHaveBeenCalledTimes(3);

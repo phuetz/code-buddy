@@ -9,6 +9,7 @@
 
 import * as readline from 'readline';
 import { logger } from '../../utils/logger.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 
 // ============================================
 // MCP Protocol Types
@@ -365,6 +366,16 @@ export class McpServer {
     return { completion: { values: [] } };
   }
 
+  private async createCodeBuddyClient(): Promise<import('../../codebuddy/index.js').CodeBuddyClient> {
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      throw new Error('No AI provider configured. Run `buddy login chatgpt` or set a provider API key.');
+    }
+
+    const { CodeBuddyClient } = await import('../../codebuddy/index.js');
+    return new CodeBuddyClient(provider.apiKey, provider.defaultModel, provider.baseURL);
+  }
+
   // ============================================
   // Built-in Tools Registration
   // ============================================
@@ -383,9 +394,7 @@ export class McpServer {
         required: ['prompt'],
       },
       async (args) => {
-        const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-        const apiKey = process.env.GROK_API_KEY || '';
-        const client = new CodeBuddyClient(apiKey);
+        const client = await this.createCodeBuddyClient();
 
         const userPrompt = args.context
           ? `Context:\n${args.context}\n\nQuestion: ${args.prompt}`
@@ -411,9 +420,7 @@ export class McpServer {
         required: ['code', 'language'],
       },
       async (args) => {
-        const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-        const apiKey = process.env.GROK_API_KEY || '';
-        const client = new CodeBuddyClient(apiKey);
+        const client = await this.createCodeBuddyClient();
 
         const prompt = `Complete or modify this ${args.language} code${args.instruction ? ` (${args.instruction})` : ''}:
 

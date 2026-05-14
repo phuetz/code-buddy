@@ -42,6 +42,7 @@ import { registerMemoryTools } from './mcp-memory-tools.js';
 import { registerSessionTools } from './mcp-session-tools.js';
 import { registerResources } from './mcp-resources.js';
 import { registerPrompts } from './mcp-prompts.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 
 // Read version from package.json (avoid import.meta.url for ts-jest compat)
 let packageVersion = '0.1.0';
@@ -112,21 +113,14 @@ export class CodeBuddyMCPServer {
     if (this.agentInitPromise) return this.agentInitPromise;
 
     this.agentInitPromise = (async () => {
-      // Resolve API key from env
-      const apiKey = process.env.GROK_API_KEY
-        || process.env.OPENAI_API_KEY
-        || process.env.ANTHROPIC_API_KEY
-        || '';
-
-      if (!apiKey) {
-        throw new Error('No API key found. Set GROK_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.');
+      const provider = detectProviderFromEnv();
+      if (!provider) {
+        throw new Error('No AI provider configured. Run `buddy login chatgpt` or set a provider API key.');
       }
 
       const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
-      const baseURL = process.env.GROK_BASE_URL;
-      const model = process.env.GROK_MODEL;
 
-      this.agent = new CodeBuddyAgent(apiKey, baseURL, model);
+      this.agent = new CodeBuddyAgent(provider.apiKey, provider.baseURL, provider.defaultModel);
 
       // Enable auto-approve for MCP server mode
       const { ConfirmationService } = await import('../utils/confirmation-service.js');
