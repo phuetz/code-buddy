@@ -7,6 +7,7 @@
 
 import { ZodError, ZodSchema, ZodType } from 'zod';
 import { logger } from "../logger.js";
+import { detectProviderFromEnv } from '../provider-detector.js';
 import fs from 'fs-extra';
 import * as path from 'path';
 import os from 'os';
@@ -917,10 +918,12 @@ export async function validateStartupConfigWithZod(
     }
   }
 
-  // Check for required API key
-  if (!validatedConfigs.userSettings?.apiKey && !process.env.GROK_API_KEY) {
+  // Check for provider credentials. ChatGPT OAuth is file-backed, so use
+  // the same provider detector as runtime instead of requiring GROK_API_KEY.
+  const detectedProvider = detectProviderFromEnv();
+  if (!validatedConfigs.userSettings?.apiKey && !detectedProvider?.apiKey) {
     warnings.push(
-      'No API key configured. Set GROK_API_KEY environment variable or configure apiKey in user-settings.json'
+      'No AI provider configured. Run `buddy login chatgpt`, set a provider API key, or configure apiKey in user-settings.json'
     );
   }
 
