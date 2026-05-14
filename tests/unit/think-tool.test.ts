@@ -18,6 +18,7 @@ jest.mock('../../src/codebuddy/client', () => ({
   }; }),
 }));
 
+import { CodeBuddyClient } from '../../src/codebuddy/client';
 import {
   ExtendedThinkingEngine,
   createExtendedThinkingEngine,
@@ -30,6 +31,8 @@ import {
   DEFAULT_THINKING_CONFIG,
   THINKING_DEPTH_CONFIG,
 } from '../../src/agent/thinking/types';
+
+const MockCodeBuddyClient = CodeBuddyClient as unknown as jest.Mock;
 
 describe('ExtendedThinkingEngine', () => {
   let engine: ExtendedThinkingEngine;
@@ -70,6 +73,33 @@ describe('ExtendedThinkingEngine', () => {
     it('should accept custom model in config', () => {
       const customEngine = new ExtendedThinkingEngine('key', undefined, { model: 'custom-model' });
       expect(customEngine.getConfig().model).toBe('custom-model');
+    });
+
+    it('should use the detected provider default when the target matches the active provider', () => {
+      const previousProvider = process.env.CODEBUDDY_PROVIDER;
+      const previousOpenAIKey = process.env.OPENAI_API_KEY;
+      const previousOpenAIModel = process.env.OPENAI_MODEL;
+      try {
+        process.env.CODEBUDDY_PROVIDER = 'openai';
+        process.env.OPENAI_API_KEY = 'openai-key';
+        process.env.OPENAI_MODEL = 'gpt-5.1-codex';
+        MockCodeBuddyClient.mockClear();
+
+        new ExtendedThinkingEngine('openai-key');
+
+        expect(MockCodeBuddyClient).toHaveBeenCalledWith(
+          'openai-key',
+          'gpt-5.1-codex',
+          'https://api.openai.com/v1',
+        );
+      } finally {
+        if (previousProvider === undefined) delete process.env.CODEBUDDY_PROVIDER;
+        else process.env.CODEBUDDY_PROVIDER = previousProvider;
+        if (previousOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = previousOpenAIKey;
+        if (previousOpenAIModel === undefined) delete process.env.OPENAI_MODEL;
+        else process.env.OPENAI_MODEL = previousOpenAIModel;
+      }
     });
   });
 

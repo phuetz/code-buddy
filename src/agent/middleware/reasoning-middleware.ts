@@ -17,6 +17,7 @@ import type {
 } from './types.js';
 import { getActiveThinkingMode } from '../../commands/handlers/think-handlers.js';
 import type { KnowledgeGraph } from '../../knowledge/knowledge-graph.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../../utils/provider-detector.js';
 
 // ── Complexity scoring ──────────────────────────────────────────────────
 
@@ -327,10 +328,12 @@ export class ReasoningMiddleware implements ConversationMiddleware {
 
           // Auto-enable extended thinking for complex queries
           try {
-            const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
-            if (apiKey) {
+            const provider = detectProviderFromEnv();
+            if (provider) {
               const { getExtendedThinkingEngine } = await import('../thinking/extended-thinking.js');
-              const et = getExtendedThinkingEngine(apiKey, process.env.GROK_BASE_URL);
+              const et = getExtendedThinkingEngine(provider.apiKey, provider.baseURL, {
+                model: selectModelForDetectedProvider(provider),
+              });
               et.setDepth(complexity.level === 'mcts' ? 'deep' : 'extended');
             }
           } catch { /* extended thinking module optional */ }

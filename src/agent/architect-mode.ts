@@ -3,6 +3,7 @@ import { EventEmitter } from "events";
 import { getErrorMessage } from "../types/index.js";
 import { auditLogger } from "../security/audit-logger.js";
 import { logger } from '../utils/logger.js';
+import { resolveClientTargetForDetectedProvider } from "../utils/provider-detector.js";
 
 export interface StepResult {
   step: ArchitectStep;
@@ -86,23 +87,25 @@ export class ArchitectMode extends EventEmitter {
     config: ArchitectConfig = {}
   ) {
     super();
+    const architectTarget = resolveClientTargetForDetectedProvider(apiKey, baseURL, config.architectModel, "grok-3-latest");
+    const editorTarget = resolveClientTargetForDetectedProvider(apiKey, baseURL, config.editorModel, "grok-code-fast-1");
     this.config = {
-      architectModel: config.architectModel || "grok-3-latest",
-      editorModel: config.editorModel || "grok-code-fast-1",
+      ...config,
+      architectModel: architectTarget.model,
+      editorModel: editorTarget.model,
       autoApprove: config.autoApprove || false,
       maxSteps: config.maxSteps || 20,
-      ...config,
     };
 
     this.architectClient = new CodeBuddyClient(
       apiKey,
       this.config.architectModel!,
-      baseURL
+      architectTarget.baseURL
     );
     this.editorClient = new CodeBuddyClient(
       apiKey,
       this.config.editorModel!,
-      baseURL
+      editorTarget.baseURL
     );
   }
 

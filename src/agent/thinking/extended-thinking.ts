@@ -28,6 +28,7 @@ import {
   THINKING_DEPTH_CONFIG,
   // THINKING_PROMPTS is exported from types but used internally via constants below
 } from "./types.js";
+import { resolveClientTargetForDetectedProvider } from "../../utils/provider-detector.js";
 
 /**
  * System prompts for thinking
@@ -121,10 +122,16 @@ export class ExtendedThinkingEngine extends EventEmitter {
   ) {
     super();
     this.config = { ...DEFAULT_THINKING_CONFIG, ...config };
+    const clientTarget = resolveClientTargetForDetectedProvider(
+      apiKey,
+      baseURL,
+      config.model,
+      "grok-3-latest"
+    );
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || "grok-3-latest",
-      baseURL
+      clientTarget.model,
+      clientTarget.baseURL
     );
   }
 
@@ -782,10 +789,11 @@ let thinkingEngineInstance: ExtendedThinkingEngine | null = null;
 
 export function getExtendedThinkingEngine(
   apiKey: string,
-  baseURL?: string
+  baseURL?: string,
+  config?: Partial<ThinkingConfig>
 ): ExtendedThinkingEngine {
   if (!thinkingEngineInstance) {
-    thinkingEngineInstance = createExtendedThinkingEngine(apiKey, baseURL);
+    thinkingEngineInstance = createExtendedThinkingEngine(apiKey, baseURL, config);
   }
   return thinkingEngineInstance;
 }

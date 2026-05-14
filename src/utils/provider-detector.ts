@@ -50,6 +50,52 @@ export function selectModelForDetectedProvider(
   return model;
 }
 
+export interface ClientTargetForDetectedProvider {
+  baseURL?: string;
+  model: string;
+  matchedDetectedProvider: boolean;
+}
+
+/**
+ * Resolve the model/baseURL for a caller that already has an api key and
+ * may have been handed the active provider tuple by the detection chain.
+ *
+ * This preserves explicit model choices, but replaces legacy Grok fallback
+ * defaults when the target is actually the detected non-Grok provider.
+ */
+export function resolveClientTargetForDetectedProvider(
+  apiKey: string,
+  baseURL: string | undefined,
+  configuredModel: string | undefined,
+  fallbackModel: string,
+): ClientTargetForDetectedProvider {
+  const configured = configuredModel?.trim();
+  const fallback = fallbackModel.trim();
+  const detected = detectProviderFromEnv();
+
+  if (
+    detected &&
+    apiKey === detected.apiKey &&
+    (!baseURL || trimTrailingSlashes(baseURL) === trimTrailingSlashes(detected.baseURL))
+  ) {
+    return {
+      baseURL: baseURL || detected.baseURL,
+      model: configured || selectModelForDetectedProvider(detected, fallback) || fallback,
+      matchedDetectedProvider: true,
+    };
+  }
+
+  return {
+    baseURL,
+    model: configured || fallback,
+    matchedDetectedProvider: false,
+  };
+}
+
+function trimTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
 function hasChatGptAccessToken(filePath: string): boolean {
   try {
     if (!fs.existsSync(filePath)) return false;

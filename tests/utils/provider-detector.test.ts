@@ -209,3 +209,57 @@ describe('selectModelForDetectedProvider', () => {
     }, 'grok-code-fast-1')).toBe('grok-code-fast-1');
   });
 });
+
+describe('resolveClientTargetForDetectedProvider', () => {
+  it('fills baseURL and replaces a legacy Grok fallback when the active OpenAI provider matches', async () => {
+    process.env.CODEBUDDY_PROVIDER = 'openai';
+    process.env.OPENAI_API_KEY = 'openai-key';
+    process.env.OPENAI_MODEL = 'gpt-5.1-codex';
+
+    const { resolveClientTargetForDetectedProvider } = await import('../../src/utils/provider-detector.js');
+    expect(resolveClientTargetForDetectedProvider(
+      'openai-key',
+      undefined,
+      undefined,
+      'grok-3-latest',
+    )).toEqual({
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-5.1-codex',
+      matchedDetectedProvider: true,
+    });
+  });
+
+  it('preserves an explicit model when the target matches the active provider', async () => {
+    process.env.CODEBUDDY_PROVIDER = 'openai';
+    process.env.OPENAI_API_KEY = 'openai-key';
+
+    const { resolveClientTargetForDetectedProvider } = await import('../../src/utils/provider-detector.js');
+    expect(resolveClientTargetForDetectedProvider(
+      'openai-key',
+      'https://api.openai.com/v1/',
+      'gpt-4.1',
+      'grok-3-latest',
+    )).toEqual({
+      baseURL: 'https://api.openai.com/v1/',
+      model: 'gpt-4.1',
+      matchedDetectedProvider: true,
+    });
+  });
+
+  it('keeps legacy fallback models when the provided target is not the active provider', async () => {
+    process.env.CODEBUDDY_PROVIDER = 'openai';
+    process.env.OPENAI_API_KEY = 'openai-key';
+
+    const { resolveClientTargetForDetectedProvider } = await import('../../src/utils/provider-detector.js');
+    expect(resolveClientTargetForDetectedProvider(
+      'other-key',
+      undefined,
+      undefined,
+      'grok-3-latest',
+    )).toEqual({
+      baseURL: undefined,
+      model: 'grok-3-latest',
+      matchedDetectedProvider: false,
+    });
+  });
+});

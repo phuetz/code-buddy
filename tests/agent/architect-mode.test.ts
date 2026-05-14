@@ -47,6 +47,10 @@ jest.mock("../../src/types/index.js", () => ({
   getErrorMessage: jest.fn().mockImplementation((err) => err?.message || String(err)),
 }));
 
+import { CodeBuddyClient } from "../../src/codebuddy/client.js";
+
+const MockCodeBuddyClient = CodeBuddyClient as unknown as jest.Mock;
+
 describe("ArchitectMode", () => {
   let architect: ArchitectMode;
   const apiKey = "test-api-key";
@@ -99,6 +103,40 @@ describe("ArchitectMode", () => {
       expect(config.editorModel).toBe("grok-code-latest");
       expect(config.autoApprove).toBe(true);
       expect(config.maxSteps).toBe(50);
+    });
+
+    it("should use the detected provider default for unconfigured model roles", () => {
+      const previousProvider = process.env.CODEBUDDY_PROVIDER;
+      const previousOpenAIKey = process.env.OPENAI_API_KEY;
+      const previousOpenAIModel = process.env.OPENAI_MODEL;
+      try {
+        process.env.CODEBUDDY_PROVIDER = "openai";
+        process.env.OPENAI_API_KEY = "openai-key";
+        process.env.OPENAI_MODEL = "gpt-5.1-codex";
+        MockCodeBuddyClient.mockClear();
+
+        architect = new ArchitectMode("openai-key");
+
+        expect(MockCodeBuddyClient).toHaveBeenNthCalledWith(
+          1,
+          "openai-key",
+          "gpt-5.1-codex",
+          "https://api.openai.com/v1"
+        );
+        expect(MockCodeBuddyClient).toHaveBeenNthCalledWith(
+          2,
+          "openai-key",
+          "gpt-5.1-codex",
+          "https://api.openai.com/v1"
+        );
+      } finally {
+        if (previousProvider === undefined) delete process.env.CODEBUDDY_PROVIDER;
+        else process.env.CODEBUDDY_PROVIDER = previousProvider;
+        if (previousOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = previousOpenAIKey;
+        if (previousOpenAIModel === undefined) delete process.env.OPENAI_MODEL;
+        else process.env.OPENAI_MODEL = previousOpenAIModel;
+      }
     });
   });
 
