@@ -315,7 +315,7 @@ export interface DesktopAutomationConfig {
 
 export const DEFAULT_AUTOMATION_CONFIG: DesktopAutomationConfig = {
   provider: 'native',
-  fallbackProviders: ['nutjs', 'mock'],
+  fallbackProviders: ['nutjs'],
   defaultDelays: {
     mouseMove: 100,
     keyPress: 50,

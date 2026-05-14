@@ -2,7 +2,7 @@
  * Desktop Automation Module
  *
  * Cross-platform desktop automation for mouse, keyboard, windows, and applications.
- * Supports multiple backends (robotjs, nut.js) with mock for testing.
+ * Supports multiple real backends (robotjs, nut.js, native OS providers).
  *
  * Enterprise-grade features:
  * - Smart Snapshot System for AI element references

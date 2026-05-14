@@ -292,7 +292,7 @@ describe('Desktop Automation', () => {
       });
 
       it('should register custom provider', async () => {
-        const customManager = new DesktopAutomationManager();
+        const customManager = new DesktopAutomationManager({ provider: 'mock' });
         const customProvider = new MockAutomationProvider();
 
         customManager.registerProvider(customProvider);
@@ -300,6 +300,15 @@ describe('Desktop Automation', () => {
 
         expect(customManager.getProvider()).not.toBeNull();
         await customManager.shutdown();
+      });
+
+      it('should fail fast when no real provider is available by default', async () => {
+        const unconfigured = new DesktopAutomationManager({
+          provider: 'nutjs',
+          fallbackProviders: [],
+        });
+
+        await expect(unconfigured.initialize()).rejects.toThrow('No automation provider available');
       });
 
       it('should get all provider statuses', async () => {

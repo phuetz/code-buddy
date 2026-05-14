@@ -2,7 +2,7 @@
  * Desktop Automation Manager
  *
  * Unified interface for mouse, keyboard, window, and application control.
- * Supports multiple backends (robotjs, nut.js, etc.) with mock for testing.
+ * Supports multiple real backends (robotjs, nut.js, native OS providers, etc.).
  */
 
 import { EventEmitter } from 'events';
@@ -90,7 +90,7 @@ export interface IAutomationProvider {
 }
 
 // ============================================================================
-// Mock Provider (for testing and fallback)
+// Mock Provider (explicit test harness)
 // ============================================================================
 
 export class MockAutomationProvider implements IAutomationProvider {
@@ -447,8 +447,7 @@ export class DesktopAutomationManager extends EventEmitter {
    * Initialize with the best available provider
    */
   async initialize(): Promise<void> {
-    // Register mock provider by default
-    if (!this.providers.has('mock')) {
+    if (this.shouldUseExplicitMockProvider() && !this.providers.has('mock')) {
       this.registerProvider(new MockAutomationProvider());
     }
 
@@ -478,14 +477,11 @@ export class DesktopAutomationManager extends EventEmitter {
       }
     }
 
-    // Fall back to mock
-    const mock = this.providers.get('mock');
-    if (mock) {
-      await mock.initialize();
-      this.provider = mock;
-    } else {
-      throw new Error('No automation provider available');
-    }
+    throw new Error('No automation provider available. Configure a real desktop automation provider, or explicitly select provider: "mock" only in tests.');
+  }
+
+  private shouldUseExplicitMockProvider(): boolean {
+    return this.config.provider === 'mock' || Boolean(this.config.fallbackProviders?.includes('mock'));
   }
 
   /**

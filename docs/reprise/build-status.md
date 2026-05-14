@@ -332,6 +332,9 @@ npm run build
   `mock` quand le modele local ne charge pas. L'echec est propage; l'integration
   base de donnees peut continuer sans vecteurs mais signale que les embeddings
   sont indisponibles.
+- `DesktopAutomationManager` n'enregistre plus le provider `mock` par defaut et
+  ne tombe plus dessus quand les providers reels sont absents. Le provider mock
+  reste disponible uniquement si `provider: "mock"` est demande explicitement.
 
 ## Blocage leve
 
