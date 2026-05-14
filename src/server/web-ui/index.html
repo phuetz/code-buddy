@@ -658,9 +658,9 @@
       <div class="sidebar-section">
         <div class="sidebar-section-title">Model</div>
         <select id="model-select">
-          <option value="grok-3-latest">grok-3-latest</option>
+          <option value="gpt-5.5">gpt-5.5</option>
           <option value="grok-3-fast">grok-3-fast</option>
-          <option value="grok-2-latest">grok-2-latest</option>
+          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
         </select>
       </div>
 
@@ -849,9 +849,37 @@
       }
     }
 
+    async function fetchModels() {
+      try {
+        const res = await fetch(API + '/api/chat/models');
+        const data = await res.json();
+        const models = Array.isArray(data.data) ? data.data : [];
+        if (models.length === 0) return;
+
+        const select = $('#model-select');
+        const current = select.value;
+        select.innerHTML = '';
+
+        for (const model of models) {
+          const option = document.createElement('option');
+          option.value = model.id;
+          option.textContent = model.provider ? `${model.id} (${model.provider})` : model.id;
+          select.appendChild(option);
+        }
+
+        const hasCurrent = Array.from(select.options).some((option) => option.value === current);
+        const active = models.find((model) => model.active_provider);
+        select.value = hasCurrent ? current : (active?.id || models[0].id);
+        $('#status-model').textContent = 'Model: ' + select.value;
+      } catch {
+        // Keep the static fallback options.
+      }
+    }
+
     // Poll health every 30s
     checkHealth();
     fetchToolCount();
+    fetchModels();
     setInterval(checkHealth, 30000);
 
     // =========================================================================

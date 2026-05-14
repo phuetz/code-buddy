@@ -10,6 +10,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { ChatRequest, ChatResponse, ChatStreamChunk } from '../types.js';
 import { createDetectedAgent } from '../agent-provider.js';
+import { detectProviderFromEnv, type DetectedProvider } from '../../utils/provider-detector.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 // (channels/index.ts re-exports channel classes that import BaseChannel
 // before it's fully initialized)
@@ -47,6 +48,58 @@ async function getAgent(): Promise<AgentAPI> {
 }
 
 const router = Router();
+
+type ChatModelProvider = Exclude<DetectedProvider['provider'], 'unknown'>;
+
+const CHAT_MODEL_CATALOG: Record<ChatModelProvider, { ownedBy: string; models: string[] }> = {
+  chatgpt: {
+    ownedBy: 'chatgpt',
+    models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
+  },
+  grok: {
+    ownedBy: 'xai',
+    models: ['grok-3-fast', 'grok-3-latest', 'grok-code-fast-1'],
+  },
+  openai: {
+    ownedBy: 'openai',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'],
+  },
+  anthropic: {
+    ownedBy: 'anthropic',
+    models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-haiku-20241022'],
+  },
+  gemini: {
+    ownedBy: 'google',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+  },
+  ollama: {
+    ownedBy: 'local',
+    models: ['qwen2.5-coder:7b', 'llama3.2', 'codellama'],
+  },
+};
+
+export function listChatModels(created = Date.now(), activeProvider = detectProviderFromEnv()?.provider) {
+  const providers = Object.entries(CHAT_MODEL_CATALOG) as Array<[
+    ChatModelProvider,
+    { ownedBy: string; models: string[] },
+  ]>;
+  providers.sort(([a], [b]) => {
+    if (a === activeProvider) return -1;
+    if (b === activeProvider) return 1;
+    return 0;
+  });
+
+  return providers.flatMap(([provider, spec]) =>
+    spec.models.map((id) => ({
+      id,
+      object: 'model',
+      created,
+      owned_by: spec.ownedBy,
+      provider,
+      active_provider: provider === activeProvider,
+    }))
+  );
+}
 
 /**
  * POST /api/chat
@@ -505,30 +558,9 @@ router.get(
   '/models',
   requireScope('chat'),
   asyncHandler(async (req: Request, res: Response) => {
-    const models = [
-      {
-        id: 'grok-3-latest',
-        object: 'model',
-        created: Date.now(),
-        owned_by: 'xai',
-      },
-      {
-        id: 'grok-3-fast',
-        object: 'model',
-        created: Date.now(),
-        owned_by: 'xai',
-      },
-      {
-        id: 'grok-2-latest',
-        object: 'model',
-        created: Date.now(),
-        owned_by: 'xai',
-      },
-    ];
-
     res.json({
       object: 'list',
-      data: models,
+      data: listChatModels(),
     });
   })
 );
