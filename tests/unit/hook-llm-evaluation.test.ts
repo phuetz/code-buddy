@@ -5,14 +5,6 @@
  * system invokes the LLM via CodeBuddyClient.
  */
 
-const providerMocks = vi.hoisted(() => ({
-  detectProviderMock: vi.fn(),
-}));
-
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderMock,
-}));
-
 import { SmartHookRunner, SmartHookConfig } from '../../src/hooks/smart-hooks.js';
 
 import {
@@ -47,7 +39,7 @@ jest.mock('../../src/utils/logger.js', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeChatResponse(content: string, tool_calls?: any[]) {
+function makeChatResponse(content: string, tool_calls?: unknown[]) {
   return {
     choices: [
       {
@@ -64,26 +56,43 @@ function makeChatResponse(content: string, tool_calls?: any[]) {
 // Environment save / restore
 // ---------------------------------------------------------------------------
 
-let savedApiKey: string | undefined;
+const originalEnv = process.env;
+
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CHATGPT_MODEL',
+  'CODEBUDDY_PROVIDER',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'OLLAMA_HOST',
+  'OPENAI_API_KEY',
+  'XAI_API_KEY',
+] as const;
+
+function clearProviderEnv(): void {
+  for (const key of PROVIDER_ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
+function useNoProvider(): void {
+  clearProviderEnv();
+  process.env.CODEBUDDY_PROVIDER = 'none';
+}
 
 beforeEach(() => {
-  savedApiKey = process.env.GROK_API_KEY;
   mockChat.mockReset();
-  providerMocks.detectProviderMock.mockReset();
-  providerMocks.detectProviderMock.mockReturnValue({
-    provider: 'grok',
-    apiKey: 'test-key',
-    baseURL: 'https://api.x.ai/v1',
-    defaultModel: 'grok-code-fast-1',
-  });
+  process.env = { ...originalEnv };
+  clearProviderEnv();
+  process.env.CODEBUDDY_PROVIDER = 'grok';
+  process.env.GROK_API_KEY = 'test-key';
+  process.env.GROK_MODEL = 'grok-code-fast-1';
 });
 
 afterEach(() => {
-  if (savedApiKey !== undefined) {
-    process.env.GROK_API_KEY = savedApiKey;
-  } else {
-    delete process.env.GROK_API_KEY;
-  }
+  process.env = originalEnv;
 });
 
 // ===========================================================================
@@ -140,7 +149,7 @@ describe('SmartHookRunner', () => {
     });
 
     it('should return rendered prompt when no provider is configured', async () => {
-      providerMocks.detectProviderMock.mockReturnValue(null);
+      useNoProvider();
       const result = await runner.runHook(baseHook, { command: 'rm -rf /' });
       expect(result.ok).toBe(true);
       expect(result.output).toBe('Evaluate rm -rf /');
@@ -195,7 +204,7 @@ describe('SmartHookRunner', () => {
     });
 
     it('should return rendered prompt when no provider is configured', async () => {
-      providerMocks.detectProviderMock.mockReturnValue(null);
+      useNoProvider();
       const result = await runner.runHook(baseHook, { tool: 'bash' });
       expect(result.ok).toBe(true);
       expect(result.output).toBe('You are a security guard for bash.');
@@ -325,7 +334,7 @@ describe('AdvancedHookRunner', () => {
     });
 
     it('should allow with additionalContext when no provider is configured', async () => {
-      providerMocks.detectProviderMock.mockReturnValue(null);
+      useNoProvider();
       const hook: AdvancedHook = {
         name: 'check-safety',
         event: HookEvent.PreToolUse,
@@ -410,7 +419,7 @@ describe('AdvancedHookRunner', () => {
     };
 
     it('should allow when no provider is configured', async () => {
-      providerMocks.detectProviderMock.mockReturnValue(null);
+      useNoProvider();
       const hook: AdvancedHook = {
         name: 'agent-guard',
         event: HookEvent.PreBash,
