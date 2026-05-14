@@ -420,17 +420,23 @@ the repo root is loaded at boot via `dotenv`.
 `buddy server` at boot calls `createPeerChatClientFromEnv()` which
 walks env keys in priority order:
 
-1. **`CODEBUDDY_PEER_PROVIDER`** explicit override — `ollama` |
-   `grok` | `anthropic` | `gemini` | `openai`. Skips auto-detect.
-2. **`OLLAMA_HOST`** set → Ollama (local, free). Default model
+1. **`CODEBUDDY_PEER_PROVIDER`** explicit override — `chatgpt` |
+   `ollama` | `gemini-cli` | `grok` | `anthropic` | `gemini` |
+   `openai`. Skips auto-detect.
+2. **ChatGPT Codex OAuth** (`buddy login chatgpt` or shared Codex CLI
+   login) → ChatGPT subscription. Default model `gpt-5.5`; honors
+   `CHATGPT_MODEL`.
+3. **`OLLAMA_HOST`** set → Ollama (local, free). Default model
    `qwen2.5-coder:7b`.
-3. **`GROK_API_KEY`** → xAI Grok. Default model `grok-3`. Honors
+4. **Gemini CLI** (`GEMINI_CLI_PATH` or `gemini` on PATH) → Gemini
+   subscription. Default model `gemini-3.1-pro-preview`.
+5. **`GROK_API_KEY`** → xAI Grok. Default model `grok-3`. Honors
    `GROK_BASE_URL` override.
-4. **`ANTHROPIC_API_KEY`** → Claude. Default model `claude-sonnet-4-6`.
-5. **`GOOGLE_API_KEY`** OR **`GEMINI_API_KEY`** → Gemini. Default
+6. **`ANTHROPIC_API_KEY`** → Claude. Default model `claude-sonnet-4-6`.
+7. **`GOOGLE_API_KEY`** OR **`GEMINI_API_KEY`** → Gemini. Default
    model `gemini-2.5-flash`.
-6. **`OPENAI_API_KEY`** → GPT. Default model `gpt-4o`.
-7. None → `null` (peer.chat answers `CLIENT_UNAVAILABLE`).
+8. **`OPENAI_API_KEY`** → GPT. Default model `gpt-4o`.
+9. None → `null` (peer.chat answers `CLIENT_UNAVAILABLE`).
 
 `CODEBUDDY_PEER_MODEL` overrides the default model for whichever
 provider is selected.

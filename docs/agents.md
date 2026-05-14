@@ -83,6 +83,7 @@ Implementation of the Google A2A spec for inter-agent communication:
 - **Task lifecycle**: submit, cancel, status polling
 - **Client/Server**: `A2AAgentServer` (executor callback) + `A2AAgentClient` (registry + skill discovery)
 - HTTP endpoints: `POST /api/a2a/tasks/send`, `GET /api/a2a/tasks/:id`, `POST /api/a2a/tasks/:id/cancel`
+- Inbound Code Buddy execution uses the same provider auto-detection as the CLI, including ChatGPT Codex OAuth via `buddy login chatgpt`.
 
 ## Agent Teams (Tmux)
 

@@ -6,17 +6,28 @@
  * env is empty or override is unknown.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  hasCodexCredentialsMock: vi.fn(),
+}));
+
+vi.mock('../../src/providers/codex-oauth.js', () => ({
+  hasCodexCredentials: mocks.hasCodexCredentialsMock,
+}));
 
 import {
   createPeerChatClientFromEnv,
   _getDetectionOrderForTests,
 } from '../../src/fleet/peer-chat-client-factory.js';
 
+const { hasCodexCredentialsMock } = mocks;
+
 /** Snapshot env vars we touch so each test can reset them cleanly. */
 const ENV_KEYS_TO_PRESERVE = [
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
+  'CHATGPT_MODEL',
   'OLLAMA_HOST',
   'GROK_API_KEY',
   'GROK_BASE_URL',
@@ -35,6 +46,8 @@ beforeEach(() => {
     originalEnv[key] = process.env[key];
     delete process.env[key];
   }
+  hasCodexCredentialsMock.mockReset();
+  hasCodexCredentialsMock.mockReturnValue(false);
   // Disable gemini-cli auto-detect by default so tests that don't
   // explicitly opt-in aren't influenced by a real `gemini` binary
   // installed on the test host. A non-existent path short-circuits
@@ -53,6 +66,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
   describe('detection order constant', () => {
     it('exposes the documented priority order (local first)', () => {
       expect(_getDetectionOrderForTests()).toEqual([
+        'chatgpt',
         'ollama',
         'gemini-cli',
         'grok',
@@ -87,6 +101,18 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       expect(createPeerChatClientFromEnv()).toBeNull();
     });
 
+    it('honors explicit CODEBUDDY_PEER_PROVIDER=chatgpt when Codex OAuth exists', () => {
+      process.env.OLLAMA_HOST = 'localhost:11434';
+      process.env.CODEBUDDY_PEER_PROVIDER = 'chatgpt';
+      hasCodexCredentialsMock.mockReturnValue(true);
+
+      const result = createPeerChatClientFromEnv();
+
+      expect(result).not.toBeNull();
+      expect(result!.info.provider).toBe('chatgpt');
+      expect(result!.info.model).toBe('gpt-5.5');
+    });
+
     it('returns null + warns on an unknown provider override (defensive)', () => {
       process.env.CODEBUDDY_PEER_PROVIDER = 'totally-not-a-provider';
       // Even with Gemini configured, the unknown override blocks it
@@ -96,6 +122,21 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
   });
 
   describe('auto-detection priority order', () => {
+    it('ChatGPT Codex OAuth beats ambient local/API providers once the user is logged in', () => {
+      hasCodexCredentialsMock.mockReturnValue(true);
+      process.env.OLLAMA_HOST = 'localhost:11434';
+      process.env.GROK_API_KEY = 'grok-x';
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
+      process.env.GOOGLE_API_KEY = 'AIza-x';
+      process.env.OPENAI_API_KEY = 'sk-x';
+
+      const result = createPeerChatClientFromEnv();
+
+      expect(result!.info.provider).toBe('chatgpt');
+      expect(result!.info.isLocal).toBe(false);
+      expect(result!.info.model).toBe('gpt-5.5');
+    });
+
     it('Ollama beats every cloud provider when OLLAMA_HOST is set', () => {
       process.env.OLLAMA_HOST = 'localhost:11434';
       process.env.GROK_API_KEY = 'grok-x';
@@ -183,7 +224,11 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
   });
 
   describe('isLocal flag', () => {
-    it('is true for ollama, false for every cloud provider', () => {
+    it('is true for local/subprocess providers, false for cloud providers', () => {
+      hasCodexCredentialsMock.mockReturnValue(true);
+      expect(createPeerChatClientFromEnv()!.info.isLocal).toBe(false);
+      hasCodexCredentialsMock.mockReturnValue(false);
+
       process.env.OLLAMA_HOST = 'localhost:11434';
       expect(createPeerChatClientFromEnv()!.info.isLocal).toBe(true);
 
@@ -217,6 +262,17 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       process.env.GOOGLE_API_KEY = 'x';
       const result = createPeerChatClientFromEnv();
       expect(result!.info.model).toBe('gemini-2.5-flash');
+    });
+
+    it('uses CHATGPT_MODEL as the ChatGPT subscription default before the generic peer override', () => {
+      hasCodexCredentialsMock.mockReturnValue(true);
+      process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
+      let result = createPeerChatClientFromEnv();
+      expect(result!.info.model).toBe('gpt-5.1-codex');
+
+      process.env.CODEBUDDY_PEER_MODEL = 'gpt-5.1-codex-max';
+      result = createPeerChatClientFromEnv();
+      expect(result!.info.model).toBe('gpt-5.1-codex-max');
     });
   });
 

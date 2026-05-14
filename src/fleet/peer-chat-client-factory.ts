@@ -3,17 +3,19 @@
  *
  * Builds a `CodeBuddyClient` for the `peer.chat` bridge by auto-detecting
  * which provider keys are present in the environment. The fleet can host
- * any one of: Ollama (local), Grok (xAI), Claude (Anthropic), Gemini
- * (Google), or GPT (OpenAI).
+ * any one of: ChatGPT subscription (Codex OAuth), Ollama (local),
+ * Grok (xAI), Claude (Anthropic), Gemini (Google), or GPT (OpenAI).
  *
  * Priority order (local first to spare cloud quotas):
  *   1. CODEBUDDY_PEER_PROVIDER explicit override
- *   2. OLLAMA_HOST set        → ollama (local, no cap)
- *   3. GROK_API_KEY           → grok
- *   4. ANTHROPIC_API_KEY      → anthropic
- *   5. GOOGLE_API_KEY|GEMINI_API_KEY → gemini
- *   6. OPENAI_API_KEY         → openai
- *   7. nothing                → null (peer.chat → CLIENT_UNAVAILABLE)
+ *   2. ChatGPT Codex OAuth    → chatgpt (subscription)
+ *   3. OLLAMA_HOST set        → ollama (local, no cap)
+ *   4. Gemini CLI             → gemini-cli (subscription)
+ *   5. GROK_API_KEY           → grok
+ *   6. ANTHROPIC_API_KEY      → anthropic
+ *   7. GOOGLE_API_KEY|GEMINI_API_KEY → gemini
+ *   8. OPENAI_API_KEY         → openai
+ *   9. nothing                → null (peer.chat → CLIENT_UNAVAILABLE)
  *
  * Override the model with CODEBUDDY_PEER_MODEL.
  */
@@ -21,9 +23,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CodeBuddyClient, GEMINI_CLI_SENTINEL, GEMINI_CLI_BASE_URL } from '../codebuddy/client.js';
+import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import { logger } from '../utils/logger.js';
 
 export type PeerChatProviderId =
+  | 'chatgpt'
   | 'ollama'
   | 'gemini-cli'
   | 'grok'
@@ -52,6 +56,16 @@ interface ProviderSpec {
  * `resolve()` returns non-null).
  */
 const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
+  chatgpt: {
+    id: 'chatgpt',
+    defaultModel: 'gpt-5.5',
+    defaultBaseUrl: 'https://chatgpt.com/backend-api/codex',
+    isLocal: false,
+    resolve: () => {
+      if (!hasCodexCredentials()) return null;
+      return { apiKey: 'oauth-chatgpt', baseUrl: SPECS.chatgpt.defaultBaseUrl };
+    },
+  },
   ollama: {
     id: 'ollama',
     defaultModel: 'qwen2.5-coder:7b',
@@ -134,12 +148,13 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
 };
 
-/** Detection priority: local first to spare cloud quotas.
+/** Detection priority: subscription/local first to spare API quotas.
  *
- * `gemini-cli` sits above `gemini` (API key) so a user with both will
- * always burn the Ultra subscription (zero marginal cost) before
- * tapping a paid AI Studio quota. */
+ * ChatGPT Codex OAuth and `gemini-cli` both represent subscriptions the
+ * user already pays for, so they sit above metered API-key providers.
+ */
 const AUTO_DETECT_ORDER: PeerChatProviderId[] = [
+  'chatgpt',
   'ollama',
   'gemini-cli',
   'grok',
@@ -203,7 +218,10 @@ function buildOne(id: PeerChatProviderId): { client: CodeBuddyClient; info: Peer
   const spec = SPECS[id];
   const resolved = spec.resolve();
   if (!resolved) return null;
-  const model = process.env.CODEBUDDY_PEER_MODEL || spec.defaultModel;
+  const model =
+    process.env.CODEBUDDY_PEER_MODEL ||
+    (id === 'chatgpt' ? process.env.CHATGPT_MODEL : undefined) ||
+    spec.defaultModel;
   try {
     const client = new CodeBuddyClient(resolved.apiKey, model, resolved.baseUrl);
     return {

@@ -22,8 +22,9 @@
  * Threat model (this surface):
  *   - The peer's message is treated as a normal user prompt; prompt
  *     injection is possible but bounded by the read-only tool list.
- *   - GROK_API_KEY is shared with the local user — A2A traffic counts
- *     against the same provider quota. Per-peer cost quotas live in V2.
+ *   - The auto-detected local provider is shared with the local user —
+ *     A2A traffic counts against the same subscription/quota. Per-peer
+ *     cost quotas live in V2.
  *   - Rate limiting is enforced at the route level (see
  *     `src/server/routes/a2a-protocol.ts`), not here.
  *
@@ -39,6 +40,7 @@ import type {
 import { getToolRegistry } from '../../tools/registry.js';
 import { getFormalToolRegistry } from '../../tools/registry/tool-registry.js';
 import { logger } from '../../utils/logger.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import {
   TaskStatus,
   type Task,
@@ -91,11 +93,15 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
       return failTask(task, 'Empty user message');
     }
 
-    // Provider credentials. We deliberately fail closed if missing rather
-    // than fall through to a default that might surface partial answers.
-    const apiKey = process.env.GROK_API_KEY ?? '';
-    if (!apiKey) {
-      return failTask(task, 'Provider API key not configured (GROK_API_KEY)');
+    // Provider credentials. Use the same auto-detection path as the CLI
+    // (including ChatGPT Codex OAuth), but still fail closed if nothing
+    // is configured rather than surfacing partial answers.
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      return failTask(
+        task,
+        'Provider credentials not configured (run `buddy login chatgpt` or set a provider API key)',
+      );
     }
 
     // Fleet-safe tool list — the security boundary. If the legacy
@@ -110,9 +116,9 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
     }
 
     const client = new CodeBuddyClient(
-      apiKey,
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL ?? 'grok-3-latest'
+      provider.apiKey,
+      provider.defaultModel,
+      provider.baseURL
     );
 
     const messages: CodeBuddyMessage[] = [

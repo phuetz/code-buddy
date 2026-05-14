@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   formalExecuteMock: vi.fn(),
   fleetSafeListMock: vi.fn(),
   isFleetSafeMock: vi.fn(),
+  detectProviderMock: vi.fn(),
+  clientConstructorMock: vi.fn(),
   loggerInfoMock: vi.fn(),
   loggerWarnMock: vi.fn(),
 }));
@@ -26,6 +28,10 @@ vi.mock('../../src/codebuddy/client.js', async () => {
   // Use a real class so `new CodeBuddyClient(...)` in the executor works.
   // vi.fn().mockImplementation(...) doesn't always behave correctly with `new`.
   class MockCodeBuddyClient {
+    constructor(apiKey: string, model?: string, baseURL?: string) {
+      mocks.clientConstructorMock(apiKey, model, baseURL);
+    }
+
     chat = mocks.chatMock;
   }
   return {
@@ -45,6 +51,10 @@ vi.mock('../../src/tools/registry.js', () => ({
   }),
 }));
 
+vi.mock('../../src/utils/provider-detector.js', () => ({
+  detectProviderFromEnv: mocks.detectProviderMock,
+}));
+
 vi.mock('../../src/utils/logger.js', () => ({
   logger: {
     info: mocks.loggerInfoMock,
@@ -59,6 +69,8 @@ const {
   formalExecuteMock,
   fleetSafeListMock,
   isFleetSafeMock,
+  detectProviderMock,
+  clientConstructorMock,
   loggerInfoMock,
   loggerWarnMock,
 } = mocks;
@@ -93,11 +105,18 @@ describe('A2A inbound TaskExecutor', () => {
     formalExecuteMock.mockReset();
     fleetSafeListMock.mockReset();
     isFleetSafeMock.mockReset();
+    detectProviderMock.mockReset();
+    clientConstructorMock.mockReset();
     loggerInfoMock.mockReset();
     loggerWarnMock.mockReset();
 
-    // Default: GROK_API_KEY present, fleet list non-empty.
-    process.env.GROK_API_KEY = 'test-key';
+    // Default: provider auto-detect succeeds, fleet list non-empty.
+    detectProviderMock.mockReturnValue({
+      provider: 'grok',
+      apiKey: 'test-key',
+      baseURL: 'https://api.x.ai/v1',
+      defaultModel: 'grok-3-latest',
+    });
     fleetSafeListMock.mockReturnValue([SAFE_TOOL]);
     isFleetSafeMock.mockImplementation((name: string) => name === 'view_file');
   });
@@ -125,8 +144,41 @@ describe('A2A inbound TaskExecutor', () => {
     expect(reply).toBeDefined();
     expect((reply!.parts[0] as { text: string }).text).toBe('Hello peer');
     expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(clientConstructorMock).toHaveBeenCalledWith(
+      'test-key',
+      'grok-3-latest',
+      'https://api.x.ai/v1',
+    );
     // Fleet-safe tool list was passed to the LLM.
     expect(chatMock.mock.calls[0]?.[1]).toEqual([SAFE_TOOL]);
+  });
+
+  it('uses ChatGPT Codex OAuth when provider auto-detection resolves chatgpt', async () => {
+    detectProviderMock.mockReturnValueOnce({
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    });
+    chatMock.mockResolvedValueOnce({
+      choices: [
+        {
+          message: { role: 'assistant', content: 'Bonjour peer', tool_calls: undefined },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    });
+
+    const executor = createCodeBuddyTaskExecutor();
+    const task = await executor(makeTask('dis bonjour'));
+
+    expect(task.status.status).toBe(TaskStatus.COMPLETED);
+    expect(clientConstructorMock).toHaveBeenCalledWith(
+      'oauth-chatgpt',
+      'gpt-5.5',
+      'https://chatgpt.com/backend-api/codex',
+    );
   });
 
   it('tool dispatch: LLM requests tool, executor runs it and feeds result back', async () => {
@@ -295,8 +347,8 @@ describe('A2A inbound TaskExecutor', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
-  it('fails closed: missing GROK_API_KEY rejects task before LLM call', async () => {
-    delete process.env.GROK_API_KEY;
+  it('fails closed: missing provider credentials rejects task before LLM call', async () => {
+    detectProviderMock.mockReturnValueOnce(null);
 
     const executor = createCodeBuddyTaskExecutor();
     const task = await executor(makeTask('any task'));
@@ -338,8 +390,8 @@ describe('A2A inbound TaskExecutor', () => {
   // ─── V1.0 audit follow-ups (M1) ──────────────────────────────────────────
 
   describe('error paths (V1.0 audit)', () => {
-    it('fails closed when GROK_API_KEY is missing', async () => {
-      delete process.env.GROK_API_KEY;
+    it('fails closed when provider auto-detection returns null', async () => {
+      detectProviderMock.mockReturnValueOnce(null);
       const executor = createCodeBuddyTaskExecutor();
       const task = await executor(makeTask('anything'));
       expect(task.status.status).toBe(TaskStatus.FAILED);
