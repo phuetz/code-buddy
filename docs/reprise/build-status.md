@@ -302,6 +302,9 @@ npm run build
 - `buddy nodes invoke` ne renvoie plus un succes `dispatched` sans transport
   compagnon branche. Une invocation de node valide mais non cablee echoue
   maintenant explicitement au lieu de masquer l'absence de WebSocket/device.
+- Le service de localisation ne renvoie plus Paris comme fausse geolocalisation
+  IP par defaut. La source `ip` exige maintenant `ipGeoApiUrl`; `gps` et
+  `network` echouent explicitement tant qu'ils ne sont pas implementes.
 
 ## Blocage leve
 

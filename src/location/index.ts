@@ -187,6 +187,32 @@ function toDegrees(radians: number): number {
   return radians * (180 / Math.PI);
 }
 
+function readNumber(data: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+function readString(data: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
 /**
  * Format coordinates as string
  */
@@ -311,9 +337,13 @@ export class LocationService extends EventEmitter {
             throw new Error('No cached location available');
           }
           break;
+        case 'gps':
+        case 'network':
+          throw new Error(`${source} location source is not implemented`);
+        case 'mock':
+          throw new Error('Mock location source requires setMockLocation()');
         default:
-          // For GPS/network, fall back to IP in mock implementation
-          location = await this.getLocationByIP();
+          throw new Error(`Unsupported location source: ${source}`);
       }
 
       // Reverse geocode if enabled
@@ -342,22 +372,42 @@ export class LocationService extends EventEmitter {
   }
 
   /**
-   * Get location by IP (mock implementation)
+   * Get location by IP.
    */
   private async getLocationByIP(): Promise<GeoLocation> {
-    // Mock IP geolocation response
-    // In real implementation, this would call an IP geolocation API
-    await new Promise(resolve => setTimeout(resolve, 50));
+    if (!this.config.ipGeoApiUrl) {
+      throw new Error('IP geolocation requires ipGeoApiUrl configuration');
+    }
 
-    return this.createLocation(
-      {
-        latitude: 48.8566,
-        longitude: 2.3522,
-        accuracy: 1000, // 1km accuracy for IP-based
-      },
-      'ip',
-      'Paris, France'
-    );
+    const response = await fetch(this.config.ipGeoApiUrl);
+    if (!response.ok) {
+      throw new Error(`IP geolocation request failed: HTTP ${response.status}`);
+    }
+
+    const data = await response.json() as Record<string, unknown>;
+    const latitude = readNumber(data, ['latitude', 'lat']);
+    const longitude = readNumber(data, ['longitude', 'lon', 'lng']);
+
+    if (latitude === undefined || longitude === undefined) {
+      throw new Error('IP geolocation response missing latitude/longitude');
+    }
+
+    const city = readString(data, ['city', 'locality']);
+    const country = readString(data, ['country', 'country_name']);
+    const countryCode = readString(data, ['countryCode', 'country_code']);
+    const accuracy = readNumber(data, ['accuracy', 'accuracyRadius', 'accuracy_radius']);
+    const name = [city, country].filter(Boolean).join(', ') || undefined;
+
+    const location = this.createLocation({ latitude, longitude, accuracy }, 'ip', name);
+    if (city || country || countryCode) {
+      location.address = {
+        city,
+        country,
+        countryCode,
+        formatted: name,
+      };
+    }
+    return location;
   }
 
   /**
@@ -380,23 +430,6 @@ export class LocationService extends EventEmitter {
    * Reverse geocode coordinates to address
    */
   private async reverseGeocode(location: GeoLocation): Promise<AddressComponents | undefined> {
-    // Mock reverse geocoding
-    // In real implementation, this would call a geocoding API
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // Return mock address based on known locations
-    if (Math.abs(location.latitude - 48.8566) < 0.1 &&
-        Math.abs(location.longitude - 2.3522) < 0.1) {
-      return {
-        city: 'Paris',
-        state: 'Île-de-France',
-        country: 'France',
-        countryCode: 'FR',
-        postalCode: '75001',
-        formatted: 'Paris, France',
-      };
-    }
-
     return {
       formatted: `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`,
     };
@@ -407,12 +440,13 @@ export class LocationService extends EventEmitter {
    */
   private getTimezone(location: GeoLocation): TimezoneInfo {
     // Simple timezone estimation based on longitude
-    // Real implementation would use a timezone database
     const offsetHours = Math.round(location.longitude / 15);
+    const sign = offsetHours >= 0 ? '+' : '-';
+    const absoluteOffset = Math.abs(offsetHours);
 
     return {
-      id: 'Europe/Paris', // Mock
-      abbreviation: 'CET',
+      id: `UTC${sign}${absoluteOffset}`,
+      abbreviation: `UTC${sign}${absoluteOffset}`,
       offsetMinutes: offsetHours * 60,
       isDST: false,
     };

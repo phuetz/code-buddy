@@ -2,6 +2,7 @@
  * Location Service Tests
  */
 
+import { vi } from 'vitest';
 import {
   LocationService,
   getLocationService,
@@ -156,12 +157,33 @@ describe('LocationService', () => {
     service = new LocationService({
       cacheEnabled: false,
       reverseGeocode: false,
+      ipGeoApiUrl: 'https://geo.example.test/json',
     });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            latitude: 48.8566,
+            longitude: 2.3522,
+            city: 'Paris',
+            country: 'France',
+            countryCode: 'FR',
+            accuracy: 1000,
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
+      )
+    );
   });
 
   afterEach(() => {
     service.shutdown();
     resetLocationService();
+    vi.unstubAllGlobals();
   });
 
   describe('Configuration', () => {
@@ -187,6 +209,17 @@ describe('LocationService', () => {
       expect(location.longitude).toBeDefined();
       expect(location.timestamp).toBeInstanceOf(Date);
       expect(location.source).toBe('ip');
+    });
+
+    it('should fail IP location when no geolocation URL is configured', async () => {
+      const noIpService = new LocationService({
+        cacheEnabled: false,
+        reverseGeocode: false,
+      });
+
+      await expect(noIpService.getCurrentLocation()).rejects.toThrow(
+        'IP geolocation requires ipGeoApiUrl configuration'
+      );
     });
 
     it('should use mock location', async () => {
