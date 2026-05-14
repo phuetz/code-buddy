@@ -16,7 +16,7 @@ describe('Screen Capture', () => {
 
   beforeEach(() => {
     resetCaptureManager();
-    manager = new CaptureManager();
+    manager = new CaptureManager({ backend: 'memory' });
   });
 
   afterEach(() => {
@@ -27,6 +27,12 @@ describe('Screen Capture', () => {
   });
 
   describe('Display Discovery', () => {
+    it('should fail fast without an explicit memory backend', async () => {
+      const nativeManager = new CaptureManager();
+
+      await expect(nativeManager.getDisplays()).rejects.toThrow('Display discovery backend is not implemented');
+    });
+
     it('should list displays', async () => {
       const displays = await manager.getDisplays();
 
@@ -82,6 +88,12 @@ describe('Screen Capture', () => {
   });
 
   describe('Screenshot', () => {
+    it('should fail fast without an explicit memory backend', async () => {
+      const nativeManager = new CaptureManager();
+
+      await expect(nativeManager.takeScreenshot()).rejects.toThrow('Screen capture backend is not implemented');
+    });
+
     it('should take screenshot', async () => {
       const result = await manager.takeScreenshot();
 
@@ -155,6 +167,13 @@ describe('Screen Capture', () => {
   });
 
   describe('Recording', () => {
+    it('should fail fast without an explicit memory backend', async () => {
+      const nativeManager = new CaptureManager();
+
+      await expect(nativeManager.startRecording({ path: '/tmp/test.mp4' }))
+        .rejects.toThrow('Screen recording backend is not implemented');
+    });
+
     it('should start and stop recording', async () => {
       await manager.startRecording({ path: '/tmp/test.mp4' });
 

@@ -317,6 +317,10 @@ npm run build
   `connect`; le transport memoire doit etre demande explicitement par
   `transport: "memory"` pour les tests. Les webhooks email passent maintenant
   par `fetch` par defaut et exposent une injection explicite pour les tests.
+- Le module `screen-capture` ne fabrique plus des captures/ecrans et
+  enregistrements factices par defaut. Le backend natif echoue clairement tant
+  qu'il n'est pas implemente; le backend memoire est maintenant explicite via
+  `backend: "memory"` dans les tests.
 
 ## Blocage leve
 

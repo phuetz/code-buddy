@@ -2,8 +2,9 @@
  * Screen Capture Manager
  *
  * Manages screenshot and recording operations.
- * Note: This is a mock implementation. Real implementation would use
- * native modules or external tools like ffmpeg, scrot, etc.
+ * Native capture/recording backends are not wired here yet. The built-in
+ * `memory` backend is an explicit test harness and is never selected by
+ * default.
  */
 
 import { EventEmitter } from 'events';
@@ -40,11 +41,12 @@ export class CaptureManager extends EventEmitter {
   constructor(config: Partial<ScreenCaptureConfig> = {}) {
     super();
     this.config = { ...DEFAULT_SCREEN_CAPTURE_CONFIG, ...config };
-    this.initializeMockData();
+    if (this.config.backend === 'memory') {
+      this.initializeMemoryData();
+    }
   }
 
-  private initializeMockData(): void {
-    // Mock displays
+  private initializeMemoryData(): void {
     this.displays = [
       {
         id: 'display-1',
@@ -64,7 +66,6 @@ export class CaptureManager extends EventEmitter {
       },
     ];
 
-    // Mock windows
     this.windows = [
       {
         id: 'window-1',
@@ -95,6 +96,7 @@ export class CaptureManager extends EventEmitter {
    * Get all available displays
    */
   async getDisplays(): Promise<DisplayInfo[]> {
+    this.ensureMemoryBackend('Display discovery');
     return [...this.displays];
   }
 
@@ -102,6 +104,7 @@ export class CaptureManager extends EventEmitter {
    * Get primary display
    */
   async getPrimaryDisplay(): Promise<DisplayInfo | undefined> {
+    this.ensureMemoryBackend('Display discovery');
     return this.displays.find(d => d.isPrimary);
   }
 
@@ -109,6 +112,7 @@ export class CaptureManager extends EventEmitter {
    * Get display by ID
    */
   async getDisplay(id: string): Promise<DisplayInfo | undefined> {
+    this.ensureMemoryBackend('Display discovery');
     return this.displays.find(d => d.id === id);
   }
 
@@ -116,6 +120,7 @@ export class CaptureManager extends EventEmitter {
    * Get all windows
    */
   async getWindows(): Promise<WindowInfo[]> {
+    this.ensureMemoryBackend('Window discovery');
     return [...this.windows].filter(w => w.isVisible && !w.isMinimized);
   }
 
@@ -123,6 +128,7 @@ export class CaptureManager extends EventEmitter {
    * Get window by ID
    */
   async getWindow(id: string): Promise<WindowInfo | undefined> {
+    this.ensureMemoryBackend('Window discovery');
     return this.windows.find(w => w.id === id);
   }
 
@@ -130,6 +136,7 @@ export class CaptureManager extends EventEmitter {
    * Find windows by title pattern
    */
   async findWindows(titlePattern: string | RegExp): Promise<WindowInfo[]> {
+    this.ensureMemoryBackend('Window discovery');
     const pattern = typeof titlePattern === 'string'
       ? new RegExp(titlePattern, 'i')
       : titlePattern;
@@ -154,6 +161,8 @@ export class CaptureManager extends EventEmitter {
     this.emit('screenshot-start', fullOptions);
 
     try {
+      this.ensureMemoryBackend('Screen capture');
+
       // Delay if specified
       if (fullOptions.delayMs && fullOptions.delayMs > 0) {
         await new Promise(resolve => setTimeout(resolve, fullOptions.delayMs));
@@ -162,8 +171,7 @@ export class CaptureManager extends EventEmitter {
       // Determine capture region
       const region = await this.resolveRegion(fullOptions);
 
-      // Generate mock image data
-      const imageData = this.generateMockImage(region, fullOptions);
+      const imageData = this.generateMemoryImage(region, fullOptions);
 
       // Generate file path if not specified
       const filePath = fullOptions.path || this.generateFilePath('screenshot', fullOptions.format || 'png');
@@ -233,6 +241,8 @@ export class CaptureManager extends EventEmitter {
       throw new Error('Recording already in progress');
     }
 
+    this.ensureMemoryBackend('Screen recording');
+
     const fullOptions: RecordingOptions = {
       ...DEFAULT_RECORDING_OPTIONS,
       ...this.config.recordingDefaults,
@@ -255,7 +265,6 @@ export class CaptureManager extends EventEmitter {
       interval: null,
     };
 
-    // Simulate frame capture
     const fps = fullOptions.fps || 30;
     const frameInterval = Math.floor(1000 / fps);
 
@@ -263,7 +272,7 @@ export class CaptureManager extends EventEmitter {
       if (this.recording?.state === 'recording') {
         this.recording.frameCount++;
 
-        // Randomly drop some frames for realism
+        // Keep the memory backend close to recorder status semantics.
         if (Math.random() < 0.01) {
           this.recording.droppedFrames++;
         }
@@ -343,7 +352,7 @@ export class CaptureManager extends EventEmitter {
       durationMs,
       frameCount: recording.frameCount,
       avgFps: durationMs > 0 ? (recording.frameCount / durationMs) * 1000 : 0,
-      size: Math.floor(recording.frameCount * 10000), // Mock file size
+      size: Math.floor(recording.frameCount * 10000),
       startedAt: recording.startedAt,
       endedAt,
       source: {
@@ -451,20 +460,24 @@ export class CaptureManager extends EventEmitter {
     return primary?.bounds || { x: 0, y: 0, width: 1920, height: 1080 };
   }
 
-  private generateMockImage(region: CaptureRegion, options: ScreenshotOptions): Buffer {
-    // Generate a minimal PNG/JPEG header + mock data
+  private generateMemoryImage(region: CaptureRegion, options: ScreenshotOptions): Buffer {
     const width = Math.floor(region.width * (options.scale || 1));
     const height = Math.floor(region.height * (options.scale || 1));
 
-    // Just return some bytes representing the image size
-    // In a real implementation, this would be actual image data
     const size = Math.floor(width * height * 3 * ((options.quality || 90) / 100));
-    const buffer = Buffer.alloc(Math.min(size, 1024 * 1024)); // Cap at 1MB for mock
+    const buffer = Buffer.alloc(Math.min(size, 1024 * 1024));
 
-    // Fill with random data to simulate image
     crypto.randomFillSync(buffer);
 
     return buffer;
+  }
+
+  private ensureMemoryBackend(operation: string): void {
+    if (this.config.backend !== 'memory') {
+      throw new Error(
+        `${operation} backend is not implemented. Configure a native backend before using screen capture, or use backend: "memory" only in tests.`
+      );
+    }
   }
 
   private generateFilePath(type: string, format: string): string {

@@ -8,6 +8,7 @@
 export type {
   CaptureType,
   CaptureSource,
+  ScreenCaptureBackend,
   CaptureRegion,
   DisplayInfo,
   WindowInfo,

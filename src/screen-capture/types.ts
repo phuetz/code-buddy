@@ -10,6 +10,7 @@
 
 export type CaptureType = 'screenshot' | 'recording';
 export type CaptureSource = 'screen' | 'window' | 'region' | 'display';
+export type ScreenCaptureBackend = 'native' | 'memory';
 
 export interface CaptureRegion {
   /** X coordinate */
@@ -221,6 +222,8 @@ export interface RecordingStatus {
 // ============================================================================
 
 export interface ScreenCaptureConfig {
+  /** Capture backend. `memory` is an explicit test harness. */
+  backend: ScreenCaptureBackend;
   /** Default screenshot options */
   screenshotDefaults: Partial<ScreenshotOptions>;
   /** Default recording options */
@@ -236,6 +239,7 @@ export interface ScreenCaptureConfig {
 }
 
 export const DEFAULT_SCREEN_CAPTURE_CONFIG: ScreenCaptureConfig = {
+  backend: 'native',
   screenshotDefaults: DEFAULT_SCREENSHOT_OPTIONS,
   recordingDefaults: DEFAULT_RECORDING_OPTIONS,
   outputDir: './captures',
