@@ -1034,8 +1034,102 @@ export class CodeBuddyAgent extends BaseAgent {
     }
   }
 
-  protected async executeTool(toolCall: CodeBuddyToolCall): Promise<ToolResult> {
+  async processUserInput(input: string, options: Record<string, unknown> = {}): Promise<{
+    content: string;
+    finishReason: 'stop';
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+    toolCalls: Array<{ name: string; id: string; success?: boolean; output?: string; error?: string; executionTime?: number }>;
+    cost: number;
+  }> {
+    const previousModel = this.applyRequestModelOverride(options.model);
+
+    try {
+      const entries = await this.processUserMessage(input);
+      const assistantEntries = entries.filter(entry => entry.type === 'assistant');
+      const content = assistantEntries.map(entry => entry.content).join('\n').trim();
+
+      return {
+        content,
+        finishReason: 'stop',
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        toolCalls: entries
+          .filter(entry => entry.type === 'tool_result')
+          .map((entry, index) => ({
+            name: entry.toolCall?.function.name ?? 'unknown',
+            id: entry.toolCall?.id ?? `tool_result_${index}`,
+            success: entry.toolResult?.success,
+            output: entry.toolResult?.output,
+            error: entry.toolResult?.error,
+            executionTime: 0,
+          })),
+        cost: this.sessionCost,
+      };
+    } finally {
+      this.restoreRequestModelOverride(previousModel);
+    }
+  }
+
+  async *streamResponse(input: string, options: Record<string, unknown> = {}): AsyncGenerator<{
+    choices?: Array<{ delta?: { content?: string } }>;
+  }, void, unknown> {
+    const previousModel = this.applyRequestModelOverride(options.model);
+
+    try {
+      for await (const chunk of this.processUserMessageStream(input)) {
+        if (chunk.type === 'content' && chunk.content) {
+          yield {
+            choices: [{ delta: { content: chunk.content } }],
+          };
+        }
+      }
+    } finally {
+      this.restoreRequestModelOverride(previousModel);
+    }
+  }
+
+  async executeTool(toolCall: CodeBuddyToolCall): Promise<ToolResult>;
+  async executeTool(name: string, params: Record<string, unknown>): Promise<ToolResult>;
+  async executeTool(
+    toolCallOrName: CodeBuddyToolCall | string,
+    params: Record<string, unknown> = {}
+  ): Promise<ToolResult> {
+    const toolCall = typeof toolCallOrName === 'string'
+      ? {
+          id: `server_tool_${Date.now()}`,
+          type: 'function' as const,
+          function: {
+            name: toolCallOrName,
+            arguments: JSON.stringify(params),
+          },
+        }
+      : toolCallOrName;
+
     return this.toolHandler.executeTool(toolCall);
+  }
+
+  getModel(): string {
+    return this.getCurrentModel();
+  }
+
+  private applyRequestModelOverride(model: unknown): string | null {
+    if (typeof model !== 'string' || model.trim().length === 0) {
+      return null;
+    }
+
+    const requestedModel = model.trim();
+    const currentModel = this.getCurrentModel();
+    if (requestedModel === currentModel) {
+      return null;
+    }
+
+    this.setModel(requestedModel);
+    return currentModel;
+  }
+
+  private restoreRequestModelOverride(previousModel: string | null): void {
+    if (previousModel && this.getCurrentModel() !== previousModel) {
+      this.setModel(previousModel);
+    }
   }
 
   isAutoRepairEnabled(): boolean {

@@ -23,9 +23,21 @@ async function getEnqueueMessage() {
 }
 
 // Agent interface for WebSocket handler
-// Note: These methods don't exist in CodeBuddyAgent - this is a placeholder for future API alignment
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AgentInstance = any;
+interface AgentInstance {
+  processUserInput(message: string, options?: Record<string, unknown>): Promise<{
+    content?: string;
+    finishReason?: string;
+    usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  }>;
+  streamResponse(message: string, options?: Record<string, unknown>): AsyncIterable<{
+    choices?: Array<{ delta?: { content?: string } }>;
+  }>;
+  executeTool(name: string, parameters: Record<string, unknown>): Promise<{
+    success: boolean;
+    output?: string;
+    error?: string;
+  }>;
+}
 
 // Rate limit configuration
 const RATE_LIMITS = {
@@ -75,6 +87,28 @@ const messageHandlers = new Map<string, MessageHandler>();
 interface AuthPayload { token?: string; apiKey?: string }
 interface ChatPayload { message?: string; model?: string; stream?: boolean; sessionId?: string }
 interface ToolPayload { name?: string; parameters?: Record<string, unknown> }
+
+async function ensureAgent(state: ConnectionState, model?: string): Promise<AgentInstance> {
+  if (!state.agent) {
+    if (!state.agentInitializing) {
+      state.agentInitializing = (async () => {
+        try {
+          state.agent = await createDetectedAgent(model);
+        } catch (err) {
+          state.agentInitializing = undefined;
+          throw err;
+        }
+      })();
+    }
+    await state.agentInitializing;
+  }
+
+  if (!state.agent) {
+    throw new Error('Agent initialization failed');
+  }
+
+  return state.agent;
+}
 
 /**
  * Generate connection ID
@@ -221,20 +255,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
   }
 
   try {
-    // Lazy load agent (with mutex to prevent duplicate creation)
-    if (!state.agent) {
-      if (!state.agentInitializing) {
-        state.agentInitializing = (async () => {
-          try {
-            state.agent = await createDetectedAgent(model);
-          } catch (err) {
-            state.agentInitializing = undefined;
-            throw err;
-          }
-        })();
-      }
-      await state.agentInitializing;
-    }
+    const agent = await ensureAgent(state, model);
 
     if (stream) {
       state.streaming = true;
@@ -247,7 +268,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         timestamp: new Date().toISOString(),
       });
 
-      const streamGen = await state.agent.streamResponse(message, { model });
+      const streamGen = await agent.streamResponse(message, { model });
 
       for await (const chunk of streamGen) {
         if (!state.streaming) break;
@@ -273,7 +294,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       state.streaming = false;
     } else {
       // Non-streaming response
-      const result = await state.agent.processUserInput(message, { model });
+      const result = await agent.processUserInput(message, { model });
 
       send(ws, {
         type: 'chat_response',
@@ -353,21 +374,9 @@ messageHandlers.set('execute_tool', async (ws, state, payload) => {
   }
 
   try {
-    if (!state.agent) {
-      if (!state.agentInitializing) {
-        state.agentInitializing = (async () => {
-          try {
-            state.agent = await createDetectedAgent();
-          } catch (err) {
-            state.agentInitializing = undefined;
-            throw err;
-          }
-        })();
-      }
-      await state.agentInitializing;
-    }
+    const agent = await ensureAgent(state);
 
-    const result = await state.agent.executeTool(name, parameters || {});
+    const result = await agent.executeTool(name, parameters || {});
 
     send(ws, {
       type: 'tool_result',

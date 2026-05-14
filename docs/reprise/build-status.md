@@ -355,6 +355,9 @@ npm run build
 - Les adapters niche Twitch/Tlon/Gmail ne renvoient plus de succes reseau
   factice. L'envoi de message et le watch Gmail exigent maintenant des clients
   reels injectes explicitement.
+- `CodeBuddyAgent` expose maintenant la facade serveur reelle attendue par les
+  routes HTTP/WebSocket (`processUserInput`, `streamResponse`,
+  `executeTool(name, params)`, `getModel`) au lieu d'un alignement `any` futur.
 
 ## Blocage leve
 
