@@ -5,6 +5,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 
 // ============================================================================
 // Types
@@ -74,8 +75,9 @@ export class AgentSDK {
   private client: SDKClient | null = null;
 
   constructor(config: AgentSDKConfig = {}) {
+    const provider = detectProviderFromEnv();
     this.config = {
-      model: config.model ?? 'grok-3-mini',
+      model: selectModelForDetectedProvider(provider, config.model ?? 'grok-3-mini') ?? 'grok-3-mini',
       tools: config.tools ?? [],
       maxTurns: config.maxTurns ?? 10,
       systemPrompt: config.systemPrompt ?? 'You are a helpful coding assistant.',
@@ -187,13 +189,17 @@ export class AgentSDK {
       return this.client;
     }
 
-    const apiKey = process.env.GROK_API_KEY?.trim();
-    if (!apiKey) {
+    const provider = detectProviderFromEnv();
+    if (!provider) {
       return null;
     }
 
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
-    this.client = new CodeBuddyClient(apiKey, this.config.model) as SDKClient;
+    this.client = new CodeBuddyClient(
+      provider.apiKey,
+      selectModelForDetectedProvider(provider, this.config.model),
+      provider.baseURL,
+    ) as SDKClient;
     return this.client;
   }
 

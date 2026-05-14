@@ -40,6 +40,7 @@ import { gatherCompletionContext } from './context-gatherer.js';
 import { AICompletionProvider } from './ai-completion-provider.js';
 import type { AICompletionConfig } from './ai-completion-provider.js';
 import { registerInlineCompletionHandler } from './inline-completion-handler.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
@@ -87,6 +88,34 @@ const aiCompletionProvider = new AICompletionProvider(
   defaultSettings.aiCompletion,
 );
 
+function createConfiguredClient(): CodeBuddyClient | null {
+  if (globalSettings.apiKey) {
+    return new CodeBuddyClient(globalSettings.apiKey, globalSettings.model);
+  }
+
+  const provider = detectProviderFromEnv();
+  if (!provider) {
+    return null;
+  }
+
+  return new CodeBuddyClient(
+    provider.apiKey,
+    selectModelForDetectedProvider(provider, globalSettings.model),
+    provider.baseURL,
+  );
+}
+
+function initializeCodeBuddyClient(): void {
+  codebuddyClient = createConfiguredClient();
+  if (codebuddyClient) {
+    aiCompletionProvider.setClient(codebuddyClient);
+    logger.info('Code Buddy client initialized');
+  } else {
+    aiCompletionProvider.setClient(null);
+    logger.warn('No AI provider configured');
+  }
+}
+
 connection.onInitialize((_params: InitializeParams): InitializeResult => {
   logger.info('Code Buddy LSP server initializing...');
 
@@ -119,15 +148,7 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => {
 connection.onInitialized(() => {
   logger.info('Code Buddy LSP server initialized');
 
-  // Initialize Code Buddy client with API key
-  const apiKey = process.env.GROK_API_KEY || globalSettings.apiKey;
-  if (apiKey) {
-    codebuddyClient = new CodeBuddyClient(apiKey, globalSettings.model);
-    aiCompletionProvider.setClient(codebuddyClient);
-    logger.info('Code Buddy client initialized');
-  } else {
-    logger.warn('No API key configured');
-  }
+  initializeCodeBuddyClient();
 
   // Update AI completion config from settings
   if (globalSettings.aiCompletion) {
@@ -146,11 +167,7 @@ connection.onDidChangeConfiguration((change) => {
   };
 
   // Reinitialize client
-  const apiKey = process.env.GROK_API_KEY || globalSettings.apiKey;
-  if (apiKey) {
-    codebuddyClient = new CodeBuddyClient(apiKey, globalSettings.model);
-    aiCompletionProvider.setClient(codebuddyClient);
-  }
+  initializeCodeBuddyClient();
 
   // Update AI completion config
   if (globalSettings.aiCompletion) {

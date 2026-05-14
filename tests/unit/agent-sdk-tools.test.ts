@@ -1,7 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentSDK } from '../../src/sdk/agent-sdk.js';
 
 describe('AgentSDK tool execution', () => {
+  let previousProvider: string | undefined;
+
+  beforeEach(() => {
+    previousProvider = process.env.CODEBUDDY_PROVIDER;
+    process.env.CODEBUDDY_PROVIDER = 'not-a-provider';
+  });
+
+  afterEach(() => {
+    if (previousProvider === undefined) {
+      delete process.env.CODEBUDDY_PROVIDER;
+    } else {
+      process.env.CODEBUDDY_PROVIDER = previousProvider;
+    }
+  });
+
   it('executes registered tools referenced in the prompt', async () => {
     const sdk = new AgentSDK();
     sdk.addTool({
