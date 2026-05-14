@@ -289,7 +289,6 @@ async function ensureUserSettingsDirectory(): Promise<void> {
 import { detectProviderFromEnv, type DetectedProvider } from './utils/provider-detector.js';
 
 // Legacy inline implementation kept commented for git-archaeology only.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function _detectProviderFromEnvLegacy(): DetectedProvider | null {
   // Priority order (mirror of src/fleet/peer-chat-client-factory.ts —
   // explicit user intent first, then local, then cloud env keys):
@@ -962,14 +961,14 @@ program
   .version(packageJson.version)
   .argument("[message...]", "Initial message to send to Code Buddy")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "CodeBuddy API key (or set GROK_API_KEY env var)")
+  .option("-k, --api-key <key>", "provider API key (or run `buddy login chatgpt` for subscription auth)")
   .option(
     "-u, --base-url <url>",
-    "CodeBuddy API base URL (or set GROK_BASE_URL env var)"
+    "provider API base URL (or provider-specific *_BASE_URL env var)"
   )
   .option(
     "-m, --model <model>",
-    "AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)"
+    "AI model to use (or provider-specific *_MODEL env var)"
   )
   .option(
     "-p, --prompt <prompt>",
@@ -1375,7 +1374,7 @@ program
 
       if (!apiKey) {
         logger.error(
-          "❌ Error: API key required. Set GOOGLE_API_KEY, GROK_API_KEY, or OPENAI_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
+          "❌ Error: no AI provider configured. Run `buddy login chatgpt`, set a provider API key, use --api-key, or save apiKey to ~/.codebuddy/user-settings.json"
         );
         process.exit(1);
       }
@@ -1852,14 +1851,14 @@ gitCommand
   .command("commit-and-push")
   .description("Generate AI commit message and push to remote")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "CodeBuddy API key (or set GROK_API_KEY env var)")
+  .option("-k, --api-key <key>", "provider API key (or run `buddy login chatgpt` for subscription auth)")
   .option(
     "-u, --base-url <url>",
-    "CodeBuddy API base URL (or set GROK_BASE_URL env var)"
+    "provider API base URL (or provider-specific *_BASE_URL env var)"
   )
   .option(
     "-m, --model <model>",
-    "AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)"
+    "AI model to use (or provider-specific *_MODEL env var)"
   )
   .option(
     "--max-tool-rounds <rounds>",
@@ -1892,7 +1891,7 @@ gitCommand
 
       if (!apiKey) {
         logger.error(
-          "❌ Error: API key required. Set GOOGLE_API_KEY, GROK_API_KEY, or OPENAI_API_KEY environment variable, use --api-key flag, or save to ~/.codebuddy/user-settings.json"
+          "❌ Error: no AI provider configured. Run `buddy login chatgpt`, set a provider API key, use --api-key, or save apiKey to ~/.codebuddy/user-settings.json"
         );
         process.exit(1);
       }

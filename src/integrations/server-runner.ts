@@ -141,7 +141,7 @@ Usage:
 Options:
   --verbose, -v     Enable verbose logging (to stderr)
   --workdir, -d     Set working directory
-  --api-key         Override GROK_API_KEY environment variable
+  --api-key         Override detected provider credentials for this process
 
 JSON-RPC Mode:
   Listens on stdin for JSON-RPC 2.0 requests, responds on stdout.
