@@ -6,6 +6,17 @@
  */
 
 import { EventEmitter } from "events";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { vi } from "vitest";
+
+let tmpHome: string;
+
+vi.mock("os", async () => {
+  const actual = await vi.importActual<typeof os>("os");
+  return { ...actual, homedir: () => tmpHome };
+});
 
 import {
   ParallelExecutor,
@@ -39,24 +50,49 @@ jest.mock("../../src/codebuddy/client.js", () => ({
   }; }),
 }));
 
-jest.mock("../../src/utils/provider-detector.js", () => ({
-  detectProviderFromEnv: jest.fn(() => null),
-  selectModelForDetectedProvider: jest.fn((detected: { provider: string; defaultModel: string }, configured?: string) => {
-    if (detected.provider !== "grok" && configured?.startsWith("grok-")) {
-      return detected.defaultModel;
-    }
-    return configured || detected.defaultModel;
-  }),
-}));
-
 jest.mock("../../src/types/index.js", () => ({
   getErrorMessage: jest.fn().mockImplementation((err) => err?.message || String(err)),
 }));
 
 import { CodeBuddyClient as _CodeBuddyClient } from "../../src/codebuddy/client.js";
-import { detectProviderFromEnv as _detectProviderFromEnv } from "../../src/utils/provider-detector.js";
 const CodeBuddyClient = _CodeBuddyClient as unknown as jest.Mock;
-const detectProviderFromEnv = _detectProviderFromEnv as unknown as jest.Mock;
+
+const envKeysToReset = [
+  "CODEBUDDY_PROVIDER",
+  "GROK_API_KEY",
+  "GROK_BASE_URL",
+  "GROK_MODEL",
+  "XAI_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "OPENAI_MODEL",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_MODEL",
+  "GOOGLE_API_KEY",
+  "GEMINI_API_KEY",
+  "GEMINI_MODEL",
+  "OLLAMA_HOST",
+  "OLLAMA_MODEL",
+  "CHATGPT_MODEL",
+];
+const envBackup: Record<string, string | undefined> = {};
+
+function writeChatGptAuth(): void {
+  const dir = path.join(tmpHome, ".codebuddy");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "codex-auth.json"),
+    JSON.stringify({ tokens: { access_token: "test-access-token" } }),
+  );
+}
+
+function executorInternals(executor: ParallelExecutor): {
+  calculateSimilarity: (a: string, b: string) => number;
+} {
+  return executor as unknown as {
+    calculateSimilarity: (a: string, b: string) => number;
+  };
+}
 
 // Helper to create mock model configs
 function createMockModels(count: number = 3): ModelConfig[] {
@@ -90,8 +126,13 @@ describe("ParallelExecutor", () => {
   let executor: ParallelExecutor;
 
   beforeEach(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "cb-parallel-executor-"));
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = "none";
     jest.clearAllMocks();
-    detectProviderFromEnv.mockReturnValue(null);
     resetParallelExecutor();
     executor = new ParallelExecutor(createMockConfig());
   });
@@ -100,6 +141,11 @@ describe("ParallelExecutor", () => {
     if (executor) {
       executor.removeAllListeners();
     }
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   describe("Constructor", () => {
@@ -144,12 +190,8 @@ describe("ParallelExecutor", () => {
 
     it("should use detected provider credentials for codebuddy models without explicit keys", () => {
       jest.clearAllMocks();
-      detectProviderFromEnv.mockReturnValue({
-        provider: "chatgpt",
-        apiKey: "oauth-chatgpt",
-        baseURL: "https://chatgpt.com/backend-api/codex",
-        defaultModel: "gpt-5.5",
-      });
+      process.env.CODEBUDDY_PROVIDER = "chatgpt";
+      writeChatGptAuth();
 
       const config = createMockConfig({
         models: [{ ...createMockModels(1)[0], model: "grok-code-fast-1" }],
@@ -764,12 +806,6 @@ describe("Task Analysis and Routing", () => {
 });
 
 describe("Confidence Estimation", () => {
-  let executor: ParallelExecutor;
-
-  beforeEach(() => {
-    executor = new ParallelExecutor(createMockConfig());
-  });
-
   it("should increase confidence for longer responses", async () => {
 
     CodeBuddyClient.mockImplementation(function() { return {
@@ -866,7 +902,7 @@ describe("Text Similarity", () => {
   });
 
   it("should calculate similarity between identical texts", () => {
-    const similarity = (executor as any).calculateSimilarity(
+    const similarity = executorInternals(executor).calculateSimilarity(
       "hello world",
       "hello world"
     );
@@ -875,7 +911,7 @@ describe("Text Similarity", () => {
   });
 
   it("should calculate similarity between different texts", () => {
-    const similarity = (executor as any).calculateSimilarity(
+    const similarity = executorInternals(executor).calculateSimilarity(
       "hello world",
       "goodbye world"
     );
@@ -885,7 +921,7 @@ describe("Text Similarity", () => {
   });
 
   it("should handle empty texts", () => {
-    const similarity = (executor as any).calculateSimilarity("", "");
+    const similarity = executorInternals(executor).calculateSimilarity("", "");
 
     expect(similarity).toBeDefined();
   });
