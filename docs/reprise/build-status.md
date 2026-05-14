@@ -99,6 +99,18 @@ node --input-type=module -e "import { getLocalCapabilities, resetCapabilityCache
 
 npm run validate
 # passed again after Cowork Fleet and ChatGPT capability fixes
+
+npm test -- tests/server/channel-a2a-bridge.test.ts tests/protocols/a2a.test.ts tests/protocols/a2a-task-router.test.ts tests/protocols/a2a-skill-selection.test.ts tests/protocols/a2a-skill-routing.test.ts tests/protocols/a2a-remote-agents.test.ts tests/protocols/a2a-codebuddy-executor.test.ts
+# 70 tests passed after remote A2A result/status propagation fix
+
+npm --prefix cowork test -- run tests/a2a-bridge-polling.test.ts
+# 5 tests passed
+
+npx eslint src/protocols/a2a/index.ts src/server/routes/a2a-protocol.ts tests/protocols/a2a-task-router.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -182,6 +194,14 @@ npm run validate
   (`chatgpt-oauth`) quand le login Codex/ChatGPT existe. Un peer qui utilise
   ton abonnement ChatGPT Pro n'apparait donc plus avec `peerChatProvider`
   renseigne mais zero modele routable.
+- Le routage A2A distant preserve maintenant les sorties des spokes:
+  `result` devient une reponse lisible meme sans artifact, les artifacts/messages
+  distants sont conserves, et un statut distant `failed` reste `FAILED` cote hub
+  au lieu d'etre transforme en succes local.
+- Le endpoint `/api/a2a/tasks/send` propage les metadonnees simples
+  (`metadata.model`, `traceId`, etc.) jusqu'au client A2A. Le bridge Channel ->
+  A2A peut donc vraiment porter son hint de modele quand un hub ou spoke le
+  consomme.
 
 ## Blocage leve
 
@@ -220,3 +240,8 @@ avec le binaire racine remonte des erreurs historiques hors du patch Fleet.
   tout le fichier en memoire, listing plafonne, sortie `/fleet tool` nettoyee
   avant affichage, refus d'autorisation renvoye au bon appelant, et creation
   de cles `fleet:listen` / `peer:invoke` testable depuis la CLI.
+- Le bloc OpenClaw dans `docs/fleet-guide.md` reste une architecture cible, pas
+  un chemin runtime termine: aujourd'hui le code actif et teste couvre le hub
+  A2A Code Buddy, le bridge Channel -> A2A et le bridge A2A Cowork. Le daemon
+  OpenClaw separe (`openclaw gateway`, lockfile `~/.openclaw/gateway.json`) est
+  encore a brancher si l'on veut Telegram/WhatsApp/ClawHub via OpenClaw.

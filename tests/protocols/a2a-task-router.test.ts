@@ -85,6 +85,61 @@ describe('A2AAgentClient.submitTask — remote routing', () => {
       role: 'user',
       parts: [{ type: 'text', text: 'ping' }],
     });
+    expect(body.metadata).toEqual({ traceId: 'abc' });
+  });
+
+  it('result-only response is preserved as task output', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        id: 'spoke-task-2',
+        status: { status: 'completed' },
+        result: 'plain pong',
+      }),
+      text: async () => '',
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const client = new A2AAgentClient();
+    registerRemote(client, 'spoke', 'http://100.73.222.64:3002');
+
+    const task = await client.submitTask('spoke', 'ping');
+
+    expect(task.status.status).toBe(TaskStatus.COMPLETED);
+    expect(task.artifacts[0].parts[0]).toMatchObject({ type: 'text', text: 'plain pong' });
+    expect(task.messages[1]).toMatchObject({
+      role: 'agent',
+      parts: [{ type: 'text', text: 'plain pong' }],
+    });
+  });
+
+  it('200 response with failed remote status stays FAILED locally', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        id: 'spoke-task-failed',
+        status: { status: 'failed', message: 'remote model unavailable' },
+        result: '',
+      }),
+      text: async () => '',
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const client = new A2AAgentClient();
+    registerRemote(client, 'spoke', 'http://100.73.222.64:3002');
+
+    const task = await client.submitTask('spoke', 'ping');
+
+    expect(task.status.status).toBe(TaskStatus.FAILED);
+    expect(task.status.message).toBe('remote model unavailable');
+    expect(task.metadata).toMatchObject({
+      agent: 'spoke',
+      remoteTaskId: 'spoke-task-failed',
+    });
   });
 
   it('5xx response: body propagated into FAILED Task message', async () => {

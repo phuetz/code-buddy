@@ -105,6 +105,24 @@ function extractMessageText(message: unknown): string {
   return JSON.stringify(message);
 }
 
+function extractMetadata(metadata: unknown): Record<string, string> | undefined {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return undefined;
+  }
+
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (!key) continue;
+    if (typeof value === 'string') {
+      normalized[key] = value;
+    } else if (typeof value === 'number' || typeof value === 'boolean') {
+      normalized[key] = String(value);
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 interface A2ARouter extends Router { a2aClient?: A2AAgentClient; }
 
 export function createA2AProtocolRoutes(): Router {
@@ -166,7 +184,7 @@ export function createA2AProtocolRoutes(): Router {
   // OR {skill} (Niveau 3 auto-routing — hub finds matching spoke and delegates).
   // Both `message` is required regardless of routing mode.
   router.post('/tasks/send', tasksSendLimiter, requireScope('admin'), asyncHandler(async (req, res) => {
-    const { agent: agentName, skill: skillId, message } = req.body;
+    const { agent: agentName, skill: skillId, message, metadata } = req.body;
 
     if (!message) {
       res.status(400).json({ error: 'Missing required field: message' });
@@ -181,7 +199,7 @@ export function createA2AProtocolRoutes(): Router {
 
     try {
       const messageText = extractMessageText(message);
-      const task = await client.submitTask(resolved.agentKey, messageText);
+      const task = await client.submitTask(resolved.agentKey, messageText, extractMetadata(metadata));
       res.json({
         id: task.id,
         status: task.status,

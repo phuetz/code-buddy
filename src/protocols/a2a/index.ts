@@ -280,6 +280,99 @@ export interface RemoteAgent {
   lastHeartbeat: number;
 }
 
+interface RemoteTaskResponse {
+  id?: unknown;
+  status?: unknown;
+  result?: unknown;
+  artifacts?: unknown;
+  messages?: unknown;
+  error?: unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeRemoteStatus(response: RemoteTaskResponse): TaskState {
+  const status = response.status;
+  let rawStatus: string | undefined;
+  let message: string | undefined;
+
+  if (typeof status === 'string') {
+    rawStatus = status;
+  } else if (isRecord(status)) {
+    rawStatus = typeof status.status === 'string' ? status.status : undefined;
+    message = typeof status.message === 'string' ? status.message : undefined;
+  }
+
+  if (!message && typeof response.error === 'string') {
+    message = response.error;
+  }
+
+  switch ((rawStatus ?? '').toLowerCase()) {
+    case 'submitted':
+      return { status: TaskStatus.SUBMITTED, message, timestamp: Date.now() };
+    case 'working':
+      return { status: TaskStatus.WORKING, message, timestamp: Date.now() };
+    case 'input-required':
+    case 'input_required':
+      return { status: TaskStatus.INPUT_REQUIRED, message, timestamp: Date.now() };
+    case 'failed':
+    case 'error':
+      return { status: TaskStatus.FAILED, message, timestamp: Date.now() };
+    case 'canceled':
+    case 'cancelled':
+      return { status: TaskStatus.CANCELED, message, timestamp: Date.now() };
+    case 'completed':
+    case '':
+      break;
+  }
+
+  if (message && !response.result && !response.artifacts && !response.messages) {
+    return { status: TaskStatus.FAILED, message, timestamp: Date.now() };
+  }
+
+  return { status: TaskStatus.COMPLETED, message, timestamp: Date.now() };
+}
+
+function extractRemoteResultText(response: RemoteTaskResponse): string | undefined {
+  if (typeof response.result !== 'string') return undefined;
+  const trimmed = response.result.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeRemoteArtifacts(response: RemoteTaskResponse): Artifact[] {
+  if (Array.isArray(response.artifacts)) {
+    return response.artifacts as Artifact[];
+  }
+
+  const resultText = extractRemoteResultText(response);
+  if (!resultText) return [];
+
+  return [{
+    name: 'response',
+    parts: [{ type: 'text', text: resultText }],
+  }];
+}
+
+function normalizeRemoteMessages(request: string, response: RemoteTaskResponse): A2AMessage[] {
+  const messages: A2AMessage[] = [
+    { role: 'user', parts: [{ type: 'text', text: request }] },
+  ];
+
+  if (Array.isArray(response.messages)) {
+    messages.push(...response.messages as A2AMessage[]);
+    return messages;
+  }
+
+  const resultText = extractRemoteResultText(response);
+  if (resultText) {
+    messages.push({ role: 'agent', parts: [{ type: 'text', text: resultText }] });
+  }
+
+  return messages;
+}
+
 /**
  * A2A Agent Client — sends tasks to other agents.
  * Used by an orchestrator to delegate work to specialist agents.
@@ -465,17 +558,24 @@ export class A2AAgentClient {
         throw new Error(`Remote task submission failed: ${response.status} ${response.statusText}${suffix}`);
       }
 
-      const result = await response.json() as Record<string, unknown>;
+      const result = await response.json() as RemoteTaskResponse;
+      const status = normalizeRemoteStatus(result);
+      const remoteTaskId = typeof result.id === 'string' ? result.id : undefined;
+      const taskMetadata: Record<string, string> = { ...metadata, agent: agentKey };
+      if (remoteTaskId) taskMetadata.remoteTaskId = remoteTaskId;
 
       // Wrap remote response in a local Task object for consistency
       return {
         id: taskId,
         sessionId: `${agentKey}_${taskId}`,
-        status: { status: TaskStatus.COMPLETED, timestamp: Date.now() },
-        messages: [{ role: 'user', parts: [{ type: 'text', text: request }] }],
-        artifacts: (result.artifacts as Artifact[]) || [],
-        metadata: { ...metadata, agent: agentKey },
-        history: [{ status: TaskStatus.SUBMITTED, timestamp: Date.now() }],
+        status,
+        messages: normalizeRemoteMessages(request, result),
+        artifacts: normalizeRemoteArtifacts(result),
+        metadata: taskMetadata,
+        history: [
+          { status: TaskStatus.SUBMITTED, timestamp: Date.now() },
+          status,
+        ],
       };
     } catch (err) {
       const isAbort = err instanceof Error && err.name === 'AbortError';
