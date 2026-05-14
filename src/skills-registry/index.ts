@@ -124,7 +124,11 @@ export interface SkillSearchResult {
   updatedAt: Date;
 }
 
+export type RegistrySource = 'remote' | 'memory';
+
 export interface RegistryConfig {
+  /** Registry source. `memory` is an explicit test harness. */
+  source: RegistrySource;
   /** Registry URL */
   registryUrl: string;
   /** Installation directory */
@@ -140,6 +144,7 @@ export interface RegistryConfig {
 }
 
 export const DEFAULT_REGISTRY_CONFIG: RegistryConfig = {
+  source: 'remote',
   registryUrl: 'https://registry.codebuddy.dev',
   installDir: '~/.codebuddy/skills',
   autoUpdate: true,
@@ -169,17 +174,18 @@ export class SkillsRegistry extends EventEmitter {
   private searchCache: Map<string, { results: SkillSearchResult[]; timestamp: number }> = new Map();
   private updateCheckTimer: NodeJS.Timeout | null = null;
 
-  // Mock registry data
-  private mockRegistry: SkillSearchResult[] = [];
+  private memoryRegistry: SkillSearchResult[] = [];
 
   constructor(config: Partial<RegistryConfig> = {}) {
     super();
     this.config = { ...DEFAULT_REGISTRY_CONFIG, ...config };
-    this.initializeMockRegistry();
+    if (this.config.source === 'memory') {
+      this.initializeMemoryRegistry();
+    }
   }
 
-  private initializeMockRegistry(): void {
-    this.mockRegistry = [
+  private initializeMemoryRegistry(): void {
+    this.memoryRegistry = [
       {
         name: '@codebuddy/git-workflow',
         displayName: 'Git Workflow',
@@ -274,6 +280,8 @@ export class SkillsRegistry extends EventEmitter {
     limit?: number;
     offset?: number;
   }): Promise<SkillSearchResult[]> {
+    this.ensureMemorySource('Skill registry search');
+
     // Check cache
     const cacheKey = JSON.stringify({ query, options });
     const cached = this.searchCache.get(cacheKey);
@@ -282,10 +290,7 @@ export class SkillsRegistry extends EventEmitter {
       return cached.results;
     }
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    let results = [...this.mockRegistry];
+    let results = [...this.memoryRegistry];
 
     // Filter by query
     if (query) {
@@ -324,20 +329,19 @@ export class SkillsRegistry extends EventEmitter {
    * Get skill details
    */
   async getSkillDetails(name: string): Promise<SkillSearchResult | null> {
-    await new Promise(resolve => setTimeout(resolve, 50));
-    return this.mockRegistry.find(s => s.name === name) || null;
+    this.ensureMemorySource('Skill registry details');
+    return this.memoryRegistry.find(s => s.name === name) || null;
   }
 
   /**
    * Get skill versions
    */
   async getVersions(name: string): Promise<SkillVersion[]> {
-    await new Promise(resolve => setTimeout(resolve, 50));
+    this.ensureMemorySource('Skill registry versions');
 
-    const skill = this.mockRegistry.find(s => s.name === name);
+    const skill = this.memoryRegistry.find(s => s.name === name);
     if (!skill) return [];
 
-    // Mock versions
     return [
       {
         version: skill.latestVersion,
@@ -360,7 +364,8 @@ export class SkillsRegistry extends EventEmitter {
    * Get featured/popular skills
    */
   async getFeatured(): Promise<SkillSearchResult[]> {
-    return this.mockRegistry
+    this.ensureMemorySource('Featured skill lookup');
+    return this.memoryRegistry
       .filter(s => s.verified)
       .sort((a, b) => b.downloads - a.downloads)
       .slice(0, 5);
@@ -397,9 +402,6 @@ export class SkillsRegistry extends EventEmitter {
       throw new Error(`Skill ${name} is not verified. Enable allowUnverified to install.`);
     }
 
-    // Simulate download
-    await new Promise(resolve => setTimeout(resolve, 200));
-
     const installed: InstalledSkill = {
       manifest: {
         name: details.name,
@@ -432,9 +434,6 @@ export class SkillsRegistry extends EventEmitter {
       return false;
     }
 
-    // Simulate cleanup
-    await new Promise(resolve => setTimeout(resolve, 50));
-
     this.installedSkills.delete(name);
     this.emit('skill-uninstall', name);
 
@@ -461,9 +460,6 @@ export class SkillsRegistry extends EventEmitter {
     }
 
     const oldVersion = installed.manifest.version;
-
-    // Simulate update
-    await new Promise(resolve => setTimeout(resolve, 150));
 
     installed.manifest.version = targetVersion;
     installed.updatedAt = new Date();
@@ -620,6 +616,9 @@ export class SkillsRegistry extends EventEmitter {
    */
   updateConfig(config: Partial<RegistryConfig>): void {
     this.config = { ...this.config, ...config };
+    if (config.source === 'memory' && this.memoryRegistry.length === 0) {
+      this.initializeMemoryRegistry();
+    }
   }
 
   /**
@@ -653,6 +652,14 @@ export class SkillsRegistry extends EventEmitter {
     this.stopAutoUpdateCheck();
     this.clearCache();
     this.installedSkills.clear();
+  }
+
+  private ensureMemorySource(operation: string): void {
+    if (this.config.source !== 'memory') {
+      throw new Error(
+        `${operation} remote client is not implemented. Configure a real registry client before using registry discovery, or use source: "memory" only in tests.`
+      );
+    }
   }
 }
 

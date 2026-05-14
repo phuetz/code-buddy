@@ -15,7 +15,7 @@ describe('Skills Registry', () => {
 
   beforeEach(() => {
     resetSkillsRegistry();
-    registry = new SkillsRegistry();
+    registry = new SkillsRegistry({ source: 'memory' });
   });
 
   afterEach(() => {
@@ -24,6 +24,12 @@ describe('Skills Registry', () => {
   });
 
   describe('Search & Discovery', () => {
+    it('should fail fast without an implemented remote registry client', async () => {
+      const remoteRegistry = new SkillsRegistry();
+
+      await expect(remoteRegistry.search('git')).rejects.toThrow('Skill registry search remote client is not implemented');
+    });
+
     it('should search for skills', async () => {
       const results = await registry.search('git');
 

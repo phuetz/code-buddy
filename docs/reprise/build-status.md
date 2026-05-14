@@ -321,6 +321,10 @@ npm run build
   enregistrements factices par defaut. Le backend natif echoue clairement tant
   qu'il n'est pas implemente; le backend memoire est maintenant explicite via
   `backend: "memory"` dans les tests.
+- `SkillsRegistry` ne presente plus son catalogue code en dur comme un registre
+  distant operationnel. La source distante echoue tant qu'un vrai client n'est
+  pas branche; le catalogue memoire doit etre demande explicitement par
+  `source: "memory"` dans les tests.
 
 ## Blocage leve
 
