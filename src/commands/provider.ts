@@ -7,16 +7,25 @@
 import { Command } from 'commander';
 import { logger } from "../utils/logger.js";
 import { getSettingsManager } from '../utils/settings-manager.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 
 interface ProviderInfo {
   name: string;
   envVar: string;
+  authLabel?: string;
   models: string[];
   defaultModel: string;
   baseURL?: string;
 }
 
 export const PROVIDERS: Record<string, ProviderInfo> = {
+  chatgpt: {
+    name: 'ChatGPT Pro (subscription)',
+    envVar: 'CHATGPT_OAUTH',
+    authLabel: 'buddy login chatgpt',
+    models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
+    defaultModel: 'gpt-5.5',
+  },
   grok: {
     name: 'Grok (xAI)',
     envVar: 'GROK_API_KEY',
@@ -54,8 +63,14 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
 
 function getConfiguredProviders(): string[] {
   const configured: string[] = [];
+  const detected = detectProviderFromEnv();
 
   for (const [key, info] of Object.entries(PROVIDERS)) {
+    if (detected?.provider === key) {
+      configured.push(key);
+      continue;
+    }
+
     const hasKey = process.env[info.envVar] ||
                    (key === 'grok' && process.env.XAI_API_KEY) ||
                    (key === 'gemini' && process.env.GEMINI_API_KEY);
@@ -68,6 +83,11 @@ function getConfiguredProviders(): string[] {
 }
 
 function getCurrentProvider(): string {
+  const detected = detectProviderFromEnv();
+  if (detected?.provider && PROVIDERS[detected.provider]) {
+    return detected.provider;
+  }
+
   const manager = getSettingsManager();
   const settings = manager.loadUserSettings();
   return settings.provider || 'grok';
@@ -85,7 +105,7 @@ function setCurrentProvider(provider: string): void {
 
 function getCurrentModel(): string | undefined {
   const manager = getSettingsManager();
-  return manager.getCurrentModel();
+  return selectModelForDetectedProvider(detectProviderFromEnv(), manager.getCurrentModel());
 }
 
 function setCurrentModel(model: string): void {
@@ -126,13 +146,13 @@ export function createProviderCommand(): Command {
 
         console.log(`  ${status} ${info.name}${marker}`);
         console.log(`     Key: ${key}`);
-        console.log(`     Env: ${info.envVar}`);
+        console.log(`     Auth: ${info.authLabel || info.envVar}`);
         console.log(`     Models: ${info.models.slice(0, 3).join(', ')}${info.models.length > 3 ? '...' : ''}`);
         console.log('');
       }
 
       if (configured.length === 0) {
-        console.log('⚠️  No providers configured. Set an API key environment variable.');
+        console.log('⚠️  No providers configured. Run `buddy login chatgpt` or set a provider API key.');
         console.log('   Example: export ANTHROPIC_API_KEY="your-key"');
       }
     });
@@ -152,7 +172,7 @@ export function createProviderCommand(): Command {
 
       const configured = getConfiguredProviders();
       if (!configured.includes(current)) {
-        console.log(`\n⚠️  Warning: ${info?.envVar || 'API key'} not set`);
+        console.log(`\n⚠️  Warning: ${info?.authLabel || info?.envVar || 'provider credentials'} not configured`);
       }
     });
 
@@ -173,8 +193,8 @@ export function createProviderCommand(): Command {
 
       const configured = getConfiguredProviders();
       if (!configured.includes(key)) {
-        console.warn(`⚠️  Warning: ${PROVIDERS[key].envVar} not set`);
-        console.warn(`   Provider will fail without API key`);
+        console.warn(`⚠️  Warning: ${PROVIDERS[key].authLabel || PROVIDERS[key].envVar} not configured`);
+        console.warn('   Provider will fail without credentials');
       }
 
       setCurrentProvider(key);

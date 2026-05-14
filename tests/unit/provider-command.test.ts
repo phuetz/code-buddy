@@ -2,8 +2,25 @@
  * Unit tests for Provider Command
  */
 
+import { vi } from 'vitest';
 
-// Mock logger
+const providerMocks = vi.hoisted(() => ({
+  detectProviderFromEnv: vi.fn(),
+}));
+
+jest.mock('../../src/utils/provider-detector', () => ({
+  detectProviderFromEnv: providerMocks.detectProviderFromEnv,
+  selectModelForDetectedProvider: (
+    detected: { provider: string; defaultModel: string } | null,
+    configured?: string,
+  ) => {
+    if (!detected) return configured;
+    if (configured && !(detected.provider !== 'grok' && /^grok[-_]/i.test(configured))) {
+      return configured;
+    }
+    return detected.defaultModel;
+  },
+}));
 
 import { createProviderCommand } from '../../src/commands/provider';
 import { Command } from 'commander';
@@ -40,6 +57,7 @@ describe('Provider Command', () => {
 
   beforeEach(() => {
     command = createProviderCommand();
+    providerMocks.detectProviderFromEnv.mockReturnValue(null);
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation(function() {
@@ -93,6 +111,7 @@ describe('Provider Command', () => {
       expect(output).toContain('ANTHROPIC_API_KEY');
       expect(output).toContain('OPENAI_API_KEY');
       expect(output).toContain('GOOGLE_API_KEY');
+      expect(output).toContain('buddy login chatgpt');
     });
   });
 
@@ -112,6 +131,22 @@ describe('Provider Command', () => {
       const output = consoleLogSpy.mock.calls.map((c) => c.join(' ')).join('\n');
 
       expect(output).toContain('Model');
+    });
+
+    it('should show detected ChatGPT subscription instead of stored Grok defaults', () => {
+      providerMocks.detectProviderFromEnv.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      command.parse(['current'], { from: 'user' });
+
+      const output = consoleLogSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+
+      expect(output).toContain('ChatGPT Pro');
+      expect(output).toContain('Model: gpt-5.5');
     });
   });
 
@@ -181,6 +216,7 @@ describe('Provider Command', () => {
 
 describe('Provider Configuration', () => {
   const PROVIDER_KEYS = {
+    chatgpt: 'buddy login chatgpt',
     grok: 'GROK_API_KEY',
     claude: 'ANTHROPIC_API_KEY',
     openai: 'OPENAI_API_KEY',
@@ -189,7 +225,7 @@ describe('Provider Configuration', () => {
 
   describe('Environment Variables', () => {
     it('should recognize standard env vars', () => {
-      for (const [provider, envVar] of Object.entries(PROVIDER_KEYS)) {
+      for (const [_provider, envVar] of Object.entries(PROVIDER_KEYS)) {
         expect(envVar).toBeDefined();
         expect(typeof envVar).toBe('string');
       }
@@ -198,6 +234,7 @@ describe('Provider Configuration', () => {
 
   describe('Provider Models', () => {
     const PROVIDER_MODELS: Record<string, string[]> = {
+      chatgpt: ['gpt-5.5', 'gpt-5.4'],
       grok: ['grok-beta', 'grok-code-fast-1'],
       claude: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-latest'],
       openai: ['gpt-4o', 'gpt-4o-mini'],
@@ -205,7 +242,7 @@ describe('Provider Configuration', () => {
     };
 
     it('should have models for each provider', () => {
-      for (const [provider, models] of Object.entries(PROVIDER_MODELS)) {
+      for (const [_provider, models] of Object.entries(PROVIDER_MODELS)) {
         expect(models.length).toBeGreaterThan(0);
       }
     });
