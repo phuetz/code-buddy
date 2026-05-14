@@ -24,6 +24,26 @@ import {
   TaskArtifact,
 } from "../types.js";
 
+const AVAILABLE_WORKFLOW_AGENTS = new Set<AgentRole>([
+  "orchestrator",
+  "coder",
+  "reviewer",
+  "tester",
+]);
+
+function normalizeWorkflowAgent(rawAgent: string): AgentRole {
+  const role = rawAgent.trim().toLowerCase() as AgentRole;
+  if (AVAILABLE_WORKFLOW_AGENTS.has(role)) {
+    return role;
+  }
+
+  if (role === "researcher" || role === "architect") {
+    return "orchestrator";
+  }
+
+  return "coder";
+}
+
 const ORCHESTRATOR_CONFIG: AgentConfig = {
   role: "orchestrator",
   name: "Orchestrator",
@@ -39,13 +59,12 @@ YOUR RESPONSIBILITIES:
 6. **Synthesis**: Combine results from multiple agents into cohesive solutions
 
 SPECIALIST AGENTS AVAILABLE:
-- **Coder**: Writes and modifies code
-- **Reviewer**: Reviews code for quality, bugs, and best practices
-- **Tester**: Runs tests and verifies functionality
-- **Researcher**: Explores codebase and gathers information
-- **Debugger**: Diagnoses and fixes bugs
-- **Architect**: Designs system architecture
-- **Documenter**: Writes documentation
+- **orchestrator**: Plans, researches architecture, gathers context, and coordinates handoffs
+- **coder**: Writes, modifies, debugs, and documents code
+- **reviewer**: Reviews code for quality, bugs, safety, and maintainability
+- **tester**: Runs and analyzes tests and verification commands
+
+Use only these exact task agent values: orchestrator, coder, reviewer, tester.
 
 PLANNING FORMAT:
 When creating a plan, use this structure:
@@ -55,7 +74,7 @@ When creating a plan, use this structure:
 <phase order="1" parallelizable="true|false">
   <name>Phase Name</name>
   <description>What this phase accomplishes</description>
-  <task priority="critical|high|medium|low" agent="role">
+  <task priority="critical|high|medium|low" agent="orchestrator|coder|reviewer|tester">
     <title>Task Title</title>
     <description>Detailed task description</description>
   </task>
@@ -187,6 +206,10 @@ Explore the codebase to understand the current state, then create a comprehensiv
         const [, priority, agent, taskContent] = taskMatch;
         const taskTitleMatch = taskContent.match(titleRegex);
         const taskDescMatch = taskContent.match(descRegex);
+        const assignedTo = normalizeWorkflowAgent(agent);
+        const metadata: Record<string, unknown> = assignedTo === agent ? {} : {
+          originalAssignedTo: agent,
+        };
 
         tasks.push({
           id: createId("task"),
@@ -194,11 +217,11 @@ Explore the codebase to understand the current state, then create a comprehensiv
           description: taskDescMatch ? taskDescMatch[1].trim() : "",
           status: "pending",
           priority: priority as TaskPriority,
-          assignedTo: agent as AgentRole,
+          assignedTo,
           dependencies: [],
           subtasks: [],
           artifacts: [],
-          metadata: {},
+          metadata,
           createdAt: new Date(),
           updatedAt: new Date(),
         });
