@@ -63,6 +63,12 @@ npm test -- tests/features/cicd-chrome-sdk-pr.test.ts tests/features/hooks-polic
 
 node dist/index.js provider current
 # Active Provider: ChatGPT Pro (subscription); Model: gpt-5.5
+
+npm test -- tests/toml-config.test.ts tests/commands/agents-handler.test.ts tests/agent/multi-agent/orchestrator-agent.test.ts tests/agent/multi-agent/provider-overrides.test.ts
+# passed: config parser/merge, swarm role planning, agents lifecycle, per-role providers
+
+npm run validate
+# passed again after multi-agent/provider override stabilization
 ```
 
 ## Debloque pendant la reprise
@@ -121,6 +127,21 @@ node dist/index.js provider current
   provider CLI non-Grok est force sans base URL explicite. Les profils non-Grok
   sans modele prennent aussi leur default provider (`gpt-4o`, Gemini, Claude,
   etc.) au lieu de `grok-code-fast-1`.
+- Les plans `/swarm` restent maintenant sur les roles reellement executables
+  (`orchestrator`, `coder`, `reviewer`, `tester`) et normalisent les anciens
+  roles OpenClaw vers ces agents, au lieu de produire un workflow impossible a
+  lancer.
+- `/agents stop` et `/agents disable` arretent directement le workflow lance,
+  sans redetecter un provider ni reconstruire un systeme different de celui qui
+  tourne.
+- Le parseur TOML charge maintenant les sections profondes documentees comme
+  `[profiles.night.agent]`, et la fusion de configuration conserve les blocs
+  runtime (`multi_agent_system`, `heartbeat`, `autonomous_fleet`, `profiles`,
+  etc.) au lieu de les ignorer silencieusement.
+- Les swarms peuvent declarer des providers differents par role via
+  `[multi_agent_system.agents.<role>]` avec `provider`, `api_key_env`,
+  `base_url` et `model`. Les secrets restent hors TOML; ChatGPT reutilise le
+  login Codex OAuth et Ollama garde son mode local.
 
 ## Blocage leve
 
