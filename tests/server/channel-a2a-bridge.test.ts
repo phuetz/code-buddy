@@ -119,6 +119,34 @@ describe('startChannelA2ABridge', () => {
     expect(calls[0].body).not.toHaveProperty('agent');
   });
 
+  it('includes configured auth headers on hub self-calls', async () => {
+    const manager = getChannelManager();
+    const channel = new MockChannel({ type: 'cli' });
+    await channel.connect();
+    manager.registerChannel(channel);
+
+    const { fn: fakeFetch, calls } = makeFakeFetch([
+      { status: 200, json: { id: 't', status: 'completed', result: 'ok' } },
+    ]);
+
+    startChannelA2ABridge({
+      hubBaseUrl: 'http://127.0.0.1:3000',
+      channelManager: manager,
+      defaultSkill: 'ollama-qwen3-4b',
+      fetchImpl: fakeFetch,
+      authHeaders: () => ({ Authorization: 'Bearer bridge-token' }),
+    });
+
+    channel.simulateMessage('hello');
+    await flush();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer bridge-token',
+    });
+  });
+
   it('routes /agent <name> <text> with the explicit agent', async () => {
     const manager = getChannelManager();
     const channel = new MockChannel({ type: 'cli' });

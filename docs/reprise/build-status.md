@@ -111,6 +111,15 @@ npx eslint src/protocols/a2a/index.ts src/server/routes/a2a-protocol.ts tests/pr
 
 npm run typecheck
 # passed
+
+npm test -- tests/server/channel-a2a-bridge.test.ts tests/protocols/a2a-task-router.test.ts
+# 18 tests passed after authenticated Channel -> A2A self-call fix
+
+npx eslint src/server/channel-a2a-bridge.ts src/server/index.ts tests/server/channel-a2a-bridge.test.ts --quiet
+# passed
+
+npm run build
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -202,6 +211,10 @@ npm run typecheck
   (`metadata.model`, `traceId`, etc.) jusqu'au client A2A. Le bridge Channel ->
   A2A peut donc vraiment porter son hint de modele quand un hub ou spoke le
   consomme.
+- Quand l'auth serveur est activee, le bridge Channel -> A2A signe maintenant
+  ses self-calls loopback avec un JWT admin court genere cote serveur. Les
+  canaux externes ne se bloquent donc plus sur `requireScope('admin')` en
+  production.
 
 ## Blocage leve
 

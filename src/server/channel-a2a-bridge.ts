@@ -31,6 +31,8 @@ export interface ChannelA2ABridgeOptions {
   defaultModel?: string;
   /** Override fetch (used by tests). */
   fetchImpl?: typeof fetch;
+  /** Optional auth headers for authenticated hub self-calls. */
+  authHeaders?: Record<string, string> | (() => Record<string, string> | undefined);
   /** Hub call timeout. Default 60 s — long-context generation can be slow. */
   taskTimeoutMs?: number;
 }
@@ -136,7 +138,10 @@ export function startChannelA2ABridge(opts: ChannelA2ABridgeOptions): ChannelA2A
     try {
       resp = await fetchFn(tasksUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...resolveAuthHeaders(opts.authHeaders),
+        },
         body: JSON.stringify(payload),
         signal: ctrl.signal,
       });
@@ -219,6 +224,13 @@ export function startChannelA2ABridge(opts: ChannelA2ABridgeOptions): ChannelA2A
       // marker that exposes intent without touching private fields.
     },
   };
+}
+
+function resolveAuthHeaders(
+  authHeaders: ChannelA2ABridgeOptions['authHeaders'],
+): Record<string, string> {
+  if (!authHeaders) return {};
+  return typeof authHeaders === 'function' ? authHeaders() ?? {} : authHeaders;
 }
 
 async function replyText(channel: BaseChannel, msg: InboundMessage, content: string): Promise<void> {

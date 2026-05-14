@@ -870,6 +870,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           '../commands/handlers/channel-handlers.js'
         );
         const { startChannelA2ABridge } = await import('./channel-a2a-bridge.js');
+        const { generateToken } = await import('./auth/jwt.js');
 
         const manager = getChannelManager();
         const cfg = loadChannelConfig();
@@ -900,6 +901,15 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           defaultSkill: process.env.A2A_BRIDGE_DEFAULT_SKILL || 'ollama-qwen3-4b',
           defaultModel: process.env.A2A_BRIDGE_DEFAULT_MODEL || 'qwen3:4b',
           defaultAgent: process.env.A2A_BRIDGE_DEFAULT_AGENT,
+          authHeaders: config.authEnabled
+            ? () => ({
+                Authorization: `Bearer ${generateToken({
+                  sub: 'channel-a2a-bridge',
+                  scopes: ['admin'],
+                  type: 'user',
+                }, config.jwtSecret, '5m')}`,
+              })
+            : undefined,
         });
         // Stash on the http server for graceful shutdown.
         (server as unknown as { _channelA2ABridge?: { stop: () => void } })._channelA2ABridge = bridge;
