@@ -352,6 +352,9 @@ npm run build
   l'action adaptee pour couper du contenu sans pretendre le resumer.
 - Le provider vocal `system` ne lance plus un AppleScript placeholder. Il echoue
   explicitement tant qu'une vraie integration Speech/Whisper n'est pas choisie.
+- Les adapters niche Twitch/Tlon/Gmail ne renvoient plus de succes reseau
+  factice. L'envoi de message et le watch Gmail exigent maintenant des clients
+  reels injectes explicitement.
 
 ## Blocage leve
 

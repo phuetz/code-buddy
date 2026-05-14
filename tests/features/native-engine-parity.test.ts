@@ -721,9 +721,18 @@ describe('TwitchAdapter', () => {
   });
 
   it('should send message when running', () => {
+    adapter = new TwitchAdapter({
+      token: 'test',
+      messageSender: (channel) => ({ sent: true, channel }),
+    });
     adapter.start();
     const result = adapter.sendMessage('#general', 'hello');
     expect(result.sent).toBe(true);
+  });
+
+  it('should fail sending without a real sender', () => {
+    adapter.start();
+    expect(() => adapter.sendMessage('#general', 'hello')).toThrow('message sender is not configured');
   });
 
   it('should throw when sending while stopped', () => {
@@ -756,11 +765,19 @@ describe('TlonAdapter', () => {
     expect(adapter.isRunning()).toBe(false);
   });
 
-  it('should send message', () => {
+  it('should send message through a configured sender', () => {
+    adapter = new TlonAdapter({
+      messageSender: (ship) => ({ sent: true, ship }),
+    });
     adapter.start();
     const result = adapter.sendMessage('~zod', 'hello');
     expect(result.sent).toBe(true);
     expect(result.ship).toBe('~zod');
+  });
+
+  it('should fail sending without a real sender', () => {
+    adapter.start();
+    expect(() => adapter.sendMessage('~zod', 'hello')).toThrow('message sender is not configured');
   });
 
   it('should throw when not running', () => {
@@ -784,15 +801,33 @@ describe('GmailWebhookAdapter', () => {
     expect(adapter.isRunning()).toBe(false);
   });
 
+  it('should fail setupWatch without a real Gmail watch client', async () => {
+    adapter.start();
+    await expect(adapter.setupWatch()).rejects.toThrow('watch client is not configured');
+  });
+
+  it('should set up watch through a configured Gmail client', async () => {
+    const expiration = String(Date.now() + 1000);
+    adapter = new GmailWebhookAdapter({
+      watchClient: {
+        setupWatch: async () => ({ historyId: 'history-1', expiration }),
+      },
+    });
+    adapter.start();
+
+    await expect(adapter.setupWatch(['INBOX'])).resolves.toEqual({ historyId: 'history-1', expiration });
+    expect(adapter.isWatchActive()).toBe(true);
+  });
+
   it('should get messages with limit', () => {
-    adapter._addMessage('1', 'Hello');
-    adapter._addMessage('2', 'World');
+    adapter.addTestMessage('1', 'Hello');
+    adapter.addTestMessage('2', 'World');
     expect(adapter.getMessages(1)).toHaveLength(1);
     expect(adapter.getMessages()).toHaveLength(2);
   });
 
   it('should mark message as read', () => {
-    adapter._addMessage('1', 'Test');
+    adapter.addTestMessage('1', 'Test');
     expect(adapter.markRead('1')).toBe(true);
     expect(adapter.markRead('nonexistent')).toBe(false);
   });

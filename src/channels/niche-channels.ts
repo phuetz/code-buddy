@@ -1,17 +1,27 @@
 /**
  * Niche Channels & Misc
- * Lightweight stubs for Twitch, Tlon, Gmail, and docs search.
+ * Lightweight adapters for optional niche channels and docs search.
  */
 
 import { logger } from '../utils/logger.js';
 
+export type TwitchMessageSender = (channel: string, text: string) => { sent: boolean; channel: string };
+
+export interface TwitchAdapterConfig {
+  token?: string;
+  messageSender?: TwitchMessageSender;
+  [key: string]: unknown;
+}
+
 export class TwitchAdapter {
   private running: boolean = false;
   private channels: Set<string> = new Set();
-  private config: Record<string, unknown>;
+  private config: TwitchAdapterConfig;
+  private messageSender?: TwitchMessageSender;
 
-  constructor(config: Record<string, unknown> = {}) {
+  constructor(config: TwitchAdapterConfig = {}) {
     this.config = config;
+    this.messageSender = config.messageSender;
   }
 
   start(): void {
@@ -31,8 +41,11 @@ export class TwitchAdapter {
 
   sendMessage(channel: string, text: string): { sent: boolean; channel: string } {
     if (!this.running) throw new Error('Adapter not running');
+    if (!this.messageSender) {
+      throw new Error('TwitchAdapter message sender is not configured. Provide a real Twitch sender before sending messages.');
+    }
     logger.debug(`Twitch [${channel}]: ${text}`);
-    return { sent: true, channel };
+    return this.messageSender(channel, text);
   }
 
   joinChannel(channel: string): void {
@@ -48,12 +61,21 @@ export class TwitchAdapter {
   }
 }
 
+export type TlonMessageSender = (shipName: string, text: string) => { sent: boolean; ship: string };
+
+export interface TlonAdapterConfig {
+  messageSender?: TlonMessageSender;
+  [key: string]: unknown;
+}
+
 export class TlonAdapter {
   private running: boolean = false;
-  private config: Record<string, unknown>;
+  private config: TlonAdapterConfig;
+  private messageSender?: TlonMessageSender;
 
-  constructor(config: Record<string, unknown> = {}) {
+  constructor(config: TlonAdapterConfig = {}) {
     this.config = config;
+    this.messageSender = config.messageSender;
   }
 
   start(): void {
@@ -72,8 +94,11 @@ export class TlonAdapter {
 
   sendMessage(shipName: string, text: string): { sent: boolean; ship: string } {
     if (!this.running) throw new Error('Adapter not running');
+    if (!this.messageSender) {
+      throw new Error('TlonAdapter message sender is not configured. Provide a real Tlon sender before sending messages.');
+    }
     logger.debug(`Tlon [${shipName}]: ${text}`);
-    return { sent: true, ship: shipName };
+    return this.messageSender(shipName, text);
   }
 
   getConfig(): Record<string, unknown> {
@@ -87,6 +112,18 @@ export interface GmailPubSubConfig {
   subscriptionName?: string;
   labelFilter?: string[];
   serviceAccountKeyPath?: string;
+  watchClient?: GmailWatchClient;
+}
+
+export interface GmailMessageSummary {
+  id: string;
+  subject: string;
+  from: string;
+}
+
+export interface GmailWatchClient {
+  setupWatch(labelIds?: string[]): Promise<{ historyId: string; expiration: string }>;
+  fetchMessagesSince?(notification: { emailAddress: string; historyId: string }): Promise<GmailMessageSummary[]>;
 }
 
 export class GmailWebhookAdapter {
@@ -94,11 +131,13 @@ export class GmailWebhookAdapter {
   private messages: Array<{ id: string; subject: string; from: string; read: boolean; receivedAt: Date }> = [];
   private config: Record<string, unknown>;
   private pubsubConfig: GmailPubSubConfig;
+  private watchClient?: GmailWatchClient;
   private watchExpiry: Date | null = null;
   private callbacks: Array<(msg: { id: string; subject: string; from: string }) => void> = [];
 
-  constructor(config: Record<string, unknown> = {}) {
+  constructor(config: GmailPubSubConfig & Record<string, unknown> = {}) {
     this.config = config;
+    this.watchClient = config.watchClient;
     this.pubsubConfig = {
       projectId: config.projectId as string,
       topicName: config.topicName as string || 'projects/my-project/topics/gmail-notifications',
@@ -128,17 +167,19 @@ export class GmailWebhookAdapter {
 
   /**
    * Set up Gmail push notifications via Pub/Sub.
-   * In production, this calls the Gmail API watch() endpoint.
    */
   async setupWatch(labelIds?: string[]): Promise<{ historyId: string; expiration: string }> {
     if (!this.running) throw new Error('Adapter not running');
-    const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    if (!this.watchClient) {
+      throw new Error('Gmail watch client is not configured. Provide a real Gmail API watch client before setupWatch().');
+    }
+
+    const watch = await this.watchClient.setupWatch(labelIds);
+    const expiryMs = Number(watch.expiration);
+    const expiry = Number.isFinite(expiryMs) ? new Date(expiryMs) : null;
     this.watchExpiry = expiry;
-    logger.debug('Gmail Pub/Sub watch set up', { labelIds, expiry: expiry.toISOString() });
-    return {
-      historyId: `history_${Date.now()}`,
-      expiration: expiry.getTime().toString(),
-    };
+    logger.debug('Gmail Pub/Sub watch set up', { labelIds, expiry: expiry?.toISOString() });
+    return watch;
   }
 
   /**
@@ -148,7 +189,14 @@ export class GmailWebhookAdapter {
   async handlePubSubNotification(data: { emailAddress: string; historyId: string }): Promise<void> {
     if (!this.running) return;
     logger.debug('Gmail Pub/Sub notification received', data);
-    // In production, this would call Gmail API to fetch new messages since historyId
+    if (!this.watchClient?.fetchMessagesSince) {
+      throw new Error('Gmail history fetch client is not configured. Provide fetchMessagesSince() before handling notifications.');
+    }
+
+    const messages = await this.watchClient.fetchMessagesSince(data);
+    for (const msg of messages) {
+      this.addMessage(msg.id, msg.subject, msg.from);
+    }
   }
 
   getMessages(limit?: number): Array<{ id: string; subject: string; from: string; read: boolean; receivedAt: Date }> {
@@ -200,8 +248,16 @@ export class GmailWebhookAdapter {
     return { ...this.pubsubConfig };
   }
 
-  // Test helper to add messages
+  addTestMessage(id: string, subject: string, from: string = 'test@example.com'): void {
+    this.addMessage(id, subject, from);
+  }
+
+  // Backward-compatible test helper.
   _addMessage(id: string, subject: string, from: string = 'test@example.com'): void {
+    this.addTestMessage(id, subject, from);
+  }
+
+  private addMessage(id: string, subject: string, from: string): void {
     const msg = { id, subject, from, read: false, receivedAt: new Date() };
     this.messages.push(msg);
     for (const cb of this.callbacks) {
