@@ -11,7 +11,6 @@
 
 import {
   ENV_SCHEMA,
-  EnvVarDef,
   validateEnv,
   getEnvSummary,
   maskValue,
@@ -26,6 +25,8 @@ describe('ENV_SCHEMA', () => {
     expect(names).toContain('GROK_API_KEY');
     expect(names).toContain('GROK_BASE_URL');
     expect(names).toContain('GROK_MODEL');
+    expect(names).toContain('CODEBUDDY_PROVIDER');
+    expect(names).toContain('CHATGPT_MODEL');
     expect(names).toContain('YOLO_MODE');
     expect(names).toContain('MAX_COST');
     expect(names).toContain('MORPH_API_KEY');
@@ -38,6 +39,11 @@ describe('ENV_SCHEMA', () => {
     expect(names).toContain('ANTHROPIC_API_KEY');
     expect(names).toContain('GOOGLE_API_KEY');
     expect(names).toContain('GEMINI_API_KEY');
+    expect(names).toContain('OLLAMA_HOST');
+    expect(names).toContain('OLLAMA_MODEL');
+    expect(names).toContain('GEMMA_MODEL');
+    expect(names).toContain('CODEBUDDY_PEER_PROVIDER');
+    expect(names).toContain('CODEBUDDY_PEER_MODEL');
     expect(names).toContain('ELEVENLABS_API_KEY');
 
     // Search
@@ -108,9 +114,9 @@ describe('ENV_SCHEMA', () => {
     }
   });
 
-  it('should mark GROK_API_KEY as required', () => {
+  it('should not require GROK_API_KEY because other provider auth can satisfy the app', () => {
     const grokKey = ENV_SCHEMA.find(d => d.name === 'GROK_API_KEY');
-    expect(grokKey?.required).toBe(true);
+    expect(grokKey?.required).not.toBe(true);
   });
 });
 
@@ -128,15 +134,14 @@ describe('getEnvDef', () => {
 });
 
 describe('validateEnv', () => {
-  it('should report error when required variables are missing', () => {
+  it('should accept an empty env schema because provider auth may come from OAuth files', () => {
     const env: Record<string, string | undefined> = {};
     const result = validateEnv(env);
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.some(e => e.includes('GROK_API_KEY'))).toBe(true);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
   });
 
-  it('should pass when required variables are set', () => {
+  it('should pass when a Grok API key is set', () => {
     const env: Record<string, string | undefined> = {
       GROK_API_KEY: 'xai-test-key-12345',
     };
@@ -147,7 +152,6 @@ describe('validateEnv', () => {
 
   it('should warn on invalid number type', () => {
     const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
       MAX_COST: 'not-a-number',
     };
     const result = validateEnv(env);
@@ -156,7 +160,6 @@ describe('validateEnv', () => {
 
   it('should warn on number below minimum', () => {
     const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
       PORT: '0',
     };
     const result = validateEnv(env);
@@ -165,7 +168,6 @@ describe('validateEnv', () => {
 
   it('should warn on number above maximum', () => {
     const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
       PORT: '99999',
     };
     const result = validateEnv(env);
@@ -174,7 +176,6 @@ describe('validateEnv', () => {
 
   it('should warn on invalid boolean value', () => {
     const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
       YOLO_MODE: 'yes-please',
     };
     const result = validateEnv(env);
@@ -183,7 +184,6 @@ describe('validateEnv', () => {
 
   it('should accept valid boolean values', () => {
     const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
       YOLO_MODE: 'true',
       DEBUG: 'true',
     };
@@ -193,7 +193,6 @@ describe('validateEnv', () => {
 
   it('should warn on string pattern mismatch', () => {
     const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
       SECURITY_MODE: 'ultra-secure',
     };
     const result = validateEnv(env);
@@ -202,7 +201,6 @@ describe('validateEnv', () => {
 
   it('should pass valid pattern matches', () => {
     const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
       SECURITY_MODE: 'auto-edit',
       LOG_LEVEL: 'debug',
     };
@@ -212,22 +210,20 @@ describe('validateEnv', () => {
   });
 
   it('should skip validation for unset optional variables', () => {
-    const env: Record<string, string | undefined> = {
-      GROK_API_KEY: 'xai-test',
-    };
+    const env: Record<string, string | undefined> = {};
     const result = validateEnv(env);
     expect(result.valid).toBe(true);
     // Should not have warnings about unset optional vars
     expect(result.warnings.filter(w => w.includes('MORPH_API_KEY'))).toHaveLength(0);
   });
 
-  it('should handle empty string as unset for required vars', () => {
+  it('should handle empty string as unset for optional vars', () => {
     const env: Record<string, string | undefined> = {
       GROK_API_KEY: '',
     };
     const result = validateEnv(env);
-    expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.includes('GROK_API_KEY'))).toBe(true);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
   });
 });
 
@@ -308,11 +304,10 @@ describe('getEnvSummary', () => {
     expect(summary).toContain(`2/${ENV_SCHEMA.length} variables set`);
   });
 
-  it('should include validation errors in output', () => {
+  it('should not show a Grok API key error for empty env output', () => {
     const summary = getEnvSummary({});
-    // GROK_API_KEY is required, so should show error
-    expect(summary).toContain('Errors:');
-    expect(summary).toContain('GROK_API_KEY');
+    expect(summary).not.toContain('Errors:');
+    expect(summary).not.toContain('GROK_API_KEY is required');
   });
 
   it('should include validation warnings in output', () => {
@@ -327,15 +322,13 @@ describe('getEnvSummary', () => {
   it('should include legend', () => {
     const summary = getEnvSummary({});
     expect(summary).toContain('Legend:');
-    expect(summary).toContain('[required]');
   });
 
-  it('should show [required] tag for required variables', () => {
+  it('should not show [required] tag for GROK_API_KEY', () => {
     const summary = getEnvSummary({});
-    // GROK_API_KEY line should have [required]
     const lines = summary.split('\n');
     const apiKeyLine = lines.find(l => l.includes('GROK_API_KEY') && !l.includes('Errors'));
-    expect(apiKeyLine).toContain('[required]');
+    expect(apiKeyLine).not.toContain('[required]');
   });
 });
 
