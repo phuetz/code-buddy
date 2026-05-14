@@ -32,6 +32,22 @@ interface MCPManagerInterface {
   listTools(server: string): string[];
 }
 
+function requireCodeBuddyClient(action: string): CodeBuddyClientInterface {
+  if (!codebuddyClientInstance) {
+    throw new Error(
+      `Code Buddy client unavailable: ${action} requires an initialized Code Buddy client.`
+    );
+  }
+  return codebuddyClientInstance;
+}
+
+function requireMCPManager(action: string): MCPManagerInterface {
+  if (!mcpManagerInstance) {
+    throw new Error(`MCP manager unavailable: ${action} requires an initialized MCP manager.`);
+  }
+  return mcpManagerInstance;
+}
+
 export interface CodeBuddyBindingsConfig extends CodeBuddyScriptConfig {
   codebuddyClient?: CodeBuddyClientInterface;
   mcpManager?: MCPManagerInterface;
@@ -66,13 +82,9 @@ export function createGrokBindings(
   const grok: Record<string, CodeBuddyFunction | CodeBuddyValue> = {};
 
   const askFn = async (prompt: string): Promise<string> => {
-    if (!codebuddyClientInstance) {
-      print('[buddy.ask] No Code Buddy client available - returning mock response');
-      return `[Mock AI Response to: ${prompt}]`;
-    }
-
     try {
-      const response = await codebuddyClientInstance.complete(prompt);
+      const client = requireCodeBuddyClient('grok.ask');
+      const response = await client.complete(prompt);
       return response;
     } catch (error) {
       throw new Error(`CodeBuddy API error: ${getErrorMessage(error)}`);
@@ -81,16 +93,11 @@ export function createGrokBindings(
   grok.ask = askFn;
 
   const chatFn = async (message: string): Promise<string> => {
+    const client = requireCodeBuddyClient('grok.chat');
     conversationHistory.push({ role: 'user', content: message });
 
-    if (!codebuddyClientInstance) {
-      const mockResponse = `[Mock Chat Response to: ${message}]`;
-      conversationHistory.push({ role: 'assistant', content: mockResponse });
-      return mockResponse;
-    }
-
     try {
-      const response = await codebuddyClientInstance.chat(conversationHistory);
+      const response = await client.chat(conversationHistory);
       conversationHistory.push({ role: 'assistant', content: response });
       return response;
     } catch (error) {
@@ -456,13 +463,9 @@ Think through the problem and execute the necessary steps.`;
   };
 
   mcp.call = async (server: string, toolName: string, args: Record<string, unknown> = {}): Promise<unknown> => {
-    if (!mcpManagerInstance) {
-      print(`[MCP] No MCP manager - mock call to ${server}.${toolName}`);
-      return { mock: true, server, tool: toolName, args };
-    }
-
     try {
-      return await mcpManagerInstance.callTool(server, toolName, args);
+      const manager = requireMCPManager('mcp.call');
+      return await manager.callTool(server, toolName, args);
     } catch (error) {
       throw new Error(`MCP call failed: ${getErrorMessage(error)}`);
     }

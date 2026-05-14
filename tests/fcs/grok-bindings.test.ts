@@ -24,13 +24,27 @@ describe('Grok-CLI Bindings', () => {
   });
 
   describe('grok namespace', () => {
-    test('grok.ask returns mock response without client', async () => {
+    test('grok.ask fails without a Code Buddy client', async () => {
       const result = await executeFCS(`
         let response = grok.ask("What is 2+2?")
         print(response)
       `);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Code Buddy client unavailable');
+    });
+
+    test('grok.ask uses the configured Code Buddy client', async () => {
+      const result = await executeFCS(`
+        let response = grok.ask("What is 2+2?")
+        print(response)
+      `, {
+        codebuddyClient: {
+          complete: async () => '4',
+          chat: async () => 'chat response',
+        },
+      } as any);
       expect(result.success).toBe(true);
-      expect(result.output.some(o => o.includes('Mock AI Response'))).toBe(true);
+      expect(result.output).toContain('4');
     });
 
     test('grok.chat maintains conversation history', async () => {
@@ -39,18 +53,28 @@ describe('Grok-CLI Bindings', () => {
         grok.chat("How are you?")
         let history = grok.history()
         print(len(history))
-      `);
+      `, {
+        codebuddyClient: {
+          complete: async () => 'complete response',
+          chat: async (messages: Array<{ role: string; content: string }>) =>
+            `reply ${messages.length}`,
+        },
+      } as any);
       expect(result.success).toBe(true);
       expect(result.output).toContain('4'); // 2 user + 2 assistant messages
     });
 
     test('grok.clearHistory clears conversation', async () => {
       const result = await executeFCS(`
-        grok.chat("Hello")
         grok.clearHistory()
         let history = grok.history()
         print(len(history))
-      `);
+      `, {
+        conversationHistory: [
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi' },
+        ],
+      } as any);
       expect(result.success).toBe(true);
       expect(result.output.some(o => o.includes('0'))).toBe(true);
     });
@@ -182,7 +206,12 @@ describe('Grok-CLI Bindings', () => {
       const result = await executeFCS(`
         let response = agent.run("List all files")
         print("agent ran")
-      `);
+      `, {
+        codebuddyClient: {
+          complete: async () => 'agent complete',
+          chat: async () => 'agent chat',
+        },
+      } as any);
       expect(result.success).toBe(true);
       expect(result.output.some(o => o.includes('agent') || o.includes('Agent'))).toBe(true);
     });
@@ -198,12 +227,13 @@ describe('Grok-CLI Bindings', () => {
       expect(result.output).toContain('0');
     });
 
-    test('mcp.call returns mock without manager', async () => {
+    test('mcp.call fails without manager', async () => {
       const result = await executeFCS(`
         let response = mcp.call("weather", "get_forecast", { city: "Paris" })
         print("mcp called")
       `);
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('MCP manager unavailable');
     });
   });
 

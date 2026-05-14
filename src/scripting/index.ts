@@ -71,8 +71,9 @@ export async function executeScript(
     const result = await runtime.execute(ast);
 
     return {
-      success: true,
+      success: result.success,
       output: result.output,
+      error: result.error,
       returnValue: result.returnValue,
       testResults: result.testResults,
       duration: Date.now() - startTime,

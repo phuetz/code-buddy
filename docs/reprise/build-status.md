@@ -292,6 +292,10 @@ npm run build
   factices quand `window.electronAPI` est absent. Le hook signale maintenant
   explicitement que le bridge desktop est indisponible, et l'utilisateur ne voit
   plus une conversation simulee comme si Code Buddy avait repondu.
+- Les bindings de scripting `grok.ask`, `grok.chat` et `mcp.call` ne retournent
+  plus de reponses artificielles sans client Code Buddy ou manager MCP. Le
+  runtime de script propage aussi maintenant `success: false` quand l'execution
+  echoue apres un parse reussi.
 
 ## Blocage leve
 
