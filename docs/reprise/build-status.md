@@ -344,6 +344,9 @@ npm run build
 - `MessagePreprocessor` n'injecte plus de pseudo-transcription audio dans les
   messages entrants. Une transcription n'est ajoutee au contexte que si un vrai
   transcripteur est configure explicitement.
+- `GitNexusMCPClient` ne se declare plus connecte en mode stub et ne renvoie
+  plus de graphes vides par defaut. Les requetes GitNexus exigent maintenant un
+  transport MCP explicite.
 
 ## Blocage leve
 

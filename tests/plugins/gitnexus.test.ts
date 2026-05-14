@@ -40,7 +40,10 @@ import {
   getGitNexusManager,
   clearGitNexusManagerCache,
 } from '../../src/plugins/gitnexus/GitNexusManager.js';
-import { GitNexusMCPClient } from '../../src/plugins/gitnexus/GitNexusMCPClient.js';
+import {
+  GitNexusMCPClient,
+  type GitNexusMCPTransport,
+} from '../../src/plugins/gitnexus/GitNexusMCPClient.js';
 import type {
   GitNexusStats,
   GNQueryResult,
@@ -376,6 +379,65 @@ describe('getGitNexusManager (singleton)', () => {
 
 describe('GitNexusMCPClient', () => {
   let client: GitNexusMCPClient;
+  type TestTransport = GitNexusMCPTransport & {
+    connect: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+    callTool: ReturnType<typeof vi.fn>;
+    readResource: ReturnType<typeof vi.fn>;
+  };
+
+  function createTransport(): TestTransport {
+    return {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      callTool: vi.fn(async (name: string, input: Record<string, unknown>) => {
+        switch (name) {
+          case 'query':
+            return {
+              processes: [{ summary: `Found ${input.query}`, priority: 1, symbol_count: 2 }],
+              definitions: [{ name: 'AuthService', type: 'class', filePath: 'src/auth.ts' }],
+            } satisfies GNQueryResult;
+          case 'context':
+            return {
+              symbol: {
+                uid: String(input.symbol),
+                kind: 'function',
+                filePath: 'src/auth.ts',
+                startLine: 12,
+              },
+              incoming: { calls: ['caller'], imports: [] },
+              outgoing: { calls: ['callee'], imports: ['dep'] },
+              processes: [{ name: 'auth', step: 'validate' }],
+            } satisfies GNContextResult;
+          case 'impact':
+            return {
+              target: String(input.target),
+              affected: [{ name: 'AuthController', depth: 1, risk: 'medium' }],
+              affectedProcesses: ['auth'],
+              riskLevel: 'medium',
+            } satisfies GNImpactResult;
+          case 'cypher':
+            return [{ n: 1 }];
+          default:
+            throw new Error(`Unexpected tool ${name}`);
+        }
+      }),
+      readResource: vi.fn(async (name: string) => {
+        switch (name) {
+          case 'clusters':
+            return [{ name: 'core', cohesion: 0.9, members: ['AuthService'], filePaths: ['src/auth.ts'] }];
+          case 'processes':
+            return [{ name: 'auth', steps: [{ symbol: 'AuthService', filePath: 'src/auth.ts', stepIndex: 1 }] }];
+          case 'repo-context':
+            return { repo: 'test-repo' };
+          case 'architecture-map':
+            return 'graph TD; A-->B;';
+          default:
+            throw new Error(`Unexpected resource ${name}`);
+        }
+      }),
+    } as unknown as TestTransport;
+  }
 
   beforeEach(() => {
     client = new GitNexusMCPClient('test-repo');
@@ -392,15 +454,23 @@ describe('GitNexusMCPClient', () => {
       expect(client.isConnected()).toBe(false);
     });
 
-    it('should connect in stub mode', async () => {
-      await client.connect();
-      expect(client.isConnected()).toBe(true);
+    it('should reject connection without a configured transport', async () => {
+      await expect(client.connect()).rejects.toThrow(
+        'GitNexus MCP transport is not configured',
+      );
+      expect(client.isConnected()).toBe(false);
     });
 
     it('should disconnect cleanly', async () => {
+      const transport = createTransport();
+      client = new GitNexusMCPClient('test-repo', transport);
+
       await client.connect();
       await client.disconnect();
+
       expect(client.isConnected()).toBe(false);
+      expect(transport.connect).toHaveBeenCalledTimes(1);
+      expect(transport.disconnect).toHaveBeenCalledTimes(1);
     });
 
     it('should expose the repo name', () => {
@@ -408,64 +478,82 @@ describe('GitNexusMCPClient', () => {
     });
   });
 
-  describe('tools (stub mode)', () => {
+  describe('tools', () => {
+    let transport: TestTransport;
+
     beforeEach(async () => {
+      transport = createTransport();
+      client = new GitNexusMCPClient('test-repo', transport);
       await client.connect();
     });
 
-    it('query should return empty results', async () => {
+    it('query should call the transport', async () => {
       const result = await client.query('find authentication flow');
-      expect(result).toEqual({ processes: [], definitions: [] });
+      expect(result.definitions[0].name).toBe('AuthService');
+      expect(transport.callTool).toHaveBeenCalledWith('query', {
+        query: 'find authentication flow',
+        repo: 'test-repo',
+      });
     });
 
-    it('context should return default symbol context', async () => {
+    it('context should call the transport', async () => {
       const result = await client.context('myFunction');
       expect(result.symbol.uid).toBe('myFunction');
       expect(result.symbol.kind).toBe('function');
-      expect(result.incoming.calls).toEqual([]);
-      expect(result.outgoing.calls).toEqual([]);
-      expect(result.processes).toEqual([]);
+      expect(result.incoming.calls).toEqual(['caller']);
     });
 
-    it('impact should return low risk default', async () => {
+    it('impact should call the transport', async () => {
       const result = await client.impact('src/index.ts');
       expect(result.target).toBe('src/index.ts');
-      expect(result.affected).toEqual([]);
-      expect(result.affectedProcesses).toEqual([]);
-      expect(result.riskLevel).toBe('low');
+      expect(result.affectedProcesses).toEqual(['auth']);
+      expect(result.riskLevel).toBe('medium');
     });
 
     it('impact should accept direction parameter', async () => {
       const result = await client.impact('src/index.ts', 'downstream');
       expect(result.target).toBe('src/index.ts');
-      expect(result.riskLevel).toBe('low');
+      expect(transport.callTool).toHaveBeenCalledWith('impact', {
+        target: 'src/index.ts',
+        direction: 'downstream',
+        repo: 'test-repo',
+      });
     });
 
-    it('cypher should return empty array', async () => {
+    it('cypher should call the transport', async () => {
       const result = await client.cypher('MATCH (n) RETURN n LIMIT 5');
-      expect(result).toEqual([]);
+      expect(result).toEqual([{ n: 1 }]);
     });
   });
 
-  describe('resources (stub mode)', () => {
+  describe('resources', () => {
     beforeEach(async () => {
+      client = new GitNexusMCPClient('test-repo', createTransport());
       await client.connect();
     });
 
-    it('getClusters should return empty array', async () => {
-      expect(await client.getClusters()).toEqual([]);
+    it('getClusters should read transport resources', async () => {
+      expect(await client.getClusters()).toEqual([{
+        name: 'core',
+        cohesion: 0.9,
+        members: ['AuthService'],
+        filePaths: ['src/auth.ts'],
+      }]);
     });
 
-    it('getProcesses should return empty array', async () => {
-      expect(await client.getProcesses()).toEqual([]);
+    it('getProcesses should read transport resources', async () => {
+      expect(await client.getProcesses()).toEqual([{
+        name: 'auth',
+        steps: [{ symbol: 'AuthService', filePath: 'src/auth.ts', stepIndex: 1 }],
+      }]);
     });
 
-    it('getRepoContext should return empty object', async () => {
-      expect(await client.getRepoContext()).toEqual({});
+    it('getRepoContext should read transport resources', async () => {
+      expect(await client.getRepoContext()).toEqual({ repo: 'test-repo' });
     });
 
-    it('getArchitectureMap should return empty string', async () => {
-      expect(await client.getArchitectureMap()).toBe('');
+    it('getArchitectureMap should read transport resources', async () => {
+      expect(await client.getArchitectureMap()).toBe('graph TD; A-->B;');
     });
   });
 

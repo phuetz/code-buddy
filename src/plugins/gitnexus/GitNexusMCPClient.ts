@@ -2,10 +2,6 @@
  * GitNexus MCP Client
  *
  * Talks to a GitNexus MCP server to query the code graph.
- * Currently operates in **stub mode** — all methods return empty/default
- * results so the rest of the codebase can integrate without requiring
- * a real GitNexus installation. The real MCP transport will be wired
- * in a follow-up once gitnexus is available.
  *
  * Tools exposed by GitNexus MCP:
  *   - query   — natural-language search over the code graph
@@ -85,35 +81,53 @@ export interface GNProcess {
   }>;
 }
 
+export interface GitNexusMCPTransport {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  callTool(name: 'query', input: { query: string; repo: string }): Promise<GNQueryResult>;
+  callTool(name: 'context', input: { symbol: string; repo: string }): Promise<GNContextResult>;
+  callTool(name: 'impact', input: { target: string; direction: 'upstream' | 'downstream'; repo: string }): Promise<GNImpactResult>;
+  callTool(name: 'cypher', input: { query: string; repo: string }): Promise<unknown[]>;
+  readResource(name: 'clusters', input: { repo: string }): Promise<GNCluster[]>;
+  readResource(name: 'processes', input: { repo: string }): Promise<GNProcess[]>;
+  readResource(name: 'repo-context', input: { repo: string }): Promise<Record<string, unknown>>;
+  readResource(name: 'architecture-map', input: { repo: string }): Promise<string>;
+}
+
 // ── Client ──────────────────────────────────────────────────────────
 
 export class GitNexusMCPClient {
   private repoName: string;
   private connected = false;
+  private transport?: GitNexusMCPTransport;
 
-  constructor(repoName: string) {
+  constructor(repoName: string, transport?: GitNexusMCPTransport) {
     this.repoName = repoName;
+    this.transport = transport;
   }
 
   /**
    * Connect to the GitNexus MCP server.
-   *
-   * In the real implementation this will use `@modelcontextprotocol/sdk`
-   * `StdioClientTransport` with:
-   *   command: 'npx'
-   *   args: ['-y', 'gitnexus@latest', 'mcp']
-   *
-   * For now this is a stub that marks the client as connected.
    */
   async connect(): Promise<void> {
+    if (!this.transport) {
+      throw new Error(
+        'GitNexus MCP transport is not configured. Start a real GitNexus MCP server and pass a transport before querying the code graph.'
+      );
+    }
+
+    await this.transport.connect();
     this.connected = true;
-    logger.debug('GitNexus MCP client connected (stub mode)', {
+    logger.debug('GitNexus MCP client connected', {
       repo: this.repoName,
     });
   }
 
   /** Disconnect from the MCP server. */
   async disconnect(): Promise<void> {
+    if (this.connected && this.transport) {
+      await this.transport.disconnect();
+    }
     this.connected = false;
     logger.debug('GitNexus MCP client disconnected', {
       repo: this.repoName,
@@ -139,8 +153,7 @@ export class GitNexusMCPClient {
   async query(q: string): Promise<GNQueryResult> {
     this.assertConnected();
     logger.debug('GitNexus query', { query: q, repo: this.repoName });
-    // Stub: real impl calls callTool('query', { query: q, repo: this.repoName })
-    return { processes: [], definitions: [] };
+    return this.requireTransport().callTool('query', { query: q, repo: this.repoName });
   }
 
   /**
@@ -150,17 +163,7 @@ export class GitNexusMCPClient {
   async context(symbolName: string): Promise<GNContextResult> {
     this.assertConnected();
     logger.debug('GitNexus context', { symbol: symbolName, repo: this.repoName });
-    return {
-      symbol: {
-        uid: symbolName,
-        kind: 'function',
-        filePath: '',
-        startLine: 0,
-      },
-      incoming: { calls: [], imports: [] },
-      outgoing: { calls: [], imports: [] },
-      processes: [],
-    };
+    return this.requireTransport().callTool('context', { symbol: symbolName, repo: this.repoName });
   }
 
   /**
@@ -175,12 +178,7 @@ export class GitNexusMCPClient {
   ): Promise<GNImpactResult> {
     this.assertConnected();
     logger.debug('GitNexus impact', { target, direction, repo: this.repoName });
-    return {
-      target,
-      affected: [],
-      affectedProcesses: [],
-      riskLevel: 'low',
-    };
+    return this.requireTransport().callTool('impact', { target, direction, repo: this.repoName });
   }
 
   /**
@@ -189,7 +187,7 @@ export class GitNexusMCPClient {
   async cypher(query: string): Promise<unknown[]> {
     this.assertConnected();
     logger.debug('GitNexus cypher', { query, repo: this.repoName });
-    return [];
+    return this.requireTransport().callTool('cypher', { query, repo: this.repoName });
   }
 
   // ── Resources ───────────────────────────────────────────────────
@@ -197,25 +195,25 @@ export class GitNexusMCPClient {
   /** Get all detected module clusters with cohesion scores. */
   async getClusters(): Promise<GNCluster[]> {
     this.assertConnected();
-    return [];
+    return this.requireTransport().readResource('clusters', { repo: this.repoName });
   }
 
   /** Get all detected business processes. */
   async getProcesses(): Promise<GNProcess[]> {
     this.assertConnected();
-    return [];
+    return this.requireTransport().readResource('processes', { repo: this.repoName });
   }
 
   /** Get high-level repository context metadata. */
   async getRepoContext(): Promise<Record<string, unknown>> {
     this.assertConnected();
-    return {};
+    return this.requireTransport().readResource('repo-context', { repo: this.repoName });
   }
 
   /** Get a Mermaid architecture diagram of the repository. */
   async getArchitectureMap(): Promise<string> {
     this.assertConnected();
-    return '';
+    return this.requireTransport().readResource('architecture-map', { repo: this.repoName });
   }
 
   // ── Internal ────────────────────────────────────────────────────
@@ -224,5 +222,12 @@ export class GitNexusMCPClient {
     if (!this.connected) {
       throw new Error('GitNexusMCPClient is not connected. Call connect() first.');
     }
+  }
+
+  private requireTransport(): GitNexusMCPTransport {
+    if (!this.transport) {
+      throw new Error('GitNexus MCP transport is not configured.');
+    }
+    return this.transport;
   }
 }

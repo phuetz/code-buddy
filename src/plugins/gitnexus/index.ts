@@ -18,6 +18,7 @@ export type {
   GNImpactResult,
   GNCluster,
   GNProcess,
+  GitNexusMCPTransport,
 } from './GitNexusMCPClient.js';
 
 export type { GitNexusStats } from './GitNexusManager.js';
