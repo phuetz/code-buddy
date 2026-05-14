@@ -127,15 +127,29 @@ function textResult(content: string): CommandHandlerResult {
   };
 }
 
-const OSC_SEQUENCE_RE = /\x1B\][\s\S]*?(?:\x07|\x1B\\)/g;
-const ANSI_SEQUENCE_RE = /[\x1B\x9B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[a-zA-Z\d]*)*)?\x07)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
-const UNSAFE_CONTROL_RE = /[\x00-\x08\x0B\x0C\x0D\x0E-\x1F\x7F]/g;
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+const C1_CSI = String.fromCharCode(155);
+const OSC_SEQUENCE_RE = new RegExp(`${ESC}\\][\\s\\S]*?(?:${BEL}|${ESC}\\\\)`, 'g');
+const ANSI_SEQUENCE_RE = new RegExp(
+  `[${ESC}${C1_CSI}][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?${BEL})|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))`,
+  'g',
+);
+
+function removeUnsafeControlChars(content: string): string {
+  return [...content]
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code === 10 || code === 9 || (code >= 32 && code !== 127);
+    })
+    .join('');
+}
 
 function sanitizePeerToolOutput(content: string): string {
-  return content
+  const withoutEscapes = content
     .replace(OSC_SEQUENCE_RE, '')
-    .replace(ANSI_SEQUENCE_RE, '')
-    .replace(UNSAFE_CONTROL_RE, '');
+    .replace(ANSI_SEQUENCE_RE, '');
+  return removeUnsafeControlChars(withoutEscapes);
 }
 
 interface ParsedListenArgs {

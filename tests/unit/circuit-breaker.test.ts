@@ -74,7 +74,7 @@ describe('CircuitBreaker', () => {
     });
 
     it('should track failures', async () => {
-      try { await cb.execute(async () => { throw new Error('fail'); }); } catch {}
+      try { await cb.execute(async () => { throw new Error('fail'); }); } catch { /* ignore expected error */ }
       const stats = cb.getStats();
       expect(stats.totalFailures).toBe(1);
       expect(stats.consecutiveFailures).toBe(1);
@@ -82,8 +82,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should reset consecutive failures on success', async () => {
-      try { await cb.execute(async () => { throw new Error('fail'); }); } catch {}
-      try { await cb.execute(async () => { throw new Error('fail'); }); } catch {}
+      try { await cb.execute(async () => { throw new Error('fail'); }); } catch { /* ignore expected error */ }
+      try { await cb.execute(async () => { throw new Error('fail'); }); } catch { /* ignore expected error */ }
       expect(cb.getStats().consecutiveFailures).toBe(2);
 
       await cb.execute(async () => 'ok');
@@ -92,8 +92,8 @@ describe('CircuitBreaker', () => {
 
     it('should remain CLOSED below failure threshold', async () => {
       // 2 failures (threshold is 3)
-      try { await cb.execute(async () => { throw new Error('f1'); }); } catch {}
-      try { await cb.execute(async () => { throw new Error('f2'); }); } catch {}
+      try { await cb.execute(async () => { throw new Error('f1'); }); } catch { /* ignore expected error */ }
+      try { await cb.execute(async () => { throw new Error('f2'); }); } catch { /* ignore expected error */ }
 
       expect(cb.getState()).toBe(CircuitState.CLOSED);
     });
@@ -106,7 +106,7 @@ describe('CircuitBreaker', () => {
   describe('CLOSED -> OPEN transition', () => {
     it('should open after reaching failure threshold', async () => {
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
 
       expect(cb.getState()).toBe(CircuitState.OPEN);
@@ -117,7 +117,7 @@ describe('CircuitBreaker', () => {
       cb.on('open', openHandler);
 
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
 
       expect(openHandler).toHaveBeenCalledTimes(1);
@@ -136,7 +136,7 @@ describe('CircuitBreaker', () => {
     beforeEach(async () => {
       // Open the circuit
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
       expect(cb.getState()).toBe(CircuitState.OPEN);
     });
@@ -168,7 +168,7 @@ describe('CircuitBreaker', () => {
 
     it('should not execute the wrapped function', async () => {
       const fn = jest.fn().mockResolvedValue('result');
-      try { await cb.execute(fn); } catch {}
+      try { await cb.execute(fn); } catch { /* ignore expected error */ }
       expect(fn).not.toHaveBeenCalled();
     });
   });
@@ -181,7 +181,7 @@ describe('CircuitBreaker', () => {
     beforeEach(async () => {
       // Open the circuit
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
     });
 
@@ -199,7 +199,7 @@ describe('CircuitBreaker', () => {
       await new Promise(resolve => setTimeout(resolve, 120));
 
       // Trigger the transition by making a call
-      try { await cb.execute(async () => 'test'); } catch {}
+      try { await cb.execute(async () => 'test'); } catch { /* ignore expected error */ }
 
       expect(halfOpenHandler).toHaveBeenCalledTimes(1);
       expect(halfOpenHandler).toHaveBeenCalledWith({ name: 'test-breaker' });
@@ -221,7 +221,7 @@ describe('CircuitBreaker', () => {
     beforeEach(async () => {
       // Open, then wait for half-open
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
       await new Promise(resolve => setTimeout(resolve, 120));
     });
@@ -255,7 +255,7 @@ describe('CircuitBreaker', () => {
     beforeEach(async () => {
       // Open, then wait for half-open
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
       await new Promise(resolve => setTimeout(resolve, 120));
     });
@@ -263,7 +263,7 @@ describe('CircuitBreaker', () => {
     it('should reopen on failure in HALF_OPEN', async () => {
       try {
         await cb.execute(async () => { throw new Error('recovery failed'); });
-      } catch {}
+      } catch { /* ignore expected error */ }
 
       expect(cb.getState()).toBe(CircuitState.OPEN);
     });
@@ -274,7 +274,7 @@ describe('CircuitBreaker', () => {
 
       try {
         await cb.execute(async () => { throw new Error('recovery failed'); });
-      } catch {}
+      } catch { /* ignore expected error */ }
 
       expect(openHandler).toHaveBeenCalledTimes(1);
     });
@@ -294,15 +294,15 @@ describe('CircuitBreaker', () => {
       });
 
       // Open the circuit
-      try { await breaker.execute(async () => { throw new Error('f1'); }); } catch {}
-      try { await breaker.execute(async () => { throw new Error('f2'); }); } catch {}
+      try { await breaker.execute(async () => { throw new Error('f1'); }); } catch { /* ignore expected error */ }
+      try { await breaker.execute(async () => { throw new Error('f2'); }); } catch { /* ignore expected error */ }
       expect(breaker.getState()).toBe(CircuitState.OPEN);
 
       // Wait for half-open
       await new Promise(resolve => setTimeout(resolve, 70));
 
       // Use up halfOpenMaxAttempts with failures
-      try { await breaker.execute(async () => { throw new Error('ho1'); }); } catch {}
+      try { await breaker.execute(async () => { throw new Error('ho1'); }); } catch { /* ignore expected error */ }
       // After first half-open failure, circuit reopens
       expect(breaker.getState()).toBe(CircuitState.OPEN);
 
@@ -317,7 +317,7 @@ describe('CircuitBreaker', () => {
   describe('reset', () => {
     it('should reset all state to initial', async () => {
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
 
       cb.reset();
@@ -343,7 +343,7 @@ describe('CircuitBreaker', () => {
 
       // CLOSED -> OPEN
       for (let i = 0; i < 3; i++) {
-        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch {}
+        try { await cb.execute(async () => { throw new Error(`fail-${i}`); }); } catch { /* ignore expected error */ }
       }
 
       // Wait for OPEN -> HALF_OPEN
@@ -431,8 +431,8 @@ describe('Circuit Breaker Registry', () => {
       const cbB = getCircuitBreaker('provider-b', { failureThreshold: 2, resetTimeoutMs: 1000 });
 
       // Fail provider A
-      try { await cbA.execute(async () => { throw new Error('a1'); }); } catch {}
-      try { await cbA.execute(async () => { throw new Error('a2'); }); } catch {}
+      try { await cbA.execute(async () => { throw new Error('a1'); }); } catch { /* ignore expected error */ }
+      try { await cbA.execute(async () => { throw new Error('a2'); }); } catch { /* ignore expected error */ }
 
       // Provider A should be OPEN
       expect(cbA.getState()).toBe(CircuitState.OPEN);
@@ -491,7 +491,7 @@ describe('Circuit Breaker Registry', () => {
       const cbB = getCircuitBreaker('beta');
 
       await cbA.execute(async () => 'ok');
-      try { await cbB.execute(async () => { throw new Error('fail'); }); } catch {}
+      try { await cbB.execute(async () => { throw new Error('fail'); }); } catch { /* ignore expected error */ }
 
       const allStats = getAllCircuitBreakerStats();
 

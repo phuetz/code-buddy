@@ -126,10 +126,32 @@ const HOMOGLYPH_MAP: Record<string, string> = {
 };
 
 /** Invisible/formatting Unicode characters that should never appear in commands */
-const INVISIBLE_CHARS = /[\u200B\u200C\u200D\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2061\u2062\u2063\u2064\uFEFF\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E]/;
+const INVISIBLE_CODE_POINTS = new Set([
+  0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2028, 0x2029,
+  0x2060, 0x2061, 0x2062, 0x2063, 0x2064, 0xFEFF, 0x00AD,
+  0x034F, 0x061C, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x180E,
+]);
+
+function hasInvisibleChars(text: string): boolean {
+  for (const char of text) {
+    const cp = char.codePointAt(0)!;
+    if (INVISIBLE_CODE_POINTS.has(cp) || (cp >= 0x202A && cp <= 0x202E)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** Bidirectional override characters (Trojan Source attack) */
-const BIDI_OVERRIDES = /[\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069]/;
+function hasBidiOverrides(text: string): boolean {
+  for (const char of text) {
+    const cp = char.codePointAt(0)!;
+    if ((cp >= 0x202A && cp <= 0x202E) || (cp >= 0x2066 && cp <= 0x2069)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export interface UnicodeObfuscationResult {
   /** Whether any obfuscation was detected */
@@ -159,12 +181,12 @@ export function detectUnicodeObfuscation(command: string): UnicodeObfuscationRes
   }
 
   // Check for invisible characters
-  if (INVISIBLE_CHARS.test(command)) {
+  if (hasInvisibleChars(command)) {
     findings.push('Invisible Unicode characters detected (ZWJ, ZWNJ, soft hyphen, etc.)');
   }
 
   // Check for BiDi overrides (Trojan Source attack vector)
-  if (BIDI_OVERRIDES.test(command)) {
+  if (hasBidiOverrides(command)) {
     findings.push('Bidirectional text override characters detected (Trojan Source attack vector)');
   }
 

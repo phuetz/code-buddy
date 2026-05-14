@@ -33,6 +33,9 @@ npm test -- tests/codebuddy/providers/provider-chatgpt-responses.test.ts tests/u
 npx eslint src/providers/codex-oauth.ts src/utils/provider-detector.ts src/commands/handlers/auth-handlers.ts src/doctor/index.ts src/embeddings/embedding-provider.ts src/knowledge/workspace-indexer.ts src/config/constants.ts src/config/model-tools.ts src/index.ts tests/providers/codex-oauth-storage.test.ts tests/utils/provider-detector.test.ts tests/commands/handlers/auth-handlers.test.ts tests/unit/embedding-provider.test.ts tests/knowledge/workspace-indexer.test.ts tests/unit/models-snapshot.test.ts tests/utils/model-utils.test.ts
 # passed with existing warnings only; 0 errors
 
+npm run lint -- --quiet
+# passed
+
 node dist/index.js --help
 # passed
 
@@ -71,6 +74,10 @@ npm --prefix cowork run build
 - L'indexeur workspace ne demarre plus apres une initialisation incomplete des
   embeddings, et le fallback mock des embeddings ne plante plus quand aucun
   listener `error` n'est attache.
+- Les erreurs ESLint restantes ont ete supprimees sur le scope global:
+  `npm run lint -- --quiet` passe. Les corrections gardent le comportement
+  existant: catches attendus documentes, regex de controle construites sans
+  litteraux de controle, et detection Unicode reformulee sans classes ambigues.
 
 ## Blocage leve
 
@@ -88,11 +95,9 @@ et de dynamic/static import; ils ne bloquent pas le packaging.
 
 ## Toujours rouge hors reprise
 
-`npm run lint` reste rouge sur de la dette preexistante hors scope de cette
-reprise, notamment `scripts/tests/cat-rate-history-cache.ts` (`no-empty`) et
-`src/agent/multi-agent/workflow-event-streamer.ts`
-(`no-constant-binary-expression`). Le lint limite aux fichiers modifies passe
-avec warnings uniquement.
+`npm run lint -- --quiet` est vert. Le lint complet garde de nombreux warnings
+historiques (`no-explicit-any`, variables inutilisees dans des tests/scripts),
+mais plus d'erreurs bloquantes connues.
 
 ## Lecture produit
 

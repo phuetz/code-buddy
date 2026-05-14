@@ -1667,7 +1667,7 @@ export class ComputerControlTool {
         const ocr = new OCRTool();
         const ocrResult = await ocr.extractText(snapshotPath);
         
-        try { await UnifiedVfsRouter.Instance.remove(snapshotPath); } catch (e) {}
+        try { await UnifiedVfsRouter.Instance.remove(snapshotPath); } catch { /* ignore cleanup error */ }
 
         const ocrData = ocrResult.data as any;
         if (ocrResult.success && ocrData?.text?.toLowerCase().includes(input.text.toLowerCase())) {
@@ -1762,7 +1762,7 @@ export class ComputerControlTool {
     const ocrResult = await ocrTool.extractText(snapshotPath);
     
     // Clean up
-    try { await UnifiedVfsRouter.Instance.remove(snapshotPath); } catch (e) {}
+    try { await UnifiedVfsRouter.Instance.remove(snapshotPath); } catch { /* ignore cleanup error */ }
 
     if (!ocrResult.success || !ocrResult.data) {
       return { success: false, error: `OCR failed: ${ocrResult.error || 'No data returned'}` };

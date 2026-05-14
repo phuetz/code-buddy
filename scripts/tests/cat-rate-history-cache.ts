@@ -132,7 +132,7 @@ export function cat59HistoryManager(): TestDef[] {
         const added1 = mgr.add('first command');
         const added2 = mgr.add('second command');
         const all = mgr.getAll();
-        try { fs.unlinkSync(tmp); } catch {}
+        try { fs.unlinkSync(tmp); } catch { /* ignore expected error */ }
         return {
           pass: added1 && added2 && all.length === 2,
           metadata: { count: all.length },
@@ -149,7 +149,7 @@ export function cat59HistoryManager(): TestDef[] {
         mgr.add('duplicate');
         const added = mgr.add('duplicate');
         const all = mgr.getAll();
-        try { fs.unlinkSync(tmp); } catch {}
+        try { fs.unlinkSync(tmp); } catch { /* ignore expected error */ }
         return {
           pass: added === false && all.length === 1,
           metadata: { count: all.length },
@@ -179,7 +179,7 @@ export function cat59HistoryManager(): TestDef[] {
         mgr.add('cmd3');
         mgr.add('cmd4');
         const all = mgr.getAll();
-        try { fs.unlinkSync(tmp); } catch {}
+        try { fs.unlinkSync(tmp); } catch { /* ignore expected error */ }
         return {
           pass: all.length === 3,
           metadata: { count: all.length, first: all[0]?.text },
@@ -199,7 +199,7 @@ export function cat59HistoryManager(): TestDef[] {
         const prev1 = mgr.getPrevious(''); // gamma
         const prev2 = mgr.getPrevious(''); // beta
         const next1 = mgr.getNext();       // gamma
-        try { fs.unlinkSync(tmp); } catch {}
+        try { fs.unlinkSync(tmp); } catch { /* ignore expected error */ }
         return {
           pass: prev1 === 'gamma' && prev2 === 'beta' && next1 === 'gamma',
           metadata: { prev1, prev2, next1 },
@@ -215,7 +215,7 @@ export function cat59HistoryManager(): TestDef[] {
         const mgr = new HistoryManager({ historyFile: tmp, excludePrefixes: ['/'] });
         const added1 = mgr.add('/think deep');
         const added2 = mgr.add('normal command');
-        try { fs.unlinkSync(tmp); } catch {}
+        try { fs.unlinkSync(tmp); } catch { /* ignore expected error */ }
         return {
           pass: added1 === false && added2 === true,
           metadata: { added1, added2 },

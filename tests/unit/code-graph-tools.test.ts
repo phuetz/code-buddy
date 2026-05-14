@@ -75,7 +75,7 @@ export async function main(): Promise<void> {
 }
 
 function cleanup(dir: string): void {
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore expected error */ }
 }
 
 // ============================================================================

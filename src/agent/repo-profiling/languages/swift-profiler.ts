@@ -67,7 +67,7 @@ export const swiftProfiler: LanguageProfiler = {
         if (toolsMatch) ctx.nodeVersion = ctx.nodeVersion || `Swift tools ${toolsMatch[1]}`;
 
         // Dependencies from .package(url:)
-        const pkgDeps = [...content.matchAll(/\.package\s*\(\s*url:\s*"[^"]*\/([^"\/]+?)(?:\.git)?"/g)];
+        const pkgDeps = [...content.matchAll(/\.package\s*\(\s*url:\s*"[^"]*\/([^"/]+?)(?:\.git)?"/g)];
         const swiftNotable = new Set([
           'Alamofire', 'Moya', 'Kingfisher', 'SnapKit', 'RxSwift',
           'Combine', 'SwiftNIO', 'Vapor', 'Kitura', 'Perfect',

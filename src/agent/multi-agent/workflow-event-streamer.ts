@@ -68,7 +68,7 @@ export function attachStreamer(
   };
   const onWorkflowError = (data: unknown) => {
     const err = (data as { error?: { message?: string } })?.error;
-    writer(`  [workflow] error: ${err?.message ?? String(err) ?? 'unknown'}\n`);
+    writer(`  [workflow] error: ${err?.message ?? (err ? String(err) : 'unknown')}\n`);
   };
   const onWorkflowStopped = () => {
     writer(`  [workflow] stopped by user\n`);

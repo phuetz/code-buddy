@@ -132,7 +132,6 @@ describe('WorkflowOrchestrator — Phase O (V0.4.1)', () => {
       const o = new WorkflowOrchestrator({ apiKey: 'k', maxConcurrentWorkflows: 2 });
       // Make the first runWorkflow hang so the second submit goes to slot 2
       let resolveFirst!: (v: unknown) => void;
-      masMocks.created; // reset by beforeEach; instances populate below as submits come in
       // We need to slow the first one
       const block = new Promise<void>((resolve) => { resolveFirst = resolve as (v: unknown) => void; });
       let firstRunImpl = false;
