@@ -2,16 +2,41 @@
 // Delegates block rendering to ContentBlockView and its sub-components.
 import { useState, useCallback, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Check, Clock, XCircle, Code2, Star } from 'lucide-react';
+import { Copy, Check, Clock, XCircle, Code2, Star, RotateCcw } from 'lucide-react';
 import type { Message, ContentBlock, ToolUseContent, ToolResultContent } from '../types';
 import { ContentBlockView } from './message/ContentBlockView';
 import { detectArtifacts } from '../utils/artifact-detector';
 import { useAppStore } from '../store';
+import { useRegenerate } from '../hooks/use-regenerate';
 
 interface MessageCardProps {
   message: Message;
   isStreaming?: boolean;
   searchMatchState?: 'none' | 'match' | 'active';
+}
+
+/**
+ * Hover-only regenerate button for assistant messages. Pulled into a
+ * sub-component so the `useRegenerate` hook isn't called from inside
+ * the parent's conditional branch (assistant-only) — keeps hook order
+ * stable across renders. Returns null if regeneration isn't possible
+ * (no preceding user message) or while the session is currently
+ * streaming.
+ */
+function RegenerateAction({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
+  const { t } = useTranslation();
+  const { canRegenerate, handleRegenerate } = useRegenerate(message);
+  if (!canRegenerate || isStreaming) return null;
+  return (
+    <button
+      onClick={handleRegenerate}
+      className="absolute -left-8 top-7 w-6 h-6 flex items-center justify-center rounded-md bg-surface-muted hover:bg-surface-active transition-all opacity-0 group-hover/assistant:opacity-100"
+      title={t('messageCard.regenerate', 'Régénérer la réponse')}
+      aria-label={t('messageCard.regenerate', 'Régénérer la réponse')}
+    >
+      <RotateCcw className="w-3 h-3 text-text-muted" />
+    </button>
+  );
 }
 
 export const MessageCard = memo(function MessageCard({
@@ -188,6 +213,7 @@ export const MessageCard = memo(function MessageCard({
               }`}
             />
           </button>
+          <RegenerateAction message={message} isStreaming={isStreaming} />
           {contentBlocks.map((block, index) => {
             // Skip tool_result blocks that are merged into their tool_use card
             if (
