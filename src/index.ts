@@ -286,7 +286,11 @@ async function ensureUserSettingsDirectory(): Promise<void> {
 // Detected provider configuration — moved to `src/utils/provider-detector.ts`
 // (Phase d.25) so it can be unit-tested in isolation. Re-exported here
 // for the rest of this file's call sites.
-import { detectProviderFromEnv, type DetectedProvider } from './utils/provider-detector.js';
+import {
+  detectProviderFromEnv,
+  selectModelForDetectedProvider,
+  type DetectedProvider,
+} from './utils/provider-detector.js';
 
 // Legacy inline implementation kept commented for git-archaeology only.
 function _detectProviderFromEnvLegacy(): DetectedProvider | null {
@@ -340,7 +344,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
       provider: 'ollama',
       apiKey: 'ollama', // placeholder — Ollama OpenAI-compat ignores it
       baseURL: host,
-      defaultModel: process.env.GROK_MODEL || process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b',
+      defaultModel: process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b',
     };
   }
 
@@ -484,24 +488,20 @@ async function saveCommandLineSettings(
 async function loadModel(): Promise<string | undefined> {
   await ensureEnvLoaded();
 
-  // 1. Explicit env var takes highest priority
-  if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
+  const detected = await getDetectedProvider();
+  let configured = process.env.GROK_MODEL;
 
-  // 2. Project/user settings override auto-detection
-  try {
-    const getSettingsManager = await lazyImport.settingsManager();
-    const manager = getSettingsManager();
-    const settingsModel = manager.getCurrentModel();
-    if (settingsModel) return settingsModel;
-  } catch (_err) {
-    logger.debug('Failed to load model from settings manager', { error: _err });
+  if (!configured) {
+    try {
+      const getSettingsManager = await lazyImport.settingsManager();
+      const manager = getSettingsManager();
+      configured = manager.getCurrentModel();
+    } catch (_err) {
+      logger.debug('Failed to load model from settings manager', { error: _err });
+    }
   }
 
-  // 3. Fallback to auto-detected provider's default model
-  const detected = await getDetectedProvider();
-  if (detected) return detected.defaultModel;
-
-  return undefined;
+  return selectModelForDetectedProvider(detected, configured);
 }
 
 // Handle commit-and-push command in headless mode
