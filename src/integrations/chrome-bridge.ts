@@ -410,9 +410,6 @@ export class ChromeBridge {
 
       this.pendingActions.set(actionId, { resolve, timeout });
       this.actionQueue.push({ id: actionId, action });
-
-      // Simulate action execution locally for testing / when extension is not present
-      this.simulateAction(actionId, action);
     });
   }
 
@@ -471,56 +468,6 @@ export class ChromeBridge {
     const actions = [...this.actionQueue];
     this.actionQueue = [];
     return actions;
-  }
-
-  /**
-   * Simulate action execution locally (fallback when no extension)
-   */
-  private simulateAction(actionId: string, action: BrowserAction): void {
-    // Deferred simulation so the promise is registered first
-    setImmediate(() => {
-      const pending = this.pendingActions.get(actionId);
-      if (!pending) return; // Already resolved or timed out
-
-      let result: BrowserActionResult;
-
-      switch (action.type) {
-        case 'navigate':
-          if (action.url) {
-            this.currentUrl = action.url;
-            this.currentTitle = '';
-          }
-          result = { success: true, data: { url: this.currentUrl }, timestamp: Date.now() };
-          break;
-        case 'click':
-          result = { success: true, data: { selector: action.selector, clicked: true }, timestamp: Date.now() };
-          break;
-        case 'type':
-          result = { success: true, data: { text: action.text, typed: true }, timestamp: Date.now() };
-          break;
-        case 'evaluate':
-          try {
-            const evalResult = new Script(action.expression || '').runInNewContext({
-              document: { title: this.currentTitle, location: { href: this.currentUrl } },
-              window: { location: { href: this.currentUrl } },
-            }, { timeout: 1000 });
-            result = { success: true, data: evalResult, timestamp: Date.now() };
-          } catch (err) {
-            result = { success: false, error: String(err), timestamp: Date.now() };
-          }
-          break;
-        case 'screenshot':
-          result = { success: true, data: { format: 'simulated' }, timestamp: Date.now() };
-          break;
-        case 'wait':
-          result = { success: true, timestamp: Date.now() };
-          break;
-        default:
-          result = { success: true, data: { action: action.type }, timestamp: Date.now() };
-      }
-
-      this.receiveActionResponse(actionId, result);
-    });
   }
 
   private findDOMElement(selector: string): DOMElementInfo | null {

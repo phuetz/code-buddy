@@ -308,6 +308,10 @@ npm run build
 - `AdvancedParallelExecutor` ne simule plus des agents reussis avec
   `Completed task`. Sans runner reel injecte, chaque tache echoue clairement;
   avec un `agentRunner`, l'execution parallele utilise le resultat fourni.
+- `ChromeBridge` ne simule plus les actions navigateur (`navigate`, `click`,
+  `type`, `evaluate`, `screenshot`, `wait`) quand aucune extension ne repond.
+  Les commandes sortantes restent en file pour Chrome, puis reussissent
+  uniquement via `receiveActionResponse` ou echouent par timeout explicite.
 
 ## Blocage leve
 
