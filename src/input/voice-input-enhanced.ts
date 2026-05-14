@@ -410,36 +410,9 @@ export class VoiceInputManager extends EventEmitter {
    * Transcribe with system speech recognition (macOS)
    */
   private async transcribeWithSystem(_audioFile: string): Promise<TranscriptionResult> {
-    // On macOS, we can use the built-in speech recognition
-    if (process.platform === 'darwin') {
-      return new Promise((resolve) => {
-        // Use macOS dictation through AppleScript (limited but works without setup)
-        const script = `
-          tell application "System Events"
-            -- This is a placeholder, actual implementation would use Speech framework
-            return "System speech recognition not fully implemented. Use whisper-local or whisper-api provider."
-          end tell
-        `;
-
-        const osascript = spawn('osascript', ['-e', script]);
-        let _stdout = ''; // Captured for future use
-
-        osascript.stdout.on('data', (data) => {
-          _stdout += data.toString();
-        });
-
-        osascript.on('close', () => {
-          resolve({
-            success: false,
-            error: 'System speech recognition requires manual setup. Please use whisper-local or whisper-api provider.'
-          });
-        });
-      });
-    }
-
     return {
       success: false,
-      error: 'System speech recognition not available on this platform. Use whisper-local or whisper-api provider.'
+      error: 'System speech recognition is not implemented. Use whisper-local or whisper-api provider.'
     };
   }
 

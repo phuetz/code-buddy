@@ -350,6 +350,8 @@ npm run build
 - L'action `summarize` du `PruningManager` ne fabrique plus un faux resume par
   troncature. Elle exige maintenant un summarizer explicite; `compact` reste
   l'action adaptee pour couper du contenu sans pretendre le resumer.
+- Le provider vocal `system` ne lance plus un AppleScript placeholder. Il echoue
+  explicitement tant qu'une vraie integration Speech/Whisper n'est pas choisie.
 
 ## Blocage leve
 
