@@ -2,11 +2,12 @@
 
 ## Environment Variables
 
-### Required
+### Recommended
 
 | Variable | Description |
 |:---------|:------------|
-| `GROK_API_KEY` | xAI API key (default provider) |
+| `buddy login chatgpt` | ChatGPT subscription via Codex OAuth. Preferred when available. |
+| `CODEBUDDY_PROVIDER` | Optional explicit provider override: `chatgpt`, `openai`, `gemini`, `anthropic`, `grok`, or `ollama`. |
 
 ### Provider Keys
 
@@ -53,8 +54,9 @@
 | Variable | Description | Default |
 |:---------|:------------|:--------|
 | `GROK_BASE_URL` | Custom API endpoint | - |
-| `GROK_MODEL` | Default model | - |
+| `GROK_MODEL` | Default xAI/Grok model, kept for historical compatibility | - |
 | `CHATGPT_MODEL` | Default ChatGPT subscription model | `gpt-5.5` |
+| `OPENAI_MODEL` / `GEMINI_MODEL` / `ANTHROPIC_MODEL` / `OLLAMA_MODEL` | Provider-specific model overrides | provider default |
 | `CODEBUDDY_MAX_TOKENS` | Override response token limit | model's maxOutputTokens |
 | `MAX_COST` | Session cost limit ($) | $10 (YOLO: $100) |
 | `YOLO_MODE` | Full autonomy mode | false |

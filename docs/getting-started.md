@@ -37,8 +37,13 @@ npm start
 ## First Run
 
 ```bash
-# Set your API key (Grok/xAI is the default provider)
-export GROK_API_KEY=your_api_key
+# Recommended: use your ChatGPT subscription via local OAuth
+buddy login chatgpt
+
+# Or set an API key for a metered provider
+export OPENAI_API_KEY=your_api_key
+# Historical xAI/Grok compatibility still works:
+# export GROK_API_KEY=your_api_key
 
 # Start interactive mode
 buddy
@@ -56,7 +61,7 @@ buddy --base-url http://localhost:11434/v1 --model llama3
 buddy --yolo
 ```
 
-Code Buddy auto-detects your provider from the API key environment variables. Set any of `GROK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, etc.
+Code Buddy auto-detects your provider from local subscription auth and API key environment variables. A valid ChatGPT login from `buddy login chatgpt` or the shared Codex CLI auth is preferred over ambient API keys. Set `CODEBUDDY_PROVIDER=chatgpt`, `openai`, `gemini`, `anthropic`, `grok`, or `ollama` to force a provider explicitly.
 
 ## Headless Mode (CI / Scripting)
 

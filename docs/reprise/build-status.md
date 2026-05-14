@@ -54,6 +54,12 @@ node cowork/scripts/pre-build-check.js
 
 npm --prefix cowork run build
 # passed; generated cowork/release/Code Buddy Cowork-1.0.0-rc.8-win-x64.exe
+
+npm test -- tests/cloud/cloud-agent-runner.test.ts tests/daemon/cron-agent-bridge.test.ts tests/daemon/heartbeat.test.ts tests/desktop/codebuddy-engine-adapter-hotswap.test.ts tests/server/agent-provider.test.ts tests/channels/channel-ai-provider.test.ts tests/unit/parallel-executor.test.ts tests/unit/provider-command.test.ts tests/agent/architect-mode.test.ts tests/commands/agents-handler.test.ts tests/commands/handlers/test-handlers-ai.test.ts tests/unit/prompt-suggestions-ai.test.ts tests/unit/config-validation-startup.test.ts tests/computer-skills-llm.test.ts tests/unit/reasoning-tool.test.ts tests/reasoning/think-handlers.test.ts tests/unit/hook-llm-evaluation.test.ts tests/unit/ide-extensions-server.test.ts tests/unit/interpreter-llm.test.ts tests/utils/provider-detector.test.ts
+# 352 tests passed
+
+node dist/index.js provider current
+# Active Provider: ChatGPT Pro (subscription); Model: gpt-5.5
 ```
 
 ## Debloque pendant la reprise
@@ -101,6 +107,14 @@ npm --prefix cowork run build
 - Les cles API serveur Fleet sortent du mode "memoire du process": elles sont
   stockees sous forme de hash local, rechargees par le serveur quand le store
   change, et gerables par `buddy api-key` / `buddy api-keys`.
+- Les tests qui masquaient le routage avec un mock global de
+  `provider-detector` utilisent maintenant de vrais signaux env/OAuth
+  temporaires. Il reste des mocks reseau/process/fichiers volontaires, mais
+  plus de faux provider dans les chemins runtime testes.
+- `ConfigResolver` ne retombe plus sur la base URL ou le modele Grok quand un
+  provider CLI non-Grok est force sans base URL explicite. Les profils non-Grok
+  sans modele prennent aussi leur default provider (`gpt-4o`, Gemini, Claude,
+  etc.) au lieu de `grok-code-fast-1`.
 
 ## Blocage leve
 
