@@ -12,11 +12,25 @@ import { BaseChannel, ChannelConfig, DeliveryResult, OutboundMessage } from '../
 export interface NostrConfig {
   privateKey?: string;
   relays: string[];
+  client?: NostrClient;
 }
 
 export interface NostrChannelConfig extends ChannelConfig {
   privateKey?: string;
   relays: string[];
+  client?: NostrClient;
+}
+
+export interface NostrClient {
+  connect(relays: string[]): Promise<string[]>;
+  disconnect?(): Promise<void>;
+  sendDirectMessage(params: {
+    pubkey: string;
+    content: string;
+    privateKey?: string;
+    publicKey: string;
+    relays: string[];
+  }): Promise<{ success: boolean; eventId?: string }>;
 }
 
 export class NostrAdapter {
@@ -30,19 +44,24 @@ export class NostrAdapter {
   ];
 
   private config: NostrConfig;
+  private client?: NostrClient;
   private running = false;
   private connectedRelays: string[] = [];
 
   constructor(config: NostrConfig) {
     this.config = { ...config, relays: [...config.relays] };
+    this.client = config.client;
   }
 
   async start(): Promise<void> {
     if (this.running) {
       throw new Error('NostrAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('Nostr client is not configured. Provide a real Nostr relay client before connecting.');
+    }
     logger.debug('NostrAdapter: connecting to relays', { relays: this.config.relays });
-    this.connectedRelays = [...this.config.relays];
+    this.connectedRelays = await this.client.connect(this.config.relays);
     this.running = true;
   }
 
@@ -51,6 +70,7 @@ export class NostrAdapter {
       throw new Error('NostrAdapter is not running');
     }
     logger.debug('NostrAdapter: disconnecting from relays');
+    await this.client?.disconnect?.();
     this.connectedRelays = [];
     this.running = false;
   }
@@ -59,12 +79,21 @@ export class NostrAdapter {
     return this.running;
   }
 
-  async sendDirectMessage(pubkey: string, content: string): Promise<{ success: boolean; eventId: string }> {
+  async sendDirectMessage(pubkey: string, content: string): Promise<{ success: boolean; eventId?: string }> {
     if (!this.running) {
       throw new Error('NostrAdapter is not running');
     }
+    if (!this.client) {
+      throw new Error('Nostr client is not configured. Provide a real Nostr relay client before sending messages.');
+    }
     logger.debug('NostrAdapter: sending NIP-04 DM', { pubkey, contentLength: content.length });
-    return { success: true, eventId: `nostr_${Date.now()}` };
+    return this.client.sendDirectMessage({
+      pubkey,
+      content,
+      privateKey: this.config.privateKey,
+      publicKey: this.getPublicKey(),
+      relays: [...this.connectedRelays],
+    });
   }
 
   getPublicKey(): string {
@@ -83,18 +112,17 @@ export class NostrAdapter {
   }
 
   addRelay(url: string): void {
-    if (!this.connectedRelays.includes(url)) {
-      this.connectedRelays.push(url);
-      this.config.relays = [...this.connectedRelays];
+    if (!this.config.relays.includes(url)) {
+      this.config.relays = [...this.config.relays, url];
       logger.debug('NostrAdapter: added relay', { url });
     }
   }
 
   removeRelay(url: string): void {
-    const index = this.connectedRelays.indexOf(url);
+    const index = this.config.relays.indexOf(url);
     if (index !== -1) {
-      this.connectedRelays.splice(index, 1);
-      this.config.relays = [...this.connectedRelays];
+      this.config.relays = this.config.relays.filter((relay) => relay !== url);
+      this.connectedRelays = this.connectedRelays.filter((relay) => relay !== url);
       logger.debug('NostrAdapter: removed relay', { url });
     }
   }
@@ -258,6 +286,7 @@ export class NostrChannel extends BaseChannel {
     this.adapter = new NostrAdapter({
       privateKey: config.privateKey,
       relays: config.relays,
+      client: config.client,
     });
   }
 

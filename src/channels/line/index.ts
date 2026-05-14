@@ -12,20 +12,40 @@ export interface LINEConfig {
   channelAccessToken: string;
   channelSecret: string;
   port?: number;
+  client?: LINEClient;
 }
 
 export interface LINEChannelConfig extends ChannelConfig {
   channelAccessToken: string;
   channelSecret: string;
   port?: number;
+  client?: LINEClient;
+}
+
+export interface LINEProfile {
+  userId: string;
+  displayName: string;
+  pictureUrl: string;
+  statusMessage: string;
+}
+
+export interface LINEClient {
+  start?(): Promise<void>;
+  stop?(): Promise<void>;
+  sendMessage(userId: string, text: string): Promise<{ success: boolean; messageId?: string }>;
+  sendImage(userId: string, imageUrl: string): Promise<{ success: boolean; messageId?: string }>;
+  sendSticker(userId: string, packageId: string, stickerId: string): Promise<{ success: boolean; messageId?: string }>;
+  getProfile(userId: string): Promise<LINEProfile>;
 }
 
 export class LINEAdapter {
   private config: LINEConfig;
+  private client?: LINEClient;
   private running = false;
 
   constructor(config: LINEConfig) {
     this.config = { ...config };
+    this.client = config.client;
     if (this.config.port === undefined) {
       this.config.port = 8080;
     }
@@ -35,7 +55,11 @@ export class LINEAdapter {
     if (this.running) {
       throw new Error('LINEAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('LINE client is not configured. Provide a real LINE client before connecting.');
+    }
     logger.debug('LINEAdapter: starting webhook server', { port: this.config.port });
+    await this.client.start?.();
     this.running = true;
   }
 
@@ -44,6 +68,7 @@ export class LINEAdapter {
       throw new Error('LINEAdapter is not running');
     }
     logger.debug('LINEAdapter: stopping webhook server');
+    await this.client?.stop?.();
     this.running = false;
   }
 
@@ -51,40 +76,47 @@ export class LINEAdapter {
     return this.running;
   }
 
-  async sendMessage(userId: string, text: string): Promise<{ success: boolean }> {
+  async sendMessage(userId: string, text: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('LINEAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('LINE client is not configured. Provide a real LINE client before sending messages.');
     }
     logger.debug('LINEAdapter: sending message', { userId, textLength: text.length });
-    return { success: true };
+    return this.client.sendMessage(userId, text);
   }
 
-  async sendImage(userId: string, imageUrl: string): Promise<{ success: boolean }> {
+  async sendImage(userId: string, imageUrl: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('LINEAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('LINE client is not configured. Provide a real LINE client before sending images.');
     }
     logger.debug('LINEAdapter: sending image', { userId, imageUrl });
-    return { success: true };
+    return this.client.sendImage(userId, imageUrl);
   }
 
-  async sendSticker(userId: string, packageId: string, stickerId: string): Promise<{ success: boolean }> {
+  async sendSticker(userId: string, packageId: string, stickerId: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('LINEAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('LINE client is not configured. Provide a real LINE client before sending stickers.');
     }
     logger.debug('LINEAdapter: sending sticker', { userId, packageId, stickerId });
-    return { success: true };
+    return this.client.sendSticker(userId, packageId, stickerId);
   }
 
-  async getProfile(userId: string): Promise<{ userId: string; displayName: string; pictureUrl: string; statusMessage: string }> {
+  async getProfile(userId: string): Promise<LINEProfile> {
     if (!this.running) {
       throw new Error('LINEAdapter is not running');
     }
-    return {
-      userId,
-      displayName: `User ${userId}`,
-      pictureUrl: '',
-      statusMessage: '',
-    };
+    if (!this.client) {
+      throw new Error('LINE client is not configured. Provide a real LINE client before reading profiles.');
+    }
+    return this.client.getProfile(userId);
   }
 
   getConfig(): LINEConfig {
@@ -111,6 +143,7 @@ export class LINEChannel extends BaseChannel {
       channelAccessToken: config.channelAccessToken,
       channelSecret: config.channelSecret,
       port: config.port,
+      client: config.client,
     });
   }
 
@@ -137,17 +170,22 @@ export class LINEChannel extends BaseChannel {
       );
 
       if (imageAttachment?.url) {
-        await this.adapter.sendImage(message.channelId, imageAttachment.url);
+        const result = await this.adapter.sendImage(message.channelId, imageAttachment.url);
+        this.status.lastActivity = new Date();
+        return {
+          success: result.success,
+          messageId: result.messageId,
+          timestamp: new Date(),
+        };
       } else {
-        await this.adapter.sendMessage(message.channelId, message.content);
+        const result = await this.adapter.sendMessage(message.channelId, message.content);
+        this.status.lastActivity = new Date();
+        return {
+          success: result.success,
+          messageId: result.messageId,
+          timestamp: new Date(),
+        };
       }
-
-      this.status.lastActivity = new Date();
-      return {
-        success: true,
-        messageId: `line_${Date.now()}`,
-        timestamp: new Date(),
-      };
     } catch (error) {
       return {
         success: false,

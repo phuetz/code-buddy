@@ -22,6 +22,7 @@ export interface FeishuConfig {
   verificationToken?: string;
   encryptKey?: string;
   port?: number;
+  client?: FeishuClient;
   /** Agent name for card headers (identity-aware) */
   agentName?: string;
   /** Agent avatar image key */
@@ -56,6 +57,7 @@ export interface FeishuChannelConfig extends ChannelConfig {
   verificationToken?: string;
   encryptKey?: string;
   port?: number;
+  client?: FeishuClient;
 }
 
 export interface FeishuMessage {
@@ -67,8 +69,20 @@ export interface FeishuMessage {
   createTime: string;
 }
 
+export interface FeishuClient {
+  start(): Promise<{ accessToken?: string }>;
+  stop?(): Promise<void>;
+  sendText(chatId: string, text: string): Promise<{ success: boolean; messageId?: string }>;
+  sendCard(chatId: string, card: Record<string, unknown>): Promise<{ success: boolean; messageId?: string }>;
+  sendImage(chatId: string, imageKey: string): Promise<{ success: boolean; messageId?: string }>;
+  replyMessage(messageId: string, text: string): Promise<{ success: boolean }>;
+  getChatMembers(chatId: string): Promise<Array<{ userId: string; name: string }>>;
+  getThreadMessages(chatId: string): Promise<FeishuMessage[]>;
+}
+
 export class FeishuAdapter {
   private config: FeishuConfig;
+  private client?: FeishuClient;
   private running = false;
   private accessToken: string | null = null;
 
@@ -77,14 +91,19 @@ export class FeishuAdapter {
       port: 9000,
       ...config,
     };
+    this.client = config.client;
   }
 
   async start(): Promise<void> {
     if (this.running) {
       throw new Error('FeishuAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('Feishu client is not configured. Provide a real Feishu client before connecting.');
+    }
     logger.debug('FeishuAdapter: starting', { appId: this.config.appId });
-    this.accessToken = `tenant_access_token_${this.config.appId}`;
+    const result = await this.client.start();
+    this.accessToken = result.accessToken ?? null;
     this.running = true;
   }
 
@@ -93,6 +112,7 @@ export class FeishuAdapter {
       throw new Error('FeishuAdapter is not running');
     }
     logger.debug('FeishuAdapter: stopping');
+    await this.client?.stop?.();
     this.accessToken = null;
     this.running = false;
   }
@@ -101,47 +121,59 @@ export class FeishuAdapter {
     return this.running;
   }
 
-  async sendText(chatId: string, text: string): Promise<{ success: boolean; messageId: string }> {
+  async sendText(chatId: string, text: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('FeishuAdapter is not running');
     }
-    const messageId = `msg_${Date.now()}`;
+    if (!this.client) {
+      throw new Error('Feishu client is not configured. Provide a real Feishu client before sending messages.');
+    }
     logger.debug('FeishuAdapter: send text', { chatId, textLength: text.length });
-    return { success: true, messageId };
+    return this.client.sendText(chatId, text);
   }
 
-  async sendCard(chatId: string, card: Record<string, unknown>): Promise<{ success: boolean; messageId: string }> {
+  async sendCard(chatId: string, card: Record<string, unknown>): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('FeishuAdapter is not running');
     }
-    const messageId = `msg_${Date.now()}`;
+    if (!this.client) {
+      throw new Error('Feishu client is not configured. Provide a real Feishu client before sending cards.');
+    }
     logger.debug('FeishuAdapter: send card', { chatId });
-    return { success: true, messageId };
+    return this.client.sendCard(chatId, card);
   }
 
-  async sendImage(chatId: string, imageKey: string): Promise<{ success: boolean; messageId: string }> {
+  async sendImage(chatId: string, imageKey: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('FeishuAdapter is not running');
     }
-    const messageId = `msg_${Date.now()}`;
+    if (!this.client) {
+      throw new Error('Feishu client is not configured. Provide a real Feishu client before sending images.');
+    }
     logger.debug('FeishuAdapter: send image', { chatId, imageKey });
-    return { success: true, messageId };
+    return this.client.sendImage(chatId, imageKey);
   }
 
   async replyMessage(messageId: string, text: string): Promise<{ success: boolean }> {
     if (!this.running) {
       throw new Error('FeishuAdapter is not running');
     }
+    if (!this.client) {
+      throw new Error('Feishu client is not configured. Provide a real Feishu client before sending replies.');
+    }
     logger.debug('FeishuAdapter: reply', { messageId, textLength: text.length });
-    return { success: true };
+    return this.client.replyMessage(messageId, text);
   }
 
   async getChatMembers(chatId: string): Promise<Array<{ userId: string; name: string }>> {
     if (!this.running) {
       throw new Error('FeishuAdapter is not running');
     }
+    if (!this.client) {
+      throw new Error('Feishu client is not configured. Provide a real Feishu client before reading chat members.');
+    }
     logger.debug('FeishuAdapter: get chat members', { chatId });
-    return [];
+    return this.client.getChatMembers(chatId);
   }
 
   getAccessToken(): string | null {
@@ -273,9 +305,11 @@ export class FeishuAdapter {
     if (!this.running) {
       throw new Error('FeishuAdapter is not running');
     }
+    if (!this.client) {
+      throw new Error('Feishu client is not configured. Provide a real Feishu client before reading thread messages.');
+    }
     logger.debug('FeishuAdapter: get thread messages', { chatId });
-    // Returns empty — real implementation would call Feishu API
-    return [];
+    return this.client.getThreadMessages(chatId);
   }
 }
 
@@ -294,6 +328,7 @@ export class FeishuChannel extends BaseChannel {
       verificationToken: cfg.verificationToken,
       encryptKey: cfg.encryptKey,
       port: cfg.port,
+      client: cfg.client,
     });
     await this.adapter.start();
     this.status.connected = true;

@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FeishuAdapter } from '../../src/channels/feishu/index.js';
-import type { FeishuCardAction } from '../../src/channels/feishu/index.js';
+import type { FeishuCardAction, FeishuClient } from '../../src/channels/feishu/index.js';
 
 // Mock logger
 vi.mock('../../src/utils/logger.js', () => ({
@@ -20,13 +20,12 @@ vi.mock('../../src/utils/logger.js', () => ({
 describe('FeishuAdapter — Interactive Cards', () => {
   let adapter: FeishuAdapter;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     adapter = new FeishuAdapter({
       appId: 'test-app',
       appSecret: 'test-secret',
       agentName: 'CodeBuddy',
     });
-    await adapter.start();
   });
 
   it('buildApprovalCard produces a valid Feishu card JSON', () => {
@@ -83,12 +82,11 @@ describe('FeishuAdapter — Interactive Cards', () => {
 describe('FeishuAdapter — Reasoning Streams', () => {
   let adapter: FeishuAdapter;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     adapter = new FeishuAdapter({
       appId: 'test-app',
       appSecret: 'test-secret',
     });
-    await adapter.start();
   });
 
   it('onReasoningStream handler called during streaming', () => {
@@ -142,21 +140,43 @@ describe('FeishuAdapter — Reasoning Streams', () => {
 });
 
 describe('FeishuAdapter — Thread Context', () => {
+  const createClient = (): FeishuClient => ({
+    start: async () => ({ accessToken: 'tenant-token-1' }),
+    sendText: async () => ({ success: true, messageId: 'msg-text-1' }),
+    sendCard: async () => ({ success: true, messageId: 'msg-card-1' }),
+    sendImage: async () => ({ success: true, messageId: 'msg-image-1' }),
+    replyMessage: async () => ({ success: true }),
+    getChatMembers: async () => [],
+    getThreadMessages: async () => [],
+  });
+
   it('getThreadMessages returns array', async () => {
     const adapter = new FeishuAdapter({
       appId: 'test-app',
       appSecret: 'test-secret',
+      client: createClient(),
     });
     await adapter.start();
 
     const messages = await adapter.getThreadMessages('chat-123');
     expect(Array.isArray(messages)).toBe(true);
+    expect(adapter.getAccessToken()).toBe('tenant-token-1');
+  });
+
+  it('start rejects when no Feishu client is configured', async () => {
+    const adapter = new FeishuAdapter({
+      appId: 'test-app',
+      appSecret: 'test-secret',
+    });
+
+    await expect(adapter.start()).rejects.toThrow('Feishu client is not configured');
   });
 
   it('getThreadMessages throws if not running', async () => {
     const adapter = new FeishuAdapter({
       appId: 'test-app',
       appSecret: 'test-secret',
+      client: createClient(),
     });
 
     await expect(adapter.getThreadMessages('chat-123')).rejects.toThrow('not running');

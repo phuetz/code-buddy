@@ -83,27 +83,27 @@ export type { WebChatConfig } from './webchat/index.js';
 
 // LINE
 export { LINEAdapter, LINEChannel } from './line/index.js';
-export type { LINEConfig, LINEChannelConfig } from './line/index.js';
+export type { LINEConfig, LINEChannelConfig, LINEClient, LINEProfile } from './line/index.js';
 
 // Nostr
 export { NostrAdapter, NostrChannel } from './nostr/index.js';
-export type { NostrConfig, NostrChannelConfig } from './nostr/index.js';
+export type { NostrConfig, NostrChannelConfig, NostrClient } from './nostr/index.js';
 
 // Zalo
 export { ZaloAdapter, ZaloChannel } from './zalo/index.js';
-export type { ZaloConfig, ZaloChannelConfig } from './zalo/index.js';
+export type { ZaloConfig, ZaloChannelConfig, ZaloClient } from './zalo/index.js';
 
 // Mattermost
 export { MattermostAdapter, MattermostChannel } from './mattermost/index.js';
-export type { MattermostConfig, MattermostChannelConfig } from './mattermost/index.js';
+export type { MattermostConfig, MattermostChannelConfig, MattermostChannelSummary, MattermostClient } from './mattermost/index.js';
 
 // Nextcloud Talk
 export { NextcloudTalkAdapter, NextcloudTalkChannel } from './nextcloud-talk/index.js';
-export type { NextcloudTalkConfig, NextcloudTalkChannelConfig } from './nextcloud-talk/index.js';
+export type { NextcloudTalkConfig, NextcloudTalkChannelConfig, NextcloudTalkRoom, NextcloudTalkClient } from './nextcloud-talk/index.js';
 
 // Twilio Voice
 export { TwilioVoiceAdapter, TwilioVoiceChannel } from './twilio-voice/index.js';
-export type { TwilioVoiceConfig, TwilioVoiceChannelConfig } from './twilio-voice/index.js';
+export type { TwilioVoiceConfig, TwilioVoiceChannelConfig, TwilioVoiceClient } from './twilio-voice/index.js';
 
 // iMessage (BlueBubbles)
 export { IMessageAdapter, IMessageChannel } from './imessage/index.js';
@@ -111,15 +111,15 @@ export type { IMessageConfig, IMessageChannelConfig } from './imessage/index.js'
 
 // IRC
 export { IRCAdapter, IRCChannel } from './irc/index.js';
-export type { IRCConfig, IRCChannelConfig } from './irc/index.js';
+export type { IRCConfig, IRCChannelConfig, IRCTransport } from './irc/index.js';
 
 // Feishu (Lark)
 export { FeishuAdapter, FeishuChannel } from './feishu/index.js';
-export type { FeishuConfig, FeishuChannelConfig, FeishuMessage } from './feishu/index.js';
+export type { FeishuConfig, FeishuChannelConfig, FeishuClient, FeishuMessage } from './feishu/index.js';
 
 // Synology Chat
 export { SynologyChatAdapter, SynologyChatChannel } from './synology-chat/index.js';
-export type { SynologyChatConfig, SynologyChatChannelConfig, SynologyChatMessage } from './synology-chat/index.js';
+export type { SynologyChatConfig, SynologyChatChannelConfig, SynologyChatClient, SynologyChatMessage } from './synology-chat/index.js';
 
 // Niche Channels (Twitch, Tlon, Gmail)
 export { TwitchAdapter, TlonAdapter, GmailWebhookAdapter, DocsSearchTool } from './niche-channels.js';

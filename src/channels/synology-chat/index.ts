@@ -13,6 +13,7 @@ export interface SynologyChatConfig {
   outgoingWebhookToken?: string;
   botName?: string;
   port?: number;
+  client?: SynologyChatClient;
 }
 
 export interface SynologyChatChannelConfig extends ChannelConfig {
@@ -20,6 +21,7 @@ export interface SynologyChatChannelConfig extends ChannelConfig {
   outgoingWebhookToken?: string;
   botName?: string;
   port?: number;
+  client?: SynologyChatClient;
 }
 
 export interface SynologyChatMessage {
@@ -32,8 +34,16 @@ export interface SynologyChatMessage {
   timestamp: string;
 }
 
+export interface SynologyChatClient {
+  start?(): Promise<void>;
+  stop?(): Promise<void>;
+  sendMessage(text: string, fileUrl?: string): Promise<{ success: boolean; messageId?: string }>;
+  sendDirectMessage(userId: number, text: string): Promise<{ success: boolean; messageId?: string }>;
+}
+
 export class SynologyChatAdapter {
   private config: SynologyChatConfig;
+  private client?: SynologyChatClient;
   private running = false;
 
   constructor(config: SynologyChatConfig) {
@@ -42,13 +52,18 @@ export class SynologyChatAdapter {
       port: 8100,
       ...config,
     };
+    this.client = config.client;
   }
 
   async start(): Promise<void> {
     if (this.running) {
       throw new Error('SynologyChatAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('Synology Chat client is not configured. Provide a real Synology Chat client before connecting.');
+    }
     logger.debug('SynologyChatAdapter: starting', { botName: this.config.botName });
+    await this.client.start?.();
     this.running = true;
   }
 
@@ -57,6 +72,7 @@ export class SynologyChatAdapter {
       throw new Error('SynologyChatAdapter is not running');
     }
     logger.debug('SynologyChatAdapter: stopping');
+    await this.client?.stop?.();
     this.running = false;
   }
 
@@ -64,23 +80,29 @@ export class SynologyChatAdapter {
     return this.running;
   }
 
-  async sendMessage(text: string, fileUrl?: string): Promise<{ success: boolean }> {
+  async sendMessage(text: string, fileUrl?: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('SynologyChatAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('Synology Chat client is not configured. Provide a real Synology Chat client before sending messages.');
     }
     logger.debug('SynologyChatAdapter: send message', {
       textLength: text.length,
       hasFile: !!fileUrl,
     });
-    return { success: true };
+    return this.client.sendMessage(text, fileUrl);
   }
 
-  async sendDirectMessage(userId: number, text: string): Promise<{ success: boolean }> {
+  async sendDirectMessage(userId: number, text: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('SynologyChatAdapter is not running');
     }
+    if (!this.client) {
+      throw new Error('Synology Chat client is not configured. Provide a real Synology Chat client before sending direct messages.');
+    }
     logger.debug('SynologyChatAdapter: send DM', { userId, textLength: text.length });
-    return { success: true };
+    return this.client.sendDirectMessage(userId, text);
   }
 
   validateWebhookToken(token: string): boolean {
@@ -109,6 +131,7 @@ export class SynologyChatChannel extends BaseChannel {
       outgoingWebhookToken: cfg.outgoingWebhookToken,
       botName: cfg.botName,
       port: cfg.port,
+      client: cfg.client,
     });
     await this.adapter.start();
     this.status.connected = true;
@@ -127,6 +150,6 @@ export class SynologyChatChannel extends BaseChannel {
       return { success: false, error: 'Not connected', timestamp: new Date() };
     }
     const result = await this.adapter.sendMessage(message.content);
-    return { success: result.success, timestamp: new Date() };
+    return { success: result.success, messageId: result.messageId, timestamp: new Date() };
   }
 }

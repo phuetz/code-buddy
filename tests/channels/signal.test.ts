@@ -653,20 +653,19 @@ describe('SignalChannel', () => {
       expect(result.error).toContain('Signal API error');
     });
 
-    it('should use Date.now() as messageId when timestamp not in response', async () => {
+    it('should not fabricate messageId when timestamp is missing from response', async () => {
       setMockRoutes([
         ...mockRoutes,
         { pattern: '/v2/send', response: mockJsonResponse({}) },
       ]);
 
-      const before = Date.now();
       const result = await channel.send({
         channelId: '+15559876543',
         content: 'No timestamp in response',
       });
 
       expect(result.success).toBe(true);
-      expect(Number(result.messageId)).toBeGreaterThanOrEqual(before);
+      expect(result.messageId).toBeUndefined();
     });
   });
 

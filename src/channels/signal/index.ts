@@ -332,13 +332,9 @@ export class SignalChannel extends BaseChannel {
         timestamp?: string | number;
       }>('POST', `/v2/send`, payload);
 
-      const messageId = result.timestamp
-        ? String(result.timestamp)
-        : String(Date.now());
-
       return {
         success: true,
-        messageId,
+        messageId: result.timestamp ? String(result.timestamp) : undefined,
         timestamp: new Date(),
       };
     } catch (error) {

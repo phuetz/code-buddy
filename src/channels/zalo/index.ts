@@ -12,27 +12,42 @@ export interface ZaloConfig {
   appId: string;
   secretKey: string;
   mode: 'bot' | 'personal';
+  client?: ZaloClient;
 }
 
 export interface ZaloChannelConfig extends ChannelConfig {
   appId: string;
   secretKey: string;
   mode: 'bot' | 'personal';
+  client?: ZaloClient;
+}
+
+export interface ZaloClient {
+  start?(): Promise<void>;
+  stop?(): Promise<void>;
+  sendMessage(userId: string, text: string): Promise<{ success: boolean; messageId?: string }>;
+  sendImage(userId: string, imageUrl: string): Promise<{ success: boolean; messageId?: string }>;
 }
 
 export class ZaloAdapter {
   private config: ZaloConfig;
+  private client?: ZaloClient;
   private running = false;
 
   constructor(config: ZaloConfig) {
     this.config = { ...config };
+    this.client = config.client;
   }
 
   async start(): Promise<void> {
     if (this.running) {
       throw new Error('ZaloAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('Zalo client is not configured. Provide a real Zalo client before connecting.');
+    }
     logger.debug('ZaloAdapter: initializing', { appId: this.config.appId, mode: this.config.mode });
+    await this.client.start?.();
     this.running = true;
   }
 
@@ -41,6 +56,7 @@ export class ZaloAdapter {
       throw new Error('ZaloAdapter is not running');
     }
     logger.debug('ZaloAdapter: disconnecting');
+    await this.client?.stop?.();
     this.running = false;
   }
 
@@ -48,20 +64,26 @@ export class ZaloAdapter {
     return this.running;
   }
 
-  async sendMessage(userId: string, text: string): Promise<{ success: boolean }> {
+  async sendMessage(userId: string, text: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('ZaloAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('Zalo client is not configured. Provide a real Zalo client before sending messages.');
     }
     logger.debug('ZaloAdapter: sending message', { userId, textLength: text.length });
-    return { success: true };
+    return this.client.sendMessage(userId, text);
   }
 
-  async sendImage(userId: string, imageUrl: string): Promise<{ success: boolean }> {
+  async sendImage(userId: string, imageUrl: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('ZaloAdapter is not running');
     }
+    if (!this.client) {
+      throw new Error('Zalo client is not configured. Provide a real Zalo client before sending images.');
+    }
     logger.debug('ZaloAdapter: sending image', { userId, imageUrl });
-    return { success: true };
+    return this.client.sendImage(userId, imageUrl);
   }
 
   getMode(): 'bot' | 'personal' {
@@ -92,6 +114,7 @@ export class ZaloChannel extends BaseChannel {
       appId: config.appId,
       secretKey: config.secretKey,
       mode: config.mode,
+      client: config.client,
     });
   }
 
@@ -118,17 +141,22 @@ export class ZaloChannel extends BaseChannel {
       );
 
       if (imageAttachment?.url) {
-        await this.adapter.sendImage(message.channelId, imageAttachment.url);
+        const result = await this.adapter.sendImage(message.channelId, imageAttachment.url);
+        this.status.lastActivity = new Date();
+        return {
+          success: result.success,
+          messageId: result.messageId,
+          timestamp: new Date(),
+        };
       } else {
-        await this.adapter.sendMessage(message.channelId, message.content);
+        const result = await this.adapter.sendMessage(message.channelId, message.content);
+        this.status.lastActivity = new Date();
+        return {
+          success: result.success,
+          messageId: result.messageId,
+          timestamp: new Date(),
+        };
       }
-
-      this.status.lastActivity = new Date();
-      return {
-        success: true,
-        messageId: `zalo_${Date.now()}`,
-        timestamp: new Date(),
-      };
     } catch (error) {
       return {
         success: false,

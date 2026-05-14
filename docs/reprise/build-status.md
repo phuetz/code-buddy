@@ -168,6 +168,18 @@ npm run typecheck
 
 npm run build
 # passed
+
+npm test -- tests/channels/new-channels.test.ts tests/channels/feishu-cards.test.ts tests/channels/synology-chat.test.ts
+# 103 tests passed after channel client-boundary cleanup
+
+npm test -- tests/channels/signal.test.ts tests/channels/new-channels.test.ts tests/channels/feishu-cards.test.ts tests/channels/synology-chat.test.ts
+# 192 tests passed after Signal stopped fabricating fallback message IDs
+
+npx eslint src/channels/zalo/index.ts src/channels/line/index.ts src/channels/mattermost/index.ts src/channels/nextcloud-talk/index.ts src/channels/twilio-voice/index.ts src/channels/nostr/index.ts src/channels/irc/index.ts src/channels/feishu/index.ts src/channels/synology-chat/index.ts src/channels/signal/index.ts src/channels/index.ts tests/channels/new-channels.test.ts tests/channels/feishu-cards.test.ts tests/channels/synology-chat.test.ts tests/channels/signal.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -358,6 +370,14 @@ npm run build
 - `CodeBuddyAgent` expose maintenant la facade serveur reelle attendue par les
   routes HTTP/WebSocket (`processUserInput`, `streamResponse`,
   `executeTool(name, params)`, `getModel`) au lieu d'un alignement `any` futur.
+- Les adapters LINE, Zalo, Nostr, Mattermost, Nextcloud Talk, Twilio Voice,
+  IRC, Feishu et Synology Chat ne simulent plus une connexion ou un envoi
+  reussi sans transport. Les chemins reseau exigent maintenant un client ou
+  transport reel injecte; les builders locaux Feishu restent disponibles sans
+  pretendre appeler l'API.
+- Signal ne fabrique plus un `messageId` local avec `Date.now()` quand
+  `signal-cli-rest-api` accepte l'envoi mais ne renvoie pas de timestamp: le
+  resultat reste un succes HTTP, mais l'identifiant reste absent.
 
 ## Blocage leve
 

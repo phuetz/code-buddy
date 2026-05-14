@@ -13,6 +13,7 @@ export interface TwilioVoiceConfig {
   authToken: string;
   phoneNumber: string;
   webhookUrl?: string;
+  client?: TwilioVoiceClient;
 }
 
 export interface TwilioVoiceChannelConfig extends ChannelConfig {
@@ -20,27 +21,39 @@ export interface TwilioVoiceChannelConfig extends ChannelConfig {
   authToken: string;
   phoneNumber: string;
   webhookUrl?: string;
+  client?: TwilioVoiceClient;
 }
 
-let callCounter = 0;
+export interface TwilioVoiceClient {
+  start?(): Promise<void>;
+  stop?(): Promise<void>;
+  makeCall(params: { from: string; to: string; twiml: string; webhookUrl?: string }): Promise<{ success: boolean; callSid?: string }>;
+  endCall(callSid: string): Promise<{ success: boolean }>;
+}
 
 export class TwilioVoiceAdapter {
   private config: TwilioVoiceConfig;
+  private client?: TwilioVoiceClient;
   private running = false;
   private activeCalls: Map<string, { to: string; startedAt: Date }> = new Map();
 
   constructor(config: TwilioVoiceConfig) {
     this.config = { ...config };
+    this.client = config.client;
   }
 
   async start(): Promise<void> {
     if (this.running) {
       throw new Error('TwilioVoiceAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('Twilio Voice client is not configured. Provide a real Twilio client before connecting.');
+    }
     logger.debug('TwilioVoiceAdapter: initializing', {
       accountSid: this.config.accountSid,
       phoneNumber: this.config.phoneNumber,
     });
+    await this.client.start?.();
     this.running = true;
   }
 
@@ -50,6 +63,7 @@ export class TwilioVoiceAdapter {
     }
     logger.debug('TwilioVoiceAdapter: stopping');
     this.activeCalls.clear();
+    await this.client?.stop?.();
     this.running = false;
   }
 
@@ -57,23 +71,40 @@ export class TwilioVoiceAdapter {
     return this.running;
   }
 
-  async makeCall(to: string, message: string): Promise<{ success: boolean; callSid: string }> {
+  async makeCall(to: string, message: string): Promise<{ success: boolean; callSid?: string }> {
     if (!this.running) {
       throw new Error('TwilioVoiceAdapter is not running');
     }
-    const callSid = `CA${Date.now()}_${++callCounter}`;
-    this.activeCalls.set(callSid, { to, startedAt: new Date() });
-    logger.debug('TwilioVoiceAdapter: making call', { to, callSid, messageLength: message.length });
-    return { success: true, callSid };
+    if (!this.client) {
+      throw new Error('Twilio Voice client is not configured. Provide a real Twilio client before making calls.');
+    }
+    const twiml = this.generateTwiML(message);
+    const result = await this.client.makeCall({
+      from: this.config.phoneNumber,
+      to,
+      twiml,
+      webhookUrl: this.config.webhookUrl,
+    });
+    if (result.success && result.callSid) {
+      this.activeCalls.set(result.callSid, { to, startedAt: new Date() });
+    }
+    logger.debug('TwilioVoiceAdapter: making call', { to, callSid: result.callSid, messageLength: message.length });
+    return result;
   }
 
   async endCall(callSid: string): Promise<{ success: boolean }> {
     if (!this.running) {
       throw new Error('TwilioVoiceAdapter is not running');
     }
-    const existed = this.activeCalls.delete(callSid);
-    logger.debug('TwilioVoiceAdapter: ending call', { callSid, existed });
-    return { success: existed };
+    if (!this.client) {
+      throw new Error('Twilio Voice client is not configured. Provide a real Twilio client before ending calls.');
+    }
+    const result = await this.client.endCall(callSid);
+    if (result.success) {
+      this.activeCalls.delete(callSid);
+    }
+    logger.debug('TwilioVoiceAdapter: ending call', { callSid, success: result.success });
+    return result;
   }
 
   getActiveCalls(): Array<{ callSid: string; to: string; startedAt: Date }> {
@@ -121,6 +152,7 @@ export class TwilioVoiceChannel extends BaseChannel {
       authToken: config.authToken,
       phoneNumber: config.phoneNumber,
       webhookUrl: config.webhookUrl,
+      client: config.client,
     });
   }
 

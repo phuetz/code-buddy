@@ -12,28 +12,50 @@ export interface NextcloudTalkConfig {
   url: string;
   username: string;
   password: string;
+  client?: NextcloudTalkClient;
 }
 
 export interface NextcloudTalkChannelConfig extends ChannelConfig {
   url: string;
   username: string;
   password: string;
+  client?: NextcloudTalkClient;
+}
+
+export interface NextcloudTalkRoom {
+  token: string;
+  name: string;
+  type: number;
+}
+
+export interface NextcloudTalkClient {
+  start?(): Promise<void>;
+  stop?(): Promise<void>;
+  sendMessage(roomToken: string, text: string): Promise<{ success: boolean; messageId?: string }>;
+  getRooms(): Promise<NextcloudTalkRoom[]>;
+  joinRoom(roomToken: string): Promise<{ success: boolean }>;
+  leaveRoom(roomToken: string): Promise<{ success: boolean }>;
 }
 
 export class NextcloudTalkAdapter {
   private config: NextcloudTalkConfig;
+  private client?: NextcloudTalkClient;
   private running = false;
-  private joinedRooms: Set<string> = new Set();
 
   constructor(config: NextcloudTalkConfig) {
     this.config = { ...config };
+    this.client = config.client;
   }
 
   async start(): Promise<void> {
     if (this.running) {
       throw new Error('NextcloudTalkAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('Nextcloud Talk client is not configured. Provide a real Nextcloud Talk client before connecting.');
+    }
     logger.debug('NextcloudTalkAdapter: connecting', { url: this.config.url, username: this.config.username });
+    await this.client.start?.();
     this.running = true;
   }
 
@@ -42,7 +64,7 @@ export class NextcloudTalkAdapter {
       throw new Error('NextcloudTalkAdapter is not running');
     }
     logger.debug('NextcloudTalkAdapter: disconnecting');
-    this.joinedRooms.clear();
+    await this.client?.stop?.();
     this.running = false;
   }
 
@@ -50,37 +72,47 @@ export class NextcloudTalkAdapter {
     return this.running;
   }
 
-  async sendMessage(roomToken: string, text: string): Promise<{ success: boolean; messageId: string }> {
+  async sendMessage(roomToken: string, text: string): Promise<{ success: boolean; messageId?: string }> {
     if (!this.running) {
       throw new Error('NextcloudTalkAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('Nextcloud Talk client is not configured. Provide a real Nextcloud Talk client before sending messages.');
     }
     logger.debug('NextcloudTalkAdapter: sending message', { roomToken, textLength: text.length });
-    return { success: true, messageId: `nc_${Date.now()}` };
+    return this.client.sendMessage(roomToken, text);
   }
 
-  async getRooms(): Promise<Array<{ token: string; name: string; type: number }>> {
+  async getRooms(): Promise<NextcloudTalkRoom[]> {
     if (!this.running) {
       throw new Error('NextcloudTalkAdapter is not running');
     }
-    return [];
+    if (!this.client) {
+      throw new Error('Nextcloud Talk client is not configured. Provide a real Nextcloud Talk client before reading rooms.');
+    }
+    return this.client.getRooms();
   }
 
   async joinRoom(roomToken: string): Promise<{ success: boolean }> {
     if (!this.running) {
       throw new Error('NextcloudTalkAdapter is not running');
     }
-    this.joinedRooms.add(roomToken);
+    if (!this.client) {
+      throw new Error('Nextcloud Talk client is not configured. Provide a real Nextcloud Talk client before joining rooms.');
+    }
     logger.debug('NextcloudTalkAdapter: joined room', { roomToken });
-    return { success: true };
+    return this.client.joinRoom(roomToken);
   }
 
   async leaveRoom(roomToken: string): Promise<{ success: boolean }> {
     if (!this.running) {
       throw new Error('NextcloudTalkAdapter is not running');
     }
-    const existed = this.joinedRooms.delete(roomToken);
-    logger.debug('NextcloudTalkAdapter: left room', { roomToken, existed });
-    return { success: existed };
+    if (!this.client) {
+      throw new Error('Nextcloud Talk client is not configured. Provide a real Nextcloud Talk client before leaving rooms.');
+    }
+    logger.debug('NextcloudTalkAdapter: leaving room', { roomToken });
+    return this.client.leaveRoom(roomToken);
   }
 
   getConfig(): NextcloudTalkConfig {
@@ -107,6 +139,7 @@ export class NextcloudTalkChannel extends BaseChannel {
       url: config.url,
       username: config.username,
       password: config.password,
+      client: config.client,
     });
   }
 

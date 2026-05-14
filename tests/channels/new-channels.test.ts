@@ -13,12 +13,12 @@ jest.mock('../../src/utils/logger.js', () => ({
 }));
 
 import { IMessageAdapter, IMessageConfig } from '../../src/channels/imessage/index.js';
-import { NostrAdapter, NostrConfig } from '../../src/channels/nostr/index.js';
-import { LINEAdapter, LINEConfig } from '../../src/channels/line/index.js';
-import { ZaloAdapter, ZaloConfig } from '../../src/channels/zalo/index.js';
-import { TwilioVoiceAdapter, TwilioVoiceConfig } from '../../src/channels/twilio-voice/index.js';
-import { MattermostAdapter, MattermostConfig } from '../../src/channels/mattermost/index.js';
-import { NextcloudTalkAdapter, NextcloudTalkConfig } from '../../src/channels/nextcloud-talk/index.js';
+import { NostrAdapter, NostrClient, NostrConfig } from '../../src/channels/nostr/index.js';
+import { LINEAdapter, LINEClient, LINEConfig } from '../../src/channels/line/index.js';
+import { ZaloAdapter, ZaloClient, ZaloConfig } from '../../src/channels/zalo/index.js';
+import { TwilioVoiceAdapter, TwilioVoiceClient, TwilioVoiceConfig } from '../../src/channels/twilio-voice/index.js';
+import { MattermostAdapter, MattermostClient, MattermostConfig } from '../../src/channels/mattermost/index.js';
+import { NextcloudTalkAdapter, NextcloudTalkClient, NextcloudTalkConfig } from '../../src/channels/nextcloud-talk/index.js';
 
 // ============================================================================
 // iMessage / BlueBubbles
@@ -142,9 +142,14 @@ describe('NostrAdapter', () => {
     privateKey: 'nsec1test',
     relays: ['wss://relay.damus.io', 'wss://nos.lol'],
   };
+  const createClient = (): NostrClient => ({
+    connect: async (relays) => [...relays],
+    disconnect: async () => undefined,
+    sendDirectMessage: async () => ({ success: true, eventId: 'nostr-event-1' }),
+  });
 
   beforeEach(() => {
-    adapter = new NostrAdapter(config);
+    adapter = new NostrAdapter({ ...config, client: createClient() });
   });
 
   afterEach(async () => {
@@ -173,6 +178,11 @@ describe('NostrAdapter', () => {
   it('should throw when starting twice', async () => {
     await adapter.start();
     await expect(adapter.start()).rejects.toThrow('already running');
+  });
+
+  it('should reject connection without a relay client', async () => {
+    const noClient = new NostrAdapter(config);
+    await expect(noClient.start()).rejects.toThrow('Nostr client is not configured');
   });
 
   it('should stop and clear relays', async () => {
@@ -209,13 +219,14 @@ describe('NostrAdapter', () => {
   it('should add a relay', async () => {
     await adapter.start();
     adapter.addRelay('wss://new-relay.example');
-    expect(adapter.getRelays()).toContain('wss://new-relay.example');
+    expect(adapter.getConfig().relays).toContain('wss://new-relay.example');
+    expect(adapter.getRelays()).not.toContain('wss://new-relay.example');
   });
 
   it('should not add duplicate relay', async () => {
     await adapter.start();
     adapter.addRelay('wss://relay.damus.io');
-    expect(adapter.getRelays().filter(r => r === 'wss://relay.damus.io')).toHaveLength(1);
+    expect(adapter.getConfig().relays.filter(r => r === 'wss://relay.damus.io')).toHaveLength(1);
   });
 
   it('should remove a relay', async () => {
@@ -232,7 +243,7 @@ describe('NostrAdapter', () => {
 
   it('should not mutate original config relays', () => {
     const original: NostrConfig = { relays: ['wss://a'] };
-    const a = new NostrAdapter(original);
+    const a = new NostrAdapter({ ...original, client: createClient() });
     a.getConfig().relays.push('wss://b');
     expect(a.getConfig().relays).toEqual(['wss://a']);
   });
@@ -249,9 +260,20 @@ describe('LINEAdapter', () => {
     channelSecret: 'secret-456',
     port: 9090,
   };
+  const createClient = (): LINEClient => ({
+    sendMessage: async () => ({ success: true, messageId: 'line-message-1' }),
+    sendImage: async () => ({ success: true, messageId: 'line-image-1' }),
+    sendSticker: async () => ({ success: true, messageId: 'line-sticker-1' }),
+    getProfile: async (userId) => ({
+      userId,
+      displayName: `User ${userId}`,
+      pictureUrl: '',
+      statusMessage: '',
+    }),
+  });
 
   beforeEach(() => {
-    adapter = new LINEAdapter(config);
+    adapter = new LINEAdapter({ ...config, client: createClient() });
   });
 
   afterEach(async () => {
@@ -303,6 +325,11 @@ describe('LINEAdapter', () => {
     await expect(adapter.sendMessage('user-1', 'Hello')).rejects.toThrow('not running');
   });
 
+  it('should reject sendMessage without a LINE client', async () => {
+    const noClient = new LINEAdapter(config);
+    await expect(noClient.start()).rejects.toThrow('LINE client is not configured');
+  });
+
   it('should send image when running', async () => {
     await adapter.start();
     const result = await adapter.sendImage('user-1', 'https://example.com/img.png');
@@ -338,9 +365,13 @@ describe('ZaloAdapter', () => {
     secretKey: 'secret-abc',
     mode: 'bot',
   };
+  const createClient = (): ZaloClient => ({
+    sendMessage: async () => ({ success: true, messageId: 'zalo-message-1' }),
+    sendImage: async () => ({ success: true, messageId: 'zalo-image-1' }),
+  });
 
   beforeEach(() => {
-    adapter = new ZaloAdapter(config);
+    adapter = new ZaloAdapter({ ...config, client: createClient() });
   });
 
   afterEach(async () => {
@@ -387,6 +418,11 @@ describe('ZaloAdapter', () => {
     await expect(adapter.sendMessage('user-1', 'Hello')).rejects.toThrow('not running');
   });
 
+  it('should reject sendMessage without a Zalo client', async () => {
+    const noClient = new ZaloAdapter(config);
+    await expect(noClient.start()).rejects.toThrow('Zalo client is not configured');
+  });
+
   it('should send image when running', async () => {
     await adapter.start();
     const result = await adapter.sendImage('user-1', 'https://example.com/img.png');
@@ -415,9 +451,27 @@ describe('TwilioVoiceAdapter', () => {
     phoneNumber: '+15551234567',
     webhookUrl: 'https://example.com/voice',
   };
+  const createClient = (): TwilioVoiceClient => {
+    let counter = 0;
+    const calls = new Set<string>();
+    return {
+      stop: async () => {
+        calls.clear();
+      },
+      makeCall: async () => {
+        const callSid = `CA_TEST_${++counter}`;
+        calls.add(callSid);
+        return { success: true, callSid };
+      },
+      endCall: async (callSid) => {
+        const existed = calls.delete(callSid);
+        return { success: existed };
+      },
+    };
+  };
 
   beforeEach(() => {
-    adapter = new TwilioVoiceAdapter(config);
+    adapter = new TwilioVoiceAdapter({ ...config, client: createClient() });
   });
 
   afterEach(async () => {
@@ -464,6 +518,11 @@ describe('TwilioVoiceAdapter', () => {
 
   it('should throw makeCall when not running', async () => {
     await expect(adapter.makeCall('+1555', 'Hello')).rejects.toThrow('not running');
+  });
+
+  it('should reject makeCall without a Twilio client', async () => {
+    const noClient = new TwilioVoiceAdapter(config);
+    await expect(noClient.start()).rejects.toThrow('Twilio Voice client is not configured');
   });
 
   it('should end a call and remove it from active calls', async () => {
@@ -516,9 +575,14 @@ describe('MattermostAdapter', () => {
     token: 'mm-token-123',
     teamId: 'team-abc',
   };
+  const createClient = (): MattermostClient => ({
+    sendMessage: async () => ({ success: true, postId: 'mm-post-1' }),
+    sendReply: async () => ({ success: true, postId: 'mm-reply-1' }),
+    getChannels: async () => [],
+  });
 
   beforeEach(() => {
-    adapter = new MattermostAdapter(config);
+    adapter = new MattermostAdapter({ ...config, client: createClient() });
   });
 
   afterEach(async () => {
@@ -566,6 +630,11 @@ describe('MattermostAdapter', () => {
     await expect(adapter.sendMessage('channel-1', 'Hello')).rejects.toThrow('not running');
   });
 
+  it('should reject sendMessage without a Mattermost client', async () => {
+    const noClient = new MattermostAdapter(config);
+    await expect(noClient.start()).rejects.toThrow('Mattermost client is not configured');
+  });
+
   it('should send reply when running', async () => {
     await adapter.start();
     const result = await adapter.sendReply('channel-1', 'root-msg-1', 'Reply text');
@@ -597,9 +666,24 @@ describe('NextcloudTalkAdapter', () => {
     username: 'admin',
     password: 'admin-pass',
   };
+  const createClient = (): NextcloudTalkClient => {
+    const joinedRooms = new Set<string>();
+    return {
+      stop: async () => {
+        joinedRooms.clear();
+      },
+      sendMessage: async () => ({ success: true, messageId: 'nc-message-1' }),
+      getRooms: async () => [],
+      joinRoom: async (roomToken) => {
+        joinedRooms.add(roomToken);
+        return { success: true };
+      },
+      leaveRoom: async (roomToken) => ({ success: joinedRooms.delete(roomToken) }),
+    };
+  };
 
   beforeEach(() => {
-    adapter = new NextcloudTalkAdapter(config);
+    adapter = new NextcloudTalkAdapter({ ...config, client: createClient() });
   });
 
   afterEach(async () => {
@@ -645,6 +729,11 @@ describe('NextcloudTalkAdapter', () => {
 
   it('should throw sendMessage when not running', async () => {
     await expect(adapter.sendMessage('room-abc', 'Hello')).rejects.toThrow('not running');
+  });
+
+  it('should reject sendMessage without a Nextcloud Talk client', async () => {
+    const noClient = new NextcloudTalkAdapter(config);
+    await expect(noClient.start()).rejects.toThrow('Nextcloud Talk client is not configured');
   });
 
   it('should return empty rooms list', async () => {

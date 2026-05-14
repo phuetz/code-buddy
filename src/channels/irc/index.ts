@@ -18,6 +18,7 @@ export interface IRCConfig {
   channels: string[];
   useTLS?: boolean;
   sasl?: boolean;
+  transport?: IRCTransport;
 }
 
 export interface IRCChannelConfig extends ChannelConfig {
@@ -30,10 +31,23 @@ export interface IRCChannelConfig extends ChannelConfig {
   channels: string[];
   useTLS?: boolean;
   sasl?: boolean;
+  transport?: IRCTransport;
+}
+
+export interface IRCTransport {
+  connect(config: IRCConfig): Promise<{ joinedChannels?: string[] }>;
+  disconnect(): Promise<void>;
+  sendMessage(target: string, text: string): Promise<{ success: boolean }>;
+  sendNotice(target: string, text: string): Promise<{ success: boolean }>;
+  sendAction(target: string, text: string): Promise<{ success: boolean }>;
+  joinChannel(channel: string): Promise<void>;
+  partChannel(channel: string, reason?: string): Promise<void>;
+  setNick(nick: string): Promise<void>;
 }
 
 export class IRCAdapter {
   private config: IRCConfig;
+  private transport?: IRCTransport;
   private running = false;
   private joinedChannels: Set<string> = new Set();
 
@@ -46,6 +60,7 @@ export class IRCAdapter {
       sasl: false,
       ...config,
     };
+    this.transport = config.transport;
   }
 
   async start(): Promise<void> {
@@ -58,8 +73,12 @@ export class IRCAdapter {
       nick: this.config.nick,
       tls: this.config.useTLS,
     });
+    if (!this.transport) {
+      throw new Error('IRC transport is not configured. Provide a real IRC transport before connecting.');
+    }
+    const result = await this.transport.connect(this.config);
     this.running = true;
-    for (const ch of this.config.channels) {
+    for (const ch of result.joinedChannels ?? this.config.channels) {
       this.joinedChannels.add(ch);
     }
   }
@@ -69,6 +88,7 @@ export class IRCAdapter {
       throw new Error('IRCAdapter is not running');
     }
     logger.debug('IRCAdapter: disconnecting');
+    await this.transport?.disconnect();
     this.joinedChannels.clear();
     this.running = false;
   }
@@ -81,30 +101,43 @@ export class IRCAdapter {
     if (!this.running) {
       throw new Error('IRCAdapter is not running');
     }
+    if (!this.transport) {
+      throw new Error('IRC transport is not configured. Provide a real IRC transport before sending messages.');
+    }
     logger.debug('IRCAdapter: PRIVMSG', { target, textLength: text.length });
-    return { success: true };
+    return this.transport.sendMessage(target, text);
   }
 
   async sendNotice(target: string, text: string): Promise<{ success: boolean }> {
     if (!this.running) {
       throw new Error('IRCAdapter is not running');
     }
+    if (!this.transport) {
+      throw new Error('IRC transport is not configured. Provide a real IRC transport before sending notices.');
+    }
     logger.debug('IRCAdapter: NOTICE', { target, textLength: text.length });
-    return { success: true };
+    return this.transport.sendNotice(target, text);
   }
 
   async sendAction(target: string, text: string): Promise<{ success: boolean }> {
     if (!this.running) {
       throw new Error('IRCAdapter is not running');
     }
+    if (!this.transport) {
+      throw new Error('IRC transport is not configured. Provide a real IRC transport before sending actions.');
+    }
     logger.debug('IRCAdapter: ACTION', { target, textLength: text.length });
-    return { success: true };
+    return this.transport.sendAction(target, text);
   }
 
   async joinChannel(channel: string): Promise<void> {
     if (!this.running) {
       throw new Error('IRCAdapter is not running');
     }
+    if (!this.transport) {
+      throw new Error('IRC transport is not configured. Provide a real IRC transport before joining channels.');
+    }
+    await this.transport.joinChannel(channel);
     this.joinedChannels.add(channel);
     logger.debug('IRCAdapter: JOIN', { channel });
   }
@@ -113,6 +146,10 @@ export class IRCAdapter {
     if (!this.running) {
       throw new Error('IRCAdapter is not running');
     }
+    if (!this.transport) {
+      throw new Error('IRC transport is not configured. Provide a real IRC transport before parting channels.');
+    }
+    await this.transport.partChannel(channel, reason);
     this.joinedChannels.delete(channel);
     logger.debug('IRCAdapter: PART', { channel, reason });
   }
@@ -129,6 +166,10 @@ export class IRCAdapter {
     if (!this.running) {
       throw new Error('IRCAdapter is not running');
     }
+    if (!this.transport) {
+      throw new Error('IRC transport is not configured. Provide a real IRC transport before changing nick.');
+    }
+    await this.transport.setNick(nick);
     this.config.nick = nick;
     logger.debug('IRCAdapter: NICK', { nick });
   }
@@ -153,6 +194,7 @@ export class IRCChannel extends BaseChannel {
       channels: cfg.channels || [],
       useTLS: cfg.useTLS,
       sasl: cfg.sasl,
+      transport: cfg.transport,
     });
     await this.adapter.start();
     this.status.connected = true;

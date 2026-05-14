@@ -12,27 +12,49 @@ export interface MattermostConfig {
   url: string;
   token: string;
   teamId?: string;
+  client?: MattermostClient;
 }
 
 export interface MattermostChannelConfig extends ChannelConfig {
   url: string;
   token: string;
   teamId?: string;
+  client?: MattermostClient;
+}
+
+export interface MattermostChannelSummary {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface MattermostClient {
+  start?(): Promise<void>;
+  stop?(): Promise<void>;
+  sendMessage(channelId: string, text: string): Promise<{ success: boolean; postId?: string }>;
+  sendReply(channelId: string, rootId: string, text: string): Promise<{ success: boolean; postId?: string }>;
+  getChannels(): Promise<MattermostChannelSummary[]>;
 }
 
 export class MattermostAdapter {
   private config: MattermostConfig;
+  private client?: MattermostClient;
   private running = false;
 
   constructor(config: MattermostConfig) {
     this.config = { ...config };
+    this.client = config.client;
   }
 
   async start(): Promise<void> {
     if (this.running) {
       throw new Error('MattermostAdapter is already running');
     }
+    if (!this.client) {
+      throw new Error('Mattermost client is not configured. Provide a real Mattermost client before connecting.');
+    }
     logger.debug('MattermostAdapter: connecting via WebSocket', { url: this.config.url });
+    await this.client.start?.();
     this.running = true;
   }
 
@@ -41,6 +63,7 @@ export class MattermostAdapter {
       throw new Error('MattermostAdapter is not running');
     }
     logger.debug('MattermostAdapter: disconnecting');
+    await this.client?.stop?.();
     this.running = false;
   }
 
@@ -48,27 +71,36 @@ export class MattermostAdapter {
     return this.running;
   }
 
-  async sendMessage(channelId: string, text: string): Promise<{ success: boolean; postId: string }> {
+  async sendMessage(channelId: string, text: string): Promise<{ success: boolean; postId?: string }> {
     if (!this.running) {
       throw new Error('MattermostAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('Mattermost client is not configured. Provide a real Mattermost client before sending messages.');
     }
     logger.debug('MattermostAdapter: sending message', { channelId, textLength: text.length });
-    return { success: true, postId: `mm_${Date.now()}` };
+    return this.client.sendMessage(channelId, text);
   }
 
-  async sendReply(channelId: string, rootId: string, text: string): Promise<{ success: boolean; postId: string }> {
+  async sendReply(channelId: string, rootId: string, text: string): Promise<{ success: boolean; postId?: string }> {
     if (!this.running) {
       throw new Error('MattermostAdapter is not running');
+    }
+    if (!this.client) {
+      throw new Error('Mattermost client is not configured. Provide a real Mattermost client before sending replies.');
     }
     logger.debug('MattermostAdapter: sending reply', { channelId, rootId, textLength: text.length });
-    return { success: true, postId: `mm_reply_${Date.now()}` };
+    return this.client.sendReply(channelId, rootId, text);
   }
 
-  async getChannels(): Promise<Array<{ id: string; name: string; type: string }>> {
+  async getChannels(): Promise<MattermostChannelSummary[]> {
     if (!this.running) {
       throw new Error('MattermostAdapter is not running');
     }
-    return [];
+    if (!this.client) {
+      throw new Error('Mattermost client is not configured. Provide a real Mattermost client before reading channels.');
+    }
+    return this.client.getChannels();
   }
 
   getConfig(): MattermostConfig {
@@ -95,6 +127,7 @@ export class MattermostChannel extends BaseChannel {
       url: config.url,
       token: config.token,
       teamId: config.teamId,
+      client: config.client,
     });
   }
 
