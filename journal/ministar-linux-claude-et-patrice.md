@@ -12,6 +12,7 @@ Fichier créé le 01 mai 2026.
 - [x] Installation de **JetBrains Toolbox** et de la suite complète d'IDE (Android Studio, WebStorm, CLion, DataGrip, Rider, RubyMine, RustRover).
 - [x] Création du répertoire de projets `~/AndroidProjects`.
 - [x] Installation des briques de voix robotiques : **Piper (TTS)** et **faster-whisper (STT)**.
+- [x] **Configuration Réseau Ollama :** Exposition du service sur toutes les interfaces (`OLLAMA_HOST=0.0.0.0`) pour accessibilité via Tailscale (IP `100.98.18.76`).
 
 ### 📌 État du système :
 - **CPU** : 12 cores / 24 threads
