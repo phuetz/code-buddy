@@ -58,6 +58,9 @@ npm --prefix cowork run build
 npm test -- tests/cloud/cloud-agent-runner.test.ts tests/daemon/cron-agent-bridge.test.ts tests/daemon/heartbeat.test.ts tests/desktop/codebuddy-engine-adapter-hotswap.test.ts tests/server/agent-provider.test.ts tests/channels/channel-ai-provider.test.ts tests/unit/parallel-executor.test.ts tests/unit/provider-command.test.ts tests/agent/architect-mode.test.ts tests/commands/agents-handler.test.ts tests/commands/handlers/test-handlers-ai.test.ts tests/unit/prompt-suggestions-ai.test.ts tests/unit/config-validation-startup.test.ts tests/computer-skills-llm.test.ts tests/unit/reasoning-tool.test.ts tests/reasoning/think-handlers.test.ts tests/unit/hook-llm-evaluation.test.ts tests/unit/ide-extensions-server.test.ts tests/unit/interpreter-llm.test.ts tests/utils/provider-detector.test.ts
 # 352 tests passed
 
+npm test -- tests/features/cicd-chrome-sdk-pr.test.ts tests/features/hooks-policies-memory-settings.test.ts tests/features/sandboxing-hooks.test.ts
+# 246 tests passed; feature tests that exercise explicit no-provider paths force CODEBUDDY_PROVIDER=none
+
 node dist/index.js provider current
 # Active Provider: ChatGPT Pro (subscription); Model: gpt-5.5
 ```
@@ -111,6 +114,9 @@ node dist/index.js provider current
   `provider-detector` utilisent maintenant de vrais signaux env/OAuth
   temporaires. Il reste des mocks reseau/process/fichiers volontaires, mais
   plus de faux provider dans les chemins runtime testes.
+- Les tests feature qui attendent volontairement "aucun provider" isolent
+  maintenant `CODEBUDDY_PROVIDER=none`, pour rester deterministes meme quand le
+  poste de dev est connecte a ChatGPT Pro via OAuth.
 - `ConfigResolver` ne retombe plus sur la base URL ou le modele Grok quand un
   provider CLI non-Grok est force sans base URL explicite. Les profils non-Grok
   sans modele prennent aussi leur default provider (`gpt-4o`, Gemini, Claude,
