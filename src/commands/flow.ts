@@ -9,8 +9,9 @@
  */
 
 import { Command } from 'commander';
+import type { ExecutionPlan } from '../agent/flow/planning-flow.js';
 import { getSettingsManager } from '../utils/settings-manager.js';
-import { PROVIDERS } from './provider.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 
 function extractContent(response: { choices: Array<{ message: { content: string | null } }> }): string {
   return response.choices?.[0]?.message?.content || '';
@@ -25,15 +26,10 @@ export function createFlowCommand(): Command {
     .option('--verbose', 'Show step-by-step progress', false)
     .action(async (goal: string, options) => {
       const settingsManager = getSettingsManager();
-      const userSettings = settingsManager.loadUserSettings();
-      const currentProviderKey = userSettings.provider || 'grok';
-      const providerInfo = PROVIDERS[currentProviderKey];
+      const provider = detectProviderFromEnv();
 
-      let apiKey = process.env[providerInfo?.envVar || ''] || '';
-      if (!apiKey) apiKey = process.env.GROK_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '';
-
-      if (!apiKey) {
-        console.error('Error: No API key configured. Run: buddy onboard');
+      if (!provider) {
+        console.error('Error: No AI provider configured. Run: buddy login chatgpt');
         process.exit(1);
       }
 
@@ -43,8 +39,8 @@ export function createFlowCommand(): Command {
         const { PlanningFlow } = await import('../agent/flow/planning-flow.js');
         const { CodeBuddyClient } = await import('../codebuddy/client.js');
 
-        const model = settingsManager.getCurrentModel() || providerInfo?.defaultModel;
-        const client = new CodeBuddyClient(apiKey, model, providerInfo?.baseURL);
+        const model = selectModelForDetectedProvider(provider, settingsManager.getCurrentModel());
+        const client = new CodeBuddyClient(provider.apiKey, model, provider.baseURL);
 
         // Plan with LLM function
         const planWithLLM = async (prompt: string): Promise<string> => {
@@ -84,14 +80,15 @@ export function createFlowCommand(): Command {
 
         // Progress events
         if (options.verbose) {
-          flow.on('flow:plan_created', (data: any) => {
-            console.log(`  Plan: ${data.stepCount} steps`);
+          flow.on('flow:plan_created', (data: { plan?: ExecutionPlan }) => {
+            console.log(`  Plan: ${data.plan?.steps.length ?? 0} steps`);
           });
-          flow.on('flow:step_start', (data: any) => {
+          flow.on('flow:step_start', (data: { title: string }) => {
             console.log(`  [${flow.getProgress()}%] Step: ${data.title}`);
           });
-          flow.on('flow:step_complete', (data: any) => {
-            console.log(`  Done: ${data.title} (${data.status})`);
+          flow.on('flow:step_complete', (data: { title: string; duration?: number }) => {
+            const duration = typeof data.duration === 'number' ? `, ${data.duration}ms` : '';
+            console.log(`  Done: ${data.title}${duration}`);
           });
         }
 

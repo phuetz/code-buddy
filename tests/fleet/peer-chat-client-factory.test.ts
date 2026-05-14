@@ -19,6 +19,7 @@ vi.mock('../../src/providers/codex-oauth.js', () => ({
 import {
   createPeerChatClientFromEnv,
   _getDetectionOrderForTests,
+  resolveProviderFromEnv,
 } from '../../src/fleet/peer-chat-client-factory.js';
 
 const { hasCodexCredentialsMock } = mocks;
@@ -28,14 +29,20 @@ const ENV_KEYS_TO_PRESERVE = [
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
   'CHATGPT_MODEL',
+  'OLLAMA_MODEL',
   'OLLAMA_HOST',
   'GROK_API_KEY',
   'GROK_BASE_URL',
+  'GROK_MODEL',
   'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
   'GOOGLE_API_KEY',
   'GEMINI_API_KEY',
+  'GEMINI_MODEL',
   'OPENAI_API_KEY',
+  'OPENAI_MODEL',
   'GEMINI_CLI_PATH',
+  'GEMINI_CLI_MODEL',
 ];
 
 let originalEnv: Record<string, string | undefined>;
@@ -264,6 +271,14 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       expect(result!.info.model).toBe('gemini-2.5-flash');
     });
 
+    it('honors provider-specific model env before the provider default', () => {
+      process.env.GROK_API_KEY = 'x';
+      process.env.GROK_MODEL = 'grok-3-mini';
+
+      expect(createPeerChatClientFromEnv()!.info.model).toBe('grok-3-mini');
+      expect(resolveProviderFromEnv('grok')?.model).toBe('grok-3-mini');
+    });
+
     it('uses CHATGPT_MODEL as the ChatGPT subscription default before the generic peer override', () => {
       hasCodexCredentialsMock.mockReturnValue(true);
       process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
@@ -273,6 +288,13 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       process.env.CODEBUDDY_PEER_MODEL = 'gpt-5.1-codex-max';
       result = createPeerChatClientFromEnv();
       expect(result!.info.model).toBe('gpt-5.1-codex-max');
+    });
+
+    it('uses CHATGPT_MODEL when resolving a raw ChatGPT provider tuple', () => {
+      hasCodexCredentialsMock.mockReturnValue(true);
+      process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
+
+      expect(resolveProviderFromEnv('chatgpt')?.model).toBe('gpt-5.1-codex');
     });
   });
 

@@ -40,6 +40,11 @@ vi.mock('../../src/utils/settings-manager.js', () => ({
 
 vi.mock('../../src/utils/provider-detector.js', () => ({
   detectProviderFromEnv: providerMocks.mockDetectProvider,
+  selectModelForDetectedProvider: (detected: { provider: string; defaultModel: string } | null, configured?: string) => {
+    if (!detected) return configured;
+    if (configured && !(detected.provider !== 'grok' && /^grok[-_]/i.test(configured))) return configured;
+    return detected.defaultModel;
+  },
 }));
 
 describe('config-loader', () => {
@@ -189,6 +194,31 @@ describe('config-loader', () => {
       });
 
       expect(loadModel()).toBe('gpt-5.5');
+    });
+
+    it('should not pass a legacy Grok model to detected ChatGPT auth', () => {
+      process.env.GROK_MODEL = 'grok-code-fast-1';
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadModel()).toBe('gpt-5.5');
+      expect(mockManager.getCurrentModel).not.toHaveBeenCalled();
+    });
+
+    it('should preserve explicit non-Grok model overrides for detected ChatGPT auth', () => {
+      process.env.GROK_MODEL = 'gpt-5.1-codex';
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadModel()).toBe('gpt-5.1-codex');
     });
 
     it('should handle settings manager errors gracefully', () => {

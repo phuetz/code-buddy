@@ -11,7 +11,7 @@ import { getCredentialManager } from '../security/credential-manager.js';
 import { getCrashHandler } from '../errors/crash-handler.js';
 import { disposeAll } from '../utils/disposable.js';
 import { logger } from '../utils/logger.js';
-import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 import type { ApplicationConfig, CommandLineOptions } from './types.js';
 
 // ============================================================================
@@ -65,18 +65,19 @@ export function loadBaseURL(): string {
  * Load model from settings or environment
  */
 export function loadModel(): string | undefined {
-  const envModel = process.env.GROK_MODEL;
-  if (envModel) return envModel;
+  const detected = detectProviderFromEnv();
+  let configured = process.env.GROK_MODEL;
 
-  try {
-    const manager = getSettingsManager();
-    const configured = manager.getCurrentModel();
-    if (configured) return configured;
-  } catch {
-    // Fall through to provider default.
+  if (!configured) {
+    try {
+      const manager = getSettingsManager();
+      configured = manager.getCurrentModel();
+    } catch {
+      // Fall through to provider default.
+    }
   }
 
-  return detectProviderFromEnv()?.defaultModel;
+  return selectModelForDetectedProvider(detected, configured);
 }
 
 /**

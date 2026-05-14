@@ -70,6 +70,11 @@ jest.mock('../../src/utils/logger.js', () => ({
 
 jest.mock('../../src/utils/provider-detector.js', () => ({
   detectProviderFromEnv: providerMocks.mockDetectProvider,
+  selectModelForDetectedProvider: (detected: { provider: string; defaultModel: string } | null, configured?: string) => {
+    if (!detected) return configured;
+    if (configured && !(detected.provider !== 'grok' && /^grok[-_]/i.test(configured))) return configured;
+    return detected.defaultModel;
+  },
 }));
 
 describe('Application Factory', () => {
@@ -184,6 +189,18 @@ describe('Application Factory', () => {
         defaultModel: 'gpt-5.5',
       });
       settingsMocks.manager.getCurrentModel.mockReturnValueOnce(undefined);
+
+      expect(loadModel()).toBe('gpt-5.5');
+    });
+
+    it('should ignore legacy Grok defaults when ChatGPT is detected', () => {
+      process.env.GROK_MODEL = 'grok-code-fast-1';
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
 
       expect(loadModel()).toBe('gpt-5.5');
     });

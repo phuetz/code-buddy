@@ -9,10 +9,39 @@
  */
 
 import { logger } from '../../utils/logger.js';
+import type { GeminiThinkingLevel } from '../../codebuddy/client.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../../utils/provider-detector.js';
 
 export interface DocsCommandResult {
   output: string;
   success: boolean;
+}
+
+async function createDocsLlmCall(
+  thinkingLevelOverride?: GeminiThinkingLevel,
+): Promise<((sys: string, user: string, thinking?: string) => Promise<string>) | undefined> {
+  const provider = detectProviderFromEnv();
+  if (!provider) return undefined;
+
+  const { CodeBuddyClient } = await import('../../codebuddy/client.js');
+  const model = selectModelForDetectedProvider(provider);
+  const client = new CodeBuddyClient(provider.apiKey, model, provider.baseURL);
+
+  return async (systemPrompt: string, userPrompt: string, thinkingLevel?: string): Promise<string> => {
+    const response = await client.chat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      [],
+      {
+        model,
+        temperature: 0.2,
+        thinkingLevel: (thinkingLevel || thinkingLevelOverride) as GeminiThinkingLevel | undefined,
+      },
+    );
+    return response.choices[0]?.message?.content ?? '';
+  };
 }
 
 /**
@@ -121,77 +150,12 @@ async function handleGenerateWithLLM(thinkingLevelOverride?: 'minimal' | 'low' |
     const rawResult = await handleGenerate(false, false);
     if (!rawResult.success) return rawResult;
 
-    // Step 2: Set up LLM client for enrichment (use OpenAI SDK directly for reliability)
-    const apiKey = process.env.GROK_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
-    if (!apiKey) {
+    // Step 2: Set up LLM client for enrichment via the active Code Buddy provider.
+    const llmCall = await createDocsLlmCall(thinkingLevelOverride);
+    if (!llmCall) {
       return {
-        output: rawResult.output + '\n\n(LLM enrichment skipped — no API key. Set GROK_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.)',
+        output: rawResult.output + '\n\n(LLM enrichment skipped — no provider. Run `buddy login chatgpt` or configure a provider API key.)',
         success: true,
-      };
-    }
-
-    // Determine model and provider
-    const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
-    const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
-
-    let model = process.env.GROK_MODEL || 'grok-3-latest';
-    if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
-    if (isOpenAI) model = 'gpt-4o-mini';
-
-    let llmCall: (sys: string, user: string, thinking?: string) => Promise<string>;
-
-    if (isGemini) {
-      // Native Gemini API — supports thinkingLevel
-      const geminiBaseURL = 'https://generativelanguage.googleapis.com/v1beta';
-      llmCall = async (systemPrompt: string, userPrompt: string, thinkingLevel?: string): Promise<string> => {
-        const generationConfig: Record<string, unknown> = {
-          temperature: 0.2,
-          maxOutputTokens: 5000,
-        };
-        if (thinkingLevel) {
-          generationConfig.thinkingConfig = { thinkingLevel };
-        }
-
-        const res = await fetch(
-          `${geminiBaseURL}/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig,
-            }),
-          },
-        );
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Gemini ${res.status}: ${errText.substring(0, 200)}`);
-        }
-        const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-        return data.candidates?.[0]?.content?.parts
-          ?.filter((p: { text?: string }) => p.text)
-          .map((p: { text?: string }) => p.text)
-          .join('') ?? '';
-      };
-    } else {
-      // OpenAI-compatible (Grok, OpenAI, LM Studio)
-      let baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
-      if (isOpenAI) baseURL = 'https://api.openai.com/v1';
-      const OpenAI = (await import('openai')).default;
-      const openaiClient = new OpenAI({ apiKey, baseURL });
-
-      llmCall = async (systemPrompt: string, userPrompt: string): Promise<string> => {
-        const response = await openaiClient.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 5000,
-          temperature: 0.2,
-        });
-        return response.choices[0]?.message?.content ?? '';
       };
     }
 
@@ -211,7 +175,8 @@ async function handleGenerateWithLLM(thinkingLevelOverride?: 'minimal' | 'low' |
     }
 
     // Step 4: Enrich raw docs with LLM prose
-    const docsDir = require('path').join(process.cwd(), '.codebuddy', 'docs');
+    const path = await import('path');
+    const docsDir = path.join(process.cwd(), '.codebuddy', 'docs');
     const { enrichDocs } = await import('../../docs/llm-enricher.js');
     const result = await enrichDocs({
       docsDir,
@@ -266,44 +231,7 @@ async function handleGenerateV2(withLLM: boolean, thinkingLevel?: 'minimal' | 'l
     // Set up LLM if requested
     let llmCall: ((sys: string, user: string, thinking?: string) => Promise<string>) | undefined;
     if (withLLM) {
-      const apiKey = process.env.GROK_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
-      if (apiKey) {
-        const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
-        const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
-        let model = process.env.GROK_MODEL || 'grok-3-latest';
-        if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
-        if (isOpenAI) model = 'gpt-4o-mini';
-
-        if (isGemini) {
-          const baseURL = 'https://generativelanguage.googleapis.com/v1beta';
-          llmCall = async (sys: string, user: string, _thinking?: string): Promise<string> => {
-            const res = await fetch(`${baseURL}/models/${model}:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: user }] }],
-                systemInstruction: { parts: [{ text: sys }] },
-                generationConfig: { temperature: 0.2, maxOutputTokens: 8000 },
-              }),
-            });
-            if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).substring(0, 200)}`);
-            const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-            return data.candidates?.[0]?.content?.parts?.filter((p: { text?: string }) => p.text).map((p: { text?: string }) => p.text).join('') ?? '';
-          };
-        } else {
-          let baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
-          if (isOpenAI) baseURL = 'https://api.openai.com/v1';
-          const OpenAI = (await import('openai')).default;
-          const client = new OpenAI({ apiKey, baseURL });
-          llmCall = async (sys: string, user: string): Promise<string> => {
-            const r = await client.chat.completions.create({
-              model, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
-              max_tokens: 8000, temperature: 0.2,
-            });
-            return r.choices[0]?.message?.content ?? '';
-          };
-        }
-      }
+      llmCall = await createDocsLlmCall(thinkingLevel);
     }
 
     // Run the V2 pipeline

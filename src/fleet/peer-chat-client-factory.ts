@@ -218,10 +218,7 @@ function buildOne(id: PeerChatProviderId): { client: CodeBuddyClient; info: Peer
   const spec = SPECS[id];
   const resolved = spec.resolve();
   if (!resolved) return null;
-  const model =
-    process.env.CODEBUDDY_PEER_MODEL ||
-    (id === 'chatgpt' ? process.env.CHATGPT_MODEL : undefined) ||
-    spec.defaultModel;
+  const model = resolveModelForSpec(id, spec);
   try {
     const client = new CodeBuddyClient(resolved.apiKey, model, resolved.baseUrl);
     return {
@@ -232,6 +229,33 @@ function buildOne(id: PeerChatProviderId): { client: CodeBuddyClient; info: Peer
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(`[peer-chat-factory] Failed to build ${id} client: ${msg}`);
     return null;
+  }
+}
+
+function resolveModelForSpec(id: PeerChatProviderId, spec: ProviderSpec): string {
+  return (
+    process.env.CODEBUDDY_PEER_MODEL ||
+    providerSpecificModelEnv(id) ||
+    spec.defaultModel
+  );
+}
+
+function providerSpecificModelEnv(id: PeerChatProviderId): string | undefined {
+  switch (id) {
+    case 'chatgpt':
+      return process.env.CHATGPT_MODEL;
+    case 'ollama':
+      return process.env.OLLAMA_MODEL;
+    case 'grok':
+      return process.env.GROK_MODEL;
+    case 'anthropic':
+      return process.env.ANTHROPIC_MODEL;
+    case 'gemini':
+      return process.env.GEMINI_MODEL;
+    case 'openai':
+      return process.env.OPENAI_MODEL;
+    case 'gemini-cli':
+      return process.env.GEMINI_CLI_MODEL;
   }
 }
 
@@ -275,7 +299,7 @@ export function resolveProviderFromEnv(
       provider: preferred,
       apiKey: resolved.apiKey,
       baseUrl: resolved.baseUrl,
-      model: process.env.CODEBUDDY_PEER_MODEL || spec.defaultModel,
+      model: resolveModelForSpec(preferred, spec),
       isLocal: spec.isLocal,
     };
   }

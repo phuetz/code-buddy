@@ -4,7 +4,7 @@
  * Validates `resolveTickProvider` priority cascade:
  *   1. task.preferLocal=true + Ollama → ollama
  *   2. preferLocal=true without Ollama → fallthrough to host config
- *   3. llm_provider='cloud' (default V0.1) → GROK env
+ *   3. llm_provider='cloud' (default) → ChatGPT subscription, then cloud API env
  *   4. llm_provider='auto' → factory auto-detect
  *   5. llm_provider='<id>' → force that provider via factory
  *   6. Factory failure → fallback to GROK env
@@ -12,9 +12,20 @@
  *   8. Worklog entry includes provider + model fields (smoke test)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  hasCodexCredentialsMock: vi.fn(),
+}));
+
+vi.mock('../../../src/providers/codex-oauth.js', () => ({
+  hasCodexCredentials: mocks.hasCodexCredentialsMock,
+}));
+
 import { resolveTickProvider } from '../../../src/agent/autonomous/fleet-tick-handler.js';
 import type { FleetTask } from '../../../src/agent/autonomous/fleet-task-types.js';
+
+const { hasCodexCredentialsMock } = mocks;
 
 const ENV_KEYS = [
   'OLLAMA_HOST',
@@ -28,6 +39,7 @@ const ENV_KEYS = [
   'OPENAI_API_KEY',
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
+  'CHATGPT_MODEL',
 ];
 
 let saved: Record<string, string | undefined>;
@@ -38,6 +50,8 @@ beforeEach(() => {
     saved[k] = process.env[k];
     delete process.env[k];
   }
+  hasCodexCredentialsMock.mockReset();
+  hasCodexCredentialsMock.mockReturnValue(false);
   // Keep these tests hermetic on developer machines that have `gemini`
   // installed globally; an explicit missing path disables PATH probing.
   process.env.GEMINI_CLI_PATH = '__codebuddy_missing_gemini_cli_for_tests__';
@@ -74,7 +88,7 @@ describe('resolveTickProvider — priority cascade', () => {
     expect(r.apiKey).toBe('sk-grok');
   });
 
-  it('llm_provider=undefined or "cloud" → GROK env (V0.1 default)', () => {
+  it('llm_provider=undefined or "cloud" → cloud provider env', () => {
     process.env.GROK_API_KEY = 'sk-grok';
     process.env.GROK_BASE_URL = 'https://custom-grok/v1';
     process.env.GROK_MODEL = 'grok-3-mini';
@@ -90,6 +104,19 @@ describe('resolveTickProvider — priority cascade', () => {
     const r2 = resolveTickProvider(taskBase(), undefined);
     expect(r2.provider).toBe('grok');
     expect(r2.reason).toBe('config:cloud');
+  });
+
+  it('llm_provider="cloud" prefers ChatGPT subscription auth over legacy Grok env', () => {
+    hasCodexCredentialsMock.mockReturnValue(true);
+    process.env.GROK_API_KEY = 'sk-grok';
+    process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
+
+    const r = resolveTickProvider(taskBase(), 'cloud');
+
+    expect(r.provider).toBe('chatgpt');
+    expect(r.apiKey).toBe('oauth-chatgpt');
+    expect(r.model).toBe('gpt-5.1-codex');
+    expect(r.reason).toBe('config:cloud');
   });
 
   it('llm_provider="auto" → factory auto-detect (Ollama first)', () => {

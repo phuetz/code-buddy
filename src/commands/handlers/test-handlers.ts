@@ -1,6 +1,7 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { CodeBuddyClient } from "../../codebuddy/client.js";
 import { AITestRunner, createAITestRunner } from "../../testing/ai-integration-tests.js";
+import { detectProviderFromEnv, selectModelForDetectedProvider } from "../../utils/provider-detector.js";
 import stringWidth from "string-width";
 
 export interface CommandHandlerResult {
@@ -61,29 +62,29 @@ export async function handleAITest(
 ): Promise<CommandHandlerResult> {
   const option = args[0]?.toLowerCase();
 
-  // Check for API key
-  const apiKey = process.env.GROK_API_KEY;
-  if (!apiKey) {
-    return {
-      handled: true,
-      entry: {
-        type: "assistant",
-        content: `❌ AI Test Failed
-
-No GROK_API_KEY environment variable found.
-Set your API key to run integration tests.`,
-        timestamp: new Date(),
-      },
-    };
-  }
-
   // Use current client if available, otherwise create new one from env
   let client = codebuddyClient;
   if (!client) {
-    // Fallback: create client from environment variables
-    const model = process.env.GROK_MODEL || process.env.OPENAI_MODEL;
-    const baseURL = process.env.GROK_BASE_URL || process.env.OPENAI_BASE_URL;
-    client = new CodeBuddyClient(apiKey, model, baseURL);
+    const provider = detectProviderFromEnv();
+    if (!provider) {
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: `❌ AI Test Failed
+
+No AI provider is configured.
+Run \`buddy login chatgpt\` or configure a provider API key to run integration tests.`,
+          timestamp: new Date(),
+        },
+      };
+    }
+
+    const model = selectModelForDetectedProvider(
+      provider,
+      process.env.GROK_MODEL || process.env.OPENAI_MODEL || process.env.CHATGPT_MODEL,
+    );
+    client = new CodeBuddyClient(provider.apiKey, model, provider.baseURL);
   }
 
   const currentModel = client.getCurrentModel();

@@ -16,7 +16,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import path from 'path';
 import { getSettingsManager } from '../../utils/settings-manager.js';
-import { PROVIDERS } from '../provider.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../../utils/provider-detector.js';
 
 async function runDirectResearch(
   topic: string,
@@ -83,31 +83,16 @@ export function createResearchCommand(): Command {
     .option('--context <text>', 'Additional context injected into each worker')
     .action(async (topic: string, opts) => {
       const settingsManager = getSettingsManager();
-      const settings = settingsManager.loadUserSettings();
-      const currentProviderKey = settings.provider || 'grok';
-      const providerInfo = PROVIDERS[currentProviderKey];
-      
-      let apiKey = process.env[providerInfo?.envVar || ''] || '';
-      if (!apiKey && currentProviderKey === 'grok') apiKey = process.env.XAI_API_KEY || '';
-      if (!apiKey && currentProviderKey === 'gemini') apiKey = process.env.GOOGLE_API_KEY || '';
-      
-      if (!apiKey) apiKey = process.env.GROK_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GOOGLE_API_KEY || '';
+      const provider = detectProviderFromEnv();
 
-      if (!apiKey) {
-        console.error('❌ No API key found for the active provider. Set the appropriate environment variable.');
+      if (!provider) {
+        console.error('❌ No AI provider found. Run `buddy login chatgpt` or configure a provider API key.');
         process.exit(1);
       }
 
-      const providerEnvBaseURL: Record<string, string | undefined> = {
-        grok: process.env.GROK_BASE_URL,
-        claude: process.env.ANTHROPIC_BASE_URL,
-        openai: process.env.OPENAI_BASE_URL,
-        gemini: process.env.GEMINI_BASE_URL,
-      };
-
       const providerConfig = {
-        model: settingsManager.getCurrentModel() || providerInfo?.defaultModel,
-        baseURL: providerEnvBaseURL[currentProviderKey] || providerInfo?.baseURL,
+        model: selectModelForDetectedProvider(provider, settingsManager.getCurrentModel()),
+        baseURL: provider.baseURL,
       };
 
       const workers = Math.min(parseInt(opts.workers, 10) || 5, 20);
@@ -119,7 +104,7 @@ export function createResearchCommand(): Command {
       const reportPath: string | undefined = opts.report || argvReportPath;
 
       console.log(`\n🔬 Wide Research: "${topic}"`);
-      console.log(`   Provider: ${providerInfo?.name || currentProviderKey} | Model: ${providerConfig.model}`);
+      console.log(`   Provider: ${provider.provider} | Model: ${providerConfig.model}`);
       console.log(`   Workers: ${workers}  |  Max rounds per worker: ${maxRoundsPerWorker}`);
       console.log('─'.repeat(60));
 
@@ -132,13 +117,13 @@ export function createResearchCommand(): Command {
       if (!process.stdin.isTTY || !process.stdout.isTTY) {
         console.log('ℹ️ Non-interactive mode detected, using direct research mode.');
         try {
-          const report = await runDirectResearch(topic, apiKey, providerConfig, Math.min(overallTimeoutMs, 120_000));
+          const report = await runDirectResearch(topic, provider.apiKey, providerConfig, Math.min(overallTimeoutMs, 120_000));
           const reportContent = [
             `# Research Report: ${topic}`,
             ``,
             `Generated: ${new Date().toISOString()}`,
             `Mode: direct`,
-            `Provider: ${providerInfo?.name || currentProviderKey}`,
+            `Provider: ${provider.provider}`,
             `Model: ${providerConfig.model || 'default'}`,
             ``,
             `---`,
@@ -253,7 +238,7 @@ export function createResearchCommand(): Command {
       });
 
       try {
-        const result = await orchestrator.research(topic, apiKey, providerConfig);
+        const result = await orchestrator.research(topic, provider.apiKey, providerConfig);
 
         console.log('\n' + '─'.repeat(60));
         console.log(`✅ Research complete!`);

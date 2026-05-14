@@ -90,7 +90,7 @@ export interface FleetTickOptions {
   priorityThreshold?: FleetTaskPriority;
   /**
    * Phase (d).20 — LLM provider selection for the autonomous agent.
-   * `'cloud'` (default V0.1) → GROK env. `'auto'` → factory auto-detect.
+   * `'cloud'` (default) → subscription/cloud provider env. `'auto'` → factory auto-detect.
    * Explicit provider id → force that provider. Per-task `preferLocal`
    * overrides this for that task only (when Ollama is configured).
    */
@@ -111,7 +111,7 @@ export interface FleetTickOptions {
   gitRun?: (args: string[], cwd: string) => Promise<{ stdout: string; stderr: string; code: number }>;
 }
 
-/** GROK fallback used by the V0.1 'cloud' default and the safety-net fallback. */
+/** GROK fallback used by the safety-net fallback when no cloud provider resolves. */
 function buildGrokEnvProvider(reason: ResolvedTickProvider['reason']): ResolvedTickProvider {
   return {
     provider: 'grok',
@@ -123,12 +123,20 @@ function buildGrokEnvProvider(reason: ResolvedTickProvider['reason']): ResolvedT
   };
 }
 
+function buildCloudEnvProvider(reason: ResolvedTickProvider['reason']): ResolvedTickProvider {
+  for (const id of ['chatgpt', 'grok', 'anthropic', 'gemini', 'openai'] satisfies PeerChatProviderId[]) {
+    const r = resolveProviderFromEnv(id);
+    if (r) return { ...r, reason };
+  }
+  return buildGrokEnvProvider(reason);
+}
+
 /**
  * Phase (d).20 — resolve which LLM provider to use for a given task.
  *
  * Priority cascade:
  *   1. `task.preferLocal=true` AND `OLLAMA_HOST` set → ollama
- *   2. `llm_provider='cloud'` (default V0.1) → GROK env
+ *   2. `llm_provider='cloud'` (default) → subscription/cloud provider env
  *   3. `llm_provider='auto'` → factory auto-detect (Ollama → grok → ...)
  *   4. `llm_provider='<id>'` → force that provider via factory
  *   5. Fallback (factory failed): GROK env (V0.1 behavior)
@@ -153,7 +161,7 @@ export function resolveTickProvider(
   // 2. cloud (default)
   const cfg = configProvider ?? 'cloud';
   if (cfg === 'cloud') {
-    return buildGrokEnvProvider('config:cloud');
+    return buildCloudEnvProvider('config:cloud');
   }
   // 3. auto or explicit
   const r = resolveProviderFromEnv(cfg);
@@ -316,10 +324,7 @@ async function defaultAgentRun(
 ): Promise<{ stdout: string; timedOut: boolean }> {
   // Lazy-import to avoid pulling the agent module at fleet-tick load time.
   const { CodeBuddyAgent } = await import('../codebuddy-agent.js');
-  // V0.1 fallback: when no provider was resolved (test path, or someone
-  // calling defaultAgentRun directly without going through runFleetTick),
-  // use the GROK env that V0.1 used.
-  const p = provider ?? buildGrokEnvProvider('config:cloud');
+  const p = provider ?? buildCloudEnvProvider('config:cloud');
   const agent = new CodeBuddyAgent(p.apiKey, p.baseUrl, p.model, 50, false);
 
   let timedOut = false;

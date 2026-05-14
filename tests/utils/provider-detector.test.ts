@@ -177,3 +177,35 @@ describe('detectProviderFromEnv — priority chain', () => {
     expect(detectProviderFromEnv()?.defaultModel).toBe('gpt-5.1-codex');
   });
 });
+
+describe('selectModelForDetectedProvider', () => {
+  it('drops legacy Grok defaults for ChatGPT subscription auth', async () => {
+    const { selectModelForDetectedProvider } = await import('../../src/utils/provider-detector.js');
+    expect(selectModelForDetectedProvider({
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    }, 'grok-code-fast-1')).toBe('gpt-5.5');
+  });
+
+  it('preserves explicit non-Grok overrides for ChatGPT subscription auth', async () => {
+    const { selectModelForDetectedProvider } = await import('../../src/utils/provider-detector.js');
+    expect(selectModelForDetectedProvider({
+      provider: 'chatgpt',
+      apiKey: 'oauth-chatgpt',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
+      defaultModel: 'gpt-5.5',
+    }, 'gpt-5.1-codex')).toBe('gpt-5.1-codex');
+  });
+
+  it('preserves Grok models when Grok is the detected provider', async () => {
+    const { selectModelForDetectedProvider } = await import('../../src/utils/provider-detector.js');
+    expect(selectModelForDetectedProvider({
+      provider: 'grok',
+      apiKey: 'xai',
+      baseURL: 'https://api.x.ai/v1',
+      defaultModel: 'grok-3-fast',
+    }, 'grok-code-fast-1')).toBe('grok-code-fast-1');
+  });
+});

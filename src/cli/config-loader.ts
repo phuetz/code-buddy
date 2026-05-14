@@ -8,7 +8,7 @@
  */
 
 import { getSettingsManager } from '../utils/settings-manager.js';
-import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 
 export interface CLIConfig {
   apiKey?: string;
@@ -58,6 +58,7 @@ export function loadBaseURL(): string {
  */
 export function loadModel(): string | undefined {
   // First check environment variables
+  const detected = detectProviderFromEnv();
   let model = process.env.GROK_MODEL;
 
   if (!model) {
@@ -70,7 +71,7 @@ export function loadModel(): string | undefined {
     }
   }
 
-  return model || detectProviderFromEnv()?.defaultModel;
+  return selectModelForDetectedProvider(detected, model);
 }
 
 /**

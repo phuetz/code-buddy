@@ -29,6 +29,27 @@ export interface DetectedProvider {
   defaultModel: string;
 }
 
+function isLikelyGrokModel(model: string): boolean {
+  return /^grok[-_]/i.test(model.trim());
+}
+
+/**
+ * Preserve explicit model overrides without letting legacy Grok defaults leak
+ * into a non-Grok provider selected by env/OAuth detection.
+ */
+export function selectModelForDetectedProvider(
+  detected: DetectedProvider | null,
+  configuredModel?: string,
+): string | undefined {
+  const model = configuredModel?.trim();
+  if (!detected) return model || undefined;
+  if (!model) return detected.defaultModel;
+  if (detected.provider !== 'grok' && isLikelyGrokModel(model)) {
+    return detected.defaultModel;
+  }
+  return model;
+}
+
 function hasChatGptAccessToken(filePath: string): boolean {
   try {
     if (!fs.existsSync(filePath)) return false;

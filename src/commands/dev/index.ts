@@ -17,20 +17,15 @@ async function createAgent() {
   dotenv.config();
 
   const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
+  const { detectProviderFromEnv } = await import('../../utils/provider-detector.js');
 
-  const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY
-    || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY
-    || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    console.error('Error: no API key found. Set GROK_API_KEY (or equivalent) environment variable.');
+  const provider = detectProviderFromEnv();
+  if (!provider) {
+    console.error('Error: no AI provider found. Run `buddy login chatgpt` or configure a provider API key.');
     process.exit(1);
   }
 
-  const baseURL = process.env.GROK_BASE_URL;
-  const model = process.env.GROK_MODEL;
-
-  return new CodeBuddyAgent(apiKey, baseURL, model);
+  return new CodeBuddyAgent(provider.apiKey, provider.baseURL, provider.defaultModel);
 }
 
 export function registerDevCommands(program: Command): void {
