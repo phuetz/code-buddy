@@ -222,7 +222,10 @@ describe('handleAgents (/agents)', () => {
   it('enable instantiates the singleton', async () => {
     const r = await handleAgents(['enable']);
     expect(r.entry?.content).toContain('Multi-agent system started');
-    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('test-key', 'https://api.x.ai/v1');
+    expect(mocks.getMultiAgentSystemMock.mock.calls.at(-1)?.slice(0, 2)).toEqual([
+      'test-key',
+      'https://api.x.ai/v1',
+    ]);
 
     const status = await handleAgents(['status']);
     expect(status.entry?.content).toMatch(/Enabled:\s+yes/);
@@ -245,10 +248,10 @@ describe('handleAgents (/agents)', () => {
 
     await handleAgents(['enable']);
 
-    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith(
+    expect(mocks.getMultiAgentSystemMock.mock.calls.at(-1)?.slice(0, 2)).toEqual([
       'oauth-chatgpt',
-      'https://chatgpt.com/backend-api/codex'
-    );
+      'https://chatgpt.com/backend-api/codex',
+    ]);
   });
 
   it('disable resets the system when enabled', async () => {

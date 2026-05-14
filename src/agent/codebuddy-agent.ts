@@ -681,8 +681,16 @@ export class CodeBuddyAgent extends BaseAgent {
         logger.warn('MultiAgentSystem boot skipped: no LLM provider configured');
         return;
       }
-      import('../agent/multi-agent/multi-agent-system.js').then(({ getMultiAgentSystem }) => {
-        getMultiAgentSystem(provider.apiKey, provider.baseURL);
+      Promise.all([
+        import('../agent/multi-agent/multi-agent-system.js'),
+        import('../agent/multi-agent/provider-overrides.js'),
+      ]).then(([{ getMultiAgentSystem }, { buildMultiAgentProviderOverrides }]) => {
+        const perAgentOverrides = buildMultiAgentProviderOverrides(masCfg);
+        if (perAgentOverrides) {
+          getMultiAgentSystem(provider.apiKey, provider.baseURL, undefined, perAgentOverrides);
+        } else {
+          getMultiAgentSystem(provider.apiKey, provider.baseURL);
+        }
         logger.info('MultiAgentSystem auto-instantiated from TOML config', {
           default_strategy: masCfg.default_strategy ?? 'hierarchical',
           provider: provider.provider,

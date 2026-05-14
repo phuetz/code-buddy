@@ -36,6 +36,7 @@ import { CoderAgent, createCoderAgent } from "./agents/coder-agent.js";
 import { ReviewerAgent, createReviewerAgent } from "./agents/reviewer-agent.js";
 import { TesterAgent, createTesterAgent } from "./agents/tester-agent.js";
 import { detectProviderFromEnv } from "../../utils/provider-detector.js";
+import type { MultiAgentProviderOverrides } from "./provider-overrides.js";
 
 /**
  * Default workflow options
@@ -1215,9 +1216,10 @@ export class MultiAgentSystem extends EventEmitter {
 export function createMultiAgentSystem(
   apiKey: string,
   baseURL?: string,
-  toolExecutor?: ToolExecutor
+  toolExecutor?: ToolExecutor,
+  perAgentOverrides?: MultiAgentProviderOverrides,
 ): MultiAgentSystem {
-  return new MultiAgentSystem(apiKey, baseURL, toolExecutor);
+  return new MultiAgentSystem(apiKey, baseURL, toolExecutor, perAgentOverrides);
 }
 
 // Singleton instance
@@ -1226,10 +1228,11 @@ let multiAgentSystemInstance: MultiAgentSystem | null = null;
 export function getMultiAgentSystem(
   apiKey: string,
   baseURL?: string,
-  toolExecutor?: ToolExecutor
+  toolExecutor?: ToolExecutor,
+  perAgentOverrides?: MultiAgentProviderOverrides,
 ): MultiAgentSystem {
   if (!multiAgentSystemInstance) {
-    multiAgentSystemInstance = createMultiAgentSystem(apiKey, baseURL, toolExecutor);
+    multiAgentSystemInstance = createMultiAgentSystem(apiKey, baseURL, toolExecutor, perAgentOverrides);
   }
   return multiAgentSystemInstance;
 }

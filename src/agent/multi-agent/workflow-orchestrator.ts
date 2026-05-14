@@ -52,6 +52,7 @@ import type {
   AgentTask,
   AgentExecutionResult,
 } from './types.js';
+import type { MultiAgentProviderOverrides } from './provider-overrides.js';
 import {
   saveWorkflowById,
   clearWorkflowById,
@@ -70,6 +71,8 @@ export interface OrchestratorConfig {
   /** When false (default), `stop(workflowId)` raises rather than mis-stopping
    *  the wrong workflow. `stopAll()` always works. */
   enablePerWorkflowStop: boolean;
+  /** Optional per-role provider/model overrides for heterogeneous swarms. */
+  perAgentOverrides?: MultiAgentProviderOverrides;
 }
 
 const DEFAULT_CONFIG: Omit<OrchestratorConfig, 'apiKey' | 'baseURL'> = {
@@ -557,12 +560,16 @@ export class WorkflowOrchestrator extends EventEmitter {
    */
   private acquireMAS(): { mas: MultiAgentSystem; isSingleton: boolean } {
     if (!this.singletonInUse) {
-      const mas = getMultiAgentSystem(this.config.apiKey, this.config.baseURL);
+      const mas = this.config.perAgentOverrides
+        ? getMultiAgentSystem(this.config.apiKey, this.config.baseURL, undefined, this.config.perAgentOverrides)
+        : getMultiAgentSystem(this.config.apiKey, this.config.baseURL);
       this.singletonInUse = true;
       return { mas, isSingleton: true };
     }
     // Pool > 1 — create a fresh instance. Each is disposed on release.
-    const mas = createMultiAgentSystem(this.config.apiKey, this.config.baseURL);
+    const mas = this.config.perAgentOverrides
+      ? createMultiAgentSystem(this.config.apiKey, this.config.baseURL, undefined, this.config.perAgentOverrides)
+      : createMultiAgentSystem(this.config.apiKey, this.config.baseURL);
     return { mas, isSingleton: false };
   }
 

@@ -100,6 +100,35 @@ model = "grok-code-fast-1"
 temperature = 0.3
 ```
 
+### Multi-Agent Provider Overrides
+
+`/agents` and `/swarm` use the detected provider by default. To run a
+heterogeneous team, configure per-role overrides without storing raw secrets:
+
+```toml
+[multi_agent_system]
+enabled = true
+default_strategy = "parallel"
+
+[multi_agent_system.agents.orchestrator]
+provider = "chatgpt"
+model = "gpt-5.5"
+
+[multi_agent_system.agents.coder]
+provider = "openai"
+api_key_env = "OPENAI_API_KEY"
+model = "gpt-5.1-codex"
+
+[multi_agent_system.agents.reviewer]
+provider = "gemini"
+api_key_env = "GOOGLE_API_KEY"
+model = "gemini-2.5-pro"
+
+[multi_agent_system.agents.tester]
+provider = "ollama"
+model = "qwen2.5-coder:7b"
+```
+
 ### Config Profiles
 
 Named profiles are deep-merged with base config. Use via `buddy --profile <name>`.

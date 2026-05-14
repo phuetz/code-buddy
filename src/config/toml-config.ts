@@ -404,6 +404,17 @@ export interface SessionsTomlConfig {
   max_spawn_per_minute?: number;
 }
 
+export interface MultiAgentRoleProviderConfig {
+  /** Provider for this role. chatgpt uses Codex OAuth; ollama uses OLLAMA_HOST. */
+  provider?: 'chatgpt' | 'openai' | 'gemini' | 'google' | 'anthropic' | 'claude' | 'grok' | 'xai' | 'ollama';
+  /** Optional environment variable containing the API key for this role. */
+  api_key_env?: string;
+  /** Optional OpenAI-compatible base URL override. */
+  base_url?: string;
+  /** Optional model override for this role. */
+  model?: string;
+}
+
 /**
  * Enterprise modules configuration (Phase K — top #3 audit OpenClaw,
  * audit `claude-et-patrice/propositions/AUDIT-OPENCLAW-HERITAGE-2026-05-02.md`).
@@ -467,6 +478,8 @@ export interface MultiAgentSystemConfig {
   coordination?: CoordinationTomlConfig;
   /** SessionRegistry sub-config (Phase F) */
   sessions?: SessionsTomlConfig;
+  /** Optional per-role provider/model overrides for heterogeneous multi-LLM swarms. */
+  agents?: Partial<Record<'orchestrator' | 'coder' | 'reviewer' | 'tester', MultiAgentRoleProviderConfig>>;
   /** Phase L (V0.4) — hard cap on a single workflow's total cost in USD.
    *  0 (default) = disabled, no cap, just track in metrics. */
   max_workflow_cost_usd?: number;

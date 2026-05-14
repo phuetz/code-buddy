@@ -153,6 +153,24 @@ function textResult(content: string): CommandHandlerResult {
   };
 }
 
+async function loadMultiAgentProviderOverrides() {
+  const [{ getConfigManager }, { buildMultiAgentProviderOverrides }] = await Promise.all([
+    import('../../config/toml-config.js'),
+    import('../../agent/multi-agent/provider-overrides.js'),
+  ]);
+  return buildMultiAgentProviderOverrides(getConfigManager().getConfig().multi_agent_system);
+}
+
+async function getConfiguredMultiAgentSystem(apiKey: string, baseURL?: string) {
+  const [{ getMultiAgentSystem }, perAgentOverrides] = await Promise.all([
+    import('../../agent/multi-agent/multi-agent-system.js'),
+    loadMultiAgentProviderOverrides(),
+  ]);
+  return perAgentOverrides
+    ? getMultiAgentSystem(apiKey, baseURL, undefined, perAgentOverrides)
+    : getMultiAgentSystem(apiKey, baseURL);
+}
+
 /**
  * Phase F — Wire MAS workflow events into the EnhancedCoordinator so
  * /agents metrics shows real data after workflows run. Without this,
@@ -440,11 +458,9 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
   const apiKey = provider.apiKey;
   const baseURL = provider.baseURL;
 
-  const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-
   if (action === 'enable') {
     const wasEnabled = agentsEnabled;
-    const system = getMultiAgentSystem(apiKey, baseURL); // instantiate singleton
+    const system = await getConfiguredMultiAgentSystem(apiKey, baseURL); // instantiate singleton
     await wireCoordinatorIfPresent(system as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
     agentsEnabled = true;
     if (wasEnabled) {
@@ -464,10 +480,10 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       return textResult('Usage: /agents plan <goal>');
     }
     if (!agentsEnabled) {
-      getMultiAgentSystem(apiKey, baseURL);
+      await getConfiguredMultiAgentSystem(apiKey, baseURL);
       agentsEnabled = true;
     }
-    const system = getMultiAgentSystem(apiKey, baseURL);
+    const system = await getConfiguredMultiAgentSystem(apiKey, baseURL);
     await wireCoordinatorIfPresent(system as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
     try {
       const result = await system.runWorkflow(goal, { strategy: activeStrategy, dryRun: true });
@@ -495,18 +511,20 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       const { getWorkflowOrchestrator } = await import('../../agent/multi-agent/workflow-orchestrator.js');
       const { getConfigManager } = await import('../../config/toml-config.js');
       const coordCfg = getConfigManager().getConfig().multi_agent_system?.coordination;
+      const perAgentOverrides = await loadMultiAgentProviderOverrides();
       const orchestrator = getWorkflowOrchestrator({
         apiKey,
         baseURL,
         maxConcurrentWorkflows: coordCfg?.max_concurrent_workflows ?? 1,
         queuePolicy: coordCfg?.queue_policy ?? 'queue',
         enablePerWorkflowStop: coordCfg?.enable_per_workflow_stop ?? false,
+        perAgentOverrides,
       });
       // Wire coordinator events to MAS instances created by the orchestrator.
       // For default=1, this is the singleton (V0.3 wire path); for pool>1
       // the additional MAS instances rely on the same lazy import — accepted
       // V0.4.1 limitation: only the singleton is wired (advisor cut).
-      const sys = getMultiAgentSystem(apiKey, baseURL);
+      const sys = await getConfiguredMultiAgentSystem(apiKey, baseURL);
       await wireCoordinatorIfPresent(sys as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
       agentsEnabled = true;
       const submission = await orchestrator.submitWorkflow(goal, { strategy: activeStrategy });
@@ -534,10 +552,10 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       );
     }
     if (!agentsEnabled) {
-      getMultiAgentSystem(apiKey, baseURL);
+      await getConfiguredMultiAgentSystem(apiKey, baseURL);
       agentsEnabled = true;
     }
-    const system = getMultiAgentSystem(apiKey, baseURL);
+    const system = await getConfiguredMultiAgentSystem(apiKey, baseURL);
     await wireCoordinatorIfPresent(system as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
 
     // Phase G — persistence. Save initial state + on every workflow:event
@@ -678,10 +696,10 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     // schemaVersion v0.1 = pre-Phase-J save migrated on load (completedTaskIds derived from results).
     // Both paths now actually resume by re-launching runWorkflow with resumeFrom.
     if (!agentsEnabled) {
-      getMultiAgentSystem(apiKey, baseURL);
+      await getConfiguredMultiAgentSystem(apiKey, baseURL);
       agentsEnabled = true;
     }
-    const system = getMultiAgentSystem(apiKey, baseURL);
+    const system = await getConfiguredMultiAgentSystem(apiKey, baseURL);
     await wireCoordinatorIfPresent(system as unknown as { on: (e: string, h: (...a: unknown[]) => void) => void; listenerCount: (e: string) => number });
 
     const completedTaskIds = persisted.completedTaskIds ?? persisted.results.map(([id]) => id);
