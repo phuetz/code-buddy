@@ -10,6 +10,7 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider, DiscoveredModel, ProviderOnboardingHooks } from '../types.js';
+import type { LLMMessage } from '../../providers/types.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const GEMMA_PROVIDER_ID = 'bundled-gemma4';
@@ -18,13 +19,17 @@ export const GEMMA_PROVIDER_ID = 'bundled-gemma4';
  * Known Gemma 4 models with context window sizes.
  * (Assuming typical variants like 2B, 9B, 27B based on previous generations)
  */
+const DEFAULT_CONTEXT_WINDOW = 8192;
+
 const KNOWN_MODELS: Record<string, { name: string; contextWindow: number }> = {
-  'gemma-4-9b-it': { name: 'Gemma 4 9B Instruct', contextWindow: 8192 },
-  'gemma-4-27b-it': { name: 'Gemma 4 27B Instruct', contextWindow: 8192 },
-  'gemma-4-2b-it': { name: 'Gemma 4 2B Instruct', contextWindow: 8192 },
+  'gemma-4-9b-it': { name: 'Gemma 4 9B Instruct', contextWindow: DEFAULT_CONTEXT_WINDOW },
+  'gemma-4-27b-it': { name: 'Gemma 4 27B Instruct', contextWindow: DEFAULT_CONTEXT_WINDOW },
+  'gemma-4-2b-it': { name: 'Gemma 4 2B Instruct', contextWindow: DEFAULT_CONTEXT_WINDOW },
 };
 
-const DEFAULT_CONTEXT_WINDOW = 8192;
+function resolveGemmaModelName(): string {
+  return process.env.GEMMA_MODEL || 'gemma-4-9b-it';
+}
 
 /**
  * Build onboarding hooks for Gemma 4 provider.
@@ -44,8 +49,11 @@ function buildOnboardingHooks(apiKey: string): ProviderOnboardingHooks {
            return { valid: true };
         }
         return { valid: false, error: 'Invalid API Key or Gemma 4 access denied.' };
-      } catch (err: any) {
-        return { valid: false, error: err.message };
+      } catch (err: unknown) {
+        return {
+          valid: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
     },
     'wizard.onboarding': async () => {
@@ -111,13 +119,13 @@ export class GemmaProviderPlugin implements PluginProvider {
     logger.debug('[GemmaProvider] initialized');
   }
 
-  async chat(messages: any[]): Promise<string> {
+  async chat(messages: LLMMessage[]): Promise<string> {
     if (!this.genAI) {
       throw new Error('Gemma Provider requires GEMINI_API_KEY to be set.');
     }
     
     // Default to the 9b model if none is specified by the router context
-    const modelName = process.env.GROK_MODEL || 'gemma-4-9b-it';
+    const modelName = resolveGemmaModelName();
     const model = this.genAI.getGenerativeModel({ model: modelName });
 
     // Format messages for the Gemini SDK (Gemma 4 uses the same interface via AI Studio)
@@ -139,7 +147,7 @@ export class GemmaProviderPlugin implements PluginProvider {
     if (!this.genAI) {
       throw new Error('Gemma Provider requires GEMINI_API_KEY to be set.');
     }
-    const modelName = process.env.GROK_MODEL || 'gemma-4-9b-it';
+    const modelName = resolveGemmaModelName();
     const model = this.genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     return result.response.text();
