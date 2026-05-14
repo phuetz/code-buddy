@@ -783,10 +783,12 @@ async function processPromptHeadless(
 ): Promise<void> {
   const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
   process.env.CODEBUDDY_DISABLE_MCP = 'true';
+  let resolvedModel = model;
 
   try {
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
     const agent = new CodeBuddyAgent(apiKey, baseURL, model, maxToolRounds);
+    resolvedModel = agent.getCurrentModel();
 
     // Configure self-healing
     if (!selfHealEnabled) {
@@ -804,7 +806,7 @@ async function processPromptHeadless(
       const { getInteractionLogger } = await import('./logging/interaction-logger.js');
       const il = getInteractionLogger();
       il.startSession({
-        model: model || 'unknown',
+        model: resolvedModel || 'unknown',
         provider: baseURL?.includes('localhost') ? 'local' : 'xai',
         cwd: process.cwd(),
         tags: ['headless'],
@@ -895,7 +897,7 @@ async function processPromptHeadless(
 
     // Gather cost and model info from the agent
     const sessionCost = agent.getSessionCost();
-    const usedModel = model || process.env.GROK_MODEL || 'unknown';
+    const usedModel = resolvedModel || 'unknown';
 
     // Output in the requested format
     const format = outputFormat.toLowerCase();
@@ -941,7 +943,7 @@ async function processPromptHeadless(
           error: errorMessage,
           result: null,
           cost: { total: 0 },
-          model: model || process.env.GROK_MODEL || 'unknown',
+          model: resolvedModel || 'unknown',
         })
       );
     }
