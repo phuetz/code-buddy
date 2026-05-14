@@ -86,9 +86,10 @@ function ApiKeyInputInner({ onApiKeySet }: ApiKeyInputProps) {
 
   return (
     <Box flexDirection="column" paddingX={2} paddingY={1}>
-      <Text color="yellow">🔑 CodeBuddy API Key Required</Text>
-      <Box marginBottom={1}>
-        <Text color="gray">Please enter your CodeBuddy API key to continue:</Text>
+      <Text color="yellow">🔑 AI Provider Required</Text>
+      <Box flexDirection="column" marginBottom={1}>
+        <Text color="gray">Enter an xAI/Grok API key to continue.</Text>
+        <Text color="gray">For ChatGPT Pro, press Ctrl+C and run `buddy login chatgpt`.</Text>
       </Box>
       
       <Box borderStyle="round" borderColor="blue" paddingX={1} marginBottom={1}>
