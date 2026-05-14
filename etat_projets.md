@@ -1,4 +1,76 @@
-# État des projets — mis à jour le 12 mai 2026
+# État des projets — mis à jour le 14 mai 2026
+
+## ✨ Bilan d'étape — 14 mai 2026 (GitNexus documents de travail + livrables techniques)
+
+Session Codex sur `D:\CascadeProjects\gitnexus-rs-from-c`, branche
+`codex/multi-llm-provider-choice`, base `f7417e4 Improve GitNexus as a reliable analysis workstation`.
+Le travail courant n'est pas encore commité au moment de cette sauvegarde.
+
+Objectif Patrice : transformer GitNexus Chat en outil capable d'importer un
+document de travail contenant des questions, d'extraire les questions, de les
+traiter une par une avec GitNexus, puis de produire un livrable final
+professionnel reprenant les réponses détaillées.
+
+État livré côté application :
+- panneau **Documents de travail** avec import DOCX, extraction des questions,
+  traitement une par une ou par lot, rattachement à une conversation dédiée et
+  cache local du document source ;
+- prompt de traitement enrichi par la reformulation GitNexus : dépôt cible,
+  lecture obligatoire des fichiers, sources exactes, explication détaillée,
+  preuves code, diagramme Mermaid si pertinent, impacts et limites ;
+- livrable Markdown restructuré comme un mini-livre technique : couverture
+  métadonnées, parcours de lecture, table des questions, document source
+  enrichi, mini-chapitres par question, index global des sources citées et
+  contrôle qualité documentaire ;
+- score qualité visible dans l'UI : couverture des questions, fichiers sources
+  cités, diagrammes, blocs de code, erreurs, réponses trop courtes ;
+- exports disponibles depuis le panneau : Markdown, HTML imprimable, DOCX et
+  PDF natif ;
+- export DOCX renforcé : callouts Obsidian `[!NOTE]`, `[!TIP]`,
+  `[!WARNING]`, `[!DANGER]`, légendes de figures Mermaid et identifiants de
+  liens uniques pour les longs documents ;
+- export PDF/HTML avec profil `technical-book` : styles de couverture,
+  encadrés, tableaux, diagrammes Mermaid plus lisibles et fallback source si le
+  rendu Mermaid n'est pas disponible ;
+- délais d'export PDF/DOCX portés à 180 s pour les gros livrables.
+
+Fichiers clés :
+- `chat-ui/src/components/chat/WorkDocumentsPanel.tsx`
+- `chat-ui/src/utils/workdoc.ts`
+- `chat-ui/src/utils/workdoc.test.ts`
+- `chat-ui/src/api/mcp-client.ts`
+- `crates/gitnexus-cli/src/commands/export_docx.rs`
+- `crates/gitnexus-cli/src/commands/generate/pdf.rs`
+- endpoints existants côté `crates/gitnexus-cli/src/commands/serve.rs` déjà utilisés pour extraction/export.
+
+Vérifications passées :
+- `npm --prefix chat-ui run test -- workdoc` : 6 tests OK
+- `npm --prefix chat-ui run lint` : OK
+- `npm --prefix chat-ui run build` : OK
+- `cargo test -p gitnexus-cli` : 155 unit tests + 10 integration tests + 1 secret scan OK
+- `git diff --check` sur les fichiers concernés : OK
+
+État du worktree GitNexus au moment de la sauvegarde :
+- de nombreux fichiers déjà modifiés/non trackés existent dans le worktree,
+  issus des travaux précédents sur chat, explorateur, vault, export et
+  multi-LLM ;
+- ne pas faire de reset/revert global ;
+- avant commit, relire le scope et idéalement faire un commit Lore dédié à la
+  chaîne "documents de travail / livrables techniques".
+
+Prochaines reprises recommandées :
+1. Tester en condition réelle dans l'application : importer un DOCX de questions
+   Alise, traiter 2 ou 3 questions, exporter HTML/PDF/DOCX.
+2. Inspecter visuellement le PDF/DOCX généré : couverture, table des questions,
+   index des sources, callouts, diagrammes Mermaid.
+3. Ajuster si besoin le seuil "réponse trop courte" et les patterns de
+   détection de sources.
+4. Committer avec le protocole Lore puis pousser sur `phuetz/gitnexus-rs`.
+5. Ensuite seulement réfléchir à la suite : planification façon Manus UI,
+   ordonnancement de tâches/questionnaire, reprise automatique après arrêt et
+   historique d'avancement par document.
+
+---
 
 ## ✨ Bilan d'étape — 12 mai 2026 (GitNexus Chat multi-LLM + réponses sourcées)
 
