@@ -489,7 +489,10 @@ async function loadModel(): Promise<string | undefined> {
   await ensureEnvLoaded();
 
   const detected = await getDetectedProvider();
-  let configured = process.env.GROK_MODEL;
+  let configured =
+    !detected || detected.provider === 'grok'
+      ? process.env.GROK_MODEL
+      : undefined;
 
   if (!configured) {
     try {

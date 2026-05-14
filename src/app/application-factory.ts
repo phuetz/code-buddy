@@ -66,7 +66,10 @@ export function loadBaseURL(): string {
  */
 export function loadModel(): string | undefined {
   const detected = detectProviderFromEnv();
-  let configured = process.env.GROK_MODEL;
+  let configured =
+    !detected || detected.provider === 'grok'
+      ? process.env.GROK_MODEL
+      : undefined;
 
   if (!configured) {
     try {

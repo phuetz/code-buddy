@@ -59,7 +59,10 @@ export function loadBaseURL(): string {
 export function loadModel(): string | undefined {
   // First check environment variables
   const detected = detectProviderFromEnv();
-  let model = process.env.GROK_MODEL;
+  let model =
+    !detected || detected.provider === 'grok'
+      ? process.env.GROK_MODEL
+      : undefined;
 
   if (!model) {
     // Use the unified model loading from settings manager

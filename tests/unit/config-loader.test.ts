@@ -198,6 +198,7 @@ describe('config-loader', () => {
 
     it('should not pass a legacy Grok model to detected ChatGPT auth', () => {
       process.env.GROK_MODEL = 'grok-code-fast-1';
+      mockManager.getCurrentModel.mockReturnValue(undefined);
       mockDetectProvider.mockReturnValue({
         provider: 'chatgpt',
         apiKey: 'oauth-chatgpt',
@@ -206,11 +207,24 @@ describe('config-loader', () => {
       });
 
       expect(loadModel()).toBe('gpt-5.5');
-      expect(mockManager.getCurrentModel).not.toHaveBeenCalled();
     });
 
-    it('should preserve explicit non-Grok model overrides for detected ChatGPT auth', () => {
+    it('should not treat GROK_MODEL as an override for detected ChatGPT auth', () => {
       process.env.GROK_MODEL = 'gpt-5.1-codex';
+      mockManager.getCurrentModel.mockReturnValue(undefined);
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadModel()).toBe('gpt-5.5');
+    });
+
+    it('should preserve settings model overrides for detected ChatGPT auth', () => {
+      delete process.env.GROK_MODEL;
+      mockManager.getCurrentModel.mockReturnValue('gpt-5.1-codex');
       mockDetectProvider.mockReturnValue({
         provider: 'chatgpt',
         apiKey: 'oauth-chatgpt',

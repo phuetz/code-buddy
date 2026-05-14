@@ -195,6 +195,7 @@ describe('Application Factory', () => {
 
     it('should ignore legacy Grok defaults when ChatGPT is detected', () => {
       process.env.GROK_MODEL = 'grok-code-fast-1';
+      settingsMocks.manager.getCurrentModel.mockReturnValueOnce(undefined);
       mockDetectProvider.mockReturnValue({
         provider: 'chatgpt',
         apiKey: 'oauth-chatgpt',
@@ -203,6 +204,31 @@ describe('Application Factory', () => {
       });
 
       expect(loadModel()).toBe('gpt-5.5');
+    });
+
+    it('should not treat GROK_MODEL as a ChatGPT model override', () => {
+      process.env.GROK_MODEL = 'gpt-5.1-codex';
+      settingsMocks.manager.getCurrentModel.mockReturnValueOnce(undefined);
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadModel()).toBe('gpt-5.5');
+    });
+
+    it('should preserve settings model overrides when ChatGPT is detected', () => {
+      settingsMocks.manager.getCurrentModel.mockReturnValueOnce('gpt-5.1-codex');
+      mockDetectProvider.mockReturnValue({
+        provider: 'chatgpt',
+        apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.5',
+      });
+
+      expect(loadModel()).toBe('gpt-5.1-codex');
     });
   });
 
