@@ -21,6 +21,9 @@ import {
   WifiOff,
   CircleDot,
   AlertCircle,
+  KeyRound,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { FleetPeerStatus } from '../types';
@@ -73,6 +76,10 @@ export function FleetPanel() {
   const [addApiKey, setAddApiKey] = useState('');
   const [addLabel, setAddLabel] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
+  const [localKey, setLocalKey] = useState<string | null>(null);
+  const [localKeyError, setLocalKeyError] = useState<string | null>(null);
+  const [localKeyBusy, setLocalKeyBusy] = useState(false);
+  const [localKeyCopied, setLocalKeyCopied] = useState(false);
 
   const peers = useMemo(() => Object.values(peersMap), [peersMap]);
 
@@ -136,6 +143,37 @@ export function FleetPanel() {
     await window.electronAPI.fleet.reconnect(peerId);
   };
 
+  const createLocalKey = async () => {
+    if (localKeyBusy) return;
+    setLocalKeyBusy(true);
+    setLocalKeyError(null);
+    setLocalKey(null);
+    setLocalKeyCopied(false);
+    try {
+      const result = await window.electronAPI.fleet.createApiKey({
+        name: 'Cowork Fleet key',
+        userId: 'local',
+        scopes: ['fleet:listen', 'peer:invoke'],
+      });
+      if (!result.ok || !result.key) {
+        setLocalKeyError(result.error || 'Failed to create key');
+        return;
+      }
+      setLocalKey(result.key);
+    } catch (err) {
+      setLocalKeyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLocalKeyBusy(false);
+    }
+  };
+
+  const copyLocalKey = async () => {
+    if (!localKey) return;
+    await navigator.clipboard.writeText(localKey);
+    setLocalKeyCopied(true);
+    window.setTimeout(() => setLocalKeyCopied(false), 1600);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-sm">
       <div className="flex h-full w-[520px] flex-col bg-background-secondary border-l border-border shadow-2xl">
@@ -160,14 +198,55 @@ export function FleetPanel() {
             <span className="text-xs uppercase tracking-wide text-text-muted">
               Peers ({peers.length})
             </span>
-            <button
-              onClick={() => setShowAdd((v) => !v)}
-              className="flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add peer
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={createLocalKey}
+                disabled={localKeyBusy}
+                className="rounded p-1.5 text-text-muted hover:bg-surface hover:text-text-primary disabled:opacity-50 transition-colors"
+                title="Create local Fleet key"
+                aria-label="Create local Fleet key"
+              >
+                <KeyRound className={`w-3.5 h-3.5 ${localKeyBusy ? 'animate-pulse' : ''}`} />
+              </button>
+              <button
+                onClick={() => setShowAdd((v) => !v)}
+                className="flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add peer
+              </button>
+            </div>
           </div>
+
+          {(localKey || localKeyError) && (
+            <div className="border-t border-border px-4 py-2">
+              {localKey ? (
+                <div className="flex items-center gap-2 rounded border border-border bg-surface px-2 py-1.5 text-xs">
+                  <KeyRound className="h-3.5 w-3.5 shrink-0 text-accent" />
+                  <code className="min-w-0 flex-1 truncate font-mono text-text-secondary">
+                    {localKey}
+                  </code>
+                  <button
+                    onClick={copyLocalKey}
+                    className="rounded p-1 text-text-muted hover:bg-background-secondary hover:text-text-primary transition-colors"
+                    title={localKeyCopied ? 'Copied' : 'Copy'}
+                    aria-label={localKeyCopied ? 'Copied' : 'Copy'}
+                  >
+                    {localKeyCopied ? (
+                      <Check className="h-3.5 w-3.5 text-success" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <p className="flex items-center gap-1 text-xs text-error">
+                  <AlertCircle className="h-3 w-3" />
+                  {localKeyError}
+                </p>
+              )}
+            </div>
+          )}
 
           {showAdd && (
             <div className="space-y-2 border-t border-border px-4 py-3">

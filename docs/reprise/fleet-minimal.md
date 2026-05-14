@@ -29,6 +29,10 @@ seulement son hash dans `~/.codebuddy/server-api-keys.json`. Le serveur recharge
 ce store quand il change, donc il est possible de creer une nouvelle cle sans
 redemarrer le serveur.
 
+Depuis Cowork, le panneau Fleet expose aussi un bouton de creation de cle locale.
+Il passe par le meme store serveur et affiche la cle complete une seule fois
+pour la copier vers l'autre peer.
+
 ## Test loopback
 
 Terminal 2:

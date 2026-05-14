@@ -1467,6 +1467,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
         agentId?: string;
       }>
     > => ipcRenderer.invoke('fleet.events', peerId, limit),
+    createApiKey: (input?: {
+      name?: string;
+      userId?: string;
+      scopes?: Array<'fleet:listen' | 'peer:invoke'>;
+    }): Promise<{
+      ok: boolean;
+      key?: string;
+      apiKey?: {
+        id: string;
+        keyPreview?: string;
+        name: string;
+        userId: string;
+        scopes: string[];
+        active: boolean;
+        createdAt: string;
+        expiresAt?: string;
+        lastUsedAt?: string;
+      };
+      store?: string;
+      error?: string;
+    }> => ipcRenderer.invoke('fleet.createApiKey', input),
+    listApiKeys: (input?: { userId?: string }): Promise<{
+      ok: boolean;
+      keys: Array<{
+        id: string;
+        keyPreview?: string;
+        name: string;
+        userId: string;
+        scopes: string[];
+        active: boolean;
+        createdAt: string;
+        expiresAt?: string;
+        lastUsedAt?: string;
+      }>;
+      store?: string;
+      error?: string;
+    }> => ipcRenderer.invoke('fleet.listApiKeys', input),
     /**
      * Fleet P5 — dispatch a goal across the fleet via the task router.
      * Returns the saga id once the dispatch is queued; sagas are
@@ -2996,6 +3033,43 @@ declare global {
             agentId?: string;
           }>
         >;
+        createApiKey: (input?: {
+          name?: string;
+          userId?: string;
+          scopes?: Array<'fleet:listen' | 'peer:invoke'>;
+        }) => Promise<{
+          ok: boolean;
+          key?: string;
+          apiKey?: {
+            id: string;
+            keyPreview?: string;
+            name: string;
+            userId: string;
+            scopes: string[];
+            active: boolean;
+            createdAt: string;
+            expiresAt?: string;
+            lastUsedAt?: string;
+          };
+          store?: string;
+          error?: string;
+        }>;
+        listApiKeys: (input?: { userId?: string }) => Promise<{
+          ok: boolean;
+          keys: Array<{
+            id: string;
+            keyPreview?: string;
+            name: string;
+            userId: string;
+            scopes: string[];
+            active: boolean;
+            createdAt: string;
+            expiresAt?: string;
+            lastUsedAt?: string;
+          }>;
+          store?: string;
+          error?: string;
+        }>;
         dispatch: (input: {
           goal: string;
           parallelism?: number;

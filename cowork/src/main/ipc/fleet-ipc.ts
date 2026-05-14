@@ -5,6 +5,64 @@ import { loadCoreModule } from '../utils/core-loader';
 import { SagaRunner } from '../fleet/saga-runner';
 import { sendToRenderer } from '../ipc-main-bridge';
 
+type FleetApiScope = 'fleet:listen' | 'peer:invoke';
+
+interface CoreApiKeyView {
+  id: string;
+  keyPreview?: string;
+  name: string;
+  userId: string;
+  scopes: string[];
+  active: boolean;
+  createdAt: Date | string;
+  expiresAt?: Date | string;
+  lastUsedAt?: Date | string;
+}
+
+interface CoreApiKeysModule {
+  createApiKey: (options: {
+    name: string;
+    userId: string;
+    scopes: FleetApiScope[];
+  }) => { key: string; apiKey: CoreApiKeyView };
+  listApiKeys: (userId: string) => CoreApiKeyView[];
+  getApiKeyStorePath: () => string;
+}
+
+const FLEET_API_SCOPES: FleetApiScope[] = ['fleet:listen', 'peer:invoke'];
+
+function normalizeFleetScopes(scopes?: string[]): FleetApiScope[] {
+  if (!scopes || scopes.length === 0) {
+    return FLEET_API_SCOPES;
+  }
+
+  const invalid = scopes.filter((scope) => !FLEET_API_SCOPES.includes(scope as FleetApiScope));
+  if (invalid.length > 0) {
+    throw new Error(`Unsupported Fleet API scope(s): ${invalid.join(', ')}`);
+  }
+
+  return Array.from(new Set(scopes)) as FleetApiScope[];
+}
+
+function serializeDate(value?: Date | string): string | undefined {
+  if (!value) return undefined;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function serializeApiKey(apiKey: CoreApiKeyView) {
+  return {
+    id: apiKey.id,
+    keyPreview: apiKey.keyPreview,
+    name: apiKey.name,
+    userId: apiKey.userId,
+    scopes: apiKey.scopes,
+    active: apiKey.active,
+    createdAt: serializeDate(apiKey.createdAt) ?? new Date().toISOString(),
+    expiresAt: serializeDate(apiKey.expiresAt),
+    lastUsedAt: serializeDate(apiKey.lastUsedAt),
+  };
+}
+
 export function registerFleetIpcHandlers(fleetBridge: FleetBridge | null) {
   const sagaRunner = fleetBridge ? new SagaRunner(fleetBridge, sendToRenderer) : null;
   ipcMain.handle('fleet.list', async () => {
@@ -39,6 +97,61 @@ export function registerFleetIpcHandlers(fleetBridge: FleetBridge | null) {
       if (!fleetBridge) return [];
       return fleetBridge.getRecentEvents(peerId, limit);
     }
+  );
+
+  ipcMain.handle(
+    'fleet.createApiKey',
+    async (
+      _event,
+      input?: { name?: string; userId?: string; scopes?: string[] },
+    ) => {
+      try {
+        const apiKeysMod = await loadCoreModule<CoreApiKeysModule>('server/auth/api-keys.js');
+        if (!apiKeysMod) {
+          return { ok: false, error: 'server API key module unavailable' };
+        }
+
+        const { key, apiKey } = apiKeysMod.createApiKey({
+          name: input?.name?.trim() || 'Cowork Fleet key',
+          userId: input?.userId?.trim() || 'local',
+          scopes: normalizeFleetScopes(input?.scopes),
+        });
+
+        return {
+          ok: true,
+          key,
+          apiKey: serializeApiKey(apiKey),
+          store: apiKeysMod.getApiKeyStorePath(),
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logError('[fleet.createApiKey] failed:', message);
+        return { ok: false, error: message };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'fleet.listApiKeys',
+    async (_event, input?: { userId?: string }) => {
+      try {
+        const apiKeysMod = await loadCoreModule<CoreApiKeysModule>('server/auth/api-keys.js');
+        if (!apiKeysMod) {
+          return { ok: false, error: 'server API key module unavailable', keys: [] };
+        }
+
+        const userId = input?.userId?.trim() || 'local';
+        return {
+          ok: true,
+          keys: apiKeysMod.listApiKeys(userId).map(serializeApiKey),
+          store: apiKeysMod.getApiKeyStorePath(),
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logError('[fleet.listApiKeys] failed:', message);
+        return { ok: false, error: message, keys: [] };
+      }
+    },
   );
 
   // ── Fleet dispatch (Wiring W1+W3+W4+W5) ─────────────────────────

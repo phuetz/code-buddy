@@ -433,6 +433,9 @@ provider is selected.
   Only a hash is stored in `~/.codebuddy/server-api-keys.json`; the full key is
   printed once. Fleet usage needs the `fleet:listen` scope (read-only events)
   and/or `peer:invoke` scope (active RPC).
+- In Cowork, the Fleet panel's key button creates the same local server key
+  through the embedded Code Buddy engine and shows the full value once for
+  copying to another peer.
 
 ### Hostname identification (Phase (d).1)
 
