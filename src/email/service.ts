@@ -21,6 +21,8 @@ import type {
   EmailWebhookConfig,
   EmailWebhookEvent,
   EmailWebhookPayload,
+  EmailWebhookRequest,
+  EmailWebhookSender,
   EmailFlag,
 } from './types.js';
 
@@ -30,10 +32,12 @@ import type {
 
 export class WebhookManager extends EventEmitter {
   private webhooks: EmailWebhookConfig[] = [];
+  private readonly sender: EmailWebhookSender;
 
-  constructor(webhooks: EmailWebhookConfig[] = []) {
+  constructor(webhooks: EmailWebhookConfig[] = [], sender: EmailWebhookSender = sendFetchWebhook) {
     super();
     this.webhooks = webhooks;
+    this.sender = sender;
   }
 
   /**
@@ -88,15 +92,24 @@ export class WebhookManager extends EventEmitter {
     webhook: EmailWebhookConfig,
     payload: EmailWebhookPayload
   ): Promise<void> {
-    const body = JSON.stringify(payload);
-
-    // Generate signature if secret is provided
+    let signedPayload = payload;
     if (webhook.secret) {
       const signature = crypto
         .createHmac('sha256', webhook.secret)
-        .update(body)
+        .update(JSON.stringify(payload))
         .digest('hex');
-      payload.signature = signature;
+      signedPayload = { ...payload, signature };
+    }
+
+    const body = JSON.stringify(signedPayload);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'CodeBuddy-EmailWebhook/1.0',
+      'X-CodeBuddy-Event': payload.event,
+    };
+
+    if (signedPayload.signature) {
+      headers['X-CodeBuddy-Signature'] = signedPayload.signature;
     }
 
     const retries = webhook.retries ?? 3;
@@ -104,14 +117,18 @@ export class WebhookManager extends EventEmitter {
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
-        // In a real implementation, use fetch or axios
-        // For now, simulate the request
-        await this.simulateWebhookRequest(webhook.url, body, timeout);
-        this.emit('webhook-sent', webhook.url, payload);
+        await this.sender({
+          url: webhook.url,
+          body,
+          payload: signedPayload,
+          timeout,
+          headers,
+        });
+        this.emit('webhook-sent', webhook.url, signedPayload);
         return;
       } catch (error) {
         if (attempt === retries - 1) {
-          this.emit('webhook-failed', webhook.url, payload, error);
+          this.emit('webhook-failed', webhook.url, signedPayload, error);
           throw error;
         }
         // Exponential backoff
@@ -119,24 +136,30 @@ export class WebhookManager extends EventEmitter {
       }
     }
   }
+}
 
-  private async simulateWebhookRequest(
-    _url: string,
-    _body: string,
-    timeout: number
-  ): Promise<void> {
-    // Simulate network request
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('Webhook request timed out'));
-      }, timeout);
+async function sendFetchWebhook(request: EmailWebhookRequest): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), request.timeout);
 
-      // Simulate success after short delay
-      setTimeout(() => {
-        clearTimeout(timer);
-        resolve();
-      }, 50);
+  try {
+    const response = await fetch(request.url, {
+      method: 'POST',
+      headers: request.headers,
+      body: request.body,
+      signal: controller.signal,
     });
+
+    if (!response.ok) {
+      throw new Error(`Webhook request failed with status ${response.status}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Webhook request timed out after ${request.timeout}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -161,7 +184,7 @@ export class EmailService extends EventEmitter {
   constructor(config: EmailServiceConfig) {
     super();
     this.config = config;
-    this.webhookManager = new WebhookManager(config.webhooks);
+    this.webhookManager = new WebhookManager(config.webhooks, config.webhookSender);
 
     // Forward webhook events
     this.webhookManager.on('webhook-sent', (url, payload) => {
@@ -621,11 +644,11 @@ ${originalMessage.text || ''}
   // ============================================================================
 
   /**
-   * Add a mock message (for testing)
+   * Add a message to the explicit memory transport (for tests)
    */
-  addMockMessage(folder: string, message: Partial<EmailMessage>): number {
+  addTestMessage(folder: string, message: Partial<EmailMessage>): number {
     this.ensureImapConnected();
-    return this.imapClient!.addMockMessage(folder, message);
+    return this.imapClient!.addTestMessage(folder, message);
   }
 
   /**

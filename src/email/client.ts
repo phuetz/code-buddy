@@ -2,8 +2,8 @@
  * Email Client
  *
  * Unified email client for IMAP/SMTP operations.
- * Note: This is a mock implementation as actual email requires external libraries.
- * In production, integrate with nodemailer (SMTP) and imap (IMAP) packages.
+ * Real IMAP/SMTP transports still need adapters. The built-in `memory`
+ * transport is an explicit test harness and is never selected by default.
  */
 
 import { EventEmitter } from 'events';
@@ -56,7 +56,7 @@ export function generateMessageId(domain = 'codebuddy.local'): string {
 }
 
 // ============================================================================
-// IMAP Client (Mock Implementation)
+// IMAP Client
 // ============================================================================
 
 export interface ImapClientEvents {
@@ -73,19 +73,23 @@ export class ImapClient extends EventEmitter {
   private connected = false;
   private selectedFolder: string | null = null;
   private idleTimeout: NodeJS.Timeout | null = null;
+  private readonly transport: 'external' | 'memory';
 
-  // Mock data for testing
-  private mockFolders: Map<string, EmailFolder> = new Map();
-  private mockMessages: Map<string, Map<number, EmailMessage>> = new Map();
+  private memoryFolders: Map<string, EmailFolder> = new Map();
+  private memoryMessages: Map<string, Map<number, EmailMessage>> = new Map();
   private nextUid = 1;
 
   constructor(config: ImapConfig) {
     super();
     this.config = { ...DEFAULT_IMAP_CONFIG, ...config } as ImapConfig;
-    this.initializeMockData();
+    this.transport = this.config.transport ?? 'external';
+
+    if (this.transport === 'memory') {
+      this.initializeMemoryData();
+    }
   }
 
-  private initializeMockData(): void {
+  private initializeMemoryData(): void {
     // Create default folders
     const folders: EmailFolder[] = [
       { name: 'INBOX', path: 'INBOX', delimiter: '/', specialUse: 'inbox', totalMessages: 0, unseenMessages: 0 },
@@ -96,8 +100,8 @@ export class ImapClient extends EventEmitter {
     ];
 
     for (const folder of folders) {
-      this.mockFolders.set(folder.path, folder);
-      this.mockMessages.set(folder.path, new Map());
+      this.memoryFolders.set(folder.path, folder);
+      this.memoryMessages.set(folder.path, new Map());
     }
   }
 
@@ -105,11 +109,14 @@ export class ImapClient extends EventEmitter {
    * Connect to IMAP server
    */
   async connect(): Promise<void> {
-    // Simulate connection delay
-    await new Promise(resolve => setTimeout(resolve, 100));
-
     if (!this.config.host) {
       throw new Error('IMAP host is required');
+    }
+
+    if (this.transport !== 'memory') {
+      throw new Error(
+        'IMAP transport is not implemented. Configure a real IMAP adapter before connecting, or use transport: "memory" only in tests.'
+      );
     }
 
     this.connected = true;
@@ -142,7 +149,7 @@ export class ImapClient extends EventEmitter {
    */
   async listFolders(): Promise<EmailFolder[]> {
     this.ensureConnected();
-    return Array.from(this.mockFolders.values());
+    return Array.from(this.memoryFolders.values());
   }
 
   /**
@@ -151,7 +158,7 @@ export class ImapClient extends EventEmitter {
   async selectFolder(path: string): Promise<EmailFolder> {
     this.ensureConnected();
 
-    const folder = this.mockFolders.get(path);
+    const folder = this.memoryFolders.get(path);
     if (!folder) {
       throw new Error(`Folder not found: ${path}`);
     }
@@ -173,7 +180,7 @@ export class ImapClient extends EventEmitter {
   async createFolder(path: string): Promise<EmailFolder> {
     this.ensureConnected();
 
-    if (this.mockFolders.has(path)) {
+    if (this.memoryFolders.has(path)) {
       throw new Error(`Folder already exists: ${path}`);
     }
 
@@ -185,8 +192,8 @@ export class ImapClient extends EventEmitter {
       unseenMessages: 0,
     };
 
-    this.mockFolders.set(path, folder);
-    this.mockMessages.set(path, new Map());
+    this.memoryFolders.set(path, folder);
+    this.memoryMessages.set(path, new Map());
 
     return folder;
   }
@@ -197,12 +204,12 @@ export class ImapClient extends EventEmitter {
   async deleteFolder(path: string): Promise<void> {
     this.ensureConnected();
 
-    if (!this.mockFolders.has(path)) {
+    if (!this.memoryFolders.has(path)) {
       throw new Error(`Folder not found: ${path}`);
     }
 
-    this.mockFolders.delete(path);
-    this.mockMessages.delete(path);
+    this.memoryFolders.delete(path);
+    this.memoryMessages.delete(path);
 
     if (this.selectedFolder === path) {
       this.selectedFolder = null;
@@ -216,7 +223,7 @@ export class ImapClient extends EventEmitter {
     this.ensureConnected();
     this.ensureFolderSelected();
 
-    const messages = this.mockMessages.get(this.selectedFolder!);
+    const messages = this.memoryMessages.get(this.selectedFolder!);
     if (!messages) return [];
 
     const results: number[] = [];
@@ -237,7 +244,7 @@ export class ImapClient extends EventEmitter {
     this.ensureConnected();
     this.ensureFolderSelected();
 
-    const messages = this.mockMessages.get(this.selectedFolder!);
+    const messages = this.memoryMessages.get(this.selectedFolder!);
     if (!messages) return [];
 
     const uidList = Array.isArray(uids) ? uids : [uids];
@@ -268,7 +275,7 @@ export class ImapClient extends EventEmitter {
     this.ensureConnected();
     this.ensureFolderSelected();
 
-    const messages = this.mockMessages.get(this.selectedFolder!);
+    const messages = this.memoryMessages.get(this.selectedFolder!);
     if (!messages) return;
 
     const uidList = Array.isArray(uids) ? uids : [uids];
@@ -295,7 +302,7 @@ export class ImapClient extends EventEmitter {
     this.ensureConnected();
     this.ensureFolderSelected();
 
-    const messages = this.mockMessages.get(this.selectedFolder!);
+    const messages = this.memoryMessages.get(this.selectedFolder!);
     if (!messages) return;
 
     const uidList = Array.isArray(uids) ? uids : [uids];
@@ -317,8 +324,8 @@ export class ImapClient extends EventEmitter {
     this.ensureConnected();
     this.ensureFolderSelected();
 
-    const srcMessages = this.mockMessages.get(this.selectedFolder!);
-    const destMessages = this.mockMessages.get(destFolder);
+    const srcMessages = this.memoryMessages.get(this.selectedFolder!);
+    const destMessages = this.memoryMessages.get(destFolder);
 
     if (!srcMessages || !destMessages) {
       throw new Error('Source or destination folder not found');
@@ -345,8 +352,8 @@ export class ImapClient extends EventEmitter {
     this.ensureConnected();
     this.ensureFolderSelected();
 
-    const srcMessages = this.mockMessages.get(this.selectedFolder!);
-    const destMessages = this.mockMessages.get(destFolder);
+    const srcMessages = this.memoryMessages.get(this.selectedFolder!);
+    const destMessages = this.memoryMessages.get(destFolder);
 
     if (!srcMessages || !destMessages) {
       throw new Error('Source or destination folder not found');
@@ -385,7 +392,7 @@ export class ImapClient extends EventEmitter {
     this.ensureConnected();
     this.ensureFolderSelected();
 
-    const messages = this.mockMessages.get(this.selectedFolder!);
+    const messages = this.memoryMessages.get(this.selectedFolder!);
     if (!messages) return [];
 
     const expunged: number[] = [];
@@ -433,7 +440,7 @@ export class ImapClient extends EventEmitter {
   async append(folder: string, message: Partial<EmailMessage>, flags?: EmailFlag[]): Promise<number> {
     this.ensureConnected();
 
-    const messages = this.mockMessages.get(folder);
+    const messages = this.memoryMessages.get(folder);
     if (!messages) {
       throw new Error(`Folder not found: ${folder}`);
     }
@@ -460,10 +467,12 @@ export class ImapClient extends EventEmitter {
   }
 
   /**
-   * Add a mock message (for testing)
+   * Add a message to the explicit memory transport (for tests)
    */
-  addMockMessage(folder: string, message: Partial<EmailMessage>): number {
-    const messages = this.mockMessages.get(folder);
+  addTestMessage(folder: string, message: Partial<EmailMessage>): number {
+    this.ensureMemoryTransport();
+
+    const messages = this.memoryMessages.get(folder);
     if (!messages) {
       throw new Error(`Folder not found: ${folder}`);
     }
@@ -494,6 +503,12 @@ export class ImapClient extends EventEmitter {
   private ensureConnected(): void {
     if (!this.connected) {
       throw new Error('Not connected to IMAP server');
+    }
+  }
+
+  private ensureMemoryTransport(): void {
+    if (this.transport !== 'memory') {
+      throw new Error('Test message injection requires transport: "memory"');
     }
   }
 
@@ -567,8 +582,8 @@ export class ImapClient extends EventEmitter {
   }
 
   private updateFolderCounts(): void {
-    for (const [path, folder] of this.mockFolders) {
-      const messages = this.mockMessages.get(path);
+    for (const [path, folder] of this.memoryFolders) {
+      const messages = this.memoryMessages.get(path);
       if (messages) {
         folder.totalMessages = messages.size;
         folder.unseenMessages = Array.from(messages.values())
@@ -579,7 +594,7 @@ export class ImapClient extends EventEmitter {
 }
 
 // ============================================================================
-// SMTP Client (Mock Implementation)
+// SMTP Client
 // ============================================================================
 
 export interface SmtpClientEvents {
@@ -592,21 +607,27 @@ export interface SmtpClientEvents {
 export class SmtpClient extends EventEmitter {
   private config: SmtpConfig;
   private connected = false;
-  private sentMessages: SendMailResult[] = [];
+  private readonly transport: 'external' | 'memory';
+  private memorySentMessages: SendMailResult[] = [];
 
   constructor(config: SmtpConfig) {
     super();
     this.config = { ...DEFAULT_SMTP_CONFIG, ...config } as SmtpConfig;
+    this.transport = this.config.transport ?? 'external';
   }
 
   /**
    * Connect to SMTP server
    */
   async connect(): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, 50));
-
     if (!this.config.host) {
       throw new Error('SMTP host is required');
+    }
+
+    if (this.transport !== 'memory') {
+      throw new Error(
+        'SMTP transport is not implemented. Configure a real SMTP adapter before connecting, or use transport: "memory" only in tests.'
+      );
     }
 
     this.connected = true;
@@ -645,9 +666,6 @@ export class SmtpClient extends EventEmitter {
       throw new Error('Subject is required');
     }
 
-    // Simulate send delay
-    await new Promise(resolve => setTimeout(resolve, 100));
-
     const toAddresses = Array.isArray(options.to)
       ? options.to.map(a => typeof a === 'string' ? a : a.address)
       : [typeof options.to === 'string' ? options.to : options.to.address];
@@ -660,7 +678,7 @@ export class SmtpClient extends EventEmitter {
       response: '250 OK',
     };
 
-    this.sentMessages.push(result);
+    this.memorySentMessages.push(result);
     this.emit('sent', result);
 
     return result;
@@ -678,14 +696,14 @@ export class SmtpClient extends EventEmitter {
    * Get sent messages (for testing)
    */
   getSentMessages(): SendMailResult[] {
-    return [...this.sentMessages];
+    return [...this.memorySentMessages];
   }
 
   /**
    * Clear sent messages (for testing)
    */
   clearSentMessages(): void {
-    this.sentMessages = [];
+    this.memorySentMessages = [];
   }
 
   private ensureConnected(): void {

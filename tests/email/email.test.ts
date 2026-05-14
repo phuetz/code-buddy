@@ -69,6 +69,7 @@ describe('ImapClient', () => {
       host: 'imap.test.com',
       port: 993,
       secure: true,
+      transport: 'memory',
       user: 'test@test.com',
       password: 'password',
     });
@@ -100,6 +101,17 @@ describe('ImapClient', () => {
       await client.disconnect();
 
       expect(events).toEqual(['connected', 'disconnected']);
+    });
+
+    it('should fail fast without an explicit memory transport', async () => {
+      const externalClient = new ImapClient({
+        host: 'imap.test.com',
+        port: 993,
+        secure: true,
+        user: 'test@test.com',
+      });
+
+      await expect(externalClient.connect()).rejects.toThrow('IMAP transport is not implemented');
     });
   });
 
@@ -141,13 +153,12 @@ describe('ImapClient', () => {
       await client.connect();
       await client.selectFolder('INBOX');
 
-      // Add mock messages
-      client.addMockMessage('INBOX', {
+      client.addTestMessage('INBOX', {
         subject: 'Test Message 1',
         text: 'Hello world',
         from: [{ address: 'sender@example.com' }],
       });
-      client.addMockMessage('INBOX', {
+      client.addTestMessage('INBOX', {
         subject: 'Test Message 2',
         text: 'Another message',
         from: [{ address: 'other@example.com' }],
@@ -247,6 +258,7 @@ describe('SmtpClient', () => {
       host: 'smtp.test.com',
       port: 587,
       secure: false,
+      transport: 'memory',
       user: 'test@test.com',
       password: 'password',
     });
@@ -267,6 +279,16 @@ describe('SmtpClient', () => {
 
       await client.disconnect();
       expect(client.isConnected()).toBe(false);
+    });
+
+    it('should fail fast without an explicit memory transport', async () => {
+      const externalClient = new SmtpClient({
+        host: 'smtp.test.com',
+        port: 587,
+        secure: false,
+      });
+
+      await expect(externalClient.connect()).rejects.toThrow('SMTP transport is not implemented');
     });
   });
 
@@ -338,7 +360,7 @@ describe('WebhookManager', () => {
   let manager: WebhookManager;
 
   beforeEach(() => {
-    manager = new WebhookManager();
+    manager = new WebhookManager([], async () => undefined);
   });
 
   it('should add and remove webhooks', () => {
@@ -396,6 +418,28 @@ describe('WebhookManager', () => {
     expect(events).toContain('https://example.com/webhook1');
     expect(events).not.toContain('https://example.com/webhook2');
   });
+
+  it('should report sender failures instead of pretending delivery succeeded', async () => {
+    const failingManager = new WebhookManager([], async () => {
+      throw new Error('network down');
+    });
+    const failures: string[] = [];
+
+    failingManager.addWebhook({
+      url: 'https://example.com/webhook',
+      events: ['message.received'],
+      retries: 1,
+    });
+    failingManager.on('webhook-failed', (url) => {
+      failures.push(url);
+    });
+
+    await expect(failingManager.trigger('message.received', {
+      account: 'test@test.com',
+    })).resolves.toBeUndefined();
+
+    expect(failures).toContain('https://example.com/webhook');
+  });
 });
 
 describe('EmailService', () => {
@@ -408,6 +452,7 @@ describe('EmailService', () => {
         host: 'imap.test.com',
         port: 993,
         secure: true,
+        transport: 'memory',
         user: 'test@test.com',
         password: 'password',
       },
@@ -415,9 +460,11 @@ describe('EmailService', () => {
         host: 'smtp.test.com',
         port: 587,
         secure: false,
+        transport: 'memory',
         user: 'test@test.com',
         password: 'password',
       },
+      webhookSender: async () => undefined,
     });
     await service.connect();
   });
@@ -439,8 +486,10 @@ describe('EmailService', () => {
           host: 'imap.test.com',
           port: 993,
           secure: true,
+          transport: 'memory',
           user: 'test@test.com',
         },
+        webhookSender: async () => undefined,
       });
 
       newService.on('connected', () => events.push('connected'));
@@ -458,7 +507,7 @@ describe('EmailService', () => {
     });
 
     it('should fetch messages', async () => {
-      service.addMockMessage('INBOX', { subject: 'Test' });
+      service.addTestMessage('INBOX', { subject: 'Test' });
 
       await service.selectFolder('INBOX');
       const uids = await service.search({ all: true });
@@ -468,7 +517,7 @@ describe('EmailService', () => {
     });
 
     it('should mark as read', async () => {
-      const uid = service.addMockMessage('INBOX', { subject: 'Test' });
+      const uid = service.addTestMessage('INBOX', { subject: 'Test' });
 
       await service.markAsRead(uid, 'INBOX');
 
@@ -524,7 +573,7 @@ describe('EmailService', () => {
         events.push(url);
       });
 
-      service.addMockMessage('INBOX', { subject: 'Test' });
+      service.addTestMessage('INBOX', { subject: 'Test' });
       await service.syncFolder('INBOX');
 
       expect(events).toContain('https://example.com/webhook');
@@ -533,14 +582,14 @@ describe('EmailService', () => {
 
   describe('sync', () => {
     it('should sync folder', async () => {
-      service.addMockMessage('INBOX', { subject: 'Test' });
+      service.addTestMessage('INBOX', { subject: 'Test' });
 
       const count = await service.syncFolder('INBOX');
       expect(count).toBe(1);
     });
 
     it('should update stats on sync', async () => {
-      service.addMockMessage('INBOX', { subject: 'Test' });
+      service.addTestMessage('INBOX', { subject: 'Test' });
 
       await service.syncFolder('INBOX');
 
@@ -558,7 +607,7 @@ describe('EmailService', () => {
       expect(stats.messagesReceived).toBe(0);
       expect(stats.messagesSent).toBe(0);
       expect(stats.errors).toBe(0);
-      expect(stats.uptime).toBeGreaterThan(0);
+      expect(stats.uptime).toBeGreaterThanOrEqual(0);
     });
 
     it('should reset stats', async () => {

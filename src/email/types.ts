@@ -57,6 +57,8 @@ export interface EmailFolder {
   recentMessages?: number;
 }
 
+export type EmailTransportMode = 'external' | 'memory';
+
 // ============================================================================
 // IMAP Types
 // ============================================================================
@@ -66,6 +68,11 @@ export interface ImapConfig {
   port: number;
   secure: boolean;
   user: string;
+  /**
+   * `external` expects a real IMAP adapter. `memory` is an explicit test
+   * harness and must not be used to claim production email connectivity.
+   */
+  transport?: EmailTransportMode;
   password?: string;
   oauth2?: OAuth2Credentials;
   timeout?: number;
@@ -133,6 +140,11 @@ export interface SmtpConfig {
   host: string;
   port: number;
   secure: boolean;
+  /**
+   * `external` expects a real SMTP adapter. `memory` is an explicit test
+   * harness and must not be used to claim production email delivery.
+   */
+  transport?: EmailTransportMode;
   user?: string;
   password?: string;
   oauth2?: OAuth2Credentials;
@@ -275,6 +287,16 @@ export interface EmailWebhookPayload {
   signature?: string;
 }
 
+export interface EmailWebhookRequest {
+  url: string;
+  body: string;
+  payload: EmailWebhookPayload;
+  timeout: number;
+  headers: Record<string, string>;
+}
+
+export type EmailWebhookSender = (request: EmailWebhookRequest) => Promise<void>;
+
 // ============================================================================
 // Email Service Types
 // ============================================================================
@@ -284,6 +306,7 @@ export interface EmailServiceConfig {
   smtp?: SmtpConfig;
   gmail?: GmailConfig;
   webhooks?: EmailWebhookConfig[];
+  webhookSender?: EmailWebhookSender;
   pollInterval?: number;
   defaultFolder?: string;
 }

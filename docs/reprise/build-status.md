@@ -312,6 +312,11 @@ npm run build
   `type`, `evaluate`, `screenshot`, `wait`) quand aucune extension ne repond.
   Les commandes sortantes restent en file pour Chrome, puis reussissent
   uniquement via `receiveActionResponse` ou echouent par timeout explicite.
+- Le module email ne presente plus son stockage memoire comme un vrai
+  IMAP/SMTP. Sans adaptateur reel, `ImapClient` et `SmtpClient` echouent au
+  `connect`; le transport memoire doit etre demande explicitement par
+  `transport: "memory"` pour les tests. Les webhooks email passent maintenant
+  par `fetch` par defaut et exposent une injection explicite pour les tests.
 
 ## Blocage leve
 
