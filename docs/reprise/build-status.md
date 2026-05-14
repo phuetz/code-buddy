@@ -156,6 +156,18 @@ npm run typecheck
 
 npm --prefix cowork run typecheck
 # passed
+
+npm test -- tests/utils/provider-detector.test.ts tests/config/config-resolver.test.ts tests/unit/provider-command.test.ts tests/unit/status-memory-section.test.ts
+# 73 tests passed after deleting the dead legacy provider detector in src/index.ts
+
+npx eslint src/index.ts --quiet
+# passed
+
+npm run typecheck
+# passed
+
+npm run build
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -258,6 +270,10 @@ npm --prefix cowork run typecheck
   "Remove from list" ne supprime plus seulement l'etat React local, et retirer
   un agent nettoie aussi les taches suivies de cet agent pour eviter les lignes
   orphelines apres rechargement.
+- `src/index.ts` ne contient plus l'ancienne implementation inline de detection
+  provider. La source de verite est maintenant uniquement
+  `src/utils/provider-detector.ts`, ce qui reduit la confusion entre heritage
+  Grok et provider ChatGPT/Codex actif.
 
 ## Blocage leve
 

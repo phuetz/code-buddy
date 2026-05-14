@@ -4,9 +4,6 @@ const STARTUP_TIME = Date.now();
 
 import { program } from "commander";
 import { readFileSync } from "fs";
-import * as nodeFs from "fs";
-import * as nodeOs from "os";
-import * as nodePath from "path";
 import { join, dirname } from "path";
 import { globalAgent as httpGlobalAgent } from 'node:http';
 import { globalAgent as httpsGlobalAgent } from 'node:https';
@@ -292,107 +289,6 @@ import {
   selectModelForDetectedProvider,
   type DetectedProvider,
 } from './utils/provider-detector.js';
-
-// Legacy inline implementation kept commented for git-archaeology only.
-function _detectProviderFromEnvLegacy(): DetectedProvider | null {
-  // Priority order (mirror of src/fleet/peer-chat-client-factory.ts —
-  // explicit user intent first, then local, then cloud env keys):
-  //   0. CODEBUDDY_PROVIDER override (always wins when set + valid)
-  //   1. ChatGPT OAuth credentials present (~/.codebuddy/codex-auth.json) —
-  //      explicit "I logged in" act, beats ambient OLLAMA_HOST
-  //   2. OLLAMA_HOST    → ollama (local, free, unlimited)
-  //   3. GROK_API_KEY   → grok / OpenAI-compat
-  //   4. GEMINI/GOOGLE  → gemini
-  //   5. OPENAI         → openai
-  //   6. ANTHROPIC      → anthropic
-
-  const override = process.env.CODEBUDDY_PROVIDER?.toLowerCase();
-
-  // ChatGPT subscription auth — explicit login wins over ambient
-  // env-detected providers. User who ran `buddy login chatgpt` recently
-  // expects subsequent calls to route through their ChatGPT plan, not
-  // get hijacked by an OLLAMA_HOST set in their shell rc weeks ago.
-  // Inline the file-existence check rather than importing codex-oauth
-  // (this function is sync; the module is async-safe).
-  if (override === 'chatgpt' || !override) {
-    try {
-      const fs = nodeFs;
-      const path = nodePath;
-      const os = nodeOs;
-      const authPath = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
-      if (fs.existsSync(authPath)) {
-        const raw = fs.readFileSync(authPath, 'utf-8').trim();
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed?.tokens?.access_token) {
-          return {
-            provider: 'chatgpt',
-            apiKey: 'oauth-chatgpt', // sentinel consumed by CodeBuddyClient
-            baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.5',
-          };
-        }
-      }
-    } catch (_err) {
-      // Malformed auth file or unexpected — fall through to other providers.
-    }
-  }
-
-  if ((override === 'ollama' || (!override && process.env.OLLAMA_HOST))) {
-    let host = process.env.OLLAMA_HOST || 'http://localhost:11434';
-    if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
-    if (!host.endsWith('/v1')) host = host.replace(/\/+$/, '') + '/v1';
-    return {
-      provider: 'ollama',
-      apiKey: 'ollama', // placeholder — Ollama OpenAI-compat ignores it
-      baseURL: host,
-      defaultModel: process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b',
-    };
-  }
-
-  if (
-    (override === 'grok' || override === 'xai') ||
-    (!override && (process.env.GROK_API_KEY || process.env.XAI_API_KEY))
-  ) {
-    return {
-      provider: 'grok',
-      apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
-      baseURL: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
-      defaultModel: process.env.GROK_MODEL || 'grok-3-fast',
-    };
-  }
-
-  if (
-    (override === 'gemini' || override === 'google') ||
-    (!override && (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY))
-  ) {
-    return {
-      provider: 'gemini',
-      apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '',
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-      defaultModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-    };
-  }
-
-  if (process.env.OPENAI_API_KEY) {
-    return {
-      provider: 'openai',
-      apiKey: process.env.OPENAI_API_KEY,
-      baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-      defaultModel: process.env.OPENAI_MODEL || 'gpt-4o',
-    };
-  }
-
-  if (process.env.ANTHROPIC_API_KEY) {
-    return {
-      provider: 'anthropic',
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      baseURL: 'https://api.anthropic.com/v1',
-      defaultModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-    };
-  }
-
-  return null;
-}
 
 // Cache detected provider
 let cachedProvider: DetectedProvider | null | undefined = undefined;
