@@ -96,6 +96,9 @@ npm run build
 
 node --input-type=module -e "import { getLocalCapabilities, resetCapabilityCache } from './dist/fleet/capability-registry.js'; resetCapabilityCache(); const cap = await getLocalCapabilities({ force: true }); console.log(JSON.stringify({ egress: cap.egress, machineLabel: cap.machineLabel, models: cap.models.filter(m => m.provider === 'chatgpt-oauth').map(m => m.id).slice(0, 5) }, null, 2));"
 # returned chatgpt-oauth models: gpt-5.5, gpt-5.1-codex, gpt-5-codex
+
+npm run validate
+# passed again after Cowork Fleet and ChatGPT capability fixes
 ```
 
 ## Debloque pendant la reprise
