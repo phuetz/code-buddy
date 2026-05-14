@@ -14,6 +14,14 @@ import {
   resetCloudAgentRunner,
 } from '../../src/cloud/cloud-agent-runner.js';
 
+let tmpHome: string;
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  const mocked = { ...actual, homedir: () => tmpHome };
+  return { ...mocked, default: mocked };
+});
+
 // ──────────────────────────────────────────────────────────────────
 // Mocks
 // ──────────────────────────────────────────────────────────────────
@@ -72,21 +80,6 @@ vi.mock('../../src/codebuddy/client.js', () => ({
   }),
 }));
 
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: vi.fn(() => ({
-    provider: 'chatgpt',
-    apiKey: 'oauth-chatgpt',
-    baseURL: 'https://chatgpt.com/backend-api/codex',
-    defaultModel: 'gpt-5.5',
-  })),
-  selectModelForDetectedProvider: vi.fn((detected: { provider: string; defaultModel: string }, configured?: string) => {
-    if (detected.provider !== 'grok' && configured?.startsWith('grok-')) {
-      return detected.defaultModel;
-    }
-    return configured || detected.defaultModel;
-  }),
-}));
-
 // Mock the tool definitions
 vi.mock('../../src/codebuddy/tools.js', () => ({
   getAllCodeBuddyTools: vi.fn().mockResolvedValue([
@@ -106,6 +99,33 @@ import { CodeBuddyClient } from '../../src/codebuddy/client.js';
 
 const MockCodeBuddyClient = CodeBuddyClient as unknown as ReturnType<typeof vi.fn>;
 
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+const envBackup: Record<string, string | undefined> = {};
+
+function writeChatGptAuth(): void {
+  const dir = path.join(tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Test Suite
 // ──────────────────────────────────────────────────────────────────
@@ -115,6 +135,13 @@ describe('CloudAgentRunner', () => {
   let testDir: string;
 
   beforeEach(() => {
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cloud-agent-home-'));
+    writeChatGptAuth();
     testDir = path.join(os.tmpdir(), `cloud-test-${Date.now()}`);
     fs.mkdirSync(testDir, { recursive: true });
     runner = new CloudAgentRunner(testDir);
@@ -123,7 +150,12 @@ describe('CloudAgentRunner', () => {
 
   afterEach(() => {
     resetCloudAgentRunner();
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
     try {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
       fs.rmSync(testDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
