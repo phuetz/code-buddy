@@ -1,19 +1,61 @@
-import { vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
-const providerMocks = vi.hoisted(() => ({
-  detectProviderFromEnv: vi.fn(),
-}));
+let tmpHome: string;
 
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderFromEnv,
-}));
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => tmpHome };
+});
 
 import { listChatModels } from '../../src/server/routes/chat';
+
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+const envBackup: Record<string, string | undefined> = {};
+
+function writeChatGptAuth(): void {
+  const dir = path.join(tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
 
 describe('chat model catalog', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    providerMocks.detectProviderFromEnv.mockReturnValue(null);
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'none';
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-model-catalog-'));
+  });
+
+  afterEach(() => {
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   it('includes non-Grok providers for the server model endpoint', () => {
@@ -26,12 +68,8 @@ describe('chat model catalog', () => {
   });
 
   it('marks and sorts the detected provider first', () => {
-    providerMocks.detectProviderFromEnv.mockReturnValue({
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    });
+    process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+    writeChatGptAuth();
 
     const models = listChatModels(123);
 
