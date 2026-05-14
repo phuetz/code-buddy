@@ -132,6 +132,7 @@ interface ActiveWorkflow {
   goal: string;
   startedAt: Date;
   promise: Promise<WorkflowResult>;
+  system: { stop: () => void };
 }
 
 interface LastResult {
@@ -268,9 +269,9 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
       return textResult('Multi-agent system is not enabled.');
     }
     if (activeWorkflow) {
+      activeWorkflow.system.stop();
       const { resetMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-      // System.stop() inside dispose path will signal the running workflow;
-      // the promise itself races to completion in the background.
+      // The workflow promise itself races to completion in the background.
       resetMultiAgentSystem();
       activeWorkflow = null;
     } else {
@@ -328,13 +329,8 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
     if (!activeWorkflow) {
       return textResult('No active workflow to stop.');
     }
-    const { getMultiAgentSystem } = await import('../../agent/multi-agent/multi-agent-system.js');
-    const provider = detectProviderFromEnv();
-    if (provider) {
-      const system = getMultiAgentSystem(provider.apiKey, provider.baseURL);
-      system.stop();
-    }
     const stoppedGoal = activeWorkflow.goal;
+    activeWorkflow.system.stop();
     activeWorkflow = null;
     logger.info(`MultiAgentSystem workflow stopped via /agents slash`, { goal: stoppedGoal });
     return textResult(`Workflow stopped: ${stoppedGoal}`);
@@ -645,7 +641,7 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
         throw err;
       }
     );
-    activeWorkflow = { goal, startedAt, promise };
+    activeWorkflow = { goal, startedAt, promise, system };
     logger.info(`MultiAgentSystem workflow started`, { goal, strategy: activeStrategy });
     return textResult(
       `Workflow started for: ${goal}\n` +
@@ -727,7 +723,7 @@ export async function handleAgents(args: string[]): Promise<CommandHandlerResult
         throw err;
       }
     );
-    activeWorkflow = { goal: persisted.goal, startedAt, promise };
+    activeWorkflow = { goal: persisted.goal, startedAt, promise, system };
 
     return textResult(
       `Resuming interrupted workflow (V0.3 per-task checkpoint):\n` +

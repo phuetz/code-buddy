@@ -261,6 +261,17 @@ describe('handleAgents (/agents)', () => {
     expect(status.entry?.content).toMatch(/Enabled:\s+no/);
   });
 
+  it('disable stops the active workflow before resetting the system', async () => {
+    mocks.runWorkflowMock.mockImplementation(() => new Promise(() => { /* never */ }));
+
+    await handleAgents(['run', 'goal-x']);
+    const r = await handleAgents(['disable']);
+
+    expect(r.entry?.content).toContain('Multi-agent system stopped');
+    expect(mocks.stopMock).toHaveBeenCalled();
+    expect(mocks.resetMultiAgentSystemMock).toHaveBeenCalled();
+  });
+
   it('disable is a no-op when not enabled', async () => {
     const r = await handleAgents(['disable']);
     expect(r.entry?.content).toContain('not enabled');
@@ -325,6 +336,20 @@ describe('handleAgents (/agents)', () => {
 
     const status = await handleAgents(['status']);
     expect(status.entry?.content).toContain('Active workflow:   (none)');
+  });
+
+  it('stop targets the launched workflow even if provider env disappears', async () => {
+    mocks.runWorkflowMock.mockImplementation(() => new Promise(() => { /* never */ }));
+
+    await handleAgents(['run', 'goal-x']);
+    const callsBeforeStop = mocks.getMultiAgentSystemMock.mock.calls.length;
+    clearProviderEnv();
+
+    const r = await handleAgents(['stop']);
+
+    expect(r.entry?.content).toContain('Workflow stopped: goal-x');
+    expect(mocks.stopMock).toHaveBeenCalled();
+    expect(mocks.getMultiAgentSystemMock.mock.calls.length).toBe(callsBeforeStop);
   });
 
   it('stop without active workflow is a no-op', async () => {
