@@ -295,4 +295,18 @@ describe('resolveClientTargetForDetectedProvider', () => {
       matchedDetectedProvider: false,
     });
   });
+
+  it('uses explicit base URL provider defaults when the target does not match active detection', async () => {
+    const { resolveClientTargetForDetectedProvider } = await import('../../src/utils/provider-detector.js');
+    expect(resolveClientTargetForDetectedProvider(
+      'standalone-openai-key',
+      'https://api.openai.com/v1',
+      undefined,
+      'grok-3-latest',
+    )).toEqual({
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      matchedDetectedProvider: false,
+    });
+  });
 });

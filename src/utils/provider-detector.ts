@@ -131,9 +131,10 @@ export function resolveClientTargetForDetectedProvider(
     };
   }
 
+  const explicitBaseURLModel = selectModelForExplicitBaseURL(baseURL, configured || fallback);
   return {
     baseURL,
-    model: configured || fallback,
+    model: explicitBaseURLModel || configured || fallback,
     matchedDetectedProvider: false,
   };
 }

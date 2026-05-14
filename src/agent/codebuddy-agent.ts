@@ -27,7 +27,7 @@ import { CostPredictor } from "../analytics/cost-predictor.js";
 import { BudgetAlertManager } from "../analytics/budget-alerts.js";
 import { initializeMemory, getMemoryManager } from "../memory/persistent-memory.js";
 import { getUserHooksManager } from "../hooks/user-hooks.js";
-import { detectProviderFromEnv } from "../utils/provider-detector.js";
+import { detectProviderFromEnv, resolveClientTargetForDetectedProvider } from "../utils/provider-detector.js";
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -108,7 +108,14 @@ export class CodeBuddyAgent extends BaseAgent {
     // Determine model to use
     const manager = getSettingsManager();
     const savedModel = manager.getCurrentModel();
-    const modelToUse = model || savedModel || "grok-code-fast-1";
+    const clientTarget = resolveClientTargetForDetectedProvider(
+      apiKey,
+      baseURL,
+      model || savedModel,
+      "grok-code-fast-1"
+    );
+    const modelToUse = clientTarget.model;
+    const baseURLToUse = clientTarget.baseURL;
 
     // YOLO mode: requires BOTH env var AND explicit config confirmation
     const autonomyManager = getAutonomyManager();
@@ -145,7 +152,7 @@ export class CodeBuddyAgent extends BaseAgent {
 
     // Create infrastructure - encapsulates all manager dependencies
     this.infrastructure = createAgentInfrastructureSync(
-      { apiKey, model: modelToUse, baseURL, maxContextTokens },
+      { apiKey, model: modelToUse, baseURL: baseURLToUse, maxContextTokens },
       { memoryEnabled: this.memoryEnabled, useModelRouting: this.useModelRouting }
     );
 
@@ -190,7 +197,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.toolSelectionStrategy = getToolSelectionStrategy({ useRAG: useRAGToolSelection });
 
     // Initialize client
-    this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
+    this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURLToUse);
 
     // Apply thinkingLevel from settings if configured
     if (!testRuntime) {
