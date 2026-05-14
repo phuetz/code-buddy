@@ -140,7 +140,7 @@ export function detectProviderFromEnv(): DetectedProvider | null {
       provider: 'ollama',
       apiKey: 'ollama',
       baseURL: host,
-      defaultModel: process.env.GROK_MODEL || process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b',
+      defaultModel: process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b',
     };
   }
 

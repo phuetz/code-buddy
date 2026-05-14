@@ -126,6 +126,16 @@ describe('detectProviderFromEnv — priority chain', () => {
     expect(detectProviderFromEnv()?.baseURL).toBe('http://localhost:11434/v1');
   });
 
+  it('uses OLLAMA_MODEL instead of a legacy GROK_MODEL for Ollama defaults', async () => {
+    process.env.OLLAMA_HOST = 'localhost:11434';
+    process.env.GROK_MODEL = 'grok-code-fast-1';
+    const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
+    expect(detectProviderFromEnv()?.defaultModel).toBe('qwen2.5-coder:7b');
+
+    process.env.OLLAMA_MODEL = 'llama3.2';
+    expect(detectProviderFromEnv()?.defaultModel).toBe('llama3.2');
+  });
+
   it('falls back to grok when no chatgpt + no ollama + GROK_API_KEY set', async () => {
     process.env.GROK_API_KEY = 'xai-key';
     process.env.GEMINI_API_KEY = 'should-not-be-used';
