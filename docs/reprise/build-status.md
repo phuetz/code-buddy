@@ -144,6 +144,18 @@ npx eslint cowork/src/main/a2a/a2a-bridge.ts cowork/src/main/index.ts cowork/src
 
 npm --prefix cowork run build:e2e
 # passed; existing Vite chunk-size/dynamic-import warnings only
+
+npm test -- tests/server/channel-a2a-bridge.test.ts tests/server/server-channel-shutdown.test.ts tests/server/peer-websocket-smoke.test.ts tests/protocols/a2a.test.ts tests/protocols/a2a-task-router.test.ts tests/protocols/a2a-skill-selection.test.ts tests/protocols/a2a-skill-routing.test.ts tests/protocols/a2a-remote-agents.test.ts tests/protocols/a2a-codebuddy-executor.test.ts tests/fleet/capability-registry.test.ts tests/fleet/task-router.test.ts
+# 106 tests passed in the combined A2A/Fleet regression sweep
+
+npm --prefix cowork test -- run tests/a2a-bridge-polling.test.ts tests/fleet-bridge.test.ts tests/fleet-discovery.test.ts tests/fleet-panel-discovery-entry.test.ts tests/fleet-ipc-api-keys.test.ts
+# 29 tests passed in the Cowork A2A/Fleet regression sweep
+
+npm run typecheck
+# passed
+
+npm --prefix cowork run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
