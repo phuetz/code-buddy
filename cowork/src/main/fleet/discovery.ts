@@ -4,8 +4,9 @@
  * Two layers, in order:
  *
  *   1. Tailscale tailnet scan via `tailscale status --json` → for
- *      every online peer, try `GET http://<ip>:3001/api/health` to
- *      detect Code Buddy. Failures are silent (most Tailscale peers
+ *      every online peer, try `GET http://<ip>:3000/api/health`
+ *      and the legacy gateway port to detect Code Buddy. Failures are
+ *      silent (most Tailscale peers
  *      won't have buddy running).
  *
  *   2. Manual config fallback: `~/.config/codebuddy/fleet-peers.yaml`
@@ -26,7 +27,7 @@ import { log, logWarn } from '../utils/logger';
 export interface DiscoveredPeer {
   /** Suggested label, e.g., 'darkstar' from Tailscale or YAML key. */
   label: string;
-  /** WS URL to pair with — `ws://<ip>:3001/ws` typically. */
+  /** WS URL to pair with — `ws://<ip>:3000/ws` for `buddy server` by default. */
   url: string;
   /** Tailscale ip / hostname / 'manual' — diagnostic only. */
   source: 'tailscale' | 'manual';
@@ -36,8 +37,17 @@ export interface DiscoveredPeer {
 
 const TAILSCALE_BIN = process.env.TAILSCALE_BIN ?? 'tailscale';
 const HEALTH_TIMEOUT_MS = 1500;
-const DEFAULT_PORT = 3001;
+const DEFAULT_PORTS = [3000, 3001];
 const DEFAULT_WS_PATH = '/ws';
+
+export function resolveDiscoveryPorts(raw = process.env.CODEBUDDY_FLEET_DISCOVERY_PORTS): number[] {
+  if (!raw?.trim()) return DEFAULT_PORTS;
+  const ports = raw
+    .split(',')
+    .map((part) => Number.parseInt(part.trim(), 10))
+    .filter((port) => Number.isInteger(port) && port > 0 && port <= 65_535);
+  return ports.length > 0 ? Array.from(new Set(ports)) : DEFAULT_PORTS;
+}
 
 /**
  * Run a full discovery pass. Layered: Tailscale first, then manual
@@ -76,11 +86,11 @@ export async function discoverTailscale(): Promise<DiscoveredPeer[]> {
     const ip = (peerInfo.TailscaleIPs ?? [])[0];
     if (!ip) continue;
     const hostname = peerInfo.HostName ?? peerInfo.DNSName?.split('.')[0] ?? ip;
-    const reachable = await isHealthEndpointAlive(ip, DEFAULT_PORT);
-    if (!reachable) continue;
+    const port = await findCodeBuddyPort(ip);
+    if (!port) continue;
     peers.push({
       label: hostname,
-      url: `ws://${ip}:${DEFAULT_PORT}${DEFAULT_WS_PATH}`,
+      url: `ws://${ip}:${port}${DEFAULT_WS_PATH}`,
       source: 'tailscale',
     });
   }
@@ -118,10 +128,10 @@ export function manualConfigPath(): string {
  *
  *   peers:
  *     - label: darkstar
- *       url: ws://100.65.42.7:3001/ws
+ *       url: ws://100.65.42.7:3000/ws
  *       apiKey: optional-bearer-token
  *     - label: g7
- *       url: ws://100.99.18.32:3001/ws
+ *       url: ws://100.99.18.32:3000/ws
  *
  * Indentation strictly 2 spaces, hyphenated lists.
  */
@@ -221,16 +231,29 @@ async function runTailscaleStatus(): Promise<unknown | null> {
   });
 }
 
+export async function findCodeBuddyPort(
+  host: string,
+  ports = resolveDiscoveryPorts(),
+  probe: (host: string, port: number) => Promise<boolean> = isHealthEndpointAlive,
+): Promise<number | null> {
+  for (const port of ports) {
+    if (await probe(host, port)) return port;
+  }
+  return null;
+}
+
 async function isHealthEndpointAlive(host: string, port: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), HEALTH_TIMEOUT_MS);
+    timer = setTimeout(() => ctrl.abort(), HEALTH_TIMEOUT_MS);
     const res = await fetch(`http://${host}:${port}/api/health`, {
       signal: ctrl.signal,
     });
-    clearTimeout(timer);
     return res.ok;
   } catch {
     return false;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

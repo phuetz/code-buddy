@@ -30,6 +30,8 @@ import type {
   FleetEventRecord,
 } from '../../renderer/types';
 
+type FleetCapability = NonNullable<FleetPeer['capability']>;
+
 interface CoreFleetListener {
   connect(): Promise<void>;
   disconnect(): Promise<void> | void;
@@ -75,6 +77,7 @@ interface PersistedFile {
 }
 
 const EVENT_RING_CAPACITY = 200;
+const CAPABILITY_REFRESH_TIMEOUT_MS = 5_000;
 
 function sanitizeId(value: string): string {
   return value
@@ -83,6 +86,36 @@ function sanitizeId(value: string): string {
     .replace(/[^a-z0-9-_]/g, '-')
     .replace(/-+/g, '-')
     .slice(0, 64);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isCapability(value: unknown): value is FleetCapability {
+  if (!isRecord(value)) return false;
+  if (!['local', 'lan', 'cloud'].includes(String(value.egress))) return false;
+  if (typeof value.machineLabel !== 'string' || value.machineLabel.trim() === '') {
+    return false;
+  }
+  if (!Array.isArray(value.models)) return false;
+
+  return value.models.every((model) => {
+    if (!isRecord(model)) return false;
+    return (
+      typeof model.id === 'string' &&
+      typeof model.contextWindow === 'number' &&
+      Array.isArray(model.strengths) &&
+      model.strengths.every((strength) => typeof strength === 'string') &&
+      typeof model.provider === 'string'
+    );
+  });
+}
+
+function getDescribedCapability(description: unknown): FleetCapability | undefined {
+  if (!isRecord(description)) return undefined;
+  const candidate = description.capabilities;
+  return isCapability(candidate) ? candidate : undefined;
 }
 
 let cachedModule: CoreFleetModule | null = null;
@@ -174,6 +207,32 @@ export class FleetBridge {
     this.sendToRenderer({ type: 'fleet.peer.update', payload: { peer: { ...entry.meta } } });
   }
 
+  private async refreshPeerCapability(peerId: string): Promise<void> {
+    const entry = this.peers.get(peerId);
+    if (!entry?.listener) return;
+
+    try {
+      const description = await entry.listener.request(
+        'peer.describe',
+        {},
+        { timeoutMs: CAPABILITY_REFRESH_TIMEOUT_MS },
+      );
+      const capability = getDescribedCapability(description);
+      if (!capability) {
+        logWarn(`[FleetBridge] peer.describe for ${peerId} did not include capabilities`);
+        return;
+      }
+      entry.meta.capability = capability;
+      if (!entry.meta.label) {
+        entry.meta.label = capability.machineLabel;
+      }
+      this.sendToRenderer({ type: 'fleet.peer.update', payload: { peer: { ...entry.meta } } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logWarn(`[FleetBridge] capability refresh failed for ${peerId}: ${msg}`);
+    }
+  }
+
   private async connectPeer(peerId: string): Promise<void> {
     const entry = this.peers.get(peerId);
     if (!entry) return;
@@ -203,10 +262,16 @@ export class FleetBridge {
     this.updateStatus(peerId, 'connecting');
 
     listener.on('connected', () => this.updateStatus(peerId, 'connected'));
-    listener.on('authenticated', () => this.updateStatus(peerId, 'authenticated'));
+    listener.on('authenticated', () => {
+      this.updateStatus(peerId, 'authenticated');
+      void this.refreshPeerCapability(peerId);
+    });
     listener.on('disconnected', () => this.updateStatus(peerId, 'disconnected'));
     listener.on('reconnecting', () => this.updateStatus(peerId, 'reconnecting'));
-    listener.on('reconnected', () => this.updateStatus(peerId, 'authenticated'));
+    listener.on('reconnected', () => {
+      this.updateStatus(peerId, 'authenticated');
+      void this.refreshPeerCapability(peerId);
+    });
     listener.on('error', (...args: unknown[]) => {
       const err = args[0];
       const msg = err instanceof Error ? err.message : String(err ?? 'unknown error');

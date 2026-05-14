@@ -473,6 +473,9 @@ provider is selected.
 - The Fleet panel's scan button runs the same Tailscale/manual YAML discovery
   path as the boot-time background scan. Manual YAML entries that include an
   `apiKey` can be added directly; peers without a key prefill the add form.
+  Tailscale discovery probes `buddy server` on port 3000 first, then the legacy
+  gateway port 3001. Override with `CODEBUDDY_FLEET_DISCOVERY_PORTS=3000,3001`
+  if your lab uses different ports.
 
 ### Hostname identification (Phase (d).1)
 

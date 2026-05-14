@@ -20,6 +20,7 @@ describe('Fleet panel discovery wiring', () => {
 
     expect(source).toContain('window.electronAPI.fleet.discoverPeers()');
     expect(source).toContain('const discoveredPeers = useAppStore((s) => s.fleetDiscoveredPeers);');
+    expect(source).toContain('capability: p.capability');
     expect(source).toContain('dismissFleetDiscoveredPeer(peer.url)');
     expect(source).toContain("title={peer.apiKey ? 'Add peer' : 'Use in add form'}");
   });

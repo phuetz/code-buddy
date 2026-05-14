@@ -69,6 +69,12 @@ npm test -- tests/toml-config.test.ts tests/commands/agents-handler.test.ts test
 
 npm run validate
 # passed again after multi-agent/provider override stabilization
+
+npm --prefix cowork test -- run tests/fleet-discovery.test.ts tests/fleet-bridge.test.ts tests/fleet-panel-discovery-entry.test.ts tests/fleet-ipc-api-keys.test.ts
+# 22 tests passed
+
+npm --prefix cowork run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -142,6 +148,12 @@ npm run validate
   `[multi_agent_system.agents.<role>]` avec `provider`, `api_key_env`,
   `base_url` et `model`. Les secrets restent hors TOML; ChatGPT reutilise le
   login Codex OAuth et Ollama garde son mode local.
+- Cowork hydrate maintenant les capabilities Fleet via `peer.describe` apres
+  authentification. Le Command Center peut donc router vers des peers
+  reels au lieu de rester bloque sur "No peer with known capabilities".
+- La discovery Cowork probe le port `3000` de `buddy server` puis le port
+  legacy `3001`, avec override `CODEBUDDY_FLEET_DISCOVERY_PORTS`. Cela aligne
+  le scan Tailscale avec les exemples `/fleet listen ws://...:3000/ws`.
 
 ## Blocage leve
 
@@ -166,6 +178,10 @@ mais plus d'erreurs bloquantes connues.
 `npm run validate` est vert dans ce worktree. Les warnings restants pendant le
 run sont historiques ou attendus par les tests (logs stderr, warnings Node,
 outils optionnels absents comme `nvidia-smi`).
+
+Le lint Cowork reste a reprendre separement: le script `npm --prefix cowork run
+lint -- --quiet` utilise encore une option CLI ESLint legacy, et un lint force
+avec le binaire racine remonte des erreurs historiques hors du patch Fleet.
 
 ## Lecture produit
 

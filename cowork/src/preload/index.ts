@@ -22,6 +22,7 @@ import type {
   Project,
   ProjectCreateInput,
   ProjectUpdateInput,
+  FleetPeer,
 } from '../renderer/types';
 import type { DiagnosticInput, DiagnosticResult } from '../renderer/types';
 import type {
@@ -1431,18 +1432,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Fleet — multi-host Code Buddy listener (GAP 3)
   fleet: {
-    list: (): Promise<
-      Array<{
-        id: string;
-        url: string;
-        label?: string;
-        addedAt: number;
-        status: string;
-        lastError?: string;
-        lastSeenAt?: number;
-        lastEventType?: string;
-      }>
-    > => ipcRenderer.invoke('fleet.list'),
+    list: (): Promise<FleetPeer[]> => ipcRenderer.invoke('fleet.list'),
     addPeer: (input: {
       url: string;
       apiKey?: string;
@@ -3011,18 +3001,7 @@ declare global {
         >;
       };
       fleet: {
-        list: () => Promise<
-          Array<{
-            id: string;
-            url: string;
-            label?: string;
-            addedAt: number;
-            status: string;
-            lastError?: string;
-            lastSeenAt?: number;
-            lastEventType?: string;
-          }>
-        >;
+        list: () => Promise<FleetPeer[]>;
         addPeer: (input: {
           url: string;
           apiKey?: string;

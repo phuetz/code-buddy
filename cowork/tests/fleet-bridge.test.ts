@@ -21,6 +21,18 @@ vi.mock('../src/main/utils/logger', () => ({
 
 class FakeFleetListener extends EventEmitter {
   static instances: FakeFleetListener[] = [];
+  static capability = {
+    egress: 'lan',
+    machineLabel: 'Ministar Linux',
+    models: [
+      {
+        id: 'qwen2.5-coder:7b',
+        contextWindow: 32768,
+        strengths: ['code'],
+        provider: 'ollama',
+      },
+    ],
+  };
   options: { url: string; apiKey?: string };
   connected = false;
 
@@ -41,6 +53,13 @@ class FakeFleetListener extends EventEmitter {
   async disconnect(): Promise<void> {
     this.connected = false;
     this.emit('disconnected');
+  }
+
+  async request(method: string): Promise<unknown> {
+    if (method === 'peer.describe') {
+      return { capabilities: FakeFleetListener.capability };
+    }
+    return {};
   }
 }
 
@@ -91,6 +110,29 @@ describe('FleetBridge', () => {
     const parsed = JSON.parse(raw);
     expect(parsed.peers[0].url).toBe('ws://100.98.18.76:3000/ws');
     expect(parsed.peers[0].apiKey).toBe('test-key');
+  });
+
+  it('hydrates peer capabilities from peer.describe after authentication', async () => {
+    const events: ServerEvent[] = [];
+    const bridge = new FleetBridge((e) => events.push(e));
+    await bridge.init();
+
+    const result = await bridge.addPeer({
+      url: 'ws://100.98.18.76:3000/ws',
+      apiKey: 'test-key',
+      label: 'Ministar Linux',
+    });
+    expect(result.success).toBe(true);
+
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    const peers = await bridge.listPeers();
+    expect(peers[0].capability).toEqual(FakeFleetListener.capability);
+
+    const updates = events.filter((e) => e.type === 'fleet.peer.update');
+    expect(updates.at(-1)?.payload.peer.capability).toEqual(FakeFleetListener.capability);
   });
 
   it('forwards fleet:event payloads as fleet.event ServerEvents', async () => {

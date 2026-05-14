@@ -112,6 +112,7 @@ export function FleetPanel() {
           lastError: p.lastError,
           lastSeenAt: p.lastSeenAt,
           lastEventType: p.lastEventType,
+          capability: p.capability,
         }))
       );
     });

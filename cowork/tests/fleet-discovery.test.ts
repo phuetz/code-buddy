@@ -5,9 +5,32 @@
  * likely to break on edge cases.
  */
 import { describe, expect, it } from 'vitest';
-import { parseManualYaml } from '../src/main/fleet/discovery';
+import {
+  findCodeBuddyPort,
+  parseManualYaml,
+  resolveDiscoveryPorts,
+} from '../src/main/fleet/discovery';
 
 describe('fleet/discovery — parseManualYaml', () => {
+  it('prefers the buddy server port and keeps the legacy gateway fallback', () => {
+    expect(resolveDiscoveryPorts()).toEqual([3000, 3001]);
+  });
+
+  it('honours explicit discovery port overrides', () => {
+    expect(resolveDiscoveryPorts('3002, 3000, nope, 3002')).toEqual([3002, 3000]);
+  });
+
+  it('uses the first reachable Code Buddy port', async () => {
+    const probes: number[] = [];
+    const port = await findCodeBuddyPort('100.98.18.76', [3000, 3001], async (_host, p) => {
+      probes.push(p);
+      return p === 3001;
+    });
+
+    expect(port).toBe(3001);
+    expect(probes).toEqual([3000, 3001]);
+  });
+
   it('returns [] for empty input', () => {
     expect(parseManualYaml('')).toEqual([]);
   });
