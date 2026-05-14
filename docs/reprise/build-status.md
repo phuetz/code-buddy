@@ -81,6 +81,21 @@ npm test -- tests/fleet/capability-registry.test.ts tests/fleet/task-router.test
 
 npx eslint src/fleet/capability-registry.ts tests/fleet/capability-registry.test.ts --quiet
 # passed
+
+npm test -- tests/agent/multi-agent/fleet-workflow-bridge.test.ts tests/agent/multi-agent/session-fleet-bridge.test.ts tests/agent/multi-agent/heterogeneous-providers.test.ts tests/agent/multi-agent/workflow-orchestrator.test.ts tests/fleet/fleet-listener.test.ts tests/fleet/fleet-handler.test.ts tests/server/fleet-bridge.test.ts
+# 154 tests passed
+
+npm --prefix cowork test -- run tests/saga-runner.test.ts tests/fleet-bridge.test.ts tests/fleet-discovery.test.ts tests/fleet-panel-discovery-entry.test.ts tests/fleet-ipc-api-keys.test.ts
+# 25 tests passed
+
+npm --prefix cowork run build:e2e
+# passed; Vite/Electron build with existing chunk-size/dynamic-import warnings
+
+npm run build
+# passed
+
+node --input-type=module -e "import { getLocalCapabilities, resetCapabilityCache } from './dist/fleet/capability-registry.js'; resetCapabilityCache(); const cap = await getLocalCapabilities({ force: true }); console.log(JSON.stringify({ egress: cap.egress, machineLabel: cap.machineLabel, models: cap.models.filter(m => m.provider === 'chatgpt-oauth').map(m => m.id).slice(0, 5) }, null, 2));"
+# returned chatgpt-oauth models: gpt-5.5, gpt-5.1-codex, gpt-5-codex
 ```
 
 ## Debloque pendant la reprise
