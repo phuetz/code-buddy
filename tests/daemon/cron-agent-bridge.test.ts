@@ -1,13 +1,18 @@
 import type { CronJob } from '../../src/scheduler/cron-scheduler.js';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
 
 const mocks = vi.hoisted(() => ({
-  detectProviderMock: vi.fn(),
   agentConstructorMock: vi.fn(),
 }));
 
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: mocks.detectProviderMock,
-}));
+let tmpHome: string;
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => tmpHome };
+});
 
 // Mock the CodeBuddyAgent dynamic import used inside executeJob
 vi.mock('../../src/agent/codebuddy-agent.js', () => ({
@@ -30,13 +35,45 @@ vi.mock('../../src/agent/codebuddy-agent.js', () => ({
 
 import { CronAgentBridge, resetCronAgentBridge } from '../../src/daemon/cron-agent-bridge.js';
 
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+const envBackup: Record<string, string | undefined> = {};
+
+async function writeChatGptAuth(): Promise<void> {
+  const dir = path.join(tmpHome, '.codebuddy');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
+
 describe('CronAgentBridge', () => {
   let bridge: CronAgentBridge;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetCronAgentBridge();
-    mocks.detectProviderMock.mockReset();
     mocks.agentConstructorMock.mockReset();
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'none';
+    tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'cron-agent-bridge-home-'));
     bridge = new CronAgentBridge({
       apiKey: 'test-key',
       baseURL: 'http://localhost:3000',
@@ -44,6 +81,14 @@ describe('CronAgentBridge', () => {
       maxToolRounds: 5,
       jobTimeoutMs: 10000,
     });
+  });
+
+  afterEach(async () => {
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
+    await fs.rm(tmpHome, { recursive: true, force: true });
   });
 
   it('should create a task executor function', () => {
@@ -89,12 +134,8 @@ describe('CronAgentBridge', () => {
   });
 
   it('falls back to the detected ChatGPT provider when no bridge key is configured', async () => {
-    mocks.detectProviderMock.mockReturnValue({
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    });
+    process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+    await writeChatGptAuth();
     bridge = new CronAgentBridge({
       maxToolRounds: 5,
       jobTimeoutMs: 10000,
