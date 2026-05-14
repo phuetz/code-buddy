@@ -1,10 +1,5 @@
 const providerMocks = vi.hoisted(() => ({
-  detectProviderMock: vi.fn(),
   agentConstructorMock: vi.fn(),
-}));
-
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderMock,
 }));
 
 vi.mock('../../src/agent/codebuddy-agent.js', () => {
@@ -32,8 +27,42 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
+let tmpHome: string;
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => tmpHome };
+});
+
 // Shared mock agent review function
 const mockAgentReview = jest.fn<Promise<string>, [string]>().mockResolvedValue('HEARTBEAT_OK');
+
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+const envBackup: Record<string, string | undefined> = {};
+
+async function writeChatGptAuth(): Promise<void> {
+  const dir = path.join(tmpHome, '.codebuddy');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
 
 describe('HeartbeatEngine', () => {
   let engine: HeartbeatEngine;
@@ -42,12 +71,18 @@ describe('HeartbeatEngine', () => {
 
   beforeEach(async () => {
     resetHeartbeatEngine();
-    providerMocks.detectProviderMock.mockReset();
     providerMocks.agentConstructorMock.mockReset();
     mockAgentReview.mockClear();
     mockAgentReview.mockResolvedValue('HEARTBEAT_OK');
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.CODEBUDDY_PROVIDER = 'none';
 
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'heartbeat-test-'));
+    tmpHome = path.join(tmpDir, 'home');
+    await fs.mkdir(tmpHome, { recursive: true });
     heartbeatFilePath = path.join(tmpDir, 'HEARTBEAT.md');
     await fs.writeFile(heartbeatFilePath, '# Test Checklist\n- [ ] Check something');
 
@@ -63,6 +98,10 @@ describe('HeartbeatEngine', () => {
 
   afterEach(async () => {
     engine.stop();
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -410,12 +449,8 @@ describe('HeartbeatEngine', () => {
     });
 
     it('uses the detected provider for live agent reviews', async () => {
-      providerMocks.detectProviderMock.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+      await writeChatGptAuth();
 
       const liveEngine = new HeartbeatEngine({
         heartbeatFilePath,
