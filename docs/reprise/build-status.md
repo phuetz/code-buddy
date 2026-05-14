@@ -180,6 +180,15 @@ npx eslint src/channels/zalo/index.ts src/channels/line/index.ts src/channels/ma
 
 npm run typecheck
 # passed
+
+npm test -- tests/features/tailscale-dashboard-nodes.test.ts
+# 72 tests passed after MessageTool transport-boundary cleanup
+
+npx eslint src/tools/message-tool.ts tests/features/tailscale-dashboard-nodes.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -378,6 +387,10 @@ npm run typecheck
 - Signal ne fabrique plus un `messageId` local avec `Date.now()` quand
   `signal-cli-rest-api` accepte l'envoi mais ne renvoie pas de timestamp: le
   resultat reste un succes HTTP, mais l'identifiant reste absent.
+- `MessageTool` ne fabrique plus des `msg-*` / `thread-*` ni des actions
+  moderation pretendument reussies. Les actions cross-channel exigent
+  maintenant un transport explicite; sans transport, l'outil echoue clairement
+  et n'enregistre pas l'action.
 
 ## Blocage leve
 

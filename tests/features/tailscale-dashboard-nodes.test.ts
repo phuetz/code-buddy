@@ -477,12 +477,24 @@ describe('DeviceNodeManager', () => {
 describe('MessageTool', () => {
   let MessageTool: typeof import('../../src/tools/message-tool').MessageTool;
   const target = { channel: 'discord', chatId: 'general' };
+  const createTransport = () => ({
+    supportedChannels: ['telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix', 'teams', 'webchat'],
+    send: () => ({ success: true, action: 'send' as const, messageId: 'msg-1' }),
+    react: (_target: unknown, messageId: string) => ({ success: true, action: 'react' as const, messageId }),
+    pin: (_target: unknown, messageId: string) => ({ success: true, action: 'pin' as const, messageId }),
+    threadCreate: () => ({ success: true, action: 'thread_create' as const, messageId: 'thread-1' }),
+    search: () => ({ success: true, action: 'search' as const }),
+    roleAdd: () => ({ success: true, action: 'role_add' as const }),
+    kick: () => ({ success: true, action: 'kick' as const }),
+    ban: () => ({ success: true, action: 'ban' as const }),
+  });
 
   beforeEach(async () => {
     jest.resetModules();
     const mod = await import('../../src/tools/message-tool.js');
     MessageTool = mod.MessageTool;
     MessageTool.resetInstance();
+    MessageTool.getInstance({ transport: createTransport() });
   });
 
   it('should be a singleton', () => {
@@ -496,7 +508,16 @@ describe('MessageTool', () => {
     const result = tool.send(target, 'Hello world');
     expect(result.success).toBe(true);
     expect(result.action).toBe('send');
-    expect(result.messageId).toBeDefined();
+    expect(result.messageId).toBe('msg-1');
+  });
+
+  it('should fail message actions when no transport is configured', () => {
+    MessageTool.resetInstance();
+    const tool = MessageTool.getInstance();
+    const result = tool.send(target, 'Hello world');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Message transport is not configured');
+    expect(tool.getActions()).toHaveLength(0);
   });
 
   it('should react to a message', () => {
@@ -518,7 +539,7 @@ describe('MessageTool', () => {
     const result = tool.threadCreate(target, 'msg-1', 'Thread text');
     expect(result.success).toBe(true);
     expect(result.action).toBe('thread_create');
-    expect(result.messageId).toContain('thread-');
+    expect(result.messageId).toBe('thread-1');
   });
 
   it('should search messages', () => {
