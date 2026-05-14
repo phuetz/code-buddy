@@ -3,6 +3,17 @@
  */
 
 import { vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+const testPaths = vi.hoisted(() => ({ tmpHome: '' }));
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => testPaths.tmpHome || actual.homedir() };
+});
+
 import {
   loadApiKey,
   loadBaseURL,
@@ -13,11 +24,6 @@ import {
   type ApplicationConfig,
   type CommandLineOptions,
 } from '../../src/app/index.js';
-
-const providerMocks = vi.hoisted(() => ({
-  mockDetectProvider: vi.fn(),
-}));
-const { mockDetectProvider } = providerMocks;
 
 const settingsMocks = vi.hoisted(() => {
   const manager = {
@@ -68,14 +74,37 @@ jest.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
-jest.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.mockDetectProvider,
-  selectModelForDetectedProvider: (detected: { provider: string; defaultModel: string } | null, configured?: string) => {
-    if (!detected) return configured;
-    if (configured && !(detected.provider !== 'grok' && /^grok[-_]/i.test(configured))) return configured;
-    return detected.defaultModel;
-  },
-}));
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_BASE_URL',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+
+function writeChatGptAuth(): void {
+  const dir = path.join(testPaths.tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
+
+function configureChatGptProvider(): void {
+  process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+  writeChatGptAuth();
+}
 
 describe('Application Factory', () => {
   const originalEnv = process.env;
@@ -83,7 +112,9 @@ describe('Application Factory', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
-    mockDetectProvider.mockReturnValue(null);
+    for (const key of envKeysToReset) delete process.env[key];
+    process.env.CODEBUDDY_PROVIDER = 'none';
+    testPaths.tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'application-factory-'));
     settingsMocks.manager.loadUserSettings.mockReturnValue({});
     settingsMocks.manager.getApiKey.mockReturnValue('settings-api-key');
     settingsMocks.manager.getBaseURL.mockReturnValue('https://settings.api.com');
@@ -92,17 +123,14 @@ describe('Application Factory', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    fs.rmSync(testPaths.tmpHome, { recursive: true, force: true });
+    testPaths.tmpHome = '';
   });
 
   describe('loadApiKey', () => {
     it('should prioritize environment variable', () => {
       process.env.GROK_API_KEY = 'env-api-key';
-      mockDetectProvider.mockReturnValue({
-        provider: 'grok',
-        apiKey: 'env-api-key',
-        baseURL: 'https://api.x.ai/v1',
-        defaultModel: 'grok-3-latest',
-      });
+      process.env.CODEBUDDY_PROVIDER = 'grok';
 
       const key = loadApiKey();
 
@@ -118,12 +146,7 @@ describe('Application Factory', () => {
     });
 
     it('should use detected ChatGPT OAuth credentials', () => {
-      mockDetectProvider.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      configureChatGptProvider();
 
       expect(loadApiKey()).toBe('oauth-chatgpt');
     });
@@ -132,12 +155,7 @@ describe('Application Factory', () => {
   describe('loadBaseURL', () => {
     it('should prioritize environment variable', () => {
       process.env.GROK_BASE_URL = 'https://env.api.com';
-      mockDetectProvider.mockReturnValue({
-        provider: 'grok',
-        apiKey: 'env-api-key',
-        baseURL: 'https://env.api.com',
-        defaultModel: 'grok-3-latest',
-      });
+      process.env.CODEBUDDY_PROVIDER = 'grok';
 
       const url = loadBaseURL();
 
@@ -153,12 +171,7 @@ describe('Application Factory', () => {
     });
 
     it('should use detected ChatGPT base URL', () => {
-      mockDetectProvider.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      configureChatGptProvider();
 
       expect(loadBaseURL()).toBe('https://chatgpt.com/backend-api/codex');
     });
@@ -182,12 +195,7 @@ describe('Application Factory', () => {
     });
 
     it('should use detected provider default when no env or settings model exists', () => {
-      mockDetectProvider.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      configureChatGptProvider();
       settingsMocks.manager.getCurrentModel.mockReturnValueOnce(undefined);
 
       expect(loadModel()).toBe('gpt-5.5');
@@ -196,12 +204,7 @@ describe('Application Factory', () => {
     it('should ignore legacy Grok defaults when ChatGPT is detected', () => {
       process.env.GROK_MODEL = 'grok-code-fast-1';
       settingsMocks.manager.getCurrentModel.mockReturnValueOnce(undefined);
-      mockDetectProvider.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      configureChatGptProvider();
 
       expect(loadModel()).toBe('gpt-5.5');
     });
@@ -209,24 +212,14 @@ describe('Application Factory', () => {
     it('should not treat GROK_MODEL as a ChatGPT model override', () => {
       process.env.GROK_MODEL = 'gpt-5.1-codex';
       settingsMocks.manager.getCurrentModel.mockReturnValueOnce(undefined);
-      mockDetectProvider.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      configureChatGptProvider();
 
       expect(loadModel()).toBe('gpt-5.5');
     });
 
     it('should preserve settings model overrides when ChatGPT is detected', () => {
       settingsMocks.manager.getCurrentModel.mockReturnValueOnce('gpt-5.1-codex');
-      mockDetectProvider.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      configureChatGptProvider();
 
       expect(loadModel()).toBe('gpt-5.1-codex');
     });
