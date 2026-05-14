@@ -831,6 +831,8 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     }
     expect(caught?.message).toContain('gpt-5.5');
     expect(caught?.message).toMatch(/gpt-5\.1-codex/);
+    expect(caught?.message).toContain('CHATGPT_MODEL');
+    expect(caught?.message).not.toContain('GROK_MODEL');
   });
 
   // Regression: prior versions called fetch() with no AbortController,

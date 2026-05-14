@@ -1,6 +1,6 @@
 # AI Providers
 
-Code Buddy supports 15 LLM providers with automatic failover and per-provider circuit breakers.
+Code Buddy supports multiple LLM providers with automatic failover and per-provider circuit breakers.
 
 ## Provider Table
 
@@ -8,7 +8,8 @@ Code Buddy supports 15 LLM providers with automatic failover and per-provider ci
 |:---------|:-------------|:-------------------|:--------|
 | **Grok** (xAI) | `GROK_API_KEY` | grok-4, grok-code-fast-1 | 128K |
 | **Claude** (Anthropic) | `ANTHROPIC_API_KEY` | claude-sonnet-4, opus | 200K |
-| **ChatGPT** (OpenAI) | `OPENAI_API_KEY` | gpt-4o, gpt-4-turbo | 128K |
+| **ChatGPT subscription** | `buddy login chatgpt` / Codex OAuth | gpt-5.5, gpt-5.1-codex | Varies |
+| **OpenAI API** | `OPENAI_API_KEY` | gpt-4o, gpt-4-turbo | 128K |
 | **Gemini** (Google) | `GOOGLE_API_KEY` | gemini-2.0-flash (+ vision) | 2M |
 | **Mistral** | `MISTRAL_API_KEY` | mistral-large, codestral | 128K |
 | **Ollama** | `OLLAMA_HOST` | llama3, codellama, etc. | Varies |
@@ -23,6 +24,16 @@ Code Buddy supports 15 LLM providers with automatic failover and per-provider ci
 | **GitHub Copilot** | `GITHUB_COPILOT_TOKEN` | Copilot models | Varies |
 
 Additional providers (MiniMax, Moonshot, Venice AI, Deepgram) are available via `src/providers/additional-providers.ts`.
+
+## ChatGPT Subscription Auth
+
+The ChatGPT subscription rail is separate from the OpenAI API rail. It uses the Codex OAuth login stored in `~/.codebuddy/codex-auth.json`, or the shared Codex CLI login in `~/.codex/auth.json`, and routes to the ChatGPT Codex backend with the `oauth-chatgpt` sentinel. It does not require `OPENAI_API_KEY` or API credits.
+
+```bash
+buddy login chatgpt
+buddy whoami
+CODEBUDDY_PROVIDER=chatgpt buddy --model gpt-5.5
+```
 
 ## Connection Profiles
 

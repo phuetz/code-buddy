@@ -1,9 +1,10 @@
-import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
+import { readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
   PROVIDER_ENV_MAP,
   PROVIDER_DEFAULT_MODEL,
+  PROVIDER_AUTH_HINTS,
   writeConfig,
   OnboardingResult,
 } from '../../src/wizard/onboarding.js';
@@ -18,8 +19,8 @@ describe('onboarding', () => {
       expect(PROVIDER_ENV_MAP['claude']).toBe('ANTHROPIC_API_KEY');
     });
 
-    it('should map chatgpt to OPENAI_API_KEY', () => {
-      expect(PROVIDER_ENV_MAP['chatgpt']).toBe('OPENAI_API_KEY');
+    it('should not ask ChatGPT subscription users for an OpenAI API key', () => {
+      expect(PROVIDER_ENV_MAP['chatgpt']).toBe('');
     });
 
     it('should have empty string for local providers', () => {
@@ -32,9 +33,16 @@ describe('onboarding', () => {
     it('should have default models for all providers', () => {
       expect(PROVIDER_DEFAULT_MODEL['grok']).toBe('grok-3');
       expect(PROVIDER_DEFAULT_MODEL['claude']).toBe('claude-sonnet-4-20250514');
-      expect(PROVIDER_DEFAULT_MODEL['chatgpt']).toBe('gpt-4o');
+      expect(PROVIDER_DEFAULT_MODEL['chatgpt']).toBe('gpt-5.5');
       expect(PROVIDER_DEFAULT_MODEL['gemini']).toBe('gemini-2.0-flash');
       expect(PROVIDER_DEFAULT_MODEL['ollama']).toBe('llama3');
+    });
+  });
+
+  describe('PROVIDER_AUTH_HINTS', () => {
+    it('points ChatGPT users to Codex OAuth instead of OPENAI_API_KEY', () => {
+      expect(PROVIDER_AUTH_HINTS['chatgpt']).toMatch(/buddy login chatgpt/);
+      expect(PROVIDER_AUTH_HINTS['chatgpt']).toMatch(/no OPENAI_API_KEY is required/);
     });
   });
 

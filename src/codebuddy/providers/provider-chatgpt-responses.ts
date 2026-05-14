@@ -806,7 +806,7 @@ function enrichError(status: number, body: string, model: string): Error {
     return new Error(
       `Model "${model}" not available on the ChatGPT Codex backend. ` +
         `Suggested fallbacks: ${FALLBACK_MODELS.join(', ')}. ` +
-        `Switch with \`/switch <model>\` or set GROK_MODEL.`,
+        `Switch with \`/switch <model>\`, pass \`--model <model>\`, or set CHATGPT_MODEL.`,
     );
   }
   if (status === 401 || status === 403) {

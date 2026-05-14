@@ -14,6 +14,7 @@
 |:---------|:---------|
 | `ANTHROPIC_API_KEY` | Anthropic (Claude) |
 | `OPENAI_API_KEY` | OpenAI (GPT) |
+| `buddy login chatgpt` | ChatGPT subscription via Codex OAuth |
 | `GOOGLE_API_KEY` | Google (Gemini) |
 | `MISTRAL_API_KEY` | Mistral AI |
 | `GROQ_API_KEY` | Groq |
@@ -53,6 +54,7 @@
 |:---------|:------------|:--------|
 | `GROK_BASE_URL` | Custom API endpoint | - |
 | `GROK_MODEL` | Default model | - |
+| `CHATGPT_MODEL` | Default ChatGPT subscription model | `gpt-5.5` |
 | `CODEBUDDY_MAX_TOKENS` | Override response token limit | model's maxOutputTokens |
 | `MAX_COST` | Session cost limit ($) | $10 (YOLO: $100) |
 | `YOLO_MODE` | Full autonomy mode | false |

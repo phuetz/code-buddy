@@ -13,7 +13,7 @@ export interface OnboardingResult {
 export const PROVIDER_ENV_MAP: Record<string, string> = {
   grok: 'GROK_API_KEY',
   claude: 'ANTHROPIC_API_KEY',
-  chatgpt: 'OPENAI_API_KEY',
+  chatgpt: '',
   gemini: 'GEMINI_API_KEY',
   ollama: '',
   lmstudio: '',
@@ -22,10 +22,15 @@ export const PROVIDER_ENV_MAP: Record<string, string> = {
 export const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
   grok: 'grok-3',
   claude: 'claude-sonnet-4-20250514',
-  chatgpt: 'gpt-4o',
+  chatgpt: 'gpt-5.5',
   gemini: 'gemini-2.0-flash',
   ollama: 'llama3',
   lmstudio: 'default',
+};
+
+export const PROVIDER_AUTH_HINTS: Record<string, string> = {
+  chatgpt:
+    'ChatGPT uses your subscription via Codex OAuth. Run `buddy login chatgpt` if you are not connected; no OPENAI_API_KEY is required.',
 };
 
 const PROVIDERS = ['grok', 'claude', 'chatgpt', 'gemini', 'ollama', 'lmstudio'];
@@ -84,8 +89,11 @@ export async function runOnboarding(): Promise<OnboardingResult> {
 
     // 2. API Key
     const envVar = PROVIDER_ENV_MAP[provider];
+    const authHint = PROVIDER_AUTH_HINTS[provider];
     let apiKey = '';
-    if (envVar) {
+    if (authHint) {
+      console.log(`\n  ${authHint}`);
+    } else if (envVar) {
       console.log(`\n  You will need to set ${envVar} in your environment.`);
       apiKey = await ask(rl, `Enter your API key (or press Enter to set ${envVar} later)`);
     } else {
@@ -116,6 +124,9 @@ export async function runOnboarding(): Promise<OnboardingResult> {
     console.log('');
     console.log(`  Provider:  ${provider}`);
     console.log(`  Model:     ${model}`);
+    if (authHint) {
+      console.log('  Auth:      ChatGPT login (buddy login chatgpt)');
+    }
     if (ttsEnabled && ttsProvider) {
       console.log(`  TTS:       ${ttsProvider}`);
     }
