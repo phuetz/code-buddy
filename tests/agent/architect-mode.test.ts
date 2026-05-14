@@ -9,47 +9,69 @@ import {
   ArchitectStep,
   StepResult,
 } from "../../src/agent/architect-mode";
+import { CodeBuddyClient } from "../../src/codebuddy/client.js";
 
-// Mock CodeBuddyClient
-jest.mock("../../src/codebuddy/client.js", () => ({
-  CodeBuddyClient: jest.fn().mockImplementation(function() { return {
-    chat: jest.fn().mockResolvedValue({
-      choices: [{
-        message: {
-          content: JSON.stringify({
-            summary: "Test proposal",
-            steps: [
-              {
-                order: 1,
-                description: "Create test file",
-                type: "create",
-                target: "src/test.ts",
-                details: "Create a new test file",
-              },
-            ],
-            files: ["src/test.ts"],
-            risks: ["None identified"],
-            estimatedChanges: 10,
-          }),
-        },
-      }],
-      usage: { prompt_tokens: 100, completion_tokens: 50 },
-    }),
+const proposalChatResponse = {
+  choices: [{
+    message: {
+      content: JSON.stringify({
+        summary: "Test proposal",
+        steps: [
+          {
+            order: 1,
+            description: "Create test file",
+            type: "create",
+            target: "src/test.ts",
+            details: "Create a new test file",
+          },
+        ],
+        files: ["src/test.ts"],
+        risks: ["None identified"],
+        estimatedChanges: 10,
+      }),
+    },
+  }],
+  usage: { prompt_tokens: 100, completion_tokens: 50 },
+};
+
+const doneChatResponse = {
+  choices: [{ message: { content: "Done" } }],
+};
+
+function createClientStub(chatResponse: unknown = proposalChatResponse): CodeBuddyClient {
+  return {
+    chat: jest.fn().mockResolvedValue(chatResponse),
     chatStream: jest.fn().mockImplementation(async function* () {
       yield { choices: [{ delta: { content: "Test " } }] };
       yield { choices: [{ delta: { content: "response" } }] };
     }),
-    getModel: jest.fn().mockReturnValue("grok-3-latest"),
-  }; }),
-}));
+  } as unknown as CodeBuddyClient;
+}
 
-jest.mock("../../src/types/index.js", () => ({
-  getErrorMessage: jest.fn().mockImplementation((err) => err?.message || String(err)),
-}));
+function architectInternals(architect: ArchitectMode): {
+  architectClient: CodeBuddyClient;
+  editorClient: CodeBuddyClient;
+  config: ArchitectConfig;
+  currentProposal: ArchitectProposal | null;
+  isActive: boolean;
+} {
+  return architect as unknown as {
+    architectClient: CodeBuddyClient;
+    editorClient: CodeBuddyClient;
+    config: ArchitectConfig;
+    currentProposal: ArchitectProposal | null;
+    isActive: boolean;
+  };
+}
 
-import { CodeBuddyClient } from "../../src/codebuddy/client.js";
-
-const MockCodeBuddyClient = CodeBuddyClient as unknown as jest.Mock;
+function stubClients(
+  architect: ArchitectMode,
+  clients: { architect?: CodeBuddyClient; editor?: CodeBuddyClient } = {},
+): void {
+  const internals = architectInternals(architect);
+  internals.architectClient = clients.architect ?? createClientStub();
+  internals.editorClient = clients.editor ?? createClientStub(doneChatResponse);
+}
 
 describe("ArchitectMode", () => {
   let architect: ArchitectMode;
@@ -113,22 +135,14 @@ describe("ArchitectMode", () => {
         process.env.CODEBUDDY_PROVIDER = "openai";
         process.env.OPENAI_API_KEY = "openai-key";
         process.env.OPENAI_MODEL = "gpt-5.1-codex";
-        MockCodeBuddyClient.mockClear();
 
         architect = new ArchitectMode("openai-key");
+        const internals = architectInternals(architect);
 
-        expect(MockCodeBuddyClient).toHaveBeenNthCalledWith(
-          1,
-          "openai-key",
-          "gpt-5.1-codex",
-          "https://api.openai.com/v1"
-        );
-        expect(MockCodeBuddyClient).toHaveBeenNthCalledWith(
-          2,
-          "openai-key",
-          "gpt-5.1-codex",
-          "https://api.openai.com/v1"
-        );
+        expect(internals.architectClient.getCurrentModel()).toBe("gpt-5.1-codex");
+        expect(internals.architectClient.getBaseURL()).toBe("https://api.openai.com/v1");
+        expect(internals.editorClient.getCurrentModel()).toBe("gpt-5.1-codex");
+        expect(internals.editorClient.getBaseURL()).toBe("https://api.openai.com/v1");
       } finally {
         if (previousProvider === undefined) delete process.env.CODEBUDDY_PROVIDER;
         else process.env.CODEBUDDY_PROVIDER = previousProvider;
@@ -399,6 +413,7 @@ describe("ArchitectMode Integration", () => {
   describe("Analysis and Implementation", () => {
     it("should analyze request and return proposal", async () => {
       const architect = new ArchitectMode("test-api-key");
+      stubClients(architect);
       const proposal = await architect.analyze("Create a test file");
 
       expect(proposal.summary).toBe("Test proposal");
@@ -410,6 +425,7 @@ describe("ArchitectMode Integration", () => {
 
     it("should implement a proposal", async () => {
       const architect = new ArchitectMode("test-api-key");
+      stubClients(architect, { editor: createClientStub(doneChatResponse) });
       const proposal: ArchitectProposal = {
         summary: "Test",
         steps: [{ order: 1, description: "Test", type: "create", target: "test.ts" }],
@@ -417,12 +433,6 @@ describe("ArchitectMode Integration", () => {
         risks: [],
         estimatedChanges: 10,
       };
-
-      // Mock editor client response
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (architect as any).editorClient.chat.mockResolvedValue({
-        choices: [{ message: { content: "Done" } }],
-      });
 
       const { success, results } = await architect.implement(proposal);
 
@@ -433,12 +443,7 @@ describe("ArchitectMode Integration", () => {
 
     it("should run full workflow with analyzeAndImplement", async () => {
       const architect = new ArchitectMode("test-api-key");
-      
-      // Mock editor client
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (architect as any).editorClient.chat.mockResolvedValue({
-        choices: [{ message: { content: "Done" } }],
-      });
+      stubClients(architect, { editor: createClientStub(doneChatResponse) });
 
       const onApproval = jest.fn().mockResolvedValue(true);
 
@@ -456,6 +461,7 @@ describe("ArchitectMode Integration", () => {
 
     it("should handle unapproved proposals", async () => {
       const architect = new ArchitectMode("test-api-key");
+      stubClients(architect);
       const onApproval = jest.fn().mockResolvedValue(false);
 
       await expect(

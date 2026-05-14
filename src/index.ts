@@ -288,6 +288,7 @@ async function ensureUserSettingsDirectory(): Promise<void> {
 // for the rest of this file's call sites.
 import {
   detectProviderFromEnv,
+  inferProviderFromBaseURL,
   selectModelForDetectedProvider,
   type DetectedProvider,
 } from './utils/provider-detector.js';
@@ -505,6 +506,17 @@ async function loadModel(): Promise<string | undefined> {
   }
 
   return selectModelForDetectedProvider(detected, configured);
+}
+
+async function resolveInteractionProviderLabel(baseURL?: string): Promise<string> {
+  const inferredProvider = inferProviderFromBaseURL(baseURL);
+  if (inferredProvider) return inferredProvider;
+  if (baseURL) {
+    return /\b(localhost|127\.0\.0\.1|\[::1\])\b/i.test(baseURL) ? 'local' : 'custom';
+  }
+
+  const detected = await getDetectedProvider();
+  return detected?.provider ?? 'unknown';
 }
 
 // Handle commit-and-push command in headless mode
@@ -807,7 +819,7 @@ async function processPromptHeadless(
       const il = getInteractionLogger();
       il.startSession({
         model: resolvedModel || 'unknown',
-        provider: baseURL?.includes('localhost') ? 'local' : 'xai',
+        provider: await resolveInteractionProviderLabel(baseURL),
         cwd: process.cwd(),
         tags: ['headless'],
       });
@@ -1779,7 +1791,7 @@ program
           const currentModel = agent.getCurrentModel?.() || model || 'unknown';
           interactionLogger.startSession({
             model: currentModel,
-            provider: baseURL?.includes('localhost') ? 'local' : 'xai',
+            provider: await resolveInteractionProviderLabel(baseURL),
             cwd: process.cwd(),
             tags: ['interactive'],
           });
