@@ -7,6 +7,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 // vi.mock factories are hoisted above imports — variables they reference
 // must be declared via vi.hoisted (audit pattern, see MEMORY.md).
@@ -15,11 +18,16 @@ const mocks = vi.hoisted(() => ({
   formalExecuteMock: vi.fn(),
   fleetSafeListMock: vi.fn(),
   isFleetSafeMock: vi.fn(),
-  detectProviderMock: vi.fn(),
   clientConstructorMock: vi.fn(),
   loggerInfoMock: vi.fn(),
   loggerWarnMock: vi.fn(),
 }));
+const testPaths = vi.hoisted(() => ({ tmpHome: '' }));
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof os>('os');
+  return { ...actual, homedir: () => testPaths.tmpHome || actual.homedir() };
+});
 
 vi.mock('../../src/codebuddy/client.js', async () => {
   const actual = await vi.importActual<typeof import('../../src/codebuddy/client.js')>(
@@ -51,10 +59,6 @@ vi.mock('../../src/tools/registry.js', () => ({
   }),
 }));
 
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: mocks.detectProviderMock,
-}));
-
 vi.mock('../../src/utils/logger.js', () => ({
   logger: {
     info: mocks.loggerInfoMock,
@@ -69,7 +73,6 @@ const {
   formalExecuteMock,
   fleetSafeListMock,
   isFleetSafeMock,
-  detectProviderMock,
   clientConstructorMock,
   loggerInfoMock,
   loggerWarnMock,
@@ -99,30 +102,75 @@ const SAFE_TOOL = {
   },
 };
 
+const envKeysToReset = [
+  'CODEBUDDY_PROVIDER',
+  'GROK_API_KEY',
+  'GROK_BASE_URL',
+  'GROK_MODEL',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'CHATGPT_MODEL',
+];
+const envBackup: Record<string, string | undefined> = {};
+
+function configureDefaultGrokProvider(): void {
+  process.env.CODEBUDDY_PROVIDER = 'grok';
+  process.env.GROK_API_KEY = 'test-key';
+  process.env.GROK_MODEL = 'grok-3-latest';
+}
+
+function clearProviderEnv(): void {
+  process.env.CODEBUDDY_PROVIDER = 'none';
+  delete process.env.GROK_API_KEY;
+  delete process.env.GROK_MODEL;
+  delete process.env.XAI_API_KEY;
+}
+
+function writeChatGptAuth(): void {
+  const dir = path.join(testPaths.tmpHome, '.codebuddy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'codex-auth.json'),
+    JSON.stringify({ tokens: { access_token: 'test-access-token' } }),
+  );
+}
+
 describe('A2A inbound TaskExecutor', () => {
   beforeEach(() => {
     chatMock.mockReset();
     formalExecuteMock.mockReset();
     fleetSafeListMock.mockReset();
     isFleetSafeMock.mockReset();
-    detectProviderMock.mockReset();
     clientConstructorMock.mockReset();
     loggerInfoMock.mockReset();
     loggerWarnMock.mockReset();
+    for (const key of envKeysToReset) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
+    testPaths.tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-codebuddy-executor-'));
 
     // Default: provider auto-detect succeeds, fleet list non-empty.
-    detectProviderMock.mockReturnValue({
-      provider: 'grok',
-      apiKey: 'test-key',
-      baseURL: 'https://api.x.ai/v1',
-      defaultModel: 'grok-3-latest',
-    });
+    configureDefaultGrokProvider();
     fleetSafeListMock.mockReturnValue([SAFE_TOOL]);
     isFleetSafeMock.mockImplementation((name: string) => name === 'view_file');
   });
 
   afterEach(() => {
-    delete process.env.GROK_API_KEY;
+    for (const key of envKeysToReset) {
+      if (envBackup[key] !== undefined) process.env[key] = envBackup[key];
+      else delete process.env[key];
+    }
+    fs.rmSync(testPaths.tmpHome, { recursive: true, force: true });
+    testPaths.tmpHome = '';
   });
 
   it('happy path: LLM returns final answer in one turn', async () => {
@@ -154,12 +202,8 @@ describe('A2A inbound TaskExecutor', () => {
   });
 
   it('uses ChatGPT Codex OAuth when provider auto-detection resolves chatgpt', async () => {
-    detectProviderMock.mockReturnValueOnce({
-      provider: 'chatgpt',
-      apiKey: 'oauth-chatgpt',
-      baseURL: 'https://chatgpt.com/backend-api/codex',
-      defaultModel: 'gpt-5.5',
-    });
+    process.env.CODEBUDDY_PROVIDER = 'chatgpt';
+    writeChatGptAuth();
     chatMock.mockResolvedValueOnce({
       choices: [
         {
@@ -348,7 +392,7 @@ describe('A2A inbound TaskExecutor', () => {
   });
 
   it('fails closed: missing provider credentials rejects task before LLM call', async () => {
-    detectProviderMock.mockReturnValueOnce(null);
+    clearProviderEnv();
 
     const executor = createCodeBuddyTaskExecutor();
     const task = await executor(makeTask('any task'));
@@ -391,7 +435,7 @@ describe('A2A inbound TaskExecutor', () => {
 
   describe('error paths (V1.0 audit)', () => {
     it('fails closed when provider auto-detection returns null', async () => {
-      detectProviderMock.mockReturnValueOnce(null);
+      clearProviderEnv();
       const executor = createCodeBuddyTaskExecutor();
       const task = await executor(makeTask('anything'));
       expect(task.status.status).toBe(TaskStatus.FAILED);
