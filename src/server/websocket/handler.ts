@@ -428,15 +428,6 @@ messageHandlers.set('status', async (ws, state, _payload) => {
  * `fleet:listen` for read-only fleet event consumption).
  */
 messageHandlers.set('peer:request', async (ws, state, payload) => {
-  if (!state.authenticated) {
-    sendError(ws, 'UNAUTHORIZED', 'Authentication required');
-    return;
-  }
-  if (!state.scopes.includes('peer:invoke')) {
-    sendError(ws, 'FORBIDDEN', 'peer:invoke scope required');
-    return;
-  }
-  const { dispatchPeerRequest } = await import('./peer-rpc.js');
   // payload is the request frame { id, method, params, traceId?, depth? }
   const frame = (payload ?? {}) as {
     id?: string;
@@ -446,6 +437,32 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     depth?: number;
   };
   const requestId = frame.id ?? '';
+
+  const sendPeerRequestError = (code: string, message: string): void => {
+    if (requestId) {
+      send(ws, {
+        type: 'peer:response',
+        payload: {
+          id: requestId,
+          ok: false,
+          error: { code, message },
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    sendError(ws, code, message);
+  };
+
+  if (!state.authenticated) {
+    sendPeerRequestError('UNAUTHORIZED', 'Authentication required');
+    return;
+  }
+  if (!state.scopes.includes('peer:invoke') && !state.scopes.includes('admin')) {
+    sendPeerRequestError('FORBIDDEN', 'peer:invoke scope required');
+    return;
+  }
+  const { dispatchPeerRequest } = await import('./peer-rpc.js');
   // Phase (d).19 — emitChunk forwards a partial result delta to the
   // caller as a `peer:chunk` frame keyed by the same request id. The
   // caller's FleetListener routes chunks to its onChunk callback. We

@@ -26,7 +26,7 @@
   "scripts": {
     "dev": "npm run download:node && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
     "dev:with-python": "npm run download:node && npm run prepare:python && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
-    "build": "npm run download:node && npm run prepare:gui-tools && npm run prepare:python:all && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && npm run build:tray-icon && tsc && vite build && node scripts/pre-build-check.js && electron-builder",
+    "build": "npm run download:node && npm run prepare:gui-tools && npm run prepare:python:all && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && npm run build:tray-icon && tsc && vite build && npm run prepare:skills && node scripts/pre-build-check.js && electron-builder",
     "build:e2e": "vite build",
     "build:win": "node scripts/build-windows.js",
     "build:tray-icon": "node scripts/build-tray-icon.js",
@@ -40,6 +40,7 @@
     "prepare:gui-tools": "node scripts/prepare-gui-tools.js",
     "prepare:python": "node scripts/prepare-python.js",
     "prepare:python:all": "node scripts/prepare-python.js --all",
+    "prepare:skills": "node scripts/prepare-skills.js",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
@@ -128,10 +129,6 @@
   },
   "author": "Code Buddy Cowork Team",
   "license": "MIT",
-  "optionalDependencies": {
-    "bufferutil": "^4.1.0",
-    "utf-8-validate": "^6.0.6"
-  },
   "lint-staged": {
     "*.{ts,tsx}": [
       "eslint --fix",

@@ -101,3 +101,5 @@ DEV_LOG.md
 *.png
 !src/renderer/assets/*.png
 !public/*.png
+!resources/tray-icon.png
+!resources/tray-iconTemplate.png

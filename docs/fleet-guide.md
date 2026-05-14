@@ -320,11 +320,11 @@ for `view_file`, line-by-line for `search`). Use
 `FleetListener.invokeToolStream(toolName, args, onChunk)` on the caller.
 
 **V1 allowlist** (read-only):
-- `view_file` — `fs.readFile` of a file under the workspace root, 10 MB
-  cap. Args: `{ file_path: string }` (relative to root or absolute
-  inside it). Streamed chunks of 16 KB when via `.stream`.
-- `list_directory` — `fs.readdir` listing with type tags (`DIR`,
-  `FILE`, `LINK`). Args: `{ path: string }`.
+- `view_file` — bounded `fs.open`/`read` of a file under the workspace
+  root, 10 MB cap. Args: `{ file_path: string }` (relative to root or
+  absolute inside it). Streamed chunks of 16 KB when via `.stream`.
+- `list_directory` — bounded `fs.opendir` listing with type tags (`DIR`,
+  `FILE`, `LINK`), capped at 500 entries. Args: `{ path: string }`.
 - `search` — ripgrep (`@vscode/ripgrep`) text search, capped at 200
   matches and 30 s. Args: `{ query: string, path: string }`. Streamed
   match-by-match when via `.stream`.

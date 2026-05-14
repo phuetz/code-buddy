@@ -703,6 +703,19 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       );
     });
 
+    it('sanitizes terminal control sequences from non-stream tool output', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k']);
+      fleetListenerMock.invokeToolMock.mockResolvedValueOnce({
+        tool: 'view_file',
+        output: 'ok\x1B[31mRED\x1B[0m\rbad\x1B]52;c;SECRET\x07done',
+        durationMs: 12,
+      });
+      const r = await handleFleet(['tool', 'peer:3000', 'view_file']);
+      expect(r.entry?.content).toContain('okREDbaddone');
+      expect(r.entry?.content).not.toContain('\x1B');
+      expect(r.entry?.content).not.toContain('SECRET');
+    });
+
     it('handles tool invocation with no JSON args (defaults to {})', async () => {
       await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k']);
       await handleFleet(['tool', 'peer:3000', 'list_directory']);
@@ -745,6 +758,35 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       // Default mock streams 'chunk-A' + 'chunk-B' = 14 bytes total.
       expect(r.entry?.content).toContain('view_file (stream) OK');
       expect(r.entry?.content).toContain('14 bytes');
+    });
+
+    it('sanitizes terminal control sequences from streamed tool chunks', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k']);
+      fleetListenerMock.invokeToolStreamMock.mockImplementationOnce(async (toolName, _args, onChunk) => {
+        onChunk('ok\x1B[31mRED');
+        onChunk('\x1B[0m\rbad\x1B]52;c;SECRET\x07done');
+        return {
+          tool: toolName,
+          output: 'ok\x1B[31mRED\x1B[0m\rbad\x1B]52;c;SECRET\x07done',
+          durationMs: 8,
+        };
+      });
+      const writeSpy = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation((() => true) as typeof process.stdout.write);
+      try {
+        const r = await handleFleet([
+          'tool', 'peer:3000', 'view_file', '{"file_path":"big.txt"}', '--stream',
+        ]);
+        const streamed = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('');
+        expect(streamed).toBe('okREDbaddone\n');
+        expect(streamed).not.toContain('\x1B');
+        expect(streamed).not.toContain('SECRET');
+        expect(r.entry?.content).toContain('view_file (stream) OK');
+        expect(r.entry?.content).toContain('12 bytes');
+      } finally {
+        writeSpy.mockRestore();
+      }
     });
 
     it('renders [truncated] tag when payload signals truncation', async () => {

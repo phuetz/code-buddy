@@ -29,13 +29,16 @@ interface UseRegenerateResult {
 export function useRegenerate(message: Message): UseRegenerateResult {
   const setMessages = useAppStore((s) => s.setMessages);
   const messages = useAppStore((s) => s.sessionStates[message.sessionId]?.messages ?? []);
+  const activeTurn = useAppStore((s) => s.sessionStates[message.sessionId]?.activeTurn ?? null);
   const { continueSession } = useIPC();
 
   const plan = computeRegenerationPlan(messages, message);
-  const canRegenerate = plan !== null;
+  const canRegenerate = plan !== null && !activeTurn;
 
   const handleRegenerate = useCallback(async () => {
-    const current = useAppStore.getState().sessionStates[message.sessionId]?.messages ?? [];
+    const currentSession = useAppStore.getState().sessionStates[message.sessionId];
+    if (currentSession?.activeTurn) return;
+    const current = currentSession?.messages ?? [];
     const fresh = computeRegenerationPlan(current, message);
     if (!fresh) return;
     setMessages(message.sessionId, fresh.slicedMessages);

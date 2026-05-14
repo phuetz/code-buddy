@@ -60,8 +60,8 @@ function buildCheckList(platform, arch) {
       severity: 'fatal',
     },
     {
-      label: 'Built-in skills directory (.claude/skills/)',
-      relPath: '.claude/skills',
+      label: 'Built-in skills directory (.bundle-resources/skills/)',
+      relPath: '.bundle-resources/skills',
       type: 'dir',
       severity: 'fatal',
     },

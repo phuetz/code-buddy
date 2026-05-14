@@ -196,21 +196,30 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
       // would let `<symlink-to-/etc>/probe_xxxx` slip the startsWith(root)
       // check because the un-followed path string still starts with tmpRoot.
       // The fix walks up to the deepest existing ancestor before realpath.
-      await fs.symlink('/etc', path.join(tmpRoot, 'escape'));
-      wirePeerToolBridge();
-      const r = await dispatchPeerRequest(
-        {
-          id: 'p4b',
-          method: 'peer.tool.invoke',
-          params: {
-            tool: 'view_file',
-            args: { file_path: 'escape/probe_does_not_exist_xxx' },
+      const outsideRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-peer-tool-outside-'));
+      try {
+        await fs.symlink(
+          outsideRoot,
+          path.join(tmpRoot, 'escape'),
+          process.platform === 'win32' ? 'junction' : 'dir',
+        );
+        wirePeerToolBridge();
+        const r = await dispatchPeerRequest(
+          {
+            id: 'p4b',
+            method: 'peer.tool.invoke',
+            params: {
+              tool: 'view_file',
+              args: { file_path: 'escape/probe_does_not_exist_xxx' },
+            },
           },
-        },
-        baseCtx,
-      );
-      expect(r.ok).toBe(false);
-      expect(r.error?.message).toContain('PATH_OUTSIDE_PEER_WORKSPACE');
+          baseCtx,
+        );
+        expect(r.ok).toBe(false);
+        expect(r.error?.message).toContain('PATH_OUTSIDE_PEER_WORKSPACE');
+      } finally {
+        await fs.rm(outsideRoot, { recursive: true, force: true });
+      }
     });
 
     it('peer.tool.invoke.stream rejects when transport has no emitChunk', async () => {
@@ -301,6 +310,36 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
       const payload = r.payload as { output: string };
       expect(payload.output).toContain('hello.txt');
       expect(payload.output).toContain('sub');
+    });
+
+    it('caps large directory listings deterministically and marks them truncated', async () => {
+      const manyDir = path.join(tmpRoot, 'many');
+      await fs.mkdir(manyDir);
+      for (let i = 0; i < 500; i++) {
+        await fs.writeFile(path.join(manyDir, `z-file-${String(i).padStart(3, '0')}.txt`), 'x');
+      }
+      for (let i = 0; i < 5; i++) {
+        await fs.writeFile(path.join(manyDir, `a-file-${String(i).padStart(3, '0')}.txt`), 'x');
+      }
+
+      wirePeerToolBridge();
+      const r = await dispatchPeerRequest(
+        {
+          id: 'p8b',
+          method: 'peer.tool.invoke',
+          params: { tool: 'list_directory', args: { path: 'many' } },
+        },
+        baseCtx,
+      );
+      expect(r.ok).toBe(true);
+      const payload = r.payload as { output: string; truncated: boolean };
+      const lines = payload.output.split('\n');
+      expect(payload.truncated).toBe(true);
+      expect(lines).toHaveLength(500);
+      expect(lines[0]).toBe('FILE  a-file-000.txt');
+      expect(lines).toContain('FILE  a-file-004.txt');
+      expect(lines).toContain('FILE  z-file-494.txt');
+      expect(lines).not.toContain('FILE  z-file-495.txt');
     });
   });
 

@@ -127,6 +127,17 @@ function textResult(content: string): CommandHandlerResult {
   };
 }
 
+const OSC_SEQUENCE_RE = /\x1B\][\s\S]*?(?:\x07|\x1B\\)/g;
+const ANSI_SEQUENCE_RE = /[\x1B\x9B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[a-zA-Z\d]*)*)?\x07)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
+const UNSAFE_CONTROL_RE = /[\x00-\x08\x0B\x0C\x0D\x0E-\x1F\x7F]/g;
+
+function sanitizePeerToolOutput(content: string): string {
+  return content
+    .replace(OSC_SEQUENCE_RE, '')
+    .replace(ANSI_SEQUENCE_RE, '')
+    .replace(UNSAFE_CONTROL_RE, '');
+}
+
 interface ParsedListenArgs {
   url: string | null;
   apiKey: string | null;
@@ -1175,10 +1186,11 @@ async function handleTool(rest: string[]): Promise<CommandHandlerResult> {
         parsedArgs,
         (delta: string) => {
           streamedAny = true;
+          const safeDelta = sanitizePeerToolOutput(delta);
           // Best-effort live print. In a TUI session this gives the
           // operator immediate feedback without waiting for the final
           // peer:response. Errors writing to stdout are non-fatal.
-          try { process.stdout.write(delta); } catch { /* ignore */ }
+          try { process.stdout.write(safeDelta); } catch { /* ignore */ }
         },
         { timeoutMs },
       );
@@ -1194,11 +1206,12 @@ async function handleTool(rest: string[]): Promise<CommandHandlerResult> {
     if (stream) {
       // The body has already been streamed live — keep the summary terse.
       return textResult(
-        `Peer "${peerName}" → ${tag} OK (${elapsed}ms)${trunc}: ${payload.output.length} bytes`,
+        `Peer "${peerName}" → ${tag} OK (${elapsed}ms)${trunc}: ${sanitizePeerToolOutput(payload.output).length} bytes`,
       );
     }
+    const safeOutput = sanitizePeerToolOutput(payload.output);
     return textResult(
-      `Peer "${peerName}" → ${tag} OK (${elapsed}ms)${trunc}:\n${payload.output}`,
+      `Peer "${peerName}" → ${tag} OK (${elapsed}ms)${trunc}:\n${safeOutput}`,
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

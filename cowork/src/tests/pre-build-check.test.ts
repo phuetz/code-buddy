@@ -47,7 +47,7 @@ function populateDarwinArtifacts(root: string, arch: string = 'arm64'): void {
   makeFile(path.join(root, '.bundle-resources/mcp/software-dev-server-example.js'));
   makeDir(path.join(root, 'dist-electron'));
   makeDir(path.join(root, 'dist'));
-  makeDir(path.join(root, '.claude/skills'));
+  makeDir(path.join(root, '.bundle-resources/skills'));
   populateEngineAdapter(root);
 
   // macOS FATAL resources
@@ -63,7 +63,7 @@ function populateWin32Artifacts(root: string): void {
   makeFile(path.join(root, '.bundle-resources/mcp/software-dev-server-example.js'));
   makeDir(path.join(root, 'dist-electron'));
   makeDir(path.join(root, 'dist'));
-  makeDir(path.join(root, '.claude/skills'));
+  makeDir(path.join(root, '.bundle-resources/skills'));
   populateEngineAdapter(root);
   makeFile(path.join(root, 'resources/node/win32-x64/node.exe'));
   makeFile(path.join(root, 'dist-wsl-agent/index.js'));

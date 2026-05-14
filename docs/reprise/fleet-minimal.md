@@ -1,0 +1,98 @@
+# Fleet minimal
+
+Ce rail valide uniquement le noyau de collaboration Code Buddy vers Code Buddy.
+OpenClaw et les canaux externes ne sont pas requis pour ce test.
+
+## But
+
+Prouver qu'une instance Code Buddy peut:
+
+- observer une autre instance via `/fleet listen`;
+- appeler `peer.ping` et `peer.describe`;
+- appeler un LLM distant via `peer.chat`;
+- invoquer les outils read-only `view_file`, `list_directory` et `search`;
+- stopper proprement la connexion.
+
+## Preflight serveur
+
+Terminal 1:
+
+```bash
+npm run build
+$env:GOOGLE_API_KEY="..."
+$env:NODE_ENV="development"
+node dist/index.js server --port 3001
+```
+
+Noter la cle admin de developpement imprimee par le serveur si l'authentification
+est active, puis la passer au client comme `CODEBUDDY_FLEET_API_KEY`.
+
+Point a corriger avant release: la documentation existante mentionne des formes
+`buddy api-key create` / `buddy api-keys create`, mais la commande CLI n'est pas
+encore exposee de maniere fiable dans l'index principal. Pour le smoke local,
+utiliser la cle de developpement ou une cle deja provisionnee.
+
+## Test loopback
+
+Terminal 2:
+
+```bash
+$env:CODEBUDDY_FLEET_API_KEY="cb_sk_..."
+node dist/index.js
+```
+
+Dans la session:
+
+```text
+> /fleet listen ws://localhost:3001/ws --api-key cb_sk_... --name self --auto-reconnect
+> /fleet status
+> /fleet send self peer.ping
+> /fleet send self peer.describe
+> /fleet send self peer.chat {"prompt":"Say hi briefly"}
+> /fleet tool self list_directory {"path":"docs","limit":20}
+> /fleet tool self view_file {"file_path":"README.md","limit":2000}
+> /fleet tool self search {"query":"Fleet","path":"docs"}
+> /fleet history 20 --peer self
+> /fleet stop self
+```
+
+## Test deux machines
+
+Sur la machine serveur, exposer uniquement sur reseau prive ou Tailscale:
+
+```bash
+$env:GOOGLE_API_KEY="..."
+node dist/index.js server --host 0.0.0.0 --port 3001
+```
+
+Sur la machine cliente:
+
+```text
+> /fleet listen ws://100.x.y.z:3001/ws --api-key cb_sk_... --name ministar-linux --auto-reconnect
+> /fleet send ministar-linux peer.ping
+> /fleet send ministar-linux peer.describe
+> /fleet tool ministar-linux view_file {"file_path":"README.md","limit":2000}
+```
+
+## Criteres de passage
+
+- `peer.ping` repond vite et sans erreur d'authentification.
+- `peer.describe` liste les methodes attendues, dont `peer.chat` et
+  `peer.tool.invoke`.
+- `peer.chat` renvoie une vraie reponse LLM.
+- Les outils read-only restent confines au workspace autorise.
+- Une cle `admin` peut invoquer `peer.ping` et les outils read-only Fleet.
+- Une cle sans scope `peer:invoke` ni `admin` recoit une erreur `FORBIDDEN`
+  correlee a la requete, sans timeout silencieux.
+- Une grande arborescence est tronquee proprement au lieu de saturer le client.
+- Les sorties de `/fleet tool` ne peuvent pas injecter de sequences de controle
+  terminal dans l'affichage.
+- `/fleet stop` ferme la connexion et `/fleet status` revient a un etat clair.
+
+Le chemin WebSocket reel est couvert par
+`tests/server/peer-websocket-smoke.test.ts` pour `peer.ping`, `peer.tool.invoke`
+et le refus de scope correle.
+
+Si ce rail passe en loopback puis sur Tailscale, Fleet minimal est pret pour une
+beta controlee. Les workflows autonomes, OpenClaw et Cowork Fleet peuvent alors
+etre durcis au-dessus de ce socle.

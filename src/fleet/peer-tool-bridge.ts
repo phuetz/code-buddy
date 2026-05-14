@@ -143,8 +143,30 @@ async function realpathFollowingExistingAncestors(absolute: string): Promise<str
 
 const READ_TRUNCATE_BYTES = 10 * 1024 * 1024; // 10 MB cap per Read
 const READ_STREAM_CHUNK = 16 * 1024;          // 16 KB per emitChunk in stream mode
+const LIST_DIRECTORY_MAX_ENTRIES = 500;
 const SEARCH_TIMEOUT_MS = 30_000;
 const SEARCH_MAX_RESULTS = 200;
+
+function insertSortedLimited(lines: string[], line: string, limit: number): void {
+  if (lines.length === limit && line >= lines[lines.length - 1]) {
+    return;
+  }
+
+  let lo = 0;
+  let hi = lines.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (line < lines[mid]) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  lines.splice(lo, 0, line);
+  if (lines.length > limit) {
+    lines.pop();
+  }
+}
 
 async function execViewFile({ args, emitChunk }: ExecArgs): Promise<{ output: string; truncated: boolean }> {
   const filePath = args.file_path ?? args.path;
@@ -177,25 +199,38 @@ async function execViewFile({ args, emitChunk }: ExecArgs): Promise<{ output: st
     });
   }
 
-  const buf = await fs.readFile(resolved, { encoding: 'utf-8' });
-  const output = truncated ? buf.slice(0, READ_TRUNCATE_BYTES) : buf;
-  return { output, truncated };
+  const handle = await fs.open(resolved, 'r');
+  try {
+    const buffer = Buffer.allocUnsafe(limit);
+    const { bytesRead } = await handle.read(buffer, 0, limit, 0);
+    const output = buffer.subarray(0, bytesRead).toString('utf-8');
+    return { output, truncated };
+  } finally {
+    await handle.close();
+  }
 }
 
-async function execListDirectory({ args }: ExecArgs): Promise<{ output: string }> {
+async function execListDirectory({ args }: ExecArgs): Promise<{ output: string; truncated: boolean }> {
   const dirPath = args.path ?? args.directory ?? '.';
   if (typeof dirPath !== 'string') {
     throw new Error('list_directory: path must be a string');
   }
   const resolved = await assertPathInsideWorkspace(dirPath);
-  const entries = await fs.readdir(resolved, { withFileTypes: true });
-  const lines = entries
-    .map((e) => {
+  const dir = await fs.opendir(resolved);
+  const lines: string[] = [];
+  let truncated = false;
+  try {
+    for await (const e of dir) {
+      if (lines.length >= LIST_DIRECTORY_MAX_ENTRIES) {
+        truncated = true;
+      }
       const tag = e.isDirectory() ? 'DIR ' : e.isSymbolicLink() ? 'LINK' : 'FILE';
-      return `${tag}  ${e.name}`;
-    })
-    .sort();
-  return { output: lines.join('\n') };
+      insertSortedLimited(lines, `${tag}  ${e.name}`, LIST_DIRECTORY_MAX_ENTRIES);
+    }
+  } finally {
+    await dir.close().catch(() => undefined);
+  }
+  return { output: lines.join('\n'), truncated };
 }
 
 async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: string; truncated: boolean }> {

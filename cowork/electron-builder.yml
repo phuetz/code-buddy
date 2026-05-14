@@ -28,8 +28,6 @@ files:
   - node_modules/ws/**/*
   - node_modules/glob/**/*
   - node_modules/dotenv/**/*
-  - node_modules/bufferutil/**/*
-  - node_modules/utf-8-validate/**/*
   # Exclude non-essential files from node_modules to reduce bundle size
   - '!**/*.js.map'
   - '!**/*.mjs.map'
@@ -58,8 +56,6 @@ asarUnpack:
   - node_modules/@img/**/*.dylib
   - node_modules/@img/**/*.so
   - node_modules/better-sqlite3/**/*.node
-  - node_modules/bufferutil/**/*.node
-  - node_modules/utf-8-validate/**/*.node
 
 win:
   icon: resources/icon.ico
@@ -76,7 +72,7 @@ win:
       to: node
     - from: dist-wsl-agent
       to: wsl-agent
-    - from: .claude/skills
+    - from: .bundle-resources/skills
       to: skills
     # Code Buddy core engine adapter (~150 KB). Required at runtime by
     # cowork/src/main/engine/embedded-mode.ts:resolveEnginePath when
@@ -120,7 +116,7 @@ mac:
       to: tools
     - from: dist-lima-agent
       to: lima-agent
-    - from: .claude/skills
+    - from: .bundle-resources/skills
       to: skills
     # Code Buddy core engine adapter — see comment on win.extraResources.
     - from: ../dist/desktop
@@ -144,7 +140,7 @@ linux:
       to: node
     - from: resources/python/linux-${arch}
       to: python
-    - from: .claude/skills
+    - from: .bundle-resources/skills
       to: skills
     # Code Buddy core engine adapter — see comment on win.extraResources.
     - from: ../dist/desktop
