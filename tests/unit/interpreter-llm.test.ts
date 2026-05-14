@@ -4,14 +4,6 @@
  * Covers processMessage(), getLLMClient(), and calculateCost()
  */
 
-const providerMocks = vi.hoisted(() => ({
-  detectProviderMock: vi.fn(),
-}));
-
-vi.mock('../../src/utils/provider-detector.js', () => ({
-  detectProviderFromEnv: providerMocks.detectProviderMock,
-}));
-
 // Mock the dynamic import of CodeBuddyClient
 
 import InterpreterService from '../../src/interpreter/interpreter-service.js';
@@ -48,19 +40,41 @@ jest.mock('fs', async () => {
 });
 
 describe('InterpreterService LLM Integration', () => {
+  const originalEnv = process.env;
   let service: InterpreterService;
-  let originalApiKey: string | undefined;
+
+  const PROVIDER_ENV_KEYS = [
+    'ANTHROPIC_API_KEY',
+    'CHATGPT_MODEL',
+    'CODEBUDDY_PROVIDER',
+    'GEMINI_API_KEY',
+    'GEMINI_MODEL',
+    'GOOGLE_API_KEY',
+    'GROK_API_KEY',
+    'GROK_MODEL',
+    'OLLAMA_HOST',
+    'OPENAI_API_KEY',
+    'XAI_API_KEY',
+  ] as const;
+
+  function clearProviderEnv(): void {
+    for (const key of PROVIDER_ENV_KEYS) {
+      delete process.env[key];
+    }
+  }
+
+  function useNoProvider(): void {
+    clearProviderEnv();
+    process.env.CODEBUDDY_PROVIDER = 'none';
+  }
 
   beforeEach(() => {
-    originalApiKey = process.env.GROK_API_KEY;
     jest.clearAllMocks();
-    providerMocks.detectProviderMock.mockReset();
-    providerMocks.detectProviderMock.mockReturnValue({
-      provider: 'grok',
-      apiKey: 'test-key-123',
-      baseURL: 'https://api.x.ai/v1',
-      defaultModel: 'grok-code-fast-1',
-    });
+    process.env = { ...originalEnv };
+    clearProviderEnv();
+    process.env.CODEBUDDY_PROVIDER = 'grok';
+    process.env.GROK_API_KEY = 'test-key-123';
+    process.env.GROK_MODEL = 'grok-code-fast-1';
 
     // Create service with persistence disabled to avoid filesystem ops
     service = new InterpreterService({
@@ -70,11 +84,7 @@ describe('InterpreterService LLM Integration', () => {
   });
 
   afterEach(() => {
-    if (originalApiKey !== undefined) {
-      process.env.GROK_API_KEY = originalApiKey;
-    } else {
-      delete process.env.GROK_API_KEY;
-    }
+    process.env = originalEnv;
   });
 
   // ==========================================================================
@@ -83,7 +93,7 @@ describe('InterpreterService LLM Integration', () => {
 
   describe('processMessage()', () => {
     it('should return error message when no provider is configured', async () => {
-      providerMocks.detectProviderMock.mockReturnValue(null);
+      useNoProvider();
 
       const result = await service.chat('Hello');
 
@@ -185,15 +195,12 @@ describe('InterpreterService LLM Integration', () => {
     });
 
     it('uses detected provider model when the active profile model is incompatible', async () => {
-      providerMocks.detectProviderMock.mockReturnValue({
-        provider: 'chatgpt',
-        apiKey: 'oauth-chatgpt',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-        defaultModel: 'gpt-5.5',
-      });
+      clearProviderEnv();
+      process.env.CODEBUDDY_PROVIDER = 'gemini';
+      process.env.GEMINI_API_KEY = 'gemini-key';
 
       mockChat.mockResolvedValueOnce({
-        choices: [{ message: { content: 'chatgpt response' } }],
+        choices: [{ message: { content: 'gemini response' } }],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       });
 
@@ -202,7 +209,7 @@ describe('InterpreterService LLM Integration', () => {
       const callOptions = mockChat.mock.calls[0][2];
       expect(callOptions).toEqual(
         expect.objectContaining({
-          model: 'gpt-5.5',
+          model: 'gemini-2.5-flash',
         })
       );
     });
