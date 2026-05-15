@@ -214,29 +214,95 @@ export class MemoryManager {
   }
 
   /**
-   * Generate a summary of messages (placeholder - would call Claude API)
+   * Build a deterministic extractive summary of older messages.
+   *
+   * This intentionally avoids claiming LLM-backed semantic compression in
+   * Cowork's main process. Runtime model summarization should be injected as a
+   * separate service so unavailable credentials cannot silently degrade into a
+   * fake "Claude summary".
    */
   private generateSummary(messages: Message[]): string {
-    // In production, this would call Claude API to generate a proper summary
-    const userMessages = messages.filter((m) => m.role === 'user');
-    const topicSet = new Set<string>();
+    if (messages.length === 0) {
+      return 'Extractive context summary: no older messages.';
+    }
 
-    for (const message of userMessages) {
-      for (const block of message.content) {
-        if (block.type === 'text') {
-          // Extract key topics (simple keyword extraction)
-          const words = block.text.split(/\s+/).filter((w) => w.length > 5);
-          words.slice(0, 3).forEach((w) => topicSet.add(w.toLowerCase()));
-        }
+    const roleCounts = new Map<string, number>();
+    for (const message of messages) {
+      roleCounts.set(message.role, (roleCounts.get(message.role) ?? 0) + 1);
+    }
+
+    const roleLine = Array.from(roleCounts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([role, count]) => `${role}: ${count}`)
+      .join(', ');
+
+    const excerpts = this.selectSummaryExcerpts(messages, 8);
+    const excerptLines = excerpts.map((message, index) => {
+      const text = this.messageTextForSummary(message);
+      const timestamp = Number.isFinite(message.timestamp)
+        ? new Date(message.timestamp).toISOString()
+        : 'unknown-time';
+      return `${index + 1}. [${message.role} @ ${timestamp}] ${text}`;
+    });
+
+    return [
+      'Extractive context summary:',
+      `Messages summarized: ${messages.length}`,
+      `Role counts: ${roleLine || 'none'}`,
+      'Representative excerpts:',
+      ...excerptLines,
+    ].join('\n');
+  }
+
+  private selectSummaryExcerpts(messages: Message[], maxExcerpts: number): Message[] {
+    if (messages.length <= maxExcerpts) {
+      return messages.filter((message) => this.messageTextForSummary(message).length > 0);
+    }
+
+    const selected = new Map<number, Message>();
+    const importantRoles = new Set(['system', 'user']);
+    messages.forEach((message, index) => {
+      if (importantRoles.has(message.role) && selected.size < maxExcerpts) {
+        selected.set(index, message);
+      }
+    });
+
+    const anchors = [0, 1, Math.floor(messages.length / 2), messages.length - 2, messages.length - 1];
+    for (const index of anchors) {
+      if (index >= 0 && index < messages.length && selected.size < maxExcerpts) {
+        selected.set(index, messages[index]);
       }
     }
 
-    const topics = Array.from(topicSet).slice(0, 5).join(', ');
+    for (let index = 0; index < messages.length && selected.size < maxExcerpts; index++) {
+      selected.set(index, messages[index]);
+    }
 
-    return (
-      `Previous conversation covered topics including: ${topics}. ` +
-      `The conversation had ${messages.length} messages.`
-    );
+    return Array.from(selected.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([, message]) => message)
+      .filter((message) => this.messageTextForSummary(message).length > 0);
+  }
+
+  private messageTextForSummary(message: Message): string {
+    const parts = message.content.flatMap((block) => {
+      if (block.type === 'text') {
+        return block.text;
+      }
+      if (block.type === 'tool_use') {
+        return `Tool use: ${block.name}`;
+      }
+      if (block.type === 'tool_result') {
+        return `Tool result: ${block.content}`;
+      }
+      return [];
+    });
+
+    return parts
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 240);
   }
 
   /**

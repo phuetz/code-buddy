@@ -55,6 +55,7 @@ function createDbStub() {
 }
 
 import { MemoryManager } from '../src/main/memory/memory-manager';
+import type { Message } from '../src/renderer/types';
 
 describe('MemoryManager — no memory_fts dependency', () => {
   let db: ReturnType<typeof createDbStub>;
@@ -108,5 +109,33 @@ describe('MemoryManager — no memory_fts dependency', () => {
     manager.saveMemoryEntry('sess-1', 'something else', { source: 'test', tags: [] });
     const results = manager.searchMemory('sess-1', 'nomatch');
     expect(results).toHaveLength(0);
+  });
+
+  it('compressContext uses an honest extractive summary instead of a fake provider summary', () => {
+    const messages = Array.from({ length: 25 }, (_, index): Message => {
+      const role = index % 2 === 0 ? 'user' : 'assistant';
+      const text =
+        index === 2
+          ? 'Investigate OAuth callback regression and preserve session restore details.'
+          : `Conversation detail ${index}`;
+
+      return {
+        id: `msg-${index}`,
+        sessionId: 'sess-1',
+        role,
+        content: [{ type: 'text', text }],
+        timestamp: Date.UTC(2026, 0, 1, 0, index),
+      };
+    });
+
+    const result = manager.compressContext(messages);
+
+    expect(result.type).toBe('compressed');
+    expect(result.messages).toEqual(messages.slice(-20));
+    expect(result.summary).toContain('Extractive context summary:');
+    expect(result.summary).toContain('Messages summarized: 5');
+    expect(result.summary).toContain('Role counts:');
+    expect(result.summary).toContain('Investigate OAuth callback regression');
+    expect(result.summary).not.toContain('Previous conversation covered topics including');
   });
 });

@@ -759,6 +759,10 @@ npm run typecheck
 - `ImageProcessorTool.compare` n'utilise plus un placeholder metadata-only
   (`1.0`/`0.5`): la similarite vient maintenant d'une vraie comparaison pixel
   normalisee via `sharp`.
+- `Cowork MemoryManager` ne pretend plus produire un resume Claude quand le
+  contexte depasse le budget; la compression embarquee genere un resume
+  extractif explicite, borne et deterministe, sans masquer l'absence d'un
+  service de summarisation LLM.
 
 ## Blocage leve
 
