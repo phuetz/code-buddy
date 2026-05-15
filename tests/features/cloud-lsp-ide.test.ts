@@ -22,6 +22,79 @@ jest.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
+type CloudSession = import('../../src/cloud/cloud-sessions').CloudSession;
+type CloudSessionBackend = import('../../src/cloud/cloud-sessions').CloudSessionBackend;
+type CloudConfig = import('../../src/cloud/cloud-sessions').CloudConfig;
+
+function createFakeCloudBackend(): CloudSessionBackend {
+  const sessions = new Map<string, CloudSession>();
+  let counter = 0;
+
+  const clone = (session: CloudSession): CloudSession => ({ ...session });
+  const get = (id: string): CloudSession => {
+    const session = sessions.get(id);
+    if (!session) {
+      throw new Error(`Session not found: ${id}`);
+    }
+    return session;
+  };
+  const updateStatus = (id: string, status: CloudSession['status']): CloudSession => {
+    const session = get(id);
+    session.status = status;
+    session.lastActivity = Date.now();
+    return clone(session);
+  };
+  const createSession = async (
+    task: string,
+    options: Partial<CloudSession>,
+    config: CloudConfig,
+  ): Promise<CloudSession> => {
+    const now = Date.now();
+    const session: CloudSession = {
+      id: `cloud-${++counter}`,
+      status: 'running',
+      createdAt: now,
+      lastActivity: now,
+      task,
+      visibility: options.visibility ?? config.defaultVisibility,
+      repoAccess: options.repoAccess ?? false,
+      networkAccess: options.networkAccess ?? config.defaultNetworkAccess,
+      vmImage: options.vmImage,
+    };
+    sessions.set(session.id, session);
+    return clone(session);
+  };
+
+  return {
+    createSession,
+    pauseSession: async (id) => updateStatus(id, 'paused'),
+    resumeSession: async (id) => updateStatus(id, 'running'),
+    terminateSession: async (id) => updateStatus(id, 'completed'),
+    shareSession: async (id, visibility, config) => {
+      const session = get(id);
+      session.visibility = visibility;
+      session.lastActivity = Date.now();
+      return `${config.apiEndpoint}/sessions/${id}/share`;
+    },
+    teleportToLocal: async (session) => ({
+      success: true,
+      localSessionId: `local-${session.id}`,
+      filesTransferred: 0,
+      diffSummary: `Teleported session ${session.id} to local local-${session.id}`,
+    }),
+    pushToCloud: async (localSessionId, config) => createSession(
+      `Pushed from local session ${localSessionId}`,
+      { repoAccess: true },
+      config,
+    ),
+    syncState: async () => ({
+      conflicts: [],
+      merged: 0,
+    }),
+    getDiff: async (session) => `No changes between local and cloud for session ${session.id}`,
+  };
+}
+
 // ============================================================================
 // Feature 1: Cloud Web Sessions + Teleport
 // ============================================================================
@@ -34,7 +107,7 @@ describe('CloudSessionManager', () => {
     jest.resetModules();
     const mod = await import('../../src/cloud/cloud-sessions');
     CloudSessionManager = mod.CloudSessionManager;
-    manager = new CloudSessionManager();
+    manager = new CloudSessionManager({ backend: createFakeCloudBackend() });
   });
 
   it('should initialize with default config', () => {
@@ -47,8 +120,16 @@ describe('CloudSessionManager', () => {
     const custom = new CloudSessionManager({
       apiEndpoint: 'https://custom.api',
       defaultVisibility: 'team',
+      backend: createFakeCloudBackend(),
     });
     expect(custom).toBeDefined();
+  });
+
+  it('should require a real backend for cloud session creation', async () => {
+    const noBackend = new CloudSessionManager();
+    await expect(noBackend.createSession('Fix bug')).rejects.toThrow(
+      'Cloud sessions require a real cloud session backend'
+    );
   });
 
   it('should create a session with task', async () => {
@@ -212,7 +293,7 @@ describe('TeleportManager', () => {
     const mod = await import('../../src/cloud/cloud-sessions');
     CloudSessionManager = mod.CloudSessionManager;
     TeleportManager = mod.TeleportManager;
-    cloudManager = new CloudSessionManager();
+    cloudManager = new CloudSessionManager({ backend: createFakeCloudBackend() });
     teleport = new TeleportManager(cloudManager);
   });
 

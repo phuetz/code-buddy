@@ -6,7 +6,6 @@
  * teleporting (syncing state between local and cloud).
  */
 
-import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { URL_CONFIG } from '../config/constants.js';
 
@@ -28,6 +27,27 @@ export interface CloudConfig {
   defaultVisibility: 'private' | 'team' | 'public';
   defaultNetworkAccess: 'none' | 'limited' | 'full';
   allowedDomains: string[];
+  backend?: CloudSessionBackend;
+}
+
+export interface CloudSessionBackend {
+  createSession(task: string, options: Partial<CloudSession>, config: CloudConfig): Promise<CloudSession>;
+  pauseSession(id: string): Promise<CloudSession>;
+  resumeSession(id: string): Promise<CloudSession>;
+  terminateSession(id: string): Promise<CloudSession>;
+  shareSession(id: string, visibility: CloudSession['visibility'], config: CloudConfig): Promise<string>;
+  teleportToLocal(session: CloudSession): Promise<{
+    success: boolean;
+    localSessionId?: string;
+    filesTransferred?: number;
+    diffSummary?: string;
+  }>;
+  pushToCloud(localSessionId: string, config: CloudConfig): Promise<CloudSession>;
+  syncState(session: CloudSession): Promise<{
+    conflicts: string[];
+    merged: number;
+  }>;
+  getDiff(session: CloudSession): Promise<string>;
 }
 
 const DEFAULT_CONFIG: CloudConfig = {
@@ -40,10 +60,12 @@ const DEFAULT_CONFIG: CloudConfig = {
 export class CloudSessionManager {
   private config: CloudConfig;
   private sessions: Map<string, CloudSession>;
+  private backend?: CloudSessionBackend;
 
   constructor(config?: Partial<CloudConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.sessions = new Map();
+    this.backend = this.config.backend;
     logger.debug('CloudSessionManager initialized', { endpoint: this.config.apiEndpoint });
   }
 
@@ -52,31 +74,16 @@ export class CloudSessionManager {
       throw new Error('Task description is required');
     }
 
-    const now = Date.now();
-    const session: CloudSession = {
-      id: randomUUID(),
-      status: 'starting',
-      createdAt: now,
-      lastActivity: now,
-      task: task.trim(),
+    const backend = this.requireBackend('create cloud session');
+    const session = await backend.createSession(task.trim(), {
       visibility: options?.visibility ?? this.config.defaultVisibility,
       repoAccess: options?.repoAccess ?? false,
       networkAccess: options?.networkAccess ?? this.config.defaultNetworkAccess,
       vmImage: options?.vmImage,
       ...options,
-      // Ensure these are not overridden by options spread
-    };
-    // Re-apply generated fields
-    session.id = session.id || randomUUID();
-    session.createdAt = now;
-    session.lastActivity = now;
-    session.status = 'starting';
+    }, this.config);
 
     this.sessions.set(session.id, session);
-
-    // Simulate startup transition
-    session.status = 'running';
-    session.lastActivity = Date.now();
 
     logger.info('Cloud session created', { id: session.id, task });
     return { ...session };
@@ -101,8 +108,8 @@ export class CloudSessionManager {
       logger.warn('Cannot pause: session not running', { id, status: session.status });
       return false;
     }
-    session.status = 'paused';
-    session.lastActivity = Date.now();
+    const updated = await this.requireBackend('pause cloud session').pauseSession(id);
+    this.sessions.set(id, updated);
     logger.info('Session paused', { id });
     return true;
   }
@@ -117,8 +124,8 @@ export class CloudSessionManager {
       logger.warn('Cannot resume: session not paused', { id, status: session.status });
       return false;
     }
-    session.status = 'running';
-    session.lastActivity = Date.now();
+    const updated = await this.requireBackend('resume cloud session').resumeSession(id);
+    this.sessions.set(id, updated);
     logger.info('Session resumed', { id });
     return true;
   }
@@ -133,8 +140,8 @@ export class CloudSessionManager {
       logger.warn('Cannot terminate: session already ended', { id, status: session.status });
       return false;
     }
-    session.status = 'completed';
-    session.lastActivity = Date.now();
+    const updated = await this.requireBackend('terminate cloud session').terminateSession(id);
+    this.sessions.set(id, updated);
     logger.info('Session terminated', { id });
     return true;
   }
@@ -144,10 +151,9 @@ export class CloudSessionManager {
     if (!session) {
       throw new Error(`Session not found: ${id}`);
     }
+    const shareUrl = await this.requireBackend('share cloud session').shareSession(id, visibility, this.config);
     session.visibility = visibility;
     session.lastActivity = Date.now();
-
-    const shareUrl = `${this.config.apiEndpoint}/sessions/${id}/share`;
     logger.info('Session shared', { id, visibility, url: shareUrl });
     return shareUrl;
   }
@@ -155,6 +161,52 @@ export class CloudSessionManager {
   async sendToCloud(task: string): Promise<CloudSession> {
     logger.info('Sending task to cloud', { task });
     return this.createSession(task, { networkAccess: 'full' });
+  }
+
+  async teleportToLocal(sessionId: string): Promise<{
+    success: boolean;
+    localSessionId?: string;
+    filesTransferred?: number;
+    diffSummary?: string;
+  }> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      logger.warn('Teleport failed: session not found', { sessionId });
+      return { success: false };
+    }
+    if (session.status !== 'running' && session.status !== 'paused') {
+      logger.warn('Teleport failed: session not in teleportable state', { sessionId, status: session.status });
+      return { success: false };
+    }
+
+    return this.requireBackend('teleport cloud session').teleportToLocal({ ...session });
+  }
+
+  async pushLocalSessionToCloud(localSessionId: string): Promise<CloudSession> {
+    const session = await this.requireBackend('push local session to cloud').pushToCloud(localSessionId, this.config);
+    this.sessions.set(session.id, session);
+    return { ...session };
+  }
+
+  async syncState(sessionId: string): Promise<{
+    conflicts: string[];
+    merged: number;
+  }> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    return this.requireBackend('sync cloud session state').syncState({ ...session });
+  }
+
+  async getDiff(sessionId: string): Promise<string> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    return this.requireBackend('diff cloud session').getDiff({ ...session });
   }
 
   getActiveCount(): number {
@@ -169,6 +221,16 @@ export class CloudSessionManager {
 
   getTotalCount(): number {
     return this.sessions.size;
+  }
+
+  private requireBackend(operation: string): CloudSessionBackend {
+    if (!this.backend) {
+      throw new Error(
+        `Cloud sessions require a real cloud session backend to ${operation}. ` +
+        'Configure CloudConfig.backend before enabling Cloud Web Sessions or Teleport.'
+      );
+    }
+    return this.backend;
   }
 }
 
@@ -186,25 +248,8 @@ export class TeleportManager {
     filesTransferred?: number;
     diffSummary?: string;
   }> {
-    const session = this.cloudManager.getSession(sessionId);
-    if (!session) {
-      logger.warn('Teleport failed: session not found', { sessionId });
-      return { success: false };
-    }
-    if (session.status !== 'running' && session.status !== 'paused') {
-      logger.warn('Teleport failed: session not in teleportable state', { sessionId, status: session.status });
-      return { success: false };
-    }
-
-    const localSessionId = randomUUID();
-    logger.info('Teleporting session to local', { sessionId, localSessionId });
-
-    return {
-      success: true,
-      localSessionId,
-      filesTransferred: 0,
-      diffSummary: `Teleported session ${sessionId} to local ${localSessionId}`,
-    };
+    logger.info('Teleporting session to local', { sessionId });
+    return this.cloudManager.teleportToLocal(sessionId);
   }
 
   async pushToCloud(localSessionId: string): Promise<CloudSession> {
@@ -213,36 +258,19 @@ export class TeleportManager {
     }
 
     logger.info('Pushing local session to cloud', { localSessionId });
-    const session = await this.cloudManager.createSession(
-      `Pushed from local session ${localSessionId}`,
-      { repoAccess: true }
-    );
-    return session;
+    return this.cloudManager.pushLocalSessionToCloud(localSessionId);
   }
 
   async syncState(sessionId: string): Promise<{
     conflicts: string[];
     merged: number;
   }> {
-    const session = this.cloudManager.getSession(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
     logger.info('Syncing state', { sessionId });
-    return {
-      conflicts: [],
-      merged: 0,
-    };
+    return this.cloudManager.syncState(sessionId);
   }
 
   async getDiff(sessionId: string): Promise<string> {
-    const session = this.cloudManager.getSession(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
     logger.info('Getting diff', { sessionId });
-    return `No changes between local and cloud for session ${sessionId}`;
+    return this.cloudManager.getDiff(sessionId);
   }
 }

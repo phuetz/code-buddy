@@ -612,6 +612,9 @@ npm run typecheck
   live n'est branche. `VoiceToCodePipeline` exige maintenant une
   `VoiceAudioSource` reelle; sans elle, la commande echoue clairement et le
   statut reste `inactive`.
+- `CloudSessionManager` et `TeleportManager` ne simulent plus des VM cloud, des
+  liens partageables ou des teleports en memoire locale. Ces chemins exigent un
+  backend cloud reel injecte; les fakes restent limites aux tests de contrat.
 
 ## Blocage leve
 
