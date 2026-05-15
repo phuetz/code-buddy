@@ -393,6 +393,9 @@ npx eslint src/utils/tool-result-content.ts src/agent/multi-agent/base-agent.ts 
 
 npm run typecheck
 # passed
+
+npm run validate
+# passed after shared tool-result formatter/runtimes cleanup; remaining warnings are historical or expected by tests
 ```
 
 ## Debloque pendant la reprise
