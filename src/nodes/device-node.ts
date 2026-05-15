@@ -393,16 +393,31 @@ export class DeviceNodeManager {
 
     const platform = this.toPlatform(device.type);
     const commands = getPlatformCommands(platform);
-    if (!commands) return null;
+    const locationCommand = commands?.getLocation?.();
+    if (!locationCommand) {
+      logger.warn(`Device ${deviceId} has no implemented location command for platform ${platform}`);
+      return null;
+    }
 
-    const result = await transport.execute(commands.getLocation());
-    device.lastSeen = Date.now();
+    const result = await transport.execute(locationCommand);
+    if (result.exitCode !== 0) {
+      logger.warn(`Location lookup failed on ${deviceId}: ${result.stderr}`);
+      return null;
+    }
 
     try {
-      const parsed = JSON.parse(result.stdout);
-      return { lat: parsed.lat || 0, lon: parsed.lon || 0 };
+      const parsed = JSON.parse(result.stdout) as { lat?: unknown; lon?: unknown; latitude?: unknown; longitude?: unknown };
+      const lat = Number(parsed.lat ?? parsed.latitude);
+      const lon = Number(parsed.lon ?? parsed.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        logger.warn(`Location lookup returned invalid coordinates for ${deviceId}`);
+        return null;
+      }
+      device.lastSeen = Date.now();
+      return { lat, lon };
     } catch {
-      return { lat: 0, lon: 0 };
+      logger.warn(`Location lookup returned non-JSON output for ${deviceId}`);
+      return null;
     }
   }
 
@@ -412,8 +427,12 @@ export class DeviceNodeManager {
       logger.warn(`Device ${deviceId} does not support notifications`);
       return false;
     }
-    logger.info(`Sending notification to ${deviceId}: ${title}`);
-    return true;
+    logger.warn('Device notifications are not implemented through DeviceNodeManager transports', {
+      deviceId,
+      title,
+      body,
+    });
+    return false;
   }
 
   async systemRun(deviceId: string, command: string): Promise<ExecuteResult | null> {

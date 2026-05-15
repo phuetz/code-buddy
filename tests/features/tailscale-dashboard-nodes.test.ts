@@ -428,9 +428,20 @@ describe('DeviceNodeManager', () => {
 
   it('should get location', async () => {
     const mgr = DeviceNodeManager.getInstance();
-    await pairWithCaps(mgr, 'loc1', 'Location Device', 'adb', ['location']);
+    await pairWithCaps(mgr, 'loc1', 'Location Device', 'ssh', ['location']);
+    mockTransport.execute.mockResolvedValueOnce({ stdout: '{"lat":48.8566,"lon":2.3522}', stderr: '', exitCode: 0 });
+
     const coords = await mgr.getLocation('loc1');
-    expect(coords).not.toBeNull();
+
+    expect(coords).toEqual({ lat: 48.8566, lon: 2.3522 });
+  });
+
+  it('should return null for invalid location output instead of fabricated coordinates', async () => {
+    const mgr = DeviceNodeManager.getInstance();
+    await pairWithCaps(mgr, 'badloc', 'Bad Location', 'ssh', ['location']);
+    mockTransport.execute.mockResolvedValueOnce({ stdout: 'not json', stderr: '', exitCode: 0 });
+
+    expect(await mgr.getLocation('badloc')).toBeNull();
   });
 
   it('should return null for location without capability', async () => {
@@ -439,10 +450,10 @@ describe('DeviceNodeManager', () => {
     expect(await mgr.getLocation('noloc')).toBeNull();
   });
 
-  it('should send notification', async () => {
+  it('should not report notification delivery without an implemented transport action', async () => {
     const mgr = DeviceNodeManager.getInstance();
     await pairWithCaps(mgr, 'notif1', 'Notifier', 'adb', ['notifications']);
-    expect(mgr.sendNotification('notif1', 'Hello', 'World')).toBe(true);
+    expect(mgr.sendNotification('notif1', 'Hello', 'World')).toBe(false);
   });
 
   it('should return false for notification without capability', async () => {

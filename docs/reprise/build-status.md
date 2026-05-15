@@ -243,6 +243,15 @@ npx eslint src/nodes/device-node.ts tests/features/tailscale-dashboard-nodes.tes
 
 npm run typecheck
 # passed
+
+npm test -- tests/features/tailscale-dashboard-nodes.test.ts
+# 74 tests passed after device location/notification fake-success cleanup
+
+npx eslint src/nodes/device-node.ts src/nodes/platform-commands.ts tests/features/tailscale-dashboard-nodes.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -463,6 +472,9 @@ npm run typecheck
 - `DeviceNodeManager.pairDevice()` ne marque plus un appareil comme paire quand
   la connexion SSH/ADB/local echoue et n'injecte plus `system_run` comme
   capacite de secours. Le pairing echoue proprement et ne persiste pas le node.
+- Les actions device ne fabriquent plus de localisation `{lat:0, lon:0}` quand
+  la sortie n'est pas exploitable, et `sendNotification()` ne pretend plus une
+  livraison reussie sans implementation transport branchee.
 
 ## Blocage leve
 

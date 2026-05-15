@@ -17,7 +17,7 @@ export interface PlatformCommands {
   /** Record the screen */
   screenRecord(outputPath: string, durationSec: number): string;
   /** Get device location (if available) */
-  getLocation(): string;
+  getLocation?: () => string;
 }
 
 // ============================================================================
@@ -35,7 +35,7 @@ export const MacOSCommands: PlatformCommands = {
     return `screencapture -V ${durationSec} ${outputPath}`;
   },
   getLocation(): string {
-    return `CoreLocationCLI 2>/dev/null || echo '{"lat":0,"lon":0}'`;
+    return `CoreLocationCLI`;
   },
 };
 
@@ -53,9 +53,6 @@ export const LinuxCommands: PlatformCommands = {
   screenRecord(outputPath: string, durationSec: number): string {
     return `ffmpeg -y -f x11grab -t ${durationSec} -i :0.0 ${outputPath} 2>/dev/null`;
   },
-  getLocation(): string {
-    return `echo '{"lat":0,"lon":0}'`;
-  },
 };
 
 // ============================================================================
@@ -72,9 +69,6 @@ export const AndroidCommands: PlatformCommands = {
   },
   screenRecord(outputPath: string, durationSec: number): string {
     return `screenrecord --time-limit ${durationSec} ${outputPath}`;
-  },
-  getLocation(): string {
-    return `dumpsys location | grep 'last known' | head -1`;
   },
 };
 
