@@ -50,6 +50,28 @@ export interface ExecutionGroup {
  */
 export type ToolExecutor = (call: ToolCall) => Promise<unknown>;
 
+function isFailedToolResult(value: unknown): value is { success: false; error?: unknown; output?: unknown } {
+  return typeof value === "object" &&
+    value !== null &&
+    "success" in value &&
+    (value as { success?: unknown }).success === false;
+}
+
+function formatToolFailure(value: { error?: unknown; output?: unknown }): string {
+  if (value.error !== undefined) {
+    return value.error instanceof Error ? value.error.message : String(value.error);
+  }
+  if (value.output !== undefined) {
+    if (typeof value.output === "string") return value.output;
+    try {
+      return JSON.stringify(value.output);
+    } catch {
+      return String(value.output);
+    }
+  }
+  return "Tool returned success=false";
+}
+
 /**
  * Execution options
  */
@@ -317,6 +339,9 @@ export class ParallelExecutor extends EventEmitter {
 
         // Execute with timeout
         const output = await this.executeWithTimeout(call);
+        if (isFailedToolResult(output)) {
+          throw new Error(formatToolFailure(output));
+        }
 
         const endTime = Date.now();
         const result: ToolResult = {

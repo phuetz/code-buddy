@@ -753,6 +753,9 @@ npm run typecheck
 - L'adaptateur `batch_tools` ne renvoie plus `success=true` quand aucun appel
   n'a pu etre execute ou quand tous les appels delegues echouent; les lots
   partiels restent verts avec les echecs detailles dans la sortie.
+- `optimization/parallel-executor` ne transforme plus un resultat outil resolu
+  `{ success:false }` en appel parallele reussi; l'erreur est maintenant
+  propagee dans le resultat de l'appel et comptee comme echec.
 
 ## Blocage leve
 
