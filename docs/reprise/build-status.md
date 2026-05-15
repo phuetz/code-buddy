@@ -680,6 +680,9 @@ npm run typecheck
 - Le `RateLimiter` reprend maintenant correctement apres le timeout d'une
   requete en file: si l'entree expire pendant l'attente de tokens, le processeur
   de queue ne reste plus accroche a une requete deja retiree.
+- Les checks scripts d'erreur `sanitizeFilePath` / `normalizeBaseURL` et le
+  check `ContextManagerV3.dispose()` ne passent plus sur n'importe quelle
+  exception ou absence de crash; ils valident maintenant le signal attendu.
 
 ## Blocage leve
 

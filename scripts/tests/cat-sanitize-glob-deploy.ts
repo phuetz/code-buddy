@@ -36,7 +36,7 @@ export function cat81Sanitize(): TestDef[] {
           return { pass: false, metadata: { reason: 'should throw' } };
         } catch (e: any) {
           return {
-            pass: true,
+            pass: e.message.includes('dangerous pattern'),
             metadata: { error: e.message },
           };
         }
@@ -263,7 +263,7 @@ export function cat83BaseURL(): TestDef[] {
           return { pass: false };
         } catch (e: any) {
           return {
-            pass: true,
+            pass: e.message.includes('valid URL'),
             metadata: { error: e.message },
           };
         }

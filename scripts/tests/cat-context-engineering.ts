@@ -430,8 +430,12 @@ export function cat80ContextManagerV3(): TestDef[] {
       fn: async () => {
         const { createContextManager } = await import('../../src/context/context-manager-v3.js');
         const mgr = createContextManager('gemini-2.5-flash');
-        mgr.dispose();
-        return { pass: true };
+        const stats = mgr.getStats([]);
+        const disposeResult = mgr.dispose();
+        return {
+          pass: stats.messageCount === 0 && stats.totalTokens >= 0 && disposeResult === undefined,
+          metadata: { messageCount: stats.messageCount, totalTokens: stats.totalTokens },
+        };
       },
     },
   ];
