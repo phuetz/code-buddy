@@ -71,7 +71,7 @@ export class HookRunner {
 
   /**
    * Enable or disable the hook runner.
-   * When disabled, `run()` returns a successful no-op result.
+   * When disabled, `run()` returns an explicit skipped result.
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -110,7 +110,12 @@ export class HookRunner {
     event: ExtendedHookEvent,
     context: Partial<ExtendedHookContext>
   ): Promise<ExtendedHookResult> {
-    if (!this.enabled) return { success: true };
+    if (!this.enabled) {
+      return {
+        success: true,
+        output: 'Hook runner disabled; no hooks executed.',
+      };
+    }
 
     const fullContext: ExtendedHookContext = {
       event,
@@ -127,7 +132,12 @@ export class HookRunner {
       return true;
     });
 
-    if (matching.length === 0) return { success: true };
+    if (matching.length === 0) {
+      return {
+        success: true,
+        output: `No hooks registered for event: ${event}.`,
+      };
+    }
 
     let combined: ExtendedHookResult = { success: true };
 

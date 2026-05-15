@@ -1099,6 +1099,9 @@ npm run typecheck
   au runtime de test.
 - Les transports/backends `memory` qui simulaient email, capture ecran et
   registry de skills sont maintenant bloques hors runtime de test.
+- Les hook runners ne renvoient plus un succes vide quand ils sont desactives
+  ou sans hook correspondant; ils indiquent explicitement qu'aucun hook n'a ete
+  execute.
 
 ## Blocage leve
 

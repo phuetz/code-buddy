@@ -148,7 +148,10 @@ export class HookManager {
     context: Partial<HookContext>
   ): Promise<HookResult> {
     if (!this.enabled) {
-      return { success: true };
+      return {
+        success: true,
+        output: "Hook manager disabled; no hooks executed.",
+      };
     }
 
     const fullContext: HookContext = {
@@ -160,7 +163,10 @@ export class HookManager {
     const hooks = this.getHooksForEvent(event);
 
     if (hooks.length === 0) {
-      return { success: true };
+      return {
+        success: true,
+        output: `No hooks registered for event: ${event}.`,
+      };
     }
 
     let combinedResult: HookResult = { success: true };
