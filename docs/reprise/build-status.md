@@ -1,4 +1,4 @@
-# Build status - 2026-05-14
+# Build status - 2026-05-15
 
 Etat mesure dans le worktree `D:\CascadeProjects\_audit-code-buddy-main`, branche
 `codex/reprise-stabilisation`.
@@ -255,6 +255,15 @@ npx eslint src/nodes/device-node.ts src/nodes/platform-commands.ts src/nodes/tra
 
 npm run typecheck
 # passed
+
+npm test -- tests/desktop-automation/system-control.test.ts
+# 10 tests passed after SystemControl brightness/volume/display fake-default cleanup
+
+npx eslint src/desktop-automation/system-control.ts tests/desktop-automation/system-control.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -482,6 +491,10 @@ npm run typecheck
   generiques tant que ces actions ne sont pas branchees cote device manager, et
   `listCameras()` retourne une liste vide au lieu d'inventer les cameras
   `back/front`.
+- `SystemControl` ne fabrique plus des valeurs systeme confortables quand les
+  commandes natives echouent: plus de luminosite `100%`, volume Windows `50%`,
+  ni ecran primaire `1920x1080` invente. Les lectures/ecritures non disponibles
+  echouent explicitement ou retournent une liste d'ecrans vide.
 
 ## Blocage leve
 

@@ -109,6 +109,22 @@ function getPlatform(): Platform {
   return process.platform as Platform;
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function parseRequiredNumber(raw: string, context: string): number {
+  const value = Number.parseFloat(raw.trim());
+  if (!Number.isFinite(value)) {
+    throw new Error(`Unable to parse ${context}: ${JSON.stringify(raw.trim())}`);
+  }
+  return value;
+}
+
+function isPositiveInteger(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
+}
+
 // ============================================================================
 // System Control Class
 // ============================================================================
@@ -408,14 +424,15 @@ export class SystemControl extends EventEmitter {
         `osascript -e 'output muted of (get volume settings)'`,
         { encoding: 'utf-8' }
       );
+      const level = parseRequiredNumber(output, 'macOS volume');
 
       return {
-        level: parseInt(output.trim(), 10),
+        level,
         muted: mutedOutput.trim() === 'true',
       };
     } catch (error) {
       logger.error('Failed to get macOS volume', { error });
-      return { level: 0, muted: false };
+      throw new Error(`Failed to get macOS volume: ${getErrorMessage(error)}`);
     }
   }
 
@@ -433,10 +450,10 @@ export class SystemControl extends EventEmitter {
       const output = execSync(`brightness -l 2>/dev/null | grep 'display' | head -1 | awk '{print $4}'`, {
         encoding: 'utf-8',
       });
-      const level = parseFloat(output.trim()) * 100;
+      const level = parseRequiredNumber(output, 'macOS brightness') * 100;
       return { level: Math.round(level) };
-    } catch {
-      return { level: 100 }; // Default fallback
+    } catch (error) {
+      throw new Error(`Failed to get macOS brightness: ${getErrorMessage(error)}`);
     }
   }
 
@@ -444,8 +461,8 @@ export class SystemControl extends EventEmitter {
     try {
       const brightnessValue = level / 100;
       execSync(`brightness ${brightnessValue} 2>/dev/null`);
-    } catch {
-      logger.warn('brightness command not available on macOS');
+    } catch (error) {
+      throw new Error(`Failed to set macOS brightness: ${getErrorMessage(error)}`);
     }
   }
 
@@ -492,13 +509,18 @@ export class SystemControl extends EventEmitter {
         const ndrvs = gpu.spdisplays_ndrvs || [];
         for (let i = 0; i < ndrvs.length; i++) {
           const display = ndrvs[i];
-          const resolution = display._spdisplays_resolution || '1920 x 1080';
+          const resolution = display._spdisplays_resolution || '';
           const [width, height] = resolution.split(' x ').map((s: string) => parseInt(s, 10));
+
+          if (!isPositiveInteger(width) || !isPositiveInteger(height)) {
+            logger.debug('Skipping macOS display with invalid resolution', { display });
+            continue;
+          }
 
           displays.push({
             id: `display-${i}`,
             name: display._name || `Display ${i + 1}`,
-            resolution: { width: width || 1920, height: height || 1080 },
+            resolution: { width, height },
             refreshRate: 60,
             primary: i === 0,
             connected: true,
@@ -506,9 +528,10 @@ export class SystemControl extends EventEmitter {
         }
       }
 
-      return displays.length > 0 ? displays : [{ id: 'display-0', name: 'Primary', resolution: { width: 1920, height: 1080 }, refreshRate: 60, primary: true, connected: true }];
-    } catch {
-      return [{ id: 'display-0', name: 'Primary', resolution: { width: 1920, height: 1080 }, refreshRate: 60, primary: true, connected: true }];
+      return displays;
+    } catch (error) {
+      logger.warn('Failed to get macOS displays', { error });
+      return [];
     }
   }
 
@@ -570,13 +593,15 @@ export class SystemControl extends EventEmitter {
         muted = muteOutput.includes('off');
       }
 
+      const level = parseRequiredNumber(output, 'Linux volume');
+
       return {
-        level: parseInt(output.trim(), 10) || 0,
+        level,
         muted,
       };
     } catch (error) {
       logger.error('Failed to get Linux volume', { error });
-      return { level: 0, muted: false };
+      throw new Error(`Failed to get Linux volume: ${getErrorMessage(error)}`);
     }
   }
 
@@ -598,38 +623,50 @@ export class SystemControl extends EventEmitter {
 
   private async getLinuxBrightness(): Promise<BrightnessInfo> {
     try {
-      const maxBrightness = parseInt(
-        execSync(`cat /sys/class/backlight/*/max_brightness 2>/dev/null | head -1`, { encoding: 'utf-8' }).trim(),
-        10
+      const maxBrightness = parseRequiredNumber(
+        execSync(`cat /sys/class/backlight/*/max_brightness 2>/dev/null | head -1`, { encoding: 'utf-8' }),
+        'Linux max brightness'
       );
-      const currentBrightness = parseInt(
-        execSync(`cat /sys/class/backlight/*/brightness 2>/dev/null | head -1`, { encoding: 'utf-8' }).trim(),
-        10
+      const currentBrightness = parseRequiredNumber(
+        execSync(`cat /sys/class/backlight/*/brightness 2>/dev/null | head -1`, { encoding: 'utf-8' }),
+        'Linux current brightness'
       );
+
+      if (maxBrightness <= 0) {
+        throw new Error('Linux max brightness is zero');
+      }
 
       const level = Math.round((currentBrightness / maxBrightness) * 100);
       return { level };
-    } catch {
-      return { level: 100 };
+    } catch (error) {
+      throw new Error(`Failed to get Linux brightness: ${getErrorMessage(error)}`);
     }
   }
 
   private async setLinuxBrightness(level: number): Promise<void> {
+    let xrandrError: unknown;
     try {
       // Try xrandr first
       const output = execSync(`xrandr --query | grep ' connected' | awk '{print $1}' | head -1`, {
         encoding: 'utf-8',
       });
       const display = output.trim();
-      if (display && /^[a-zA-Z0-9\-_]+$/.test(display)) {
-        execFileSync('xrandr', ['--output', display, '--brightness', String(level / 100)]);
+      if (!display) {
+        throw new Error('No connected display reported by xrandr');
       }
-    } catch {
+      if (!/^[a-zA-Z0-9\-_]+$/.test(display)) {
+        throw new Error(`Unexpected xrandr display name: ${display}`);
+      }
+      execFileSync('xrandr', ['--output', display, '--brightness', String(level / 100)]);
+      return;
+    } catch (error) {
+      xrandrError = error;
       try {
         // Try brightnessctl
         execSync(`brightnessctl set ${level}%`);
-      } catch {
-        logger.warn('No brightness control available on Linux');
+      } catch (brightnessError) {
+        logger.warn('No brightness control available on Linux', { xrandrError, brightnessError });
+        throw new Error(`Failed to set Linux brightness: ${getErrorMessage(brightnessError)}`);
       }
     }
   }
@@ -712,9 +749,10 @@ export class SystemControl extends EventEmitter {
         }
       }
 
-      return displays.length > 0 ? displays : [{ id: 'display-0', name: 'Primary', resolution: { width: 1920, height: 1080 }, refreshRate: 60, primary: true, connected: true }];
-    } catch {
-      return [{ id: 'display-0', name: 'Primary', resolution: { width: 1920, height: 1080 }, refreshRate: 60, primary: true, connected: true }];
+      return displays;
+    } catch (error) {
+      logger.warn('Failed to get Linux displays', { error });
+      return [];
     }
   }
 
@@ -772,14 +810,14 @@ export class SystemControl extends EventEmitter {
         `powershell -Command "(Get-AudioDevice -PlaybackVolume)"`,
         { encoding: 'utf-8' }
       );
+      const level = parseRequiredNumber(output, 'Windows volume');
 
       return {
-        level: parseInt(output.trim(), 10) || 0,
+        level,
         muted: false, // Would need additional PowerShell to check
       };
-    } catch {
-      // Fallback using nircmd if available
-      return { level: 50, muted: false };
+    } catch (error) {
+      throw new Error(`Failed to get Windows volume: ${getErrorMessage(error)}`);
     }
   }
 
@@ -806,9 +844,9 @@ export class SystemControl extends EventEmitter {
         `powershell -Command "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness"`,
         { encoding: 'utf-8' }
       );
-      return { level: parseInt(output.trim(), 10) || 100 };
-    } catch {
-      return { level: 100 };
+      return { level: parseRequiredNumber(output, 'Windows brightness') };
+    } catch (error) {
+      throw new Error(`Failed to get Windows brightness: ${getErrorMessage(error)}`);
     }
   }
 
@@ -817,8 +855,8 @@ export class SystemControl extends EventEmitter {
       execSync(
         `powershell -Command "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1,${level})"`
       );
-    } catch {
-      logger.warn('Failed to set Windows brightness');
+    } catch (error) {
+      throw new Error(`Failed to set Windows brightness: ${getErrorMessage(error)}`);
     }
   }
 
@@ -869,19 +907,28 @@ export class SystemControl extends EventEmitter {
       const data = JSON.parse(output);
       const displays = Array.isArray(data) ? data : [data];
 
-      return displays.map((d, i) => ({
-        id: `display-${i}`,
-        name: d.Name || `Display ${i + 1}`,
-        resolution: {
-          width: d.CurrentHorizontalResolution || 1920,
-          height: d.CurrentVerticalResolution || 1080,
-        },
-        refreshRate: d.CurrentRefreshRate || 60,
-        primary: i === 0,
-        connected: true,
-      }));
-    } catch {
-      return [{ id: 'display-0', name: 'Primary', resolution: { width: 1920, height: 1080 }, refreshRate: 60, primary: true, connected: true }];
+      return displays.flatMap((d, i) => {
+        const width = Number(d.CurrentHorizontalResolution);
+        const height = Number(d.CurrentVerticalResolution);
+        const refreshRate = Number(d.CurrentRefreshRate);
+
+        if (!isPositiveInteger(width) || !isPositiveInteger(height)) {
+          logger.debug('Skipping Windows display with invalid resolution', { display: d });
+          return [];
+        }
+
+        return [{
+          id: `display-${i}`,
+          name: d.Name || `Display ${i + 1}`,
+          resolution: { width, height },
+          refreshRate: isPositiveInteger(refreshRate) ? refreshRate : 0,
+          primary: i === 0,
+          connected: true,
+        }];
+      });
+    } catch (error) {
+      logger.warn('Failed to get Windows displays', { error });
+      return [];
     }
   }
 
