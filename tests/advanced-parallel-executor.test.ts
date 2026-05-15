@@ -82,6 +82,46 @@ describe('AdvancedParallelExecutor', () => {
       expect(results[0].filesModified).toEqual(['src/example.ts']);
     });
 
+    it('fails runner success with no output and no file changes', async () => {
+      const runnerExecutor = new AdvancedParallelExecutor({
+        maxConcurrent: 1,
+        useWorktrees: false,
+        agentRunner: async () => ({
+          success: true,
+          output: '   ',
+          filesModified: [],
+        }),
+      });
+
+      const results = await runnerExecutor.executeParallel([
+        { id: 'agent1', name: 'Agent 1', task: 'Do task 1' },
+      ]);
+
+      expect(results[0].success).toBe(false);
+      expect(results[0].output).toBe('Parallel agent runner returned no output or file changes.');
+      expect(results[0].error).toBe('Parallel agent runner returned no output or file changes.');
+    });
+
+    it('keeps runner success with file changes visible when output is empty', async () => {
+      const runnerExecutor = new AdvancedParallelExecutor({
+        maxConcurrent: 1,
+        useWorktrees: false,
+        agentRunner: async () => ({
+          success: true,
+          output: '',
+          filesModified: ['src/example.ts'],
+        }),
+      });
+
+      const results = await runnerExecutor.executeParallel([
+        { id: 'agent1', name: 'Agent 1', task: 'Do task 1' },
+      ]);
+
+      expect(results[0].success).toBe(true);
+      expect(results[0].output).toBe('Agent completed without textual output; modified 1 file(s).');
+      expect(results[0].filesModified).toEqual(['src/example.ts']);
+    });
+
     it('should handle priority ordering', async () => {
       const tasks = [
         { id: 'low', name: 'Low Priority', task: 'Task', priority: 1 },

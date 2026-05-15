@@ -890,6 +890,9 @@ npm run typecheck
 - Le gestionnaire de taches de fond CLI ne renvoie plus `''` pour des cas
   differents comme tache inconnue, succes silencieux ou echec sans sortie; ces
   etats ont maintenant des messages distincts.
+- `AdvancedParallelExecutor` ne considere plus un runner `success=true` sans
+  sortie ni fichiers modifies comme un vrai succes, et les erreurs/timeout sans
+  sortie gardent maintenant un `output` exploitable pour les agregateurs.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

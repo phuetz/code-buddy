@@ -789,9 +789,34 @@ describe('AdvancedParallelExecutor (Multi-Agent)', () => {
         result: expect.objectContaining({
           agentId: 'agent-1',
           success: false,
+          output: expect.stringContaining('No parallel agent runner configured'),
           error: expect.stringContaining('No parallel agent runner configured'),
         }),
       });
+    });
+
+    it('does not accept empty successful runner output without file changes', async () => {
+      const runnerExecutor = new AdvancedParallelExecutor({
+        maxConcurrent: 1,
+        useWorktrees: false,
+        agentRunner: async () => ({
+          success: true,
+          output: '',
+          filesModified: [],
+        }),
+      });
+
+      const results = await runnerExecutor.executeParallel([
+        { id: 'agent-1', name: 'Agent', task: 'Task' },
+      ]);
+
+      expect(results[0]).toEqual(
+        expect.objectContaining({
+          success: false,
+          output: 'Parallel agent runner returned no output or file changes.',
+          error: 'Parallel agent runner returned no output or file changes.',
+        })
+      );
     });
 
     it('should batch tasks when exceeding maxConcurrent', async () => {

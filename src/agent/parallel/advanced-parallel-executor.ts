@@ -79,6 +79,11 @@ const DEFAULT_CONFIG: ParallelExecutionConfig = {
   workspaceRoot: process.cwd(),
 };
 
+const NO_RUNNER_ERROR =
+  'No parallel agent runner configured; AdvancedParallelExecutor cannot execute real agent tasks yet.';
+const EMPTY_SUCCESS_ERROR = 'Parallel agent runner returned no output or file changes.';
+const FAILED_WITHOUT_OUTPUT_ERROR = 'Parallel agent runner failed without output.';
+
 /**
  * Advanced Parallel Agent Executor
  */
@@ -192,16 +197,17 @@ export class AdvancedParallelExecutor extends EventEmitter {
 
       // Execute agent task
       const result = await this.runAgentTask(task, workdir);
+      const normalizedResult = this.normalizeRunnerResult(result);
 
       const agentResult: AgentResult = {
         agentId: task.id,
         task: task.task,
-        success: result.success,
-        output: result.output,
-        error: result.error,
+        success: normalizedResult.success,
+        output: normalizedResult.output,
+        error: normalizedResult.error,
         duration: Date.now() - startTime,
-        tokensUsed: result.tokensUsed || 0,
-        filesModified: result.filesModified || [],
+        tokensUsed: normalizedResult.tokensUsed || 0,
+        filesModified: normalizedResult.filesModified || [],
         worktree: worktree?.path,
       };
 
@@ -216,7 +222,7 @@ export class AdvancedParallelExecutor extends EventEmitter {
         agentId: task.id,
         task: task.task,
         success: false,
-        output: '',
+        output: errorMessage,
         error: errorMessage,
         duration: Date.now() - startTime,
         tokensUsed: 0,
@@ -241,9 +247,8 @@ export class AdvancedParallelExecutor extends EventEmitter {
     if (!this.config.agentRunner) {
       return {
         success: false,
-        output: '',
-        error:
-          'No parallel agent runner configured; AdvancedParallelExecutor cannot execute real agent tasks yet.',
+        output: NO_RUNNER_ERROR,
+        error: NO_RUNNER_ERROR,
       };
     }
 
@@ -258,7 +263,7 @@ export class AdvancedParallelExecutor extends EventEmitter {
             resolve({
               success: false,
               error: 'Task timed out',
-              output: '',
+              output: 'Task timed out',
             });
           }, timeout);
         }),
@@ -268,6 +273,37 @@ export class AdvancedParallelExecutor extends EventEmitter {
         clearTimeout(timer);
       }
     }
+  }
+
+  private normalizeRunnerResult(result: AgentRunnerResult): AgentRunnerResult {
+    const output = result.output?.trim() ?? '';
+    const filesModified = result.filesModified || [];
+
+    if (result.success && output.length === 0) {
+      if (filesModified.length > 0) {
+        return {
+          ...result,
+          output: `Agent completed without textual output; modified ${filesModified.length} file(s).`,
+        };
+      }
+
+      return {
+        ...result,
+        success: false,
+        output: result.error?.trim() || EMPTY_SUCCESS_ERROR,
+        error: result.error?.trim() || EMPTY_SUCCESS_ERROR,
+      };
+    }
+
+    if (!result.success && output.length === 0) {
+      return {
+        ...result,
+        output: result.error?.trim() || FAILED_WITHOUT_OUTPUT_ERROR,
+        error: result.error?.trim() || FAILED_WITHOUT_OUTPUT_ERROR,
+      };
+    }
+
+    return result;
   }
 
   /**
