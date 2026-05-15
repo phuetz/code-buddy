@@ -441,6 +441,15 @@ npx eslint src/fleet/result-aggregator.ts tests/fleet/saga-store.test.ts --quiet
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/extended-thinking.test.ts tests/unit/think-tool.test.ts tests/unit/thinking.test.ts
+# extended thinking suites passed after conclusion-required synthesis fallback
+
+npx eslint src/agent/thinking/extended-thinking.ts tests/unit/extended-thinking.test.ts tests/unit/think-tool.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -1079,6 +1088,9 @@ npm run typecheck
 - L'aggregateur Fleet signale maintenant explicitement quand il livre les
   resultats bruts faute de synthese LLM, et les reponses de synthese composees
   uniquement d'espaces declenchent ce fallback visible.
+- ExtendedThinking ne renvoie plus `Unable to reach conclusion` comme reponse
+  finale quand la synthese echoue sans qu'aucune conclusion reelle n'existe; ce
+  cas devient une erreur explicite.
 
 ## Blocage leve
 

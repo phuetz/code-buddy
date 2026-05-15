@@ -983,6 +983,32 @@ describe('ExtendedThinkingEngine', () => {
       expect(result).toBeDefined();
       expect(result.answer).toBeDefined();
     });
+
+    it('should fail synthesis fallback when no conclusion exists', async () => {
+      engine = new ExtendedThinkingEngine('test-api-key', undefined, {
+        maxThoughts: 1,
+        verificationEnabled: false,
+      });
+
+      const analysisThought = {
+        choices: [{
+          message: {
+            content: `<thought_type>analysis</thought_type>
+<content>Only analysis, no conclusion</content>
+<confidence>0.7</confidence>`,
+          },
+        }],
+      };
+
+      mockChat
+        .mockResolvedValueOnce(analysisThought)
+        .mockResolvedValueOnce(analysisThought)
+        .mockResolvedValueOnce(analysisThought)
+        .mockRejectedValueOnce(new Error('Synthesis failed'));
+
+      await expect(engine.think('Test problem', undefined, 'minimal'))
+        .rejects.toThrow('Extended thinking synthesis failed and produced no conclusion');
+    });
   });
 
   // ===========================================================================

@@ -116,7 +116,7 @@ describe('ExtendedThinkingEngine', () => {
           choices: [{ message: { content: '<answer>Y is the answer</answer><reasoning>After careful analysis</reasoning><confidence>0.85</confidence><key_insights>- Insight 1</key_insights><uncertainties>- Some uncertainty</uncertainties>' } }],
         });
 
-      const result = await engine.think('What is X?');
+      const result = await engine.think('What is X?', undefined, 'minimal');
       expect(result).toBeDefined();
       expect(result.answer).toBeDefined();
       expect(result.confidence).toBeGreaterThanOrEqual(0);

@@ -568,11 +568,14 @@ export class ExtendedThinkingEngine extends EventEmitter {
   ): ThinkingResult {
     const conclusions = thoughts.filter((t) => t.type === "conclusion");
     const bestConclusion = conclusions.sort((a, b) => b.confidence - a.confidence)[0];
+    if (!bestConclusion) {
+      throw new Error("Extended thinking synthesis failed and produced no conclusion.");
+    }
 
     return {
-      answer: bestConclusion?.content || "Unable to reach conclusion",
+      answer: bestConclusion.content,
       reasoning: thoughts.map((t) => t.content).join("\n"),
-      confidence: bestConclusion?.confidence || 0.3,
+      confidence: bestConclusion.confidence,
       thinkingTime: (session.endTime || Date.now()) - session.startTime,
       thoughtCount: thoughts.length,
       chainsExplored: session.chains.length,
