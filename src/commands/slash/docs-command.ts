@@ -17,6 +17,16 @@ export interface DocsCommandResult {
   success: boolean;
 }
 
+export function requireDocsLlmContent(response: {
+  choices?: Array<{ message?: { content?: string | null } | null }>;
+}): string {
+  const content = response.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new Error('/docs LLM enrichment returned no response content');
+  }
+  return content;
+}
+
 async function createDocsLlmCall(
   thinkingLevelOverride?: GeminiThinkingLevel,
 ): Promise<((sys: string, user: string, thinking?: string) => Promise<string>) | undefined> {
@@ -40,7 +50,7 @@ async function createDocsLlmCall(
         thinkingLevel: (thinkingLevel || thinkingLevelOverride) as GeminiThinkingLevel | undefined,
       },
     );
-    return response.choices[0]?.message?.content ?? '';
+    return requireDocsLlmContent(response);
   };
 }
 

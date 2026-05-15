@@ -405,6 +405,15 @@ npx eslint src/providers/local-llm-provider.ts tests/unit/local-llm-provider.tes
 
 npm run typecheck
 # passed
+
+npm test -- tests/commands/llm-response-content.test.ts
+# 5 tests passed after buddy flow and /docs LLM empty-content guards
+
+npx eslint src/commands/flow.ts src/commands/slash/docs-command.ts tests/commands/llm-response-content.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -1028,6 +1037,9 @@ npm run typecheck
 - Le provider local `node-llama-cpp` ne transforme plus une completion ou un
   stream vide en reponse valide; il exige aussi au moins un message utilisateur
   comme le chemin streaming.
+- `buddy flow` et `/docs --with-llm` refusent maintenant les reponses LLM
+  absentes ou blanches au lieu d'injecter `''` dans le plan ou les docs
+  enrichies.
 
 ## Blocage leve
 

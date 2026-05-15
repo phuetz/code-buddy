@@ -13,8 +13,14 @@ import type { ExecutionPlan } from '../agent/flow/planning-flow.js';
 import { getSettingsManager } from '../utils/settings-manager.js';
 import { detectProviderFromEnv, selectModelForDetectedProvider } from '../utils/provider-detector.js';
 
-function extractContent(response: { choices: Array<{ message: { content: string | null } }> }): string {
-  return response.choices?.[0]?.message?.content || '';
+export function requireFlowResponseContent(response: {
+  choices?: Array<{ message?: { content?: string | null } | null }>;
+}): string {
+  const content = response.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new Error('Flow LLM returned no response content');
+  }
+  return content;
 }
 
 export function createFlowCommand(): Command {
@@ -51,7 +57,7 @@ export function createFlowCommand(): Command {
             },
             { role: 'user', content: prompt },
           ]);
-          return extractContent(response);
+          return requireFlowResponseContent(response);
         };
 
         // Default agent: uses the LLM to execute step instructions
@@ -65,7 +71,7 @@ export function createFlowCommand(): Command {
               },
               { role: 'user', content: instruction },
             ]);
-            return extractContent(response);
+            return requireFlowResponseContent(response);
           },
         };
 
