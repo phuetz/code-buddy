@@ -225,6 +225,15 @@ npx eslint src/i18n/index.ts tests/unit/i18n.test.ts --quiet
 
 npm run typecheck
 # passed
+
+npm test -- tests/channels/channel-handlers-additional-channels.test.ts
+# 17 tests passed after removing unknown-channel MockChannel fallback
+
+npx eslint src/commands/handlers/channel-handlers.ts tests/channels/channel-handlers-additional-channels.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -439,6 +448,9 @@ npm run typecheck
 - L'i18n n'annonce plus allemand, espagnol, japonais et chinois comme langues
   supportees alors que ces tables etaient seulement des copies anglaises. Les
   locales supportees sont maintenant limitees aux tables reelles `en` et `fr`.
+- Le handler `buddy channels start` ne remplace plus un type de channel inconnu
+  par un `MockChannel`. Une configuration inconnue echoue maintenant avec une
+  erreur explicite au lieu de creer un canal factice.
 
 ## Blocage leve
 

@@ -30,6 +30,12 @@ describe('handleChannels additional channel activation', () => {
     'matrix',
     'google-chat',
     'teams',
+    'line',
+    'nostr',
+    'zalo',
+    'mattermost',
+    'nextcloud-talk',
+    'twilio-voice',
     'imessage',
   ]);
 
@@ -41,6 +47,16 @@ describe('handleChannels additional channel activation', () => {
       if (channel.status) {
         channel.status.connected = true;
         channel.status.authenticated = true;
+        channel.status.lastActivity = new Date();
+      }
+    };
+    const markDisconnected = async function (this: unknown): Promise<void> {
+      const channel = this as {
+        status?: { connected: boolean; authenticated: boolean; lastActivity?: Date };
+      };
+      if (channel.status) {
+        channel.status.connected = false;
+        channel.status.authenticated = false;
         channel.status.lastActivity = new Date();
       }
     };
@@ -71,17 +87,46 @@ describe('handleChannels additional channel activation', () => {
         vi.spyOn(TeamsChannel.prototype, 'connect').mockImplementation(markConnected);
         break;
       }
+      case 'line': {
+        const { LINEChannel } = await import('../../src/channels/line/index.js');
+        vi.spyOn(LINEChannel.prototype, 'connect').mockImplementation(markConnected);
+        vi.spyOn(LINEChannel.prototype, 'disconnect').mockImplementation(markDisconnected);
+        break;
+      }
+      case 'nostr': {
+        const { NostrChannel } = await import('../../src/channels/nostr/index.js');
+        vi.spyOn(NostrChannel.prototype, 'connect').mockImplementation(markConnected);
+        vi.spyOn(NostrChannel.prototype, 'disconnect').mockImplementation(markDisconnected);
+        break;
+      }
+      case 'zalo': {
+        const { ZaloChannel } = await import('../../src/channels/zalo/index.js');
+        vi.spyOn(ZaloChannel.prototype, 'connect').mockImplementation(markConnected);
+        vi.spyOn(ZaloChannel.prototype, 'disconnect').mockImplementation(markDisconnected);
+        break;
+      }
+      case 'mattermost': {
+        const { MattermostChannel } = await import('../../src/channels/mattermost/index.js');
+        vi.spyOn(MattermostChannel.prototype, 'connect').mockImplementation(markConnected);
+        vi.spyOn(MattermostChannel.prototype, 'disconnect').mockImplementation(markDisconnected);
+        break;
+      }
+      case 'nextcloud-talk': {
+        const { NextcloudTalkChannel } = await import('../../src/channels/nextcloud-talk/index.js');
+        vi.spyOn(NextcloudTalkChannel.prototype, 'connect').mockImplementation(markConnected);
+        vi.spyOn(NextcloudTalkChannel.prototype, 'disconnect').mockImplementation(markDisconnected);
+        break;
+      }
+      case 'twilio-voice': {
+        const { TwilioVoiceChannel } = await import('../../src/channels/twilio-voice/index.js');
+        vi.spyOn(TwilioVoiceChannel.prototype, 'connect').mockImplementation(markConnected);
+        vi.spyOn(TwilioVoiceChannel.prototype, 'disconnect').mockImplementation(markDisconnected);
+        break;
+      }
       case 'imessage': {
         const { IMessageChannel } = await import('../../src/channels/imessage/index.js');
         vi.spyOn(IMessageChannel.prototype, 'connect').mockImplementation(markConnected);
-        vi.spyOn(IMessageChannel.prototype, 'disconnect').mockImplementation(async function (this: unknown): Promise<void> {
-          const channel = this as { status?: { connected: boolean; authenticated: boolean; lastActivity?: Date } };
-          if (channel.status) {
-            channel.status.connected = false;
-            channel.status.authenticated = false;
-            channel.status.lastActivity = new Date();
-          }
-        });
+        vi.spyOn(IMessageChannel.prototype, 'disconnect').mockImplementation(markDisconnected);
         break;
       }
       default:
@@ -268,4 +313,11 @@ describe('instantiateChannel common channel config', () => {
       expect(channel?.isChannelAllowed('blocked-channel')).toBe(false);
     });
   }
+
+  it('rejects unsupported channel types instead of falling back to MockChannel', async () => {
+    await expect(instantiateChannel({
+      type: 'unknown-channel',
+      enabled: true,
+    })).rejects.toThrow('Unsupported channel type: unknown-channel');
+  });
 });

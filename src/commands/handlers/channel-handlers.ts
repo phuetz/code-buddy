@@ -384,9 +384,7 @@ export async function instantiateChannel(config: ChannelConfigEntry): Promise<im
       } as import('../../channels/index.js').IMessageChannelConfig);
     }
     default: {
-      logger.warn(`Unsupported channel type: ${config.type}, using generic config`);
-      const { MockChannel } = await import('../../channels/index.js');
-      return new MockChannel(channelConfig);
+      throw new Error(`Unsupported channel type: ${config.type}. No channel implementation is registered for this type.`);
     }
   }
 }
