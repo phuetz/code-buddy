@@ -365,6 +365,77 @@ describe('TreeOfThoughtReasoner', () => {
     });
   });
 
+  describe('LLM output contracts', () => {
+    function reasonerInternals(reasoner: TreeOfThoughtReasoner): {
+      client: { chat: jest.Mock };
+      chainOfThought: (problem: Problem) => Promise<unknown>;
+      generateThoughts: (node: ThoughtNode, problem: Problem) => Promise<string[]>;
+      evaluateThought: (node: ThoughtNode, problem: Problem) => Promise<number>;
+    } {
+      return reasoner as unknown as {
+        client: { chat: jest.Mock };
+        chainOfThought: (problem: Problem) => Promise<unknown>;
+        generateThoughts: (node: ThoughtNode, problem: Problem) => Promise<string[]>;
+        evaluateThought: (node: ThoughtNode, problem: Problem) => Promise<number>;
+      };
+    }
+
+    function sampleNode(): ThoughtNode {
+      return {
+        id: 'node-1',
+        content: 'Initial analysis',
+        type: 'analysis',
+        parent: null,
+        children: [],
+        score: 0,
+        visits: 0,
+        depth: 0,
+        metadata: { generationRound: 0 },
+        state: 'pending',
+      };
+    }
+
+    it('should reject empty chain-of-thought responses', async () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+      const internals = reasonerInternals(reasoner);
+      internals.client.chat = jest.fn().mockResolvedValue({
+        choices: [{ message: { content: '   ' } }],
+      });
+
+      await expect(internals.chainOfThought({ description: 'Explain failure' }))
+        .rejects.toThrow('Chain-of-thought returned no response content');
+    });
+
+    it('should not invent fallback thoughts when generation fails', async () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+      const internals = reasonerInternals(reasoner);
+      internals.client.chat = jest.fn().mockRejectedValue(new Error('provider down'));
+
+      await expect(internals.generateThoughts(sampleNode(), { description: 'Solve this' }))
+        .rejects.toThrow('provider down');
+    });
+
+    it('should reject unparseable thought generation output', async () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+      const internals = reasonerInternals(reasoner);
+      internals.client.chat = jest.fn().mockResolvedValue({
+        choices: [{ message: { content: 'too short' } }],
+      });
+
+      await expect(internals.generateThoughts(sampleNode(), { description: 'Solve this' }))
+        .rejects.toThrow('Thought generation returned no parseable approaches');
+    });
+
+    it('should score failed thought evaluations as zero', async () => {
+      const reasoner = createTreeOfThoughtReasoner('test-key');
+      const internals = reasonerInternals(reasoner);
+      internals.client.chat = jest.fn().mockRejectedValue(new Error('evaluator down'));
+
+      await expect(internals.evaluateThought(sampleNode(), { description: 'Solve this' }))
+        .resolves.toBe(0);
+    });
+  });
+
   describe('formatResult', () => {
     it('should format successful result', () => {
       const reasoner = createTreeOfThoughtReasoner('test-key');

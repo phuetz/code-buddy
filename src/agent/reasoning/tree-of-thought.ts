@@ -122,9 +122,8 @@ export class TreeOfThoughtReasoner extends EventEmitter {
    * We wrap each call in a `Promise.race` against a timer so the
    * generator can continue or fail gracefully after `llmTimeoutMs`.
    *
-   * Throws a `reasoning:llm-timeout` error whose message the caller's
-   * try/catch handles (all four reasoning methods already have a
-   * try/catch with a sensible fallback).
+   * Throws a `reasoning:llm-timeout` error whose message the caller can
+   * surface through the reasoning failure path.
    */
   private chatWithTimeout(
     messages: CodeBuddyMessage[],
@@ -289,7 +288,10 @@ Think through this step by step:`;
     ];
 
     const response = await this.chatWithTimeout(messages, []);
-    const content = response.choices[0]?.message?.content || "";
+    const content = response.choices[0]?.message?.content?.trim() || "";
+    if (!content) {
+      throw new Error("Chain-of-thought returned no response content");
+    }
 
     return this.parseCoTResponse(content);
   }
@@ -335,12 +337,18 @@ Approach 2:
         temperature: this.config.temperature,
       });
 
-      const content = response.choices[0]?.message?.content || "";
-      return this.parseApproaches(content);
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      if (!content) {
+        throw new Error("Thought generation returned no response content");
+      }
+      const approaches = this.parseApproaches(content);
+      if (approaches.length === 0) {
+        throw new Error("Thought generation returned no parseable approaches");
+      }
+      return approaches;
     } catch (error) {
       logger.warn('LLM call failed during thought generation', { error: getErrorMessage(error) });
-      // Return a single fallback thought so the search can continue
-      return [`Continue analyzing: ${problem.description.slice(0, 200)}`];
+      throw error;
     }
   }
 
@@ -380,14 +388,17 @@ Rate this thought (0-1):`;
         temperature: 0.1,
       });
 
-      const content = response.choices[0]?.message?.content || "0.5";
-      const score = parseFloat(content.match(/[\d.]+/)?.[0] || "0.5");
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      const scoreMatch = content.match(/[\d.]+/);
+      if (!scoreMatch) {
+        throw new Error("Thought evaluation returned no numeric score");
+      }
+      const score = parseFloat(scoreMatch[0]);
 
       return Math.max(0, Math.min(1, score));
     } catch (error) {
       logger.warn('LLM call failed during thought evaluation', { error: getErrorMessage(error) });
-      // Return neutral score so the node isn't unfairly penalized or boosted
-      return 0.5;
+      return 0;
     }
   }
 

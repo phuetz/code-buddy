@@ -871,6 +871,9 @@ npm run typecheck
 - Le `ParallelExecutor` ne considere plus les reponses modele vides comme des
   sorties valides et son formatteur affiche un echec d'agregation explicite au
   lieu de `(No response)`.
+- Le Tree-of-Thought ne fabrique plus de pensee locale `Continue analyzing...`
+  quand la generation LLM echoue; une generation vide/non parseable echoue, et
+  une evaluation LLM impossible vaut 0 au lieu d'un score neutre.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
