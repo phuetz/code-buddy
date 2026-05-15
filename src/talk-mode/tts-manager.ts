@@ -6,6 +6,7 @@
 
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 import type {
   TTSProvider,
   TTSProviderConfig,
@@ -56,6 +57,7 @@ export class MockTTSProvider implements ITTSProvider {
   private synthDelay = 100;
 
   async initialize(_config: TTSProviderConfig): Promise<void> {
+    assertTestRuntimeFeature('MockTTSProvider');
     this.initialized = true;
     this.voices = [
       {
@@ -186,6 +188,9 @@ export class TTSManager extends EventEmitter {
    * Register a TTS provider
    */
   registerProvider(provider: ITTSProvider): void {
+    if (provider.id === 'mock') {
+      assertTestRuntimeFeature('MockTTSProvider');
+    }
     this.providers.set(provider.id, provider);
   }
 

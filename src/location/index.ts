@@ -5,6 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 
 // ============================================================================
 // Types
@@ -508,6 +509,7 @@ export class LocationService extends EventEmitter {
    * Set mock location (for testing)
    */
   setMockLocation(location: GeoLocation | null): void {
+    assertTestRuntimeFeature('Mock location');
     this.mockLocation = location;
   }
 
@@ -519,6 +521,7 @@ export class LocationService extends EventEmitter {
     longitude: number,
     options?: Partial<GeoLocation>
   ): GeoLocation {
+    assertTestRuntimeFeature('Mock location');
     return {
       latitude,
       longitude,

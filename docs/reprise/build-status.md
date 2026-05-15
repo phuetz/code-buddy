@@ -1091,6 +1091,9 @@ npm run typecheck
 - ExtendedThinking ne renvoie plus `Unable to reach conclusion` comme reponse
   finale quand la synthese echoue sans qu'aucune conclusion reelle n'existe; ce
   cas devient une erreur explicite.
+- Les doubles runtime `mock` restent utilisables par les tests explicites, mais
+  `MockChannel`, TTS mock, desktop automation mock, embeddings mock et location
+  mock refusent maintenant de s'initialiser dans un runtime normal.
 
 ## Blocage leve
 

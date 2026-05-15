@@ -8,6 +8,7 @@
 import { EventEmitter } from 'events';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger.js';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 import type {
   ModifierKey,
   MouseButton,
@@ -115,6 +116,7 @@ export class MockAutomationProvider implements IAutomationProvider {
   private appPidCounter = 1000;
 
   async initialize(): Promise<void> {
+    assertTestRuntimeFeature('MockAutomationProvider');
     this.initialized = true;
     this.mockWindows = [
       {
@@ -440,6 +442,9 @@ export class DesktopAutomationManager extends EventEmitter {
    * Register a provider
    */
   registerProvider(provider: IAutomationProvider): void {
+    if (provider.name === 'mock') {
+      assertTestRuntimeFeature('MockAutomationProvider');
+    }
     this.providers.set(provider.name, provider);
   }
 
@@ -447,6 +452,10 @@ export class DesktopAutomationManager extends EventEmitter {
    * Initialize with the best available provider
    */
   async initialize(): Promise<void> {
+    if (this.config.provider === 'mock') {
+      assertTestRuntimeFeature('MockAutomationProvider');
+    }
+
     if (this.shouldUseExplicitMockProvider() && !this.providers.has('mock')) {
       this.registerProvider(new MockAutomationProvider());
     }

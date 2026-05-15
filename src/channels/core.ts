@@ -7,6 +7,7 @@
 
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 import { getSessionIsolator, resetSessionIsolator, SessionIsolator } from './session-isolation.js';
 export { resetSessionIsolator, SessionIsolator };
 import { getIdentityLinker, resetIdentityLinker, IdentityLinker, type CanonicalIdentity, type ChannelIdentity } from './identity-links.js';
@@ -487,6 +488,7 @@ export class MockChannel extends BaseChannel {
   private sentMessages: OutboundMessage[] = [];
 
   constructor(config: Partial<ChannelConfig> = {}) {
+    assertTestRuntimeFeature('MockChannel');
     const channelType = config.type || 'cli';
     super(channelType, {
       type: channelType,

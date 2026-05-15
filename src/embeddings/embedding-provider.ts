@@ -12,6 +12,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 
 // ============================================================================
 // Types
@@ -74,6 +75,9 @@ export class EmbeddingProvider extends EventEmitter {
   constructor(config: Partial<EmbeddingConfig> = {}) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
+    if (this.config.provider === 'mock') {
+      assertTestRuntimeFeature('Mock embedding provider');
+    }
   }
 
   /**
