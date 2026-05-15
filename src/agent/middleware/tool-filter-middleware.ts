@@ -82,8 +82,9 @@ export class ToolFilterMiddleware implements ConversationMiddleware {
       try {
         const { filterToolsForMode } = await import('../plan-mode.js');
         tools = filterToolsForMode(tools);
-      } catch {
-        // plan-mode module not available — skip
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`Plan-mode tool filtering is unavailable: ${message}`);
       }
     }
 

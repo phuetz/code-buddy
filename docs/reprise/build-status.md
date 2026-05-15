@@ -719,6 +719,9 @@ npm run typecheck
 - `QualityGateMiddleware` ne marque plus une gate comme passee quand le registre
   d'agents ou l'execution de gate echoue: l'erreur devient un finding visible,
   bloquant seulement pour les gates requises.
+- `ToolFilterMiddleware` ne saute plus silencieusement le filtrage plan-mode si
+  le module ou la fonction echoue: la boucle continue, mais avec un warning
+  explicite pour eviter un mode plan faussement protege.
 
 ## Blocage leve
 

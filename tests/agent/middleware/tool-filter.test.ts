@@ -11,6 +11,8 @@ import type { MiddlewareContext } from '../../../src/agent/middleware/types.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+type TestTool = { type: string; function: { name: string; description?: string; parameters?: unknown } };
+
 function makeContext(overrides: Partial<MiddlewareContext> = {}): MiddlewareContext {
   const state = new Map<string, unknown>();
   return {
@@ -30,9 +32,13 @@ function makeContext(overrides: Partial<MiddlewareContext> = {}): MiddlewareCont
   };
 }
 
-function makeTool(name: string, desc = ''): { type: string; function: { name: string; description?: string; parameters?: unknown } } {
+function makeTool(name: string, desc = ''): TestTool {
   return { type: 'function', function: { name, description: desc } };
 }
+
+const planModeMocks = vi.hoisted(() => ({
+  filterToolsForMode: vi.fn((tools: TestTool[]) => tools),
+}));
 
 // Mock the sandbox registry import
 vi.mock('../../../src/sandbox/sandbox-registry.js', () => ({
@@ -41,12 +47,17 @@ vi.mock('../../../src/sandbox/sandbox-registry.js', () => ({
 
 // Mock the plan-mode import
 vi.mock('../../../src/agent/plan-mode.js', () => ({
-  filterToolsForMode: (tools: any[]) => tools, // No filtering in default mode
+  filterToolsForMode: planModeMocks.filterToolsForMode,
 }));
 
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('ToolFilterMiddleware', () => {
+  beforeEach(() => {
+    planModeMocks.filterToolsForMode.mockReset();
+    planModeMocks.filterToolsForMode.mockImplementation((tools: TestTool[]) => tools);
+  });
+
   describe('constructor', () => {
     it('uses default config when none provided', () => {
       const mw = new ToolFilterMiddleware();
@@ -191,6 +202,20 @@ describe('ToolFilterMiddleware', () => {
         lastToolResults: [{ toolName: 'grep', success: false, output: 'error' }],
       }));
       expect(second.action).toBe('continue');
+    });
+
+    it('warns when plan-mode filtering is unavailable', async () => {
+      planModeMocks.filterToolsForMode.mockImplementationOnce(() => {
+        throw new Error('plan mode import failed');
+      });
+      const mw = new ToolFilterMiddleware({ checkSandbox: false });
+      const ctx = makeContext({ tools: [makeTool('write_file'), makeTool('read_file')] });
+
+      const result = await mw.beforeTurn(ctx);
+
+      expect(result.action).toBe('warn');
+      expect(result.message).toContain('Plan-mode tool filtering is unavailable');
+      expect(result.message).toContain('plan mode import failed');
     });
   });
 
