@@ -766,6 +766,10 @@ npm run typecheck
 - `FeishuAPI.sendTypingIndicator` ne renvoie plus une promesse resolue en no-op
   pour une capacite absente de Feishu/Lark; l'appel echoue explicitement avec
   la limite plateforme.
+- `Cowork MessageRouter` ne laisse plus disparaitre les medias distants non
+  telecharges: image/file/voice transmettent maintenant leurs metadonnees
+  (url/key/nom/taille/duree) a l'agent avec une mention explicite des bytes ou
+  de la transcription manquants.
 
 ## Blocage leve
 

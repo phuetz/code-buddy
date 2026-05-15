@@ -396,30 +396,25 @@ export class MessageRouter {
         break;
         
       case 'image':
-        // TODO: Download image and convert to base64
-        if (message.content.imageUrl) {
-          // For now, add as text description
-          blocks.push({
-            type: 'text',
-            text: `[用户发送了一张图片: ${message.content.imageUrl}]`,
-          } as TextContent);
-        }
+        blocks.push({
+          type: 'text',
+          text: this.describeUnsupportedImage(message),
+        } as TextContent);
         break;
         
       case 'file':
         if (message.content.file) {
           blocks.push({
             type: 'text',
-            text: `[用户发送了文件: ${message.content.file.name}]`,
+            text: this.describeUnsupportedFile(message),
           } as TextContent);
         }
         break;
         
       case 'voice':
-        // TODO: Transcribe voice message
         blocks.push({
           type: 'text',
-          text: '[用户发送了语音消息]',
+          text: this.describeUnsupportedVoice(message),
         } as TextContent);
         break;
         
@@ -431,6 +426,48 @@ export class MessageRouter {
     }
     
     return blocks;
+  }
+
+  private describeUnsupportedImage(message: RemoteMessage): string {
+    const { imageUrl, imageKey } = message.content;
+    const details = [
+      imageUrl ? `url=${imageUrl}` : undefined,
+      imageKey ? `key=${imageKey}` : undefined,
+    ].filter(Boolean);
+
+    return details.length > 0
+      ? `[Remote image received (${details.join(', ')}). Image bytes were not attached by the router.]`
+      : '[Remote image received. Image bytes were not attached by the router.]';
+  }
+
+  private describeUnsupportedFile(message: RemoteMessage): string {
+    const file = message.content.file;
+    if (!file) {
+      return '[Remote file received. File bytes were not attached by the router.]';
+    }
+
+    const details = [
+      `name=${file.name}`,
+      file.mimeType ? `mime=${file.mimeType}` : undefined,
+      typeof file.size === 'number' ? `size=${file.size}` : undefined,
+      file.url ? `url=${file.url}` : undefined,
+      file.key ? `key=${file.key}` : undefined,
+    ].filter(Boolean);
+
+    return `[Remote file received (${details.join(', ')}). File bytes were not attached by the router.]`;
+  }
+
+  private describeUnsupportedVoice(message: RemoteMessage): string {
+    const voice = message.content.voice;
+    const details = [
+      voice?.url ? `url=${voice.url}` : undefined,
+      voice?.key ? `key=${voice.key}` : undefined,
+      typeof voice?.duration === 'number' ? `duration=${voice.duration}s` : undefined,
+    ].filter(Boolean);
+
+    return details.length > 0
+      ? `[Remote voice message received (${details.join(', ')}). Audio transcription is not available in the router.]`
+      : '[Remote voice message received. Audio transcription is not available in the router.]';
   }
   
   /**
