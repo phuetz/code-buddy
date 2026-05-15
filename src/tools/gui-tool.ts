@@ -87,6 +87,31 @@ function tmpScreenshotPath(): string {
   return join(tmpdir(), `codebuddy_gui_${Date.now()}.png`);
 }
 
+function normaliseScreenshotRegion(region?: GuiToolInput['region']): GuiToolInput['region'] | undefined {
+  if (!region) return undefined;
+
+  const values = [region.x, region.y, region.width, region.height];
+  if (!values.every(Number.isFinite)) {
+    throw new Error('Screenshot region values must be finite numbers');
+  }
+  if (region.x < 0 || region.y < 0 || region.width <= 0 || region.height <= 0) {
+    throw new Error('Screenshot region must have non-negative x/y and positive width/height');
+  }
+
+  const normalised = {
+    x: Math.trunc(region.x),
+    y: Math.trunc(region.y),
+    width: Math.trunc(region.width),
+    height: Math.trunc(region.height),
+  };
+
+  if (normalised.width <= 0 || normalised.height <= 0) {
+    throw new Error('Screenshot region width/height must be at least 1 pixel');
+  }
+
+  return normalised;
+}
+
 /**
  * Capture full-screen screenshot via platform-native command.
  * Returns base64-encoded PNG string or throws.
@@ -94,27 +119,38 @@ function tmpScreenshotPath(): string {
  */
 export function captureScreenshotNative(region?: GuiToolInput['region']): string {
   const outPath = tmpScreenshotPath();
+  const crop = normaliseScreenshotRegion(region);
 
   try {
     if (process.platform === 'win32') {
       // PowerShell screen capture via .NET System.Drawing
       const escapedPath = outPath.replace(/\\/g, '\\\\');
-      const script = [
-        'Add-Type -AssemblyName System.Windows.Forms',
-        'Add-Type -AssemblyName System.Drawing',
+      const captureScript = crop ? [
+        `$w = ${crop.width}`,
+        `$h = ${crop.height}`,
+        '$bmp = New-Object System.Drawing.Bitmap($w, $h)',
+        '$g = [System.Drawing.Graphics]::FromImage($bmp)',
+        `$g.CopyFromScreen(${crop.x}, ${crop.y}, 0, 0, $bmp.Size)`,
+      ] : [
         '$primary = [System.Windows.Forms.Screen]::PrimaryScreen',
         '$w = $primary.Bounds.Width',
         '$h = $primary.Bounds.Height',
         '$bmp = New-Object System.Drawing.Bitmap($w, $h)',
         '$g = [System.Drawing.Graphics]::FromImage($bmp)',
         '$g.CopyFromScreen(0, 0, 0, 0, $bmp.Size)',
+      ];
+      const script = [
+        'Add-Type -AssemblyName System.Windows.Forms',
+        'Add-Type -AssemblyName System.Drawing',
+        ...captureScript,
         `$bmp.Save('${escapedPath}', [System.Drawing.Imaging.ImageFormat]::Png)`,
         '$g.Dispose()',
         '$bmp.Dispose()',
       ].join('; ');
       execSync(`powershell -NoProfile -NonInteractive -Command "${script}"`, { timeout: 15000 });
     } else if (process.platform === 'darwin') {
-      execSync(`screencapture -x "${outPath}"`, { timeout: 10000 });
+      const regionArg = crop ? ` -R${crop.x},${crop.y},${crop.width},${crop.height}` : '';
+      execSync(`screencapture -x${regionArg} "${outPath}"`, { timeout: 10000 });
     } else {
       // Linux: try scrot, then import (ImageMagick), then gnome-screenshot
       const hasScrot = ((): boolean => {
@@ -124,10 +160,15 @@ export function captureScreenshotNative(region?: GuiToolInput['region']): string
         try { execSync('which import', { stdio: 'ignore' }); return true; } catch { return false; }
       })();
       if (hasScrot) {
-        execSync(`scrot "${outPath}"`, { timeout: 10000 });
+        const regionArg = crop ? `-a ${crop.x},${crop.y},${crop.width},${crop.height} ` : '';
+        execSync(`scrot ${regionArg}"${outPath}"`, { timeout: 10000 });
       } else if (hasImport) {
-        execSync(`import -window root "${outPath}"`, { timeout: 10000 });
+        const cropArg = crop ? ` -crop ${crop.width}x${crop.height}+${crop.x}+${crop.y}` : '';
+        execSync(`import -window root${cropArg} "${outPath}"`, { timeout: 10000 });
       } else {
+        if (crop) {
+          throw new Error('Region screenshot requires scrot or ImageMagick import on Linux');
+        }
         execSync(`gnome-screenshot -f "${outPath}"`, { timeout: 10000 });
       }
     }
@@ -137,10 +178,6 @@ export function captureScreenshotNative(region?: GuiToolInput['region']): string
     }
 
     const data = readFileSync(outPath);
-
-    // Region crop is a no-op in the sync path when sharp is unavailable.
-    // Async callers can crop after decoding the base64 if needed.
-    void region; // accepted but not processed in sync path
 
     return data.toString('base64');
   } finally {

@@ -117,6 +117,39 @@ describe('captureScreenshotNative', () => {
     expect(calls.some(([cmd]) => typeof cmd === 'string' && cmd.includes('screencapture'))).toBe(true);
   });
 
+  it('passes requested crop region to macOS screenshot command', () => {
+    setPlatform('darwin');
+    vi.mocked(execSync).mockReturnValue(Buffer.from(''));
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(Buffer.from('png'));
+
+    const result = captureScreenshotNative({ x: 10, y: 20, width: 300, height: 200 });
+
+    expect(result).toBeTruthy();
+    const calls = vi.mocked(execSync).mock.calls;
+    expect(calls.some(([cmd]) => typeof cmd === 'string' && cmd.includes('-R10,20,300,200'))).toBe(true);
+  });
+
+  it('rejects invalid screenshot crop regions', () => {
+    setPlatform('darwin');
+
+    expect(() => captureScreenshotNative({ x: 0, y: 0, width: 0, height: 10 }))
+      .toThrow('positive width/height');
+  });
+
+  it('fails Linux region screenshots when only gnome-screenshot is available', () => {
+    setPlatform('linux');
+    vi.mocked(execSync).mockImplementation((cmd: Parameters<typeof execSync>[0]) => {
+      if (typeof cmd === 'string' && cmd === 'which gnome-screenshot') {
+        return Buffer.from('/usr/bin/gnome-screenshot');
+      }
+      throw new Error('missing command');
+    });
+
+    expect(() => captureScreenshotNative({ x: 10, y: 20, width: 30, height: 40 }))
+      .toThrow('Region screenshot requires scrot or ImageMagick import');
+  });
+
   it('returns base64 string', () => {
     setPlatform('darwin');
     vi.mocked(execSync).mockReturnValue(Buffer.from(''));

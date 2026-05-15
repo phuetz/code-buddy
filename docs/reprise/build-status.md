@@ -740,6 +740,10 @@ npm run typecheck
 - `BashTool` ne continue plus silencieusement en execution directe quand le
   routage auto-sandbox lui-meme est indisponible: seules les commandes de
   lecture reconnues comme sures passent encore, les autres echouent clairement.
+- `gui_control screenshot` applique maintenant les regions demandees via les
+  backends natifs (PowerShell, screencapture, scrot ou ImageMagick) et echoue si
+  le backend disponible ne peut pas recadrer, au lieu de renvoyer une capture
+  plein ecran comme si le crop avait reussi.
 
 ## Blocage leve
 
