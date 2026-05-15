@@ -825,6 +825,9 @@ npm run typecheck
 - Le provider runtime TurboQuant applique le meme garde-fou cote Ollama/vLLM:
   chat non-stream et streaming echouent si le backend ne renvoie aucun contenu
   utile, tout en conservant les tool calls vLLM sans texte assistant.
+- Les providers locaux WebLLM et Ollama ne renvoient plus une completion vide
+  comme succes; les appels non-stream et les streams totalement muets echouent
+  avec une erreur explicite.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

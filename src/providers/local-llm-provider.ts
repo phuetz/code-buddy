@@ -111,6 +111,13 @@ interface NavigatorWithGPU extends Navigator {
   };
 }
 
+function requireLocalProviderContent(provider: string, content: unknown): string {
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new Error(`${provider} returned empty response content`);
+  }
+  return content;
+}
+
 // ============================================================================
 // node-llama-cpp Provider
 // ============================================================================
@@ -432,7 +439,10 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
       stream: false,
     }) as ChatCompletionResponse;
 
-    const content = response.choices[0]?.message?.content || '';
+    const content = requireLocalProviderContent(
+      'WebLLM',
+      response.choices[0]?.message?.content
+    );
 
     return {
       content,
@@ -458,11 +468,18 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
       stream: true,
     }) as AsyncIterable<ChatCompletionChunk>;
 
+    let emittedContent = false;
     for await (const chunk of response) {
       const content = chunk.choices[0]?.delta?.content;
       if (content) {
+        if (content.trim().length > 0) {
+          emittedContent = true;
+        }
         yield content;
       }
+    }
+    if (!emittedContent) {
+      throw new Error('WebLLM returned empty response content');
     }
   }
 
@@ -667,13 +684,14 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     );
 
     const data = await response.json() as {
-      message: { content: string };
+      message?: { content?: string };
       eval_count?: number;
       model: string;
     };
+    const content = requireLocalProviderContent('Ollama', data.message?.content);
 
     return {
-      content: data.message.content,
+      content,
       tokensUsed: data.eval_count || 0,
       model: data.model,
       provider: this.type,
@@ -742,6 +760,7 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     const decoder = new TextDecoder();
     const maxIterations = 50000; // Safety limit for LLM response chunks
     let iterations = 0;
+    let emittedContent = false;
 
     try {
       while (iterations < maxIterations) {
@@ -774,6 +793,9 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
             try {
               const data = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
               if (data.message?.content) {
+                if (data.message.content.trim().length > 0) {
+                  emittedContent = true;
+                }
                 yield data.message.content;
               }
             } catch {
@@ -787,6 +809,9 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
         logger.warn(`[OllamaProvider] Stream reached max iterations: ${maxIterations}`, {
           source: 'OllamaProvider',
         });
+      }
+      if (!emittedContent) {
+        throw new Error('Ollama returned empty response content');
       }
     } finally {
       reader.releaseLock();

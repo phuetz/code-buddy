@@ -878,17 +878,26 @@ describe('WebLLMProvider', () => {
       );
     });
 
-    it('should handle missing content in response', async () => {
+    it('should throw on missing content in response', async () => {
       mockEngine.chat.completions.create.mockResolvedValue({
         choices: [{ message: {} }],
         usage: { total_tokens: 0 },
       });
 
-      const response = await provider.complete([
+      await expect(provider.complete([
         { role: 'user', content: 'Hello' },
-      ]);
+      ])).rejects.toThrow('WebLLM returned empty response content');
+    });
 
-      expect(response.content).toBe('');
+    it('should throw on blank content in response', async () => {
+      mockEngine.chat.completions.create.mockResolvedValue({
+        choices: [{ message: { content: '   ' } }],
+        usage: { total_tokens: 0 },
+      });
+
+      await expect(provider.complete([
+        { role: 'user', content: 'Hello' },
+      ])).rejects.toThrow('WebLLM returned empty response content');
     });
 
     it('should handle missing usage in response', async () => {
@@ -978,6 +987,23 @@ describe('WebLLMProvider', () => {
       }
 
       expect(chunks).toEqual(['Valid']);
+    });
+
+    it('should throw when stream completes without content', async () => {
+      async function* mockStreamResponse() {
+        yield { choices: [{ delta: {} }] };
+        yield { choices: [{ delta: { content: '' } }] };
+      }
+
+      mockEngine.chat.completions.create.mockResolvedValue(mockStreamResponse());
+
+      await expect(async () => {
+        for await (const _chunk of provider.stream([
+          { role: 'user', content: 'Hello' },
+        ])) {
+          // Should throw after the empty stream completes
+        }
+      }).rejects.toThrow('WebLLM returned empty response content');
     });
   });
 

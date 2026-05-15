@@ -476,6 +476,34 @@ describe('OllamaProvider', () => {
       expect(response.tokensUsed).toBe(0);
     });
 
+    it('should throw on missing response content', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          message: {},
+          model: 'llama3.1',
+        }),
+      });
+
+      await expect(provider.complete([
+        { role: 'user', content: 'Hello' },
+      ])).rejects.toThrow('Ollama returned empty response content');
+    });
+
+    it('should throw on blank response content', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          message: { content: '   ' },
+          model: 'llama3.1',
+        }),
+      });
+
+      await expect(provider.complete([
+        { role: 'user', content: 'Hello' },
+      ])).rejects.toThrow('Ollama returned empty response content');
+    });
+
     it('should throw on API error', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
@@ -563,7 +591,12 @@ describe('OllamaProvider', () => {
 
     it('should use stream: true', async () => {
       const mockReader = {
-        read: jest.fn().mockResolvedValue({ done: true }),
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('{"message":{"content":"ok"}}\n'),
+          })
+          .mockResolvedValueOnce({ done: true }),
         releaseLock: jest.fn(),
       };
 
@@ -646,6 +679,37 @@ describe('OllamaProvider', () => {
       expect(chunks).toEqual(['Valid']);
     });
 
+    it('should throw when stream completes without content', async () => {
+      const mockReader = {
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('{"message":{}}\n'),
+          })
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('{"message":{"content":""}}\n'),
+          })
+          .mockResolvedValueOnce({ done: true }),
+        releaseLock: jest.fn(),
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        body: { getReader: () => mockReader },
+      });
+
+      const stream = provider.stream([
+        { role: 'user', content: 'Hello' },
+      ]);
+
+      await expect(async () => {
+        for await (const _chunk of stream) {
+          // Should throw after the empty stream completes
+        }
+      }).rejects.toThrow('Ollama returned empty response content');
+    });
+
     it('should skip malformed JSON', async () => {
       const mockReader = {
         read: jest.fn()
@@ -700,7 +764,12 @@ describe('OllamaProvider', () => {
 
     it('should release reader lock', async () => {
       const mockReader = {
-        read: jest.fn().mockResolvedValue({ done: true }),
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('{"message":{"content":"ok"}}\n'),
+          })
+          .mockResolvedValueOnce({ done: true }),
         releaseLock: jest.fn(),
       };
 
@@ -720,7 +789,12 @@ describe('OllamaProvider', () => {
 
     it('should use custom options', async () => {
       const mockReader = {
-        read: jest.fn().mockResolvedValue({ done: true }),
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('{"message":{"content":"ok"}}\n'),
+          })
+          .mockResolvedValueOnce({ done: true }),
         releaseLock: jest.fn(),
       };
 
