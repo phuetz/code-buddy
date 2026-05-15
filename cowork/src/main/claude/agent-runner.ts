@@ -1394,7 +1394,7 @@ ${hints.join('\n')}
       } else {
         if (provider === 'ollama' || provider === 'lmstudio') {
           log(
-            '[ClaudeAgentRunner] Local OpenAI-compatible provider configured without explicit API key; relying on placeholder/env auth path',
+            '[ClaudeAgentRunner] Local OpenAI-compatible provider configured without explicit API key; relying on local/env auth',
             safeStringify({
               provider,
               modelProvider: piModel.provider,

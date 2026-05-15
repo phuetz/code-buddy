@@ -934,6 +934,9 @@ npm run typecheck
 - Le BashTool et l'action workflow explicite `noop` utilisent aussi des libelles
   clairs, sans l'ancien suffixe generique `(no output)` ni `No operation
   performed`.
+- Les logs Cowork pour les providers locaux ne parlent plus de chemin
+  `placeholder/env auth`; ils indiquent maintenant clairement le fallback
+  d'auth local/env.
 
 ## Blocage leve
 

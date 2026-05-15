@@ -71,7 +71,7 @@ function resolveEffectiveUrl(input: DiagnosticInput): URL {
   }
 
   if (!raw) {
-    // Fallback for custom without baseUrl — use a dummy so we can still surface errors
+    // Diagnostic sentinel for custom providers without a base URL; later checks surface the real issue.
     raw = 'https://localhost';
   }
 
