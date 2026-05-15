@@ -142,19 +142,17 @@ export class HookRunner {
           result = await this.runHttp(hook.handler, fullContext);
           break;
         case 'prompt':
-          // Prompt handlers require a model integration.
-          // Returning passthrough until a model provider is wired in.
           result = {
-            success: true,
-            reason: 'Prompt handler evaluation skipped (no model available)',
+            success: false,
+            error:
+              'Prompt hook handlers are not wired to a model provider in HookRunner; use SmartHookRunner/AdvancedHookRunner or disable this hook.',
           };
           break;
         case 'agent':
-          // Agent handlers spawn a read-only sub-agent.
-          // Returning passthrough until agent registry integration is wired in.
           result = {
-            success: true,
-            reason: 'Agent handler evaluation deferred',
+            success: false,
+            error:
+              'Agent hook handlers are not wired to a sub-agent runtime in HookRunner; use SmartHookRunner/AdvancedHookRunner or disable this hook.',
           };
           break;
         default:
@@ -164,7 +162,14 @@ export class HookRunner {
           };
       }
 
-      if (!result.success) combined.success = false;
+      if (!result.success) {
+        combined.success = false;
+        if (result.error) {
+          combined.error = combined.error
+            ? `${combined.error}\n${result.error}`
+            : result.error;
+        }
+      }
 
       if (result.blocked) {
         combined.blocked = true;

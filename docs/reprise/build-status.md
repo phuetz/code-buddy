@@ -782,6 +782,9 @@ npm run typecheck
 - En mode navigateur, Cowork ne simule plus une sauvegarde de configuration
   reussie; `App.handleConfigSave` echoue explicitement hors Electron au lieu de
   declencher le message "saved" sans persistance.
+- `HookRunner` ne marque plus les handlers `prompt` et `agent` non cables comme
+  des evaluations reussies; un hook configure mais impossible a executer rend
+  maintenant un echec explicite au lieu d'un passthrough vert.
 
 ## Blocage leve
 
