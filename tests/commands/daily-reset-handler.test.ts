@@ -32,6 +32,8 @@ describe('handleDailyReset', () => {
     expect(r.entry?.content).toContain('disable');
     expect(r.entry?.content).toContain('status');
     expect(r.entry?.content).toContain('run');
+    expect(r.entry?.content).toContain('does not clear');
+    expect(r.entry?.content).not.toContain('clear in-memory conversation history');
   });
 
   it('defaults to status when no action provided', async () => {

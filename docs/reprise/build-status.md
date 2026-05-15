@@ -633,6 +633,9 @@ npm run typecheck
   fantome qui n'etait jamais drainee. Une tache deja terminee libere la
   session; une vraie tache `fireAndForget` active fait rejeter les envois
   concurrents en `409` tant qu'une queue durable n'est pas branchee.
+- L'aide `/daily-reset` ne promet plus de vider l'historique live. Elle indique
+  maintenant que V0.1 declenche seulement le hook interne du moteur tant que le
+  callback vers les messages de session n'est pas branche.
 
 ## Blocage leve
 

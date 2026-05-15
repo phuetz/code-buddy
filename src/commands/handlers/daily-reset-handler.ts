@@ -32,8 +32,8 @@ const HELP_TEXT = `Usage: /daily-reset <action>
 
 Actions:
   enable   Start the daily reset scheduler. Fires at the configured time
-           each day to clear in-memory conversation history (preserves
-           MEMORY.md, HEARTBEAT.md, todo.md, and all files on disk).
+           each day and runs the engine reset hook. V0.1 does not clear
+           the live agent session messages until a callback is wired.
   disable  Stop the scheduler.
   status   Show enabled flag, configured time, and ms until next reset.
   run      Manually trigger a reset on engine state (V0.1 limitation:
