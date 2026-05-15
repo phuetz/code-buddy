@@ -737,6 +737,9 @@ npm run typecheck
 - `BashTool` ne retombe plus en execution directe quand l'auto-sandbox a exige
   Docker mais que le sandbox Docker est indisponible; la commande echoue avant
   tout `spawn` local.
+- `BashTool` ne continue plus silencieusement en execution directe quand le
+  routage auto-sandbox lui-meme est indisponible: seules les commandes de
+  lecture reconnues comme sures passent encore, les autres echouent clairement.
 
 ## Blocage leve
 

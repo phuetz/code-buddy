@@ -341,6 +341,7 @@ export class BashTool implements Disposable {
       }
 
       // Auto-sandbox routing: route dangerous commands to Docker sandbox
+      let autoSandboxRoutingError: unknown;
       try {
         const { getAutoSandboxRouter } = await import('../../sandbox/auto-sandbox.js');
         const router = getAutoSandboxRouter();
@@ -378,11 +379,22 @@ export class BashTool implements Disposable {
             };
           }
         }
-      } catch { /* auto-sandbox module unavailable, continue normally */ }
+      } catch (error) {
+        autoSandboxRoutingError = error;
+      }
 
       // Skip confirmation for safe read-only commands (ls, cat, grep, etc.)
       const safeBinCheck = SafeBinariesChecker.getInstance();
       const isSafeCommand = safeBinCheck.isSafe(command);
+
+      if (autoSandboxRoutingError && !isSafeCommand) {
+        return {
+          success: false,
+          error: `Auto-sandbox routing unavailable; refusing non-safe command: ${
+            autoSandboxRoutingError instanceof Error ? autoSandboxRoutingError.message : String(autoSandboxRoutingError)
+          }`,
+        };
+      }
 
       // Check if user has already accepted bash commands for this session
       const sessionFlags = this.confirmationService.getSessionFlags();

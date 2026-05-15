@@ -328,6 +328,30 @@ describe('BashTool', () => {
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
+    it('should refuse non-safe direct execution when auto-sandbox routing is unavailable', async () => {
+      mockAutoSandboxRoute.mockRejectedValueOnce(new Error('router unavailable'));
+
+      const result = await bashTool.execute('node dangerous-script.js');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Auto-sandbox routing unavailable');
+      expect(result.error).toContain('router unavailable');
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('should allow safe commands when auto-sandbox routing is unavailable', async () => {
+      mockAutoSandboxRoute.mockRejectedValueOnce(new Error('router unavailable'));
+      const mockProcess = createMockChildProcess();
+      mockSpawn.mockReturnValue(mockProcess);
+
+      emitAfterSpawn(mockProcess, { stdout: 'hello', exitCode: 0 });
+      const result = await bashTool.execute('echo "hello"');
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('hello');
+      expect(mockSpawn).toHaveBeenCalled();
+    });
+
     it('should capture stderr output', async () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);
