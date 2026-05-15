@@ -311,6 +311,30 @@ describe('Desktop Automation', () => {
         await expect(unconfigured.initialize()).rejects.toThrow('No automation provider available');
       });
 
+      it('should not auto-create mock fallback providers', async () => {
+        const fallbackOnly = new DesktopAutomationManager({
+          provider: 'nutjs',
+          fallbackProviders: ['mock'],
+        });
+
+        await expect(fallbackOnly.initialize()).rejects.toThrow('No automation provider available');
+      });
+
+      it('should allow explicitly registered mock fallback providers in tests', async () => {
+        const fallbackManager = new DesktopAutomationManager({
+          provider: 'nutjs',
+          fallbackProviders: ['mock'],
+        });
+        fallbackManager.registerProvider(new MockAutomationProvider());
+
+        await fallbackManager.initialize();
+
+        const status = await fallbackManager.getProviderStatus();
+        expect(status?.name).toBe('mock');
+
+        await fallbackManager.shutdown();
+      });
+
       it('should get all provider statuses', async () => {
         const statuses = await manager.getAllProviderStatuses();
 

@@ -914,6 +914,9 @@ npm run typecheck
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
+- L'automatisation desktop ne cree plus automatiquement un provider `mock` via
+  la chaine de fallback; le mock reste utilisable pour les tests explicites,
+  mais un poste sans backend reel echoue au lieu de simuler une action.
 
 ## Blocage leve
 

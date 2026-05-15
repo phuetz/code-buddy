@@ -481,7 +481,7 @@ export class DesktopAutomationManager extends EventEmitter {
   }
 
   private shouldUseExplicitMockProvider(): boolean {
-    return this.config.provider === 'mock' || Boolean(this.config.fallbackProviders?.includes('mock'));
+    return this.config.provider === 'mock';
   }
 
   /**

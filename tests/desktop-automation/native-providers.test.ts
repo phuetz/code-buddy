@@ -564,7 +564,7 @@ describe('Auto-detection', () => {
     it('should have correct default config with native as primary', () => {
       const { DEFAULT_AUTOMATION_CONFIG } = require('../../src/desktop-automation/types.js');
       expect(DEFAULT_AUTOMATION_CONFIG.provider).toBe('native');
-      expect(DEFAULT_AUTOMATION_CONFIG.fallbackProviders).toEqual(['nutjs', 'mock']);
+      expect(DEFAULT_AUTOMATION_CONFIG.fallbackProviders).toEqual(['nutjs']);
     });
   });
 });
