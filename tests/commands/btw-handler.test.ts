@@ -61,7 +61,7 @@ describe('handleBtw', () => {
     expect(result.entry?.content).toContain('API rate limit');
   });
 
-  it('handles response with no content', async () => {
+  it('reports an error when response has no content', async () => {
     const mockClient = {
       chat: vi.fn().mockResolvedValue({
         choices: [{ message: { role: 'assistant', content: null }, finish_reason: 'stop' }],
@@ -70,6 +70,6 @@ describe('handleBtw', () => {
     setBtwClient(mockClient as any);
 
     const result = await handleBtw(['test']);
-    expect(result.entry?.content).toContain('No response received');
+    expect(result.entry?.content).toContain('/btw received no assistant response');
   });
 });

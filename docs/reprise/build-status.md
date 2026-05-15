@@ -859,6 +859,8 @@ npm run typecheck
 - Les jobs cron et reviews heartbeat n'utilisent plus `No response` comme
   sortie synthetique quand l'agent ne produit aucun message assistant; ces
   chemins signalent maintenant une erreur explicite.
+- La commande `/btw` ne renvoie plus `No response received.` quand l'appel LLM
+  retourne un message assistant vide; elle affiche l'erreur du tour one-shot.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

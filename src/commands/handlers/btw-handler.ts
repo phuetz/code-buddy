@@ -50,7 +50,10 @@ export async function handleBtw(args: string[]): Promise<CommandHandlerResult> {
       { role: 'user', content: question },
     ]);
 
-    const answer = response?.choices?.[0]?.message?.content ?? 'No response received.';
+    const answer = response?.choices?.[0]?.message?.content;
+    if (!answer || answer.trim().length === 0) {
+      throw new Error('/btw received no assistant response');
+    }
 
     return {
       handled: true,
