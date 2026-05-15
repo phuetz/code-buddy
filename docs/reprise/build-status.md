@@ -822,6 +822,9 @@ npm run typecheck
 - Les providers LLM plugins bundles ne convertissent plus une reponse API sans
   contenu en chaine vide; Azure, Bedrock, Groq, Together, Fireworks, OpenRouter,
   Ollama, vLLM, Copilot, Gemma et TurboQuant levent maintenant une erreur.
+- Le provider runtime TurboQuant applique le meme garde-fou cote Ollama/vLLM:
+  chat non-stream et streaming echouent si le backend ne renvoie aucun contenu
+  utile, tout en conservant les tool calls vLLM sans texte assistant.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

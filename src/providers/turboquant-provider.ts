@@ -94,6 +94,17 @@ const CHARS_PER_TOKEN = 4;
 /** Default complexity threshold in tokens when 'auto' is chosen */
 const AUTO_COMPLEXITY_THRESHOLD = 800;
 
+function hasNonEmptyContent(content: string | null | undefined): content is string {
+  return typeof content === 'string' && content.trim().length > 0;
+}
+
+function requireBackendContent(backend: string, content: string | null | undefined): string {
+  if (!hasNonEmptyContent(content)) {
+    throw new Error(`${backend} returned empty response content`);
+  }
+  return content;
+}
+
 /**
  * Estimate total token count from a message array (content only, no tools).
  */
@@ -250,7 +261,7 @@ export class TurboQuantProvider {
     }
 
     const data = (await response.json()) as OllamaChatResponse;
-    const content = data.message?.content ?? '';
+    const content = requireBackendContent('Ollama', data.message?.content);
 
     return {
       choices: [
@@ -296,6 +307,7 @@ export class TurboQuantProvider {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let emittedContent = false;
 
     try {
       while (true) {
@@ -309,11 +321,19 @@ export class TurboQuantProvider {
           try {
             const parsed = JSON.parse(trimmed) as OllamaChatResponse;
             const token = parsed.message?.content;
-            if (token) yield token;
+            if (token) {
+              if (token.trim().length > 0) {
+                emittedContent = true;
+              }
+              yield token;
+            }
           } catch {
             // Partial JSON line — skip
           }
         }
+      }
+      if (!emittedContent) {
+        throw new Error('Ollama returned empty response content');
       }
     } finally {
       reader.releaseLock();
@@ -408,6 +428,7 @@ export class TurboQuantProvider {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let emittedContent = false;
 
     try {
       while (true) {
@@ -424,11 +445,19 @@ export class TurboQuantProvider {
               choices?: Array<{ delta?: { content?: string | null } }>;
             };
             const token = parsed.choices?.[0]?.delta?.content;
-            if (token) yield token;
+            if (token) {
+              if (token.trim().length > 0) {
+                emittedContent = true;
+              }
+              yield token;
+            }
           } catch {
             // Partial SSE line — skip
           }
         }
+      }
+      if (!emittedContent) {
+        throw new Error('vLLM returned empty response content');
       }
     } finally {
       reader.releaseLock();
@@ -506,14 +535,20 @@ export class TurboQuantProvider {
         arguments: tc.function?.arguments ?? '{}',
       },
     }));
+    const hasToolCalls = Boolean(toolCalls && toolCalls.length > 0);
+    const content = message?.content ?? null;
+
+    if (!hasToolCalls && !hasNonEmptyContent(content)) {
+      throw new Error('vLLM returned empty response content');
+    }
 
     return {
       choices: [
         {
           message: {
             role: message?.role ?? 'assistant',
-            content: message?.content ?? null,
-            ...(toolCalls && toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+            content,
+            ...(hasToolCalls ? { tool_calls: toolCalls } : {}),
           },
           finish_reason: choice?.finish_reason ?? 'stop',
         },

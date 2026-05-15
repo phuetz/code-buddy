@@ -63,8 +63,34 @@ function mockFetch(responseData: unknown, ok = true, status = 200): void {
   );
 }
 
+function mockFetchStream(bodyText: string, ok = true, status = 200): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok,
+      status,
+      statusText: ok ? 'OK' : 'Internal Server Error',
+      json: () => Promise.resolve({}),
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(bodyText));
+          controller.close();
+        },
+      }),
+    })
+  );
+}
+
 function mockFetchError(message: string): void {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error(message)));
+}
+
+async function collectStream(stream: AsyncIterable<string>): Promise<string[]> {
+  const chunks: string[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return chunks;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,13 +213,27 @@ describe('TurboQuantProvider — Ollama response', () => {
     expect(result.usage?.total_tokens).toBe(15);
   });
 
-  it('handles missing Ollama message content gracefully', async () => {
+  it('throws when Ollama message content is missing', async () => {
     mockFetch({ done: true });
 
     const provider = new TurboQuantProvider(makeConfig());
-    const result = await provider.chat(SHORT_MESSAGES);
+    await expect(provider.chat(SHORT_MESSAGES)).rejects.toThrow(
+      'Ollama returned empty response content'
+    );
+  });
 
-    expect(result.choices[0]!.message.content).toBe('');
+  it('throws when Ollama message content is blank', async () => {
+    mockFetch({
+      message: { role: 'assistant', content: '   ' },
+      done: true,
+      prompt_eval_count: 1,
+      eval_count: 1,
+    });
+
+    const provider = new TurboQuantProvider(makeConfig());
+    await expect(provider.chat(SHORT_MESSAGES)).rejects.toThrow(
+      'Ollama returned empty response content'
+    );
   });
 
   it('throws on Ollama HTTP error', async () => {
@@ -225,6 +265,29 @@ describe('TurboQuantProvider — vLLM response', () => {
     expect(result.choices[0]!.message.content).toBe('Hello from vLLM');
     expect(result.choices[0]!.finish_reason).toBe('stop');
     expect(result.usage?.total_tokens).toBe(28);
+  });
+
+  it('throws when vLLM returns no content without tool calls', async () => {
+    mockFetch({
+      choices: [
+        { message: { role: 'assistant', content: null }, finish_reason: 'stop' },
+      ],
+      usage: { prompt_tokens: 20, completion_tokens: 0, total_tokens: 20 },
+    });
+
+    const provider = new TurboQuantProvider(makeConfig());
+    await expect(provider.chat(LONG_MESSAGES)).rejects.toThrow(
+      'vLLM returned empty response content'
+    );
+  });
+
+  it('throws when vLLM omits choices', async () => {
+    mockFetch({ usage: { prompt_tokens: 20, completion_tokens: 0, total_tokens: 20 } });
+
+    const provider = new TurboQuantProvider(makeConfig());
+    await expect(provider.chat(LONG_MESSAGES)).rejects.toThrow(
+      'vLLM returned empty response content'
+    );
   });
 
   it('includes tool_calls in vLLM response when present', async () => {
@@ -263,6 +326,48 @@ describe('TurboQuantProvider — vLLM response', () => {
 
     const provider = new TurboQuantProvider(makeConfig());
     await expect(provider.chat(LONG_MESSAGES)).rejects.toThrow('vLLM API error: 503');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Streaming response formatting
+// ---------------------------------------------------------------------------
+
+describe('TurboQuantProvider — streaming response', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('streams Ollama tokens when content is present', async () => {
+    mockFetchStream(
+      [
+        JSON.stringify({ message: { role: 'assistant', content: 'Hel' } }),
+        JSON.stringify({ message: { role: 'assistant', content: 'lo' }, done: true }),
+        '',
+      ].join('\n')
+    );
+
+    const provider = new TurboQuantProvider(makeConfig());
+    await expect(collectStream(provider.chatStream(SHORT_MESSAGES))).resolves.toEqual([
+      'Hel',
+      'lo',
+    ]);
+  });
+
+  it('throws when Ollama streaming returns no content', async () => {
+    mockFetchStream(`${JSON.stringify({ message: { role: 'assistant', content: '' }, done: true })}\n`);
+
+    const provider = new TurboQuantProvider(makeConfig());
+    await expect(collectStream(provider.chatStream(SHORT_MESSAGES))).rejects.toThrow(
+      'Ollama returned empty response content'
+    );
+  });
+
+  it('throws when vLLM streaming returns no content', async () => {
+    mockFetchStream('data: {"choices":[{"delta":{"content":""}}]}\n\ndata: [DONE]\n\n');
+
+    const provider = new TurboQuantProvider(makeConfig());
+    await expect(collectStream(provider.chatStream(LONG_MESSAGES))).rejects.toThrow(
+      'vLLM returned empty response content'
+    );
   });
 });
 
