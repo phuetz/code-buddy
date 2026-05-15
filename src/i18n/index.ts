@@ -2,11 +2,13 @@
  * Internationalization (i18n) System
  *
  * Provides locale-aware string translation with parameter interpolation.
- * Supports 6 locales: en, fr, de, es, ja, zh.
+ * Supports locales that have real translation tables.
  * Auto-detects locale from environment or config override.
  */
 
-export type Locale = 'en' | 'fr' | 'de' | 'es' | 'ja' | 'zh';
+export type Locale = 'en' | 'fr';
+
+const supportedLocales: readonly Locale[] = ['en', 'fr'];
 
 export interface I18nStrings {
   // Common
@@ -92,15 +94,6 @@ localeTables.en = en;
 localeTables.fr = fr;
 
 /**
- * Stub locales — fall back to English for untranslated keys.
- */
-const stubLocales: Locale[] = ['de', 'es', 'ja', 'zh'];
-for (const loc of stubLocales) {
-  // Create a proxy that falls back to English for any missing key
-  localeTables[loc] = { ...en };
-}
-
-/**
  * Auto-detect locale from environment variables.
  * Priority: CODEBUDDY_LOCALE > LANG > LC_ALL > default 'en'
  */
@@ -112,8 +105,7 @@ function autoDetectLocale(): Locale {
     '';
 
   const code = envLocale.toLowerCase().split(/[._-]/)[0];
-  const supported: Locale[] = ['en', 'fr', 'de', 'es', 'ja', 'zh'];
-  if (supported.includes(code as Locale)) {
+  if (supportedLocales.includes(code as Locale)) {
     return code as Locale;
   }
   return 'en';
@@ -167,14 +159,14 @@ export function getLocale(): Locale {
  * Check if a locale is supported.
  */
 export function isLocaleSupported(locale: string): locale is Locale {
-  return ['en', 'fr', 'de', 'es', 'ja', 'zh'].includes(locale);
+  return supportedLocales.includes(locale as Locale);
 }
 
 /**
  * Get all supported locale codes.
  */
 export function getSupportedLocales(): Locale[] {
-  return ['en', 'fr', 'de', 'es', 'ja', 'zh'];
+  return [...supportedLocales];
 }
 
 /**

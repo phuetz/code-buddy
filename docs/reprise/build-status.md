@@ -216,6 +216,15 @@ npx eslint src/tools/video-tool.ts tests/tools/video-tool.test.ts --quiet
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/i18n.test.ts
+# 10 tests passed after removing untranslated locale stubs
+
+npx eslint src/i18n/index.ts tests/unit/i18n.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -427,6 +436,9 @@ npm run typecheck
 - `VideoTool` ne se contente plus d'un code retour `ffmpeg` a zero pour les
   extractions. Les frames, miniatures et pistes audio doivent maintenant
   exister et etre non vides avant que l'outil annonce un succes.
+- L'i18n n'annonce plus allemand, espagnol, japonais et chinois comme langues
+  supportees alors que ces tables etaient seulement des copies anglaises. Les
+  locales supportees sont maintenant limitees aux tables reelles `en` et `fr`.
 
 ## Blocage leve
 

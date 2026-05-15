@@ -51,9 +51,11 @@ describe('i18n System', () => {
     expect(result).toBe('bash failed: timeout');
   });
 
-  it('should fall back to English for unsupported locales', () => {
-    setLocale('de'); // stub locale
-    expect(t('common.yes')).toBe('Yes'); // falls back to English
+  it('should fall back to English for untranslated env locales', () => {
+    process.env.CODEBUDDY_LOCALE = 'de';
+    resetI18n();
+    expect(getLocale()).toBe('en');
+    expect(t('common.yes')).toBe('Yes');
   });
 
   it('should auto-detect locale from CODEBUDDY_LOCALE env', () => {
@@ -76,20 +78,15 @@ describe('i18n System', () => {
     expect(getLocale()).toBe('en');
   });
 
-  it('should list all supported locales', () => {
+  it('should list only translated locales', () => {
     const locales = getSupportedLocales();
-    expect(locales).toContain('en');
-    expect(locales).toContain('fr');
-    expect(locales).toContain('de');
-    expect(locales).toContain('es');
-    expect(locales).toContain('ja');
-    expect(locales).toContain('zh');
-    expect(locales).toHaveLength(6);
+    expect(locales).toEqual(['en', 'fr']);
   });
 
   it('should validate locale support', () => {
     expect(isLocaleSupported('en')).toBe(true);
     expect(isLocaleSupported('fr')).toBe(true);
+    expect(isLocaleSupported('de')).toBe(false);
     expect(isLocaleSupported('ko')).toBe(false);
     expect(isLocaleSupported('pt')).toBe(false);
   });
