@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 import { logger } from '../utils/logger.js';
 import type { ToolResult } from '../types/index.js';
 
@@ -270,9 +271,9 @@ function indent(text: string, prefix = '    '): string {
  */
 function scanForConflicts(cwd: string): ToolResult {
   try {
-    const { execSync } = require('child_process');
-    const output = execSync(
-      'git diff --name-only --diff-filter=U',
+    const output = execFileSync(
+      'git',
+      ['diff', '--name-only', '--diff-filter=U'],
       { cwd, encoding: 'utf-8', timeout: 10000 },
     ).trim();
 
@@ -298,8 +299,12 @@ function scanForConflicts(cwd: string): ToolResult {
       success: true,
       output: `Files with merge conflicts:\n${summaries.join('\n')}`,
     };
-  } catch {
-    // Fallback: not in a git repo or git not available
-    return { success: true, output: 'Unable to scan for conflicts (git not available or not in a repository).' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`scan conflicts error: ${message}`);
+    return {
+      success: false,
+      error: `Unable to scan for conflicts: git not available or not in a repository. ${message}`,
+    };
   }
 }

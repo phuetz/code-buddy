@@ -4,11 +4,20 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockReadFileSync, mockWriteFileSync, mockExistsSync } = vi.hoisted(() => ({
+const { mockReadFileSync, mockWriteFileSync, mockExistsSync, mockExecFileSync } = vi.hoisted(() => ({
   mockReadFileSync: vi.fn(),
   mockWriteFileSync: vi.fn(),
   mockExistsSync: vi.fn().mockReturnValue(true),
+  mockExecFileSync: vi.fn(),
 }));
+
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  return {
+    ...actual,
+    execFileSync: mockExecFileSync,
+  };
+});
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
@@ -216,6 +225,7 @@ describe('executeResolveConflicts', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(SIMPLE_CONFLICT);
     mockWriteFileSync.mockImplementation(() => {});
+    mockExecFileSync.mockReturnValue('');
   });
 
   it('should resolve conflicts in a specific file', async () => {
@@ -242,5 +252,32 @@ describe('executeResolveConflicts', () => {
     const result = await executeResolveConflicts({ file_path: 'nonexistent.ts' });
     expect(result.success).toBe(false);
     expect(result.error).toContain('not found');
+  });
+
+  it('should scan for conflicted files through git', async () => {
+    mockExecFileSync.mockReturnValue('test.ts\n');
+
+    const result = await executeResolveConflicts({ scan_only: true });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('Files with merge conflicts');
+    expect(result.output).toContain('test.ts: 1 conflict(s)');
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      'git',
+      ['diff', '--name-only', '--diff-filter=U'],
+      expect.objectContaining({ encoding: 'utf-8', timeout: 10000 }),
+    );
+  });
+
+  it('should fail when git conflict scan cannot run', async () => {
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('not a git repository');
+    });
+
+    const result = await executeResolveConflicts({ scan_only: true });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Unable to scan for conflicts');
+    expect(result.error).toContain('not a git repository');
   });
 });

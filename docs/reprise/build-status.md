@@ -649,6 +649,9 @@ npm run typecheck
 - Dans le meme runner, un outil headless qui echoue est maintenant renvoye au
   modele comme `Error: ...` et l'evenement `tool_result` porte `success=false`;
   l'ancien fallback pouvait transformer une erreur vide en `Done`.
+- `resolve_conflicts` ne transforme plus un echec de scan Git en succes
+  informatif. Si `git diff --name-only --diff-filter=U` ne peut pas tourner,
+  `/conflicts scan` remonte maintenant un echec explicite.
 
 ## Blocage leve
 
