@@ -70,6 +70,64 @@ function execKubectlSafe(
   });
 }
 
+function waitForPortForwardReady(
+  proc: ReturnType<typeof spawn>,
+  timeoutMs: number = 5000
+): Promise<{ success: true } | { success: false; error: string }> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let output = '';
+
+    const cleanup = () => {
+      proc.stdout?.removeAllListeners('data');
+      proc.stderr?.removeAllListeners('data');
+      proc.removeAllListeners('error');
+      proc.removeAllListeners('exit');
+      proc.removeAllListeners('close');
+      clearTimeout(timer);
+    };
+
+    const finish = (result: { success: true } | { success: false; error: string }) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const appendOutput = (data: Buffer) => {
+      output += data.toString();
+      if (/Forwarding from/i.test(output)) {
+        finish({ success: true });
+      }
+    };
+
+    const timer = setTimeout(() => {
+      finish({
+        success: false,
+        error: `kubectl port-forward did not report readiness within ${timeoutMs}ms${output.trim() ? `: ${output.trim()}` : ''}`,
+      });
+    }, timeoutMs);
+
+    proc.stdout?.on('data', appendOutput);
+    proc.stderr?.on('data', appendOutput);
+    proc.on('error', (error: Error) => {
+      finish({ success: false, error: error.message });
+    });
+    proc.on('exit', (code: number | null) => {
+      finish({
+        success: false,
+        error: `kubectl port-forward exited before becoming ready${code !== null ? ` (code ${code})` : ''}${output.trim() ? `: ${output.trim()}` : ''}`,
+      });
+    });
+    proc.on('close', (code: number | null) => {
+      finish({
+        success: false,
+        error: `kubectl port-forward closed before becoming ready${code !== null ? ` (code ${code})` : ''}${output.trim() ? `: ${output.trim()}` : ''}`,
+      });
+    });
+  });
+}
+
 export type K8sResourceType =
   | 'pods'
   | 'deployments'
@@ -689,7 +747,6 @@ export class KubernetesTool {
       }
     }
 
-    // Note: Port forward runs in background, we just start it
     const resourcePrefix = resourceType === 'services' ? 'svc/' : 'pod/';
     const args = ['port-forward', `${resourcePrefix}${name}`, `${localPort}:${remotePort}`];
 
@@ -697,13 +754,23 @@ export class KubernetesTool {
       args.push('-n', namespace);
     }
 
-    // Start port-forward in background (it won't block)
     const proc = spawn('kubectl', args, {
       cwd: this.cwd,
       detached: true,
-      stdio: 'ignore',
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
+    const startup = await waitForPortForwardReady(proc);
+    if (!startup.success) {
+      proc.kill('SIGTERM');
+      return {
+        success: false,
+        error: `Port-forward failed to start: ${startup.error}`,
+      };
+    }
+
+    proc.stdout?.destroy();
+    proc.stderr?.destroy();
     proc.unref();
 
     return {

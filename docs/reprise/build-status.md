@@ -618,6 +618,9 @@ npm run typecheck
 - `/watch start` verifie maintenant que `FileWatcherTrigger` est réellement en
   cours d'execution apres `start()`. Si `fs.watch` echoue au demarrage, la
   commande renvoie l'erreur au lieu d'annoncer `File watcher started`.
+- `KubernetesTool.portForward()` attend maintenant le signal de readiness
+  `Forwarding from ...` de `kubectl` avant d'annoncer le tunnel demarre. Si
+  `kubectl` manque ou quitte immediatement, l'outil renvoie l'erreur.
 
 ## Blocage leve
 
