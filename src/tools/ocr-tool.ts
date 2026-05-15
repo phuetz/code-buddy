@@ -32,7 +32,7 @@ export interface OCROptions {
 /**
  * OCR Tool for extracting text from images
  * Uses Tesseract OCR as the backend (must be installed on system)
- * Falls back to basic image analysis if Tesseract is not available
+ * Can fall back to OpenAI vision OCR when OPENAI_API_KEY is configured
  */
 export class OCRTool {
   private readonly supportedFormats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.tif', '.webp'];
@@ -366,11 +366,13 @@ export class OCRTool {
       }
     });
 
-    const successCount = results.filter(r => r.text).length;
+    const successCount = results.filter(r => !r.error).length;
+    const allFailed = filePaths.length > 0 && successCount === 0;
 
     return {
-      success: true,
-      output: `Batch OCR completed: ${successCount}/${filePaths.length} successful\n\n` +
+      success: !allFailed,
+      error: allFailed ? `Batch OCR failed: 0/${filePaths.length} images processed successfully` : undefined,
+      output: `Batch OCR ${allFailed ? 'failed' : 'completed'}: ${successCount}/${filePaths.length} successful\n\n` +
         results.map(r => `${r.file}: ${r.error || `${r.text?.slice(0, 100)}...`}`).join('\n'),
       data: results
     };

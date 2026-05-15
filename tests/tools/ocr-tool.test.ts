@@ -211,6 +211,16 @@ describe('OCRTool', () => {
       expect(result.success).toBe(true);
       expect((result.data as any[])).toHaveLength(2);
     });
+
+    it('should fail when no files are processed successfully', async () => {
+      mockVfs.exists.mockResolvedValue(false);
+
+      const result = await tool.batchOCR(['missing-1.png', 'missing-2.png']);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('0/2');
+      expect(result.output).toContain('Batch OCR failed: 0/2 successful');
+    });
   });
 
   describe('extractRegion', () => {

@@ -744,6 +744,9 @@ npm run typecheck
   backends natifs (PowerShell, screencapture, scrot ou ImageMagick) et echoue si
   le backend disponible ne peut pas recadrer, au lieu de renvoyer une capture
   plein ecran comme si le crop avait reussi.
+- `OCRTool.batchOCR` ne renvoie plus `success=true` quand toutes les images du
+  lot echouent; le resultat garde les erreurs par fichier, mais le statut global
+  devient rouge a `0/N` succes.
 
 ## Blocage leve
 
