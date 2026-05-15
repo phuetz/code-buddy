@@ -305,7 +305,7 @@ describe('startChannelA2ABridge', () => {
     expect(sent[0].content).toMatch(/Usage: \/skill/);
   });
 
-  it('reports an empty-reply marker when result is missing', async () => {
+  it('reports a task failure when result is missing', async () => {
     const manager = getChannelManager();
     const channel = new MockChannel({ type: 'cli' });
     await channel.connect();
@@ -327,6 +327,31 @@ describe('startChannelA2ABridge', () => {
 
     const sent = channel.getSentMessages();
     expect(sent).toHaveLength(1);
-    expect(sent[0].content).toBe('(empty reply from fleet)');
+    expect(sent[0].content).toBe('Task failed: fleet returned no output');
+  });
+
+  it('reports a task failure when result is blank', async () => {
+    const manager = getChannelManager();
+    const channel = new MockChannel({ type: 'cli' });
+    await channel.connect();
+    manager.registerChannel(channel);
+
+    const { fn: fakeFetch } = makeFakeFetch([
+      { status: 200, json: { id: 't', status: 'completed', result: '   ' } },
+    ]);
+
+    startChannelA2ABridge({
+      hubBaseUrl: 'http://127.0.0.1:3000',
+      channelManager: manager,
+      defaultSkill: 'ollama-qwen3-4b',
+      fetchImpl: fakeFetch,
+    });
+
+    channel.simulateMessage('hi');
+    await flush();
+
+    const sent = channel.getSentMessages();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].content).toBe('Task failed: fleet returned no output');
   });
 });

@@ -843,6 +843,9 @@ npm run typecheck
 - Le provider Gemini natif ne fabrique plus de message de secours quand Google
   renvoie des `parts` vides; les chemins non-stream et streaming exigent
   maintenant du texte utile ou un function call.
+- Le bridge canal -> A2A ne repond plus `(empty reply from fleet)` quand une
+  tache hub se termine sans resultat; il signale maintenant un echec explicite
+  au canal appelant.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

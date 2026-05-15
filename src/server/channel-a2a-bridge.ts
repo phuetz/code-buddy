@@ -201,8 +201,12 @@ export function startChannelA2ABridge(opts: ChannelA2ABridgeOptions): ChannelA2A
     }
 
     const result = typeof dataObj.result === 'string' ? dataObj.result : '';
-    if (!result) {
-      await replyText(channel, msg, '(empty reply from fleet)');
+    if (!result.trim()) {
+      logger.warn('[channel-a2a-bridge] hub completed without fleet output', {
+        channel: channel.type,
+        status: statusStr,
+      });
+      await replyText(channel, msg, 'Task failed: fleet returned no output');
       return;
     }
     await replyText(channel, msg, result);
