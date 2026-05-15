@@ -1084,7 +1084,22 @@ export class RemoteManager extends EventEmitter {
       log('[RemoteManager] Feishu channel registered');
     }
 
-    // TODO: Register other channels (WeChat, Telegram, DingTalk)
+    const unsupportedChannels = (
+      [
+        ['wechat', config.channels.wechat],
+        ['telegram', config.channels.telegram],
+        ['dingtalk', config.channels.dingtalk],
+        ['websocket', config.channels.websocket],
+      ] as const
+    )
+      .filter(([, channelConfig]) => Boolean(channelConfig))
+      .map(([channel]) => channel);
+
+    if (unsupportedChannels.length > 0) {
+      throw new Error(
+        `Remote channel(s) not implemented: ${unsupportedChannels.join(', ')}. Only Feishu is currently supported.`
+      );
+    }
   }
 
   /**

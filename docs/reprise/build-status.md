@@ -795,6 +795,9 @@ npm run typecheck
   `impact` / `flowchart` / `file_map` quand la population profonde ne produit
   aucune donnee d'appels; l'outil demande maintenant de construire un call graph
   exploitable.
+- Cowork RemoteManager ne demarre plus un gateway en ignorant une channel
+  configuree mais absente du runtime (Telegram, WeChat, DingTalk ou WebSocket);
+  le demarrage echoue explicitement tant que seule la channel Feishu est cablee.
 
 ## Blocage leve
 
