@@ -352,8 +352,7 @@ export class CollaborativeSessionManager extends EventEmitter {
 
   generateInviteLink(): string {
     if (!this.currentSession) throw new Error('Not currently in a collaborative session. Join or create a session first.');
-    const inviteCode = crypto.randomBytes(16).toString('base64url');
-    return 'codebuddy://join/' + this.currentSession.id + '?code=' + inviteCode;
+    throw new Error('Invite links require a real collaboration relay. This in-memory manager can only share sessions inside the current process.');
   }
 
   private generateId(prefix: string): string {

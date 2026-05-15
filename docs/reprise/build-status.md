@@ -318,6 +318,15 @@ npx eslint src/commands/handlers/team-session-handler.ts tests/commands/team-ses
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/collaborative-mode.test.ts
+# 69 tests passed after in-memory collaboration invite cleanup
+
+npx eslint src/collaboration/collaborative-mode.ts tests/unit/collaborative-mode.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -575,6 +584,10 @@ npm run typecheck
   `encryption_key` n'est configuree. Le texte d'aide et le chemin de stockage
   indiquent aussi le dossier reel `~/.codebuddy/sessions/`, pas l'ancien nom
   `shares`.
+- `CollaborativeSessionManager.generateInviteLink()` ne fabrique plus un lien
+  `codebuddy://join/...` inutilisable. Le manager historique est seulement
+  memoire locale tant qu'un vrai relay de collaboration n'est pas branche; il
+  echoue donc explicitement au lieu de produire un faux code d'invitation.
 
 ## Blocage leve
 

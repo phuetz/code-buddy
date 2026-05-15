@@ -489,12 +489,12 @@ describe('CollaborativeSessionManager', () => {
   });
 
   describe('generateInviteLink', () => {
-    it('should generate invite link', () => {
+    it('should reject invite links without a collaboration relay', () => {
       manager.createSession('Test Session', { name: 'Owner' });
 
-      const link = manager.generateInviteLink();
-
-      expect(link).toMatch(/^codebuddy:\/\/join\/sess_[a-f0-9]+\?code=/);
+      expect(() => manager.generateInviteLink()).toThrow(
+        'Invite links require a real collaboration relay'
+      );
     });
 
     it('should throw when not in session', () => {
