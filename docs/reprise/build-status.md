@@ -327,6 +327,15 @@ npx eslint src/collaboration/collaborative-mode.ts tests/unit/collaborative-mode
 
 npm run typecheck
 # passed
+
+npm test -- tests/commands/script-handlers.test.ts tests/unit/enhanced-command-handler.test.ts
+# 13 tests passed after /script run placeholder cleanup
+
+npx eslint src/commands/handlers/script-handlers.ts tests/commands/script-handlers.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -588,6 +597,10 @@ npm run typecheck
   `codebuddy://join/...` inutilisable. Le manager historique est seulement
   memoire locale tant qu'un vrai relay de collaboration n'est pas branche; il
   echoue donc explicitement au lieu de produire un faux code d'invitation.
+- `/script run` attend maintenant l'execution du Buddy Script et renvoie la
+  sortie ou l'erreur dans la reponse de commande. Le chat ne se contente plus
+  d'un message `Running script...` pendant que le resultat part seulement dans
+  `console.log`.
 
 ## Blocage leve
 

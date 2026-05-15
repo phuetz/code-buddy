@@ -24,7 +24,7 @@ export interface CommandHandlerResult {
 /**
  * Handle /script command
  */
-export function handleScript(args: string[]): CommandHandlerResult {
+export async function handleScript(args: string[]): Promise<CommandHandlerResult> {
   const action = args[0]?.toLowerCase();
   const target = args.slice(1).join(' ');
 
@@ -73,7 +73,7 @@ export function handleScript(args: string[]): CommandHandlerResult {
 /**
  * Run a script file
  */
-function handleScriptRun(filePath: string): CommandHandlerResult {
+async function handleScriptRun(filePath: string): Promise<CommandHandlerResult> {
   if (!filePath) {
     return {
       handled: true,
@@ -106,24 +106,6 @@ Examples:
     };
   }
 
-  // Execute asynchronously and return placeholder
-  // The actual execution happens in the background
-  executeScriptAsync(fullPath);
-
-  return {
-    handled: true,
-    entry: {
-      type: "assistant",
-      content: `🚀 Running script: ${path.basename(fullPath)}...`,
-      timestamp: new Date(),
-    },
-  };
-}
-
-/**
- * Execute script asynchronously
- */
-async function executeScriptAsync(filePath: string): Promise<void> {
   const manager = getScriptManager();
 
   try {
@@ -135,19 +117,42 @@ async function executeScriptAsync(filePath: string): Promise<void> {
     });
 
     if (result.success) {
-      console.log('\n📜 Script Output:');
-      console.log('─'.repeat(40));
-      result.output.forEach(line => console.log(line));
-      console.log('─'.repeat(40));
-      console.log(`✅ Script completed in ${result.duration}ms`);
-      if (result.returnValue !== null && result.returnValue !== undefined) {
-        console.log(`   Return value: ${JSON.stringify(result.returnValue)}`);
-      }
-    } else {
-      console.log(`\n❌ Script failed: ${result.error}`);
+      const output = result.output.length > 0 ? result.output.join('\n') : '(no output)';
+      const returnValue = result.returnValue !== null && result.returnValue !== undefined
+        ? `\nReturn value: ${JSON.stringify(result.returnValue)}`
+        : '';
+
+      return {
+        handled: true,
+        entry: {
+          type: "assistant",
+          content: `📜 Script Output: ${path.basename(filePath)}
+${'─'.repeat(40)}
+${output}
+${'─'.repeat(40)}
+✅ Script completed in ${result.duration}ms${returnValue}`,
+          timestamp: new Date(),
+        },
+      };
     }
+
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `❌ Script failed: ${result.error || 'Unknown script error'}`,
+        timestamp: new Date(),
+      },
+    };
   } catch (error) {
-    console.log(`\n❌ Script error: ${error instanceof Error ? error.message : error}`);
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `❌ Script error: ${error instanceof Error ? error.message : error}`,
+        timestamp: new Date(),
+      },
+    };
   }
 }
 
