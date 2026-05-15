@@ -249,7 +249,11 @@ export async function handleVulns(args: string[]): Promise<CommandHandlerResult>
     handled: true,
     entry: {
       type: 'assistant',
-      content: result.output || result.error || 'Scan complete.',
+      content: result.output?.trim()
+        || result.error?.trim()
+        || (result.success
+          ? 'Vulnerability scan completed with no report output.'
+          : 'Vulnerability scan failed without error details.'),
       timestamp: new Date(),
     },
   };

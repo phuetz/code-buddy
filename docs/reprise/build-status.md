@@ -348,6 +348,15 @@ npm run typecheck
 
 npm run validate
 # passed after Extended Thinking suite alignment; warnings remain historical
+
+npm test -- tests/commands/vulns-handler.test.ts tests/unit/dependency-scanner.test.ts
+# 22 tests passed after /vulns empty-output wording cleanup
+
+npx eslint src/commands/handlers/lightweight.ts tests/commands/vulns-handler.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -676,6 +685,9 @@ npm run validate
 - `/vulns` ne transforme plus l'absence d'un outil d'audit ou une sortie JSON
   illisible en `0 vulnerabilite`. Les audits incomplets sont marques
   `success=false`, avec le detail partiel disponible dans `output`.
+- Le handler slash `/vulns` ne retombe plus sur le message generique
+  `Scan complete.` si le scanner revient sans sortie; il distingue maintenant
+  explicitement un succes sans rapport et un echec sans detail.
 - `DependencyAnalyzer` n'enterre plus les checks optionnels non executes:
   `npm outdated` sans sortie et `madge` indisponible ajoutent maintenant des
   avertissements au rapport au lieu de laisser croire a zero outdated/cycle.
