@@ -101,34 +101,46 @@ export function cat36DaemonDailyReset(): TestDef[] {
       name: '36.1-daily-reset-instantiation',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/daemon/daily-reset.js');
-        const DailyReset = mod.DailyResetManager || mod.default;
-        if (!DailyReset) return { pass: true, metadata: { skip: 'no DailyResetManager' } };
-        const mgr = new DailyReset();
-        return { pass: mgr !== undefined };
+        const { DailyResetManager } = await import('../../src/daemon/daily-reset.js');
+        const mgr = new DailyResetManager();
+        const config = mgr.getConfig();
+        return {
+          pass: mgr.isEnabled() && config.resetHour === 4 && config.resetMinute === 0,
+          metadata: { config },
+        };
       },
     },
     {
       name: '36.2-reset-hour-configurable',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/daemon/daily-reset.js');
-        const DailyReset = mod.DailyResetManager || mod.default;
-        if (!DailyReset) return { pass: true, metadata: { skip: 'no export' } };
-        const mgr = new DailyReset({ resetHour: 5 });
-        return { pass: mgr !== undefined };
+        const { DailyResetManager } = await import('../../src/daemon/daily-reset.js');
+        const mgr = new DailyResetManager({ resetHour: 5 });
+        const config = mgr.getConfig();
+        const msUntilReset = mgr.msUntilNextReset();
+        return {
+          pass: config.resetHour === 5 && msUntilReset > 0 && msUntilReset <= 24 * 60 * 60 * 1000,
+          metadata: { config, msUntilReset },
+        };
       },
     },
     {
-      name: '36.3-should-reset-logic',
+      name: '36.3-run-reset-clears-and-summarizes',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/daemon/daily-reset.js');
-        const DailyReset = mod.DailyResetManager || mod.default;
-        if (!DailyReset) return { pass: true, metadata: { skip: 'no export' } };
-        const mgr = new DailyReset();
-        const shouldReset = mgr.shouldReset?.() ?? mgr.needsReset?.() ?? false;
-        return { pass: typeof shouldReset === 'boolean', metadata: { shouldReset } };
+        const { DailyResetManager } = await import('../../src/daemon/daily-reset.js');
+        const mgr = new DailyResetManager();
+        const messages = [{ role: 'user', content: 'hello' }];
+        const result = await mgr.runReset(messages, { role: 'system', content: 'system prompt' });
+        return {
+          pass:
+            result.messagesCleared === 1 &&
+            result.summaryMessage !== null &&
+            messages.length === 2 &&
+            messages[0].role === 'system' &&
+            messages[1].role === 'assistant',
+          metadata: { messagesCleared: result.messagesCleared, messageCount: messages.length },
+        };
       },
     },
     {
@@ -165,7 +177,7 @@ export function cat37BackgroundTasks(): TestDef[] {
         const mod = await import('../../src/agent/background-tasks.js');
         const getMgr = mod.getBackgroundTaskManager;
         const reset = mod.resetBackgroundTaskManager;
-        if (!getMgr || !reset) return { pass: true, metadata: { skip: 'no singleton exports' } };
+        if (typeof getMgr !== 'function' || typeof reset !== 'function') return { pass: false, metadata: { error: 'missing singleton exports' } };
         reset();
         const a = getMgr();
         const b = getMgr();
@@ -182,7 +194,7 @@ export function cat37BackgroundTasks(): TestDef[] {
         const mod = await import('../../src/agent/background-tasks.js');
         const reset = mod.resetBackgroundTaskManager;
         const getMgr = mod.getBackgroundTaskManager;
-        if (!getMgr || !reset) return { pass: true, metadata: { skip: 'no exports' } };
+        if (typeof getMgr !== 'function' || typeof reset !== 'function') return { pass: false, metadata: { error: 'missing exports' } };
         reset();
         const mgr = getMgr();
         const tasks = mgr.listTasks();
@@ -197,7 +209,7 @@ export function cat37BackgroundTasks(): TestDef[] {
         const mod = await import('../../src/agent/background-tasks.js');
         const reset = mod.resetBackgroundTaskManager;
         const getMgr = mod.getBackgroundTaskManager;
-        if (!getMgr || !reset) return { pass: true, metadata: { skip: 'no exports' } };
+        if (typeof getMgr !== 'function' || typeof reset !== 'function') return { pass: false, metadata: { error: 'missing exports' } };
         reset();
         const mgr = getMgr();
         const task = mgr.getTask('nonexistent-id');
@@ -212,7 +224,7 @@ export function cat37BackgroundTasks(): TestDef[] {
         const mod = await import('../../src/agent/background-tasks.js');
         const reset = mod.resetBackgroundTaskManager;
         const getMgr = mod.getBackgroundTaskManager;
-        if (!getMgr || !reset) return { pass: true, metadata: { skip: 'no exports' } };
+        if (typeof getMgr !== 'function' || typeof reset !== 'function') return { pass: false, metadata: { error: 'missing exports' } };
         reset();
         const mgr = getMgr();
         const output = mgr.getTaskOutput('nonexistent-id');
@@ -227,7 +239,7 @@ export function cat37BackgroundTasks(): TestDef[] {
         const mod = await import('../../src/agent/background-tasks.js');
         const reset = mod.resetBackgroundTaskManager;
         const getMgr = mod.getBackgroundTaskManager;
-        if (!getMgr || !reset) return { pass: true, metadata: { skip: 'no exports' } };
+        if (typeof getMgr !== 'function' || typeof reset !== 'function') return { pass: false, metadata: { error: 'missing exports' } };
         reset();
         const mgr = getMgr();
         const killed = mgr.killTask('nonexistent-id');

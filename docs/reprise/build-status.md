@@ -686,6 +686,9 @@ npm run typecheck
 - Les checks Observability des scripts etendus ne masquent plus l'absence de
   `initObservability` ou du module `tracing`: les exports sont requis, et le
   chemin sans variables d'environnement verifie le retour et l'etat env.
+- Les checks script `DailyResetManager` et `BackgroundTaskManager` ne skippent
+  plus vert si les exports attendus disparaissent; reset quotidien, singleton
+  et operations inexistantes sont maintenant verifies comme contrats reels.
 
 ## Blocage leve
 
