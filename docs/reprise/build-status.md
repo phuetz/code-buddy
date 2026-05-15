@@ -810,6 +810,9 @@ npm run typecheck
 - Le mode `wide research` ne compte plus un worker sans sortie comme un succes
   et ne renvoie plus `success=true` quand 0 worker a produit du contenu; la CLI
   ecrit aussi un rapport en echec au lieu d'afficher "Research complete".
+- Cowork ne transforme plus une commande `sudo` terminee avec un code de sortie
+  non nul en simple sortie texte; le wrapper de mot de passe rejette maintenant
+  l'execution avec le code/signal et le stderr/stdout utile.
 
 ## Blocage leve
 

@@ -64,6 +64,7 @@ import { ThinkTagStreamParser } from './think-tag-parser';
 import { fetchOllamaModelInfo } from '../config/ollama-api';
 import { getReasoningBridge } from '../reasoning/reasoning-bridge';
 import { createReasoningCapture } from '../reasoning/reasoning-capture';
+import { finalizeSudoCommandOutput } from './sudo-command';
 
 // Virtual workspace path shown to the model (hides real sandbox path)
 const VIRTUAL_WORKSPACE_PATH = '/workspace';
@@ -813,15 +814,19 @@ ${hints.join('\n')}
                   clearTimeout(timer);
                   reject(err);
                 });
-                child.on('close', () => {
+                child.on('close', (code, closeSignal) => {
                   clearTimeout(timer);
-                  resolve(stdout + stderr);
+                  try {
+                    resolve(finalizeSudoCommandOutput(stdout, stderr, code, closeSignal));
+                  } catch (err) {
+                    reject(err);
+                  }
                 });
                 child.stdin.write(password + '\n');
                 child.stdin.end();
               });
               return {
-                content: [{ type: 'text' as const, text: output || '(no output)' }],
+                content: [{ type: 'text' as const, text: output }],
                 details: undefined as unknown,
               };
             } catch (sudoErr) {
