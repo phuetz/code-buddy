@@ -281,6 +281,42 @@ describe('Notebook Tool - Execution', () => {
       expect(result.content).toContain('executed successfully');
       expect(result.content).toContain('hello world');
     });
+
+    it('should fail when the executed cell records an error output', async () => {
+      mockExecFile.mockImplementation((...args: unknown[]) => {
+        const cb = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, '', '');
+      });
+
+      const notebook = makeNotebook([
+        { type: 'code', source: '1 / 0' },
+      ]);
+
+      const executedNotebook = makeExecutedNotebook([
+        {
+          type: 'code',
+          source: '1 / 0',
+          execution_count: 1,
+          outputs: [{ output_type: 'error', ename: 'ZeroDivisionError', evalue: 'division by zero', traceback: [] }],
+        },
+      ]);
+
+      mockReadFile
+        .mockResolvedValueOnce(notebook)
+        .mockResolvedValueOnce(executedNotebook);
+
+      mockWriteFile.mockResolvedValue(undefined);
+
+      const result = await tool.execute({
+        action: 'execute_cell',
+        path: 'test.ipynb',
+        cellIndex: 0,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('executed with errors');
+      expect(result.error).toContain('ZeroDivisionError');
+    });
   });
 
   // ==========================================================================
@@ -350,8 +386,9 @@ describe('Notebook Tool - Execution', () => {
         path: 'test.ipynb',
       });
 
-      expect(result.success).toBe(true);
-      expect(result.content).toContain('Cells with errors: 1');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Cells with errors: 1');
+      expect(result.error).toContain('ZeroDivisionError');
     });
   });
 

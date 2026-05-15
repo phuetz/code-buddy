@@ -327,9 +327,7 @@ export class NotebookTool {
     const markdownCells = notebook.cells.filter(c => c.cell_type === 'markdown');
 
     const executedCells = codeCells.filter(c => c.execution_count !== null && c.execution_count !== undefined);
-    const cellsWithErrors = codeCells.filter(c =>
-      c.outputs?.some(o => o.output_type === 'error')
-    );
+    const cellsWithErrors = codeCells.filter(c => this.hasErrorOutput(c));
 
     // Extract imports
     const imports: string[] = [];
@@ -533,7 +531,11 @@ export class NotebookTool {
       await this.saveNotebook(filePath, notebook);
 
       // Format output
-      const parts = [`## Cell ${cellIndex} executed successfully`, ''];
+      const cellHasErrors = this.hasErrorOutput(executedCell);
+      const parts = [
+        `## Cell ${cellIndex} executed ${cellHasErrors ? 'with errors' : 'successfully'}`,
+        '',
+      ];
       if (executedCell.outputs && executedCell.outputs.length > 0) {
         parts.push('**Output:**');
         for (const output of executedCell.outputs) {
@@ -543,7 +545,12 @@ export class NotebookTool {
         parts.push('(no output)');
       }
 
-      return { success: true, content: parts.join('\n') };
+      const result = parts.join('\n');
+      if (cellHasErrors) {
+        return { success: false, error: result };
+      }
+
+      return { success: true, content: result };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: `Failed to execute cell ${cellIndex}: ${message}` };
@@ -597,9 +604,7 @@ export class NotebookTool {
       const executedNotebook = await this.loadNotebook(filePath);
       const codeCells = executedNotebook.cells.filter(c => c.cell_type === 'code');
       const cellsWithOutput = codeCells.filter(c => c.outputs && c.outputs.length > 0);
-      const cellsWithErrors = codeCells.filter(c =>
-        c.outputs?.some(o => o.output_type === 'error')
-      );
+      const cellsWithErrors = codeCells.filter(c => this.hasErrorOutput(c));
 
       const parts = [
         `# Executed all cells in ${outputName}`,
@@ -627,7 +632,12 @@ export class NotebookTool {
         parts.push('');
       }
 
-      return { success: true, content: parts.join('\n') };
+      const result = parts.join('\n');
+      if (cellsWithErrors.length > 0) {
+        return { success: false, error: result };
+      }
+
+      return { success: true, content: result };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: `Failed to execute notebook: ${message}` };
@@ -750,6 +760,10 @@ export class NotebookTool {
       default:
         return '[Unknown output]';
     }
+  }
+
+  private hasErrorOutput(cell: NotebookCell): boolean {
+    return cell.outputs?.some(o => o.output_type === 'error') ?? false;
   }
 }
 
