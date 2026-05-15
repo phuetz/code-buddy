@@ -763,6 +763,9 @@ npm run typecheck
   contexte depasse le budget; la compression embarquee genere un resume
   extractif explicite, borne et deterministe, sans masquer l'absence d'un
   service de summarisation LLM.
+- `FeishuAPI.sendTypingIndicator` ne renvoie plus une promesse resolue en no-op
+  pour une capacite absente de Feishu/Lark; l'appel echoue explicitement avec
+  la limite plateforme.
 
 ## Blocage leve
 

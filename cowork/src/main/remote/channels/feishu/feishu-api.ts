@@ -388,11 +388,13 @@ export class FeishuAPI {
   }
 
   /**
-   * Send typing indicator (Feishu doesn't have native support, but we can use this for other purposes)
+   * Send typing indicator.
+   *
+   * Feishu/Lark does not expose a native typing-indicator API for bot messages.
+   * Surface that limitation explicitly instead of returning a no-op success.
    */
   async sendTypingIndicator(_chatId: string): Promise<void> {
-    // Feishu doesn't support typing indicators
-    // This is a no-op placeholder
+    throw new Error('Feishu does not support typing indicators for bot messages');
   }
 
   /**
