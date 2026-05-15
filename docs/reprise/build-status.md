@@ -670,6 +670,9 @@ npm run typecheck
 - Le template GitHub Actions `lint-format` ne termine plus le typecheck par
   `|| true`: si aucun script de typage ne passe, la CI generee devient rouge
   au lieu de donner un faux vert.
+- Les scripts de tests reels `cat-gateway-daemon` et `cat-channels-extended`
+  ne contiennent plus leurs assertions `|| true`: creation de session et forme
+  de message entrant sont maintenant verifiees sur des valeurs observees.
 
 ## Blocage leve
 

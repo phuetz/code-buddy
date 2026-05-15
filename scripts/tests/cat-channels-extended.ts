@@ -54,13 +54,27 @@ export function cat45ChannelCore(): TestDef[] {
       },
     },
     {
-      name: '45.4-inbound-message-shape',
+      name: '45.4-mock-channel-inbound-shape',
       timeout: 5000,
       fn: async () => {
         const mod = await import('../../src/channels/core.js');
-        // Verify that core channel module is structured
-        const hasType = mod.ChannelType !== undefined || mod.CHANNEL_TYPES !== undefined || true;
-        return { pass: hasType };
+        const channel = new mod.MockChannel({ type: 'cli' });
+        const message = channel.simulateMessage('/help now');
+        const status = channel.getStatus();
+        return {
+          pass:
+            message.content === '/help now' &&
+            message.isCommand === true &&
+            message.commandName === 'help' &&
+            Array.isArray(message.commandArgs) &&
+            message.commandArgs[0] === 'now' &&
+            status.type === 'cli',
+          metadata: {
+            commandName: message.commandName,
+            commandArgs: message.commandArgs,
+            status,
+          },
+        };
       },
     },
     {

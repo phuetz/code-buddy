@@ -58,8 +58,8 @@ export function cat35GatewayTypes(): TestDef[] {
         sm.createSession('test-session', { name: 'Test' });
         const session = sm.getSession?.('test-session');
         return {
-          pass: session !== undefined || true, // createSession succeeded without throwing
-          metadata: { type: typeof sm },
+          pass: session !== undefined && session.id === 'test-session' && session.name === 'Test' && sm.hasSession('test-session'),
+          metadata: { sessionId: session?.id, sessionName: session?.name, hasSession: sm.hasSession('test-session') },
         };
       },
     },
