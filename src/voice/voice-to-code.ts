@@ -18,6 +18,13 @@ export interface VoiceCodeConfig {
   language: string;
   /** Auto-send transcribed text as a prompt */
   autoExecute: boolean;
+  /** Live microphone/audio source feeding PCM/WAV chunks into the recognizer */
+  audioSource?: VoiceAudioSource;
+}
+
+export interface VoiceAudioSource {
+  start(onAudio: (audio: Buffer) => void): Promise<void>;
+  stop(): Promise<void>;
 }
 
 const DEFAULT_VOICE_CODE_CONFIG: VoiceCodeConfig = {
@@ -98,6 +105,10 @@ export class VoiceToCodePipeline extends EventEmitter {
         interimResults: false,
       });
 
+      if (!this.config.audioSource) {
+        throw new Error(getLiveCaptureUnavailableMessage());
+      }
+
       // Listen for transcription events
       recognizer.on('transcript', (result: { text: string; isFinal: boolean }) => {
         if (!result.isFinal) return;
@@ -120,14 +131,27 @@ export class VoiceToCodePipeline extends EventEmitter {
       });
 
       await recognizer.startListening();
+      try {
+        await this.config.audioSource.start((audio) => {
+          void recognizer.processAudio(audio).catch((err: Error) => {
+            this.emit('error', err);
+          });
+        });
+      } catch (err) {
+        await recognizer.stopListening();
+        throw err;
+      }
+
       this.recognizer = recognizer;
       this.active = true;
       this.emit('status', 'started');
     } catch (err) {
-      // STT modules not available — provide setup instructions
-      const setupMessage = getSetupInstructions(this.config.sttProvider);
-      this.emit('error', new Error(setupMessage));
-      throw new Error(setupMessage);
+      const setupMessage = err instanceof Error && err.message === getLiveCaptureUnavailableMessage()
+        ? err.message
+        : getSetupInstructions(this.config.sttProvider);
+      const error = new Error(setupMessage);
+      this.emit('error', error);
+      throw error;
     }
   }
 
@@ -138,6 +162,10 @@ export class VoiceToCodePipeline extends EventEmitter {
     if (!this.active) return;
 
     try {
+      if (this.config.audioSource) {
+        await this.config.audioSource.stop();
+      }
+
       if (this.recognizer && typeof (this.recognizer as { stopListening?: () => Promise<void> }).stopListening === 'function') {
         await (this.recognizer as { stopListening: () => Promise<void> }).stopListening();
       }
@@ -163,6 +191,14 @@ export class VoiceToCodePipeline extends EventEmitter {
   getConfig(): VoiceCodeConfig {
     return { ...this.config };
   }
+}
+
+function getLiveCaptureUnavailableMessage(): string {
+  return [
+    'Voice-to-code live microphone capture is not wired in this CLI runtime.',
+    'A real VoiceAudioSource must be provided before the pipeline can start.',
+    'Use one-shot voice input/transcription paths until a live microphone source is connected.',
+  ].join('\n');
 }
 
 /**

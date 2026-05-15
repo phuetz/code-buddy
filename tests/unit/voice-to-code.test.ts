@@ -2,7 +2,7 @@
  * Unit tests for Voice-to-Code Pipeline
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { detectIntent, VoiceToCodePipeline } from '../../src/voice/voice-to-code';
 
 describe('Voice-to-Code Pipeline', () => {
@@ -57,6 +57,32 @@ describe('Voice-to-Code Pipeline', () => {
       const pipeline = new VoiceToCodePipeline();
       // Should not throw
       await pipeline.stop();
+      expect(pipeline.isActive()).toBe(false);
+    });
+
+    it('should not report active without a live audio source', async () => {
+      const pipeline = new VoiceToCodePipeline();
+
+      await expect(pipeline.start()).rejects.toThrow('live microphone capture is not wired');
+
+      expect(pipeline.isActive()).toBe(false);
+    });
+
+    it('should start and stop when a live audio source is provided', async () => {
+      const audioSource = {
+        start: vi.fn(async () => undefined),
+        stop: vi.fn(async () => undefined),
+      };
+      const pipeline = new VoiceToCodePipeline({ audioSource });
+
+      await pipeline.start();
+
+      expect(pipeline.isActive()).toBe(true);
+      expect(audioSource.start).toHaveBeenCalledOnce();
+
+      await pipeline.stop();
+
+      expect(audioSource.stop).toHaveBeenCalledOnce();
       expect(pipeline.isActive()).toBe(false);
     });
   });

@@ -608,6 +608,10 @@ npm run typecheck
 - `/batch` ne lance plus une unite dependante apres l'echec de sa dependance.
   Les dependances ne sont satisfaites que par des unites reussies; les unites
   bloquees sont maintenant marquees `Skipped` avec la dependance en cause.
+- `/voice-code on` ne declare plus un pipeline actif quand aucun flux micro
+  live n'est branche. `VoiceToCodePipeline` exige maintenant une
+  `VoiceAudioSource` reelle; sans elle, la commande echoue clairement et le
+  statut reste `inactive`.
 
 ## Blocage leve
 
