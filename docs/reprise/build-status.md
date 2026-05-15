@@ -336,6 +336,18 @@ npx eslint src/commands/handlers/script-handlers.ts tests/commands/script-handle
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/think-tool.test.ts tests/unit/extended-thinking.test.ts tests/unit/thinking.test.ts
+# Extended Thinking suites passed after aligning zero-thought failures
+
+npx eslint src/agent/thinking/extended-thinking.ts tests/unit/think-tool.test.ts tests/unit/extended-thinking.test.ts tests/unit/thinking.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
+
+npm run validate
+# passed after Extended Thinking suite alignment; warnings remain historical
 ```
 
 ## Debloque pendant la reprise
@@ -874,9 +886,10 @@ npm run typecheck
 - Le Tree-of-Thought ne fabrique plus de pensee locale `Continue analyzing...`
   quand la generation LLM echoue; une generation vide/non parseable echoue, et
   une evaluation LLM impossible vaut 0 au lieu d'un score neutre.
-- Extended Thinking ne retourne plus un resultat fallback quand aucune pensee
-  reelle n'a ete generee; les reponses de pensee/synthese vides echouent, et
-  une erreur de verification produit une verification negative explicite.
+- Extended Thinking garde maintenant un contrat coherent dans ses suites de
+  tests: zero pensee reelle generee reste une erreur explicite, tandis qu'une
+  synthese ratee apres au moins une pensee reelle retombe sur la meilleure
+  conclusion avec une incertitude visible.
 - L'executor agent streaming ne fabrique plus `Using tools to help you...`
   quand le stream assistant ne contient ni texte ni tool call; ce cas remonte
   maintenant comme erreur du tour.

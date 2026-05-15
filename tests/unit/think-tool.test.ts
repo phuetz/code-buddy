@@ -181,12 +181,11 @@ describe('ExtendedThinkingEngine', () => {
       expect(result).toBeDefined();
     });
 
-    it('should handle API errors gracefully', async () => {
+    it('should fail when API errors prevent thought generation', async () => {
       mockChatResponse.mockRejectedValue(new Error('API Error'));
 
-      const result = await engine.think('Test problem');
-      expect(result).toBeDefined();
-      expect(result.uncertainties).toContain('Synthesis process encountered issues');
+      await expect(engine.think('Test problem'))
+        .rejects.toThrow('Extended thinking produced no thoughts to synthesize');
     });
   });
 
@@ -238,14 +237,11 @@ describe('ExtendedThinkingEngine', () => {
       expect(thoughtHandler).toHaveBeenCalled();
     });
 
-    it('should handle empty response', async () => {
-      mockChatResponse
-        .mockResolvedValueOnce({ choices: [{ message: { content: '' } }] })
-        .mockResolvedValueOnce({ choices: [{ message: { content: '<thought_type>conclusion</thought_type><content>End</content><confidence>0.9</confidence>' } }] })
-        .mockResolvedValue({ choices: [{ message: { content: '' } }] });
+    it('should fail when the first thought response is empty', async () => {
+      mockChatResponse.mockResolvedValue({ choices: [{ message: { content: '' } }] });
 
-      const result = await engine.think('Test');
-      expect(result).toBeDefined();
+      await expect(engine.think('Test'))
+        .rejects.toThrow('Extended thinking produced no thoughts to synthesize');
     });
   });
 
@@ -437,16 +433,16 @@ describe('ExtendedThinkingEngine', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle null choices in response', async () => {
+    it('should fail on null choices in response', async () => {
       mockChatResponse.mockResolvedValue({ choices: [] });
-      const result = await engine.think('Test');
-      expect(result).toBeDefined();
+      await expect(engine.think('Test'))
+        .rejects.toThrow('Extended thinking produced no thoughts to synthesize');
     });
 
-    it('should handle undefined message content', async () => {
+    it('should fail on undefined message content', async () => {
       mockChatResponse.mockResolvedValue({ choices: [{ message: {} }] });
-      const result = await engine.think('Test');
-      expect(result).toBeDefined();
+      await expect(engine.think('Test'))
+        .rejects.toThrow('Extended thinking produced no thoughts to synthesize');
     });
 
     it('should handle very long problem text', async () => {
