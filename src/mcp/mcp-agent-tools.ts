@@ -58,7 +58,11 @@ export function formatAgentResponse(entries: ChatEntry[]): string {
     }
   }
 
-  return parts.join('\n\n') || 'No response generated.';
+  const response = parts.join('\n\n').trim();
+  if (!response) {
+    throw new Error('Agent returned no response content.');
+  }
+  return response;
 }
 
 /**

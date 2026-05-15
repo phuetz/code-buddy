@@ -341,6 +341,15 @@ describe('MCP Agent Intelligence Layer', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('API down');
     });
+
+    it('should report empty agent responses as errors', async () => {
+      mockProcessUserMessage.mockResolvedValueOnce([]);
+      const handler = registeredTools.get('agent_chat')!.handler;
+      const result = await handler({ message: 'empty' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Agent returned no response content');
+    });
   });
 
   describe('agent_task handler', () => {
@@ -733,9 +742,8 @@ describe('MCP Agent Intelligence Layer', () => {
       expect(result).toContain('Thinking about it...');
     });
 
-    it('should return fallback for empty entries', () => {
-      const result = formatAgentResponse([]);
-      expect(result).toBe('No response generated.');
+    it('should reject empty entries', () => {
+      expect(() => formatAgentResponse([])).toThrow('Agent returned no response content');
     });
   });
 

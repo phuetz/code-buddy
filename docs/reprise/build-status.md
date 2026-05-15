@@ -863,6 +863,9 @@ npm run typecheck
   retourne un message assistant vide; elle affiche l'erreur du tour one-shot.
 - La recherche Perplexity ne transforme plus une reponse API sans contenu en
   `No response`; le chemin direct retourne maintenant un echec explicite.
+- Les outils MCP `agent_chat` / `agent_task` / `agent_plan` ne renvoient plus
+  `No response generated.` quand l'agent ne produit aucune entree exploitable;
+  ils exposent une erreur MCP.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
