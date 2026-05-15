@@ -756,6 +756,9 @@ npm run typecheck
 - `optimization/parallel-executor` ne transforme plus un resultat outil resolu
   `{ success:false }` en appel parallele reussi; l'erreur est maintenant
   propagee dans le resultat de l'appel et comptee comme echec.
+- `ImageProcessorTool.compare` n'utilise plus un placeholder metadata-only
+  (`1.0`/`0.5`): la similarite vient maintenant d'une vraie comparaison pixel
+  normalisee via `sharp`.
 
 ## Blocage leve
 

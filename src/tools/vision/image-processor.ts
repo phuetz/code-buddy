@@ -126,17 +126,50 @@ export class ImageProcessorTool {
       }
   }
 
-  // Basic diff/comparison using sharp (metadata comparison for now, pixel diff requires more advanced logic or pixelmatch)
+  // Pixel comparison using sharp. Images are normalized to a shared thumbnail so
+  // different dimensions can still be compared without pulling in pixelmatch.
   async compare(path1: string, path2: string): Promise<{ similarity: number; description: string; sameDimensions: boolean }> {
       const meta1 = await sharp(path1).metadata();
       const meta2 = await sharp(path2).metadata();
-      
+
+      if (!meta1.width || !meta1.height || !meta2.width || !meta2.height) {
+          throw new Error('Cannot compare images without dimensions');
+      }
+
       const sameDimensions = meta1.width === meta2.width && meta1.height === meta2.height;
-      
-      // Stubbing actual pixel diff for now, but returning real metadata comparison
+      const targetWidth = Math.max(1, Math.min(256, meta1.width, meta2.width));
+      const targetHeight = Math.max(1, Math.min(256, meta1.height, meta2.height));
+      const [img1, img2] = await Promise.all([
+          sharp(path1)
+              .resize(targetWidth, targetHeight, { fit: 'fill' })
+              .toColourspace('srgb')
+              .removeAlpha()
+              .raw()
+              .toBuffer(),
+          sharp(path2)
+              .resize(targetWidth, targetHeight, { fit: 'fill' })
+              .toColourspace('srgb')
+              .removeAlpha()
+              .raw()
+              .toBuffer(),
+      ]);
+
+      const length = Math.min(img1.length, img2.length);
+      if (length === 0) {
+          throw new Error('Cannot compare empty image buffers');
+      }
+
+      let totalDifference = 0;
+      for (let i = 0; i < length; i++) {
+          totalDifference += Math.abs(img1[i] - img2[i]);
+      }
+
+      const averageDifference = totalDifference / length / 255;
+      const similarity = Math.max(0, Math.min(1, 1 - averageDifference));
+
       return {
-          similarity: sameDimensions && meta1.format === meta2.format && meta1.size === meta2.size ? 1.0 : 0.5,
-          description: `Compared ${path.basename(path1)} (${meta1.width}x${meta1.height}) with ${path.basename(path2)} (${meta2.width}x${meta2.height})`,
+          similarity: Number(similarity.toFixed(4)),
+          description: `Pixel comparison of ${path.basename(path1)} (${meta1.width}x${meta1.height}) and ${path.basename(path2)} (${meta2.width}x${meta2.height})`,
           sameDimensions
       }
   }
