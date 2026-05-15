@@ -1,7 +1,7 @@
 /**
  * Tests for SWE Agent Adapter (registry integration)
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { getSWEAgent, resetSWEAgent, SWESpecializedAgent } from '../../src/agent/specialized/swe-agent-adapter.js';
 
 describe('SWESpecializedAgent', () => {
@@ -50,5 +50,19 @@ describe('SWESpecializedAgent', () => {
     const a = getSWEAgent();
     const b = getSWEAgent();
     expect(a).toBe(b);
+  });
+
+  it('returns a failed AgentResult when the SWE run ends in an internal error', async () => {
+    const agent = new SWESpecializedAgent();
+    const result = await agent.execute({
+      action: 'run',
+      params: {
+        llmCall: vi.fn().mockResolvedValue({ content: '', tool_calls: [] }),
+        executeTool: vi.fn(),
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('SWE agent returned no terminal response');
   });
 });

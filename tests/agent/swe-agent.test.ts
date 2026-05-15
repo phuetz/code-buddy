@@ -90,6 +90,19 @@ describe('SWEAgent', () => {
     expect(agent.status).toBe(AgentStatus.FINISHED);
   });
 
+  it('fails terminal responses without content', async () => {
+    mockLLM.mockResolvedValueOnce({
+      content: '   ',
+      tool_calls: [],
+    } as SWELLMResponse);
+
+    const agent = createAgent();
+    const result = await agent.run('Return nothing');
+
+    expect(result).toBe('Error: SWE agent returned no terminal response');
+    expect(agent.status).toBe(AgentStatus.ERROR);
+  });
+
   it('detects stuck state and recovers', async () => {
     const stuckHandler = vi.fn();
 

@@ -7,6 +7,7 @@ import {
   type AgentTask,
   type AgentResult,
 } from './types.js';
+import { AgentStatus } from '../state-machine.js';
 
 const SWE_AGENT_CONFIG = {
   id: 'swe',
@@ -52,12 +53,43 @@ export class SWESpecializedAgent extends SpecializedAgent {
 
       const prompt = this.buildPrompt(task);
       const result = await agent.run(prompt);
+      const output = result.trim();
+      const state = agent.getState();
+
+      if (!output) {
+        return {
+          success: false,
+          error: 'SWE agent returned no output',
+          duration: Date.now() - start,
+          metadata: { steps: state.currentStep },
+        };
+      }
+
+      if (agent.status === AgentStatus.ERROR || output.startsWith('Error:')) {
+        return {
+          success: false,
+          error: output.replace(/^Error:\s*/, ''),
+          output: result,
+          duration: Date.now() - start,
+          metadata: { steps: state.currentStep },
+        };
+      }
+
+      if (output.startsWith('Max steps (')) {
+        return {
+          success: false,
+          error: output,
+          output: result,
+          duration: Date.now() - start,
+          metadata: { steps: state.currentStep },
+        };
+      }
 
       return {
         success: true,
         output: result,
         duration: Date.now() - start,
-        metadata: { steps: agent.getState().currentStep },
+        metadata: { steps: state.currentStep },
       };
     } catch (error) {
       return {

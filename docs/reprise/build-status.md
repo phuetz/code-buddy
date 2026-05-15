@@ -850,6 +850,9 @@ npm run typecheck
   `Aggregation failed: no content returned.` quand l'appel d'agregation ne
   renvoie aucun texte; il bascule vers le rapport fallback base sur les vraies
   sorties workers.
+- L'agent SWE specialise ne transforme plus une reponse terminale vide en
+  `No response`, et son adaptateur ne renvoie plus `success=true` quand le run
+  interne finit en erreur ou en limite de steps.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

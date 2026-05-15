@@ -367,7 +367,10 @@ export class SWEAgent extends EventEmitter {
 
     // No tool calls → terminal response
     if (!response.tool_calls?.length) {
-      return response.content || 'No response';
+      if (response.content.trim().length === 0) {
+        throw new Error('SWE agent returned no terminal response');
+      }
+      return response.content;
     }
 
     // Act: execute tools
