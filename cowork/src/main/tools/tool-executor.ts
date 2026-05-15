@@ -8,6 +8,8 @@ import type { ToolResult, ExecutionContext, MountedPath } from '../../renderer/t
 import { isUncPath } from '../../shared/local-file-path';
 import { isPathWithinRoot } from './path-containment';
 
+export const COMMAND_COMPLETED_WITH_NO_OUTPUT = 'Command completed successfully with no output.';
+
 /**
  * ToolExecutor - Secure tool execution framework
  *
@@ -455,7 +457,7 @@ export class ToolExecutor {
           }
         }
         if (code === 0) {
-          resolve(stdout || 'Command completed successfully');
+          resolve(stdout || COMMAND_COMPLETED_WITH_NO_OUTPUT);
         } else {
           reject(new Error(stderr || `Command exited with code ${code}`));
         }
@@ -972,7 +974,7 @@ export class ToolExecutor {
           }
         }
         if (code === 0) {
-          resolve({ success: true, output: stdout || 'Command completed' });
+          resolve({ success: true, output: stdout || COMMAND_COMPLETED_WITH_NO_OUTPUT });
         } else {
           resolve({
             success: false,

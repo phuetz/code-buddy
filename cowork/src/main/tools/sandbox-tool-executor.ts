@@ -15,6 +15,8 @@ import type { ToolResult, ExecutionContext, MountedPath } from '../../renderer/t
 import { isUncPath } from '../../shared/local-file-path';
 import { isPathWithinRoot } from './path-containment';
 
+const COMMAND_COMPLETED_WITH_NO_OUTPUT = 'Command completed successfully with no output.';
+
 /**
  * SandboxToolExecutor - Executes tools through the sandbox
  */
@@ -163,7 +165,7 @@ export class SandboxToolExecutor {
     const result = await this.sandboxAdapter.executeCommand(command, resolvedCwd);
 
     if (result.success) {
-      return result.stdout || 'Command completed successfully';
+      return result.stdout || COMMAND_COMPLETED_WITH_NO_OUTPUT;
     } else {
       throw new Error(result.stderr || `Command exited with code ${result.exitCode}`);
     }

@@ -906,6 +906,9 @@ npm run typecheck
 - Les backends sandbox (registry, Docker, E2B, OpenShell) ne laissent plus les
   echecs sans stdout disparaitre dans `output:''`; l'erreur devient visible
   dans `output`, y compris pour le streaming Docker sans chunk stdout.
+- Cowork affiche maintenant `Command completed successfully with no output.`
+  pour les commandes reussies sans stdout, au lieu de `Command completed` ou
+  `Command completed successfully`.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
