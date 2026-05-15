@@ -7,7 +7,7 @@
 
 import { EventEmitter } from "events";
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from "../../codebuddy/client.js";
-import { getErrorMessage } from "../../types/index.js";
+import { getErrorMessage, ToolResult } from "../../types/index.js";
 import {
   AgentRole,
   AgentConfig,
@@ -20,6 +20,16 @@ import {
   ToolExecutor,
   AgentCapability,
 } from "./types.js";
+
+const TOOL_COMPLETED_WITH_NO_OUTPUT = "Tool completed successfully with no output.";
+const TOOL_FAILED_WITH_NO_DETAILS = "Tool failed without error details.";
+
+function formatToolResultForAgent(result: ToolResult): string {
+  if (result.success) {
+    return result.output?.trim() || TOOL_COMPLETED_WITH_NO_OUTPUT;
+  }
+  return result.error?.trim() || result.output?.trim() || TOOL_FAILED_WITH_NO_DETAILS;
+}
 
 /**
  * Abstract base class for all agents
@@ -264,6 +274,12 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
         throw new Error("No response from agent");
       }
 
+      const toolCalls = assistantMessage.tool_calls ?? [];
+      const hasToolCalls = toolCalls.length > 0;
+      if (!assistantMessage.content?.trim() && !hasToolCalls) {
+        throw new Error("Agent returned no content or tool calls");
+      }
+
       // Add assistant message to history
       this.messages.push({
         role: "assistant",
@@ -277,8 +293,8 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
       }
 
       // Handle tool calls
-      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        for (const toolCall of assistantMessage.tool_calls) {
+      if (hasToolCalls) {
+        for (const toolCall of toolCalls) {
           this.toolsUsed.push(toolCall.function.name);
           this.emit("agent:tool", {
             role: this.config.role,
@@ -289,9 +305,7 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
 
           this.messages.push({
             role: "tool",
-            content: result.success
-              ? result.output || "Success"
-              : result.error || "Error",
+            content: formatToolResultForAgent(result),
             tool_call_id: toolCall.id,
           });
         }

@@ -357,6 +357,15 @@ npx eslint src/commands/handlers/lightweight.ts tests/commands/vulns-handler.tes
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/subagents.test.ts tests/agent/subagents.test.ts tests/agent/multi-agent/base-agent-runtime.test.ts
+# 85 tests passed after multi-agent tool result wording cleanup
+
+npx eslint src/agent/subagents.ts src/agent/multi-agent/base-agent.ts tests/unit/subagents.test.ts tests/agent/subagents.test.ts tests/agent/multi-agent/base-agent-runtime.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -918,6 +927,10 @@ npm run typecheck
 - `AdvancedParallelExecutor` ne considere plus un runner `success=true` sans
   sortie ni fichiers modifies comme un vrai succes, et les erreurs/timeout sans
   sortie gardent maintenant un `output` exploitable pour les agregateurs.
+- Les agents multi-agent et subagents ne reinjectent plus `Success` / `Error`
+  generiques au modele quand un tool reussit sans sortie ou echoue sans detail;
+  les messages outil nomment maintenant explicitement ces deux etats. Une
+  reponse assistant sans texte ni tool call devient aussi une erreur runtime.
 - Wide Research ne stocke plus les workers rates avec `output:''`; un worker
   en echec garde maintenant une sortie explicite `Worker failed: ...`.
 - `TaskGraph` et `DelegationEngine` normalisent les resultats en echec: un

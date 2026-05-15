@@ -2,6 +2,16 @@ import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../codebud
 import { EventEmitter } from "events";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 
+const TOOL_COMPLETED_WITH_NO_OUTPUT = "Tool completed successfully with no output.";
+const TOOL_FAILED_WITH_NO_DETAILS = "Tool failed without error details.";
+
+function formatToolResultForSubagent(result: ToolResult): string {
+  if (result.success) {
+    return result.output?.trim() || TOOL_COMPLETED_WITH_NO_OUTPUT;
+  }
+  return result.error?.trim() || result.output?.trim() || TOOL_FAILED_WITH_NO_DETAILS;
+}
+
 export interface SubagentConfig {
   name: string;
   description: string;
@@ -345,6 +355,12 @@ export class Subagent extends EventEmitter {
           throw new Error("No response from subagent");
         }
 
+        const toolCalls = assistantMessage.tool_calls ?? [];
+        const hasToolCalls = toolCalls.length > 0;
+        if (!assistantMessage.content?.trim() && !hasToolCalls) {
+          throw new Error("Subagent returned no content or tool calls");
+        }
+
         // Add assistant message to history
         messages.push({
           role: "assistant",
@@ -353,8 +369,8 @@ export class Subagent extends EventEmitter {
         });
 
         // Handle tool calls
-        if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-          for (const toolCall of assistantMessage.tool_calls) {
+        if (hasToolCalls) {
+          for (const toolCall of toolCalls) {
             toolsUsed.push(toolCall.function.name);
             this.emit("subagent:tool", {
               name: toolCall.function.name,
@@ -365,9 +381,7 @@ export class Subagent extends EventEmitter {
               const result = await executeTool(toolCall);
               messages.push({
                 role: "tool",
-                content: result.success
-                  ? result.output || "Success"
-                  : result.error || "Error",
+                content: formatToolResultForSubagent(result),
                 tool_call_id: toolCall.id,
               });
             }

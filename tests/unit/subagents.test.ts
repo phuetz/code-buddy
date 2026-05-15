@@ -112,6 +112,93 @@ describe('Subagents Module', () => {
       expect(mockClient.chat).toHaveBeenCalledTimes(2);
     });
 
+    it('should send explicit tool output when a successful tool is silent', async () => {
+      const agent = new Subagent(apiKey, config, baseURL);
+      const mockClient = (agent as unknown as MockedSubagent).client;
+
+      mockClient.chat
+        .mockResolvedValueOnce({
+          choices: [{
+            message: {
+              content: 'Calling tool...',
+              tool_calls: [{
+                id: 'call_silent',
+                function: {
+                  name: 'silent_tool',
+                  arguments: '{}',
+                },
+              }],
+            },
+          }],
+        })
+        .mockResolvedValueOnce({
+          choices: [{ message: { content: 'Tool result handled' } }],
+        });
+
+      const executeTool = jest.fn().mockResolvedValue({
+        success: true,
+        output: '   ',
+      } as ToolResult);
+
+      await agent.run('test task', undefined, [], executeTool);
+
+      const secondRoundMessages = mockClient.chat.mock.calls[1][0] as Array<{ role: string; content?: string }>;
+      const toolMessage = [...secondRoundMessages].reverse().find((message) => message.role === 'tool');
+      expect(toolMessage).toMatchObject({
+        role: 'tool',
+        content: 'Tool completed successfully with no output.',
+      });
+    });
+
+    it('should send explicit tool output when a tool fails without details', async () => {
+      const agent = new Subagent(apiKey, config, baseURL);
+      const mockClient = (agent as unknown as MockedSubagent).client;
+
+      mockClient.chat
+        .mockResolvedValueOnce({
+          choices: [{
+            message: {
+              content: 'Calling tool...',
+              tool_calls: [{
+                id: 'call_failed',
+                function: {
+                  name: 'failed_tool',
+                  arguments: '{}',
+                },
+              }],
+            },
+          }],
+        })
+        .mockResolvedValueOnce({
+          choices: [{ message: { content: 'Failure handled' } }],
+        });
+
+      const executeTool = jest.fn().mockResolvedValue({ success: false } as ToolResult);
+
+      await agent.run('test task', undefined, [], executeTool);
+
+      const secondRoundMessages = mockClient.chat.mock.calls[1][0] as Array<{ role: string; content?: string }>;
+      const toolMessage = [...secondRoundMessages].reverse().find((message) => message.role === 'tool');
+      expect(toolMessage).toMatchObject({
+        role: 'tool',
+        content: 'Tool failed without error details.',
+      });
+    });
+
+    it('should fail when the subagent returns no content or tool calls', async () => {
+      const agent = new Subagent(apiKey, config, baseURL);
+      const mockClient = (agent as unknown as MockedSubagent).client;
+
+      mockClient.chat.mockResolvedValueOnce({
+        choices: [{ message: { content: '   ' } }],
+      });
+
+      const result = await agent.run('test task');
+
+      expect(result.success).toBe(false);
+      expect(result.output).toContain('Subagent returned no content or tool calls');
+    });
+
     it('should respect max rounds', async () => {
       const agent = new Subagent(apiKey, { ...config, maxRounds: 2 }, baseURL);
       const mockClient = (agent as unknown as MockedSubagent).client;
