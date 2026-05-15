@@ -725,6 +725,9 @@ npm run typecheck
 - Le `MultiAgentSystem` n'ignore plus silencieusement les erreurs de detection
   de conflits entre agents: il conserve le fallback, mais ajoute un evenement
   timeline visible `Conflict detection unavailable`.
+- Les echecs d'enregistrement du pipeline middleware principal (`turn-limit`,
+  `cost-limit`, context warnings, reasoning, auto-repair, quality-gate) passent
+  de `debug` a `warn` avec le garde-fou degrade explicitement nomme.
 
 ## Blocage leve
 

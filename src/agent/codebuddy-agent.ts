@@ -329,7 +329,7 @@ export class CodeBuddyAgent extends BaseAgent {
             pipeline.use(new TurnLimitMiddleware());
             logger.debug('TurnLimitMiddleware registered in pipeline (priority 10)');
           } catch (err) {
-            logger.debug('Failed to register TurnLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+            logger.warn('Failed to register TurnLimitMiddleware; turn-limit enforcement is degraded', { error: err instanceof Error ? err.message : String(err) });
           }
           // Cost limit middleware (priority 20) — enforces session cost budget
           try {
@@ -340,7 +340,7 @@ export class CodeBuddyAgent extends BaseAgent {
             }));
             logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');
           } catch (err) {
-            logger.debug('Failed to register CostLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+            logger.warn('Failed to register CostLimitMiddleware; cost-limit enforcement is degraded', { error: err instanceof Error ? err.message : String(err) });
           }
           // Context warning middleware (priority 30) — warns when nearing context limits
           try {
@@ -348,7 +348,7 @@ export class CodeBuddyAgent extends BaseAgent {
             pipeline.use(new ContextWarningMiddleware(this.contextManager));
             logger.debug('ContextWarningMiddleware registered in pipeline (priority 30)');
           } catch (err) {
-            logger.debug('Failed to register ContextWarningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+            logger.warn('Failed to register ContextWarningMiddleware; context-limit warnings are degraded', { error: err instanceof Error ? err.message : String(err) });
           }
           // Reasoning middleware (priority 42) — auto-detects complex queries
           try {
@@ -356,7 +356,7 @@ export class CodeBuddyAgent extends BaseAgent {
             pipeline.use(createReasoningMiddleware());
             logger.debug('ReasoningMiddleware registered in pipeline (priority 42)');
           } catch (err) {
-            logger.debug('Failed to register ReasoningMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+            logger.warn('Failed to register ReasoningMiddleware; automatic reasoning guidance is degraded', { error: err instanceof Error ? err.message : String(err) });
           }
           // Workflow guard (priority 45)
           pipeline.use(new WorkflowGuardMiddleware());
@@ -366,7 +366,7 @@ export class CodeBuddyAgent extends BaseAgent {
             pipeline.use(createAutoRepairMiddleware());
             logger.debug('AutoRepairMiddleware registered in pipeline (priority 150)');
           } catch (err) {
-            logger.debug('Failed to register AutoRepairMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+            logger.warn('Failed to register AutoRepairMiddleware; repair suggestions are degraded', { error: err instanceof Error ? err.message : String(err) });
           }
           // Quality gate middleware (priority 200) — auto-delegates to specialized agents
           try {
@@ -374,13 +374,15 @@ export class CodeBuddyAgent extends BaseAgent {
             pipeline.use(createQualityGateMiddleware());
             logger.debug('QualityGateMiddleware registered in pipeline (priority 200)');
           } catch (err) {
-            logger.debug('Failed to register QualityGateMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+            logger.warn('Failed to register QualityGateMiddleware; post-implementation review gates are degraded', { error: err instanceof Error ? err.message : String(err) });
           }
           this.executor.setMiddlewarePipeline(pipeline);
           logger.debug('WorkflowGuardMiddleware registered in default pipeline');
         }
       }).catch(err => {
-        logger.debug('Failed to register middleware pipeline (non-critical)', err);
+        logger.warn('Failed to register middleware pipeline; workflow guards are degraded', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
     }
 
