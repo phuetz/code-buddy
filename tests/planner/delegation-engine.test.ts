@@ -61,6 +61,7 @@ describe('DelegationEngine', () => {
     );
 
     expect(result.result.success).toBe(false);
+    expect(result.result.output).toBe('Task failed: always fails');
   });
 
   it('should aggregate results', () => {

@@ -1,4 +1,9 @@
-import { TaskGraph, PlannedTask, TaskResult } from '../../src/agent/planner/task-graph.js';
+import {
+  formatTaskFailureOutput,
+  TaskGraph,
+  PlannedTask,
+  TaskResult,
+} from '../../src/agent/planner/task-graph.js';
 
 describe('TaskGraph', () => {
   it('should create an empty graph', () => {
@@ -44,8 +49,14 @@ describe('TaskGraph', () => {
     ]);
 
     graph.markFailed('t1', 'error');
+    expect(graph.getTask('t1')?.result?.output).toBe('Task failed: error');
     expect(graph.getTask('t2')?.status).toBe('skipped');
     expect(graph.getTask('t3')?.status).toBe('skipped');
+  });
+
+  it('should format task failures without empty output', () => {
+    expect(formatTaskFailureOutput('boom')).toBe('Task failed: boom');
+    expect(formatTaskFailureOutput('')).toBe('Task failed without output or error details.');
   });
 
   it('should detect cycles', () => {
@@ -115,6 +126,23 @@ describe('TaskGraph', () => {
 
     expect(result.success).toBe(true);
     expect(result.completedCount).toBe(3);
+  });
+
+  it('should keep failed executor results visible', async () => {
+    const graph = new TaskGraph([
+      { id: 't1', description: 'Task 1', dependencies: [], status: 'pending' },
+    ]);
+
+    const result = await graph.execute(async () => ({
+      success: false,
+      output: '',
+      duration: 0,
+      error: 'boom',
+    }));
+
+    expect(result.success).toBe(false);
+    expect(result.results.get('t1')?.output).toBe('Task failed: boom');
+    expect(graph.getTask('t1')?.result?.output).toBe('Task failed: boom');
   });
 
   it('should report progress', () => {

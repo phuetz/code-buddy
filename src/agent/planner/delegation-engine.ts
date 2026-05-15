@@ -5,7 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { PlannedTask, TaskResult } from './task-graph.js';
+import { formatTaskFailureOutput, normalizeTaskResult, type PlannedTask, type TaskResult } from './task-graph.js';
 import { logger } from '../../utils/logger.js';
 
 // ============================================================================
@@ -96,7 +96,7 @@ export class DelegationEngine extends EventEmitter {
       try {
         this.emit('delegation:attempt', { taskId: task.id, subagent, attempt: retries + 1 });
 
-        const result = await executor(task, context);
+        const result = normalizeTaskResult(await executor(task, context));
 
         if (result.success) {
           // Store output in shared context for downstream tasks
@@ -121,7 +121,12 @@ export class DelegationEngine extends EventEmitter {
     return {
       taskId: task.id,
       subagent,
-      result: { success: false, output: '', duration: 0, error: lastError || 'Max retries exceeded' },
+      result: {
+        success: false,
+        output: formatTaskFailureOutput(lastError || 'Max retries exceeded'),
+        duration: 0,
+        error: lastError || 'Max retries exceeded',
+      },
       retries,
     };
   }

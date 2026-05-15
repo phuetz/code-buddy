@@ -38,6 +38,25 @@ export interface TaskGraphResult {
   skippedCount: number;
 }
 
+export function formatTaskFailureOutput(error: string | undefined): string {
+  const detail = error?.trim();
+  return detail
+    ? `Task failed: ${detail}`
+    : 'Task failed without output or error details.';
+}
+
+export function normalizeTaskResult(result: TaskResult): TaskResult {
+  if (!result.success && result.output.trim().length === 0) {
+    return {
+      ...result,
+      output: formatTaskFailureOutput(result.error),
+      error: result.error?.trim() || 'Task failed without error details',
+    };
+  }
+
+  return result;
+}
+
 // ============================================================================
 // Task Graph
 // ============================================================================
@@ -96,7 +115,12 @@ export class TaskGraph extends EventEmitter {
     const task = this.tasks.get(id);
     if (task) {
       task.status = 'failed';
-      task.result = { success: false, output: '', duration: 0, error };
+      task.result = {
+        success: false,
+        output: formatTaskFailureOutput(error),
+        duration: 0,
+        error,
+      };
       this.emit('task:failed', { id, error });
 
       // Skip dependent tasks
@@ -223,7 +247,7 @@ export class TaskGraph extends EventEmitter {
       const batchResults = await Promise.allSettled(
         batch.map(async task => {
           try {
-            const result = await executor(task);
+            const result = normalizeTaskResult(await executor(task));
             results.set(task.id, result);
 
             if (result.success) {
