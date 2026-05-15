@@ -233,14 +233,12 @@ export class QualityGateMiddleware implements ConversationMiddleware {
         const result = await this.runSingleGate(gate, changedFiles);
         results.push(result);
       } catch (error) {
-        logger.warn(`Quality gate ${gate.id} failed to execute`, {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Non-execution = pass (don't block on infrastructure errors)
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`Quality gate ${gate.id} failed to execute`, { error: message });
         results.push({
           gateId: gate.id,
-          passed: true,
-          findings: [],
+          passed: !gate.required,
+          findings: [`Quality gate ${gate.id} failed to execute: ${message}`],
         });
       }
     }
@@ -280,9 +278,13 @@ export class QualityGateMiddleware implements ConversationMiddleware {
         passed: findings.length === 0,
         findings,
       };
-    } catch {
-      // Module not available — pass silently
-      return { gateId: gate.id, passed: true, findings: [] };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        gateId: gate.id,
+        passed: !gate.required,
+        findings: [`Quality gate ${gate.id} failed to execute: ${message}`],
+      };
     }
   }
 

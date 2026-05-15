@@ -2,6 +2,20 @@
  * Tests for Quality Gate Middleware
  */
 
+const agentRegistryMocks = vi.hoisted(() => ({
+  registerBuiltInAgents: vi.fn(),
+  executeOn: vi.fn(),
+}));
+
+vi.mock('../../../src/agent/specialized/agent-registry.js', () => ({
+  AgentRegistry: vi.fn().mockImplementation(function() {
+    return {
+      registerBuiltInAgents: agentRegistryMocks.registerBuiltInAgents,
+      executeOn: agentRegistryMocks.executeOn,
+    };
+  }),
+}));
+
 import {
   QualityGateMiddleware,
   createQualityGateMiddleware,
@@ -51,6 +65,13 @@ function toolResultEntry(content: string, toolName = 'bash'): ChatEntry {
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('QualityGateMiddleware', () => {
+  beforeEach(() => {
+    agentRegistryMocks.registerBuiltInAgents.mockReset();
+    agentRegistryMocks.executeOn.mockReset();
+    agentRegistryMocks.registerBuiltInAgents.mockResolvedValue(undefined);
+    agentRegistryMocks.executeOn.mockResolvedValue({ success: true, output: '' });
+  });
+
   describe('constructor', () => {
     it('uses default config when none provided', () => {
       const mw = new QualityGateMiddleware();
@@ -133,6 +154,33 @@ describe('QualityGateMiddleware', () => {
 
       const result = await mw.afterTurn(ctx);
       expect(result.action).toBe('continue');
+    });
+
+    it('warns instead of silently passing when a gate cannot execute', async () => {
+      agentRegistryMocks.registerBuiltInAgents.mockRejectedValueOnce(new Error('registry unavailable'));
+      const mw = new QualityGateMiddleware({
+        minRoundsBeforeGate: 0,
+        maxGateRuns: 1,
+        gates: [{
+          id: 'code-guardian',
+          agentId: 'code-guardian',
+          action: 'review',
+          required: false,
+        }],
+      });
+
+      const ctx = makeContext({
+        toolRound: 5,
+        history: [
+          toolResultEntry('wrote src/app.ts'),
+          assistantEntry('Implementation complete. All requested code changes have been made and are ready for review.'),
+        ],
+      });
+
+      const result = await mw.afterTurn(ctx);
+      expect(result.action).toBe('warn');
+      expect(result.message).toContain('Quality gate code-guardian failed to execute');
+      expect(result.message).toContain('registry unavailable');
     });
   });
 

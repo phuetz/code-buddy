@@ -716,6 +716,9 @@ npm run typecheck
 - Les derniers `pass: true` inconditionnels des scripts API ont ete retires:
   erreurs provider dans `43.5`, `6.3` et `15.5` deviennent maintenant des
   echecs explicites avec message d'erreur au lieu de faux skips verts.
+- `QualityGateMiddleware` ne marque plus une gate comme passee quand le registre
+  d'agents ou l'execution de gate echoue: l'erreur devient un finding visible,
+  bloquant seulement pour les gates requises.
 
 ## Blocage leve
 
