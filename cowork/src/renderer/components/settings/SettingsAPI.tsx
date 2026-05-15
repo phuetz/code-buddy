@@ -144,6 +144,8 @@ export function SettingsAPI() {
           account_id: res.account_id,
           is_fedramp: res.is_fedramp,
         });
+      } else {
+        setChatgptStatus({ signedIn: false });
       }
     })();
     return () => { cancelled = true; };

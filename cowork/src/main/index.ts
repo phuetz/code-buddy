@@ -1882,7 +1882,7 @@ ipcMain.handle('config.codexOauthStatus', async () => {
     }
     const auth = await getChatGptAuth();
     if (!auth) {
-      return { success: true, signedIn: false, error: 'credentials present but unreadable' };
+      return { success: false, signedIn: false, error: 'credentials present but unreadable' };
     }
     return {
       success: true,

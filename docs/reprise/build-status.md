@@ -798,6 +798,9 @@ npm run typecheck
 - Cowork RemoteManager ne demarre plus un gateway en ignorant une channel
   configuree mais absente du runtime (Telegram, WeChat, DingTalk ou WebSocket);
   le demarrage echoue explicitement tant que seule la channel Feishu est cablee.
+- Le status ChatGPT/Codex OAuth de Cowork ne renvoie plus `success=true` quand
+  les credentials existent mais sont illisibles; le panneau Settings remet aussi
+  le badge ChatGPT a "deconnecte" si le status check echoue.
 
 ## Blocage leve
 
