@@ -897,6 +897,9 @@ npm run typecheck
   en echec garde maintenant une sortie explicite `Worker failed: ...`.
 - `TaskGraph` et `DelegationEngine` normalisent les resultats en echec: un
   echec sans sortie devient `Task failed: ...` au lieu d'un `output:''`.
+- `PipelineCompositor` ne laisse plus une sortie globale vide ou la sortie de
+  l'etape precedente quand une etape echoue; l'echec est maintenant visible au
+  niveau pipeline et au niveau step, meme si le tool ne remplit que `output`.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

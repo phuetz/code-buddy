@@ -12,6 +12,8 @@
 
 import {
   PipelineCompositor,
+  formatPipelineFailureOutput,
+  formatPipelineStepFailureOutput,
   resetPipelineCompositor,
 } from '../../src/workflows/pipeline';
 import type {
@@ -244,6 +246,23 @@ describe('Pipeline Integration', () => {
       const result = await compositor.run('failing_tool');
       expect(result.success).toBe(false);
       expect(result.error).toContain('Tool failed');
+      expect(result.output).toBe('Pipeline failed: Tool failed');
+      expect(result.steps[0].output).toBe("Step 'failing_tool' failed: Tool failed");
+    });
+
+    it('should surface failed tool output when error details are missing', async () => {
+      const mockExecutor: ToolExecutor = jest.fn(async () => ({
+        success: false,
+        output: 'stderr-only failure',
+      }));
+
+      compositor.setToolExecutor(mockExecutor);
+
+      const result = await compositor.run('failing_tool');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('stderr-only failure');
+      expect(result.output).toBe('Pipeline failed: stderr-only failure');
+      expect(result.steps[0].output).toBe("Step 'failing_tool' failed: stderr-only failure");
     });
 
     it('should stop pipeline on step failure', async () => {
@@ -262,6 +281,8 @@ describe('Pipeline Integration', () => {
       expect(result.success).toBe(false);
       expect(callCount).toBe(2); // step3 should not be called
       expect(result.steps).toHaveLength(2);
+      expect(result.output).toBe('Pipeline failed: Step 2 broke');
+      expect(result.steps[1].output).toBe("Step 'step2' failed: Step 2 broke");
     });
   });
 
@@ -327,8 +348,25 @@ describe('Pipeline Integration', () => {
       const result = await limitedCompositor.run('s1 | s2 | s3');
       expect(result.success).toBe(false);
       expect(result.error).toContain('exceeds maximum');
+      expect(result.output).toBe('Pipeline failed: Pipeline exceeds maximum of 2 steps');
 
       limitedCompositor.dispose();
+    });
+  });
+
+  describe('Failure Formatting', () => {
+    it('should format pipeline failures without blank output', () => {
+      expect(formatPipelineFailureOutput('boom')).toBe('Pipeline failed: boom');
+      expect(formatPipelineFailureOutput('')).toBe('Pipeline failed without error details.');
+    });
+
+    it('should format step failures without blank output', () => {
+      const step: PipelineStep = { type: 'tool', name: 'compile', args: {} };
+
+      expect(formatPipelineStepFailureOutput(step, 'boom')).toBe("Step 'compile' failed: boom");
+      expect(formatPipelineStepFailureOutput(step, '')).toBe(
+        "Step 'compile' failed without error details."
+      );
     });
   });
 

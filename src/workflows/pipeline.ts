@@ -148,6 +148,19 @@ export type ToolExecutor = (
   input?: string
 ) => Promise<{ success: boolean; output: string; error?: string }>;
 
+export function formatPipelineFailureOutput(error?: string): string {
+  const details = error?.trim();
+  return details ? `Pipeline failed: ${details}` : 'Pipeline failed without error details.';
+}
+
+export function formatPipelineStepFailureOutput(step: PipelineStep, error?: string): string {
+  const details = error?.trim();
+  const stepName = step.name || '<unnamed>';
+  return details
+    ? `Step '${stepName}' failed: ${details}`
+    : `Step '${stepName}' failed without error details.`;
+}
+
 /**
  * Pipeline compositor configuration
  */
@@ -437,12 +450,13 @@ export class PipelineCompositor extends EventEmitter {
 
     // Validate
     if (steps.length > this.config.maxSteps) {
+      const maxStepsError = `Pipeline exceeds maximum of ${this.config.maxSteps} steps`;
       return {
         success: false,
-        output: '',
+        output: formatPipelineFailureOutput(maxStepsError),
         steps: [],
         totalDurationMs: Date.now() - startTime,
-        error: `Pipeline exceeds maximum of ${this.config.maxSteps} steps`,
+        error: maxStepsError,
       };
     }
 
@@ -455,6 +469,7 @@ export class PipelineCompositor extends EventEmitter {
       if (Date.now() - startTime > this.config.maxDurationMs) {
         error = 'Pipeline exceeded maximum duration';
         success = false;
+        currentOutput = formatPipelineFailureOutput(error);
         break;
       }
 
@@ -478,7 +493,7 @@ export class PipelineCompositor extends EventEmitter {
         result = {
           step,
           success: false,
-          output: '',
+          output: formatPipelineStepFailureOutput(step, errMsg),
           error: errMsg,
           durationMs: Date.now() - stepStart,
           index: i,
@@ -492,9 +507,16 @@ export class PipelineCompositor extends EventEmitter {
             result.success = true;
             result.output = fallbackOutput;
             currentOutput = fallbackOutput;
-          } catch {
+          } catch (fallbackErr) {
+            const fallbackErrMsg = fallbackErr instanceof Error
+              ? fallbackErr.message
+              : String(fallbackErr);
+            const fallbackName = step.fallback.name || '<unnamed>';
+            result.error = `${errMsg}; fallback '${fallbackName}' failed: ${fallbackErrMsg}`;
+            result.output = formatPipelineStepFailureOutput(step, result.error);
             success = false;
-            error = errMsg;
+            error = result.error;
+            currentOutput = formatPipelineFailureOutput(error);
             stepResults.push(result);
             break;
           }
@@ -502,11 +524,13 @@ export class PipelineCompositor extends EventEmitter {
           // && requires previous success
           success = false;
           error = errMsg;
+          currentOutput = formatPipelineFailureOutput(error);
           stepResults.push(result);
           break;
         } else {
           success = false;
           error = errMsg;
+          currentOutput = formatPipelineFailureOutput(error);
           stepResults.push(result);
           break;
         }
@@ -604,7 +628,7 @@ export class PipelineCompositor extends EventEmitter {
     const result = await this.config.toolExecutor(step.name, args, input);
 
     if (!result.success) {
-      throw new Error(result.error || `Tool '${step.name}' failed`);
+      throw new Error(result.error || result.output || `Tool '${step.name}' failed`);
     }
 
     return result.output;
