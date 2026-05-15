@@ -438,7 +438,7 @@ export class GitBridge {
     try {
       const dryRun = runGit(root, ['worktree', 'prune', '--dry-run'], { timeout: 8000 });
       if (!dryRun.trim()) {
-        return { success: true, output: '' };
+        return { success: true, output: 'No prunable worktrees found.' };
       }
       runGit(root, ['worktree', 'prune'], { timeout: 8000 });
       return { success: true, output: dryRun.trim() };

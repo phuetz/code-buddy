@@ -884,6 +884,9 @@ npm run typecheck
   resultats de tool vides ou mal formes derriere `Done` / `Scan complete`;
   ils affichent maintenant un succes sans sortie ou un echec sans details de
   facon explicite.
+- Cowork `GitBridge.pruneWorktrees()` ne renvoie plus `success=true` avec une
+  sortie vide quand il n'y a rien a nettoyer; l'UI recoit maintenant
+  `No prunable worktrees found.`.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

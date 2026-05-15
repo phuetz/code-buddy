@@ -78,4 +78,23 @@ describe('GitBridge worktrees', () => {
     expect(removeResult.success).toBe(false);
     expect(removeResult.error).toContain('Cannot remove the current worktree');
   });
+
+  it('keeps worktree prune no-op output visible', () => {
+    const sandbox = mkdtempSync(path.join(os.tmpdir(), 'cowork-git-worktree-'));
+    const repo = path.join(sandbox, 'repo');
+    tmpDirs.push(sandbox);
+
+    mkdirSync(repo, { recursive: true });
+    git(repo, ['init']);
+    git(repo, ['config', 'user.name', 'Cowork Tests']);
+    git(repo, ['config', 'user.email', 'cowork-tests@example.com']);
+    writeFileSync(path.join(repo, 'README.md'), 'base\n', 'utf8');
+    git(repo, ['add', 'README.md']);
+    git(repo, ['commit', '-m', 'initial']);
+
+    const bridge = new GitBridge();
+    const result = bridge.pruneWorktrees(repo);
+
+    expect(result).toEqual({ success: true, output: 'No prunable worktrees found.' });
+  });
 });
