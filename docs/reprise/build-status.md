@@ -750,6 +750,9 @@ npm run typecheck
 - `code_graph` ne marque plus les requetes comme reussies quand le graphe est
   vide; `stats` reste consultable, mais les operations d'analyse demandent
   maintenant explicitement de construire le graphe.
+- L'adaptateur `batch_tools` ne renvoie plus `success=true` quand aucun appel
+  n'a pu etre execute ou quand tous les appels delegues echouent; les lots
+  partiels restent verts avec les echecs detailles dans la sortie.
 
 ## Blocage leve
 

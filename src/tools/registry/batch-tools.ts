@@ -52,10 +52,21 @@ export class BatchToolExecute implements ITool {
       const yoloMode = yoloModeProvider?.() || false;
 
       const result = await executeBatch(calls, executeToolProvider, yoloMode);
+      const output = formatBatchResults(result);
+      const noCallsExecuted = result.results.length === 0;
+      const allCallsFailed = result.results.length > 0 && result.results.every(r => !r.success);
+
+      if (noCallsExecuted || allCallsFailed) {
+        return {
+          success: false,
+          error: result.summary,
+          output,
+        };
+      }
 
       return {
         success: true,
-        output: formatBatchResults(result),
+        output,
       };
     } catch (error: unknown) {
       return {

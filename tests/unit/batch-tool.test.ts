@@ -19,11 +19,13 @@ vi.mock('@/utils/logger.js', () => ({
 
 import { executeBatch, formatBatchResults, MAX_BATCH_SIZE, READ_ONLY_TOOLS } from '@/tools/batch-tool.js';
 import type { BatchCall } from '@/tools/batch-tool.js';
+import { BatchToolExecute, resetBatchInstances, setBatchToolProvider } from '@/tools/registry/batch-tools.js';
 
 describe('Batch Tool', () => {
   let mockExecuteTool: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    resetBatchInstances();
     mockExecuteTool = vi.fn().mockResolvedValue({
       success: true,
       output: 'mock output',
@@ -204,6 +206,45 @@ describe('Batch Tool', () => {
 
       // All 3 should have been running concurrently
       expect(maxConcurrent).toBeGreaterThan(1);
+    });
+  });
+
+  describe('BatchToolExecute adapter', () => {
+    it('should fail when every delegated tool call fails', async () => {
+      mockExecuteTool.mockResolvedValue({ success: false, error: 'tool unavailable' });
+      setBatchToolProvider(mockExecuteTool, () => false);
+      const tool = new BatchToolExecute();
+
+      const result = await tool.execute({
+        calls: [
+          { tool: 'view_file', args: { path: 'missing.ts' } },
+          { tool: 'search', args: { query: 'missing' } },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('0/2 succeeded');
+      expect(result.output).toContain('[FAIL] view_file');
+      expect(result.output).toContain('[FAIL] search');
+    });
+
+    it('should keep partial batch results successful with failure details', async () => {
+      mockExecuteTool
+        .mockResolvedValueOnce({ success: true, output: 'ok' })
+        .mockResolvedValueOnce({ success: false, error: 'tool unavailable' });
+      setBatchToolProvider(mockExecuteTool, () => false);
+      const tool = new BatchToolExecute();
+
+      const result = await tool.execute({
+        calls: [
+          { tool: 'view_file', args: { path: 'ok.ts' } },
+          { tool: 'search', args: { query: 'missing' } },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('1/2 succeeded');
+      expect(result.output).toContain('[FAIL] search');
     });
   });
 
