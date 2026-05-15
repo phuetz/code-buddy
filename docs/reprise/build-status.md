@@ -791,6 +791,10 @@ npm run typecheck
 - Les outils fournis par plugins ne sont plus emballes automatiquement en
   `success=true`: si un plugin renvoie un `ToolResult` rouge, le dispatcher CLI
   preserve maintenant l'echec et son erreur.
+- `code_graph` ne renvoie plus un succes pour `who_calls` / `what_calls` /
+  `impact` / `flowchart` / `file_map` quand la population profonde ne produit
+  aucune donnee d'appels; l'outil demande maintenant de construire un call graph
+  exploitable.
 
 ## Blocage leve
 

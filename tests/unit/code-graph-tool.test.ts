@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     formatDrift: vi.fn(),
     saveSnapshot: vi.fn(),
     createGraphEmbeddingIndex: vi.fn(),
+    populateDeepCodeGraph: vi.fn(),
   };
 });
 
@@ -34,6 +35,10 @@ vi.mock('../../src/knowledge/graph-embeddings.js', () => ({
   createGraphEmbeddingIndex: mocks.createGraphEmbeddingIndex,
 }));
 
+vi.mock('../../src/knowledge/code-graph-deep-populator.js', () => ({
+  populateDeepCodeGraph: mocks.populateDeepCodeGraph,
+}));
+
 import { CodeGraphTool } from '../../src/tools/registry/code-graph-tools.js';
 
 describe('CodeGraphTool drift', () => {
@@ -46,6 +51,7 @@ describe('CodeGraphTool drift', () => {
     mocks.getSnapshotInfo.mockReturnValue({ path: 'code-graph-snapshot.json' });
     mocks.detectDrift.mockReturnValue(null);
     mocks.formatDrift.mockReturnValue('formatted drift');
+    mocks.populateDeepCodeGraph.mockReturnValue(0);
     mocks.createGraphEmbeddingIndex.mockReturnValue({
       search: vi.fn().mockResolvedValue([]),
       isReady: vi.fn().mockReturnValue(false),
@@ -103,5 +109,15 @@ describe('CodeGraphTool drift', () => {
 
     expect(result.success).toBe(true);
     expect(result.output).toBe('No semantic matches found for "routing middleware".');
+  });
+
+  it('should fail call-graph operations when deep population finds no call data', async () => {
+    const result = await new CodeGraphTool().execute({
+      operation: 'who_calls',
+      query: 'runTurnLoop',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Call graph data is unavailable');
   });
 });

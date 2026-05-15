@@ -58,8 +58,8 @@ export class CodeGraphTool implements ITool {
           const added = populateDeepCodeGraph(graph, process.cwd());
           if (added === 0) {
             return {
-              success: true,
-              output: `No call graph data found. The project may have no source files in recognized directories (src/, lib/, app/), or all files may be unsupported languages.`,
+              success: false,
+              error: `Call graph data is unavailable. Run \`codebase_map build\` with deep analysis or check that the project has supported source files in recognized directories (src/, lib/, app/).`,
             };
           }
         } catch (err) {
