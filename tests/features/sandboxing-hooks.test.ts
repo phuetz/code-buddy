@@ -50,6 +50,17 @@ function cleanTempDir(dir: string): void {
   }
 }
 
+async function waitFor(condition: () => boolean, timeoutMs = 1000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error('Timed out waiting for async hook test condition');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 /**
  * Create a mock child process that emits events
  */
@@ -965,11 +976,13 @@ describe('EnvPersistence', () => {
 describe('AsyncHookManager', () => {
   const originalEnv = process.env;
   let AsyncHookManager: typeof import('../../src/hooks/async-hooks').AsyncHookManager;
+  let ASYNC_HOOK_COMPLETED_WITH_NO_OUTPUT: typeof import('../../src/hooks/async-hooks').ASYNC_HOOK_COMPLETED_WITH_NO_OUTPUT;
   type SmartHookConfig = import('../../src/hooks/smart-hooks').SmartHookConfig;
 
   beforeAll(async () => {
     const mod = await import('../../src/hooks/async-hooks.js');
     AsyncHookManager = mod.AsyncHookManager;
+    ASYNC_HOOK_COMPLETED_WITH_NO_OUTPUT = mod.ASYNC_HOOK_COMPLETED_WITH_NO_OUTPUT;
   });
 
   beforeEach(() => {
@@ -1065,7 +1078,7 @@ describe('AsyncHookManager', () => {
         { name: 'World' }
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => mgr.getJob(jobId)?.status === 'completed');
 
       const job = mgr.getJob(jobId);
       expect(job).not.toBeNull();
@@ -1087,16 +1100,19 @@ describe('AsyncHookManager', () => {
   describe('getCompletedJobs', () => {
     it('should return completed jobs', async () => {
       const mgr = new AsyncHookManager();
-      mgr.submit(
+      const jobId1 = mgr.submit(
         { type: 'prompt', event: 'test1', prompt: 'A' },
         {}
       );
-      mgr.submit(
+      const jobId2 = mgr.submit(
         { type: 'prompt', event: 'test2', prompt: 'B' },
         {}
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() =>
+        mgr.getJob(jobId1)?.status === 'completed' &&
+        mgr.getJob(jobId2)?.status === 'completed'
+      );
 
       const completed = mgr.getCompletedJobs();
       expect(completed).toHaveLength(2);
@@ -1105,9 +1121,9 @@ describe('AsyncHookManager', () => {
 
     it('should clear completed list after retrieval', async () => {
       const mgr = new AsyncHookManager();
-      mgr.submit({ type: 'prompt', event: 'test', prompt: 'A' }, {});
+      const jobId = mgr.submit({ type: 'prompt', event: 'test', prompt: 'A' }, {});
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => mgr.getJob(jobId)?.status === 'completed');
 
       const first = mgr.getCompletedJobs();
       expect(first).toHaveLength(1);
@@ -1121,12 +1137,12 @@ describe('AsyncHookManager', () => {
   describe('getSystemMessages', () => {
     it('should format completed hooks as system messages', async () => {
       const mgr = new AsyncHookManager();
-      mgr.submit(
+      const jobId = mgr.submit(
         { type: 'prompt', event: 'PreBash', prompt: 'Check this' },
         {}
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => mgr.getJob(jobId)?.status === 'completed');
 
       const messages = mgr.getSystemMessages();
       expect(messages).toHaveLength(1);
@@ -1135,14 +1151,35 @@ describe('AsyncHookManager', () => {
       mgr.dispose();
     });
 
+    it('should format successful hooks with no stdout explicitly', async () => {
+      mockSpawn.mockReturnValue(
+        createMockChildProcess({ exitCode: 0, delay: 10 })
+      );
+
+      const mgr = new AsyncHookManager();
+      const jobId = mgr.submit(
+        { type: 'command', event: 'PostToolUse', command: 'true' },
+        {}
+      );
+
+      await waitFor(() => mgr.getJob(jobId)?.status === 'completed');
+
+      const messages = mgr.getSystemMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toBe(
+        `[Async Hook: PostToolUse] Success: ${ASYNC_HOOK_COMPLETED_WITH_NO_OUTPUT}`
+      );
+      mgr.dispose();
+    });
+
     it('should format failed hooks correctly', async () => {
       const mgr = new AsyncHookManager();
-      mgr.submit(
+      const jobId = mgr.submit(
         { type: 'agent', event: 'test' },
         {}
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => mgr.getJob(jobId)?.status === 'completed');
 
       const messages = mgr.getSystemMessages();
       expect(messages).toHaveLength(1);
@@ -1161,9 +1198,9 @@ describe('AsyncHookManager', () => {
   describe('clearCompleted', () => {
     it('should remove completed jobs from tracking', async () => {
       const mgr = new AsyncHookManager();
-      mgr.submit({ type: 'prompt', event: 'test', prompt: 'A' }, {});
+      const jobId = mgr.submit({ type: 'prompt', event: 'test', prompt: 'A' }, {});
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => mgr.getJob(jobId)?.status === 'completed');
 
       expect(mgr.getTotalCount()).toBe(1);
       mgr.clearCompleted();

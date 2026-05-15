@@ -34,6 +34,8 @@ export interface AsyncHookJob {
   error?: string;
 }
 
+export const ASYNC_HOOK_COMPLETED_WITH_NO_OUTPUT = 'completed successfully with no output.';
+
 // ============================================================================
 // AsyncHookManager
 // ============================================================================
@@ -184,7 +186,10 @@ export class AsyncHookManager {
       if (job.status === 'completed' && job.result) {
         const prefix = `[Async Hook: ${job.hookConfig.event}]`;
         if (job.result.ok) {
-          messages.push(`${prefix} Success: ${job.result.output ?? 'No output'}`);
+          const output = job.result.output?.trim()
+            ? job.result.output
+            : ASYNC_HOOK_COMPLETED_WITH_NO_OUTPUT;
+          messages.push(`${prefix} Success: ${output}`);
         } else {
           messages.push(`${prefix} Failed: ${job.result.reason ?? 'Unknown error'}`);
         }

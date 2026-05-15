@@ -917,6 +917,9 @@ npm run typecheck
 - L'automatisation desktop ne cree plus automatiquement un provider `mock` via
   la chaine de fallback; le mock reste utilisable pour les tests explicites,
   mais un poste sans backend reel echoue au lieu de simuler une action.
+- Les hooks async ne reinjectent plus `Success: No output` ni un succes vide
+  quand une commande termine sans stdout; le contexte indique maintenant que le
+  hook a reussi sans sortie.
 
 ## Blocage leve
 
