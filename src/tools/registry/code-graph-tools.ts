@@ -38,9 +38,12 @@ export class CodeGraphTool implements ITool {
     const graph = getKnowledgeGraph();
 
     if (graph.getStats().tripleCount === 0) {
+      if (operation === 'stats') {
+        return this.stats(graph);
+      }
       return {
-        success: true,
-        output: 'Code graph is empty. Run `codebase_map build` first to populate the graph, or use `codebase_map` with `deep: true` to include call graph data.',
+        success: false,
+        error: 'Code graph is empty. Run `codebase_map build` first to populate the graph, or use `codebase_map` with `deep: true` to include call graph data.',
       };
     }
 

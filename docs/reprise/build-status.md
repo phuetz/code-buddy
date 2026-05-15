@@ -747,6 +747,9 @@ npm run typecheck
 - `OCRTool.batchOCR` ne renvoie plus `success=true` quand toutes les images du
   lot echouent; le resultat garde les erreurs par fichier, mais le statut global
   devient rouge a `0/N` succes.
+- `code_graph` ne marque plus les requetes comme reussies quand le graphe est
+  vide; `stats` reste consultable, mais les operations d'analyse demandent
+  maintenant explicitement de construire le graphe.
 
 ## Blocage leve
 
