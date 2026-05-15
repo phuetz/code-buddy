@@ -405,7 +405,13 @@ export class CloudAgentRunner extends EventEmitter {
 
         // If no tool calls, we're done
         if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-          task.result = assistantMsg.content || '';
+          const rawContent = typeof assistantMsg.content === 'string' ? assistantMsg.content : '';
+          const finalContent = rawContent.trim();
+          if (!finalContent) {
+            task.error = 'LLM returned no final response content';
+          } else {
+            task.result = rawContent;
+          }
           break;
         }
 
@@ -437,8 +443,8 @@ export class CloudAgentRunner extends EventEmitter {
             const result = await executeToolHeadless(toolName, toolArgs, abortController.signal);
             toolSucceeded = result.success;
             toolResult = result.success
-              ? (result.output || '(tool returned no output)')
-              : `Error: ${result.error || 'tool failed without details'}`;
+              ? (result.output?.trim() || 'Tool completed successfully with no output.')
+              : `Error: ${result.error?.trim() || result.output?.trim() || 'tool failed without details'}`;
 
             // Track file changes
             if (result.filesChanged) {

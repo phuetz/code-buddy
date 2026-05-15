@@ -284,6 +284,30 @@ describe('CloudAgentRunner', () => {
       expect(status.error).toBe('No response from LLM');
     });
 
+    it('should fail when the LLM returns empty final content', async () => {
+      MockCodeBuddyClient.mockImplementationOnce(function () {
+        return {
+          chat: vi.fn().mockResolvedValue({
+            choices: [{
+              message: {
+                role: 'assistant',
+                content: '   ',
+                tool_calls: undefined,
+              },
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 0 },
+          }),
+        };
+      });
+
+      const taskId = await runner.submitTask({ goal: 'Empty final response test' });
+      await waitForCompletion(runner, taskId, 5000);
+
+      const status = await runner.getTaskStatus(taskId);
+      expect(status.status).toBe('failed');
+      expect(status.error).toBe('LLM returned no final response content');
+    });
+
     it('should fail when max tool rounds are exhausted without a final response', async () => {
       MockCodeBuddyClient.mockImplementationOnce(function () {
         return {
@@ -361,6 +385,55 @@ describe('CloudAgentRunner', () => {
         event.data.name === 'read_file'
       );
       expect(failedToolEvent?.data.success).toBe(false);
+    });
+
+    it('should pass explicit silent tool success back to the LLM', async () => {
+      MockExecuteToolHeadless.mockResolvedValueOnce({
+        success: true,
+        output: '   ',
+      });
+      const chat = vi.fn()
+        .mockResolvedValueOnce({
+          choices: [{
+            message: {
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                id: 'call_1',
+                function: { name: 'read_file', arguments: '{}' },
+              }],
+            },
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        })
+        .mockResolvedValueOnce({
+          choices: [{
+            message: {
+              role: 'assistant',
+              content: 'Final answer after silent tool.',
+              tool_calls: undefined,
+            },
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        });
+      MockCodeBuddyClient.mockImplementationOnce(function () {
+        return { chat };
+      });
+
+      const taskId = await runner.submitTask({
+        goal: 'Silent tool output test',
+        maxToolRounds: 2,
+      });
+      await waitForCompletion(runner, taskId, 5000);
+
+      const status = await runner.getTaskStatus(taskId);
+      expect(status.status).toBe('completed');
+      const secondRoundMessages = chat.mock.calls[1][0] as Array<{ role: string; content?: string }>;
+      const toolMessage = [...secondRoundMessages].reverse().find((message) => message.role === 'tool');
+      expect(toolMessage).toMatchObject({
+        role: 'tool',
+        content: 'Tool completed successfully with no output.',
+      });
     });
 
     it('should set completedAt when task finishes', async () => {

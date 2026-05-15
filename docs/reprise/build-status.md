@@ -366,6 +366,15 @@ npx eslint src/agent/subagents.ts src/agent/multi-agent/base-agent.ts tests/unit
 
 npm run typecheck
 # passed
+
+npm test -- tests/cloud/cloud-agent-runner.test.ts
+# 39 tests passed after CloudAgentRunner empty-final-response cleanup
+
+npx eslint src/cloud/cloud-agent-runner.ts tests/cloud/cloud-agent-runner.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -679,6 +688,10 @@ npm run typecheck
 - Dans le meme runner, un outil headless qui echoue est maintenant renvoye au
   modele comme `Error: ...` et l'evenement `tool_result` porte `success=false`;
   l'ancien fallback pouvait transformer une erreur vide en `Done`.
+- Le runner cloud applique aussi ce contrat aux reponses finales vides:
+  assistant sans texte ni tool call devient `LLM returned no final response
+  content`, et un tool headless reussi sans sortie est renvoye au LLM comme
+  succes silencieux explicite.
 - `resolve_conflicts` ne transforme plus un echec de scan Git en succes
   informatif. Si `git diff --name-only --diff-filter=U` ne peut pas tourner,
   `/conflicts scan` remonte maintenant un echec explicite.
