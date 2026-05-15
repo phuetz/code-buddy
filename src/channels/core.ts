@@ -507,6 +507,14 @@ export class MockChannel extends BaseChannel {
   }
 
   async send(message: OutboundMessage): Promise<DeliveryResult> {
+    if (!this.status.connected) {
+      return {
+        success: false,
+        error: 'MockChannel not connected',
+        timestamp: new Date(),
+      };
+    }
+
     this.sentMessages.push(message);
     return {
       success: true,
@@ -723,6 +731,7 @@ export class ChannelManager extends EventEmitter {
 
   private outgoingQueue: Array<{ type: ChannelType; message: OutboundMessage; priority: number }> = [];
   private processingQueue: boolean = false;
+  private queueDrainPromise: Promise<DeliveryResult> | null = null;
 
   /**
    * Send a message to a user across channels with priority
@@ -751,24 +760,46 @@ export class ChannelManager extends EventEmitter {
    * Process the outgoing message queue
    */
   private async processQueue(): Promise<DeliveryResult> {
-    if (this.processingQueue || this.outgoingQueue.length === 0) {
-      return { success: true, timestamp: new Date() };
+    if (this.processingQueue) {
+      return this.queueDrainPromise ?? {
+        success: false,
+        error: 'Message queued but no active delivery drain is available',
+        timestamp: new Date(),
+      };
+    }
+
+    if (this.outgoingQueue.length === 0) {
+      return {
+        success: false,
+        error: 'No queued messages to send',
+        timestamp: new Date(),
+      };
     }
 
     this.processingQueue = true;
-    let lastResult: DeliveryResult = { success: true, timestamp: new Date() };
-
-    try {
+    const drain = (async (): Promise<DeliveryResult> => {
+      let lastResult: DeliveryResult = {
+        success: false,
+        error: 'No queued messages to send',
+        timestamp: new Date(),
+      };
       while (this.outgoingQueue.length > 0) {
         const item = this.outgoingQueue.shift()!;
         lastResult = await this.send(item.type, item.message);
         this.emit('message:sent', { type: item.type, result: lastResult });
       }
+      return lastResult;
+    })();
+    this.queueDrainPromise = drain;
+
+    try {
+      return await drain;
     } finally {
       this.processingQueue = false;
+      if (this.queueDrainPromise === drain) {
+        this.queueDrainPromise = null;
+      }
     }
-
-    return lastResult;
   }
 
   /**

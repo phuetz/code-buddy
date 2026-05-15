@@ -282,6 +282,15 @@ npx eslint src/workflows/workflow-engine.ts tests/unit/workflows.test.ts --quiet
 
 npm run typecheck
 # passed
+
+npm test -- tests/channels/channels.test.ts tests/server/channel-a2a-bridge.test.ts tests/server/server-channel-shutdown.test.ts
+# 57 tests passed after ChannelManager queue fake-success cleanup
+
+npx eslint src/channels/core.ts tests/channels/channels.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -520,6 +529,10 @@ npm run typecheck
 - `WorkflowEngine` ne pre-enregistre plus les workflows d'exemple `validation`
   et `data-pipeline`, qui pouvaient terminer via des etapes `noop`. Les
   workflows doivent maintenant etre enregistres explicitement avant execution.
+- `ChannelManager.sendToUser()` ne retourne plus un succes immediat quand une
+  livraison est seulement en file pendant qu'un drain est deja actif; l'appel
+  attend le drain reel. `MockChannel.send()` refuse aussi les envois avant
+  connexion, pour eviter des tests qui valident une livraison impossible.
 
 ## Blocage leve
 

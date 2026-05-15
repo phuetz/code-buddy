@@ -71,6 +71,17 @@ describe('Multi-Channel Support', () => {
       expect(result.messageId).toBeDefined();
     });
 
+    it('should reject sends when not connected', async () => {
+      const result = await channel.send({
+        channelId: 'test',
+        content: 'Hello World',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('MockChannel not connected');
+      expect(channel.getSentMessages()).toEqual([]);
+    });
+
     it('should track sent messages', async () => {
       await channel.connect();
 
@@ -243,6 +254,51 @@ describe('Multi-Channel Support', () => {
       });
 
       expect(result.success).toBe(true);
+    });
+
+    it('should wait for the active queue drain instead of returning fake success', async () => {
+      class SlowMockChannel extends MockChannel {
+        private releaseSend: (() => void) | null = null;
+        private sendCount = 0;
+
+        async send(message: OutboundMessage) {
+          this.sendCount++;
+          if (this.sendCount === 1) {
+            await new Promise<void>(resolve => {
+              this.releaseSend = resolve;
+            });
+          }
+          return super.send(message);
+        }
+
+        releaseFirstSend(): void {
+          this.releaseSend?.();
+        }
+      }
+
+      const slowChannel = new SlowMockChannel({ type: 'cli', enabled: true });
+      manager.registerChannel(slowChannel);
+      await slowChannel.connect();
+
+      const first = manager.sendToUser('cli', 'user-1', 'first');
+      const second = manager.sendToUser('cli', 'user-2', 'second');
+      let secondResolved = false;
+      second.then(() => {
+        secondResolved = true;
+      });
+
+      await Promise.resolve();
+      expect(secondResolved).toBe(false);
+
+      slowChannel.releaseFirstSend();
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+
+      expect(firstResult.success).toBe(true);
+      expect(secondResult.success).toBe(true);
+      expect(slowChannel.getSentMessages().map(message => message.content)).toEqual([
+        'first',
+        'second',
+      ]);
     });
 
     it('should return error for unknown channel', async () => {
