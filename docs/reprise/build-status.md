@@ -695,6 +695,9 @@ npm run typecheck
 - Le check script `TOOL_GROUPS` ne skippe plus si l'export manque et verifie
   des mappings sensibles (`read`, `bash`, `git_push`) au lieu de seulement
   compter les entrees.
+- Le check script des types de canaux majeurs ne depend plus d'un export
+  runtime inexistant pour un type TypeScript; il enregistre maintenant de vrais
+  canaux `telegram` et `discord` dans `ChannelManager`.
 
 ## Blocage leve
 

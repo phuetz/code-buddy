@@ -28,16 +28,21 @@ export function cat45ChannelCore(): TestDef[] {
       name: '45.2-channel-types-include-major',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/channels/core.js');
-        // Check if ChannelType includes major platforms
-        const types = mod.CHANNEL_TYPES || mod.channelTypes;
-        if (!types) return { pass: true, metadata: { skip: 'no CHANNEL_TYPES export' } };
-        const arr = Array.isArray(types) ? types : Object.values(types);
-        const hasTelegram = arr.some((t: any) => String(t).includes('telegram'));
-        const hasDiscord = arr.some((t: any) => String(t).includes('discord'));
+        const { ChannelManager, MockChannel } = await import('../../src/channels/core.js');
+        const manager = new ChannelManager();
+        const telegram = new MockChannel({ type: 'telegram' });
+        const discord = new MockChannel({ type: 'discord' });
+        manager.registerChannel(telegram);
+        manager.registerChannel(discord);
+        await manager.connectAll();
+        const status = manager.getStatus();
         return {
-          pass: hasTelegram || hasDiscord || arr.length >= 5,
-          metadata: { types: arr.slice(0, 10) },
+          pass:
+            manager.getChannel('telegram') === telegram &&
+            manager.getChannel('discord') === discord &&
+            status.telegram.connected === true &&
+            status.discord.authenticated === true,
+          metadata: { registered: manager.getAllChannels().map(channel => channel.type), status },
         };
       },
     },
