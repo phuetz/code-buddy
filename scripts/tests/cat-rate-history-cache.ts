@@ -81,10 +81,10 @@ export function cat58RateLimiter(): TestDef[] {
         const p1 = limiter.execute(async () => 'first', { estimatedTokens: 0 }).catch(() => 'q1-error');
         const p2 = limiter.execute(async () => 'second', { estimatedTokens: 0 }).catch(() => 'q2-error');
         const [r1, r2] = await Promise.all([p1, p2]);
-        // At least one should succeed or fail gracefully
+        const status = limiter.getStatus();
         return {
-          pass: true,
-          metadata: { r1, r2 },
+          pass: r1 === 'q1-error' && r2 === 'q2-error' && status.queueLength === 0,
+          metadata: { r1, r2, queueLength: status.queueLength },
         };
       },
     },
@@ -96,10 +96,10 @@ export function cat58RateLimiter(): TestDef[] {
         const limiter = new RateLimiter({ requestsPerMinute: 100, maxBurst: 10 });
         let eventFired = false;
         limiter.on('queued', () => { eventFired = true; });
-        await limiter.execute(async () => 'test', { estimatedTokens: 10 });
+        const result = await limiter.execute(async () => 'test', { estimatedTokens: 10 });
         return {
-          pass: true, // Event may or may not fire depending on queue path
-          metadata: { eventFired },
+          pass: eventFired && result === 'test',
+          metadata: { eventFired, result },
         };
       },
     },

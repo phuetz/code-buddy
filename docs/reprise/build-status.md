@@ -673,6 +673,13 @@ npm run typecheck
 - Les scripts de tests reels `cat-gateway-daemon` et `cat-channels-extended`
   ne contiennent plus leurs assertions `|| true`: creation de session et forme
   de message entrant sont maintenant verifiees sur des valeurs observees.
+- Quatre autres checks de scripts ne passent plus inconditionnellement:
+  overflow/evenement du rate limiter, `PollManager.stopAll()` et defaults
+  `AuthMonitor` verifient maintenant leurs resultats au lieu de renvoyer
+  `pass: true`.
+- Le `RateLimiter` reprend maintenant correctement apres le timeout d'une
+  requete en file: si l'entree expire pendant l'attente de tokens, le processeur
+  de queue ne reste plus accroche a une requete deja retiree.
 
 ## Blocage leve
 

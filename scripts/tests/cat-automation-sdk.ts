@@ -119,10 +119,12 @@ export function cat62PollManager(): TestDef[] {
         const { PollManager } = await import('../../src/automation/polls.js');
         PollManager.resetInstance();
         const mgr = PollManager.getInstance();
-        mgr.addPoll({ id: 'p1', name: 'P1', type: 'command', target: 'echo', intervalMs: 60000, enabled: false });
+        mgr.addPoll({ id: 'p1', name: 'P1', type: 'custom', target: 'noop', intervalMs: 60000, enabled: true });
         mgr.stopAll();
+        const poll = mgr.getPoll('p1');
+        const polls = mgr.listPolls();
         PollManager.resetInstance();
-        return { pass: true };
+        return { pass: polls.length === 1 && poll?.enabled === false };
       },
     },
   ];
@@ -228,10 +230,13 @@ export function cat63AuthMonitor(): TestDef[] {
         const { AuthMonitor } = await import('../../src/automation/auth-monitoring.js');
         AuthMonitor.resetInstance();
         const mon = AuthMonitor.getInstance();
-        // Should not throw
         mon.stop();
+        const summary = mon.getSummary();
         AuthMonitor.resetInstance();
-        return { pass: true };
+        return {
+          pass: summary.total === 0 && summary.valid === 0 && summary.invalid === 0 && summary.expiring === 0 && summary.expired === 0,
+          metadata: summary,
+        };
       },
     },
     {

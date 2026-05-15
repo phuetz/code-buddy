@@ -40,6 +40,7 @@ export interface QueuedRequest<T> {
   timestamp: number;
   estimatedTokens: number;
   retries: number;
+  timeout?: ReturnType<typeof setTimeout>;
 }
 
 const DEFAULT_CONFIG: RateLimitConfig = {
@@ -167,17 +168,17 @@ export class RateLimiter extends EventEmitter {
 
       this.emit('queued', { requestId: request.id, queueLength: this.queue.length });
 
-      // Start processing if not already
-      this.processQueue();
-
       // Set timeout
-      setTimeout(() => {
+      request.timeout = setTimeout(() => {
         const index = this.queue.findIndex(r => r.id === request.id);
         if (index !== -1) {
           this.queue.splice(index, 1);
           reject(new Error('Rate limit queue timeout'));
         }
       }, this.config.queueTimeout);
+
+      // Start processing if not already
+      this.processQueue();
     });
   }
 
@@ -235,13 +236,21 @@ export class RateLimiter extends EventEmitter {
       const request = this.queue[0];
 
       // Wait until we can proceed
-      while (!this.canProceed(request.estimatedTokens)) {
+      while (this.queue[0] === request && !this.canProceed(request.estimatedTokens)) {
         await this.sleep(100);
         this.refillTokens();
       }
 
+      if (this.queue[0] !== request) {
+        continue;
+      }
+
       // Remove from queue and execute
       this.queue.shift();
+      if (request.timeout) {
+        clearTimeout(request.timeout);
+        request.timeout = undefined;
+      }
       this.consumeTokens(request.estimatedTokens);
 
       try {
@@ -313,6 +322,10 @@ export class RateLimiter extends EventEmitter {
   clearQueue(): number {
     const count = this.queue.length;
     for (const request of this.queue) {
+      if (request.timeout) {
+        clearTimeout(request.timeout);
+        request.timeout = undefined;
+      }
       request.reject(new Error('Queue cleared'));
     }
     this.queue = [];

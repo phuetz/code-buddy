@@ -2,6 +2,7 @@
  * Tests for Rate Limiter
  */
 
+import { vi } from 'vitest';
 import { RateLimiter, getRateLimiter, resetRateLimiter } from '../src/utils/rate-limiter';
 
 describe('RateLimiter', () => {
@@ -106,6 +107,49 @@ describe('RateLimiter', () => {
       const results = await Promise.allSettled(promises);
       const rejected = results.filter(r => r.status === 'rejected');
       expect(rejected.length).toBeGreaterThan(0);
+    });
+
+    it('should continue processing after a queued request times out', async () => {
+      const timeoutLimiter = new RateLimiter({
+        requestsPerMinute: 1,
+        tokensPerMinute: 10000,
+        maxBurst: 0,
+        maxQueueSize: 1,
+        queueTimeout: 20,
+      });
+
+      await expect(timeoutLimiter.execute(async () => 'never', { estimatedTokens: 0 }))
+        .rejects.toThrow('Rate limit queue timeout');
+
+      await new Promise(resolve => setTimeout(resolve, 150));
+      timeoutLimiter.updateConfig({ maxBurst: 1, requestsPerMinute: 60 });
+      timeoutLimiter.updateFromHeaders({ 'x-ratelimit-remaining': '1' });
+
+      await expect(timeoutLimiter.execute(async () => 'later', { estimatedTokens: 0 }))
+        .resolves.toBe('later');
+
+      timeoutLimiter.dispose();
+    });
+
+    it('should clear queue timeout after a queued request executes', async () => {
+      vi.useFakeTimers();
+      const timerLimiter = new RateLimiter({
+        requestsPerMinute: 60,
+        tokensPerMinute: 10000,
+        maxBurst: 1,
+        maxQueueSize: 1,
+        queueTimeout: 60000,
+      });
+
+      try {
+        await expect(timerLimiter.execute(async () => 'done', { estimatedTokens: 0 }))
+          .resolves.toBe('done');
+
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        timerLimiter.dispose();
+        vi.useRealTimers();
+      }
     });
   });
 
