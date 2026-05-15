@@ -689,6 +689,19 @@ describe('CodeBuddyClient', () => {
       expect(receivedChunks).toHaveLength(4);
     });
 
+    it('should reject a stream that finishes without content or tool calls', async () => {
+      async function* mockGenerator() {
+        yield { choices: [{ delta: {}, finish_reason: 'stop', index: 0 }] };
+      }
+      mockCreate.mockResolvedValueOnce(mockGenerator());
+
+      await expect(async () => {
+        for await (const _chunk of client.chatStream([{ role: 'user', content: 'Hi' }])) {
+          // Should throw before yielding the empty finish chunk
+        }
+      }).rejects.toThrow('no assistant content or tool calls');
+    });
+
     it('should use chat options in streaming request', async () => {
       async function* mockGenerator() {
         yield { choices: [{ delta: { content: 'OK' }, index: 0 }] };
@@ -1789,16 +1802,16 @@ describe('CodeBuddyClient', () => {
       );
     });
 
-    it('should handle null response content', async () => {
+    it('should reject null response content without tool calls', async () => {
       mockCreate.mockResolvedValueOnce({
         choices: [
           { message: { role: 'assistant', content: null }, finish_reason: 'stop' },
         ],
       });
 
-      const response = await client.chat([{ role: 'user', content: 'Hi' }]);
-      // The mock response is returned as-is
-      expect(response.choices[0].message.content).toBeNull();
+      await expect(client.chat([{ role: 'user', content: 'Hi' }])).rejects.toThrow(
+        'no assistant content or tool calls'
+      );
     });
 
     it('should handle undefined options gracefully', async () => {

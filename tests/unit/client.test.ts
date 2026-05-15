@@ -1039,14 +1039,14 @@ describe('CodeBuddyClient', () => {
       );
     });
 
-    it('should handle null content in assistant message', async () => {
+    it('should reject null content without tool calls in assistant message', async () => {
       mockCreate.mockResolvedValueOnce({
         choices: [{ message: { role: 'assistant', content: null }, finish_reason: 'stop' }],
       });
 
-      const response = await client.chat([{ role: 'user', content: 'Hi' }]);
-      // The mock response is returned as-is
-      expect(response.choices[0].message.content).toBeNull();
+      await expect(client.chat([{ role: 'user', content: 'Hi' }])).rejects.toThrow(
+        'no assistant content or tool calls'
+      );
     });
 
     it('should handle system messages', async () => {

@@ -67,6 +67,22 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   service_tier?: 'auto' | 'default' | 'flex';
 }
 
+function hasUsefulAssistantOutput(response: CodeBuddyResponse): boolean {
+  const message = response.choices?.[0]?.message;
+  return (
+    (typeof message?.content === 'string' && message.content.trim().length > 0) ||
+    Boolean(message?.tool_calls && message.tool_calls.length > 0)
+  );
+}
+
+function chunkHasUsefulAssistantOutput(chunk: ChatCompletionChunk): boolean {
+  const delta = chunk.choices?.[0]?.delta;
+  return (
+    (typeof delta?.content === 'string' && delta.content.trim().length > 0) ||
+    Boolean(delta?.tool_calls && delta.tool_calls.length > 0)
+  );
+}
+
 export interface OpenAICompatProviderOptions {
   apiKey: string;
   baseURL: string;
@@ -528,6 +544,10 @@ export class OpenAICompatProvider implements Provider {
         }
       }
 
+      if (!hasUsefulAssistantOutput(codeBuddyResponse)) {
+        throw new Error('OpenAI-compatible provider returned no assistant content or tool calls');
+      }
+
       return codeBuddyResponse;
     } catch (error: unknown) {
       if (error instanceof CircuitOpenError) {
@@ -608,8 +628,18 @@ export class OpenAICompatProvider implements Provider {
         ),
       );
 
+      let emittedUsefulOutput = false;
       for await (const chunk of stream) {
+        if (chunkHasUsefulAssistantOutput(chunk)) {
+          emittedUsefulOutput = true;
+        }
+        if (chunk.choices?.[0]?.finish_reason && !emittedUsefulOutput) {
+          throw new Error('OpenAI-compatible provider returned no assistant content or tool calls');
+        }
         yield chunk;
+      }
+      if (!emittedUsefulOutput) {
+        throw new Error('OpenAI-compatible provider returned no assistant content or tool calls');
       }
     } catch (error: unknown) {
       if (error instanceof CircuitOpenError) {

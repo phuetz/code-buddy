@@ -837,6 +837,9 @@ npm run typecheck
 - Le provider ChatGPT Responses refuse maintenant les streams termines sans
   texte assistant utile ni tool call; les tours uniquement `reasoning` ne
   peuvent plus etre pris pour une reponse reussie.
+- Le provider OpenAI-compatible applique aussi ce contrat: une reponse ou un
+  stream sans texte assistant non vide ni tool call echoue au lieu d'etre
+  retourne tel quel avec `content: null`.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
