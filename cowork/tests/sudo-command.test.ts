@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { finalizeSudoCommandOutput } from '../src/main/claude/sudo-command';
+import {
+  SUDO_COMMAND_COMPLETED_WITH_NO_OUTPUT,
+  finalizeSudoCommandOutput,
+} from '../src/main/claude/sudo-command';
 
 describe('finalizeSudoCommandOutput', () => {
   it('returns command output for zero exit code', () => {
@@ -7,7 +10,7 @@ describe('finalizeSudoCommandOutput', () => {
   });
 
   it('keeps a visible no-output marker for successful silent commands', () => {
-    expect(finalizeSudoCommandOutput('', '', 0, null)).toBe('(no output)');
+    expect(finalizeSudoCommandOutput('', '', 0, null)).toBe(SUDO_COMMAND_COMPLETED_WITH_NO_OUTPUT);
   });
 
   it('throws when the command exits non-zero', () => {

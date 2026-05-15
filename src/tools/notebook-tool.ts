@@ -14,6 +14,8 @@ import { logger } from '../utils/logger.js';
 
 const execFileAsync = promisify(execFile);
 
+export const NOTEBOOK_CELL_COMPLETED_WITH_NO_OUTPUT = 'Cell completed successfully with no output.';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -542,7 +544,7 @@ export class NotebookTool {
           parts.push(this.formatOutput(output));
         }
       } else {
-        parts.push('(no output)');
+        parts.push(NOTEBOOK_CELL_COMPLETED_WITH_NO_OUTPUT);
       }
 
       const result = parts.join('\n');
@@ -627,7 +629,7 @@ export class NotebookTool {
             parts.push(this.formatOutput(output));
           }
         } else {
-          parts.push('(no output)');
+          parts.push(NOTEBOOK_CELL_COMPLETED_WITH_NO_OUTPUT);
         }
         parts.push('');
       }

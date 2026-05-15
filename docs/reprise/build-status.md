@@ -928,6 +928,9 @@ npm run typecheck
 - Les sorties utilisateur encore marquees `(no output)` dans les taches de fond,
   les logs de process, les scripts `/script` et `/fcs`, et l'observation SWE
   utilisent maintenant des phrases explicites et contextualisees.
+- Cowork `sudo`, le tool `device run` et les executions notebook ne renvoient
+  plus de placeholder `(no output)`; les succes silencieux et echecs sans flux
+  ont maintenant des messages lisibles.
 
 ## Blocage leve
 

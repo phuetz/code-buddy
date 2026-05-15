@@ -8,6 +8,9 @@
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
+export const DEVICE_COMMAND_COMPLETED_WITH_NO_OUTPUT = 'Command completed successfully with no output.';
+export const DEVICE_COMMAND_FAILED_WITH_NO_OUTPUT = 'Device command failed without stdout or stderr.';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -122,10 +125,13 @@ export class DeviceTool {
           if (!result) {
             return { success: false, error: `Command execution failed on device ${input.deviceId}` };
           }
+          const output = result.stdout || (result.exitCode === 0
+            ? DEVICE_COMMAND_COMPLETED_WITH_NO_OUTPUT
+            : result.stderr || DEVICE_COMMAND_FAILED_WITH_NO_OUTPUT);
           return {
             success: result.exitCode === 0,
-            output: result.stdout || '(no output)',
-            error: result.exitCode !== 0 ? result.stderr : undefined,
+            output,
+            error: result.exitCode !== 0 ? result.stderr || DEVICE_COMMAND_FAILED_WITH_NO_OUTPUT : undefined,
           };
         }
 

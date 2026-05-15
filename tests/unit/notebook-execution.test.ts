@@ -69,7 +69,10 @@ vi.mock('fs', async () => {
   };
 });
 
-import { NotebookTool } from '../../src/tools/notebook-tool.js';
+import {
+  NOTEBOOK_CELL_COMPLETED_WITH_NO_OUTPUT,
+  NotebookTool,
+} from '../../src/tools/notebook-tool.js';
 
 // ============================================================================
 // Test Fixtures
@@ -282,6 +285,41 @@ describe('Notebook Tool - Execution', () => {
       expect(result.content).toContain('hello world');
     });
 
+    it('should return an explicit message when an executed cell has no output', async () => {
+      mockExecFile.mockImplementation((...args: unknown[]) => {
+        const cb = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, '', '');
+      });
+
+      const notebook = makeNotebook([
+        { type: 'code', source: 'x = 1' },
+      ]);
+
+      const executedNotebook = makeExecutedNotebook([
+        {
+          type: 'code',
+          source: 'x = 1',
+          execution_count: 1,
+          outputs: [],
+        },
+      ]);
+
+      mockReadFile
+        .mockResolvedValueOnce(notebook)
+        .mockResolvedValueOnce(executedNotebook);
+
+      mockWriteFile.mockResolvedValue(undefined);
+
+      const result = await tool.execute({
+        action: 'execute_cell',
+        path: 'test.ipynb',
+        cellIndex: 0,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain(NOTEBOOK_CELL_COMPLETED_WITH_NO_OUTPUT);
+    });
+
     it('should fail when the executed cell records an error output', async () => {
       mockExecFile.mockImplementation((...args: unknown[]) => {
         const cb = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
@@ -360,6 +398,32 @@ describe('Notebook Tool - Execution', () => {
       expect(result.content).toContain('Code cells: 2');
       expect(result.content).toContain('Cells with output: 2');
       expect(result.content).toContain('Cells with errors: 0');
+    });
+
+    it('should show explicit no-output messages for silent cells', async () => {
+      mockExecFile.mockImplementation((...args: unknown[]) => {
+        const cb = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, '', '');
+      });
+
+      const executedNotebook = makeExecutedNotebook([
+        {
+          type: 'code',
+          source: 'x = 1',
+          execution_count: 1,
+          outputs: [],
+        },
+      ]);
+
+      mockReadFile.mockResolvedValue(executedNotebook);
+
+      const result = await tool.execute({
+        action: 'execute_all',
+        path: 'test.ipynb',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain(NOTEBOOK_CELL_COMPLETED_WITH_NO_OUTPUT);
     });
 
     it('should report cells with errors', async () => {
