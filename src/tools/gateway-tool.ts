@@ -113,15 +113,16 @@ export class GatewayTool {
 
   healthCheck(): HealthCheckResult {
     logger.info('Running gateway health check');
+    const memoryUsage = process.memoryUsage?.()?.heapUsed;
+    const checks = {
+      api: this.running,
+      channels: this.channelCount > 0,
+      memory: typeof memoryUsage === 'number' && Number.isFinite(memoryUsage),
+    };
+
     return {
-      healthy: this.running,
-      checks: {
-        api: this.running,
-        database: true,
-        llm: true,
-        channels: this.channelCount > 0 || true,
-        memory: true,
-      },
+      healthy: checks.api && checks.memory,
+      checks,
     };
   }
 }

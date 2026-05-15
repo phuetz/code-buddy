@@ -655,6 +655,9 @@ npm run typecheck
 - Le chemin `BashTool.shellFreeExec()` ne renvoie plus le fallback opaque
   `Done` pour une commande exit 0 sans sortie; il utilise maintenant le meme
   message explicite que l'execution Bash principale.
+- `GatewayTool.healthCheck()` ne declare plus `database` et `llm` sains sans
+  verification reelle, et l'etat `channels` depend maintenant du compteur de
+  canaux au lieu d'un `|| true`.
 
 ## Blocage leve
 

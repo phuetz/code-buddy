@@ -709,9 +709,19 @@ describe('GatewayTool', () => {
     const health = gw.healthCheck();
     expect(health.healthy).toBe(true);
     expect(health.checks.api).toBe(true);
-    expect(health.checks.database).toBe(true);
-    expect(health.checks.llm).toBe(true);
+    expect(health.checks.channels).toBe(false);
     expect(health.checks.memory).toBe(true);
+    expect(health.checks).not.toHaveProperty('database');
+    expect(health.checks).not.toHaveProperty('llm');
+  });
+
+  it('should report channel health from the actual channel count', () => {
+    const gw = GatewayTool.getInstance();
+    gw.start();
+    expect(gw.healthCheck().checks.channels).toBe(false);
+
+    gw.setChannelCount(1);
+    expect(gw.healthCheck().checks.channels).toBe(true);
   });
 
   it('should return unhealthy when not running', () => {
