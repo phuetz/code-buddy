@@ -317,6 +317,24 @@ describe('NodeLlamaCppProvider', () => {
       expect(response.provider).toBe('local-llama');
     });
 
+    it('should throw if no user message is present', async () => {
+      await expect(provider.complete([
+        { role: 'system', content: 'You are helpful' },
+      ])).rejects.toThrow('No user message found');
+    });
+
+    it('should throw when node-llama-cpp returns blank content', async () => {
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionBlankResponse() {
+        return {
+          prompt: jest.fn().mockResolvedValue('   '),
+        };
+      });
+
+      await expect(provider.complete([
+        { role: 'user', content: 'Hello' },
+      ])).rejects.toThrow('node-llama-cpp returned empty response content');
+    });
+
     it('should include generation time', async () => {
       const response = await provider.complete([
         { role: 'user', content: 'Hello' },
@@ -466,6 +484,24 @@ describe('NodeLlamaCppProvider', () => {
 
       expect(chunks.length).toBeGreaterThan(0);
       expect(chunks.join('')).toBe('Hello World Response');
+    });
+
+    it('should throw when streaming response is blank', async () => {
+      mockLlamaChatSession.mockImplementation(function LlamaChatSessionBlankStream() {
+        return {
+          prompt: jest.fn().mockResolvedValue('\n  \t'),
+        };
+      });
+
+      const stream = provider.stream([
+        { role: 'user', content: 'Hello' },
+      ]);
+
+      await expect(async () => {
+        for await (const _chunk of stream) {
+          // Should throw before yielding chunks
+        }
+      }).rejects.toThrow('node-llama-cpp returned empty response content');
     });
 
     it('should use last user message for streaming', async () => {

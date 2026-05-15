@@ -396,6 +396,15 @@ npm run typecheck
 
 npm run validate
 # passed after shared tool-result formatter/runtimes cleanup; remaining warnings are historical or expected by tests
+
+npm test -- tests/unit/local-llm-provider.test.ts
+# 129 tests passed after node-llama-cpp empty-response hardening
+
+npx eslint src/providers/local-llm-provider.ts tests/unit/local-llm-provider.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -1016,6 +1025,9 @@ npm run validate
 - Les logs Cowork pour les providers locaux ne parlent plus de chemin
   `placeholder/env auth`; ils indiquent maintenant clairement le fallback
   d'auth local/env.
+- Le provider local `node-llama-cpp` ne transforme plus une completion ou un
+  stream vide en reponse valide; il exige aussi au moins un message utilisateur
+  comme le chemin streaming.
 
 ## Blocage leve
 

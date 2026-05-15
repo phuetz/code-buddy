@@ -240,6 +240,10 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
 
     const { LlamaChatSession } = nodeLlamaCpp;
 
+    if (!messages.some(m => m.role === 'user')) {
+      throw new Error('No user message found in the conversation. Include at least one message with role "user".');
+    }
+
     const session = new LlamaChatSession({
       context: this.context as ConstructorParameters<typeof LlamaChatSession>[0]['context'],
       systemPrompt: messages.find(m => m.role === 'system')?.content,
@@ -255,10 +259,11 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
         });
       }
     }
+    const content = requireLocalProviderContent('node-llama-cpp', response);
 
     return {
-      content: response,
-      tokensUsed: Math.ceil(response.length / 4), // Rough estimate
+      content,
+      tokensUsed: Math.ceil(content.length / 4), // Rough estimate
       model: this.config?.modelPath || 'unknown',
       provider: this.type,
       generationTime: Date.now() - startTime,
@@ -300,7 +305,7 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
 
     // node-llama-cpp returns the full response, but we can simulate streaming
     // For true streaming, we'd need to use the onToken callback
-    const response = await responseIterator;
+    const response = requireLocalProviderContent('node-llama-cpp', await responseIterator);
 
     // Simulate streaming by yielding chunks
     const chunkSize = 10;
