@@ -785,6 +785,9 @@ npm run typecheck
 - `HookRunner` ne marque plus les handlers `prompt` et `agent` non cables comme
   des evaluations reussies; un hook configure mais impossible a executer rend
   maintenant un echec explicite au lieu d'un passthrough vert.
+- Le dry-run des hooks Cowork ne valide plus les handlers impossibles: une
+  commande vide ou un type inconnu echoue explicitement au lieu de renvoyer un
+  no-op `success=true` dans l'UI de configuration.
 
 ## Blocage leve
 

@@ -192,9 +192,8 @@ export class HooksBridge {
   /**
    * Dry-run a hook handler. Supports `command` (spawn shell), `http`
    * (POST with synthetic dry-run body), and `prompt` (single LLM
-   * round-trip via pi-ai's `completeSimple`). `agent` handlers are
-   * still mocked — they would require spawning a sub-agent runtime
-   * which is too heavy for an authoring dry-run.
+   * round-trip via pi-ai's `completeSimple`). `agent` handlers spawn
+   * a bounded dry-run sub-agent through the local bridge.
    */
   async test(handler: UserHookHandler): Promise<HooksTestResult> {
     if (handler.type === 'command') {
@@ -209,13 +208,14 @@ export class HooksBridge {
     if (handler.type === 'agent') {
       return this.testAgentHandler(handler);
     }
-    // No remaining types — defensive no-op.
+    const unknownType = (handler as { type?: string }).type ?? 'unknown';
     return {
-      success: true,
-      exitCode: 0,
+      success: false,
+      exitCode: null,
       stdout: '',
       stderr: '',
       durationMs: 0,
+      error: `Unsupported hook handler type: ${unknownType}`,
     };
   }
 
@@ -267,11 +267,12 @@ export class HooksBridge {
   private async testCommandHandler(handler: UserHookHandler): Promise<HooksTestResult> {
     if (!handler.command) {
       return {
-        success: true,
-        exitCode: 0,
+        success: false,
+        exitCode: null,
         stdout: '',
         stderr: '',
         durationMs: 0,
+        error: 'Empty command',
       };
     }
     if (!this.workspaceDir) {
