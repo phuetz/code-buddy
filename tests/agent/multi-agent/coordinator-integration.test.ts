@@ -190,7 +190,7 @@ describe('MAS — Phase H Coordinator integration', () => {
       expect(first.data.conflict.type).toBe('code_overlap');
     });
 
-    it('coordinator throws → silent fallback (no events, no rethrow)', async () => {
+    it('coordinator throws → emits visible degradation event without rethrowing', async () => {
       mocks.setTomlConfig({ enable_conflict_resolution: true });
       mocks.detectConflictsMock.mockImplementationOnce(() => { throw new Error('detect boom'); });
 
@@ -198,7 +198,12 @@ describe('MAS — Phase H Coordinator integration', () => {
       mas.on('workflow:event', (e) => events.push(e));
 
       await expect(callHelper(mas, [makeTask('t1')])).resolves.toBeUndefined();
-      expect(events.filter((e) => (e as { type: string }).type === 'conflict_detected')).toHaveLength(0);
+      const warningEvents = events.filter((e) => (e as { type: string }).type === 'agent_message');
+      expect(warningEvents).toHaveLength(1);
+      const event = warningEvents[0] as { message: string; data: { warning: boolean; error: string } };
+      expect(event.message).toContain('Conflict detection unavailable');
+      expect(event.data.warning).toBe(true);
+      expect(event.data.error).toContain('detect boom');
     });
   });
 });

@@ -1204,8 +1204,13 @@ export class MultiAgentSystem extends EventEmitter {
           );
         }
       }
-    } catch {
-      // coord disabled or import fail — silently skip
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.addTimelineEvent(
+        'agent_message',
+        `Conflict detection unavailable: ${message}`,
+        { warning: true, source: 'enhanced-coordination', error: message }
+      );
     }
   }
 }

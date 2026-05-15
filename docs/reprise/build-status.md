@@ -722,6 +722,9 @@ npm run typecheck
 - `ToolFilterMiddleware` ne saute plus silencieusement le filtrage plan-mode si
   le module ou la fonction echoue: la boucle continue, mais avec un warning
   explicite pour eviter un mode plan faussement protege.
+- Le `MultiAgentSystem` n'ignore plus silencieusement les erreurs de detection
+  de conflits entre agents: il conserve le fallback, mais ajoute un evenement
+  timeline visible `Conflict detection unavailable`.
 
 ## Blocage leve
 
