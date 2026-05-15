@@ -776,6 +776,9 @@ npm run typecheck
 - `knowledge_graph` ne renvoie plus "No matching triples found" sur un graphe
   vide pour les operations de lecture; `stats` et `add` restent autorises, les
   requetes demandent maintenant un graphe initialise.
+- Les diagnostics API Cowork concurrents ne renvoient plus `overallOk=true`
+  quand le run est seulement saute (`skippedReason=concurrent_run`); le resultat
+  ne peut plus etre interprete comme une connexion verifiee.
 
 ## Blocage leve
 

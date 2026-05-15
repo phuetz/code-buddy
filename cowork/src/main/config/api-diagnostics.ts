@@ -502,7 +502,7 @@ export async function runDiagnostics(input: DiagnosticInput): Promise<Diagnostic
     log('[Diagnostics] Skipping — another run is already in progress');
     return {
       steps: STEP_NAMES.map((name) => ({ name, status: 'skip' as const, latencyMs: 0 })),
-      overallOk: true,
+      overallOk: false,
       verificationLevel,
       skippedReason: 'concurrent_run',
       failedAt: undefined,

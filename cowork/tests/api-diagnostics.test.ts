@@ -265,6 +265,45 @@ describe('runDiagnostics TLS step', () => {
     expect(modelStep?.error).toBe('401 Unauthorized');
   });
 
+  it('does not report success when a concurrent diagnostics run is skipped', async () => {
+    let releaseTcp!: () => void;
+    mocks.tcpConnect.mockImplementationOnce(() => {
+      const handlers: Record<string, () => void> = {};
+      const socket = {
+        once(event: string, handler: () => void) {
+          handlers[event] = handler;
+          return socket;
+        },
+        destroy: vi.fn(),
+      };
+      releaseTcp = () => handlers.connect?.();
+      return socket;
+    });
+
+    const firstRun = runDiagnostics({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+
+    while (mocks.tcpConnect.mock.calls.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    const skipped = await runDiagnostics({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+
+    expect(skipped.skippedReason).toBe('concurrent_run');
+    expect(skipped.overallOk).toBe(false);
+    expect(skipped.steps.every((step) => step.status === 'skip')).toBe(true);
+
+    releaseTcp();
+    await firstRun;
+  });
+
   it('discovers local Ollama using the caller-provided loopback endpoint', async () => {
     mocks.fetch.mockResolvedValueOnce(
       new Response(JSON.stringify({
