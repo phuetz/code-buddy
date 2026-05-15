@@ -176,8 +176,11 @@ export function createCanvasRoutes(config?: Partial<CanvasRouteConfig>): RouteHa
         try {
           const data = JSON.parse(body);
           logger.debug('A2UI eval', { expression: data.expression?.slice(0, 100) });
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ evaluated: true, expression: data.expression }));
+          res.writeHead(501, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'A2UI expression evaluation is not wired in the HTTP canvas route. Use the A2UI WebSocket server for live interactions.',
+            expression: data.expression,
+          }));
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON body' }));
@@ -241,12 +244,11 @@ function buildA2UIPage(): string {
 <body>
   <h1>A2UI Host</h1>
   <div id="canvas-container">
-    <p>Agent-driven visual workspace. Canvas content will appear here.</p>
+    <p>Static A2UI host page. Start the A2UI WebSocket server to receive live agent-driven canvas updates.</p>
   </div>
-  <div class="status">Connected to Code Buddy Gateway</div>
+  <div class="status">Not connected: this HTTP route does not open a WebSocket.</div>
   <script>
-    // A2UI WebSocket connection placeholder
-    console.log('A2UI host ready');
+    console.warn('A2UI WebSocket is not connected from this static HTTP page.');
   </script>
 </body>
 </html>`;

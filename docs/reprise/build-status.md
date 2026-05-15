@@ -621,6 +621,9 @@ npm run typecheck
 - `KubernetesTool.portForward()` attend maintenant le signal de readiness
   `Forwarding from ...` de `kubectl` avant d'annoncer le tunnel demarre. Si
   `kubectl` manque ou quitte immediatement, l'outil renvoie l'erreur.
+- La page HTTP statique A2UI ne pretend plus etre connectee au gateway, et
+  `/__codebuddy__/a2ui/eval` ne renvoie plus `evaluated: true` sans moteur
+  d'evaluation branche. Le endpoint repond maintenant `501` explicitement.
 
 ## Blocage leve
 
