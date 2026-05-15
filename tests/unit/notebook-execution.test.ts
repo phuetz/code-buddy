@@ -456,5 +456,45 @@ describe('Notebook Tool - Execution', () => {
       expect(result.success).toBe(true);
       expect(result.content).toContain('julia-1.8');
     });
+
+    it('should fail if kernel process exits during startup', async () => {
+      mockExecFile.mockImplementation((...args: unknown[]) => {
+        const cb = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, '6.5.0', '');
+      });
+
+      const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+      const mockProcess = {
+        pid: 777,
+        killed: false,
+        exitCode: null,
+        stderr: { on: vi.fn(), removeListener: vi.fn() },
+        stdout: { on: vi.fn(), removeListener: vi.fn() },
+        on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+          const current = listeners.get(event) ?? [];
+          current.push(listener);
+          listeners.set(event, current);
+          return mockProcess;
+        }),
+        removeListener: vi.fn(),
+        kill: vi.fn(),
+      };
+      mockSpawn.mockReturnValue(mockProcess);
+
+      const resultPromise = tool.execute({
+        action: 'kernel_start',
+        path: 'test.ipynb',
+      });
+      setTimeout(() => {
+        for (const listener of listeners.get('close') ?? []) {
+          listener(1, null);
+        }
+      }, 0);
+
+      const result = await resultPromise;
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('closed during startup');
+      expect(result.error).toContain('code=1');
+    });
   });
 });

@@ -387,6 +387,68 @@ export class NotebookTool {
   /** Active kernel process (for kernel_start/kernel_stop lifecycle) */
   private kernelProcess: import('child_process').ChildProcess | null = null;
 
+  private async waitForKernelStartup(
+    proc: import('child_process').ChildProcess,
+    timeoutMs = 3000,
+  ): Promise<{ started: boolean; output: string; error?: string }> {
+    return new Promise((resolve) => {
+      let output = '';
+      let settled = false;
+
+      const cleanup = () => {
+        proc.stderr?.removeListener('data', onData);
+        proc.stdout?.removeListener('data', onData);
+        proc.removeListener?.('error', onError);
+        proc.removeListener?.('exit', onExit);
+        proc.removeListener?.('close', onClose);
+      };
+      const finish = (result: { started: boolean; output: string; error?: string }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
+        resolve(result);
+      };
+      const onData = (data: Buffer) => {
+        output += data.toString();
+      };
+      const onError = (err: Error) => {
+        finish({ started: false, output, error: err.message });
+      };
+      const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+        finish({
+          started: false,
+          output,
+          error: `kernel process exited during startup (code=${code ?? 'null'}, signal=${signal ?? 'null'})`,
+        });
+      };
+      const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
+        finish({
+          started: false,
+          output,
+          error: `kernel process closed during startup (code=${code ?? 'null'}, signal=${signal ?? 'null'})`,
+        });
+      };
+      const timer = setTimeout(() => {
+        if (proc.exitCode !== null && proc.exitCode !== undefined) {
+          finish({
+            started: false,
+            output,
+            error: `kernel process exited during startup (code=${proc.exitCode})`,
+          });
+          return;
+        }
+        finish({ started: true, output });
+      }, timeoutMs);
+
+      proc.stderr?.on('data', onData);
+      proc.stdout?.on('data', onData);
+      proc.on('error', onError);
+      proc.on('exit', onExit);
+      proc.on('close', onClose);
+    });
+  }
+
   /**
    * Check if jupyter is available on the system
    */
@@ -593,27 +655,20 @@ export class NotebookTool {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-      // Wait briefly for kernel to start
-      const startOutput = await new Promise<string>((resolve) => {
-        let output = '';
-        const handler = (data: Buffer) => {
-          output += data.toString();
+      const startup = await this.waitForKernelStartup(this.kernelProcess);
+      if (!startup.started) {
+        this.kernelProcess = null;
+        return {
+          success: false,
+          error: `Failed to start kernel "${kernel}": ${startup.error ?? 'process ended before readiness check completed'}${startup.output.trim() ? `\n${startup.output.trim()}` : ''}`,
         };
-        this.kernelProcess!.stderr?.on('data', handler);
-        this.kernelProcess!.stdout?.on('data', handler);
-
-        setTimeout(() => {
-          this.kernelProcess!.stderr?.removeListener('data', handler);
-          this.kernelProcess!.stdout?.removeListener('data', handler);
-          resolve(output);
-        }, 3000);
-      });
+      }
 
       logger.info('Jupyter kernel started', { kernel, pid: this.kernelProcess.pid });
 
       return {
         success: true,
-        content: `Jupyter kernel "${kernel}" started (PID: ${this.kernelProcess.pid})\n${startOutput.trim()}`,
+        content: `Jupyter kernel "${kernel}" started (PID: ${this.kernelProcess.pid})\n${startup.output.trim()}`,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

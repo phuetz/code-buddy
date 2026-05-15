@@ -636,6 +636,9 @@ npm run typecheck
 - L'aide `/daily-reset` ne promet plus de vider l'historique live. Elle indique
   maintenant que V0.1 declenche seulement le hook interne du moteur tant que le
   callback vers les messages de session n'est pas branche.
+- `NotebookTool.kernel_start` ne declare plus un kernel Jupyter demarre si le
+  process quitte pendant la fenetre de demarrage. Les sorties `error`/`exit`/
+  `close` sont maintenant captees et renvoyees comme echec.
 
 ## Blocage leve
 
