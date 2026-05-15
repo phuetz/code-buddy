@@ -23,9 +23,11 @@ import {
   A2AAgentServer,
   A2AAgentClient,
   getTaskResult,
+  TaskStatus,
   type Task,
   type A2AMessage,
 } from '../../protocols/a2a/index.js';
+import { logger } from '../../utils/logger.js';
 
 /* ── Session Store ── */
 
@@ -33,7 +35,6 @@ interface QueuedPrompt {
   message: A2AMessage;
   metadata?: Record<string, string>;
   fireAndForget?: boolean;
-  resolve: (task: Task) => void;
 }
 
 interface ACPSession {
@@ -43,7 +44,7 @@ interface ACPSession {
   tasks: Task[];
   createdAt: number;
   lastActive: number;
-  /** Prompt queue — messages waiting for the active task to complete */
+  /** Reserved for a future durable prompt queue; ACP HTTP currently rejects concurrent sends. */
   queue: QueuedPrompt[];
   /** Whether the session is soft-closed (no new sends accepted) */
   closed: boolean;
@@ -106,6 +107,27 @@ export function createACPRoutes(): Router {
     }
   }
 
+  function isTerminalTask(task: Task): boolean {
+    return (
+      task.status.status === TaskStatus.COMPLETED ||
+      task.status.status === TaskStatus.FAILED ||
+      task.status.status === TaskStatus.CANCELED
+    );
+  }
+
+  function refreshSessionActiveTask(session: ACPSession): Task | undefined {
+    if (!session.activeTaskId) return undefined;
+
+    const found = findTask(session.activeTaskId);
+    if (!found || isTerminalTask(found.task)) {
+      session.activeTaskId = null;
+      session.lastActive = Date.now();
+      return undefined;
+    }
+
+    return found.task;
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // Agent & Task Endpoints
   // ──────────────────────────────────────────────────────────────────────────
@@ -116,7 +138,7 @@ export function createACPRoutes(): Router {
    * Extended (Native Engine v2026.3.12 alignment):
    * - `resumeSessionId` — copy context from a previous session
    * - `fireAndForget` — return 202 immediately
-   * - Prompt queue — if a task is active, queue the prompt (returns 202 with queuePosition)
+   * - Active session guard — rejects concurrent sends until queue draining is wired
    */
   router.post('/send', asyncHandler(async (req, res) => {
     const { agentId, message, sessionId, metadata, resumeSessionId, fireAndForget } = req.body;
@@ -136,9 +158,15 @@ export function createACPRoutes(): Router {
       return;
     }
 
+    const session = sessionId ? findSessionById(sessionId) : undefined;
+
+    if (sessionId && !session) {
+      res.status(404).json({ error: `Session not found: ${sessionId}` });
+      return;
+    }
+
     // Check if session is soft-closed
     if (sessionId) {
-      const session = findSessionById(sessionId);
       if (session?.closed) {
         res.status(409).json({ error: 'Session is closed — no new sends accepted' });
         return;
@@ -161,32 +189,28 @@ export function createACPRoutes(): Router {
       }
     }
 
-    // Check if session has an active task — queue if so
-    if (sessionId) {
-      const session = findSessionById(sessionId);
-      if (session?.activeTaskId) {
-        // Queue the prompt
-        const queuePosition = session.queue.length + 1;
-
-        if (fireAndForget) {
-          session.queue.push({ message: a2aMessage, metadata, fireAndForget: true, resolve: () => {} });
-          res.status(202).json({ taskId, queued: true, queuePosition, fireAndForget: true });
-          return;
-        }
-
-        // Return 202 with queue position (prompt will be processed when active task completes)
-        const queuePromise = new Promise<Task>((resolve) => {
-          session.queue.push({ message: a2aMessage, metadata, resolve });
+    // Check if session has an active task. Prompt queueing is not wired into
+    // this in-process transport yet, so refuse instead of accepting work that
+    // would never be drained.
+    if (session) {
+      const activeTask = refreshSessionActiveTask(session);
+      if (activeTask) {
+        res.status(409).json({
+          error: 'Session already has an active task; prompt queueing is not wired for ACP HTTP yet',
+          activeTaskId: activeTask.id,
+          queued: false,
         });
-
-        res.status(202).json({ taskId, queued: true, queuePosition });
-        // Process will drain queue automatically
         return;
       }
     }
 
     // Fire-and-forget: submit task and return immediately
     if (fireAndForget) {
+      if (session) {
+        session.activeTaskId = taskId;
+        session.lastActive = Date.now();
+      }
+
       server.submitTask({
         id: taskId,
         sessionId: sessionId || taskId,
@@ -194,10 +218,17 @@ export function createACPRoutes(): Router {
         metadata: { ...(metadata || {}), resumeMessages: resumeMessages.length > 0 ? 'true' : undefined },
       }).then(task => {
         taskIndex.set(taskId, agentId);
-        if (sessionId) associateTaskWithSession(sessionId, task);
+        if (session) associateTaskWithSession(session.id, task);
+      }).catch(err => {
+        const error = err instanceof Error ? err.message : String(err);
+        logger.error('ACP fire-and-forget task failed before registration', { taskId, agentId, error });
+        if (session?.activeTaskId === taskId) {
+          session.activeTaskId = null;
+          session.lastActive = Date.now();
+        }
       });
 
-      res.status(202).json({ taskId, queued: false, fireAndForget: true });
+      res.status(202).json({ taskId, queued: false, fireAndForget: true, activeTaskId: session?.activeTaskId });
       return;
     }
 
@@ -211,8 +242,8 @@ export function createACPRoutes(): Router {
     taskIndex.set(taskId, agentId);
 
     // Associate with session if provided
-    if (sessionId) {
-      associateTaskWithSession(sessionId, task);
+    if (session) {
+      associateTaskWithSession(session.id, task);
     }
 
     res.json({
@@ -570,7 +601,7 @@ export function createACPRoutes(): Router {
     for (const session of sessions.values()) {
       if (session.id === sessionId) {
         session.tasks.push(task);
-        session.activeTaskId = task.id;
+        session.activeTaskId = isTerminalTask(task) ? null : task.id;
         break;
       }
     }

@@ -629,6 +629,10 @@ npm run typecheck
   `code_overlap` avec au moins une tache perdante reellement bloquee
   alimentent maintenant `conflict.resolution`; les autres restent visibles
   comme pending jusqu'a une vraie strategie runtime.
+- Le transport HTTP ACP ne met plus les prompts de session dans une queue
+  fantome qui n'etait jamais drainee. Une tache deja terminee libere la
+  session; une vraie tache `fireAndForget` active fait rejeter les envois
+  concurrents en `409` tant qu'une queue durable n'est pas branchee.
 
 ## Blocage leve
 

@@ -4,14 +4,17 @@
  * Phase 2: resumeSessionId, prompt queue, cancel, soft-close, fire-and-forget
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import express from 'express';
+import { createServer, type Server } from 'http';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { createACPRoutes } from '../../src/server/routes/acp.js';
 
 // Mock the a2a module
 vi.mock('../../src/protocols/a2a/index.js', () => {
   const tasks = new Map<string, any>();
-  const activeTasks = new Map<string, boolean>();
 
-  const A2AAgentServer = vi.fn().mockImplementation((card: any, executor: any) => {
+  const A2AAgentServer = vi.fn().mockImplementation(function (_card: any, _executor: any) {
+    const card = _card;
     return {
       getAgentCard: () => card,
       submitTask: vi.fn().mockImplementation(async (req: any) => {
@@ -47,7 +50,7 @@ vi.mock('../../src/protocols/a2a/index.js', () => {
     };
   });
 
-  const A2AAgentClient = vi.fn().mockImplementation(() => {
+  const A2AAgentClient = vi.fn().mockImplementation(function () {
     const agents = new Map<string, any>();
     return {
       agents,
@@ -72,6 +75,60 @@ vi.mock('../../src/protocols/a2a/index.js', () => {
 });
 
 describe('ACP Advanced Sessions', () => {
+  let server: Server | undefined;
+
+  async function startApp(agent: any): Promise<{ baseUrl: string; sessions: Map<string, any> }> {
+    const app = express();
+    app.use(express.json());
+
+    const routes = createACPRoutes();
+    const client = (routes as unknown as { acpClient: { registerAgent: (key: string, server: any) => void } }).acpClient;
+    client.registerAgent('agent-1', agent);
+    app.use('/api/acp', routes);
+
+    await new Promise<void>((resolve) => {
+      server = createServer(app);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const addr = server.address() as { port: number };
+    return {
+      baseUrl: `http://127.0.0.1:${addr.port}`,
+      sessions: (routes as unknown as { acpSessions: Map<string, any> }).acpSessions,
+    };
+  }
+
+  function makeCompletedAgent(): any {
+    const tasks = new Map<string, any>();
+    return {
+      getAgentCard: () => ({ name: 'test-agent' }),
+      submitTask: vi.fn().mockImplementation(async (req: any) => {
+        const task = {
+          id: req.id,
+          sessionId: req.sessionId || req.id,
+          status: { status: 'completed', timestamp: Date.now() },
+          messages: [req.message],
+          artifacts: [],
+          history: [{ status: 'completed', timestamp: Date.now() }],
+          metadata: req.metadata,
+        };
+        tasks.set(task.id, task);
+        return task;
+      }),
+      getTask: (id: string) => tasks.get(id),
+      cancelTask: vi.fn(),
+      yieldTask: vi.fn(),
+      resumeTask: vi.fn(),
+    };
+  }
+
+  afterEach(async () => {
+    if (server) {
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
+      server = undefined;
+    }
+  });
+
   describe('ACPSession interface', () => {
     it('should have queue, closed, and activeTaskId fields', () => {
       // Type check — if the module compiles, this passes
@@ -92,29 +149,107 @@ describe('ACP Advanced Sessions', () => {
   });
 
   describe('Prompt Queue behavior', () => {
-    it('should queue prompts when task is active', () => {
-      const queue: Array<{ message: any; metadata?: any; resolve: Function }> = [];
+    it('does not leave completed sends as active and does not queue the next prompt', async () => {
+      const { baseUrl, sessions } = await startApp(makeCompletedAgent());
 
-      // Simulate active task
-      const activeTaskId = 'task_1';
-      const message = { role: 'user', parts: [{ type: 'text', text: 'queued prompt' }] };
+      const sessionResp = await fetch(`${baseUrl}/api/acp/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'main' }),
+      });
+      const session = await sessionResp.json() as { id: string };
 
-      // Queue the prompt
-      queue.push({ message, resolve: () => {} });
+      const body = {
+        agentId: 'agent-1',
+        sessionId: session.id,
+        message: { role: 'user', parts: [{ type: 'text', text: 'hello' }] },
+      };
 
-      expect(queue.length).toBe(1);
-      expect(queue[0].message.parts[0].text).toBe('queued prompt');
+      const first = await fetch(`${baseUrl}/api/acp/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(first.status).toBe(200);
+
+      const stored = sessions.get('main');
+      expect(stored.activeTaskId).toBeNull();
+
+      const second = await fetch(`${baseUrl}/api/acp/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...body, message: { role: 'user', parts: [{ type: 'text', text: 'again' }] } }),
+      });
+      expect(second.status).toBe(200);
+      const secondBody = await second.json() as { queued?: boolean };
+      expect(secondBody.queued).toBeUndefined();
     });
 
-    it('should drain queue in order', () => {
-      const queue: string[] = ['first', 'second', 'third'];
-      const processed: string[] = [];
+    it('rejects concurrent sends while a fire-and-forget task is active', async () => {
+      let release!: () => void;
+      const tasks = new Map<string, any>();
+      const slowAgent = {
+        getAgentCard: () => ({ name: 'slow-agent' }),
+        submitTask: vi.fn().mockImplementation(async (req: any) => {
+          const task = {
+            id: req.id,
+            sessionId: req.sessionId || req.id,
+            status: { status: 'working', timestamp: Date.now() },
+            messages: [req.message],
+            artifacts: [],
+            history: [{ status: 'working', timestamp: Date.now() }],
+            metadata: req.metadata,
+          };
+          tasks.set(task.id, task);
+          await new Promise<void>((resolve) => { release = resolve; });
+          task.status = { status: 'completed', timestamp: Date.now() };
+          task.history.push(task.status);
+          return task;
+        }),
+        getTask: (id: string) => tasks.get(id),
+        cancelTask: vi.fn(),
+        yieldTask: vi.fn(),
+        resumeTask: vi.fn(),
+      };
 
-      while (queue.length > 0) {
-        processed.push(queue.shift()!);
-      }
+      const { baseUrl } = await startApp(slowAgent);
+      const sessionResp = await fetch(`${baseUrl}/api/acp/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'main' }),
+      });
+      const session = await sessionResp.json() as { id: string };
 
-      expect(processed).toEqual(['first', 'second', 'third']);
+      const first = await fetch(`${baseUrl}/api/acp/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'agent-1',
+          sessionId: session.id,
+          fireAndForget: true,
+          message: { role: 'user', parts: [{ type: 'text', text: 'long task' }] },
+        }),
+      });
+      expect(first.status).toBe(202);
+
+      const second = await fetch(`${baseUrl}/api/acp/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'agent-1',
+          sessionId: session.id,
+          message: { role: 'user', parts: [{ type: 'text', text: 'next task' }] },
+        }),
+      });
+
+      expect(second.status).toBe(409);
+      const secondBody = await second.json() as { queued: boolean; error: string; activeTaskId: string };
+      expect(secondBody.queued).toBe(false);
+      expect(secondBody.error).toContain('prompt queueing is not wired');
+      expect(secondBody.activeTaskId).toBeTruthy();
+
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
   });
 
@@ -150,12 +285,12 @@ describe('ACP Advanced Sessions', () => {
       const taskId = `acp_${Date.now()}_abc`;
       const response = {
         status: 202,
-        body: { taskId, queued: true },
+        body: { taskId, queued: false },
       };
 
       expect(response.status).toBe(202);
       expect(response.body.taskId).toBe(taskId);
-      expect(response.body.queued).toBe(true);
+      expect(response.body.queued).toBe(false);
     });
   });
 
