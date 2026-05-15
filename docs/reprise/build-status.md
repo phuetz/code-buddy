@@ -788,6 +788,9 @@ npm run typecheck
 - Le dry-run des hooks Cowork ne valide plus les handlers impossibles: une
   commande vide ou un type inconnu echoue explicitement au lieu de renvoyer un
   no-op `success=true` dans l'UI de configuration.
+- Les outils fournis par plugins ne sont plus emballes automatiquement en
+  `success=true`: si un plugin renvoie un `ToolResult` rouge, le dispatcher CLI
+  preserve maintenant l'echec et son erreur.
 
 ## Blocage leve
 

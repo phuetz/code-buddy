@@ -97,6 +97,36 @@ export interface ToolHandlerDependencies {
   repairCoordinator: RepairCoordinator;
 }
 
+function stringifyPluginValue(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
+function isPluginToolResult(value: unknown): value is ToolResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { success?: unknown }).success === 'boolean'
+  );
+}
+
+export function normalizePluginToolResult(result: unknown): ToolResult {
+  if (isPluginToolResult(result)) {
+    return {
+      success: result.success,
+      output: stringifyPluginValue(result.output ?? result.content),
+      error: stringifyPluginValue(result.error),
+      data: result.data,
+      metadata: result.metadata,
+    };
+  }
+
+  return {
+    success: true,
+    output: stringifyPluginValue(result),
+  };
+}
+
 /**
  * ToolHandler manages tool instantiation and execution
  *
@@ -875,10 +905,7 @@ export class ToolHandler {
 
       const result = await this.deps.marketplace.executeTool(toolName, args);
 
-      return {
-        success: true,
-        output: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
-      };
+      return normalizePluginToolResult(result);
     } catch (error: unknown) {
       return {
         success: false,
