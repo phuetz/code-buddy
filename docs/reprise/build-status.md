@@ -247,7 +247,10 @@ npm run typecheck
 npm test -- tests/features/tailscale-dashboard-nodes.test.ts
 # 74 tests passed after device location/notification fake-success cleanup
 
-npx eslint src/nodes/device-node.ts src/nodes/platform-commands.ts tests/features/tailscale-dashboard-nodes.test.ts --quiet
+npm test -- tests/unit/device-transports.test.ts
+# 22 tests passed after Android transport capability cleanup
+
+npx eslint src/nodes/device-node.ts src/nodes/platform-commands.ts src/nodes/transports/adb-transport.ts tests/features/tailscale-dashboard-nodes.test.ts tests/unit/device-transports.test.ts --quiet
 # passed
 
 npm run typecheck
@@ -475,6 +478,10 @@ npm run typecheck
 - Les actions device ne fabriquent plus de localisation `{lat:0, lon:0}` quand
   la sortie n'est pas exploitable, et `sendNotification()` ne pretend plus une
   livraison reussie sans implementation transport branchee.
+- `ADBTransport` n'annonce plus `location` / `notifications` comme capacites
+  generiques tant que ces actions ne sont pas branchees cote device manager, et
+  `listCameras()` retourne une liste vide au lieu d'inventer les cameras
+  `back/front`.
 
 ## Blocage leve
 

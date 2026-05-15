@@ -114,8 +114,7 @@ export class ADBTransport implements DeviceTransport {
       'system_run', 'system_info', 'file_transfer', 'file_browse',
       'screenshot', 'screen_record',
       'camera', 'camera_list', 'camera_snap',
-      'location',
-      'notifications', 'notification_list',
+      'notification_list',
       'contacts', 'contacts_search',
       'calendar', 'calendar_events',
       'sensors', 'sensor_data',
@@ -137,10 +136,7 @@ export class ADBTransport implements DeviceTransport {
       'dumpsys media.camera | grep -E "Camera ID|Facing"'
     );
     if (result.exitCode !== 0 || !result.stdout.trim()) {
-      return [
-        { id: '0', facing: 'back' },
-        { id: '1', facing: 'front' },
-      ];
+      return [];
     }
 
     const cameras: { id: string; facing: string }[] = [];
@@ -157,9 +153,7 @@ export class ADBTransport implements DeviceTransport {
         currentId = '';
       }
     }
-    return cameras.length > 0
-      ? cameras
-      : [{ id: '0', facing: 'back' }, { id: '1', facing: 'front' }];
+    return cameras;
   }
 
   /**

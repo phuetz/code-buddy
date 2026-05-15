@@ -298,7 +298,18 @@ describe('ADBTransport', () => {
     expect(caps).toContain('screenshot');
     expect(caps).toContain('screen_record');
     expect(caps).toContain('camera');
-    expect(caps).toContain('location');
+    expect(caps).not.toContain('location');
+    expect(caps).not.toContain('notifications');
+    expect(caps).toContain('notification_list');
+  });
+
+  it('should return no cameras when Android camera detection has no output', async () => {
+    mockSpawn.mockReturnValue(createMockProcess(0, '', ''));
+
+    const { ADBTransport } = await import('../../src/nodes/transports/adb-transport.js');
+    const transport = new ADBTransport({ deviceId: 'pixel-7' });
+
+    await expect(transport.listCameras()).resolves.toEqual([]);
   });
 });
 
