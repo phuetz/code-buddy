@@ -527,7 +527,7 @@ export function cat95ThreeWayDiff(): TestDef[] {
             metadata: { resolved: resolved.substring(0, 100) },
           };
         }
-        return { pass: true, metadata: { note: 'no conflicts to resolve' } };
+        return { pass: false, metadata: { error: 'expected conflict to resolve' } };
       },
     },
     {
@@ -548,7 +548,7 @@ export function cat95ThreeWayDiff(): TestDef[] {
             metadata: { markers: markers.substring(0, 200) },
           };
         }
-        return { pass: true, metadata: { note: 'no conflict hunk found' } };
+        return { pass: false, metadata: { error: 'expected conflict hunk' } };
       },
     },
   ];

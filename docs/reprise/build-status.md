@@ -698,6 +698,9 @@ npm run typecheck
 - Le check script des types de canaux majeurs ne depend plus d'un export
   runtime inexistant pour un type TypeScript; il enregistre maintenant de vrais
   canaux `telegram` et `discord` dans `ChannelManager`.
+- Les checks script `ThreeWayDiff` ne passent plus si le scenario attendu ne
+  produit pas de conflit; resolution et marqueurs deviennent des echecs
+  explicites si la detection regresse.
 
 ## Blocage leve
 
