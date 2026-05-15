@@ -231,12 +231,11 @@ export function cat50Observability(): TestDef[] {
       fn: async () => {
         const mod = await import('../../src/observability/index.js');
         const init = mod.initObservability;
-        if (!init) return { pass: true, metadata: { skip: 'no initObservability' } };
-        // Call twice — should not throw
+        if (typeof init !== 'function') return { pass: false, metadata: { error: 'no initObservability export' } };
         try {
-          init();
-          init();
-          return { pass: true };
+          const first = init();
+          const second = init();
+          return { pass: first === undefined && second === undefined };
         } catch (e: any) {
           return { pass: false, metadata: { error: e.message } };
         }
@@ -246,13 +245,9 @@ export function cat50Observability(): TestDef[] {
       name: '50.3-tracing-module-exports',
       timeout: 5000,
       fn: async () => {
-        try {
-          const mod = await import('../../src/observability/tracing.js');
-          const keys = Object.keys(mod);
-          return { pass: keys.length >= 1, metadata: { exports: keys } };
-        } catch {
-          return { pass: true, metadata: { skip: 'tracing module not available' } };
-        }
+        const mod = await import('../../src/observability/tracing.js');
+        const keys = Object.keys(mod);
+        return { pass: keys.length >= 1, metadata: { exports: keys } };
       },
     },
     {
@@ -266,13 +261,19 @@ export function cat50Observability(): TestDef[] {
         delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
         try {
           const mod = await import('../../src/observability/index.js');
-          mod.initObservability?.();
-          return { pass: true };
+          const result = mod.initObservability?.();
+          return {
+            pass:
+              typeof mod.initObservability === 'function' &&
+              result === undefined &&
+              process.env.SENTRY_DSN === undefined &&
+              process.env.OTEL_EXPORTER_OTLP_ENDPOINT === undefined,
+          };
         } catch (e: any) {
           return { pass: false, metadata: { error: e.message } };
         } finally {
-          if (origSentry) process.env.SENTRY_DSN = origSentry;
-          if (origOtel) process.env.OTEL_EXPORTER_OTLP_ENDPOINT = origOtel;
+          if (origSentry !== undefined) process.env.SENTRY_DSN = origSentry;
+          if (origOtel !== undefined) process.env.OTEL_EXPORTER_OTLP_ENDPOINT = origOtel;
         }
       },
     },

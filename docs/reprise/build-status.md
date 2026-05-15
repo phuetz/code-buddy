@@ -683,6 +683,9 @@ npm run typecheck
 - Les checks scripts d'erreur `sanitizeFilePath` / `normalizeBaseURL` et le
   check `ContextManagerV3.dispose()` ne passent plus sur n'importe quelle
   exception ou absence de crash; ils valident maintenant le signal attendu.
+- Les checks Observability des scripts etendus ne masquent plus l'absence de
+  `initObservability` ou du module `tracing`: les exports sont requis, et le
+  chemin sans variables d'environnement verifie le retour et l'etat env.
 
 ## Blocage leve
 
