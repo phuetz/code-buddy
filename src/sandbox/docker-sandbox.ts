@@ -178,19 +178,22 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
         const durationMs = Date.now() - startTime;
 
         if (timedOut) {
+          const error = `Command timed out after ${merged.timeout}ms`;
           resolve({
             success: false,
-            output: stdout,
-            error: `Command timed out after ${merged.timeout}ms`,
+            output: stdout || error,
+            error,
             exitCode: exitCode,
             durationMs,
             containerId: containerName,
           });
         } else {
+          const success = exitCode === 0;
+          const error = stderr || undefined;
           resolve({
-            success: exitCode === 0,
-            output: stdout,
-            error: stderr || undefined,
+            success,
+            output: stdout || (!success ? error ?? '' : ''),
+            error,
             exitCode,
             durationMs,
             containerId: containerName,
@@ -206,7 +209,7 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
 
         resolve({
           success: false,
-          output: '',
+          output: err.message,
           error: err.message,
           exitCode: 1,
           durationMs: Date.now() - startTime,
@@ -230,6 +233,7 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let spawnError: string | undefined;
 
     this.activeContainers.add(containerName);
     globalActiveContainers.add(containerName);
@@ -280,7 +284,8 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
         resolve(code ?? 1);
       });
 
-      proc.on('error', () => {
+      proc.on('error', (err) => {
+        spawnError = err.message;
         clearTimeout(timer);
         streamDone = true;
         this.activeContainers.delete(containerName);
@@ -306,11 +311,15 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
 
     const exitCode = await exitPromise;
     const durationMs = Date.now() - startTime;
+    const success = !timedOut && exitCode === 0;
+    const error = timedOut
+      ? `Command timed out after ${merged.timeout}ms`
+      : spawnError || stderr || undefined;
 
     return {
-      success: timedOut ? false : exitCode === 0,
-      output: stdout,
-      error: timedOut ? `Command timed out after ${merged.timeout}ms` : (stderr || undefined),
+      success,
+      output: stdout || (!success ? error ?? '' : ''),
+      error,
       exitCode,
       durationMs,
       containerId: containerName,

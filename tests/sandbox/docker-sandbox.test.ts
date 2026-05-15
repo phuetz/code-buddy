@@ -174,6 +174,7 @@ describe('DockerSandbox', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/timed out/i);
+      expect(result.output).toBe(result.error);
     });
 
     it('should handle spawn errors', async () => {
@@ -189,6 +190,7 @@ describe('DockerSandbox', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('spawn ENOENT');
+      expect(result.output).toBe('spawn ENOENT');
       expect(result.exitCode).toBe(1);
     });
 
@@ -206,7 +208,25 @@ describe('DockerSandbox', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('command not found');
+      expect(result.output).toBe('command not found');
       expect(result.exitCode).toBe(127);
+    });
+
+    it('should expose streaming spawn errors as output', async () => {
+      const proc = createMockProcess();
+      mockSpawn.mockReturnValue(proc);
+
+      const sandbox = new DockerSandbox();
+      const stream = sandbox.executeStreaming('echo test');
+
+      const firstRead = stream.next();
+      proc.emit('error', new Error('spawn ENOENT'));
+
+      const result = await firstRead;
+      expect(result.done).toBe(true);
+      expect(result.value.success).toBe(false);
+      expect(result.value.error).toBe('spawn ENOENT');
+      expect(result.value.output).toBe('spawn ENOENT');
     });
 
     it('should allow per-call config overrides', async () => {

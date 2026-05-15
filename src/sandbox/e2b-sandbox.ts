@@ -138,10 +138,11 @@ export class E2BSandbox {
     try {
       await this.ensureSandbox();
     } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        output: '',
-        error: err instanceof Error ? err.message : String(err),
+        output: error,
+        error,
         exitCode: 1,
         durationMs: Date.now() - startTime,
       };
@@ -158,19 +159,21 @@ export class E2BSandbox {
 
       this.touchActivity();
 
+      const success = result.exitCode === 0;
       return {
-        success: result.exitCode === 0,
-        output: result.stdout,
+        success,
+        output: result.stdout || (!success ? result.stderr || '' : ''),
         error: result.stderr || undefined,
         exitCode: result.exitCode,
         durationMs: Date.now() - startTime,
         sandboxId: this.sandboxId!,
       };
     } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        output: '',
-        error: err instanceof Error ? err.message : String(err),
+        output: error,
+        error,
         exitCode: 1,
         durationMs: Date.now() - startTime,
         sandboxId: this.sandboxId ?? undefined,

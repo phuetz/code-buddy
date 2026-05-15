@@ -81,10 +81,11 @@ export class OpenShellBackend implements SandboxBackendInterface {
         return await this.executeRemote(command, timeout, opts);
       }
     } catch (error) {
+      const errorMessage = `OpenShell execution failed: ${error instanceof Error ? error.message : String(error)}`;
       return {
         success: false,
-        output: '',
-        error: `OpenShell execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        output: errorMessage,
+        error: errorMessage,
         exitCode: 1,
         durationMs: Date.now() - startTime,
       };
@@ -137,10 +138,12 @@ export class OpenShellBackend implements SandboxBackendInterface {
 
       proc.on('close', (code) => {
         clearTimeout(timer);
+        const success = !timedOut && code === 0;
+        const error = timedOut ? `Timed out after ${timeout}ms` : stderr || undefined;
         resolve({
-          success: !timedOut && code === 0,
-          output: stdout,
-          error: timedOut ? `Timed out after ${timeout}ms` : stderr || undefined,
+          success,
+          output: stdout || (!success ? error ?? '' : ''),
+          error,
           exitCode: code ?? 1,
           durationMs: Date.now() - startTime,
         });
@@ -177,10 +180,11 @@ export class OpenShellBackend implements SandboxBackendInterface {
 
       if (!response.ok) {
         const text = await response.text().catch(() => '');
+        const error = `OpenShell API error ${response.status}: ${text || response.statusText}`;
         return {
           success: false,
-          output: '',
-          error: `OpenShell API error ${response.status}: ${text || response.statusText}`,
+          output: error,
+          error,
           exitCode: 1,
           durationMs: Date.now() - startTime,
         };
@@ -191,12 +195,14 @@ export class OpenShellBackend implements SandboxBackendInterface {
         error?: string;
         exitCode?: number;
       };
+      const exitCode = result.exitCode ?? 1;
+      const success = exitCode === 0;
 
       return {
-        success: (result.exitCode ?? 1) === 0,
-        output: result.output ?? '',
+        success,
+        output: result.output ?? (!success ? result.error ?? '' : ''),
         error: result.error,
-        exitCode: result.exitCode ?? 0,
+        exitCode,
         durationMs: Date.now() - startTime,
       };
     } catch (error) {

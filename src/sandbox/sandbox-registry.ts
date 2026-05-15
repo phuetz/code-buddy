@@ -63,10 +63,11 @@ export async function sandboxExecute(
 ): Promise<SandboxExecResult> {
   const backend = await getActiveSandboxBackend();
   if (!backend) {
+    const error = 'No sandbox backend available';
     return {
       success: false,
-      output: '',
-      error: 'No sandbox backend available',
+      output: error,
+      error,
       exitCode: 1,
       durationMs: 0,
     };

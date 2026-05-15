@@ -61,6 +61,7 @@ describe('E2BSandbox', () => {
       const result = await sandbox.execute('echo hello');
       expect(result.success).toBe(false);
       expect(result.error).toContain('E2B_API_KEY');
+      expect(result.output).toBe(result.error);
     });
   });
 

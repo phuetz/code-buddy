@@ -903,6 +903,9 @@ npm run typecheck
 - `WebSearchTool.fetchPage()` ne renvoie plus `output:''` lorsque le web est
   desactive ou que le garde SSRF bloque l'URL; la sortie expose maintenant la
   raison du refus.
+- Les backends sandbox (registry, Docker, E2B, OpenShell) ne laissent plus les
+  echecs sans stdout disparaitre dans `output:''`; l'erreur devient visible
+  dans `output`, y compris pour le streaming Docker sans chunk stdout.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

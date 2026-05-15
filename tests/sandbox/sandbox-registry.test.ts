@@ -62,6 +62,7 @@ describe('SandboxRegistry', () => {
     const result = await sandboxExecute('echo hello');
     expect(result.success).toBe(false);
     expect(result.error).toContain('No sandbox backend');
+    expect(result.output).toBe(result.error);
   });
 
   it('listSandboxBackends returns all backends with availability', async () => {
