@@ -27,6 +27,7 @@ import type { RepairCoordinator } from '../execution/repair-coordinator.js';
 import type { EnhancedMemory, MemoryEntry, MemoryType } from '../../memory/index.js';
 import { getEnhancedMemory } from '../../memory/index.js';
 import { logger } from '../../utils/logger.js';
+import { assertTestRuntimeFeature } from '../../utils/test-runtime.js';
 import { getErrorMessage } from '../../errors/index.js';
 
 // Runtime imports for createAgentInfrastructureSync
@@ -518,6 +519,7 @@ export function createTestInfrastructure(
   overrides: Partial<AgentInfrastructureDeps> = {},
   config: AgentInfrastructureConfig = {}
 ): AgentInfrastructure {
+  assertTestRuntimeFeature('createTestInfrastructure');
   // Create minimal mock implementations
   const mockContainer = {
     settings: {} as IServiceContainer['settings'],

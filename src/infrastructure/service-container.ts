@@ -26,6 +26,7 @@ import { getSettingsManager } from '../utils/settings-manager.js';
 import { getCheckpointManager } from '../checkpoints/checkpoint-manager.js';
 import { getSessionStore } from '../persistence/session-store.js';
 import { getCostTracker } from '../utils/cost-tracker.js';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 
 // ============================================================================
 // Service Container Implementation
@@ -176,6 +177,7 @@ export function getServiceContainer(): IServiceContainer {
  * @param mocks - Partial mock implementations
  */
 export function createTestContainer(mocks: Partial<IServiceContainerConfig> = {}): ServiceContainer {
+  assertTestRuntimeFeature('createTestContainer');
   // Create minimal mock implementations for missing services
   const defaultMocks: IServiceContainerConfig = {
     settings: mocks.settings ?? createMockSettingsManager(),

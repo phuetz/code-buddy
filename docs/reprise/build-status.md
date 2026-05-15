@@ -1094,6 +1094,9 @@ npm run typecheck
 - Les doubles runtime `mock` restent utilisables par les tests explicites, mais
   `MockChannel`, TTS mock, desktop automation mock, embeddings mock et location
   mock refusent maintenant de s'initialiser dans un runtime normal.
+- Les fabriques `createTestInfrastructure` et `createTestContainer`, qui
+  construisent des dependances mockees depuis `src`, sont elles aussi limitees
+  au runtime de test.
 
 ## Blocage leve
 
