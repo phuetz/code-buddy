@@ -430,11 +430,15 @@ export class CloudAgentRunner extends EventEmitter {
           });
 
           let toolResult: string;
+          let toolSucceeded = false;
           try {
             // Lazy-load tool execution
             const { executeToolHeadless } = await import('./headless-tool-executor.js');
             const result = await executeToolHeadless(toolName, toolArgs, abortController.signal);
-            toolResult = result.output || result.error || 'Done';
+            toolSucceeded = result.success;
+            toolResult = result.success
+              ? (result.output || '(tool returned no output)')
+              : `Error: ${result.error || 'tool failed without details'}`;
 
             // Track file changes
             if (result.filesChanged) {
@@ -453,7 +457,7 @@ export class CloudAgentRunner extends EventEmitter {
 
           this.emitProgress(taskId, 'tool_result', {
             name: toolName,
-            success: !toolResult.startsWith('Error:'),
+            success: toolSucceeded,
           });
 
           messages.push({

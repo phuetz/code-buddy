@@ -642,6 +642,9 @@ npm run typecheck
 - `CloudAgentRunner` ne classe plus une tache comme `completed` quand le LLM
   ne renvoie aucun choix ou quand les rounds outils sont epuises sans reponse
   finale. Ces cas deviennent des echecs explicites.
+- Dans le meme runner, un outil headless qui echoue est maintenant renvoye au
+  modele comme `Error: ...` et l'evenement `tool_result` porte `success=false`;
+  l'ancien fallback pouvait transformer une erreur vide en `Done`.
 
 ## Blocage leve
 

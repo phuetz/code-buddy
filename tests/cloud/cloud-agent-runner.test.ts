@@ -96,8 +96,10 @@ vi.mock('../../src/prompts/system-base.js', () => ({
 }));
 
 import { CodeBuddyClient } from '../../src/codebuddy/client.js';
+import { executeToolHeadless } from '../../src/cloud/headless-tool-executor.js';
 
 const MockCodeBuddyClient = CodeBuddyClient as unknown as ReturnType<typeof vi.fn>;
+const MockExecuteToolHeadless = executeToolHeadless as unknown as ReturnType<typeof vi.fn>;
 
 const envKeysToReset = [
   'CODEBUDDY_PROVIDER',
@@ -310,6 +312,55 @@ describe('CloudAgentRunner', () => {
       const status = await runner.getTaskStatus(taskId);
       expect(status.status).toBe('failed');
       expect(status.error).toContain('Reached max tool rounds');
+    });
+
+    it('should record failed tool calls as failed progress events', async () => {
+      MockExecuteToolHeadless.mockResolvedValueOnce({
+        success: false,
+        error: 'tool exploded',
+      });
+      MockCodeBuddyClient.mockImplementationOnce(function () {
+        const chat = vi.fn()
+          .mockResolvedValueOnce({
+            choices: [{
+              message: {
+                role: 'assistant',
+                content: '',
+                tool_calls: [{
+                  id: 'call_1',
+                  function: { name: 'read_file', arguments: '{}' },
+                }],
+              },
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          })
+          .mockResolvedValueOnce({
+            choices: [{
+              message: {
+                role: 'assistant',
+                content: 'Final answer after tool failure.',
+                tool_calls: undefined,
+              },
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          });
+        return { chat };
+      });
+
+      const taskId = await runner.submitTask({
+        goal: 'Failed tool progress test',
+        maxToolRounds: 2,
+      });
+      await waitForCompletion(runner, taskId, 5000);
+
+      const status = await runner.getTaskStatus(taskId);
+      expect(status.status).toBe('completed');
+      const events = runner.getProgressEvents(taskId);
+      const failedToolEvent = events.find((event) =>
+        event.type === 'tool_result' &&
+        event.data.name === 'read_file'
+      );
+      expect(failedToolEvent?.data.success).toBe(false);
     });
 
     it('should set completedAt when task finishes', async () => {
