@@ -58,6 +58,11 @@ describe('handleShare (/share)', () => {
     expect(r.entry?.content).toContain('DISABLED — V0.2');
   });
 
+  it('does not claim encrypted storage when no encryption key is configured', async () => {
+    const r = await handleShare(['status']);
+    expect(r.entry?.content).toContain('plain (encryption key not configured)');
+  });
+
   it('enable instantiates the manager', async () => {
     const r = await handleShare(['enable']);
     expect(r.entry?.content).toContain('Team session manager started');

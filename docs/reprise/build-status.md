@@ -309,6 +309,15 @@ npx eslint src/commands/handlers/colab-handler.ts src/collaboration/ai-colab-man
 
 npm run typecheck
 # passed
+
+npm test -- tests/commands/team-session-handler.test.ts
+# 14 tests passed after /share encryption/storage truth cleanup
+
+npx eslint src/commands/handlers/team-session-handler.ts tests/commands/team-session-handler.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -562,6 +571,10 @@ npm run typecheck
 - `AIColabManager` rehydrate les dates JSON persistées en objets `Date`; les
   statuts/instructions ne cassent donc plus sur les work logs ou taches charges
   depuis `.codebuddy`.
+- `/share status` n'annonce plus un chiffrement AES quand aucune
+  `encryption_key` n'est configuree. Le texte d'aide et le chemin de stockage
+  indiquent aussi le dossier reel `~/.codebuddy/sessions/`, pas l'ancien nom
+  `shares`.
 
 ## Blocage leve
 

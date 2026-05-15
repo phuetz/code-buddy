@@ -23,7 +23,7 @@
  *
  * **Limitation V0.1**: real-time sync requires a WebSocket server,
  * which is not wired in V0.1. All session metadata is persisted locally
- * under ~/.codebuddy/shares/, but cross-host members will not see each
+ * under ~/.codebuddy/sessions/, but cross-host members will not see each
  * other's edits. V0.2 will wire `src/server/websocket/handler.ts` to a
  * `/ws/shares/:id` endpoint and hook the share* / annotation methods
  * into broadcast.
@@ -54,7 +54,7 @@ Actions:
   status                Show enabled flag, active session, real-time sync state.
   create <name>         Create a new local session named <name>.
   join <sessionId>      Join an existing local session.
-  list                  List sessions persisted under ~/.codebuddy/shares/.
+  list                  List sessions persisted under ~/.codebuddy/sessions/.
   leave                 Leave the current session.
 
 V0.1 limitation: real-time sync requires a WebSocket server (V0.2 work).
@@ -63,7 +63,7 @@ Sessions are persisted locally; remote members will not see live edits.
 Configure defaults in TOML under [team_session]:
   enabled            = false       # auto-instantiate at boot
   server_url         = ""          # WebSocket sync server (V0.2)
-  enable_encryption  = true        # AES-256-GCM on session files
+  enable_encryption  = true        # AES-256-GCM when encryption_key is set
   auto_reconnect     = true
   reconnect_interval = 5000        # ms
   heartbeat_interval = 30000       # ms
@@ -71,7 +71,7 @@ Configure defaults in TOML under [team_session]:
 
 interface ManagerInternals {
   currentMember: { id: string; name: string } | null;
-  config: { serverUrl?: string; enableEncryption?: boolean };
+  config: { serverUrl?: string; enableEncryption?: boolean; encryptionKey?: string };
   loadMemberProfile?: () => void;
 }
 
@@ -84,7 +84,7 @@ function isInstantiated(): boolean {
 function formatStatusLines(
   enabled: boolean,
   serverUrl: string | undefined,
-  encryption: boolean,
+  encryptionLabel: string,
   sessionSummary: string,
 ): string {
   const lines: string[] = [];
@@ -92,10 +92,17 @@ function formatStatusLines(
   lines.push('═'.repeat(40));
   lines.push(`Enabled:           ${enabled ? 'yes' : 'no'}`);
   lines.push(`Real-time sync:    ${serverUrl ? `enabled (${serverUrl})` : 'DISABLED — V0.2'}`);
-  lines.push(`Encryption:        ${encryption ? 'AES-256-GCM' : 'plain'}`);
+  lines.push(`Encryption:        ${encryptionLabel}`);
   lines.push('');
   lines.push(sessionSummary);
   return lines.join('\n');
+}
+
+function formatEncryptionStatus(config: { enableEncryption?: boolean; encryptionKey?: string }): string {
+  if (!config.enableEncryption) {
+    return 'plain';
+  }
+  return config.encryptionKey ? 'AES-256-GCM' : 'plain (encryption key not configured)';
 }
 
 /**
@@ -159,7 +166,15 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
   if (action === 'status') {
     // Status is read-only: report the current flag without instantiating.
     if (!sessionEnabled) {
-      const text = formatStatusLines(false, cfg.server_url, cfg.enable_encryption ?? true, 'No active session.');
+      const text = formatStatusLines(
+        false,
+        cfg.server_url,
+        formatEncryptionStatus({
+          enableEncryption: cfg.enable_encryption ?? true,
+          encryptionKey: cfg.encryption_key,
+        }),
+        'No active session.',
+      );
       return {
         handled: true,
         entry: { type: 'assistant', content: text, timestamp: new Date() },
@@ -175,7 +190,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     const text = formatStatusLines(
       sessionEnabled,
       liveInternals.config.serverUrl,
-      !!liveInternals.config.enableEncryption,
+      formatEncryptionStatus(liveInternals.config),
       sessionSummary,
     );
     return {
@@ -245,7 +260,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
         handled: true,
         entry: {
           type: 'assistant',
-          content: `Session created: ${session.name}\nID: ${session.id}\nOwner: ${internals.currentMember?.name ?? '(unknown)'}\nStorage: ~/.codebuddy/shares/${session.id}.json`,
+          content: `Session created: ${session.name}\nID: ${session.id}\nOwner: ${internals.currentMember?.name ?? '(unknown)'}\nStorage: ~/.codebuddy/sessions/${session.id}.json`,
           timestamp: new Date(),
         },
       };
