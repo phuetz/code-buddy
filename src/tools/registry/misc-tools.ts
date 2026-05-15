@@ -842,6 +842,13 @@ export class KnowledgeGraphQueryTool implements ITool {
     const graph = KnowledgeGraph.getInstance();
     const action = input.action as string;
 
+    if (action !== 'stats' && action !== 'add' && graph.getStats().tripleCount === 0) {
+      return {
+        success: false,
+        error: 'Knowledge graph is empty. Run codebase analysis first or add triples before querying relationships.',
+      };
+    }
+
     switch (action) {
       case 'query': {
         const pattern: Record<string, string | undefined> = {};

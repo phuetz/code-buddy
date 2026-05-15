@@ -773,6 +773,9 @@ npm run typecheck
 - `Cowork SkillsManager.startMcpServer` ne journalise plus un faux serveur MCP
   "registered" sans process; la tentative echoue explicitement et renvoie vers
   le gestionnaire MCP dedie.
+- `knowledge_graph` ne renvoie plus "No matching triples found" sur un graphe
+  vide pour les operations de lecture; `stats` et `add` restent autorises, les
+  requetes demandent maintenant un graphe initialise.
 
 ## Blocage leve
 
