@@ -9,6 +9,7 @@ export interface StepResult {
   step: ArchitectStep;
   response: unknown;
   success: boolean;
+  error?: string;
 }
 
 export interface ArchitectProposal {
@@ -74,6 +75,29 @@ For each step:
 
 Do not deviate from the plan. If you encounter an issue, report it clearly.`;
 
+type ArchitectAssistantMessage = {
+  content?: string | null;
+  tool_calls?: unknown[] | null;
+};
+
+function requireArchitectTextContent(message: ArchitectAssistantMessage | undefined): string {
+  const content = message?.content;
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new Error('Architect returned no proposal content');
+  }
+  return content;
+}
+
+function hasEditorOutput(message: ArchitectAssistantMessage | undefined): boolean {
+  return Boolean(
+    message
+    && (
+      (typeof message.content === 'string' && message.content.trim().length > 0)
+      || (Array.isArray(message.tool_calls) && message.tool_calls.length > 0)
+    )
+  );
+}
+
 export class ArchitectMode extends EventEmitter {
   private architectClient: CodeBuddyClient;
   private editorClient: CodeBuddyClient;
@@ -124,7 +148,7 @@ export class ArchitectMode extends EventEmitter {
 
     try {
       const response = await this.architectClient.chat(messages);
-      const content = response.choices[0]?.message?.content || "";
+      const content = requireArchitectTextContent(response.choices[0]?.message);
 
       // Parse the JSON response — robust extraction that handles nested objects
       const proposal = this.parseProposalJson(content);
@@ -198,10 +222,14 @@ export class ArchitectMode extends EventEmitter {
 
           try {
             const response = await this.editorClient.chat(messages, tools);
+            const assistantMessage = response.choices[0]?.message;
+            if (!hasEditorOutput(assistantMessage)) {
+              throw new Error(`Editor returned no content or tool calls for step ${step.order}`);
+            }
 
             const result: StepResult = {
               step,
-              response: response.choices[0]?.message,
+              response: assistantMessage,
               success: true,
             };
 

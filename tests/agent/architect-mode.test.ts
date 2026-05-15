@@ -423,6 +423,16 @@ describe("ArchitectMode Integration", () => {
       expect((architect as any).currentProposal).toBe(proposal);
     });
 
+    it("should reject empty architect proposal responses", async () => {
+      const architect = new ArchitectMode("test-api-key");
+      stubClients(architect, {
+        architect: createClientStub({ choices: [{ message: { content: "   " } }] }),
+      });
+
+      await expect(architect.analyze("Create a test file"))
+        .rejects.toThrow("Architect returned no proposal content");
+    });
+
     it("should implement a proposal", async () => {
       const architect = new ArchitectMode("test-api-key");
       stubClients(architect, { editor: createClientStub(doneChatResponse) });
@@ -439,6 +449,29 @@ describe("ArchitectMode Integration", () => {
       expect(success).toBe(true);
       expect(results).toHaveLength(1);
       expect(results[0].step).toBe(proposal.steps[0]);
+    });
+
+    it("should fail implementation steps with empty editor responses", async () => {
+      const architect = new ArchitectMode("test-api-key");
+      stubClients(architect, {
+        editor: createClientStub({ choices: [{ message: { content: "" } }] }),
+      });
+      const proposal: ArchitectProposal = {
+        summary: "Test",
+        steps: [{ order: 1, description: "Test", type: "create", target: "test.ts" }],
+        files: ["test.ts"],
+        risks: [],
+        estimatedChanges: 10,
+      };
+
+      const { success, results } = await architect.implement(proposal);
+
+      expect(success).toBe(false);
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(false);
+      expect(results[0]).toMatchObject({
+        error: "Editor returned no content or tool calls for step 1",
+      });
     });
 
     it("should run full workflow with analyzeAndImplement", async () => {
