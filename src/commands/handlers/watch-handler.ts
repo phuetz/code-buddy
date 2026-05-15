@@ -24,6 +24,7 @@ export async function handleWatch(args: string[]): Promise<CommandHandlerResult>
       const config = patterns.length > 0 ? { patterns } : {};
 
       watcherInstance = new FileWatcherTrigger(config);
+      let startErrorMessage: string | null = null;
 
       // Wire up event listeners for user feedback
       watcherInstance.on('change', (event) => {
@@ -33,10 +34,15 @@ export async function handleWatch(args: string[]): Promise<CommandHandlerResult>
       });
 
       watcherInstance.on('error', (err) => {
+        startErrorMessage = err.message;
         process.stderr.write(`  [watch] Error: ${err.message}\n`);
       });
 
       watcherInstance.start(process.cwd());
+      if (!watcherInstance.isRunning()) {
+        watcherInstance = null;
+        return result(`File watcher failed to start: ${startErrorMessage || 'unknown error'}`);
+      }
 
       const cfg = watcherInstance.getConfig();
       return result(

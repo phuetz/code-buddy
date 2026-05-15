@@ -615,6 +615,9 @@ npm run typecheck
 - `CloudSessionManager` et `TeleportManager` ne simulent plus des VM cloud, des
   liens partageables ou des teleports en memoire locale. Ces chemins exigent un
   backend cloud reel injecte; les fakes restent limites aux tests de contrat.
+- `/watch start` verifie maintenant que `FileWatcherTrigger` est réellement en
+  cours d'execution apres `start()`. Si `fs.watch` echoue au demarrage, la
+  commande renvoie l'erreur au lieu d'annoncer `File watcher started`.
 
 ## Blocage leve
 
