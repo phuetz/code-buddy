@@ -887,6 +887,9 @@ npm run typecheck
 - Cowork `GitBridge.pruneWorktrees()` ne renvoie plus `success=true` avec une
   sortie vide quand il n'y a rien a nettoyer; l'UI recoit maintenant
   `No prunable worktrees found.`.
+- Le gestionnaire de taches de fond CLI ne renvoie plus `''` pour des cas
+  differents comme tache inconnue, succes silencieux ou echec sans sortie; ces
+  etats ont maintenant des messages distincts.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

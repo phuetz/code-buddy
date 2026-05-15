@@ -283,8 +283,8 @@ describe('BackgroundTaskManager', () => {
     expect(output.length).toBeLessThanOrEqual(1024 * 1024);
   }, 15000);
 
-  it('should return empty string for nonexistent task output', () => {
-    expect(manager.getTaskOutput('bg-999')).toBe('');
+  it('should return explicit message for nonexistent task output', () => {
+    expect(manager.getTaskOutput('bg-999')).toBe('Task not found: bg-999');
   });
 
   it('should return undefined for nonexistent task', () => {

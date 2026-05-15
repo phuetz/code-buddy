@@ -110,4 +110,30 @@ describe('BackgroundTaskManager (agent)', () => {
   it('killTask returns false when task does not exist', () => {
     expect(manager.killTask('bg-999')).toBe(false);
   });
+
+  it('keeps completed no-output tasks visible', () => {
+    const child = createMockChildProcess();
+    mockSpawn.mockReturnValue(child);
+
+    const id = manager.launchTask('true');
+    child.emit('close', 0);
+
+    expect(manager.getTask(id)?.status).toBe('completed');
+    expect(manager.getTaskOutput(id)).toBe('(no output)');
+  });
+
+  it('keeps failed no-output tasks visible', () => {
+    const child = createMockChildProcess();
+    mockSpawn.mockReturnValue(child);
+
+    const id = manager.launchTask('false');
+    child.emit('close', 2);
+
+    expect(manager.getTask(id)?.status).toBe('failed');
+    expect(manager.getTaskOutput(id)).toBe('Task failed with exit code 2 and produced no output.');
+  });
+
+  it('keeps missing task output explicit', () => {
+    expect(manager.getTaskOutput('bg-999')).toBe('Task not found: bg-999');
+  });
 });

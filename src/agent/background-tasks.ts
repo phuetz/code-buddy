@@ -18,6 +18,7 @@ export interface BackgroundTask {
 }
 
 const MAX_OUTPUT_BYTES = 1024 * 1024; // 1MB
+const NO_OUTPUT_MARKER = '(no output)';
 
 /**
  * BackgroundTaskManager spawns and tracks background shell commands.
@@ -102,17 +103,29 @@ export class BackgroundTaskManager {
   getTaskOutput(taskId: string, filter?: RegExp): string {
     const task = this.tasks.get(taskId);
     if (!task) {
-      return '';
+      return `Task not found: ${taskId}`;
     }
 
-    if (!filter) {
+    if (filter) {
+      return task.output
+        .split('\n')
+        .filter((line) => filter.test(line))
+        .join('\n');
+    }
+
+    if (task.output.trim()) {
       return task.output;
     }
 
-    return task.output
-      .split('\n')
-      .filter((line) => filter.test(line))
-      .join('\n');
+    if (task.status === 'completed') {
+      return NO_OUTPUT_MARKER;
+    }
+
+    if (task.status === 'failed') {
+      return `Task failed with exit code ${task.exitCode ?? 'unknown'} and produced no output.`;
+    }
+
+    return '';
   }
 
   /**
