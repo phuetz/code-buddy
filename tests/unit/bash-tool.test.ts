@@ -475,6 +475,27 @@ describe('BashTool', () => {
     });
   });
 
+  describe('Shell-Free Execution', () => {
+    it('should report zero-output success explicitly', async () => {
+      const mockProcess = createMockChildProcess();
+      mockSpawn.mockReturnValue(mockProcess);
+
+      emitAfterSpawn(mockProcess, { exitCode: 0 });
+      const result = await bashTool.shellFreeExec(['true']);
+
+      expect(result.success).toBe(true);
+      expect(result.output).toBe('Command executed successfully (no output)');
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'true',
+        [],
+        expect.objectContaining({
+          shell: false,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+      );
+    });
+  });
+
   describe('Working Directory Changes', () => {
     const _originalCwd = process.cwd();
     const originalChdir = process.chdir;

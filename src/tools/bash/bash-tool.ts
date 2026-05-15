@@ -609,7 +609,7 @@ export class BashTool implements Disposable {
         if (timedOut) {
           resolve({ success: false, error: 'Command timed out' });
         } else if (code === 0) {
-          resolve({ success: true, output: stdout.trim() || 'Done' });
+          resolve({ success: true, output: stdout.trim() || 'Command executed successfully (no output)' });
         } else {
           resolve({ success: false, error: stderr.trim() || `Exit code ${code}` });
         }

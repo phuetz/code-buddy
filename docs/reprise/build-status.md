@@ -652,6 +652,9 @@ npm run typecheck
 - `resolve_conflicts` ne transforme plus un echec de scan Git en succes
   informatif. Si `git diff --name-only --diff-filter=U` ne peut pas tourner,
   `/conflicts scan` remonte maintenant un echec explicite.
+- Le chemin `BashTool.shellFreeExec()` ne renvoie plus le fallback opaque
+  `Done` pour une commande exit 0 sans sortie; il utilise maintenant le meme
+  message explicite que l'execution Bash principale.
 
 ## Blocage leve
 
