@@ -6,6 +6,18 @@ import { getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { updateCurrentModel } from "../utils/model-config.js";
 
+export const COMMAND_COMPLETED_WITH_NO_OUTPUT = "Command completed successfully with no output.";
+
+export function formatCommandResultContent(result: {
+  success: boolean;
+  output?: string;
+  error?: string;
+}): string {
+  return result.success
+    ? result.output || COMMAND_COMPLETED_WITH_NO_OUTPUT
+    : result.error || "Command failed";
+}
+
 export interface ClientCommandContext {
   agent: CodeBuddyAgent;
   chatHistory: ChatEntry[];
@@ -270,9 +282,7 @@ export class ClientCommandDispatcher {
 
       const commandEntry: ChatEntry = {
         type: "tool_result",
-        content: result.success
-          ? result.output || "Command completed"
-          : result.error || "Command failed",
+        content: formatCommandResultContent(result),
         timestamp: new Date(),
         toolCall: {
           id: `shell_bypass_${Date.now()}`,
@@ -319,9 +329,7 @@ export class ClientCommandDispatcher {
 
         const commandEntry: ChatEntry = {
           type: "tool_result",
-          content: result.success
-            ? result.output || "Command completed"
-            : result.error || "Command failed",
+          content: formatCommandResultContent(result),
           timestamp: new Date(),
           toolCall: {
             id: `bash_${Date.now()}`,

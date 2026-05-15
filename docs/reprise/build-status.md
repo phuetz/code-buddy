@@ -909,6 +909,8 @@ npm run typecheck
 - Cowork affiche maintenant `Command completed successfully with no output.`
   pour les commandes reussies sans stdout, au lieu de `Command completed` ou
   `Command completed successfully`.
+- Le dispatcher CLI applique le meme libelle explicite aux commandes bash
+  directes et au raccourci `!cmd` quand elles reussissent sans stdout.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
