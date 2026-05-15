@@ -541,7 +541,7 @@ export class CodeGraphTool implements ITool {
 
     const drift = detectDrift(graph, cwd);
     if (!drift) {
-      return { success: true, output: 'Failed to compute drift. Snapshot may be corrupted.' };
+      return { success: false, error: 'Failed to compute drift. Snapshot may be corrupted.' };
     }
 
     return { success: true, output: formatDrift(drift) };

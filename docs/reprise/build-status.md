@@ -658,6 +658,9 @@ npm run typecheck
 - `GatewayTool.healthCheck()` ne declare plus `database` et `llm` sains sans
   verification reelle, et l'etat `channels` depend maintenant du compteur de
   canaux au lieu d'un `|| true`.
+- `code_graph drift` ne renvoie plus `success=true` avec le message
+  `Failed to compute drift`. Une snapshot illisible/corrompue devient un
+  echec outil, tandis que l'absence de baseline reste une reponse actionable.
 
 ## Blocage leve
 
