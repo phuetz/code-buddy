@@ -5,4 +5,7 @@
  * from 'src/tools/bash' or 'src/tools/bash.js'.
  */
 
-export { BashTool } from './bash-tool.js';
+export {
+  BASH_COMMAND_COMPLETED_WITH_NO_OUTPUT,
+  BashTool,
+} from './bash-tool.js';

@@ -6,6 +6,8 @@ import { EventEmitter } from 'events';
 import type { WorkflowStep, WorkflowContext, StepResult } from './types.js';
 import { logger } from '../utils/logger.js';
 
+export const NOOP_STEP_COMPLETED_WITHOUT_SIDE_EFFECTS = 'Noop action completed without side effects.';
+
 export class StepManager extends EventEmitter {
   private actionHandlers: Map<string, (context: WorkflowContext) => Promise<StepResult>> = new Map();
 
@@ -49,7 +51,7 @@ export class StepManager extends EventEmitter {
 
     // Noop action
     this.registerAction('noop', async () => {
-      return { success: true, output: 'No operation performed' };
+      return { success: true, output: NOOP_STEP_COMPLETED_WITHOUT_SIDE_EFFECTS };
     });
   }
 

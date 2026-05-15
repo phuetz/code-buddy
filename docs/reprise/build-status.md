@@ -931,6 +931,9 @@ npm run typecheck
 - Cowork `sudo`, le tool `device run` et les executions notebook ne renvoient
   plus de placeholder `(no output)`; les succes silencieux et echecs sans flux
   ont maintenant des messages lisibles.
+- Le BashTool et l'action workflow explicite `noop` utilisent aussi des libelles
+  clairs, sans l'ancien suffixe generique `(no output)` ni `No operation
+  performed`.
 
 ## Blocage leve
 

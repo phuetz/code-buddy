@@ -18,7 +18,10 @@ import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 import os from 'os';
-import { BashTool } from '../../src/tools/bash';
+import {
+  BASH_COMMAND_COMPLETED_WITH_NO_OUTPUT,
+  BashTool,
+} from '../../src/tools/bash';
 import { validateWithSchema, validateCommand as validateCommandSafety, sanitizeForShell } from '../../src/utils/input-validator';
 import { isLikelyTestOutput, parseTestOutput } from '../../src/utils/test-output-parser';
 import { registerDisposable } from '../../src/utils/disposable';
@@ -386,7 +389,7 @@ describe('BashTool', () => {
       emitAfterSpawn(mockProcess, { exitCode: 0 });
       const result = await bashTool.execute('true');
       expect(result.success).toBe(true);
-      expect(result.output).toBe('Command executed successfully (no output)');
+      expect(result.output).toBe(BASH_COMMAND_COMPLETED_WITH_NO_OUTPUT);
     });
 
     it('should pass correct spawn options', async () => {
@@ -533,7 +536,7 @@ describe('BashTool', () => {
       const result = await bashTool.shellFreeExec(['true']);
 
       expect(result.success).toBe(true);
-      expect(result.output).toBe('Command executed successfully (no output)');
+      expect(result.output).toBe(BASH_COMMAND_COMPLETED_WITH_NO_OUTPUT);
       expect(mockSpawn).toHaveBeenCalledWith(
         'true',
         [],

@@ -24,7 +24,10 @@ export type {
 } from './types.js';
 
 // Step Manager
-export { StepManager } from './step-manager.js';
+export {
+  NOOP_STEP_COMPLETED_WITHOUT_SIDE_EFFECTS,
+  StepManager,
+} from './step-manager.js';
 
 // State Manager
 export { WorkflowStateManager } from './state-manager.js';

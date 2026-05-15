@@ -47,6 +47,7 @@ import {
   WorkflowResult,
   getWorkflowEngine,
   resetWorkflowEngine,
+  NOOP_STEP_COMPLETED_WITHOUT_SIDE_EFFECTS,
 } from '../../src/workflows/index';
 
 // ============================================================================
@@ -416,7 +417,7 @@ describe('StepManager', () => {
 
       const result = await stepManager.executeStep(step, context);
       expect(result.success).toBe(true);
-      expect(result.output).toBe('No operation performed');
+      expect(result.output).toBe(NOOP_STEP_COMPLETED_WITHOUT_SIDE_EFFECTS);
     });
   });
 });

@@ -35,6 +35,8 @@ import { SafeBinariesChecker } from '../../security/safe-binaries.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { auditLogger } from '../../security/audit-logger.js';
 
+export const BASH_COMMAND_COMPLETED_WITH_NO_OUTPUT = 'Command completed successfully with no output.';
+
 const CONTROLLED_WSL_ENV_VARS = [
   'CI',
   'NO_COLOR',
@@ -501,7 +503,7 @@ export class BashTool implements Disposable {
       }
 
       const output = result.stdout + (result.stderr ? `\nSTDERR: ${result.stderr}` : '');
-      const trimmedOutput = output.trim() || 'Command executed successfully (no output)';
+      const trimmedOutput = output.trim() || BASH_COMMAND_COMPLETED_WITH_NO_OUTPUT;
 
       // Check if this looks like test output and enrich it
       if (isLikelyTestOutput(trimmedOutput)) {
@@ -624,7 +626,7 @@ export class BashTool implements Disposable {
         if (timedOut) {
           resolve({ success: false, error: 'Command timed out' });
         } else if (code === 0) {
-          resolve({ success: true, output: stdout.trim() || 'Command executed successfully (no output)' });
+          resolve({ success: true, output: stdout.trim() || BASH_COMMAND_COMPLETED_WITH_NO_OUTPUT });
         } else {
           resolve({ success: false, error: stderr.trim() || `Exit code ${code}` });
         }
