@@ -264,6 +264,15 @@ npx eslint src/desktop-automation/system-control.ts tests/desktop-automation/sys
 
 npm run typecheck
 # passed
+
+npm test -- tests/security/docker-sandbox/manager.test.ts tests/security/docker-sandbox/cli-client.test.ts
+# 46 tests passed after Docker sandbox default client cleanup
+
+npx eslint src/security/docker-sandbox/manager.ts src/security/docker-sandbox/index.ts tests/security/docker-sandbox/cli-client.test.ts tests/security/docker-sandbox/manager.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -495,6 +504,10 @@ npm run typecheck
   commandes natives echouent: plus de luminosite `100%`, volume Windows `50%`,
   ni ecran primaire `1920x1080` invente. Les lectures/ecritures non disponibles
   echouent explicitement ou retournent une liste d'ecrans vide.
+- `DockerSandboxManager` n'utilise plus un client Docker mock par defaut. Sans
+  client injecte, il pilote maintenant le binaire `docker` reel pour creer,
+  demarrer, executer, inspecter et mesurer les conteneurs; le `MockDockerClient`
+  reste explicite pour les tests.
 
 ## Blocage leve
 

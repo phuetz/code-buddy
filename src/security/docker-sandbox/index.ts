@@ -35,6 +35,7 @@ export {
 // Manager
 export {
   DockerSandboxManager,
+  DockerCliClient,
   MockDockerClient,
   getDockerSandboxManager,
   resetDockerSandboxManager,

@@ -7,6 +7,7 @@
 
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
+import { execFileSync, spawn } from 'child_process';
 import type {
   DockerSandboxConfig,
   SessionContainer,
@@ -90,12 +91,268 @@ interface DockerStats {
   blockWrite: number;
 }
 
+interface DockerCliRunResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
 // ============================================================================
-// Mock Docker Client (for testing/development)
+// Docker CLI Client
+// ============================================================================
+
+const DOCKER_SIZE_UNITS: Record<string, number> = {
+  b: 1,
+  kb: 1000,
+  kib: 1024,
+  mb: 1000 ** 2,
+  mib: 1024 ** 2,
+  gb: 1000 ** 3,
+  gib: 1024 ** 3,
+  tb: 1000 ** 4,
+  tib: 1024 ** 4,
+};
+
+function parseDockerSize(raw: string, context: string): number {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    throw new Error(`Unable to parse Docker size for ${context}: <empty>`);
+  }
+  if (trimmed === '--') return 0;
+
+  const match = trimmed.match(/^([\d.]+)\s*([kmgt]?i?b)$/i);
+  if (!match) {
+    throw new Error(`Unable to parse Docker size for ${context}: ${raw}`);
+  }
+
+  const value = Number.parseFloat(match[1]);
+  const unit = match[2].toLowerCase();
+  if (!Number.isFinite(value) || !DOCKER_SIZE_UNITS[unit]) {
+    throw new Error(`Unable to parse Docker size for ${context}: ${raw}`);
+  }
+
+  return Math.round(value * DOCKER_SIZE_UNITS[unit]);
+}
+
+function parseDockerSizePair(raw: string, context: string): [number, number] {
+  if (raw.trim() === '') {
+    throw new Error(`Unable to parse Docker size pair for ${context}: <empty>`);
+  }
+  const [left = '0B', right = '0B'] = raw.split('/').map(part => part.trim());
+  return [parseDockerSize(left, `${context} used`), parseDockerSize(right, `${context} limit`)];
+}
+
+function mapDockerStatus(raw: string): ContainerStatus {
+  switch (raw.trim()) {
+    case 'created':
+    case 'restarting':
+      return 'creating';
+    case 'running':
+      return 'running';
+    case 'paused':
+      return 'paused';
+    case 'exited':
+      return 'stopped';
+    case 'dead':
+      return 'dead';
+    case 'removing':
+      return 'removing';
+    default:
+      throw new Error(`Unknown Docker container status: ${raw.trim() || '<empty>'}`);
+  }
+}
+
+/**
+ * Docker CLI implementation. This is the default runtime client and requires a
+ * working `docker` binary instead of simulating containers in memory.
+ */
+export class DockerCliClient implements IDockerClient {
+  async isAvailable(): Promise<boolean> {
+    try {
+      execFileSync('docker', ['info'], { stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async createContainer(config: DockerContainerConfig): Promise<string> {
+    const args = ['create'];
+
+    if (config.name) args.push('--name', config.name);
+    if (config.workDir) args.push('--workdir', config.workDir);
+    if (config.user) args.push('--user', config.user);
+    if (config.networkMode) args.push('--network', config.networkMode);
+    if (config.memory) args.push('--memory', String(config.memory));
+    if (config.cpuShares) args.push('--cpu-shares', String(config.cpuShares));
+
+    for (const [key, value] of Object.entries(config.env ?? {})) {
+      args.push('--env', `${key}=${value}`);
+    }
+
+    for (const volume of config.volumes ?? []) {
+      args.push('--volume', `${volume.source}:${volume.target}${volume.readOnly ? ':ro' : ''}`);
+    }
+
+    for (const [key, value] of Object.entries(config.labels ?? {})) {
+      args.push('--label', `${key}=${value}`);
+    }
+
+    args.push(config.image, 'sh', '-c', 'while true; do sleep 3600; done');
+    return (await this.runDockerChecked(args)).trim();
+  }
+
+  async startContainer(containerId: string): Promise<void> {
+    await this.runDockerChecked(['start', containerId]);
+  }
+
+  async stopContainer(containerId: string, timeout = 10): Promise<void> {
+    await this.runDockerChecked(['stop', '--time', String(timeout), containerId]);
+  }
+
+  async removeContainer(containerId: string, force = false): Promise<void> {
+    await this.runDockerChecked(['rm', ...(force ? ['--force'] : []), containerId]);
+  }
+
+  async exec(containerId: string, command: string[], options?: DockerExecOptions): Promise<DockerExecResult> {
+    const args = ['exec'];
+
+    if (options?.stdin !== undefined) args.push('--interactive');
+    if (options?.workDir) args.push('--workdir', options.workDir);
+    if (options?.user) args.push('--user', options.user);
+
+    for (const [key, value] of Object.entries(options?.env ?? {})) {
+      args.push('--env', `${key}=${value}`);
+    }
+
+    args.push(containerId, ...command);
+    const result = await this.runDocker(args, {
+      input: options?.stdin,
+      timeout: options?.timeout,
+    });
+
+    return {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+  }
+
+  async getStats(containerId: string): Promise<DockerStats> {
+    const output = await this.runDockerChecked([
+      'stats',
+      '--no-stream',
+      '--format',
+      '{{json .}}',
+      containerId,
+    ]);
+    const stats = JSON.parse(output.trim().split('\n')[0] || '{}') as {
+      CPUPerc?: string;
+      MemUsage?: string;
+      NetIO?: string;
+      BlockIO?: string;
+    };
+
+    const cpuPercent = Number.parseFloat((stats.CPUPerc ?? '').replace('%', ''));
+    if (!Number.isFinite(cpuPercent)) {
+      throw new Error(`Unable to parse Docker CPU percent: ${stats.CPUPerc ?? '<missing>'}`);
+    }
+
+    const [memoryUsage, memoryLimit] = parseDockerSizePair(stats.MemUsage ?? '', 'memory');
+    const [networkRx, networkTx] = parseDockerSizePair(stats.NetIO ?? '', 'network IO');
+    const [blockRead, blockWrite] = parseDockerSizePair(stats.BlockIO ?? '', 'block IO');
+
+    return {
+      cpuPercent,
+      memoryUsage,
+      memoryLimit,
+      networkRx,
+      networkTx,
+      blockRead,
+      blockWrite,
+    };
+  }
+
+  async getStatus(containerId: string): Promise<ContainerStatus> {
+    const output = await this.runDockerChecked(['inspect', '-f', '{{.State.Status}}', containerId]);
+    return mapDockerStatus(output);
+  }
+
+  async pullImage(image: string): Promise<void> {
+    await this.runDockerChecked(['pull', image]);
+  }
+
+  async imageExists(image: string): Promise<boolean> {
+    try {
+      await this.runDockerChecked(['image', 'inspect', image]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async runDockerChecked(args: string[], options?: { input?: string; timeout?: number }): Promise<string> {
+    const result = await this.runDocker(args, options);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || `docker ${args.join(' ')} exited with ${result.exitCode}`);
+    }
+    return result.stdout;
+  }
+
+  private async runDocker(args: string[], options?: { input?: string; timeout?: number }): Promise<DockerCliRunResult> {
+    return new Promise((resolve, reject) => {
+      const child = spawn('docker', args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+
+      const timeout = options?.timeout && options.timeout > 0
+        ? setTimeout(() => {
+            if (!settled) {
+              child.kill('SIGKILL');
+              settled = true;
+              resolve({ exitCode: 124, stdout, stderr: stderr || 'Docker command timed out' });
+            }
+          }, options.timeout)
+        : null;
+
+      child.stdout.on('data', chunk => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on('data', chunk => {
+        stderr += chunk.toString();
+      });
+      child.on('error', error => {
+        if (timeout) clearTimeout(timeout);
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      });
+      child.on('close', code => {
+        if (timeout) clearTimeout(timeout);
+        if (!settled) {
+          settled = true;
+          resolve({ exitCode: code ?? 1, stdout, stderr });
+        }
+      });
+
+      if (options?.input !== undefined) {
+        child.stdin.write(options.input);
+      }
+      child.stdin.end();
+    });
+  }
+}
+
+// ============================================================================
+// Mock Docker Client (for explicit tests)
 // ============================================================================
 
 /**
- * Mock Docker client for testing when Docker is not available
+ * Mock Docker client for tests. Runtime code uses DockerCliClient by default.
  */
 export class MockDockerClient implements IDockerClient {
   private containers: Map<string, { status: ContainerStatus; config: DockerContainerConfig }> = new Map();
@@ -181,7 +438,7 @@ export class DockerSandboxManager extends EventEmitter {
 
   constructor(docker?: IDockerClient, config?: Partial<DockerSandboxConfig>) {
     super();
-    this.docker = docker || new MockDockerClient();
+    this.docker = docker || new DockerCliClient();
     this.defaultConfig = { ...DEFAULT_SANDBOX_CONFIG, ...config };
   }
 
