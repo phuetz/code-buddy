@@ -816,6 +816,9 @@ npm run typecheck
 - Le bridge Fleet `peer.chat` / `peer.chat-stream` / `peer.dispatch` ne traite
   plus une reponse LLM vide comme un succes; l'appel devient un echec explicite
   et les dispatchs en arriere-plan passent en `failed`.
+- Le bridge Fleet `peer.chat-session.continue` et `continue-stream` applique
+  le meme garde-fou: une reponse vide echoue et le tour utilisateur est retire
+  de l'historique pour que la relance ne pollue pas la session.
 
 ## Blocage leve
 

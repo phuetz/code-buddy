@@ -296,6 +296,20 @@ describe('peer.chat-session.continue', () => {
     expect(r2.error?.message).toContain('prompt is required');
   });
 
+  it('fails empty LLM responses and rolls back the user message', async () => {
+    const { client } = makeClient('');
+    await wirePeerSessionBridge(() => client as never);
+    const startRes = await dispatch('peer.chat-session.start', {});
+    const sessionId = (startRes.payload as { sessionId: string }).sessionId;
+
+    const response = await dispatch('peer.chat-session.continue', { sessionId, prompt: 'hi' });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('LLM returned empty content');
+    const live = _listSessionsForTests().find((s) => s.sessionId === sessionId);
+    expect(live?.messageCount).toBe(0);
+  });
+
   it('serialises concurrent continues FIFO', async () => {
     // Hand-rolled client that resolves in a controlled order so we can
     // observe whether messages.push interleaves.
@@ -790,6 +804,27 @@ describe('peer.chat-session.continue-stream', () => {
     );
     expect(r2.ok).toBe(false);
     expect(r2.error?.message).toContain('prompt is required');
+  });
+
+  it('fails empty streams and rolls back the user message', async () => {
+    const { client } = makeStreamingClient([]);
+    await wirePeerSessionBridge(() => client as never);
+    const startRes = await dispatch('peer.chat-session.start', {});
+    const sessionId = (startRes.payload as { sessionId: string }).sessionId;
+
+    const response = await dispatchPeerRequest(
+      {
+        id: 'r-empty-stream',
+        method: 'peer.chat-session.continue-stream',
+        params: { sessionId, prompt: 'hi' },
+      },
+      baseCtx({ emitChunk: () => undefined }),
+    );
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('LLM returned empty content');
+    const live = _listSessionsForTests().find((s) => s.sessionId === sessionId);
+    expect(live?.messageCount).toBe(0);
   });
 
   it('emits fleet:chat-session:turn after a successful stream', async () => {

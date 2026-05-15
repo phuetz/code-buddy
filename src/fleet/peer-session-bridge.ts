@@ -71,6 +71,13 @@ const sessions = new Map<string, ChatSession>();
 let cachedGetter: PeerChatClientGetter | null = null;
 let wired = false;
 
+function requireNonEmptySessionText(text: string, method: string): string {
+  if (text.trim().length === 0) {
+    throw new Error(`${method}: LLM returned empty content`);
+  }
+  return text;
+}
+
 function getIdleMs(): number {
   const raw = process.env.CODEBUDDY_PEER_SESSION_IDLE_MS;
   if (raw) {
@@ -287,7 +294,16 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         throw err;
       }
 
-      const text = response?.choices?.[0]?.message?.content ?? '';
+      let text: string;
+      try {
+        text = requireNonEmptySessionText(
+          response?.choices?.[0]?.message?.content ?? '',
+          'peer.chat-session.continue',
+        );
+      } catch (err) {
+        session.messages.pop();
+        throw err;
+      }
       session.messages.push({ role: 'assistant', content: text });
       session.lastUsedAt = Date.now();
 
@@ -427,7 +443,15 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         throw err;
       }
 
-      session.messages.push({ role: 'assistant', content: aggregate });
+      let text: string;
+      try {
+        text = requireNonEmptySessionText(aggregate, 'peer.chat-session.continue-stream');
+      } catch (err) {
+        session.messages.pop();
+        throw err;
+      }
+
+      session.messages.push({ role: 'assistant', content: text });
       session.lastUsedAt = Date.now();
 
       try {
@@ -448,7 +472,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       });
 
       return {
-        text: aggregate,
+        text,
         finishReason,
         usage,
         traceId: ctx.traceId,
