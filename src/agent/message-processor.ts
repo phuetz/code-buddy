@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from "events";
+import { formatToolResultContent } from "../utils/tool-result-content.js";
 
 /**
  * Chat entry types for history
@@ -179,9 +180,10 @@ export class MessageProcessor extends EventEmitter {
    * Add a tool result to history
    */
   addToolResult(toolCall: CodeBuddyToolCall, result: ToolResult): void {
+    const content = formatToolResultContent(result);
     const entry: ChatEntry = {
       type: "tool_result",
-      content: result.success ? result.output || "Success" : result.error || "Error",
+      content,
       timestamp: new Date(),
       toolCall,
       toolResult: result,
@@ -189,7 +191,7 @@ export class MessageProcessor extends EventEmitter {
     this.chatHistory.push(entry);
     this.messages.push({
       role: "tool",
-      content: result.success ? result.output || "Success" : result.error || "Error",
+      content,
       tool_call_id: toolCall.id,
     });
     this.emit("tool_result:added", entry);

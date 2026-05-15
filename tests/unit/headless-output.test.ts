@@ -264,7 +264,7 @@ describe('Headless Output', () => {
       expect(text).toContain('Errors: Error 1, Error 2');
     });
 
-    it('should show Success output for tools without output', () => {
+    it('should show explicit output for tools without output', () => {
       const resultNoOutput: HeadlessResult = {
         ...sampleResult,
         messages: [
@@ -286,7 +286,7 @@ describe('Headless Output', () => {
 
       const text = formatAsText(resultNoOutput);
 
-      expect(text).toContain('Success');
+      expect(text).toContain('Tool completed successfully with no output.');
     });
   });
 

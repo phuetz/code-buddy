@@ -3,6 +3,8 @@
  * Supports multiple output formats for CI/CD and automation
  */
 
+import { formatToolResultContent } from './tool-result-content.js';
+
 export type OutputFormat = 'json' | 'stream-json' | 'text' | 'markdown';
 
 export function resolveHeadlessOutputFormatOption(options: {
@@ -94,9 +96,9 @@ export function formatAsText(result: HeadlessResult): string {
         }
         if (msg.toolResult) {
           if (msg.toolResult.success) {
-            output += `${msg.toolResult.output || 'Success'}\n\n`;
+            output += `${formatToolResultContent(msg.toolResult)}\n\n`;
           } else {
-            output += `Error: ${msg.toolResult.error}\n\n`;
+            output += `Error: ${formatToolResultContent(msg.toolResult)}\n\n`;
           }
         }
         break;
@@ -147,9 +149,9 @@ export function formatAsMarkdown(result: HeadlessResult): string {
         if (msg.toolResult) {
           output += '**Result:**\n\n';
           if (msg.toolResult.success) {
-            output += '```\n' + (msg.toolResult.output || 'Success') + '\n```\n\n';
+            output += '```\n' + formatToolResultContent(msg.toolResult) + '\n```\n\n';
           } else {
-            output += '```\nError: ' + msg.toolResult.error + '\n```\n\n';
+            output += '```\nError: ' + formatToolResultContent(msg.toolResult) + '\n```\n\n';
           }
         }
         break;

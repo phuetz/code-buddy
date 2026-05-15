@@ -10,6 +10,7 @@ import { getErrorMessage } from "../types/index.js";
 
 import { filterCommandSuggestions } from "../ui/components/CommandSuggestions.js";
 import { loadModelConfig } from "../utils/model-config.js";
+import { formatToolResultContent } from "../utils/tool-result-content.js";
 
 // Import enhanced features
 import { getSlashCommandManager } from "../commands/slash-commands.js";
@@ -694,9 +695,7 @@ export function useInputHandler({
               if (updateToolCallEntry) {
                 updateToolCallEntry(chunk.toolCall.id, {
                   type: "tool_result",
-                  content: chunk.toolResult?.success
-                    ? chunk.toolResult?.output || "Success"
-                    : chunk.toolResult?.error || "Error occurred",
+                  content: formatToolResultContent(chunk.toolResult),
                   toolResult: chunk.toolResult,
                 });
               } else {
@@ -712,9 +711,7 @@ export function useInputHandler({
                       return {
                         ...entry,
                         type: "tool_result",
-                        content: chunk.toolResult?.success
-                          ? chunk.toolResult?.output || "Success"
-                          : chunk.toolResult?.error || "Error occurred",
+                        content: formatToolResultContent(chunk.toolResult),
                         toolResult: chunk.toolResult,
                       };
                     }

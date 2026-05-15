@@ -18,6 +18,7 @@ import { TokenCounter } from "../../utils/token-counter.js";
 import { logger } from "../../utils/logger.js";
 import { getErrorMessage } from "../../errors/index.js";
 import { sanitizeToolResult } from "../../utils/sanitize.js";
+import { formatToolResultContent } from "../../utils/tool-result-content.js";
 import {
   prepareTurnMessages,
   injectInitialContext,
@@ -1081,7 +1082,7 @@ export class AgentExecutor {
             }
 
             // --- Disk-backed tool result (Manus AI #19) ---
-            const rawStreamContent = sanitizeToolResult(result?.success ? result.output || "Success" : result?.error || "Error");
+            const rawStreamContent = sanitizeToolResult(formatToolResultContent(result));
             persistToolResult(toolCall.id, rawStreamContent);
 
             // --- Observation Variator (Manus AI #17) ---
@@ -1089,7 +1090,7 @@ export class AgentExecutor {
 
             const toolResultEntry: ChatEntry = {
               type: "tool_result",
-              content: result?.success ? result.output || "Success" : result?.error || "Error occurred",
+              content: formatToolResultContent(result),
               timestamp: new Date(),
               toolCall: toolCall,
               toolResult: result,

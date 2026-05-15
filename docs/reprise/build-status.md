@@ -375,6 +375,15 @@ npx eslint src/cloud/cloud-agent-runner.ts tests/cloud/cloud-agent-runner.test.t
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/message-processor.test.ts tests/agent/message-processor.test.ts tests/agent/execution/agent-executor.test.ts tests/unit/headless-output.test.ts tests/unit/formatters.test.ts
+# 398 tests passed after shared tool-result empty-output formatting
+
+npx eslint src/utils/tool-result-content.ts src/agent/message-processor.ts src/agent/execution/agent-executor.ts src/utils/headless-output.ts src/hooks/use-input-handler.ts tests/unit/message-processor.test.ts tests/agent/execution/agent-executor.test.ts tests/unit/headless-output.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -971,6 +980,10 @@ npm run typecheck
 - Les hooks async ne reinjectent plus `Success: No output` ni un succes vide
   quand une commande termine sans stdout; le contexte indique maintenant que le
   hook a reussi sans sortie.
+- L'historique de messages, l'executor agent, l'UI Ink et les formats headless
+  passent maintenant par un formateur partage pour les resultats de tools:
+  succes silencieux et echec sans detail ne deviennent plus `Success`,
+  `Error` ou `Error occurred`.
 - Le bridge A2A Code Buddy n'injecte plus `(empty result)` / `(no content)` pour
   les resultats de tools ou reponses finales silencieuses; il expose des
   messages de succes sans sortie explicites.

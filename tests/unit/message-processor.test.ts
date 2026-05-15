@@ -484,7 +484,7 @@ function test() {
         processor.addToolResult(toolCall, { success: true });
 
         const messages = processor.getMessages();
-        expect(messages[1].content).toBe("Success");
+        expect(messages[1].content).toBe("Tool completed successfully with no output.");
       });
 
       it("should use default error message when error is empty", () => {
@@ -497,7 +497,7 @@ function test() {
         processor.addToolResult(toolCall, { success: false });
 
         const messages = processor.getMessages();
-        expect(messages[1].content).toBe("Error");
+        expect(messages[1].content).toBe("Tool failed without error details.");
       });
 
       it("should store tool call and result in history entry", () => {

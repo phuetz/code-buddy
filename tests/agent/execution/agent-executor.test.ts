@@ -1499,7 +1499,7 @@ describe('AgentExecutor', () => {
 
       const toolResult = entries.find(e => e.type === 'tool_result');
       expect(toolResult).toBeDefined();
-      expect(toolResult!.content).toBe('Success');
+      expect(toolResult!.content).toBe('Tool completed successfully with no output.');
     });
 
     it('should handle zero maxToolRounds', async () => {
