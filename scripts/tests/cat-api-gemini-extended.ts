@@ -354,13 +354,18 @@ export function cat73CostTracker(): TestDef[] {
       fn: async () => {
         const { CostTracker } = await import('../../src/utils/cost-tracker.js');
         const tracker = new CostTracker({ budgetLimit: 0.01, trackHistory: false, useSQLite: false });
-        let warned = false;
-        tracker.on('budget-warning', () => { warned = true; });
-        tracker.on('budget-exceeded', () => { warned = true; });
+        let exceeded: { limit: number; current: number } | undefined;
+        let warned: { limit: number; current: number; percentage: number } | undefined;
+        tracker.on('budget:warning', (payload) => { warned = payload; });
+        tracker.on('budget:exceeded', (payload) => { exceeded = payload; });
         tracker.recordUsage(10000, 10000, 'grok-3-latest');
+        const report = tracker.getReport();
         return {
-          pass: true, // Events may or may not fire depending on threshold
-          metadata: { warned },
+          pass: exceeded !== undefined &&
+            exceeded.limit === 0.01 &&
+            exceeded.current === report.monthlyCost &&
+            report.monthlyCost >= 0.01,
+          metadata: { exceeded, warned, monthlyCost: report.monthlyCost },
         };
       },
     },

@@ -87,6 +87,30 @@ describe('CostTracker', () => {
       loadedTracker.dispose();
     });
 
+    it('should let constructor config override persisted config', () => {
+      mockFs.existsSync.mockImplementation((filePath: unknown) => String(filePath).includes('cost-config'));
+      mockFs.readJsonSync.mockReturnValue({
+        budgetLimit: 100,
+        useSQLite: true,
+      });
+
+      const overrideTracker = new CostTracker({
+        budgetLimit: 0.001,
+        trackHistory: false,
+        useSQLite: false,
+      });
+      const exceededHandler = jest.fn();
+      overrideTracker.on('budget:exceeded', exceededHandler);
+
+      overrideTracker.recordUsage(1000, 500, 'grok-3-latest');
+
+      expect(exceededHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 0.001 })
+      );
+      expect(mockGetAnalyticsRepository).not.toHaveBeenCalled();
+      overrideTracker.dispose();
+    });
+
     it('should handle config load errors gracefully', () => {
       mockFs.existsSync.mockReturnValue(true);
       mockFs.readJsonSync.mockImplementation(function() {

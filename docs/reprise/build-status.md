@@ -707,6 +707,12 @@ npm run typecheck
 - Le test reel Gemini `5.3-agent-multi-tool-sequence` ne valide plus n'importe
   quel lot d'appels outils paralleles: il exige maintenant `list_directory` et
   `read_file` quand Gemini choisit de les appeler en une seule reponse.
+- Le check script `73.4-budget-limit-event` ecoute maintenant les vrais evenements
+  `budget:warning` / `budget:exceeded` du `CostTracker` et echoue si le
+  depassement de budget n'est pas observe.
+- `CostTracker` respecte maintenant les options explicites du constructeur apres
+  chargement de la config disque, ce qui rend les checks budget deterministes et
+  evite qu'un budget utilisateur masque un depassement attendu.
 
 ## Blocage leve
 

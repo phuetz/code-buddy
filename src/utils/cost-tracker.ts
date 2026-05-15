@@ -100,10 +100,13 @@ export class CostTracker extends EventEmitter {
 
   constructor(config: Partial<CostConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...DEFAULT_CONFIG };
     this.configPath = path.join(os.homedir(), ".codebuddy", "cost-config.json");
     this.historyPath = path.join(os.homedir(), ".codebuddy", "cost-history.json");
     this.sessionStart = new Date();
+
+    this.loadConfig();
+    this.config = { ...this.config, ...config };
 
     // Initialize SQLite repository if enabled
     if (this.config.useSQLite) {
@@ -115,7 +118,6 @@ export class CostTracker extends EventEmitter {
       }
     }
 
-    this.loadConfig();
     this.loadHistory();
   }
 
