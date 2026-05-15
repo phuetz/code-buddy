@@ -900,6 +900,9 @@ npm run typecheck
 - `PipelineCompositor` ne laisse plus une sortie globale vide ou la sortie de
   l'etape precedente quand une etape echoue; l'echec est maintenant visible au
   niveau pipeline et au niveau step, meme si le tool ne remplit que `output`.
+- `WebSearchTool.fetchPage()` ne renvoie plus `output:''` lorsque le web est
+  desactive ou que le garde SSRF bloque l'URL; la sortie expose maintenant la
+  raison du refus.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

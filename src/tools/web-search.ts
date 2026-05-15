@@ -100,6 +100,10 @@ export interface PerplexitySearchResult {
   model: string;
 }
 
+function webFetchFailure(error: string): ToolResult {
+  return { success: false, output: error, error };
+}
+
 // ============================================================================
 // Serper API types
 // ============================================================================
@@ -689,18 +693,14 @@ export class WebSearchTool {
   async fetchPage(url: string, _prompt?: string): Promise<ToolResult> {
     // Enforce WebSearchMode — fetchPage should respect the same mode as search()
     if (_globalSearchMode === 'disabled') {
-      return { success: false, output: '', error: 'Web access is disabled by configuration' };
+      return webFetchFailure('Web access is disabled by configuration');
     }
 
     try {
       // SSRF guard: block requests to internal/private network addresses
       const ssrfCheck = await assertSafeUrl(url);
       if (!ssrfCheck.safe) {
-        return {
-          success: false,
-          output: '',
-          error: `URL blocked by SSRF guard: ${ssrfCheck.reason}`,
-        };
+        return webFetchFailure(`URL blocked by SSRF guard: ${ssrfCheck.reason}`);
       }
 
       const response = await axios.get(url, {

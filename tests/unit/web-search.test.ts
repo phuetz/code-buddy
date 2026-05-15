@@ -15,7 +15,12 @@ import axios from 'axios';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-import { WebSearchTool, WebSearchOptions, SearchResult } from '../../src/tools/web-search';
+import {
+  WebSearchTool,
+  WebSearchOptions,
+  SearchResult,
+  setWebSearchMode,
+} from '../../src/tools/web-search';
 
 describe('WebSearchTool', () => {
   let webSearchTool: WebSearchTool;
@@ -40,6 +45,7 @@ describe('WebSearchTool', () => {
 
   afterEach(() => {
     webSearchTool.clearCache();
+    setWebSearchMode('live');
   });
 
   describe('constructor', () => {
@@ -329,6 +335,26 @@ describe('WebSearchTool', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Failed to fetch page');
       expect(result.error).toContain('404 Not Found');
+    });
+
+    it('should return visible output when page fetching is disabled', async () => {
+      setWebSearchMode('disabled');
+
+      const result = await webSearchTool.fetchPage('https://example.com/page');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Web access is disabled by configuration');
+      expect(result.output).toBe('Web access is disabled by configuration');
+      expect(mockedAxios.get).not.toHaveBeenCalled();
+    });
+
+    it('should return visible output when SSRF guard blocks a URL', async () => {
+      const result = await webSearchTool.fetchPage('http://127.0.0.1/admin');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('URL blocked by SSRF guard');
+      expect(result.output).toBe(result.error);
+      expect(mockedAxios.get).not.toHaveBeenCalled();
     });
 
     it('should follow redirects up to 5 times', async () => {
