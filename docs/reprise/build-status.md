@@ -291,6 +291,15 @@ npx eslint src/channels/core.ts tests/channels/channels.test.ts --quiet
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/ide-extensions-server.test.ts
+# 8 tests passed after IDE empty-response cleanup
+
+npx eslint src/integrations/ide/server.ts tests/unit/ide-extensions-server.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -533,6 +542,10 @@ npm run typecheck
   livraison est seulement en file pendant qu'un drain est deja actif; l'appel
   attend le drain reel. `MockChannel.send()` refuse aussi les envois avant
   connexion, pour eviter des tests qui valident une livraison impossible.
+- Les actions IA de l'IDE (`ask`, `explain`, `refactor`, `suggestFix`) ne
+  transforment plus une reponse provider vide en resultat vide pretendument
+  valide. Le handler renvoie maintenant une erreur explicite
+  `AI provider returned an empty IDE response`.
 
 ## Blocage leve
 

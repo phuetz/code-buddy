@@ -234,6 +234,19 @@ describe('IDEExtensionsServer', () => {
     );
   });
 
+  it('returns an error when the IDE AI provider sends an empty response', async () => {
+    chatMock.mockResolvedValueOnce({
+      choices: [],
+    });
+
+    const server = new IDEExtensionsServer();
+    const response = await invoke(server, 'ask', {
+      question: 'How should I decouple file system access?',
+    });
+
+    expect(response?.error?.message).toBe('AI provider returned an empty IDE response');
+  });
+
   it('returns refactored code without markdown fences', async () => {
     chatMock.mockResolvedValueOnce({
       choices: [

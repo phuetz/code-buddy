@@ -485,7 +485,11 @@ Return a focused replacement for the problematic range only.`,
   private async runPrompt(messages: IDEChatMessage[]): Promise<string> {
     const client = await this.requireCodeBuddyClient();
     const response = await client.chat(messages, []);
-    return response.choices?.[0]?.message?.content?.trim() || '';
+    const content = response.choices?.[0]?.message?.content?.trim() ?? '';
+    if (!content) {
+      throw new Error('AI provider returned an empty IDE response');
+    }
+    return content;
   }
 
   private async buildCompletionContext(params: Partial<CompletionRequest>): Promise<{ prefix: string; suffix: string; language: string }> {
