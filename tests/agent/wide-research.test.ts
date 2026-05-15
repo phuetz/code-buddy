@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ensureResearchAggregationOutput,
   ensureResearchWorkerOutput,
   formatWideResearchToolResult,
   type WideResearchResult,
@@ -39,6 +40,13 @@ describe('wide research result handling', () => {
   it('rejects empty worker output instead of counting it as success', () => {
     expect(() => ensureResearchWorkerOutput('   ')).toThrow('Worker produced no output');
     expect(ensureResearchWorkerOutput('Findings')).toBe('Findings');
+  });
+
+  it('rejects empty aggregation output instead of returning a fake report', () => {
+    expect(() => ensureResearchAggregationOutput(undefined)).toThrow('Aggregation produced no output');
+    expect(() => ensureResearchAggregationOutput('')).toThrow('Aggregation produced no output');
+    expect(() => ensureResearchAggregationOutput('   ')).toThrow('Aggregation produced no output');
+    expect(ensureResearchAggregationOutput('Synthesized report')).toBe('Synthesized report');
   });
 
   it('returns a failed ToolResult when no research worker succeeded', () => {

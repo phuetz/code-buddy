@@ -846,6 +846,10 @@ npm run typecheck
 - Le bridge canal -> A2A ne repond plus `(empty reply from fleet)` quand une
   tache hub se termine sans resultat; il signale maintenant un echec explicite
   au canal appelant.
+- Le mode `wide research` ne fabrique plus un rapport synthetique
+  `Aggregation failed: no content returned.` quand l'appel d'agregation ne
+  renvoie aucun texte; il bascule vers le rapport fallback base sur les vraies
+  sorties workers.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

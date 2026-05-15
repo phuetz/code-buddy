@@ -90,6 +90,13 @@ export function ensureResearchWorkerOutput(output: string): string {
   return output;
 }
 
+export function ensureResearchAggregationOutput(output: string | null | undefined): string {
+  if (!output || output.trim().length === 0) {
+    throw new Error('Aggregation produced no output');
+  }
+  return output;
+}
+
 export function formatWideResearchToolResult(result: WideResearchResult): ToolResult {
   const summary = [
     `# Wide Research: ${result.topic}`,
@@ -367,7 +374,7 @@ export class WideResearchOrchestrator extends EventEmitter {
       },
     ]);
 
-    return response.choices[0]?.message?.content ?? 'Aggregation failed: no content returned.';
+    return ensureResearchAggregationOutput(response.choices[0]?.message?.content);
   }
 
   // --------------------------------------------------------------------------
