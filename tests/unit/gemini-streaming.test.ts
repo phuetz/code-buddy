@@ -443,7 +443,7 @@ describe('Gemini SSE Streaming', () => {
     it('should map Gemini finish reason SAFETY to content_filter', async () => {
       const client = createClient();
       const ssePayloads = [
-        { candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }] },
+        { candidates: [{ content: { parts: [{ text: 'blocked' }] }, finishReason: 'SAFETY' }] },
       ];
 
       global.fetch = jest.fn().mockResolvedValue(
@@ -474,6 +474,21 @@ describe('Gemini SSE Streaming', () => {
 
       const filterChunk = chunks.find(c => c.choices[0].finish_reason === 'content_filter');
       expect(filterChunk).toBeDefined();
+    });
+
+    it('should reject streams without assistant content or tool calls', async () => {
+      const client = createClient();
+      const ssePayloads = [
+        { candidates: [{ content: { parts: [] }, finishReason: 'STOP' }] },
+      ];
+
+      global.fetch = jest.fn().mockResolvedValue(
+        mockFetchResponse(createSSEStream(ssePayloads))
+      );
+
+      await expect(collectChunks(client.chatStream(
+        [{ role: 'user', content: 'Hi' }]
+      ))).rejects.toThrow('Gemini returned no assistant content or tool calls');
     });
 
     it('should yield tool call chunks for functionCall parts', async () => {

@@ -840,6 +840,9 @@ npm run typecheck
 - Le provider OpenAI-compatible applique aussi ce contrat: une reponse ou un
   stream sans texte assistant non vide ni tool call echoue au lieu d'etre
   retourne tel quel avec `content: null`.
+- Le provider Gemini natif ne fabrique plus de message de secours quand Google
+  renvoie des `parts` vides; les chemins non-stream et streaming exigent
+  maintenant du texte utile ou un function call.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

@@ -509,26 +509,11 @@ export class GeminiNativeProvider implements Provider {
 
     // Handle empty content (Gemini may return content without parts for certain queries)
     if (!candidate.content.parts || candidate.content.parts.length === 0) {
-      logger.warn('Gemini returned empty content parts', {
+      logger.error('Gemini returned empty content parts', {
         source: 'GeminiNativeProvider',
         finishReason: candidate.finishReason,
       });
-      // Return a graceful response instead of throwing
-      return {
-        choices: [{
-          message: {
-            role: 'assistant',
-            content: "Je ne peux pas répondre à cette question. Il s'agit peut-être d'une requête nécessitant des données en temps réel (météo, actualités) auxquelles je n'ai pas accès, ou d'une question que le modèle ne peut pas traiter.",
-            tool_calls: undefined,
-          },
-          finish_reason: candidate.finishReason || 'stop',
-        }],
-        usage: {
-          prompt_tokens: data.usageMetadata?.promptTokenCount ?? 0,
-          completion_tokens: 0,
-          total_tokens: data.usageMetadata?.totalTokenCount ?? 0,
-        },
-      };
+      throw new Error('Gemini returned no assistant content or tool calls');
     }
 
     const toolCalls: CodeBuddyToolCall[] = [];
@@ -561,6 +546,10 @@ export class GeminiNativeProvider implements Provider {
     const groundingFooter = GeminiNativeProvider.formatGroundingFooter(candidate.groundingMetadata);
     if (groundingFooter && content) {
       content += groundingFooter;
+    }
+
+    if (content.trim().length === 0 && toolCalls.length === 0) {
+      throw new Error('Gemini returned no assistant content or tool calls');
     }
 
     // Log response summary
@@ -777,6 +766,7 @@ export class GeminiNativeProvider implements Provider {
       const reader = res.body.getReader();
       let chunkIndex = 0;
       let lastGroundingMetadata: unknown = null;
+      let emittedUsefulOutput = false;
 
       for await (const chunk of this.parseGeminiSSE(reader)) {
         const candidates = (chunk as Record<string, unknown>).candidates as Array<Record<string, unknown>> | undefined;
@@ -795,6 +785,9 @@ export class GeminiNativeProvider implements Provider {
 
         for (const part of parts) {
           if (part.text) {
+            if ((part.text as string).trim().length > 0) {
+              emittedUsefulOutput = true;
+            }
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
               object: 'chat.completion.chunk' as const,
@@ -812,6 +805,7 @@ export class GeminiNativeProvider implements Provider {
           }
 
           if (part.functionCall) {
+            emittedUsefulOutput = true;
             const fc = part.functionCall as { name: string; args?: Record<string, unknown> };
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
@@ -862,6 +856,10 @@ export class GeminiNativeProvider implements Provider {
         }
       }
 
+      if (!emittedUsefulOutput) {
+        throw new Error('Gemini returned no assistant content or tool calls');
+      }
+
       // Emit the Sources footer (if any) BEFORE the final stop chunk so
       // it lands in the assistant content rather than after finish_reason.
       const groundingFooter = GeminiNativeProvider.formatGroundingFooter(lastGroundingMetadata);
@@ -895,6 +893,13 @@ export class GeminiNativeProvider implements Provider {
         }],
       };
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === 'Gemini returned no assistant content or tool calls'
+      ) {
+        throw error;
+      }
+
       logger.warn('Gemini streaming error, falling back to non-streaming', {
         source: 'GeminiNativeProvider',
         error: error instanceof Error ? error.message : String(error),

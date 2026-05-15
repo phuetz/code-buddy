@@ -144,4 +144,50 @@ describe('CodeBuddyClient Gemini malformed recovery', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(response.choices[0].message.content).toBe('ok');
   });
+
+  it('rejects Gemini responses with empty content parts', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        candidates: [{
+          finishReason: 'STOP',
+          content: { parts: [] },
+        }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 0, totalTokenCount: 1 },
+      }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = new CodeBuddyClient(
+      'test-gemini-key',
+      'gemini-2.5-flash',
+      'https://generativelanguage.googleapis.com/v1beta',
+    );
+
+    await expect(client.chat([{ role: 'user', content: 'ping' }]))
+      .rejects.toThrow('Gemini returned no assistant content or tool calls');
+  });
+
+  it('rejects Gemini responses with only blank text', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        candidates: [{
+          finishReason: 'STOP',
+          content: { parts: [{ text: '   ' }] },
+        }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 0, totalTokenCount: 1 },
+      }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = new CodeBuddyClient(
+      'test-gemini-key',
+      'gemini-2.5-flash',
+      'https://generativelanguage.googleapis.com/v1beta',
+    );
+
+    await expect(client.chat([{ role: 'user', content: 'ping' }]))
+      .rejects.toThrow('Gemini returned no assistant content or tool calls');
+  });
 });
