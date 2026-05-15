@@ -312,6 +312,7 @@ describe('Aggregator — aggregateParallelResults', () => {
   it('falls back to concatenation when no client is wired', async () => {
     const saga = makeSagaWithResults(['answer A', 'answer B']);
     const result = await aggregateParallelResults(saga);
+    expect(result).toContain('Aggregation unavailable; raw completed results follow.');
     expect(result).toContain('answer A');
     expect(result).toContain('answer B');
     expect(result).toContain('Source 1');
@@ -337,15 +338,16 @@ describe('Aggregator — aggregateParallelResults', () => {
     expect((fakeClient as unknown as { chat: ReturnType<typeof vi.fn> }).chat).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to concat if the LLM returns empty content', async () => {
+  it('falls back to explicit raw concat if the LLM returns empty content', async () => {
     const fakeClient = {
       chat: vi.fn(async () => ({
-        choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'stop' }],
+        choices: [{ message: { role: 'assistant', content: '   ' }, finish_reason: 'stop' }],
       })),
     };
     wireAggregatorClient(() => fakeClient as never);
     const saga = makeSagaWithResults(['x', 'y']);
     const result = await aggregateParallelResults(saga);
+    expect(result).toContain('Aggregation unavailable; raw completed results follow.');
     expect(result).toContain('Source 1');
   });
 
@@ -358,6 +360,7 @@ describe('Aggregator — aggregateParallelResults', () => {
     wireAggregatorClient(() => fakeClient as never);
     const saga = makeSagaWithResults(['x', 'y']);
     const result = await aggregateParallelResults(saga);
+    expect(result).toContain('Aggregation unavailable; raw completed results follow.');
     expect(result).toContain('Source 1');
   });
 });

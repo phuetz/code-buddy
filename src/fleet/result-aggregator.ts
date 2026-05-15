@@ -78,7 +78,8 @@ export async function aggregateParallelResults(
   const client = cachedGetter?.() ?? null;
   if (!client) {
     // Graceful fallback: concatenate with separators so the saga
-    // doesn't dead-end. The user gets raw content rather than a fail.
+    // doesn't dead-end. The user gets explicitly labelled raw content
+    // rather than a synthetic synthesis.
     logger.warn?.('[result-aggregator] no client wired, falling back to concat');
     return concatenateAsFallback(completed);
   }
@@ -94,8 +95,8 @@ export async function aggregateParallelResults(
       ],
       [], // no tools
     );
-    const text = response?.choices?.[0]?.message?.content ?? '';
-    if (!text) {
+    const text = response?.choices?.[0]?.message?.content;
+    if (typeof text !== 'string' || text.trim().length === 0) {
       logger.warn?.('[result-aggregator] LLM returned empty content, falling back');
       return concatenateAsFallback(completed);
     }
@@ -149,7 +150,11 @@ function buildUserPrompt(
 }
 
 function concatenateAsFallback(steps: SagaStep[]): string {
-  return steps
-    .map((s, i) => `Source ${i + 1} (${s.peerId} × ${s.model}):\n${s.result}\n`)
-    .join('\n---\n');
+  return [
+    'Aggregation unavailable; raw completed results follow.',
+    '',
+    steps
+      .map((s, i) => `Source ${i + 1} (${s.peerId} × ${s.model}):\n${s.result}\n`)
+      .join('\n---\n'),
+  ].join('\n');
 }

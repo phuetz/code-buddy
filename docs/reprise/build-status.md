@@ -432,6 +432,15 @@ npx eslint src/context/precompaction-flush.ts src/agent/execution/agent-executor
 
 npm run typecheck
 # passed
+
+npm test -- tests/fleet/saga-store.test.ts
+# Fleet saga/result aggregator tests passed after explicit raw aggregation fallback
+
+npx eslint src/fleet/result-aggregator.ts tests/fleet/saga-store.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -1067,6 +1076,9 @@ npm run typecheck
 - Le flush memoire pre-compaction ne traite plus une reponse LLM blanche comme
   un sentinel `NO_REPLY`; l'executor ne fabrique plus non plus ce sentinel quand
   le client ne renvoie aucun contenu.
+- L'aggregateur Fleet signale maintenant explicitement quand il livre les
+  resultats bruts faute de synthese LLM, et les reponses de synthese composees
+  uniquement d'espaces declenchent ce fallback visible.
 
 ## Blocage leve
 
