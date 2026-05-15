@@ -693,17 +693,13 @@ export class SkillsManager {
       return;
     }
 
-    // Skill-specific MCP server lifecycle is V1.1 scope. Skills that
-    // ship as standalone MCP servers (separate from skill `command`
-    // execution which already works) require sandbox + auth-token
-    // rotation design before we can spawn them safely. For V1.0, this
-    // method is a stub: it logs intent and stores a placeholder entry
-    // so callers don't crash, but no child process is spawned.
-    log(`MCP server stub registered for skill: ${skill.name} (V1.1 scope)`);
+    throw new Error(
+      'MCP skill server lifecycle is not implemented in SkillsManager; use the MCP manager to install and run MCP servers'
+    );
   }
 
   /**
-   * Stop an MCP server (stub — see startMcpServer note for V1.1 scope).
+   * Stop an MCP server started through this manager.
    */
   async stopMcpServer(skillId: string): Promise<void> {
     const server = this.runningServers.get(skillId);

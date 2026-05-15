@@ -25,6 +25,7 @@ vi.mock('../src/main/utils/logger', () => ({
 
 import { SkillsManager } from '../src/main/skills/skills-manager';
 import type { DatabaseInstance } from '../src/main/db/database';
+import type { Skill } from '../src/renderer/types';
 
 function createDbMock(): DatabaseInstance {
   const statement = { run: vi.fn() };
@@ -153,5 +154,26 @@ describe('SkillsManager installPluginFromDirectory', () => {
 
     expect(sameNameSkills).toHaveLength(1);
     expect(sameNameSkills[0].id.startsWith('global-')).toBe(true);
+  });
+
+  it('fails MCP skill startup explicitly instead of registering a stub server', async () => {
+    const manager = new SkillsManager(createDbMock());
+    const skill: Skill = {
+      id: 'mcp-demo',
+      name: 'Demo MCP',
+      type: 'mcp',
+      enabled: true,
+      config: {
+        mcp: {
+          command: 'node',
+          args: ['server.js'],
+        },
+      },
+      createdAt: Date.now(),
+    };
+
+    await expect(manager.startMcpServer(skill)).rejects.toThrow(
+      'MCP skill server lifecycle is not implemented'
+    );
   });
 });

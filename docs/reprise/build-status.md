@@ -770,6 +770,9 @@ npm run typecheck
   telecharges: image/file/voice transmettent maintenant leurs metadonnees
   (url/key/nom/taille/duree) a l'agent avec une mention explicite des bytes ou
   de la transcription manquants.
+- `Cowork SkillsManager.startMcpServer` ne journalise plus un faux serveur MCP
+  "registered" sans process; la tentative echoue explicitement et renvoie vers
+  le gestionnaire MCP dedie.
 
 ## Blocage leve
 
