@@ -203,7 +203,11 @@ export class CronAgentBridge extends EventEmitter {
 
     const entries = await agent.processUserMessage(job.task.message);
     const assistantEntries = entries.filter(e => e.type === 'assistant');
-    return assistantEntries.map(e => e.content).join('\n') || 'No response';
+    const output = assistantEntries.map(e => e.content).join('\n').trim();
+    if (!output) {
+      throw new Error('Cron job agent returned no assistant response');
+    }
+    return output;
   }
 
   /**

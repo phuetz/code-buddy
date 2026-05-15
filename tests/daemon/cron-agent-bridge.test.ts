@@ -5,6 +5,7 @@ import * as path from 'path';
 
 const mocks = vi.hoisted(() => ({
   agentConstructorMock: vi.fn(),
+  agentEntriesMock: vi.fn(() => [{ type: 'assistant', content: 'mock response' }]),
 }));
 
 let tmpHome: string;
@@ -28,7 +29,7 @@ vi.mock('../../src/agent/codebuddy-agent.js', () => ({
     }
 
     async processUserMessage() {
-      return [{ type: 'assistant', content: 'mock response' }];
+      return mocks.agentEntriesMock();
     }
   },
 }));
@@ -68,6 +69,8 @@ describe('CronAgentBridge', () => {
   beforeEach(async () => {
     resetCronAgentBridge();
     mocks.agentConstructorMock.mockReset();
+    mocks.agentEntriesMock.mockReset();
+    mocks.agentEntriesMock.mockReturnValue([{ type: 'assistant', content: 'mock response' }]);
     for (const key of envKeysToReset) {
       envBackup[key] = process.env[key];
       delete process.env[key];
@@ -164,6 +167,25 @@ describe('CronAgentBridge', () => {
       5,
       false
     );
+  });
+
+  it('fails the job when the agent produces no assistant response', async () => {
+    mocks.agentEntriesMock.mockReturnValueOnce([]);
+
+    const job: CronJob = {
+      id: 'empty-job',
+      name: 'Empty Job',
+      type: 'every',
+      schedule: { every: 60000 },
+      task: { type: 'message', message: 'test' },
+      status: 'active',
+      createdAt: new Date(),
+      runCount: 0,
+      errorCount: 0,
+      enabled: true,
+    };
+
+    await expect(bridge.executeJob(job)).rejects.toThrow('Cron job agent returned no assistant response');
   });
 
   it('should handle webhook delivery', async () => {

@@ -856,6 +856,9 @@ npm run typecheck
 - Les questions remote Cowork expirees ne resolvent plus en `{}` comme si
   l'utilisateur avait repondu/ignore volontairement; le timeout revient
   maintenant `null`.
+- Les jobs cron et reviews heartbeat n'utilisent plus `No response` comme
+  sortie synthetique quand l'agent ne produit aucun message assistant; ces
+  chemins signalent maintenant une erreur explicite.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

@@ -64,6 +64,13 @@ export interface HeartbeatTickResult {
   duration: number;
 }
 
+export function ensureHeartbeatReviewOutput(output: string): string {
+  if (output.trim().length === 0) {
+    throw new Error('Heartbeat agent review returned no assistant response');
+  }
+  return output;
+}
+
 const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
   intervalMs: 30 * 60 * 1000, // 30 minutes
   activeHoursStart: 8,
@@ -329,7 +336,7 @@ export class HeartbeatEngine extends EventEmitter {
   private async executeAgentReview(checklistContent: string): Promise<string> {
     // Allow override for testing
     if (this.config.agentReviewFn) {
-      return this.config.agentReviewFn(checklistContent);
+      return ensureHeartbeatReviewOutput(await this.config.agentReviewFn(checklistContent));
     }
 
     const provider = detectProviderFromEnv();
@@ -366,7 +373,7 @@ export class HeartbeatEngine extends EventEmitter {
 
     const entries = await agent.processUserMessage(prompt);
     const assistantEntries = entries.filter(e => e.type === 'assistant');
-    return assistantEntries.map(e => e.content).join('\n') || 'No response';
+    return ensureHeartbeatReviewOutput(assistantEntries.map(e => e.content).join('\n'));
   }
 
   /**

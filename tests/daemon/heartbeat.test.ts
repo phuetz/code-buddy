@@ -448,6 +448,21 @@ describe('HeartbeatEngine', () => {
       alwaysActiveEngine.stop();
     });
 
+    it('reports an error when the heartbeat review produces no assistant response', async () => {
+      const emptyReviewEngine = new HeartbeatEngine({
+        heartbeatFilePath,
+        activeHoursStart: 0,
+        activeHoursEnd: 24,
+        agentReviewFn: jest.fn().mockResolvedValue('   '),
+      });
+
+      const result = await emptyReviewEngine.tick();
+
+      expect(result.suppressed).toBe(false);
+      expect(result.agentResponse).toContain('Heartbeat agent review returned no assistant response');
+      emptyReviewEngine.stop();
+    });
+
     it('uses the detected provider for live agent reviews', async () => {
       process.env.CODEBUDDY_PROVIDER = 'chatgpt';
       await writeChatGptAuth();
