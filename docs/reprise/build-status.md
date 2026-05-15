@@ -853,6 +853,9 @@ npm run typecheck
 - L'agent SWE specialise ne transforme plus une reponse terminale vide en
   `No response`, et son adaptateur ne renvoie plus `success=true` quand le run
   interne finit en erreur ou en limite de steps.
+- Les questions remote Cowork expirees ne resolvent plus en `{}` comme si
+  l'utilisateur avait repondu/ignore volontairement; le timeout revient
+  maintenant `null`.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

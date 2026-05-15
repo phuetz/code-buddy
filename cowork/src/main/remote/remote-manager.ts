@@ -519,8 +519,8 @@ export class RemoteManager extends EventEmitter {
     }
 
     // Wait for user response
-    return new Promise((resolve) => {
-      this.interactionResolvers.set(questionId, resolve);
+    return new Promise<string | null>((resolve) => {
+      this.interactionResolvers.set(questionId, (response) => resolve(response));
 
       // Set timeout
       setTimeout(
@@ -530,7 +530,7 @@ export class RemoteManager extends EventEmitter {
               log('[RemoteManager] Question timeout:', questionId);
               this.pendingInteractions.delete(questionId);
               this.interactionResolvers.delete(questionId);
-              resolve('{}'); // Return empty answer on timeout
+              resolve(null);
             }
           }).catch((err) => logError('[RemoteManager] Question timeout lock error:', err));
         },
