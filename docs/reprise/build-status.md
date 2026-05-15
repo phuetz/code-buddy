@@ -925,6 +925,9 @@ npm run typecheck
   messages de succes sans sortie explicites.
 - OpenShell distant ne renvoie plus `output:''` sur succes silencieux ou echec
   sans detail; les deux cas ont maintenant une sortie lisible.
+- Les sorties utilisateur encore marquees `(no output)` dans les taches de fond,
+  les logs de process, les scripts `/script` et `/fcs`, et l'observation SWE
+  utilisent maintenant des phrases explicites et contextualisees.
 
 ## Blocage leve
 

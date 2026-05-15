@@ -2,7 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { handleScript } from '../../src/commands/handlers/script-handlers.js';
+import {
+  SCRIPT_COMPLETED_WITH_NO_OUTPUT,
+  handleScript,
+} from '../../src/commands/handlers/script-handlers.js';
 import { resetScriptManager } from '../../src/scripting/index.js';
 
 describe('handleScript', () => {
@@ -39,5 +42,15 @@ describe('handleScript', () => {
     expect(result.handled).toBe(true);
     expect(result.entry?.content).toContain('Script failed');
     expect(result.entry?.content).toContain('boom');
+  });
+
+  it('returns an explicit message when the script has no output', async () => {
+    const scriptPath = path.join(tmpDir, 'silent.bs');
+    fs.writeFileSync(scriptPath, '');
+
+    const result = await handleScript(['run', scriptPath]);
+
+    expect(result.handled).toBe(true);
+    expect(result.entry?.content).toContain(SCRIPT_COMPLETED_WITH_NO_OUTPUT);
   });
 });

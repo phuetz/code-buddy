@@ -2,7 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { handleFCS } from '../../src/commands/handlers/fcs-handlers.js';
+import {
+  FCS_SCRIPT_COMPLETED_WITH_NO_OUTPUT,
+  handleFCS,
+} from '../../src/commands/handlers/fcs-handlers.js';
 
 describe('handleFCS', () => {
   let tmpDir: string;
@@ -40,6 +43,16 @@ describe('handleFCS', () => {
     expect(result.handled).toBe(true);
     expect(result.entry?.content).toContain('FCS script failed');
     expect(result.entry?.content).toContain('boom');
+  });
+
+  it('returns an explicit message when the FCS script has no output', async () => {
+    const scriptPath = path.join(tmpDir, 'silent.fcs');
+    fs.writeFileSync(scriptPath, '');
+
+    const result = await handleFCS(['run', scriptPath]);
+
+    expect(result.handled).toBe(true);
+    expect(result.entry?.content).toContain(FCS_SCRIPT_COMPLETED_WITH_NO_OUTPUT);
   });
 
   it('returns template search results instead of a loading placeholder', async () => {

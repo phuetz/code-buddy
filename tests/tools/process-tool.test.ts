@@ -8,7 +8,12 @@
 import { execSync } from 'child_process';
 import type { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { ProcessTool, getProcessTool, resetProcessTool } from '../../src/tools/process-tool.js';
+import {
+  PROCESS_LOG_EMPTY_OUTPUT,
+  ProcessTool,
+  getProcessTool,
+  resetProcessTool,
+} from '../../src/tools/process-tool.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -321,14 +326,14 @@ describe('ProcessTool', () => {
       expect(result.output).not.toContain('line-99\n');
     });
 
-    it('should return "(no output)" when buffer is empty', async () => {
+    it('should return an explicit message when buffer is empty', async () => {
       const mockProc = createMockChildProcess();
       tool.trackProcess(100, 'node app.js', mockProc);
 
       const result = await tool.log(100);
 
       expect(result.success).toBe(true);
-      expect(result.output).toBe('(no output)');
+      expect(result.output).toBe(PROCESS_LOG_EMPTY_OUTPUT);
     });
   });
 
@@ -461,10 +466,10 @@ describe('ProcessTool', () => {
 
       // Verify buffers are empty
       const logResult = await tool.log(100);
-      expect(logResult.output).toBe('(no output)');
+      expect(logResult.output).toBe(PROCESS_LOG_EMPTY_OUTPUT);
 
       const errLogResult = await tool.log(100, { stderr: true });
-      expect(errLogResult.output).toBe('(no output)');
+      expect(errLogResult.output).toBe(PROCESS_LOG_EMPTY_OUTPUT);
     });
 
     it('should report zero lines when buffers are already empty', async () => {
@@ -706,7 +711,7 @@ describe('ProcessTool', () => {
 
       // Verify cleared
       const emptyLog = await tool.log(42);
-      expect(emptyLog.output).toBe('(no output)');
+      expect(emptyLog.output).toBe(PROCESS_LOG_EMPTY_OUTPUT);
 
       // Remove
       const removeResult = await tool.remove(42);

@@ -402,7 +402,7 @@ export class SWEAgent extends EventEmitter {
 
       // Truncate large outputs
       let output = result.success
-        ? result.output || 'Success (no output)'
+        ? result.output || 'Tool completed successfully with no output.'
         : `Error: ${result.error || 'Unknown error'}`;
 
       if (output.length > this.config.maxObserve) {

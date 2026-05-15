@@ -18,7 +18,7 @@ export interface BackgroundTask {
 }
 
 const MAX_OUTPUT_BYTES = 1024 * 1024; // 1MB
-const NO_OUTPUT_MARKER = '(no output)';
+export const BACKGROUND_TASK_COMPLETED_WITH_NO_OUTPUT = 'Command completed successfully with no output.';
 
 /**
  * BackgroundTaskManager spawns and tracks background shell commands.
@@ -118,7 +118,7 @@ export class BackgroundTaskManager {
     }
 
     if (task.status === 'completed') {
-      return NO_OUTPUT_MARKER;
+      return BACKGROUND_TASK_COMPLETED_WITH_NO_OUTPUT;
     }
 
     if (task.status === 'failed') {

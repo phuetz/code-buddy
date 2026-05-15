@@ -10,6 +10,8 @@ import type { ChildProcess } from 'child_process';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
+export const PROCESS_LOG_EMPTY_OUTPUT = 'No process log output captured.';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -111,7 +113,7 @@ export class ProcessTool {
 
     return {
       success: true,
-      output: lines.length > 0 ? lines.join('\n') : '(no output)',
+      output: lines.length > 0 ? lines.join('\n') : PROCESS_LOG_EMPTY_OUTPUT,
     };
   }
 

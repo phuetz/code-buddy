@@ -1,6 +1,9 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { BackgroundTaskManager } from '../../src/agent/background-tasks.js';
+import {
+  BACKGROUND_TASK_COMPLETED_WITH_NO_OUTPUT,
+  BackgroundTaskManager,
+} from '../../src/agent/background-tasks.js';
 
 vi.mock('child_process', () => {
   const impl = {
@@ -119,7 +122,7 @@ describe('BackgroundTaskManager (agent)', () => {
     child.emit('close', 0);
 
     expect(manager.getTask(id)?.status).toBe('completed');
-    expect(manager.getTaskOutput(id)).toBe('(no output)');
+    expect(manager.getTaskOutput(id)).toBe(BACKGROUND_TASK_COMPLETED_WITH_NO_OUTPUT);
   });
 
   it('keeps failed no-output tasks visible', () => {

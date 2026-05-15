@@ -11,6 +11,8 @@ import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { executeFCS, executeFCSFile, parseFCS, initScriptRegistry } from "../../scripting/index.js";
 import type { ScriptResult } from "../../scripting/index.js";
 
+export const FCS_SCRIPT_COMPLETED_WITH_NO_OUTPUT = 'Script completed successfully with no output.';
+
 export interface CommandHandlerResult {
   handled: boolean;
   entry?: ChatEntry;
@@ -135,7 +137,7 @@ Examples:
 }
 
 function formatFCSResult(filePath: string, result: ScriptResult): string {
-  const output = result.output.length > 0 ? result.output.join('\n') : '(no output)';
+  const output = result.output.length > 0 ? result.output.join('\n') : FCS_SCRIPT_COMPLETED_WITH_NO_OUTPUT;
   const returnValue = result.returnValue !== null && result.returnValue !== undefined
     ? `\nReturn value: ${JSON.stringify(result.returnValue)}`
     : '';
