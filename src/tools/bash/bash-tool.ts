@@ -371,8 +371,11 @@ export class BashTool implements Disposable {
               output: sbResult.output || undefined,
               error: errorMsg,
             };
-          } catch {
-            // Docker sandbox unavailable, fall through to direct execution
+          } catch (error) {
+            return {
+              success: false,
+              error: `Sandbox execution required but unavailable: ${error instanceof Error ? error.message : String(error)}`,
+            };
           }
         }
       } catch { /* auto-sandbox module unavailable, continue normally */ }

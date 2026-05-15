@@ -142,10 +142,20 @@ jest.mock('../../src/security/safe-binaries', () => ({
 }));
 
 // Mock auto-sandbox (dynamic import in execute())
+const mockAutoSandboxRoute = jest.fn(() => Promise.resolve({ mode: 'direct' }));
 jest.mock('../../src/sandbox/auto-sandbox', () => ({
   getAutoSandboxRouter: jest.fn(function() { return {
-    route: jest.fn().mockResolvedValue({ mode: 'direct' }),
+    route: mockAutoSandboxRoute,
   }; }),
+}));
+
+const mockDockerExecute = jest.fn();
+jest.mock('../../src/sandbox/docker-sandbox', () => ({
+  DockerSandbox: jest.fn(function() {
+    return {
+      execute: mockDockerExecute,
+    };
+  }),
 }));
 
 // Mock command-validator
@@ -243,6 +253,9 @@ describe('BashTool', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAutoSandboxRoute.mockReset();
+    mockAutoSandboxRoute.mockResolvedValue({ mode: 'direct' });
+    mockDockerExecute.mockReset();
     mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
     bashTool = new BashTool();
   });
@@ -301,6 +314,18 @@ describe('BashTool', () => {
       const result = await bashTool.execute('echo "hello"');
       expect(result.success).toBe(true);
       expect(result.output).toContain('hello');
+    });
+
+    it('should not fall back to direct execution when required sandbox is unavailable', async () => {
+      mockAutoSandboxRoute.mockResolvedValueOnce({ mode: 'sandbox' });
+      mockDockerExecute.mockRejectedValueOnce(new Error('docker unavailable'));
+
+      const result = await bashTool.execute('node dangerous-script.js');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Sandbox execution required but unavailable');
+      expect(result.error).toContain('docker unavailable');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('should capture stderr output', async () => {

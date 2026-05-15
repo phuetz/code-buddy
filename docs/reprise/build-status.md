@@ -734,6 +734,9 @@ npm run typecheck
 - `PDFTool.extractText` ne considere plus le placeholder "minimal extractable
   text" comme une extraction reussie; les PDF image/chiffres/non supportes
   renvoient maintenant une erreur explicite avec les donnees partielles.
+- `BashTool` ne retombe plus en execution directe quand l'auto-sandbox a exige
+  Docker mais que le sandbox Docker est indisponible; la commande echoue avant
+  tout `spawn` local.
 
 ## Blocage leve
 
