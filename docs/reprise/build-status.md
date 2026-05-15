@@ -661,6 +661,9 @@ npm run typecheck
 - `code_graph drift` ne renvoie plus `success=true` avec le message
   `Failed to compute drift`. Une snapshot illisible/corrompue devient un
   echec outil, tandis que l'absence de baseline reste une reponse actionable.
+- `/vulns` ne transforme plus l'absence d'un outil d'audit ou une sortie JSON
+  illisible en `0 vulnerabilite`. Les audits incomplets sont marques
+  `success=false`, avec le detail partiel disponible dans `output`.
 
 ## Blocage leve
 

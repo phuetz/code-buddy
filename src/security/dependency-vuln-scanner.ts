@@ -31,6 +31,7 @@ export interface Vulnerability {
 export interface VulnerabilityReport {
   packageManager: PackageManager;
   vulnerabilities: Vulnerability[];
+  auditError?: string;
   summary: {
     critical: number;
     high: number;
@@ -77,7 +78,7 @@ export function detectPackageManagers(projectRoot: string): PackageManager[] {
 // Audit Runners
 // ============================================================================
 
-function runCommand(cmd: string, cwd: string): string | null {
+function runCommand(cmd: string, cwd: string): string {
   try {
     return execSync(cmd, {
       cwd,
@@ -88,9 +89,15 @@ function runCommand(cmd: string, cwd: string): string | null {
   } catch (err: unknown) {
     // npm audit exits non-zero when vulnerabilities are found — capture stdout
     if (err && typeof err === 'object' && 'stdout' in err) {
-      return (err as { stdout: string }).stdout || null;
+      const stdout = (err as { stdout?: string | Buffer }).stdout;
+      if (stdout) {
+        const text = Buffer.isBuffer(stdout) ? stdout.toString('utf-8') : stdout;
+        if (text.trim()) return text;
+      }
     }
-    return null;
+
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`${cmd} failed: ${message}`);
   }
 }
 
@@ -118,44 +125,43 @@ function auditNpm(projectRoot: string): VulnerabilityReport {
   const vulns: Vulnerability[] = [];
   const output = runCommand('npm audit --json', projectRoot);
 
-  if (output) {
-    try {
-      const data = JSON.parse(output);
+  try {
+    const data = JSON.parse(output);
 
-      // npm audit v7+ format
-      if (data.vulnerabilities && typeof data.vulnerabilities === 'object') {
-        for (const [pkgName, info] of Object.entries(data.vulnerabilities)) {
-          const v = info as Record<string, unknown>;
-          vulns.push({
-            package: pkgName,
-            version: (v.range as string) || '',
-            severity: normalizeSeverity((v.severity as string) || 'low'),
-            title: (v.title as string) || (v.name as string) || pkgName,
-            cve: Array.isArray(v.via) ? extractCve(v.via) : undefined,
-            fixVersion: (v.fixAvailable as Record<string, unknown>)?.version as string || undefined,
-            description: buildNpmDescription(v),
-          });
-        }
+    // npm audit v7+ format
+    if (data.vulnerabilities && typeof data.vulnerabilities === 'object') {
+      for (const [pkgName, info] of Object.entries(data.vulnerabilities)) {
+        const v = info as Record<string, unknown>;
+        vulns.push({
+          package: pkgName,
+          version: (v.range as string) || '',
+          severity: normalizeSeverity((v.severity as string) || 'low'),
+          title: (v.title as string) || (v.name as string) || pkgName,
+          cve: Array.isArray(v.via) ? extractCve(v.via) : undefined,
+          fixVersion: (v.fixAvailable as Record<string, unknown>)?.version as string || undefined,
+          description: buildNpmDescription(v),
+        });
       }
-
-      // npm audit v6 format (advisories)
-      if (data.advisories && typeof data.advisories === 'object') {
-        for (const advisory of Object.values(data.advisories)) {
-          const a = advisory as Record<string, unknown>;
-          vulns.push({
-            package: (a.module_name as string) || '',
-            version: (a.vulnerable_versions as string) || '',
-            severity: normalizeSeverity((a.severity as string) || 'low'),
-            title: (a.title as string) || '',
-            cve: Array.isArray(a.cves) ? (a.cves as string[])[0] : undefined,
-            fixVersion: (a.patched_versions as string) || undefined,
-            description: (a.overview as string) || '',
-          });
-        }
-      }
-    } catch (e) {
-      logger.debug('npm audit JSON parse failed');
     }
+
+    // npm audit v6 format (advisories)
+    if (data.advisories && typeof data.advisories === 'object') {
+      for (const advisory of Object.values(data.advisories)) {
+        const a = advisory as Record<string, unknown>;
+        vulns.push({
+          package: (a.module_name as string) || '',
+          version: (a.vulnerable_versions as string) || '',
+          severity: normalizeSeverity((a.severity as string) || 'low'),
+          title: (a.title as string) || '',
+          cve: Array.isArray(a.cves) ? (a.cves as string[])[0] : undefined,
+          fixVersion: (a.patched_versions as string) || undefined,
+          description: (a.overview as string) || '',
+        });
+      }
+    }
+  } catch (e) {
+    logger.debug('npm audit JSON parse failed');
+    throw new Error(`npm audit JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   return { packageManager: 'npm', vulnerabilities: vulns, summary: makeSummary(vulns) };
@@ -191,31 +197,42 @@ function buildNpmDescription(v: Record<string, unknown>): string {
 
 function auditPip(projectRoot: string): VulnerabilityReport {
   const vulns: Vulnerability[] = [];
-  const output = runCommand('pip audit --format json', projectRoot) ||
-    runCommand('python -m pip_audit --format json', projectRoot);
+  let output: string;
 
-  if (output) {
+  try {
+    output = runCommand('pip audit --format json', projectRoot);
+  } catch (firstError) {
     try {
-      const data = JSON.parse(output);
-      const deps = Array.isArray(data) ? data : (data.dependencies || []);
-
-      for (const dep of deps) {
-        if (!dep.vulns || dep.vulns.length === 0) continue;
-        for (const vuln of dep.vulns) {
-          vulns.push({
-            package: dep.name || '',
-            version: dep.version || '',
-            severity: normalizeSeverity(vuln.severity || 'medium'),
-            title: vuln.id || vuln.aliases?.[0] || '',
-            cve: vuln.aliases?.find((a: string) => a.startsWith('CVE-')) || vuln.id || undefined,
-            fixVersion: vuln.fix_versions?.[0] || dep.fix_versions?.[0] || undefined,
-            description: vuln.description || vuln.id || '',
-          });
-        }
-      }
-    } catch (e) {
-      logger.debug('pip audit JSON parse failed');
+      output = runCommand('python -m pip_audit --format json', projectRoot);
+    } catch (secondError) {
+      throw new Error(
+        `pip audit unavailable: ${firstError instanceof Error ? firstError.message : String(firstError)}; ` +
+        `${secondError instanceof Error ? secondError.message : String(secondError)}`
+      );
     }
+  }
+
+  try {
+    const data = JSON.parse(output);
+    const deps = Array.isArray(data) ? data : (data.dependencies || []);
+
+    for (const dep of deps) {
+      if (!dep.vulns || dep.vulns.length === 0) continue;
+      for (const vuln of dep.vulns) {
+        vulns.push({
+          package: dep.name || '',
+          version: dep.version || '',
+          severity: normalizeSeverity(vuln.severity || 'medium'),
+          title: vuln.id || vuln.aliases?.[0] || '',
+          cve: vuln.aliases?.find((a: string) => a.startsWith('CVE-')) || vuln.id || undefined,
+          fixVersion: vuln.fix_versions?.[0] || dep.fix_versions?.[0] || undefined,
+          description: vuln.description || vuln.id || '',
+        });
+      }
+    }
+  } catch (e) {
+    logger.debug('pip audit JSON parse failed');
+    throw new Error(`pip audit JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   return { packageManager: 'pip', vulnerabilities: vulns, summary: makeSummary(vulns) };
@@ -229,27 +246,26 @@ function auditCargo(projectRoot: string): VulnerabilityReport {
   const vulns: Vulnerability[] = [];
   const output = runCommand('cargo audit --json', projectRoot);
 
-  if (output) {
-    try {
-      const data = JSON.parse(output);
-      const advisories = data.vulnerabilities?.list || [];
+  try {
+    const data = JSON.parse(output);
+    const advisories = data.vulnerabilities?.list || [];
 
-      for (const entry of advisories) {
-        const advisory = entry.advisory || {};
-        const pkg = entry.package || {};
-        vulns.push({
-          package: pkg.name || '',
-          version: pkg.version || '',
-          severity: normalizeSeverity(advisory.cvss?.severity || 'medium'),
-          title: advisory.title || advisory.id || '',
-          cve: advisory.aliases?.find((a: string) => a.startsWith('CVE-')) || advisory.id || undefined,
-          fixVersion: entry.versions?.patched?.[0] || undefined,
-          description: advisory.description || advisory.title || '',
-        });
-      }
-    } catch (e) {
-      logger.debug('cargo audit JSON parse failed');
+    for (const entry of advisories) {
+      const advisory = entry.advisory || {};
+      const pkg = entry.package || {};
+      vulns.push({
+        package: pkg.name || '',
+        version: pkg.version || '',
+        severity: normalizeSeverity(advisory.cvss?.severity || 'medium'),
+        title: advisory.title || advisory.id || '',
+        cve: advisory.aliases?.find((a: string) => a.startsWith('CVE-')) || advisory.id || undefined,
+        fixVersion: entry.versions?.patched?.[0] || undefined,
+        description: advisory.description || advisory.title || '',
+      });
     }
+  } catch (e) {
+    logger.debug('cargo audit JSON parse failed');
+    throw new Error(`cargo audit JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   return { packageManager: 'cargo', vulnerabilities: vulns, summary: makeSummary(vulns) };
@@ -263,34 +279,33 @@ function auditGo(projectRoot: string): VulnerabilityReport {
   const vulns: Vulnerability[] = [];
   const output = runCommand('govulncheck -json ./...', projectRoot);
 
-  if (output) {
-    try {
-      // govulncheck outputs newline-delimited JSON
-      const lines = output.split('\n').filter(Boolean);
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line);
-          if (entry.osv) {
-            const osv = entry.osv;
-            vulns.push({
-              package: osv.affected?.[0]?.package?.name || '',
-              version: osv.affected?.[0]?.ranges?.[0]?.events?.[0]?.introduced || '',
-              severity: normalizeSeverity(
-                osv.database_specific?.severity || osv.severity?.[0]?.score > 7 ? 'high' : 'medium'
-              ),
-              title: osv.summary || osv.id || '',
-              cve: osv.aliases?.find((a: string) => a.startsWith('CVE-')) || osv.id || undefined,
-              fixVersion: osv.affected?.[0]?.ranges?.[0]?.events?.[1]?.fixed || undefined,
-              description: osv.details || osv.summary || '',
-            });
-          }
-        } catch {
-          // Skip non-JSON lines
+  try {
+    // govulncheck outputs newline-delimited JSON
+    const lines = output.split('\n').filter(Boolean);
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.osv) {
+          const osv = entry.osv;
+          vulns.push({
+            package: osv.affected?.[0]?.package?.name || '',
+            version: osv.affected?.[0]?.ranges?.[0]?.events?.[0]?.introduced || '',
+            severity: normalizeSeverity(
+              osv.database_specific?.severity || osv.severity?.[0]?.score > 7 ? 'high' : 'medium'
+            ),
+            title: osv.summary || osv.id || '',
+            cve: osv.aliases?.find((a: string) => a.startsWith('CVE-')) || osv.id || undefined,
+            fixVersion: osv.affected?.[0]?.ranges?.[0]?.events?.[1]?.fixed || undefined,
+            description: osv.details || osv.summary || '',
+          });
         }
+      } catch {
+        // Skip non-JSON lines
       }
-    } catch (e) {
-      logger.debug('govulncheck JSON parse failed');
     }
+  } catch (e) {
+    logger.debug('govulncheck JSON parse failed');
+    throw new Error(`govulncheck JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   return { packageManager: 'go', vulnerabilities: vulns, summary: makeSummary(vulns) };
@@ -338,14 +353,17 @@ export async function scanDependencies(projectRoot: string): Promise<Vulnerabili
           reports.push({
             packageManager: pm,
             vulnerabilities: [],
+            auditError: `Audit not implemented for ${pm}`,
             summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
           });
       }
     } catch (err) {
-      logger.error(`Failed to audit ${pm}: ${err instanceof Error ? err.message : String(err)}`);
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`Failed to audit ${pm}: ${message}`);
       reports.push({
         packageManager: pm,
         vulnerabilities: [],
+        auditError: message,
         summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
       });
     }
@@ -395,6 +413,11 @@ export async function executeScanVulnerabilities(args: {
       const header = `## ${pm.toUpperCase()} (${summary.total} vulnerabilities)`;
       const summaryLine = `  Critical: ${summary.critical} | High: ${summary.high} | Medium: ${summary.medium} | Low: ${summary.low}`;
 
+      if (report.auditError) {
+        sections.push(`${header}\n${summaryLine}\n  Audit failed: ${report.auditError}`);
+        continue;
+      }
+
       if (vulns.length === 0) {
         sections.push(`${header}\n${summaryLine}\n  No known vulnerabilities found.`);
         continue;
@@ -414,10 +437,16 @@ export async function executeScanVulnerabilities(args: {
       sections.push(`${header}\n${summaryLine}\n\n${details}`);
     }
 
-    return {
-      success: true,
-      output: sections.join('\n\n'),
-    };
+    const failed = filtered.filter(r => r.auditError);
+    if (failed.length > 0) {
+      return {
+        success: false,
+        output: sections.join('\n\n'),
+        error: `Vulnerability scan incomplete: ${failed.map(r => `${r.packageManager}: ${r.auditError}`).join('; ')}`,
+      };
+    }
+
+    return { success: true, output: sections.join('\n\n') };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error(`scan_vulnerabilities error: ${msg}`);
@@ -447,6 +476,9 @@ export function formatVulnerabilityReport(reports: VulnerabilityReport[]): strin
     totalVulns += r.summary.total;
     lines.push(`\n${r.packageManager}: ${r.summary.total} vulnerabilities`);
     lines.push(`  Critical: ${r.summary.critical} | High: ${r.summary.high} | Medium: ${r.summary.medium} | Low: ${r.summary.low}`);
+    if (r.auditError) {
+      lines.push(`  Audit failed: ${r.auditError}`);
+    }
   }
 
   lines.unshift(`Total: ${totalVulns} vulnerabilities across ${reports.length} package manager(s)`);

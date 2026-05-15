@@ -161,7 +161,7 @@ describe('scanDependencies', () => {
     expect(reports[0].vulnerabilities[0].severity).toBe('critical');
   });
 
-  it('should handle command returning null', async () => {
+  it('should record an audit error when audit command output is unavailable', async () => {
     (existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) =>
       p.endsWith('package.json')
     );
@@ -171,6 +171,8 @@ describe('scanDependencies', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0].vulnerabilities).toHaveLength(0);
     expect(reports[0].summary.total).toBe(0);
+    expect(reports[0].auditError).toContain('npm audit --json failed');
+    expect(reports[0].auditError).toContain('not found');
   });
 });
 
@@ -208,6 +210,20 @@ describe('executeScanVulnerabilities', () => {
     expect(result.success).toBe(true);
     expect(result.output).toContain('not detected');
   });
+
+  it('should fail when a detected package manager cannot be audited', async () => {
+    (existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) =>
+      p.endsWith('package.json')
+    );
+    (execSync as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('npm audit missing'); });
+
+    const result = await executeScanVulnerabilities({ package_manager: 'npm' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Vulnerability scan incomplete');
+    expect(result.error).toContain('npm audit missing');
+    expect(result.output).toContain('Audit failed');
+  });
 });
 
 describe('formatVulnerabilityReport', () => {
@@ -230,6 +246,19 @@ describe('formatVulnerabilityReport', () => {
     expect(output).toContain('npm');
     expect(output).toContain('2 vulnerabilities');
     expect(output).toContain('High: 1');
+  });
+
+  it('should include audit errors in formatted reports', () => {
+    const reports: VulnerabilityReport[] = [{
+      packageManager: 'npm',
+      vulnerabilities: [],
+      auditError: 'npm audit unavailable',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+    }];
+
+    const output = formatVulnerabilityReport(reports);
+
+    expect(output).toContain('Audit failed: npm audit unavailable');
   });
 
   it('should show total across multiple package managers', () => {
