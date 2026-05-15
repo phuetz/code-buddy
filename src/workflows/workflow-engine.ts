@@ -25,33 +25,6 @@ export class WorkflowEngine extends EventEmitter {
     super();
     this.stateManager = new WorkflowStateManager(statesDir);
     this.stepManager = new StepManager();
-    this.registerBuiltInWorkflows();
-  }
-
-  private registerBuiltInWorkflows(): void {
-    this.registerWorkflow({
-      id: 'validation',
-      name: 'Validation Workflow',
-      description: 'Basic validation workflow template',
-      version: '1.0.0',
-      steps: [
-        { id: 'validate-input', name: 'Validate Input', action: 'noop' },
-        { id: 'process', name: 'Process', action: 'noop' },
-        { id: 'complete', name: 'Complete', action: 'log' },
-      ],
-    });
-
-    this.registerWorkflow({
-      id: 'data-pipeline',
-      name: 'Data Pipeline',
-      description: 'Sample data processing pipeline',
-      version: '1.0.0',
-      steps: [
-        { id: 'extract', name: 'Extract Data', action: 'noop' },
-        { id: 'transform', name: 'Transform Data', action: 'noop' },
-        { id: 'load', name: 'Load Data', action: 'noop' },
-      ],
-    });
   }
 
   registerWorkflow(workflow: WorkflowDefinition): void {

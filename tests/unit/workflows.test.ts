@@ -665,12 +665,8 @@ describe('WorkflowEngine', () => {
       expect(engine.off).toBeDefined();
     });
 
-    it('should register built-in workflows', () => {
-      const workflows = engine.getWorkflows();
-      const workflowIds = workflows.map(w => w.id);
-
-      expect(workflowIds).toContain('validation');
-      expect(workflowIds).toContain('data-pipeline');
+    it('should start without sample workflows', () => {
+      expect(engine.getWorkflows()).toEqual([]);
     });
   });
 
@@ -747,7 +743,7 @@ describe('WorkflowEngine', () => {
       engine.registerWorkflow(workflow2);
 
       const workflows = engine.getWorkflows();
-      expect(workflows.length).toBeGreaterThanOrEqual(2);
+      expect(workflows).toEqual([workflow1, workflow2]);
     });
   });
 
@@ -1380,11 +1376,18 @@ describe('WorkflowEngine', () => {
     });
 
     it('should format available workflows', () => {
+      engine.registerWorkflow({
+        id: 'format-workflow',
+        name: 'Format Workflow',
+        description: 'Workflow for testing list formatting',
+        version: '1.0.0',
+        steps: [],
+      });
+
       const formatted = engine.formatWorkflows();
 
       expect(formatted).toContain('Available Workflows');
-      expect(formatted).toContain('validation');
-      expect(formatted).toContain('data-pipeline');
+      expect(formatted).toContain('format-workflow');
     });
 
     it('should return message when no workflows registered', () => {

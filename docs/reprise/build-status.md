@@ -273,6 +273,15 @@ npx eslint src/security/docker-sandbox/manager.ts src/security/docker-sandbox/in
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/workflows.test.ts
+# 104 tests passed after removing auto-registered noop sample workflows
+
+npx eslint src/workflows/workflow-engine.ts tests/unit/workflows.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -508,6 +517,9 @@ npm run typecheck
   client injecte, il pilote maintenant le binaire `docker` reel pour creer,
   demarrer, executer, inspecter et mesurer les conteneurs; le `MockDockerClient`
   reste explicite pour les tests.
+- `WorkflowEngine` ne pre-enregistre plus les workflows d'exemple `validation`
+  et `data-pipeline`, qui pouvaient terminer via des etapes `noop`. Les
+  workflows doivent maintenant etre enregistres explicitement avant execution.
 
 ## Blocage leve
 
