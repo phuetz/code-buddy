@@ -57,6 +57,25 @@ jest.mock("../../src/types/index.js", () => ({
 import { CodeBuddyClient as _CodeBuddyClient } from "../../src/codebuddy/client.js";
 const CodeBuddyClient = _CodeBuddyClient as unknown as jest.Mock;
 
+function mockDefaultCodeBuddyClient(): void {
+  CodeBuddyClient.mockImplementation(function() { return {
+    chat: jest.fn().mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: "Test response from model",
+          },
+        },
+      ],
+      usage: {
+        total_tokens: 150,
+        prompt_tokens: 100,
+        completion_tokens: 50,
+      },
+    }),
+  }; });
+}
+
 const envKeysToReset = [
   "CODEBUDDY_PROVIDER",
   "GROK_API_KEY",
@@ -133,6 +152,7 @@ describe("ParallelExecutor", () => {
     }
     process.env.CODEBUDDY_PROVIDER = "none";
     jest.clearAllMocks();
+    mockDefaultCodeBuddyClient();
     resetParallelExecutor();
     executor = new ParallelExecutor(createMockConfig());
   });
@@ -316,6 +336,25 @@ describe("ParallelExecutor", () => {
 
       expect(result.confidence).toBe(0);
       expect(result.responses.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it("should treat blank model responses as failed responses", async () => {
+      CodeBuddyClient.mockImplementation(function() { return {
+        chat: jest.fn().mockResolvedValue({
+          choices: [{ message: { content: "   " } }],
+          usage: { total_tokens: 12 },
+        }),
+      }; });
+
+      const blankExecutor = new ParallelExecutor(createMockConfig());
+      const result = await blankExecutor.execute("Test prompt", undefined, "all");
+
+      expect(result.aggregatedResponse).toBeUndefined();
+      expect(result.confidence).toBe(0);
+      expect(result.responses).toHaveLength(3);
+      expect(result.responses.every((response) =>
+        response.error?.includes("returned no response content")
+      )).toBe(true);
     });
   });
 
@@ -704,6 +743,31 @@ describe("ParallelExecutor", () => {
       const formatted = executor.formatResult(result);
 
       expect(formatted).toContain("Debate:");
+    });
+
+    it("should format missing aggregated output as an explicit failure summary", () => {
+      const formatted = executor.formatResult({
+        strategy: "all",
+        responses: [{
+          modelId: "model-empty",
+          modelName: "Empty Model",
+          content: "",
+          confidence: 0,
+          latency: 12,
+          tokensUsed: 0,
+          metadata: {},
+          error: "Model model-empty returned no response content",
+        }],
+        confidence: 0,
+        totalLatency: 12,
+        effectiveLatency: 12,
+        totalTokens: 0,
+        metadata: {},
+      });
+
+      expect(formatted).toContain("No aggregated response produced.");
+      expect(formatted).toContain("model-empty: Model model-empty returned no response content");
+      expect(formatted).not.toContain("(No response)");
     });
   });
 });

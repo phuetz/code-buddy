@@ -868,6 +868,9 @@ npm run typecheck
   ils exposent une erreur MCP.
 - La commande `buddy heartbeat tick` n'imprime plus `No response` si le moteur
   revient sans sortie agent; elle marque le tick comme echec CLI.
+- Le `ParallelExecutor` ne considere plus les reponses modele vides comme des
+  sorties valides et son formatteur affiche un echec d'agregation explicite au
+  lieu de `(No response)`.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

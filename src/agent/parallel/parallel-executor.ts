@@ -49,6 +49,10 @@ export class ParallelExecutor extends EventEmitter {
     this.initializeClients();
   }
 
+  private getUsableResponses(responses: ModelResponse[]): ModelResponse[] {
+    return responses.filter((response) => !response.error && response.content.trim().length > 0);
+  }
+
   /**
    * Initialize clients for each model
    */
@@ -202,7 +206,7 @@ export class ParallelExecutor extends EventEmitter {
     );
 
     const responses = await Promise.all(responsePromises);
-    const validResponses = responses.filter((r) => !r.error);
+    const validResponses = this.getUsableResponses(responses);
 
     // Aggregate results
     const aggregatedResponse = selectBest
@@ -238,19 +242,20 @@ export class ParallelExecutor extends EventEmitter {
       this.executeModel(model, prompt, systemPrompt)
     );
 
-    const firstResponse = await Promise.race(responsePromises);
     const allResponses = await Promise.all(responsePromises);
+    const firstResponse = this.getUsableResponses(allResponses)
+      .sort((a, b) => a.latency - b.latency)[0];
 
     return {
       strategy: "fastest",
       responses: allResponses,
-      aggregatedResponse: firstResponse.content,
-      confidence: firstResponse.confidence,
+      aggregatedResponse: firstResponse?.content,
+      confidence: firstResponse?.confidence || 0,
       totalLatency: Date.now() - startTime,
-      effectiveLatency: firstResponse.latency,
+      effectiveLatency: firstResponse?.latency || 0,
       totalTokens: allResponses.reduce((sum, r) => sum + r.tokensUsed, 0),
-      selectedModel: firstResponse.modelId,
-      metadata: { winner: firstResponse.modelId },
+      selectedModel: firstResponse?.modelId,
+      metadata: firstResponse ? { winner: firstResponse.modelId } : { fastestFailed: true },
     };
   }
 
@@ -331,13 +336,13 @@ export class ParallelExecutor extends EventEmitter {
     return {
       strategy: "route",
       responses: [response],
-      aggregatedResponse: response.content,
-      confidence: response.confidence,
+      aggregatedResponse: response.error ? undefined : response.content,
+      confidence: response.error ? 0 : response.confidence,
       totalLatency: Date.now() - startTime,
       effectiveLatency: response.latency,
       totalTokens: response.tokensUsed,
-      selectedModel: response.modelId,
-      metadata: { routingDecision: decision },
+      selectedModel: response.error ? undefined : response.modelId,
+      metadata: response.error ? { routingDecision: decision, error: response.error } : { routingDecision: decision },
     };
   }
 
@@ -357,7 +362,7 @@ export class ParallelExecutor extends EventEmitter {
     );
 
     const responses = await Promise.all(responsePromises);
-    const validResponses = responses.filter((r) => !r.error);
+    const validResponses = this.getUsableResponses(responses);
 
     // Check consensus
     const consensus = this.checkConsensus(validResponses);
@@ -395,7 +400,12 @@ export class ParallelExecutor extends EventEmitter {
     );
     totalTokens += initialResponses.reduce((sum, r) => sum + r.tokensUsed, 0);
 
-    let currentPositions = initialResponses.map((r) => ({
+    const validInitialResponses = this.getUsableResponses(initialResponses);
+    if (validInitialResponses.length === 0) {
+      throw new Error("No successful debate responses");
+    }
+
+    let currentPositions = validInitialResponses.map((r) => ({
       modelId: r.modelId,
       argument: r.content,
       confidence: r.confidence,
@@ -464,7 +474,7 @@ export class ParallelExecutor extends EventEmitter {
     const responses = await Promise.all(
       models.map((m) => this.executeModel(m, prompt, systemPrompt))
     );
-    const validResponses = responses.filter((r) => !r.error);
+    const validResponses = this.getUsableResponses(responses);
 
     // Synthesize responses using an LLM
     const synthesized = await this.synthesizeResponses(validResponses, prompt);
@@ -533,7 +543,10 @@ export class ParallelExecutor extends EventEmitter {
       ]);
       if (timeoutId) clearTimeout(timeoutId);
 
-      const content = response.choices[0]?.message?.content || "";
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      if (!content) {
+        throw new Error(`Model ${model.id} returned no response content`);
+      }
       const tokensUsed = response.usage?.total_tokens || 0;
       const latency = Date.now() - startTime;
 
@@ -690,13 +703,17 @@ Synthesize these responses into a single, comprehensive answer that:
 
     try {
       const response = await synthesizer.chat(messages, []);
-      const content = response.choices[0]?.message?.content || "";
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      if (!content) {
+        throw new Error("Synthesis model returned no response content");
+      }
 
       const answerMatch = content.match(/<synthesized_answer>([\s\S]*?)<\/synthesized_answer>/);
       const confMatch = content.match(/<confidence>([\d.]+)<\/confidence>/);
+      const synthesizedAnswer = answerMatch?.[1]?.trim() || content;
 
       return {
-        content: answerMatch?.[1]?.trim() || content,
+        content: synthesizedAnswer,
         confidence: confMatch ? parseFloat(confMatch[1]) : 0.7,
       };
     } catch {
@@ -759,9 +776,10 @@ Synthesize these responses into a single, comprehensive answer that:
    * Select best response based on confidence and quality
    */
   private selectBestResponse(responses: ModelResponse[]): ModelResponse | null {
-    if (responses.length === 0) return null;
+    const usableResponses = this.getUsableResponses(responses);
+    if (usableResponses.length === 0) return null;
 
-    return responses.reduce((best, r) => {
+    return usableResponses.reduce((best, r) => {
       // Score based on confidence and model weight
       const model = this.config.models.find((m) => m.id === r.modelId);
       const weight = model?.weight || 1;
@@ -1070,7 +1088,24 @@ Synthesize these responses into a single, comprehensive answer that:
     lines.push("");
     lines.push("─".repeat(40));
     lines.push("Response:");
-    lines.push(result.aggregatedResponse || "(No response)");
+    const aggregatedResponse = result.aggregatedResponse?.trim();
+    if (aggregatedResponse) {
+      lines.push(aggregatedResponse);
+    } else {
+      lines.push("No aggregated response produced.");
+      const responseErrors = result.responses
+        .filter((response) => response.error)
+        .map((response) => `${response.modelId}: ${response.error}`);
+      const metadataError = typeof result.metadata.error === "string" ? result.metadata.error : undefined;
+      const errors = metadataError ? [metadataError, ...responseErrors] : responseErrors;
+      if (errors.length > 0) {
+        lines.push("");
+        lines.push("Errors:");
+        for (const error of errors) {
+          lines.push(`  - ${error}`);
+        }
+      }
+    }
 
     lines.push("");
     lines.push("═".repeat(60));
