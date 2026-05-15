@@ -866,6 +866,8 @@ npm run typecheck
 - Les outils MCP `agent_chat` / `agent_task` / `agent_plan` ne renvoient plus
   `No response generated.` quand l'agent ne produit aucune entree exploitable;
   ils exposent une erreur MCP.
+- La commande `buddy heartbeat tick` n'imprime plus `No response` si le moteur
+  revient sans sortie agent; elle marque le tick comme echec CLI.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

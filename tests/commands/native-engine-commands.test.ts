@@ -284,7 +284,7 @@ describe('Native Engine CLI Commands', () => {
         expect(output).toContain('Suppressed (HEARTBEAT_OK)');
       });
 
-      it('should display "No response" when agentResponse is null', async () => {
+      it('should fail when agentResponse is missing', async () => {
         mockEngine.tick.mockResolvedValue({
           skipped: false,
           suppressed: false,
@@ -293,8 +293,8 @@ describe('Native Engine CLI Commands', () => {
 
         await program.parseAsync(['node', 'test', 'heartbeat', 'tick']);
 
-        const output = getLogOutput();
-        expect(output).toContain('Result:\nNo response');
+        expect(getErrorOutput()).toContain('Heartbeat tick failed: no agent response returned.');
+        expect(processExitSpy).toHaveBeenCalledWith(1);
       });
     });
   });

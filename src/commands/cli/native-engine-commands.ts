@@ -74,7 +74,13 @@ export function registerHeartbeatCommands(program: Command): void {
       } else if (result.suppressed) {
         console.log('Suppressed (HEARTBEAT_OK)');
       } else {
-        console.log(`Result:\n${result.agentResponse ?? 'No response'}`);
+        const agentResponse = result.agentResponse?.trim();
+        if (!agentResponse) {
+          console.error('Heartbeat tick failed: no agent response returned.');
+          process.exit(1);
+          return;
+        }
+        console.log(`Result:\n${agentResponse}`);
       }
     });
 }
