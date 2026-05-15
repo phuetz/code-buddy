@@ -7,7 +7,8 @@
 
 import { EventEmitter } from "events";
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from "../../codebuddy/client.js";
-import { getErrorMessage, ToolResult } from "../../types/index.js";
+import { getErrorMessage } from "../../types/index.js";
+import { formatToolResultContent } from "../../utils/tool-result-content.js";
 import {
   AgentRole,
   AgentConfig,
@@ -20,16 +21,6 @@ import {
   ToolExecutor,
   AgentCapability,
 } from "./types.js";
-
-const TOOL_COMPLETED_WITH_NO_OUTPUT = "Tool completed successfully with no output.";
-const TOOL_FAILED_WITH_NO_DETAILS = "Tool failed without error details.";
-
-function formatToolResultForAgent(result: ToolResult): string {
-  if (result.success) {
-    return result.output?.trim() || TOOL_COMPLETED_WITH_NO_OUTPUT;
-  }
-  return result.error?.trim() || result.output?.trim() || TOOL_FAILED_WITH_NO_DETAILS;
-}
 
 /**
  * Abstract base class for all agents
@@ -305,7 +296,7 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
 
           this.messages.push({
             role: "tool",
-            content: formatToolResultForAgent(result),
+            content: formatToolResultContent(result),
             tool_call_id: toolCall.id,
           });
         }

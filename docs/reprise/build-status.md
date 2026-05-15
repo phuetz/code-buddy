@@ -384,6 +384,15 @@ npx eslint src/utils/tool-result-content.ts src/agent/message-processor.ts src/a
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/subagents.test.ts tests/agent/subagents.test.ts tests/agent/multi-agent/base-agent-runtime.test.ts tests/cloud/cloud-agent-runner.test.ts tests/mcp/mcp-server.test.ts tests/agent/swe-agent.test.ts tests/agent/swe-agent-adapter.test.ts tests/unit/message-processor.test.ts tests/agent/execution/agent-executor.test.ts tests/unit/headless-output.test.ts
+# 435 tests passed after reusing the shared tool-result formatter in agent runtimes
+
+npx eslint src/utils/tool-result-content.ts src/agent/multi-agent/base-agent.ts src/agent/subagents.ts src/cloud/cloud-agent-runner.ts src/mcp/mcp-server.ts src/agent/specialized/swe-agent.ts src/agent/message-processor.ts src/agent/execution/agent-executor.ts src/utils/headless-output.ts src/hooks/use-input-handler.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -984,6 +993,9 @@ npm run typecheck
   passent maintenant par un formateur partage pour les resultats de tools:
   succes silencieux et echec sans detail ne deviennent plus `Success`,
   `Error` ou `Error occurred`.
+- Le meme formateur est reutilise par les runtimes BaseAgent/Subagent,
+  CloudAgentRunner, MCP server et SWE agent, pour eviter que ces surfaces
+  divergent a nouveau.
 - Le bridge A2A Code Buddy n'injecte plus `(empty result)` / `(no content)` pour
   les resultats de tools ou reponses finales silencieuses; il expose des
   messages de succes sans sortie explicites.

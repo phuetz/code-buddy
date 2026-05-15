@@ -15,6 +15,7 @@ import os from 'os';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 import { RunStore } from '../observability/run-store.js';
+import { formatToolResultContent } from '../utils/tool-result-content.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -443,8 +444,8 @@ export class CloudAgentRunner extends EventEmitter {
             const result = await executeToolHeadless(toolName, toolArgs, abortController.signal);
             toolSucceeded = result.success;
             toolResult = result.success
-              ? (result.output?.trim() || 'Tool completed successfully with no output.')
-              : `Error: ${result.error?.trim() || result.output?.trim() || 'tool failed without details'}`;
+              ? formatToolResultContent(result)
+              : `Error: ${formatToolResultContent(result)}`;
 
             // Track file changes
             if (result.filesChanged) {

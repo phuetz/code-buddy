@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import { AgentStateMachine, AgentStatus } from '../state-machine.js';
 import { TERMINATE_SIGNAL } from '../../tools/terminate-tool.js';
 import type { KnowledgeGraph } from '../../knowledge/knowledge-graph.js';
+import { formatToolResultContent } from '../../utils/tool-result-content.js';
 
 /** SWE Agent configuration */
 export interface SWEAgentConfig {
@@ -402,8 +403,8 @@ export class SWEAgent extends EventEmitter {
 
       // Truncate large outputs
       let output = result.success
-        ? result.output || 'Tool completed successfully with no output.'
-        : `Error: ${result.error || 'Unknown error'}`;
+        ? formatToolResultContent(result)
+        : `Error: ${formatToolResultContent(result)}`;
 
       if (output.length > this.config.maxObserve) {
         output = output.substring(0, this.config.maxObserve) + `\n... (truncated, ${output.length} chars total)`;

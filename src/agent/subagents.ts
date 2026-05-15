@@ -1,16 +1,7 @@
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../codebuddy/client.js";
 import { EventEmitter } from "events";
 import { ToolResult, getErrorMessage } from "../types/index.js";
-
-const TOOL_COMPLETED_WITH_NO_OUTPUT = "Tool completed successfully with no output.";
-const TOOL_FAILED_WITH_NO_DETAILS = "Tool failed without error details.";
-
-function formatToolResultForSubagent(result: ToolResult): string {
-  if (result.success) {
-    return result.output?.trim() || TOOL_COMPLETED_WITH_NO_OUTPUT;
-  }
-  return result.error?.trim() || result.output?.trim() || TOOL_FAILED_WITH_NO_DETAILS;
-}
+import { formatToolResultContent } from "../utils/tool-result-content.js";
 
 export interface SubagentConfig {
   name: string;
@@ -381,7 +372,7 @@ export class Subagent extends EventEmitter {
               const result = await executeTool(toolCall);
               messages.push({
                 role: "tool",
-                content: formatToolResultForSubagent(result),
+                content: formatToolResultContent(result),
                 tool_call_id: toolCall.id,
               });
             }

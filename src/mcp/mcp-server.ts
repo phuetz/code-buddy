@@ -43,6 +43,7 @@ import { registerSessionTools } from './mcp-session-tools.js';
 import { registerResources } from './mcp-resources.js';
 import { registerPrompts } from './mcp-prompts.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { formatToolResultContent } from '../utils/tool-result-content.js';
 
 // Read version from package.json (avoid import.meta.url for ts-jest compat)
 let packageVersion = '0.1.0';
@@ -390,10 +391,7 @@ export class CodeBuddyMCPServer {
    * Convert a ToolResult to MCP CallToolResult format.
    */
   private formatResult(result: ToolResult): { content: Array<{ type: 'text'; text: string }>; isError?: boolean } {
-    const output = result.output?.trim() || result.content?.trim();
-    const text = result.success
-      ? (output || 'Tool completed successfully with no output.')
-      : (result.error?.trim() || 'Tool failed without error details.');
+    const text = formatToolResultContent(result);
 
     return {
       content: [{ type: 'text' as const, text }],
