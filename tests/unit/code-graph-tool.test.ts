@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
     getStats: vi.fn(),
     query: vi.fn(),
     findEntity: vi.fn(),
+    formatEgoGraph: vi.fn(),
   };
 
   return {
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => {
     detectDrift: vi.fn(),
     formatDrift: vi.fn(),
     saveSnapshot: vi.fn(),
+    createGraphEmbeddingIndex: vi.fn(),
   };
 });
 
@@ -28,6 +30,10 @@ vi.mock('../../src/knowledge/graph-drift.js', () => ({
   saveSnapshot: mocks.saveSnapshot,
 }));
 
+vi.mock('../../src/knowledge/graph-embeddings.js', () => ({
+  createGraphEmbeddingIndex: mocks.createGraphEmbeddingIndex,
+}));
+
 import { CodeGraphTool } from '../../src/tools/registry/code-graph-tools.js';
 
 describe('CodeGraphTool drift', () => {
@@ -36,9 +42,15 @@ describe('CodeGraphTool drift', () => {
     mocks.graph.getStats.mockReturnValue({ tripleCount: 1 });
     mocks.graph.query.mockReturnValue([]);
     mocks.graph.findEntity.mockReturnValue(undefined);
+    mocks.graph.formatEgoGraph.mockReturnValue('');
     mocks.getSnapshotInfo.mockReturnValue({ path: 'code-graph-snapshot.json' });
     mocks.detectDrift.mockReturnValue(null);
     mocks.formatDrift.mockReturnValue('formatted drift');
+    mocks.createGraphEmbeddingIndex.mockReturnValue({
+      search: vi.fn().mockResolvedValue([]),
+      isReady: vi.fn().mockReturnValue(false),
+      rebuild: vi.fn(),
+    });
   });
 
   it('should keep missing snapshot as an actionable no-baseline result', async () => {
@@ -65,5 +77,31 @@ describe('CodeGraphTool drift', () => {
 
     expect(result.success).toBe(true);
     expect(result.output).toBe('formatted drift');
+  });
+
+  it('should fail semantic search when the embedding index is unavailable', async () => {
+    const result = await new CodeGraphTool().execute({
+      operation: 'semantic_search',
+      query: 'routing middleware',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Semantic search index is unavailable');
+  });
+
+  it('should report no semantic matches only when the index is ready', async () => {
+    mocks.createGraphEmbeddingIndex.mockReturnValue({
+      search: vi.fn().mockResolvedValue([]),
+      isReady: vi.fn().mockReturnValue(true),
+      rebuild: vi.fn(),
+    });
+
+    const result = await new CodeGraphTool().execute({
+      operation: 'semantic_search',
+      query: 'routing middleware',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('No semantic matches found for "routing middleware".');
   });
 });

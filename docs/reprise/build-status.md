@@ -701,6 +701,9 @@ npm run typecheck
 - Les checks script `ThreeWayDiff` ne passent plus si le scenario attendu ne
   produit pas de conflit; resolution et marqueurs deviennent des echecs
   explicites si la detection regresse.
+- `code_graph semantic_search` ne confond plus index d'embeddings indisponible
+  et zero resultat: index non pret => `success=false`; index pret sans match =>
+  reponse vide explicite.
 
 ## Blocage leve
 

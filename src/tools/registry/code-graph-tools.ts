@@ -354,7 +354,10 @@ export class CodeGraphTool implements ITool {
     const results = await index.search(query, 10);
 
     if (results.length === 0) {
-      return { success: true, output: `No semantic matches found for "${query}". Embeddings may not be available.` };
+      if (!index.isReady()) {
+        return { success: false, error: `Semantic search index is unavailable for "${query}". Build graph embeddings before retrying.` };
+      }
+      return { success: true, output: `No semantic matches found for "${query}".` };
     }
 
     const lines = [`Semantic search for "${query}":\n`];
