@@ -831,6 +831,9 @@ npm run typecheck
 - Le bridge SSE historique de Cowork ne clot plus une session en `idle` avec un
   `stream.message` vide; une fin de stream sans contenu assistant emet
   maintenant une erreur renderer.
+- Le provider `gemini-cli` ne transforme plus une enveloppe JSON sans
+  `response` ni un stream `result` sans message en reponse assistant vide; les
+  deux chemins echouent explicitement.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

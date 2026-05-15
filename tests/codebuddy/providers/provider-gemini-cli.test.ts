@@ -210,6 +210,30 @@ describe('GeminiCliProvider — chat() (non-streaming)', () => {
     await expect(provider.chat([{ role: 'user', content: 'x' }])).rejects.toThrow(/oh no/);
   });
 
+  it('throws when the JSON envelope has no response content', async () => {
+    state.nextRun.stdout = JSON.stringify({ stats: { input: 1, output: 0 } });
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-2.5-pro',
+      defaultMaxTokens: 1024,
+    });
+    await expect(provider.chat([{ role: 'user', content: 'x' }])).rejects.toThrow(
+      /empty response content/
+    );
+  });
+
+  it('throws when the JSON envelope response is blank', async () => {
+    state.nextRun.stdout = JSON.stringify({ response: '   ' });
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-2.5-pro',
+      defaultMaxTokens: 1024,
+    });
+    await expect(provider.chat([{ role: 'user', content: 'x' }])).rejects.toThrow(
+      /empty response content/
+    );
+  });
+
   it('handles missing stats gracefully (usage undefined)', async () => {
     state.nextRun.stdout = JSON.stringify({ response: 'plain' });
     const provider = new GeminiCliProvider({
@@ -329,6 +353,25 @@ describe('GeminiCliProvider — chatStream() (JSONL events)', () => {
       }
     };
     await expect(drain()).rejects.toThrow(/API_FAILURE/);
+  });
+
+  it('throws when the stream reaches result without message content', async () => {
+    state.nextRun.streamLines = [
+      JSON.stringify({ type: 'init', sessionId: 'abc' }),
+      JSON.stringify({ type: 'result', stats: { input: 5, output: 0 } }),
+    ];
+    const provider = new GeminiCliProvider({
+      binaryPath: '/fake/gemini',
+      model: 'gemini-2.5-pro',
+      defaultMaxTokens: 1024,
+    });
+
+    const drain = async () => {
+      for await (const _ of provider.chatStream([{ role: 'user', content: 'x' }])) {
+        /* consume */
+      }
+    };
+    await expect(drain()).rejects.toThrow(/empty response content/);
   });
 });
 

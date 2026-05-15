@@ -189,6 +189,9 @@ export class GeminiCliProvider implements Provider {
     }
 
     const content = parsed.response ?? '';
+    if (content.trim().length === 0) {
+      throw new Error('gemini-cli: empty response content');
+    }
     const usage = mapStatsToUsage(parsed.stats);
 
     return {
@@ -241,6 +244,9 @@ export class GeminiCliProvider implements Provider {
 
     const rl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
 
+    let emittedContent = false;
+    let sawResult = false;
+
     try {
       let bytesSeen = 0;
       for await (const line of rl) {
@@ -267,6 +273,9 @@ export class GeminiCliProvider implements Provider {
           case 'message': {
             const delta = event.delta ?? event.content ?? '';
             if (!delta) break;
+            if (delta.trim().length > 0) {
+              emittedContent = true;
+            }
             yield {
               id: 'gemini-cli-stream',
               object: 'chat.completion.chunk',
@@ -295,20 +304,7 @@ export class GeminiCliProvider implements Provider {
             break;
           }
           case 'result':
-            // Final stats — yield a final empty chunk with finish_reason.
-            yield {
-              id: 'gemini-cli-stream',
-              object: 'chat.completion.chunk',
-              created: Math.floor(Date.now() / 1000),
-              model,
-              choices: [
-                {
-                  index: 0,
-                  delta: {},
-                  finish_reason: 'stop',
-                },
-              ],
-            } as ChatCompletionChunk;
+            sawResult = true;
             break;
         }
       }
@@ -321,6 +317,24 @@ export class GeminiCliProvider implements Provider {
     const exitCode = await waitForExit(child);
     if (exitCode !== 0) {
       throw mapExitCode(exitCode, stderrChunks.join(''));
+    }
+    if (!emittedContent) {
+      throw new Error('gemini-cli: empty response content');
+    }
+    if (sawResult) {
+      yield {
+        id: 'gemini-cli-stream',
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
+      } as ChatCompletionChunk;
     }
   }
 }
