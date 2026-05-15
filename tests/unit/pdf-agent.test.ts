@@ -421,6 +421,19 @@ describe('PDFAgent', () => {
     it('should still initialize successfully', () => {
       expect(agent.isReady()).toBe(true);
     });
+
+    it('should fail extraction explicitly when parser is unavailable', async () => {
+      (agent as unknown as { pdfParse: null }).pdfParse = null;
+      const task: AgentTask = {
+        action: 'extract',
+        inputFiles: [mockFilePath],
+      };
+
+      const result = await agent.execute(task);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('PDF text extraction is not available');
+    });
   });
 
   describe('PDF parse error handling', () => {

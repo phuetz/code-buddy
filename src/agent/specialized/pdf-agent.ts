@@ -77,7 +77,7 @@ export class PDFAgent extends SpecializedAgent {
       this.isInitialized = true;
       this.emit('initialized');
     } catch (_error) {
-      // pdf-parse not available, will use fallback
+      // pdf-parse not available; extraction actions will fail explicitly.
       this.isInitialized = true;
       this.emit('initialized', { warning: 'pdf-parse not available, using limited functionality' });
     }
@@ -385,9 +385,9 @@ export class PDFAgent extends SpecializedAgent {
       }
     }
 
-    // Fallback: return basic info without text extraction
+    // Without the parser, text-bearing actions cannot honestly succeed.
     return {
-      success: true,
+      success: false,
       data: {
         metadata: {
           pageCount: 0,
@@ -396,7 +396,7 @@ export class PDFAgent extends SpecializedAgent {
         pages: [],
         text: '[PDF text extraction not available - install pdf-parse]',
       } as PDFExtractResult,
-      output: 'Warning: pdf-parse not available. Install with: npm install pdf-parse',
+      error: 'PDF text extraction is not available. Install pdf-parse to process PDF content.',
     };
   }
 

@@ -728,6 +728,9 @@ npm run typecheck
 - Les echecs d'enregistrement du pipeline middleware principal (`turn-limit`,
   `cost-limit`, context warnings, reasoning, auto-repair, quality-gate) passent
   de `debug` a `warn` avec le garde-fou degrade explicitement nomme.
+- `PDFAgent` ne renvoie plus `success=true` avec un texte placeholder quand
+  `pdf-parse` est absent; les actions d'extraction PDF echouent explicitement
+  avec l'installation manquante.
 
 ## Blocage leve
 
