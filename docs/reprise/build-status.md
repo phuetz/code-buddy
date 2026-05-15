@@ -601,6 +601,10 @@ npm run typecheck
   sortie ou l'erreur dans la reponse de commande. Le chat ne se contente plus
   d'un message `Running script...` pendant que le resultat part seulement dans
   `console.log`.
+- `/fcs run` et `/fcs templates` attendent maintenant le travail reel et
+  renvoient la sortie, l'erreur ou les templates dans la reponse de commande.
+  Le chat ne se contente plus de `Running FCS script...` ou `Loading FCS
+  templates...` pendant que le resultat part seulement dans `console.log`.
 
 ## Blocage leve
 

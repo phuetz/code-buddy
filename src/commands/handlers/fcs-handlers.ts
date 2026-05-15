@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { executeFCS, executeFCSFile, parseFCS, initScriptRegistry } from "../../scripting/index.js";
-import type { FCSConfig as _FCSConfig } from "../../scripting/index.js"; // Type-only import for documentation
+import type { ScriptResult } from "../../scripting/index.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -21,7 +21,7 @@ export interface CommandHandlerResult {
 /**
  * Handle /fcs command
  */
-export function handleFCS(args: string[]): CommandHandlerResult {
+export async function handleFCS(args: string[]): Promise<CommandHandlerResult> {
   const action = args[0]?.toLowerCase();
   const target = args.slice(1).join(' ');
 
@@ -73,7 +73,7 @@ export function handleFCS(args: string[]): CommandHandlerResult {
 /**
  * Run an FCS script file
  */
-function handleFCSRun(filePath: string): CommandHandlerResult {
+async function handleFCSRun(filePath: string): Promise<CommandHandlerResult> {
   if (!filePath) {
     return {
       handled: true,
@@ -106,46 +106,53 @@ Examples:
     };
   }
 
-  // Execute asynchronously
-  executeFCSAsync(fullPath);
-
-  return {
-    handled: true,
-    entry: {
-      type: "assistant",
-      content: `Running FCS script: ${path.basename(fullPath)}...`,
-      timestamp: new Date(),
-    },
-  };
-}
-
-/**
- * Execute FCS script asynchronously
- */
-async function executeFCSAsync(filePath: string): Promise<void> {
   try {
-    const result = await executeFCSFile(filePath, {
+    const result = await executeFCSFile(fullPath, {
       verbose: true,
       enableAI: true,
       enableBash: true,
       enableFileOps: true,
     });
 
-    if (result.success) {
-      console.log('\nFCS Script Output:');
-      console.log('-'.repeat(40));
-      result.output.forEach(line => console.log(line));
-      console.log('-'.repeat(40));
-      console.log(`Script completed in ${result.duration}ms`);
-      if (result.returnValue !== null && result.returnValue !== undefined) {
-        console.log(`Return value: ${JSON.stringify(result.returnValue)}`);
-      }
-    } else {
-      console.log(`\nScript failed: ${result.error}`);
-    }
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: formatFCSResult(fullPath, result),
+        timestamp: new Date(),
+      },
+    };
   } catch (error) {
-    console.log(`\nScript error: ${error instanceof Error ? error.message : error}`);
+    return {
+      handled: true,
+      entry: {
+        type: "assistant",
+        content: `FCS script error: ${error instanceof Error ? error.message : error}`,
+        timestamp: new Date(),
+      },
+    };
   }
+}
+
+function formatFCSResult(filePath: string, result: ScriptResult): string {
+  const output = result.output.length > 0 ? result.output.join('\n') : '(no output)';
+  const returnValue = result.returnValue !== null && result.returnValue !== undefined
+    ? `\nReturn value: ${JSON.stringify(result.returnValue)}`
+    : '';
+
+  if (result.success) {
+    return `FCS Script Output: ${path.basename(filePath)}
+${'-'.repeat(40)}
+${output}
+${'-'.repeat(40)}
+Script completed in ${result.duration}ms${returnValue}`;
+  }
+
+  const outputBlock = result.output.length > 0
+    ? `\n\nOutput before failure:\n${output}`
+    : '';
+
+  return `FCS script failed: ${result.error || 'Unknown script error'}${outputBlock}`;
 }
 
 /**
@@ -301,15 +308,12 @@ FileCommander Script files have .fcs or .fc extension.`;
 /**
  * Handle /fcs templates command
  */
-function handleFCSTemplates(search?: string): CommandHandlerResult {
-  // Execute async operation and handle result
-  handleFCSTemplatesAsync(search);
-
+async function handleFCSTemplates(search?: string): Promise<CommandHandlerResult> {
   return {
     handled: true,
     entry: {
       type: "assistant",
-      content: "Loading FCS templates...",
+      content: await loadFCSTemplates(search),
       timestamp: new Date(),
     },
   };
@@ -318,7 +322,7 @@ function handleFCSTemplates(search?: string): CommandHandlerResult {
 /**
  * Handle /fcs templates command (async)
  */
-async function handleFCSTemplatesAsync(search?: string): Promise<void> {
+async function loadFCSTemplates(search?: string): Promise<string> {
   try {
     const registry = await initScriptRegistry();
 
@@ -327,13 +331,12 @@ async function handleFCSTemplatesAsync(search?: string): Promise<void> {
       const results = registry.searchTemplates(search);
 
       if (results.length === 0) {
-        console.log(`\nNo templates found matching: ${search}`);
-        console.log('\nUse /fcs templates to see all available templates.');
-        return;
+        return `No templates found matching: ${search}
+
+Use /fcs templates to see all available templates.`;
       }
 
       const lines = [
-        '',
         `FCS Templates matching "${search}"`,
         '='.repeat(50),
         ''
@@ -348,15 +351,13 @@ async function handleFCSTemplatesAsync(search?: string): Promise<void> {
         lines.push('');
       }
 
-      console.log(lines.join('\n'));
-      return;
+      return lines.join('\n');
     }
 
     // List all templates
-    const content = registry.formatTemplateList();
-    console.log('\n' + content);
+    return registry.formatTemplateList();
   } catch (error) {
-    console.log(`\nError loading templates: ${error instanceof Error ? error.message : error}`);
+    return `Error loading templates: ${error instanceof Error ? error.message : error}`;
   }
 }
 
