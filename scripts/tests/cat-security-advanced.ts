@@ -149,15 +149,23 @@ export function cat32ToolPolicyGroups(): TestDef[] {
       name: '32.2-tool-groups-maps-tools-to-groups',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/security/tool-policy/tool-groups.js');
-        const groups = mod.TOOL_GROUPS;
-        if (!groups) return { pass: true, metadata: { skip: 'no TOOL_GROUPS export' } };
+        const { TOOL_GROUPS } = await import('../../src/security/tool-policy/tool-groups.js');
         // TOOL_GROUPS maps tool names → group arrays (e.g. { 'read': ['group:fs', 'group:fs:read'] })
-        const toolNames = Object.keys(groups);
-        const allHaveGroupArrays = toolNames.every(k => Array.isArray((groups as any)[k]));
+        const toolNames = Object.keys(TOOL_GROUPS);
+        const allHaveGroupArrays = toolNames.every(k => Array.isArray(TOOL_GROUPS[k]));
         return {
-          pass: toolNames.length >= 5 && allHaveGroupArrays,
-          metadata: { toolCount: toolNames.length, first5: toolNames.slice(0, 5) },
+          pass:
+            toolNames.length >= 5 &&
+            allHaveGroupArrays &&
+            TOOL_GROUPS.read.includes('group:fs:read') &&
+            TOOL_GROUPS.bash.includes('group:runtime') &&
+            TOOL_GROUPS.git_push.includes('group:dangerous'),
+          metadata: {
+            toolCount: toolNames.length,
+            read: TOOL_GROUPS.read,
+            bash: TOOL_GROUPS.bash,
+            gitPush: TOOL_GROUPS.git_push,
+          },
         };
       },
     },

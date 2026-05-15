@@ -692,6 +692,9 @@ npm run typecheck
 - Les checks script des canaux niche et du `PRSessionLinker` ne passent plus
   par des skips verts ou une ancienne API fictive `link/get/unlink`: ils
   exigent les modules locaux et testent `linkToPR/getCurrentPR/unlinkPR`.
+- Le check script `TOOL_GROUPS` ne skippe plus si l'export manque et verifie
+  des mappings sensibles (`read`, `bash`, `git_push`) au lieu de seulement
+  compter les entrees.
 
 ## Blocage leve
 
