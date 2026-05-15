@@ -195,7 +195,7 @@ describe('BrowserTool', () => {
       // If playwright is installed and browsers are available, success is acceptable
 
       await freshTool.dispose();
-    });
+    }, 15000);
   });
 
   describe('Navigation', () => {

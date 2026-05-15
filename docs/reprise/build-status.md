@@ -1102,6 +1102,9 @@ npm run typecheck
 - Les hook runners ne renvoient plus un succes vide quand ils sont desactives
   ou sans hook correspondant; ils indiquent explicitement qu'aucun hook n'a ete
   execute.
+- Le test browser qui verifie le chemin "Playwright indisponible" a maintenant
+  un timeout local plus large; il etait vert isole mais pouvait depasser 5 s
+  pendant `npm run validate` sous charge.
 
 ## Blocage leve
 
