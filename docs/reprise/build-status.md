@@ -234,6 +234,15 @@ npx eslint src/commands/handlers/channel-handlers.ts tests/channels/channel-hand
 
 npm run typecheck
 # passed
+
+npm test -- tests/features/tailscale-dashboard-nodes.test.ts
+# 73 tests passed after failed device pairing cleanup
+
+npx eslint src/nodes/device-node.ts tests/features/tailscale-dashboard-nodes.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -451,6 +460,9 @@ npm run typecheck
 - Le handler `buddy channels start` ne remplace plus un type de channel inconnu
   par un `MockChannel`. Une configuration inconnue echoue maintenant avec une
   erreur explicite au lieu de creer un canal factice.
+- `DeviceNodeManager.pairDevice()` ne marque plus un appareil comme paire quand
+  la connexion SSH/ADB/local echoue et n'injecte plus `system_run` comme
+  capacite de secours. Le pairing echoue proprement et ne persiste pas le node.
 
 ## Blocage leve
 

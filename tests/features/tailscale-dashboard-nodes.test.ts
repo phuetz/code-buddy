@@ -308,6 +308,16 @@ describe('DeviceNodeManager', () => {
 
   beforeEach(async () => {
     jest.resetModules();
+    mockTransport.connect.mockReset();
+    mockTransport.connect.mockResolvedValue(undefined);
+    mockTransport.disconnect.mockReset();
+    mockTransport.disconnect.mockResolvedValue(undefined);
+    mockTransport.isConnected.mockReset();
+    mockTransport.isConnected.mockReturnValue(true);
+    mockTransport.getCapabilities.mockReset();
+    mockTransport.getCapabilities.mockResolvedValue(['system_run']);
+    mockTransport.execute.mockReset();
+    mockTransport.execute.mockResolvedValue({ stdout: 'stub: executed', stderr: '', exitCode: 0 });
     const mod = await import('../../src/nodes/device-node.js');
     DeviceNodeManager = mod.DeviceNodeManager;
     DeviceNodeManager.resetInstance();
@@ -333,6 +343,18 @@ describe('DeviceNodeManager', () => {
     expect(device.name).toBe('My Mac');
     expect(device.paired).toBe(true);
     expect(device.capabilities).toContain('camera');
+  });
+
+  it('should reject failed pairing instead of registering fallback capabilities', async () => {
+    mockTransport.connect.mockRejectedValueOnce(new Error('connection refused'));
+
+    const mgr = DeviceNodeManager.getInstance();
+
+    await expect(mgr.pairDevice('bad1', 'Broken Device', 'ssh')).rejects.toThrow(
+      'Device pairing failed for Broken Device (bad1): connection refused'
+    );
+    expect(mgr.getDevice('bad1')).toBeUndefined();
+    expect(mgr.isDevicePaired('bad1')).toBe(false);
   });
 
   it('should unpair a device', async () => {

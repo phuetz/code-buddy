@@ -238,8 +238,9 @@ export class DeviceNodeManager {
     this.devices.set(id, device);
 
     // Connect and auto-detect capabilities
+    let transport: DeviceTransport | null = null;
     try {
-      const transport = await this.createTransport(device);
+      transport = await this.createTransport(device);
       await transport.connect();
       this.transports.set(id, transport);
 
@@ -257,8 +258,14 @@ export class DeviceNodeManager {
 
       logger.info(`Device paired with capabilities: ${caps.join(', ')}`, { id, name });
     } catch (err) {
-      logger.warn(`Device paired but connection failed: ${err instanceof Error ? err.message : String(err)}`);
-      device.capabilities = ['system_run'];
+      const message = err instanceof Error ? err.message : String(err);
+      if (transport) {
+        await transport.disconnect().catch(() => {});
+      }
+      this.transports.delete(id);
+      this.devices.delete(id);
+      logger.warn(`Device pairing failed: ${message}`, { id, name, transportType });
+      throw new Error(`Device pairing failed for ${name} (${id}): ${message}`);
     }
 
     this.saveDevices();
