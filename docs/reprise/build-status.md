@@ -822,6 +822,9 @@ npm run typecheck
 - Les providers LLM plugins bundles ne convertissent plus une reponse API sans
   contenu en chaine vide; Azure, Bedrock, Groq, Together, Fireworks, OpenRouter,
   Ollama, vLLM, Copilot, Gemma et TurboQuant levent maintenant une erreur.
+- L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
+  serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
+  levent maintenant une erreur exploitable.
 
 ## Blocage leve
 

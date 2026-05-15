@@ -298,14 +298,18 @@ export class CodeBuddyAdapter extends EventEmitter {
 
     if (!res.ok) {
       logError('[CodeBuddyAdapter] chatSync HTTP error:', res.status);
-      return '';
+      throw new Error(`Code Buddy chatSync failed: HTTP ${res.status} ${res.statusText}`);
     }
 
     interface SyncResponse {
       choices?: Array<{ message?: { content?: string } }>;
     }
     const data = (await res.json()) as SyncResponse;
-    return data.choices?.[0]?.message?.content ?? '';
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (content.trim().length === 0) {
+      throw new Error('Code Buddy chatSync returned empty content');
+    }
+    return content;
   }
 
   // ---- Agentic task API -------------------------------------------------------
@@ -327,11 +331,15 @@ export class CodeBuddyAdapter extends EventEmitter {
 
     if (!res.ok) {
       logError('[CodeBuddyAdapter] submitTask HTTP error:', res.status);
-      return '';
+      throw new Error(`Code Buddy submitTask failed: HTTP ${res.status} ${res.statusText}`);
     }
 
     const data = (await res.json()) as TaskResponse;
-    return data.taskId ?? data.id ?? '';
+    const taskId = data.taskId ?? data.id ?? '';
+    if (!taskId) {
+      throw new Error('Code Buddy submitTask returned no task id');
+    }
+    return taskId;
   }
 
   /** Polls the status of a previously submitted task. */
@@ -341,7 +349,7 @@ export class CodeBuddyAdapter extends EventEmitter {
     });
     if (!res.ok) {
       logWarn('[CodeBuddyAdapter] getTaskStatus HTTP error:', res.status);
-      return { status: 'unknown' };
+      throw new Error(`Code Buddy getTaskStatus failed: HTTP ${res.status} ${res.statusText}`);
     }
     return res.json();
   }
