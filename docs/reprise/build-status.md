@@ -704,6 +704,9 @@ npm run typecheck
 - `code_graph semantic_search` ne confond plus index d'embeddings indisponible
   et zero resultat: index non pret => `success=false`; index pret sans match =>
   reponse vide explicite.
+- Le test reel Gemini `5.3-agent-multi-tool-sequence` ne valide plus n'importe
+  quel lot d'appels outils paralleles: il exige maintenant `list_directory` et
+  `read_file` quand Gemini choisit de les appeler en une seule reponse.
 
 ## Blocage leve
 

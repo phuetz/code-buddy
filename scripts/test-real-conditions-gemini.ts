@@ -772,7 +772,11 @@ function cat5AgenticLoop(): TestDef[] {
         const firstName = tc[0]?.function.name;
         // If Gemini called both tools in parallel, that's also valid
         if (tc.length >= 2) {
-          return { pass: true, metadata: { parallelTools: tc.map(t => t.function.name) } };
+          const parallelTools = tc.map(t => t.function.name);
+          return {
+            pass: parallelTools.includes('list_directory') && parallelTools.includes('read_file'),
+            metadata: { parallelTools },
+          };
         }
 
         // Provide first tool result, expect second tool
