@@ -9,7 +9,7 @@
  *   5. onModelSelected — post-selection hook
  *
  * Phases that are not implemented by the provider are silently skipped.
- * An auth failure short-circuits the entire pipeline.
+ * Auth failures and empty model discovery short-circuit the pipeline.
  *
  * Native Engine v2026.3.19 — Provider Plugin Onboarding Architecture.
  */
@@ -81,6 +81,10 @@ export async function runProviderOnboarding(
     try {
       models = await hooks['discovery.run']();
       logger.debug(`${tag} Discovered ${models.length} model(s)`);
+      if (models.length === 0) {
+        logger.warn(`${tag} Discovery returned no models`);
+        return { success: false, message: 'Discovery returned no models' };
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.warn(`${tag} Discovery threw: ${msg}`);

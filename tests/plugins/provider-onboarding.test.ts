@@ -175,7 +175,7 @@ describe('Provider Onboarding', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should skip modelPicker when no models discovered', async () => {
+    it('should fail when discovery returns no models', async () => {
       const callOrder: string[] = [];
 
       const hooks: ProviderOnboardingHooks = {
@@ -199,7 +199,8 @@ describe('Provider Onboarding', () => {
 
       const result = await runProviderOnboarding(provider);
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Discovery returned no models');
       // modelPicker should not be called when models list is empty
       expect(callOrder).toEqual(['discovery.run']);
     });

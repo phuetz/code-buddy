@@ -804,6 +804,9 @@ npm run typecheck
 - Les hooks `command` du `HookRunner` CLI n'imposent plus `sh -c` sur Windows;
   ils utilisent maintenant `cmd /c` sous Windows et `sh -c` ailleurs, ce qui
   rend le dry-run/les hooks utilisables dans l'environnement principal du repo.
+- L'onboarding des providers plugins ne renvoie plus "completed" quand la
+  decouverte ne trouve aucun modele; il echoue explicitement avant le picker,
+  ce qui evite de configurer un provider LLM sans modele utilisable.
 
 ## Blocage leve
 
