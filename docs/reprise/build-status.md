@@ -893,6 +893,8 @@ npm run typecheck
 - `AdvancedParallelExecutor` ne considere plus un runner `success=true` sans
   sortie ni fichiers modifies comme un vrai succes, et les erreurs/timeout sans
   sortie gardent maintenant un `output` exploitable pour les agregateurs.
+- Wide Research ne stocke plus les workers rates avec `output:''`; un worker
+  en echec garde maintenant une sortie explicite `Worker failed: ...`.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

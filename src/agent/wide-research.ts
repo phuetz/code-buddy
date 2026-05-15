@@ -97,6 +97,13 @@ export function ensureResearchAggregationOutput(output: string | null | undefine
   return output;
 }
 
+export function formatResearchWorkerFailureOutput(error: string | null | undefined): string {
+  const detail = error?.trim();
+  return detail
+    ? `Worker failed: ${detail}`
+    : 'Worker failed without output or error details.';
+}
+
 export function formatWideResearchToolResult(result: WideResearchResult): ToolResult {
   const summary = [
     `# Wide Research: ${result.topic}`,
@@ -182,12 +189,13 @@ export class WideResearchOrchestrator extends EventEmitter {
         const workerStart = Date.now();
         const remainingOverallMs = Math.max(1_000, deadline - Date.now());
         if (remainingOverallMs <= 1_000) {
+          const error = 'Skipped: overall research timeout reached';
           const result: ResearchWorkerResult = {
             subtopic,
             workerIndex,
-            output: '',
+            output: formatResearchWorkerFailureOutput(error),
             success: false,
-            error: 'Skipped: overall research timeout reached',
+            error,
             durationMs: 0,
           };
           this.emit('progress', { type: 'worker_done', workerIndex, subtopic, success: false } satisfies WideResearchProgress);
@@ -210,12 +218,13 @@ export class WideResearchOrchestrator extends EventEmitter {
           this.emit('progress', { type: 'worker_done', workerIndex, subtopic, success: true } satisfies WideResearchProgress);
           return result;
         } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
           const result: ResearchWorkerResult = {
             subtopic,
             workerIndex,
-            output: '',
+            output: formatResearchWorkerFailureOutput(error),
             success: false,
-            error: err instanceof Error ? err.message : String(err),
+            error,
             durationMs: Date.now() - workerStart,
           };
           this.emit('progress', { type: 'worker_done', workerIndex, subtopic, success: false } satisfies WideResearchProgress);
