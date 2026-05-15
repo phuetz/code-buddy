@@ -212,8 +212,11 @@ export class HookRunner {
   ): Promise<ExtendedHookResult> {
     return new Promise((resolve) => {
       const timeout = handler.timeout || 30000;
+      const isWindows = process.platform === 'win32';
+      const shell = isWindows ? 'cmd' : 'sh';
+      const shellFlag = isWindows ? '/c' : '-c';
 
-      const child = spawn('sh', ['-c', handler.command], {
+      const child = spawn(shell, [shellFlag, handler.command], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,

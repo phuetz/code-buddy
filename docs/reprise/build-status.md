@@ -801,6 +801,9 @@ npm run typecheck
 - Le status ChatGPT/Codex OAuth de Cowork ne renvoie plus `success=true` quand
   les credentials existent mais sont illisibles; le panneau Settings remet aussi
   le badge ChatGPT a "deconnecte" si le status check echoue.
+- Les hooks `command` du `HookRunner` CLI n'imposent plus `sh -c` sur Windows;
+  ils utilisent maintenant `cmd /c` sous Windows et `sh -c` ailleurs, ce qui
+  rend le dry-run/les hooks utilisables dans l'environnement principal du repo.
 
 ## Blocage leve
 
