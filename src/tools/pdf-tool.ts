@@ -67,6 +67,14 @@ export class PDFTool {
       const buffer = await this.vfs.readFileBuffer(resolvedPath);
       const content = await this.parsePDF(buffer, options);
 
+      if (content.text.startsWith('[PDF contains minimal extractable text')) {
+        return {
+          success: false,
+          error: 'No extractable PDF text found. The file may be image-based, encrypted, or use unsupported compression.',
+          data: content
+        };
+      }
+
       return {
         success: true,
         output: this.formatOutput(content, filePath),

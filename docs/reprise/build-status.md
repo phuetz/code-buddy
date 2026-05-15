@@ -731,6 +731,9 @@ npm run typecheck
 - `PDFAgent` ne renvoie plus `success=true` avec un texte placeholder quand
   `pdf-parse` est absent; les actions d'extraction PDF echouent explicitement
   avec l'installation manquante.
+- `PDFTool.extractText` ne considere plus le placeholder "minimal extractable
+  text" comme une extraction reussie; les PDF image/chiffres/non supportes
+  renvoient maintenant une erreur explicite avec les donnees partielles.
 
 ## Blocage leve
 

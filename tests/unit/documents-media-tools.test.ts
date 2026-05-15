@@ -66,6 +66,19 @@ describe('Document and Media Tools VFS Migration', () => {
       expect(mockStat).toHaveBeenCalled();
       expect(mockReadFileBuffer).toHaveBeenCalled();
     });
+
+    it('should fail when no PDF text is extractable', async () => {
+      const tool = new PDFTool();
+
+      mockExists.mockResolvedValue(true);
+      mockStat.mockResolvedValue({ size: 1024 });
+      mockReadFileBuffer.mockResolvedValue(Buffer.from('%PDF-1.4...'));
+
+      const result = await tool.extractText('test.pdf');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('No extractable PDF text found');
+    });
   });
 
   describe('ArchiveTool', () => {
