@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { requireFlowResponseContent } from '../../src/commands/flow.js';
+import { requireDirectResearchContent } from '../../src/commands/research/index.js';
 import { requireDocsLlmContent } from '../../src/commands/slash/docs-command.js';
 
 describe('user-facing LLM response content guards', () => {
@@ -30,5 +31,17 @@ describe('user-facing LLM response content guards', () => {
     expect(() => requireDocsLlmContent({
       choices: [{ message: { content: '\n\t' } }],
     })).toThrow('/docs LLM enrichment returned no response content');
+  });
+
+  it('keeps non-empty direct research content', () => {
+    expect(requireDirectResearchContent('topic', {
+      choices: [{ message: { content: '# Report' } }],
+    })).toBe('# Report');
+  });
+
+  it('rejects blank direct research content', () => {
+    expect(() => requireDirectResearchContent('test topic', {
+      choices: [{ message: { content: '' } }],
+    })).toThrow('Direct research returned no provider content for topic: test topic');
   });
 });

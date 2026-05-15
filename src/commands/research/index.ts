@@ -18,6 +18,17 @@ import path from 'path';
 import { getSettingsManager } from '../../utils/settings-manager.js';
 import { detectProviderFromEnv, selectModelForDetectedProvider } from '../../utils/provider-detector.js';
 
+export function requireDirectResearchContent(
+  topic: string,
+  response: { choices?: Array<{ message?: { content?: string | null } | null }> | null }
+): string {
+  const content = response.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new Error(`Direct research returned no provider content for topic: ${topic}`);
+  }
+  return content;
+}
+
 async function runDirectResearch(
   topic: string,
   apiKey: string,
@@ -44,11 +55,7 @@ async function runDirectResearch(
     ),
   ]);
 
-  const content = response?.choices?.[0]?.message?.content;
-  if (typeof content === 'string' && content.trim().length > 0) {
-    return content;
-  }
-  return `# Research Report: ${topic}\n\nNo content returned by provider.`;
+  return requireDirectResearchContent(topic, response);
 }
 
 function detectReportPathFromArgv(argv: string[]): string | undefined {

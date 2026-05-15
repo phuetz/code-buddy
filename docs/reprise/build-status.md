@@ -407,9 +407,9 @@ npm run typecheck
 # passed
 
 npm test -- tests/commands/llm-response-content.test.ts
-# 5 tests passed after buddy flow and /docs LLM empty-content guards
+# 7 tests passed after buddy flow, /docs, and direct research LLM empty-content guards
 
-npx eslint src/commands/flow.ts src/commands/slash/docs-command.ts tests/commands/llm-response-content.test.ts --quiet
+npx eslint src/commands/flow.ts src/commands/slash/docs-command.ts src/commands/research/index.ts tests/commands/llm-response-content.test.ts --quiet
 # passed
 
 npm run typecheck
@@ -1049,6 +1049,9 @@ npm run typecheck
 - `buddy flow` et `/docs --with-llm` refusent maintenant les reponses LLM
   absentes ou blanches au lieu d'injecter `''` dans le plan ou les docs
   enrichies.
+- `buddy research` en mode direct/non interactif echoue maintenant si le
+  provider ne renvoie pas de contenu, au lieu de fabriquer un rapport Markdown
+  vide.
 - `ArchitectMode` refuse maintenant un plan architecte vide et marque les
   etapes editeur sans texte ni tool call comme echecs, au lieu de les compter
   comme reussies.
