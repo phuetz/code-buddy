@@ -466,7 +466,14 @@ export class CloudAgentRunner extends EventEmitter {
 
       // Success
       if (task.status === 'running') {
-        task.status = 'completed';
+        if (task.error) {
+          task.status = 'failed';
+        } else if (task.result === undefined) {
+          task.status = 'failed';
+          task.error = `Reached max tool rounds (${maxRounds}) without a final LLM response`;
+        } else {
+          task.status = 'completed';
+        }
         task.completedAt = new Date();
         task.filesChanged = Array.from(filesChanged);
       }

@@ -639,6 +639,9 @@ npm run typecheck
 - `NotebookTool.kernel_start` ne declare plus un kernel Jupyter demarre si le
   process quitte pendant la fenetre de demarrage. Les sorties `error`/`exit`/
   `close` sont maintenant captees et renvoyees comme echec.
+- `CloudAgentRunner` ne classe plus une tache comme `completed` quand le LLM
+  ne renvoie aucun choix ou quand les rounds outils sont epuises sans reponse
+  finale. Ces cas deviennent des echecs explicites.
 
 ## Blocage leve
 

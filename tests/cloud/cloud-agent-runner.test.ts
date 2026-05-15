@@ -264,6 +264,54 @@ describe('CloudAgentRunner', () => {
       }
     });
 
+    it('should fail when the LLM returns no choices', async () => {
+      MockCodeBuddyClient.mockImplementationOnce(function () {
+        return {
+          chat: vi.fn().mockResolvedValue({
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 0 },
+          }),
+        };
+      });
+
+      const taskId = await runner.submitTask({ goal: 'No choices test' });
+      await waitForCompletion(runner, taskId, 5000);
+
+      const status = await runner.getTaskStatus(taskId);
+      expect(status.status).toBe('failed');
+      expect(status.error).toBe('No response from LLM');
+    });
+
+    it('should fail when max tool rounds are exhausted without a final response', async () => {
+      MockCodeBuddyClient.mockImplementationOnce(function () {
+        return {
+          chat: vi.fn().mockResolvedValue({
+            choices: [{
+              message: {
+                role: 'assistant',
+                content: '',
+                tool_calls: [{
+                  id: 'call_1',
+                  function: { name: 'read_file', arguments: '{}' },
+                }],
+              },
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        };
+      });
+
+      const taskId = await runner.submitTask({
+        goal: 'Tool loop test',
+        maxToolRounds: 1,
+      });
+      await waitForCompletion(runner, taskId, 5000);
+
+      const status = await runner.getTaskStatus(taskId);
+      expect(status.status).toBe('failed');
+      expect(status.error).toContain('Reached max tool rounds');
+    });
+
     it('should set completedAt when task finishes', async () => {
       const taskId = await runner.submitTask({ goal: 'Completion time test' });
       await waitForCompletion(runner, taskId, 5000);
