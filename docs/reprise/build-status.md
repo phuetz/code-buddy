@@ -689,6 +689,9 @@ npm run typecheck
 - Les checks script `DailyResetManager` et `BackgroundTaskManager` ne skippent
   plus vert si les exports attendus disparaissent; reset quotidien, singleton
   et operations inexistantes sont maintenant verifies comme contrats reels.
+- Les checks script des canaux niche et du `PRSessionLinker` ne passent plus
+  par des skips verts ou une ancienne API fictive `link/get/unlink`: ils
+  exigent les modules locaux et testent `linkToPR/getCurrentPR/unlinkPR`.
 
 ## Blocage leve
 

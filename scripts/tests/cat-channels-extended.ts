@@ -122,48 +122,32 @@ export function cat46NicheChannels(): TestDef[] {
       name: '46.2-irc-channel-exists',
       timeout: 5000,
       fn: async () => {
-        try {
-          const mod = await import('../../src/channels/irc/index.js');
-          return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
-        } catch {
-          return { pass: true, metadata: { skip: 'irc module not available' } };
-        }
+        const mod = await import('../../src/channels/irc/index.js');
+        return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
       },
     },
     {
       name: '46.3-feishu-channel-exists',
       timeout: 5000,
       fn: async () => {
-        try {
-          const mod = await import('../../src/channels/feishu/index.js');
-          return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
-        } catch {
-          return { pass: true, metadata: { skip: 'feishu module not available' } };
-        }
+        const mod = await import('../../src/channels/feishu/index.js');
+        return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
       },
     },
     {
       name: '46.4-synology-chat-exists',
       timeout: 5000,
       fn: async () => {
-        try {
-          const mod = await import('../../src/channels/synology-chat/index.js');
-          return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
-        } catch {
-          return { pass: true, metadata: { skip: 'synology module not available' } };
-        }
+        const mod = await import('../../src/channels/synology-chat/index.js');
+        return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
       },
     },
     {
       name: '46.5-line-channel-exists',
       timeout: 5000,
       fn: async () => {
-        try {
-          const mod = await import('../../src/channels/line/index.js');
-          return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
-        } catch {
-          return { pass: true, metadata: { skip: 'line module not available' } };
-        }
+        const mod = await import('../../src/channels/line/index.js');
+        return { pass: Object.keys(mod).length >= 1, metadata: { exports: Object.keys(mod) } };
       },
     },
   ];
@@ -191,51 +175,56 @@ export function cat47PRSessionLinker(): TestDef[] {
       name: '47.2-instantiation',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/integrations/pr-session-linker.js');
-        const Linker = mod.PRSessionLinker || mod.default;
-        if (!Linker) return { pass: true, metadata: { skip: 'no PRSessionLinker export' } };
-        const linker = new Linker();
-        return { pass: linker !== undefined };
+        const { PRSessionLinker } = await import('../../src/integrations/pr-session-linker.js');
+        const linker = new PRSessionLinker();
+        return {
+          pass: linker.getCurrentPR() === null && linker.getReviewStatus() === null && linker.formatPRFooter() === '',
+        };
       },
     },
     {
       name: '47.3-link-and-get',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/integrations/pr-session-linker.js');
-        const Linker = mod.PRSessionLinker || mod.default;
-        if (!Linker) return { pass: true, metadata: { skip: 'no export' } };
-        const linker = new Linker();
-        const linkFn = linker.link || linker.linkSession || linker.associate;
-        const getFn = linker.get || linker.getSession || linker.getLinkedSession;
-        if (!linkFn || !getFn) return { pass: true, metadata: { skip: 'no link/get methods' } };
-        linkFn.call(linker, 'PR-123', 'session-abc');
-        const result = getFn.call(linker, 'PR-123');
-        return {
-          pass: result === 'session-abc' || result?.sessionId === 'session-abc',
-          metadata: { result },
-        };
+        const { PRSessionLinker } = await import('../../src/integrations/pr-session-linker.js');
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => ({ ok: false }) as Response;
+        try {
+          const linker = new PRSessionLinker();
+          const result = await linker.linkToPR('https://github.com/example/repo/pull/123');
+          const current = linker.getCurrentPR();
+          return {
+            pass:
+              result.number === 123 &&
+              current?.number === 123 &&
+              linker.getReviewStatus() === 'pending' &&
+              linker.formatPRFooter().includes('PR #123'),
+            metadata: { result, current },
+          };
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
       },
     },
     {
       name: '47.4-unlink',
       timeout: 5000,
       fn: async () => {
-        const mod = await import('../../src/integrations/pr-session-linker.js');
-        const Linker = mod.PRSessionLinker || mod.default;
-        if (!Linker) return { pass: true, metadata: { skip: 'no export' } };
-        const linker = new Linker();
-        const linkFn = linker.link || linker.linkSession || linker.associate;
-        const unlinkFn = linker.unlink || linker.unlinkSession || linker.remove;
-        if (!linkFn || !unlinkFn) return { pass: true, metadata: { skip: 'no methods' } };
-        linkFn.call(linker, 'PR-456', 'session-xyz');
-        unlinkFn.call(linker, 'PR-456');
-        const getFn = linker.get || linker.getSession || linker.getLinkedSession;
-        const result = getFn?.call(linker, 'PR-456');
-        return {
-          pass: result === undefined || result === null,
-          metadata: { afterUnlink: result },
-        };
+        const { PRSessionLinker } = await import('../../src/integrations/pr-session-linker.js');
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => ({ ok: false }) as Response;
+        try {
+          const linker = new PRSessionLinker();
+          await linker.linkToPR('https://github.com/example/repo/pull/456');
+          linker.unlinkPR();
+          const result = linker.getCurrentPR();
+          return {
+            pass: result === null && linker.getReviewStatus() === null && linker.formatPRFooter() === '',
+            metadata: { afterUnlink: result },
+          };
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
       },
     },
   ];
