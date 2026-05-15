@@ -605,6 +605,9 @@ npm run typecheck
   renvoient la sortie, l'erreur ou les templates dans la reponse de commande.
   Le chat ne se contente plus de `Running FCS script...` ou `Loading FCS
   templates...` pendant que le resultat part seulement dans `console.log`.
+- `/batch` ne lance plus une unite dependante apres l'echec de sa dependance.
+  Les dependances ne sont satisfaites que par des unites reussies; les unites
+  bloquees sont maintenant marquees `Skipped` avec la dependance en cause.
 
 ## Blocage leve
 

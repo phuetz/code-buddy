@@ -555,6 +555,34 @@ describe('CC13: Batch Handlers', () => {
     expect(order[1]).toBe('b');
   });
 
+  it('executeBatchPlan does not run units whose dependency failed', async () => {
+    const { executeBatchPlan } = await import('../../src/commands/handlers/batch-handlers.js');
+    const order: string[] = [];
+
+    const results = await executeBatchPlan(
+      {
+        goal: 'test',
+        units: [
+          { label: 'a', instruction: 'do a' },
+          { label: 'b', instruction: 'do b', dependsOn: ['a'] },
+        ],
+      },
+      async (label, _instr) => {
+        order.push(label);
+        if (label === 'a') {
+          return { label, success: false, summary: 'failed', durationMs: 10 };
+        }
+        return { label, success: true, summary: 'should not run', durationMs: 10 };
+      }
+    );
+
+    expect(order).toEqual(['a']);
+    expect(results).toHaveLength(2);
+    expect(results[1].label).toBe('b');
+    expect(results[1].success).toBe(false);
+    expect(results[1].summary).toContain('Skipped: failed dependency a');
+  });
+
   it('formatBatchResults shows summary', async () => {
     const { formatBatchResults } = await import('../../src/commands/handlers/batch-handlers.js');
     const output = formatBatchResults([

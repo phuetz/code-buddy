@@ -159,24 +159,54 @@ export async function executeBatchPlan(
   spawnFn: (label: string, instruction: string) => Promise<BatchResult>,
 ): Promise<BatchResult[]> {
   const results: BatchResult[] = [];
-  const completed = new Set<string>();
+  const succeeded = new Set<string>();
+  const failed = new Set<string>();
 
   // Topological sort: execute units respecting dependencies
   const remaining = [...plan.units];
 
   while (remaining.length > 0) {
+    const blocked = remaining.filter(u =>
+      u.dependsOn?.some(dep => failed.has(dep))
+    );
+
+    for (const unit of blocked) {
+      const failedDeps = unit.dependsOn?.filter(dep => failed.has(dep)) ?? [];
+      results.push({
+        label: unit.label,
+        success: false,
+        summary: `Skipped: failed dependency ${failedDeps.join(', ')}`,
+        durationMs: 0,
+      });
+      failed.add(unit.label);
+      const idx = remaining.indexOf(unit);
+      if (idx >= 0) remaining.splice(idx, 1);
+    }
+
+    if (remaining.length === 0) {
+      break;
+    }
+
     // Find units whose dependencies are satisfied
     const ready = remaining.filter(u =>
-      !u.dependsOn?.length || u.dependsOn.every(dep => completed.has(dep))
+      !u.dependsOn?.length || u.dependsOn.every(dep => succeeded.has(dep))
     );
 
     if (ready.length === 0) {
-      // Circular dependency or unresolvable — execute all remaining
-      logger.debug('Batch: unresolvable dependencies, executing remaining units');
+      // Circular or missing dependencies cannot be executed honestly.
+      logger.debug('Batch: unresolvable dependencies, skipping remaining units');
       for (const unit of remaining) {
-        ready.push(unit);
+        const missingDeps = unit.dependsOn?.filter(dep => !succeeded.has(dep)) ?? [];
+        results.push({
+          label: unit.label,
+          success: false,
+          summary: `Skipped: unresolved dependencies ${missingDeps.join(', ') || '(unknown)'}`,
+          durationMs: 0,
+        });
+        failed.add(unit.label);
       }
       remaining.length = 0;
+      break;
     }
 
     // Remove ready units from remaining
@@ -196,7 +226,11 @@ export async function executeBatchPlan(
 
       if (settled.status === 'fulfilled') {
         results.push(settled.value);
-        completed.add(unit.label);
+        if (settled.value.success) {
+          succeeded.add(unit.label);
+        } else {
+          failed.add(unit.label);
+        }
       } else {
         results.push({
           label: unit.label,
@@ -204,7 +238,7 @@ export async function executeBatchPlan(
           summary: `Error: ${settled.reason}`,
           durationMs: 0,
         });
-        completed.add(unit.label); // Mark as done even on failure
+        failed.add(unit.label);
       }
     }
   }
