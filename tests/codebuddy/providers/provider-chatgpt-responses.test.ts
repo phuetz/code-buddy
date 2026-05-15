@@ -329,6 +329,19 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(toolCalls).toEqual([{ id: 'c1', name: 'search', args: '{"q":"X"}' }]);
   });
 
+  it('throws when the response completes without assistant content or tool calls', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.created"}\n\n',
+      'data: {"type":"response.completed"}\n\n',
+    ]);
+
+    await expect(async () => {
+      for await (const _chunk of parseSseStream(stream, 'gpt-5.5')) {
+        /* drain */
+      }
+    }).rejects.toThrow('ChatGPT Responses backend returned no assistant content or tool calls');
+  });
+
   it('throws on response.failed with a useful message', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.failed","response":{"error":{"code":"rate_limited","message":"Slow down"}}}\n\n',
@@ -498,6 +511,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(streamingResponse([
+        'data: {"type":"response.output_text.delta","delta":"ok"}\n\n',
         'data: {"type":"response.completed"}\n\n',
       ]));
 
@@ -645,6 +659,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     const responses: Response[] = [
       streamingResponse([
         'data: {"type":"response.output_item.done","item":{"type":"reasoning","encrypted_content":"stale-blob"}}\n\n',
+        'data: {"type":"response.output_text.delta","delta":"first"}\n\n',
         'data: {"type":"response.completed"}\n\n',
       ]),
       streamingResponse([
@@ -685,6 +700,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
 
   it('does NOT include encrypted_reasoning when reasoning effort is unset', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamingResponse([
+      'data: {"type":"response.output_text.delta","delta":"ok"}\n\n',
       'data: {"type":"response.completed"}\n\n',
     ]));
 
@@ -839,7 +855,10 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
   // so a stalled TLS/auth phase would hang the agent loop indefinitely.
   it('passes an AbortSignal to fetch (so connect timeout can fire)', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      streamingResponse(['data: {"type":"response.completed"}\n\n']),
+      streamingResponse([
+        'data: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+        'data: {"type":"response.completed"}\n\n',
+      ]),
     );
 
     const provider = new ChatGptResponsesProvider({

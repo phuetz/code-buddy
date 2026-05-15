@@ -641,6 +641,7 @@ export async function* parseSseStream(
   const decoder = new TextDecoder();
   let buffer = '';
   let chunkIndex = 0;
+  let emittedUsefulOutput = false;
 
   const makeChunk = (delta: DeltaWithReasoning, finishReason?: string): ChatCompletionChunk => ({
     id: `chatcmpl-codex-${chunkIndex++}`,
@@ -653,6 +654,12 @@ export async function* parseSseStream(
       finish_reason: (finishReason as ChatCompletionChunk['choices'][0]['finish_reason']) ?? null,
     }],
   });
+  const finish = (): ChatCompletionChunk => {
+    if (!emittedUsefulOutput) {
+      throw new Error('ChatGPT Responses backend returned no assistant content or tool calls');
+    }
+    return makeChunk({}, 'stop');
+  };
 
   try {
     while (true) {
@@ -697,7 +704,7 @@ export async function* parseSseStream(
         if (dataLines.length === 0) continue;
         const dataStr = dataLines.join('\n');
         if (dataStr === '[DONE]') {
-          yield makeChunk({}, 'stop');
+          yield finish();
           return;
         }
 
@@ -722,6 +729,9 @@ export async function* parseSseStream(
         const type = parsed.type;
 
         if (type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
+          if (parsed.delta.trim().length > 0) {
+            emittedUsefulOutput = true;
+          }
           yield makeChunk({ content: parsed.delta });
           continue;
         }
@@ -745,6 +755,7 @@ export async function* parseSseStream(
         if (type === 'response.output_item.done' && parsed.item?.type === 'function_call') {
           const item = parsed.item;
           if (item.name && item.call_id) {
+            emittedUsefulOutput = true;
             yield makeChunk({
               tool_calls: [{
                 index: 0,
@@ -776,7 +787,7 @@ export async function* parseSseStream(
         }
 
         if (type === 'response.completed') {
-          yield makeChunk({}, 'stop');
+          yield finish();
           return;
         }
 

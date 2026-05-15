@@ -834,6 +834,9 @@ npm run typecheck
 - Le provider `gemini-cli` ne transforme plus une enveloppe JSON sans
   `response` ni un stream `result` sans message en reponse assistant vide; les
   deux chemins echouent explicitement.
+- Le provider ChatGPT Responses refuse maintenant les streams termines sans
+  texte assistant utile ni tool call; les tours uniquement `reasoning` ne
+  peuvent plus etre pris pour une reponse reussie.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
