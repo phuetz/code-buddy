@@ -36,6 +36,7 @@ export interface DependencyAnalysis {
   prodDependencies: number;
   devDependencies: number;
   outdatedCount: number;
+  warnings: string[];
   dependencies: PackageDependency[];
   outdated: PackageDependency[];
   unused: string[];
@@ -129,8 +130,11 @@ export async function analyzeDependencies(
 
   // Check for outdated packages
   let outdated: PackageDependency[] = [];
+  const warnings: string[] = [];
   if (opts.checkOutdated) {
-    outdated = await checkOutdatedPackages(rootDir, dependencies);
+    const result = await checkOutdatedPackages(rootDir, dependencies);
+    outdated = result.outdated;
+    warnings.push(...result.warnings);
   }
 
   // Check for unused dependencies
@@ -142,7 +146,9 @@ export async function analyzeDependencies(
   // Check for circular dependencies
   let circular: string[][] = [];
   if (opts.checkCircular) {
-    circular = findCircularDependencies(rootDir);
+    const result = findCircularDependencies(rootDir);
+    circular = result.circular;
+    warnings.push(...result.warnings);
   }
 
   // Build dependency graph
@@ -156,6 +162,7 @@ export async function analyzeDependencies(
     prodDependencies: Object.keys(prodDeps).length,
     devDependencies: Object.keys(devDeps).length,
     outdatedCount: outdated.length,
+    warnings,
     dependencies,
     outdated,
     unused,
@@ -171,8 +178,9 @@ export async function analyzeDependencies(
 async function checkOutdatedPackages(
   rootDir: string,
   dependencies: PackageDependency[]
-): Promise<PackageDependency[]> {
+): Promise<{ outdated: PackageDependency[]; warnings: string[] }> {
   const outdated: PackageDependency[] = [];
+  const warnings: string[] = [];
 
   try {
     const output = execSync('npm outdated --json', {
@@ -194,10 +202,12 @@ async function checkOutdatedPackages(
     }
   } catch (error) {
     // npm outdated returns non-zero exit code when packages are outdated
+    let handledStdout = false;
     if (error instanceof Error && 'stdout' in error) {
       try {
         const stdout = (error as { stdout: string }).stdout;
         if (stdout) {
+          handledStdout = true;
           const outdatedData = JSON.parse(stdout);
           for (const [name, info] of Object.entries(outdatedData) as [string, { current: string; wanted: string; latest: string }][]) {
             const dep = dependencies.find(d => d.name === name);
@@ -210,12 +220,16 @@ async function checkOutdatedPackages(
           }
         }
       } catch {
-        // Ignore parse errors
+        warnings.push('Failed to parse npm outdated output; outdated dependency check is incomplete.');
       }
+    }
+
+    if (!handledStdout) {
+      warnings.push('npm outdated did not return output; outdated dependency check is incomplete.');
     }
   }
 
-  return outdated;
+  return { outdated, warnings };
 }
 
 /**
@@ -320,8 +334,9 @@ async function getSourceFiles(rootDir: string): Promise<string[]> {
 /**
  * Find circular dependencies in the project
  */
-function findCircularDependencies(rootDir: string): string[][] {
+function findCircularDependencies(rootDir: string): { circular: string[][]; warnings: string[] } {
   const circular: string[][] = [];
+  const warnings: string[] = [];
 
   try {
     // Try to use madge if available
@@ -334,10 +349,10 @@ function findCircularDependencies(rootDir: string): string[][] {
     const circles = JSON.parse(output || '[]');
     circular.push(...circles);
   } catch {
-    // madge not available, skip circular check
+    warnings.push('madge circular dependency check did not run; circular dependency results are incomplete.');
   }
 
-  return circular;
+  return { circular, warnings };
 }
 
 /**
@@ -431,6 +446,14 @@ export function formatDependencyReport(analysis: DependencyAnalysis): string {
     lines.push('Circular Dependencies:');
     for (const cycle of analysis.circular) {
       lines.push(`  ${cycle.join(' -> ')}`);
+    }
+    lines.push('');
+  }
+
+  if (analysis.warnings.length > 0) {
+    lines.push('Warnings:');
+    for (const warning of analysis.warnings) {
+      lines.push(`  - ${warning}`);
     }
     lines.push('');
   }

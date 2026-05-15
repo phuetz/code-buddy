@@ -664,6 +664,9 @@ npm run typecheck
 - `/vulns` ne transforme plus l'absence d'un outil d'audit ou une sortie JSON
   illisible en `0 vulnerabilite`. Les audits incomplets sont marques
   `success=false`, avec le detail partiel disponible dans `output`.
+- `DependencyAnalyzer` n'enterre plus les checks optionnels non executes:
+  `npm outdated` sans sortie et `madge` indisponible ajoutent maintenant des
+  avertissements au rapport au lieu de laisser croire a zero outdated/cycle.
 
 ## Blocage leve
 
