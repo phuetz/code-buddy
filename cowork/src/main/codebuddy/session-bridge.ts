@@ -141,13 +141,7 @@ export class SessionBridge {
           }
 
           case 'done': {
-            this.sendStreamMessage({
-              sessionId,
-              role: 'assistant',
-              content: fullContent,
-            });
-            this.sendSessionStatus({ sessionId, status: 'idle' });
-            log('[SessionBridge] session done', sessionId);
+            this.finishSession(sessionId, fullContent);
             return;
           }
 
@@ -164,12 +158,7 @@ export class SessionBridge {
       }
 
       // Generator exhausted without an explicit 'done' event — treat as done.
-      this.sendStreamMessage({
-        sessionId,
-        role: 'assistant',
-        content: fullContent,
-      });
-      this.sendSessionStatus({ sessionId, status: 'idle' });
+      this.finishSession(sessionId, fullContent);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logError('[SessionBridge] unhandled error during session', sessionId, err);
@@ -193,6 +182,24 @@ export class SessionBridge {
     if (!this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data);
     }
+  }
+
+  private finishSession(sessionId: string, fullContent: string): void {
+    if (fullContent.trim().length === 0) {
+      const message = 'Code Buddy session ended without assistant content';
+      logError('[SessionBridge] empty assistant content', sessionId);
+      this.sendError({ message, sessionId });
+      this.sendSessionStatus({ sessionId, status: 'error' });
+      return;
+    }
+
+    this.sendStreamMessage({
+      sessionId,
+      role: 'assistant',
+      content: fullContent,
+    });
+    this.sendSessionStatus({ sessionId, status: 'idle' });
+    log('[SessionBridge] session done', sessionId);
   }
 
   private sendSessionStatus(payload: SessionStatusPayload): void {

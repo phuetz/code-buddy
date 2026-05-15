@@ -828,6 +828,9 @@ npm run typecheck
 - Les providers locaux WebLLM et Ollama ne renvoient plus une completion vide
   comme succes; les appels non-stream et les streams totalement muets echouent
   avec une erreur explicite.
+- Le bridge SSE historique de Cowork ne clot plus une session en `idle` avec un
+  `stream.message` vide; une fin de stream sans contenu assistant emet
+  maintenant une erreur renderer.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
