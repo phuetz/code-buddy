@@ -216,7 +216,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       expect(payload.modelRequested).toBe('grok-3-mini-fast');
     });
 
-    it('returns empty text when the LLM response has no content (defensive)', async () => {
+    it('METHOD_ERROR when the LLM response has no content', async () => {
       const chat = vi.fn(async () => ({
         choices: [{ message: { role: 'assistant', content: null }, finish_reason: 'length' }],
       }));
@@ -227,10 +227,8 @@ describe('peer-chat-bridge — Phase (d).15', () => {
         baseCtx,
       );
 
-      expect(r.ok).toBe(true);
-      const payload = r.payload as { text: string; finishReason: string };
-      expect(payload.text).toBe('');
-      expect(payload.finishReason).toBe('length');
+      expect(r.ok).toBe(false);
+      expect(r.error?.message).toContain('LLM returned empty content');
     });
   });
 
@@ -317,6 +315,31 @@ describe('peer-chat-bridge — Phase (d).15', () => {
         baseCtx,
       );
       expect(afterClear.payload).toEqual({ found: false });
+    });
+
+    it('marks dispatch failed when the LLM returns empty content', async () => {
+      const chat = vi.fn(async () => ({
+        choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'stop' }],
+      }));
+      wirePeerChatBridge(() => ({ chat } as unknown as ReturnType<PeerChatClientGetter>));
+
+      const accepted = await dispatchPeerRequest(
+        {
+          id: 'disp-empty',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-empty-result',
+            prompt: 'Return something',
+          },
+        },
+        baseCtx,
+      );
+
+      expect(accepted.ok).toBe(true);
+      const failed = await waitForDispatch('run-empty-result', 'failed');
+      const payload = failed.payload as { status: string; error?: string };
+      expect(payload.status).toBe('failed');
+      expect(payload.error).toContain('LLM returned empty content');
     });
   });
 });

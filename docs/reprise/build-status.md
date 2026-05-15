@@ -813,6 +813,9 @@ npm run typecheck
 - Cowork ne transforme plus une commande `sudo` terminee avec un code de sortie
   non nul en simple sortie texte; le wrapper de mot de passe rejette maintenant
   l'execution avec le code/signal et le stderr/stdout utile.
+- Le bridge Fleet `peer.chat` / `peer.chat-stream` / `peer.dispatch` ne traite
+  plus une reponse LLM vide comme un succes; l'appel devient un echec explicite
+  et les dispatchs en arriere-plan passent en `failed`.
 
 ## Blocage leve
 

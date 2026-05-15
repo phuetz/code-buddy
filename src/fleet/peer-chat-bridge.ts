@@ -36,6 +36,13 @@ let wired = false;
 
 const DEFAULT_SYSTEM_PROMPT = 'Answer this side question briefly. Do not use tools.';
 
+function requireNonEmptyPeerText(text: string, method: string): string {
+  if (text.trim().length === 0) {
+    throw new Error(`${method}: LLM returned empty content`);
+  }
+  return text;
+}
+
 /**
  * Register the `peer.chat` method on the peer-rpc registry. The
  * `getClient` closure is captured and called on EACH invocation, so
@@ -86,8 +93,13 @@ export function wirePeerChatBridge(
       chatOptions,
     );
 
+    const text = requireNonEmptyPeerText(
+      response?.choices?.[0]?.message?.content ?? '',
+      'peer.chat',
+    );
+
     return {
-      text: response?.choices?.[0]?.message?.content ?? '',
+      text,
       // The CodeBuddyResponse shape doesn't expose the model name
       // directly (provider-specific). Echo what the caller asked for
       // so they can attribute the response correctly.
@@ -149,8 +161,10 @@ export function wirePeerChatBridge(
       if (chunk?.usage) usage = chunk.usage;
     }
 
+    const text = requireNonEmptyPeerText(aggregate, 'peer.chat-stream');
+
     return {
-      text: aggregate,
+      text,
       modelRequested: model,
       finishReason: finishReason ?? undefined,
       usage,
@@ -282,7 +296,10 @@ async function runDispatchedTask(state: DispatchState): Promise<void> {
     [],
     chatOptions,
   );
-  state.result = response?.choices?.[0]?.message?.content ?? '';
+  state.result = requireNonEmptyPeerText(
+    response?.choices?.[0]?.message?.content ?? '',
+    'peer.dispatch',
+  );
   state.status = 'completed';
   state.completedAt = Date.now();
 }

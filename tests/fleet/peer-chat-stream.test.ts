@@ -162,6 +162,18 @@ describe('peer.chat-stream method', () => {
     expect(payload.text).toBe('hi there');
   });
 
+  it('fails when the stream completes without content', async () => {
+    const fakeClient = makeStreamingClient([]);
+    wirePeerChatBridge(() => fakeClient as never);
+    const response = await dispatchPeerRequest(
+      { id: 'req-empty-stream', method: 'peer.chat-stream', params: { prompt: 'say hi' } },
+      baseCtx({ emitChunk: () => undefined }),
+    );
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('LLM returned empty content');
+  });
+
   it('echoes traceId in the response payload', async () => {
     const fakeClient = makeStreamingClient(['ok']);
     wirePeerChatBridge(() => fakeClient as never);
