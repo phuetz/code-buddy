@@ -453,6 +453,25 @@ describe('WebSearchTool', () => {
     });
   });
 
+  describe('searchPerplexity', () => {
+    it('should fail when Perplexity returns no answer content', async () => {
+      process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+      webSearchTool = new WebSearchTool();
+      mockedAxios.post.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: '   ' } }],
+          citations: [],
+        },
+      });
+
+      const result = await webSearchTool.searchPerplexity('empty answer query');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Perplexity search returned no answer content');
+      expect(result.output).toBeUndefined();
+    });
+  });
+
   describe('clearCache', () => {
     it('should clear the search cache', async () => {
       const mockHtml = `

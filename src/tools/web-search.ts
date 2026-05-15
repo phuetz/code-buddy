@@ -329,10 +329,14 @@ export class WebSearchTool {
       return { success: true, output: this.formatPerplexityResult(cached.result, query) };
     }
 
-    const result = await this.runPerplexitySearch(query, options);
+    try {
+      const result = await this.runPerplexitySearch(query, options);
 
-    this.perplexityCache.set(cacheKey, { result, timestamp: Date.now() });
-    return { success: true, output: this.formatPerplexityResult(result, query) };
+      this.perplexityCache.set(cacheKey, { result, timestamp: Date.now() });
+      return { success: true, output: this.formatPerplexityResult(result, query) };
+    } catch (error) {
+      return { success: false, error: `Perplexity search failed: ${getErrorMessage(error)}` };
+    }
   }
 
   // ============================================================================
@@ -533,7 +537,10 @@ export class WebSearchTool {
       },
     );
 
-    const content = response.data.choices?.[0]?.message?.content ?? 'No response';
+    const content = response.data.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      throw new Error('Perplexity search returned no answer content.');
+    }
     const citations = response.data.citations ?? [];
 
     logger.debug('Perplexity search completed', { query, model, citationCount: citations.length });

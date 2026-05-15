@@ -861,6 +861,8 @@ npm run typecheck
   chemins signalent maintenant une erreur explicite.
 - La commande `/btw` ne renvoie plus `No response received.` quand l'appel LLM
   retourne un message assistant vide; elle affiche l'erreur du tour one-shot.
+- La recherche Perplexity ne transforme plus une reponse API sans contenu en
+  `No response`; le chemin direct retourne maintenant un echec explicite.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
