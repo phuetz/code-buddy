@@ -279,6 +279,34 @@ describe('CodeBuddyMCPServer', () => {
       expect(result.content[0].text).toBe('command output');
     });
 
+    it('formats successful empty tool results explicitly', () => {
+      const formatResult = (server as unknown as {
+        formatResult: (result: { success: boolean; output?: string; content?: string }) => {
+          content: Array<{ text: string }>;
+          isError?: boolean;
+        };
+      }).formatResult.bind(server);
+
+      const result = formatResult({ success: true, output: '   ' });
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text).toBe('Tool completed successfully with no output.');
+    });
+
+    it('formats failed empty tool results as errors', () => {
+      const formatResult = (server as unknown as {
+        formatResult: (result: { success: boolean; error?: string }) => {
+          content: Array<{ text: string }>;
+          isError?: boolean;
+        };
+      }).formatResult.bind(server);
+
+      const result = formatResult({ success: false });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toBe('Tool failed without error details.');
+    });
+
     it('should map search_files to SearchTool.search', async () => {
       const handler = getRegisteredHandler('search_files');
       expect(handler).toBeDefined();

@@ -880,6 +880,10 @@ npm run typecheck
 - L'executor agent streaming ne fabrique plus `Using tools to help you...`
   quand le stream assistant ne contient ni texte ni tool call; ce cas remonte
   maintenant comme erreur du tour.
+- Le serveur MCP Code Buddy et la commande `/conflicts` ne masquent plus les
+  resultats de tool vides ou mal formes derriere `Done` / `Scan complete`;
+  ils affichent maintenant un succes sans sortie ou un echec sans details de
+  facon explicite.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

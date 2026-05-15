@@ -390,9 +390,10 @@ export class CodeBuddyMCPServer {
    * Convert a ToolResult to MCP CallToolResult format.
    */
   private formatResult(result: ToolResult): { content: Array<{ type: 'text'; text: string }>; isError?: boolean } {
+    const output = result.output?.trim() || result.content?.trim();
     const text = result.success
-      ? (result.output || result.content || 'Done')
-      : (result.error || 'Unknown error');
+      ? (output || 'Tool completed successfully with no output.')
+      : (result.error?.trim() || 'Tool failed without error details.');
 
     return {
       content: [{ type: 'text' as const, text }],

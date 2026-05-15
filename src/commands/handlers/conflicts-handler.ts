@@ -5,6 +5,16 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import type { ToolResult } from '../../types/index.js';
+
+function formatConflictResult(result: ToolResult, emptySuccessMessage: string): string {
+  const output = result.output?.trim();
+  if (result.success) {
+    return output || emptySuccessMessage;
+  }
+
+  return result.error?.trim() || 'Conflict command failed without error details.';
+}
 
 export async function handleConflicts(args: string[]): Promise<CommandHandlerResult> {
   const { executeResolveConflicts } = await import('../../tools/merge-conflict-tool.js');
@@ -17,7 +27,11 @@ export async function handleConflicts(args: string[]): Promise<CommandHandlerRes
       const result = await executeResolveConflicts({ scan_only: true });
       return {
         handled: true,
-        entry: { type: 'assistant', content: result.output || result.error || 'Scan complete.', timestamp: new Date() },
+        entry: {
+          type: 'assistant',
+          content: formatConflictResult(result, 'Conflict scan completed with no details.'),
+          timestamp: new Date(),
+        },
       };
     }
 
@@ -39,7 +53,11 @@ export async function handleConflicts(args: string[]): Promise<CommandHandlerRes
       const result = await executeResolveConflicts({ file_path: filePath, strategy });
       return {
         handled: true,
-        entry: { type: 'assistant', content: result.output || result.error || 'Done.', timestamp: new Date() },
+        entry: {
+          type: 'assistant',
+          content: formatConflictResult(result, 'Conflict resolution completed with no details.'),
+          timestamp: new Date(),
+        },
       };
     }
 
@@ -55,7 +73,11 @@ export async function handleConflicts(args: string[]): Promise<CommandHandlerRes
       const result = await executeResolveConflicts({ file_path: filePath, strategy: 'ai' });
       return {
         handled: true,
-        entry: { type: 'assistant', content: result.output || result.error || 'No conflicts found.', timestamp: new Date() },
+        entry: {
+          type: 'assistant',
+          content: formatConflictResult(result, 'Conflict inspection completed with no details.'),
+          timestamp: new Date(),
+        },
       };
     }
 
