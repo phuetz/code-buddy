@@ -533,14 +533,14 @@ export class EnhancedCoordinator extends EventEmitter {
    * was annotation-only).
    *
    * Other conflict types (`resource_contention`, `approach_disagreement`,
-   * `deadline_conflict`) keep V0.3 behaviour — annotation only, with a
-   * `logger.warn` flagging the V0.5+ deferral. Caller can still inspect
-   * `conflict.resolution` for advisory decision text.
+   * `deadline_conflict`) stay unresolved, with a `logger.warn` flagging the
+   * V0.5+ deferral. Advisory text must not be stored as a resolution because
+   * the performance report treats `conflict.resolution` as genuinely resolved.
    *
    * Returns the IDs of tasks whose status was mutated, so callers can log
    * the side-effect or update streamers (empty array if no mutation
-   * happened — strategy=`none`, autoResolveEnabled=false, or no `tasks`
-   * provided).
+   * happened — strategy=`none`, autoResolveEnabled=false, no `tasks`
+   * provided, or no concrete losing task could be blocked).
    */
   autoResolveConflicts(tasks?: AgentTask[]): string[] {
     const mutatedTaskIds: string[] = [];
@@ -585,17 +585,17 @@ export class EnhancedCoordinator extends EventEmitter {
             }
           }
 
-          const decisionSuffix = blockedCount > 0
-            ? ` — blocked ${blockedCount} losing task(s): ${losers.join(', ')}`
-            : sideEffectsEnabled
-              ? ' — no losing tasks found to block'
-              : ' — annotation only (auto_resolve_enabled=false or strategy=none)';
-
-          resolution = {
-            strategy: 'priority',
-            decision: `Agent ${winner} has priority${file ? ` for ${file}` : ''}${decisionSuffix}`,
-            resolvedBy: 'orchestrator',
-          };
+          if (blockedCount > 0) {
+            resolution = {
+              strategy: 'priority',
+              decision: `Agent ${winner} has priority for ${file} — blocked ${blockedCount} losing task(s): ${losers.join(', ')}`,
+              resolvedBy: 'orchestrator',
+            };
+          } else if (sideEffectsEnabled) {
+            logger.warn(
+              `[multi-agent] code_overlap auto-resolve found no pending losing task to block${file ? ` for ${file}` : ''}; conflict remains unresolved`
+            );
+          }
           break;
         }
 
@@ -605,11 +605,6 @@ export class EnhancedCoordinator extends EventEmitter {
               `[multi-agent] auto-resolve for type=resource_contention not implemented in V0.4.1 (annotation-only); deferred to V0.5+`
             );
           }
-          resolution = {
-            strategy: 'arbitration',
-            decision: 'Queue excess tasks for later execution (V0.5+)',
-            resolvedBy: 'orchestrator',
-          };
           break;
 
         case 'approach_disagreement':
@@ -618,11 +613,6 @@ export class EnhancedCoordinator extends EventEmitter {
               `[multi-agent] auto-resolve for type=approach_disagreement not implemented in V0.4.1 (annotation-only); deferred to V0.5+`
             );
           }
-          resolution = {
-            strategy: 'consensus',
-            decision: 'Prefer approach with higher confidence score (V0.5+)',
-            resolvedBy: 'orchestrator',
-          };
           break;
 
         case 'deadline_conflict':
@@ -631,11 +621,6 @@ export class EnhancedCoordinator extends EventEmitter {
               `[multi-agent] auto-resolve for type=deadline_conflict not implemented in V0.4.1 (annotation-only); deferred to V0.5+`
             );
           }
-          resolution = {
-            strategy: 'priority',
-            decision: 'Prioritize critical path tasks (V0.5+)',
-            resolvedBy: 'orchestrator',
-          };
           break;
       }
 

@@ -4,8 +4,8 @@
  * Validates the coordinator's narrow-scope auto-resolve:
  * - `prefer-reviewer` strategy on `code_overlap` mutates losing agents'
  *   tasks to status='blocked'.
- * - Other conflict types remain annotation-only with V0.5+ deferral warning.
- * - Strategy='none' / autoResolveEnabled=false → no mutation.
+ * - Other conflict types remain unresolved with V0.5+ deferral warning.
+ * - Strategy='none' / autoResolveEnabled=false → no mutation and no resolution.
  * - detectConflicts now picks up `pending` tasks (loosened filter).
  */
 
@@ -205,7 +205,7 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
   });
 
   describe('autoResolveConflicts no side-effects when disabled', () => {
-    it('autoResolveEnabled=false → annotation only, no task mutation', () => {
+    it('autoResolveEnabled=false → no mutation and conflict stays pending', () => {
       const c = new EnhancedCoordinator({
         enableConflictResolution: true,
         autoResolveEnabled: false,
@@ -221,11 +221,13 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
       expect(tasks[0].status).toBe('pending');
       expect(tasks[1].status).toBe('pending');
       const [conflict] = c.getConflicts();
-      expect(conflict.resolution).toBeDefined();
-      expect(conflict.resolution!.decision).toContain('annotation only');
+      expect(conflict.resolution).toBeUndefined();
+      const report = c.getPerformanceReport();
+      expect(report).toContain('  Resolved: 0');
+      expect(report).toContain('  Pending: 1');
     });
 
-    it('strategy=none → annotation only', () => {
+    it('strategy=none → no mutation and no resolution', () => {
       const c = new EnhancedCoordinator({
         enableConflictResolution: true,
         autoResolveEnabled: true,
@@ -239,9 +241,11 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
       const mutated = c.autoResolveConflicts(tasks);
       expect(mutated).toEqual([]);
       expect(tasks[0].status).toBe('pending');
+      const [conflict] = c.getConflicts();
+      expect(conflict.resolution).toBeUndefined();
     });
 
-    it('no tasks param → annotation only (back-compat with V0.3 callers)', () => {
+    it('no tasks param → no mutation and no resolution (back-compat with V0.3 callers)', () => {
       const c = new EnhancedCoordinator({
         enableConflictResolution: true,
         autoResolveEnabled: true,
@@ -256,11 +260,13 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
       const mutated = c.autoResolveConflicts();
       expect(mutated).toEqual([]);
       expect(tasks[0].status).toBe('pending');
+      const [conflict] = c.getConflicts();
+      expect(conflict.resolution).toBeUndefined();
     });
   });
 
-  describe('autoResolveConflicts non-code_overlap types remain annotation-only', () => {
-    it('resource_contention → annotation, no mutation, V0.5 warning', () => {
+  describe('autoResolveConflicts non-code_overlap types remain unresolved', () => {
+    it('resource_contention → no mutation, no resolution, V0.5 warning', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       const c = new EnhancedCoordinator({
@@ -288,13 +294,13 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
 
       expect(mutated).toEqual([]);
       expect(tasks[0].status).toBe('pending');
-      expect(inject.resolution).toBeDefined();
-      expect(inject.resolution!.decision).toContain('V0.5');
+      expect(inject.resolution).toBeUndefined();
       expect(warnSpy).toHaveBeenCalled();
       warnSpy.mockRestore();
     });
 
-    it('approach_disagreement → annotation only', () => {
+    it('approach_disagreement → no resolution', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
       const c = new EnhancedCoordinator({
         enableConflictResolution: true,
         autoResolveEnabled: true,
@@ -313,10 +319,13 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
 
       const mutated = c.autoResolveConflicts([]);
       expect(mutated).toEqual([]);
-      expect(inject.resolution!.decision).toContain('V0.5');
+      expect(inject.resolution).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
 
-    it('deadline_conflict → annotation only', () => {
+    it('deadline_conflict → no resolution', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
       const c = new EnhancedCoordinator({
         enableConflictResolution: true,
         autoResolveEnabled: true,
@@ -335,7 +344,9 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
 
       const mutated = c.autoResolveConflicts([]);
       expect(mutated).toEqual([]);
-      expect(inject.resolution!.decision).toContain('V0.5');
+      expect(inject.resolution).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 
@@ -383,8 +394,7 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
       const mutated = c.autoResolveConflicts(tasks);
       expect(mutated).toEqual([]);
       expect(tasks[0].status).toBe('pending');
-      // resolution still annotated
-      expect(inject.resolution).toBeDefined();
+      expect(inject.resolution).toBeUndefined();
     });
 
     it('does not block tasks already in completed status', () => {
@@ -412,6 +422,7 @@ describe('EnhancedCoordinator — Phase M (V0.4.1) auto-resolve side-effects', (
       const mutated = c.autoResolveConflicts(tasks);
       expect(mutated).toEqual([]); // t1 completed, no mutation
       expect(tasks[0].status).toBe('completed');
+      expect(inject.resolution).toBeUndefined();
     });
   });
 });

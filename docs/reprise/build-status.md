@@ -624,6 +624,11 @@ npm run typecheck
 - La page HTTP statique A2UI ne pretend plus etre connectee au gateway, et
   `/__codebuddy__/a2ui/eval` ne renvoie plus `evaluated: true` sans moteur
   d'evaluation branche. Le endpoint repond maintenant `501` explicitement.
+- L'auto-resolution multi-agent ne marque plus les conflits comme resolus
+  quand elle n'a fait qu'ecrire un texte consultatif. Seuls les conflits
+  `code_overlap` avec au moins une tache perdante reellement bloquee
+  alimentent maintenant `conflict.resolution`; les autres restent visibles
+  comme pending jusqu'a une vraie strategie runtime.
 
 ## Blocage leve
 
