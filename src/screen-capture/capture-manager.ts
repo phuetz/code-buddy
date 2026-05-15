@@ -10,6 +10,7 @@
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 import type {
   ScreenshotOptions,
   ScreenshotResult,
@@ -42,6 +43,7 @@ export class CaptureManager extends EventEmitter {
     super();
     this.config = { ...DEFAULT_SCREEN_CAPTURE_CONFIG, ...config };
     if (this.config.backend === 'memory') {
+      assertTestRuntimeFeature('Memory screen capture backend');
       this.initializeMemoryData();
     }
   }

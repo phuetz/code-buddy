@@ -1097,6 +1097,8 @@ npm run typecheck
 - Les fabriques `createTestInfrastructure` et `createTestContainer`, qui
   construisent des dependances mockees depuis `src`, sont elles aussi limitees
   au runtime de test.
+- Les transports/backends `memory` qui simulaient email, capture ecran et
+  registry de skills sont maintenant bloques hors runtime de test.
 
 ## Blocage leve
 

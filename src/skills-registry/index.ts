@@ -6,6 +6,7 @@
 
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 
 // ============================================================================
 // Types
@@ -180,6 +181,7 @@ export class SkillsRegistry extends EventEmitter {
     super();
     this.config = { ...DEFAULT_REGISTRY_CONFIG, ...config };
     if (this.config.source === 'memory') {
+      assertTestRuntimeFeature('Memory skills registry');
       this.initializeMemoryRegistry();
     }
   }
@@ -617,6 +619,7 @@ export class SkillsRegistry extends EventEmitter {
   updateConfig(config: Partial<RegistryConfig>): void {
     this.config = { ...this.config, ...config };
     if (config.source === 'memory' && this.memoryRegistry.length === 0) {
+      assertTestRuntimeFeature('Memory skills registry');
       this.initializeMemoryRegistry();
     }
   }

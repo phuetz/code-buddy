@@ -8,6 +8,7 @@
 
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
+import { assertTestRuntimeFeature } from '../utils/test-runtime.js';
 import type {
   ImapConfig,
   SmtpConfig,
@@ -85,6 +86,7 @@ export class ImapClient extends EventEmitter {
     this.transport = this.config.transport ?? 'external';
 
     if (this.transport === 'memory') {
+      assertTestRuntimeFeature('Memory IMAP transport');
       this.initializeMemoryData();
     }
   }
@@ -614,6 +616,9 @@ export class SmtpClient extends EventEmitter {
     super();
     this.config = { ...DEFAULT_SMTP_CONFIG, ...config } as SmtpConfig;
     this.transport = this.config.transport ?? 'external';
+    if (this.transport === 'memory') {
+      assertTestRuntimeFeature('Memory SMTP transport');
+    }
   }
 
   /**
