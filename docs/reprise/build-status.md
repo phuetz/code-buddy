@@ -300,6 +300,15 @@ npx eslint src/integrations/ide/server.ts tests/unit/ide-extensions-server.test.
 
 npm run typecheck
 # passed
+
+npm test -- tests/unit/ai-colab-manager.test.ts tests/unit/colab-handler.test.ts
+# 37 tests passed after /colab complete confirmation cleanup
+
+npx eslint src/commands/handlers/colab-handler.ts src/collaboration/ai-colab-manager.ts tests/unit/colab-handler.test.ts tests/unit/ai-colab-manager.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -546,6 +555,13 @@ npm run typecheck
   transforment plus une reponse provider vide en resultat vide pretendument
   valide. Le handler renvoie maintenant une erreur explicite
   `AI provider returned an empty IDE response`.
+- `/colab complete <task> --confirm` applique maintenant vraiment la completion
+  d'une tache au lieu de reafficher seulement les instructions. La commande
+  exige que la tache soit en cours, qu'un work log lie existe, que ce log porte
+  une preuve de fonctionnement, et que la limite de fichiers soit respectee.
+- `AIColabManager` rehydrate les dates JSON persistées en objets `Date`; les
+  statuts/instructions ne cassent donc plus sur les work logs ou taches charges
+  depuis `.codebuddy`.
 
 ## Blocage leve
 

@@ -122,7 +122,8 @@ ${task.proofOfFunctionality.join('\n')}
 }
 
 function handleComplete(manager: ReturnType<typeof getAIColabManager>, args: string[]): ColabCommandResult {
-  const taskId = args[0];
+  const taskId = args.find(arg => !arg.startsWith('--'));
+  const confirmed = args.includes('--confirm');
 
   if (!taskId) {
     // Find current in-progress task
@@ -151,7 +152,66 @@ Usage: /colab complete <task-id>
     };
   }
 
-  // For interactive completion, we need more info
+  const task = manager.getTasks().find(t => t.id === taskId);
+  if (!task) {
+    return {
+      success: false,
+      output: `Task ${taskId} not found. Use /colab tasks to see available tasks.`
+    };
+  }
+
+  if (confirmed) {
+    if (task.status === 'completed') {
+      return {
+        success: false,
+        output: `Task ${taskId} is already completed.`
+      };
+    }
+
+    if (task.status !== 'in_progress') {
+      return {
+        success: false,
+        output: `Task ${taskId} is ${task.status}. Start it with /colab start ${taskId} before completing it.`
+      };
+    }
+
+    const matchingLogs = manager.getRecentWorkLog(50).filter(entry => entry.taskId === taskId);
+    const latestLog = matchingLogs[matchingLogs.length - 1];
+    if (!latestLog) {
+      return {
+        success: false,
+        output: `Task ${taskId} cannot be completed without a matching work log. Add one with /colab log add --task ${taskId} ...`
+      };
+    }
+
+    if (latestLog.filesModified.length > task.maxFiles) {
+      return {
+        success: false,
+        output: `Task ${taskId} modifies ${latestLog.filesModified.length} files, above the task limit of ${task.maxFiles}. Split the work before completing it.`
+      };
+    }
+
+    if (!latestLog.proofOfFunctionality.trim()) {
+      return {
+        success: false,
+        output: `Task ${taskId} cannot be completed without proof of functionality. Add --proof "npm test ..." to the work log.`
+      };
+    }
+
+    manager.updateTaskStatus(taskId, 'completed');
+    return {
+      success: true,
+      output: `## Task Completed: ${task.title}
+
+**ID:** ${task.id}
+**Agent:** ${task.assignedAgent || latestLog.agent}
+**Proof:** ${latestLog.proofOfFunctionality}
+`,
+      action: 'complete',
+      data: manager.getTasks().find(t => t.id === taskId)
+    };
+  }
+
   return {
     success: true,
     output: `## Complete Task: ${taskId}

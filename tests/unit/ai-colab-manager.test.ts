@@ -52,6 +52,64 @@ describe('AIColabManager', () => {
       const manager = new AIColabManager();
       expect(manager).toBeDefined();
     });
+
+    it('should hydrate persisted dates from JSON', () => {
+      mockFs.existsSync.mockImplementation((filePath) => {
+        const pathText = String(filePath);
+        return pathText.endsWith('colab-tasks.json') || pathText.endsWith('colab-worklog.json');
+      });
+      mockFs.readFileSync.mockImplementation((filePath) => {
+        const pathText = String(filePath);
+        if (pathText.endsWith('colab-tasks.json')) {
+          return JSON.stringify({
+            config: {
+              lastUpdated: '2026-05-15T00:00:00.000Z'
+            },
+            tasks: [
+              {
+                id: 'task-1',
+                title: 'Persisted task',
+                description: 'Loaded from disk',
+                status: 'in_progress',
+                priority: 'high',
+                maxFiles: 10,
+                estimatedTests: 1,
+                filesToModify: [],
+                acceptanceCriteria: [],
+                proofOfFunctionality: [],
+                startedAt: '2026-05-15T01:00:00.000Z'
+              }
+            ]
+          });
+        }
+
+        return JSON.stringify({
+          entries: [
+            {
+              id: 'log-1',
+              date: '2026-05-15T02:00:00.000Z',
+              agent: 'Codex',
+              taskId: 'task-1',
+              summary: 'Persisted entry',
+              filesModified: [],
+              testsAdded: [],
+              proofOfFunctionality: 'npm test',
+              issues: [],
+              nextSteps: []
+            }
+          ]
+        });
+      });
+
+      const manager = new AIColabManager(testDir);
+      const [task] = manager.getTasks();
+      const [entry] = manager.getRecentWorkLog(1);
+
+      expect(task.startedAt).toBeInstanceOf(Date);
+      expect(entry.date).toBeInstanceOf(Date);
+      expect(() => manager.getStatus()).not.toThrow();
+      expect(() => manager.generateAgentInstructions('Gemini')).not.toThrow();
+    });
   });
 
   describe('Task Management', () => {

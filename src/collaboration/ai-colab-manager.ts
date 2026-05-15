@@ -63,6 +63,21 @@ export interface HandoffInfo {
   recommendedNextSteps: string[];
 }
 
+type SerializedDate = Date | number | string;
+
+type SerializedColabTask = Omit<ColabTask, 'startedAt' | 'completedAt'> & {
+  startedAt?: SerializedDate;
+  completedAt?: SerializedDate;
+};
+
+type SerializedWorkLogEntry = Omit<WorkLogEntry, 'date'> & {
+  date?: SerializedDate;
+};
+
+type SerializedColabConfig = Partial<Omit<ColabConfig, 'lastUpdated'>> & {
+  lastUpdated?: SerializedDate;
+};
+
 // ============================================================================
 // AI Collaboration Manager
 // ============================================================================
@@ -100,12 +115,23 @@ export class AIColabManager {
     // Load tasks
     if (fs.existsSync(this.tasksFilePath)) {
       try {
-        const data = JSON.parse(fs.readFileSync(this.tasksFilePath, 'utf-8'));
+        const data = JSON.parse(fs.readFileSync(this.tasksFilePath, 'utf-8')) as {
+          config?: SerializedColabConfig;
+          tasks?: SerializedColabTask[];
+        };
         for (const task of data.tasks || []) {
-          this.tasks.set(task.id, task);
+          this.tasks.set(task.id, {
+            ...task,
+            startedAt: this.parseOptionalDate(task.startedAt),
+            completedAt: this.parseOptionalDate(task.completedAt)
+          });
         }
         if (data.config) {
-          this.config = { ...this.config, ...data.config };
+          this.config = {
+            ...this.config,
+            ...data.config,
+            lastUpdated: this.parseOptionalDate(data.config.lastUpdated) ?? this.config.lastUpdated
+          };
         }
       } catch {
         // Ignore parse errors, use defaults
@@ -115,12 +141,26 @@ export class AIColabManager {
     // Load work log
     if (fs.existsSync(this.workLogFilePath)) {
       try {
-        const data = JSON.parse(fs.readFileSync(this.workLogFilePath, 'utf-8'));
-        this.workLog = data.entries || [];
+        const data = JSON.parse(fs.readFileSync(this.workLogFilePath, 'utf-8')) as {
+          entries?: SerializedWorkLogEntry[];
+        };
+        this.workLog = (data.entries || []).map(entry => ({
+          ...entry,
+          date: this.parseOptionalDate(entry.date) ?? new Date()
+        }));
       } catch {
         // Ignore parse errors, use defaults
       }
     }
+  }
+
+  private parseOptionalDate(value: SerializedDate | undefined): Date | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
   }
 
   private saveData(): void {

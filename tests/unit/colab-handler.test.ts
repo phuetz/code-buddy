@@ -87,6 +87,39 @@ describe('Colab Handler', () => {
       expect(result.success).toBe(false);
       expect(result.output).toContain('No task in progress');
     });
+
+    it('should complete a started task only after a matching work log with proof', async () => {
+      const created = await handleColabCommand([
+        'create',
+        'Night stabilization',
+        'Remove fake collaboration completions'
+      ]);
+      const task = created.data as { id: string };
+
+      await handleColabCommand(['start', task.id, 'Codex']);
+
+      const withoutLog = await handleColabCommand(['complete', task.id, '--confirm']);
+      expect(withoutLog.success).toBe(false);
+      expect(withoutLog.output).toContain('matching work log');
+
+      await handleColabCommand([
+        'log', 'add',
+        '--agent', 'Codex',
+        '--task', task.id,
+        '--summary', 'Implemented completion confirmation',
+        '--files', 'src/commands/handlers/colab-handler.ts',
+        '--proof', 'npm test -- tests/unit/colab-handler.test.ts'
+      ]);
+
+      const completed = await handleColabCommand(['complete', task.id, '--confirm']);
+      expect(completed.success).toBe(true);
+      expect(completed.action).toBe('complete');
+      expect(completed.output).toContain('Task Completed');
+
+      const tasks = await handleColabCommand(['tasks']);
+      expect(tasks.output).toContain('[x] Terminées');
+      expect(tasks.output).toContain('Night stabilization');
+    });
   });
 
   describe('log command', () => {
