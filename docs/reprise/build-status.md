@@ -779,6 +779,9 @@ npm run typecheck
 - Les diagnostics API Cowork concurrents ne renvoient plus `overallOk=true`
   quand le run est seulement saute (`skippedReason=concurrent_run`); le resultat
   ne peut plus etre interprete comme une connexion verifiee.
+- En mode navigateur, Cowork ne simule plus une sauvegarde de configuration
+  reussie; `App.handleConfigSave` echoue explicitement hors Electron au lieu de
+  declencher le message "saved" sans persistance.
 
 ## Blocage leve
 
