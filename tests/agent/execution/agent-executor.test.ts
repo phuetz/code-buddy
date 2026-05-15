@@ -451,10 +451,7 @@ describe('AgentExecutor', () => {
       expect(entries[0].content).toContain('Network error');
     });
 
-    it('should handle empty/missing assistant content gracefully', async () => {
-      // Phase D: streaming flow returns accumulated message; an empty content
-      // is handled by runTurnLoop's "Using tools to help you..." fallback.
-      // Test that we still get an entry (no crash) with no content from the LLM.
+    it('should report empty/missing assistant content as an error', async () => {
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content delta at all
       });
@@ -472,8 +469,8 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should produce at least one entry (no crash)
-      expect(entries.length).toBeGreaterThanOrEqual(1);
+      expect(entries.length).toBe(1);
+      expect(entries[0].content).toContain('Assistant stream returned no content or tool calls');
     });
 
     it('should handle tool execution failure', async () => {
@@ -1459,9 +1456,7 @@ describe('AgentExecutor', () => {
       expect(entries[0].content).toBe('No tools needed.');
     });
 
-    it('should handle null content in assistant message', async () => {
-      // Streaming flow: getAccumulatedMessage returns null content; runTurnLoop
-      // applies a fallback "Using tools to help you..." when content is empty.
+    it('should report null content with no tool calls as an error', async () => {
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content
       });
@@ -1479,9 +1474,8 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should use fallback content
       expect(entries.length).toBe(1);
-      expect(entries[0].content).toBeDefined();
+      expect(entries[0].content).toContain('Assistant stream returned no content or tool calls');
     });
 
     it('should handle tool returning no output', async () => {

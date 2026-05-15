@@ -830,9 +830,12 @@ export class AgentExecutor {
 
         const accumulatedMessage = this.deps.streamingHandler.getAccumulatedMessage();
         // Sanitize streamed assistant content: strip model control tokens and invisible chars
-        const rawStreamedContent = accumulatedMessage.content || "Using tools to help you...";
+        const rawStreamedContent = accumulatedMessage.content || "";
         const content = sanitizeAssistantOutput(rawStreamedContent);
         const toolCalls = accumulatedMessage.tool_calls;
+        if (!content.trim() && (!toolCalls || toolCalls.length === 0)) {
+          throw new Error("Assistant stream returned no content or tool calls");
+        }
 
         const assistantEntry: ChatEntry = {
           type: "assistant",

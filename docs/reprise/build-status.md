@@ -877,6 +877,9 @@ npm run typecheck
 - Extended Thinking ne retourne plus un resultat fallback quand aucune pensee
   reelle n'a ete generee; les reponses de pensee/synthese vides echouent, et
   une erreur de verification produit une verification negative explicite.
+- L'executor agent streaming ne fabrique plus `Using tools to help you...`
+  quand le stream assistant ne contient ni texte ni tool call; ce cas remonte
+  maintenant comme erreur du tour.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.
