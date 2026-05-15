@@ -36,6 +36,9 @@ export interface OpenShellConfig {
 
 const DEFAULT_TIMEOUT = 60_000;
 
+export const OPENSHELL_COMPLETED_WITH_NO_OUTPUT = 'Command completed successfully with no output.';
+export const OPENSHELL_FAILED_WITH_NO_OUTPUT = 'OpenShell command failed without output.';
+
 export class OpenShellBackend implements SandboxBackendInterface {
   readonly name = 'openshell';
   private config: OpenShellConfig;
@@ -197,10 +200,15 @@ export class OpenShellBackend implements SandboxBackendInterface {
       };
       const exitCode = result.exitCode ?? 1;
       const success = exitCode === 0;
+      const output = result.output?.trim()
+        ? result.output
+        : success
+          ? OPENSHELL_COMPLETED_WITH_NO_OUTPUT
+          : result.error ?? OPENSHELL_FAILED_WITH_NO_OUTPUT;
 
       return {
         success,
-        output: result.output ?? (!success ? result.error ?? '' : ''),
+        output,
         error: result.error,
         exitCode,
         durationMs: Date.now() - startTime,

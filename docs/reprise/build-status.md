@@ -920,6 +920,11 @@ npm run typecheck
 - Les hooks async ne reinjectent plus `Success: No output` ni un succes vide
   quand une commande termine sans stdout; le contexte indique maintenant que le
   hook a reussi sans sortie.
+- Le bridge A2A Code Buddy n'injecte plus `(empty result)` / `(no content)` pour
+  les resultats de tools ou reponses finales silencieuses; il expose des
+  messages de succes sans sortie explicites.
+- OpenShell distant ne renvoie plus `output:''` sur succes silencieux ou echec
+  sans detail; les deux cas ont maintenant une sortie lisible.
 
 ## Blocage leve
 

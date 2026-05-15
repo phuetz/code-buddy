@@ -51,6 +51,9 @@ import {
 const MAX_TURNS = 3;
 const MAX_TOKENS = 100_000;
 
+export const A2A_TOOL_COMPLETED_WITH_NO_OUTPUT = 'Tool completed successfully with no output.';
+export const A2A_AGENT_COMPLETED_WITH_NO_OUTPUT = 'Agent completed without textual output.';
+
 const SYSTEM_PROMPT = `You are Code Buddy, exposed via the Agent-to-Agent (A2A) protocol.
 A remote peer agent has submitted a task to you. You only have access to read-only,
 search, web-query, and codebase-analysis tools — you cannot edit files, run shell
@@ -223,7 +226,7 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
-            content: resultText.length > 0 ? resultText : '(empty result)',
+            content: resultText.trim().length > 0 ? resultText : A2A_TOOL_COMPLETED_WITH_NO_OUTPUT,
           });
         } catch (err) {
           messages.push({
@@ -245,7 +248,7 @@ export function createCodeBuddyTaskExecutor(): TaskExecutor {
     // Append the agent reply and mark the task completed.
     task.messages.push({
       role: 'agent',
-      parts: [{ type: 'text', text: finalText || '(no content)' }],
+      parts: [{ type: 'text', text: finalText || A2A_AGENT_COMPLETED_WITH_NO_OUTPUT }],
     });
     task.status = {
       status: TaskStatus.COMPLETED,

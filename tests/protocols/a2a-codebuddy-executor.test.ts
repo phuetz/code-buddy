@@ -78,7 +78,11 @@ const {
   loggerWarnMock,
 } = mocks;
 
-import { createCodeBuddyTaskExecutor } from '../../src/protocols/a2a/codebuddy-executor.js';
+import {
+  A2A_AGENT_COMPLETED_WITH_NO_OUTPUT,
+  A2A_TOOL_COMPLETED_WITH_NO_OUTPUT,
+  createCodeBuddyTaskExecutor,
+} from '../../src/protocols/a2a/codebuddy-executor.js';
 import { TaskStatus, type Task } from '../../src/protocols/a2a/index.js';
 
 function makeTask(text: string, metadata?: Record<string, string>): Task {
@@ -278,6 +282,77 @@ describe('A2A inbound TaskExecutor', () => {
       'Here is the content of foo.txt'
     );
     expect(chatMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('tool dispatch: feeds explicit content for successful empty tool output', async () => {
+    chatMock
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call-empty',
+                  type: 'function',
+                  function: { name: 'view_file', arguments: '{"path":"empty.txt"}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { total_tokens: 10 },
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Done',
+              tool_calls: undefined,
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { total_tokens: 14 },
+      });
+
+    formalExecuteMock.mockResolvedValueOnce({
+      success: true,
+      output: '',
+      toolName: 'view_file',
+      duration: 1,
+      timestamp: new Date(),
+    });
+
+    const executor = createCodeBuddyTaskExecutor();
+    const task = await executor(makeTask('show empty file'));
+
+    expect(task.status.status).toBe(TaskStatus.COMPLETED);
+    const secondTurnMessages = chatMock.mock.calls[1]?.[0] as Array<{ role: string; content: string }>;
+    const toolMessage = secondTurnMessages.find((message) => message.role === 'tool');
+    expect(toolMessage?.content).toBe(A2A_TOOL_COMPLETED_WITH_NO_OUTPUT);
+  });
+
+  it('returns explicit content when the final LLM reply is empty', async () => {
+    chatMock.mockResolvedValueOnce({
+      choices: [
+        {
+          message: { role: 'assistant', content: '', tool_calls: undefined },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: { total_tokens: 5 },
+    });
+
+    const executor = createCodeBuddyTaskExecutor();
+    const task = await executor(makeTask('silent reply'));
+
+    expect(task.status.status).toBe(TaskStatus.COMPLETED);
+    const reply = task.messages.find((m) => m.role === 'agent');
+    expect((reply!.parts[0] as { text: string }).text).toBe(A2A_AGENT_COMPLETED_WITH_NO_OUTPUT);
   });
 
   it('fleet-safe defense in depth: hallucinated tool name is rejected even if LLM tries it', async () => {
