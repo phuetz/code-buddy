@@ -54,6 +54,14 @@ describe("GitHubActionsManager", () => {
       expect(template?.jobs).toBeDefined();
     });
 
+    it("should not mask lint-format typecheck failures", () => {
+      const template = manager.getTemplate("lint-format");
+      const typeCheckStep = template?.jobs.lint.steps.find(step => step.name === "Type check");
+
+      expect(typeCheckStep?.run).toBe("npm run typecheck || npm run type-check");
+      expect(typeCheckStep?.run).not.toContain("|| true");
+    });
+
     it("should return null for unknown template", () => {
       const template = manager.getTemplate("nonexistent");
       expect(template).toBeNull();

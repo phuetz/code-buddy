@@ -311,7 +311,7 @@ const WORKFLOW_TEMPLATES: Record<string, WorkflowConfig> = {
           { run: 'npm ci' },
           { name: 'Run ESLint', run: 'npm run lint' },
           { name: 'Check formatting', run: 'npm run format:check || npm run format -- --check' },
-          { name: 'Type check', run: 'npm run typecheck || npm run type-check || true' },
+          { name: 'Type check', run: 'npm run typecheck || npm run type-check' },
         ],
       },
     },

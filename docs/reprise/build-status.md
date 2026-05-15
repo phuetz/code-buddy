@@ -667,6 +667,9 @@ npm run typecheck
 - `DependencyAnalyzer` n'enterre plus les checks optionnels non executes:
   `npm outdated` sans sortie et `madge` indisponible ajoutent maintenant des
   avertissements au rapport au lieu de laisser croire a zero outdated/cycle.
+- Le template GitHub Actions `lint-format` ne termine plus le typecheck par
+  `|| true`: si aucun script de typage ne passe, la CI generee devient rouge
+  au lieu de donner un faux vert.
 
 ## Blocage leve
 
