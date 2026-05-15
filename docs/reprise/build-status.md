@@ -874,6 +874,9 @@ npm run typecheck
 - Le Tree-of-Thought ne fabrique plus de pensee locale `Continue analyzing...`
   quand la generation LLM echoue; une generation vide/non parseable echoue, et
   une evaluation LLM impossible vaut 0 au lieu d'un score neutre.
+- Extended Thinking ne retourne plus un resultat fallback quand aucune pensee
+  reelle n'a ete generee; les reponses de pensee/synthese vides echouent, et
+  une erreur de verification produit une verification negative explicite.
 - L'ancien adaptateur HTTP Cowork `CodeBuddyAdapter` ne masque plus les erreurs
   serveur en `''` ou `{status:"unknown"}`; chatSync, submitTask et getTaskStatus
   levent maintenant une erreur exploitable.

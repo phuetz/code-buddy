@@ -1110,16 +1110,14 @@ describe('ExtendedThinkingEngine', () => {
       });
     });
 
-    it('should handle API errors during thought generation', async () => {
+    it('should fail when no thoughts can be generated', async () => {
       mockChat.mockRejectedValue(new Error('API Error'));
 
-      const result = await engine.think('Test problem');
-
-      // Should still return a result (fallback)
-      expect(result).toBeDefined();
+      await expect(engine.think('Test problem'))
+        .rejects.toThrow('Extended thinking produced no thoughts to synthesize');
     });
 
-    it('should handle empty response from API', async () => {
+    it('should fail when the API returns empty thought content', async () => {
       mockChat.mockResolvedValue({
         choices: [{
           message: {
@@ -1128,13 +1126,16 @@ describe('ExtendedThinkingEngine', () => {
         }],
       });
 
-      const result = await engine.think('Test problem');
-
-      expect(result).toBeDefined();
+      await expect(engine.think('Test problem'))
+        .rejects.toThrow('Extended thinking produced no thoughts to synthesize');
     });
 
-    it('should handle verification errors gracefully', async () => {
+    it('should convert verification errors into failed verification', async () => {
       engine.setConfig({ verificationEnabled: true });
+      const verificationEvents: Array<{ verified: boolean }> = [];
+      engine.on('thinking:verification', (event: { verified: boolean }) => {
+        verificationEvents.push(event);
+      });
 
       mockChat
         .mockResolvedValueOnce({
@@ -1161,6 +1162,7 @@ describe('ExtendedThinkingEngine', () => {
 
       // Should complete despite verification error
       expect(result).toBeDefined();
+      expect(verificationEvents).toContainEqual(expect.objectContaining({ verified: false }));
     });
   });
 

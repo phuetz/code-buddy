@@ -283,6 +283,11 @@ export class ExtendedThinkingEngine extends EventEmitter {
    * Parse a thought from LLM response
    */
   private parseThought(content: string): Thought | null {
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      return null;
+    }
+
     const typeMatch = content.match(/<thought_type>(\w+)<\/thought_type>/);
     const contentMatch = content.match(/<content>([\s\S]*?)<\/content>/);
     const confidenceMatch = content.match(/<confidence>([\d.]+)<\/confidence>/);
@@ -293,7 +298,7 @@ export class ExtendedThinkingEngine extends EventEmitter {
       return {
         id: this.createId("thought"),
         type: "analysis",
-        content: content.slice(0, 500),
+        content: trimmedContent.slice(0, 500),
         confidence: 0.5,
         timestamp: Date.now(),
       };
@@ -348,8 +353,13 @@ export class ExtendedThinkingEngine extends EventEmitter {
           ? [correctionsMatch[1].trim()]
           : undefined,
       };
-    } catch {
-      return { thought, verified: true, confidence: 0.5 };
+    } catch (error) {
+      return {
+        thought,
+        verified: false,
+        confidence: 0,
+        issues: [`Verification failed: ${error instanceof Error ? error.message : String(error)}`],
+      };
     }
   }
 
@@ -390,6 +400,9 @@ export class ExtendedThinkingEngine extends EventEmitter {
   ): Promise<ThinkingResult> {
     // Collect all thoughts across chains
     const allThoughts = session.chains.flatMap((c) => c.thoughts);
+    if (allThoughts.length === 0) {
+      throw new Error("Extended thinking produced no thoughts to synthesize.");
+    }
 
     // If self-consistency is enabled, use it
     if (config.selfConsistency && session.chains.length > 1) {
@@ -416,7 +429,10 @@ export class ExtendedThinkingEngine extends EventEmitter {
         temperature: 0.3,
       });
 
-      const content = response.choices[0]?.message?.content || "";
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      if (!content) {
+        throw new Error("Extended thinking synthesis returned no response content.");
+      }
       return this.parseSynthesis(session, content, allThoughts);
     } catch {
       // Fallback result
