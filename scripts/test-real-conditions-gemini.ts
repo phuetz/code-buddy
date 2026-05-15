@@ -887,8 +887,9 @@ function cat6Reasoning(): TestDef[] {
             tokenUsage: resp.usage,
             metadata: { preview: content.substring(0, 100) },
           };
-        } catch {
-          return { pass: true, metadata: { note: 'skipped (optional)' } };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return { pass: false, metadata: { error: message } };
         }
       },
     },
@@ -1477,8 +1478,9 @@ function cat15Integration(): TestDef[] {
               totalTokens: resp.usage.total_tokens,
             } : undefined,
           };
-        } catch {
-          return { pass: true, metadata: { note: 'skipped (optional)' } };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return { pass: false, metadata: { error: message } };
         }
       },
     },

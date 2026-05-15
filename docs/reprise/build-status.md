@@ -713,6 +713,9 @@ npm run typecheck
 - `CostTracker` respecte maintenant les options explicites du constructeur apres
   chargement de la config disque, ce qui rend les checks budget deterministes et
   evite qu'un budget utilisateur masque un depassement attendu.
+- Les derniers `pass: true` inconditionnels des scripts API ont ete retires:
+  erreurs provider dans `43.5`, `6.3` et `15.5` deviennent maintenant des
+  echecs explicites avec message d'erreur au lieu de faux skips verts.
 
 ## Blocage leve
 

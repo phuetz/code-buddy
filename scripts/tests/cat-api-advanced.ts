@@ -267,9 +267,9 @@ export function cat43MultiTurn(): TestDef[] {
             tokenUsage: resp.usage,
             metadata: { content: resp.content },
           };
-        } catch (e: any) {
-          // Some providers reject certain assistant messages — that's acceptable
-          return { pass: true, metadata: { handledGracefully: true, error: e?.message } };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return { pass: false, metadata: { error: message } };
         }
       },
     },
