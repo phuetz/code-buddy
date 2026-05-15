@@ -133,7 +133,7 @@ describe('Groq Provider', () => {
       ).rejects.toThrow('Groq API error');
     });
 
-    it('should handle empty choices', async () => {
+    it('should throw on empty choices', async () => {
       process.env.GROQ_API_KEY = 'test-groq-key';
       const provider = createGroqProvider()!;
 
@@ -142,8 +142,9 @@ describe('Groq Provider', () => {
         json: async () => ({ choices: [] }),
       });
 
-      const result = await provider.chat!([{ role: 'user', content: 'Hello' }]);
-      expect(result).toBe('');
+      await expect(
+        provider.chat!([{ role: 'user', content: 'Hello' }])
+      ).rejects.toThrow('Groq returned empty response content');
     });
   });
 

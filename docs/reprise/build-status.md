@@ -819,6 +819,9 @@ npm run typecheck
 - Le bridge Fleet `peer.chat-session.continue` et `continue-stream` applique
   le meme garde-fou: une reponse vide echoue et le tour utilisateur est retire
   de l'historique pour que la relance ne pollue pas la session.
+- Les providers LLM plugins bundles ne convertissent plus une reponse API sans
+  contenu en chaine vide; Azure, Bedrock, Groq, Together, Fireworks, OpenRouter,
+  Ollama, vLLM, Copilot, Gemma et TurboQuant levent maintenant une erreur.
 
 ## Blocage leve
 

@@ -9,6 +9,7 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider } from '../types.js';
+import { requireProviderText } from './response-content.js';
 
 export const COPILOT_PROVIDER_ID = 'bundled-copilot';
 
@@ -56,7 +57,7 @@ export function createCopilotProvider(): PluginProvider | null {
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      return data.choices?.[0]?.message?.content ?? '';
+      return requireProviderText('GitHub Copilot', data.choices?.[0]?.message?.content);
     },
 
     async complete(prompt: string) {

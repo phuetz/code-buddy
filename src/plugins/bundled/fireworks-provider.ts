@@ -14,6 +14,7 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider, DiscoveredModel, ProviderOnboardingHooks } from '../types.js';
+import { requireProviderText } from './response-content.js';
 
 export const FIREWORKS_PROVIDER_ID = 'bundled-fireworks';
 
@@ -140,7 +141,7 @@ export function createFireworksProvider(): PluginProvider | null {
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      return data.choices?.[0]?.message?.content ?? '';
+      return requireProviderText('Fireworks AI', data.choices?.[0]?.message?.content);
     },
 
     async complete(prompt: string) {

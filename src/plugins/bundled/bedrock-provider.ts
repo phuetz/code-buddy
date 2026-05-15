@@ -11,6 +11,7 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider, DiscoveredModel, ProviderOnboardingHooks } from '../types.js';
+import { requireProviderText } from './response-content.js';
 
 export const BEDROCK_PROVIDER_ID = 'bundled-bedrock';
 
@@ -395,7 +396,7 @@ export function createBedrockProvider(): PluginProvider | null {
       const data = await response.json() as {
         output?: { message?: { content?: Array<{ text?: string }> } };
       };
-      return data.output?.message?.content?.[0]?.text ?? '';
+      return requireProviderText('AWS Bedrock', data.output?.message?.content?.[0]?.text);
     },
 
     async complete(prompt: string) {

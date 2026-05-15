@@ -14,6 +14,7 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider, DiscoveredModel, ProviderOnboardingHooks } from '../types.js';
+import { requireProviderText } from './response-content.js';
 
 export const GROQ_PROVIDER_ID = 'bundled-groq';
 
@@ -150,7 +151,7 @@ export function createGroqProvider(): PluginProvider | null {
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      return data.choices?.[0]?.message?.content ?? '';
+      return requireProviderText('Groq', data.choices?.[0]?.message?.content);
     },
 
     async complete(prompt: string) {

@@ -10,6 +10,7 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider, DiscoveredModel, ProviderOnboardingHooks } from '../types.js';
+import { requireProviderText } from './response-content.js';
 
 export const OLLAMA_PROVIDER_ID = 'bundled-ollama';
 
@@ -187,7 +188,7 @@ export function createOllamaProvider(): PluginProvider | null {
       const data = await response.json() as {
         message?: { content?: string };
       };
-      return data.message?.content ?? '';
+      return requireProviderText('Ollama', data.message?.content);
     },
 
     async complete(prompt: string) {

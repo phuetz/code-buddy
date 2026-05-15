@@ -489,6 +489,22 @@ describe('Cloud Providers', () => {
       );
     });
 
+    it('should throw when Azure chat response has no content', async () => {
+      process.env.AZURE_OPENAI_ENDPOINT = 'https://myresource.openai.azure.com';
+      process.env.AZURE_OPENAI_API_KEY = 'test-key';
+
+      const provider = createAzureProvider()!;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [] }),
+      });
+
+      await expect(provider.chat!([{ role: 'user', content: 'Hi' }])).rejects.toThrow(
+        'Azure OpenAI returned empty response content'
+      );
+    });
+
     it('should handle empty deployments list', async () => {
       process.env.AZURE_OPENAI_ENDPOINT = 'https://myresource.openai.azure.com';
       process.env.AZURE_OPENAI_API_KEY = 'test-key';

@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider } from '../types.js';
+import { requireProviderText } from './response-content.js';
 import {
   TurboQuantProvider,
   createTurboQuantProvider,
@@ -184,7 +185,7 @@ export function createTurboQuantPlugin(): PluginProvider | null {
             content: m.content,
           }))
         );
-        return response.choices[0]?.message?.content ?? '';
+        return requireProviderText('TurboQuant', response.choices[0]?.message?.content);
       } catch (err) {
         stats.ollamaErrors++;
         throw err;

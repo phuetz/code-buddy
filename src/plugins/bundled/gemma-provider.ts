@@ -12,6 +12,7 @@ import { logger } from '../../utils/logger.js';
 import type { PluginProvider, DiscoveredModel, ProviderOnboardingHooks } from '../types.js';
 import type { LLMMessage } from '../../providers/types.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { requireProviderText } from './response-content.js';
 
 export const GEMMA_PROVIDER_ID = 'bundled-gemma4';
 
@@ -140,7 +141,7 @@ export class GemmaProviderPlugin implements PluginProvider {
 
     const chatSession = model.startChat({ history: formattedHistory });
     const result = await chatSession.sendMessage(lastMessage.parts[0].text);
-    return result.response.text();
+    return requireProviderText('Google Gemma 4', result.response.text());
   }
 
   async complete(prompt: string): Promise<string> {
@@ -150,7 +151,7 @@ export class GemmaProviderPlugin implements PluginProvider {
     const modelName = resolveGemmaModelName();
     const model = this.genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
-    return result.response.text();
+    return requireProviderText('Google Gemma 4', result.response.text());
   }
 }
 

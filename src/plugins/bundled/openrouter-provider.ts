@@ -9,6 +9,7 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider } from '../types.js';
+import { requireProviderText } from './response-content.js';
 
 export const OPENROUTER_PROVIDER_ID = 'bundled-openrouter';
 
@@ -58,7 +59,7 @@ export function createOpenRouterProvider(): PluginProvider | null {
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      return data.choices?.[0]?.message?.content ?? '';
+      return requireProviderText('OpenRouter', data.choices?.[0]?.message?.content);
     },
 
     async complete(prompt: string) {
