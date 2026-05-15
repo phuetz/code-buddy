@@ -807,6 +807,9 @@ npm run typecheck
 - L'onboarding des providers plugins ne renvoie plus "completed" quand la
   decouverte ne trouve aucun modele; il echoue explicitement avant le picker,
   ce qui evite de configurer un provider LLM sans modele utilisable.
+- Le mode `wide research` ne compte plus un worker sans sortie comme un succes
+  et ne renvoie plus `success=true` quand 0 worker a produit du contenu; la CLI
+  ecrit aussi un rapport en echec au lieu d'afficher "Research complete".
 
 ## Blocage leve
 

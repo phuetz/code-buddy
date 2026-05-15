@@ -240,6 +240,28 @@ export function createResearchCommand(): Command {
       try {
         const result = await orchestrator.research(topic, provider.apiKey, providerConfig);
 
+        if (result.successCount === 0) {
+          const message = 'No research workers succeeded; no report available.';
+          if (reportPath) {
+            await fs.writeFile(
+              reportPath,
+              [
+                `# Research Report: ${topic}`,
+                ``,
+                `Generated: ${new Date().toISOString()}`,
+                `Status: failed`,
+                `Workers: 0/${result.subtopics.length} succeeded`,
+                ``,
+                message,
+                ``,
+                result.report,
+              ].join('\n'),
+              'utf-8'
+            );
+          }
+          throw new Error(message);
+        }
+
         console.log('\n' + '─'.repeat(60));
         console.log(`✅ Research complete!`);
         console.log(`   Workers succeeded: ${result.successCount}/${result.subtopics.length}`);

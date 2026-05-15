@@ -83,6 +83,42 @@ export type WideResearchProgress =
   | { type: 'aggregating' }
   | { type: 'done'; result: WideResearchResult };
 
+export function ensureResearchWorkerOutput(output: string): string {
+  if (output.trim().length === 0) {
+    throw new Error('Worker produced no output');
+  }
+  return output;
+}
+
+export function formatWideResearchToolResult(result: WideResearchResult): ToolResult {
+  const summary = [
+    `# Wide Research: ${result.topic}`,
+    ``,
+    `**Workers:** ${result.successCount}/${result.subtopics.length} succeeded`,
+    `**Duration:** ${(result.durationMs / 1000).toFixed(1)}s`,
+    ``,
+    `## Subtopics Researched`,
+    ...result.subtopics.map((s, i) => {
+      const r = result.workerResults[i];
+      return `- ${s} ${r?.success ? '✅' : '❌'}`;
+    }),
+    ``,
+    `---`,
+    ``,
+    result.report,
+  ].join('\n');
+
+  if (result.successCount === 0) {
+    return {
+      success: false,
+      error: 'Wide Research failed: no research workers succeeded',
+      output: summary,
+    };
+  }
+
+  return { success: true, output: summary };
+}
+
 // ============================================================================
 // Orchestrator
 // ============================================================================
@@ -291,7 +327,7 @@ export class WideResearchOrchestrator extends EventEmitter {
       }
     }
 
-    return output || '(no output from worker)';
+    return ensureResearchWorkerOutput(output);
   }
 
   // --------------------------------------------------------------------------
@@ -397,24 +433,7 @@ export async function runWideResearch(
   try {
     const result = await orchestrator.research(topic, apiKey, providerConfig);
 
-    const summary = [
-      `# Wide Research: ${topic}`,
-      ``,
-      `**Workers:** ${result.successCount}/${result.subtopics.length} succeeded`,
-      `**Duration:** ${(result.durationMs / 1000).toFixed(1)}s`,
-      ``,
-      `## Subtopics Researched`,
-      ...result.subtopics.map((s, i) => {
-        const r = result.workerResults[i];
-        return `- ${s} ${r?.success ? '✅' : '❌'}`;
-      }),
-      ``,
-      `---`,
-      ``,
-      result.report,
-    ].join('\n');
-
-    return { success: true, output: summary };
+    return formatWideResearchToolResult(result);
   } catch (err) {
     return {
       success: false,
