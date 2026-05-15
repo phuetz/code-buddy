@@ -95,6 +95,15 @@ describe('PrecompactionFlusher', () => {
       expect(result.suppressed).toBe(true);
     });
 
+    it('should not treat blank LLM output as a NO_REPLY sentinel', async () => {
+      const chatFn = jest.fn().mockResolvedValue('   ');
+      const result = await flusher.flush(makeMessages(5), chatFn, tmpDir);
+
+      expect(result.flushed).toBe(false);
+      expect(result.suppressed).toBe(false);
+      expect(result.writtenTo).toBeNull();
+    });
+
     it('should extract facts when LLM returns bullet list', async () => {
       const facts = '- User prefers TypeScript strict mode\n- Project uses ESM imports\n- API key stored in .env';
       const chatFn = jest.fn().mockResolvedValue(facts);

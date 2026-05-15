@@ -112,6 +112,10 @@ export class PrecompactionFlusher {
     }
 
     const trimmed = response.trim();
+    if (!trimmed) {
+      logger.debug('PrecompactionFlusher: LLM returned empty content');
+      return { flushed: false, factsCount: 0, writtenTo: null, suppressed: false };
+    }
 
     // Extract and persist decisions from the response (fire-and-forget)
     this.extractAndPersistDecisions(trimmed);
@@ -128,10 +132,6 @@ export class PrecompactionFlusher {
     const content = trimmed.startsWith(NO_REPLY_SENTINEL)
       ? trimmed.slice(NO_REPLY_SENTINEL.length).trim()
       : trimmed;
-
-    if (!content) {
-      return { flushed: false, factsCount: 0, writtenTo: null, suppressed: true };
-    }
 
     // Save facts to MEMORY.md
     const writtenTo = await this.saveFacts(content, workDir);

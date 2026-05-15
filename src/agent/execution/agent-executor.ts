@@ -776,7 +776,11 @@ export class AgentExecutor {
                     flushMsgs.map(m => ({ role: m.role, content: m.content })),
                     [],
                   );
-                  return r.choices[0]?.message?.content ?? 'NO_REPLY';
+                  const content = r.choices[0]?.message?.content;
+                  if (typeof content !== 'string' || content.trim().length === 0) {
+                    throw new Error('Precompaction flush LLM returned no content');
+                  }
+                  return content;
                 }
               );
             } catch {

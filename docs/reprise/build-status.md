@@ -423,6 +423,15 @@ npx eslint src/agent/architect-mode.ts tests/agent/architect-mode.test.ts tests/
 
 npm run typecheck
 # passed
+
+npm test -- tests/context/precompaction-flush.test.ts tests/agent/execution/agent-executor.test.ts
+# precompaction flush and agent-executor tests passed after NO_REPLY fabrication removal
+
+npx eslint src/context/precompaction-flush.ts src/agent/execution/agent-executor.ts tests/context/precompaction-flush.test.ts tests/agent/execution/agent-executor.test.ts --quiet
+# passed
+
+npm run typecheck
+# passed
 ```
 
 ## Debloque pendant la reprise
@@ -1055,6 +1064,9 @@ npm run typecheck
 - `ArchitectMode` refuse maintenant un plan architecte vide et marque les
   etapes editeur sans texte ni tool call comme echecs, au lieu de les compter
   comme reussies.
+- Le flush memoire pre-compaction ne traite plus une reponse LLM blanche comme
+  un sentinel `NO_REPLY`; l'executor ne fabrique plus non plus ce sentinel quand
+  le client ne renvoie aucun contenu.
 
 ## Blocage leve
 
