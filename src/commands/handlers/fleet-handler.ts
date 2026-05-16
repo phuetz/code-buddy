@@ -42,6 +42,11 @@ import {
   getFleetRegistry,
   type ActiveListenerEntry,
 } from '../../fleet/fleet-registry.js';
+import { executePeerDelegate } from '../../tools/peer-delegate-tool.js';
+import {
+  executeRoutePeer,
+  type RoutePeerParams,
+} from '../../tools/route-peer-tool.js';
 
 // eslint-disable-next-line no-control-regex -- Fleet stream chunks may contain terminal control bytes from remote peers.
 const ANSI_ESCAPE_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/g;
@@ -96,6 +101,16 @@ Actions:
                                       live (uses peer.tool.invoke.stream).
                                       Example: /fleet tool darkstar
                                       view_file {"file_path":"README.md"}
+  route <prompt>                      Choose the best peer/model for a task
+            [--privacy public|sensitive]
+            [--max-cost-usd <n>]       using peer.describe + TaskRouter.
+            [--max-latency-ms <n>]     Use --delegate to immediately run the
+            [--parallelism <n>]        selected peer.chat lane. Use --json
+            [--estimated-tokens <n>]   for machine-readable output.
+            [--timeout <ms>]
+            [--delegate]
+            [--delegate-timeout <ms>]
+            [--json]
   chat start <peer>                   (V1.2.1) UX wrapper around
        [--system "<prompt>"]          peer.chat-session.* — opens a
        [--model <id>]                 multi-turn session with stable alias
@@ -158,6 +173,38 @@ interface ParsedHistoryArgs {
   type: string | null;
   /** `true` when `--json` was passed — render as JSON array instead of text. */
   json: boolean;
+}
+
+interface ParsedRouteArgs {
+  prompt: string;
+  routeParams: Omit<RoutePeerParams, 'prompt'>;
+  delegate: boolean;
+  delegateTimeoutMs?: number;
+  json: boolean;
+  error?: string;
+}
+
+interface RouteLaneSummary {
+  peer: string;
+  model: string;
+  score: number;
+}
+
+interface RoutePeerCommandData {
+  recommendation: RouteLaneSummary;
+  fallback: RouteLaneSummary | null;
+  parallel?: RouteLaneSummary[];
+  rationale: string;
+  classification: unknown;
+  describeErrors: Array<{ peer: string; error: string }>;
+  nextCall: {
+    tool: string;
+    args: {
+      peer: string;
+      prompt: string;
+      model: string;
+    };
+  };
 }
 
 /**
@@ -295,6 +342,99 @@ function parseHistoryArgs(rest: string[]): ParsedHistoryArgs {
     }
   }
   return { count, peer, type, json };
+}
+
+function parsePositiveNumberFlag(flag: string, raw: string | undefined): {
+  value?: number;
+  error?: string;
+} {
+  if (raw === undefined) {
+    return { error: `Error: ${flag} expects a positive number.` };
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    return { error: `Error: ${flag} expects a positive number, got "${raw}".` };
+  }
+  return { value };
+}
+
+function parsePositiveIntegerFlag(flag: string, raw: string | undefined): {
+  value?: number;
+  error?: string;
+} {
+  const parsed = parsePositiveNumberFlag(flag, raw);
+  if (parsed.error || parsed.value === undefined) return parsed;
+  return { value: Math.floor(parsed.value) };
+}
+
+function parseRouteArgs(rest: string[]): ParsedRouteArgs {
+  const promptParts: string[] = [];
+  const routeParams: ParsedRouteArgs['routeParams'] = {};
+  let delegate = false;
+  let delegateTimeoutMs: number | undefined;
+  let json = false;
+
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (arg === '--privacy' && i + 1 < rest.length) {
+      const privacy = rest[i + 1];
+      if (privacy !== 'public' && privacy !== 'sensitive') {
+        return {
+          prompt: '',
+          routeParams,
+          delegate,
+          json,
+          error: 'Error: --privacy must be "public" or "sensitive".',
+        };
+      }
+      routeParams.privacyTag = privacy;
+      i++;
+    } else if ((arg === '--max-cost' || arg === '--max-cost-usd') && i + 1 < rest.length) {
+      const parsed = parsePositiveNumberFlag(arg, rest[i + 1]);
+      if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
+      routeParams.maxCostUsd = parsed.value;
+      i++;
+    } else if ((arg === '--max-latency' || arg === '--max-latency-ms') && i + 1 < rest.length) {
+      const parsed = parsePositiveIntegerFlag(arg, rest[i + 1]);
+      if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
+      routeParams.maxLatencyMs = parsed.value;
+      i++;
+    } else if (arg === '--parallelism' && i + 1 < rest.length) {
+      const parsed = parsePositiveIntegerFlag(arg, rest[i + 1]);
+      if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
+      routeParams.parallelism = parsed.value;
+      i++;
+    } else if ((arg === '--estimated-tokens' || arg === '--tokens') && i + 1 < rest.length) {
+      const parsed = parsePositiveIntegerFlag(arg, rest[i + 1]);
+      if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
+      routeParams.estimatedTokens = parsed.value;
+      i++;
+    } else if (arg === '--timeout' && i + 1 < rest.length) {
+      const parsed = parsePositiveIntegerFlag(arg, rest[i + 1]);
+      if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
+      routeParams.timeoutMs = parsed.value;
+      i++;
+    } else if (arg === '--delegate-timeout' && i + 1 < rest.length) {
+      const parsed = parsePositiveIntegerFlag(arg, rest[i + 1]);
+      if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
+      delegateTimeoutMs = parsed.value;
+      i++;
+    } else if (arg === '--delegate') {
+      delegate = true;
+    } else if (arg === '--json') {
+      json = true;
+    } else {
+      promptParts.push(arg);
+    }
+  }
+
+  return {
+    prompt: promptParts.join(' ').trim(),
+    routeParams,
+    delegate,
+    ...(delegateTimeoutMs !== undefined ? { delegateTimeoutMs } : {}),
+    json,
+  };
 }
 
 /**
@@ -1084,6 +1224,10 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
     return await handleChat(rest);
   }
 
+  if (action === 'route') {
+    return await handleRoute(rest);
+  }
+
   if (action === 'tool') {
     return await handleTool(rest);
   }
@@ -1093,6 +1237,133 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
   }
 
   return textResult(`Unknown fleet action: ${args[0]}\n\n${HELP}`);
+}
+
+function getClassificationComplexity(classification: unknown): string {
+  if (!classification || typeof classification !== 'object') return 'unknown';
+  const complexity = (classification as { complexity?: unknown }).complexity;
+  return typeof complexity === 'string' ? complexity : 'unknown';
+}
+
+function isRoutePeerCommandData(value: unknown): value is RoutePeerCommandData {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<RoutePeerCommandData>;
+  const rec = candidate.recommendation;
+  return Boolean(
+    rec &&
+      typeof rec.peer === 'string' &&
+      typeof rec.model === 'string' &&
+      typeof rec.score === 'number',
+  );
+}
+
+function formatLane(label: string, lane: RouteLaneSummary | null | undefined): string {
+  if (!lane) return `${label}: none`;
+  return `${label}: ${lane.peer} / ${lane.model} (score ${lane.score.toFixed(3)})`;
+}
+
+function formatRoutePeerCommandData(data: RoutePeerCommandData): string {
+  const lines: string[] = [
+    'Fleet route recommendation',
+    formatLane('  Primary', data.recommendation),
+    formatLane('  Fallback', data.fallback),
+  ];
+
+  if (data.parallel && data.parallel.length > 0) {
+    lines.push(
+      `  Parallel: ${data.parallel
+        .map((lane) => `${lane.peer}/${lane.model} (${lane.score.toFixed(3)})`)
+        .join(', ')}`,
+    );
+  }
+
+  lines.push(`  Complexity: ${getClassificationComplexity(data.classification)}`);
+  lines.push(`  Rationale: ${data.rationale}`);
+  if (data.describeErrors.length > 0) {
+    lines.push(`  Describe warnings: ${data.describeErrors.length}`);
+    for (const warning of data.describeErrors.slice(0, 3)) {
+      lines.push(`    ${warning.peer}: ${warning.error}`);
+    }
+  }
+  lines.push('');
+  lines.push('Next call:');
+  lines.push(
+    `  peer_delegate {"peer":"${data.nextCall.args.peer}","model":"${data.nextCall.args.model}","prompt":${JSON.stringify(data.nextCall.args.prompt)}}`,
+  );
+  lines.push(
+    `  or /fleet route ${JSON.stringify(data.nextCall.args.prompt)} --delegate`,
+  );
+  return lines.join('\n');
+}
+
+async function handleRoute(rest: string[]): Promise<CommandHandlerResult> {
+  const parsed = parseRouteArgs(rest);
+  if (parsed.error) {
+    return textResult(parsed.error);
+  }
+  if (!parsed.prompt) {
+    return textResult(
+      'Usage: /fleet route <prompt> [--privacy public|sensitive] [--delegate] [--json]\n\n' +
+        HELP,
+    );
+  }
+
+  const routeResult = await executeRoutePeer({
+    prompt: parsed.prompt,
+    ...parsed.routeParams,
+  });
+
+  if (!routeResult.success) {
+    if (parsed.json) {
+      return textResult(JSON.stringify(routeResult, null, 2));
+    }
+    const details = routeResult.data ? `\n${JSON.stringify(routeResult.data, null, 2)}` : '';
+    return textResult(`Fleet route FAILED:\n  ${routeResult.error ?? 'unknown error'}${details}`);
+  }
+
+  if (!isRoutePeerCommandData(routeResult.data)) {
+    return textResult(
+      parsed.json
+        ? JSON.stringify(routeResult, null, 2)
+        : `Fleet route returned an unexpected payload:\n${routeResult.output ?? '(empty)'}`,
+    );
+  }
+
+  const routeData = routeResult.data;
+  if (!parsed.delegate) {
+    return textResult(
+      parsed.json
+        ? JSON.stringify(routeData, null, 2)
+        : formatRoutePeerCommandData(routeData),
+    );
+  }
+
+  const delegateResult = await executePeerDelegate({
+    peer: routeData.recommendation.peer,
+    prompt: parsed.prompt,
+    model: routeData.recommendation.model,
+    ...(parsed.delegateTimeoutMs !== undefined ? { timeoutMs: parsed.delegateTimeoutMs } : {}),
+  });
+
+  if (parsed.json) {
+    return textResult(
+      JSON.stringify(
+        {
+          route: routeData,
+          delegate: delegateResult,
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
+  const delegateText = delegateResult.success
+    ? delegateResult.output ?? ''
+    : `FAILED:\n  ${delegateResult.error ?? 'unknown error'}`;
+  return textResult(
+    `${formatRoutePeerCommandData(routeData)}\n\nDelegated response:\n${delegateText}`,
+  );
 }
 
 /**

@@ -159,6 +159,36 @@ The peer's key must have `peer:invoke`, the remote server must set
 `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT`, and the requested tool must pass
 the read-only allowlist + `fleetSafe` metadata checks.
 
+### `/fleet route <prompt> [--delegate]`
+
+Human-facing wrapper around the same semantic router exposed to the LLM
+as `route_peer`. It calls `peer.describe` on connected peers, classifies
+the prompt, applies Fleet `TaskRouter` constraints, and prints the
+recommended peer/model before you delegate work.
+
+```bash
+/fleet route "think deeply about this multi-agent architecture" --privacy public
+# -> Primary: ministar-linux / gpt-5.1-codex (score ...)
+# -> Next call: peer_delegate {...}
+
+/fleet route "audit this private source tree" --privacy sensitive
+# -> Cloud-egress peers are vetoed; local Ollama/Gemini peers can win
+
+/fleet route "summarize this design tradeoff" --delegate --delegate-timeout 120000
+# -> Routes first, then sends one peer.chat call to the selected lane
+```
+
+Useful flags:
+
+- `--privacy public|sensitive` — sensitive tasks veto cloud-egress peers.
+- `--max-cost-usd <n>` / `--max-latency-ms <n>` — hard routing filters.
+- `--parallelism <n>` — ask the router for multiple lanes.
+- `--estimated-tokens <n>` — avoid peers with too-small context windows.
+- `--timeout <ms>` — per-peer `peer.describe` timeout.
+- `--delegate` — immediately run the recommended `peer.chat` lane.
+- `--delegate-timeout <ms>` — override the delegated chat timeout.
+- `--json` — return the raw route payload for scripts.
+
 ### `/fleet status`
 
 ```
@@ -621,6 +651,9 @@ Two new tools registered on every Code Buddy:
   returns a recommended peer/model plus a ready `peer_delegate` call.
   Use `privacyTag: "sensitive"` to veto cloud-egress peers for private
   code or secret-bearing prompts.
+- `/fleet route "..."` — human-facing version of the same router.
+  Add `--delegate` to route and immediately perform one `peer.chat`
+  call on the selected peer/model.
 - `peer_delegate(peer, prompt, [systemPrompt], [model], [timeoutMs])` —
   wraps `peer.chat`. Returns the peer's text response, usage, traceId.
 

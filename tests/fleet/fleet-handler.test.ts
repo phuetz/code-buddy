@@ -665,6 +665,126 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
     });
   });
 
+  describe('route action', () => {
+    it('reports no peers when nothing is connected', async () => {
+      const r = await handleFleet(['route', 'think', 'deeply']);
+      expect(r.entry?.content).toContain('No fleet peers connected');
+    });
+
+    it('renders a human recommendation from peer.describe capabilities', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'chatgpt']);
+      fleetListenerMock.requestMock.mockImplementationOnce(async (method) => {
+        expect(method).toBe('peer.describe');
+        return {
+          capabilities: {
+            egress: 'cloud',
+            machineLabel: 'ChatGPT Pro laptop',
+            models: [
+              {
+                id: 'gpt-5.1-codex',
+                contextWindow: 200_000,
+                strengths: ['reasoning', 'thinking', 'code'],
+                provider: 'chatgpt-oauth',
+              },
+            ],
+          },
+        };
+      });
+
+      const r = await handleFleet([
+        'route',
+        'think',
+        'deeply',
+        'about',
+        'this',
+        'architecture',
+        '--privacy',
+        'public',
+      ]);
+
+      const out = r.entry?.content ?? '';
+      expect(out).toContain('Fleet route recommendation');
+      expect(out).toContain('Primary: chatgpt / gpt-5.1-codex');
+      expect(out).toContain('peer_delegate');
+      expect(fleetListenerMock.requestMock).toHaveBeenCalledWith(
+        'peer.describe',
+        {},
+        { timeoutMs: 5_000 },
+      );
+    });
+
+    it('--json emits the structured route payload', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'local']);
+      fleetListenerMock.requestMock.mockImplementationOnce(async () => ({
+        capabilities: {
+          egress: 'local',
+          models: [
+            {
+              id: 'qwen3.6:35b',
+              contextWindow: 32_000,
+              strengths: ['reasoning', 'thinking'],
+              provider: 'ollama',
+            },
+          ],
+        },
+      }));
+
+      const r = await handleFleet(['route', 'private', 'analysis', '--json']);
+      const parsed = JSON.parse(r.entry?.content ?? '{}');
+      expect(parsed.recommendation).toMatchObject({
+        peer: 'local',
+        model: 'qwen3.6:35b',
+      });
+      expect(parsed.nextCall.tool).toBe('peer_delegate');
+    });
+
+    it('--delegate routes first, then sends peer.chat to the selected peer/model', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'chatgpt']);
+      fleetListenerMock.requestMock.mockImplementation(async (method, params) => {
+        if (method === 'peer.describe') {
+          return {
+            capabilities: {
+              egress: 'cloud',
+              models: [
+                {
+                  id: 'gpt-5.1-codex',
+                  contextWindow: 200_000,
+                  strengths: ['reasoning', 'thinking'],
+                  provider: 'chatgpt-oauth',
+                },
+              ],
+            },
+          };
+        }
+        if (method === 'peer.chat') {
+          expect(params).toMatchObject({
+            prompt: 'think deeply',
+            model: 'gpt-5.1-codex',
+          });
+          return { text: 'delegated answer', modelRequested: 'gpt-5.1-codex' };
+        }
+        return { ok: true };
+      });
+
+      const r = await handleFleet(['route', 'think', 'deeply', '--delegate']);
+      const out = r.entry?.content ?? '';
+      expect(out).toContain('Delegated response');
+      expect(out).toContain('delegated answer');
+      expect(fleetListenerMock.requestMock).toHaveBeenCalledWith(
+        'peer.chat',
+        { prompt: 'think deeply', model: 'gpt-5.1-codex' },
+        { timeoutMs: 60_000 },
+      );
+    });
+
+    it('rejects invalid privacy values before contacting peers', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k']);
+      const r = await handleFleet(['route', 'hello', '--privacy', 'secret']);
+      expect(r.entry?.content).toContain('--privacy must be');
+      expect(fleetListenerMock.requestMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('tool action (Phase (d).23 / V1.3)', () => {
     it('reports no listeners when none active', async () => {
       const r = await handleFleet(['tool', 'peer:3000', 'view_file']);
