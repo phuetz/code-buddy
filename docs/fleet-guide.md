@@ -607,9 +607,15 @@ The fleet through Phase (d).16a was peer-RPC plumbing. Phases (d).17 →
 
 Two new tools registered on every Code Buddy:
 
-- `list_peers()` — read-only snapshot of `FleetRegistry`. Returns peer
-  ids + URL + last-seen + compaction state + `peerChatLikelyAvailable`
-  hint. No RPC round-trips.
+- `list_peers()` — fast read-only snapshot of `FleetRegistry`. Returns
+  peer ids + URL + last-seen + compaction state +
+  `peerChatLikelyAvailable` hint without RPC round-trips.
+- `list_peers({ "includeCapabilities": true })` — best-effort
+  enrichment path. Calls `peer.describe` on each peer and returns
+  `peerChatProvider` plus a compact provider/model capability summary
+  (`chatgpt-oauth`, `ollama`, `gemini-cli`, strengths, egress, etc.).
+  Requires `peer:invoke` on the fleet key; peers that refuse are still
+  listed with `describeError`.
 - `peer_delegate(peer, prompt, [systemPrompt], [model], [timeoutMs])` —
   wraps `peer.chat`. Returns the peer's text response, usage, traceId.
 
@@ -623,7 +629,7 @@ can autonomously decide to delegate without a copy-paste step:
 
 ```
 User: ask the darkstar peer how it would index a 50M-row table
-LLM: [calls list_peers, sees darkstar healthy, calls peer_delegate({peer: 'darkstar', ...})]
+LLM: [calls list_peers({includeCapabilities:true}), sees darkstar has ollama/qwen, calls peer_delegate({peer: 'darkstar', ...})]
 LLM (continuing with peer's answer in context): "darkstar suggests …"
 ```
 

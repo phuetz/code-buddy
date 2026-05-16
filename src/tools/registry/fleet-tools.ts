@@ -119,17 +119,36 @@ export class ListPeersTool implements ITool {
   readonly name = 'list_peers';
   readonly description =
     'List all connected fleet peers with their status (last seen, compacting, peer chat availability). ' +
-    'Use this before peer_delegate to discover peer IDs and pick a healthy peer.';
+    'Use this before peer_delegate to discover peer IDs and pick a healthy peer. ' +
+    'Set includeCapabilities=true when you need provider/model metadata for routing.';
 
-  async execute(_input: Record<string, unknown>): Promise<ToolResult> {
-    return executeListPeers();
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    return executeListPeers({
+      includeCapabilities: input.includeCapabilities === true,
+      timeoutMs: typeof input.timeoutMs === 'number' ? input.timeoutMs : undefined,
+    });
   }
 
   getSchema(): ToolSchema {
     return {
       name: this.name,
       description: this.description,
-      parameters: { type: 'object', properties: {}, required: [] },
+      parameters: {
+        type: 'object',
+        properties: {
+          includeCapabilities: {
+            type: 'boolean',
+            description:
+              'When true, also call peer.describe on each peer and include provider/model capability summaries. Requires peer:invoke on the fleet key.',
+          },
+          timeoutMs: {
+            type: 'number',
+            description:
+              'Per-peer peer.describe timeout in milliseconds when includeCapabilities is true. Default 5000.',
+          },
+        },
+        required: [],
+      },
     };
   }
 
@@ -145,7 +164,7 @@ export class ListPeersTool implements ITool {
       keywords: ['peers', 'fleet', 'connected', 'remote', 'claudes', 'list', 'discover', 'status'],
       priority: 5,
       modifiesFiles: false,
-      makesNetworkRequests: false,
+      makesNetworkRequests: true,
       fleetSafe: false,
     };
   }

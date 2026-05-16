@@ -1,19 +1,40 @@
 /**
  * list_peers tool — Phase (d).17.
  *
- * Read-only projection of FleetRegistry state. No extra RPCs are made:
- * the LLM gets a snapshot of what's already known locally, which is
- * enough to pick a peer for `peer_delegate`.
- *
- * For richer per-peer metadata (provider, model, role…), `/fleet send
- * <peer> peer.describe` remains the power-user path — we don't
- * round-trip every peer on every list_peers call.
+ * Read-only projection of FleetRegistry state. By default no extra RPCs
+ * are made: the LLM gets a fast snapshot of what's already known
+ * locally. When `includeCapabilities` is true, the tool best-effort
+ * calls `peer.describe` on each peer so the LLM can choose between
+ * providers/models before using `peer_delegate`.
  *
  * @module src/tools/list-peers-tool
  */
 
 import { getFleetRegistry } from '../fleet/fleet-registry.js';
+import type { FleetProvider, ModelStrength, PeerCapability } from '../fleet/types.js';
 import type { ToolResult } from '../types/index.js';
+
+export interface ListPeersParams {
+  includeCapabilities?: boolean;
+  timeoutMs?: number;
+}
+
+export interface ListedPeerChatProvider {
+  provider: string;
+  model: string;
+  isLocal: boolean;
+}
+
+export interface ListedPeerCapabilities {
+  machineLabel: string;
+  egress: PeerCapability['egress'];
+  modelCount: number;
+  providers: FleetProvider[];
+  topModels: string[];
+  strengths: ModelStrength[];
+  maxConcurrency?: number;
+  activeRequests?: number;
+}
 
 export interface ListedPeer {
   id: string;
@@ -26,9 +47,15 @@ export interface ListedPeer {
   stale: boolean;
   /** Conservative hint — peer has been seen recently and isn't compacting. */
   peerChatLikelyAvailable: boolean;
+  /** Present when includeCapabilities=true and peer.describe succeeds. */
+  peerChatProvider?: ListedPeerChatProvider | null;
+  /** Present when includeCapabilities=true and peer.describe returns capabilities. */
+  capabilities?: ListedPeerCapabilities | null;
+  /** Present when includeCapabilities=true but peer.describe fails. */
+  describeError?: string;
 }
 
-export async function executeListPeers(): Promise<ToolResult> {
+export async function executeListPeers(params: ListPeersParams = {}): Promise<ToolResult> {
   const reg = getFleetRegistry();
   const entries = reg.list();
 
@@ -57,9 +84,83 @@ export async function executeListPeers(): Promise<ToolResult> {
     };
   });
 
+  if (params.includeCapabilities) {
+    const timeoutMs =
+      params.timeoutMs && params.timeoutMs > 0 ? params.timeoutMs : 5_000;
+    await Promise.all(
+      entries.map(async (entry, index) => {
+        try {
+          const raw = await entry.listener.request(
+            'peer.describe',
+            {},
+            { timeoutMs },
+          );
+          const described = raw as {
+            peerChatProvider?: unknown;
+            capabilities?: unknown;
+          };
+          peers[index].peerChatProvider = normalizePeerChatProvider(
+            described.peerChatProvider,
+          );
+          peers[index].capabilities = summarizeCapabilities(
+            described.capabilities,
+          );
+        } catch (err) {
+          peers[index].describeError =
+            err instanceof Error ? err.message : String(err);
+        }
+      }),
+    );
+  }
+
   return {
     success: true,
     output: JSON.stringify(peers, null, 2),
     data: { peers },
+  };
+}
+
+function normalizePeerChatProvider(raw: unknown): ListedPeerChatProvider | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const candidate = raw as {
+    provider?: unknown;
+    model?: unknown;
+    isLocal?: unknown;
+  };
+  if (
+    typeof candidate.provider !== 'string' ||
+    typeof candidate.model !== 'string' ||
+    typeof candidate.isLocal !== 'boolean'
+  ) {
+    return null;
+  }
+  return {
+    provider: candidate.provider,
+    model: candidate.model,
+    isLocal: candidate.isLocal,
+  };
+}
+
+function summarizeCapabilities(raw: unknown): ListedPeerCapabilities | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const cap = raw as Partial<PeerCapability>;
+  if (!Array.isArray(cap.models)) return null;
+
+  const providers = new Set<FleetProvider>();
+  const strengths = new Set<ModelStrength>();
+  for (const model of cap.models) {
+    providers.add(model.provider);
+    for (const strength of model.strengths) strengths.add(strength);
+  }
+
+  return {
+    machineLabel: typeof cap.machineLabel === 'string' ? cap.machineLabel : '',
+    egress: cap.egress ?? 'local',
+    modelCount: cap.models.length,
+    providers: Array.from(providers).sort(),
+    topModels: cap.models.slice(0, 6).map((model) => model.id),
+    strengths: Array.from(strengths).sort(),
+    maxConcurrency: cap.maxConcurrency,
+    activeRequests: cap.activeRequests,
   };
 }

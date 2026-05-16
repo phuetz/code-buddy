@@ -45,6 +45,10 @@ Heading toward `1.0.0` final. Open audit blockers tracked in
     as `chatgpt-oauth`, advertises Codex subscription models at zero
     marginal cost, and lets `peer.chat` use the ChatGPT Codex Responses
     backend before falling back to paid API providers.
+  - `list_peers({ includeCapabilities: true })` now enriches connected
+    peers with `peer.describe` provider/model summaries so the LLM can
+    choose between ChatGPT OAuth, Ollama, Gemini CLI, and paid APIs before
+    calling `peer_delegate`.
   - New module `src/fleet/peer-tool-bridge.ts` (~280 LOC,
     standalone executors using `fs/promises` + `@vscode/ripgrep`).
     18 unit tests in `tests/server/peer-tool-bridge.test.ts`.

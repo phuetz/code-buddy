@@ -597,9 +597,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'list_peers',
     category: 'utility' as ToolCategory,
-    keywords: ['peers', 'fleet', 'connected', 'remote', 'claudes', 'list', 'discover', 'status'],
+    keywords: ['peers', 'fleet', 'connected', 'remote', 'claudes', 'list', 'discover', 'status', 'provider', 'model', 'capabilities'],
     priority: 5,
-    description: 'List connected fleet peers with status, last-seen, and peer chat availability'
+    description: 'List connected fleet peers with status, last-seen, peer chat availability, and optional provider/model capabilities'
   },
 
   // AskUserQuestion (structured multi-option mid-task questions)

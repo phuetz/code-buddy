@@ -19,6 +19,7 @@ interface ListenerStubOptions {
   lastSeenReason?: string | null;
   compactionActive?: boolean;
   stale?: boolean;
+  request?: FleetListenerPublicAPI['request'];
 }
 
 function makeStubListener(opts: ListenerStubOptions = {}): FleetListenerPublicAPI {
@@ -26,7 +27,7 @@ function makeStubListener(opts: ListenerStubOptions = {}): FleetListenerPublicAP
     disconnect: async () => undefined,
     getReconnectAttempts: () => 0,
     isReconnecting: () => false,
-    request: async () => ({}),
+    request: opts.request ?? (async () => ({})),
     getLastSeen: () => ({
       at: opts.lastSeenAgeMs != null ? Date.now() - opts.lastSeenAgeMs : null,
       reason: opts.lastSeenReason ?? null,
@@ -130,5 +131,79 @@ describe('list_peers tool', () => {
     const result = await executeListPeers();
     const data = result.data as { peers: ListedPeer[] };
     expect(data.peers[0].stale).toBe(true);
+  });
+
+  it('optionally enriches peers with peer.describe provider capabilities', async () => {
+    registerPeer('chatgpt-peer', {
+      lastSeenAgeMs: 100,
+      request: async (method) => {
+        expect(method).toBe('peer.describe');
+        return {
+          peerChatProvider: {
+            provider: 'chatgpt-oauth',
+            model: 'gpt-5.1-codex',
+            isLocal: false,
+          },
+          capabilities: {
+            machineLabel: 'ministar',
+            egress: 'cloud',
+            models: [
+              {
+                id: 'gpt-5.1-codex',
+                contextWindow: 200_000,
+                strengths: ['reasoning', 'code'],
+                provider: 'chatgpt-oauth',
+              },
+              {
+                id: 'qwen3.6:35b',
+                contextWindow: 32_000,
+                strengths: ['reasoning', 'thinking'],
+                provider: 'ollama',
+              },
+            ],
+            maxConcurrency: 3,
+            activeRequests: 1,
+          },
+        };
+      },
+    });
+
+    const result = await executeListPeers({ includeCapabilities: true });
+    expect(result.success).toBe(true);
+
+    const data = result.data as { peers: ListedPeer[] };
+    expect(data.peers[0].peerChatProvider).toEqual({
+      provider: 'chatgpt-oauth',
+      model: 'gpt-5.1-codex',
+      isLocal: false,
+    });
+    expect(data.peers[0].capabilities).toMatchObject({
+      machineLabel: 'ministar',
+      egress: 'cloud',
+      modelCount: 2,
+      providers: ['chatgpt-oauth', 'ollama'],
+      topModels: ['gpt-5.1-codex', 'qwen3.6:35b'],
+      maxConcurrency: 3,
+      activeRequests: 1,
+    });
+    expect(data.peers[0].capabilities?.strengths).toEqual([
+      'code',
+      'reasoning',
+      'thinking',
+    ]);
+  });
+
+  it('keeps the peer listed when peer.describe enrichment fails', async () => {
+    registerPeer('listen-only', {
+      lastSeenAgeMs: 100,
+      request: async () => {
+        throw new Error('FORBIDDEN: peer:invoke scope required');
+      },
+    });
+
+    const result = await executeListPeers({ includeCapabilities: true });
+    const data = result.data as { peers: ListedPeer[] };
+    expect(data.peers[0].id).toBe('listen-only');
+    expect(data.peers[0].describeError).toContain('peer:invoke');
   });
 });
