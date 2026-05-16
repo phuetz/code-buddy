@@ -35,6 +35,9 @@ streaming chunks.
 - **LRU agent cache** (P9) — `MAX_CACHED_SESSIONS = 50` matches pi.
   Insertion-ordered `Map` with touch-on-access; oldest evicted on
   overflow with `dispose()`.
+- **README runner section** (P6) — documented the embedded Code Buddy
+  core engine default, pi fallback, titlebar badge, Settings override,
+  and active-turn queue semantics.
 
 ### Fixed — Cowork-on-core migration
 

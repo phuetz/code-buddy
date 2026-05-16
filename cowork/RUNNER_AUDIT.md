@@ -187,7 +187,7 @@ CODEBUDDY_ENGINE_PATH=/abs/path/to/dist npm run dev
 - ~~Phase 3 : surface "active runner = engine | pi" in titlebar.~~ — done.
 - ~~Phase 4 : Settings opt-in / opt-out persisté.~~ — done.
 - ~~Phase 5 : add tests for event-mapping.~~ — done (9 cases).
-- Phase 6 : update CHANGELOG + README runner section. **In flight.**
+- ~~Phase 6 : update CHANGELOG + README runner section.~~ — done.
 - Out of scope here : deprecate pi (V0.9+, after 4-6 weeks of
   engine-only daily use). The audit doc + Settings page are the
   prerequisites for a clean deprecation announcement.

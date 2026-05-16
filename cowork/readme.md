@@ -14,6 +14,7 @@
   <a href="#demo">Demo</a> •
   <a href="#installation">Downloads</a> •
   <a href="#quick-start">Quick Start</a> •
+  <a href="#core-engine">Core Engine</a> •
   <a href="#skills">Skills Library</a>
 </p>
 
@@ -169,6 +170,29 @@ You need an API key to power the agent. We support **OpenRouter**, **Anthropic**
 1. **Select a Workspace**: Choose a folder where Claude is allowed to work.
 2. **Enter a Prompt**:
    > "Read the financial_report.csv in this folder and create a PowerPoint summary with 5 slides."
+
+<a id="core-engine"></a>
+## Core Engine Runner
+
+Cowork now runs on the embedded **Code Buddy core engine** by default. This is
+the same agentic loop used by the terminal CLI, so Cowork inherits the core
+middlewares, transcript repair, output sanitizer, MCP routing, skills reload,
+and model hot-swap behavior.
+
+- **Default path**: Auto mode uses the embedded engine when the built bundle is
+  available.
+- **Fallback path**: the legacy `pi-coding-agent` runner is still available when
+  the engine bundle is missing or when `CODEBUDDY_EMBEDDED=0` is set.
+- **Visibility**: the titlebar runner badge shows whether the active process is
+  using the engine or pi fallback. Settings -> Core engine lets you choose Auto,
+  Always on, or Always off.
+- **Active turns**: prompts are serialized per session by `SessionManager`.
+  The Stop button cancels an active run; normal follow-up prompts can queue
+  intentionally, and Cowork does not expose a regenerate action while a turn is
+  already active.
+
+See [`RUNNER_AUDIT.md`](./RUNNER_AUDIT.md) for the engine-vs-pi parity matrix
+and deprecation notes.
 
 ### 📝 Important Notes
 
