@@ -129,7 +129,11 @@ tailscale ping <peer-hostname>
 nc -zv <peer-ip> 3000
 
 # 2. Key + scopes (on the peer)
-buddy api-key create --scopes fleet:listen,peer:invoke
+# Create or re-issue a Code Buddy API key with:
+#   fleet:listen          for /fleet listen
+#   peer:invoke           for /fleet send, /fleet chat, /fleet tool
+#   fleet:listen,peer:invoke for both observe + invoke workflows
+CODEBUDDY_FLEET_API_KEY=cb_sk_...
 
 # 3. CORS (on the peer)
 CODEBUDDY_FLEET_CORS_ORIGINS=http://<listener-host>:* buddy serve

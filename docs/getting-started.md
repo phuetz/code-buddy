@@ -225,11 +225,17 @@ Or use `/yolo on` mid-session.
 Confirm `.codebuddy/CODEBUDDY_MEMORY.md` exists in your project. If not, run `buddy --init`. Then run `/memory recent` to confirm the agent is actually persisting (auto-memory shipped in 1.0.0-rc.2). If `/memory recent` shows "never", make sure `memoryEnabled` is on in your config (default).
 
 ### Fleet: "AUTH_FAILED" when connecting to a peer
-The peer's API key needs the `fleet:listen` scope. On the peer, regenerate with:
+The peer's API key needs the `fleet:listen` scope for `/fleet listen`.
+If you also call `/fleet send`, `/fleet chat`, or `/fleet tool`, the
+same key also needs `peer:invoke`.
+
+On the peer, regenerate or reconfigure a server-side key with the
+required scopes. On the connecting instance, pass that key with
+`--api-key` or store it in `CODEBUDDY_FLEET_API_KEY`:
+
 ```
-buddy api-keys create --scope fleet:listen
+CODEBUDDY_FLEET_API_KEY=cb_sk_...
 ```
-Then pass the new key with `--api-key` to `/fleet listen` on the connecting instance.
 
 ### Fleet: connection drops repeatedly
 Auto-reconnect is opt-in (`autoReconnect: true` in the listener options). Without it, a single drop ends the session. With it, the listener uses exponential backoff. Check `/fleet status` for the current state. Persistent drops usually indicate an apiKey scope issue or a network/firewall problem (Tailscale ACLs, port 3000 reachable?).

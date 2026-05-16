@@ -141,6 +141,24 @@ response.
 JSON params must be a JSON object (not an array, not a primitive).
 Default timeout 30s. `--timeout` overrides per call.
 
+### `/fleet tool <peer> <name> [json-args] [--timeout <ms>] [--stream]`
+
+UX wrapper around `peer.tool.invoke` for the read-only remote tools.
+Use it when you want the CLI shape to feel like a normal Code Buddy
+tool call instead of manually wrapping the `peer.tool.invoke` JSON.
+
+```bash
+/fleet tool darkstar view_file {"file_path":"world-model/README.md"}
+# -> Remote view_file output from DARKSTAR, scoped to its workspace root
+
+/fleet tool darkstar search {"query":"TODO","path":"src"} --stream
+# -> Streams sanitized peer:chunk output live while ripgrep runs remotely
+```
+
+The peer's key must have `peer:invoke`, the remote server must set
+`CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT`, and the requested tool must pass
+the read-only allowlist + `fleetSafe` metadata checks.
+
 ### `/fleet status`
 
 ```
@@ -428,6 +446,20 @@ provider is selected.
   `fleet:listen` scope (read-only events) and/or `peer:invoke` scope
   (active RPC).
 
+Scope matrix:
+
+| Scope | Grants | Does not grant |
+|-------|--------|----------------|
+| `fleet:listen` | Subscribe to `fleet:*` events via `/fleet listen`; observe peer heartbeats, tool events, workflow events, and compaction notices. | Calling `peer.*` RPC methods or remote tools. |
+| `peer:invoke` | Send `peer:request` frames via `/fleet send`, `/fleet chat`, `/fleet tool`, `peer_delegate`, or `FleetListener.invokeTool*`. This includes `peer.chat` and the read-only `peer.tool.invoke` surface. | Passive event streaming unless the same key also has `fleet:listen`. |
+| `admin` | All API scopes, including both fleet scopes. | Nothing scope-related; still obeys workspace-root, allowlist, role, and depth guards. |
+
+For a peer that should both observe and invoke another peer, issue a key
+with both `fleet:listen` and `peer:invoke`. Current V1.x code uses the
+existing `peer:invoke` scope for all peer RPC, including
+`peer.tool.invoke`; a narrower `peer:tool:invoke` sub-scope is only a
+future roadmap idea.
+
 ### Hostname identification (Phase (d).1)
 
 - **`CODEBUDDY_FLEET_HOSTNAME`** — overrides `os.hostname()` in the
@@ -521,12 +553,16 @@ buddy
 # → see methods + peerChatProvider populated
 > /fleet send self peer.chat {"prompt":"Say hi briefly"}
 # → real Gemini response, ~30 tokens of quota
+> /fleet tool self view_file {"file_path":"README.md"} --stream
+# → read-only remote tool response from inside CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT
 > /fleet history --peer self
-# → at least 4 events captured (heartbeat + the 3 above)
+# → at least 5 events captured (heartbeat + the 4 above)
 > /fleet stop self
 ```
 
-If all 5 commands return as documented, your fleet is operational.
+The remote tool command requires `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT`
+on the server side and a key with `peer:invoke`. If all commands return
+as documented, your fleet is operational.
 
 ---
 

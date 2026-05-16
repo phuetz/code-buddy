@@ -37,6 +37,10 @@ Heading toward `1.0.0` final. Open audit blockers tracked in
   - Audit log via `logger.info('[fleet] peer.tool.invoke', meta)` on
     every invocation (success and failure), with shape
     `{ event, from, traceId, depth, tool, stream, ok, error?, durationMs }`.
+  - R4 audit hardening: `view_file` now reads only a capped prefix,
+    `list_directory` caps entries and reports truncation, stream output
+    is sanitized before live terminal display, and the WebSocket
+    loopback path is covered by `tests/fleet/fleet-loopback-smoke.test.ts`.
   - New module `src/fleet/peer-tool-bridge.ts` (~280 LOC,
     standalone executors using `fs/promises` + `@vscode/ripgrep`).
     18 unit tests in `tests/server/peer-tool-bridge.test.ts`.
@@ -54,13 +58,12 @@ Heading toward `1.0.0` final. Open audit blockers tracked in
     default: with no `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` set, every
     invocation rejects with `PEER_WORKSPACE_NOT_CONFIGURED` and
     nothing else changes. Existing deployments need no migration.
-  - **Test coverage scope** — the 19 unit tests dispatch directly via
-    `dispatchPeerRequest`, bypassing the WebSocket transport. The
-    `ctx.emitChunk → peer:chunk` wiring in `handler.ts` is exercised
-    indirectly by the symmetrical `peer-chat-stream` tests but not
-    directly here. **Cross-host E2E with a real DARKSTAR fleet
-    gateway is the intended Phase 2-3 follow-up**; do not push this
-    commit upstream until that validation is green.
+  - **Test coverage scope** — unit tests dispatch directly via
+    `dispatchPeerRequest`, while `tests/fleet/fleet-loopback-smoke.test.ts`
+    starts a real Gateway WebSocket server and exercises `/fleet tool`
+    over the loopback transport in both buffered and streamed modes.
+    Cross-host E2E with a real DARKSTAR fleet gateway remains the
+    intended Phase 2-3 follow-up.
 
 ### Added — Fleet V1.2 (Phase d.21)
 
