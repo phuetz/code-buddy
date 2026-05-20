@@ -22,18 +22,29 @@ vi.mock('../../src/utils/logger.js', () => ({
 // Mock persistent-memory so finalise()'s skill writeback hook doesn't
 // touch the real user memory files during tests. Tests that exercise
 // the writeback path read these mocks to assert behaviour.
+type FakeMemory = {
+  key: string;
+  value: string;
+  category?: string;
+  accessCount?: number;
+};
 const rememberMock = vi.fn(async () => {});
 const initializeMock = vi.fn(async () => {});
+const getRelevantMemoriesMock = vi.fn<(query: string, limit: number) => FakeMemory[]>(
+  () => [],
+);
 vi.mock('../../src/memory/persistent-memory.js', () => ({
   getMemoryManager: () => ({
     initialize: initializeMock,
     remember: rememberMock,
+    getRelevantMemories: getRelevantMemoriesMock,
   }),
 }));
 
 import {
   SagaStore,
   deriveSagaStatus,
+  loadRelevantSagaLessons,
   type SagaRecord,
 } from '../../src/fleet/saga-store';
 import { logger } from '../../src/utils/logger.js';
@@ -130,8 +141,10 @@ beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'saga-store-test-'));
   rememberMock.mockClear();
   initializeMock.mockClear();
+  getRelevantMemoriesMock.mockClear();
   rememberMock.mockImplementation(async () => {});
   initializeMock.mockImplementation(async () => {});
+  getRelevantMemoriesMock.mockImplementation(() => []);
 });
 
 afterEach(() => {
@@ -293,6 +306,83 @@ describe('deriveSagaStatus', () => {
       updatedAt: 0,
     };
     expect(deriveSagaStatus(saga)).toBe('pending');
+  });
+});
+
+describe('loadRelevantSagaLessons (Phase F — skill recall)', () => {
+  it('returns formatted lessons for fleet-saga memory entries matching the query', async () => {
+    getRelevantMemoriesMock.mockImplementation(() => [
+      {
+        key: 'fleet-saga-saga_a1',
+        value: 'Goal: fix off-by-one\n\nOutcome: added bounds check in parser',
+      },
+      {
+        key: 'fleet-saga-saga_b2',
+        value: 'Goal: refactor router\n\nOutcome: split monolith into 3 modules',
+      },
+    ]);
+    const lessons = await loadRelevantSagaLessons('fix bug');
+    expect(lessons).toHaveLength(2);
+    expect(lessons[0]).toContain('off-by-one');
+    expect(lessons[0]).toMatch(/^- /);
+    expect(initializeMock).toHaveBeenCalled();
+  });
+
+  it('filters out non-fleet memory entries', async () => {
+    getRelevantMemoriesMock.mockImplementation(() => [
+      { key: 'user-preference-style', value: 'two-space indent' },
+      {
+        key: 'fleet-saga-only-one',
+        value: 'Goal: doc update\n\nOutcome: rewrote README',
+      },
+      { key: 'project-decision-auth', value: 'use JWT' },
+    ]);
+    const lessons = await loadRelevantSagaLessons('update docs');
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]).toContain('doc update');
+  });
+
+  it('respects the limit option (default 3, configurable)', async () => {
+    getRelevantMemoriesMock.mockImplementation(() =>
+      Array.from({ length: 6 }, (_, i) => ({
+        key: `fleet-saga-${i}`,
+        value: `Goal: g${i}\n\nOutcome: o${i}`,
+      })),
+    );
+    const lessons = await loadRelevantSagaLessons('anything');
+    expect(lessons).toHaveLength(3);
+    const fewer = await loadRelevantSagaLessons('anything', { limit: 1 });
+    expect(fewer).toHaveLength(1);
+  });
+
+  it('truncates long values to 300 chars with ellipsis', async () => {
+    const longValue = `Goal: x\n\nOutcome: ${'A'.repeat(1000)}`;
+    getRelevantMemoriesMock.mockImplementation(() => [
+      { key: 'fleet-saga-long', value: longValue },
+    ]);
+    const [lesson] = await loadRelevantSagaLessons('x');
+    expect(lesson.length).toBeLessThanOrEqual('- '.length + 300);
+    expect(lesson.endsWith('...')).toBe(true);
+  });
+
+  it('returns [] (no throw) when memory module rejects', async () => {
+    getRelevantMemoriesMock.mockImplementation(() => {
+      throw new Error('memory file corrupt');
+    });
+    const lessons = await loadRelevantSagaLessons('anything');
+    expect(lessons).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('loadRelevantSagaLessons failed'),
+      expect.any(Object),
+    );
+  });
+
+  it('returns [] when initialize rejects', async () => {
+    initializeMock.mockImplementation(async () => {
+      throw new Error('init blocked');
+    });
+    const lessons = await loadRelevantSagaLessons('anything');
+    expect(lessons).toEqual([]);
   });
 });
 

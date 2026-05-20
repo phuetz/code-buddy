@@ -52,6 +52,12 @@ interface SagaStepShape {
   role?: string;
   /** Only set on chain steps — index of predecessor step. */
   dependsOn?: number;
+  /**
+   * Phase H — set to `true` after the runner has retried this chain
+   * step on an alternative peer. Acts as a 1-retry cap: a second
+   * stall on the alt peer fails the chain for good.
+   */
+  retried?: boolean;
   runId?: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   toolPolicy?: DispatchToolPolicyShape;
@@ -369,13 +375,129 @@ export class SagaRunner {
     }
     if (result.status === 'completed') {
       await store.completeStep(sagaId, laneIndex, result.result ?? '');
-    } else if (result.status === 'failed') {
+      this.emitSagaUpdate(sagaId);
+      return;
+    }
+    // Phase H — chain step stalled or failed. Attempt one retry on an
+    // alternative peer carrying the same role before giving up on the
+    // chain. Non-chain steps keep the existing failure path.
+    const isChainStep = step.lane === 'chain' && step.role;
+    const isStallFailure =
+      result.status === 'cancelled' ||
+      (result.status === 'failed' && result.error === 'poll_timeout');
+    if (isChainStep && isStallFailure && !step.retried) {
+      const reassigned = await this.retryChainStepOnAlternatePeer(
+        store,
+        sagaId,
+        laneIndex,
+        step.peerId,
+        step.role!,
+      );
+      if (reassigned) {
+        this.emitSagaUpdate(sagaId);
+        await this.runStep(store, sagaId, laneIndex);
+        return;
+      }
+      // No alt peer — fall through to failStep below.
+    }
+    if (result.status === 'failed') {
       await store.failStep(sagaId, laneIndex, result.error ?? 'unknown_error');
     } else {
       // 'cancelled' or polling timeout — record as failed for now.
       await store.failStep(sagaId, laneIndex, `poll_terminal_unknown: ${result.status}`);
     }
     this.emitSagaUpdate(sagaId);
+  }
+
+  /**
+   * Phase H — find an alternative peer with the requested role (using
+   * the core TaskRouter with `excludePeerIds` set to the stalled peer)
+   * and re-stage the saga step so {@link runStep} can fire dispatch
+   * again. Sets `retried: true` to cap further retries.
+   *
+   * Returns `true` if the step was reassigned, `false` if no
+   * alternative is available (chain breaks). Errors are swallowed and
+   * logged — caller falls through to the failure path.
+   */
+  private async retryChainStepOnAlternatePeer(
+    store: SagaStoreShape,
+    sagaId: string,
+    laneIndex: number,
+    originalPeerId: string,
+    role: string,
+  ): Promise<boolean> {
+    try {
+      type RouterMod = {
+        TaskRouter: new () => {
+          plan: (
+            cls: Record<string, unknown>,
+            peers: Array<{ peerId: string; capability: unknown }>,
+            constraints?: unknown,
+          ) => {
+            primary: { peerId: string; model: string };
+          };
+        };
+      };
+      type ClsMod = {
+        classifyTaskComplexity: (msg: string) => Record<string, unknown>;
+      };
+      const [routerMod, clsMod] = await Promise.all([
+        loadCoreModule<RouterMod>('fleet/task-router.js'),
+        loadCoreModule<ClsMod>('optimization/model-routing.js'),
+      ]);
+      if (!routerMod || !clsMod) {
+        logWarn('[saga-runner] retry: router/classifier modules unavailable');
+        return false;
+      }
+      const saga = await store.load(sagaId);
+      if (!saga) return false;
+
+      const peers = (await Promise.resolve(this.fleetBridge.listPeers())) as Array<
+        { id: string; capability?: unknown }
+      >;
+      const peerSlots = peers
+        .filter((p) => Boolean(p.capability))
+        .map((p) => ({ peerId: p.id, capability: p.capability as unknown }));
+      if (peerSlots.length === 0) return false;
+
+      const classification = clsMod.classifyTaskComplexity(saga.goal);
+      const router = new routerMod.TaskRouter();
+      const altPlan = router.plan(classification, peerSlots, {
+        requiredRole: role,
+        excludePeerIds: [originalPeerId],
+        privacyTag: saga.metadata?.privacyTag,
+      });
+      const altPeerId = altPlan.primary.peerId;
+      const altModel = altPlan.primary.model;
+      await store.update(sagaId, (s) => {
+        const target = s.steps[laneIndex];
+        if (!target) return s;
+        target.peerId = altPeerId;
+        target.model = altModel;
+        target.status = 'pending';
+        target.retried = true;
+        target.runId = undefined;
+        target.error = undefined;
+        return s;
+      });
+      logWarn('[saga-runner] chain step retried on alternate peer', {
+        sagaId,
+        laneIndex,
+        from: originalPeerId,
+        to: altPeerId,
+        role,
+      });
+      return true;
+    } catch (err) {
+      // NoPeerAvailableError or any router throw — chain breaks.
+      logWarn('[saga-runner] retry: no alternate peer found', {
+        sagaId,
+        laneIndex,
+        role,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    }
   }
 
   private async pollStatus(

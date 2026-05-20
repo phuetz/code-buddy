@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import {
+  buildChainStagePrompt,
   buildTaskPrompt,
   isFleetPaused,
   parseAgentOutput,
@@ -25,6 +26,7 @@ import {
   runFleetTick,
 } from '../../../src/agent/autonomous/fleet-tick-handler.js';
 import type {
+  AgentTaskOutput,
   FleetTask,
   FleetTasksFile,
   PresenceFile,
@@ -33,6 +35,19 @@ import type {
 
 // We mock node:fs/promises so we can simulate the .codebuddy files.
 vi.mock('fs/promises');
+
+// Mock saga-store's lesson recall — Phase F injection should never
+// touch real user memory in tests. The default returns no lessons so
+// existing tests see the pre-Phase-F prompt unchanged. Hoisted so the
+// `vi.mock` factory below (which is itself hoisted) can reference it.
+const { loadRelevantSagaLessonsMock } = vi.hoisted(() => ({
+  loadRelevantSagaLessonsMock: vi.fn<
+    (query: string, opts?: { limit?: number }) => Promise<string[]>
+  >(async () => []),
+}));
+vi.mock('../../../src/fleet/saga-store.js', () => ({
+  loadRelevantSagaLessons: loadRelevantSagaLessonsMock,
+}));
 const fsMock = fs as unknown as {
   readFile: ReturnType<typeof vi.fn>;
   writeFile: ReturnType<typeof vi.fn>;
@@ -186,6 +201,62 @@ describe('parseAgentOutput', () => {
   });
 });
 
+describe('buildChainStagePrompt (Phase G — Hermes auto-chain)', () => {
+  const task = makeTask({
+    title: 'Fix off-by-one',
+    description: 'Audit parser bounds',
+    filesToModify: ['src/parser.ts'],
+    acceptanceCriteria: ['no off-by-one', 'tests added'],
+  });
+  const basePrompt = 'BASE_PROMPT_PLACEHOLDER';
+
+  it('first stage (no prior) returns the base prompt unchanged', () => {
+    expect(buildChainStagePrompt('code', basePrompt, task, null)).toBe(basePrompt);
+  });
+
+  it('review stage prepends audit framing + prior summary', () => {
+    const prior: AgentTaskOutput = {
+      summary: 'Added bounds check at line 42',
+      files_modified: [{ file: 'src/parser.ts', changes: '+5 / -1' }],
+      issues: [],
+      next_steps: [],
+    };
+    const out = buildChainStagePrompt('review', basePrompt, task, prior);
+    expect(out).toContain(basePrompt);
+    expect(out).toContain('# Stage: review');
+    expect(out).toContain('Added bounds check');
+    expect(out).toContain('src/parser.ts: +5 / -1');
+  });
+
+  it('safe/test stage prepends test-writing framing', () => {
+    const prior: AgentTaskOutput = {
+      summary: 'Reviewed and approved',
+      files_modified: [],
+      issues: [],
+      next_steps: [],
+    };
+    const out = buildChainStagePrompt('safe', basePrompt, task, prior);
+    expect(out).toContain('# Stage: test');
+    expect(out).toContain('Reviewed and approved');
+  });
+
+  it('truncates very long prior summaries at 1500 chars', () => {
+    const prior: AgentTaskOutput = {
+      summary: 'X'.repeat(3000),
+      files_modified: [],
+      issues: [],
+      next_steps: [],
+    };
+    const out = buildChainStagePrompt('review', basePrompt, task, prior);
+    // Truncated summary appears once; explicit cap test.
+    const summaryStart = out.indexOf('Previous stage summary:');
+    const filesStart = out.indexOf('Files touched in the previous stage:');
+    const between = filesStart > 0 ? out.slice(summaryStart, filesStart) : out.slice(summaryStart);
+    expect(between).toContain('...');
+    expect(between.length).toBeLessThanOrEqual('Previous stage summary:\n'.length + 1500 + 10);
+  });
+});
+
 describe('buildTaskPrompt', () => {
   it('includes title, description, files, criteria, JSON-output protocol', () => {
     const t = makeTask({
@@ -207,6 +278,7 @@ describe('buildTaskPrompt', () => {
 describe('runFleetTick — outcomes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    loadRelevantSagaLessonsMock.mockImplementation(async () => []);
   });
 
   it('returns dirty_repo when status --porcelain shows changes', async () => {
@@ -404,5 +476,157 @@ describe('runFleetTick — outcomes', () => {
       // default priorityThreshold = 'high', so critical is skipped
     });
     expect(result.kind).toBe('no_task');
+  });
+});
+
+describe('runFleetTick — Phase F skill memory injection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('appends <recent_fleet_lessons> block when loadRelevantSagaLessons returns matches', async () => {
+    loadRelevantSagaLessonsMock.mockImplementation(async () => [
+      '- Goal: similar bug\n\nOutcome: bounds check fixed it',
+      '- Goal: another bug\n\nOutcome: added regression test',
+    ]);
+    const git = makeGitMock();
+    setupVirtualFs({
+      tasks: { version: '0.1', tasks: [makeTask({ id: 'task-lessons', priority: 'high' })] },
+      worklog: { version: '0.1', entries: [] },
+    });
+    const seenPrompts: string[] = [];
+    const agentRun = vi.fn(async (prompt: string) => {
+      seenPrompts.push(prompt);
+      return { stdout: '{"summary":"done"}', timedOut: false };
+    });
+
+    await runFleetTick({
+      repoPath: '/fake',
+      host: 'test',
+      gitRun: gitRunFromMock(git),
+      agentRun,
+    });
+    expect(seenPrompts).toHaveLength(1);
+    expect(seenPrompts[0]).toContain('<recent_fleet_lessons>');
+    expect(seenPrompts[0]).toContain('similar bug');
+    expect(seenPrompts[0]).toContain('another bug');
+  });
+
+  it('leaves the prompt unchanged when no lessons match', async () => {
+    loadRelevantSagaLessonsMock.mockImplementation(async () => []);
+    const git = makeGitMock();
+    setupVirtualFs({
+      tasks: { version: '0.1', tasks: [makeTask({ priority: 'high' })] },
+      worklog: { version: '0.1', entries: [] },
+    });
+    let captured = '';
+    const agentRun = vi.fn(async (prompt: string) => {
+      captured = prompt;
+      return { stdout: '{"summary":"done"}', timedOut: false };
+    });
+    await runFleetTick({
+      repoPath: '/fake',
+      host: 'test',
+      gitRun: gitRunFromMock(git),
+      agentRun,
+    });
+    expect(captured).not.toContain('<recent_fleet_lessons>');
+  });
+});
+
+describe('runFleetTick — Phase G auto-chain from FleetTask', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loadRelevantSagaLessonsMock.mockImplementation(async () => []);
+  });
+
+  it('runs three sequential agentRun calls when task.chainRoles is set', async () => {
+    const git = makeGitMock();
+    const task = makeTask({
+      id: 'chain-task',
+      priority: 'high',
+      chainRoles: ['code', 'review', 'safe'],
+    });
+    const virtual: VirtualFs = {
+      tasks: { version: '0.1', tasks: [task] },
+      worklog: { version: '0.1', entries: [] },
+    };
+    setupVirtualFs(virtual);
+
+    const calls: string[] = [];
+    const agentRun = vi.fn(async (prompt: string) => {
+      calls.push(prompt);
+      const stageIdx = calls.length;
+      return {
+        stdout: `stage ${stageIdx}\n{"summary":"stage-${stageIdx}-summary","files_modified":[],"issues":[],"next_steps":[]}`,
+        timedOut: false,
+      };
+    });
+    const result = await runFleetTick({
+      repoPath: '/fake',
+      host: 'test/grok-cli',
+      gitRun: gitRunFromMock(git),
+      agentRun,
+      maxStageMs: 1000,
+    });
+
+    expect(result.kind).toBe('completed');
+    expect(agentRun).toHaveBeenCalledTimes(3);
+    // Stage 1 = bare base prompt (no '# Stage: review' framing yet).
+    expect(calls[0]).not.toContain('# Stage: review');
+    // Stage 2 = review framing + stage 1's summary.
+    expect(calls[1]).toContain('# Stage: review');
+    expect(calls[1]).toContain('stage-1-summary');
+    // Stage 3 = test framing + stage 2's summary.
+    expect(calls[2]).toContain('# Stage: test');
+    expect(calls[2]).toContain('stage-2-summary');
+    // Worklog has chainStages.
+    expect(virtual.worklog.entries).toHaveLength(1);
+    const entry = virtual.worklog.entries[0];
+    expect(entry.chainStages).toHaveLength(3);
+    expect(entry.chainStages?.map((s) => s.role)).toEqual(['code', 'review', 'safe']);
+    expect(entry.chainStages?.[0].summary).toBe('stage-1-summary');
+    // Final task summary = LAST stage's summary (carries through to completion).
+    expect(entry.summary).toBe('stage-3-summary');
+  });
+
+  it('breaks chain on stage timeout — partial chainStages, task marked blocked', async () => {
+    const git = makeGitMock();
+    const task = makeTask({
+      id: 'chain-timeout',
+      priority: 'high',
+      chainRoles: ['code', 'review', 'safe'],
+    });
+    const virtual: VirtualFs = {
+      tasks: { version: '0.1', tasks: [task] },
+      worklog: { version: '0.1', entries: [] },
+    };
+    setupVirtualFs(virtual);
+
+    let callCount = 0;
+    const agentRun = vi.fn(async () => {
+      callCount += 1;
+      if (callCount === 2) {
+        // Review stage times out.
+        return { stdout: '', timedOut: true };
+      }
+      return {
+        stdout: `{"summary":"stage-${callCount}-ok","files_modified":[],"issues":[],"next_steps":[]}`,
+        timedOut: false,
+      };
+    });
+    const result = await runFleetTick({
+      repoPath: '/fake',
+      host: 'test/grok-cli',
+      gitRun: gitRunFromMock(git),
+      agentRun,
+      maxStageMs: 100,
+    });
+    // Stage 3 never fires.
+    expect(agentRun).toHaveBeenCalledTimes(2);
+    // Outer outcome should be `blocked` with `reason: 'timeout'` (chain timed out).
+    expect(result.kind).toBe('blocked');
+    // Task surfaces as blocked in tasks.json.
+    expect(virtual.tasks.tasks[0].status).toBe('blocked');
   });
 });

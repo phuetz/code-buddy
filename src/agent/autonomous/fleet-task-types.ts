@@ -48,6 +48,24 @@ export interface FleetTask {
    * set, the task falls back to the host's default provider (no block).
    */
   preferLocal?: boolean;
+  /**
+   * Phase 2 (Hermes self-improving) — opt-in Draft→Review→Test chain.
+   * When set, the autonomous tick runs the task as a sequence of
+   * in-process agent calls, one per role, with each stage's output
+   * threaded into the next stage's prompt.
+   *
+   * Recommended values:
+   *   ['code', 'review', 'safe']      → Draft → Review → Test
+   *   ['code', 'review']              → Draft → Review (no tests stage)
+   *   ['research', 'code']            → Research → Implementation
+   *
+   * Per-stage timeout = `maxTaskMs / chainRoles.length` unless the
+   * tick caller overrides via `maxStageMs`. Worklog gets a `chainStages`
+   * array with one entry per stage (auditable). When unset (default),
+   * the tick runs single-shot as before — no behaviour change for
+   * existing tasks.
+   */
+  chainRoles?: string[];
 }
 
 export interface FleetTasksFile {
@@ -71,6 +89,19 @@ export interface WorklogFileEntry {
   provider?: string;
   /** Phase (d).20 — model name used. */
   model?: string;
+  /**
+   * Phase 2 (Hermes auto-chain) — per-stage breakdown for sagas that
+   * ran as a Draft→Review→Test sequence. Each entry mirrors the
+   * `AgentTaskOutput` JSON the agent emitted on that stage's last
+   * line. Absent for single-shot tasks. Old worklog readers ignore
+   * unknown fields, so adding this is backward-compatible.
+   */
+  chainStages?: Array<{
+    role: string;
+    summary: string;
+    timedOut?: boolean;
+    elapsedSeconds?: number;
+  }>;
 }
 
 export interface WorklogFile {

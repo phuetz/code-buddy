@@ -252,6 +252,15 @@ export async function dispatchFleetSaga(
           metadata?: Record<string, unknown>;
         }) => Promise<{ id: string }>;
       };
+      /**
+       * Phase F (Hermes self-improving loop) — present on core SagaStore
+       * since commit > 97633bc7. Older cores return `undefined` and the
+       * dispatch path falls through to the bare goal.
+       */
+      loadRelevantSagaLessons?: (
+        query: string,
+        opts?: { limit?: number },
+      ) => Promise<string[]>;
     };
     type LintMod = {
       scanForSecrets: (
@@ -371,8 +380,30 @@ export async function dispatchFleetSaga(
     });
     const internetProofSummary = summarizeInternetProofPlan(internetProofPlan);
 
+    // Phase F — recall recent saga lessons and prepend them so the
+    // dispatched chain (or single saga) inherits what past fleet runs
+    // learned about similar goals. Warning-only: any failure leaves
+    // the bare goal untouched.
+    let augmentedGoal = input.goal;
+    let injectedLessonCount = 0;
+    if (typeof sagaMod.loadRelevantSagaLessons === 'function') {
+      try {
+        const lessons = await sagaMod.loadRelevantSagaLessons(input.goal);
+        if (lessons.length > 0) {
+          augmentedGoal = `## Past fleet lessons\n${lessons.join(
+            '\n',
+          )}\n\n## Goal\n${input.goal}`;
+          injectedLessonCount = lessons.length;
+        }
+      } catch (err) {
+        logWarn('[fleet.dispatch] loadRelevantSagaLessons failed (ignored)', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     const saga = await sagaMod.getSagaStore().create({
-      goal: input.goal,
+      goal: augmentedGoal,
       plan,
       metadata: {
         privacyTag: effectivePrivacyTag,
@@ -383,6 +414,10 @@ export async function dispatchFleetSaga(
         ...(input.hermesPlanSurface ? { hermesPlanSurface: input.hermesPlanSurface } : {}),
         requestedAt: Date.now(),
         lintWarning,
+        // Preserve the untouched user goal so observers can compare
+        // pre- and post-injection prompts. Set only when injection
+        // actually happened to keep saga metadata noise-free.
+        ...(injectedLessonCount > 0 ? { rawGoal: input.goal, injectedLessonCount } : {}),
         ...runLineageMetadata,
         ...(targetPeerIds.length > 0 ? { targetPeerIds } : {}),
         ...(internetProofPlan ? { internetProofPlan } : {}),

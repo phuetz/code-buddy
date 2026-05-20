@@ -108,6 +108,16 @@ export interface DispatchConstraints {
    * scores higher on cost alone.
    */
   requiredRole?: string;
+  /**
+   * Phase H — subtractive peer filter. Inverse of `targetPeerIds`. Used
+   * by chain-step retry to pick an alternative peer after a stall:
+   *   `{ requiredRole: 'review', excludePeerIds: [stalledPeerId] }`.
+   *
+   * Throws `NoPeerAvailableError` when the exclusion empties the
+   * candidate pool (caller should leave the step failed). Whitespace
+   * entries are normalised; an empty array is a no-op.
+   */
+  excludePeerIds?: string[];
 }
 
 /** A peer entry as seen by the router (cap snapshot + dynamic load info). */
@@ -138,6 +148,7 @@ export class TaskRouter {
     const minContextWindow =
       constraints.estimatedTokens ?? classification.estimatedTokens ?? 0;
     const targetPeerIds = normalizeTargetPeerIds(constraints.targetPeerIds);
+    const excludePeerIds = normalizeTargetPeerIds(constraints.excludePeerIds);
 
     // 1. Enumerate every (peer, model) candidate.
     const candidates: DispatchLane[] = [];
@@ -145,6 +156,9 @@ export class TaskRouter {
 
     for (const slot of peers) {
       if (targetPeerIds && !targetPeerIds.has(slot.peerId)) {
+        continue;
+      }
+      if (excludePeerIds && excludePeerIds.has(slot.peerId)) {
         continue;
       }
 

@@ -495,6 +495,66 @@ describe('planChainDispatch — Hermes chain composition', () => {
   });
 });
 
+describe('TaskRouter — Phase H excludePeerIds', () => {
+  it('drops peers in the exclude list before scoring', () => {
+    const peers: PeerSlot[] = [
+      peer('alpha', {
+        models: [model('m1', { provider: 'ollama', strengths: ['reasoning'] })],
+      }),
+      peer('beta', {
+        models: [model('m2', { provider: 'ollama', strengths: ['reasoning'] })],
+      }),
+    ];
+    const plan = router.plan(classify({ requiresReasoning: true }), peers, {
+      excludePeerIds: ['alpha'],
+    });
+    expect(plan.primary.peerId).toBe('beta');
+  });
+
+  it('throws NoPeerAvailableError when exclusion empties the pool', () => {
+    const peers: PeerSlot[] = [
+      peer('only', {
+        models: [model('m', { provider: 'ollama', strengths: ['reasoning'] })],
+      }),
+    ];
+    expect(() =>
+      router.plan(classify({ requiresReasoning: true }), peers, {
+        excludePeerIds: ['only'],
+      }),
+    ).toThrow(NoPeerAvailableError);
+  });
+
+  it('normalises whitespace and ignores empty entries', () => {
+    const peers: PeerSlot[] = [
+      peer('alpha', { models: [model('m', { strengths: ['reasoning'] })] }),
+      peer('beta', { models: [model('m', { strengths: ['reasoning'] })] }),
+    ];
+    const plan = router.plan(classify({ requiresReasoning: true }), peers, {
+      excludePeerIds: [' alpha ', '', '  '],
+    });
+    expect(plan.primary.peerId).toBe('beta');
+  });
+
+  it('combines with requiredRole — alt peer with matching role wins', () => {
+    const peers: PeerSlot[] = [
+      peer('reviewer-1', {
+        roles: ['review'],
+        models: [model('m', { strengths: ['reasoning'] })],
+      }),
+      peer('reviewer-2', {
+        roles: ['review'],
+        models: [model('m', { strengths: ['reasoning'] })],
+      }),
+    ];
+    // Exclude reviewer-1 → reviewer-2 inherits the review role bonus.
+    const plan = router.plan(classify({ requiresReasoning: true }), peers, {
+      requiredRole: 'review',
+      excludePeerIds: ['reviewer-1'],
+    });
+    expect(plan.primary.peerId).toBe('reviewer-2');
+  });
+});
+
 describe('TaskRouter — Hermes role bonus', () => {
   it('tilts the choice toward the review-tagged peer when other terms are similar', () => {
     // Two cloud peers with identical cost / load / latency / model

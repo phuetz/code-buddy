@@ -17,6 +17,8 @@ const state = vi.hoisted(() => {
     lane: 'primary' | 'fallback' | 'parallel' | 'chain';
     role?: string;
     dependsOn?: number;
+    /** Phase H — set when SagaRunner reassigns the step on an alternate peer. */
+    retried?: boolean;
     runId?: string;
     status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
     toolPolicy?: {
@@ -141,6 +143,46 @@ vi.mock('../src/main/utils/core-loader', () => ({
         }),
       };
     }
+    if (relPath === 'fleet/task-router.js') {
+      // Phase H mock — supports the retry helper's TaskRouter usage.
+      // Tests opt-in by setting `state.alternatePeerForRole` to control
+      // which peer is returned for a given role+exclude pair.
+      return {
+        TaskRouter: class {
+          plan(
+            _cls: unknown,
+            peers: Array<{ peerId: string; capability: unknown }>,
+            constraints: {
+              requiredRole?: string;
+              excludePeerIds?: string[];
+            },
+          ) {
+            const exclude = new Set(constraints.excludePeerIds ?? []);
+            const role = constraints.requiredRole;
+            const alt = peers.find((p) => !exclude.has(p.peerId));
+            if (!alt) {
+              throw new Error('NoPeerAvailableError: no alt peer');
+            }
+            return {
+              primary: { peerId: alt.peerId, model: `model-for-${role}` },
+              rationale: 'retry alt',
+            };
+          }
+        },
+      };
+    }
+    if (relPath === 'optimization/model-routing.js') {
+      return {
+        classifyTaskComplexity: () => ({
+          complexity: 'simple',
+          requiresVision: false,
+          requiresReasoning: false,
+          requiresLongContext: false,
+          estimatedTokens: 1000,
+          confidence: 0.8,
+        }),
+      };
+    }
     if (relPath === 'fleet/result-aggregator.js') {
       return {
         aggregateParallelResults: vi.fn(async (saga: unknown) => {
@@ -172,6 +214,7 @@ import { SagaRunner } from '../src/main/fleet/saga-runner';
 
 function makeFleetBridgeMock(
   responses: Record<string, (params: Record<string, unknown>) => Promise<unknown>>,
+  opts: { peers?: Array<{ id: string; capability?: unknown }> } = {},
 ) {
   return {
     peerRequest: vi.fn(async (peerId: string, method: string, params = {}) => {
@@ -179,6 +222,7 @@ function makeFleetBridgeMock(
       if (!handler) throw new Error(`unmocked ${peerId}:${method}`);
       return handler(params as Record<string, unknown>);
     }),
+    listPeers: vi.fn(() => opts.peers ?? []),
   } as unknown as Parameters<typeof SagaRunner>[0] extends never
     ? never
     : ConstructorParameters<typeof SagaRunner>[0];
@@ -737,5 +781,177 @@ describe('SagaRunner — primary fails, fallback fires', () => {
     expect(saga.steps[0].error).toContain('peer-a unavailable');
     expect(saga.steps[1].status).toBe('completed');
     expect(saga.steps[1].result).toBe('FALLBACK_OK');
+  });
+});
+
+describe('SagaRunner — Phase H chain step retry on stall', () => {
+  it('reassigns a stalled chain step to an alternate peer with the same role and completes', async () => {
+    state.sagas.set('saga_retry', {
+      id: 'saga_retry',
+      goal: 'Review my draft',
+      plan: {
+        primary: { peerId: 'drafter', model: 'm-draft' },
+        chain: [
+          { peerId: 'drafter', model: 'm-draft', role: 'code' },
+          { peerId: 'reviewer-stall', model: 'm-review', role: 'review' },
+        ],
+      },
+      steps: [
+        {
+          peerId: 'drafter',
+          model: 'm-draft',
+          lane: 'chain',
+          role: 'code',
+          status: 'pending',
+        },
+        {
+          peerId: 'reviewer-stall',
+          model: 'm-review',
+          lane: 'chain',
+          role: 'review',
+          dependsOn: 0,
+          status: 'pending',
+        },
+      ],
+      status: 'pending',
+    });
+
+    let runIdCounter = 0;
+    const dispatchCalls: Array<{ peerId: string; runId: string }> = [];
+    const fleetBridge = makeFleetBridgeMock(
+      {
+        'peer.dispatch': async () => {
+          runIdCounter += 1;
+          return { runId: `retry-run-${runIdCounter}` };
+        },
+        'peer.dispatchStatus': async (params) => {
+          const runId = String(params.runId ?? '');
+          // runId 1 = drafter draft → completes immediately.
+          if (runId === 'retry-run-1') {
+            return { found: true, status: 'completed', result: 'DRAFT_DONE' };
+          }
+          // runId 2 = reviewer-stall → never reports terminal status
+          // (pending forever) so pollStatus eventually hits its
+          // 5-minute deadline. To keep the test fast, we instead
+          // return `failed` with the exact `poll_timeout` error string
+          // the runner emits on real stalls.
+          if (runId === 'retry-run-2') {
+            return { found: true, status: 'failed', error: 'poll_timeout' };
+          }
+          // runId 3 = alt-reviewer (after retry) → completes.
+          return { found: true, status: 'completed', result: 'REVIEW_DONE_ALT' };
+        },
+      },
+      {
+        peers: [
+          { id: 'reviewer-stall', capability: { roles: ['review'] } },
+          { id: 'alt-reviewer', capability: { roles: ['review'] } },
+        ],
+      },
+    );
+    // Track which peers received dispatch.
+    const originalPeerRequest = fleetBridge.peerRequest as ReturnType<typeof vi.fn>;
+    originalPeerRequest.mockImplementation(
+      async (peerId: string, method: string, params: Record<string, unknown> = {}) => {
+        if (method === 'peer.dispatch') {
+          runIdCounter += 1;
+          const runId = `retry-run-${runIdCounter}`;
+          dispatchCalls.push({ peerId, runId });
+          return { runId };
+        }
+        if (method === 'peer.dispatchStatus') {
+          const runId = String(params.runId ?? '');
+          if (runId === 'retry-run-1') {
+            return { found: true, status: 'completed', result: 'DRAFT_DONE' };
+          }
+          if (runId === 'retry-run-2') {
+            return { found: true, status: 'failed', error: 'poll_timeout' };
+          }
+          return { found: true, status: 'completed', result: 'REVIEW_DONE_ALT' };
+        }
+        throw new Error(`unmocked ${peerId}:${method}`);
+      },
+    );
+    runIdCounter = 0;
+
+    const runner = new SagaRunner(fleetBridge as never, vi.fn());
+    runner.start('saga_retry');
+
+    await waitFor(
+      () => state.sagas.get('saga_retry')?.finalResult !== undefined,
+      5_000,
+    );
+
+    const saga = state.sagas.get('saga_retry')!;
+    expect(saga.status).toBe('completed');
+    expect(saga.finalResult).toBe('REVIEW_DONE_ALT');
+    // Step 1 was reassigned from reviewer-stall to alt-reviewer.
+    expect(saga.steps[1].peerId).toBe('alt-reviewer');
+    expect(saga.steps[1].retried).toBe(true);
+    expect(saga.steps[1].status).toBe('completed');
+    // 3 dispatches happened: drafter, reviewer-stall, alt-reviewer.
+    expect(dispatchCalls).toHaveLength(3);
+    expect(dispatchCalls[1].peerId).toBe('reviewer-stall');
+    expect(dispatchCalls[2].peerId).toBe('alt-reviewer');
+  });
+
+  it('breaks the chain when no alternate peer carries the required role', async () => {
+    state.sagas.set('saga_no_alt', {
+      id: 'saga_no_alt',
+      goal: 'Review with no alt',
+      plan: {
+        primary: { peerId: 'lone', model: 'm' },
+        chain: [
+          { peerId: 'lone', model: 'm', role: 'code' },
+          { peerId: 'lone', model: 'm', role: 'review' },
+        ],
+      },
+      steps: [
+        { peerId: 'lone', model: 'm', lane: 'chain', role: 'code', status: 'pending' },
+        {
+          peerId: 'lone',
+          model: 'm',
+          lane: 'chain',
+          role: 'review',
+          dependsOn: 0,
+          status: 'pending',
+        },
+      ],
+      status: 'pending',
+    });
+
+    let runIdCounter = 0;
+    const fleetBridge = makeFleetBridgeMock(
+      {
+        'peer.dispatch': async () => {
+          runIdCounter += 1;
+          return { runId: `no-alt-${runIdCounter}` };
+        },
+        'peer.dispatchStatus': async (params) => {
+          const runId = String(params.runId ?? '');
+          if (runId === 'no-alt-1') {
+            return { found: true, status: 'completed', result: 'DRAFT_DONE' };
+          }
+          // Reviewer stalls; only one peer exists so retry can't find alt.
+          return { found: true, status: 'failed', error: 'poll_timeout' };
+        },
+      },
+      { peers: [{ id: 'lone', capability: { roles: ['code', 'review'] } }] },
+    );
+
+    const runner = new SagaRunner(fleetBridge as never, vi.fn());
+    runner.start('saga_no_alt');
+
+    await waitFor(
+      () => state.sagas.get('saga_no_alt')?.steps[1].status === 'failed',
+      5_000,
+    );
+
+    const saga = state.sagas.get('saga_no_alt')!;
+    // Step 1 stayed on the lone peer and failed — chain breaks.
+    expect(saga.steps[1].peerId).toBe('lone');
+    expect(saga.steps[1].status).toBe('failed');
+    expect(saga.steps[1].retried).toBeUndefined();
+    expect(saga.status).toBe('failed');
   });
 });

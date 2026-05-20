@@ -499,6 +499,57 @@ export function deriveSagaStatus(saga: SagaRecord): SagaStatus {
 }
 
 /**
+ * Recall recent saga lessons relevant to a new goal. Pairs with
+ * {@link appendSagaLesson} — Phase E writes, this reads. Together they
+ * close the Hermes-style self-improving loop: every chain saga that
+ * completes leaves a trace, and the next dispatch with a similar goal
+ * pulls the trace back into the prompt as context.
+ *
+ * The recall uses `PersistentMemoryManager.getRelevantMemories` (keyword
+ * scoring + access-count boost) then filters to entries whose `key`
+ * starts with `fleet-saga-` so non-saga memory (preferences, decisions)
+ * doesn't leak into dispatch prompts.
+ *
+ * Warning-only: any failure (memory module unavailable, locked file,
+ * mock throwing in tests) returns an empty array. Callers are designed
+ * around `length === 0` ⇒ skip the injection block.
+ *
+ * @param query free-form goal text used to score memories
+ * @param opts.limit max lessons to return (default 3)
+ * @returns formatted snippets ready to inline in a prompt, or `[]` on failure
+ */
+export async function loadRelevantSagaLessons(
+  query: string,
+  opts: { limit?: number } = {},
+): Promise<string[]> {
+  const limit = opts.limit ?? 3;
+  try {
+    const { getMemoryManager } = await import('../memory/persistent-memory.js');
+    const manager = getMemoryManager();
+    await manager.initialize();
+    // Pull a wider candidate set then filter by fleet prefix. The
+    // memory manager scores 5 by default; we ask for limit*3 to give
+    // the filter room to find fleet entries even when the project has
+    // many non-fleet memories.
+    const candidates = manager.getRelevantMemories(query, Math.max(limit * 3, 9));
+    const fleetLessons = candidates.filter((m) =>
+      m.key.startsWith('fleet-saga-'),
+    );
+    return fleetLessons.slice(0, limit).map((m) => {
+      const value =
+        m.value.length > 300 ? `${m.value.slice(0, 297)}...` : m.value;
+      return `- ${value}`;
+    });
+  } catch (err) {
+    logger.warn?.(
+      '[saga-store] loadRelevantSagaLessons failed (returning empty)',
+      { error: err instanceof Error ? err.message : String(err) },
+    );
+    return [];
+  }
+}
+
+/**
  * Append a saga's finalised outcome to the project persistent memory.
  * Used by `finalise()` so an autonomous Draft→Review→Test chain leaves
  * a Hermes-style "learned skill" trace future agents can recall.

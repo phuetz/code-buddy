@@ -56,6 +56,7 @@ import {
   type WorklogFile,
   type WorklogFileEntry,
 } from './fleet-task-types.js';
+import { loadRelevantSagaLessons } from '../../fleet/saga-store.js';
 
 // Promisify the safer arg-array variant. Args never go through a shell.
 const execFileP = promisify(childProcess.execFile);
@@ -85,6 +86,13 @@ export interface FleetTickOptions {
   host: string;
   /** Hard cap on the agent's wall-clock time per task. Default 600 000 ms. */
   maxTaskMs?: number;
+  /**
+   * Phase 2 (Hermes auto-chain) — per-stage wall-clock cap when the
+   * claimed task has `chainRoles`. Defaults to `maxTaskMs / chainRoles.length`.
+   * Useful in tests to force a fast timeout in one stage without
+   * blowing past the test runner deadline.
+   */
+  maxStageMs?: number;
   /** Lowest priority that the autonomous tick will claim. Default 'high'
    *  (i.e. critical is SKIPPED — needs human validation). */
   priorityThreshold?: FleetTaskPriority;
@@ -308,6 +316,140 @@ export function buildTaskPrompt(host: string, task: FleetTask): string {
   ].join('\n');
 }
 
+/**
+ * Phase G — Hermes-style sequential collaboration on the autonomous
+ * tick. Each role gets its own `agentRun` call; the previous stage's
+ * parsed summary is threaded into the next stage's prompt so the
+ * reviewer/tester have context without an extra RPC.
+ *
+ * Returns the **last** stage's stdout as the canonical output (worklog
+ * uses the last stage's parsed summary), the aggregated `timedOut`
+ * flag (true when any stage timed out), and a per-stage breakdown for
+ * audit.
+ *
+ * On any stage timeout, the function returns early — subsequent stages
+ * are skipped. The worklog ends up with fewer `chainStages` entries
+ * than `roles.length`, which downstream consumers treat as a partial
+ * chain (chain-broke detection).
+ */
+async function runFleetTickChain(args: {
+  roles: string[];
+  basePrompt: string;
+  task: FleetTask;
+  agentRun: NonNullable<FleetTickOptions['agentRun']>;
+  maxTaskMs: number;
+  maxStageMs?: number;
+  provider: ResolvedTickProvider;
+}): Promise<{
+  stdout: string;
+  timedOut: boolean;
+  stages: NonNullable<WorklogFileEntry['chainStages']>;
+}> {
+  const perStage = Math.max(
+    1,
+    args.maxStageMs ?? Math.floor(args.maxTaskMs / Math.max(1, args.roles.length)),
+  );
+  const stages: NonNullable<WorklogFileEntry['chainStages']> = [];
+  let lastStdout = '';
+  let priorParsed: AgentTaskOutput | null = null;
+  for (let i = 0; i < args.roles.length; i++) {
+    const role = args.roles[i];
+    const stagePrompt = buildChainStagePrompt(role, args.basePrompt, args.task, priorParsed);
+    const stageStart = Date.now();
+    let stageStdout = '';
+    let stageTimedOut = false;
+    try {
+      const result = await args.agentRun(stagePrompt, perStage, args.provider);
+      stageStdout = result.stdout;
+      stageTimedOut = result.timedOut;
+    } catch (err) {
+      stageTimedOut = (err as Error).message === 'FLEET_TICK_TIMEOUT';
+      if (!stageTimedOut) throw err; // unexpected — propagate to outer handler
+    }
+    const elapsedSeconds = Math.round((Date.now() - stageStart) / 1000);
+    const parsed = parseAgentOutput(stageStdout);
+    stages.push({
+      role,
+      summary: parsed?.summary ?? '(non-JSON output)',
+      ...(stageTimedOut ? { timedOut: true } : {}),
+      elapsedSeconds,
+    });
+    if (stageTimedOut) {
+      // Chain breaks — return what we have so the worklog records the
+      // partial trace and the outer handler flips the task to blocked.
+      return { stdout: lastStdout, timedOut: true, stages };
+    }
+    lastStdout = stageStdout;
+    priorParsed = parsed;
+  }
+  return { stdout: lastStdout, timedOut: false, stages };
+}
+
+/**
+ * Compose a per-stage prompt for {@link runFleetTickChain}. The first
+ * stage uses the base prompt unchanged. Later stages prepend a
+ * role-specific framing and a (truncated) summary of the prior stage's
+ * output so the next agent has context without re-running the work.
+ *
+ * Truncation: prior summary capped at 1500 chars to keep stage prompts
+ * bounded (worst case ~ basePrompt + 1.5 KB per stage).
+ */
+export function buildChainStagePrompt(
+  role: string,
+  basePrompt: string,
+  task: FleetTask,
+  prior: AgentTaskOutput | null,
+): string {
+  if (!prior) {
+    // First stage — just the bare base prompt. Acceptance criteria
+    // are already in there via buildTaskPrompt.
+    return basePrompt;
+  }
+  const priorSummary =
+    prior.summary.length > 1500 ? `${prior.summary.slice(0, 1497)}...` : prior.summary;
+  const priorFiles = (prior.files_modified ?? [])
+    .map((f) => `- ${f.file}: ${f.changes}`)
+    .join('\n');
+  const filesBlock = priorFiles ? `\n\nFiles touched in the previous stage:\n${priorFiles}` : '';
+  if (role === 'review') {
+    return [
+      basePrompt,
+      '',
+      '# Stage: review',
+      "Audit the previous stage's work. Flag bugs, missing tests, scope creep, security issues.",
+      'Do NOT modify code at this stage — produce findings as a structured summary.',
+      '',
+      'Previous stage summary:',
+      priorSummary,
+      filesBlock,
+    ].join('\n');
+  }
+  if (role === 'safe' || role === 'test') {
+    return [
+      basePrompt,
+      '',
+      '# Stage: test',
+      "Write tests covering the reviewed implementation. Stay strictly inside `filesToModify`.",
+      "Don't introduce new abstractions — assert behaviour, not internals.",
+      '',
+      'Previous stage summary:',
+      priorSummary,
+      filesBlock,
+    ].join('\n');
+  }
+  // `research`, custom roles, etc. — generic framing.
+  return [
+    basePrompt,
+    '',
+    `# Stage: ${role}`,
+    'Build on the previous stage with this role in mind.',
+    '',
+    'Previous stage summary:',
+    priorSummary,
+    filesBlock,
+  ].join('\n');
+}
+
 /** Default in-process agent runner — used when no `agentRun` injected. */
 async function defaultAgentRun(
   prompt: string,
@@ -482,15 +624,43 @@ export async function runFleetTick(opts: FleetTickOptions): Promise<FleetTickOut
     taskId: task.id,
   });
 
-  // 7. Invoke agent
-  const prompt = buildTaskPrompt(host, task);
+  // 7. Invoke agent — augment the prompt with relevant saga lessons
+  // recalled from project memory. Phase E writes saga outcomes there;
+  // here we read them back so the in-process agent inherits what past
+  // chain sagas learned about similar goals. Best-effort: an empty
+  // lessons array yields the bare prompt.
+  const basePrompt = buildTaskPrompt(host, task);
+  const lessons = await loadRelevantSagaLessons(`${task.title} ${task.description}`);
+  const prompt =
+    lessons.length > 0
+      ? `${basePrompt}\n\n<recent_fleet_lessons>\n${lessons.join('\n')}\n</recent_fleet_lessons>`
+      : basePrompt;
   const t0 = Date.now();
   let stdout = '';
   let timedOut = false;
+  let chainStages: WorklogFileEntry['chainStages'] | undefined;
   try {
-    const result = await agentRun(prompt, maxTaskMs, provider);
-    stdout = result.stdout;
-    timedOut = result.timedOut;
+    if (task.chainRoles && task.chainRoles.length > 0) {
+      // Phase G — opt-in Hermes chain on autonomous tick. Each role
+      // gets its own agentRun call; later stages inherit earlier
+      // stages' summaries via `buildChainStagePrompt`.
+      const chainResult = await runFleetTickChain({
+        roles: task.chainRoles,
+        basePrompt: prompt,
+        task,
+        agentRun,
+        maxTaskMs,
+        maxStageMs: opts.maxStageMs,
+        provider,
+      });
+      stdout = chainResult.stdout;
+      timedOut = chainResult.timedOut;
+      chainStages = chainResult.stages;
+    } else {
+      const result = await agentRun(prompt, maxTaskMs, provider);
+      stdout = result.stdout;
+      timedOut = result.timedOut;
+    }
   } catch (err) {
     timedOut = (err as Error).message === 'FLEET_TICK_TIMEOUT';
     if (!timedOut) {
@@ -560,6 +730,7 @@ export async function runFleetTick(opts: FleetTickOptions): Promise<FleetTickOut
     elapsedSeconds: Math.round(elapsedMs / 1000),
     provider: provider.provider,
     model: provider.model,
+    ...(chainStages ? { chainStages } : {}),
   });
 
   task.status = 'completed';
