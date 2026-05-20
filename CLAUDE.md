@@ -1,53 +1,41 @@
 # CLAUDE.md
 
-> **Status: 1.0.0-rc.5 — V1 release candidate** (May 2026). Multi-AI fleet hub
-> (Phases (d).1 → (d).16a) is the headline feature. Through rc.5: auto-memory
-> writeback, `/memory recent`, `AGENTS.md` cross-CLI scaffold, opt-in
-> mid-stream retry, history curation API (Gemini CLI audit reco #3, 3/3
-> closed), `Explore` read-only subagent + `disallowedTools` field
-> (Claude Code audit Phase A+C), `/subagent` discovery slash, **`/swarm
-> <task>`** team-lead UX inspired by Korben, **lessons feature activated**
-> + **`<writing_rules>` directive** (Manus AI structured blocks pattern,
-> @renschni gist) — completes the persistence trilogy auto-memory +
-> lessons + writing discipline. Read
-> [`docs/getting-started.md`](docs/getting-started.md) first. See
-> [`docs/fleet-guide.md`](docs/fleet-guide.md) and
-> [`CHANGELOG.md`](CHANGELOG.md).
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Guidance for Claude Code when working in this repo. Keep this file short — it should capture what you *can't* derive by reading the source.
+> **Status: 1.0.0-rc.8** (2026-05-09 → ongoing toward `1.0.0`). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you *can't* derive by reading the source.
 
 ## Build, Test, Lint
 
 ```bash
 npm install
 npm run dev            # Bun dev mode
-npm run dev:node       # tsx dev mode
-npm run build          # TypeScript build
+npm run dev:node       # tsx dev mode (use this on Windows if Bun misbehaves)
+npm run build          # TypeScript build (tsc -> dist/)
 npm run typecheck
 npm run lint
 npm run validate       # lint + typecheck + test — run before committing
-npm test               # Vitest — full suite is ~26K tests, slow. Prefer a path filter.
-npm test -- path/to/file.test.ts
-npm run test:run       # one-shot (no watch)
-npm run build:gui      # Cowork Electron GUI
-buddy install-gui && buddy gui
+npm test               # Vitest — ~27K tests, slow. Always prefer a path filter.
+npm test -- tests/path/to/file.test.ts
+npm run build:gui      # Cowork Electron GUI (cd cowork && npm run build)
+npm run dev:gui        # Cowork dev (Vite + Electron)
 ```
 
-Tests live in `tests/` and in-source `src/**/*.test.ts`. Vitest + happy-dom. `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works.
+Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` files despite what `vitest.config.ts` would allow. Vitest with `pool: 'forks'` and `--max-old-space-size=8192`. `vitest.setup.ts` shims `globalThis.jest` → `vi` so legacy `jest.fn()` works. There is also a Jest-compat transform in `vitest.config.ts` that rewrites `jest.mock` → `vi.mock` and resolves `.js` imports back to source `.ts` files inside test specs.
 
 ## Testing Gotchas
 
 - ESM project (`"type": "module"`). Use `import.meta.url` + `fileURLToPath` for `__dirname`. `@` alias → `./src` (see `vitest.config.ts`). Source imports need `.js` extensions even for `.ts` files.
 - Use `logger` (`src/utils/logger.js`) not `console.*` in production — tests spy on `logger.warn`.
-- `BashTool` tests: call `ConfirmationService.setSessionFlag('bashCommands', true)` first, and mock every transitive import (`safe-binaries`, `auto-sandbox`, `shell-env-policy`, `bash-parser`, `checkpoint-manager`, `audit-logger`, `command-validator`, `streaming-executor`). `execute()` has async pre-spawn logic, so defer mock process events with `setImmediate()` — don't emit synchronously.
-- CLI command tests: Commander `parseAsync()` + `exitOverride()`, mock `console.log` / `process.exit`.
-- Channel adapter tests: mock `global.fetch` for health checks, mock dynamic imports via virtual modules.
-- `DeviceNodeManager` tests: mock `ssh-transport` / `adb-transport` / `local-transport` and `fs` (prevents `devices.json` bleed between tests). `pairDevice()` is async.
-- `AgentRegistry` ships 8 built-in agents: PDF, Excel, DataAnalysis, SQL, Archive, CodeGuardian, SecurityReview, SWE.
+- **`BashTool`** tests: call `ConfirmationService.setSessionFlag('bashCommands', true)` first, and mock every transitive import (`safe-binaries`, `auto-sandbox`, `shell-env-policy`, `bash-parser`, `checkpoint-manager`, `audit-logger`, `command-validator`, `streaming-executor`). `execute()` has async pre-spawn logic, so defer mock process events with `setImmediate()` — don't emit synchronously.
+- **CLI command tests:** Commander `parseAsync()` + `exitOverride()`, mock `console.log` / `process.exit`.
+- **Channel adapter tests:** mock `global.fetch` for health checks, mock dynamic imports via virtual modules.
+- **`DeviceNodeManager` tests:** mock `ssh-transport` / `adb-transport` / `local-transport` and `fs` (prevents `devices.json` bleed between tests). `pairDevice()` is async.
+- **`AgentRegistry`** ships 8 built-in agents: PDF, Excel, DataAnalysis, SQL, Archive, CodeGuardian, SecurityReview, SWE.
+- **`better-sqlite3`** is a native module — three test files are skipped where Electron headers aren't available. If your test loads the DB layer, expect a rebuild step.
 
 ## Architecture
 
-Terminal multi-provider AI coding agent (Grok / Claude / GPT / Gemini / Ollama / LM Studio, all via OpenAI-compatible routing). Core is an agentic loop where the LLM autonomously calls tools.
+Terminal multi-provider AI coding agent. **15 providers** via OpenAI-compatible routing (Grok, Claude, GPT, Gemini, Ollama, LM Studio, AWS Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) + a separate Gemini native path. Core is an agentic loop where the LLM autonomously calls tools.
 
 ```
 User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
@@ -79,10 +67,19 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
 ### Non-obvious Architecture Decisions
 
 1. **Lazy loading** — Heavy modules are loaded via getters in `CodeBuddyAgent` and lazy imports in `src/index.ts`. Profile with `PERF_TIMING=true`.
-2. **Model-aware limits** — `src/config/model-tools.ts` holds per-model capabilities (contextWindow, maxOutputTokens, patchFormat) with glob matching (`grok-3*`, `claude-*`). Start here for any model-specific behavior. System prompt is truncated to `(contextWindow − maxOutputTokens) × 50%`.
-3. **RAG tool selection** — `src/codebuddy/tools.ts` filters tools per query via embeddings to reduce prompt tokens; cached after first round.
+2. **Model-aware limits** — `src/config/model-tools.ts` holds per-model capabilities (contextWindow, maxOutputTokens, patchFormat) with glob matching (`grok-3*`, `claude-*`). **Start here for any model-specific behavior.** System prompt is truncated to `(contextWindow − maxOutputTokens) × 50%`.
+3. **RAG tool selection** — `src/codebuddy/tools.ts` filters tools per query via embeddings to reduce prompt tokens; cached after first round. BM25 fallback via `tool_search` and tool metadata in `src/tools/metadata.ts`.
 4. **Context compression** — `ContextManagerV2` (`src/context/context-manager-v2.ts`) uses sliding window + summarization; budget from `getModelToolConfig(model).contextWindow`.
-5. **Middleware pipeline** — `src/agent/middleware/` has composable before/after hooks. Priorities matter: reasoning = 42, workflow-guard = 45. Register in `codebuddy-agent.ts` constructor.
+5. **Middleware pipeline** — `src/agent/middleware/` has composable before/after hooks. **Priorities matter:**
+
+   | Middleware | Priority | Purpose |
+   |---|---|---|
+   | `ReasoningMiddleware` | 42 | Auto-detect complex queries, inject `<reasoning_guidance>` |
+   | `WorkflowGuardMiddleware` | 45 | Suggest plan init for complex first messages |
+   | `AutoRepairMiddleware` | 150 | Detect errors, invoke fault localizer, suggest repairs |
+   | `QualityGateMiddleware` | 200 | Auto-delegate to CodeGuardian and SecurityReview agents |
+
+   Register in `codebuddy-agent.ts` constructor.
 6. **Confirmation service** — Singleton. Check order: permission mode → declarative rules → session flags → Guardian Agent.
 7. **Per-turn context injection** — Each LLM turn appends `<lessons_context>` (before) and `<todo_context>` (after). Must be applied in both agent-executor paths.
 8. **Pluggable ContextEngine** — Plugins can register a custom context pipeline via `PluginContext.registerContextEngine()`. If `ownsCompaction` is set, built-in auto-compact is skipped. Trust check blocks non-trusted plugins from owning compaction.
@@ -95,13 +92,36 @@ Two systems coexist:
 - **Extended Thinking** (`src/agent/thinking/`) — provider-level (Grok `budget_tokens`). Levels: `off`/`minimal`/`low`/`medium`/`high`/`xhigh`.
 - **ToT + MCTS** (`src/agent/reasoning/`) — modes `shallow`/`medium`/`deep`/`exhaustive`. MCTSr Q-value: `Q(a) = 0.5 * (min(R) + mean(R))`. Entry point: `reasoning-facade.ts`. User-facing: `/think` command and the `reason` tool. Reasoning middleware (priority 42) auto-detects complex queries and injects `<reasoning_guidance>`.
 
+## Fleet (Multi-AI Hub) — `src/fleet/` + `src/server/websocket/`
+
+Stateful WebSocket mesh letting Code Buddy peers observe each other's events live and invoke each other's LLMs / read-only tools. Bridges live in `src/fleet/` and are wired in `src/server/index.ts` on every `buddy server` start.
+
+- **`peer.chat`** (V1) — stateless one-shot LLM call to a peer (`peer-chat-bridge.ts`).
+- **`peer.chat-session.start|continue|end|continue-stream|list`** (V1.2, Phase d.21–d.22) — multi-turn sessions, FIFO-serialised per `sessionId`, 30-min idle TTL (`CODEBUDDY_PEER_SESSION_IDLE_MS`), persisted to `~/.codebuddy/peer-sessions/*.json` (`peer-session-store.ts`). Privacy guard: `peer.chat-session.list` returns metadata only, never prompt/assistant content (asserted by test).
+- **`peer.tool.invoke` + `.stream`** (V1.3, Phase d.23, `peer-tool-bridge.ts`) — remote read-only tool execution. **Three security gates** in order: allowlist (`CODEBUDDY_PEER_TOOL_ALLOWLIST`, default `view_file`/`list_directory`/`search`) → registry `fleetSafe: true` flag (`src/tools/metadata.ts`) → workspace root (`CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` must be set; **fails closed** with `PEER_WORKSPACE_NOT_CONFIGURED` if unset, so a misconfigured peer can't expose `/`). Anti-loop guards: `CODEBUDDY_PEER_MAX_DEPTH`, `CODEBUDDY_PEER_ROLE=leaf`.
+- **`route_peer` tool + `/fleet route`** — `TaskRouter` (`task-router.ts`) classifies a prompt, gathers peer capabilities via `peer.describe`, applies privacy/cost/latency constraints, returns the recommended `peer_delegate` call. Privacy lint (`privacy-lint.ts`) detects SSN/IBAN/phone/credit-card before routing.
+- **Slash UX:** `/fleet listen`, `/fleet send <peer> <method> <json>`, `/fleet history [--type glob] [--json]`, `/fleet status [--with-sessions]`, `/fleet chat start|say|end|list`, `/fleet route`, `/fleet describe`.
+
+## Cowork — Desktop GUI (`cowork/`)
+
+Electron app, separate `package.json`, Node ≥22, Vite + React + better-sqlite3, Playwright for e2e. Architecture in `cowork/ARCHITECTURE.md`.
+
+- Build: `npm run build:gui` (or `cd cowork && npm run dev` for live).
+- Tests: `cd cowork && npm test` (vitest) and `npm run test:e2e` (Playwright).
+- `better-sqlite3` is rebuilt against Electron headers via `npm run rebuild` (called from `postinstall`).
+- **Dual-`mainWindow` regression** (rc.8, commit `751f7eb6`): `cowork/src/main/index.ts` and `cowork/src/main/window-management.ts` each owned a `let mainWindow: BrowserWindow | null = null`. Only the former was set; `getMainWindow()` (used by `ipc-main-bridge.ts:sendToRenderer()`) always returned `null`, silently dropping every main→renderer IPC push. Fixed by exporting `setMainWindow()` and calling it after `BrowserWindow` creation. **If you add another module that needs `mainWindow`, import the setter, don't redeclare the variable.**
+- **`@phuetz/ai-providers` inlined** into `src/providers/_shared/` (commit `5757b197`) — don't reintroduce the workspace symlink.
+- **`JWT_SECRET` runtime fallback**: auth throws at module-load under `NODE_ENV=production` if missing; `ServerBridge` mints a 64-byte hex secret at boot if none persisted. Persistent secrets go through Settings → Embedded server (`SettingsServer.tsx`).
+- Visual workflow execution wraps the core `Orchestrator` (`src/orchestration/orchestrator.ts`) with a 4-agent pool (`cowork/src/main/workflows/workflow-bridge.ts`). Two runtime bugs fixed before ship: `processQueue` deadlock after `queueTask` (use `task_created` listener + `queueMicrotask`) and `workflow_started` listener-order issue (use `prependListener` so the run-scoped capture handler populates the instanceId↔workflowId map first).
+- Linux dev loop: see `cowork/DEV-LINUX.md` — skip `npm run build`, use `npx vite build` (~30 s), boot Electron with `--no-sandbox --disable-gpu`.
+
 ## Adding a Tool
 
 1. Create class in `src/tools/` returning `Promise<ToolResult>` (`{ success, output?, error? }`).
 2. Add OpenAI function definition in `src/codebuddy/tools.ts`.
 3. Add execution case in `CodeBuddyAgent.executeTool()`.
 4. Register in `src/tools/registry/` via the right factory.
-5. Add metadata in `src/tools/metadata.ts` (keywords + priority — used by RAG selection and BM25 `tool_search`).
+5. Add metadata in `src/tools/metadata.ts` (keywords + priority — used by RAG selection and BM25 `tool_search`). Set `fleetSafe: true` only for read-only tools you want exposed via `peer.tool.invoke`.
 
 Codex-style aliases (`shell_exec`, `file_read`, `browser_search`, …) live in `src/tools/registry/tool-aliases.ts`.
 
@@ -113,33 +133,43 @@ Codex-style aliases (`shell_exec`, `file_read`, `browser_search`, …) live in `
 
 When a tool touches a path, the system walks upward to the project root loading any `CODEBUDDY.md` / `CONTEXT.md` / `INSTRUCTIONS.md` / `AGENTS.md` / `README.md` (and in `.codebuddy/` or `.claude/` subdirs). Max 4KB per discovery. `.codebuddy/settings.json → codebuddyMdExcludes` takes glob patterns to skip. CODEBUDDY.md supports `@path/to/file` imports (relative, `@~/…`, `@//…`), recursive to 5 levels.
 
+## Auto-Memory Writeback
+
+Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.codebuddy/memory.md` (user). The agent writes back preferences, decisions, and gotchas across sessions (see `src/memory/persistent-memory.ts`). User-facing surface: `/memory recent`, `/memory show`, `buddy --init` (also generates an `AGENTS.md` for cross-CLI compatibility — read by Claude Code, Gemini CLI, Cursor, Codex).
+
 ## Config Files
 
 - `src/config/model-tools.ts` — **start here for model-specific behavior**. Per-model caps with glob matching.
 - `src/config/constants.ts` — `SUPPORTED_MODELS`, `TOKEN_LIMITS`
 - `src/config/toml-config.ts` — config profiles (`[profiles.<name>]` deep-merged; `buddy --profile <name>`). Also `[model_pairs]` for architect/editor split.
 - `src/config/advanced-config.ts` — effort levels (low/medium/high) → temperature + token params
+- `.codebuddy/settings.json` — local model + thinking-level defaults (current repo: `gpt-5.5` + `high`)
 
 ## Coding Conventions
 
-- TypeScript strict, avoid `any`
+- TypeScript strict, avoid `any`. `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are **not yet on** — see `tsconfig.json` TODOs.
 - Single quotes, semicolons, 2-space indent
 - Files kebab-case (`text-editor.ts`); React components PascalCase (`ChatInterface.tsx`)
-- Conventional Commits (`feat(scope): description`)
+- Conventional Commits (`feat(scope): description`) — enforced by `commitlint.config.js`
 - ESM — imports need `.js` extension even from `.ts` sources
+- Path aliases (`@agent/*`, `@tools/*`, etc.) are declared in `tsconfig.json` but **not actually used in source** — relative imports are the norm. Don't introduce them in new code unless you're starting a sweep.
 
 ## Environment Variables
 
 | Variable | Purpose |
 |----------|---------|
-| `GROK_API_KEY` | Required API key from x.ai |
+| `GROK_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | Provider auto-detect |
 | `GROK_BASE_URL` / `GROK_MODEL` | Custom endpoint / default model |
 | `CODEBUDDY_MAX_TOKENS` | Override response token limit |
 | `CODEBUDDY_AUTOCOMPACT_PCT` | Auto-compact threshold as % of context window |
 | `MORPH_API_KEY` | Enables fast file editing |
 | `YOLO_MODE` / `MAX_COST` | Full autonomy ($10 default, $100 YOLO) |
 | `JWT_SECRET` | Required in production for API server |
-| `MCP` / search keys | `BRAVE_API_KEY`, `EXA_API_KEY`, `PERPLEXITY_API_KEY`, `OPENROUTER_API_KEY`, `FIRECRAWL_API_KEY` |
+| `OLLAMA_HOST` / `VLLM_BASE_URL` | Bundled provider auto-detect |
+| `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` | **Required to enable** `peer.tool.invoke` — fail-closed when unset |
+| `CODEBUDDY_PEER_TOOL_ALLOWLIST` | csv override for default `view_file,list_directory,search` |
+| `CODEBUDDY_PEER_SESSION_IDLE_MS` / `CODEBUDDY_PEER_MAX_DEPTH` / `CODEBUDDY_PEER_ROLE` | Fleet limits |
+| Search keys | `BRAVE_API_KEY`, `EXA_API_KEY`, `PERPLEXITY_API_KEY`, `OPENROUTER_API_KEY`, `FIRECRAWL_API_KEY` |
 | `PICOVOICE_ACCESS_KEY` | Porcupine wake word (text-match fallback if absent) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |
 | `PERF_TIMING`, `CACHE_TRACE`, `VERBOSE` | Debug flags |
@@ -160,8 +190,11 @@ Full list: `buddy --help` and `/tools` in-session. The ones most worth knowing:
 ```bash
 buddy                       # Interactive chat
 buddy --profile <name>      # Named config profile
+buddy login                 # ChatGPT OAuth (no API key needed, $0 marginal cost via Codex Responses backend)
+buddy whoami                # Show current auth + plan
 buddy onboard               # Setup wizard
 buddy doctor [--fix]        # Environment diagnostics + auto-migration
+buddy server [--port N]     # Start HTTP server (3000) + Gateway WS (3001) — required for fleet
 buddy dev plan|run|pr|fix-ci  # Golden-path workflows (forces WritePolicy.strict)
 buddy run list|show|tail|replay  # Observability
 buddy research "<topic>"    # Wide research
@@ -174,7 +207,10 @@ In-session slash commands (not exhaustive):
 ```
 /think off|shallow|medium|deep|exhaustive|status|<problem>
 /batch <goal>                # Decompose into parallel sub-agents
+/swarm <task>                # Team-lead UX (Korben-inspired)
 /team start|add|status|...   # Agent Teams coordination
+/fleet listen|send|history|status|chat|route|describe
+/memory recent|show|search
 /compact [level]
 /config [set] <key> <value>  # Dot-notation, SecretRef, --dry-run, batch JSON
 /switch <model|auto>         # Mid-conversation model switch
@@ -186,8 +222,8 @@ In-session slash commands (not exhaustive):
 
 ## HTTP Server (`src/server/`)
 
-Default ports: **3000** HTTP, **3001** Gateway WS. CORS enabled, rate-limit 100 req/min, JWT required in production.
+Started with `buddy server`. Default ports: **3000** HTTP, **3001** Gateway WS. CORS enabled, rate-limit 100 req/min, JWT required in production.
 
 Routes worth knowing: `/api/health`, `/api/chat`, `/api/chat/completions` (OpenAI-compatible), `/api/sessions`, `/api/memory`, `/api/a2a/*` (Google A2A: AgentCard discovery + task lifecycle), `/__codebuddy__/canvas/:id`, `/__codebuddy__/a2ui/`.
 
-Gateway WS events: `connect` (pre-auth), `hello_ok`, `auth`, `chat`, `session_create|join|leave|patch`, `presence`. Origin-hardened (GHSA-5wcw-8jjv-m286): default `corsOrigins` is localhost-only, `trustedProxies` must be configured explicitly.
+Gateway WS events: `connect` (pre-auth), `hello_ok`, `auth`, `chat`, `session_create|join|leave|patch`, `presence`, `peer:*`. Origin-hardened (GHSA-5wcw-8jjv-m286): default `corsOrigins` is localhost-only, `trustedProxies` must be configured explicitly. Live API heartbeat at `/api/health.apiHeartbeat` (30s probe loop in `src/server/heartbeat-monitor.ts`).
