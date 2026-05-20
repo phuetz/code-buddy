@@ -1,0 +1,16 @@
+{
+  "active": true,
+  "current_phase": "waiting_for_next_heartbeat",
+  "started_at": "2026-05-20T01:18:17+02:00",
+  "task_description": "Agentic Coding Cell heartbeat: integrate PostCommander workflow/approval patterns into Code Buddy",
+  "context_snapshot_path": "D:/CascadeProjects/grok-cli-weekend/.omx/context/agentic-coding-cell-20260519T185413Z.md",
+  "lane": "workflow-integration",
+  "next_increment": "Cowork importer UI implementation or controlled producer execution handoff",
+  "last_increment": "proposal-loop Cowork workspace graph summary",
+  "verification": [
+    "94/94 targeted tests",
+    "targeted ESLint",
+    "npm run typecheck",
+    "CLI smoke Cowork workspace graph summary"
+  ]
+}
