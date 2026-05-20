@@ -1,4 +1,404 @@
-# État des projets — mis à jour le 14 mai 2026
+# État des projets — mis à jour le 20 mai 2026
+
+## ✨ Bilan d'étape — 19 mai 2026 (brique robot workflow + codage agentique)
+
+Patrice a formulé explicitement la direction: chaque projet ajoute une brique à
+notre robot. La session a relié deux briques concrètes :
+
+- **PostCommander** apporte le pattern "workflow builder" : un assistant IA
+  construit un graphe `nodes/edges`, l'interface ReactFlow permet de le modifier,
+  le serveur le persiste dans `flowData`, puis le worker exécute les nœuds en
+  exposant `activeNodeId`, `completedNodeIds` et `runningNodeErrors`.
+- **Code Buddy / grok-cli-weekend** reprend ce motif pour la nouvelle
+  **Cellule de codage agentique** : un run de codage est désormais aussi un
+  graphe d'action visualisable (`workflow.nodes`, `workflow.edges`,
+  `activeNodeId`, `completedNodeIds`, `blockedNodeIds`), avec un état
+  `approval` (`draft`, `needs_approval`, `approved`, `rejected`,
+  `not_required`) avant écriture, un export canvas via `--workflow-file`, et
+  un prompt builder via `--workflow-builder-prompt-file`, puis une validation
+  de sortie builder via `--workflow-builder-proposal-file`, exportable en
+  canvas via `--workflow-builder-proposal-canvas-file`. Le graphe porte aussi
+  des erreurs par nœud (`workflow.nodeErrors`, `data.errorMessages`) comme le
+  `runningNodeErrors` de PostCommander, et peut produire un snapshot compact de
+  progression via `--workflow-progress-file`. Les propositions builder doivent
+  maintenant avoir exactement un nœud `trigger`, et tous les nœuds doivent être
+  atteignables depuis lui. La cellule produit aussi un artefact compact
+  d'approbation via `--approval-file`, avec état, raison, fichiers concernés,
+  nœuds de validation et `nextAction` pour Cowork. Le retour d'approbation est
+  aussi structuré : `--approval-decision-prompt-file` écrit le prompt strict de
+  revue, `--proposal-loop-file` regroupe les prompts, chemins d'artefacts et
+  commandes sûres de la boucle proposition/preview/approval, avec état de
+  stepper `activeStepId`, compteurs, étapes terminées et étapes bloquées, plus
+  projection graphe `nodes/edges` et événements ordonnés pour activity feed,
+  plus un canvas ReactFlow/Cowork via `--proposal-loop-canvas-file`, puis
+  un bundle de travail via `--proposal-loop-artifacts-dir` incluant
+  `edit-proposal-request.json`, `edit-proposal-producer-dispatch.json` et
+  `edit-proposal-review.json`, avec manifest `coworkImport` pour que Cowork
+  sache quel artefact ouvrir dans chaque panneau, et export standalone
+  `--proposal-loop-cowork-import-file` quand Cowork veut seulement la table
+  d'import. `--proposal-loop-cowork-import-check-file` ajoute le check passif
+  côté consommateur : artefacts requis manquants, queue/primary présents, et
+  existence de chaque panneau. `--proposal-loop-cowork-workspace-file` transforme
+  ce check en résumé d'ouverture UI : panneau à ouvrir, panneaux disponibles,
+  panneaux indisponibles et action primaire. Il copie aussi la queue passive de
+  `proposal-loop-next-action.json` (`runState`, `activeStepId`,
+  `nextActionType`, `uiPrimaryAction`) pour que Cowork voie la prochaine action
+  sans jamais exécuter la commande, ainsi qu'un stepper passif issu de
+  `proposal-loop.json` pour afficher étape active, compteurs et progression.
+  Il copie aussi un graphe passif issu de `proposal-loop.json` pour afficher
+  nœud actif, nœuds, arêtes, gates approval, blocages et compteurs de statut
+  sans ouvrir le canvas comme autorité d'exécution.
+  Il copie aussi une activité passive issue de `workflow-events.json` pour
+  afficher un feed d'événements sans interpréter ce feed comme une autorité.
+  Il copie aussi une approbation passive issue de `approval-state.json` pour
+  afficher état, raison, fichiers concernés, gates et prochaine action sans
+  créer de décision d'approbation ni appliquer d'édition.
+  Il copie aussi un catalogue de commandes passif depuis `proposal-loop.json`
+  pour afficher commandes `buddy`, statuts, artefacts d'entrée/sortie et règles
+  safety sans exécuter ces commandes.
+  Il copie aussi un résumé producteur passif issu de
+  `edit-proposal-request.json`, `edit-proposal-producer-dispatch.json` et
+  `edit-proposal-review.json` pour afficher demande, instructions, safety,
+  schéma, dispatch, review, outils autorisés, fichiers concernés et prochaine
+  action sans lancer d'agent ni déclencher de preview.
+  Il copie aussi des preuves passives issues de `seed-report.json` pour
+  afficher statut de run, état d'approbation, blocages, validations, compteurs
+  d'édition, vérifications et nœud actif sans traiter le rapport complet comme
+  une autorité d'exécution.
+  Il copie aussi un manifest passif issu de `artifact-bundle.json` pour
+  afficher nombre d'artefacts matérialisés, rôles, safety notes, panneaux
+  Cowork, artefacts requis et état source sans lancer d'agent ni exécuter de
+  commande.
+  La review de sortie producteur est maintenant aussi une étape explicite
+  `review-edit-proposal` dans la boucle, entre production de proposition et
+  preview. `--proposal-loop-next-action-file` écrit le petit snapshot
+  consommateur qui dit si Cowork peut lancer une commande sûre ou doit attendre
+  une intervention humaine, avec `ui.primaryAction` pour afficher bouton,
+  commande copiable, raison de blocage et artefacts actifs sans analyser tout
+  le paquet. `--edit-proposal-producer-dispatch-file` écrit la
+  première frontière d'invocation producteur : messages, état workflow, outils
+  lecture seule, actions interdites, sortie `edit-proposal.json` et commande de
+  review, sans lancer d'agent ni donner de droit d'écriture, puis
+  `--approval-decision-file` + `--require-approval` impose une décision
+  `approved` avant l'application des edits. Pour l'affichage live,
+  `--workflow-events-file` écrit une timeline déterministe avec un événement par
+  nœud, sévérité et message.
+
+Fichiers PostCommander relus comme source d'inspiration :
+- `server/src/services/agent/workflow-builder.ts` — créateur IA de graphe
+  ReactFlow ;
+- `client/src/pages/AutomationsPage.tsx` — canevas, templates, chat builder,
+  sauvegarde et stepper live ;
+- `server/src/services/jobs/scraper.worker.ts` — moteur d'exécution graphe +
+  progression par nœud ;
+- `server/src/routes/automations.routes.ts` — persistance, trigger manuel,
+  webhook et endpoint agent builder.
+
+Fichiers Code Buddy touchés :
+- `docs/agentic-coding-cell.md`
+- `src/agent/autonomous/agentic-coding-contract.ts`
+- `src/agent/autonomous/agentic-coding-runner.ts`
+- `src/commands/cli/autonomous-code-command.ts`
+- tests dédiés sous `tests/agent/autonomous/` et
+  `tests/commands/autonomous-code-command.test.ts`
+
+Capacités livrées côté Code Buddy :
+- contrat JSON borné (`repo`, `task`, `allowedPaths`, `verification`,
+  `riskLevel`) ;
+- préflight workspace + `git status` + blocage des fichiers sales hors scope ;
+- proposition d'édition séparée via `--edit-proposal-file` ;
+- prompt de proposition non-écrivant via `--proposal-prompt-file` ;
+- preview dry-run via `--preview-edits` ;
+- écriture scoped `replace_text` via `--apply-edits` ;
+- garde `--require-preview` pour forcer une preview réussie avant application ;
+- rapport JSON persistant via `--report-file` ;
+- graphe workflow et état d'approbation pour une future intégration Cowork ;
+- export de canvas PostCommander/ReactFlow-like via `--workflow-file` ;
+- prompt non-écrivant de créateur de workflow via
+  `--workflow-builder-prompt-file` ;
+- validation non-écrivante de proposition builder via
+  `--workflow-builder-proposal-file` : schéma, ids de nœuds et arêtes
+  référentielles ;
+- export de la proposition builder validée en canvas Cowork-ready via
+  `--workflow-builder-proposal-canvas-file` ;
+- erreurs par nœud dans le workflow et dans le canvas pour afficher la cause
+  exacte d'un blocage ;
+- snapshot de progression Cowork-ready via `--workflow-progress-file` :
+  nœud actif, nœuds terminés, nœuds bloqués, erreurs, compteurs de statuts et
+  `nextAction` UI-ready ;
+- snapshot d'approbation Cowork-ready via `--approval-file` :
+  `agentic-coding-approval-state`, fichiers concernés, compteurs preview/apply
+  et prochaine action `review_preview` / `inspect_rejection` / `none` ;
+- prompt de décision d'approbation Cowork-ready via
+  `--approval-decision-prompt-file` :
+  schéma `agentic-coding-approval-decision`, contrat, état courant et preview
+  before/after ;
+- paquet de boucle proposition/preview/approval via `--proposal-loop-file` :
+  `agentic-coding-proposal-loop`, prompts intégrés, chemins d'artefacts,
+  `nextAction`, `activeStepId`, compteurs, étapes terminées/bloquées et
+  projection graphe `nodes`/`edges`, événements ordonnés par étape, plus
+  commandes `buddy autonomous-code` pour Cowork ;
+- canvas de boucle proposition/preview/approval via
+  `--proposal-loop-canvas-file` :
+  `agentic-coding-proposal-loop-canvas`, 8 nœuds `customNode`, 7 arêtes, nœud
+  actif `review-preview`, métadonnées `agenticType` / `iconName` / `status`
+  prêtes pour Cowork, avec `review-edit-proposal` avant la preview ;
+- bundle de boucle proposition/preview/approval via
+  `--proposal-loop-artifacts-dir` :
+  `agentic-coding-proposal-loop-artifact-bundle`, matérialisant en une commande
+  le paquet loop, le canvas, les prompts, l'état d'approbation, les snapshots
+  progress/events, la review producteur et le rapport seed sans exécuter la
+  boucle ni appliquer d'edit ; le manifest contient aussi `coworkImport` avec
+  panneaux canvas, next-action, approval, producer request, producer dispatch,
+  producer review, events, seed report et manifest ;
+- export standalone du manifest Cowork via
+  `--proposal-loop-cowork-import-file` :
+  même carte `coworkImport` que le bundle, sans matérialiser les autres
+  artefacts et sans exécuter de commande ;
+- check passif de manifest Cowork via
+  `--proposal-loop-cowork-import-check-file` :
+  `agentic-coding-proposal-loop-cowork-import-check`, statut `ready` /
+  `missing_required` / `invalid`, artefacts requis manquants, présence de la
+  queue et existence de chaque panneau, sans ouvrir les artefacts comme
+  autorité d'exécution ;
+- résumé d'ouverture Cowork via
+  `--proposal-loop-cowork-workspace-file` :
+  `agentic-coding-proposal-loop-cowork-workspace`, statut du workspace,
+  `openPanelId`, panneaux disponibles/indisponibles et `ui.primaryAction`
+  `open_panel` / `resolve_missing` / `fix_import`, plus queue passive avec
+  `runState`, `activeStepId`, `nextActionType` et `uiPrimaryAction`, plus
+  stepper passif avec `counts`, `completedStepIds`, `blockedStepIds` et étapes
+  compactes, plus graphe passif avec `activeNodeId`, `nodeCount`, `edgeCount`,
+  `approvalNodeIds`, `blockedNodeIds` et compteurs de statut, plus catalogue
+  commandes passif avec `commandCount`,
+  `readyCommandCount`, texte de commande, statut, safety et artefacts, plus
+  activité passive avec événement actif, compteurs de sévérité
+  et lignes d'événements compactes, plus approbation passive avec `state`,
+  `reason`, `affectedFiles`, `gateNodeIds` et `nextAction`, plus producteur
+  passif avec demande producteur, compteurs d'instructions/safety, clés de
+  schéma, mode de dispatch, outils lecture seule, commande de review, état de
+  review, fichiers concernés et `nextAction`, plus preuves passives avec
+  statut, compteurs d'édition, compteurs de vérification et workflow actif,
+  plus manifest passif avec nombre d'artefacts, rôles, safety notes, panneaux
+  Cowork, artefacts requis et état source ;
+- enveloppe producteur via `edit-proposal-request.json` dans le bundle :
+  `agentic-coding-edit-proposal-request`, avec prompt d'entrée, chemin de
+  sortie `edit-proposal.json`, schéma attendu et règles data-only pour un futur
+  agent producteur ;
+- dispatch producteur via `--edit-proposal-producer-dispatch-file` :
+  `agentic-coding-edit-proposal-producer-dispatch`, avec messages
+  système/utilisateur, état workflow courant, outils lecture seule, actions
+  interdites, cible `edit-proposal.json` et commande de review ;
+- review de proposition via `--edit-proposal-review-file` :
+  `agentic-coding-edit-proposal-review`, état `missing` / `accepted` /
+  `rejected`, erreurs de validation, fichiers proposés, métadonnées producteur
+  et `nextAction` vers preview ou correction ;
+- snapshot consommateur via `--proposal-loop-next-action-file` :
+  `agentic-coding-proposal-loop-next-action`, étape active, prochaine action,
+  `runState`, `canRunCommand` et `ui.primaryAction` pour les files Cowork ;
+- décision d'approbation Cowork-ready via `--approval-decision-file` :
+  `agentic-coding-approval-decision`, reviewer, raison, décision
+  `approved` / `rejected`, et gate `--require-approval` avant écriture ;
+- timeline d'événements Cowork-ready via `--workflow-events-file` :
+  `agentic-coding-workflow-events`, un événement ordonné par nœud, sévérité
+  `success` / `warning` / `error`, message et indicateur actif ;
+- validation de connectivité du graphe builder : exactement un trigger, aucun
+  nœud orphelin.
+
+Vérifications Code Buddy :
+- `npm test -- tests/agent/autonomous/agentic-coding-contract.test.ts tests/agent/autonomous/agentic-coding-runner.test.ts tests/commands/autonomous-code-command.test.ts`
+  → 94/94 OK ;
+- `npx eslint ...` ciblé OK ;
+- diagnostics TypeScript ciblés OK ;
+- `npm run typecheck` OK ;
+- smoke CLI réel `--workflow-file` : `status: ready`,
+  `workflowKind: agentic-coding-workflow-canvas`, 11 nœuds, 10 arêtes,
+  premier nœud `customNode`.
+- smoke CLI réel `--workflow-builder-prompt-file` : `status: ready`,
+  prompt contenant `agentic-coding-workflow-builder-proposal`, le canvas courant
+  et la règle "pas d'édition directe".
+- smoke CLI réel `--workflow-builder-proposal-file` : `status: ready`,
+  proposition chargée avec 2 nœuds, 1 arête et gate d'approbation.
+- smoke CLI réel `--workflow-builder-proposal-canvas-file` : `status: ready`,
+  `kind: agentic-coding-workflow-builder-proposal-canvas`, 2 nœuds, 1 arête,
+  premier nœud `customNode`.
+- smoke CLI réel erreur par nœud : `status: blocked`,
+  `activeNodeId: git-preflight`, 2 erreurs de nœuds, et le canvas porte
+  `data.errorMessages` sur `git-preflight`.
+- smoke CLI réel `--workflow-progress-file` : `status: blocked`,
+  `kind: agentic-coding-workflow-progress`, `activeNodeId: git-preflight`,
+  2 nœuds bloqués sur 11 et première erreur remontée.
+- smoke CLI réel proposition builder déconnectée : `status: validation_failed`,
+  erreur `unreachable node(s): orphan`.
+- smoke CLI réel `nextAction` : snapshot `agentic-coding-workflow-progress`
+  avec `nextAction.type: inspect_blocker`, `nodeId: git-preflight` et message
+  exact du blocage.
+- smoke CLI réel `--approval-file` : `status: previewed`,
+  `kind: agentic-coding-approval-state`, `state: needs_approval`,
+  `nextAction: review_preview`, fichier `docs/note.md`.
+- smoke CLI réel `--approval-decision-file --require-approval --apply-edits` :
+  `status: edited`, `approvalState: approved`, décision `approved`, preview
+  `previewed`, edit `applied`, contenu `after`.
+- smoke CLI réel `--workflow-events-file` : `status: blocked`,
+  `kind: agentic-coding-workflow-events`, `activeNodeId: git-preflight`,
+  événement actif `git-preflight`, sévérité `error`, 12 événements.
+- smoke CLI réel `--approval-decision-prompt-file` : `status: previewed`,
+  `approvalState: needs_approval`, prompt contenant
+  `agentic-coding-approval-decision`, `docs/note.md` et la règle
+  `Use decision "approved"`.
+- smoke CLI réel `--proposal-loop-file` : `status: previewed`,
+  `kind: agentic-coding-proposal-loop`, `nextAction: review_preview`, 8 étapes,
+  dont `review-edit-proposal`, prompts de proposition et d'approbation présents.
+- smoke CLI réel état stepper `--proposal-loop-file` :
+  `activeStepId: review-preview`, `completed: 4`, `ready: 1`, `total: 8`.
+- smoke CLI réel events `--proposal-loop-file` : 8 événements,
+  événement actif `review-preview`, sévérité `warning`, séquence 5.
+- smoke CLI réel graphe `--proposal-loop-file` : 8 nœuds, 7 arêtes,
+  nœud `review-preview` typé `approval`, arête review-proposal -> preview et
+  arête review -> apply présentes.
+- smoke CLI réel `--proposal-loop-canvas-file` :
+  `kind: agentic-coding-proposal-loop-canvas`, `activeNodeId:
+  review-preview`, 8 nœuds, 7 arêtes, nœud d'approbation en `customNode`
+  logique.
+- smoke CLI réel `--proposal-loop-artifacts-dir` :
+  `kind: agentic-coding-proposal-loop-artifact-bundle`, `activeStepId:
+  review-preview`, 13 artefacts matérialisés, request
+  `agentic-coding-edit-proposal-request`, review
+  `agentic-coding-edit-proposal-review`, next-action
+  `agentic-coding-proposal-loop-next-action`, dispatch
+  `agentic-coding-edit-proposal-producer-dispatch`, prompt de proposition
+  présent, seed report présent, approval `needs_approval`.
+- smoke CLI réel `coworkImport` :
+  `defaultPanelId: canvas`, `suggestedFocusPanelId: approval`,
+  queue `proposal-loop-next-action.json`, 9 panneaux, dont producer request,
+  producer dispatch et approval.
+- smoke CLI réel `--proposal-loop-cowork-import-file` :
+  `status: previewed`, `defaultPanelId: canvas`,
+  `suggestedFocusPanelId: approval`, queue
+  `proposal-loop-next-action.json`, 9 panneaux, producer request, dispatch et
+  approval présents.
+- smoke CLI réel `--proposal-loop-cowork-import-check-file` :
+  `checkStatus: ready`, `missingRequiredCount: 0`,
+  `queueArtifactExists: true`, 9 panneaux, tous les panneaux présents.
+- smoke CLI réel `--proposal-loop-cowork-workspace-file` :
+  `workspaceStatus: ready`, `openPanelId: approval`, action `open_panel`,
+  0 panneau indisponible, 9 panneaux, status text `Workspace ready: 9/9 panels
+  available.`
+- smoke CLI réel workspace queue :
+  `queueRunState: human_input_required`, `queueActiveStepId: review-preview`,
+  `queueNextActionType: review_preview`, action `human_review`, aucune erreur
+  de validation.
+- smoke CLI réel workspace stepper :
+  `stepperActiveStepId: review-preview`, `stepperCompleted: 4`,
+  `stepperReady: 1`, `stepperTotal: 8`, étape active `review-preview`.
+- smoke CLI réel workspace graph :
+  `graphActiveNodeId: review-preview`, `graphNodeCount: 8`,
+  `graphEdgeCount: 7`, approval `review-preview`, completed `4`, ready `1`.
+- smoke CLI réel workspace commands :
+  `commandCount: 5`, `readyCommandCount: 0`, preview contient
+  `--preview-edits`, apply contient `--apply-edits`, aucune erreur.
+- smoke CLI réel workspace activity :
+  `activityTotal: 12`, `activityWarning: 1`, événement actif présent et aucune
+  erreur de validation.
+- smoke CLI réel workspace approval :
+  `approvalState: needs_approval`, `approvalSourceActiveNodeId:
+  approval-decision`, `approvalFile: docs/note.md`, action `review_preview`.
+- smoke CLI réel workspace producer :
+  `producerRequestInstructions: 5`, `producerRequestSafety: 3`,
+  `producerDispatchMode: data_only_edit_proposal`, review `accepted`, action
+  `preview_edits`, producteur `smoke-producer`, fichier `docs/note.md`.
+- smoke CLI réel workspace evidence :
+  `evidenceStatus: previewed`, `evidenceApprovalState: needs_approval`,
+  `declared: 1`, `previewed: 1`, nœud actif `approval-decision`.
+- smoke CLI réel workspace manifest :
+  `manifestMaterialized: 13`, `manifestPanelCount: 9`,
+  `manifestRequiredCount: 5`, source `review-preview`, approval
+  `needs_approval`.
+- smoke CLI réel `--proposal-loop-next-action-file` :
+  `kind: agentic-coding-proposal-loop-next-action`, active step
+  `review-edit-proposal`, `runState: ready_command`, `canRunCommand: true` et
+  UI `run_command` avec commande contenant `--edit-proposal-review-file`.
+- smoke CLI réel bundle next-action UI :
+  `runState: human_input_required`, `ui.primaryAction.type: human_review`,
+  `enabled: false`, raison de désactivation = revue de preview à écrire.
+- smoke CLI réel `--edit-proposal-producer-dispatch-file` :
+  `kind: agentic-coding-edit-proposal-producer-dispatch`,
+  `runPolicy.mode: data_only_edit_proposal`, 3 outils lecture seule, sortie
+  `edit-proposal.json`, commande contenant `--edit-proposal-review-file`.
+- smoke CLI réel `--edit-proposal-review-file` :
+  `kind: agentic-coding-edit-proposal-review`, `state: accepted`,
+  `nextAction: preview_edits`, fichier `docs/note.md`, producteur
+  `smoke-agent`, aucune erreur de validation.
+
+Lecture stratégique :
+PostCommander donne au robot une façon de **penser l'action comme un graphe**.
+Code Buddy donne une façon de **modifier son propre logiciel avec preuves**.
+Cowork devra faire converger les deux : un cockpit où Patrice voit le graphe,
+les nœuds actifs, la preview, l'approbation, les tests et le handoff.
+Le snapshot de progression ajoute une vue légère pour un futur stepper live
+sans charger le canvas complet. Le snapshot d'approbation ajoute la pièce
+manquante pour une file Cowork "à valider", sans que l'interface doive analyser
+le rapport complet. Le prompt de décision d'approbation donne à Cowork ou à
+l'humain une sortie JSON bornée pour relire une preview. Le paquet
+`proposal-loop` donne la route complète sans l'exécuter automatiquement, et
+expose maintenant l'état prêt-à-afficher du stepper Cowork, son graphe
+`nodes/edges`, son activity feed et son canvas ReactFlow/Cowork. La
+matérialisation du bundle donne à Cowork un dossier de travail directement
+consommable : prompt agent, enveloppe producteur, review producteur, canvas,
+dispatch producteur, manifest d'import, snapshot next-action, statut, events et rapport. La review de proposition ajoute le sas suivant :
+vérifier la sortie de l'agent avant toute preview ou écriture, et ce sas est
+maintenant visible comme nœud de workflow. La décision
+d'approbation ajoute le retour contrôlé : Cowork peut maintenant dire
+oui/non au runner sans jamais écrire elle-même. La timeline d'événements ajoute
+la matière pour un activity feed ou un stepper live sans reconstruire l'histoire
+depuis le graphe.
+Le manifest d'import peut maintenant être demandé seul, ce qui donne à Cowork
+une première poignée de chargement sans ouvrir ni matérialiser tout le bundle.
+Le check d'import ajoute l'étape suivante côté cockpit : savoir si le workspace
+est vraiment ouvrable avant d'afficher ses panneaux ou de proposer une action.
+Le résumé workspace franchit encore un cran : Cowork n'a plus à décider à la
+volée quel panneau ouvrir, le runner lui fournit déjà l'état d'ouverture. Il
+porte maintenant aussi la queue passive de prochaine action, ce qui prépare une
+sidebar ou file d'attente Cowork sans transformer une commande copiable en
+exécution implicite. Le stepper passif complète cette vue : Cowork peut montrer
+la progression de la boucle sans ouvrir `proposal-loop.json` comme une
+autorité d'action. L'activité passive ajoute le troisième panneau léger :
+Cowork peut ouvrir un feed d'événements avec sévérités et événement actif sans
+relire `workflow-events.json` comme permission d'agir.
+L'approbation passive ajoute le quatrième panneau léger : Cowork peut ouvrir le
+gate de revue depuis `approval-state.json` avec état, fichier, nœuds de gate et
+prochaine action, sans transformer cette lecture en décision d'approbation.
+Le producteur passif ajoute le cinquième panneau léger : Cowork peut voir la
+demande, le dispatch et la review d'un agent producteur, les règles safety, les
+outils lecture seule, la commande de review et l'état `accepted` / `missing` /
+`rejected`, sans lancer l'agent ni déclencher de preview.
+Les preuves passives ajoutent le sixième panneau léger : Cowork peut afficher
+le résumé de run et les compteurs de preuve depuis `seed-report.json`, sans
+relire ce rapport comme une autorité d'exécution.
+Le manifest passif ajoute le septième panneau léger : Cowork peut afficher la
+complétude du bundle depuis `artifact-bundle.json`, sans traiter le manifest
+comme permission de lancer des agents ou des commandes.
+Le catalogue commandes passif ajoute une palette d'action lisible : Cowork peut
+montrer les commandes `buddy` préparées par le loop, leurs statuts et leurs
+artefacts, sans transformer ce texte en exécution automatique.
+Le graphe passif ajoute une mini-carte : Cowork peut afficher nœuds, arêtes,
+gates et compteurs de workflow sans ouvrir le canvas comme autorité d'action.
+
+Prochaine brique naturelle :
+brancher une boucle agentique qui consomme le `proposal-prompt.md`, produit un
+`edit-proposal.json`, puis laisse le runner valider, prévisualiser et appliquer
+sans jamais donner au modèle un droit d'écriture direct. Côté cockpit, Cowork
+peut maintenant importer le canvas `--workflow-file` pour afficher le même
+modèle mental que PostCommander : graphe, étape active, approbation et preuves.
+Le prompt builder donne aussi au futur agent un format borné pour proposer ou
+réviser ce graphe sans toucher aux fichiers du dépôt. Le fichier de proposition
+builder ajoute la frontière suivante : le graphe proposé entre dans le rapport
+seulement si ses nœuds et arêtes sont cohérents. Le canvas de proposition
+permettra à Cowork de montrer le graphe proposé à côté du graphe réellement
+exécuté. Les erreurs par nœud donnent enfin à Cowork la matière nécessaire pour
+expliquer un blocage directement sur la carte concernée.
+
+---
 
 ## ✨ Bilan d'étape — 14 mai 2026 (GitNexus documents de travail + livrables techniques)
 
