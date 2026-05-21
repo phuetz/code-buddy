@@ -11,7 +11,7 @@ export const GENERATE_DOCUMENT_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
     name: 'generate_document',
-    description: 'Generate professional documents: PowerPoint (PPTX), Word (DOCX), Excel (XLSX), or PDF. Provide markdown content and the tool converts it to the specified format. Use # for title, ## for sections, ### for subsections, - for bullets, ``` for code blocks, and | for tables (XLSX).',
+    description: 'Generate professional documents: PowerPoint (PPTX), Word (DOCX), Excel (XLSX), or PDF. Provide markdown content and the tool converts it to the specified format. Use # for title, ## for sections, ### for subsections, - for bullets, ``` for code blocks, | or tab-separated rows for tables, and local image references like ![caption](path) for DOCX screenshots. DOCX image references are embedded with aspect-ratio fitting and visible captions from the alt text. Output paths must use the matching extension.',
     parameters: {
       type: 'object',
       properties: {
@@ -26,11 +26,11 @@ export const GENERATE_DOCUMENT_TOOL: CodeBuddyTool = {
         },
         content: {
           type: 'string',
-          description: 'Document content in markdown format. Use # for title slide, ## for section headers, ### for sub-sections, - for bullet points, ``` for code blocks. For XLSX, use CSV rows or JSON array of objects.',
+          description: 'Document content in markdown format. Use # for title slide, ## for section headers, ### for sub-sections, - for bullet points, ``` for code blocks. For DOCX, local image references such as ![caption](screens/image1.png) are embedded, fitted without distortion, and captioned from the alt text. For XLSX, use CSV rows or JSON array of objects.',
         },
         outputPath: {
           type: 'string',
-          description: 'Output file path, e.g. "./report.pptx" or "./output/analysis.pdf"',
+          description: 'Output file path with matching extension, e.g. "./report.docx", "./deck.pptx", or "./output/analysis.pdf"',
         },
         theme: {
           type: 'string',

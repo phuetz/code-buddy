@@ -64,6 +64,7 @@
     "dev:node": "tsx src/index.ts",
     "start": "node dist/index.js",
     "start:bun": "bun run dist/index.js",
+    "smoke:docx": "tsx scripts/smoke-docx-workshop.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

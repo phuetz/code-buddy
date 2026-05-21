@@ -21,6 +21,7 @@ export interface DocumentMetadata {
   lastModifiedBy?: string;
   pageCount?: number;
   wordCount?: number;
+  embeddedImageCount?: number;
   sheetCount?: number;
   slideCount?: number;
 }
@@ -36,6 +37,19 @@ export interface SlideContent {
   number: number;
   title?: string;
   text: string;
+}
+
+export interface ExtractedDocumentImage {
+  sourcePath: string;
+  outputPath: string;
+  markdownRef: string;
+  size: number;
+}
+
+interface DocxImageRelationship {
+  id: string;
+  target: string;
+  zipPath: string;
 }
 
 /**
@@ -118,6 +132,134 @@ export class DocumentTool {
   }
 
   /**
+   * Extract embedded DOCX images to a directory so downstream OCR or deliverable
+   * generation can inspect screenshots instead of only seeing text markers.
+   */
+  async extractEmbeddedImages(filePath: string, outputDir?: string): Promise<ToolResult> {
+    try {
+      const resolvedPath = path.resolve(process.cwd(), filePath);
+
+      if (!await this.vfs.exists(resolvedPath)) {
+        return {
+          success: false,
+          error: `Document not found: ${filePath}`
+        };
+      }
+
+      const ext = path.extname(resolvedPath).toLowerCase();
+      if (ext !== '.docx') {
+        return {
+          success: false,
+          error: 'Embedded image extraction currently supports DOCX files only'
+        };
+      }
+
+      const stats = await this.vfs.stat(resolvedPath);
+      const fileSizeMB = stats.size / (1024 * 1024);
+      if (fileSizeMB > this.maxFileSizeMB) {
+        return {
+          success: false,
+          error: `File too large: ${fileSizeMB.toFixed(2)}MB. Max: ${this.maxFileSizeMB}MB`
+        };
+      }
+
+      const AdmZip = (await import('adm-zip')).default;
+      const buffer = await this.vfs.readFileBuffer(resolvedPath);
+      const zip = new AdmZip(buffer);
+      const selectedImages = this.selectDocxImagesForExtraction(zip);
+      const resolvedOutputDir = outputDir
+        ? path.resolve(process.cwd(), outputDir)
+        : path.join(path.dirname(resolvedPath), `${path.basename(resolvedPath, ext)}-images`);
+
+      if (selectedImages.length === 0) {
+        return {
+          success: true,
+          output: `No embedded images found in ${filePath}`,
+          data: { images: [], outputDir: resolvedOutputDir }
+        };
+      }
+
+      await this.vfs.ensureDir(resolvedOutputDir);
+
+      const images: ExtractedDocumentImage[] = [];
+      for (const selected of selectedImages) {
+        const fileName = path.basename(selected.entry.entryName);
+        if (!fileName) continue;
+        const imageBuffer = selected.entry.getData();
+        const outputPath = path.join(resolvedOutputDir, fileName);
+        const markdownRef = `![Source screenshot - ${fileName}](${formatMarkdownPath(outputPath)})`;
+        await this.vfs.writeFileBuffer(outputPath, imageBuffer);
+        images.push({
+          sourcePath: selected.entry.entryName,
+          outputPath,
+          markdownRef,
+          size: imageBuffer.length
+        });
+      }
+
+      return {
+        success: true,
+        output: [
+          `Extracted ${images.length} embedded image(s) to ${resolvedOutputDir}`,
+          ...images.map(image => `- ${image.outputPath} (${image.size} bytes)`),
+          ...(images.length > 0
+            ? [
+                'Markdown references for generate_document:',
+                ...images.map(image => `- ${image.markdownRef}`)
+              ]
+            : [])
+        ].join('\n'),
+        data: { images, outputDir: resolvedOutputDir }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to extract embedded images: ${getErrorMessage(error)}`
+      };
+    }
+  }
+
+  private selectDocxImagesForExtraction(zip: {
+    getEntries: () => Array<{ isDirectory: boolean; entryName: string; getData: () => Buffer }>;
+    getEntry: (entryName: string) => { isDirectory: boolean; entryName: string; getData: () => Buffer } | null;
+    readAsText: (path: string) => string;
+  }): Array<{ relationshipId?: string; entry: { isDirectory: boolean; entryName: string; getData: () => Buffer } }> {
+    const relationships = this.extractDocxImageRelationshipEntries(zip);
+    const byId = new Map(relationships.map(relationship => [relationship.id, relationship]));
+    const documentXml = safeReadZipText(zip, 'word/document.xml');
+    const orderedRelationshipIds = documentXml
+      ? this.extractDocxImageRelationshipIdsInDocumentOrder(documentXml)
+      : [];
+    const selectedRelationships = orderedRelationshipIds
+      .map(id => byId.get(id))
+      .filter((relationship): relationship is DocxImageRelationship => Boolean(relationship));
+    const relationshipsToExtract = selectedRelationships.length > 0 ? selectedRelationships : relationships;
+
+    if (relationshipsToExtract.length > 0) {
+      const seen = new Set<string>();
+      return relationshipsToExtract
+        .filter(relationship => {
+          if (seen.has(relationship.zipPath)) return false;
+          seen.add(relationship.zipPath);
+          return true;
+        })
+        .map(relationship => {
+          const entry = zip.getEntry(relationship.zipPath);
+          return entry && !entry.isDirectory
+            ? { relationshipId: relationship.id, entry }
+            : null;
+        })
+        .filter((image): image is { relationshipId: string; entry: { isDirectory: boolean; entryName: string; getData: () => Buffer } } => Boolean(image));
+    }
+
+    // Backward-compatible fallback for minimal synthetic DOCX files or unusual
+    // packages that include media but omit document relationships.
+    return zip.getEntries()
+      .filter(entry => !entry.isDirectory && entry.entryName.startsWith('word/media/'))
+      .map(entry => ({ entry }));
+  }
+
+  /**
    * Read DOCX file
    */
   private async readDocx(filePath: string): Promise<DocumentContent> {
@@ -128,8 +270,13 @@ export class DocumentTool {
     // Read document.xml
     const documentXml = zip.readAsText('word/document.xml');
 
-    // Extract text from XML
-    const text = this.extractTextFromXml(documentXml, 'w:t');
+    const relationships = this.extractDocxRelationships(zip);
+
+    // Extract text from XML while preserving paragraph, table, and image
+    // positions. Question documents depend on those breaks to keep
+    // analysis/context attached to the right question.
+    const extraction = this.extractDocxText(documentXml, relationships);
+    const { text } = extraction;
 
     // Try to read metadata from core.xml
     const metadata = this.extractDocxMetadata(zip);
@@ -139,7 +286,8 @@ export class DocumentTool {
       type: 'docx',
       metadata: {
         ...metadata,
-        wordCount: text.split(/\s+/).filter(w => w.length > 0).length
+        wordCount: text.split(/\s+/).filter(w => w.length > 0).length,
+        embeddedImageCount: extraction.embeddedImageCount
       }
     };
   }
@@ -483,18 +631,218 @@ export class DocumentTool {
    * Extract text from XML content
    */
   private extractTextFromXml(xml: string, tagName: string): string {
-    const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'g');
-    const matches = xml.match(regex) || [];
+    return this.extractTextRunsFromXml(xml, tagName)
+      .map(text => text.trim())
+      .filter(Boolean)
+      .join(' ');
+  }
 
-    const texts: string[] = [];
-    for (const match of matches) {
-      const text = match.replace(/<[^>]+>/g, '').trim();
-      if (text) {
-        texts.push(text);
+  private extractDocxText(
+    documentXml: string,
+    relationships: Map<string, string> = new Map()
+  ): { text: string; embeddedImageCount: number } {
+    const bodyMatch = documentXml.match(/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/);
+    const sourceXml = bodyMatch?.[1] || documentXml;
+    const blocks = this.extractXmlBlocks(sourceXml, ['w:p', 'w:tbl']);
+
+    if (blocks.length === 0) {
+      const text = this.extractTextFromXml(documentXml, 'w:t');
+      const imageMarkers = this.extractDocxImageMarkers(documentXml, relationships);
+      return {
+        text: [text, ...imageMarkers].filter(Boolean).join('\n'),
+        embeddedImageCount: imageMarkers.length
+      };
+    }
+
+    const lines: string[] = [];
+    let embeddedImageCount = 0;
+
+    for (const block of blocks) {
+      if (block.tagName === 'w:tbl') {
+        const table = this.extractDocxTableText(block.xml, relationships);
+        if (table.lines.length > 0) {
+          lines.push('[Table]', ...table.lines);
+        }
+        embeddedImageCount += table.embeddedImageCount;
+        continue;
+      }
+
+      const paragraph = this.extractDocxParagraphText(block.xml, relationships);
+      if (paragraph.lines.length > 0) {
+        lines.push(...paragraph.lines);
+      }
+      embeddedImageCount += paragraph.embeddedImageCount;
+    }
+
+    return {
+      text: lines.filter(Boolean).join('\n'),
+      embeddedImageCount
+    };
+  }
+
+  private extractXmlBlocks(xml: string, tagNames: string[]): Array<{ tagName: string; xml: string }> {
+    const pattern = tagNames.map(tag => tag.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
+    const regex = new RegExp(`<(${pattern})\\b[^>]*>[\\s\\S]*?</\\1>`, 'g');
+    const blocks: Array<{ tagName: string; xml: string }> = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(xml)) !== null) {
+      blocks.push({ tagName: match[1], xml: match[0] });
+    }
+
+    return blocks;
+  }
+
+  private extractDocxTableText(
+    tableXml: string,
+    relationships: Map<string, string>
+  ): { lines: string[]; embeddedImageCount: number } {
+    const rows = this.extractXmlBlocks(tableXml, ['w:tr']);
+    const lines: string[] = [];
+    let embeddedImageCount = 0;
+
+    for (const row of rows) {
+      const cells = this.extractXmlBlocks(row.xml, ['w:tc']);
+      const cellTexts: string[] = [];
+
+      for (const cell of cells) {
+        const paragraphs = this.extractXmlBlocks(cell.xml, ['w:p']);
+        const paragraphLines: string[] = [];
+
+        for (const paragraphXml of paragraphs) {
+          const paragraph = this.extractDocxParagraphText(paragraphXml.xml, relationships);
+          paragraphLines.push(...paragraph.lines);
+          embeddedImageCount += paragraph.embeddedImageCount;
+        }
+
+        if (paragraphs.length === 0) {
+          const paragraph = this.extractDocxParagraphText(cell.xml, relationships);
+          paragraphLines.push(...paragraph.lines);
+          embeddedImageCount += paragraph.embeddedImageCount;
+        }
+
+        cellTexts.push(paragraphLines.join(' / ').replace(/\s*\n\s*/g, ' / ').trim());
+      }
+
+      const rowText = cellTexts.join('\t').trim();
+      if (rowText) {
+        lines.push(rowText);
       }
     }
 
-    return texts.join(' ');
+    return { lines, embeddedImageCount };
+  }
+
+  private extractDocxParagraphText(
+    paragraphXml: string,
+    relationships: Map<string, string>
+  ): { lines: string[]; embeddedImageCount: number } {
+    const text = this.extractTextRunsFromXml(paragraphXml, 'w:t').join('').trim();
+    const imageMarkers = this.extractDocxImageMarkers(paragraphXml, relationships);
+
+    return {
+      lines: [text, ...imageMarkers].filter(Boolean),
+      embeddedImageCount: imageMarkers.length
+    };
+  }
+
+  private extractDocxImageMarkers(paragraphXml: string, relationships: Map<string, string>): string[] {
+    const relIds = new Set<string>();
+    const relRegex = /\br:(?:embed|link|id)=["']([^"']+)["']/g;
+    let match: RegExpExecArray | null;
+    const hasImageMarkup = /<(?:w:drawing|w:pict|pic:pic|v:imagedata)\b/.test(paragraphXml);
+
+    while ((match = relRegex.exec(paragraphXml)) !== null) {
+      relIds.add(this.decodeXmlText(match[1]));
+    }
+
+    const markers = [...relIds]
+      .map(relId => relationships.get(relId))
+      .filter((target): target is string => Boolean(target))
+      .map(target => `[Embedded image: ${target}]`);
+
+    if (markers.length === 0 && hasImageMarkup) {
+      markers.push('[Embedded image]');
+    }
+
+    return markers;
+  }
+
+  private extractTextRunsFromXml(xml: string, tagName: string): string[] {
+    const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, 'g');
+    const texts: string[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(xml)) !== null) {
+      texts.push(this.decodeXmlText(match[1]));
+    }
+
+    return texts;
+  }
+
+  private decodeXmlText(text: string): string {
+    return text
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+  }
+
+  private extractDocxRelationships(zip: { readAsText: (path: string) => string }): Map<string, string> {
+    const relationships = new Map<string, string>();
+    for (const relationship of this.extractDocxImageRelationshipEntries(zip)) {
+      relationships.set(relationship.id, relationship.target);
+    }
+    return relationships;
+  }
+
+  private extractDocxImageRelationshipEntries(zip: { readAsText: (path: string) => string }): DocxImageRelationship[] {
+    const relationships: DocxImageRelationship[] = [];
+    try {
+      const relsXml = zip.readAsText('word/_rels/document.xml.rels');
+      const relMatches = relsXml.match(/<Relationship\b[^>]*\/?>/g) || [];
+
+      for (const relXml of relMatches) {
+        const id = this.getXmlAttribute(relXml, 'Id');
+        const type = this.getXmlAttribute(relXml, 'Type');
+        const target = this.getXmlAttribute(relXml, 'Target');
+        const targetMode = this.getXmlAttribute(relXml, 'TargetMode');
+
+        if (id && target && targetMode !== 'External' && type?.endsWith('/image')) {
+          const zipPath = resolveDocxImageTargetToZipPath(target);
+          if (zipPath) {
+            relationships.push({ id, target, zipPath });
+          }
+        }
+      }
+    } catch {
+      // Relationship extraction is best-effort; text extraction can continue.
+    }
+
+    return relationships;
+  }
+
+  private extractDocxImageRelationshipIdsInDocumentOrder(documentXml: string): string[] {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const relRegex = /\br:(?:embed|link)=["']([^"']+)["']/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = relRegex.exec(documentXml)) !== null) {
+      const id = this.decodeXmlText(match[1]);
+      if (!seen.has(id)) {
+        ids.push(id);
+        seen.add(id);
+      }
+    }
+
+    return ids;
+  }
+
+  private getXmlAttribute(xml: string, attributeName: string): string | undefined {
+    const match = xml.match(new RegExp(`\\b${attributeName}=(["'])(.*?)\\1`));
+    return match ? this.decodeXmlText(match[2]) : undefined;
   }
 
   /**
@@ -553,6 +901,9 @@ export class DocumentTool {
     }
     if (content.metadata.wordCount) {
       lines.push(`   Words: ${content.metadata.wordCount}`);
+    }
+    if (content.metadata.embeddedImageCount) {
+      lines.push(`   Images: ${content.metadata.embeddedImageCount}`);
     }
     if (content.metadata.sheetCount) {
       lines.push(`   Sheets: ${content.metadata.sheetCount}`);
@@ -638,4 +989,29 @@ export class DocumentTool {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
+}
+
+function safeReadZipText(zip: { readAsText: (path: string) => string }, entryName: string): string | null {
+  try {
+    return zip.readAsText(entryName);
+  } catch {
+    return null;
+  }
+}
+
+function resolveDocxImageTargetToZipPath(target: string): string | null {
+  const normalized = target.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.includes('..')) {
+    return null;
+  }
+
+  const zipPath = normalized.startsWith('word/')
+    ? normalized
+    : path.posix.join('word', normalized);
+
+  return zipPath.startsWith('word/media/') ? zipPath : null;
+}
+
+function formatMarkdownPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
 }

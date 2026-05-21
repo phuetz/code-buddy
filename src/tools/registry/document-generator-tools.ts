@@ -9,6 +9,10 @@ import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
 import { executeGenerateDocument } from '../document-generator.js';
 
+function expectedOutputExtension(type: string): string {
+  return `.${type.toLowerCase()}`;
+}
+
 // ============================================================================
 // GenerateDocumentExecuteTool
 // ============================================================================
@@ -20,7 +24,7 @@ import { executeGenerateDocument } from '../document-generator.js';
 export class GenerateDocumentExecuteTool implements ITool {
   readonly name = 'generate_document';
   readonly description =
-    'Generate professional documents: PowerPoint (PPTX), Word (DOCX), Excel (XLSX), or PDF from markdown content.';
+    'Generate professional documents: PowerPoint (PPTX), Word (DOCX), Excel (XLSX), or PDF from markdown content. DOCX supports tables and local image references with aspect-ratio fitting and visible captions. Output paths must use the matching extension.';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     return await executeGenerateDocument({
@@ -49,11 +53,11 @@ export class GenerateDocumentExecuteTool implements ITool {
           },
           content: {
             type: 'string',
-            description: 'Markdown content for the document',
+            description: 'Markdown content for the document. For DOCX, local image references like ![caption](screens/image1.png) are embedded, fitted without distortion, and captioned from the alt text.',
           },
           outputPath: {
             type: 'string',
-            description: 'Output file path',
+            description: 'Output file path with matching extension, e.g. report.docx for type docx',
           },
           theme: {
             type: 'string',
@@ -95,6 +99,16 @@ export class GenerateDocumentExecuteTool implements ITool {
 
     if (typeof data.outputPath !== 'string' || data.outputPath.trim() === '') {
       errors.push('outputPath must be a non-empty string');
+    }
+
+    if (
+      typeof data.type === 'string'
+      && ['pptx', 'docx', 'xlsx', 'pdf'].includes(data.type)
+      && typeof data.outputPath === 'string'
+      && data.outputPath.trim() !== ''
+      && !data.outputPath.trim().toLowerCase().endsWith(expectedOutputExtension(data.type))
+    ) {
+      errors.push(`outputPath must end with ${expectedOutputExtension(data.type)} when type is ${data.type}`);
     }
 
     if (data.theme !== undefined && !['professional', 'minimal', 'dark'].includes(data.theme as string)) {
