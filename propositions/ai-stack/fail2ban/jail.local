@@ -1,0 +1,19 @@
+[DEFAULT]
+# Bantime augmenté à 1h (vs 10m default) — assez pour décourager les bots, pas
+# trop pour ne pas bloquer Patrice/Sébastien si oubli de password.
+bantime = 1h
+# Fenêtre de comptage : 10 min
+findtime = 10m
+# 5 tentatives avant ban (vs 5 default — explicite)
+maxretry = 5
+
+# Whitelist :
+# - localhost
+# - tailnet (CGNAT 100.64.0.0/10) : Patrice/Sébastien depuis tailscale ne peuvent pas être bannis
+ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10
+
+[sshd]
+enabled = true
+# Mode aggressive : ajoute la détection des "bad protocol" et "no matching auth method"
+# pour bannir les bots qui scannent sans même tenter un password.
+mode = aggressive

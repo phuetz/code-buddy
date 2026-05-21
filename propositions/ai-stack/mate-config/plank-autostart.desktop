@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Plank
+Comment=Dock élégant pour MATE (autostart)
+Exec=plank
+Icon=plank
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-MATE-Autostart-enabled=true
+Hidden=false

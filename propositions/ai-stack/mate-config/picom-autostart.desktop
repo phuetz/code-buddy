@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Picom
+Comment=Compositor X11 (anti-tearing, ombres, fading)
+Exec=picom --config %h/.config/picom/picom.conf
+Icon=preferences-desktop-display
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-MATE-Autostart-enabled=true
+Hidden=false

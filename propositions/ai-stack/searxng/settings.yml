@@ -1,0 +1,20 @@
+use_default_settings: true
+
+server:
+  secret_key: "aae330c2767b4accd5a392763e0d2f639747048d1a70cda9e1d449a14d822c9b"
+  limiter: false
+  image_proxy: true
+
+ui:
+  static_use_hash: true
+
+search:
+  formats:
+    - html
+    - json
+
+engines:
+  - name: wikipedia
+    disabled: false
+  - name: duckduckgo
+    disabled: false

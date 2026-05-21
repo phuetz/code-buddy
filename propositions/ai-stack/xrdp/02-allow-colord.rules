@@ -1,0 +1,35 @@
+// Évite les popups d'auth récurrents en session RDP pour des actions
+// PolicyKit que la session distante ne peut pas valider correctement.
+// Bug GNOME/MATE connu sur Ubuntu 24.04 — popups intempestifs.
+
+// Color management (gnome-color-manager)
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.color-manager.create-device" ||
+        action.id == "org.freedesktop.color-manager.create-profile" ||
+        action.id == "org.freedesktop.color-manager.delete-device" ||
+        action.id == "org.freedesktop.color-manager.delete-profile" ||
+        action.id == "org.freedesktop.color-manager.modify-device" ||
+        action.id == "org.freedesktop.color-manager.modify-profile") {
+        return polkit.Result.YES;
+    }
+});
+
+// NetworkManager (popup "system policy prevents Wi-Fi scans" notamment)
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.NetworkManager.wifi.scan" ||
+        action.id == "org.freedesktop.NetworkManager.enable-disable-network" ||
+        action.id == "org.freedesktop.NetworkManager.enable-disable-wifi" ||
+        action.id == "org.freedesktop.NetworkManager.network-control" ||
+        action.id == "org.freedesktop.NetworkManager.settings.modify.system" ||
+        action.id == "org.freedesktop.NetworkManager.settings.modify.own") {
+        return polkit.Result.YES;
+    }
+});
+
+// PackageKit (popups "authentication required" pour mises à jour software)
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.packagekit.system-network-proxy-configure" ||
+        action.id == "org.freedesktop.packagekit.system-sources-refresh") {
+        return polkit.Result.YES;
+    }
+});

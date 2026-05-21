@@ -1,0 +1,48 @@
+model_list:
+  - model_name: ollama-gemma4
+    litellm_params:
+      model: ollama_chat/gemma4:26b
+      api_base: http://127.0.0.1:11434
+
+  - model_name: ollama-qwen3
+    litellm_params:
+      model: ollama_chat/qwen3:4b
+      api_base: http://127.0.0.1:11434
+
+  - model_name: ollama-qwen36
+    litellm_params:
+      model: ollama_chat/qwen3.6:35b-a3b-q4_K_M
+      api_base: http://127.0.0.1:11434
+
+  - model_name: ollama-embed
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://127.0.0.1:11434
+
+  # Décommenter et ajouter clés dans .env quand dispo
+  # - model_name: claude-opus
+  #   litellm_params:
+  #     model: anthropic/claude-opus-4-7
+  #     api_key: os.environ/ANTHROPIC_API_KEY
+  #
+  # - model_name: claude-sonnet
+  #   litellm_params:
+  #     model: anthropic/claude-sonnet-4-6
+  #     api_key: os.environ/ANTHROPIC_API_KEY
+  #
+  # - model_name: gemini-pro
+  #   litellm_params:
+  #     model: gemini/gemini-2.5-pro
+  #     api_key: os.environ/GEMINI_API_KEY
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  cache: true
+  cache_params:
+    type: redis
+    host: 127.0.0.1
+    port: 6380
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

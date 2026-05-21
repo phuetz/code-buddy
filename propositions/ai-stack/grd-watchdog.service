@@ -1,0 +1,17 @@
+[Unit]
+Description=GNOME Remote Desktop watchdog (restart on known refcount bug)
+After=gnome-remote-desktop.service systemd-journald.service
+Wants=systemd-journald.service
+StartLimitBurst=10
+StartLimitIntervalSec=300
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/grd-watchdog.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
