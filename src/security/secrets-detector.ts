@@ -87,7 +87,7 @@ const SECRET_PATTERNS: SecretPattern[] = [
   // GitLab Personal Access Token
   {
     type: 'gitlab_token',
-    pattern: /glpat-[a-zA-Z0-9\-]{20}/,
+    pattern: /glpat-[a-zA-Z0-9-]{20}/,
     severity: 'critical',
     description: 'GitLab Personal Access Token detected',
     suggestion: 'Use environment variable GITLAB_TOKEN or CI/CD variables',

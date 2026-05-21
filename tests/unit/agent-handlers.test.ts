@@ -15,12 +15,9 @@
 import {
   handleAgent,
   checkAgentTriggers,
-  CommandHandlerResult,
 } from '../../src/commands/handlers/agent-handlers';
 import {
   getCustomAgentLoader,
-  resetCustomAgentLoader,
-  CustomAgentLoader,
   CustomAgentConfig,
 } from '../../src/agent/custom/custom-agent-loader';
 
@@ -60,6 +57,8 @@ describe('Agent Handlers', () => {
     maxTokens: 4000,
     tags: ['test', 'unit-test'],
     triggers: ['test this', 'run test'],
+    fleetDispatchProfile: 'review',
+    requireExplicitDispatchProfile: true,
     author: 'Test Author',
     version: '1.0.0',
   };
@@ -209,6 +208,8 @@ Use /agent create <name> to create a new agent interactively.`;
       expect(result.output).toContain('Max Tokens: 4000');
       expect(result.output).toContain('Tags: test, unit-test');
       expect(result.output).toContain('Triggers: test this, run test');
+      expect(result.output).toContain('Fleet Dispatch Profile: review');
+      expect(result.output).toContain('Require Explicit Dispatch Profile: yes');
       expect(result.output).toContain('System Prompt:');
       expect(result.output).toContain('You are a test agent');
     });

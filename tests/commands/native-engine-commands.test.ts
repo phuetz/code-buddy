@@ -41,6 +41,7 @@ const mockSkillsHub = {
   uninstall: jest.fn(),
   update: jest.fn(),
   list: jest.fn(),
+  usageSummary: jest.fn(),
   info: jest.fn(),
   publish: jest.fn(),
   sync: jest.fn(),
@@ -475,6 +476,43 @@ describe('Native Engine CLI Commands', () => {
         await program.parseAsync(['node', 'test', 'hub', 'list']);
 
         expect(getLogOutput()).toContain('No skills installed from the hub.');
+      });
+    });
+
+    describe('hub usage', () => {
+      it('should display skill usage telemetry', async () => {
+        mockSkillsHub.usageSummary.mockReturnValue([
+          {
+            name: 'review-skill',
+            version: '1.0.0',
+            usage: {
+              invocationCount: 3,
+              successCount: 2,
+              failureCount: 1,
+              lastUsedAt: Date.parse('2026-05-16T10:00:00Z'),
+              averageDurationMs: 123.4,
+              lastError: 'missing tool',
+            },
+          },
+        ]);
+
+        await program.parseAsync(['node', 'test', 'hub', 'usage']);
+
+        const output = getLogOutput();
+        expect(output).toContain('Skill usage (1):');
+        expect(output).toContain('review-skill v1.0.0');
+        expect(output).toContain('3 run(s), 2 ok, 1 failed');
+        expect(output).toContain('Last used: 2026-05-16T10:00:00.000Z');
+        expect(output).toContain('Avg duration: 123ms');
+        expect(output).toContain('Last error: missing tool');
+      });
+
+      it('should display message when no usage exists', async () => {
+        mockSkillsHub.usageSummary.mockReturnValue([]);
+
+        await program.parseAsync(['node', 'test', 'hub', 'usage']);
+
+        expect(getLogOutput()).toContain('No skill usage recorded yet.');
       });
     });
 

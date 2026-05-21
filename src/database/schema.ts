@@ -13,7 +13,7 @@
 // Schema Version
 // ============================================================================
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // ============================================================================
 // Table Definitions
@@ -274,8 +274,47 @@ CREATE INDEX IF NOT EXISTS idx_cache_category ON cache(category);
 
 export const MIGRATIONS: Record<number, string> = {
   1: SCHEMA_SQL,
-  // Future migrations will be added here
-  // 2: `ALTER TABLE memories ADD COLUMN new_field TEXT;`,
+  2: `
+-- ============================================================================
+-- MESSAGE FULL-TEXT SEARCH
+-- Enables fast session search without scanning JSON session files.
+-- ============================================================================
+ALTER TABLE sessions ADD COLUMN parent_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+  content,
+  session_id UNINDEXED,
+  role UNINDEXED,
+  content='messages',
+  content_rowid='id',
+  tokenize='unicode61'
+);
+
+INSERT INTO messages_fts(messages_fts) VALUES('rebuild');
+
+DROP TRIGGER IF EXISTS messages_ai;
+DROP TRIGGER IF EXISTS messages_ad;
+DROP TRIGGER IF EXISTS messages_au;
+
+CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO messages_fts(rowid, content, session_id, role)
+  VALUES (new.id, COALESCE(new.content, ''), new.session_id, new.role);
+END;
+
+CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
+  INSERT INTO messages_fts(messages_fts, rowid, content, session_id, role)
+  VALUES ('delete', old.id, COALESCE(old.content, ''), old.session_id, old.role);
+END;
+
+CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
+  INSERT INTO messages_fts(messages_fts, rowid, content, session_id, role)
+  VALUES ('delete', old.id, COALESCE(old.content, ''), old.session_id, old.role);
+
+  INSERT INTO messages_fts(rowid, content, session_id, role)
+  VALUES (new.id, COALESCE(new.content, ''), new.session_id, new.role);
+END;
+`,
 };
 
 // ============================================================================
@@ -311,6 +350,7 @@ export type MemoryType =
 
 export interface Session {
   id: string;
+  parent_session_id?: string;
   project_id?: string;
   project_path?: string;
   name?: string;

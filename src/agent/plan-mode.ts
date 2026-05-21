@@ -73,7 +73,7 @@ const PLAN_MODE_ALLOWED_TOOLS = new Set([
   // Knowledge
   'knowledge_search', 'knowledge_list', 'codebase_map', 'code_graph',
   // Other read-only
-  'todo_update', 'lessons_search', 'lessons_list',
+  'todo_update', 'lessons_search', 'lessons_list', 'lessons_graph',
   'restore_context', 'memory_search',
 ]);
 

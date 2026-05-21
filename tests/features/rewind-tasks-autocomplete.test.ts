@@ -179,6 +179,23 @@ describe('BackgroundTaskManager', () => {
     manager.cleanup();
   });
 
+  async function waitForTaskStatus(
+    id: string,
+    expectedStatus: 'completed' | 'failed',
+    timeoutMs = 5_000,
+  ): Promise<ReturnType<BackgroundTaskManager['getTask']>> {
+    const deadline = Date.now() + timeoutMs;
+    let task = manager.getTask(id);
+    while (Date.now() < deadline) {
+      task = manager.getTask(id);
+      if (task?.status === expectedStatus) {
+        return task;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return task;
+  }
+
   it('should launch a task and return an auto-incrementing ID', () => {
     const id1 = manager.launchTask('echo hello');
     const id2 = manager.launchTask('echo world');
@@ -196,24 +213,21 @@ describe('BackgroundTaskManager', () => {
 
   it('should capture task output', async () => {
     const id = manager.launchTask('echo "test output line"');
-    // Wait for process to complete
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await waitForTaskStatus(id, 'completed');
     const output = manager.getTaskOutput(id);
     expect(output).toContain('test output line');
   });
 
   it('should transition to completed on exit code 0', async () => {
     const id = manager.launchTask('echo done');
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const task = manager.getTask(id);
+    const task = await waitForTaskStatus(id, 'completed');
     expect(task!.status).toBe('completed');
     expect(task!.exitCode).toBe(0);
   });
 
   it('should transition to failed on non-zero exit', async () => {
     const id = manager.launchTask('exit 1');
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const task = manager.getTask(id);
+    const task = await waitForTaskStatus(id, 'failed');
     expect(task!.status).toBe('failed');
     expect(task!.exitCode).toBe(1);
   });
@@ -242,7 +256,7 @@ describe('BackgroundTaskManager', () => {
 
   it('should filter output by regex', async () => {
     const id = manager.launchTask('printf "alpha\\nbeta\\ngamma\\nalpha2\\n"');
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await waitForTaskStatus(id, 'completed');
     const filtered = manager.getTaskOutput(id, /alpha/);
     expect(filtered).toContain('alpha');
     expect(filtered).not.toContain('beta');
@@ -262,7 +276,7 @@ describe('BackgroundTaskManager', () => {
   it('should cap output at 1MB', async () => {
     // Generate > 1MB of output
     const id = manager.launchTask('dd if=/dev/zero bs=1024 count=1200 2>/dev/null | tr "\\0" "A"');
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await waitForTaskStatus(id, 'completed', 10_000);
     const output = manager.getTaskOutput(id);
     expect(output.length).toBeLessThanOrEqual(1024 * 1024);
   });

@@ -106,7 +106,7 @@ export class FCSParser {
       this.skipNewlines();
     }
 
-    return { type: 'Program', statements };
+    return { type: 'Program', statements, body: statements };
   }
 
   // ============================================
@@ -174,6 +174,10 @@ export class FCSParser {
     if (this.matchKeyword('try')) return this.parseTryStatement();
     if (this.matchKeyword('throw')) return this.parseThrowStatement();
     if (this.matchKeyword('assert')) return this.parseAssertStatement();
+    if (this.check(TokenType.LeftBrace) && this.isDictLiteralStart()) {
+      return this.parseExpressionStatement();
+    }
+
     if (this.match(TokenType.LeftBrace)) return this.parseBlockStatement();
 
     return this.parseExpressionStatement();
@@ -1075,6 +1079,17 @@ export class FCSParser {
   private checkNext(type: TokenType): boolean {
     if (this.current + 1 >= this.tokens.length) return false;
     return this.tokens[this.current + 1].type === type;
+  }
+
+  private isDictLiteralStart(): boolean {
+    const key = this.tokens[this.current + 1];
+    const separator = this.tokens[this.current + 2];
+    if (!key || !separator) return false;
+
+    return (
+      (key.type === TokenType.Identifier || key.type === TokenType.String) &&
+      separator.type === TokenType.Colon
+    );
   }
 
   private checkKeyword(...keywords: string[]): boolean {

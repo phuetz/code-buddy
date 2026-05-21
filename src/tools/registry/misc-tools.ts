@@ -15,6 +15,7 @@ import { ReasoningTool } from '../index.js';
 import { SkillDiscoveryTool } from '../skill-discovery-tool.js';
 import { DeviceTool } from '../device-tool.js';
 import type { DeployTool } from '../deploy-tool.js';
+import type { ComputerControlInput } from '../computer-control-tool.js';
 
 // Lazy-loaded browser-automation module (accessibility + refs)
 import type { BrowserTool as BrowserAutomationTool, BrowserToolInput } from '../../browser-automation/index.js';
@@ -86,13 +87,13 @@ export function resetMiscInstances(): void {
 const BROWSER_ACTIONS = [
   'launch', 'connect', 'close',
   'tabs', 'new_tab', 'focus_tab', 'close_tab',
-  'snapshot', 'get_element', 'find_elements',
+  'snapshot', 'observe', 'get_element', 'find_elements',
   'navigate', 'go_back', 'go_forward', 'reload',
   'click', 'double_click', 'right_click', 'type', 'fill', 'select', 'press', 'hover', 'scroll',
   'screenshot', 'pdf',
   'get_cookies', 'set_cookie', 'clear_cookies', 'set_headers', 'set_offline',
   'emulate_device', 'set_geolocation',
-  'evaluate', 'get_content', 'get_url', 'get_title',
+  'evaluate', 'get_content', 'extract', 'assert_text', 'get_url', 'get_title',
 ] as const;
 
 /**
@@ -130,6 +131,10 @@ export class BrowserExecuteTool implements ITool {
           ref: { type: 'number', description: 'Element reference number from snapshot' },
           role: { type: 'string', description: 'Element role to search for' },
           name: { type: 'string', description: 'Element name/text to search for' },
+          query: { type: 'string', description: 'Natural-language extraction focus or assertion query' },
+          expectedText: { type: 'string', description: 'Text expected to appear on the page for assert_text' },
+          proofGoal: { type: 'string', description: 'Optional proof-loop goal used when persistWhenProven returns memory/lesson suggestions' },
+          persistWhenProven: { type: 'boolean', description: 'For extract/assert_text, return remember and lessons_add payload suggestions only after durable evidence is proven' },
           text: { type: 'string', description: 'Text to type' },
           key: { type: 'string', description: 'Key to press (Enter, Tab, Escape, etc.)' },
           modifiers: { type: 'array', items: { type: 'string' }, description: 'Modifier keys' },
@@ -178,7 +183,7 @@ export class BrowserExecuteTool implements ITool {
       name: this.name,
       description: this.description,
       category: 'web' as ToolCategoryType,
-      keywords: ['browser', 'web', 'automation', 'playwright', 'screenshot', 'scrape', 'accessibility'],
+      keywords: ['browser', 'web', 'automation', 'playwright', 'screenshot', 'scrape', 'accessibility', 'observe', 'extract', 'assert', 'stagehand', 'ui test'],
       priority: 5,
       requiresConfirmation: true,
       modifiesFiles: false,
@@ -227,7 +232,7 @@ export class ComputerControlExecuteTool implements ITool {
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     const tool = await getComputerControl();
-    return await tool.execute(input as any);
+    return await tool.execute(input as unknown as ComputerControlInput);
   }
 
   getSchema(): ToolSchema {

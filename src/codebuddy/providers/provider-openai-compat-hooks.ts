@@ -42,7 +42,13 @@ export { injectAnthropicCacheBreakpoints } from '../../optimization/cache-breakp
 export function injectJsonSystemPromptForAnthropic(
   messages: CodeBuddyMessage[],
 ): CodeBuddyMessage[] {
-  const lastSystemIdx = messages.findLastIndex(m => m.role === 'system');
+  let lastSystemIdx = -1;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === 'system') {
+      lastSystemIdx = index;
+      break;
+    }
+  }
   if (lastSystemIdx < 0) return messages;
   const sysMsg = messages[lastSystemIdx];
   if (typeof sysMsg.content !== 'string') return messages;

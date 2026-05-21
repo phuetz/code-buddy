@@ -210,18 +210,22 @@ export const DOCUMENT_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "document",
-    description: "Read Office documents (DOCX, XLSX, PPTX, CSV, RTF). Extracts text, metadata, and structure.",
+    description: "Read Office documents (DOCX, XLSX, PPTX, CSV, RTF). Extracts text, metadata, structure, and DOCX embedded images with Markdown references for OCR-to-deliverable workflows.",
     parameters: {
       type: "object",
       properties: {
         operation: {
           type: "string",
-          enum: ["read", "list"],
-          description: "Operation: read (extract content), list (list documents in directory)"
+          enum: ["read", "list", "extract_images"],
+          description: "Operation: read (extract content), list (list documents in directory), extract_images (save embedded DOCX images to a directory and return Markdown image references)"
         },
         path: {
           type: "string",
           description: "Path to document or directory"
+        },
+        output_dir: {
+          type: "string",
+          description: "Directory where embedded DOCX images should be extracted when operation is extract_images; results include output paths and Markdown references for generate_document"
         }
       },
       required: ["operation", "path"]

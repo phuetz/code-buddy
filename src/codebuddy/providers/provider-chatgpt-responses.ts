@@ -48,10 +48,11 @@ const ORIGINATOR = 'codex_cli_rs';
 const CONNECT_TIMEOUT_MS = 60_000;       // until response headers
 const STREAM_IDLE_TIMEOUT_MS = 120_000;  // between SSE events
 
-/** Models the Codex backend exposes. The default `gpt-5.5` is what Patrice
- *  asked for; if the backend rejects it with `model_not_found`, the error
- *  surfaces these as suggested fallbacks. */
+/** Models the ChatGPT Codex backend can expose after the primary model is
+ *  rejected. `gpt-5.2` is the known-good safety fallback from real OAuth
+ *  smoke testing, while several codex-suffixed slugs may be plan-gated. */
 const FALLBACK_MODELS = [
+  'gpt-5.2',
   'gpt-5.1-codex',
   'gpt-5.1-codex-max',
   'gpt-5-codex',
@@ -164,7 +165,6 @@ export class ChatGptResponsesProvider implements Provider {
   private authProvider: () => Promise<ChatGptAuth | null>;
   private refreshAuth: () => Promise<ChatGptAuth | null>;
   private currentModel: string;
-  private defaultMaxTokens: number;
   /** Stable per-instance key so the backend's prompt cache lights up
    *  across tool-call turns within the same conversation. */
   private promptCacheKey: string;
@@ -185,7 +185,6 @@ export class ChatGptResponsesProvider implements Provider {
     this.authProvider = opts.authProvider;
     this.refreshAuth = opts.refreshAuth ?? opts.authProvider;
     this.currentModel = opts.model;
-    this.defaultMaxTokens = opts.defaultMaxTokens;
     this.promptCacheKey = `cb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.disableModelFallback = opts.disableModelFallback ?? false;
   }
@@ -292,14 +291,17 @@ export class ChatGptResponsesProvider implements Provider {
     }
 
     // 400 / 404 with `model_not_supported` (or `model_not_found`) →
-    // auto-fallback to the first FALLBACK_MODELS entry the user hasn't
-    // already tried. Saves them from copy-pasting `--model gpt-5.1-codex`
-    // when the backend rotates available slugs. Capped at one retry.
+    // auto-fallback to the first FALLBACK_MODELS entry when the current
+    // model is not already one of those fallback candidates. CLI `--model`
+    // reaches this provider through `currentModel`, not always `opts.model`,
+    // so the fallback-list membership check prevents cascading from one
+    // explicitly chosen fallback slug to the next rejected slug.
     if (
       !response.ok &&
       (response.status === 400 || response.status === 404) &&
       !this.disableModelFallback &&
-      !opts.model // only auto-switch when user didn't explicitly pin a model
+      !opts.model &&
+      !FALLBACK_MODELS.includes(model)
     ) {
       const errorText = await response.clone().text().catch(() => '');
       if (/model.*(not.{0,5}supported|not.{0,5}found)/i.test(errorText)) {

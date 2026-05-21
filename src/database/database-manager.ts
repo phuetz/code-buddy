@@ -8,10 +8,10 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { SCHEMA_VERSION, MIGRATIONS } from './schema.js';
 import { logger } from '../utils/logger.js';
 import { TypedEventEmitter, DatabaseEvents } from '../events/index.js';
+import { getDatabasePath } from '../utils/codebuddy-home.js';
 
 // ============================================================================
 // Types
@@ -39,7 +39,6 @@ export interface DatabaseStats {
 // ============================================================================
 
 const DEFAULT_CONFIG: DatabaseConfig = {
-  dbPath: path.join(os.homedir(), '.codebuddy', 'codebuddy.db'),
   inMemory: false,
   verbose: false,
   walMode: true,
@@ -63,7 +62,7 @@ export class DatabaseManager extends TypedEventEmitter<DatabaseEvents> {
 
   constructor(config: Partial<DatabaseConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...DEFAULT_CONFIG, dbPath: getDatabasePath(), ...config };
   }
 
   /**

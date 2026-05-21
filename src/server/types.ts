@@ -5,7 +5,7 @@
  */
 
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { SERVER_CONFIG, TIMEOUT_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
+import { SERVER_CONFIG, TIMEOUT_CONFIG } from '../config/constants.js';
 
 // ============================================================================
 // Server Configuration
@@ -361,6 +361,8 @@ export interface SessionInfo {
   model?: string;
   /** Session description */
   description?: string;
+  /** Parent session when this session was cloned, branched or forked */
+  parentSessionId?: string;
 }
 
 export interface SessionDetailResponse extends SessionInfo {

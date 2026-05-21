@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import type { ChatEntry } from '../agent/types.js';
 import { getSessionRepository, SessionRepository } from '../database/repositories/session-repository.js';
-import type { Message as DBMessage } from '../database/schema.js';
+import type { Message as DBMessage, Session as DBSession } from '../database/schema.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
 
@@ -19,6 +19,12 @@ export interface SessionMetadata {
   toolCallCount?: number;
   /** IDs of runs associated with this session */
   runIds?: string[];
+  /** Search-result preview injected by searchSessions(). */
+  searchSnippet?: string;
+  searchRole?: string;
+  searchScore?: number;
+  searchMessageId?: number;
+  parentSessionId?: string;
   [key: string]: string | string[] | number | boolean | undefined;
 }
 
@@ -77,8 +83,9 @@ export class SessionStore {
       try {
         this.dbRepository = getSessionRepository();
       } catch {
-        // Fallback to JSON if SQLite fails
-        this.config.useSQLite = false;
+        // Database startup is async in several entrypoints. Keep SQLite
+        // enabled and lazily initialize the repository on first use.
+        this.dbRepository = null;
       }
     }
     // Directory will be ensured lazily on first file operation
@@ -129,6 +136,29 @@ export class SessionStore {
     }
   }
 
+  private async ensureDatabaseRepository(): Promise<SessionRepository | null> {
+    if (!this.config.useSQLite) {
+      return null;
+    }
+
+    if (this.dbRepository) {
+      return this.dbRepository;
+    }
+
+    try {
+      const { initializeDatabase } = await import('../database/database-manager.js');
+      await initializeDatabase();
+      this.dbRepository = getSessionRepository();
+      return this.dbRepository;
+    } catch (error) {
+      logger.debug('[session-store] SQLite unavailable; using JSON session persistence only', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.config.useSQLite = false;
+      return null;
+    }
+  }
+
   /**
    * Create a new session
    */
@@ -144,8 +174,9 @@ export class SessionStore {
     };
 
     // Store in SQLite if enabled
-    if (this.dbRepository) {
-      this.dbRepository.createSession({
+    const dbRepository = await this.ensureDatabaseRepository();
+    if (dbRepository) {
+      dbRepository.createSession({
         id: session.id,
         project_path: session.workingDirectory,
         name: session.name,
@@ -288,7 +319,8 @@ export class SessionStore {
       }
 
       // Store in SQLite if enabled
-      if (this.dbRepository) {
+      const dbRepository = await this.ensureDatabaseRepository();
+      if (dbRepository) {
         const dbMessage: Omit<DBMessage, 'id' | 'created_at'> = {
           session_id: this.currentSessionId!,
           role: message.type === 'tool_result' ? 'tool' : message.type === 'tool_call' ? 'assistant' : message.type === 'reasoning' ? 'assistant' : message.type === 'plan_progress' ? 'assistant' : message.type === 'steer' ? 'user' : message.type === 'diff_preview' ? 'assistant' : message.type,
@@ -296,7 +328,7 @@ export class SessionStore {
           tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
           metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,
         };
-        this.dbRepository.addMessage(dbMessage);
+        dbRepository.addMessage(dbMessage);
       }
 
       // writeSessionUnlocked skips the lock because we are already inside it.
@@ -950,6 +982,69 @@ export class SessionStore {
     }
   }
 
+  private loadSessionFromDiskSync(sessionId: string): Session | null {
+    const filePath = this.getSessionFilePath(sessionId);
+
+    try {
+      const raw = _fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(raw);
+      if (typeof data !== 'object' || data === null || !Array.isArray(data.messages)) {
+        return null;
+      }
+
+      const createdAt = new Date(data.createdAt);
+      const lastAccessedAt = new Date(data.lastAccessedAt);
+      if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
+        return null;
+      }
+
+      return {
+        ...data,
+        createdAt,
+        lastAccessedAt,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private convertDatabaseSession(session: DBSession): Session {
+    const messages = this.dbRepository
+      ? this.dbRepository.getMessages(session.id, 500).map(message => this.convertDatabaseMessage(message))
+      : [];
+
+    return {
+      id: session.id,
+      name: session.name || session.id,
+      workingDirectory: session.project_path || process.cwd(),
+      model: session.model || 'unknown',
+      messages,
+      createdAt: new Date(session.created_at),
+      lastAccessedAt: new Date(session.updated_at),
+      metadata: session.metadata as SessionMetadata | undefined,
+    };
+  }
+
+  private convertDatabaseMessage(message: DBMessage): SessionMessage {
+    const type = message.role === 'tool'
+      ? 'tool_result'
+      : message.role === 'system'
+        ? 'assistant'
+        : message.role;
+
+    return {
+      type,
+      content: message.content || '',
+      timestamp: message.created_at || new Date().toISOString(),
+      toolCallName: Array.isArray(message.tool_calls) && message.tool_calls.length > 0
+        ? (message.tool_calls[0] as { name?: string }).name
+        : undefined,
+      toolCallSuccess: typeof message.metadata?.success === 'boolean'
+        ? message.metadata.success
+        : undefined,
+    };
+  }
+
   /**
    * Get session file path
    */
@@ -970,18 +1065,136 @@ export class SessionStore {
    * Search sessions by content
    */
   async searchSessions(query: string): Promise<Session[]> {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      return [];
+    }
+
+    if (this.config.useSQLite) {
+      const databaseMatches = await this.searchSessionsInDatabase(trimmedQuery);
+      if (databaseMatches.length > 0) {
+        return databaseMatches;
+      }
+    }
+
     const sessions = await this.listSessions();
-    const lowerQuery = query.toLowerCase();
+    const lowerQuery = trimmedQuery.toLowerCase();
+    const matches: Session[] = [];
 
-    return sessions.filter(session => {
-      // Search in name
-      if (session.name.toLowerCase().includes(lowerQuery)) return true;
+    for (const session of sessions) {
+      const match = this.findJsonSearchMatch(session, lowerQuery);
+      if (match) {
+        matches.push(this.withSearchMetadata(session, match));
+      }
+    }
 
-      // Search in messages
-      return session.messages.some(msg =>
-        msg.content.toLowerCase().includes(lowerQuery)
-      );
-    });
+    return matches;
+  }
+
+  private async searchSessionsInDatabase(query: string): Promise<Session[]> {
+    const dbRepository = await this.ensureDatabaseRepository();
+    if (!dbRepository) {
+      return [];
+    }
+
+    try {
+      const results = dbRepository.searchMessages(query, { limit: MAX_SESSIONS });
+      const seen = new Set<string>();
+      const sessions: Session[] = [];
+
+      for (const result of results) {
+        if (seen.has(result.session.id)) {
+          continue;
+        }
+
+        seen.add(result.session.id);
+        const diskSession = this.loadSessionFromDiskSync(result.session.id);
+        const session = diskSession ?? this.convertDatabaseSession(result.session);
+        sessions.push(
+          this.withSearchMetadata(session, {
+            snippet: result.snippet,
+            role: result.message.role,
+            score: result.score,
+            messageId: result.message.id,
+            parentSessionId: result.session.parent_session_id,
+          }),
+        );
+      }
+
+      return sessions;
+    } catch (error) {
+      logger.debug('[session-store] SQLite session search failed; falling back to JSON scan', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
+  private findJsonSearchMatch(
+    session: Session,
+    lowerQuery: string,
+  ): {
+    snippet: string;
+    role?: string;
+    messageId?: number;
+  } | null {
+    const name = typeof session.name === 'string' ? session.name : '';
+    if (name.toLowerCase().includes(lowerQuery)) {
+      return { snippet: name, role: 'session' };
+    }
+
+    const messages = Array.isArray(session.messages) ? session.messages : [];
+    const messageIndex = messages.findIndex((msg) =>
+      typeof msg?.content === 'string' &&
+      msg.content.toLowerCase().includes(lowerQuery)
+    );
+    if (messageIndex < 0) return null;
+
+    const message = messages[messageIndex];
+    const content = typeof message.content === 'string' ? message.content : '';
+    return {
+      snippet: this.buildPlainSnippet(content, lowerQuery),
+      role: typeof message.type === 'string' ? message.type : undefined,
+      messageId: messageIndex + 1,
+    };
+  }
+
+  private buildPlainSnippet(content: string, lowerQuery: string): string {
+    const normalized = content.replace(/\s+/g, ' ').trim();
+    const idx = normalized.toLowerCase().indexOf(lowerQuery);
+    if (idx < 0) return normalized.slice(0, 180);
+    const start = Math.max(0, idx - 60);
+    const end = Math.min(normalized.length, idx + lowerQuery.length + 60);
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < normalized.length ? '...' : '';
+    return `${prefix}${normalized.slice(start, end)}${suffix}`;
+  }
+
+  private withSearchMetadata(
+    session: Session,
+    match: {
+      snippet: string;
+      role?: string;
+      score?: number;
+      messageId?: number;
+      parentSessionId?: string;
+    },
+  ): Session {
+    const sessionMetadata = session.metadata && typeof session.metadata === 'object'
+      ? session.metadata
+      : undefined;
+    const parentSessionId = match.parentSessionId ?? sessionMetadata?.parentSessionId;
+    return {
+      ...session,
+      metadata: {
+        ...sessionMetadata,
+        ...(parentSessionId ? { parentSessionId } : {}),
+        searchSnippet: match.snippet.replace(/\s+/g, ' ').trim(),
+        ...(match.role ? { searchRole: match.role } : {}),
+        ...(typeof match.score === 'number' ? { searchScore: match.score } : {}),
+        ...(typeof match.messageId === 'number' ? { searchMessageId: match.messageId } : {}),
+      },
+    };
   }
 
   /**
@@ -1045,10 +1258,16 @@ export class SessionStore {
       name: newName || `${original.name} (copy)`,
       createdAt: new Date(),
       lastAccessedAt: new Date(),
-      messages: [...original.messages]
+      messages: [...original.messages],
+      metadata: {
+        ...original.metadata,
+        parentSessionId: sessionId,
+        clonedFrom: sessionId,
+      }
     };
 
     await this.saveSession(cloned);
+    await this.persistDatabaseSessionSnapshot(cloned, sessionId);
     return cloned;
   }
 
@@ -1070,13 +1289,53 @@ export class SessionStore {
       messages: branchedMessages,
       metadata: {
         ...original.metadata,
+        parentSessionId: sessionId,
         branchedFrom: sessionId,
         branchedAt: atMessageIndex
       }
     };
 
     await this.saveSession(branched);
+    await this.persistDatabaseSessionSnapshot(branched, sessionId);
     return branched;
+  }
+
+  private async persistDatabaseSessionSnapshot(session: Session, parentSessionId?: string): Promise<void> {
+    const dbRepository = await this.ensureDatabaseRepository();
+    if (!dbRepository) {
+      return;
+    }
+
+    try {
+      if (dbRepository.getSessionById(session.id)) {
+        return;
+      }
+
+      dbRepository.createSession({
+        id: session.id,
+        parent_session_id: parentSessionId,
+        project_path: session.workingDirectory,
+        name: session.name,
+        model: session.model,
+        metadata: session.metadata,
+      });
+
+      for (const message of session.messages) {
+        dbRepository.addMessage({
+          session_id: session.id,
+          role: message.type === 'tool_result' ? 'tool' : message.type === 'user' ? 'user' : 'assistant',
+          content: message.content,
+          tool_calls: message.toolCallName ? [{ name: message.toolCallName }] : undefined,
+          metadata: message.toolCallSuccess !== undefined ? { success: message.toolCallSuccess } : undefined,
+        });
+      }
+    } catch (error) {
+      logger.debug('[session-store] SQLite session lineage persistence failed', {
+        sessionId: session.id,
+        parentSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**

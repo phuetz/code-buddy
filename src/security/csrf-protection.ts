@@ -54,6 +54,14 @@ const DEFAULT_CONFIG: Required<CSRFConfig> = {
   secure: process.env.NODE_ENV === 'production',
 };
 
+function hasHeaderValue(value: string | string[] | undefined): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) => entry.trim().length > 0);
+  }
+
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 /**
  * CSRF Protection Manager
  */
@@ -229,6 +237,12 @@ export class CSRFProtection extends EventEmitter {
     return (req, res, next) => {
       // Exempt A2A endpoints from CSRF (they use authentication instead)
       if (req.path?.startsWith('/api/a2a')) {
+        return next();
+      }
+
+      // Header-authenticated API clients are not vulnerable to browser cookie
+      // CSRF, and OpenAI-compatible clients cannot perform a CSRF token dance.
+      if (hasHeaderValue(req.headers.authorization) || hasHeaderValue(req.headers['x-api-key'])) {
         return next();
       }
 

@@ -53,7 +53,7 @@ export async function recordRecoveryAttempt(): Promise<number> {
  * Check if there's a pending crash recovery.
  * Returns recovery info if found, null otherwise.
  */
-export async function checkCrashRecovery(cwd: string = process.cwd()): Promise<RecoveryInfo | null> {
+export async function checkCrashRecovery(_cwd: string = process.cwd()): Promise<RecoveryInfo | null> {
   // Check the global recovery dir (where CrashHandler writes)
   const recoveryDir = RECOVERY_DIR;
   if (!existsSync(recoveryDir)) return null;
@@ -205,7 +205,7 @@ export async function clearRecoveryFiles(): Promise<void> {
  * that includes the session ID and message count.
  */
 export async function saveRecoveryCheckpoint(
-  cwd: string,
+  _cwd: string,
   sessionId: string,
   messageCount: number,
   lastUserMessage: string,

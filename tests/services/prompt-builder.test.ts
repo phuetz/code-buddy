@@ -27,7 +27,7 @@
  * - cacheSystemPrompt is called with the final prompt.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // ---- mocks for required modules --------------------------------------
 
@@ -64,6 +64,7 @@ import {
   PromptBuilder,
   type PromptBuilderConfig,
 } from '../../src/services/prompt-builder.js';
+import { resetToolFilter, setToolFilter } from '../../src/utils/tool-filter.js';
 import {
   _resetFleetRegistryForTests,
   getFleetRegistry,
@@ -161,6 +162,7 @@ function registerFleetPeer(): void {
 
 describe('PromptBuilder — Phase T4', () => {
   beforeEach(() => {
+    resetToolFilter();
     _resetFleetRegistryForTests();
     promptMocks.getSystemPromptForModeMock
       .mockReset()
@@ -172,6 +174,10 @@ describe('PromptBuilder — Phase T4', () => {
     modelToolsMock.getModelToolConfigMock
       .mockReset()
       .mockReturnValue({ contextWindow: 128_000, maxOutputTokens: 8_000 });
+  });
+
+  afterEach(() => {
+    resetToolFilter();
   });
 
   describe('construction + updateConfig', () => {
@@ -240,6 +246,39 @@ describe('PromptBuilder — Phase T4', () => {
       await builder.buildSystemPrompt('myprompt', 'grok-3', null);
       const args = promptMocks.buildSystemPromptMock.mock.calls[0][0];
       expect(args.userInstructions).toBeUndefined();
+    });
+
+    it('filters explicit prompt-manager tool prompts through the active tool filter', async () => {
+      setToolFilter({
+        enabledPatterns: ['view_file', 'search', 'reason'],
+        disabledPatterns: ['bash'],
+      });
+      const { builder, cacheSystemPrompt } = buildBuilder();
+      await builder.buildSystemPrompt('claude-code', 'grok-3', null, {
+        includeBootstrap: false,
+        includePersona: false,
+        includeKnowledge: false,
+        includeProjectDocs: false,
+        includeRules: false,
+        includeSkills: false,
+        includeIdentity: false,
+        includeFleet: false,
+        includeMemoryDirective: false,
+        includeLessonsDirective: false,
+        includeWritingRules: false,
+        includeCodingStyle: false,
+        includeWorkflowRules: false,
+        includeVariation: false,
+      });
+
+      const args = promptMocks.buildSystemPromptMock.mock.calls[0][0];
+      expect(args.tools).toEqual(['view_file', 'search', 'reason']);
+
+      const finalPrompt = cacheSystemPrompt.mock.calls[0][0] as string;
+      expect(finalPrompt).toContain('<active_tool_filter>');
+      expect(finalPrompt).toContain('Enabled patterns: view_file, search, reason');
+      expect(finalPrompt).toContain('Disabled patterns: bash');
+      expect(finalPrompt).toContain('Trust the schema over generic prompt text');
     });
   });
 
@@ -389,6 +428,71 @@ describe('PromptBuilder — Phase T4', () => {
       await builder.buildSystemPrompt(undefined, 'grok-3', null);
       const finalPrompt = cacheSystemPrompt.mock.calls[0][0] as string;
       expect(finalPrompt).not.toContain('<auto_memory_directive>');
+    });
+
+    it('does NOT inject memory or lessons directives when the active tool filter hides those tools', async () => {
+      setToolFilter({
+        enabledPatterns: ['view_file', 'search'],
+        disabledPatterns: [],
+      });
+      const { builder, cacheSystemPrompt } = buildBuilder({
+        config: { memoryEnabled: true },
+        withMemory: true,
+        withPersistentMemory: 'persistent-bit',
+      });
+      await builder.buildSystemPrompt(undefined, 'grok-3', null, {
+        includeBootstrap: false,
+        includePersona: false,
+        includeKnowledge: false,
+        includeProjectDocs: false,
+        includeRules: false,
+        includeSkills: false,
+        includeIdentity: false,
+        includeFleet: false,
+        includeWritingRules: false,
+        includeCodingStyle: false,
+        includeWorkflowRules: false,
+        includeVariation: false,
+      });
+
+      const finalPrompt = cacheSystemPrompt.mock.calls[0][0] as string;
+      expect(finalPrompt).not.toContain('<auto_memory_directive>');
+      expect(finalPrompt).not.toContain('<lessons_directive>');
+      expect(finalPrompt).toContain('<active_tool_filter>');
+    });
+  });
+
+  describe('tool-aware workflow guidance', () => {
+    it('omits filtered tool names from workflow rules', async () => {
+      setToolFilter({
+        enabledPatterns: ['view_file', 'search'],
+        disabledPatterns: [],
+      });
+      const { builder, cacheSystemPrompt } = buildBuilder();
+      await builder.buildSystemPrompt(undefined, 'grok-3', null, {
+        includeBootstrap: false,
+        includePersona: false,
+        includeKnowledge: false,
+        includeProjectDocs: false,
+        includeRules: false,
+        includeSkills: false,
+        includeIdentity: false,
+        includeFleet: false,
+        includeMemoryDirective: false,
+        includeLessonsDirective: false,
+        includeWritingRules: false,
+        includeCodingStyle: false,
+        includeWorkflowRules: true,
+        includeVariation: false,
+      });
+
+      const finalPrompt = cacheSystemPrompt.mock.calls[0][0] as string;
+      expect(finalPrompt).toContain('## Workflow Orchestration');
+      expect(finalPrompt).not.toContain('`web_search`');
+      expect(finalPrompt).not.toContain('`web_fetch`');
+      expect(finalPrompt).not.toContain('`browser`');
+      expect(finalPrompt).not.toContain('`task_verify`');
+      expect(finalPrompt).toContain('do not claim live verification');
     });
   });
 

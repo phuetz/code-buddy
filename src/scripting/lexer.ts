@@ -352,10 +352,12 @@ export class FCSLexer {
       }
     }
 
-    if (!this.isAtEnd()) {
-      this.advance(); // *
-      this.advance(); // /
+    if (this.isAtEnd()) {
+      throw new Error('Unterminated block comment');
     }
+
+    this.advance(); // *
+    this.advance(); // /
 
     return null; // Comments are skipped
   }

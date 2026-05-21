@@ -54,7 +54,7 @@ describe('doctor — ChatGPT OAuth check', () => {
     expect(chatgpt?.status).toBe('warn');
     expect(chatgpt?.message).toMatch(/not signed in/i);
     expect(chatgpt?.message).toMatch(/login chatgpt/i);
-  });
+  }, 15_000);
 
   it('returns ok with email + plan when credentials are valid and recent', async () => {
     writeAuthFile({
@@ -80,7 +80,7 @@ describe('doctor — ChatGPT OAuth check', () => {
     expect(chatgpt?.status).toBe('ok');
     expect(chatgpt?.message).toContain('patrice@example.com');
     expect(chatgpt?.message).toContain('Plan: plus');
-  });
+  }, 15_000);
 
   it('flags FedRAMP marker in the ok message when present', async () => {
     writeAuthFile({

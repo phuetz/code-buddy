@@ -14,6 +14,7 @@ interface SessionData {
   name: string;
   description?: string;
   createdAt: Date | string;
+  lastAccessedAt?: Date | string;
   updatedAt?: Date | string;
   messages?: Array<{ role: string; content: string; timestamp?: string; metadata?: unknown }>;
   tokenCount?: number;
@@ -23,11 +24,14 @@ interface SessionData {
 
 interface SessionStoreAPI {
   listSessions(): Promise<SessionData[]>;
+  searchSessions?(query: string): Promise<SessionData[]>;
   loadSession(id: string): Promise<SessionData | null>;
-  createSession(data: Record<string, unknown>): Promise<SessionData>;
-  updateSession(id: string, data: Record<string, unknown>): Promise<SessionData>;
+  createSession(name?: string, model?: string): Promise<SessionData>;
+  updateSession?(id: string, data: Record<string, unknown>): Promise<SessionData>;
   deleteSession(id: string): Promise<void>;
-  addMessage(id: string, message: Record<string, unknown>): Promise<void>;
+  addMessage?(id: string, message: Record<string, unknown>): Promise<void>;
+  cloneSession?(id: string, newName?: string): Promise<SessionData | null>;
+  branchSession?(id: string, atMessageIndex: number, newName?: string): Promise<SessionData | null>;
 }
 
 // Lazy load the session store
@@ -45,6 +49,20 @@ const router = Router();
 // Helper to extract string param (Express params can be string | string[])
 function getStringParam(param: string | string[] | undefined): string {
   return Array.isArray(param) ? param[0] : param || '';
+}
+
+function getSessionTimestamp(session: SessionData, field: 'created' | 'updated'): Date | string {
+  if (field === 'created') {
+    return session.createdAt;
+  }
+
+  return session.updatedAt || session.lastAccessedAt || session.createdAt;
+}
+
+function getParentSessionId(session: SessionData): string | undefined {
+  const metadata = session.metadata || {};
+  const parent = metadata.parentSessionId || metadata.branchedFrom || metadata.clonedFrom || metadata.forkedFrom;
+  return typeof parent === 'string' ? parent : undefined;
 }
 
 /**
@@ -77,11 +95,13 @@ router.get(
       throw ApiServerError.badRequest('Search query must not exceed 500 characters');
     }
 
-    const allSessions = await store.listSessions();
+    const allSessions = search && typeof search === 'string' && store.searchSessions
+      ? await store.searchSessions(search)
+      : await store.listSessions();
     let sessions = allSessions;
 
-    // Apply search filter if provided
-    if (search && typeof search === 'string') {
+    // Apply search filter if provided and the store has no content search.
+    if (search && typeof search === 'string' && !store.searchSessions) {
       const searchLower = search.toLowerCase();
       sessions = sessions.filter((s: SessionData) =>
         s.name?.toLowerCase().includes(searchLower) ||
@@ -101,11 +121,12 @@ router.get(
       id: s.id,
       name: s.name,
       description: s.description,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
+      createdAt: getSessionTimestamp(s, 'created'),
+      updatedAt: getSessionTimestamp(s, 'updated'),
       messageCount: s.messages?.length || 0,
       tokenCount: s.tokenCount || 0,
       model: s.model,
+      parentSessionId: getParentSessionId(s),
     }));
 
     const response: SessionListResponse = {
@@ -149,8 +170,9 @@ router.get(
       name: latest.name,
       description: latest.description,
       createdAt: latest.createdAt,
-      updatedAt: latest.updatedAt,
+      updatedAt: getSessionTimestamp(latest, 'updated'),
       messageCount: latest.messages?.length || 0,
+      parentSessionId: getParentSessionId(latest),
     });
   })
 );
@@ -181,6 +203,7 @@ router.get(
       messages: session.messages,
       messageCount: session.messages?.length || 0,
       tokenCount: session.tokenCount || 0,
+      parentSessionId: getParentSessionId(session),
       metadata: session.metadata,
     });
   })
@@ -225,12 +248,12 @@ router.post(
       }
     }
 
-    const session = await store.createSession({
-      name: name || `Session ${Date.now()}`,
-      description,
-      model: model || process.env.GROK_MODEL || 'grok-3-latest',
-      metadata,
-    });
+    const session = await store.createSession(
+      name || `Session ${Date.now()}`,
+      model || process.env.GROK_MODEL || 'grok-3-latest',
+    );
+    session.description = description;
+    session.metadata = metadata;
 
     res.status(201).json({
       id: session.id,
@@ -260,17 +283,31 @@ router.put(
 
     const { name, description, metadata } = req.body;
 
-    const updated = await store.updateSession(id, {
-      name: name ?? session.name,
-      description: description ?? session.description,
-      metadata: metadata ?? session.metadata,
-    });
+    if (store.updateSession) {
+      const updated = await store.updateSession(id, {
+        name: name ?? session.name,
+        description: description ?? session.description,
+        metadata: metadata ?? session.metadata,
+      });
+
+      res.json({
+        id: updated.id,
+        name: updated.name,
+        description: updated.description,
+        updatedAt: getSessionTimestamp(updated, 'updated'),
+      });
+      return;
+    }
+
+    session.name = name ?? session.name;
+    session.description = description ?? session.description;
+    session.metadata = metadata ?? session.metadata;
 
     res.json({
-      id: updated.id,
-      name: updated.name,
-      description: updated.description,
-      updatedAt: updated.updatedAt,
+      id: session.id,
+      name: session.name,
+      description: session.description,
+      updatedAt: getSessionTimestamp(session, 'updated'),
     });
   })
 );
@@ -358,7 +395,11 @@ router.post(
       metadata,
     };
 
-    await store.addMessage(id, message);
+    if (store.addMessage) {
+      await store.addMessage(id, message);
+    } else {
+      session.messages = [...(session.messages || []), message];
+    }
 
     res.status(201).json(message);
   })
@@ -382,31 +423,32 @@ router.post(
 
     const { name, description, fromMessage } = req.body;
 
-    // Create a copy of the session
-    let messages = session.messages || [];
-    if (typeof fromMessage === 'number' && fromMessage >= 0) {
-      messages = messages.slice(0, fromMessage + 1);
+    const forkName = name || `${session.name} (fork)`;
+    const forked = typeof fromMessage === 'number' && fromMessage >= 0 && store.branchSession
+      ? await store.branchSession(id, fromMessage, forkName)
+      : store.cloneSession
+        ? await store.cloneSession(id, forkName)
+        : await store.createSession(forkName, session.model);
+
+    if (!forked) {
+      throw ApiServerError.internal('Failed to fork session');
     }
 
-    const forked = await store.createSession({
-      name: name || `${session.name} (fork)`,
-      description: description || `Forked from ${session.id}`,
-      model: session.model,
-      messages,
-      metadata: {
-        ...session.metadata,
-        forkedFrom: session.id,
-        forkedAt: new Date().toISOString(),
-      },
-    });
+    forked.description = description || `Forked from ${session.id}`;
+    forked.metadata = {
+      ...forked.metadata,
+      forkedFrom: session.id,
+      forkedAt: new Date().toISOString(),
+    };
 
     res.status(201).json({
       id: forked.id,
       name: forked.name,
       description: forked.description,
       createdAt: forked.createdAt,
-      messageCount: messages.length,
+      messageCount: forked.messages?.length || 0,
       forkedFrom: session.id,
+      parentSessionId: getParentSessionId(forked),
     });
   })
 );

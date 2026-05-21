@@ -125,6 +125,24 @@ describe('USearch Vector Index', () => {
       expect(addedEvents[0].count).toBe(1);
       expect(addedEvents[0].totalSize).toBe(1);
     });
+
+    it('should reject invalid dimensions without reserving an id', async () => {
+      await expect(index.add({ id: 'empty', embedding: [] })).rejects.toThrow(
+        'expected 3, got 0'
+      );
+
+      expect(index.size()).toBe(0);
+      expect(index.has('empty')).toBe(false);
+    });
+
+    it('should reject non-finite values', async () => {
+      await expect(index.add({ id: 'nan', embedding: [1, Number.NaN, 0] })).rejects.toThrow(
+        'finite numbers'
+      );
+
+      expect(index.size()).toBe(0);
+      expect(index.has('nan')).toBe(false);
+    });
   });
 
   describe('Searching', () => {

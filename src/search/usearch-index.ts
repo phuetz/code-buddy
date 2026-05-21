@@ -215,10 +215,12 @@ export class USearchVectorIndex extends EventEmitter {
   async add(vector: IndexableVector): Promise<void> {
     await this.initialize();
     if (!this.index) throw new Error('Index not initialized');
+    this.assertIndexableVector(vector);
+
+    const embedding = this.normalizeEmbedding(vector.embedding);
+    this.validateEmbedding(embedding, 'add');
 
     const key = this.getOrCreateKey(vector.id);
-    const embedding = this.normalizeEmbedding(vector.embedding);
-
     this.index.add(key, embedding);
 
     if (vector.metadata) {
@@ -236,8 +238,10 @@ export class USearchVectorIndex extends EventEmitter {
     if (!this.index) throw new Error('Index not initialized');
 
     for (const vector of vectors) {
-      const key = this.getOrCreateKey(vector.id);
+      this.assertIndexableVector(vector);
       const embedding = this.normalizeEmbedding(vector.embedding);
+      this.validateEmbedding(embedding, 'add');
+      const key = this.getOrCreateKey(vector.id);
       this.index.add(key, embedding);
 
       if (vector.metadata) {
@@ -290,6 +294,7 @@ export class USearchVectorIndex extends EventEmitter {
 
     const startTime = Date.now();
     const queryVector = this.normalizeEmbedding(query);
+    this.validateEmbedding(queryVector, 'search');
 
     // Search with expansion factor for better recall
     const results = this.index.search(queryVector, k);
@@ -525,7 +530,36 @@ export class USearchVectorIndex extends EventEmitter {
     if (embedding instanceof Float32Array) {
       return embedding;
     }
+    if (!Array.isArray(embedding)) {
+      throw new Error('Embedding must be an array or Float32Array');
+    }
     return new Float32Array(embedding);
+  }
+
+  private assertIndexableVector(vector: IndexableVector): void {
+    if (!vector || typeof vector !== 'object') {
+      throw new Error('Vector must include a string id and embedding');
+    }
+    if (typeof vector.id !== 'string' || vector.id.length === 0) {
+      throw new Error('Vector id must be a non-empty string');
+    }
+    if (vector.embedding === undefined || vector.embedding === null) {
+      throw new Error('Vector embedding is required');
+    }
+  }
+
+  private validateEmbedding(embedding: Float32Array, operation: 'add' | 'search'): void {
+    if (embedding.length !== this.config.dimensions) {
+      throw new Error(
+        `Vector dimensions must match index dimensions for ${operation}: expected ${this.config.dimensions}, got ${embedding.length}`
+      );
+    }
+
+    for (const value of embedding) {
+      if (!Number.isFinite(value)) {
+        throw new Error(`Vector embedding for ${operation} must contain only finite numbers`);
+      }
+    }
   }
 
   private distanceToScore(distance: number): number {

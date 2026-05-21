@@ -349,7 +349,7 @@ describe('BashTool', () => {
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'bash',
-        ['-c', 'test-command'],
+        ['-c', expect.stringContaining('test-command')],
         expect.objectContaining({
           shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],

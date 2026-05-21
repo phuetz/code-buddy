@@ -134,6 +134,28 @@ export {
   createKnowledgeTools,
 } from './knowledge-tools.js';
 
+// Tool Adapters - Relationship Intelligence
+export {
+  RelationshipContextTool,
+  createRelationshipIntelligenceTools,
+} from './relationship-intelligence-tools.js';
+
+// Tool Adapters - Internet Scout
+export {
+  InternetScoutPlanTool,
+  InternetScoutRunTool,
+  createInternetScoutTools,
+} from './internet-scout-tools.js';
+
+// Tool Adapters - Lead Scout
+export {
+  LeadScoutEnrichmentPlanTool,
+  LeadScoutLessonCandidatesTool,
+  LeadScoutPlanTool,
+  LeadScoutRunTool,
+  createLeadScoutTools,
+} from './lead-scout-tools.js';
+
 // Tool Adapters - Persistent Memory (remember, recall, forget)
 export {
   RememberTool,
@@ -152,6 +174,7 @@ export {
 // Tool Adapters - Lessons (self-improvement loop + verification contract)
 export {
   LessonsAddTool,
+  LessonsGraphTool,
   LessonsSearchTool,
   LessonsListTool,
   TaskVerifyTool,
@@ -350,6 +373,9 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createProcessTools } = await import('./process-tools.js');
   const { createVisionTools } = await import('./vision-tools.js');
   const { createKnowledgeTools } = await import('./knowledge-tools.js');
+  const { createRelationshipIntelligenceTools } = await import('./relationship-intelligence-tools.js');
+  const { createInternetScoutTools } = await import('./internet-scout-tools.js');
+  const { createLeadScoutTools } = await import('./lead-scout-tools.js');
   const { createScriptTools } = await import('./script-tools.js');
   const { createPlanTools } = await import('./plan-tools.js');
   const { createAttentionTools } = await import('./attention-tools.js');
@@ -390,6 +416,9 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createProcessTools(),
     ...createVisionTools(),
     ...createKnowledgeTools(),
+    ...createRelationshipIntelligenceTools(),
+    ...createInternetScoutTools(),
+    ...createLeadScoutTools(),
     ...createMemoryTools(),
     ...createParallelTools(),
     ...createScriptTools(),
@@ -454,6 +483,9 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createScriptTools(),
     ...createPlanTools(),
     ...createKnowledgeTools(),
+    ...createRelationshipIntelligenceTools(),
+    ...createInternetScoutTools(),
+    ...createLeadScoutTools(),
     ...createMemoryTools(),
     ...createParallelTools(),
     ...createAttentionTools(),
@@ -506,6 +538,9 @@ import { createVisionTools } from './vision-tools.js';
 import { createScriptTools } from './script-tools.js';
 import { createPlanTools } from './plan-tools.js';
 import { createKnowledgeTools } from './knowledge-tools.js';
+import { createRelationshipIntelligenceTools } from './relationship-intelligence-tools.js';
+import { createInternetScoutTools } from './internet-scout-tools.js';
+import { createLeadScoutTools } from './lead-scout-tools.js';
 import { createMemoryTools } from './memory-tools.js';
 import { createParallelTools } from './parallel-tools.js';
 import { createAttentionTools } from './attention-tools.js';

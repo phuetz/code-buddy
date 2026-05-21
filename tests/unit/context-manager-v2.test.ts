@@ -671,8 +671,8 @@ describe('ContextManagerV2', () => {
 
     it('should create manager for llama models', () => {
       const llamaManager = createContextManager('llama3.2');
-      // llama3.2 falls through to default contextWindow (32768)
-      expect(llamaManager.getConfig().maxContextTokens).toBe(32768);
+      // llama3* uses the conservative local-model profile.
+      expect(llamaManager.getConfig().maxContextTokens).toBe(8192);
       llamaManager.dispose();
     });
 

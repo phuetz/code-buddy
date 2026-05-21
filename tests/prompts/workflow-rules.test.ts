@@ -44,6 +44,10 @@ describe('getWorkflowRulesBlock', () => {
     expect(block).toContain('Verification Contract');
   });
 
+  it('should contain an "Internet Automation Proof Loop" section', () => {
+    expect(block).toContain('Internet Automation Proof Loop');
+  });
+
   it('should contain an "Uncertainty Protocol" section', () => {
     expect(block).toContain('Uncertainty Protocol');
   });
@@ -82,5 +86,49 @@ describe('getWorkflowRulesBlock', () => {
 
   it('should reference lessons_search for pre-task lookup', () => {
     expect(block).toContain('lessons_search');
+  });
+
+  it('should reference browser observe/extract/assert_text for web proof loops', () => {
+    expect(block).toContain('action=`observe`');
+    expect(block).toContain('action=`extract`');
+    expect(block).toContain('action=`assert_text`');
+    expect(block).toContain('persistWhenProven=true');
+    expect(block).toContain('persistenceSuggestions');
+  });
+
+  it('omits tool-specific guidance for unavailable tools', () => {
+    const filtered = getWorkflowRulesBlock({
+      isToolAvailable: toolName => ![
+        'browser',
+        'lessons_add',
+        'lessons_search',
+        'remember',
+        'task_verify',
+        'web_fetch',
+        'web_search',
+      ].includes(toolName),
+    });
+
+    expect(filtered).toContain('Internet Automation Proof Loop');
+    expect(filtered).not.toContain('`web_search`');
+    expect(filtered).not.toContain('`web_fetch`');
+    expect(filtered).not.toContain('`browser`');
+    expect(filtered).not.toContain('`task_verify`');
+    expect(filtered).not.toContain('`remember`');
+    expect(filtered).not.toContain('`lessons_add`');
+    expect(filtered).not.toContain('`lessons_search`');
+    expect(filtered).toContain('do not claim live verification');
+  });
+
+  it('keeps static web guidance without browser actions when browser is unavailable', () => {
+    const filtered = getWorkflowRulesBlock({
+      isToolAvailable: toolName => ['web_search', 'web_fetch'].includes(toolName),
+    });
+
+    expect(filtered).toContain('`web_search`');
+    expect(filtered).toContain('`web_fetch`');
+    expect(filtered).not.toContain('action=`observe`');
+    expect(filtered).not.toContain('action=`extract`');
+    expect(filtered).not.toContain('action=`assert_text`');
   });
 });

@@ -387,6 +387,7 @@ export class LatencyOptimizer extends EventEmitter {
    */
   private startPeriodicCleanup(): void {
     this.cleanupIntervalId = setInterval(() => this.cleanup(), 60000); // Every minute
+    this.cleanupIntervalId.unref?.();
   }
 
   /**

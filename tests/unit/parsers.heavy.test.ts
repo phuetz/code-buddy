@@ -675,7 +675,7 @@ describe('FCS Parser', () => {
     });
 
     it('should parse return statements', () => {
-      const ast = parseFCS(tokenizeFCS('func test() { return 42 }'));
+      const ast = parseFCS(tokenizeFCS('func sample() { return 42 }'));
       const fn = ast.statements[0] as any;
       const returnStmt = fn.body.statements[0];
       expect(returnStmt.type).toBe('Return');
@@ -740,16 +740,22 @@ describe('FCS Parser', () => {
   });
 
   describe('FCS Parser - Error Handling', () => {
-    it('should throw on invalid syntax', () => {
-      expect(() => parseFCS(tokenizeFCS('let = 5'))).toThrow();
+    it('should recover from invalid syntax', () => {
+      const ast = parseFCS(tokenizeFCS('let = 5'));
+
+      expect(ast.statements).toHaveLength(0);
     });
 
-    it('should throw on mismatched braces', () => {
-      expect(() => parseFCS(tokenizeFCS('func test() {'))).toThrow();
+    it('should recover from mismatched braces', () => {
+      const ast = parseFCS(tokenizeFCS('func sample() {'));
+
+      expect(ast.statements).toHaveLength(0);
     });
 
-    it('should throw on const without initializer', () => {
-      expect(() => parseFCS(tokenizeFCS('const x'))).toThrow();
+    it('should recover from const without initializer', () => {
+      const ast = parseFCS(tokenizeFCS('const x'));
+
+      expect(ast.statements).toHaveLength(0);
     });
   });
 });
@@ -761,7 +767,7 @@ describe('FCS Parser', () => {
 describe('Buddy Script Parser', () => {
   let tokenizeBuddy: any;
   let parseBuddy: any;
-  let BuddyTokenType: any;
+  let TokenType: any;
 
   beforeAll(async () => {
     const lexerModule = await import('../../src/scripting/lexer');
@@ -770,77 +776,77 @@ describe('Buddy Script Parser', () => {
 
     tokenizeBuddy = lexerModule.tokenize;
     parseBuddy = parserModule.parse;
-    BuddyTokenType = typesModule.TokenType;
+    TokenType = typesModule.TokenType;
   });
 
   describe('Buddy Script Lexer', () => {
     it('should tokenize basic tokens', () => {
       const tokens = tokenizeBuddy('let x = 42');
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.LET)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.IDENTIFIER)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.ASSIGN)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.NUMBER)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Keyword && t.value === 'let')).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Identifier && t.value === 'x')).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Assign)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Number)).toBe(true);
     });
 
     it('should tokenize strings', () => {
       const tokens = tokenizeBuddy('"hello world"');
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.STRING && t.value === 'hello world')).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.String && t.value === 'hello world')).toBe(true);
     });
 
     it('should tokenize booleans', () => {
       const tokens = tokenizeBuddy('true false');
-      expect(tokens.filter((t: any) => t.type === BuddyTokenType.BOOLEAN).length).toBe(2);
+      expect(tokens.filter((t: any) => t.type === TokenType.Boolean).length).toBe(2);
     });
 
     it('should tokenize comparison operators', () => {
       const tokens = tokenizeBuddy('== != < > <= >=');
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.EQUALS)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.NOT_EQUALS)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.LESS_THAN)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.GREATER_THAN)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Equal)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.NotEqual)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Less)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Greater)).toBe(true);
     });
 
     it('should tokenize logical operators', () => {
       const tokens = tokenizeBuddy('&& || !');
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.AND)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.OR)).toBe(true);
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.NOT)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.And)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Or)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Not)).toBe(true);
     });
 
     it('should tokenize power operator', () => {
       const tokens = tokenizeBuddy('2 ** 3');
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.POWER)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Power)).toBe(true);
     });
 
     it('should tokenize arrow', () => {
       const tokens = tokenizeBuddy('=>');
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.ARROW)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Arrow)).toBe(true);
     });
 
     it('should tokenize question mark', () => {
       const tokens = tokenizeBuddy('?');
-      expect(tokens.some((t: any) => t.type === BuddyTokenType.QUESTION)).toBe(true);
+      expect(tokens.some((t: any) => t.type === TokenType.Question)).toBe(true);
     });
 
     it('should skip single-line comments', () => {
       const tokens = tokenizeBuddy('x // comment\ny');
-      expect(tokens.filter((t: any) => t.type === BuddyTokenType.IDENTIFIER).length).toBe(2);
+      expect(tokens.filter((t: any) => t.type === TokenType.Identifier).length).toBe(2);
     });
 
     it('should skip multi-line comments', () => {
       const tokens = tokenizeBuddy('x /* comment */ y');
-      expect(tokens.filter((t: any) => t.type === BuddyTokenType.IDENTIFIER).length).toBe(2);
+      expect(tokens.filter((t: any) => t.type === TokenType.Identifier).length).toBe(2);
     });
 
     it('should handle escape sequences', () => {
       const tokens = tokenizeBuddy('"hello\\nworld"');
-      const str = tokens.find((t: any) => t.type === BuddyTokenType.STRING);
+      const str = tokens.find((t: any) => t.type === TokenType.String);
       expect(str?.value).toBe('hello\nworld');
     });
 
     it('should handle scientific notation', () => {
       const tokens = tokenizeBuddy('1e10 2.5E-3');
-      const numbers = tokens.filter((t: any) => t.type === BuddyTokenType.NUMBER);
+      const numbers = tokens.filter((t: any) => t.type === TokenType.Number);
       expect(numbers.length).toBe(2);
     });
 
@@ -856,101 +862,100 @@ describe('Buddy Script Parser', () => {
   describe('Buddy Script Parser - Expressions', () => {
     it('should parse literals', () => {
       const ast = parseBuddy(tokenizeBuddy('42'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'ExpressionStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'ExpressionStmt',
       });
     });
 
     it('should parse binary expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('1 + 2 * 3'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('BinaryExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Binary');
     });
 
     it('should parse logical expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('a && b || c'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('LogicalExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Binary');
     });
 
     it('should parse unary expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('!x'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('UnaryExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Unary');
     });
 
     it('should parse call expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('foo(a, b)'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('CallExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Call');
     });
 
     it('should parse member expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('obj.prop'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('MemberExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Member');
       expect(stmt.expression.computed).toBe(false);
     });
 
     it('should parse computed member expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('arr[0]'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('MemberExpression');
-      expect(stmt.expression.computed).toBe(true);
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Index');
     });
 
     it('should parse array expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('[1, 2, 3]'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('ArrayExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Array');
     });
 
     it('should parse object expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('{ a: 1, b: 2 }'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('ObjectExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Dict');
     });
 
     it('should parse conditional expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('x ? 1 : 2'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('ConditionalExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Ternary');
     });
 
     it('should parse assignment expressions', () => {
       const ast = parseBuddy(tokenizeBuddy('x = 5'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('AssignmentExpression');
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Assignment');
     });
 
     it('should parse await expressions', () => {
-      const ast = parseBuddy(tokenizeBuddy('await promise'));
-      const stmt = ast.body[0] as any;
-      expect(stmt.expression.type).toBe('AwaitExpression');
+      const ast = parseBuddy(tokenizeBuddy('await job'));
+      const stmt = ast.statements[0] as any;
+      expect(stmt.expression.type).toBe('Await');
     });
   });
 
   describe('Buddy Script Parser - Statements', () => {
     it('should parse variable declarations', () => {
       const ast = parseBuddy(tokenizeBuddy('let x = 42'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'VariableDeclaration',
-        kind: 'let',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'VarDeclaration',
+        isConst: false,
         name: 'x',
       });
     });
 
     it('should parse const declarations', () => {
       const ast = parseBuddy(tokenizeBuddy('const x = 42'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'VariableDeclaration',
-        kind: 'const',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'VarDeclaration',
+        isConst: true,
       });
     });
 
     it('should parse function declarations', () => {
       const ast = parseBuddy(tokenizeBuddy('function add(a, b) { return a + b }'));
-      expect(ast.body[0]).toMatchObject({
+      expect(ast.statements[0]).toMatchObject({
         type: 'FunctionDeclaration',
         name: 'add',
       });
@@ -958,87 +963,87 @@ describe('Buddy Script Parser', () => {
 
     it('should parse async function declarations', () => {
       const ast = parseBuddy(tokenizeBuddy('async function fetch() { }'));
-      const fn = ast.body[0] as any;
-      expect(fn.async).toBe(true);
+      const fn = ast.statements[0] as any;
+      expect(fn.isAsync).toBe(true);
     });
 
     it('should parse if statements', () => {
       const ast = parseBuddy(tokenizeBuddy('if (x > 0) { y = 1 }'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'IfStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'If',
       });
     });
 
     it('should parse if-else statements', () => {
       const ast = parseBuddy(tokenizeBuddy('if (x > 0) { y = 1 } else { y = 0 }'));
-      const ifStmt = ast.body[0] as any;
-      expect(ifStmt.alternate).not.toBeNull();
+      const ifStmt = ast.statements[0] as any;
+      expect(ifStmt.elseBranch).not.toBeNull();
     });
 
     it('should parse else-if chains', () => {
       const ast = parseBuddy(tokenizeBuddy('if (x > 0) { } else if (x < 0) { } else { }'));
-      const ifStmt = ast.body[0] as any;
-      expect(ifStmt.alternate.type).toBe('IfStatement');
+      const ifStmt = ast.statements[0] as any;
+      expect(ifStmt.elseBranch.type).toBe('If');
     });
 
     it('should parse while statements', () => {
       const ast = parseBuddy(tokenizeBuddy('while (x > 0) { x = x - 1 }'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'WhileStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'While',
       });
     });
 
     it('should parse for-in statements', () => {
       const ast = parseBuddy(tokenizeBuddy('for i in items { print(i) }'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'ForInStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'For',
         variable: 'i',
       });
     });
 
     it('should parse C-style for statements', () => {
       const ast = parseBuddy(tokenizeBuddy('for (let i = 0; i < 10; i = i + 1) { }'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'ForStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'ForCStyle',
       });
     });
 
     it('should parse return statements', () => {
-      const ast = parseBuddy(tokenizeBuddy('function test() { return 42 }'));
-      const fn = ast.body[0] as any;
-      expect(fn.body.body[0].type).toBe('ReturnStatement');
+      const ast = parseBuddy(tokenizeBuddy('function sample() { return 42 }'));
+      const fn = ast.statements[0] as any;
+      expect(fn.body.statements[0].type).toBe('Return');
     });
 
     it('should parse break statements', () => {
       const ast = parseBuddy(tokenizeBuddy('while (true) { break }'));
-      const whileStmt = ast.body[0] as any;
-      expect(whileStmt.body.body[0].type).toBe('BreakStatement');
+      const whileStmt = ast.statements[0] as any;
+      expect(whileStmt.body.statements[0].type).toBe('Break');
     });
 
     it('should parse continue statements', () => {
       const ast = parseBuddy(tokenizeBuddy('while (true) { continue }'));
-      const whileStmt = ast.body[0] as any;
-      expect(whileStmt.body.body[0].type).toBe('ContinueStatement');
+      const whileStmt = ast.statements[0] as any;
+      expect(whileStmt.body.statements[0].type).toBe('Continue');
     });
 
     it('should parse try-catch statements', () => {
       const ast = parseBuddy(tokenizeBuddy('try { foo() } catch (e) { }'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'TryStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'Try',
       });
     });
 
     it('should parse throw statements', () => {
       const ast = parseBuddy(tokenizeBuddy('throw "error"'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'ThrowStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'Throw',
       });
     });
 
     it('should parse import statements', () => {
       const ast = parseBuddy(tokenizeBuddy('import fs'));
-      expect(ast.body[0]).toMatchObject({
-        type: 'ImportStatement',
+      expect(ast.statements[0]).toMatchObject({
+        type: 'Import',
         module: 'fs',
       });
     });

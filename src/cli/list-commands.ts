@@ -77,7 +77,7 @@ export async function listAgents(): Promise<void> {
   const loader = getCustomAgentLoader();
   const agents = loader.listAgents();
 
-  console.log('Available custom agents:\n');
+  console.log('Available agents:\n');
 
   if (agents.length === 0) {
     console.log('  (no custom agents found)');

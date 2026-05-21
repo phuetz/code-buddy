@@ -619,7 +619,7 @@ export class DiagramExecuteTool implements ITool {
 
 export class DocumentExecuteTool implements ITool {
   readonly name = 'document';
-  readonly description = 'Read Office documents (DOCX, XLSX, PPTX, CSV, RTF). Extracts text, metadata, and structure.';
+  readonly description = 'Read Office documents (DOCX, XLSX, PPTX, CSV, RTF). Extracts text, metadata, structure, and DOCX embedded images with Markdown references.';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     const tool = await getDocument();
@@ -631,6 +631,8 @@ export class DocumentExecuteTool implements ITool {
         return tool.readDocument(filePath);
       case 'list':
         return tool.listDocuments(filePath);
+      case 'extract_images':
+        return tool.extractEmbeddedImages(filePath, input.output_dir as string | undefined);
       default:
         return { success: false, error: `Unknown document operation: ${op}` };
     }
@@ -643,8 +645,9 @@ export class DocumentExecuteTool implements ITool {
       parameters: {
         type: 'object',
         properties: {
-          operation: { type: 'string', enum: ['read', 'list'], description: 'Operation to perform' },
+          operation: { type: 'string', enum: ['read', 'list', 'extract_images'], description: 'Operation to perform; extract_images returns output paths and Markdown image references for generate_document' },
           path: { type: 'string', description: 'Path to document or directory' },
+          output_dir: { type: 'string', description: 'Directory where embedded DOCX images should be extracted; result data includes markdownRef values' },
         },
         required: ['operation', 'path'],
       },
@@ -655,12 +658,13 @@ export class DocumentExecuteTool implements ITool {
     if (typeof input !== 'object' || input === null) return { valid: false, errors: ['Input must be an object'] };
     const d = input as Record<string, unknown>;
     if (typeof d.operation !== 'string') return { valid: false, errors: ['operation is required'] };
+    if (!['read', 'list', 'extract_images'].includes(d.operation)) return { valid: false, errors: ['operation must be one of: read, list, extract_images'] };
     if (typeof d.path !== 'string') return { valid: false, errors: ['path is required'] };
     return { valid: true };
   }
 
   getMetadata(): IToolMetadata {
-    return { name: this.name, description: this.description, category: 'utility' as ToolCategoryType, keywords: ['document', 'docx', 'xlsx', 'pptx', 'csv', 'office'], priority: 4, modifiesFiles: false, makesNetworkRequests: false };
+    return { name: this.name, description: this.description, category: 'utility' as ToolCategoryType, keywords: ['document', 'docx', 'xlsx', 'pptx', 'csv', 'office', 'embedded images', 'screenshots'], priority: 4, modifiesFiles: true, makesNetworkRequests: false };
   }
 
   isAvailable(): boolean { return true; }

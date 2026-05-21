@@ -37,6 +37,20 @@ export interface SessionWithMessages extends Session {
   messages: Message[];
 }
 
+export interface SessionSearchOptions {
+  projectId?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SessionSearchResult {
+  session: Session;
+  message: Message;
+  snippet: string;
+  score: number;
+}
+
 // ============================================================================
 // Session Repository
 // ============================================================================
@@ -57,13 +71,14 @@ export class SessionRepository {
    */
   createSession(session: Omit<Session, 'created_at' | 'updated_at' | 'total_tokens_in' | 'total_tokens_out' | 'total_cost' | 'message_count' | 'tool_calls_count' | 'is_archived'>): Session {
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (id, project_id, project_path, name, model, metadata)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (id, parent_session_id, project_id, project_path, name, model, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       RETURNING *
     `);
 
     const result = stmt.get(
       session.id,
+      session.parent_session_id || null,
       session.project_id || null,
       session.project_path || null,
       session.name || null,
@@ -272,6 +287,111 @@ export class SessionRepository {
   }
 
   /**
+   * Search session messages through the SQLite FTS5 index.
+   *
+   * This is the Hermes-inspired durable search path: query the database
+   * instead of scanning every JSON session file in Node memory.
+   */
+  searchMessages(query: string, options: SessionSearchOptions = {}): SessionSearchResult[] {
+    const ftsQuery = this.buildFtsQuery(query);
+    if (!ftsQuery) {
+      return [];
+    }
+
+    const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+    const offset = Math.max(options.offset ?? 0, 0);
+    const params: unknown[] = [ftsQuery];
+
+    let sql = `
+      SELECT
+        s.id AS session_id,
+        s.parent_session_id AS session_parent_session_id,
+        s.project_id AS session_project_id,
+        s.project_path AS session_project_path,
+        s.name AS session_name,
+        s.model AS session_model,
+        s.created_at AS session_created_at,
+        s.updated_at AS session_updated_at,
+        s.total_tokens_in AS session_total_tokens_in,
+        s.total_tokens_out AS session_total_tokens_out,
+        s.total_cost AS session_total_cost,
+        s.message_count AS session_message_count,
+        s.tool_calls_count AS session_tool_calls_count,
+        s.is_archived AS session_is_archived,
+        s.metadata AS session_metadata,
+        m.id AS message_id,
+        m.session_id AS message_session_id,
+        m.role AS message_role,
+        m.content AS message_content,
+        m.tool_calls AS message_tool_calls,
+        m.tool_call_id AS message_tool_call_id,
+        m.tokens AS message_tokens,
+        m.created_at AS message_created_at,
+        m.metadata AS message_metadata,
+        snippet(messages_fts, 0, '[', ']', '...', 18) AS snippet,
+        bm25(messages_fts) AS score
+      FROM messages_fts
+      JOIN messages m ON m.id = messages_fts.rowid
+      JOIN sessions s ON s.id = m.session_id
+      WHERE messages_fts MATCH ?
+    `;
+
+    if (options.projectId) {
+      sql += ' AND s.project_id = ?';
+      params.push(options.projectId);
+    }
+
+    if (!options.includeArchived) {
+      sql += ' AND s.is_archived = 0';
+    }
+
+    sql += ' ORDER BY score ASC, m.id DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as SessionSearchRow[];
+
+    return rows.map(row => {
+      const sessionRow = {
+        id: row.session_id,
+        parent_session_id: row.session_parent_session_id ?? undefined,
+        project_id: row.session_project_id ?? undefined,
+        project_path: row.session_project_path ?? undefined,
+        name: row.session_name ?? undefined,
+        model: row.session_model ?? undefined,
+        created_at: row.session_created_at,
+        updated_at: row.session_updated_at,
+        total_tokens_in: row.session_total_tokens_in,
+        total_tokens_out: row.session_total_tokens_out,
+        total_cost: row.session_total_cost,
+        message_count: row.session_message_count,
+        tool_calls_count: row.session_tool_calls_count,
+        is_archived: Boolean(row.session_is_archived),
+        metadata: row.session_metadata,
+      } as Session & { metadata: string | null };
+
+      const messageRow = {
+        id: row.message_id,
+        session_id: row.message_session_id,
+        role: row.message_role,
+        content: row.message_content ?? undefined,
+        tool_calls: row.message_tool_calls,
+        tool_call_id: row.message_tool_call_id ?? undefined,
+        tokens: row.message_tokens,
+        created_at: row.message_created_at,
+        metadata: row.message_metadata,
+      } as Message & { tool_calls: string | null; metadata: string | null };
+
+      return {
+        session: this.deserializeSession(sessionRow),
+        message: this.deserializeMessage(messageRow),
+        snippet: row.snippet ?? row.message_content ?? '',
+        score: row.score,
+      };
+    });
+  }
+
+  /**
    * Delete messages from session
    */
   deleteMessages(sessionId: string, fromId?: number): number {
@@ -411,6 +531,50 @@ export class SessionRepository {
       metadata,
     };
   }
+
+  private buildFtsQuery(query: string): string | null {
+    const tokens = query
+      .trim()
+      .match(/[\p{L}\p{N}_@./:-]+/gu)
+      ?.slice(0, 32);
+
+    if (!tokens?.length) {
+      return null;
+    }
+
+    return tokens
+      .map(token => `"${token.replace(/"/g, '""')}"`)
+      .join(' AND ');
+  }
+}
+
+interface SessionSearchRow {
+  session_id: string;
+  session_parent_session_id: string | null;
+  session_project_id: string | null;
+  session_project_path: string | null;
+  session_name: string | null;
+  session_model: string | null;
+  session_created_at: string;
+  session_updated_at: string;
+  session_total_tokens_in: number;
+  session_total_tokens_out: number;
+  session_total_cost: number;
+  session_message_count: number;
+  session_tool_calls_count: number;
+  session_is_archived: boolean | number;
+  session_metadata: string | null;
+  message_id: number;
+  message_session_id: string;
+  message_role: Message['role'];
+  message_content: string | null;
+  message_tool_calls: string | null;
+  message_tool_call_id: string | null;
+  message_tokens: number;
+  message_created_at: string;
+  message_metadata: string | null;
+  snippet: string | null;
+  score: number;
 }
 
 // ============================================================================

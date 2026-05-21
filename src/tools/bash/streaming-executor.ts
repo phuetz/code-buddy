@@ -12,6 +12,7 @@ import { validateCommand as validateCommandSafety } from '../../utils/input-vali
 import { validateCommand } from './command-validator.js';
 import { getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
+import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -67,23 +68,12 @@ export async function* executeStreaming(
   // Spawn the process
   const isWindows = process.platform === 'win32';
   const policyEnv = getShellEnvPolicy().buildEnv(getFilteredEnv());
-  const controlledEnv: Record<string, string> = {
+  const controlledEnv: NodeJS.ProcessEnv = {
     ...policyEnv,
-    HISTFILE: '/dev/null',
-    HISTSIZE: '0',
-    CI: 'true',
-    NO_COLOR: '1',
-    TERM: 'dumb',
-    NO_TTY: '1',
-    GIT_TERMINAL_PROMPT: '0',
-    NPM_CONFIG_YES: 'true',
-    LC_ALL: 'C.UTF-8',
-    LANG: 'C.UTF-8',
-    PYTHONIOENCODING: 'utf-8',
-    DEBIAN_FRONTEND: 'noninteractive',
+    ...CONTROLLED_SUBPROCESS_ENV,
   };
 
-  const proc = spawn('bash', ['-c', command], {
+  const proc = spawn('bash', ['-c', `${buildBashEnvPrelude()}\n${command}`], {
     shell: false,
     cwd: deps.getCurrentDirectory(),
     env: controlledEnv,

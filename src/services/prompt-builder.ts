@@ -23,6 +23,12 @@ import { PromptCacheManager } from "../optimization/prompt-cache.js";
 import { MoltbotHooksManager } from "../hooks/moltbot-hooks.js";
 import { getModelToolConfig } from "../config/model-tools.js";
 import { classifyQuery, type QueryComplexity } from "../agent/execution/query-classifier.js";
+import {
+  filterToolNames,
+  getToolFilter,
+  isToolNameAllowed,
+  type ToolFilterConfig,
+} from "../utils/tool-filter.js";
 
 export interface PromptBuilderConfig {
   yoloMode: boolean;
@@ -70,6 +76,37 @@ const ALL_BLOCKS: Required<BuildOptions> = {
   includeVariation: true,
 };
 
+const EXTERNAL_PROMPT_MANAGER_TOOLS = [
+  'view_file',
+  'str_replace_editor',
+  'create_file',
+  'search',
+  'bash',
+  'todo',
+  'reason',
+] as const;
+
+function hasActiveToolFilter(config: ToolFilterConfig): boolean {
+  return config.enabledPatterns.length > 0 || config.disabledPatterns.length > 0;
+}
+
+function buildActiveToolFilterDirective(config: ToolFilterConfig): string | null {
+  if (!hasActiveToolFilter(config)) {
+    return null;
+  }
+
+  const enabled = config.enabledPatterns.length > 0 ? config.enabledPatterns.join(', ') : 'all';
+  const disabled = config.disabledPatterns.length > 0 ? config.disabledPatterns.join(', ') : 'none';
+
+  return `<active_tool_filter>
+The actual model-facing tool schema for this turn has an active filter.
+- Enabled patterns: ${enabled}
+- Disabled patterns: ${disabled}
+- Trust the schema over generic prompt text. If a tool name appears elsewhere in this prompt but is absent from the schema, that instruction is inactive.
+- Do not claim unavailable tools exist, suggest calling them, or emit calls for them.
+</active_tool_filter>`;
+}
+
 export class PromptBuilder {
   constructor(
     private config: PromptBuilderConfig,
@@ -95,10 +132,19 @@ export class PromptBuilder {
     // OpenAI tool_calls support), the auto-memory + lessons directives just
     // confuse the LLM into hallucinating JSON tool calls. Force-off here.
     const toolCfg = getModelToolConfig(modelName);
+    const activeToolFilter = getToolFilter();
     if (toolCfg.supportsToolCalls === false) {
       gates.includeMemoryDirective = false;
       gates.includeLessonsDirective = false;
       gates.includeWorkflowRules = false;
+    }
+    if (!isToolNameAllowed('remember', activeToolFilter)) {
+      gates.includeMemoryDirective = false;
+    }
+    if (!['lessons_add', 'lessons_search', 'lessons_graph'].every(toolName =>
+      isToolNameAllowed(toolName, activeToolFilter)
+    )) {
+      gates.includeLessonsDirective = false;
     }
     try {
       let systemPrompt: string;
@@ -169,7 +215,7 @@ export class PromptBuilder {
           userInstructions: customInstructions || undefined,
           cwd: this.config.cwd,
           modelName,
-          tools: ['view_file', 'str_replace_editor', 'create_file', 'search', 'bash', 'todo', 'reason'],
+          tools: filterToolNames(EXTERNAL_PROMPT_MANAGER_TOOLS, activeToolFilter),
           includeMemory: !!memoryContext,
           memoryContext,
         });
@@ -501,7 +547,9 @@ Output formatting discipline:
       if (gates.includeWorkflowRules) {
         try {
           const { getWorkflowRulesBlock } = await import('../prompts/workflow-rules.js');
-          systemPrompt += '\n\n' + getWorkflowRulesBlock();
+          systemPrompt += '\n\n' + getWorkflowRulesBlock({
+            isToolAvailable: toolName => isToolNameAllowed(toolName, activeToolFilter),
+          });
           logger.debug('Injected workflow orchestration rules into system prompt');
         } catch (err) {
           logger.warn('Failed to inject workflow rules', { error: getErrorMessage(err) });
@@ -527,6 +575,15 @@ Output formatting discipline:
         } catch {
           // non-critical — proceed with original prompt
         }
+      }
+
+      const activeToolFilterDirective = buildActiveToolFilterDirective(activeToolFilter);
+      if (activeToolFilterDirective) {
+        systemPrompt += '\n\n' + activeToolFilterDirective;
+        logger.debug('Injected active tool filter directive into system prompt', {
+          enabledPatterns: activeToolFilter.enabledPatterns,
+          disabledPatterns: activeToolFilter.disabledPatterns,
+        });
       }
 
       // Truncate system prompt if it exceeds the model's context budget.

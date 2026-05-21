@@ -53,6 +53,7 @@ export class CodeBuddyAgent extends BaseAgent {
   private codebuddyClient: CodeBuddyClient;
   private toolHandler: ToolHandler;
   private promptBuilder: PromptBuilder;
+  private customSystemPromptOverride: string | null = null;
   private streamingHandler: StreamingHandler;
   private executor: AgentExecutor;
 
@@ -248,6 +249,9 @@ export class CodeBuddyAgent extends BaseAgent {
       // into hallucinating JSON tool calls.
       rebuildSystemPromptForQuery: async (msg: string) => {
         try {
+          if (this.customSystemPromptOverride) {
+            return this.customSystemPromptOverride;
+          }
           if (!this.promptBuilder) return null;
           const customInstructions = loadCustomInstructions();
           return await this.promptBuilder.buildForQuery(
@@ -1011,6 +1015,17 @@ export class CodeBuddyAgent extends BaseAgent {
     return await this.toolHandler.bash.execute(command);
   }
 
+  async executeToolByName(name: string, parameters: Record<string, unknown> = {}): Promise<ToolResult> {
+    return await this.toolHandler.executeTool({
+      id: `server_tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: 'function',
+      function: {
+        name,
+        arguments: JSON.stringify(parameters),
+      },
+    });
+  }
+
   getCurrentModel(): string {
     return this.codebuddyClient.getCurrentModel();
   }
@@ -1217,6 +1232,7 @@ export class CodeBuddyAgent extends BaseAgent {
    * @param prompt - The custom system prompt content
    */
   setSystemPrompt(prompt: string): void {
+    this.customSystemPromptOverride = prompt;
     // Find and update the system message
     const systemMessageIndex = this.messages.findIndex(m => m.role === 'system');
     if (systemMessageIndex >= 0) {

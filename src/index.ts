@@ -14,8 +14,11 @@ import { globalAgent as httpsGlobalAgent } from 'node:https';
 // Types for dynamically imported modules
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
+import type { CustomAgentConfig } from "./agent/custom/custom-agent-loader.js";
 
 import { fileURLToPath } from 'url';
+import { resolveHeadlessOutputFormat } from './cli/headless-options.js';
+import { resolveCliModelList } from './cli/model-listing.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -289,7 +292,6 @@ async function ensureUserSettingsDirectory(): Promise<void> {
 import { detectProviderFromEnv, type DetectedProvider } from './utils/provider-detector.js';
 
 // Legacy inline implementation kept commented for git-archaeology only.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function _detectProviderFromEnvLegacy(): DetectedProvider | null {
   // Priority order (mirror of src/fleet/peer-chat-client-factory.ts —
   // explicit user intent first, then local, then cloud env keys):
@@ -328,8 +330,10 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
           };
         }
       }
-    } catch {
-      // Malformed auth file or unexpected — fall through to other providers.
+    } catch (err) {
+      logger.debug('Ignoring unreadable ChatGPT OAuth credentials during provider detection', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -768,6 +772,43 @@ async function finalizeHeadlessRun(code: number): Promise<void> {
   return;
 }
 
+async function loadCustomAgentForCli(
+  agentName: string | undefined,
+  announce: boolean,
+): Promise<CustomAgentConfig | null> {
+  if (!agentName) return null;
+
+  const { getCustomAgentLoader } = await import("./agent/custom/custom-agent-loader.js");
+  const loader = getCustomAgentLoader();
+  const agentConfig = loader.getAgent(agentName);
+
+  if (!agentConfig) {
+    logger.error(`Agent not found: ${agentName}`);
+    const agents = loader.listAgents();
+    if (agents.length > 0) {
+      cli.error('\nAvailable agents:');
+      agents.forEach(a => cli.error(`   - ${a.id}`));
+    }
+    process.exit(1);
+  }
+
+  if (announce) {
+    cli.info(`Using agent: ${agentConfig.name}`);
+  }
+  const { setActiveCustomAgentRuntime } = await import('./agent/custom/custom-agent-runtime.js');
+  setActiveCustomAgentRuntime(agentConfig);
+  return agentConfig;
+}
+
+async function applyCustomAgentToolFilter(agentConfig: CustomAgentConfig): Promise<void> {
+  const { hasCustomAgentToolFilter, buildCustomAgentToolFilter } = await import('./agent/custom/custom-agent-tool-filter.js');
+  if (!hasCustomAgentToolFilter(agentConfig)) return;
+
+  const { getToolFilter, setToolFilter } = await import('./utils/tool-filter.js');
+  const { getBuiltinToolNames } = await import('./codebuddy/tools.js');
+  setToolFilter(buildCustomAgentToolFilter(agentConfig, getToolFilter(), getBuiltinToolNames()));
+}
+
 // Headless mode processing function
 async function processPromptHeadless(
   prompt: string,
@@ -777,14 +818,27 @@ async function processPromptHeadless(
   maxToolRounds?: number,
   selfHealEnabled: boolean = true,
   outputFormat: string = 'json',
-  outputSchemaPath?: string
+  outputSchemaPath?: string,
+  agentName?: string,
 ): Promise<void> {
   const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
+  const previousHeadless = process.env.CODEBUDDY_HEADLESS;
   process.env.CODEBUDDY_DISABLE_MCP = 'true';
+  process.env.CODEBUDDY_HEADLESS = 'true';
 
   try {
+    const customAgentConfig = await loadCustomAgentForCli(agentName, false);
+    const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
-    const agent = new CodeBuddyAgent(apiKey, baseURL, model, maxToolRounds);
+    const agent = new CodeBuddyAgent(apiKey, baseURL, modelToUse, maxToolRounds);
+
+    await agent.systemPromptReady;
+    if (customAgentConfig?.systemPrompt) {
+      agent.setSystemPrompt(customAgentConfig.systemPrompt);
+    }
+    if (customAgentConfig) {
+      await applyCustomAgentToolFilter(customAgentConfig);
+    }
 
     // Configure self-healing
     if (!selfHealEnabled) {
@@ -802,7 +856,7 @@ async function processPromptHeadless(
       const { getInteractionLogger } = await import('./logging/interaction-logger.js');
       const il = getInteractionLogger();
       il.startSession({
-        model: model || 'unknown',
+        model: modelToUse || 'unknown',
         provider: baseURL?.includes('localhost') ? 'local' : 'xai',
         cwd: process.cwd(),
         tags: ['headless'],
@@ -893,7 +947,7 @@ async function processPromptHeadless(
 
     // Gather cost and model info from the agent
     const sessionCost = agent.getSessionCost();
-    const usedModel = model || process.env.GROK_MODEL || 'unknown';
+    const usedModel = modelToUse || process.env.GROK_MODEL || 'unknown';
 
     // Output in the requested format
     const format = outputFormat.toLowerCase();
@@ -950,6 +1004,11 @@ async function processPromptHeadless(
       delete process.env.CODEBUDDY_DISABLE_MCP;
     } else {
       process.env.CODEBUDDY_DISABLE_MCP = previousDisableMCP;
+    }
+    if (previousHeadless === undefined) {
+      delete process.env.CODEBUDDY_HEADLESS;
+    } else {
+      process.env.CODEBUDDY_HEADLESS = previousHeadless;
     }
   }
 }
@@ -1047,6 +1106,10 @@ program
   .option(
     "--resume <sessionId>",
     "resume a specific session by ID (supports partial matching)"
+  )
+  .option(
+    "--search-sessions <query>",
+    "search saved sessions by content"
   )
   .option(
     "--max-price <dollars>",
@@ -1212,21 +1275,22 @@ program
 
     // Handle --list-models flag
     if (options.listModels) {
-      const baseURL = options.baseUrl || await loadBaseURL();
+      const detected = options.baseUrl ? null : await getDetectedProvider();
+      const baseURL = options.baseUrl || detected?.baseURL || await loadBaseURL();
       try {
-        const response = await fetch(`${baseURL}/models`);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        const data = await response.json() as { data?: Array<{ id: string; owned_by?: string }> };
+        const { models } = await resolveCliModelList({
+          baseURL,
+          provider: detected?.provider,
+          defaultModel: detected?.defaultModel || process.env.CHATGPT_MODEL,
+        });
 
         // Pipeable listing: stdout so `buddy --list-models | grep ...` works.
         cli.stdout("📋 Available models:\n");
-        if (data.data && data.data.length > 0) {
-          data.data.forEach((model: { id: string; owned_by?: string }) => {
+        if (models.length > 0) {
+          models.forEach((model: { id: string; owned_by?: string }) => {
             cli.stdout(`  • ${model.id}`);
           });
-          cli.stdout(`\n  Total: ${data.data.length} model(s)`);
+          cli.stdout(`\n  Total: ${models.length} model(s)`);
         } else {
           cli.stdout("  (no models found)");
         }
@@ -1272,7 +1336,7 @@ program
       const agents = loader.listAgents();
 
       // Pipeable listing (see --list-models).
-      cli.stdout("📋 Available custom agents:\n");
+      cli.stdout("📋 Available agents:\n");
 
       if (agents.length === 0) {
         cli.stdout("  (no custom agents found)");
@@ -1290,6 +1354,13 @@ program
       }
 
       cli.info("\n💡 Usage: codebuddy --agent <id>");
+      process.exit(0);
+    }
+
+    // Handle --search-sessions flag
+    if (options.searchSessions) {
+      const { searchSessions } = await import("./cli/session-commands.js");
+      await searchSessions(options.searchSessions);
       process.exit(0);
     }
 
@@ -1445,7 +1516,7 @@ program
         const { getSessionStore } = await import("./persistence/session-store.js");
         const sessionStore = getSessionStore();
         sessionStore.setEphemeral(true);
-        cli.error("Ephemeral mode: ENABLED (session will not be saved)");
+        cli.info("Ephemeral mode: ENABLED (session will not be saved)");
       }
 
       // Handle --allowed-tools / --disallowed-tools (natively --allowedTools / --disallowedTools)
@@ -1543,8 +1614,9 @@ program
           model,
           maxToolRounds,
           options.selfHeal !== false,
-          options.output || options.outputFormat || 'json',
-          options.outputSchema
+          resolveHeadlessOutputFormat(options),
+          options.outputSchema,
+          options.agent
         );
         await finalizeHeadlessRun(0);
         return;
@@ -1582,6 +1654,8 @@ program
 
         customAgentConfig = agentConfig;
         cli.info(`🤖 Using agent: ${agentConfig.name}`);
+        const { setActiveCustomAgentRuntime } = await import('./agent/custom/custom-agent-runtime.js');
+        setActiveCustomAgentRuntime(agentConfig);
 
         // Override model if specified in agent config
         if (agentConfig.model) {
@@ -1595,7 +1669,32 @@ program
 
       // Apply custom agent system prompt if configured
       if (customAgentConfig?.systemPrompt) {
+        await agent.systemPromptReady;
         agent.setSystemPrompt(customAgentConfig.systemPrompt);
+      }
+
+      // Apply custom-agent tool filters after CLI-level filters have
+      // been parsed. Explicit CLI allowlists win; agent disabledTools
+      // are added as a defensive blacklist.
+      if (customAgentConfig) {
+        const { hasCustomAgentToolFilter, buildCustomAgentToolFilter } = await import('./agent/custom/custom-agent-tool-filter.js');
+        if (hasCustomAgentToolFilter(customAgentConfig)) {
+          const { getToolFilter, setToolFilter } = await import('./utils/tool-filter.js');
+          const { getBuiltinToolNames } = await import('./codebuddy/tools.js');
+          const filter = buildCustomAgentToolFilter(
+            customAgentConfig,
+            getToolFilter(),
+            getBuiltinToolNames(),
+          );
+          setToolFilter(filter);
+          const disabled = filter.disabledPatterns.length
+            ? filter.disabledPatterns.join(',')
+            : 'none';
+          const enabled = filter.enabledPatterns.length
+            ? filter.enabledPatterns.join(',')
+            : 'all';
+          cli.info(`Agent tool filter: allowed=${enabled}; disabled=${disabled}`);
+        }
       }
 
       // Enable auto-observation for computer-use agents
@@ -2257,12 +2356,6 @@ addLazyCommandGroup(program, 'hub', 'Skills marketplace (search, install, publis
   registerHubCommands(program);
 });
 
-// Hermes — native Hermes-inspired Code Buddy agent profile diagnostics
-addLazyCommandGroup(program, 'hermes', 'Inspect the native Hermes-inspired Code Buddy agent profile', async () => {
-  const { registerHermesCommands } = await import('./commands/cli/hermes-commands.js');
-  registerHermesCommands(program);
-});
-
 addLazyCommandGroup(program, 'device', 'Manage paired device nodes (SSH, ADB, local)', async () => {
   const { registerDeviceCommands } = await import('./commands/cli/device-commands.js');
   registerDeviceCommands(program);
@@ -2281,6 +2374,31 @@ addLazyCommandGroup(program, 'groups', 'Manage group chat security', async () =>
 addLazyCommandGroup(program, 'auth-profile', 'Manage authentication profiles (API key rotation)', async () => {
   const { registerAuthProfileCommands } = await import('./commands/cli/native-engine-commands.js');
   registerAuthProfileCommands(program);
+});
+
+addLazyCommandGroup(program, 'fleet', 'Inspect Fleet routing and dispatch policy decisions', async () => {
+  const { registerFleetCommands } = await import('./commands/cli/fleet-commands.js');
+  registerFleetCommands(program);
+});
+
+addLazyCommandGroup(program, 'hermes', 'Inspect the native Hermes-inspired Code Buddy agent profile', async () => {
+  const { registerHermesCommands } = await import('./commands/cli/hermes-commands.js');
+  registerHermesCommands(program);
+});
+
+addLazyCommandGroup(program, 'tools', 'Inspect tool profiles and effective tool availability', async () => {
+  const { registerToolsCommands } = await import('./commands/cli/tools-commands.js');
+  registerToolsCommands(program);
+});
+
+addLazyCommandGroup(program, 'autonomous-code', 'Run a guarded Agentic Coding Cell task contract', async () => {
+  const { registerAutonomousCodeCommand } = await import('./commands/cli/autonomous-code-command.js');
+  registerAutonomousCodeCommand(program);
+});
+
+addLazyCommandGroup(program, 'session', 'Manage saved sessions', async () => {
+  const { registerSessionCommands } = await import('./cli/session-commands.js');
+  registerSessionCommands(program);
 });
 
 addLazyCommandGroup(program, 'config', 'Show environment variable configuration and validation', async () => {

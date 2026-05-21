@@ -11,6 +11,7 @@ import { asyncHandler } from '../middleware/index.js';
 import { getRequestStats } from '../middleware/logging.js';
 import { getDatabaseManager } from '../../database/database-manager.js';
 import { getConnectionStats } from '../websocket/handler.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import type { ServerStats } from '../types.js';
 
 const require = createRequire(import.meta.url);
@@ -82,6 +83,10 @@ function checkDatabase(): 'ok' | 'error' {
  *  - OPENAI_BASE_URL pointing at a local Ollama / LM-Studio (no key needed)
  */
 function checkApi(): 'ok' | 'error' {
+  if (detectProviderFromEnv()) {
+    return 'ok';
+  }
+
   if (
     process.env.GROK_API_KEY ||
     process.env.XAI_API_KEY ||
@@ -104,6 +109,25 @@ function checkApi(): 'ok' | 'error' {
 function checkMemory(): 'ok' | 'error' {
   const memUsage = process.memoryUsage();
   return memUsage.heapUsed < MEMORY_THRESHOLD ? 'ok' : 'error';
+}
+
+function getConfiguredProviderStatus(): { ready: boolean; message: string } {
+  const provider = detectProviderFromEnv();
+  if (!provider) {
+    return {
+      ready: false,
+      message: 'No LLM provider configured',
+    };
+  }
+
+  return {
+    ready: true,
+    message: `Provider configured: ${provider.provider}`,
+  };
+}
+
+function getGrokModelsUrl(baseURL: string): string {
+  return `${baseURL.replace(/\/+$/, '')}/models`;
 }
 
 /**
@@ -242,12 +266,8 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const checks: Record<string, { ready: boolean; message?: string; latencyMs?: number }> = {};
 
-    // Check API key configuration
-    const apiKeyConfigured = !!process.env.GROK_API_KEY;
-    checks.apiKey = {
-      ready: apiKeyConfigured,
-      message: apiKeyConfigured ? 'API key configured' : 'GROK_API_KEY not set',
-    };
+    const provider = detectProviderFromEnv();
+    checks.provider = getConfiguredProviderStatus();
 
     // Check database connection
     const dbStart = Date.now();
@@ -269,37 +289,38 @@ router.get(
         : `Memory pressure (${Math.round(memUsage.heapUsed / 1024 / 1024)}MB exceeds threshold)`,
     };
 
-    // Check Grok API connectivity (with timeout)
-    const apiStart = Date.now();
-    try {
-      const response = await fetch('https://api.x.ai/v1/models', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${process.env.GROK_API_KEY || ''}`,
-        },
-        signal: AbortSignal.timeout(3000),
-      });
-      const apiLatency = Date.now() - apiStart;
+    if (provider?.provider === 'grok') {
+      const apiStart = Date.now();
+      try {
+        const response = await fetch(getGrokModelsUrl(provider.baseURL), {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${provider.apiKey}`,
+          },
+          signal: AbortSignal.timeout(3000),
+        });
+        const apiLatency = Date.now() - apiStart;
 
-      if (response.ok) {
-        updateApiHeartbeat(apiLatency);
+        if (response.ok) {
+          updateApiHeartbeat(apiLatency);
+        }
+
+        checks.grokApi = {
+          ready: response.ok,
+          message: response.ok ? 'Grok API reachable' : `Grok API returned ${response.status}`,
+          latencyMs: apiLatency,
+        };
+      } catch (error) {
+        checks.grokApi = {
+          ready: false,
+          message: `Grok API unreachable: ${error instanceof Error ? error.message : String(error)}`,
+          latencyMs: Date.now() - apiStart,
+        };
       }
-
-      checks.grokApi = {
-        ready: response.ok,
-        message: response.ok ? 'Grok API reachable' : `Grok API returned ${response.status}`,
-        latencyMs: apiLatency,
-      };
-    } catch (error) {
-      checks.grokApi = {
-        ready: false,
-        message: `Grok API unreachable: ${error instanceof Error ? error.message : String(error)}`,
-        latencyMs: Date.now() - apiStart,
-      };
     }
 
     const allPassing = Object.values(checks).every((c) => c.ready);
-    const criticalPassing = checks.apiKey.ready && checks.memory.ready;
+    const criticalPassing = checks.provider.ready && checks.database.ready && checks.memory.ready;
 
     const response = {
       ready: criticalPassing,
@@ -588,12 +609,13 @@ export function createK8sHealthAliases(): Router {
 
   // /readyz → same as GET /api/health/ready (lightweight)
   k8s.get('/readyz', asyncHandler(async (_req: Request, res: Response) => {
-    const apiKeyOk = !!process.env.GROK_API_KEY;
+    const providerOk = getConfiguredProviderStatus().ready;
+    const databaseOk = checkDatabase() === 'ok';
     const memOk = process.memoryUsage().heapUsed < 1024 * 1024 * 1024;
-    const ready = apiKeyOk && memOk;
+    const ready = providerOk && databaseOk && memOk;
     res.status(ready ? 200 : 503).json({
       ready,
-      checks: { apiKey: apiKeyOk, memory: memOk },
+      checks: { provider: providerOk, database: databaseOk, memory: memOk },
     });
   }));
 

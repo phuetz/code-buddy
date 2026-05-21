@@ -120,9 +120,15 @@ export const ENV_SCHEMA: EnvVarDef[] = [
     category: 'core',
   },
   {
-    name: 'GROK_HOME',
+    name: 'CODEBUDDY_HOME',
     type: 'string',
     description: 'Custom home directory for Code Buddy config/data',
+    category: 'core',
+  },
+  {
+    name: 'GROK_HOME',
+    type: 'string',
+    description: 'Legacy alias for CODEBUDDY_HOME from the historical grok-cli name',
     category: 'core',
   },
   {

@@ -5,7 +5,7 @@
  * and providing status tracking.
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import { logger } from '../utils/logger.js';
 
 export interface BackgroundTask {
@@ -18,6 +18,25 @@ export interface BackgroundTask {
 }
 
 const MAX_OUTPUT_BYTES = 1024 * 1024; // 1MB
+let hasBashCache: boolean | null = null;
+
+function hasUsableBash(): boolean {
+  if (hasBashCache !== null) {
+    return hasBashCache;
+  }
+
+  try {
+    const result = spawnSync('bash', ['--version'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    hasBashCache = result.status === 0;
+  } catch {
+    hasBashCache = false;
+  }
+
+  return hasBashCache;
+}
 
 /**
  * BackgroundTaskManager spawns and tracks background shell commands.
@@ -46,8 +65,9 @@ export class BackgroundTaskManager {
     this.tasks.set(id, task);
 
     const isWindows = process.platform === 'win32';
-    const shell = isWindows ? (process.env.COMSPEC || 'cmd.exe') : 'sh';
-    const shellArgs = isWindows ? ['/d', '/s', '/c', command] : ['-c', command];
+    const useBash = !isWindows || hasUsableBash();
+    const shell = useBash ? 'bash' : (process.env.COMSPEC || 'cmd.exe');
+    const shellArgs = useBash ? ['-c', command] : ['/d', '/s', '/c', command];
 
     const child = spawn(shell, shellArgs, {
       detached: !isWindows,

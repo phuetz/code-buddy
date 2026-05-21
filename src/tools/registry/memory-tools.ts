@@ -10,6 +10,7 @@
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
 import { getMemoryManager, type MemoryCategory } from '../../memory/persistent-memory.js';
+import { executeHermesLifecycleHook } from '../../hooks/hermes-lifecycle-hooks.js';
 
 // ============================================================================
 // remember
@@ -23,12 +24,39 @@ export class RememberTool implements ITool {
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     const mm = getMemoryManager();
 
-    const key = input.key as string;
-    const value = input.value as string;
-    const scope = (input.scope as 'project' | 'user') ?? 'project';
-    const category = (input.category as MemoryCategory) ?? 'custom';
+    let key = input.key as string;
+    let value = input.value as string;
+    let scope = (input.scope as 'project' | 'user') ?? 'project';
+    let category = (input.category as MemoryCategory) ?? 'custom';
 
     try {
+      const hookResult = await executeHermesLifecycleHook(process.cwd(), 'before_memory_write', {
+        toolName: this.name,
+        toolInput: { key, value, scope, category },
+        memoryKey: key,
+        memoryValue: value,
+        memoryScope: scope,
+        memoryCategory: category,
+      });
+
+      if (!hookResult.allowed) {
+        return {
+          success: false,
+          error: hookResult.feedback ?? 'Memory write blocked by BeforeMemoryWrite hook.',
+        };
+      }
+
+      if (hookResult.updatedInput) {
+        key = typeof hookResult.updatedInput.key === 'string' ? hookResult.updatedInput.key : key;
+        value = typeof hookResult.updatedInput.value === 'string' ? hookResult.updatedInput.value : value;
+        scope = hookResult.updatedInput.scope === 'user' || hookResult.updatedInput.scope === 'project'
+          ? hookResult.updatedInput.scope
+          : scope;
+        category = typeof hookResult.updatedInput.category === 'string'
+          ? hookResult.updatedInput.category as MemoryCategory
+          : category;
+      }
+
       await mm.remember(key, value, { scope, category });
       return {
         success: true,

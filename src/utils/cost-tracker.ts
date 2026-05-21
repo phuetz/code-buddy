@@ -10,18 +10,16 @@ import { getAnalyticsRepository, AnalyticsRepository } from '../database/reposit
  * ChatGPT Plus/Pro plan, NOT per token, so cost tracking should report
  * 0 to avoid showing fictitious USD spend in dashboards.
  *
- * Conservative match — only slugs that the OpenAI API platform does
- * NOT expose. `gpt-5` and `gpt-5.1` can be hit via API key auth too,
- * so we don't zero them out here. The caller paths that route through
+ * Conservative match for the models this app routes through ChatGPT
+ * OAuth by default. The caller paths that route through
  * `ChatGptResponsesProvider` get cost=0 either way because the backend
  * doesn't return token usage in the SSE stream.
- *
- * Patrice's case: `gpt-5.5` is Codex-only, so this works for him today.
  */
 function isChatGptSubscriptionModel(model: string): boolean {
   if (!model) return false;
   const m = model.toLowerCase();
   return (
+    m === 'gpt-5.2' ||
     m === 'gpt-5.5' ||
     m.startsWith('gpt-5.5-') ||
     m.includes('-codex') ||
@@ -176,7 +174,7 @@ export class CostTracker extends EventEmitter {
   /**
    * Calculate cost for token usage.
    *
-   * Returns 0 for ChatGPT subscription auth (`gpt-5.5*`, `gpt-5*-codex`,
+   * Returns 0 for ChatGPT subscription auth (`gpt-5.2`, `gpt-5.5*`, `gpt-5*-codex`,
    * etc. served via `chatgpt.com/backend-api/codex`) — those calls are
    * billed against the user's flat-fee ChatGPT Plus/Pro plan, NOT a
    * per-token API platform balance. Reporting a fictitious USD cost is

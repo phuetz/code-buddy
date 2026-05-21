@@ -782,12 +782,12 @@ const memoryCommands: SlashCommand[] = [
   },
   {
     name: 'lessons',
-    description: 'Manage lessons learned (list|add <content>|search <query>|stats)',
+    description: 'Manage lessons learned (list|add <content>|search <query>|graph|stats)',
     prompt: '__LESSONS__',
     filePath: '',
     isBuiltin: true,
     arguments: [
-      { name: 'action', description: 'list, add <content>, search <query>, stats', required: false }
+      { name: 'action', description: 'list, add <content>, search <query>, graph, stats', required: false }
     ]
   },
   {

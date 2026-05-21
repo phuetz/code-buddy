@@ -34,6 +34,7 @@ import { parseBashCommand } from '../../security/bash-parser.js';
 import { SafeBinariesChecker } from '../../security/safe-binaries.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { auditLogger } from '../../security/audit-logger.js';
+import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 
 export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
@@ -122,28 +123,9 @@ export class BashTool implements Disposable {
       const policyEnv = getShellEnvPolicy().buildEnv(filteredEnv);
 
       // Controlled environment variables for deterministic output
-      const controlledEnv: Record<string, string> = {
+      const controlledEnv: NodeJS.ProcessEnv = {
         ...policyEnv,
-        // Disable history to prevent command logging
-        HISTFILE: '/dev/null',
-        HISTSIZE: '0',
-        // CI mode for consistent behavior
-        CI: 'true',
-        // Disable color output for clean parsing
-        NO_COLOR: '1',
-        TERM: 'dumb',
-        // Disable TTY for non-interactive mode
-        NO_TTY: '1',
-        // Disable interactive features
-        GIT_TERMINAL_PROMPT: '0',
-        NPM_CONFIG_YES: 'true',
-        YARN_ENABLE_PROGRESS_BARS: 'false',
-        // Locale settings for consistent encoding
-        LC_ALL: 'C.UTF-8',
-        LANG: 'C.UTF-8',
-        PYTHONIOENCODING: 'utf-8',
-        // Force non-interactive for common tools
-        DEBIAN_FRONTEND: 'noninteractive',
+        ...CONTROLLED_SUBPROCESS_ENV,
       };
 
       const spawnOptions: SpawnOptions = {
@@ -158,7 +140,7 @@ export class BashTool implements Disposable {
         stdio: ['ignore', 'pipe', 'pipe'],
       };
 
-      const proc = spawn('bash', ['-c', command], spawnOptions);
+      const proc = spawn('bash', ['-c', `${buildBashEnvPrelude()}\n${command}`], spawnOptions);
       this.runningProcesses.add(proc);
 
       // Store process group ID for cleanup
@@ -540,7 +522,10 @@ export class BashTool implements Disposable {
 
     const [cmd, ...args] = argv;
     const workDir = cwd ?? this.currentDirectory;
-    const policyEnv = getShellEnvPolicy().buildEnv(getFilteredEnv());
+    const policyEnv = {
+      ...getShellEnvPolicy().buildEnv(getFilteredEnv()),
+      ...CONTROLLED_SUBPROCESS_ENV,
+    };
 
     return new Promise((resolve) => {
       let stdout = '';

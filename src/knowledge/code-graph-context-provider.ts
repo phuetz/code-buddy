@@ -376,6 +376,12 @@ let _embeddingIndexBuilding = false;
  * Non-blocking: if it fails, exact-match-only mode continues.
  */
 export function warmEmbeddingIndex(graph: KnowledgeGraph): void {
+  if (
+    process.env.CODEBUDDY_HEADLESS === 'true' ||
+    process.env.CODEBUDDY_DISABLE_BACKGROUND_EMBEDDINGS === 'true'
+  ) {
+    return;
+  }
   if (_embeddingIndex || _embeddingIndexBuilding) return;
   if (graph.getStats().tripleCount < 10) return; // too small to be useful
 

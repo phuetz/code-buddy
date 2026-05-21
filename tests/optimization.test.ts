@@ -632,6 +632,18 @@ describe('Latency Optimizer', () => {
       expect(measurement!.duration).toBeGreaterThanOrEqual(0);
     });
 
+    it('should not keep short-lived CLI processes alive', () => {
+      const interval = (optimizer as unknown as {
+        cleanupIntervalId: { hasRef?: () => boolean };
+      }).cleanupIntervalId;
+
+      if (typeof interval.hasRef === 'function') {
+        expect(interval.hasRef()).toBe(false);
+      } else {
+        expect(interval).toBeDefined();
+      }
+    });
+
     it('should determine if target was met', async () => {
       const id = optimizer.startOperation('file_read');
       // Quick operation

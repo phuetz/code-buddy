@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { validateOutputSchema } from '../../src/utils/output-schema-validator';
 import { SessionStore } from '../../src/persistence/session-store';
+import { resolveHeadlessOutputFormat } from '../../src/cli/headless-options';
 
 // ============================================================================
 // Feature 1: --output-schema validation
@@ -179,6 +180,17 @@ describe('Output Schema Validator', () => {
     expect(validateOutputSchema(50, schemaPath).valid).toBe(true);
     expect(validateOutputSchema(-1, schemaPath).valid).toBe(false);
     expect(validateOutputSchema(101, schemaPath).valid).toBe(false);
+  });
+});
+
+describe('Headless output option resolution', () => {
+  it('prefers --output-format over the legacy --output default', () => {
+    expect(resolveHeadlessOutputFormat({ output: 'json', outputFormat: 'text' })).toBe('text');
+  });
+
+  it('falls back to --output and then json', () => {
+    expect(resolveHeadlessOutputFormat({ output: 'stream-json' })).toBe('stream-json');
+    expect(resolveHeadlessOutputFormat({})).toBe('json');
   });
 });
 

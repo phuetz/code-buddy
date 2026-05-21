@@ -82,6 +82,45 @@ Add tools via three mechanisms:
 | 4 | Serper | `SERPER_API_KEY` | Google Search results |
 | 5 | DuckDuckGo | None | Free fallback |
 
+## Browser Automation Proof Loop
+
+The `browser` tool is Playwright-backed and now exposes a small
+Stagehand-inspired proof loop without adding a new runtime dependency:
+
+- `observe` captures an accessibility snapshot with actionable refs and
+  surrounding page context.
+- `extract` returns a compact URL/title/headings/actions/links/text
+  readout, optionally filtered by `query`, `text` or `name`.
+- `assert_text` checks that expected text is actually present on the page
+  and returns an explicit pass/fail result for automated tests.
+
+Use this shape for internet tasks that must be auditable:
+`web_search` -> `web_fetch` -> `browser` `observe` -> `browser`
+`extract` -> `browser` `assert_text` -> `remember` / `lessons_add`
+only when the fact or workflow is proven.
+
+`buildInternetProofPlan()` in `src/browser-automation/internet-proof-plan.ts`
+turns that proof loop into a side-effect-free plan object so CLI, Cowork
+or Fleet views can display the same sequence before any browser/network
+operation runs.
+
+`buildBrowserOperatorSessionDraft()` in
+`src/browser-automation/browser-operator-session.ts` wraps an
+`InternetScoutPlan` in a Manus-style operator contract: isolated vs local
+browser mode, explicit consent state, dedicated tab label, stop control,
+planned action log and proof export manifest. It is side-effect-free and
+intended for CLI/Cowork review before any browser session is started.
+Preview the same contract from the CLI with:
+
+```bash
+buddy tools browser-operator draft "verify a public form" \
+  --source-url https://example.com/form \
+  --requires-interaction \
+  --expected-text "Thanks" \
+  --mode local \
+  --json
+```
+
 ## Code Exec Tool
 
 JavaScript sandbox with a tool bridge. The LLM writes JavaScript that calls `await tools.<name>(args)`. Helpers: `text()`, `store(key,val)`, `load(key)`, `yield_control()`. Runs in `vm.createContext` with no process/require access. 30s timeout.

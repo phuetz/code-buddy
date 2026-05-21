@@ -92,4 +92,35 @@ describe('SessionStore', () => {
       expect(store1).toBe(store2);
     });
   });
+
+  describe('searchSessions', () => {
+    it('skips legacy malformed session records without crashing', async () => {
+      await fs.writeFile(
+        path.join(testDir, 'legacy.json'),
+        JSON.stringify({
+          id: 'legacy',
+          messages: [{}],
+          createdAt: new Date('2026-05-16T08:00:00Z').toISOString(),
+          lastAccessedAt: new Date('2026-05-16T08:00:00Z').toISOString(),
+        })
+      );
+
+      await fs.writeFile(
+        path.join(testDir, 'match.json'),
+        JSON.stringify({
+          id: 'match',
+          name: 'Good Session',
+          messages: [{ type: 'user', content: 'CODEBUDDY searchable text' }],
+          createdAt: new Date('2026-05-16T09:00:00Z').toISOString(),
+          lastAccessedAt: new Date('2026-05-16T09:00:00Z').toISOString(),
+        })
+      );
+
+      const results = await store.searchSessions('searchable');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('match');
+      expect(results[0].metadata?.searchSnippet).toContain('searchable');
+    });
+  });
 });

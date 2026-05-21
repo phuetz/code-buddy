@@ -13,7 +13,6 @@
 
 import type {
   ToolGroup,
-  PolicyProfile,
   PolicyAction,
   PolicyRule,
   PolicyDecision,

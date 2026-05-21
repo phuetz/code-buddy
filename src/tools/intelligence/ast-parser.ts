@@ -66,6 +66,8 @@ interface LanguagePatterns {
   };
 }
 
+const NEVER_MATCH_PATTERN = /$^/g;
+
 /**
  * TypeScript/JavaScript patterns
  */
@@ -108,7 +110,7 @@ const PYTHON_PATTERNS: LanguagePatterns = {
     /(?:async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^:]+))?:/g,
   methodPattern:
     /(?:async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^:]+))?:/g,
-  interfacePattern: /$/g, // No interfaces in Python
+  interfacePattern: NEVER_MATCH_PATTERN, // No interfaces in Python
   typePattern:
     /(\w+)(?:\s*:\s*TypeAlias)?\s*=\s*(?:TypeVar|Union|Optional|List|Dict|Tuple|Callable)/g,
   enumPattern:
@@ -119,7 +121,7 @@ const PYTHON_PATTERNS: LanguagePatterns = {
     /^([A-Z][A-Z0-9_]*)\s*(?::\s*([^=]+))?\s*=/gm,
   importPattern:
     /(?:from\s+(\S+)\s+)?import\s+([^#\n]+)/g,
-  exportPattern: /$/g, // Python uses __all__
+  exportPattern: NEVER_MATCH_PATTERN, // Python uses __all__
   commentPatterns: {
     single: /#.*/g,
     multiStart: /'''/,
@@ -142,14 +144,14 @@ const GO_PATTERNS: LanguagePatterns = {
     /type\s+(\w+)\s+interface\s*\{/g,
   typePattern:
     /type\s+(\w+)\s+/g,
-  enumPattern: /$/g, // Go uses const blocks
+  enumPattern: NEVER_MATCH_PATTERN, // Go uses const blocks
   variablePattern:
     /(?:var|const)\s+(\w+)(?:\s+(\w+))?\s*=/g,
   constantPattern:
     /const\s+(\w+)(?:\s+(\w+))?\s*=/g,
   importPattern:
     /import\s+(?:\(\s*)?"([^"]+)"(?:\s*\))?/g,
-  exportPattern: /$/g, // Go uses capitalization
+  exportPattern: NEVER_MATCH_PATTERN, // Go uses capitalization
   commentPatterns: {
     single: /\/\/.*/g,
     multiStart: /\/\*/,
@@ -302,6 +304,14 @@ export class ASTParser {
     return EXTENSION_TO_LANGUAGE[ext] || "unknown";
   }
 
+  private execGlobal(regex: RegExp, content: string): RegExpExecArray | null {
+    const match = regex.exec(content);
+    if (match && match[0].length === 0) {
+      regex.lastIndex = match.index + 1;
+    }
+    return match;
+  }
+
   /**
    * Extract class symbols
    */
@@ -315,7 +325,7 @@ export class ASTParser {
     const regex = new RegExp(patterns.classPattern.source, patterns.classPattern.flags);
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = this.execGlobal(regex, content)) !== null) {
       const range = this.getRange(content, match.index, match[0].length);
       const visibility = this.inferVisibility(content, match.index, language);
 
@@ -352,7 +362,7 @@ export class ASTParser {
     const regex = new RegExp(patterns.functionPattern.source, patterns.functionPattern.flags);
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = this.execGlobal(regex, content)) !== null) {
       const range = this.getRange(content, match.index, match[0].length);
       const visibility = this.inferVisibility(content, match.index, language);
 
@@ -415,7 +425,7 @@ export class ASTParser {
     const regex = new RegExp(patterns.interfacePattern.source, patterns.interfacePattern.flags);
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = this.execGlobal(regex, content)) !== null) {
       const range = this.getRange(content, match.index, match[0].length);
 
       symbols.push({
@@ -450,7 +460,7 @@ export class ASTParser {
     const regex = new RegExp(patterns.typePattern.source, patterns.typePattern.flags);
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = this.execGlobal(regex, content)) !== null) {
       const range = this.getRange(content, match.index, match[0].length);
 
       symbols.push({
@@ -482,7 +492,7 @@ export class ASTParser {
     const regex = new RegExp(patterns.enumPattern.source, patterns.enumPattern.flags);
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = this.execGlobal(regex, content)) !== null) {
       const range = this.getRange(content, match.index, match[0].length);
 
       symbols.push({
@@ -516,7 +526,7 @@ export class ASTParser {
     const constRegex = new RegExp(patterns.constantPattern.source, patterns.constantPattern.flags);
     let match;
 
-    while ((match = constRegex.exec(content)) !== null) {
+    while ((match = this.execGlobal(constRegex, content)) !== null) {
       // Skip if inside a function/class body (simple heuristic)
       const beforeMatch = content.slice(0, match.index);
       const openBraces = (beforeMatch.match(/\{/g) || []).length;
@@ -555,7 +565,7 @@ export class ASTParser {
     const regex = new RegExp(patterns.importPattern.source, patterns.importPattern.flags);
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = this.execGlobal(regex, content)) !== null) {
       const range = this.getRange(content, match.index, match[0].length);
       const specifiers: ImportSpecifier[] = [];
 
@@ -662,7 +672,7 @@ export class ASTParser {
     const regex = new RegExp(patterns.exportPattern.source, patterns.exportPattern.flags);
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = this.execGlobal(regex, content)) !== null) {
       const range = this.getRange(content, match.index, match[0].length);
       const isDefault = match[0].includes("default");
 

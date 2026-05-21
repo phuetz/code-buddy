@@ -415,9 +415,13 @@ export class RepoProfiler {
     // Trigger background semantic indexing of the workspace
     try {
       const { getWorkspaceIndexer } = await import('../knowledge/workspace-indexer.js');
-      const indexer = getWorkspaceIndexer();
-      await indexer.initialize();
-      indexer.startIndexing().catch(e => logger.error('Background indexing failed', { error: String(e) }));
+      const indexer = getWorkspaceIndexer({
+        workspaceRoot: this.cwd,
+        indexPath: path.join(this.cwd, '.codebuddy', 'index', 'workspace.bin'),
+      });
+      indexer.initialize()
+        .then(() => indexer.startIndexing())
+        .catch(e => logger.error('Background indexing failed', { error: String(e) }));
     } catch (e) {
       logger.debug('Failed to load workspace indexer', { error: String(e) });
     }

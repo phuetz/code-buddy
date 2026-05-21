@@ -172,7 +172,8 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
           
           await handleUltraplan(args, (msg: string) => {
               // Strip ANSI escape codes for cleaner UI display
-              const cleanMsg = msg.replace(/\x1b\[[0-9;]*m/g, '');
+              const escapeChar = String.fromCharCode(27);
+              const cleanMsg = msg.replace(new RegExp(`${escapeChar}\\[[0-9;]*m`, 'g'), '');
               fullContent += cleanMsg;
               onEvent({ type: 'content', content: cleanMsg });
           });

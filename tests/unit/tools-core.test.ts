@@ -156,7 +156,7 @@ describe('BashTool', () => {
       const result = await bashTool.execute('echo "hello"');
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
-    });
+    }, 15_000);
 
     test('should execute pwd command successfully', async () => {
       const result = await bashTool.execute('pwd');

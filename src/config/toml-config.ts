@@ -15,7 +15,7 @@ import { logger } from '../utils/logger.js';
 // ============================================================================
 
 /**
- * Strip JSON comments (single-line // and multi-line /* *​/) from a string.
+ * Strip JSON comments (single-line and block comments) from a string.
  * Respects strings — comments inside quoted strings are preserved.
  */
 export function stripJsonComments(input: string): string {

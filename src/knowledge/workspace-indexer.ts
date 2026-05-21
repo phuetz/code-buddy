@@ -13,6 +13,7 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 import glob from 'fast-glob';
 import { EmbeddingProvider } from '../embeddings/embedding-provider.js';
+import type { VectorSearchResult } from '../search/usearch-index.js';
 
 // Fallback brute-force index if USearch is not available
 class BruteForceIndex {
@@ -112,14 +113,14 @@ export class WorkspaceIndexer extends EventEmitter {
       }
       
       await fs.ensureDir(path.dirname(this.config.indexPath));
-      this.loadIndexMetadata();
+      await this.loadIndexMetadata();
       
     } catch (err) {
       logger.error('Failed to initialize WorkspaceIndexer', { error: String(err) });
     }
   }
   
-  private loadIndexMetadata() {
+  private async loadIndexMetadata(): Promise<void> {
       const metaPath = this.config.indexPath + '.meta.json';
       if (fs.existsSync(metaPath)) {
           try {
@@ -128,7 +129,7 @@ export class WorkspaceIndexer extends EventEmitter {
               this.nextId = meta.nextId;
               
               if (this.vectorIndex.load) {
-                  this.vectorIndex.load(this.config.indexPath);
+                  await this.vectorIndex.load(this.config.indexPath);
               }
               logger.info(`Loaded workspace index with ${this.entries.size} chunks.`);
           } catch (e) {
@@ -137,7 +138,7 @@ export class WorkspaceIndexer extends EventEmitter {
       }
   }
   
-  private saveIndexMetadata() {
+  private async saveIndexMetadata(): Promise<void> {
       const metaPath = this.config.indexPath + '.meta.json';
       const meta = {
           entries: Array.from(this.entries.entries()),
@@ -145,7 +146,7 @@ export class WorkspaceIndexer extends EventEmitter {
       };
       fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
       if (this.vectorIndex.save) {
-          this.vectorIndex.save(this.config.indexPath);
+          await this.vectorIndex.save(this.config.indexPath);
       }
   }
 
@@ -191,8 +192,10 @@ export class WorkspaceIndexer extends EventEmitter {
                       chunkIndex: i,
                       text: chunks[i]
                   });
-                  this.vectorIndex.add(id, embeddings.embeddings[i]);
-                  totalChunks++;
+                  const indexed = await this.addVector(id, embeddings.embeddings[i]);
+                  if (indexed) {
+                    totalChunks++;
+                  }
               }
           }
           
@@ -208,7 +211,7 @@ export class WorkspaceIndexer extends EventEmitter {
         }
       }
 
-      this.saveIndexMetadata();
+      await this.saveIndexMetadata();
       logger.info(`Workspace indexing complete: ${processedFiles} files, ${totalChunks} chunks.`);
       this.emit('indexing:complete', { files: processedFiles, chunks: totalChunks });
     } catch (err) {
@@ -238,7 +241,7 @@ export class WorkspaceIndexer extends EventEmitter {
       const queryEmbedding = await this.embeddingProvider.embed(query);
       if (!queryEmbedding) return [];
 
-      const results = this.vectorIndex.search(queryEmbedding, k);
+      const results = await this.searchVectors(queryEmbedding.embedding, k);
 
       return results.map((r: { id: number; score: number }) => {
           const entry = this.entries.get(r.id);
@@ -253,13 +256,48 @@ export class WorkspaceIndexer extends EventEmitter {
       return [];
     }
   }
+
+  private async addVector(id: number, embedding: Float32Array | undefined): Promise<boolean> {
+    if (!embedding || embedding.length === 0) {
+      return false;
+    }
+
+    if (this.vectorIndex instanceof BruteForceIndex) {
+      this.vectorIndex.add(id, embedding);
+      return true;
+    }
+
+    await this.vectorIndex.add({
+      id: String(id),
+      embedding,
+      metadata: { numericId: id },
+    });
+    return true;
+  }
+
+  private async searchVectors(
+    queryEmbedding: Float32Array,
+    k: number
+  ): Promise<Array<{ id: number; score: number }>> {
+    if (this.vectorIndex instanceof BruteForceIndex) {
+      return this.vectorIndex.search(queryEmbedding, k);
+    }
+
+    const results = await this.vectorIndex.search(queryEmbedding, k) as VectorSearchResult[];
+    return results
+      .map((result) => ({
+        id: Number(result.id),
+        score: result.score,
+      }))
+      .filter((result) => Number.isInteger(result.id));
+  }
 }
 
 // Singleton for easy access
 let instance: WorkspaceIndexer | null = null;
-export function getWorkspaceIndexer(): WorkspaceIndexer {
-    if (!instance) {
-        instance = new WorkspaceIndexer();
+export function getWorkspaceIndexer(config?: Partial<WorkspaceIndexerConfig>): WorkspaceIndexer {
+    if (!instance || config) {
+        instance = new WorkspaceIndexer(config);
     }
     return instance;
 }

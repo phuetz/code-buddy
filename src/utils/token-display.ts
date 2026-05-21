@@ -50,7 +50,7 @@ function formatCost(cost: number): string {
  * Uses a simple heuristic; for accurate cost tracking use CostTracker.
  *
  * Special-case: returns 0 when `model` indicates a ChatGPT subscription
- * call (`gpt-5.5*`, `*-codex*`, `codex-1`). Those are billed against
+ * call (`gpt-5.2`, `gpt-5.5*`, `*-codex*`, `codex-1`). Those are billed against
  * the user's flat-fee Plus/Pro plan, NOT per token, so reporting USD
  * spend would be misleading. See `cost-tracker.ts:isChatGptSubscriptionModel`.
  */
@@ -68,6 +68,7 @@ export function estimateCost(
 function isChatGptSubscriptionModel(model: string): boolean {
   const m = model.toLowerCase();
   return (
+    m === 'gpt-5.2' ||
     m === 'gpt-5.5' ||
     m.startsWith('gpt-5.5-') ||
     m.includes('-codex') ||

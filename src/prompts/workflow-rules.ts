@@ -8,7 +8,112 @@
  * Injected by PromptBuilder.buildSystemPrompt() after bootstrap context.
  */
 
-export function getWorkflowRulesBlock(): string {
+export interface WorkflowRulesOptions {
+  /**
+   * Tool availability predicate for model-facing prompt guidance. Defaults
+   * to all tools available to preserve legacy prompt behavior.
+   */
+  isToolAvailable?: (toolName: string) => boolean;
+}
+
+const DEFAULT_TOOL_AVAILABLE = (_toolName: string) => true;
+
+function buildAutoCorrectionRule(isToolAvailable: (toolName: string) => boolean): string {
+  if (isToolAvailable('lessons_add')) {
+    return `After any user correction, call \`lessons_add\` with category=PATTERN.
+Format: "[what went wrong] -> [correct behaviour]"`;
+  }
+
+  return `After any user correction, capture the reusable pattern in the final summary or an approved note.
+Format: "[what went wrong] -> [correct behaviour]"`;
+}
+
+function buildVerificationRule(isToolAvailable: (toolName: string) => boolean): string {
+  if (isToolAvailable('task_verify')) {
+    return `1. **TypeScript**: \`npx tsc --noEmit\` must pass (or call \`task_verify\` with check=typescript)
+2. **Tests**: the relevant test suite must pass (or call \`task_verify\` with check=tests)
+3. **Diff**: confirm no unintended files changed beyond the task scope
+4. **Behaviour**: demonstrate correctness via test output, log line, or explicit assertion
+
+Use the \`task_verify\` tool to automate steps 1-2.`;
+  }
+
+  return `1. **TypeScript**: \`npx tsc --noEmit\` must pass when TypeScript is in scope
+2. **Tests**: the relevant test suite must pass
+3. **Diff**: confirm no unintended files changed beyond the task scope
+4. **Behaviour**: demonstrate correctness via test output, log line, or explicit assertion`;
+}
+
+function buildInternetProofLoop(isToolAvailable: (toolName: string) => boolean): string {
+  const hasWebSearch = isToolAvailable('web_search');
+  const hasWebFetch = isToolAvailable('web_fetch');
+  const hasBrowser = isToolAvailable('browser');
+  const hasRemember = isToolAvailable('remember');
+  const hasLessonsAdd = isToolAvailable('lessons_add');
+
+  if (!hasWebSearch && !hasWebFetch && !hasBrowser) {
+    return `For web tasks that require current information, browsing, UI automation,
+prospecting, screenshots, or automated tests:
+1. Use only the web or browser tools present in the model-facing schema.
+2. If no web or browser tool is present, do not claim live verification.
+3. Ask for source material, work from existing files, or state the limitation clearly.`;
+  }
+
+  const steps: string[] = [
+    `For web tasks that require current information, browsing, UI automation,
+prospecting, screenshots, or automated tests:`,
+  ];
+
+  let index = 1;
+  if (hasWebSearch) {
+    steps.push(`${index++}. Start with \`web_search\` for discovery when the source is not already known.`);
+  }
+  if (hasWebFetch) {
+    steps.push(`${index++}. Use \`web_fetch\` for cheap static reading before opening a browser.`);
+  }
+  if (hasBrowser) {
+    steps.push(`${index++}. Use \`browser\` with action=\`observe\` before any page interaction.`);
+    steps.push(`${index++}. Use \`browser\` with action=\`extract\` to capture URL, title, headings,
+   links, actions and query-focused text evidence.`);
+    steps.push(`${index++}. Use \`browser\` with action=\`assert_text\` after a claim, login state,
+   navigation, or UI test expectation. Treat a failed assertion as a failing test.`);
+    steps.push(`${index++}. On the final \`extract\` or passing \`assert_text\`, set
+   \`persistWhenProven=true\` with a short \`proofGoal\` when durable evidence
+   should be saved${
+     hasRemember || hasLessonsAdd
+       ? `, then use returned \`persistenceSuggestions\` for
+   ${[hasRemember ? '`remember`' : null, hasLessonsAdd ? '`lessons_add`' : null].filter(Boolean).join(' and ')}`
+       : ''
+   }.`);
+  }
+
+  steps.push(`${index}. Persist only proven durable facts or reusable patterns; do not store raw
+   browsing noise.`);
+
+  return steps.join('\n');
+}
+
+function buildLessonsIntegration(isToolAvailable: (toolName: string) => boolean): string {
+  const hasLessonsSearch = isToolAvailable('lessons_search');
+  const hasLessonsAdd = isToolAvailable('lessons_add');
+
+  if (!hasLessonsSearch && !hasLessonsAdd) {
+    return `Review active lessons (injected as <lessons_context>) at the start of each turn when present.`;
+  }
+
+  const lines: string[] = [];
+  if (hasLessonsSearch) {
+    lines.push('Before starting a task similar to a previous one, call `lessons_search` to find relevant lessons.');
+  }
+  if (hasLessonsAdd) {
+    lines.push('After any user correction: call `lessons_add` (category=PATTERN) immediately.');
+  }
+  lines.push('Review active lessons (injected as <lessons_context>) at the start of each turn.');
+  return lines.join('\n');
+}
+
+export function getWorkflowRulesBlock(options: WorkflowRulesOptions = {}): string {
+  const isToolAvailable = options.isToolAvailable ?? DEFAULT_TOOL_AVAILABLE;
   return `## Workflow Orchestration
 
 ### When to Plan (concrete triggers — skip vague "non-trivial")
@@ -32,18 +137,16 @@ If 2+ consecutive tool calls fail or return unexpected results:
 3. Diagnose the root cause (not the symptom).
 4. Re-plan the approach from scratch before acting again.
 
-After any user correction, call \`lessons_add\` with category=PATTERN.
-Format: "[what went wrong] → [correct behaviour]"
+${buildAutoCorrectionRule(isToolAvailable)}
 
 ### Verification Contract (mandatory before marking a task done)
 
 Before claiming completion, verify:
-1. **TypeScript**: \`npx tsc --noEmit\` must pass (or call \`task_verify\` with check=typescript)
-2. **Tests**: the relevant test suite must pass (or call \`task_verify\` with check=tests)
-3. **Diff**: confirm no unintended files changed beyond the task scope
-4. **Behaviour**: demonstrate correctness via test output, log line, or explicit assertion
+${buildVerificationRule(isToolAvailable)}
 
-Use the \`task_verify\` tool to automate steps 1–2.
+### Internet Automation Proof Loop
+
+${buildInternetProofLoop(isToolAvailable)}
 
 ### Uncertainty Protocol
 
@@ -73,7 +176,5 @@ Assign one focused task per subagent. Do not duplicate work across subagents.
 
 ### Lessons Integration
 
-Before starting a task similar to a previous one, call \`lessons_search\` to find relevant lessons.
-After any user correction: call \`lessons_add\` (category=PATTERN) immediately.
-Review active lessons (injected as <lessons_context>) at the start of each turn.`;
+${buildLessonsIntegration(isToolAvailable)}`;
 }

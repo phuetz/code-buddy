@@ -67,12 +67,12 @@ export async function handleLogin(args: string[]): Promise<CommandHandlerResult>
     if (auth.account_id) lines.push(`   Account ID: ${auth.account_id}`);
     lines.push('');
     lines.push(`Tokens stored at: ${getCodexAuthFilePath()}`);
-    lines.push('Use \`gpt-5.5\` or another Codex model. Try a message now.');
+    lines.push('Use `gpt-5.5` or another supported ChatGPT model. Try a message now.');
   } catch (err) {
     lines.push('❌ Login failed');
     lines.push(`   ${err instanceof Error ? err.message : String(err)}`);
     lines.push('');
-    lines.push('Run \`/login chatgpt\` again to retry.');
+    lines.push('Run `/login chatgpt` again to retry.');
   }
 
   return { handled: true, entry: makeEntry(lines.join('\n')) };
@@ -99,7 +99,7 @@ export async function handleLogout(args: string[]): Promise<CommandHandlerResult
   clearCodexCredentials();
   lines.push('✅ ChatGPT credentials cleared');
   lines.push(`   Removed: ${getCodexAuthFilePath()}`);
-  lines.push('Run \`/login chatgpt\` to authenticate again.');
+  lines.push('Run `/login chatgpt` to authenticate again.');
 
   return { handled: true, entry: makeEntry(lines.join('\n')) };
 }
@@ -114,7 +114,7 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
   lines.push('='.repeat(50));
 
   if (!hasCodexCredentials()) {
-    lines.push('ChatGPT: not connected (run \`/login chatgpt\`)');
+    lines.push('ChatGPT: not connected (run `/login chatgpt`)');
     return { handled: true, entry: makeEntry(lines.join('\n')) };
   }
 
@@ -122,7 +122,7 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
     const auth = await getChatGptAuth();
     if (!auth) {
       lines.push('ChatGPT: token unreadable (file present but no access_token).');
-      lines.push('  Try \`/logout chatgpt\` then \`/login chatgpt\`.');
+      lines.push('  Try `/logout chatgpt` then `/login chatgpt`.');
       return { handled: true, entry: makeEntry(lines.join('\n')) };
     }
     lines.push('ChatGPT: ✅ connected');

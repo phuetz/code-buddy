@@ -477,13 +477,14 @@ describe('MetricsDashboard', () => {
 
   describe('getEventsInRange', () => {
     it('should return events within date range', () => {
-      const now = new Date();
-      const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+      const beforeRecord = new Date();
+      const hourAgo = new Date(beforeRecord.getTime() - 60 * 60 * 1000);
+      const twoHoursAgo = new Date(beforeRecord.getTime() - 2 * 60 * 60 * 1000);
 
       dashboard.recordTokenUsage({ promptTokens: 100, completionTokens: 50 });
 
-      const events = dashboard.getEventsInRange(hourAgo, now);
+      const afterRecord = new Date();
+      const events = dashboard.getEventsInRange(hourAgo, afterRecord);
 
       expect(events.length).toBeGreaterThan(0);
 

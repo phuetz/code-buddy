@@ -9,6 +9,7 @@
  */
 
 import { getCustomAgentLoader } from '../../agent/custom/custom-agent-loader.js';
+import { setActiveCustomAgentRuntime } from '../../agent/custom/custom-agent-runtime.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -155,6 +156,12 @@ function handleAgentInfo(args: string[]): CommandHandlerResult {
   if (agent.triggers?.length) lines.push(`Triggers: ${agent.triggers.join(', ')}`);
   if (agent.tools?.length) lines.push(`Allowed Tools: ${agent.tools.join(', ')}`);
   if (agent.disabledTools?.length) lines.push(`Disabled Tools: ${agent.disabledTools.join(', ')}`);
+  if (agent.fleetDispatchProfile) lines.push(`Fleet Dispatch Profile: ${agent.fleetDispatchProfile}`);
+  if (agent.requireExplicitDispatchProfile !== undefined) {
+    lines.push(
+      `Require Explicit Dispatch Profile: ${agent.requireExplicitDispatchProfile ? 'yes' : 'no'}`,
+    );
+  }
 
   lines.push('');
   lines.push('System Prompt:');
@@ -192,6 +199,7 @@ Use /agent to list available agents.`,
   // Build the activation prompt
   const remainingArgs = args.slice(1).join(' ');
   const prompt = remainingArgs || `You are now activated as "${agent.name}". How can I help you?`;
+  setActiveCustomAgentRuntime(agent);
 
   return {
     handled: true,
@@ -215,6 +223,7 @@ export function checkAgentTriggers(input: string): CommandHandlerResult | null {
 
   // Use the first matching agent
   const agent = matchingAgents[0];
+  setActiveCustomAgentRuntime(agent);
 
   return {
     handled: false, // Don't fully handle - let the message through with modified context

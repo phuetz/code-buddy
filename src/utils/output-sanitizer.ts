@@ -60,7 +60,7 @@ const LLAMA_INST_PATTERN = /\[INST\][\s\S]*?\[\/INST\]/g;
  * - U+FEFF: Byte Order Mark (BOM) / Zero Width No-Break Space
  * - U+00AD: Soft Hyphen
  */
-const ZERO_WIDTH_CHARS_PATTERN = /[\u200B\u200C\u200D\uFEFF\u00AD]/g;
+const ZERO_WIDTH_CHARS_PATTERN = /(?:\u200B|\u200C|\u200D|\uFEFF|\u00AD)/g;
 
 /**
  * All sanitization rules applied in order.

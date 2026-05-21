@@ -25,6 +25,8 @@ jest.mock('../../src/agent/custom/custom-agent-loader.js', () => {
       tags: ['test', 'demo'],
       tools: ['read', 'write'],
       disabledTools: ['bash'],
+      fleetDispatchProfile: 'review',
+      requireExplicitDispatchProfile: true,
     },
     {
       id: 'code-helper',
@@ -93,6 +95,8 @@ describe('Agent Handlers', () => {
 
         expect(result.output).toContain('Allowed Tools: read, write');
         expect(result.output).toContain('Disabled Tools: bash');
+        expect(result.output).toContain('Fleet Dispatch Profile: review');
+        expect(result.output).toContain('Require Explicit Dispatch Profile: yes');
       });
 
       it('should show system prompt (truncated)', () => {

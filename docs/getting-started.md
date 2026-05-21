@@ -82,15 +82,40 @@ Headless mode exits cleanly after completion -- safe for `timeout`, shell script
 ## Session Management
 
 ```bash
+# List recent saved sessions
+buddy session list
+buddy session list --limit 25
+
+# Search saved sessions by content
+buddy session search "database migration"
+
+# Resume a specific session by ID (supports partial matching)
+buddy session resume abc123
+
+# Resume the most recent session
+buddy session last
+
 # Continue the most recent session
 buddy --continue
 
 # Resume a specific session by ID (supports partial matching)
 buddy --resume abc123
 
+# Legacy flag form for scripts
+buddy --search-sessions "database migration"
+
 # Set a cost limit for the session
 buddy --max-price 5.00
 ```
+
+The `buddy session` command group is the operator-friendly surface for
+finding and resuming work, while `--continue`, `--resume`, and
+`--search-sessions` remain available for scripts. Session search uses
+the local SQLite FTS index when available and falls back to JSON session
+files. Results include parent lineage and a compact matching snippet so
+you can decide what to resume without opening every session.
+`CODEBUDDY_HOME` controls the home directory for new installs; the
+historical `GROK_HOME` alias still works.
 
 ## Typical Workflow
 
@@ -163,13 +188,27 @@ You're now streaming the peer's `fleet:agent:tool_started`, `fleet:workflow:even
 
 To send a message to the peer (and have it route to its LLM):
 ```
-> /fleet send peer.chat "hello, can you analyze this file?"
+> /fleet send ministar-linux peer.chat {"prompt":"hello, can you analyze this file?"}
+```
+
+For a longer conversation, open a multi-turn chat session with an
+operating posture:
+```
+> /fleet chat start ministar-linux --profile review
+> /fleet chat say audit the dispatch flow before we change it
+> /fleet status --with-sessions
 ```
 
 Inspect connection state:
 ```
 > /fleet status               # Current peer URL, connection state, recent events
 > /fleet stop                 # Disconnect cleanly
+```
+
+From a shell, inspect the same operating postures before you route:
+```bash
+buddy fleet profiles
+buddy fleet policy review bash
 ```
 
 ### Two stated objectives
@@ -254,6 +293,25 @@ export CODEBUDDY_STREAM_RETRY=1     # Exponential backoff, 4 attempts max
 buddy
 ```
 Trade-off: a retried stream restarts from the beginning, so you may see duplicated content across the retry boundary. Default-off in 1.0.0-rc.2 pending observation; will become default-on in 1.0.0 final after a week of clean opt-in usage.
+
+### Cowork launch fails after a Windows or Electron update
+If Cowork reports that it cannot locate `better_sqlite3.node`, rebuild the
+native Electron module:
+
+```bash
+buddy install-gui
+```
+
+For source checkouts you can also run:
+
+```bash
+cd cowork
+npm run rebuild
+```
+
+`buddy install-gui` now prefers Cowork's own Electron binary and rebuilds
+Cowork native modules, which keeps `better-sqlite3` aligned with the Electron
+runtime that launches the app.
 
 ### More
 - `buddy doctor` — full environment check

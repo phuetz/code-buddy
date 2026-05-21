@@ -9,9 +9,13 @@
 
 import { spawn } from 'child_process';
 import { resolve, dirname } from 'path';
-import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
+import {
+  getElectronBaseDirs,
+  hasElectronBinary,
+  resolveElectronBinaryPath,
+} from './electron-paths.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -27,30 +31,14 @@ function getProjectRoot(): string {
  */
 export function isElectronAvailable(): boolean {
   const projectRoot = getProjectRoot();
-  // Check for electron package
-  return existsSync(resolve(projectRoot, 'node_modules', 'electron'));
+  return getElectronBaseDirs(projectRoot).some(hasElectronBinary);
 }
 
 /**
  * Get the path to the Electron binary.
  */
 function getElectronBinaryPath(): string {
-  const projectRoot = getProjectRoot();
-  const binName = process.platform === 'win32' ? 'electron.cmd' : 'electron';
-  const binPath = resolve(projectRoot, 'node_modules', '.bin', binName);
-
-  if (existsSync(binPath)) {
-    return binPath;
-  }
-
-  // Fallback: try the electron package's exported path
-  const electronPkgPath = resolve(projectRoot, 'node_modules', 'electron', 'dist', 'electron');
-  const electronExe = process.platform === 'win32' ? electronPkgPath + '.exe' : electronPkgPath;
-  if (existsSync(electronExe)) {
-    return electronExe;
-  }
-
-  throw new Error('Electron binary not found. Run: buddy install-gui');
+  return resolveElectronBinaryPath(getProjectRoot());
 }
 
 export interface LaunchOptions {

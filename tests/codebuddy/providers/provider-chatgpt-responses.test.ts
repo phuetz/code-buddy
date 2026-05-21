@@ -723,7 +723,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
 
     const provider = new ChatGptResponsesProvider({
       authProvider: async () => authBundle(),
-      model: 'gpt-5.5', // first FALLBACK_MODELS entry is 'gpt-5.1-codex'
+      model: 'gpt-5.5', // first FALLBACK_MODELS entry is 'gpt-5.2'
       defaultMaxTokens: 1000,
     });
 
@@ -741,7 +741,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     expect(out.join('')).toBe('OK');
     // 2nd request used the fallback model (first entry of FALLBACK_MODELS).
     const body2 = JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string);
-    expect(body2.model).toBe('gpt-5.1-codex');
+    expect(body2.model).toBe('gpt-5.2');
   });
 
   it('auto-fallback: skipped when caller pinned --model explicitly', async () => {
@@ -771,6 +771,37 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     }
     expect(caught).toBeTruthy();
     expect(caught!.message).toContain('gpt-5.5');
+  });
+
+  it('auto-fallback: stops when current model is already a fallback candidate', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ detail: "The 'gpt-5.1-codex' model is not supported." }),
+        { status: 400 },
+      ),
+    );
+
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      model: 'gpt-5.1-codex',
+      defaultMaxTokens: 1000,
+    });
+
+    let caught: Error | null = null;
+    try {
+      const gen = provider.chatStream(
+        [{ role: 'user', content: 'X' } as CodeBuddyMessage],
+        [],
+        {},
+      );
+      for await (const _ of gen) { /* drain */ }
+    } catch (err) {
+      caught = err as Error;
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(caught).toBeTruthy();
+    expect(caught!.message).toContain('gpt-5.1-codex');
   });
 
   it('auto-fallback: skipped when disableModelFallback=true', async () => {

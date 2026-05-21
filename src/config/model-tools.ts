@@ -102,17 +102,6 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 16384,
     patchFormat: 'unified',
   },
-  // GPT-5 (400K context, 128K output)
-  {
-    model: 'gpt-5*',
-    supportsReasoning: true,
-    supportsToolCalls: true,
-    supportsVision: true,
-    contextWindow: 400000,
-    maxOutputTokens: 128000,
-    patchFormat: 'unified',
-  },
-
   // Claude Opus 4.6 (200K context, 128K output)
   {
     model: 'claude-opus-4-6*',
@@ -188,10 +177,8 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   },
 
   // ChatGPT Codex backend (Phase d.23) — exposed via OAuth subscription
-  // auth at chatgpt.com/backend-api/codex/responses. Slugs taken from the
-  // upstream `openai/codex` catalog. `gpt-5.5` is Patrice's default — if
-  // the backend rejects it with `model_not_found`, the chatgpt-responses
-  // provider surfaces these as suggested fallbacks.
+  // auth at chatgpt.com/backend-api/codex/responses. `gpt-5.5` matches the
+  // GitNexus helper default; `gpt-5.2` remains the known-good fallback.
   {
     model: 'gpt-5.5*',
     supportsReasoning: true,
@@ -232,17 +219,16 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
     promptProfile: 'rich',
   },
+  // GPT-5 (400K context, 128K output)
   {
     model: 'gpt-5*',
     supportsReasoning: true,
     supportsToolCalls: true,
     supportsVision: true,
-    contextWindow: 200000,
-    maxOutputTokens: 64000,
-    patchFormat: 'search_replace',
-    promptProfile: 'rich',
+    contextWindow: 400000,
+    maxOutputTokens: 128000,
+    patchFormat: 'unified',
   },
-
   // Grok 4.1 Fast (2M context)
   {
     model: 'grok-4*fast*',

@@ -125,6 +125,8 @@ export const SUPPORTED_MODELS = {
   'gemma-4-9b-it': { maxTokens: 8192, provider: 'bundled-gemma4' },
   'gemma-4-2b-it': { maxTokens: 8192, provider: 'bundled-gemma4' },
   // GPT models
+  'gpt-5.5': { maxTokens: 200000, provider: 'openai' },
+  'gpt-5.2': { maxTokens: 400000, provider: 'openai' },
   'gpt-5': { maxTokens: 400000, provider: 'openai' },
   'gpt-4.1': { maxTokens: 1000000, provider: 'openai' },
   'gpt-4o': { maxTokens: 128000, provider: 'openai' },

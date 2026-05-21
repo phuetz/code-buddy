@@ -9,6 +9,13 @@ import { randomBytes } from 'crypto';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { requireScope, asyncHandler, ApiServerError, validateRequired } from '../middleware/index.js';
 import type { ChatRequest, ChatResponse, ChatStreamChunk } from '../types.js';
+import {
+  createServerAgent,
+  listServerModels,
+  runAgentCompletion,
+  streamAgentDeltas,
+  type ServerAgent,
+} from '../agent-adapter.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 // (channels/index.ts re-exports channel classes that import BaseChannel
 // before it's fully initialized)
@@ -21,31 +28,12 @@ async function getEnqueueMessage() {
   return _enqueueMessage;
 }
 
-// Agent interface for server routes (subset of CodeBuddyAgent methods used)
-interface AgentAPI {
-  processUserInput(input: string, options?: Record<string, unknown>): Promise<{
-    content?: string;
-    finishReason?: string;
-    usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-    toolCalls?: Array<{ name: string; id: string; success?: boolean; output?: string; error?: string; executionTime?: number }>;
-    cost?: number;
-  }>;
-  streamResponse(input: string, options?: Record<string, unknown>): AsyncIterable<{
-    choices?: Array<{ delta?: { content?: string } }>;
-  }>;
-  getModel(): string;
-}
-
 // Lazy load the agent
-let agentInstance: AgentAPI | null = null;
-async function getAgent(): Promise<AgentAPI> {
+let agentInstance: ServerAgent | null = null;
+
+async function getAgent(): Promise<ServerAgent> {
   if (!agentInstance) {
-    const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-    agentInstance = new CodeBuddyAgent(
-      process.env.GROK_API_KEY || '',
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL || 'grok-3-latest'
-    ) as unknown as AgentAPI;
+    agentInstance = await createServerAgent();
   }
   return agentInstance!;
 }
@@ -135,29 +123,24 @@ router.post(
           });
         }
 
-        // Get completion
-        return agent.processUserInput(
+        return runAgentCompletion(
+          agent,
           messages[messages.length - 1].content as string,
-          {
-            model: body.model,
-            temperature: body.temperature,
-            maxTokens: body.maxTokens,
-            enableTools: body.tools,
-          }
+          { model: body.model }
         );
       });
 
       const response: ChatResponse = {
         id: requestId,
         content: result.content || '',
-        model: body.model || agent.getModel(),
+        model: body.model || agent.getCurrentModel(),
         finishReason: (result.finishReason as ChatResponse['finishReason']) || 'stop',
         usage: {
-          promptTokens: result.usage?.prompt_tokens || 0,
-          completionTokens: result.usage?.completion_tokens || 0,
-          totalTokens: result.usage?.total_tokens || 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
         },
-        toolCalls: result.toolCalls?.map((tc: { name: string; id: string; success?: boolean; output?: string; error?: string; executionTime?: number }) => ({
+        toolCalls: result.toolCalls?.map((tc) => ({
           name: tc.name,
           callId: tc.id,
           success: tc.success ?? true,
@@ -166,7 +149,6 @@ router.post(
           executionTime: tc.executionTime || 0,
         })),
         sessionId: body.sessionId,
-        cost: result.cost,
         latency: Date.now() - startTime,
       };
 
@@ -197,8 +179,13 @@ async function handleStreamingChat(
 
   // Handle client disconnect
   let isConnected = true;
-  req.on('close', () => {
+  req.on('aborted', () => {
     isConnected = false;
+  });
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      isConnected = false;
+    }
   });
 
   try {
@@ -217,19 +204,15 @@ async function handleStreamingChat(
     let _totalContent = '';
     let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
-    const stream = await agent.streamResponse(
+    const stream = streamAgentDeltas(
+      agent,
       messages[messages.length - 1].content as string,
-      {
-        model: body.model,
-        temperature: body.temperature,
-        maxTokens: body.maxTokens,
-      }
+      { model: body.model }
     );
 
-    for await (const chunk of stream) {
+    for await (const delta of stream) {
       if (!isConnected) break;
 
-      const delta = chunk.choices?.[0]?.delta?.content || '';
       _totalContent += delta;
 
       const streamChunk: ChatStreamChunk = {
@@ -291,7 +274,7 @@ async function handleOpenAIStreamingChat(
 ): Promise<void> {
   const requestId = `chatcmpl-${randomBytes(12).toString('hex')}`;
   const created = Math.floor(Date.now() / 1000);
-  const modelName = body.model || (await getAgent()).getModel();
+  const modelName = body.model || (await getAgent()).getCurrentModel();
 
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -301,8 +284,13 @@ async function handleOpenAIStreamingChat(
 
   // Handle client disconnect
   let isConnected = true;
-  req.on('close', () => {
+  req.on('aborted', () => {
     isConnected = false;
+  });
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      isConnected = false;
+    }
   });
 
   try {
@@ -322,19 +310,15 @@ async function handleOpenAIStreamingChat(
     const promptTokens = Math.ceil(promptText.length / 4);
     let completionTokens = 0;
 
-    const stream = await agent.streamResponse(
+    const stream = streamAgentDeltas(
+      agent,
       messages[messages.length - 1].content as string,
-      {
-        model: body.model,
-        temperature: body.temperature,
-        maxTokens: body.maxTokens,
-      }
+      { model: body.model }
     );
 
-    for await (const chunk of stream) {
+    for await (const delta of stream) {
       if (!isConnected) break;
 
-      const delta = chunk.choices?.[0]?.delta?.content || '';
       completionTokens += Math.ceil(delta.length / 4);
 
       const openaiChunk = {
@@ -453,13 +437,10 @@ router.post(
       const messages = body.messages as ChatCompletionMessageParam[];
       const lastMessage = messages[messages.length - 1];
 
-      const result = await agent.processUserInput(
+      const result = await runAgentCompletion(
+        agent,
         lastMessage.content as string,
-        {
-          model: body.model,
-          temperature: body.temperature,
-          maxTokens: body.max_tokens,
-        }
+        { model: body.model }
       );
 
       // Estimate token counts when the provider doesn't return them
@@ -473,7 +454,7 @@ router.post(
         id: requestId,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: body.model || agent.getModel(),
+        model: body.model || agent.getCurrentModel(),
         choices: [
           {
             index: 0,
@@ -485,9 +466,9 @@ router.post(
           },
         ],
         usage: {
-          prompt_tokens: result.usage?.prompt_tokens || estimatedPromptTokens,
-          completion_tokens: result.usage?.completion_tokens || estimatedCompletionTokens,
-          total_tokens: result.usage?.total_tokens || (estimatedPromptTokens + estimatedCompletionTokens),
+          prompt_tokens: estimatedPromptTokens,
+          completion_tokens: estimatedCompletionTokens,
+          total_tokens: estimatedPromptTokens + estimatedCompletionTokens,
         },
       };
 
@@ -509,30 +490,9 @@ router.get(
   '/models',
   requireScope('chat'),
   asyncHandler(async (req: Request, res: Response) => {
-    const models = [
-      {
-        id: 'grok-3-latest',
-        object: 'model',
-        created: Date.now(),
-        owned_by: 'xai',
-      },
-      {
-        id: 'grok-3-fast',
-        object: 'model',
-        created: Date.now(),
-        owned_by: 'xai',
-      },
-      {
-        id: 'grok-2-latest',
-        object: 'model',
-        created: Date.now(),
-        owned_by: 'xai',
-      },
-    ];
-
     res.json({
       object: 'list',
-      data: models,
+      data: listServerModels(),
     });
   })
 );

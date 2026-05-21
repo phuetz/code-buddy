@@ -37,6 +37,24 @@ const DEFAULT_CONFIG: GraphEmbeddingConfig = {
   entityPrefix: 'mod:',
 };
 
+type VectorIndexKind = 'usearch' | 'legacy-usearch' | 'brute-force';
+
+function getEmbeddings(batchResult: unknown): number[][] {
+  if (Array.isArray(batchResult)) {
+    return batchResult as number[][];
+  }
+  const maybeBatch = batchResult as { embeddings?: number[][] | Float32Array[] } | null | undefined;
+  return (maybeBatch?.embeddings ?? []).map(embedding => Array.from(embedding));
+}
+
+function getEmbedding(result: unknown): number[] | undefined {
+  if (Array.isArray(result)) {
+    return result as number[];
+  }
+  const maybeResult = result as { embedding?: number[] | Float32Array } | null | undefined;
+  return maybeResult?.embedding ? Array.from(maybeResult.embedding) : undefined;
+}
+
 // ============================================================================
 // Implementation
 // ============================================================================
@@ -56,6 +74,7 @@ export function createGraphEmbeddingIndex(
   let entityTexts: Map<string, string> = new Map();
   let embeddingProvider: any = null;
   let vectorIndex: any = null;
+  let vectorIndexKind: VectorIndexKind = 'brute-force';
   let entityIds: string[] = [];
 
   return {
@@ -83,7 +102,8 @@ export function createGraphEmbeddingIndex(
 
         // Generate embeddings
         const texts = entityIds.map(id => entityTexts.get(id)!);
-        const embeddings = await embeddingProvider.embedBatch(texts);
+        const batchResult = await embeddingProvider.embedBatch(texts);
+        const embeddings = getEmbeddings(batchResult);
 
         if (!embeddings || embeddings.length === 0) {
           ready = false;
@@ -94,14 +114,33 @@ export function createGraphEmbeddingIndex(
         const dim = embeddings[0].length;
         try {
           const { USearchVectorIndex } = await import('../search/usearch-index.js');
-          vectorIndex = new USearchVectorIndex(dim);
+          vectorIndex = new USearchVectorIndex({ dimensions: dim, metric: 'cos' });
+          vectorIndexKind = 'usearch';
+          if (typeof vectorIndex.add === 'function' && vectorIndex.add.length >= 2) {
+            const LegacyUSearchVectorIndex = USearchVectorIndex as unknown as new (
+              dimensions: number
+            ) => unknown;
+            vectorIndex = new LegacyUSearchVectorIndex(dim);
+            vectorIndexKind = 'legacy-usearch';
+          }
         } catch {
           // Fallback to brute-force
           vectorIndex = new BruteForceIndex(dim);
+          vectorIndexKind = 'brute-force';
         }
 
         for (let i = 0; i < entityIds.length; i++) {
-          vectorIndex.add(i, embeddings[i]);
+          if (vectorIndexKind === 'usearch') {
+            await vectorIndex.add({
+              id: String(i),
+              embedding: embeddings[i],
+              metadata: { entityId: entityIds[i] },
+            });
+          } else if (vectorIndexKind === 'legacy-usearch') {
+            vectorIndex.add(i, embeddings[i]);
+          } else {
+            vectorIndex.add(i, embeddings[i]);
+          }
         }
 
         ready = true;
@@ -122,15 +161,18 @@ export function createGraphEmbeddingIndex(
       }
 
       try {
-        const queryEmbedding = await embeddingProvider.embed(query);
+        const queryResult = await embeddingProvider.embed(query);
+        const queryEmbedding = getEmbedding(queryResult);
         if (!queryEmbedding) return [];
 
-        const results = vectorIndex.search(queryEmbedding, Math.min(k, entityIds.length));
+        const results = await vectorIndex.search(queryEmbedding, Math.min(k, entityIds.length));
 
-        return results.map((r: { id: number; score: number }) => ({
-          entityId: entityIds[r.id],
-          score: r.score,
-        }));
+        return results
+          .map((r: { id: number | string; score: number }) => ({
+            entityId: entityIds[Number(r.id)],
+            score: r.score,
+          }))
+          .filter((r: { entityId: string | undefined; score: number }) => Boolean(r.entityId));
       } catch {
         return [];
       }

@@ -69,6 +69,35 @@ export {
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL,
 } from "./tool-definitions/index.js";
 
+export function getBuiltinToolNames(): string[] {
+  const groups: CodeBuddyTool[][] = [
+    CORE_TOOLS,
+    [MORPH_EDIT_TOOL],
+    SEARCH_TOOLS,
+    TODO_TOOLS,
+    WEB_TOOLS,
+    ADVANCED_TOOLS,
+    MULTIMODAL_TOOLS,
+    COMPUTER_CONTROL_TOOLS,
+    BROWSER_TOOLS,
+    CANVAS_TOOLS,
+    AGENT_TOOLS,
+    FIRECRAWL_TOOLS,
+    LSP_TOOLS,
+    SECRETS_TOOLS,
+    ADVISOR_TOOLS,
+    ASK_USER_QUESTION_TOOLS,
+    EXIT_PLAN_MODE_TOOLS,
+    CODEBASE_REPLACE_TOOLS,
+    SESSION_TOOLS,
+    FLEET_TOOLS,
+  ];
+
+  return Array.from(new Set(
+    groups.flatMap((tools) => tools.map((tool) => tool.function.name)),
+  ));
+}
+
 // ============================================================================
 // Tool Registry Initialization
 // ============================================================================
@@ -523,7 +552,10 @@ export function getSkillAugmentedTools(
     });
   }
 
-  return [...currentTools, ...missingTools];
+  // Skill requirements must not bypass CLI/custom-agent/Fleet profile
+  // filters. Re-apply the active schema filter after augmentation so a
+  // disabled tool cannot reappear in the model-facing tool schema.
+  return applyToolFilter([...currentTools, ...missingTools]);
 }
 
 // Initialize registry on module load

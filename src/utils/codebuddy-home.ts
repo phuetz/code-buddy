@@ -1,17 +1,17 @@
 /**
- * GROK_HOME - Centralized configuration directory management
+ * Code Buddy home - centralized configuration directory management
  *
- * Supports the GROK_HOME environment variable to customize the location
- * of Code Buddy configuration files and data (like VIBE_HOME in Mistral Vibe).
+ * Supports CODEBUDDY_HOME for new installs and GROK_HOME as a backward
+ * compatible alias from the historical grok-cli project name.
  *
  * Default: ~/.codebuddy/
  *
  * Usage:
- *   export GROK_HOME="/path/to/custom/home"
- *   grok "your prompt"
+ *   export CODEBUDDY_HOME="/path/to/custom/home"
+ *   buddy "your prompt"
  *
  * Directory structure:
- *   $GROK_HOME/
+ *   $CODEBUDDY_HOME/
  *   ├── config.toml          # Configuration file
  *   ├── user-settings.json   # User settings
  *   ├── .env                 # API keys
@@ -35,126 +35,132 @@ import path from 'path';
 import fs from 'fs';
 
 /**
- * Get the GROK_HOME directory path
+ * Get the Code Buddy home directory path.
  *
  * Priority:
- * 1. GROK_HOME environment variable
- * 2. ~/.codebuddy/ (default)
+ * 1. CODEBUDDY_HOME environment variable
+ * 2. GROK_HOME legacy environment variable
+ * 3. ~/.codebuddy/ (default)
  */
 export function getCodeBuddyHome(): string {
-  return process.env.GROK_HOME || path.join(os.homedir(), '.codebuddy');
+  return process.env.CODEBUDDY_HOME || process.env.GROK_HOME || path.join(os.homedir(), '.codebuddy');
 }
 
 /**
- * Get a path within GROK_HOME
+ * Get a path within Code Buddy home.
  *
- * @param relativePath - Path relative to GROK_HOME (e.g., 'agents', 'config.toml')
+ * @param relativePath - Path relative to Code Buddy home (e.g., 'agents', 'config.toml')
  * @returns Absolute path
  */
-export function getGrokPath(...relativePath: string[]): string {
+export function getCodeBuddyPath(...relativePath: string[]): string {
   return path.join(getCodeBuddyHome(), ...relativePath);
 }
+
+/**
+ * Backward-compatible alias for older grok-cli imports.
+ */
+export const getGrokPath = getCodeBuddyPath;
 
 /**
  * Get the agents directory path
  */
 export function getAgentsDir(): string {
-  return getGrokPath('agents');
+  return getCodeBuddyPath('agents');
 }
 
 /**
  * Get the prompts directory path
  */
 export function getPromptsDir(): string {
-  return getGrokPath('prompts');
+  return getCodeBuddyPath('prompts');
 }
 
 /**
  * Get the commands directory path
  */
 export function getCommandsDir(): string {
-  return getGrokPath('commands');
+  return getCodeBuddyPath('commands');
 }
 
 /**
  * Get the themes directory path
  */
 export function getThemesDir(): string {
-  return getGrokPath('themes');
+  return getCodeBuddyPath('themes');
 }
 
 /**
  * Get the database path
  */
 export function getDatabasePath(): string {
-  return getGrokPath('codebuddy.db');
+  return getCodeBuddyPath('codebuddy.db');
 }
 
 /**
  * Get the user settings path
  */
 export function getUserSettingsPath(): string {
-  return getGrokPath('user-settings.json');
+  return getCodeBuddyPath('user-settings.json');
 }
 
 /**
  * Get the sessions directory path
  */
 export function getSessionsDir(): string {
-  return getGrokPath('sessions');
+  return getCodeBuddyPath('sessions');
 }
 
 /**
  * Get the memory directory path
  */
 export function getMemoryDir(): string {
-  return getGrokPath('memory');
+  return getCodeBuddyPath('memory');
 }
 
 /**
  * Get the checkpoints directory path
  */
 export function getCheckpointsDir(): string {
-  return getGrokPath('checkpoints');
+  return getCodeBuddyPath('checkpoints');
 }
 
 /**
  * Get the cache directory path
  */
 export function getCacheDir(): string {
-  return getGrokPath('cache');
+  return getCodeBuddyPath('cache');
 }
 
 /**
  * Get the tasks directory path
  */
 export function getTasksDir(): string {
-  return getGrokPath('tasks');
+  return getCodeBuddyPath('tasks');
 }
 
 /**
  * Get the branches directory path
  */
 export function getBranchesDir(): string {
-  return getGrokPath('branches');
+  return getCodeBuddyPath('branches');
 }
 
 /**
  * Get the personas directory path
  */
 export function getPersonasDir(): string {
-  return getGrokPath('personas');
+  return getCodeBuddyPath('personas');
 }
 
 /**
  * Get the offline data directory path
  */
 export function getOfflineDir(): string {
-  return getGrokPath('offline');
+  return getCodeBuddyPath('offline');
 }
 
 /**
- * Ensure GROK_HOME directory exists
+ * Ensure Code Buddy home directory exists
  */
 export function ensureCodeBuddyHome(): void {
   const codebuddyHome = getCodeBuddyHome();
@@ -164,10 +170,10 @@ export function ensureCodeBuddyHome(): void {
 }
 
 /**
- * Ensure a subdirectory exists within GROK_HOME
+ * Ensure a subdirectory exists within Code Buddy home
  */
 export function ensureGrokDir(...relativePath: string[]): string {
-  const dir = getGrokPath(...relativePath);
+  const dir = getCodeBuddyPath(...relativePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -175,18 +181,23 @@ export function ensureGrokDir(...relativePath: string[]): string {
 }
 
 /**
- * Check if custom GROK_HOME is set
+ * Check if a custom Code Buddy home is set
  */
 export function isCustomCodeBuddyHome(): boolean {
-  return !!process.env.GROK_HOME;
+  return !!(process.env.CODEBUDDY_HOME || process.env.GROK_HOME);
 }
 
 /**
- * Format GROK_HOME info for display
+ * Format Code Buddy home info for display
  */
 export function formatCodeBuddyHomeInfo(): string {
   const codebuddyHome = getCodeBuddyHome();
   const isCustom = isCustomCodeBuddyHome();
+  const source = process.env.CODEBUDDY_HOME
+    ? 'CODEBUDDY_HOME'
+    : process.env.GROK_HOME
+      ? 'GROK_HOME'
+      : 'default';
 
-  return `GROK_HOME: ${codebuddyHome}${isCustom ? ' (custom)' : ' (default)'}`;
+  return `CODEBUDDY_HOME: ${codebuddyHome}${isCustom ? ` (custom via ${source})` : ' (default)'}`;
 }

@@ -54,7 +54,7 @@ export interface CodeBuddyTool {
 }
 
 /** Chat completion request payload - extends OpenAI types with Grok-specific fields */
-interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming, 'tools' | 'tool_choice'> {
+export interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming, 'tools' | 'tool_choice'> {
   tools?: CodeBuddyTool[];
   tool_choice?: "auto" | "none" | "required";
   search_parameters?: SearchParameters;
@@ -64,7 +64,7 @@ interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming
 }
 
 /** Streaming chat completion request payload */
-interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStreaming, 'tools' | 'tool_choice'> {
+export interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStreaming, 'tools' | 'tool_choice'> {
   tools?: CodeBuddyTool[];
   tool_choice?: "auto" | "none" | "required";
   search_parameters?: SearchParameters;

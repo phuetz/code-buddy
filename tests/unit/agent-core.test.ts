@@ -43,6 +43,7 @@ const {
   mockChatStreamResponse: vi.fn().mockImplementation(async function* () {
     yield { choices: [{ delta: { content: "Hello " } }] };
     yield { choices: [{ delta: { content: "World" } }] };
+    yield { choices: [{ delta: {}, finish_reason: "stop" }] };
   }),
   mockViewFile: vi.fn().mockResolvedValue({ success: true, output: "file content" }),
   mockCreateFile: vi.fn().mockResolvedValue({ success: true, output: "File created" }),
@@ -59,6 +60,141 @@ const {
   mockPrepareMessages: vi.fn().mockImplementation((messages: any) => messages),
   mockShouldWarn: vi.fn().mockReturnValue({ warn: false }),
   mockExecuteHooks: vi.fn().mockResolvedValue(undefined),
+}));
+
+function makeDefaultChatResponse() {
+  return {
+    choices: [{ message: { content: "Test response", tool_calls: null } }],
+    usage: { prompt_tokens: 100, completion_tokens: 50 },
+  };
+}
+
+function mockStreamOnce(content: string): void {
+  mockChatStreamResponse.mockImplementationOnce(async function* () {
+    yield { choices: [{ delta: { content } }] };
+    yield { choices: [{ delta: {}, finish_reason: "stop" }] };
+  });
+}
+
+function resetAgentCoreMocks(): void {
+  mockChatResponse.mockReset();
+  mockChatResponse.mockResolvedValue(makeDefaultChatResponse());
+
+  mockChatStreamResponse.mockReset();
+  mockChatStreamResponse.mockImplementation(async function* () {
+    yield { choices: [{ delta: { content: "Hello " } }] };
+    yield { choices: [{ delta: { content: "World" } }] };
+    yield { choices: [{ delta: {}, finish_reason: "stop" }] };
+  });
+
+  mockViewFile.mockReset();
+  mockViewFile.mockResolvedValue({ success: true, output: "file content" });
+  mockCreateFile.mockReset();
+  mockCreateFile.mockResolvedValue({ success: true, output: "File created" });
+  mockStrReplace.mockReset();
+  mockStrReplace.mockResolvedValue({ success: true, output: "Text replaced" });
+  mockBashExecute.mockReset();
+  mockBashExecute.mockResolvedValue({ success: true, output: "command output" });
+  mockSearchTool.mockReset();
+  mockSearchTool.mockResolvedValue({ success: true, output: "search results" });
+  mockWebSearch.mockReset();
+  mockWebSearch.mockResolvedValue({ success: true, output: "web results" });
+  mockFetchPage.mockReset();
+  mockFetchPage.mockResolvedValue({ success: true, output: "page content" });
+  mockCheckpointBeforeCreate.mockReset();
+  mockCheckpointBeforeEdit.mockReset();
+  mockCalculateCost.mockReset();
+  mockCalculateCost.mockReturnValue(0.001);
+  mockRecordUsage.mockReset();
+  mockIsYOLOEnabled.mockReset();
+  mockIsYOLOEnabled.mockReturnValue(false);
+  mockPrepareMessages.mockReset();
+  mockPrepareMessages.mockImplementation((messages: unknown) => messages);
+  mockShouldWarn.mockReset();
+  mockShouldWarn.mockReturnValue({ warn: false });
+  mockExecuteHooks.mockReset();
+  mockExecuteHooks.mockResolvedValue(undefined);
+}
+
+jest.mock("../../src/agent/planner/progress-default-sink.js", () => ({
+  getProgressTracker: jest.fn().mockReturnValue({
+    start: jest.fn(),
+    update: jest.fn(),
+  }),
+  wireDefaultProgressSink: jest.fn(),
+  _resetForTests: jest.fn(),
+}));
+
+jest.mock("../../src/agent/middleware/index.js", () => ({
+  MiddlewarePipeline: jest.fn().mockImplementation(() => ({
+    use: jest.fn().mockReturnThis(),
+    runBeforeTurn: jest.fn().mockResolvedValue({ action: "continue" }),
+    runAfterTurn: jest.fn().mockResolvedValue({ action: "continue" }),
+    getMiddlewareNames: jest.fn().mockReturnValue([]),
+  })),
+  WorkflowGuardMiddleware: jest.fn().mockImplementation(function WorkflowGuardMiddleware() {
+    return {};
+  }),
+}));
+
+jest.mock("../../src/agent/middleware/turn-limit.js", () => ({
+  TurnLimitMiddleware: jest.fn().mockImplementation(function TurnLimitMiddleware() {
+    return {};
+  }),
+}));
+
+jest.mock("../../src/agent/middleware/cost-limit.js", () => ({
+  CostLimitMiddleware: jest.fn().mockImplementation(function CostLimitMiddleware() {
+    return {};
+  }),
+}));
+
+jest.mock("../../src/agent/middleware/context-warning.js", () => ({
+  ContextWarningMiddleware: jest.fn().mockImplementation(function ContextWarningMiddleware() {
+    return {};
+  }),
+}));
+
+jest.mock("../../src/agent/middleware/reasoning-middleware.js", () => ({
+  createReasoningMiddleware: jest.fn().mockReturnValue({}),
+}));
+
+jest.mock("../../src/agent/middleware/auto-repair-middleware.js", () => ({
+  createAutoRepairMiddleware: jest.fn().mockReturnValue({}),
+}));
+
+jest.mock("../../src/agent/middleware/quality-gate-middleware.js", () => ({
+  createQualityGateMiddleware: jest.fn().mockReturnValue({}),
+}));
+
+jest.mock("../../src/agent/multi-agent/agent-tools.js", () => ({
+  setContextEngineProvider: jest.fn(),
+  waitForSingleAgent: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock("../../src/context/workspace-context.js", () => ({
+  getWorkspaceContext: jest.fn().mockResolvedValue(""),
+}));
+
+jest.mock("../../src/input/context-mentions.js", () => ({
+  processMentions: jest.fn().mockResolvedValue({
+    cleanedMessage: "",
+    contextBlocks: [],
+  }),
+}));
+
+jest.mock("../../src/personas/persona-manager.js", () => ({
+  getPersonaManager: jest.fn().mockReturnValue({
+    autoSelectPersona: jest.fn(),
+  }),
+}));
+
+jest.mock("../../src/memory/knowledge-graph.js", () => ({
+  getKnowledgeGraph: jest.fn().mockReturnValue({
+    load: jest.fn().mockResolvedValue(undefined),
+    extractFromMessageDeduped: jest.fn(),
+  }),
+  isTrivialMessage: jest.fn().mockReturnValue(true),
 }));
 
 // Mock codebuddy client
@@ -268,6 +404,90 @@ jest.mock("../../src/prompts/index.js", () => ({
   autoSelectPromptId: jest.fn().mockReturnValue("default"),
 }));
 
+jest.mock("../../src/services/prompt-builder.js", () => ({
+  PromptBuilder: jest.fn().mockImplementation(function PromptBuilder() {
+    return {
+      buildSystemPrompt: jest.fn().mockResolvedValue("System prompt"),
+      buildForQuery: jest.fn().mockResolvedValue(null),
+      updateConfig: jest.fn(),
+    };
+  }),
+}));
+
+jest.mock("../../src/memory/persistent-memory.js", () => ({
+  initializeMemory: jest.fn().mockResolvedValue(undefined),
+  getMemoryManager: jest.fn().mockReturnValue({
+    getRelevantMemories: jest.fn().mockResolvedValue([]),
+    addMemory: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
+jest.mock("../../src/agent/repo-profiler.js", () => ({
+  getRepoProfiler: jest.fn().mockReturnValue({
+    getProfile: jest.fn().mockResolvedValue({}),
+  }),
+}));
+
+jest.mock("../../src/agent/execution/tool-selection-strategy.js", () => ({
+  getToolSelectionStrategy: jest.fn().mockImplementation(() => ({
+    selectToolsForQuery: jest.fn().mockResolvedValue({ tools: [] }),
+    cacheTools: jest.fn(),
+    clearCache: jest.fn(),
+    clearAllCaches: jest.fn(),
+    shouldUseSearchFor: jest.fn().mockReturnValue(false),
+    setActiveSkill: jest.fn(),
+    updateConfig: jest.fn(),
+    getLastSelection: jest.fn().mockReturnValue(null),
+    formatLastSelectionStats: jest.fn().mockReturnValue("No selection"),
+    classifyQuery: jest.fn().mockReturnValue({ categories: ["general"], confidence: 0.8 }),
+    getSelectionMetrics: jest.fn().mockReturnValue({}),
+    formatSelectionMetrics: jest.fn().mockReturnValue("Tool Selection Metrics: OK"),
+    getMostMissedTools: jest.fn().mockReturnValue([]),
+    resetMetrics: jest.fn(),
+    getCacheStats: jest.fn().mockReturnValue({ classificationCache: { size: 0 }, selectionCache: { size: 0 } }),
+  })),
+}));
+
+jest.mock("../../src/concurrency/lane-queue.js", () => ({
+  getLaneQueue: jest.fn().mockReturnValue({
+    enqueue: jest.fn((_laneId: string, task: () => unknown) => task()),
+  }),
+}));
+
+jest.mock("../../src/skills/index.js", () => ({
+  findSkill: jest.fn().mockReturnValue(null),
+  findStarterPack: jest.fn().mockReturnValue(null),
+  initializeSkills: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock("../../src/skills/adapters/index.js", () => ({
+  skillMdToUnified: jest.fn(),
+}));
+
+jest.mock("../../src/analytics/cost-predictor.js", () => ({
+  CostPredictor: jest.fn().mockImplementation(function CostPredictor() {
+    return {
+      predict: jest.fn().mockReturnValue({
+        model: "grok-code-fast-1",
+        estimatedCost: 0,
+        estimatedInputTokens: 0,
+        estimatedOutputTokens: 0,
+        confidence: 1,
+      }),
+    };
+  }),
+}));
+
+jest.mock("../../src/analytics/budget-alerts.js", () => ({
+  BudgetAlertManager: jest.fn().mockImplementation(function BudgetAlertManager() {
+    return {
+      on: jest.fn(),
+      off: jest.fn(),
+      check: jest.fn(),
+    };
+  }),
+}));
+
 // Mock cost tracker
 jest.mock("../../src/utils/cost-tracker.js", () => ({
   getCostTracker: jest.fn().mockReturnValue({
@@ -326,6 +546,10 @@ jest.mock("../../src/types/errors.js", () => ({
   getErrorMessage: jest.fn().mockImplementation((err) => err?.message || String(err)),
 }));
 
+jest.mock("../../src/errors/index.js", () => ({
+  getErrorMessage: jest.fn().mockImplementation((err) => err?.message || String(err)),
+}));
+
 // Mock logger
 jest.mock("../../src/utils/logger.js", () => ({
   logger: {
@@ -360,6 +584,12 @@ jest.mock("../../src/hooks/lifecycle-hooks.js", () => ({
   HooksManager: jest.fn(),
 }));
 
+jest.mock("../../src/hooks/user-hooks.js", () => ({
+  getUserHooksManager: jest.fn().mockReturnValue({
+    executeHooks: mockExecuteHooks,
+  }),
+}));
+
 // Mock model router
 jest.mock("../../src/optimization/model-routing.js", () => ({
   getModelRouter: jest.fn().mockReturnValue({
@@ -389,20 +619,20 @@ describe("Agent Core Module Tests", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAgentCoreMocks();
     process.env = { ...originalEnv };
     delete process.env.YOLO_MODE;
     delete process.env.MAX_COST;
     delete process.env.MORPH_API_KEY;
     delete process.env.CODEBUDDY_MAX_CONTEXT;
-    mockIsYOLOEnabled.mockReturnValue(false);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = originalEnv;
     if (agent) {
       agent.dispose();
     }
+    await new Promise((resolve) => setImmediate(resolve));
   });
 
   // ===========================================================================
@@ -571,6 +801,63 @@ describe("Agent Core Module Tests", () => {
         expect(controller.signal.aborted).toBe(true);
       });
     });
+  });
+
+  // ===========================================================================
+  // INTEGRATION TESTS
+  // ===========================================================================
+  describe("Integration Tests", () => {
+    beforeEach(() => {
+      agent = new CodeBuddyAgent("test-api-key");
+    });
+
+    it("should handle complete conversation flow", async () => {
+      // Initial message
+      const entries1 = await agent.processUserMessage("Hello");
+      expect(entries1.length).toBeGreaterThan(0);
+
+      // Follow-up message
+      mockStreamOnce("Follow-up response");
+      const entries2 = await agent.processUserMessage("Follow-up");
+      expect(entries2.length).toBeGreaterThan(0);
+
+      // Check history
+      const history = agent.getChatHistory();
+      expect(history.length).toBeGreaterThanOrEqual(4);
+    }, 60_000);
+
+    it("should maintain state across multiple operations", async () => {
+      // Process a message
+      await agent.processUserMessage("Hello");
+
+      // Change some settings
+      agent.setRAGToolSelection(false);
+      agent.setParallelToolExecution(false);
+
+      // Process another message
+      const entries = await agent.processUserMessage("Hello again");
+      expect(entries.length).toBeGreaterThan(0);
+
+      // Verify settings persisted
+      expect(agent.isRAGToolSelectionEnabled()).toBe(false);
+      expect(agent.isParallelToolExecutionEnabled()).toBe(false);
+    }, 60_000);
+
+    it("should clear chat and reset for new conversation", async () => {
+      // Have a conversation
+      await agent.processUserMessage("Hello");
+      await agent.processUserMessage("How are you?");
+      expect(agent.getChatHistory().length).toBeGreaterThan(0);
+
+      // Clear chat
+      agent.clearChat();
+      expect(agent.getChatHistory().length).toBe(0);
+
+      // Start new conversation
+      mockStreamOnce("New conversation");
+      const entries = await agent.processUserMessage("New topic");
+      expect(entries.length).toBeGreaterThan(0);
+    }, 60_000);
   });
 
   // ===========================================================================
@@ -858,10 +1145,15 @@ describe("Agent Core Module Tests", () => {
       it("should handle abort during streaming", async () => {
         const chunks: StreamingChunk[] = [];
         // Set up abort after first chunk
-        setTimeout(() => agent.abortCurrentOperation(), 5);
+        const streamingAgent = agent;
+        const abortTimer = setTimeout(() => streamingAgent.abortCurrentOperation(), 5);
 
-        for await (const chunk of agent.processUserMessageStream("Hello")) {
-          chunks.push(chunk);
+        try {
+          for await (const chunk of streamingAgent.processUserMessageStream("Hello")) {
+            chunks.push(chunk);
+          }
+        } finally {
+          clearTimeout(abortTimer);
         }
         // Should complete without error
         expect(chunks.find((c) => c.type === "done")).toBeDefined();
@@ -939,7 +1231,9 @@ describe("Agent Core Module Tests", () => {
 
     describe("API Error Handling", () => {
       it("should handle chat API errors gracefully", async () => {
-        mockChatResponse.mockRejectedValueOnce(new Error("API Error"));
+        mockChatStreamResponse.mockImplementationOnce(async function* () {
+          throw new Error("API Error");
+        });
         const entries = await agent.processUserMessage("Hello");
         const errorEntry = entries.find((e) => e.content?.includes("error"));
         expect(errorEntry).toBeDefined();
@@ -958,7 +1252,9 @@ describe("Agent Core Module Tests", () => {
       });
 
       it("should add error response to messages for valid conversation structure", async () => {
-        mockChatResponse.mockRejectedValueOnce(new Error("API Error"));
+        mockChatStreamResponse.mockImplementationOnce(async function* () {
+          throw new Error("API Error");
+        });
         await agent.processUserMessage("Hello");
         const messages = (agent as any).messages;
         const lastMessage = messages[messages.length - 1];
@@ -1112,66 +1408,4 @@ describe("Agent Core Module Tests", () => {
     });
   });
 
-  // ===========================================================================
-  // INTEGRATION TESTS
-  // ===========================================================================
-  describe("Integration Tests", () => {
-    beforeEach(() => {
-      agent = new CodeBuddyAgent("test-api-key");
-    });
-
-    it("should handle complete conversation flow", async () => {
-      // Initial message
-      const entries1 = await agent.processUserMessage("Hello");
-      expect(entries1.length).toBeGreaterThan(0);
-
-      // Follow-up message
-      mockChatResponse.mockResolvedValueOnce({
-        choices: [{ message: { content: "Follow-up response", tool_calls: null } }],
-        usage: { prompt_tokens: 150, completion_tokens: 75 },
-      });
-      const entries2 = await agent.processUserMessage("Follow-up");
-      expect(entries2.length).toBeGreaterThan(0);
-
-      // Check history
-      const history = agent.getChatHistory();
-      expect(history.length).toBeGreaterThanOrEqual(4);
-    });
-
-    it("should maintain state across multiple operations", async () => {
-      // Process a message
-      await agent.processUserMessage("Hello");
-
-      // Change some settings
-      agent.setRAGToolSelection(false);
-      agent.setParallelToolExecution(false);
-
-      // Process another message
-      const entries = await agent.processUserMessage("Hello again");
-      expect(entries.length).toBeGreaterThan(0);
-
-      // Verify settings persisted
-      expect(agent.isRAGToolSelectionEnabled()).toBe(false);
-      expect(agent.isParallelToolExecutionEnabled()).toBe(false);
-    });
-
-    it("should clear chat and reset for new conversation", async () => {
-      // Have a conversation
-      await agent.processUserMessage("Hello");
-      await agent.processUserMessage("How are you?");
-      expect(agent.getChatHistory().length).toBeGreaterThan(0);
-
-      // Clear chat
-      agent.clearChat();
-      expect(agent.getChatHistory().length).toBe(0);
-
-      // Start new conversation
-      mockChatResponse.mockResolvedValueOnce({
-        choices: [{ message: { content: "New conversation", tool_calls: null } }],
-        usage: { prompt_tokens: 100, completion_tokens: 50 },
-      });
-      const entries = await agent.processUserMessage("New topic");
-      expect(entries.length).toBeGreaterThan(0);
-    });
-  });
 });

@@ -7,6 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { requireScope, asyncHandler, ApiServerError } from '../middleware/index.js';
 import type { ToolExecutionRequest, ToolExecutionResponse, ToolInfo } from '../types.js';
+import { createServerAgent, type ServerAgent } from '../agent-adapter.js';
 
 // CodeBuddyTool shape from registry (OpenAI function-calling format)
 interface CodeBuddyToolShape {
@@ -35,34 +36,23 @@ function toToolInfo(tool: CodeBuddyToolShape): ToolInfo {
   };
 }
 
-interface AgentAPI {
-  executeTool(name: string, params: Record<string, unknown>): Promise<{
-    success: boolean;
-    output?: string;
-    error?: string;
-  }>;
-}
-
 // Lazy load the tool registry
 let toolRegistryInstance: ToolRegistryAPI | null = null;
 async function getToolRegistry(): Promise<ToolRegistryAPI> {
   if (!toolRegistryInstance) {
+    const { initializeToolRegistry } = await import('../../codebuddy/tools.js');
     const { ToolRegistry } = await import('../../tools/registry.js');
+    initializeToolRegistry();
     toolRegistryInstance = ToolRegistry.getInstance() as unknown as ToolRegistryAPI;
   }
   return toolRegistryInstance!;
 }
 
 // Lazy load the agent for tool execution
-let agentInstance: AgentAPI | null = null;
-async function getAgent(): Promise<AgentAPI> {
+let agentInstance: ServerAgent | null = null;
+async function getAgent(): Promise<ServerAgent> {
   if (!agentInstance) {
-    const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-    agentInstance = new CodeBuddyAgent(
-      process.env.GROK_API_KEY || '',
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL || 'grok-3-latest'
-    ) as unknown as AgentAPI;
+    agentInstance = await createServerAgent();
   }
   return agentInstance!;
 }
@@ -171,7 +161,7 @@ router.post(
 
     try {
       const agent = await getAgent();
-      const result = await agent.executeTool(name, body.parameters || {});
+      const result = await agent.executeToolByName(name, body.parameters || {});
 
       const response: ToolExecutionResponse = {
         toolName: name,
@@ -248,7 +238,7 @@ router.post(
       }
 
       try {
-        const result = await agent.executeTool(toolRequest.name, toolRequest.parameters || {});
+        const result = await agent.executeToolByName(toolRequest.name, toolRequest.parameters || {});
         results.push({
           toolName: toolRequest.name,
           success: result.success,

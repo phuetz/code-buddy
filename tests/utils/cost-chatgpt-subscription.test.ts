@@ -24,6 +24,10 @@ describe('CostTracker.calculateCost — ChatGPT subscription zeroing', () => {
     expect(tracker.calculateCost(1000, 500, 'gpt-5.5')).toBe(0);
   });
 
+  it('returns 0 for gpt-5.2 when routed through ChatGPT OAuth fallback', () => {
+    expect(tracker.calculateCost(1000, 500, 'gpt-5.2')).toBe(0);
+  });
+
   it('returns 0 for any *-codex model variant', () => {
     expect(tracker.calculateCost(1000, 500, 'gpt-5.1-codex')).toBe(0);
     expect(tracker.calculateCost(1000, 500, 'gpt-5-codex')).toBe(0);
@@ -57,6 +61,10 @@ describe('CostTracker.calculateCost — ChatGPT subscription zeroing', () => {
 describe('estimateCost (token-display) — same zeroing as CostTracker', () => {
   it('returns 0 for gpt-5.5 when model is passed', () => {
     expect(estimateCost(1000, 500, undefined, undefined, 'gpt-5.5')).toBe(0);
+  });
+
+  it('returns 0 for gpt-5.2 when model is passed', () => {
+    expect(estimateCost(1000, 500, undefined, undefined, 'gpt-5.2')).toBe(0);
   });
 
   it('returns 0 for *-codex models when model is passed', () => {

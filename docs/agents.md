@@ -47,6 +47,46 @@ TOML config layering is supported for role configuration.
 
 Managed by `AgentRegistry` (`src/agent/specialized/agent-registry.ts`). Per-agent parameter overrides (temperature, maxTokens, model) configurable via `agent_defaults.agents.<id>` in TOML.
 
+## Built-in Custom Agent Profiles
+
+The custom-agent loader also ships native profiles that are available
+without creating files in `~/.codebuddy/agents/`.
+
+| Agent | Use |
+|:------|:----|
+| **hermes** | Hermes-inspired Code Buddy profile for toolset-aware Fleet work, skills, memory, session search, scheduled tasks and delegation |
+
+Use it directly:
+
+```bash
+buddy --agent hermes
+buddy hermes profile
+buddy hermes agent safe
+buddy hermes doctor
+```
+
+`hermes` is not a vendored Hermes runtime. It is a Code Buddy system
+prompt plus native metadata that maps Hermes patterns onto existing
+Code Buddy surfaces: `fleet.hermes.<profile>` toolsets, SKILL.md
+packages, project memory, saved-session search, Cowork scheduled Fleet
+dispatches and peer delegation.
+
+`buddy hermes doctor [profile]` verifies the active Hermes custom-agent
+source, the selected Fleet toolset, prompt boundary checks and the
+effective tool filter (`disabledTools` included). It is the quickest CLI
+sanity check after changing a local `~/.codebuddy/agents/hermes.toml`
+override.
+
+When `hermes` is active, Code Buddy also records the agent's default
+Fleet dispatch profile in runtime context. `route_peer` and
+`peer_delegate` use that context to carry a concrete `dispatchProfile`
+into delegated calls even when the model omits the argument, so Hermes
+delegation keeps its resolver-backed toolset posture end-to-end.
+On the receiving peer, a custom `systemPrompt` is preserved but receives
+the selected dispatch profile's policy hint, so a caller can customize
+persona or task framing without silently dropping the Hermes toolset
+posture.
+
 ## SWE Agent (OpenManus)
 
 Think-act loop with 3 tools: `bash`, `str_replace_editor`, `terminate`. Features:

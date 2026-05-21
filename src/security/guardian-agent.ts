@@ -126,7 +126,7 @@ const HOMOGLYPH_MAP: Record<string, string> = {
 };
 
 /** Invisible/formatting Unicode characters that should never appear in commands */
-const INVISIBLE_CHARS = /[\u200B\u200C\u200D\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2061\u2062\u2063\u2064\uFEFF\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E]/;
+const INVISIBLE_CHARS = /(?:\u200B|\u200C|\u200D|\u200E|\u200F|\u2028|\u2029|[\u202A-\u202E]|\u2060|\u2061|\u2062|\u2063|\u2064|\uFEFF|\u00AD|\u034F|\u061C|\u115F|\u1160|\u17B4|\u17B5|\u180E)/;
 
 /** Bidirectional override characters (Trojan Source attack) */
 const BIDI_OVERRIDES = /[\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069]/;

@@ -7,7 +7,8 @@
 
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
-import type { CronJob, JobRun } from '../scheduler/cron-scheduler.js';
+import type { CronJob } from '../scheduler/cron-scheduler.js';
+import { executeHermesLifecycleHook } from '../hooks/hermes-lifecycle-hooks.js';
 
 // ============================================================================
 // Types
@@ -210,6 +211,19 @@ export class CronAgentBridge extends EventEmitter {
   ): Promise<{ delivered: boolean; channel?: string }> {
     if (!job.delivery) {
       return { delivered: false };
+    }
+
+    const hookResult = await executeHermesLifecycleHook(process.cwd(), 'before_scheduled_delivery', {
+      jobId: job.id,
+      jobName: job.name,
+      delivery: job.delivery as Record<string, unknown>,
+      deliveryOutput: output,
+    });
+    if (!hookResult.allowed) {
+      logger.warn(`Scheduled delivery blocked by BeforeScheduledDelivery hook for job ${job.id}`, {
+        feedback: hookResult.feedback,
+      });
+      return { delivered: false, channel: 'blocked-by-hook' };
     }
 
     // Webhook delivery

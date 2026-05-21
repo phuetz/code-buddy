@@ -36,6 +36,10 @@ function commandExists(cmd: string): boolean {
   }
 }
 
+function getCommandAvailability(cmd: string): 'installed' | 'not found' {
+  return commandExists(cmd) ? 'installed' : 'not found';
+}
+
 function checkNodeVersion(): DoctorCheck {
   const major = parseInt(process.version.slice(1), 10);
   if (major >= 18) {
@@ -55,10 +59,11 @@ function checkDependencies(): DoctorCheck[] {
   ];
 
   for (const dep of required) {
+    const availability = getCommandAvailability(dep.cmd);
     checks.push({
       name: dep.label,
-      status: commandExists(dep.cmd) ? 'ok' : dep.level,
-      message: commandExists(dep.cmd) ? 'installed' : 'not found',
+      status: availability === 'installed' ? 'ok' : dep.level,
+      message: availability,
     });
   }
 

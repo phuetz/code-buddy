@@ -181,6 +181,37 @@ export function registerHubCommands(program: Command): void {
     });
 
   hub
+    .command('usage')
+    .description('Show local skill usage telemetry')
+    .action(async () => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const skillsHub = getSkillsHub();
+      const used = skillsHub.usageSummary();
+      if (used.length === 0) {
+        console.log('No skill usage recorded yet.');
+        return;
+      }
+
+      console.log(`\nSkill usage (${used.length}):\n`);
+      for (const s of used) {
+        const usage = s.usage;
+        if (!usage) continue;
+        console.log(`  ${s.name} v${s.version}`);
+        console.log(
+          `    ${usage.invocationCount} run(s), ${usage.successCount} ok, ${usage.failureCount} failed`,
+        );
+        console.log(`    Last used: ${new Date(usage.lastUsedAt).toISOString()}`);
+        if (usage.averageDurationMs !== undefined) {
+          console.log(`    Avg duration: ${Math.round(usage.averageDurationMs)}ms`);
+        }
+        if (usage.lastError) {
+          console.log(`    Last error: ${usage.lastError}`);
+        }
+        console.log('');
+      }
+    });
+
+  hub
     .command('info <name>')
     .description('Show details about an installed skill')
     .action(async (name: string) => {

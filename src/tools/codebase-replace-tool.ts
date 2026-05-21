@@ -5,13 +5,14 @@
  * Supports text and regex patterns, dry-run preview, and safety limits.
  */
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { rgPath } from '@vscode/ripgrep';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // ============================================================================
 // Types
@@ -67,7 +68,8 @@ export async function codebaseReplace(
     throw new Error('searchPattern is required');
   }
 
-  // Build ripgrep command to find matching files
+  // Build ripgrep args to find matching files. Use execFile instead of a
+  // shell command so Windows quoting never changes the pattern/glob meaning.
   const rgFlags: string[] = ['-l', '--no-messages'];
 
   if (!isRegex) {
@@ -76,25 +78,22 @@ export async function codebaseReplace(
 
   // Add glob filter
   if (glob !== '**/*') {
-    rgFlags.push(`--glob "${glob}"`);
+    rgFlags.push('--glob', glob);
   }
 
   // Exclude common non-text directories
-  rgFlags.push('--glob "!node_modules"');
-  rgFlags.push('--glob "!.git"');
-  rgFlags.push('--glob "!dist"');
-  rgFlags.push('--glob "!build"');
-  rgFlags.push('--glob "!*.min.*"');
-  rgFlags.push('--glob "!.codebuddy/screenshots"');
-  rgFlags.push('--glob "!.codebuddy/tool-results"');
-
-  // Escape the search pattern for shell
-  const escapedPattern = searchPattern.replace(/"/g, '\\"');
-  const rgCommand = `rg ${rgFlags.join(' ')} "${escapedPattern}"`;
+  rgFlags.push('--glob', '!node_modules');
+  rgFlags.push('--glob', '!.git');
+  rgFlags.push('--glob', '!dist');
+  rgFlags.push('--glob', '!build');
+  rgFlags.push('--glob', '!*.min.*');
+  rgFlags.push('--glob', '!.codebuddy/screenshots');
+  rgFlags.push('--glob', '!.codebuddy/tool-results');
+  rgFlags.push('--', searchPattern, '.');
 
   let matchingFiles: string[];
   try {
-    const { stdout } = await execAsync(rgCommand, {
+    const { stdout } = await execFileAsync(rgPath, rgFlags, {
       cwd: process.cwd(),
       maxBuffer: 1024 * 1024,
     });

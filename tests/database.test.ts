@@ -5,7 +5,8 @@
  */
 
 // Check if better-sqlite3 native module is available
-import { existsSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -32,6 +33,7 @@ try {
 
 describe.skipIf(!hasBetterSqlite3)('Database System', () => {
   let getDatabaseManager: any;
+  let DatabaseManager: any;
   let resetDatabaseManager: any;
   let initializeDatabase: any;
   let MemoryRepository: any;
@@ -49,11 +51,14 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
   let CacheRepository: any;
   let getCacheRepository: any;
   let resetCacheRepository: any;
+  let SessionStore: any;
+  let resetSessionStore: any;
 
   beforeAll(async () => {
     if (!hasBetterSqlite3) return;
     // Dynamically import modules only when better-sqlite3 is available
     const dbManager = await import('../src/database/database-manager.js');
+    DatabaseManager = dbManager.DatabaseManager;
     getDatabaseManager = dbManager.getDatabaseManager;
     resetDatabaseManager = dbManager.resetDatabaseManager;
     initializeDatabase = dbManager.initializeDatabase;
@@ -83,6 +88,10 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     getCacheRepository = cacheRepo.getCacheRepository;
     resetCacheRepository = cacheRepo.resetCacheRepository;
 
+    const sessionStore = await import('../src/persistence/session-store.js');
+    SessionStore = sessionStore.SessionStore;
+    resetSessionStore = sessionStore.resetSessionStore;
+
     // Initialize in-memory database for tests
     await initializeDatabase({ inMemory: true });
   });
@@ -94,6 +103,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     resetAnalyticsRepository();
     resetEmbeddingRepository();
     resetCacheRepository();
+    resetSessionStore();
     resetDatabaseManager();
   });
 
@@ -155,6 +165,28 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
       });
 
       expect(result).toBe(42);
+    });
+
+    it('should honor CODEBUDDY_HOME for the default database path', async () => {
+      const previousCodeBuddyHome = process.env.CODEBUDDY_HOME;
+      const homeDir = mkdtempSync(join(tmpdir(), 'codebuddy-db-home-'));
+
+      process.env.CODEBUDDY_HOME = homeDir;
+      const manager = new DatabaseManager();
+
+      try {
+        await manager.initialize();
+        expect(manager.formatStats()).toContain(join(homeDir, 'codebuddy.db'));
+      } finally {
+        manager.close();
+        rmSync(homeDir, { recursive: true, force: true });
+
+        if (previousCodeBuddyHome === undefined) {
+          delete process.env.CODEBUDDY_HOME;
+        } else {
+          process.env.CODEBUDDY_HOME = previousCodeBuddyHome;
+        }
+      }
     });
   });
 
@@ -354,6 +386,34 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
       expect(messages.length).toBe(1);
     });
 
+    it('should search session messages through SQLite FTS', () => {
+      const results = repo.searchMessages('Hello AI');
+
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].session.id).toBe('test-session-1');
+      expect(results[0].message.content).toContain('Hello');
+      expect(results[0].snippet).toContain('Hello');
+    });
+
+    it('should sanitize punctuation-heavy search queries', () => {
+      const results = repo.searchMessages('"Hello?!" AI');
+
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].session.id).toBe('test-session-1');
+    });
+
+    it('should let SessionStore search SQLite sessions before JSON fallback', async () => {
+      const store = new SessionStore({ useSQLite: true });
+      const results = await store.searchSessions('Hello AI');
+
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].id).toBe('test-session-1');
+      expect(results[0].messages.length).toBeGreaterThanOrEqual(2);
+      expect(results[0].metadata?.searchSnippet).toContain('Hello');
+      expect(results[0].metadata?.searchRole).toBe('user');
+      expect(typeof results[0].metadata?.searchScore).toBe('number');
+    });
+
     it('should update session stats', () => {
       const updated = repo.updateSessionStats('test-session-1', {
         tokensIn: 100,
@@ -376,6 +436,21 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
 
       expect(sessions.length).toBeGreaterThanOrEqual(1);
       expect(sessions.every(s => s.project_id === 'test-project')).toBe(true);
+    });
+
+    it('should persist parent session lineage', () => {
+      const child = repo.createSession({
+        id: 'test-session-child',
+        parent_session_id: 'test-session-1',
+        project_id: 'test-project',
+        name: 'Child Session',
+        model: 'grok-beta',
+      });
+
+      expect(child.parent_session_id).toBe('test-session-1');
+
+      const reloaded = repo.getSessionById('test-session-child');
+      expect(reloaded?.parent_session_id).toBe('test-session-1');
     });
 
     it('should get session with messages', () => {

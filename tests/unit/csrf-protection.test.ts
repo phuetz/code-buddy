@@ -296,6 +296,26 @@ describe('CSRFProtection', () => {
       expect(next).toHaveBeenCalledWith(expect.any(Error));
     });
 
+    it('should skip CSRF check for header-authenticated API requests', () => {
+      const mw = csrf.middleware();
+      const req = {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        cookies: {},
+        body: {},
+      };
+      const res = {
+        cookie: jest.fn(),
+      };
+      const next = jest.fn();
+
+      mw(req as any, res as any, next);
+
+      expect(next).toHaveBeenCalledWith();
+    });
+
     it('should validate token from header', () => {
       const mw = csrf.middleware();
       const token = csrf.generateToken();
