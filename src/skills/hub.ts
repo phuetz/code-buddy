@@ -71,6 +71,32 @@ export interface InstalledSkill {
   checksum: string;
   /** Path to installed SKILL.md */
   path: string;
+  /** Lightweight local usage telemetry for skill curation */
+  usage?: SkillUsageStats;
+}
+
+export interface SkillUsageStats {
+  /** Total invocations recorded locally */
+  invocationCount: number;
+  /** Successful invocations */
+  successCount: number;
+  /** Failed invocations */
+  failureCount: number;
+  /** Last usage timestamp (epoch ms) */
+  lastUsedAt: number;
+  /** Last invocation duration in ms */
+  lastDurationMs?: number;
+  /** Running average duration in ms */
+  averageDurationMs?: number;
+  /** Last failure message, cleared on success */
+  lastError?: string;
+}
+
+export interface SkillUsageRecord {
+  success: boolean;
+  durationMs?: number;
+  error?: string;
+  usedAt?: number;
 }
 
 export interface HubConfig {
@@ -239,7 +265,15 @@ export class SkillsHub extends EventEmitter {
    * Get the lockfile contents (for testing / external inspection).
    */
   getLockfile(): Lockfile {
-    return { ...this.lockfile, skills: { ...this.lockfile.skills } };
+    return {
+      ...this.lockfile,
+      skills: Object.fromEntries(
+        Object.entries(this.lockfile.skills).map(([name, skill]) => [
+          name,
+          { ...skill, usage: skill.usage ? { ...skill.usage } : undefined },
+        ]),
+      ),
+    };
   }
 
   // ==========================================================================
@@ -794,6 +828,55 @@ export class SkillsHub extends EventEmitter {
    */
   list(): InstalledSkill[] {
     return Object.values(this.lockfile.skills);
+  }
+
+  /**
+   * Record local skill usage so frequently useful skills can be curated.
+   * Hermes-style learning starts with this small durable signal.
+   */
+  recordUsage(skillName: string, record: SkillUsageRecord): InstalledSkill | null {
+    const installed = this.lockfile.skills[skillName];
+    if (!installed) {
+      logger.warn('Cannot record usage for missing skill', { name: skillName });
+      return null;
+    }
+
+    const previous = installed.usage;
+    const invocationCount = (previous?.invocationCount ?? 0) + 1;
+    const previousAverage = previous?.averageDurationMs ?? 0;
+    const durationMs = record.durationMs;
+    const averageDurationMs =
+      typeof durationMs === 'number'
+        ? ((previousAverage * (invocationCount - 1)) + durationMs) / invocationCount
+        : previous?.averageDurationMs;
+
+    installed.usage = {
+      invocationCount,
+      successCount: (previous?.successCount ?? 0) + (record.success ? 1 : 0),
+      failureCount: (previous?.failureCount ?? 0) + (record.success ? 0 : 1),
+      lastUsedAt: record.usedAt ?? Date.now(),
+      lastDurationMs: durationMs,
+      averageDurationMs,
+      lastError: record.success ? undefined : record.error,
+    };
+
+    this.writeLockfile();
+    this.emit('skill:usage', installed);
+    return installed;
+  }
+
+  /**
+   * Return installed skills ordered by local usage frequency.
+   */
+  usageSummary(): InstalledSkill[] {
+    return this.list()
+      .filter(skill => Boolean(skill.usage))
+      .sort((left, right) => {
+        const countDelta =
+          (right.usage?.invocationCount ?? 0) - (left.usage?.invocationCount ?? 0);
+        if (countDelta !== 0) return countDelta;
+        return (right.usage?.lastUsedAt ?? 0) - (left.usage?.lastUsedAt ?? 0);
+      });
   }
 
   /**

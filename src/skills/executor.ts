@@ -69,16 +69,19 @@ export class SkillExecutor extends EventEmitter {
   async execute(skill: Skill, context: SkillExecutionContext): Promise<SkillExecutionResult> {
     const startTime = Date.now();
     const toolCalls: SkillExecutionResult['toolCalls'] = [];
+    this.emit('skill:start', skill, context);
 
     try {
       // Check requirements
       const reqCheck = this.checkRequirements(skill, context);
       if (!reqCheck.met) {
-        return {
+        const result: SkillExecutionResult = {
           success: false,
           error: `Requirements not met: ${reqCheck.missing.join(', ')}`,
           duration: Date.now() - startTime,
         };
+        this.emit('skill:executed', skill, result);
+        return result;
       }
 
       // CC11: Resolve $ARGUMENTS and other skill variables in raw markdown
@@ -122,19 +125,24 @@ export class SkillExecutor extends EventEmitter {
         output = this.formatSkillGuidance(skill, context);
       }
 
-      return {
+      const result: SkillExecutionResult = {
         success: true,
         output,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         duration: Date.now() - startTime,
       };
+      this.emit('skill:executed', skill, result);
+      return result;
     } catch (error) {
-      return {
+      const result: SkillExecutionResult = {
         success: false,
         error: error instanceof Error ? error.message : String(error),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         duration: Date.now() - startTime,
       };
+      this.emit('skill:error', skill.metadata.name, error);
+      this.emit('skill:executed', skill, result);
+      return result;
     }
   }
 

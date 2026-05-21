@@ -397,6 +397,21 @@ export class ToolSelectionStrategy {
       'release notes',
       'changelog',
       'price',
+      'internet',
+      'website',
+      'site web',
+      'documentation',
+      'docs',
+      'github.com',
+      'http://',
+      'https://',
+      'stagehand',
+      'browserbase',
+      'mem0',
+      'actualité',
+      'actualite',
+      'récent',
+      'recent',
     ];
 
     if (keywords.some((k) => q.includes(k))) return true;

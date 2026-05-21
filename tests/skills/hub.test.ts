@@ -665,6 +665,56 @@ describe('SkillsHub', () => {
     });
   });
 
+  describe('usage telemetry', () => {
+    it('should record local skill usage in the lockfile', async () => {
+      await hub.installFromContent('test-skill', VALID_SKILL_CONTENT);
+      const listener = jest.fn();
+      hub.on('skill:usage', listener);
+
+      hub.recordUsage('test-skill', { success: true, durationMs: 100, usedAt: 1_000 });
+      const updated = hub.recordUsage('test-skill', {
+        success: false,
+        durationMs: 300,
+        error: 'tool failed',
+        usedAt: 2_000,
+      });
+
+      expect(updated?.usage).toMatchObject({
+        invocationCount: 2,
+        successCount: 1,
+        failureCount: 1,
+        lastUsedAt: 2_000,
+        lastDurationMs: 300,
+        averageDurationMs: 200,
+        lastError: 'tool failed',
+      });
+      expect(listener).toHaveBeenCalledTimes(2);
+
+      const persisted = JSON.parse(readFileSync(config.lockfilePath!, 'utf-8')) as {
+        skills: Record<string, InstalledSkill>;
+      };
+      expect(persisted.skills['test-skill'].usage?.invocationCount).toBe(2);
+    });
+
+    it('should summarize used skills by invocation count', async () => {
+      await hub.installFromContent('test-skill', VALID_SKILL_CONTENT);
+      await hub.installFromContent('another-skill', ANOTHER_SKILL_CONTENT);
+
+      hub.recordUsage('another-skill', { success: true, usedAt: 1_000 });
+      hub.recordUsage('test-skill', { success: true, usedAt: 2_000 });
+      hub.recordUsage('test-skill', { success: true, usedAt: 3_000 });
+
+      expect(hub.usageSummary().map(skill => skill.name)).toEqual([
+        'test-skill',
+        'another-skill',
+      ]);
+    });
+
+    it('should ignore usage records for unknown skills', () => {
+      expect(hub.recordUsage('missing-skill', { success: true })).toBeNull();
+    });
+  });
+
   // ==========================================================================
   // Publish
   // ==========================================================================

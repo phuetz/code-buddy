@@ -6,10 +6,13 @@
  * tools required by the matched skill.
  */
 
+import { afterEach, describe, expect, it } from 'vitest';
+
 import { getSkillAugmentedTools } from '../../src/codebuddy/tools';
 import { ToolSelectionStrategy } from '../../src/agent/execution/tool-selection-strategy';
 import type { UnifiedSkill } from '../../src/skills/types';
 import type { CodeBuddyTool } from '../../src/codebuddy/client';
+import { resetToolFilter, setToolFilter } from '../../src/utils/tool-filter';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,6 +44,10 @@ function makeSkill(overrides: Partial<UnifiedSkill> = {}): UnifiedSkill {
 // ---------------------------------------------------------------------------
 
 describe('getSkillAugmentedTools', () => {
+  afterEach(() => {
+    resetToolFilter();
+  });
+
   it('should return current tools unchanged when skill has no required tools', () => {
     const tools = [makeTool('bash'), makeTool('view_file')];
     const skill = makeSkill({ requires: undefined, tools: undefined });
@@ -92,6 +99,40 @@ describe('getSkillAugmentedTools', () => {
 
     const result = getSkillAugmentedTools(tools, skill);
     expect(result).toEqual(tools);
+  });
+
+  it('should not reintroduce skill-required tools blocked by the active schema filter', () => {
+    setToolFilter({
+      enabledPatterns: [],
+      disabledPatterns: ['bash'],
+    });
+
+    const tools = [makeTool('view_file')];
+    const skill = makeSkill({
+      requires: { tools: ['bash'] },
+    });
+
+    const result = getSkillAugmentedTools(tools, skill);
+    const names = result.map(t => t.function.name);
+
+    expect(names).toEqual(['view_file']);
+    expect(names).not.toContain('bash');
+  });
+
+  it('should apply active allowlists to the final augmented schema', () => {
+    setToolFilter({
+      enabledPatterns: ['view_file'],
+      disabledPatterns: [],
+    });
+
+    const tools = [makeTool('view_file'), makeTool('bash')];
+    const skill = makeSkill({
+      requires: { tools: ['web_search'] },
+    });
+
+    const result = getSkillAugmentedTools(tools, skill);
+
+    expect(result.map(t => t.function.name)).toEqual(['view_file']);
   });
 });
 

@@ -107,4 +107,13 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
     // alwaysInclude falls back to the strategy's default (with memory tools)
     expect(callArgs[1]?.alwaysInclude).toContain('remember');
   });
+
+  it('enables web search for internet automation and current docs queries', () => {
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+
+    expect(strategy.shouldUseSearchFor('automatiser tout ce qui est acces internet')).toBe(true);
+    expect(strategy.shouldUseSearchFor('etudie Stagehand Browserbase')).toBe(true);
+    expect(strategy.shouldUseSearchFor('lire la documentation Mem0 node')).toBe(true);
+    expect(strategy.shouldUseSearchFor('https://github.com/browserbase/stagehand')).toBe(true);
+  });
 });

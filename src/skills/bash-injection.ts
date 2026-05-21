@@ -12,7 +12,7 @@ import { execSync } from 'child_process';
 import { logger } from '../utils/logger.js';
 
 /** Regex to match !`command` bash injection syntax */
-const BASH_INJECTION_REGEX = /!\`([^`]+)\`/g;
+const BASH_INJECTION_REGEX = /!`([^`]+)`/g;
 
 /** Maximum command execution time (ms) */
 const BASH_INJECTION_TIMEOUT = 10_000;
