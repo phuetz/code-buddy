@@ -17,10 +17,24 @@ import { createApiKey } from '../../src/server/auth/api-keys.js';
 import { FleetListener } from '../../src/fleet/fleet-listener.js';
 import { getFleetRegistry } from '../../src/fleet/fleet-registry.js';
 import { resetCapabilityCache } from '../../src/fleet/capability-registry.js';
+import { wirePeerChatBridge, unwirePeerChatBridge } from '../../src/fleet/peer-chat-bridge.js';
+import {
+  wirePeerSessionBridge,
+  unwirePeerSessionBridge,
+} from '../../src/fleet/peer-session-bridge.js';
+import {
+  PeerSessionStore,
+  _setPeerSessionStoreForTests,
+  resetPeerSessionStore,
+} from '../../src/fleet/peer-session-store.js';
 import {
   handleFleet,
   _resetFleetHandlerForTests,
 } from '../../src/commands/handlers/fleet-handler.js';
+import {
+  executePeerDelegate,
+  _resetCallCounterForTests,
+} from '../../src/tools/peer-delegate-tool.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import type { CodeBuddyTool } from '../../src/codebuddy/client.js';
 
@@ -52,7 +66,19 @@ function seedFleetSafeRegistry(): void {
   }
 }
 
+function makeMockPeerChatClient(answer = 'loopback delegated review'): {
+  client: { chat: ReturnType<typeof vi.fn> };
+  chat: ReturnType<typeof vi.fn>;
+} {
+  const chat = vi.fn(async () => ({
+    choices: [{ message: { role: 'assistant', content: answer }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 11, completion_tokens: 4, total_tokens: 15 },
+  }));
+  return { client: { chat }, chat };
+}
+
 describe('Fleet loopback smoke', () => {
+  const loopbackTimeoutMs = 10_000;
   let tmpRoot = '';
   let serverHandle: ServerHandle | null = null;
   let listener: FleetListener | null = null;
@@ -69,6 +95,9 @@ describe('Fleet loopback smoke', () => {
     tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-loopback-'));
     tmpRoot = await fs.realpath(tmpRoot);
     await fs.writeFile(path.join(tmpRoot, 'hello.txt'), 'hello from loopback\n');
+    _setPeerSessionStoreForTests(
+      new PeerSessionStore({ storeDir: path.join(tmpRoot, 'peer-sessions') }),
+    );
     process.env.CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT = tmpRoot;
     process.env.CODEBUDDY_CODEX_AUTH_PATH = path.join(tmpRoot, 'codex-auth.json');
     process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
@@ -80,10 +109,13 @@ describe('Fleet loopback smoke', () => {
     resetCapabilityCache();
     seedFleetSafeRegistry();
     _resetFleetHandlerForTests();
+    _resetCallCounterForTests();
   });
 
   afterEach(async () => {
     _resetFleetHandlerForTests();
+    unwirePeerSessionBridge();
+    resetPeerSessionStore();
     if (listener) {
       await listener.disconnect().catch(() => undefined);
       listener = null;
@@ -117,7 +149,7 @@ describe('Fleet loopback smoke', () => {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
-  async function connectLoopbackPeer(): Promise<void> {
+  async function connectLoopbackPeer(peerChatClient?: { chat: ReturnType<typeof vi.fn> }): Promise<void> {
     const { key } = createApiKey({
       name: 'loopback-smoke',
       userId: 'test-loopback',
@@ -134,11 +166,22 @@ describe('Fleet loopback smoke', () => {
       securityHeaders: { enabled: false },
     });
     const address = serverHandle.server.address() as AddressInfo;
+    if (peerChatClient) {
+      await new Promise((resolve) => setImmediate(resolve));
+      unwirePeerChatBridge();
+      wirePeerChatBridge(() => peerChatClient as never, {
+        provider: 'chatgpt-oauth',
+        model: 'gpt-5.1-codex',
+        isLocal: false,
+      });
+      unwirePeerSessionBridge();
+      await wirePeerSessionBridge(() => peerChatClient as never);
+    }
     listener = new FleetListener({
       url: `ws://127.0.0.1:${address.port}/ws`,
       apiKey: key,
-      connectTimeoutMs: 2_000,
-      authTimeoutMs: 2_000,
+      connectTimeoutMs: loopbackTimeoutMs,
+      authTimeoutMs: loopbackTimeoutMs,
     });
     await listener.connect();
     getFleetRegistry().register({
@@ -161,7 +204,7 @@ describe('Fleet loopback smoke', () => {
       'view_file',
       '{"file_path":"hello.txt"}',
       '--timeout',
-      '2000',
+      String(loopbackTimeoutMs),
     ]);
 
     expect(result.entry?.content).toContain('Peer "loopback" → view_file OK');
@@ -179,7 +222,7 @@ describe('Fleet loopback smoke', () => {
         '{"file_path":"hello.txt"}',
         '--stream',
         '--timeout',
-        '2000',
+        String(loopbackTimeoutMs),
       ]);
 
       const written = writeSpy.mock.calls.map((call) => String(call[0])).join('');
@@ -202,7 +245,7 @@ describe('Fleet loopback smoke', () => {
       '--privacy',
       'public',
       '--timeout',
-      '2000',
+      String(loopbackTimeoutMs),
     ]);
 
     const out = result.entry?.content ?? '';
@@ -211,10 +254,138 @@ describe('Fleet loopback smoke', () => {
     expect(out).toContain('peer_delegate');
   });
 
+  it('routes /fleet route --profile through real loopback peer.describe capabilities', async () => {
+    await connectLoopbackPeer();
+
+    const result = await handleFleet([
+      'route',
+      'review',
+      'this',
+      'patch',
+      '--profile',
+      'review',
+      '--privacy',
+      'public',
+      '--timeout',
+      String(loopbackTimeoutMs),
+    ]);
+
+    const out = result.entry?.content ?? '';
+    expect(out).toContain('Fleet route recommendation');
+    expect(out).toContain('Primary: loopback / gpt-5.1-codex');
+    expect(out).toContain('Profile: review');
+    expect(out).toContain('Tool policy: minimal / confirm');
+    expect(out).toContain('peer_delegate');
+    expect(out).toContain('"dispatchProfile":"review"');
+  });
+
+  it('routes peer_delegate dispatchProfile metadata through real loopback peer.chat', async () => {
+    const { client, chat } = makeMockPeerChatClient();
+    await connectLoopbackPeer(client);
+
+    const result = await executePeerDelegate({
+      peer: 'loopback',
+      prompt: 'review this patch',
+      dispatchProfile: 'review',
+      timeoutMs: loopbackTimeoutMs,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('loopback delegated review');
+    expect(result.output).toContain('[profile: review | policy: minimal / confirm]');
+
+    const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+    expect(messages[0].content).toContain('Prioritize defects');
+    expect(messages[0].content).toContain('Tool policy hint:');
+
+    expect(result.data).toMatchObject({
+      peer: 'loopback',
+      text: 'loopback delegated review',
+      dispatchProfile: 'review',
+      toolPolicy: {
+        policyProfile: 'minimal',
+        defaultAction: 'confirm',
+      },
+      toolDecisions: expect.arrayContaining([
+        expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+        expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+        expect.objectContaining({ tool: 'bash', action: 'deny' }),
+      ]),
+    });
+  });
+
+  it('routes /fleet route --delegate --profile through real loopback peer.chat', async () => {
+    const { client, chat } = makeMockPeerChatClient('route delegated review');
+    await connectLoopbackPeer(client);
+
+    const result = await handleFleet([
+      'route',
+      'review',
+      'this',
+      'patch',
+      '--profile',
+      'review',
+      '--delegate',
+      '--privacy',
+      'public',
+      '--timeout',
+      String(loopbackTimeoutMs),
+      '--delegate-timeout',
+      String(loopbackTimeoutMs),
+    ]);
+
+    const out = result.entry?.content ?? '';
+    expect(out).toContain('Fleet route recommendation');
+    expect(out).toContain('Profile: review');
+    expect(out).toContain('Delegated response');
+    expect(out).toContain('route delegated review');
+    expect(out).toContain('[profile: review | policy: minimal / confirm]');
+
+    const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+    expect(messages[0].content).toContain('Prioritize defects');
+  });
+
+  it('routes /fleet chat start --profile through real loopback peer.chat-session', async () => {
+    const { client, chat } = makeMockPeerChatClient('session review answer');
+    await connectLoopbackPeer(client);
+
+    const start = await handleFleet([
+      'chat',
+      'start',
+      'loopback',
+      '--profile',
+      'review',
+      '--name',
+      'review-session',
+    ]);
+
+    expect(start.entry?.content).toContain('Chat session "review-session" opened');
+    expect(start.entry?.content).toContain('Profile: review');
+
+    const say = await handleFleet([
+      'chat',
+      'say',
+      'please',
+      'review',
+      'this',
+      'patch',
+      '--session',
+      'review-session',
+    ]);
+
+    expect(say.entry?.content).toContain('session review answer');
+    const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+    expect(messages[0].content).toContain('Prioritize defects');
+    expect(messages[0].content).toContain('Tool policy hint:');
+
+    const status = await handleFleet(['status', '--with-sessions']);
+    expect(status.entry?.content).toContain('profile review');
+  });
+
   it('renders /fleet describe from a real loopback peer.describe response', async () => {
     await connectLoopbackPeer();
 
-    const result = await handleFleet(['describe', 'loopback', '--timeout', '2000']);
+    const result = await handleFleet(['describe', 'loopback', '--timeout', String(loopbackTimeoutMs)]);
 
     const out = result.entry?.content ?? '';
     expect(out).toContain('Fleet peer "loopback"');

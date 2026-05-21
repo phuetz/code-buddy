@@ -40,6 +40,9 @@ import {
   createScriptTools,
   createPlanTools,
   createKnowledgeTools,
+  createRelationshipIntelligenceTools,
+  createInternetScoutTools,
+  createLeadScoutTools,
   createMemoryTools,
   createParallelTools,
   createAttentionTools,
@@ -81,6 +84,7 @@ import {
 } from "../tools/hooks/index.js";
 import { WritePolicy, WRITE_TOOL_NAMES } from "../security/write-policy.js";
 import { RunStore } from "../observability/run-store.js";
+import { isToolNameAllowed } from "../utils/tool-filter.js";
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -192,6 +196,9 @@ export class ToolHandler {
       ...createScriptTools(),
       ...createPlanTools(),
       ...createKnowledgeTools(),
+      ...createRelationshipIntelligenceTools(),
+      ...createInternetScoutTools(),
+      ...createLeadScoutTools(),
       ...createMemoryTools(),
       ...createParallelTools(),
       ...createAttentionTools(),
@@ -296,6 +303,11 @@ export class ToolHandler {
         toolCallId: toolCall.id,
         timestamp: startTime,
       };
+
+      const filterBlock = this.checkActiveToolFilter(toolName, toolCall.id, startTime);
+      if (filterBlock) {
+        return filterBlock;
+      }
 
       // Check permission mode before execution
       try {
@@ -572,6 +584,62 @@ export class ToolHandler {
   }
 
   /**
+   * Enforce the same active filter used to build model-facing tool schemas.
+   * This closes the runtime gap where a stale or malformed tool call could
+   * request a hidden tool after the schema had already removed it.
+   */
+  private checkActiveToolFilter(
+    toolName: string,
+    toolCallId?: string,
+    startTime: number = Date.now(),
+  ): ToolResult | null {
+    if (isToolNameAllowed(toolName)) {
+      return null;
+    }
+
+    logger.info(`Tool blocked by active filter: ${toolName}`);
+    const error = `Tool "${toolName}" is disabled by the active tool filter and was not executed.`;
+    this.emitToolFilterBlock(toolName, error, toolCallId, startTime);
+    return {
+      success: false,
+      error,
+    };
+  }
+
+  private emitToolFilterBlock(
+    toolName: string,
+    error: string,
+    toolCallId?: string,
+    startTime: number = Date.now(),
+  ): void {
+    if (!this.currentRunId) return;
+
+    const store = RunStore.getInstance();
+    const durationMs = Math.max(0, Date.now() - startTime);
+    store.emit(this.currentRunId, {
+      type: 'decision',
+      data: {
+        kind: 'tool_filter_block',
+        source: 'active_tool_filter',
+        toolName,
+        toolCallId,
+        reason: error,
+      },
+    });
+    store.emit(this.currentRunId, {
+      type: 'tool_result',
+      data: {
+        toolName,
+        toolCallId,
+        success: false,
+        error,
+        durationMs,
+        blockedBy: 'active_tool_filter',
+      },
+    });
+  }
+
+  /**
    * Check tool policy before execution
    * @param toolName Tool name to check
    * @param args Tool arguments
@@ -739,7 +807,12 @@ export class ToolHandler {
   public async *executeToolStreaming(
     toolCall: CodeBuddyToolCall
   ): AsyncGenerator<string, ToolResult, undefined> {
+    const startTime = Date.now();
     const toolName = toolCall.function.name;
+    const filterBlock = this.checkActiveToolFilter(toolName, toolCall.id, startTime);
+    if (filterBlock) {
+      return filterBlock;
+    }
 
     // Bash: stream stdout/stderr in real-time
     if (toolName === 'bash') {

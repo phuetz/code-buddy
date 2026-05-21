@@ -14,6 +14,7 @@ import {
   unwirePeerChatBridge,
   isPeerChatBridgeWired,
   _unwireForTests,
+  getDispatchState,
   type PeerChatClientGetter,
 } from '../../src/fleet/peer-chat-bridge.js';
 import {
@@ -43,6 +44,18 @@ const baseCtx: PeerMethodContext = {
   traceId: 'trace-test-abc',
   depth: 0,
 };
+
+function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const tick = () => {
+      if (predicate()) return resolve();
+      if (Date.now() - start > timeoutMs) return reject(new Error('waitFor timeout'));
+      setTimeout(tick, 20);
+    };
+    tick();
+  });
+}
 
 // ---- tests -----------------------------------------------------------
 
@@ -117,6 +130,24 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       expect(r.ok).toBe(false);
       expect(r.error?.message).toContain('upstream rate-limited');
     });
+
+    it('rejects unknown dispatchProfile values before calling the client', async () => {
+      const { client, chat } = makeMockClient();
+      wirePeerChatBridge(() => client as never);
+
+      const r = await dispatchPeerRequest(
+        {
+          id: 'p4-profile',
+          method: 'peer.chat',
+          params: { prompt: 'q', dispatchProfile: 'chaos' },
+        },
+        baseCtx,
+      );
+
+      expect(r.ok).toBe(false);
+      expect(r.error?.message).toContain('dispatchProfile must be one of');
+      expect(chat).not.toHaveBeenCalled();
+    });
   });
 
   describe('peer.chat — happy paths', () => {
@@ -179,6 +210,71 @@ describe('peer-chat-bridge — Phase (d).15', () => {
 
       const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
       expect(messages[0].content).toBe('You are a pirate. Answer in shanties.');
+    });
+
+    it('appends dispatchProfile policy guidance to explicit systemPrompt', async () => {
+      const { client, chat } = makeMockClient();
+      wirePeerChatBridge(() => client as never);
+
+      await dispatchPeerRequest(
+        {
+          id: 'p6-profile-prompt',
+          method: 'peer.chat',
+          params: {
+            prompt: 'Q',
+            systemPrompt: 'You are a pirate. Answer in shanties.',
+            dispatchProfile: 'safe',
+          },
+        },
+        baseCtx,
+      );
+
+      const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+      expect(messages[0].content).toContain('You are a pirate. Answer in shanties.');
+      expect(messages[0].content).toContain('protect secrets');
+      expect(messages[0].content).toContain('Tool policy hint:');
+    });
+
+    it('dispatchProfile applies profile guidance and returns policy metadata', async () => {
+      const { client, chat } = makeMockClient();
+      wirePeerChatBridge(() => client as never);
+
+      const r = await dispatchPeerRequest(
+        {
+          id: 'p6-profile',
+          method: 'peer.chat',
+          params: { prompt: 'Review this patch', dispatchProfile: 'review' },
+        },
+        baseCtx,
+      );
+
+      expect(r.ok).toBe(true);
+      const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+      expect(messages[0].content).toContain('Prioritize defects');
+      expect(messages[0].content).toContain('Tool policy hint:');
+
+      const payload = r.payload as {
+        dispatchProfile?: string;
+        toolPolicy?: { policyProfile?: string; defaultAction?: string };
+        toolDecisions?: Array<{ tool: string; action: string }>;
+        toolset?: { toolsetId: string; deniedTools: string[] };
+      };
+      expect(payload.dispatchProfile).toBe('review');
+      expect(payload.toolPolicy).toMatchObject({
+        policyProfile: 'minimal',
+        defaultAction: 'confirm',
+      });
+      expect(payload.toolDecisions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+          expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+          expect.objectContaining({ tool: 'bash', action: 'deny' }),
+        ]),
+      );
+      expect(payload.toolset?.toolsetId).toBe('fleet.hermes.review');
+      expect(payload.toolset?.deniedTools).toEqual(
+        expect.arrayContaining(['create_file', 'bash']),
+      );
     });
 
     it('model option propagates as ChatOptions.model and is echoed in modelRequested', async () => {
@@ -249,6 +345,145 @@ describe('peer-chat-bridge — Phase (d).15', () => {
         model: 'gemini-2.5-flash',
         isLocal: false,
       });
+    });
+  });
+
+  describe('peer.dispatch — profile metadata', () => {
+    it('rejects unknown dispatchProfile values before queuing a dispatch', async () => {
+      const { client, chat } = makeMockClient();
+      wirePeerChatBridge(() => client as never);
+
+      const accepted = await dispatchPeerRequest(
+        {
+          id: 'dispatch-invalid-profile',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-invalid-profile',
+            prompt: 'Review this patch',
+            dispatchProfile: 'chaos',
+          },
+        },
+        baseCtx,
+      );
+
+      expect(accepted.ok).toBe(false);
+      expect(accepted.error?.message).toContain('dispatchProfile must be one of');
+      expect(getDispatchState('run-invalid-profile')).toBeNull();
+      expect(chat).not.toHaveBeenCalled();
+    });
+
+    it('stores dispatchProfile and applies profile-specific system guidance', async () => {
+      const { client, chat } = makeMockClient();
+      wirePeerChatBridge(() => client as never);
+
+      const accepted = await dispatchPeerRequest(
+        {
+          id: 'dispatch-1',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-review',
+            prompt: 'Review this patch',
+            model: 'm-review',
+            dispatchProfile: 'review',
+            traceId: 'trace-child',
+            parentRunId: 'parent-run',
+          },
+        },
+        baseCtx,
+      );
+
+      expect(accepted.ok).toBe(true);
+      await waitFor(() => getDispatchState('run-review')?.status === 'completed');
+
+      const state = getDispatchState('run-review');
+      expect(state).toMatchObject({
+        runId: 'run-review',
+        prompt: 'Review this patch',
+        model: 'm-review',
+        dispatchProfile: 'review',
+        toolPolicy: expect.objectContaining({
+          policyProfile: 'minimal',
+          denyGroups: expect.arrayContaining(['group:fs:write', 'group:runtime']),
+        }),
+        toolDecisions: expect.arrayContaining([
+          expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+          expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+          expect.objectContaining({ tool: 'bash', action: 'deny' }),
+        ]),
+        traceId: 'trace-child',
+        parentRunId: 'parent-run',
+        status: 'completed',
+      });
+
+      const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+      expect(messages[0].content).toContain('Prioritize defects');
+      expect(messages[0].content).toContain('Tool policy hint:');
+      expect(chat.mock.calls[0][2]).toEqual({ model: 'm-review' });
+
+      const status = await dispatchPeerRequest(
+        {
+          id: 'dispatch-status-1',
+          method: 'peer.dispatchStatus',
+          params: { runId: 'run-review' },
+        },
+        baseCtx,
+      );
+      expect(status.ok).toBe(true);
+      expect(status.payload).toMatchObject({
+        found: true,
+        runId: 'run-review',
+        status: 'completed',
+        dispatchProfile: 'review',
+        toolPolicy: expect.objectContaining({
+          policyProfile: 'minimal',
+        }),
+        toolDecisions: expect.arrayContaining([
+          expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+        ]),
+        result: 'mocked answer',
+      });
+    });
+
+    it('returns accepted dispatch policy metadata and preserves frame traceId', async () => {
+      const { client } = makeMockClient();
+      wirePeerChatBridge(() => client as never);
+
+      const accepted = await dispatchPeerRequest(
+        {
+          id: 'dispatch-safe-accepted',
+          method: 'peer.dispatch',
+          traceId: 'trace-from-frame',
+          params: {
+            id: 'run-safe-accepted',
+            prompt: 'Inspect this risky change',
+            dispatchProfile: 'safe',
+          },
+        },
+        baseCtx,
+      );
+
+      expect(accepted.ok).toBe(true);
+      expect(accepted.payload).toMatchObject({
+        runId: 'run-safe-accepted',
+        traceId: 'trace-from-frame',
+        dispatchProfile: 'safe',
+        toolPolicy: expect.objectContaining({
+          policyProfile: 'minimal',
+          defaultAction: 'deny',
+        }),
+        toolDecisions: expect.arrayContaining([
+          expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+          expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+          expect.objectContaining({ tool: 'bash', action: 'deny' }),
+        ]),
+        toolset: expect.objectContaining({
+          toolsetId: 'fleet.hermes.safe',
+          deniedTools: expect.arrayContaining(['create_file', 'bash', 'git_push']),
+        }),
+      });
+
+      await waitFor(() => getDispatchState('run-safe-accepted')?.status === 'completed');
+      expect(getDispatchState('run-safe-accepted')?.traceId).toBe('trace-from-frame');
     });
   });
 });

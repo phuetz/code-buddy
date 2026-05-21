@@ -47,6 +47,14 @@ import {
   executeRoutePeer,
   type RoutePeerParams,
 } from '../../tools/route-peer-tool.js';
+import {
+  FLEET_DISPATCH_PROFILES,
+  normalizeDispatchProfile,
+  type FleetDispatchToolDecision,
+  type FleetDispatchToolPolicy,
+  type FleetDispatchProfile,
+  type FleetHermesToolsetDescriptor,
+} from '../../fleet/dispatch-profile.js';
 
 // eslint-disable-next-line no-control-regex -- Fleet stream chunks may contain terminal control bytes from remote peers.
 const ANSI_ESCAPE_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/g;
@@ -106,6 +114,7 @@ Actions:
                                       view_file {"file_path":"README.md"}
   route <prompt>                      Choose the best peer/model for a task
             [--privacy public|sensitive]
+            [--profile balanced|research|code|review|safe]
             [--max-cost-usd <n>]       using peer.describe + TaskRouter.
             [--max-latency-ms <n>]     Use --delegate to immediately run the
             [--parallelism <n>]        selected peer.chat lane. Use --json
@@ -117,6 +126,7 @@ Actions:
   chat start <peer>                   (V1.2.1) UX wrapper around
        [--system "<prompt>"]          peer.chat-session.* — opens a
        [--model <id>]                 multi-turn session with stable alias
+       [--profile balanced|research|code|review|safe]
        [--name <alias>]               so you don't have to copy sessionId
                                       between turns.
   chat say <message>                  Send the next user turn. Uses the
@@ -204,6 +214,17 @@ interface RoutePeerCommandData {
   recommendation: RouteLaneSummary;
   fallback: RouteLaneSummary | null;
   parallel?: RouteLaneSummary[];
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: {
+    policyProfile: string;
+    defaultAction: string;
+    summary: string;
+  };
+  toolDecisions?: Array<{
+    tool: string;
+    action: string;
+    matchedGroup?: string;
+  }>;
   rationale: string;
   classification: unknown;
   describeErrors: Array<{ peer: string; error: string }>;
@@ -213,6 +234,7 @@ interface RoutePeerCommandData {
       peer: string;
       prompt: string;
       model: string;
+      dispatchProfile?: FleetDispatchProfile;
     };
   };
 }
@@ -399,6 +421,23 @@ function parsePositiveIntegerFlag(flag: string, raw: string | undefined): {
   return { value: Math.floor(parsed.value) };
 }
 
+function parseDispatchProfileFlag(raw: string | undefined): {
+  value?: FleetDispatchProfile;
+  error?: string;
+} {
+  if (raw === undefined) {
+    return {
+      error: `Error: --profile expects one of ${FLEET_DISPATCH_PROFILES.join(', ')}.`,
+    };
+  }
+  if (!FLEET_DISPATCH_PROFILES.includes(raw as FleetDispatchProfile)) {
+    return {
+      error: `Error: --profile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}, got "${raw}".`,
+    };
+  }
+  return { value: normalizeDispatchProfile(raw) };
+}
+
 function parseRouteArgs(rest: string[]): ParsedRouteArgs {
   const promptParts: string[] = [];
   const routeParams: ParsedRouteArgs['routeParams'] = {};
@@ -420,6 +459,11 @@ function parseRouteArgs(rest: string[]): ParsedRouteArgs {
         };
       }
       routeParams.privacyTag = privacy;
+      i++;
+    } else if ((arg === '--profile' || arg === '--dispatch-profile') && i + 1 < rest.length) {
+      const parsed = parseDispatchProfileFlag(rest[i + 1]);
+      if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
+      routeParams.dispatchProfile = parsed.value;
       i++;
     } else if ((arg === '--max-cost' || arg === '--max-cost-usd') && i + 1 < rest.length) {
       const parsed = parsePositiveNumberFlag(arg, rest[i + 1]);
@@ -559,6 +603,10 @@ interface ChatSessionSummary {
   sessionId: string;
   turnCount: number;
   model?: string;
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: FleetDispatchToolPolicy;
+  toolDecisions?: FleetDispatchToolDecision[];
+  toolset?: FleetHermesToolsetDescriptor;
   ageMs: number;
   idleMs: number;
   expiresInMs: number;
@@ -570,6 +618,7 @@ interface ChatSessionRef {
   sessionId: string;
   systemPrompt?: string;
   model?: string;
+  dispatchProfile?: FleetDispatchProfile;
   turnCount: number;
   startedAt: number;
   lastUsedAt: number;
@@ -595,13 +644,16 @@ interface ParsedChatStartArgs {
   peerName: string | null;
   systemPrompt: string | null;
   model: string | null;
+  dispatchProfile?: FleetDispatchProfile;
   alias: string | null;
+  error?: string;
 }
 
 function parseChatStartArgs(rest: string[]): ParsedChatStartArgs {
   let peerName: string | null = null;
   let systemPrompt: string | null = null;
   let model: string | null = null;
+  let dispatchProfile: FleetDispatchProfile | undefined;
   let alias: string | null = null;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
@@ -611,6 +663,11 @@ function parseChatStartArgs(rest: string[]): ParsedChatStartArgs {
     } else if (arg === '--model' && i + 1 < rest.length) {
       model = rest[i + 1];
       i++;
+    } else if ((arg === '--profile' || arg === '--dispatch-profile') && i + 1 < rest.length) {
+      const parsed = parseDispatchProfileFlag(rest[i + 1]);
+      if (parsed.error) return { peerName, systemPrompt, model, alias, error: parsed.error };
+      dispatchProfile = parsed.value;
+      i++;
     } else if (arg === '--name' && i + 1 < rest.length) {
       alias = rest[i + 1];
       i++;
@@ -618,7 +675,7 @@ function parseChatStartArgs(rest: string[]): ParsedChatStartArgs {
       peerName = arg;
     }
   }
-  return { peerName, systemPrompt, model, alias };
+  return { peerName, systemPrompt, model, dispatchProfile, alias };
 }
 
 interface ParsedChatSayArgs {
@@ -682,6 +739,32 @@ function formatRelativeAge(ms: number): string {
   return `${hr}h`;
 }
 
+function formatToolDecisionSummary(
+  decisions: readonly FleetDispatchToolDecision[] | undefined,
+): string {
+  if (!decisions || decisions.length === 0) return '';
+  const shown = decisions.slice(0, 6);
+  const suffix = decisions.length > shown.length ? `, +${decisions.length - shown.length}` : '';
+  return shown.map((decision) => `${decision.tool}=${decision.action}`).join(', ') + suffix;
+}
+
+function formatChatSessionPolicySummary(session: ChatSessionSummary): string | null {
+  const parts: string[] = [];
+  const policyProfile = session.toolPolicy?.policyProfile ?? session.toolset?.policyProfile;
+  const defaultAction = session.toolPolicy?.defaultAction ?? session.toolset?.defaultAction;
+  if (policyProfile && defaultAction) {
+    parts.push(`policy ${policyProfile} / ${defaultAction}`);
+  }
+  if (session.toolset?.toolsetId) {
+    parts.push(`toolset ${session.toolset.toolsetId}`);
+  }
+  const decisions = formatToolDecisionSummary(session.toolDecisions ?? session.toolset?.decisions);
+  if (decisions) {
+    parts.push(`decisions ${decisions}`);
+  }
+  return parts.length > 0 ? parts.join('; ') : null;
+}
+
 /**
  * Drop any chat sessions tied to a peer that's been stopped. Called
  * from the `stop` branch right after `unregister`. The peer's
@@ -717,19 +800,30 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
     for (const ref of chatSessions.values()) {
       const age = formatRelativeAge(now - ref.lastUsedAt);
       const modelTxt = ref.model ? `model ${ref.model}` : 'default model';
+      const profileTxt = ref.dispatchProfile ? `, profile ${ref.dispatchProfile}` : '';
       const isActive = ref.alias === activeAlias ? '   ← active' : '';
       lines.push(
-        `  ${ref.alias.padEnd(20)} → ${ref.peerName.padEnd(18)} [turn ${ref.turnCount}, ${age} ago, ${modelTxt}]${isActive}`,
+        `  ${ref.alias.padEnd(20)} → ${ref.peerName.padEnd(18)} [turn ${ref.turnCount}, ${age} ago, ${modelTxt}${profileTxt}]${isActive}`,
       );
     }
     return textResult(lines.join('\n'));
   }
 
   if (sub === 'start') {
-    const { peerName, systemPrompt, model, alias: explicitAlias } = parseChatStartArgs(inner);
+    const {
+      peerName,
+      systemPrompt,
+      model,
+      dispatchProfile,
+      alias: explicitAlias,
+      error,
+    } = parseChatStartArgs(inner);
+    if (error) {
+      return textResult(error);
+    }
     if (!peerName) {
       return textResult(
-        'Usage: /fleet chat start <peer> [--system "<prompt>"] [--model <id>] [--name <alias>]',
+        'Usage: /fleet chat start <peer> [--system "<prompt>"] [--model <id>] [--profile balanced|research|code|review|safe] [--name <alias>]',
       );
     }
     const target = getFleetRegistry().get(peerName);
@@ -747,17 +841,19 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
     const params: Record<string, unknown> = {};
     if (systemPrompt) params.systemPrompt = systemPrompt;
     if (model) params.model = model;
+    if (dispatchProfile) params.dispatchProfile = dispatchProfile;
 
     try {
       const result = (await target.listener.request('peer.chat-session.start', params, {
         timeoutMs: 30_000,
-      })) as { sessionId?: string };
+      })) as { sessionId?: string; dispatchProfile?: FleetDispatchProfile };
       const sessionId = result?.sessionId;
       if (typeof sessionId !== 'string' || !sessionId) {
         return textResult(
           `Peer "${peerName}" → peer.chat-session.start returned no sessionId. Got: ${JSON.stringify(result)}`,
         );
       }
+      const storedProfile = result.dispatchProfile ?? dispatchProfile;
       const now = Date.now();
       chatSessions.set(alias, {
         alias,
@@ -765,14 +861,16 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
         sessionId,
         systemPrompt: systemPrompt ?? undefined,
         model: model ?? undefined,
+        dispatchProfile: storedProfile,
         turnCount: 0,
         startedAt: now,
         lastUsedAt: now,
       });
       activeAlias = alias;
       const sidShort = sessionId.length > 14 ? `${sessionId.slice(0, 14)}…` : sessionId;
+      const profileTxt = storedProfile ? ` Profile: ${storedProfile}.` : '';
       return textResult(
-        `Chat session "${alias}" opened with ${peerName} (sessionId=${sidShort}). ` +
+        `Chat session "${alias}" opened with ${peerName} (sessionId=${sidShort}).${profileTxt} ` +
           `Send turns with /fleet chat say <message>.`,
       );
     } catch (err) {
@@ -806,14 +904,16 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
         'peer.chat-session.continue',
         { sessionId: ref.sessionId, prompt: message },
         { timeoutMs: 120_000 },
-      )) as { text?: string };
+      )) as { text?: string; dispatchProfile?: FleetDispatchProfile };
       const elapsed = Date.now() - t0;
       ref.turnCount++;
       ref.lastUsedAt = Date.now();
+      ref.dispatchProfile = result.dispatchProfile ?? ref.dispatchProfile;
       activeAlias = alias;
       const text = result?.text ?? '';
+      const profileTxt = ref.dispatchProfile ? `, profile ${ref.dispatchProfile}` : '';
       return textResult(
-        `← ${alias} (${ref.peerName}) [turn ${ref.turnCount}, ${elapsed}ms]:\n${text}`,
+        `← ${alias} (${ref.peerName}) [turn ${ref.turnCount}, ${elapsed}ms${profileTxt}]:\n${text}`,
       );
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
@@ -886,7 +986,7 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
   return textResult(
     `Unknown chat sub-action: ${sub}\n` +
       `Usage: /fleet chat (start|say|end|list) ...\n` +
-      `  start <peer> [--system <s>] [--model <m>] [--name <alias>]\n` +
+      `  start <peer> [--system <s>] [--model <m>] [--profile <profile>] [--name <alias>]\n` +
       `  say <message> [--session <alias>]\n` +
       `  end [<alias>] | --all\n` +
       `  list`,
@@ -944,10 +1044,15 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
           blocks.push(`  Chat sessions (${entry.length}):`);
           for (const s of entry) {
             const modelTxt = s.model ? `model ${s.model}` : 'default model';
+            const profileTxt = s.dispatchProfile ? `  profile ${s.dispatchProfile}` : '';
             blocks.push(
               `    ${s.sessionId.padEnd(22)} turn ${String(s.turnCount).padEnd(2)} ` +
-                `idle ${formatRelativeAge(s.idleMs)}  ${modelTxt}`,
+                `idle ${formatRelativeAge(s.idleMs)}  ${modelTxt}${profileTxt}`,
             );
+            const policySummary = formatChatSessionPolicySummary(s);
+            if (policySummary) {
+              blocks.push(`      ${policySummary}`);
+            }
           }
         } else {
           blocks.push('  Chat sessions: (none open on this peer)');
@@ -1444,7 +1549,20 @@ function formatRoutePeerCommandData(data: RoutePeerCommandData): string {
     );
   }
 
+  const profile = data.dispatchProfile ?? data.nextCall.args.dispatchProfile ?? 'balanced';
   lines.push(`  Complexity: ${getClassificationComplexity(data.classification)}`);
+  lines.push(`  Profile: ${profile}`);
+  if (data.toolPolicy) {
+    lines.push(`  Tool policy: ${data.toolPolicy.policyProfile} / ${data.toolPolicy.defaultAction}`);
+    lines.push(`  Tool policy summary: ${data.toolPolicy.summary}`);
+  }
+  if (data.toolDecisions && data.toolDecisions.length > 0) {
+    lines.push(
+      `  Tool decisions: ${data.toolDecisions
+        .map((decision) => `${decision.tool}=${decision.action}`)
+        .join(', ')}`,
+    );
+  }
   lines.push(`  Rationale: ${data.rationale}`);
   if (data.describeErrors.length > 0) {
     lines.push(`  Describe warnings: ${data.describeErrors.length}`);
@@ -1454,11 +1572,18 @@ function formatRoutePeerCommandData(data: RoutePeerCommandData): string {
   }
   lines.push('');
   lines.push('Next call:');
+  const nextCallJson = {
+    peer: data.nextCall.args.peer,
+    model: data.nextCall.args.model,
+    dispatchProfile: profile,
+    prompt: data.nextCall.args.prompt,
+  };
   lines.push(
-    `  peer_delegate {"peer":"${data.nextCall.args.peer}","model":"${data.nextCall.args.model}","prompt":${JSON.stringify(data.nextCall.args.prompt)}}`,
+    `  peer_delegate ${JSON.stringify(nextCallJson)}`,
   );
+  const profileSuffix = profile !== 'balanced' ? ` --profile ${profile}` : '';
   lines.push(
-    `  or /fleet route ${JSON.stringify(data.nextCall.args.prompt)} --delegate`,
+    `  or /fleet route ${JSON.stringify(data.nextCall.args.prompt)}${profileSuffix} --delegate`,
   );
   return lines.join('\n');
 }
@@ -1509,6 +1634,7 @@ async function handleRoute(rest: string[]): Promise<CommandHandlerResult> {
     peer: routeData.recommendation.peer,
     prompt: parsed.prompt,
     model: routeData.recommendation.model,
+    dispatchProfile: routeData.nextCall.args.dispatchProfile ?? parsed.routeParams.dispatchProfile,
     ...(parsed.delegateTimeoutMs !== undefined ? { timeoutMs: parsed.delegateTimeoutMs } : {}),
   });
 

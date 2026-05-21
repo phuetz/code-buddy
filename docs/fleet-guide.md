@@ -320,9 +320,15 @@ Request:
 {
   "prompt": "What's the time complexity of CEM-MPC?",   // required
   "systemPrompt": "Answer briefly. No tools.",          // optional, default sensible
-  "model": "gemini-2.5-flash"                           // optional, override the wired default
+  "model": "gemini-2.5-flash",                          // optional, override the wired default
+  "dispatchProfile": "review"                           // optional: balanced|research|code|review|safe
 }
 ```
+
+If `dispatchProfile` is provided and `systemPrompt` is omitted,
+`peer.chat` derives a profile-specific system prompt. If both are
+provided, the explicit `systemPrompt` wins, but the profile is still
+echoed as policy metadata in the response.
 
 Response:
 ```json
@@ -335,7 +341,25 @@ Response:
     "completion_tokens": 142,
     "total_tokens": 180
   },
-  "traceId": "trace-1g2h3i4j-5k6l7m8n"
+  "traceId": "trace-1g2h3i4j-5k6l7m8n",
+  "dispatchProfile": "review",
+  "toolPolicy": {
+    "profile": "review",
+    "policyProfile": "minimal",
+    "defaultAction": "confirm",
+    "summary": "Review posture: read-first, no code mutation..."
+  },
+  "toolDecisions": [
+    { "tool": "view_file", "action": "allow" },
+    { "tool": "create_file", "action": "deny" },
+    { "tool": "bash", "action": "deny" }
+  ],
+  "toolset": {
+    "toolsetId": "fleet.hermes.review",
+    "allowedTools": ["view_file", "web_search"],
+    "confirmTools": ["web_fetch"],
+    "deniedTools": ["create_file", "bash", "delete_file"]
+  }
 }
 ```
 
@@ -665,12 +689,29 @@ Two new tools registered on every Code Buddy:
   `peer.describe`, classifies the prompt, runs Fleet `TaskRouter`, and
   returns a recommended peer/model plus a ready `peer_delegate` call.
   Use `privacyTag: "sensitive"` to veto cloud-egress peers for private
-  code or secret-bearing prompts.
+  code or secret-bearing prompts. Use `dispatchProfile` (`balanced`,
+  `research`, `code`, `review`, `safe`) to nudge model selection and
+  carry the same operating posture into the suggested delegate call.
 - `/fleet route "..."` — human-facing version of the same router.
-  Add `--delegate` to route and immediately perform one `peer.chat`
-  call on the selected peer/model.
-- `peer_delegate(peer, prompt, [systemPrompt], [model], [timeoutMs])` —
-  wraps `peer.chat`. Returns the peer's text response, usage, traceId.
+  Add `--profile review` (or another dispatch profile) to select a
+  posture, and `--delegate` to route and immediately perform one
+  `peer.chat` call on the selected peer/model.
+- `peer_delegate(peer, prompt, [systemPrompt], [model], [dispatchProfile],
+  [timeoutMs])` — wraps `peer.chat`. Returns the peer's text response,
+  usage, traceId, and any peer-side `toolPolicy/toolDecisions` metadata.
+  When `dispatchProfile` is set, Code Buddy sends it through the RPC
+  boundary; the remote peer uses it for profile guidance when no
+  `systemPrompt` override is provided and always echoes the policy
+  metadata back.
+- `buddy fleet policy review view_file create_file bash` — operator
+  diagnostic that previews the allow/confirm/deny tool decisions for a
+  Fleet dispatch profile before a future outillage path executes tools.
+- `buddy fleet toolsets review view_file create_file web_fetch` —
+  Hermes-style toolset descriptor for a Fleet profile. It derives
+  `fleet.hermes.<profile>` allowed/confirmed/denied tool lists from the
+  same policy resolver as `fleet policy`, so operators can inspect the
+  effective tool posture without a second source of truth. Add `--json`
+  for machine-readable Fleet/Cowork integration.
 
 Anti-loop guards stack: the existing `CODEBUDDY_PEER_ROLE=leaf` refusal
 + the new per-turn cap (default 5, env
@@ -754,23 +795,24 @@ append turns with `continue`, close with `end`.
 
 #### Methods
 
-- `peer.chat-session.start({ systemPrompt?, model? })`
-  → `{ sessionId, expiresAt, traceId }`
+- `peer.chat-session.start({ systemPrompt?, model?, dispatchProfile? })`
+  → `{ sessionId, expiresAt, traceId, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
 - `peer.chat-session.continue({ sessionId, prompt })`
-  → `{ text, finishReason, usage, traceId }`
+  → `{ text, finishReason, usage, traceId, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
 - `peer.chat-session.continue-stream({ sessionId, prompt })`
-  → `{ text, finishReason, usage, traceId }` plus `peer:chunk` frames
-  emitted live for each assistant delta. Same FIFO serialisation and
-  persistence as `continue` ; useful when a turn is expected to be
+  → `{ text, finishReason, usage, traceId, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
+  plus `peer:chunk` frames emitted live for each assistant delta. Same
+  FIFO serialisation and persistence as `continue` ; useful when a turn is expected to be
   long and the caller wants visibility into in-flight output. If
   the stream errors before any delta arrives, the user message is
   rolled back ; if some text was already produced, that partial
   answer is persisted so the next turn sees it.
 - `peer.chat-session.list()`
-  → `{ count, sessions: [{ sessionId, turnCount, model?, ageMs, idleMs,
-  expiresInMs }], traceId }`. Read-only metadata snapshot, never
-  returns prompt content or assistant text. Used by `/fleet status
-  --with-sessions` and external monitoring.
+  → `{ count, sessions: [{ sessionId, turnCount, model?, dispatchProfile?,
+  toolPolicy?, toolDecisions?, toolset?, ageMs, idleMs, expiresInMs }], traceId }`.
+  Read-only metadata snapshot, never returns prompt content or assistant
+  text. Used by `/fleet status --with-sessions`, Cowork peer details and
+  external monitoring.
 - `peer.chat-session.end({ sessionId })`
   → `{ closed: boolean, traceId }`
 
@@ -805,7 +847,7 @@ Three events are emitted on the fleet bus during a chat session
 lifecycle, visible to `/fleet listen` consumers and recorded by
 `/fleet history`:
 
-- `fleet:chat-session:start` — payload `{ sessionId, model? }`
+- `fleet:chat-session:start` — payload `{ sessionId, model?, dispatchProfile? }`
 - `fleet:chat-session:turn`  — payload `{ sessionId, turnCount, elapsedMs?, usage? }`
 - `fleet:chat-session:end`   — payload `{ sessionId, reason: 'end' | 'expired' }`
 
@@ -814,6 +856,11 @@ assistant text, no system prompt. A remote `/fleet listen` consumer
 sees that a session is active and how many turns have been exchanged,
 but never the conversation itself. Useful for `/fleet status`-style
 monitoring without compromising conversation privacy.
+
+Cowork consumes the same metadata-only events. The Fleet peer panel can
+show active chat-session counts, profile chips and turn counts for a
+peer, but it intentionally stores no prompt, answer or system prompt in
+renderer state.
 
 #### Limitations (V1.2-saga)
 
@@ -841,8 +888,8 @@ monitoring without compromising conversation privacy.
 
 ```bash
 > /fleet send ministar-linux peer.chat-session.start \
-    {"systemPrompt":"Tu es un expert Rust","model":"qwen2.5-coder:7b"}
-# → { sessionId: "sess_lpz4xy_h2k1", expiresAt: 1715380000000, ... }
+    {"dispatchProfile":"review","model":"qwen2.5-coder:7b"}
+# → { sessionId: "sess_lpz4xy_h2k1", dispatchProfile: "review", toolPolicy: {...}, ... }
 
 > /fleet send ministar-linux peer.chat-session.continue \
     {"sessionId":"sess_lpz4xy_h2k1","prompt":"Donne-moi un exemple de borrow checker"}
@@ -863,8 +910,8 @@ UX wrapper over `peer.chat-session.*` that drops the need to copy
 `sessionId` between turns. Sub-actions: `start`, `say`, `end`, `list`.
 
 ```bash
-> /fleet chat start ministar-linux --system "Tu es un expert Rust" --model qwen2.5-coder:7b
-# → Chat session "ministar-linux-1" opened with ministar-linux (sessionId=sess_lpz4xy_h2k…).
+> /fleet chat start ministar-linux --profile review --model qwen2.5-coder:7b
+# → Chat session "ministar-linux-1" opened with ministar-linux (sessionId=sess_lpz4xy_h2k…, profile review).
 #   Send turns with /fleet chat say <message>.
 
 > /fleet chat say Donne-moi un exemple de borrow checker
@@ -877,7 +924,7 @@ UX wrapper over `peer.chat-session.*` that drops the need to copy
 
 > /fleet chat list
 # Active chat sessions (1):
-#   ministar-linux-1     → ministar-linux     [turn 2, 5s ago, model qwen2.5-coder:7b]   ← active
+#   ministar-linux-1     → ministar-linux     [turn 2, 5s ago, model qwen2.5-coder:7b, profile review]   ← active
 
 > /fleet chat end
 # Chat session "ministar-linux-1" closed.
@@ -891,6 +938,46 @@ there's only one open, or to the last `start` otherwise. Pass
 `/fleet stop <peer>` and `/fleet stop --all` auto-purge any chat
 sessions tied to the peer being closed (server-side will TTL out within
 the `CODEBUDDY_PEER_SESSION_IDLE_MS` window).
+
+`--profile balanced|research|code|review|safe` is the same Fleet
+dispatch profile used by `/fleet route`, `route_peer`, `peer_delegate`
+and Cowork dispatch. If `--system` is omitted, the peer derives a
+profile-specific system prompt. If `--system` is present, the explicit
+prompt wins, while the profile still travels as metadata for policy
+preview, monitoring and future tool enforcement.
+
+### Hermes-style Fleet toolsets
+
+Fleet dispatch profiles now expose a small Hermes-inspired toolset
+manifest:
+
+```bash
+buddy fleet toolsets review view_file create_file bash web_fetch
+buddy fleet toolsets safe --json
+```
+
+Profile selection is shared by the CLI, model-facing tool schemas and
+Hermes Agent prompt:
+
+| Profile | Use when |
+| --- | --- |
+| `balanced` | General delegation, mixed tasks, or unclear posture |
+| `research` | Source-aware investigation, context gathering, and low-mutation analysis |
+| `code` | Implementation, refactoring, tests, and development edits |
+| `review` | Read-first code review, audit, regression, and missing-test analysis |
+| `safe` | High-risk, secret-bearing, destructive, or read-only-by-default work |
+
+Each descriptor has an id such as `fleet.hermes.review`, the profile
+intent, policy profile, default action, group rules and concrete
+`allowedTools`, `confirmTools` and `deniedTools` for the inspected tool
+names. The descriptor is intentionally derived from
+`previewDispatchToolDecisions()` instead of hand-maintained allowlists.
+That keeps `fleet policy`, peer metadata and Cowork's future filtered
+tool UX aligned with the same resolver. `route_peer`, `peer.chat`,
+`peer.chat-stream`, `peer.dispatchStatus` and `peer.chat-session.*`
+now return the descriptor as `toolset` whenever a dispatch profile is
+selected, while retaining the older `toolPolicy` and `toolDecisions`
+fields for compatibility.
 
 ### Autonomous v0.2 — Ollama spokes (Phase d.20)
 
@@ -929,6 +1016,17 @@ connecte en flow complet :
 | **W4** — Privacy lint scan le goal AVANT le router (auto-bump à `sensitive`) | `fleet.dispatch` IPC handler |
 | **W5** — Cost cap `canSpend()` vérifié AVANT chaque dispatch | `fleet.dispatch` IPC handler |
 | **W6** — `discoverPeers()` Tailscale + YAML appelé au boot + toutes les 5 min | `cowork/src/main/index.ts` + IPC `fleet.discoverPeers` |
+
+### Cowork cockpit notes
+
+- Fleet-origin scheduled tasks are visible in both the Fleet and Scheduled
+  Activity Feed filters, but their prompt content is not copied into activity
+  metadata.
+- Clicking a scheduled Activity Feed entry opens Settings -> Schedule so the
+  operator can inspect, run, disable or delete the task. Fleet-only entries
+  still open the Fleet Command Center.
+- Schedule metadata chips show only operational context such as source,
+  dispatch profile, privacy tag, parallelism and memory-count hints.
 
 ### Flow complet d'une dispatch
 

@@ -149,6 +149,28 @@ describe('peer.chat-stream method', () => {
     expect(response.error?.message).toContain('prompt is required');
   });
 
+  it('rejects unknown dispatchProfile values before streaming', async () => {
+    let called = false;
+    const fakeClient = {
+      async *chatStream() {
+        called = true;
+        yield { choices: [{ delta: { content: 'x' } }] };
+      },
+    };
+    wirePeerChatBridge(() => fakeClient as never);
+    const response = await dispatchPeerRequest(
+      {
+        id: 'req-invalid-profile',
+        method: 'peer.chat-stream',
+        params: { prompt: 'q', dispatchProfile: 'chaos' },
+      },
+      baseCtx({ emitChunk: () => undefined }),
+    );
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('dispatchProfile must be one of');
+    expect(called).toBe(false);
+  });
+
   it('works WITHOUT a streaming transport — aggregates locally and returns full text', async () => {
     const fakeClient = makeStreamingClient(['hi', ' there']);
     wirePeerChatBridge(() => fakeClient as never);
@@ -188,5 +210,83 @@ describe('peer.chat-stream method', () => {
       baseCtx(),
     );
     expect(capturedOpts).toMatchObject({ model: 'grok-3' });
+  });
+
+  it('applies dispatchProfile guidance and returns policy metadata', async () => {
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const fakeClient = {
+      async *chatStream(msgs: unknown) {
+        capturedMessages = msgs as Array<{ role: string; content: string }>;
+        yield { choices: [{ delta: { content: 'safe ' } }] };
+        yield { choices: [{ delta: { content: 'answer' }, finish_reason: 'stop' }] };
+      },
+    };
+    wirePeerChatBridge(() => fakeClient as never);
+
+    const response = await dispatchPeerRequest(
+      {
+        id: 'req-9',
+        method: 'peer.chat-stream',
+        params: { prompt: 'q', dispatchProfile: 'safe' },
+      },
+      baseCtx(),
+    );
+
+    expect(response.ok).toBe(true);
+    expect(capturedMessages[0].content).toContain('protect secrets');
+    expect(capturedMessages[0].content).toContain('Tool policy hint:');
+    const payload = response.payload as {
+      text: string;
+      dispatchProfile?: string;
+      toolPolicy?: { policyProfile?: string; defaultAction?: string };
+      toolDecisions?: Array<{ tool: string; action: string }>;
+      toolset?: { toolsetId: string; deniedTools: string[] };
+    };
+    expect(payload.text).toBe('safe answer');
+    expect(payload.dispatchProfile).toBe('safe');
+    expect(payload.toolPolicy).toMatchObject({
+      policyProfile: 'minimal',
+      defaultAction: 'deny',
+    });
+    expect(payload.toolDecisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+        expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+        expect.objectContaining({ tool: 'bash', action: 'deny' }),
+      ]),
+    );
+    expect(payload.toolset?.toolsetId).toBe('fleet.hermes.safe');
+    expect(payload.toolset?.deniedTools).toEqual(
+      expect.arrayContaining(['create_file', 'bash']),
+    );
+  });
+
+  it('appends dispatchProfile policy guidance to explicit stream systemPrompt', async () => {
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const fakeClient = {
+      async *chatStream(msgs: unknown) {
+        capturedMessages = msgs as Array<{ role: string; content: string }>;
+        yield { choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] };
+      },
+    };
+    wirePeerChatBridge(() => fakeClient as never);
+
+    const response = await dispatchPeerRequest(
+      {
+        id: 'req-10',
+        method: 'peer.chat-stream',
+        params: {
+          prompt: 'q',
+          systemPrompt: 'You are a private reviewer.',
+          dispatchProfile: 'safe',
+        },
+      },
+      baseCtx(),
+    );
+
+    expect(response.ok).toBe(true);
+    expect(capturedMessages[0].content).toContain('You are a private reviewer.');
+    expect(capturedMessages[0].content).toContain('protect secrets');
+    expect(capturedMessages[0].content).toContain('Tool policy hint:');
   });
 });

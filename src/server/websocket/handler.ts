@@ -11,6 +11,12 @@ import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { verifyToken } from '../auth/jwt.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
+import {
+  createServerAgent,
+  runAgentCompletion,
+  streamAgentDeltas,
+  type ServerAgent,
+} from '../agent-adapter.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
 async function getEnqueueMessage() {
@@ -20,11 +26,6 @@ async function getEnqueueMessage() {
   }
   return _enqueueMessage;
 }
-
-// Agent interface for WebSocket handler
-// Note: These methods don't exist in CodeBuddyAgent - this is a placeholder for future API alignment
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AgentInstance = any;
 
 // Rate limit configuration
 const RATE_LIMITS = {
@@ -42,7 +43,7 @@ interface ConnectionState {
   keyId?: string;
   scopes: string[];
   lastActivity: number;
-  agent?: AgentInstance;
+  agent?: ServerAgent;
   agentInitializing?: Promise<void>;
   streaming: boolean;
   // Rate limiting
@@ -225,12 +226,7 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       if (!state.agentInitializing) {
         state.agentInitializing = (async () => {
           try {
-            const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-            state.agent = new CodeBuddyAgent(
-              process.env.GROK_API_KEY || '',
-              process.env.GROK_BASE_URL,
-              model || process.env.GROK_MODEL || 'grok-3-latest'
-            );
+            state.agent = await createServerAgent();
           } catch (err) {
             state.agentInitializing = undefined;
             throw err;
@@ -238,6 +234,10 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         })();
       }
       await state.agentInitializing;
+    }
+    const agent = state.agent;
+    if (!agent) {
+      throw new Error('Agent initialization failed');
     }
 
     if (stream) {
@@ -251,12 +251,11 @@ messageHandlers.set('chat', async (ws, state, payload) => {
         timestamp: new Date().toISOString(),
       });
 
-      const streamGen = await state.agent.streamResponse(message, { model });
+      const streamGen = streamAgentDeltas(agent, message, { model });
 
-      for await (const chunk of streamGen) {
+      for await (const delta of streamGen) {
         if (!state.streaming) break;
 
-        const delta = chunk.choices?.[0]?.delta?.content || '';
         if (delta) {
           send(ws, {
             type: 'stream_chunk',
@@ -277,14 +276,13 @@ messageHandlers.set('chat', async (ws, state, payload) => {
       state.streaming = false;
     } else {
       // Non-streaming response
-      const result = await state.agent.processUserInput(message, { model });
+      const result = await runAgentCompletion(agent, message, { model });
 
       send(ws, {
         type: 'chat_response',
         payload: {
           content: result.content,
           finishReason: result.finishReason,
-          usage: result.usage,
         },
         timestamp: new Date().toISOString(),
       });
@@ -361,12 +359,7 @@ messageHandlers.set('execute_tool', async (ws, state, payload) => {
       if (!state.agentInitializing) {
         state.agentInitializing = (async () => {
           try {
-            const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-            state.agent = new CodeBuddyAgent(
-              process.env.GROK_API_KEY || '',
-              process.env.GROK_BASE_URL,
-              process.env.GROK_MODEL || 'grok-3-latest'
-            );
+            state.agent = await createServerAgent();
           } catch (err) {
             state.agentInitializing = undefined;
             throw err;
@@ -375,8 +368,12 @@ messageHandlers.set('execute_tool', async (ws, state, payload) => {
       }
       await state.agentInitializing;
     }
+    const agent = state.agent;
+    if (!agent) {
+      throw new Error('Agent initialization failed');
+    }
 
-    const result = await state.agent.executeTool(name, parameters || {});
+    const result = await agent.executeToolByName(name, parameters || {});
 
     send(ws, {
       type: 'tool_result',

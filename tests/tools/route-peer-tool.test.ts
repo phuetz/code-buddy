@@ -10,6 +10,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { executeRoutePeer } from '../../src/tools/route-peer-tool.js';
 import {
+  resetActiveCustomAgentRuntime,
+  setActiveCustomAgentRuntime,
+} from '../../src/agent/custom/custom-agent-runtime.js';
+import {
   getFleetRegistry,
   _resetFleetRegistryForTests,
   type ActiveListenerEntry,
@@ -67,12 +71,37 @@ function capability(partial: Partial<PeerCapability>): PeerCapability {
 describe('route_peer tool', () => {
   beforeEach(() => {
     _resetFleetRegistryForTests();
+    resetActiveCustomAgentRuntime();
   });
 
   it('errors when no peers are connected', async () => {
     const result = await executeRoutePeer({ prompt: 'analyze this architecture' });
     expect(result.success).toBe(false);
     expect(result.error).toContain('No fleet peers connected');
+  });
+
+  it('rejects unknown dispatchProfile values before peer discovery', async () => {
+    registerPeer(
+      'review-box',
+      capability({
+        models: [
+          {
+            id: 'reviewer',
+            contextWindow: 32_000,
+            strengths: ['reasoning'],
+            provider: 'ollama',
+          },
+        ],
+      }),
+    );
+
+    const result = await executeRoutePeer({
+      prompt: 'quick patch review',
+      dispatchProfile: 'chaos',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('dispatchProfile must be one of');
   });
 
   it('routes reasoning-heavy public tasks to the strongest ChatGPT OAuth peer', async () => {
@@ -127,6 +156,103 @@ describe('route_peer tool', () => {
         model: 'gpt-5.1-codex',
       },
     });
+  });
+
+  it('propagates dispatchProfile into routing and the suggested peer_delegate call', async () => {
+    registerPeer(
+      'review-box',
+      capability({
+        models: [
+          {
+            id: 'fast-small',
+            contextWindow: 32_000,
+            strengths: ['cheap', 'fast'],
+            provider: 'ollama',
+          },
+          {
+            id: 'reviewer',
+            contextWindow: 32_000,
+            strengths: ['reasoning'],
+            provider: 'ollama',
+          },
+        ],
+      }),
+    );
+
+    const result = await executeRoutePeer({
+      prompt: 'quick patch review',
+      dispatchProfile: 'review',
+    });
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      recommendation: { model: string };
+      dispatchProfile: string;
+      toolPolicy: { policyProfile: string; denyGroups: string[] };
+      toolDecisions: Array<{ tool: string; action: string; matchedGroup?: string }>;
+      toolset: { toolsetId: string; deniedTools: string[] };
+      nextCall: { args: { dispatchProfile?: string } };
+      rationale: string;
+    };
+    expect(data.recommendation.model).toBe('reviewer');
+    expect(data.dispatchProfile).toBe('review');
+    expect(data.toolPolicy.policyProfile).toBe('minimal');
+    expect(data.toolPolicy.denyGroups).toContain('group:fs:write');
+    expect(data.toolDecisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+        expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+        expect.objectContaining({ tool: 'bash', action: 'deny' }),
+      ]),
+    );
+    expect(data.toolset.toolsetId).toBe('fleet.hermes.review');
+    expect(data.toolset.deniedTools).toEqual(
+      expect.arrayContaining(['create_file', 'bash']),
+    );
+    expect(data.nextCall.args.dispatchProfile).toBe('review');
+    expect(data.rationale).toContain('Profile: review');
+  });
+
+  it('propagates the active agent dispatch profile when omitted by the caller', async () => {
+    setActiveCustomAgentRuntime({
+      id: 'hermes',
+      name: 'Hermes Agent',
+      description: '',
+      systemPrompt: 'prompt',
+      fleetDispatchProfile: 'review',
+      requireExplicitDispatchProfile: true,
+    });
+    registerPeer(
+      'review-box',
+      capability({
+        models: [
+          {
+            id: 'reviewer',
+            contextWindow: 32_000,
+            strengths: ['reasoning'],
+            provider: 'ollama',
+          },
+        ],
+      }),
+    );
+
+    const result = await executeRoutePeer({
+      prompt: 'review this patch',
+    });
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      dispatchProfile: string;
+      dispatchProfileSource: string;
+      dispatchProfileAgent?: string;
+      nextCall: { args: { dispatchProfile?: string } };
+      toolset: { toolsetId: string };
+    };
+    expect(data.dispatchProfile).toBe('review');
+    expect(data.dispatchProfileSource).toBe('agent-default');
+    expect(data.dispatchProfileAgent).toBe('hermes');
+    expect(data.nextCall.args.dispatchProfile).toBe('review');
+    expect(data.toolset.toolsetId).toBe('fleet.hermes.review');
   });
 
   it('vetoes cloud peers when privacyTag is sensitive', async () => {

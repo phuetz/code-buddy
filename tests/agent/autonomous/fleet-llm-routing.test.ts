@@ -13,6 +13,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as os from 'os';
+import * as path from 'path';
 import { resolveTickProvider } from '../../../src/agent/autonomous/fleet-tick-handler.js';
 import type { FleetTask } from '../../../src/agent/autonomous/fleet-task-types.js';
 
@@ -27,6 +29,8 @@ const ENV_KEYS = [
   'OPENAI_API_KEY',
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
+  'CODEBUDDY_CODEX_AUTH_PATH',
+  'GEMINI_CLI_PATH',
 ];
 
 let saved: Record<string, string | undefined>;
@@ -37,6 +41,14 @@ beforeEach(() => {
     saved[k] = process.env[k];
     delete process.env[k];
   }
+  process.env.CODEBUDDY_CODEX_AUTH_PATH = path.join(
+    os.tmpdir(),
+    `codebuddy-missing-codex-auth-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+  );
+  process.env.GEMINI_CLI_PATH = path.join(
+    os.tmpdir(),
+    `codebuddy-missing-gemini-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
 });
 
 afterEach(() => {

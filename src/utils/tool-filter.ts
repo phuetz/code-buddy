@@ -154,6 +154,45 @@ export function filterTools(
 }
 
 /**
+ * Filter a list of tool names using the same rules as the model-facing
+ * tool schema. Useful for prompt guidance that lists tool names without
+ * needing to construct the full runtime definitions.
+ */
+export function filterToolNames(
+  toolNames: readonly string[],
+  config: ToolFilterConfig = currentFilter
+): string[] {
+  if (config.enabledPatterns.length === 0 && config.disabledPatterns.length === 0) {
+    return [...toolNames];
+  }
+
+  const tools: CodeBuddyTool[] = toolNames.map(name => ({
+    type: 'function',
+    function: {
+      name,
+      description: '',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  }));
+
+  return filterTools(tools, config).tools.map(tool => tool.function.name);
+}
+
+/**
+ * Check whether a single tool name survives the active tool filter.
+ */
+export function isToolNameAllowed(
+  toolName: string,
+  config: ToolFilterConfig = currentFilter
+): boolean {
+  return filterToolNames([toolName], config).length === 1;
+}
+
+/**
  * Create a tool filter from CLI options
  */
 export function createToolFilter(options: {

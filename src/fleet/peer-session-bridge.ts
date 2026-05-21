@@ -42,6 +42,20 @@ import {
   getPeerSessionStore,
   type PersistedChatSession,
 } from './peer-session-store.js';
+import {
+  DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS,
+  FLEET_DISPATCH_PROFILES,
+  buildDispatchSystemPrompt,
+  buildHermesToolsetDescriptor,
+  getDispatchToolPolicy,
+  isFleetDispatchProfile,
+  mergeDispatchSystemPrompt,
+  normalizeDispatchProfile,
+  type FleetDispatchProfile,
+  type FleetHermesToolsetDescriptor,
+  type FleetDispatchToolDecision,
+  type FleetDispatchToolPolicy,
+} from './dispatch-profile.js';
 
 /** Closure that returns the CodeBuddyClient to use, or null if none is wired. */
 export type PeerChatClientGetter = () => CodeBuddyClient | null;
@@ -55,6 +69,10 @@ interface ChatSession {
   sessionId: string;
   systemPrompt: string;
   model?: string;
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: FleetDispatchToolPolicy;
+  toolDecisions?: FleetDispatchToolDecision[];
+  toolset?: FleetHermesToolsetDescriptor;
   /** User/assistant turns only — system prompt is held separately and prepended on each call. */
   messages: ChatSessionMessage[];
   createdAt: number;
@@ -70,6 +88,88 @@ const DEFAULT_IDLE_MS = 30 * 60 * 1000;
 const sessions = new Map<string, ChatSession>();
 let cachedGetter: PeerChatClientGetter | null = null;
 let wired = false;
+
+function resolvePeerSessionProfile(params: Record<string, unknown>): {
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: FleetDispatchToolPolicy;
+  toolDecisions?: FleetDispatchToolDecision[];
+  toolset?: FleetHermesToolsetDescriptor;
+} {
+  if (params.dispatchProfile === undefined) {
+    return {};
+  }
+  if (!isFleetDispatchProfile(params.dispatchProfile)) {
+    throw new Error(
+      `peer.chat-session.start: dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}`,
+    );
+  }
+  const dispatchProfile = normalizeDispatchProfile(params.dispatchProfile);
+  const toolset = buildHermesToolsetDescriptor(
+    dispatchProfile,
+    [...DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS],
+  );
+  return {
+    dispatchProfile,
+    toolPolicy: getDispatchToolPolicy(dispatchProfile),
+    toolDecisions: toolset.decisions,
+    toolset,
+  };
+}
+
+function resolvePeerSessionSystemPrompt(
+  params: Record<string, unknown>,
+  dispatchProfile?: FleetDispatchProfile,
+): string {
+  if (typeof params.systemPrompt === 'string' && params.systemPrompt.length > 0) {
+    return dispatchProfile
+      ? mergeDispatchSystemPrompt(params.systemPrompt, dispatchProfile)
+      : params.systemPrompt;
+  }
+  if (dispatchProfile) {
+    return buildDispatchSystemPrompt(dispatchProfile);
+  }
+  return DEFAULT_SYSTEM_PROMPT;
+}
+
+function sessionPolicyMetadata(session: ChatSession): {
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: FleetDispatchToolPolicy;
+  toolDecisions?: FleetDispatchToolDecision[];
+  toolset?: FleetHermesToolsetDescriptor;
+} {
+  return {
+    ...(session.dispatchProfile ? { dispatchProfile: session.dispatchProfile } : {}),
+    ...(session.toolPolicy ? { toolPolicy: session.toolPolicy } : {}),
+    ...(session.toolDecisions ? { toolDecisions: session.toolDecisions } : {}),
+    ...(session.toolset ? { toolset: session.toolset } : {}),
+  };
+}
+
+function assertPeerSessionContinueProfile(
+  params: Record<string, unknown>,
+  session: ChatSession,
+  methodName: string,
+): void {
+  if (params.dispatchProfile === undefined) {
+    return;
+  }
+  if (!isFleetDispatchProfile(params.dispatchProfile)) {
+    throw new Error(
+      `${methodName}: dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}`,
+    );
+  }
+  const requestedProfile = normalizeDispatchProfile(params.dispatchProfile);
+  if (!session.dispatchProfile) {
+    throw new Error(
+      `${methodName}: dispatchProfile cannot be set on continue for a session started without a profile; start a new session with dispatchProfile "${requestedProfile}"`,
+    );
+  }
+  if (requestedProfile !== session.dispatchProfile) {
+    throw new Error(
+      `${methodName}: dispatchProfile "${requestedProfile}" does not match session profile "${session.dispatchProfile}"; start a new session to change profile`,
+    );
+  }
+}
 
 function getIdleMs(): number {
   const raw = process.env.CODEBUDDY_PEER_SESSION_IDLE_MS;
@@ -121,6 +221,10 @@ function snapshot(session: ChatSession): PersistedChatSession {
     sessionId: session.sessionId,
     systemPrompt: session.systemPrompt,
     model: session.model,
+    dispatchProfile: session.dispatchProfile,
+    toolPolicy: session.toolPolicy,
+    toolDecisions: session.toolDecisions,
+    toolset: session.toolset,
     messages: [...session.messages],
     createdAt: session.createdAt,
     lastUsedAt: session.lastUsedAt,
@@ -157,6 +261,10 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         sessionId: p.sessionId,
         systemPrompt: p.systemPrompt,
         model: p.model,
+        dispatchProfile: p.dispatchProfile,
+        toolPolicy: p.toolPolicy,
+        toolDecisions: p.toolDecisions,
+        toolset: p.toolset,
         messages: [...p.messages],
         createdAt: p.createdAt,
         lastUsedAt: p.lastUsedAt,
@@ -179,10 +287,8 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
     const now = Date.now();
     await purgeExpired(now, idleMs);
 
-    const systemPrompt =
-      typeof params.systemPrompt === 'string' && params.systemPrompt.length > 0
-        ? params.systemPrompt
-        : DEFAULT_SYSTEM_PROMPT;
+    const profile = resolvePeerSessionProfile(params);
+    const systemPrompt = resolvePeerSessionSystemPrompt(params, profile.dispatchProfile);
     const model =
       typeof params.model === 'string' && params.model.length > 0 ? params.model : undefined;
 
@@ -191,6 +297,10 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       sessionId,
       systemPrompt,
       model,
+      dispatchProfile: profile.dispatchProfile,
+      toolPolicy: profile.toolPolicy,
+      toolDecisions: profile.toolDecisions,
+      toolset: profile.toolset,
       messages: [],
       createdAt: now,
       lastUsedAt: now,
@@ -210,12 +320,20 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         error: err instanceof Error ? err.message : String(err),
       });
     }
-    broadcastChatSessionStart({ sessionId, model });
+    broadcastChatSessionStart({
+      sessionId,
+      model,
+      ...(profile.dispatchProfile ? { dispatchProfile: profile.dispatchProfile } : {}),
+    });
 
     return {
       sessionId,
       expiresAt: now + idleMs,
       traceId: ctx.traceId,
+      ...(profile.dispatchProfile ? { dispatchProfile: profile.dispatchProfile } : {}),
+      ...(profile.toolPolicy ? { toolPolicy: profile.toolPolicy } : {}),
+      ...(profile.toolDecisions ? { toolDecisions: profile.toolDecisions } : {}),
+      ...(profile.toolset ? { toolset: profile.toolset } : {}),
     };
   });
 
@@ -249,6 +367,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       broadcastChatSessionEnd({ sessionId, reason: 'expired' });
       throw new Error(`SESSION_EXPIRED: session "${sessionId}" idled past ${idleMs}ms`);
     }
+    assertPeerSessionContinueProfile(params, session, 'peer.chat-session.continue');
 
     // FIFO serialise: chain onto the session's pending promise so
     // concurrent continue() calls run one after the other rather than
@@ -258,6 +377,10 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       finishReason: string | null | undefined;
       usage: unknown;
       traceId: string;
+      dispatchProfile?: FleetDispatchProfile;
+      toolPolicy?: FleetDispatchToolPolicy;
+      toolDecisions?: FleetDispatchToolDecision[];
+      toolset?: FleetHermesToolsetDescriptor;
     }> => {
       const client = cachedGetter?.() ?? null;
       if (!client) {
@@ -320,6 +443,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         finishReason: response?.choices?.[0]?.finish_reason,
         usage: response?.usage,
         traceId: ctx.traceId,
+        ...sessionPolicyMetadata(session),
       };
     };
 
@@ -364,12 +488,17 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       broadcastChatSessionEnd({ sessionId, reason: 'expired' });
       throw new Error(`SESSION_EXPIRED: session "${sessionId}" idled past ${idleMs}ms`);
     }
+    assertPeerSessionContinueProfile(params, session, 'peer.chat-session.continue-stream');
 
     const run = async (): Promise<{
       text: string;
       finishReason: string | null | undefined;
       usage: unknown;
       traceId: string;
+      dispatchProfile?: FleetDispatchProfile;
+      toolPolicy?: FleetDispatchToolPolicy;
+      toolDecisions?: FleetDispatchToolDecision[];
+      toolset?: FleetHermesToolsetDescriptor;
     }> => {
       const client = cachedGetter?.() ?? null;
       if (!client) {
@@ -452,6 +581,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         finishReason,
         usage,
         traceId: ctx.traceId,
+        ...sessionPolicyMetadata(session),
       };
     };
 
@@ -476,6 +606,10 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       sessionId: s.sessionId,
       turnCount: Math.floor(s.messages.length / 2),
       model: s.model,
+      dispatchProfile: s.dispatchProfile,
+      toolPolicy: s.toolPolicy,
+      toolDecisions: s.toolDecisions,
+      toolset: s.toolset,
       ageMs: now - s.createdAt,
       idleMs: now - s.lastUsedAt,
       expiresInMs: Math.max(0, idleMs - (now - s.lastUsedAt)),
@@ -553,10 +687,12 @@ export function _listSessionsForTests(): Array<{
   sessionId: string;
   messageCount: number;
   lastUsedAt: number;
+  dispatchProfile?: FleetDispatchProfile;
 }> {
   return Array.from(sessions.values()).map((s) => ({
     sessionId: s.sessionId,
     messageCount: s.messages.length,
     lastUsedAt: s.lastUsedAt,
+    dispatchProfile: s.dispatchProfile,
   }));
 }

@@ -163,6 +163,54 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Fetch web page content',
     fleetSafe: true,
   },
+  {
+    name: 'internet_scout_plan',
+    category: 'web',
+    keywords: ['internet scout', 'surf', 'browse', 'navigation', 'osint', 'prospecting', 'lead', 'profile enrichment', 'search', 'fetch', 'observe', 'extract', 'assert', 'stagehand', 'evidence', 'rate limit', 'captcha', 'proof'],
+    priority: 8,
+    description: 'Plan safe evidence-first web surfing with search, fetch, browser observe/extract/assert, blockers, and optional persistence',
+    fleetSafe: true,
+  },
+  {
+    name: 'internet_scout_run',
+    category: 'web',
+    keywords: ['internet scout', 'run', 'surf', 'browse', 'playwright', 'browser', 'navigation', 'osint', 'prospecting', 'lead', 'profile enrichment', 'search', 'fetch', 'observe', 'extract', 'assert', 'stagehand', 'evidence', 'rate limit', 'captcha', 'proof'],
+    priority: 9,
+    description: 'Execute bounded evidence-first web surfing with search, fetch, Playwright browser observe/extract/assert, and blocker-aware stops',
+    fleetSafe: false,
+  },
+  {
+    name: 'lead_scout_plan',
+    category: 'planning',
+    keywords: ['lead scout', 'prospecting', 'prospect', 'leads', 'b2b', 'architectes', 'syndics', 'agences immobilieres', 'maitres oeuvre', 'promoteurs', 'bureaux etudes', 'sirene', 'rnc', 'osint', 'public data', 'script recipe', 'scoring', 'human review'],
+    priority: 9,
+    description: 'Plan safe B2B lead discovery with public sources, schema, scoring, script recipe, evidence, and human-review gates',
+    fleetSafe: true,
+  },
+  {
+    name: 'lead_scout_run',
+    category: 'planning',
+    keywords: ['lead scout', 'run', 'prospecting', 'prospect', 'leads', 'b2b', 'architectes', 'syndics', 'agences immobilieres', 'dataset', 'json', 'csv', 'dedupe', 'scoring', 'review queue', 'email draft', 'human review'],
+    priority: 10,
+    description: 'Run local-first B2B lead discovery over JSON/CSV datasets with dedupe, scoring, drafts, and optional review export',
+    fleetSafe: false,
+  },
+  {
+    name: 'lead_scout_enrichment_plan',
+    category: 'planning',
+    keywords: ['lead scout', 'enrichment', 'multi-hop', 'script generation', 'sandbox', 'manus', 'architectes', 'website', 'contact page', 'phone', 'telephone', 'email', 'evidence chain', 'public data'],
+    priority: 10,
+    description: 'Plan multi-hop public B2B enrichment with principles, evidence chain, generated script contract, and sandbox execution policy',
+    fleetSafe: true,
+  },
+  {
+    name: 'lead_scout_lesson_candidates',
+    category: 'planning',
+    keywords: ['lead scout', 'lessons', 'learning', 'self improvement', 'script feedback', 'sandbox logs', 'patterns', 'enrichment', 'lessons_add'],
+    priority: 9,
+    description: 'Generate reviewed lesson candidates from Lead Scout runs and sandbox script observations without persisting automatically',
+    fleetSafe: true,
+  },
   // Firecrawl (Native Engine v2026.3.14)
   {
     name: 'firecrawl_search',
@@ -184,9 +232,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'browser',
     category: 'web',
-    keywords: ['browser', 'automate', 'click', 'fill', 'form', 'screenshot', 'scrape', 'navigate', 'headless', 'puppeteer', 'playwright', 'selenium', 'test', 'ui', 'automation', 'web'],
+    keywords: ['browser', 'automate', 'click', 'fill', 'form', 'screenshot', 'scrape', 'navigate', 'headless', 'puppeteer', 'playwright', 'selenium', 'test', 'ui', 'automation', 'web', 'observe', 'extract', 'assert', 'assertion', 'stagehand', 'page.act', 'page.extract', 'page.observe'],
     priority: 6,
-    description: 'Automate web browser for navigation, interaction, and testing'
+    description: 'Automate web browser for navigation, interaction, extraction, observation, and testing'
   },
   {
     name: 'computer_control',
@@ -293,9 +341,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'document',
     category: 'document',
-    keywords: ['docx', 'xlsx', 'pptx', 'word', 'excel', 'powerpoint', 'office', 'spreadsheet'],
+    keywords: ['docx', 'xlsx', 'pptx', 'word', 'excel', 'powerpoint', 'office', 'spreadsheet', 'embedded images', 'screenshots'],
     priority: 5,
-    description: 'Read Office documents'
+    description: 'Read Office documents and extract DOCX embedded images'
   },
   {
     name: 'archive',
@@ -476,6 +524,27 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Delete a persistent memory entry'
   },
   {
+    name: 'relationship_context',
+    category: 'utility',
+    keywords: [
+      'relationship',
+      'identity',
+      'person',
+      'people',
+      'public figure',
+      'world memory',
+      'people memory',
+      'robot',
+      'recognition',
+      'permission',
+      'evidence',
+      'context'
+    ],
+    priority: 6,
+    description: 'Build a safe relationship/world-memory context card with permissions and evidence',
+    fleetSafe: true,
+  },
+  {
     name: 'lessons_add',
     category: 'utility',
     keywords: ['lesson', 'learn', 'correction', 'pattern', 'rule', 'mistake'],
@@ -496,6 +565,14 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['lesson', 'list', 'all', 'show', 'history'],
     priority: 4,
     description: 'List all lessons learned',
+    fleetSafe: true,
+  },
+  {
+    name: 'lessons_graph',
+    category: 'utility',
+    keywords: ['lesson', 'graph', 'obsidian', 'wiki', 'related', 'concepts', 'links', 'notions'],
+    priority: 5,
+    description: 'Build a concept graph over lessons.md to find related lessons and nearby notions',
     fleetSafe: true,
   },
   {
@@ -590,23 +667,23 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'peer_delegate',
     category: 'utility' as ToolCategory,
-    keywords: ['peer', 'delegate', 'fleet', 'consult', 'ask', 'collaborate', 'remote', 'claude', 'orchestrate', 'sub-agent', 'multi-ai', 'distributed'],
+    keywords: ['peer', 'delegate', 'fleet', 'consult', 'ask', 'collaborate', 'remote', 'claude', 'orchestrate', 'sub-agent', 'multi-ai', 'distributed', 'hermes', 'dispatch', 'dispatchProfile', 'profile', 'toolset', 'toolsets', 'policy'],
     priority: 7,
-    description: 'Delegate a one-shot question to a connected fleet peer Code Buddy and get its answer back inline'
+    description: 'Delegate a one-shot question to a connected fleet peer Code Buddy and get its answer plus Hermes-style dispatch policy metadata back inline'
   },
   {
     name: 'list_peers',
     category: 'utility' as ToolCategory,
-    keywords: ['peers', 'fleet', 'connected', 'remote', 'claudes', 'list', 'discover', 'status', 'provider', 'model', 'capabilities'],
+    keywords: ['peers', 'fleet', 'connected', 'remote', 'claudes', 'list', 'discover', 'status', 'provider', 'model', 'capabilities', 'route', 'routing', 'hermes', 'dispatch'],
     priority: 5,
     description: 'List connected fleet peers with status, last-seen, peer chat availability, and optional provider/model capabilities'
   },
   {
     name: 'route_peer',
     category: 'utility' as ToolCategory,
-    keywords: ['peer', 'route', 'fleet', 'model', 'provider', 'capability', 'delegate', 'multi-ai', 'orchestrate', 'select'],
+    keywords: ['peer', 'route', 'fleet', 'model', 'provider', 'capability', 'delegate', 'multi-ai', 'orchestrate', 'select', 'hermes', 'dispatch', 'dispatchProfile', 'profile', 'toolset', 'toolsets', 'policy', 'safe', 'review', 'research', 'code'],
     priority: 7,
-    description: 'Choose the best connected fleet peer and model for a prompt using peer.describe capabilities and Fleet TaskRouter'
+    description: 'Choose the best connected fleet peer and model for a prompt using peer.describe capabilities, Fleet TaskRouter, and optional Hermes-style dispatch profile'
   },
 
   // AskUserQuestion (structured multi-option mid-task questions)
@@ -680,7 +757,7 @@ export const CATEGORY_KEYWORDS: Record<ToolCategory, string[]> = {
   file_search: ['search', 'find', 'locate', 'where', 'grep', 'look for', 'which file', 'contains'],
   system: ['run', 'execute', 'install', 'build', 'test', 'compile', 'npm', 'yarn', 'pip', 'command', 'terminal', 'docker', 'container', 'kubernetes', 'k8s', 'kubectl', 'pod', 'deployment', 'compose'],
   git: ['git', 'commit', 'push', 'pull', 'branch', 'merge', 'diff', 'status', 'version control'],
-  web: ['search online', 'google', 'web', 'internet', 'fetch url', 'website', 'documentation', 'latest', 'news', 'browser', 'automate', 'click', 'fill form', 'screenshot', 'scrape', 'headless', 'ui test', 'weather', 'météo', 'meteo', 'forecast', 'temperature', 'actualité', 'actualite', 'current events', 'real time', 'real-time'],
+  web: ['search online', 'google', 'web', 'internet', 'fetch url', 'website', 'documentation', 'latest', 'news', 'browser', 'automate', 'click', 'fill form', 'screenshot', 'scrape', 'headless', 'ui test', 'observe', 'extract from page', 'assert page', 'stagehand', 'weather', 'météo', 'meteo', 'forecast', 'temperature', 'actualité', 'actualite', 'current events', 'real time', 'real-time'],
   planning: ['plan', 'todo', 'task', 'organize', 'steps', 'breakdown'],
   media: ['image', 'audio', 'video', 'screenshot', 'picture', 'photo', 'sound', 'music', 'capture'],
   document: ['pdf', 'document', 'docx', 'xlsx', 'word', 'excel', 'archive', 'zip'],

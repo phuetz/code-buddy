@@ -106,6 +106,50 @@ describe('/fleet chat start', () => {
     expect(content(result)).toContain('Chat session "rust-coach" opened');
   });
 
+  it('--profile passes dispatchProfile through to peer.chat-session.start', async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === 'peer.chat-session.start') {
+        return { sessionId: 'sess_review1234567', dispatchProfile: 'review' };
+      }
+      throw new Error(`unexpected method ${method}`);
+    });
+    registerPeer('ministar-linux', request);
+
+    const result = await handleFleet([
+      'chat',
+      'start',
+      'ministar-linux',
+      '--profile',
+      'review',
+    ]);
+
+    expect(content(result)).toContain('Profile: review');
+    expect(request).toHaveBeenCalledWith(
+      'peer.chat-session.start',
+      { dispatchProfile: 'review' },
+      { timeoutMs: 30_000 },
+    );
+
+    const list = await handleFleet(['chat', 'list']);
+    expect(content(list)).toContain('profile review');
+  });
+
+  it('rejects invalid --profile values locally', async () => {
+    const request = vi.fn(async () => ({ sessionId: 'sess_should_not_open' }));
+    registerPeer('ministar-linux', request);
+
+    const result = await handleFleet([
+      'chat',
+      'start',
+      'ministar-linux',
+      '--profile',
+      'chaos',
+    ]);
+
+    expect(content(result)).toContain('--profile must be one of');
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('rejects unknown peer with a clear error', async () => {
     const result = await handleFleet(['chat', 'start', 'no-such-peer']);
     expect(content(result)).toContain('No fleet peer named "no-such-peer"');
@@ -155,6 +199,25 @@ describe('/fleet chat say', () => {
       { sessionId: 'sess_abc', prompt: 'donne-moi un exemple' },
       { timeoutMs: 120_000 },
     );
+  });
+
+  it('surfaces returned dispatchProfile metadata on chat turns and local list', async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === 'peer.chat-session.start') return { sessionId: 'sess_abc' };
+      if (method === 'peer.chat-session.continue') {
+        return { text: 'reviewed', dispatchProfile: 'review' };
+      }
+      throw new Error(`unexpected method ${method}`);
+    });
+    registerPeer('ministar-linux', request);
+
+    await handleFleet(['chat', 'start', 'ministar-linux']);
+    const result = await handleFleet(['chat', 'say', 'review', 'this']);
+
+    expect(content(result)).toContain('[turn 1');
+    expect(content(result)).toContain('profile review');
+    const list = await handleFleet(['chat', 'list']);
+    expect(content(list)).toContain('profile review');
   });
 
   it('asks for --session when multiple sessions are active', async () => {
@@ -333,7 +396,7 @@ describe('/fleet status --with-sessions', () => {
           count: 2,
           sessions: [
             { sessionId: 'sess_a1b2c3', turnCount: 3, model: 'qwen3:4b', ageMs: 5_000, idleMs: 2_000, expiresInMs: 1_798_000 },
-            { sessionId: 'sess_d4e5f6', turnCount: 1, model: undefined, ageMs: 1_000, idleMs: 500, expiresInMs: 1_799_500 },
+            { sessionId: 'sess_d4e5f6', turnCount: 1, model: undefined, dispatchProfile: 'review', ageMs: 1_000, idleMs: 500, expiresInMs: 1_799_500 },
           ],
         };
       }
@@ -348,6 +411,7 @@ describe('/fleet status --with-sessions', () => {
     expect(content(result)).toContain('model qwen3:4b');
     expect(content(result)).toContain('sess_d4e5f6');
     expect(content(result)).toContain('default model');
+    expect(content(result)).toContain('profile review');
     expect(request).toHaveBeenCalledWith('peer.chat-session.list', {}, { timeoutMs: 5_000 });
   });
 

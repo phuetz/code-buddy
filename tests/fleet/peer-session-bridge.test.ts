@@ -172,6 +172,129 @@ describe('peer.chat-session.start', () => {
     expect(payload.traceId).toBe('trace-xyz');
   });
 
+  it('rejects unknown dispatchProfile values before creating a session', async () => {
+    await wirePeerSessionBridge(() => makeClient().client as never);
+    const response = await dispatch('peer.chat-session.start', {
+      dispatchProfile: 'chaos',
+    });
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('dispatchProfile must be one of');
+    expect(_listSessionsForTests()).toHaveLength(0);
+    expect(fs.readdirSync(storeTmpDir).filter((file) => file.endsWith('.json'))).toHaveLength(0);
+    expect(broadcastChatSessionStart).not.toHaveBeenCalled();
+  });
+
+  it('applies dispatchProfile guidance and returns policy metadata', async () => {
+    const { client, calls } = makeClient('review answer');
+    await wirePeerSessionBridge(() => client as never);
+
+    const startRes = await dispatch('peer.chat-session.start', {
+      dispatchProfile: 'review',
+    });
+
+    expect(startRes.ok).toBe(true);
+    const startPayload = startRes.payload as {
+      sessionId: string;
+      dispatchProfile?: string;
+      toolPolicy?: { policyProfile?: string; defaultAction?: string };
+      toolDecisions?: Array<{ tool: string; action: string }>;
+      toolset?: { toolsetId: string; deniedTools: string[] };
+    };
+    expect(startPayload.dispatchProfile).toBe('review');
+    expect(startPayload.toolPolicy).toMatchObject({
+      policyProfile: 'minimal',
+      defaultAction: 'confirm',
+    });
+    expect(startPayload.toolDecisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+        expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+        expect.objectContaining({ tool: 'bash', action: 'deny' }),
+      ]),
+    );
+    expect(startPayload.toolset?.toolsetId).toBe('fleet.hermes.review');
+    expect(startPayload.toolset?.deniedTools).toEqual(
+      expect.arrayContaining(['create_file', 'bash']),
+    );
+
+    const continueRes = await dispatch('peer.chat-session.continue', {
+      sessionId: startPayload.sessionId,
+      prompt: 'Please review this patch',
+    });
+    const continuePayload = continueRes.payload as {
+      dispatchProfile?: string;
+      toolPolicy?: { policyProfile?: string; defaultAction?: string };
+      toolDecisions?: Array<{ tool: string; action: string }>;
+      toolset?: { toolsetId: string; deniedTools: string[] };
+    };
+    expect(continuePayload.dispatchProfile).toBe('review');
+    expect(continuePayload.toolPolicy).toMatchObject({
+      policyProfile: 'minimal',
+      defaultAction: 'confirm',
+    });
+    expect(continuePayload.toolDecisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+        expect.objectContaining({ tool: 'create_file', action: 'deny' }),
+      ]),
+    );
+    expect(continuePayload.toolset?.toolsetId).toBe('fleet.hermes.review');
+
+    const sentMessages = calls[0].messages as Array<{ role: string; content: string }>;
+    expect(sentMessages[0].role).toBe('system');
+    expect(sentMessages[0].content).toContain('Prioritize defects');
+    expect(sentMessages[0].content).toContain('Tool policy hint:');
+
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(storeTmpDir, `${startPayload.sessionId}.json`), 'utf-8'),
+    );
+    expect(persisted.dispatchProfile).toBe('review');
+    expect(persisted.toolPolicy).toMatchObject({ policyProfile: 'minimal' });
+
+    const listRes = await dispatch('peer.chat-session.list', {});
+    const listPayload = listRes.payload as {
+      sessions: Array<{ sessionId: string; dispatchProfile?: string }>;
+    };
+    expect(listPayload.sessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: startPayload.sessionId,
+          dispatchProfile: 'review',
+        }),
+      ]),
+    );
+  });
+
+  it('keeps custom systemPrompt while appending dispatchProfile guidance', async () => {
+    const { client, calls } = makeClient('safe answer');
+    await wirePeerSessionBridge(() => client as never);
+
+    const startRes = await dispatch('peer.chat-session.start', {
+      systemPrompt: 'You are a private reviewer.',
+      dispatchProfile: 'safe',
+    });
+
+    expect(startRes.ok).toBe(true);
+    const startPayload = startRes.payload as { sessionId: string; dispatchProfile?: string };
+    expect(startPayload.dispatchProfile).toBe('safe');
+
+    await dispatch('peer.chat-session.continue', {
+      sessionId: startPayload.sessionId,
+      prompt: 'Inspect this change',
+    });
+
+    const sentMessages = calls[0].messages as Array<{ role: string; content: string }>;
+    expect(sentMessages[0].content).toContain('You are a private reviewer.');
+    expect(sentMessages[0].content).toContain('protect secrets');
+    expect(sentMessages[0].content).toContain('Tool policy hint:');
+
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(storeTmpDir, `${startPayload.sessionId}.json`), 'utf-8'),
+    );
+    expect(persisted.systemPrompt).toContain('You are a private reviewer.');
+    expect(persisted.systemPrompt).toContain('Tool policy hint:');
+  });
+
   it('GC purges idle sessions on the next start', async () => {
     process.env.CODEBUDDY_PEER_SESSION_IDLE_MS = '50';
     try {
@@ -294,6 +417,41 @@ describe('peer.chat-session.continue', () => {
     const r2 = await dispatch('peer.chat-session.continue', { sessionId });
     expect(r2.ok).toBe(false);
     expect(r2.error?.message).toContain('prompt is required');
+  });
+
+  it('rejects dispatchProfile changes on continue before calling the client', async () => {
+    const { client } = makeClient();
+    await wirePeerSessionBridge(() => client as never);
+    const startRes = await dispatch('peer.chat-session.start', { dispatchProfile: 'review' });
+    const sessionId = (startRes.payload as { sessionId: string }).sessionId;
+
+    const response = await dispatch('peer.chat-session.continue', {
+      sessionId,
+      prompt: 'please mutate this profile',
+      dispatchProfile: 'safe',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('does not match session profile "review"');
+    expect(client.chat).not.toHaveBeenCalled();
+    expect(_listSessionsForTests().find((s) => s.sessionId === sessionId)?.messageCount).toBe(0);
+  });
+
+  it('rejects dispatchProfile on continue when the session was started without one', async () => {
+    const { client } = makeClient();
+    await wirePeerSessionBridge(() => client as never);
+    const startRes = await dispatch('peer.chat-session.start', {});
+    const sessionId = (startRes.payload as { sessionId: string }).sessionId;
+
+    const response = await dispatch('peer.chat-session.continue', {
+      sessionId,
+      prompt: 'add a profile late',
+      dispatchProfile: 'review',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('cannot be set on continue');
+    expect(client.chat).not.toHaveBeenCalled();
   });
 
   it('serialises concurrent continues FIFO', async () => {
@@ -689,6 +847,40 @@ describe('peer.chat-session.continue-stream', () => {
     expect(payload.usage?.total_tokens).toBe(9);
   });
 
+  it('returns session dispatchProfile policy metadata on streamed turns', async () => {
+    const { client } = makeStreamingClient(['safe answer']);
+    await wirePeerSessionBridge(() => client as never);
+
+    const startRes = await dispatch('peer.chat-session.start', { dispatchProfile: 'safe' });
+    const sessionId = (startRes.payload as { sessionId: string }).sessionId;
+
+    const r = await dispatchPeerRequest(
+      {
+        id: 'r1b',
+        method: 'peer.chat-session.continue-stream',
+        params: { sessionId, prompt: 'check this safely' },
+      },
+      baseCtx({ emitChunk: () => undefined }),
+    );
+    expect(r.ok).toBe(true);
+    const payload = r.payload as {
+      dispatchProfile?: string;
+      toolPolicy?: { policyProfile?: string; defaultAction?: string };
+      toolDecisions?: Array<{ tool: string; action: string }>;
+    };
+    expect(payload.dispatchProfile).toBe('safe');
+    expect(payload.toolPolicy).toMatchObject({
+      policyProfile: 'minimal',
+      defaultAction: 'deny',
+    });
+    expect(payload.toolDecisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tool: 'view_file', action: 'allow' }),
+        expect.objectContaining({ tool: 'bash', action: 'deny' }),
+      ]),
+    );
+  });
+
   it('works without an emitChunk transport (aggregates locally)', async () => {
     const { client } = makeStreamingClient(['part', '1', 'part2']);
     await wirePeerSessionBridge(() => client as never);
@@ -792,6 +984,31 @@ describe('peer.chat-session.continue-stream', () => {
     expect(r2.error?.message).toContain('prompt is required');
   });
 
+  it('rejects dispatchProfile changes on streamed continue before streaming', async () => {
+    const emitted: string[] = [];
+    const { client } = makeStreamingClient(['should not stream']);
+    await wirePeerSessionBridge(() => client as never);
+    const startRes = await dispatch('peer.chat-session.start', { dispatchProfile: 'safe' });
+    const sessionId = (startRes.payload as { sessionId: string }).sessionId;
+
+    const response = await dispatchPeerRequest(
+      {
+        id: 'r8b',
+        method: 'peer.chat-session.continue-stream',
+        params: {
+          sessionId,
+          prompt: 'change posture',
+          dispatchProfile: 'code',
+        },
+      },
+      baseCtx({ emitChunk: (delta) => emitted.push(delta) }),
+    );
+
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('does not match session profile "safe"');
+    expect(emitted).toEqual([]);
+  });
+
   it('emits fleet:chat-session:turn after a successful stream', async () => {
     await wirePeerSessionBridge(() => makeStreamingClient(['ok']).client as never);
     const startRes = await dispatch('peer.chat-session.start', {});
@@ -813,7 +1030,8 @@ describe('peer.chat-session.continue-stream', () => {
   it('rolls back the user message when chatStream throws with zero deltas', async () => {
     const flakyClient = {
       chat: vi.fn(),
-      async *chatStream() {
+      chatStream: async function* (): AsyncGenerator<StreamChunk> {
+        yield* [] as StreamChunk[];
         throw new Error('upstream gateway 502');
       },
     };

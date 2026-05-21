@@ -22,6 +22,11 @@
  */
 
 import os from 'os';
+import {
+  FLEET_DISPATCH_PROFILES,
+  isFleetDispatchProfile,
+  normalizeDispatchProfile,
+} from '../../fleet/dispatch-profile.js';
 import { logger } from '../../utils/logger.js';
 
 // ──────────────────────────────────────────────────────────────────
@@ -214,7 +219,7 @@ function registerBuiltInMethods(): void {
     try {
       const { getLocalCapabilities } = await import('../../fleet/capability-registry.js');
       capabilities = await getLocalCapabilities();
-    } catch (err) {
+    } catch (_err) {
       // Capability detection is best-effort — never fail describe.
       capabilities = null;
     }
@@ -246,35 +251,52 @@ function registerBuiltInMethods(): void {
   // already wraps the local agent for `peer.chat` one-shots) — this
   // method is a thin async wrapper so the caller doesn't block waiting
   // for the LLM response.
-  registerPeerMethod('peer.dispatch', async (params) => {
-    const { id, prompt, model, traceId, parentRunId } = (params ?? {}) as {
+  registerPeerMethod('peer.dispatch', async (params, ctx) => {
+    const { id, prompt, model, traceId, parentRunId, dispatchProfile } = (params ?? {}) as {
       id?: string;
       prompt?: string;
       model?: string;
       traceId?: string;
       parentRunId?: string;
+      dispatchProfile?: unknown;
     };
     if (typeof prompt !== 'string' || prompt.trim().length === 0) {
       throw new Error('peer.dispatch: missing string prompt');
+    }
+    if (dispatchProfile !== undefined && !isFleetDispatchProfile(dispatchProfile)) {
+      throw new Error(
+        `peer.dispatch: dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}`,
+      );
     }
     const dispatchId =
       typeof id === 'string' && id.length > 0
         ? id
         : `disp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const resolvedDispatchProfile = normalizeDispatchProfile(dispatchProfile);
+    const resolvedTraceId = typeof traceId === 'string' && traceId.length > 0
+      ? traceId
+      : ctx.traceId;
 
     // Lazy-import to avoid pulling the bridge at module load.
-    const { dispatchPeerTask } = await import('../../fleet/peer-chat-bridge.js');
+    const { dispatchPeerTask, getDispatchState } = await import('../../fleet/peer-chat-bridge.js');
     // Returns immediately — the bridge owns the async lifecycle.
     void dispatchPeerTask({
       runId: dispatchId,
       prompt,
       model,
-      traceId,
+      dispatchProfile: resolvedDispatchProfile,
+      traceId: resolvedTraceId,
       parentRunId,
     });
+    const state = getDispatchState(dispatchId);
     return {
       runId: dispatchId,
       acceptedAt: Date.now(),
+      traceId: resolvedTraceId,
+      dispatchProfile: resolvedDispatchProfile,
+      toolPolicy: state?.toolPolicy,
+      toolDecisions: state?.toolDecisions,
+      toolset: state?.toolset,
     };
   });
 
@@ -296,6 +318,10 @@ function registerBuiltInMethods(): void {
       found: true,
       runId: state.runId,
       status: state.status,
+      dispatchProfile: state.dispatchProfile,
+      toolPolicy: state.toolPolicy,
+      toolDecisions: state.toolDecisions,
+      toolset: state.toolset,
       result: state.result,
       error: state.error,
       startedAt: state.startedAt,

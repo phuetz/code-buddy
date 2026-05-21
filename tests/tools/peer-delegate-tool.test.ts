@@ -17,6 +17,10 @@ import {
   type ActiveListenerEntry,
   type FleetListenerPublicAPI,
 } from '../../src/fleet/fleet-registry.js';
+import {
+  resetActiveCustomAgentRuntime,
+  setActiveCustomAgentRuntime,
+} from '../../src/agent/custom/custom-agent-runtime.js';
 
 const ORIGINAL_ENV = process.env;
 
@@ -64,6 +68,7 @@ describe('peer_delegate tool', () => {
     delete process.env.CODEBUDDY_PEER_DELEGATE_MAX_PER_TURN;
     _resetFleetRegistryForTests();
     _resetCallCounterForTests();
+    resetActiveCustomAgentRuntime();
   });
 
   afterEach(() => {
@@ -103,6 +108,21 @@ describe('peer_delegate tool', () => {
       r = await executePeerDelegate({ peer: 'alpha', prompt: '' });
       expect(r.success).toBe(false);
       expect(r.error).toContain('"prompt"');
+    });
+
+    it('rejects unknown dispatchProfile values before contacting peers', async () => {
+      const request = vi.fn();
+      registerPeer('alpha', request);
+
+      const result = await executePeerDelegate({
+        peer: 'alpha',
+        prompt: 'review this',
+        dispatchProfile: 'chaos',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('dispatchProfile must be one of');
+      expect(request).not.toHaveBeenCalled();
     });
   });
 
@@ -157,6 +177,100 @@ describe('peer_delegate tool', () => {
         model: 'claude-opus-4-5',
       });
       expect(options).toMatchObject({ timeoutMs: 30_000 });
+    });
+
+    it('uses dispatchProfile guidance when no systemPrompt override is provided', async () => {
+      const request = vi.fn().mockResolvedValue({ text: 'ok', usage: undefined });
+      registerPeer('alpha', request);
+
+      await executePeerDelegate({
+        peer: 'alpha',
+        prompt: 'review this patch',
+        dispatchProfile: 'review',
+      });
+
+      const [, params] = request.mock.calls[0];
+      expect(params).toMatchObject({
+        prompt: 'review this patch',
+      });
+      expect((params as { systemPrompt: string }).systemPrompt).toContain('Prioritize defects');
+      expect((params as { systemPrompt: string }).systemPrompt).toContain('Tool policy hint:');
+      expect((params as { dispatchProfile: string }).dispatchProfile).toBe('review');
+    });
+
+    it('uses the active agent dispatch profile when caller omits dispatchProfile', async () => {
+      setActiveCustomAgentRuntime({
+        id: 'hermes',
+        name: 'Hermes Agent',
+        description: '',
+        systemPrompt: 'prompt',
+        fleetDispatchProfile: 'safe',
+        requireExplicitDispatchProfile: true,
+      });
+      const request = vi.fn().mockResolvedValue({ text: 'ok', usage: undefined });
+      registerPeer('alpha', request);
+
+      const result = await executePeerDelegate({
+        peer: 'alpha',
+        prompt: 'inspect this risky change',
+      });
+
+      expect(result.success).toBe(true);
+      const [, params] = request.mock.calls[0];
+      expect((params as { dispatchProfile: string }).dispatchProfile).toBe('safe');
+      expect((params as { systemPrompt: string }).systemPrompt).toContain('Be conservative');
+      expect(result.output).toContain('[profile: safe | source: agent-default');
+      expect(result.data).toMatchObject({
+        dispatchProfile: 'safe',
+        dispatchProfileSource: 'agent-default',
+        dispatchProfileAgent: 'hermes',
+      });
+    });
+
+    it('returns peer-side dispatch policy metadata when the peer echoes it', async () => {
+      const request = vi.fn().mockResolvedValue({
+        text: 'reviewed',
+        usage: undefined,
+        dispatchProfile: 'review',
+        toolPolicy: {
+          policyProfile: 'minimal',
+          defaultAction: 'confirm',
+          summary: 'Review posture',
+        },
+        toolDecisions: [
+          { tool: 'view_file', action: 'allow' },
+          { tool: 'create_file', action: 'deny' },
+        ],
+        toolset: {
+          toolsetId: 'fleet.hermes.review',
+          deniedTools: ['create_file'],
+        },
+      });
+      registerPeer('alpha', request);
+
+      const result = await executePeerDelegate({
+        peer: 'alpha',
+        prompt: 'review this patch',
+        dispatchProfile: 'review',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('[profile: review | policy: minimal / confirm]');
+      expect(result.data).toMatchObject({
+        dispatchProfile: 'review',
+        toolPolicy: {
+          policyProfile: 'minimal',
+          defaultAction: 'confirm',
+        },
+        toolDecisions: [
+          { tool: 'view_file', action: 'allow' },
+          { tool: 'create_file', action: 'deny' },
+        ],
+        toolset: {
+          toolsetId: 'fleet.hermes.review',
+          deniedTools: ['create_file'],
+        },
+      });
     });
   });
 

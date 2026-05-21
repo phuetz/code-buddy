@@ -8,6 +8,16 @@
  */
 
 import type { CodeBuddyTool } from './client.js';
+import { FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT } from '../fleet/dispatch-profile.js';
+
+const DISPATCH_PROFILE_PARAMETER_DESCRIPTION =
+  'Optional Fleet dispatch profile. When set, carries the operating posture through peer.chat ' +
+  'and returns peer-side policy metadata when supported. Selection guide: ' +
+  `${FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT}.`;
+
+const ROUTE_DISPATCH_PROFILE_PARAMETER_DESCRIPTION =
+  'Hermes-style operating posture for routing and later peer_delegate guidance. ' +
+  `Selection guide: ${FLEET_DISPATCH_PROFILE_GUIDANCE_TEXT}.`;
 
 export const PEER_DELEGATE_TOOL_DEF: CodeBuddyTool = {
   type: 'function',
@@ -16,7 +26,7 @@ export const PEER_DELEGATE_TOOL_DEF: CodeBuddyTool = {
     description:
       'Delegate a one-shot question or task to a connected fleet peer Code Buddy. ' +
       'The peer answers independently with its own model and returns its response. ' +
-      'Use list_peers first to see which peers are available.',
+      'Use route_peer first when multiple peers are available; pass dispatchProfile to carry the selected posture and receive policy metadata.',
     parameters: {
       type: 'object',
       properties: {
@@ -39,6 +49,11 @@ export const PEER_DELEGATE_TOOL_DEF: CodeBuddyTool = {
           type: 'string',
           description:
             'Optional model hint for the peer (e.g. "grok-3", "claude-opus-4-5"). Peer may ignore.',
+        },
+        dispatchProfile: {
+          type: 'string',
+          enum: ['balanced', 'research', 'code', 'review', 'safe'],
+          description: DISPATCH_PROFILE_PARAMETER_DESCRIPTION,
         },
         timeoutMs: {
           type: 'number',
@@ -113,6 +128,11 @@ export const ROUTE_PEER_TOOL_DEF: CodeBuddyTool = {
         estimatedTokens: {
           type: 'number',
           description: 'Optional estimated input token count for context-window filtering.',
+        },
+        dispatchProfile: {
+          type: 'string',
+          enum: ['balanced', 'research', 'code', 'review', 'safe'],
+          description: ROUTE_DISPATCH_PROFILE_PARAMETER_DESCRIPTION,
         },
         timeoutMs: {
           type: 'number',

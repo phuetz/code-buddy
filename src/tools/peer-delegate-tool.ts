@@ -25,6 +25,18 @@
  */
 
 import { getFleetRegistry } from '../fleet/fleet-registry.js';
+import {
+  buildDispatchSystemPrompt,
+  FLEET_DISPATCH_PROFILES,
+  isFleetDispatchProfile,
+  type FleetDispatchProfile,
+  type FleetHermesToolsetDescriptor,
+} from '../fleet/dispatch-profile.js';
+import {
+  resolveActiveCustomAgentDispatchProfile,
+  shouldPropagateResolvedDispatchProfile,
+  type DispatchProfileSource,
+} from '../agent/custom/custom-agent-runtime.js';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -62,6 +74,7 @@ export interface PeerDelegateParams {
   prompt: string;
   systemPrompt?: string;
   model?: string;
+  dispatchProfile?: FleetDispatchProfile | string;
   timeoutMs?: number;
 }
 
@@ -75,6 +88,19 @@ interface PeerChatRpcResult {
     total_tokens?: number;
   };
   traceId?: string;
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: {
+    policyProfile?: string;
+    defaultAction?: string;
+    summary?: string;
+  };
+  toolDecisions?: Array<{
+    tool: string;
+    action: string;
+    reason?: string;
+  }>;
+  toolset?: FleetHermesToolsetDescriptor;
+  dispatchProfileSource?: DispatchProfileSource;
 }
 
 export async function executePeerDelegate(params: PeerDelegateParams): Promise<ToolResult> {
@@ -97,6 +123,15 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
   }
   if (!params.prompt || typeof params.prompt !== 'string') {
     return { success: false, error: 'peer_delegate: "prompt" parameter is required (string).' };
+  }
+  if (
+    params.dispatchProfile !== undefined &&
+    !isFleetDispatchProfile(params.dispatchProfile)
+  ) {
+    return {
+      success: false,
+      error: `peer_delegate: dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}.`,
+    };
   }
 
   const reg = getFleetRegistry();
@@ -122,6 +157,13 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
 
   const timeoutMs =
     params.timeoutMs && params.timeoutMs > 0 ? params.timeoutMs : DEFAULT_TIMEOUT_MS;
+  const dispatchResolution = resolveActiveCustomAgentDispatchProfile(params.dispatchProfile);
+  const dispatchProfile = dispatchResolution.dispatchProfile;
+  const shouldPropagateDispatchProfile = shouldPropagateResolvedDispatchProfile(dispatchResolution);
+  const systemPrompt =
+    params.systemPrompt ?? (
+      shouldPropagateDispatchProfile ? buildDispatchSystemPrompt(dispatchProfile) : undefined
+    );
 
   const t0 = Date.now();
   try {
@@ -129,8 +171,9 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
       'peer.chat',
       {
         prompt: params.prompt,
-        ...(params.systemPrompt ? { systemPrompt: params.systemPrompt } : {}),
+        ...(systemPrompt ? { systemPrompt } : {}),
         ...(params.model ? { model: params.model } : {}),
+        ...(shouldPropagateDispatchProfile ? { dispatchProfile } : {}),
       },
       { timeoutMs },
     )) as PeerChatRpcResult;
@@ -144,6 +187,19 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
       lines.push(`[tokens: ${inT} in / ${outT} out | total: ${raw.usage.total_tokens}]`);
     }
     if (raw?.modelRequested) lines.push(`[model: ${raw.modelRequested}]`);
+    const returnedDispatchProfile = raw?.dispatchProfile ?? (
+      shouldPropagateDispatchProfile ? dispatchProfile : undefined
+    );
+    if (returnedDispatchProfile) {
+      const policy = raw?.toolPolicy?.policyProfile ?? '?';
+      const action = raw?.toolPolicy?.defaultAction ?? '?';
+      const sourceSuffix = dispatchResolution.source === 'explicit'
+        ? ''
+        : ` | source: ${dispatchResolution.source}`;
+      lines.push(
+        `[profile: ${returnedDispatchProfile}${sourceSuffix} | policy: ${policy} / ${action}]`,
+      );
+    }
 
     return {
       success: true,
@@ -155,6 +211,12 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
         finishReason: raw?.finishReason,
         usage: raw?.usage,
         traceId: raw?.traceId,
+        dispatchProfile: returnedDispatchProfile,
+        dispatchProfileSource: dispatchResolution.source,
+        ...(dispatchResolution.agentId ? { dispatchProfileAgent: dispatchResolution.agentId } : {}),
+        toolPolicy: raw?.toolPolicy,
+        toolDecisions: raw?.toolDecisions,
+        toolset: raw?.toolset,
         elapsedMs,
       },
     };

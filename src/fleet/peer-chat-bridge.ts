@@ -22,6 +22,20 @@
 import type { CodeBuddyClient, ChatOptions } from '../codebuddy/client.js';
 import { registerPeerMethod, unregisterPeerMethod } from '../server/websocket/peer-rpc.js';
 import { logger } from '../utils/logger.js';
+import {
+  DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS,
+  FLEET_DISPATCH_PROFILES,
+  buildDispatchSystemPrompt,
+  buildHermesToolsetDescriptor,
+  getDispatchToolPolicy,
+  isFleetDispatchProfile,
+  mergeDispatchSystemPrompt,
+  normalizeDispatchProfile,
+  type FleetDispatchProfile,
+  type FleetHermesToolsetDescriptor,
+  type FleetDispatchToolDecision,
+  type FleetDispatchToolPolicy,
+} from './dispatch-profile.js';
 import type { PeerChatProviderInfo } from './peer-chat-client-factory.js';
 
 // Re-imported for the streaming variant — kept narrow to avoid a wider import surface.
@@ -35,6 +49,50 @@ let cachedProviderInfo: PeerChatProviderInfo | null = null;
 let wired = false;
 
 const DEFAULT_SYSTEM_PROMPT = 'Answer this side question briefly. Do not use tools.';
+
+export type { FleetDispatchProfile as PeerDispatchProfile } from './dispatch-profile.js';
+
+function resolvePeerChatProfile(params: Record<string, unknown>): {
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: FleetDispatchToolPolicy;
+  toolDecisions?: FleetDispatchToolDecision[];
+  toolset?: FleetHermesToolsetDescriptor;
+} {
+  if (params.dispatchProfile === undefined) {
+    return {};
+  }
+  if (!isFleetDispatchProfile(params.dispatchProfile)) {
+    throw new Error(
+      `peer.chat: dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}`,
+    );
+  }
+  const dispatchProfile = normalizeDispatchProfile(params.dispatchProfile);
+  const toolset = buildHermesToolsetDescriptor(
+    dispatchProfile,
+    [...DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS],
+  );
+  return {
+    dispatchProfile,
+    toolPolicy: getDispatchToolPolicy(dispatchProfile),
+    toolDecisions: toolset.decisions,
+    toolset,
+  };
+}
+
+function resolvePeerChatSystemPrompt(
+  params: Record<string, unknown>,
+  dispatchProfile?: FleetDispatchProfile,
+): string {
+  if (typeof params.systemPrompt === 'string' && params.systemPrompt.length > 0) {
+    return dispatchProfile
+      ? mergeDispatchSystemPrompt(params.systemPrompt, dispatchProfile)
+      : params.systemPrompt;
+  }
+  if (dispatchProfile) {
+    return buildDispatchSystemPrompt(dispatchProfile);
+  }
+  return DEFAULT_SYSTEM_PROMPT;
+}
 
 /**
  * Register the `peer.chat` method on the peer-rpc registry. The
@@ -57,10 +115,8 @@ export function wirePeerChatBridge(
   cachedProviderInfo = providerInfo ?? null;
   registerPeerMethod('peer.chat', async (params, ctx) => {
     const prompt = typeof params.prompt === 'string' ? params.prompt : '';
-    const systemPrompt =
-      typeof params.systemPrompt === 'string' && params.systemPrompt.length > 0
-        ? params.systemPrompt
-        : DEFAULT_SYSTEM_PROMPT;
+    const profile = resolvePeerChatProfile(params);
+    const systemPrompt = resolvePeerChatSystemPrompt(params, profile.dispatchProfile);
     const model = typeof params.model === 'string' && params.model.length > 0
       ? params.model
       : undefined;
@@ -97,6 +153,10 @@ export function wirePeerChatBridge(
       // Echo traceId so consumers can correlate a peer.chat answer
       // back to its originating call chain (Phase (d).14 trace).
       traceId: ctx.traceId,
+      ...(profile.dispatchProfile ? { dispatchProfile: profile.dispatchProfile } : {}),
+      ...(profile.toolPolicy ? { toolPolicy: profile.toolPolicy } : {}),
+      ...(profile.toolDecisions ? { toolDecisions: profile.toolDecisions } : {}),
+      ...(profile.toolset ? { toolset: profile.toolset } : {}),
     };
   });
   // Phase (d).19 — streaming variant. Same params, but the handler
@@ -104,10 +164,8 @@ export function wirePeerChatBridge(
   // callers without streaming support still get the full text.
   registerPeerMethod('peer.chat-stream', async (params, ctx) => {
     const prompt = typeof params.prompt === 'string' ? params.prompt : '';
-    const systemPrompt =
-      typeof params.systemPrompt === 'string' && params.systemPrompt.length > 0
-        ? params.systemPrompt
-        : DEFAULT_SYSTEM_PROMPT;
+    const profile = resolvePeerChatProfile(params);
+    const systemPrompt = resolvePeerChatSystemPrompt(params, profile.dispatchProfile);
     const model = typeof params.model === 'string' && params.model.length > 0
       ? params.model
       : undefined;
@@ -155,6 +213,10 @@ export function wirePeerChatBridge(
       finishReason: finishReason ?? undefined,
       usage,
       traceId: ctx.traceId,
+      ...(profile.dispatchProfile ? { dispatchProfile: profile.dispatchProfile } : {}),
+      ...(profile.toolPolicy ? { toolPolicy: profile.toolPolicy } : {}),
+      ...(profile.toolDecisions ? { toolDecisions: profile.toolDecisions } : {}),
+      ...(profile.toolset ? { toolset: profile.toolset } : {}),
     };
   });
 
@@ -215,6 +277,10 @@ interface DispatchState {
   runId: string;
   prompt: string;
   model?: string;
+  dispatchProfile: FleetDispatchProfile;
+  toolPolicy: FleetDispatchToolPolicy;
+  toolDecisions: FleetDispatchToolDecision[];
+  toolset: FleetHermesToolsetDescriptor;
   traceId?: string;
   parentRunId?: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -236,13 +302,23 @@ export function dispatchPeerTask(input: {
   runId: string;
   prompt: string;
   model?: string;
+  dispatchProfile?: FleetDispatchProfile;
   traceId?: string;
   parentRunId?: string;
 }): void {
+  const dispatchProfile = input.dispatchProfile ?? 'balanced';
+  const toolset = buildHermesToolsetDescriptor(
+    dispatchProfile,
+    [...DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS],
+  );
   const state: DispatchState = {
     runId: input.runId,
     prompt: input.prompt,
     model: input.model,
+    dispatchProfile,
+    toolPolicy: getDispatchToolPolicy(dispatchProfile),
+    toolDecisions: toolset.decisions,
+    toolset,
     traceId: input.traceId,
     parentRunId: input.parentRunId,
     status: 'pending',
@@ -276,7 +352,7 @@ async function runDispatchedTask(state: DispatchState): Promise<void> {
     : undefined;
   const response = await client.chat(
     [
-      { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
+      { role: 'system', content: buildDispatchSystemPrompt(state.dispatchProfile) },
       { role: 'user', content: state.prompt },
     ],
     [],

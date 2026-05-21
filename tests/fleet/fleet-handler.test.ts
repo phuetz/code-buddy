@@ -360,6 +360,69 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       expect(r.entry?.content).not.toContain('Peer compacting');
       expect(r.entry?.content).not.toContain('Last compaction');
     });
+
+    it('prints peer chat-session policy metadata when --with-sessions is enabled', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'reviewer']);
+      fleetListenerMock.requestMock.mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 'sess_review_123456',
+            turnCount: 2,
+            model: 'gpt-5.1-codex',
+            dispatchProfile: 'review',
+            toolPolicy: {
+              profile: 'review',
+              policyProfile: 'minimal',
+              defaultAction: 'confirm',
+              allowGroups: ['group:fs:read'],
+              confirmGroups: ['group:web:fetch'],
+              denyGroups: ['group:fs:write', 'group:runtime'],
+              summary: 'Review posture.',
+            },
+            toolset: {
+              profile: 'review',
+              toolsetId: 'fleet.hermes.review',
+              label: 'Hermes-style Fleet review toolset',
+              intent: 'Read-first code review.',
+              policyProfile: 'minimal',
+              defaultAction: 'confirm',
+              allowGroups: ['group:fs:read'],
+              confirmGroups: ['group:web:fetch'],
+              denyGroups: ['group:fs:write', 'group:runtime'],
+              allowedTools: ['view_file'],
+              confirmTools: ['web_fetch'],
+              deniedTools: ['create_file', 'bash'],
+              decisions: [],
+              summary: 'Review posture.',
+              systemPrompt: 'Prioritize defects.',
+            },
+            toolDecisions: [
+              { tool: 'view_file', action: 'allow', groups: ['group:fs:read'], source: 'global', reason: 'read' },
+              { tool: 'create_file', action: 'deny', groups: ['group:fs:write'], source: 'global', reason: 'write' },
+              { tool: 'bash', action: 'deny', groups: ['group:runtime'], source: 'global', reason: 'runtime' },
+            ],
+            ageMs: 4_000,
+            idleMs: 1_200,
+            expiresInMs: 60_000,
+          },
+        ],
+      });
+
+      const r = await handleFleet(['status', '--with-sessions']);
+      const out = r.entry?.content ?? '';
+      expect(out).toContain('Chat sessions (1):');
+      expect(out).toContain('profile review');
+      expect(out).toContain('policy minimal / confirm');
+      expect(out).toContain('toolset fleet.hermes.review');
+      expect(out).toContain('view_file=allow');
+      expect(out).toContain('create_file=deny');
+      expect(out).toContain('bash=deny');
+      expect(fleetListenerMock.requestMock).toHaveBeenCalledWith(
+        'peer.chat-session.list',
+        {},
+        { timeoutMs: 5_000 },
+      );
+    });
   });
 
   // ==========================================================================
@@ -859,10 +922,72 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       );
     });
 
+    it('--profile review applies profile routing and delegated peer.chat guidance', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k', '--name', 'chatgpt']);
+      fleetListenerMock.requestMock.mockImplementation(async (method, params) => {
+        if (method === 'peer.describe') {
+          return {
+            capabilities: {
+              egress: 'cloud',
+              models: [
+                {
+                  id: 'fast-small',
+                  contextWindow: 32_000,
+                  strengths: ['cheap', 'fast'],
+                  provider: 'chatgpt-oauth',
+                },
+                {
+                  id: 'reviewer',
+                  contextWindow: 200_000,
+                  strengths: ['reasoning'],
+                  provider: 'chatgpt-oauth',
+                },
+              ],
+            },
+          };
+        }
+        if (method === 'peer.chat') {
+          expect(params).toMatchObject({
+            prompt: 'review this patch',
+            model: 'reviewer',
+          });
+          expect((params as { systemPrompt: string }).systemPrompt).toContain(
+            'Prioritize defects',
+          );
+          return { text: 'reviewed', modelRequested: 'reviewer' };
+        }
+        return { ok: true };
+      });
+
+      const r = await handleFleet([
+        'route',
+        'review',
+        'this',
+        'patch',
+        '--profile',
+        'review',
+        '--delegate',
+      ]);
+      const out = r.entry?.content ?? '';
+      expect(out).toContain('Profile: review');
+      expect(out).toContain('Tool policy: minimal / confirm');
+      expect(out).toContain('Tool decisions:');
+      expect(out).toContain('create_file=deny');
+      expect(out).toContain('bash=deny');
+      expect(out).toContain('reviewed');
+    });
+
     it('rejects invalid privacy values before contacting peers', async () => {
       await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k']);
       const r = await handleFleet(['route', 'hello', '--privacy', 'secret']);
       expect(r.entry?.content).toContain('--privacy must be');
+      expect(fleetListenerMock.requestMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid dispatch profiles before contacting peers', async () => {
+      await handleFleet(['listen', 'ws://peer:3000/ws', '--api-key', 'k']);
+      const r = await handleFleet(['route', 'hello', '--profile', 'chaos']);
+      expect(r.entry?.content).toContain('--profile must be one of');
       expect(fleetListenerMock.requestMock).not.toHaveBeenCalled();
     });
   });

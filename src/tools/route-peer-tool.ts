@@ -12,6 +12,18 @@ import {
   type DispatchConstraints,
   type PeerSlot,
 } from '../fleet/task-router.js';
+import {
+  DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS,
+  FLEET_DISPATCH_PROFILES,
+  buildHermesToolsetDescriptor,
+  getDispatchToolPolicy,
+  isFleetDispatchProfile,
+  type FleetDispatchProfile,
+} from '../fleet/dispatch-profile.js';
+import {
+  resolveActiveCustomAgentDispatchProfile,
+  shouldPropagateResolvedDispatchProfile,
+} from '../agent/custom/custom-agent-runtime.js';
 import type { PeerCapability } from '../fleet/types.js';
 import { getFleetRegistry } from '../fleet/fleet-registry.js';
 import { classifyTaskComplexity } from '../optimization/model-routing.js';
@@ -24,6 +36,7 @@ export interface RoutePeerParams {
   maxLatencyMs?: number;
   parallelism?: number;
   estimatedTokens?: number;
+  dispatchProfile?: FleetDispatchProfile | string;
   timeoutMs?: number;
 }
 
@@ -41,6 +54,15 @@ const DEFAULT_DESCRIBE_TIMEOUT_MS = 5_000;
 export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolResult> {
   if (!params.prompt || typeof params.prompt !== 'string') {
     return { success: false, error: 'route_peer: "prompt" parameter is required (string).' };
+  }
+  if (
+    params.dispatchProfile !== undefined &&
+    !isFleetDispatchProfile(params.dispatchProfile)
+  ) {
+    return {
+      success: false,
+      error: `route_peer: dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}.`,
+    };
   }
 
   const registry = getFleetRegistry();
@@ -94,6 +116,14 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
   }
 
   const classification = classifyTaskComplexity(params.prompt);
+  const dispatchResolution = resolveActiveCustomAgentDispatchProfile(params.dispatchProfile);
+  const dispatchProfile = dispatchResolution.dispatchProfile;
+  const toolPolicy = getDispatchToolPolicy(dispatchProfile);
+  const toolset = buildHermesToolsetDescriptor(
+    dispatchProfile,
+    [...DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS],
+  );
+  const toolDecisions = toolset.decisions;
   const constraints: DispatchConstraints = {
     ...(params.privacyTag ? { privacyTag: params.privacyTag } : {}),
     ...(typeof params.maxCostUsd === 'number' ? { maxCostUsd: params.maxCostUsd } : {}),
@@ -104,6 +134,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
     ...(typeof params.estimatedTokens === 'number' && params.estimatedTokens > 0
       ? { estimatedTokens: Math.floor(params.estimatedTokens) }
       : {}),
+    dispatchProfile,
   };
 
   try {
@@ -127,6 +158,12 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
         model: lane.model,
         score: lane.score,
       })),
+      dispatchProfile,
+      dispatchProfileSource: dispatchResolution.source,
+      ...(dispatchResolution.agentId ? { dispatchProfileAgent: dispatchResolution.agentId } : {}),
+      toolPolicy,
+      toolDecisions,
+      toolset,
       rationale: plan.rationale,
       classification,
       describeErrors,
@@ -136,6 +173,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
           peer: plan.primary.peerId,
           prompt: params.prompt,
           model: plan.primary.model,
+          ...(shouldPropagateResolvedDispatchProfile(dispatchResolution) ? { dispatchProfile } : {}),
         },
       },
     };

@@ -193,9 +193,11 @@ export function broadcastCompactionComplete(
  * peer-session-bridge when peer.chat-session.start succeeds. Metadata
  * only — no system prompt, no model output.
  */
-export function broadcastChatSessionStart(
-  payload: { sessionId: string; model?: string },
-): void {
+export function broadcastChatSessionStart(payload: {
+  sessionId: string;
+  model?: string;
+  dispatchProfile?: string;
+}): void {
   broadcastFleetEvent('fleet:chat-session:start', { ...payload });
 }
 

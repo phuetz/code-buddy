@@ -33,6 +33,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { withSessionLock } from '../persistence/session-lock.js';
 import { logger } from '../utils/logger.js';
+import type {
+  FleetDispatchProfile,
+  FleetHermesToolsetDescriptor,
+  FleetDispatchToolDecision,
+  FleetDispatchToolPolicy,
+} from './dispatch-profile.js';
 
 export interface PersistedChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -43,6 +49,10 @@ export interface PersistedChatSession {
   sessionId: string;
   systemPrompt: string;
   model?: string;
+  dispatchProfile?: FleetDispatchProfile;
+  toolPolicy?: FleetDispatchToolPolicy;
+  toolDecisions?: FleetDispatchToolDecision[];
+  toolset?: FleetHermesToolsetDescriptor;
   /** User/assistant turns (system prompt is held separately). */
   messages: PersistedChatMessage[];
   createdAt: number;
