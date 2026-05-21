@@ -1370,6 +1370,16 @@ describe('autonomous-code CLI command', () => {
         nodeTypes: Array<{ canvasTypes: string[]; count: number; iconNames: string[]; id: string }>;
         statuses: Array<{ count: number; id: string; tone: string }>;
       };
+      graphViewport: {
+        activeNodeId: string;
+        activePosition: { x: number; y: number };
+        bounds: { height: number; maxX: number; maxY: number; minX: number; minY: number; width: number };
+        center: { x: number; y: number };
+        edgeCount: number;
+        mode: string;
+        nodeCount: number;
+        padding: number;
+      };
       focus: {
         activeBadgeIds: string[];
         activePanelId: string;
@@ -1842,6 +1852,23 @@ describe('autonomous-code CLI command', () => {
         id: 'approval',
       }),
     ]));
+    expect(saved.graphViewport).toEqual(expect.objectContaining({
+      activeNodeId: 'review-preview',
+      activePosition: { x: 250, y: 650 },
+      bounds: {
+        height: 1210,
+        maxX: 330,
+        maxY: 1180,
+        minX: 170,
+        minY: -30,
+        width: 160,
+      },
+      center: { x: 250, y: 575 },
+      edgeCount: 7,
+      mode: 'passive',
+      nodeCount: 8,
+      padding: 80,
+    }));
     expect(saved.guardrails).toEqual(expect.objectContaining({
       approvalState: 'needs_approval',
       canRunCommand: false,

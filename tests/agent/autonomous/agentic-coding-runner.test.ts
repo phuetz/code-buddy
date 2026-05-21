@@ -1415,6 +1415,17 @@ describe('runAgenticCodingCell', () => {
         safetyNote: string;
         statuses: Array<{ count: number; id: string; tone: string }>;
       };
+      graphViewport: {
+        activeNodeId: string;
+        activePosition: { x: number; y: number };
+        bounds: { height: number; maxX: number; maxY: number; minX: number; minY: number; width: number };
+        center: { x: number; y: number };
+        edgeCount: number;
+        mode: string;
+        nodeCount: number;
+        padding: number;
+        safetyNote: string;
+      };
     };
     const loop = JSON.parse(await fs.readFile(saved.artifacts.proposalLoopFile, 'utf8')) as { activeStepId: string; kind: string };
     const canvas = JSON.parse(await fs.readFile(saved.artifacts.proposalLoopCanvasFile, 'utf8')) as { activeNodeId: string; kind: string };
@@ -2339,6 +2350,24 @@ describe('runAgenticCodingCell', () => {
         id: 'edit',
       }),
     ]));
+    expect(saved.graphViewport).toEqual({
+      activeNodeId: 'review-preview',
+      activePosition: { x: 250, y: 650 },
+      bounds: {
+        height: 1210,
+        maxX: 330,
+        maxY: 1180,
+        minX: 170,
+        minY: -30,
+        width: 160,
+      },
+      center: { x: 250, y: 575 },
+      edgeCount: 7,
+      mode: 'passive',
+      nodeCount: 8,
+      padding: 80,
+      safetyNote: 'Graph viewport is display metadata only.',
+    });
     expect(saved.graph.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({
         source: 'review-edit-proposal',

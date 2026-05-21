@@ -273,6 +273,11 @@ rows, icon names, canvas types, node count, edge count, and active node id.
 This lets Cowork render a stable legend for the graph mini-map without
 reinterpreting graph data as execution authority.
 
+The workspace also includes a passive `graphViewport`: graph bounds, center,
+padding, active node position, node count, and edge count. This lets Cowork
+frame the graph mini-map consistently without recalculating layout or treating
+the viewport as execution state.
+
 The workspace also includes a passive `commands` object copied from the same
 loop packet. It lists each step that has a `buddy` command, its status, safety
 notes, input/output artifacts, and a display-only `commandText`. This gives
@@ -731,9 +736,9 @@ The first pure core module is intentionally small:
   canvas exports, compact next-action snapshots with Cowork UI action hints,
   non-writing artifact bundles with `coworkImport` panel manifests, standalone
   Cowork import manifests, passive import availability checks, Cowork workspace
-  summaries with passive queue, stepper, graph, graph legend, command catalog,
-  navigation, guardrails, supervision, review checklist, review route, badges,
-  layout, artifact shelf, focus, panel
+  summaries with passive queue, stepper, graph, graph legend, graph viewport,
+  command catalog, navigation, guardrails, supervision, review checklist,
+  review route, badges, layout, artifact shelf, focus, panel
   states, decision form, action rail, operator brief, operator handoff,
   activity, approval, producer request, producer dispatch/review, evidence, and
   manifest hints,
@@ -761,9 +766,9 @@ The first pure core module is intentionally small:
   edit-proposal request export, producer dispatch export, producer-output review
   export, bundle and standalone `coworkImport` manifests, and next-action
   snapshot export with UI action hints, plus passive Cowork import checks and
-  workspace summaries with queue, stepper, graph, graph legend, command
-  catalog, navigation, guardrails, supervision, review checklist, review route,
-  badges, layout, artifact shelf, focus, panel
+  workspace summaries with queue, stepper, graph, graph legend, graph viewport,
+  command catalog, navigation, guardrails, supervision, review checklist,
+  review route, badges, layout, artifact shelf, focus, panel
   states, decision form, action rail, operator brief, operator handoff,
   activity, approval, producer
   request/dispatch/review hints, evidence, and manifest hints.

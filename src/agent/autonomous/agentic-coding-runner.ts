@@ -629,6 +629,24 @@ export interface AgenticCodingProposalLoopCoworkWorkspace {
       tone: 'neutral' | 'success' | 'warning' | 'danger';
     }>;
   };
+  graphViewport?: {
+    activeNodeId?: string;
+    activePosition?: { x: number; y: number };
+    bounds: {
+      height: number;
+      maxX: number;
+      maxY: number;
+      minX: number;
+      minY: number;
+      width: number;
+    };
+    center: { x: number; y: number };
+    edgeCount: number;
+    mode: 'passive';
+    nodeCount: number;
+    padding: number;
+    safetyNote: string;
+  };
   guardrails: {
     approvalState?: AgenticCodingApprovalState;
     canRunCommand?: boolean;
@@ -5415,6 +5433,41 @@ export function buildAgenticCodingProposalLoopCoworkWorkspace(
       };
     })()
     : undefined;
+  const graphViewport: AgenticCodingProposalLoopCoworkWorkspace['graphViewport'] | undefined = graph && graph.nodes.length > 0
+    ? (() => {
+      const padding = 80;
+      const xValues = graph.nodes.map((node) => node.position.x);
+      const yValues = graph.nodes.map((node) => node.position.y);
+      const minX = Math.min(...xValues);
+      const maxX = Math.max(...xValues);
+      const minY = Math.min(...yValues);
+      const maxY = Math.max(...yValues);
+      const activeNode = graph.activeNodeId
+        ? graph.nodes.find((node) => node.id === graph.activeNodeId)
+        : undefined;
+      return {
+        ...(graph.activeNodeId ? { activeNodeId: graph.activeNodeId } : {}),
+        ...(activeNode ? { activePosition: activeNode.position } : {}),
+        bounds: {
+          height: maxY - minY + padding * 2,
+          maxX: maxX + padding,
+          maxY: maxY + padding,
+          minX: minX - padding,
+          minY: minY - padding,
+          width: maxX - minX + padding * 2,
+        },
+        center: {
+          x: Math.round((minX + maxX) / 2),
+          y: Math.round((minY + maxY) / 2),
+        },
+        edgeCount: graph.edgeCount,
+        mode: 'passive',
+        nodeCount: graph.nodeCount,
+        padding,
+        safetyNote: 'Graph viewport is display metadata only.',
+      };
+    })()
+    : undefined;
   const navigationGroupDefinitions: Array<{
     id: 'workflow' | 'review' | 'producer' | 'evidence';
     label: string;
@@ -5917,6 +5970,7 @@ export function buildAgenticCodingProposalLoopCoworkWorkspace(
     generatedAt: check.generatedAt,
     ...(graph ? { graph } : {}),
     ...(graphLegend ? { graphLegend } : {}),
+    ...(graphViewport ? { graphViewport } : {}),
     guardrails,
     kind: 'agentic-coding-proposal-loop-cowork-workspace',
     ...(manifest ? { manifest } : {}),
