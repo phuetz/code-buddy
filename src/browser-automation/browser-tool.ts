@@ -10,6 +10,12 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { getBrowserManager, BrowserManager } from './browser-manager.js';
+import {
+  buildInternetProofPersistenceSuggestions,
+  buildInternetProofPlan,
+  type InternetProofEvidence,
+  type InternetProofPersistenceSuggestion,
+} from './internet-proof-plan.js';
 
 // ============================================================================
 // Types
@@ -27,6 +33,7 @@ export type BrowserAction =
   | 'close_tab'
   // Snapshot
   | 'snapshot'
+  | 'observe'
   | 'get_element'
   | 'find_elements'
   // Navigation
@@ -60,6 +67,8 @@ export type BrowserAction =
   // JS
   | 'evaluate'
   | 'get_content'
+  | 'extract'
+  | 'assert_text'
   // Info
   | 'get_url'
   | 'get_title'
@@ -115,6 +124,10 @@ export interface BrowserToolInput {
   ref?: number;
   role?: string;
   name?: string;
+  query?: string;
+  expectedText?: string;
+  proofGoal?: string;
+  persistWhenProven?: boolean;
   // Interaction
   text?: string;
   key?: string;
@@ -176,6 +189,95 @@ export interface BrowserToolInput {
   downloadPath?: string;
 }
 
+interface ExtractedPage {
+  url: string;
+  title: string;
+  headings: string[];
+  links: Array<{ text: string; href: string }>;
+  actions: string[];
+  fields: string[];
+  text: string;
+  textLength: number;
+}
+
+interface AssertPage {
+  url: string;
+  title: string;
+  text: string;
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map(normalizeString).map((item) => item.trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeExtractedPage(value: unknown): ExtractedPage {
+  const page = typeof value === 'object' && value !== null
+    ? value as Record<string, unknown>
+    : {};
+  const links = Array.isArray(page.links)
+    ? page.links
+        .map((link) => {
+          const record = typeof link === 'object' && link !== null
+            ? link as Record<string, unknown>
+            : {};
+          return {
+            text: normalizeString(record.text).trim(),
+            href: normalizeString(record.href).trim(),
+          };
+        })
+        .filter((link) => link.text || link.href)
+    : [];
+
+  const text = normalizeString(page.text);
+  const textLength = typeof page.textLength === 'number' ? page.textLength : text.length;
+
+  return {
+    url: normalizeString(page.url),
+    title: normalizeString(page.title),
+    headings: normalizeStringArray(page.headings),
+    links,
+    actions: normalizeStringArray(page.actions),
+    fields: normalizeStringArray(page.fields),
+    text,
+    textLength,
+  };
+}
+
+function normalizeAssertPage(value: unknown): AssertPage {
+  const page = typeof value === 'object' && value !== null
+    ? value as Record<string, unknown>
+    : {};
+
+  return {
+    url: normalizeString(page.url),
+    title: normalizeString(page.title),
+    text: normalizeString(page.text),
+  };
+}
+
+function findMatchingLines(text: string, query: string, limit: number): string[] {
+  const terms = query.toLowerCase().split(/\s+/).map((term) => term.trim()).filter(Boolean);
+  if (terms.length === 0) {
+    return [];
+  }
+
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      const normalized = line.toLowerCase();
+      return terms.every((term) => normalized.includes(term)) ||
+        terms.some((term) => term.length > 3 && normalized.includes(term));
+    })
+    .slice(0, limit);
+}
+
 // ============================================================================
 // Browser Tool
 // ============================================================================
@@ -220,6 +322,8 @@ export class BrowserTool {
         // Snapshot
         case 'snapshot':
           return this.takeSnapshot(input);
+        case 'observe':
+          return this.observe(input);
         case 'get_element':
           return this.getElement(input);
         case 'find_elements':
@@ -286,6 +390,10 @@ export class BrowserTool {
           return this.evaluate(input);
         case 'get_content':
           return this.getContent();
+        case 'extract':
+          return this.extract(input);
+        case 'assert_text':
+          return this.assertText(input);
 
         // Info
         case 'get_url':
@@ -439,7 +547,7 @@ export class BrowserTool {
   // Lifecycle
   // ============================================================================
 
-  private async launch(input: BrowserToolInput): Promise<ToolResult> {
+  private async launch(_input: BrowserToolInput): Promise<ToolResult> {
     if (this.manager.isLaunched()) {
       return { success: true, output: 'Browser already launched' };
     }
@@ -534,6 +642,23 @@ export class BrowserTool {
         title: snapshot.title,
         elementCount: snapshot.elements.length,
       },
+    };
+  }
+
+  private async observe(input: BrowserToolInput): Promise<ToolResult> {
+    const result = await this.takeSnapshot({
+      ...input,
+      interactiveOnly: input.interactiveOnly ?? false,
+      maxElements: input.maxElements ?? 80,
+    });
+
+    if (!result.success) {
+      return result;
+    }
+
+    return {
+      ...result,
+      output: `Observation snapshot\n${result.output ?? ''}`,
     };
   }
 
@@ -905,6 +1030,183 @@ export class BrowserTool {
       output: truncated,
       data: { length: content.length },
     };
+  }
+
+  private async extract(input: BrowserToolInput): Promise<ToolResult> {
+    const result = await this.manager.evaluate({
+      expression: `(() => {
+        const text = (document.body?.innerText || '').replace(/\\s+\\n/g, '\\n').trim();
+        const take = (value, max = 140) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, max);
+        const headings = Array.from(document.querySelectorAll('h1,h2,h3'))
+          .map((el) => take(el.textContent))
+          .filter(Boolean)
+          .slice(0, 20);
+        const links = Array.from(document.querySelectorAll('a[href]'))
+          .map((el) => ({ text: take(el.textContent || el.getAttribute('aria-label')), href: el.href }))
+          .filter((link) => link.text || link.href)
+          .slice(0, 30);
+        const actions = Array.from(document.querySelectorAll('button,[role="button"],a[href],input,textarea,select'))
+          .map((el) => take(el.getAttribute('aria-label') || el.textContent || el.getAttribute('placeholder') || el.getAttribute('name') || el.id))
+          .filter(Boolean)
+          .slice(0, 30);
+        const fields = Array.from(document.querySelectorAll('input,textarea,select'))
+          .map((el) => take(el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || el.id))
+          .filter(Boolean)
+          .slice(0, 20);
+        return {
+          url: location.href,
+          title: document.title,
+          headings,
+          links,
+          actions,
+          fields,
+          text: text.slice(0, 12000),
+          textLength: text.length,
+        };
+      })()`,
+    });
+
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    const extracted = normalizeExtractedPage(result.value);
+    const query = (input.query || input.text || input.name || '').trim();
+    const matches = query ? findMatchingLines(extracted.text, query, 12) : [];
+    const textPreview = (matches.length > 0 ? matches : extracted.text.split(/\n+/).slice(0, 12))
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join('\n');
+    const persistenceSuggestions = this.buildInternetProofPersistenceSuggestions(input, {
+      url: extracted.url,
+      title: extracted.title,
+      query: query || undefined,
+      headings: extracted.headings,
+      matches,
+      snippet: textPreview,
+    });
+
+    const output = [
+      `Extracted: ${extracted.title || '(untitled)'}`,
+      `URL: ${extracted.url}`,
+      query ? `Query: ${query}` : undefined,
+      extracted.headings.length ? `Headings:\n${extracted.headings.map((heading) => `- ${heading}`).join('\n')}` : undefined,
+      extracted.actions.length ? `Actionable:\n${extracted.actions.map((action) => `- ${action}`).join('\n')}` : undefined,
+      extracted.links.length ? `Links:\n${extracted.links.map((link) => `- ${link.text || link.href} -> ${link.href}`).join('\n')}` : undefined,
+      textPreview ? `Text:\n${textPreview}` : undefined,
+      extracted.textLength > extracted.text.length ? `Text truncated: ${extracted.text.length}/${extracted.textLength} chars` : undefined,
+      this.formatPersistenceSuggestionOutput(persistenceSuggestions),
+    ].filter(Boolean).join('\n\n');
+
+    return {
+      success: true,
+      output,
+      data: {
+        ...extracted,
+        query: query || undefined,
+        matches,
+        ...(persistenceSuggestions.length > 0 ? { persistenceSuggestions } : {}),
+      },
+    };
+  }
+
+  private async assertText(input: BrowserToolInput): Promise<ToolResult> {
+    const expected = (input.expectedText || input.text || input.query || '').trim();
+    if (!expected) {
+      return { success: false, error: 'expectedText, text, or query is required' };
+    }
+
+    const result = await this.manager.evaluate({
+      expression: `(() => ({
+        url: location.href,
+        title: document.title,
+        text: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim()
+      }))()`,
+    });
+
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    const page = normalizeAssertPage(result.value);
+    const haystack = `${page.title}\n${page.url}\n${page.text}`.toLowerCase();
+    const needle = expected.toLowerCase();
+    const passed = haystack.includes(needle);
+    const index = haystack.indexOf(needle);
+    const snippet = index >= 0
+      ? page.text.slice(Math.max(0, index - 80), Math.min(page.text.length, index + expected.length + 160))
+      : page.text.slice(0, 240);
+    const persistenceSuggestions = this.buildInternetProofPersistenceSuggestions(input, {
+      url: page.url,
+      title: page.title,
+      query: input.query,
+      matches: passed ? [expected] : [],
+      expectedText: expected,
+      assertionPassed: passed,
+      snippet,
+    });
+
+    return {
+      success: passed,
+      output: passed
+        ? [
+            `Assertion passed: page contains "${expected}"\n${snippet}`,
+            this.formatPersistenceSuggestionOutput(persistenceSuggestions),
+          ].filter(Boolean).join('\n\n')
+        : `Assertion failed: page does not contain "${expected}"\nTitle: ${page.title}\nURL: ${page.url}\nPreview: ${snippet}`,
+      error: passed ? undefined : `Expected text not found: ${expected}`,
+      data: {
+        expectedText: expected,
+        passed,
+        title: page.title,
+        url: page.url,
+        snippet,
+        ...(persistenceSuggestions.length > 0 ? { persistenceSuggestions } : {}),
+      },
+    };
+  }
+
+  private buildInternetProofPersistenceSuggestions(
+    input: BrowserToolInput,
+    evidence: InternetProofEvidence,
+  ): InternetProofPersistenceSuggestion[] {
+    if (input.persistWhenProven !== true) {
+      return [];
+    }
+
+    const goal = (
+      input.proofGoal ||
+      input.query ||
+      input.expectedText ||
+      evidence.title ||
+      evidence.url ||
+      input.url ||
+      ''
+    ).trim();
+    if (!goal) {
+      return [];
+    }
+
+    const plan = buildInternetProofPlan({
+      goal,
+      query: input.query || input.text || input.name,
+      sourceUrl: evidence.url || input.url,
+      expectedText: evidence.expectedText || input.expectedText,
+      requiresBrowser: true,
+      persistWhenProven: true,
+    });
+
+    return buildInternetProofPersistenceSuggestions({ plan, evidence });
+  }
+
+  private formatPersistenceSuggestionOutput(
+    suggestions: InternetProofPersistenceSuggestion[],
+  ): string | undefined {
+    if (suggestions.length === 0) {
+      return undefined;
+    }
+    const tools = suggestions.map((suggestion) => suggestion.tool).join(', ');
+    return `Persistence suggestions available: ${tools}`;
   }
 
   // ============================================================================

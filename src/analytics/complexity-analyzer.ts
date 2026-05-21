@@ -9,7 +9,7 @@
  */
 
 import fs from 'fs-extra';
-import glob from 'fast-glob';
+import { glob } from 'fast-glob';
 
 export interface FunctionComplexity {
   name: string;

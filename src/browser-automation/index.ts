@@ -67,3 +67,65 @@ export {
   getBrowserTool,
   resetBrowserTool,
 } from './browser-tool.js';
+
+export type {
+  InternetProofPlan,
+  InternetProofPlanOptions,
+  InternetProofEvidence,
+  InternetProofPersistenceOptions,
+  InternetProofPersistenceSuggestion,
+  InternetProofStep,
+  InternetProofStepTool,
+} from './internet-proof-plan.js';
+
+export {
+  buildInternetProofPlan,
+  buildInternetProofPersistenceSuggestions,
+} from './internet-proof-plan.js';
+
+export type {
+  InternetScoutEvidenceKind,
+  InternetScoutIntent,
+  InternetScoutPlan,
+  InternetScoutPlanOptions,
+  InternetScoutStep,
+  InternetScoutStepStage,
+  InternetScoutStepTool,
+} from './internet-scout-plan.js';
+
+export {
+  INTERNET_SCOUT_INTENTS,
+  buildInternetScoutPlan,
+  renderInternetScoutPlan,
+} from './internet-scout-plan.js';
+
+export type {
+  BrowserOperatorActionLogEntry,
+  BrowserOperatorActionStatus,
+  BrowserOperatorConsentScope,
+  BrowserOperatorConsentState,
+  BrowserOperatorMode,
+  BrowserOperatorSessionDraft,
+  BrowserOperatorSessionOptions,
+} from './browser-operator-session.js';
+
+export {
+  buildBrowserOperatorSessionDraft,
+  renderBrowserOperatorSessionDraft,
+} from './browser-operator-session.js';
+
+export type {
+  InternetScoutExecutableTool,
+  InternetScoutEvidence,
+  InternetScoutRunOptions,
+  InternetScoutRunResult,
+  InternetScoutToolExecutor,
+  InternetScoutTrace,
+  InternetScoutTraceStatus,
+  InternetScoutWaitUntil,
+} from './internet-scout-runner.js';
+
+export {
+  renderInternetScoutRunResult,
+  runInternetScout,
+} from './internet-scout-runner.js';

@@ -84,6 +84,9 @@ describe('Computer Use Tool Adapters', () => {
         const actionEnum = schema.parameters.properties!.action.enum;
         expect(actionEnum).toContain('launch');
         expect(actionEnum).toContain('snapshot');
+        expect(actionEnum).toContain('observe');
+        expect(actionEnum).toContain('extract');
+        expect(actionEnum).toContain('assert_text');
         expect(actionEnum).toContain('click');
         expect(actionEnum).toContain('navigate');
         expect(actionEnum).toContain('fill');
@@ -104,6 +107,8 @@ describe('Computer Use Tool Adapters', () => {
         const schema = tool.getSchema();
         const props = schema.parameters.properties!;
         expect(props.text).toBeDefined();
+        expect(props.query).toBeDefined();
+        expect(props.expectedText).toBeDefined();
         expect(props.key).toBeDefined();
         expect(props.url).toBeDefined();
         expect(props.expression).toBeDefined();
@@ -136,7 +141,7 @@ describe('Computer Use Tool Adapters', () => {
       it('should accept all valid actions', () => {
         const actions = [
           'launch', 'connect', 'close',
-          'snapshot', 'click', 'navigate', 'type', 'fill',
+          'snapshot', 'observe', 'extract', 'assert_text', 'click', 'navigate', 'type', 'fill',
           'go_back', 'go_forward', 'reload',
           'screenshot', 'pdf', 'evaluate',
         ];

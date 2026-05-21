@@ -20,9 +20,11 @@ export const BROWSER_TOOL: CodeBuddyTool = {
 WORKFLOW:
 1. 'launch' to start browser (or 'connect' to existing)
 2. 'navigate' to a URL
-3. 'snapshot' to detect page elements - elements get numeric refs [1], [2], etc.
+3. 'observe' or 'snapshot' to detect page elements - elements get numeric refs [1], [2], etc.
 4. Use refs in click/type/fill actions
-5. 'screenshot' or 'pdf' to capture content
+5. Use 'extract' to capture URL/title/headings/actions/links/text evidence
+6. Use 'assert_text' after navigation or UI expectations to make the flow testable
+7. 'screenshot' or 'pdf' to capture content
 
 ACTIONS:
 Lifecycle:
@@ -38,6 +40,7 @@ Tabs:
 
 Snapshot:
 - snapshot: Take snapshot of page, returns elements with refs [1], [2], etc.
+- observe: Take a broader Stagehand-style observation snapshot before acting
 - get_element: Get details of element by ref
 - find_elements: Search elements by role/name
 
@@ -76,6 +79,8 @@ Device:
 JavaScript:
 - evaluate: Execute JavaScript in page context
 - get_content: Get page HTML content
+- extract: Extract compact page state with URL/title/headings/actions/links/text
+- assert_text: Assert expected text is present; failed assertion means failed test
 - get_url: Get current URL
 - get_title: Get page title
 
@@ -113,13 +118,13 @@ Download:
           enum: [
             'launch', 'connect', 'close',
             'tabs', 'new_tab', 'focus_tab', 'close_tab',
-            'snapshot', 'get_element', 'find_elements',
+            'snapshot', 'observe', 'get_element', 'find_elements',
             'navigate', 'go_back', 'go_forward', 'reload',
             'click', 'double_click', 'right_click', 'type', 'fill', 'select', 'press', 'hover', 'scroll',
             'screenshot', 'pdf',
             'get_cookies', 'set_cookie', 'clear_cookies', 'set_headers', 'set_offline',
             'emulate_device', 'set_geolocation',
-            'evaluate', 'get_content', 'get_url', 'get_title',
+            'evaluate', 'get_content', 'extract', 'assert_text', 'get_url', 'get_title',
             'drag', 'upload_files', 'wait_for_navigation',
             'get_local_storage', 'set_local_storage', 'get_session_storage', 'set_session_storage',
             'add_route_rule', 'remove_route_rule', 'clear_route_rules',
@@ -173,6 +178,22 @@ Download:
         name: {
           type: 'string',
           description: 'Element name/text to search for',
+        },
+        query: {
+          type: 'string',
+          description: 'Natural-language extraction focus or assertion query',
+        },
+        expectedText: {
+          type: 'string',
+          description: 'Text expected to appear on the page for assert_text',
+        },
+        proofGoal: {
+          type: 'string',
+          description: 'Optional proof-loop goal used when persistWhenProven returns memory/lesson suggestions',
+        },
+        persistWhenProven: {
+          type: 'boolean',
+          description: 'For extract/assert_text, return remember and lessons_add payload suggestions only after durable evidence is proven',
         },
         // Interaction
         text: {
@@ -363,9 +384,154 @@ Download:
 };
 
 /**
+ * Internet Scout Run Tool
+ *
+ * Executes a bounded, evidence-first web navigation run.
+ */
+export const INTERNET_SCOUT_RUN_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'internet_scout_run',
+    description: `Execute a bounded Internet Scout workflow.
+
+This runs the safe sequence from internet_scout_plan using web_search/web_fetch and Playwright-backed browser actions: launch, navigate, observe, scroll, extract, and assert_text. It stops on captcha, login walls, paywalls, 403/429, rate limits, or access-control bypass signals. It does not invent clicks or bypass site protections.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        goal: {
+          type: 'string',
+          description: 'What to learn, verify, or collect from public/user-authorized web sources.',
+        },
+        query: {
+          type: 'string',
+          description: 'Optional search query. Defaults to goal.',
+        },
+        sourceUrl: {
+          type: 'string',
+          description: 'Known starting URL. If omitted, the run starts with web_search.',
+        },
+        intent: {
+          type: 'string',
+          enum: ['research', 'prospecting', 'profile_enrichment', 'page_verification', 'lead_discovery'],
+          description: 'Navigation intent. Prospecting/profile intents add safe relationship_context handling.',
+        },
+        requiresInteraction: {
+          type: 'boolean',
+          description: 'Whether the page likely needs observation before extraction. The runner does not invent clicks.',
+        },
+        expectedText: {
+          type: 'string',
+          description: 'Text that must be proven with browser.assert_text for success.',
+        },
+        persistWhenProven: {
+          type: 'boolean',
+          description: 'Ask browser extract/assert to return persistence suggestions after proof.',
+        },
+        executePersistence: {
+          type: 'boolean',
+          description: 'Actually execute remember/lessons_add suggestions. Default false.',
+        },
+        maxPages: {
+          type: 'number',
+          description: 'Maximum public source candidates. Defaults to 5.',
+        },
+        useBrowser: {
+          type: 'boolean',
+          description: 'Use Playwright/browser for navigate, observe, extract, and assert. Default true.',
+        },
+        headless: {
+          type: 'boolean',
+          description: 'Run browser headless. Default true.',
+        },
+        browserPageLimit: {
+          type: 'number',
+          description: 'Maximum candidate pages to open in the browser. Defaults to 1.',
+        },
+        scrollCount: {
+          type: 'number',
+          description: 'Optional number of down-scrolls before browser.extract. Defaults to 0.',
+        },
+        waitUntil: {
+          type: 'string',
+          enum: ['load', 'domcontentloaded', 'networkidle'],
+          description: 'Navigation completion condition. Defaults to domcontentloaded.',
+        },
+        allowLoginPages: {
+          type: 'boolean',
+          description: 'Allow user-authorized login pages to open, without credential/captcha bypass.',
+        },
+      },
+      required: ['goal'],
+    },
+  },
+};
+
+/**
+ * Internet Scout Plan Tool
+ *
+ * Produces a safe web navigation plan before using search/fetch/browser tools.
+ */
+export const INTERNET_SCOUT_PLAN_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'internet_scout_plan',
+    description: `Plan an evidence-first web navigation workflow before browsing.
+
+Use this when a task involves advanced internet research, OSINT-style public source review, prospecting, profile enrichment, page verification, or multi-step web surfing.
+
+The plan sequences web_search, web_fetch, browser.observe, browser.extract, browser.assert_text, relationship_context, remember, and lessons_add where appropriate. It also returns stop conditions for captcha, login walls, paywalls, 403/429, rate limits, and access-control bypass requests.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        goal: {
+          type: 'string',
+          description: 'What to learn, verify, or collect from public/user-authorized web sources.',
+        },
+        query: {
+          type: 'string',
+          description: 'Optional search query. Defaults to goal.',
+        },
+        sourceUrl: {
+          type: 'string',
+          description: 'Known starting URL. If omitted, the plan starts with web_search.',
+        },
+        intent: {
+          type: 'string',
+          enum: ['research', 'prospecting', 'profile_enrichment', 'page_verification', 'lead_discovery'],
+          description: 'Navigation intent. Prospecting/profile intents add safe relationship_context handling.',
+        },
+        requiresInteraction: {
+          type: 'boolean',
+          description: 'Whether clicks, forms, tabs, or scrolling are likely needed before extraction.',
+        },
+        expectedText: {
+          type: 'string',
+          description: 'Text expected on the page; adds browser.assert_text to the plan.',
+        },
+        persistWhenProven: {
+          type: 'boolean',
+          description: 'Add remember/lessons_add only after durable evidence is proven.',
+        },
+        maxPages: {
+          type: 'number',
+          description: 'Maximum public pages to inspect. Defaults to 5.',
+        },
+        allowLoginPages: {
+          type: 'boolean',
+          description: 'Allow user-authorized login pages to be opened, without credential/captcha bypass.',
+        },
+      },
+      required: ['goal'],
+    },
+  },
+};
+
+/**
  * All browser tools
  */
 export const BROWSER_TOOLS: CodeBuddyTool[] = [
+  INTERNET_SCOUT_RUN_TOOL,
+  INTERNET_SCOUT_PLAN_TOOL,
   BROWSER_TOOL,
 ];
 
