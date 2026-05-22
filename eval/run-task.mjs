@@ -50,7 +50,7 @@ function runTask(taskSlug) {
   let result;
   try {
     result = JSON.parse(stdout.trim());
-  } catch (err) {
+  } catch (_err) {
     console.error(`Failed to parse agent output as JSON for task ${taskSlug}. Raw output:`);
     console.error(stdout);
     return false;
