@@ -109,6 +109,9 @@ export function registerAutonomousCodeCommand(program: Command): void {
     .option('--json', 'output JSON')
     .action(async (options: AutonomousCodeOptions) => {
       try {
+        const dotenv = await import('dotenv');
+        dotenv.config();
+
         if (!options.taskFile && !options.resume) {
           throw new Error('Either --task-file or --resume must be provided.');
         }

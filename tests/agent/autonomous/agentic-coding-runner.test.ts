@@ -695,7 +695,7 @@ describe('runAgenticCodingCell', () => {
 
     const report = await runAgenticCodingCell({ runVerification: true, taskFile });
 
-    expect(report.status).toBe('verification_failed');
+    expect(report.status).toBe('blocked');
     expect(report.verification).toEqual([
       expect.objectContaining({
         command: 'rm -rf /',
