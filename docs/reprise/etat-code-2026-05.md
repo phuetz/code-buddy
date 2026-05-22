@@ -92,8 +92,9 @@ La commande `npm run validate` a été exécutée avec succès sur l'environneme
 - **Typecheck (TSC)** : Vert (0 erreur).
 - **Tests unitaires et d'intégration (Vitest)** :
   - **Fichiers de test** : 908 passés, 2 ignorés (910 au total).
-  - **Nombre total de cas de test** : 28 503 passés, 86 ignorés (28 589 au total).
-  - **Durée totale** : 47.49 secondes (importation 283.66s, exécution tests 481.13s).
+  - **Nombre total de cas de test** : 28505 passés, 86 ignorés (28591 au total).
+  - **Durée totale** : 53.02 secondes.
   - **Statut final** : Vert complet (aucune erreur).
+
 
 
