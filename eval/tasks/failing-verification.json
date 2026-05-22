@@ -1,0 +1,21 @@
+{
+  "repo": "D:/CascadeProjects/grok-cli-weekend",
+  "task": "Modify eval/sandbox/target.txt to contain 'Hello, Failed Buddy!' but the verification fails on purpose to trigger rollback.",
+  "allowedPaths": [
+    "eval/sandbox/target.txt"
+  ],
+  "verification": [
+    "node -e \"throw new Error('Verification failed on purpose to test self-correction loop limits');\""
+  ],
+  "riskLevel": "low",
+  "output": "text",
+  "edits": [
+    {
+      "type": "replace_text",
+      "path": "eval/sandbox/target.txt",
+      "find": "Hello, World!",
+      "replace": "Hello, Failed Buddy!",
+      "expectedOccurrences": 1
+    }
+  ]
+}
