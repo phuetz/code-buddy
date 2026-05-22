@@ -1,0 +1,21 @@
+{
+  "repo": "D:/CascadeProjects/grok-cli-weekend",
+  "task": "Modify eval/sandbox/target.txt to replace 'Hello, Unknown!' with 'Hello, Buddy!' (this string does not exist, so it should fail to apply).",
+  "allowedPaths": [
+    "eval/sandbox/target.txt"
+  ],
+  "verification": [
+    "node -e \"const fs = require('fs'); const content = fs.readFileSync('eval/sandbox/target.txt', 'utf8').trim(); if (content !== 'Hello, World!') throw new Error('Verification failed: ' + content);\""
+  ],
+  "riskLevel": "low",
+  "output": "text",
+  "edits": [
+    {
+      "type": "replace_text",
+      "path": "eval/sandbox/target.txt",
+      "find": "Hello, Unknown!",
+      "replace": "Hello, Buddy!",
+      "expectedOccurrences": 1
+    }
+  ]
+}

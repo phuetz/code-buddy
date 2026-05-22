@@ -1,0 +1,21 @@
+{
+  "repo": "D:/CascadeProjects/grok-cli-weekend",
+  "task": "Modify eval/sandbox/target.txt to contain 'Hello, Code Buddy!' and 'Goodbye, Code Buddy!' on two separate lines.",
+  "allowedPaths": [
+    "eval/sandbox/target.txt"
+  ],
+  "verification": [
+    "node -e \"const fs = require('fs'); const content = fs.readFileSync('eval/sandbox/target.txt', 'utf8').replace(/\\r\\n/g, '\\n').trim(); if (content !== 'Hello, Code Buddy!\\nGoodbye, Code Buddy!') throw new Error('Verification failed: ' + JSON.stringify(content));\""
+  ],
+  "riskLevel": "low",
+  "output": "text",
+  "edits": [
+    {
+      "type": "replace_text",
+      "path": "eval/sandbox/target.txt",
+      "find": "Hello, World!",
+      "replace": "Hello, Code Buddy!\nGoodbye, Code Buddy!",
+      "expectedOccurrences": 1
+    }
+  ]
+}
