@@ -1,0 +1,8 @@
+{
+  "status": "blocked",
+  "args": ["--max-cost-usd", "0.00001"],
+  "maxFilesChanged": 0,
+  "mustTouchPaths": [],
+  "mustNotTouchOutside": true,
+  "verificationMustPass": false
+}

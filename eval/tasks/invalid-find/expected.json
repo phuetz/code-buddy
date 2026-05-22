@@ -1,0 +1,7 @@
+{
+  "status": "blocked",
+  "maxFilesChanged": 0,
+  "mustTouchPaths": [],
+  "mustNotTouchOutside": true,
+  "verificationMustPass": false
+}
