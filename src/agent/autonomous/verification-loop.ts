@@ -14,7 +14,8 @@ import {
   runVerificationCommands,
 } from './agentic-coding-runner.js';
 import { generateEditProposal } from './edit-proposal-producer.js';
-import type { CodeBuddyClient, CodeBuddyMessage } from '../../codebuddy/client.js';
+import { CodeBuddyClient } from '../../codebuddy/client.js';
+import type { CodeBuddyMessage, CodeBuddyTool } from '../../codebuddy/client.js';
 import { saveCheckpoint, loadCheckpoint } from './checkpoint-manager.js';
 
 const execFileAsync = promisify(execFile);
@@ -30,6 +31,9 @@ async function rollbackFiles(repo: string, relativePaths: string[]): Promise<voi
   }
 }
 
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { getCostTracker } from '../../utils/cost-tracker.js';
+
 export async function runVerificationAndSelfCorrectionLoop(
   contract: AgenticCodingTaskContract,
   options: AgenticCodingRunOptions,
@@ -41,12 +45,62 @@ export async function runVerificationAndSelfCorrectionLoop(
   verification: AgenticCodingVerificationResult[];
   iterations: number;
   contract: AgenticCodingTaskContract;
+  reason?: string;
 }> {
   let currentContract = { ...contract };
   let checkpointToResume = null;
   if (options.resume) {
     checkpointToResume = await loadCheckpoint(options.resume);
   }
+
+  let cumulativeCostUsd = 0;
+  const costLimit = options.maxCostUsd ?? 5.0;
+
+  // 1. Resolve client
+  let baseClient: CodeBuddyClient;
+  if (customClient) {
+    baseClient = customClient;
+  } else {
+    const detected = detectProviderFromEnv();
+    if (!detected) {
+      throw new Error('No LLM provider configuration found in environment.');
+    }
+    baseClient = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+  }
+
+  const tracker = getCostTracker();
+
+  // 2. Wrap client in a proxy to track cumulative LLM cost
+  const clientProxy = new Proxy(baseClient, {
+    get(target, prop, receiver) {
+      if (prop === 'chat') {
+        return async function (
+          messages: CodeBuddyMessage[],
+          tools?: CodeBuddyTool[],
+          chatOpts?: any,
+          searchOpts?: any
+        ) {
+          if (cumulativeCostUsd >= costLimit) {
+            throw new Error(`Cost budget of $${costLimit.toFixed(2)} exceeded. Blocking further LLM calls.`);
+          }
+          const response = await target.chat(messages, tools, chatOpts, searchOpts);
+          const model = target.getCurrentModel();
+          const choice = response.choices?.[0];
+          const inputTokens = response.usage?.prompt_tokens ?? Math.ceil(JSON.stringify(messages).length / 4);
+          const outputTokens = response.usage?.completion_tokens ?? Math.ceil((choice?.message?.content ?? '').length / 4);
+
+          const usage = tracker.recordUsage(inputTokens, outputTokens, model);
+          cumulativeCostUsd += usage.cost;
+
+          if (cumulativeCostUsd >= costLimit) {
+            throw new Error(`Cost budget of $${costLimit.toFixed(2)} exceeded. Blocking further LLM calls.`);
+          }
+          return response;
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    }
+  });
 
   let currentVerification: AgenticCodingVerificationResult[] = [];
   let hasFailed = false;
@@ -83,14 +137,17 @@ export async function runVerificationAndSelfCorrectionLoop(
     hasFailed = currentVerification.some((result) => result.status !== 'passed');
   }
 
-  // If any verification command was blocked by safety checks, exit immediately.
+  // If any verification command was blocked by safety checks, rollback files and return status 'blocked'
   const hasBlocked = currentVerification.some((result) => result.status === 'blocked');
   if (hasBlocked) {
+    const filesToRestore = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+    await rollbackFiles(currentContract.repo, filesToRestore);
     return {
-      status: 'verification_failed',
+      status: 'blocked',
       verification: currentVerification,
       iterations: 0,
       contract: currentContract,
+      reason: 'Verification command blocked by safety policy check.',
     };
   }
 
@@ -125,7 +182,7 @@ export async function runVerificationAndSelfCorrectionLoop(
 
   if (currentContract.edits.length === 0) {
     try {
-      const initialProposal = await generateEditProposal(dispatch, customClient);
+      const initialProposal = await generateEditProposal(dispatch, clientProxy);
       currentContract.edits = initialProposal.edits;
 
       if (options.runId) {
@@ -156,6 +213,20 @@ export async function runVerificationAndSelfCorrectionLoop(
         options.verificationTimeoutMs ?? 120000
       );
 
+      // Check safety checks block
+      const hasBlockedAfterInitial = currentVerification.some((result) => result.status === 'blocked');
+      if (hasBlockedAfterInitial) {
+        const filesToRestore = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+        await rollbackFiles(currentContract.repo, filesToRestore);
+        return {
+          status: 'blocked',
+          verification: currentVerification,
+          iterations: 0,
+          contract: currentContract,
+          reason: 'Verification command blocked by safety policy check after applying initial edits.',
+        };
+      }
+
       hasFailed = currentVerification.some((result) => result.status !== 'passed');
       if (!hasFailed) {
         if (options.runId) {
@@ -176,11 +247,23 @@ export async function runVerificationAndSelfCorrectionLoop(
         };
       }
     } catch (err) {
+      const filesToRestore = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+      await rollbackFiles(currentContract.repo, filesToRestore);
+      if (cumulativeCostUsd >= costLimit) {
+        return {
+          status: 'blocked',
+          verification: currentVerification,
+          iterations: 0,
+          contract: currentContract,
+          reason: `Cost budget of $${costLimit.toFixed(2)} exceeded during initial edit proposal generation.`,
+        };
+      }
       return {
         status: 'verification_failed',
         verification: currentVerification,
         iterations: 0,
         contract: currentContract,
+        reason: err instanceof Error ? err.message : String(err),
       };
     }
   }
@@ -249,14 +332,25 @@ Please analyze the failure and generate a new, corrected edit proposal to resolv
 
     let newProposal;
     try {
-      newProposal = await generateEditProposal(nextDispatch, customClient);
+      newProposal = await generateEditProposal(nextDispatch, clientProxy);
     } catch (err) {
-      // If the LLM call fails, return verification_failed
+      const pathsToRevert = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+      await rollbackFiles(currentContract.repo, pathsToRevert);
+      if (cumulativeCostUsd >= costLimit) {
+        return {
+          status: 'blocked',
+          verification: currentVerification,
+          iterations: iter + 1,
+          contract: currentContract,
+          reason: `Cost budget of $${costLimit.toFixed(2)} exceeded during self-correction iteration ${iter + 1}.`,
+        };
+      }
       return {
         status: 'verification_failed',
         verification: currentVerification,
         iterations: iter + 1,
         contract: currentContract,
+        reason: err instanceof Error ? err.message : String(err),
       };
     }
 
@@ -270,22 +364,27 @@ Please analyze the failure and generate a new, corrected edit proposal to resolv
       const previews = await previewDeclaredEdits(currentContract);
       const failedPreviews = previews.filter((p) => p.status !== 'previewed');
       if (failedPreviews.length > 0) {
-        // Return verification failed if preview of self-corrected proposal fails
+        const pathsToRevert = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+        await rollbackFiles(currentContract.repo, pathsToRevert);
         return {
           status: 'verification_failed',
           verification: currentVerification,
           iterations: iter + 1,
           contract: currentContract,
+          reason: 'Preview of self-corrected proposal failed.',
         };
       }
 
       await applyDeclaredEdits(currentContract);
-    } catch {
+    } catch (err) {
+      const pathsToRevert = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+      await rollbackFiles(currentContract.repo, pathsToRevert);
       return {
         status: 'verification_failed',
         verification: currentVerification,
         iterations: iter + 1,
         contract: currentContract,
+        reason: err instanceof Error ? err.message : String(err),
       };
     }
 
@@ -294,6 +393,20 @@ Please analyze the failure and generate a new, corrected edit proposal to resolv
       currentContract,
       options.verificationTimeoutMs ?? 120000
     );
+
+    // If safety checks blocked any verification command, rollback and block
+    const hasBlockedInLoop = currentVerification.some((result) => result.status === 'blocked');
+    if (hasBlockedInLoop) {
+      const pathsToRevert = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+      await rollbackFiles(currentContract.repo, pathsToRevert);
+      return {
+        status: 'blocked',
+        verification: currentVerification,
+        iterations: iter + 1,
+        contract: currentContract,
+        reason: 'Verification command blocked by safety policy check during self-correction loop.',
+      };
+    }
 
     hasFailed = currentVerification.some((result) => result.status !== 'passed');
     if (!hasFailed) {
@@ -327,10 +440,15 @@ Please analyze the failure and generate a new, corrected edit proposal to resolv
     });
   }
 
+  // Rollback files when iteration limit is reached
+  const pathsToRevert = Array.from(new Set(currentContract.edits.map((e) => e.path)));
+  await rollbackFiles(currentContract.repo, pathsToRevert);
+
   return {
-    status: 'verification_failed',
+    status: 'blocked',
     verification: currentVerification,
     iterations: maxIterations,
     contract: currentContract,
+    reason: `Maximum iterations (${maxIterations}) reached without passing verification.`,
   };
 }

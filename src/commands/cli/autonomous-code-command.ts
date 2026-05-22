@@ -55,6 +55,7 @@ interface AutonomousCodeOptions {
   workflowProgressFile?: string;
   resume?: string;
   runId?: string;
+  maxCostUsd?: string;
 }
 
 function parseTimeout(value: string | undefined): number | undefined {
@@ -103,6 +104,7 @@ export function registerAutonomousCodeCommand(program: Command): void {
     .option('--workflow-progress-file <path>', 'write a compact workflow progress snapshot JSON artifact')
     .option('--run-verification', 'run declared verification commands after preflight passes')
     .option('--verification-timeout-ms <ms>', 'timeout per verification command', '120000')
+    .option('--max-cost-usd <usd>', 'maximum allowed cost in USD')
     .option('--report-file <path>', 'write the JSON report to a file')
     .option('--json', 'output JSON')
     .action(async (options: AutonomousCodeOptions) => {
@@ -124,6 +126,7 @@ export function registerAutonomousCodeCommand(program: Command): void {
           workflowBuilderProposalFile: options.workflowBuilderProposalFile,
           resume: options.resume,
           runId: options.runId,
+          maxCostUsd: options.maxCostUsd ? Number(options.maxCostUsd) : undefined,
         });
         const reportPath = options.reportFile
           ? await writeAgenticCodingRunReport(report, options.reportFile)

@@ -82,3 +82,18 @@ Après inspection de la base de code réelle, voici les ajustements par rapport 
    Le test `tests/unit/scripting-parser.test.ts` est marqué globalement en `describe.skip`. Il a été remplacé fonctionnellement par `tests/unit/fcs-parser.test.ts` (173 assertions fonctionnelles). Le fichier hérité doit être supprimé pour réduire l'entropie.
 3. **Périmètre du Policy Engine (WS5)** :
    Le plan prévoit un Policy Engine centralisé. Dans le code existant, les permissions et la sécurité sont gérées par `ConfirmationService` et `AutonomyManager`, ainsi que par des middlewares spécifiques. La modernisation WS5 devra consolider et unifier ces systèmes existants plutôt que d'ajouter une couche redondante.
+
+---
+
+## 4. Résultats de la validation (IMM-T1 - 2026-05-22)
+
+La commande `npm run validate` a été exécutée avec succès sur l'environnement Windows cible :
+- **Linter (ESLint)** : Vert (0 erreur, 2235 avertissements de style/unused-vars).
+- **Typecheck (TSC)** : Vert (0 erreur).
+- **Tests unitaires et d'intégration (Vitest)** :
+  - **Fichiers de test** : 908 passés, 2 ignorés (910 au total).
+  - **Nombre total de cas de test** : 28 503 passés, 86 ignorés (28 589 au total).
+  - **Durée totale** : 47.49 secondes (importation 283.66s, exécution tests 481.13s).
+  - **Statut final** : Vert complet (aucune erreur).
+
+

@@ -157,6 +157,7 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
           },
         ],
       }),
+      getCurrentModel: () => 'gpt-4o',
     } as unknown as CodeBuddyClient;
 
     const result = await runVerificationAndSelfCorrectionLoop(
@@ -175,7 +176,7 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
     expect(updatedContent).toBe('Hello Correct content');
   });
 
-  it('fails with verification_failed when max iterations exceeded', async () => {
+  it('returns blocked when max iterations exceeded and rolls back edits', async () => {
     // Write initial wrong greeting and commit it
     await fs.writeFile(testFile, 'Hello Wrong content', 'utf8');
     await execFileAsync('git', ['add', 'docs/example.md'], { cwd: repoPath });
@@ -184,7 +185,7 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
     const contract = getContract(repoPath);
     const dispatch = getDispatch(repoPath, taskFile);
 
-    // Mock client: keeps returning a proposal that replaces Wrong with Wrong-er, which still fails the test.
+    // Mock client: keeps returning a proposal that replaces Wrong with Broken, which still fails the test.
     const mockClient = {
       chat: vi.fn().mockResolvedValue({
         choices: [
@@ -196,6 +197,7 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
           },
         ],
       }),
+      getCurrentModel: () => 'gpt-4o',
     } as unknown as CodeBuddyClient;
 
     const result = await runVerificationAndSelfCorrectionLoop(
@@ -206,8 +208,56 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
       2 // max iterations = 2
     );
 
-    expect(result.status).toBe('verification_failed');
+    expect(result.status).toBe('blocked');
     expect(result.iterations).toBe(2);
-    expect(result.verification[0].status).toBe('failed');
+    expect(result.reason).toContain('Maximum iterations (2) reached');
+
+    // Verify files were rolled back
+    const fileContent = await fs.readFile(testFile, 'utf8');
+    expect(fileContent).toBe('Hello Wrong content');
+  });
+
+  it('returns blocked when cost limit is exceeded', async () => {
+    // Write initial wrong greeting and commit it
+    await fs.writeFile(testFile, 'Hello Wrong content', 'utf8');
+    await execFileAsync('git', ['add', 'docs/example.md'], { cwd: repoPath });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: repoPath });
+
+    const contract = getContract(repoPath);
+    const dispatch = getDispatch(repoPath, taskFile);
+
+    // Mock client that returns a proposal, but we'll set the cost limit to a very small amount
+    const mockClient = {
+      chat: vi.fn().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '```json\n{\n  "summary": "Fix incorrectly again",\n  "edits": [\n    {\n      "type": "replace_text",\n      "path": "docs/example.md",\n      "find": "Hello Wrong",\n      "replace": "Hello Broken",\n      "expectedOccurrences": 1\n    }\n  ],\n  "risks": [],\n  "verificationNotes": []\n}\n```',
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 100000,
+          completion_tokens: 100000,
+        }
+      }),
+      getCurrentModel: () => 'gpt-4o',
+    } as unknown as CodeBuddyClient;
+
+    const result = await runVerificationAndSelfCorrectionLoop(
+      contract,
+      { taskFile, maxCostUsd: 0.00001 }, // setting extremely low cost limit
+      dispatch,
+      mockClient,
+      2
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.reason).toContain('Cost budget');
+    
+    // Verify files were rolled back
+    const fileContent = await fs.readFile(testFile, 'utf8');
+    expect(fileContent).toBe('Hello Wrong content');
   });
 });

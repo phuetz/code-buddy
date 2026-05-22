@@ -65,6 +65,7 @@ export interface AgenticCodingRunOptions {
   resume?: string;
   skipDecomposition?: boolean;
   contract?: AgenticCodingTaskContract;
+  maxCostUsd?: number;
 }
 
 export interface AgenticCodingRulesFile {
@@ -5486,6 +5487,9 @@ export async function runAgenticCodingCell(options: AgenticCodingRunOptions): Pr
 
     finalContract = loopResult.contract;
     verification.push(...loopResult.verification);
+    if (loopResult.status === 'blocked') {
+      blockedReasons.push(loopResult.reason ?? 'Verification loop blocked: safety, cost budget, or max iterations reached');
+    }
   }
 
   const verificationFailed = verification.some((result) => result.status !== 'passed');
