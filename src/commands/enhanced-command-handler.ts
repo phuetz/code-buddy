@@ -180,6 +180,7 @@ import {
   handleIdentity,
   handlePairing,
   handleElevated,
+  handlePolicy,
 } from "./handlers/index.js";
 
 import type { CommandHandlerResult } from "./handlers/index.js";
@@ -465,6 +466,7 @@ export class EnhancedCommandHandler {
     ['__IDENTITY__', (args) => handleIdentity(args)],
     ['__PAIRING__', (args) => handlePairing(args)],
     ['__ELEVATED__', (args) => handleElevated(args)],
+    ['__POLICY__', (args) => handlePolicy(args)],
 
     // Documentation V2 pipeline
     ['__DOCS_GENERATE__', () => handleDocsGenerate()],

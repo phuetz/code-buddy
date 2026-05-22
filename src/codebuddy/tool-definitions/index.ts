@@ -204,5 +204,11 @@ export {
 // Session tools (multi-agent coordination — Phase E wake)
 export { SESSION_TOOLS } from './session-tools.js';
 
+// GitNexus tools
+export {
+  GITNEXUS_ASK_TOOL,
+  GITNEXUS_TOOLS,
+} from './gitnexus-tools.js';
+
 // Re-export CodeBuddyTool from client for convenience
 export type { CodeBuddyTool as Tool } from './types.js';

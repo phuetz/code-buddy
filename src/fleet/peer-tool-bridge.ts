@@ -35,6 +35,8 @@ import {
 } from '../server/websocket/peer-rpc.js';
 import { logger } from '../utils/logger.js';
 import { getToolRegistry } from '../tools/registry.js';
+import { PolicyEngine } from '../security/policy-engine.js';
+import { ConfirmationService } from '../utils/confirmation-service.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -72,7 +74,7 @@ function getWorkspaceRoot(): string | null {
   return raw ? path.resolve(raw) : null;
 }
 
-function assertToolAllowed(name: string): void {
+function assertToolAllowed(name: string, scopes?: string[]): void {
   if (!getAllowlist().has(name)) {
     throw new Error(
       `TOOL_NOT_ALLOWED_FOR_PEER_INVOKE: tool "${name}" is not in the peer-invoke allowlist`,
@@ -81,6 +83,32 @@ function assertToolAllowed(name: string): void {
   if (!getToolRegistry().isFleetSafe(name)) {
     throw new Error(
       `TOOL_NOT_FLEET_SAFE: tool "${name}" lacks fleetSafe metadata`,
+    );
+  }
+
+  const peerScopes = scopes === undefined ? ['*'] : scopes;
+  if (peerScopes.length === 0) {
+    throw new Error(
+      `PEER_SCOPE_DENIED: peer has empty scopes list`,
+    );
+  }
+
+  const isAllowed = peerScopes.some(scope => {
+    return (
+      scope === '*' ||
+      scope === 'all' ||
+      scope === 'peer:invoke' ||
+      scope === 'peer:tool:invoke' ||
+      scope === name ||
+      scope === `tool:${name}` ||
+      scope === 'tool:*' ||
+      scope === 'tool:all'
+    );
+  });
+
+  if (!isAllowed) {
+    throw new Error(
+      `PEER_SCOPE_DENIED: peer scopes [${peerScopes.join(', ')}] do not permit invoking tool "${name}"`,
     );
   }
 }
@@ -173,11 +201,17 @@ async function resolveDanglingSymlink(cur: string, tail: string[]): Promise<stri
 // Standalone executors (read-only V1)
 // ──────────────────────────────────────────────────────────────────
 
-const READ_TRUNCATE_BYTES = 10 * 1024 * 1024; // 10 MB cap per Read
+const READ_TRUNCATE_BYTES = 256 * 1024; // 256 KB cap per Read
 const READ_STREAM_CHUNK = 16 * 1024;          // 16 KB per emitChunk in stream mode
-const LIST_DIRECTORY_MAX_ENTRIES = 1_000;
+const LIST_DIRECTORY_MAX_ENTRIES = 256;
 const SEARCH_TIMEOUT_MS = 30_000;
 const SEARCH_MAX_RESULTS = 200;
+
+function stripAnsi(text: string): string {
+  if (typeof text !== 'string') return text;
+  const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqty=><]/g;
+  return text.replace(ansiRegex, '');
+}
 
 async function readFilePrefix(filePath: string, limit: number): Promise<string> {
   if (limit <= 0) return '';
@@ -214,8 +248,9 @@ async function execViewFile({ args, emitChunk }: ExecArgs): Promise<{ output: st
       let total = '';
       stream.on('data', (chunk: string | Buffer) => {
         const s = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
-        total += s;
-        emitChunk(s);
+        const clean = stripAnsi(s);
+        total += clean;
+        emitChunk(clean);
       });
       stream.on('end', () => resolve({ output: total, truncated }));
       stream.on('error', (err) => reject(err));
@@ -223,7 +258,7 @@ async function execViewFile({ args, emitChunk }: ExecArgs): Promise<{ output: st
   }
 
   const output = await readFilePrefix(resolved, limit);
-  return { output, truncated };
+  return { output: stripAnsi(output), truncated };
 }
 
 async function execListDirectory({ args }: ExecArgs): Promise<{ output: string; truncated: boolean }> {
@@ -244,7 +279,7 @@ async function execListDirectory({ args }: ExecArgs): Promise<{ output: string; 
   if (truncated) {
     visible.push(`... truncated after ${LIST_DIRECTORY_MAX_ENTRIES} entries (${lines.length} total)`);
   }
-  return { output: visible.join('\n'), truncated };
+  return { output: stripAnsi(visible.join('\n')), truncated };
 }
 
 async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: string; truncated: boolean }> {
@@ -291,9 +326,10 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
           truncated = true;
           continue;
         }
-        stdout += line + '\n';
+        const cleanLine = stripAnsi(line + '\n');
+        stdout += cleanLine;
         lineCount += 1;
-        emitChunk?.(line + '\n');
+        emitChunk?.(cleanLine);
       }
       if (truncated) {
         try { proc.kill('SIGTERM'); } catch { /* ignore */ }
@@ -307,8 +343,9 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (stdoutBuffer.length > 0 && lineCount < SEARCH_MAX_RESULTS) {
-        stdout += stdoutBuffer;
-        emitChunk?.(stdoutBuffer);
+        const cleanBuf = stripAnsi(stdoutBuffer);
+        stdout += cleanBuf;
+        emitChunk?.(cleanBuf);
       }
       // ripgrep exit codes: 0 = matches found, 1 = no matches (still ok),
       // 2 = error. SIGTERM after truncation produces null code on some
@@ -397,7 +434,30 @@ async function runInvocation(
   }
 
   try {
-    assertToolAllowed(tool);
+    assertToolAllowed(tool, ctx.scopes);
+
+    // Evaluate against Policy Engine
+    const policyResult = PolicyEngine.getInstance().evaluate({
+      capability: 'peer:invoke',
+      risk: 'medium',
+      detail: { tool, args: argsRaw, peerId: ctx.connectionId },
+    });
+
+    if (policyResult.decision === 'deny') {
+      throw new Error(`PEER_INVOKE_DENIED: ${policyResult.reason}`);
+    }
+
+    if (policyResult.decision === 'needs_approval') {
+      const confirmResult = await ConfirmationService.getInstance().requestConfirmation({
+        operation: `peer.tool.invoke:${tool}`,
+        filename: argsRaw.file_path as string || argsRaw.path as string || '',
+        content: `Peer ${ctx.connectionId} requests execution of tool ${tool} with arguments: ${JSON.stringify(argsRaw)}`,
+      });
+      if (!confirmResult.confirmed) {
+        throw new Error(`PEER_INVOKE_DENIED: Human approval was rejected or timed out`);
+      }
+    }
+
     const exec = EXECUTORS[tool];
     if (!exec) {
       throw new Error(`UNKNOWN_PEER_TOOL: no executor registered for "${tool}"`);
@@ -409,7 +469,7 @@ async function runInvocation(
     logAudit({ ctx, tool, stream, ok: true, start });
     return {
       tool,
-      output,
+      output: stripAnsi(output),
       durationMs: Date.now() - start,
       truncated,
     };

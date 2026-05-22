@@ -1,5 +1,5 @@
 {
-  "detectedAt": "2026-05-07T21:29:35.164Z",
+  "detectedAt": "2026-05-22T21:59:05.284Z",
   "languages": [
     "TypeScript",
     "JavaScript"
@@ -26,7 +26,7 @@
     ]
   },
   "contextPack": "Language: TypeScript, JavaScript | Framework: Ink (terminal UI) | Package manager: npm | Commands: test=\"npm run test\", lint=\"npm run lint\", format=\"npm run format\", build=\"npm run build\", typecheck=\"npm run typecheck\", validate=\"npm run validate\" | Dirs: src=src, tests=tests, docs=docs | Naming: camelCase (JS/TS)",
-  "_configMtime": 1777894532030.432,
+  "_configMtime": 1779456568022.7576,
   "name": "@phuetz/code-buddy",
   "description": "Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and Enterprise-grade architecture.",
   "moduleType": "esm",
@@ -50,35 +50,51 @@
     "openai",
     "react",
     "zod",
-    "@phuetz/ai-providers",
-    "better-sqlite3"
+    "better-sqlite3",
+    "cli-highlight"
   ],
   "license": "MIT",
   "cartography": {
     "fileStats": {
       "byExtension": {
-        ".ts": 2318,
+        ".ts": 2500,
         ".js": 27,
         ".tsx": 48
       },
       "locEstimate": {
-        "TypeScript": 790624,
+        "TypeScript": 861405,
         "JavaScript": 319
       },
-      "totalSourceFiles": 1567,
-      "totalTestFiles": 826,
+      "totalSourceFiles": 1652,
+      "totalTestFiles": 923,
       "largestFiles": [
         {
+          "path": "src/agent/autonomous/agentic-coding-runner.ts",
+          "lines": 8103
+        },
+        {
+          "path": "tests/agent/autonomous/agentic-coding-runner.test.ts",
+          "lines": 3992
+        },
+        {
+          "path": "tests/commands/autonomous-code-command.test.ts",
+          "lines": 3657
+        },
+        {
           "path": "src/index.ts",
-          "lines": 2310
+          "lines": 2576
         },
         {
           "path": "tests/agent/execution/agent-executor.test.ts",
-          "lines": 1983
+          "lines": 1989
         },
         {
           "path": "src/tools/computer-control-tool.ts",
           "lines": 2262
+        },
+        {
+          "path": "src/commands/handlers/fleet-handler.ts",
+          "lines": 1871
         },
         {
           "path": "tests/unit/codebuddy-client.test.ts",
@@ -89,24 +105,8 @@
           "lines": 2297
         },
         {
-          "path": "tests/unit/thinking.test.ts",
-          "lines": 2011
-        },
-        {
-          "path": "tests/channels/signal.test.ts",
-          "lines": 2121
-        },
-        {
           "path": "src/agent/codebuddy-agent.ts",
-          "lines": 1503
-        },
-        {
-          "path": "tests/unit/auth.test.ts",
-          "lines": 1922
-        },
-        {
-          "path": "tests/channels/matrix.test.ts",
-          "lines": 1890
+          "lines": 1609
         }
       ]
     },
@@ -115,22 +115,22 @@
         {
           "name": "Agent core",
           "directory": "src/agent",
-          "fileCount": 187
+          "fileCount": 206
         },
         {
           "name": "Tool implementations",
           "directory": "src/tools",
-          "fileCount": 166
+          "fileCount": 174
         },
         {
           "name": "Command handlers",
           "directory": "src/commands",
-          "fileCount": 104
+          "fileCount": 109
         },
         {
           "name": "Utilities",
           "directory": "src/utils",
-          "fileCount": 101
+          "fileCount": 103
         },
         {
           "name": "UI layer",
@@ -150,21 +150,21 @@
         {
           "name": "Security",
           "directory": "src/security",
-          "fileCount": 49
+          "fileCount": 50
         },
         {
           "name": "codebuddy",
           "directory": "src/codebuddy",
-          "fileCount": 35
-        },
-        {
-          "name": "Configuration",
-          "directory": "src/config",
-          "fileCount": 30
+          "fileCount": 38
         },
         {
           "name": "HTTP server",
           "directory": "src/server",
+          "fileCount": 33
+        },
+        {
+          "name": "Configuration",
+          "directory": "src/config",
           "fileCount": 30
         },
         {
@@ -185,7 +185,12 @@
         {
           "name": "Hooks",
           "directory": "src/hooks",
-          "fileCount": 25
+          "fileCount": 26
+        },
+        {
+          "name": "Provider adapters",
+          "directory": "src/providers",
+          "fileCount": 22
         },
         {
           "name": "Memory system",
@@ -193,9 +198,19 @@
           "fileCount": 19
         },
         {
+          "name": "fleet",
+          "directory": "src/fleet",
+          "fileCount": 18
+        },
+        {
           "name": "renderers",
           "directory": "src/renderers",
           "fileCount": 18
+        },
+        {
+          "name": "Observability",
+          "directory": "src/observability",
+          "fileCount": 17
         },
         {
           "name": "docs",
@@ -208,11 +223,6 @@
           "fileCount": 16
         },
         {
-          "name": "Provider adapters",
-          "directory": "src/providers",
-          "fileCount": 16
-        },
-        {
           "name": "Skills system",
           "directory": "src/skills",
           "fileCount": 15
@@ -220,6 +230,11 @@
         {
           "name": "analytics",
           "directory": "src/analytics",
+          "fileCount": 13
+        },
+        {
+          "name": "browser-automation",
+          "directory": "src/browser-automation",
           "fileCount": 13
         },
         {
@@ -243,6 +258,11 @@
           "fileCount": 11
         },
         {
+          "name": "desktop",
+          "directory": "src/desktop",
+          "fileCount": 10
+        },
+        {
           "name": "Sandbox",
           "directory": "src/sandbox",
           "fileCount": 10
@@ -253,18 +273,8 @@
           "fileCount": 9
         },
         {
-          "name": "browser-automation",
-          "directory": "src/browser-automation",
-          "fileCount": 9
-        },
-        {
           "name": "canvas",
           "directory": "src/canvas",
-          "fileCount": 9
-        },
-        {
-          "name": "desktop",
-          "directory": "src/desktop",
           "fileCount": 9
         },
         {
@@ -313,6 +323,11 @@
           "fileCount": 8
         },
         {
+          "name": "cli",
+          "directory": "src/cli",
+          "fileCount": 7
+        },
+        {
           "name": "lsp",
           "directory": "src/lsp",
           "fileCount": 7
@@ -338,8 +353,8 @@
           "fileCount": 6
         },
         {
-          "name": "Observability",
-          "directory": "src/observability",
+          "name": "leads",
+          "directory": "src/leads",
           "fileCount": 6
         },
         {
@@ -380,16 +395,6 @@
         {
           "name": "checkpoints",
           "directory": "src/checkpoints",
-          "fileCount": 5
-        },
-        {
-          "name": "cli",
-          "directory": "src/cli",
-          "fileCount": 5
-        },
-        {
-          "name": "fleet",
-          "directory": "src/fleet",
           "fileCount": 5
         },
         {
@@ -543,6 +548,11 @@
           "fileCount": 2
         },
         {
+          "name": "Identity",
+          "directory": "src/identity",
+          "fileCount": 2
+        },
+        {
           "name": "learning",
           "directory": "src/learning",
           "fileCount": 2
@@ -610,27 +620,27 @@
       "hotModules": [
         {
           "module": "src/utils/logger",
-          "importedBy": 523
+          "importedBy": 540
         },
         {
           "module": "src/types",
-          "importedBy": 163
+          "importedBy": 172
         },
         {
           "module": "src/codebuddy/client",
-          "importedBy": 77
+          "importedBy": 82
         },
         {
           "module": "src/services/vfs/unified-vfs-router",
           "importedBy": 46
         },
         {
-          "module": "src/agent/codebuddy-agent",
-          "importedBy": 44
+          "module": "src/tools/registry/types",
+          "importedBy": 45
         },
         {
-          "module": "src/tools/registry/types",
-          "importedBy": 42
+          "module": "src/agent/codebuddy-agent",
+          "importedBy": 44
         },
         {
           "module": "src/knowledge/knowledge-graph",
@@ -638,7 +648,7 @@
         },
         {
           "module": "src/commands/handlers/branch-handlers",
-          "importedBy": 28
+          "importedBy": 29
         },
         {
           "module": "src/channels/core",
@@ -665,7 +675,7 @@
           "importedBy": 15
         },
         {
-          "module": "src/server/types",
+          "module": "src/channels",
           "importedBy": 14
         }
       ],
@@ -673,6 +683,14 @@
         {
           "a": "src/codebuddy/client",
           "b": "src/codebuddy/providers/provider-openai-compat"
+        },
+        {
+          "a": "src/agent/autonomous/checkpoint-manager",
+          "b": "src/agent/autonomous/agentic-coding-runner"
+        },
+        {
+          "a": "src/agent/autonomous/edit-proposal-producer",
+          "b": "src/agent/autonomous/agentic-coding-runner"
         },
         {
           "a": "src/context/smart-compaction",
@@ -704,9 +722,9 @@
         "src/agent/agent-loader",
         "src/agent/agent-state",
         "src/agent/architect-mode",
+        "src/agent/autonomous/fleet-tick-handler",
         "src/agent/background-tasks",
-        "src/agent/cache-trace",
-        "src/agent/context/memory-context-builder"
+        "src/agent/cache-trace"
       ]
     },
     "apiSurface": {
@@ -1428,6 +1446,8 @@
         }
       ],
       "wsEvents": [
+        "aborted",
+        "agent",
         "agent:offline",
         "agent:registered",
         "agent:status-changed",
@@ -1439,15 +1459,17 @@
         "client:disconnect",
         "client:disconnect:details",
         "config",
+        "help",
         "overview",
         "presence",
         "progress",
         "session:create",
         "session:join",
         "session:leave",
-        "sessions"
+        "sessions",
+        "skill"
       ],
-      "endpointCount": 161
+      "endpointCount": 165
     },
     "patterns": {
       "singletons": [
@@ -1494,6 +1516,7 @@
         "ToolMetricsTracker",
         "GitPinnedMarketplace",
         "CredentialManager",
+        "PolicyEngine",
         "SafeBinariesChecker",
         "SenderPolicyManager",
         "WritePolicy",
@@ -1535,7 +1558,6 @@
         "ScriptRegistry",
         "SkillRegistry",
         "SkillRegistry",
-        "SkillsRegistry",
         "FormalToolRegistry",
         "ToolRegistry"
       ],
@@ -1817,7 +1839,6 @@
         "SkillsHub",
         "SkillRegistry",
         "SkillManager",
-        "SkillsRegistry",
         "ChunkHandler",
         "MarkdownChunker",
         "ProgressTracker",
@@ -2409,7 +2430,7 @@
             "RouteInterceptor",
             "BrowserManager",
             "BrowserTool",
-            "discoverChromeEndpoint"
+            "buildInternetProofPersistenceSuggestions"
           ]
         },
         {
@@ -2455,11 +2476,11 @@
         {
           "module": "cli",
           "exports": [
+            "shouldUseStaticChatGptModels",
             "ensureUserSettingsDirectory",
+            "resolveHeadlessOutputFormat",
             "handleCommitAndPushHeadless",
-            "saveCommandLineSettings",
-            "processPromptHeadless",
-            "resumeLastSession"
+            "saveCommandLineSettings"
           ]
         },
         {
@@ -2475,11 +2496,11 @@
         {
           "module": "codebuddy",
           "exports": [
+            "ChatGptResponsesProvider",
             "GeminiNativeProvider",
             "OpenAICompatProvider",
-            "CodeBuddyClient",
-            "A2UI_TOOL",
-            "injectJsonSystemPromptForAnthropic"
+            "GeminiCliProvider",
+            "CodeBuddyClient"
           ]
         },
         {
@@ -2655,11 +2676,11 @@
         {
           "module": "fleet",
           "exports": [
+            "NoPeerAvailableError",
+            "PeerSessionStore",
             "FleetListener",
-            "getFleetHeartbeatIntervalMs",
-            "createPeerChatClientFromEnv",
-            "isCompactionBridgeWired",
-            "getPeerChatProviderInfo"
+            "CostTracker",
+            "TaskRouter"
           ]
         },
         {
@@ -2750,6 +2771,16 @@
             "TreeSitterScanner",
             "TypeScriptScanner",
             "KnowledgeManager"
+          ]
+        },
+        {
+          "module": "leads",
+          "exports": [
+            "LEAD_DISCOVERY_WORKFLOW_TEMPLATE_SCHEMA_VERSION",
+            "renderLeadDiscoveryWorkflowTemplate",
+            "buildLeadDiscoveryWorkflowTemplate",
+            "renderLeadScoutLessonCandidates",
+            "buildLeadScoutLessonCandidates"
           ]
         },
         {
@@ -2928,8 +2959,8 @@
             "ProviderFallbackChain",
             "NodeLlamaCppProvider",
             "LocalProviderManager",
-            "TurboQuantProvider",
-            "CircuitOpenError"
+            "CircuitBreakerError",
+            "TurboQuantProvider"
           ]
         },
         {
@@ -3096,10 +3127,10 @@
           "module": "tools",
           "exports": [
             "AskUserQuestionReadlineProvider",
+            "LeadScoutLessonCandidatesTool",
             "ExitPlanModeReadlineProvider",
             "GenerateDocumentExecuteTool",
-            "ResolveConflictsExecuteTool",
-            "AskUserQuestionExecuteTool"
+            "LeadScoutEnrichmentPlanTool"
           ]
         },
         {
@@ -3220,19 +3251,20 @@
           ]
         },
         {
+          "module": "identity",
+          "exports": [
+            "IdentityManager",
+            "buildRelationshipContext",
+            "resetIdentityManager",
+            "getIdentityManager"
+          ]
+        },
+        {
           "module": "features",
           "exports": [
             "initializeEnhancedFeatures",
             "resetAllEnhancedFeatures",
             "getFeatureStatusSummary"
-          ]
-        },
-        {
-          "module": "identity",
-          "exports": [
-            "IdentityManager",
-            "resetIdentityManager",
-            "getIdentityManager"
           ]
         },
         {
@@ -3321,14 +3353,6 @@
             "SidecarBridge",
             "resetSidecarBridge",
             "getSidecarBridge"
-          ]
-        },
-        {
-          "module": "skills-registry",
-          "exports": [
-            "SkillsRegistry",
-            "resetSkillsRegistry",
-            "getSkillsRegistry"
           ]
         },
         {

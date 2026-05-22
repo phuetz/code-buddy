@@ -4,6 +4,7 @@ import path from 'path';
 import type { RemoteApprovalService } from '../security/remote-approval.js';
 import { checkDeclarativePermission } from '../security/declarative-rules.js';
 import { getPermissionModeManager } from '../security/permission-modes.js';
+import { PolicyEngine, Capability } from '../security/policy-engine.js';
 
 export interface ConfirmationOptions {
   operation: string;
@@ -209,6 +210,43 @@ export class ConfirmationService extends EventEmitter {
       };
     }
 
+    // Policy Engine Check
+    const capability: Capability = process.env.CODEBUDDY_SELF_IMPROVEMENT === 'true'
+      ? 'self_improvement'
+      : (operationType === 'bash' ? 'shell:safe' : 'fs:write:scoped');
+    let risk: 'low' | 'medium' | 'high' = 'medium';
+    const rawRisk = ((options as any).riskLevel || (options as any).risk || process.env.CODEBUDDY_RISK_LEVEL || '').toLowerCase();
+    if (rawRisk === 'low') {
+      risk = 'low';
+    } else if (rawRisk === 'high' || rawRisk === 'critical') {
+      risk = 'high';
+    }
+
+    const detail: Record<string, unknown> = {
+      path: options.filename,
+      command: operationType === 'bash' ? options.filename : undefined,
+      ...(options as any).detail
+    };
+
+    const policyResult = PolicyEngine.getInstance().evaluate({
+      capability,
+      risk,
+      detail,
+    });
+
+    if (policyResult.decision === 'deny') {
+      return {
+        confirmed: false,
+        feedback: policyResult.reason,
+      };
+    }
+    const isSelfImprovement = capability === 'self_improvement';
+    if (!isSelfImprovement && policyResult.decision === 'allow') {
+      return {
+        confirmed: true,
+      };
+    }
+
     // CC18: Check permission mode before other checks
     const toolName = operationType === 'bash' ? 'Bash' : 'Edit';
     const permMgr = getPermissionModeManager();
@@ -216,7 +254,7 @@ export class ConfirmationService extends EventEmitter {
     if (!modeDecision.allowed) {
       return { confirmed: false, feedback: modeDecision.reason };
     }
-    if (!modeDecision.prompted) {
+    if (!isSelfImprovement && !modeDecision.prompted) {
       // Mode says auto-approve (e.g., acceptEdits for edits, dontAsk for non-destructive)
       return { confirmed: true };
     }
@@ -226,7 +264,7 @@ export class ConfirmationService extends EventEmitter {
       ? { command: options.filename }
       : { file_path: options.filename };
     const declarativeDecision = checkDeclarativePermission(toolName, toolArgs);
-    if (declarativeDecision === 'allow') {
+    if (!isSelfImprovement && declarativeDecision === 'allow') {
       return { confirmed: true };
     }
     if (declarativeDecision === 'deny') {
@@ -236,6 +274,7 @@ export class ConfirmationService extends EventEmitter {
     // Check session flags — but require re-confirmation for large changes
     const isLargeChange = (options.linesChanged ?? 0) > this.largeChangeThreshold;
     if (
+      !isSelfImprovement &&
       !isLargeChange && (
         this.sessionFlags.allOperations ||
         (operationType === 'file' && this.sessionFlags.fileOperations) ||

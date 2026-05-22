@@ -283,6 +283,13 @@ export {
   resetFleetToolInstances,
 } from './fleet-tools.js';
 
+// Tool Adapters - GitNexus
+export {
+  GitNexusAskTool,
+  createGitNexusTools,
+  resetGitNexusInstances,
+} from './gitnexus-tools.js';
+
 // Tool Adapters - AskUserQuestion (ask_user_question)
 export {
   AskUserQuestionExecuteTool,
@@ -396,6 +403,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createFleetTools } = await import('./fleet-tools.js');
   const { createAskUserQuestionTools } = await import('./ask-user-question-tools.js');
   const { createExitPlanModeTools } = await import('./exit-plan-mode-tools.js');
+  const { createGitNexusTools } = await import('./gitnexus-tools.js');
   
   // Await MCP Manager initialization before registering its tools
   const { getMcpManager } = await import('../mcp/mcp-manager.js');
@@ -438,6 +446,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createFleetTools(),
     ...createAskUserQuestionTools(),
     ...createExitPlanModeTools(),
+    ...createGitNexusTools(),
     ...createMcpTools(),
   ];
 
@@ -506,6 +515,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createExitPlanModeTools(),
     ...createGuiTools(),
     ...createSessionTools(),
+    ...createGitNexusTools(),
   ];
   // Append canonical-prefix aliases (shell_exec → bash_run, etc.).
   allTools.push(...createAliasTools(allTools));
@@ -562,3 +572,4 @@ import { createExitPlanModeTools } from './exit-plan-mode-tools.js';
 import { createGuiTools } from './gui-tools.js';
 import { createSessionTools } from './session-tools.js';
 import { createAliasTools } from './tool-aliases.js';
+import { createGitNexusTools } from './gitnexus-tools.js';

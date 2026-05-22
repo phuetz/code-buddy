@@ -32,6 +32,7 @@ export {
   handleSecurityReview,
   handleIdentity,
   handleElevated,
+  handlePolicy,
 } from './security-handlers.js';
 
 // Voice handlers

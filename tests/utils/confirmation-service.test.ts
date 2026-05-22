@@ -143,4 +143,33 @@ describe('ConfirmationService', () => {
       expect(typeof service.emit).toBe('function');
     });
   });
+
+  describe('PolicyEngine Integration', () => {
+    afterEach(async () => {
+      const { PolicyEngine } = await import('../../src/security/policy-engine.js');
+      PolicyEngine.getInstance().releaseKillSwitch();
+    });
+
+    it('should auto-approve allowed operations (e.g. low risk fs:write:scoped)', async () => {
+      const result = await service.requestConfirmation({
+        operation: 'write_file',
+        filename: 'somefile.txt',
+        riskLevel: 'low' as any,
+      }, 'file');
+      expect(result.confirmed).toBe(true);
+    });
+
+    it('should deny denied operations (e.g. when kill switch is engaged)', async () => {
+      const { PolicyEngine } = await import('../../src/security/policy-engine.js');
+      PolicyEngine.getInstance().engageKillSwitch('Emergency');
+
+      const result = await service.requestConfirmation({
+        operation: 'write_file',
+        filename: 'somefile.txt',
+        riskLevel: 'low' as any,
+      }, 'file');
+      expect(result.confirmed).toBe(false);
+      expect(result.feedback).toContain('Kill switch engaged');
+    });
+  });
 });

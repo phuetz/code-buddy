@@ -7,6 +7,7 @@ import { getDMPairing } from "../../channels/dm-pairing.js";
 import { getIdentityLinker } from "../../channels/identity-links.js";
 import { getElevatedMode } from "../../elevated-mode/index.js";
 import type { ChannelType } from "../../channels/index.js";
+import { PolicyEngine } from "../../security/policy-engine.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -945,6 +946,47 @@ Valid channels: ${VALID_IDENTITY_CHANNELS.join(', ')}`;
     handled: true,
     entry: {
       type: "assistant",
+      content,
+      timestamp: new Date(),
+    },
+  };
+}
+
+/**
+ * Handle /policy CLI command (kill, release, status)
+ */
+export function handlePolicy(args: string[]): CommandHandlerResult {
+  const policyEngine = PolicyEngine.getInstance();
+  const action = args[0]?.toLowerCase();
+
+  let content: string;
+
+  switch (action) {
+    case 'kill': {
+      const reason = args.slice(1).join(' ') || 'Manual policy termination';
+      policyEngine.engageKillSwitch(reason);
+      content = `🚨 Global Policy Kill Switch ENGAGED.\nReason: ${reason}\n\nAll subsequent operations will be denied immediately.`;
+      break;
+    }
+
+    case 'release': {
+      policyEngine.releaseKillSwitch();
+      content = `✅ Global Policy Kill Switch RELEASED.\nNormal security evaluation has been restored.`;
+      break;
+    }
+
+    case 'status':
+    default: {
+      const isKilled = policyEngine.isKilled();
+      content = `Security Policy Engine Status:\n--------------------------------\nKill Switch: ${isKilled ? `🚨 ENGAGED (Reason: ${policyEngine.getKillReason()})` : '✅ RELEASED (Normal Policy Active)'}`;
+      break;
+    }
+  }
+
+  return {
+    handled: true,
+    entry: {
+      type: 'assistant',
       content,
       timestamp: new Date(),
     },

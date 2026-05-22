@@ -25,7 +25,8 @@ export type AuditAction =
   | 'checkpoint_restored'
   | 'sandbox_execute'
   | 'pattern_matched'
-  | 'tool_execution';
+  | 'tool_execution'
+  | 'self_improvement';
 
 export type AuditDecision = 'allow' | 'block' | 'warn' | 'confirm';
 

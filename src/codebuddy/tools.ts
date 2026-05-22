@@ -44,6 +44,7 @@ import {
   EXIT_PLAN_MODE_TOOLS,
   CODEBASE_REPLACE_TOOLS,
   SESSION_TOOLS,
+  GITNEXUS_TOOLS,
 } from "./tool-definitions/index.js";
 import { FLEET_TOOLS } from "./fleet-tool-defs.js";
 
@@ -91,6 +92,7 @@ export function getBuiltinToolNames(): string[] {
     CODEBASE_REPLACE_TOOLS,
     SESSION_TOOLS,
     FLEET_TOOLS,
+    GITNEXUS_TOOLS,
   ];
 
   return Array.from(new Set(
@@ -180,6 +182,9 @@ export function initializeToolRegistry(): void {
   // Fleet tools — peer_delegate, list_peers (Phase (d).17). Always available;
   // peer_delegate returns a clear error when no peers are connected.
   registerGroup(FLEET_TOOLS);
+
+  // GitNexus tools
+  registerGroup(GITNEXUS_TOOLS);
 
   isRegistryInitialized = true;
   logger.debug('Tool registry initialized with built-in tools');

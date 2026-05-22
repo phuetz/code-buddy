@@ -578,6 +578,16 @@ const securityCommands: SlashCommand[] = [
     arguments: [
       { name: 'path', description: 'File or directory path to scan (default: current directory)', required: false }
     ]
+  },
+  {
+    name: 'policy',
+    description: 'Manage security policies and global kill switch',
+    prompt: '__POLICY__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'action', description: 'kill <reason> | release | status', required: true }
+    ]
   }
 ];
 

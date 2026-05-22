@@ -27,6 +27,7 @@ import {
 } from '../../src/server/websocket/peer-rpc.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import type { CodeBuddyTool } from '../../src/codebuddy/client.js';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 // ---- helpers ---------------------------------------------------------
 
@@ -78,6 +79,7 @@ beforeEach(async () => {
   _unwireForTests();
   _resetPeerRpcForTests();
   seedFleetSafeRegistry();
+  vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation').mockResolvedValue({ confirmed: true });
   tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-peer-tool-'));
   // The realpath check normalises symlinks (e.g. /tmp → /private/tmp on macOS).
   tmpRoot = await fs.realpath(tmpRoot);
@@ -90,6 +92,7 @@ beforeEach(async () => {
 afterEach(async () => {
   _unwireForTests();
   _resetPeerRpcForTests();
+  vi.restoreAllMocks();
   ToolRegistry.getInstance().clear();
   delete process.env.CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT;
   delete process.env.CODEBUDDY_PEER_TOOL_ALLOWLIST;
@@ -326,7 +329,7 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
       expect(payload.truncated).toBe(true);
       expect(payload.output).toContain('entry-0000.txt');
       expect(payload.output).not.toContain('entry-1004.txt');
-      expect(payload.output).toContain('truncated after 1000 entries (1005 total)');
+      expect(payload.output).toContain('truncated after 256 entries (1005 total)');
     });
   });
 
@@ -366,12 +369,12 @@ describe('peer-tool-bridge — Phase (d).23 V1.3', () => {
     });
   });
 
-  describe('view_file — 10 MB truncation cap', () => {
+  describe('view_file — 256 KB truncation cap', () => {
     it('returns truncated=true when file exceeds READ_TRUNCATE_BYTES', async () => {
-      // Write a 10 MB + 1 byte file. Smaller than the cap by one byte
+      // Write a 256 KB + 1 byte file. Smaller than the cap by one byte
       // would round to truncated=false; we deliberately cross.
-      const cap = 10 * 1024 * 1024;
-      const big = Buffer.alloc(cap + 1024, 'a'); // 10 MB + 1 KB ASCII 'a'
+      const cap = 256 * 1024;
+      const big = Buffer.alloc(cap + 1024, 'a'); // 256 KB + 1 KB ASCII 'a'
       await fs.writeFile(path.join(tmpRoot, 'huge.txt'), big);
 
       wirePeerToolBridge();

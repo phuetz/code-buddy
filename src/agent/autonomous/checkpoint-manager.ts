@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import { AgenticCodingTaskContract } from './agentic-coding-contract.js';
 import { AgenticCodingRunOptions, AgenticCodingRunReport, AgenticCodingVerificationResult } from './agentic-coding-runner.js';
 import { redactSecrets } from '../../security/data-redaction.js';
+import { GitNexusContext, WorldModelInvariants } from '../../tools/gitnexus-tool.js';
 
 export interface AgenticCodingCheckpoint {
   runId: string;
@@ -15,6 +16,8 @@ export interface AgenticCodingCheckpoint {
   reports?: AgenticCodingRunReport[];
   timestamp: string;
   verification?: AgenticCodingVerificationResult[];
+  gitnexusEvidence?: GitNexusContext;
+  worldModelInvariants?: WorldModelInvariants | null;
 }
 
 export function getCheckpointPath(runId: string): string {

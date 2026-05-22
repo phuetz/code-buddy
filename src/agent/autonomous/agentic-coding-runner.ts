@@ -23,6 +23,11 @@ import { shouldDecompose, decomposeTask } from './task-decomposer.js';
 import { saveCheckpoint, loadCheckpoint, type AgenticCodingCheckpoint } from './checkpoint-manager.js';
 import { redactSecrets } from '../../security/data-redaction.js';
 import { generateEditProposal } from './edit-proposal-producer.js';
+import { GitNexusTool, type GitNexusContext, type WorldModelInvariants } from '../../tools/gitnexus-tool.js';
+import { evaluateScope } from '../scope-awareness.js';
+
+import { ConfirmationService } from '../../utils/confirmation-service.js';
+import { auditLogger } from '../../security/audit-logger.js';
 
 let isApplyingEdits = false;
 const originalWriteFile = fs.writeFile;
@@ -37,8 +42,28 @@ fs.writeFile = function (
   return originalWriteFile.call(fs, path, data, options);
 } as any;
 
+export async function persistRunArtifact(filePath: string, content: string): Promise<void> {
+  const redacted = redactSecrets(content);
+  await originalWriteFile(filePath, redacted, 'utf8');
+}
+
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+
+async function getOriginalBranch(repoPath: string): Promise<string> {
+  const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: repoPath });
+  return stdout.trim();
+}
+
+async function getGitDiff(repoPath: string, baseBranch?: string): Promise<string> {
+  try {
+    const cmd = baseBranch ? `git diff ${baseBranch}` : 'git diff HEAD';
+    const { stdout } = await execAsync(cmd, { cwd: repoPath });
+    return stdout;
+  } catch {
+    return '';
+  }
+}
 
 export type AgenticCodingRunStatus =
   | 'validation_failed'
@@ -1744,6 +1769,8 @@ export interface AgenticCodingRunReport {
   verificationRequested: boolean;
   workflow: AgenticCodingWorkflowReport;
   workflowBuilderProposal?: AgenticCodingWorkflowBuilderProposalReport;
+  gitnexusEvidence?: GitNexusContext;
+  worldModelInvariants?: WorldModelInvariants | null;
 }
 
 export interface AgenticCodingEditProposalPromptOptions {
@@ -4610,6 +4637,20 @@ export function buildAgenticCodingEditProposalProducerDispatch(
           'You are Code Buddy\'s edit-proposal producer.',
           'Read the user prompt, inspect only the bounded repository context needed, and return data only.',
           'Do not modify files, run broad shell commands, push, deploy, or approve your own output.',
+          ...(report.gitnexusEvidence ? [
+            '',
+            '=== GitNexus Context & Insights ===',
+            `Likely Files to Edit: ${JSON.stringify(report.gitnexusEvidence.likelyFiles)}`,
+            `Dependent Symbols: ${JSON.stringify(report.gitnexusEvidence.dependentSymbols)}`,
+            `Tests to Watch: ${JSON.stringify(report.gitnexusEvidence.testsToWatch)}`,
+            `Notes: ${report.gitnexusEvidence.notes || 'None'}`
+          ] : []),
+          ...(report.worldModelInvariants ? [
+            '',
+            '=== World Model Invariants ===',
+            `Architecture: ${JSON.stringify(report.worldModelInvariants.architecture)}`,
+            `Invariants: ${JSON.stringify(report.worldModelInvariants.invariants)}`
+          ] : [])
         ].join('\n'),
         role: 'system',
       },
@@ -5013,6 +5054,8 @@ export function aggregateReports(
 
   const uniqueBlockedReasons = Array.from(new Set(blockedReasons));
   const uniqueValidationErrors = Array.from(new Set(validationErrors));
+  const gitnexusEvidence = reports.find(r => r.gitnexusEvidence)?.gitnexusEvidence;
+  const worldModelInvariants = reports.find(r => r.worldModelInvariants)?.worldModelInvariants;
 
   const plan = buildExecutionPlan({
     approvalDecision: undefined,
@@ -5062,6 +5105,8 @@ export function aggregateReports(
     verification,
     verificationRequested: Boolean(options.runVerification),
     workflow: buildWorkflowReport(plan),
+    gitnexusEvidence,
+    worldModelInvariants,
   };
 }
 
@@ -5121,6 +5166,8 @@ export function buildFinalReport(checkpoint: AgenticCodingCheckpoint): AgenticCo
     verification,
     verificationRequested: Boolean(options.runVerification),
     workflow: buildWorkflowReport(plan),
+    gitnexusEvidence: checkpoint.gitnexusEvidence,
+    worldModelInvariants: checkpoint.worldModelInvariants,
   };
 }
 
@@ -5286,9 +5333,29 @@ export async function runAgenticCodingCell(options: AgenticCodingRunOptions): Pr
     }
   }
 
+  const isSelfImprovement = contract && path.resolve(contract.repo) === path.resolve(process.cwd());
+  if (isSelfImprovement && contract) {
+    process.env.CODEBUDDY_SELF_IMPROVEMENT = 'true';
+    contract.riskLevel = 'high';
+  }
+
   const repo = contract?.repo ?? '';
   const rulesFiles = contract ? await collectRulesFiles(contract.repo) : [];
   const executionGate = contract ? assessAgenticCodingExecutionGate(contract) : undefined;
+  let gitnexusEvidence: GitNexusContext | undefined;
+  let worldModelInvariants: WorldModelInvariants | null = null;
+  if (checkpointToResume?.gitnexusEvidence) {
+    gitnexusEvidence = checkpointToResume.gitnexusEvidence;
+  } else if (contract) {
+    const gitnexus = new GitNexusTool();
+    gitnexusEvidence = await gitnexus.ask(contract.task);
+  }
+  if (checkpointToResume?.worldModelInvariants !== undefined) {
+    worldModelInvariants = checkpointToResume.worldModelInvariants;
+  } else if (contract) {
+    const gitnexus = new GitNexusTool();
+    worldModelInvariants = await gitnexus.readWorldModel();
+  }
   let dirtyFiles: AgenticCodingDirtyFile[] = [];
   const editPreviews: AgenticCodingEditPreview[] = [];
   const editResults: AgenticCodingEditResult[] = [];
@@ -5343,6 +5410,8 @@ export async function runAgenticCodingCell(options: AgenticCodingRunOptions): Pr
       verificationRequested: Boolean(options.runVerification),
       workflow: buildWorkflowReport(plan),
       workflowBuilderProposal,
+      gitnexusEvidence,
+      worldModelInvariants,
     };
   }
 
@@ -5373,6 +5442,8 @@ export async function runAgenticCodingCell(options: AgenticCodingRunOptions): Pr
       contract: finalContract,
       step: 'initialized',
       timestamp: new Date().toISOString(),
+      gitnexusEvidence,
+      worldModelInvariants,
     });
   }
 
@@ -5406,8 +5477,20 @@ export async function runAgenticCodingCell(options: AgenticCodingRunOptions): Pr
     );
   }
 
+  if (repoExists && finalContract) {
+    const scopeResult = await evaluateScope(finalContract);
+    if (!scopeResult.allowed) {
+      blockedReasons.push(
+        `Repository scope violation: ${scopeResult.reason || 'Task is out of scope per repo rules.'}`
+      );
+    }
+  }
+
   if (executionGate && !executionGate.autoExecutable) {
-    blockedReasons.push(...executionGate.reasons);
+    const reasons = isSelfImprovement
+      ? executionGate.reasons.filter(r => !r.includes('only auto-executes low-risk tasks') && !r.includes('touches a high-risk scope'))
+      : executionGate.reasons;
+    blockedReasons.push(...reasons);
   }
 
   if (options.maxCostUsd !== undefined && options.maxCostUsd < 0.01) {
@@ -5439,78 +5522,177 @@ export async function runAgenticCodingCell(options: AgenticCodingRunOptions): Pr
     blockedReasons.push('approval decision file is required before applying scoped edits');
   }
 
-  if (options.applyEdits && validationErrors.length === 0 && blockedReasons.length === 0) {
-    const alreadyApplied = checkpointToResume && (
-      checkpointToResume.step === 'applied' ||
-      checkpointToResume.step === 'proposal_generated' ||
-      checkpointToResume.step === 'verified'
-    );
-    if (alreadyApplied) {
-      editResults.push(...finalContract.edits.map(e => ({ path: e.path, status: 'applied' as const, occurrences: 1 })));
+  let originalBranch: string | undefined;
+  let sandboxBranch: string | undefined;
+  let selfImprovementApproved = false;
+
+  if (isSelfImprovement && (options.applyEdits || options.runVerification) && validationErrors.length === 0 && blockedReasons.length === 0) {
+    const approval = await ConfirmationService.getInstance().requestConfirmation({
+      operation: 'self_improvement',
+      filename: finalContract.repo,
+      content: `Self-improvement requested on Code Buddy itself. Task: ${finalContract.task}`
+    });
+
+    if (!approval.confirmed) {
+      blockedReasons.push(`Self-improvement approval denied: ${approval.feedback || 'User rejected'}`);
+      auditLogger.log({
+        action: 'self_improvement',
+        decision: 'block',
+        source: 'runAgenticCodingCell',
+        target: finalContract.repo,
+        details: `Self-improvement approval denied: ${approval.feedback || 'User rejected'}`
+      });
     } else {
-      editResults.push(...await applyDeclaredEdits(finalContract));
-      const failedEdits = editResults.filter((result) => result.status !== 'applied');
-      if (failedEdits.length > 0) {
-        blockedReasons.push(
-          `scoped edits failed: ${failedEdits.map((result) => `${result.path} (${result.reason ?? result.status})`).join(', ')}`
-        );
+      selfImprovementApproved = true;
+      try {
+        originalBranch = await getOriginalBranch(finalContract.repo);
+        const runId = options.runId || 'default';
+        sandboxBranch = `tmp-self-improve-${runId}`;
+        await execAsync(`git checkout -B ${sandboxBranch}`, { cwd: finalContract.repo });
+      } catch (error) {
+        blockedReasons.push(`Failed to initialize sandbox branch for self-improvement: ${error instanceof Error ? error.message : String(error)}`);
+        auditLogger.log({
+          action: 'self_improvement',
+          decision: 'block',
+          source: 'runAgenticCodingCell',
+          target: finalContract.repo,
+          details: `Failed to initialize sandbox branch: ${error instanceof Error ? error.message : String(error)}`
+        });
       }
     }
   }
 
-  if (options.runVerification && validationErrors.length === 0 && blockedReasons.length === 0 && finalContract) {
-    const tempReport: AgenticCodingRunReport = {
-      approval: buildApprovalReport({
+  let executionCompleted = false;
+
+  try {
+    if (options.applyEdits && validationErrors.length === 0 && blockedReasons.length === 0) {
+      const alreadyApplied = checkpointToResume && (
+        checkpointToResume.step === 'applied' ||
+        checkpointToResume.step === 'proposal_generated' ||
+        checkpointToResume.step === 'verified'
+      );
+      if (alreadyApplied) {
+        editResults.push(...finalContract.edits.map(e => ({ path: e.path, status: 'applied' as const, occurrences: 1 })));
+      } else {
+        editResults.push(...await applyDeclaredEdits(finalContract));
+        const failedEdits = editResults.filter((result) => result.status !== 'applied');
+        if (failedEdits.length > 0) {
+          blockedReasons.push(
+            `scoped edits failed: ${failedEdits.map((result) => `${result.path} (${result.reason ?? result.status})`).join(', ')}`
+          );
+        }
+      }
+    }
+
+    if (options.runVerification && validationErrors.length === 0 && blockedReasons.length === 0 && finalContract) {
+      const tempReport: AgenticCodingRunReport = {
+        approval: buildApprovalReport({
+          approvalDecision,
+          blockedReasons,
+          editPreviewRequired,
+          editPreviews,
+          editResults,
+          validationErrors,
+        }),
         approvalDecision,
+        autoExecutable: true,
         blockedReasons,
+        dirtyFiles,
+        editProposal,
         editPreviewRequired,
+        editPreviewRequested,
         editPreviews,
+        editRequested: Boolean(options.applyEdits),
         editResults,
+        generatedAt,
+        plan: [],
+        repo,
+        rulesFiles,
+        status: 'ready',
+        taskFile,
         validationErrors,
-      }),
-      approvalDecision,
-      autoExecutable: true,
-      blockedReasons,
-      dirtyFiles,
-      editProposal,
-      editPreviewRequired,
-      editPreviewRequested,
-      editPreviews,
-      editRequested: Boolean(options.applyEdits),
-      editResults,
-      generatedAt,
-      plan: [],
-      repo,
-      rulesFiles,
-      status: 'ready',
-      taskFile,
-      validationErrors,
-      verification,
-      verificationRequested: Boolean(options.runVerification),
-      workflow: {
-        nodeErrors: [],
-        blockedNodeIds: [],
-        completedNodeIds: [],
-        nodes: [],
-        edges: [],
-      },
-      workflowBuilderProposal,
-    };
-    const tempArtifacts = deriveAgenticCodingProposalLoopArtifacts(
-      options.editProposalFile || path.join(path.dirname(taskFile), 'proposal-loop.json')
-    );
-    const dispatch = buildAgenticCodingEditProposalProducerDispatch(tempReport, tempArtifacts);
+        verification,
+        verificationRequested: Boolean(options.runVerification),
+        workflow: {
+          nodeErrors: [],
+          blockedNodeIds: [],
+          completedNodeIds: [],
+          nodes: [],
+          edges: [],
+        },
+        workflowBuilderProposal,
+        gitnexusEvidence,
+        worldModelInvariants,
+      };
+      const tempArtifacts = deriveAgenticCodingProposalLoopArtifacts(
+        options.editProposalFile || path.join(path.dirname(taskFile), 'proposal-loop.json')
+      );
+      const dispatch = buildAgenticCodingEditProposalProducerDispatch(tempReport, tempArtifacts);
 
-    const loopResult = await runVerificationAndSelfCorrectionLoop(
-      finalContract,
-      options,
-      dispatch
-    );
+      const loopResult = await runVerificationAndSelfCorrectionLoop(
+        finalContract,
+        options,
+        dispatch
+      );
 
-    finalContract = loopResult.contract;
-    verification.push(...loopResult.verification);
-    if (loopResult.status === 'blocked') {
-      blockedReasons.push(loopResult.reason ?? 'Verification loop blocked: safety, cost budget, or max iterations reached');
+      finalContract = loopResult.contract;
+      verification.push(...loopResult.verification);
+      if (loopResult.status === 'blocked') {
+        blockedReasons.push(loopResult.reason ?? 'Verification loop blocked: safety, cost budget, or max iterations reached');
+      }
+    }
+
+    executionCompleted = true;
+  } catch (error) {
+    blockedReasons.push(`Self-improvement execution failed with error: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    if (selfImprovementApproved && originalBranch && sandboxBranch) {
+      const verificationFailed = verification.some((result) => result.status !== 'passed');
+      const finalStatus: AgenticCodingRunStatus =
+        validationErrors.length > 0 ? 'validation_failed'
+          : blockedReasons.length > 0 ? 'blocked'
+          : editResults.length > 0 && verification.length === 0 ? 'edited'
+          : editPreviews.length > 0 && verification.length === 0 ? 'previewed'
+          : verification.length === 0 ? 'ready'
+          : verificationFailed ? 'verification_failed'
+          : 'verified';
+
+      if (executionCompleted && finalStatus === 'verified') {
+        auditLogger.log({
+          action: 'self_improvement',
+          decision: 'allow',
+          source: 'runAgenticCodingCell',
+          target: finalContract.repo,
+          details: `Self-improvement verified successfully on branch ${sandboxBranch}`
+        });
+      } else {
+        try {
+          const diff = await getGitDiff(finalContract.repo);
+          await execAsync('git reset --hard', { cwd: finalContract.repo });
+          await execAsync('git clean -fd', { cwd: finalContract.repo });
+          await execAsync(`git checkout -f ${originalBranch}`, { cwd: finalContract.repo });
+          await execAsync(`git branch -D ${sandboxBranch}`, { cwd: finalContract.repo });
+          
+          auditLogger.log({
+            action: 'self_improvement',
+            decision: 'block',
+            source: 'runAgenticCodingCell',
+            target: finalContract.repo,
+            details: `Self-improvement rolled back (status: ${finalStatus}). Diff:\n${diff}`
+          });
+        } catch (rollbackError) {
+          auditLogger.log({
+            action: 'self_improvement',
+            decision: 'block',
+            source: 'runAgenticCodingCell',
+            target: finalContract.repo,
+            details: `Self-improvement rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
+          });
+        }
+      }
+    }
+    if (isSelfImprovement) {
+      delete process.env.CODEBUDDY_SELF_IMPROVEMENT;
     }
   }
 
@@ -5575,6 +5757,8 @@ export async function runAgenticCodingCell(options: AgenticCodingRunOptions): Pr
     verificationRequested: Boolean(options.runVerification),
     workflow: buildWorkflowReport(plan),
     workflowBuilderProposal,
+    gitnexusEvidence,
+    worldModelInvariants,
   };
 }
 
@@ -5917,7 +6101,7 @@ export async function writeAgenticCodingRunReport(
 ): Promise<string> {
   const resolved = path.resolve(reportFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(report, null, 2)}\n`);
   return resolved;
 }
 
@@ -5927,7 +6111,7 @@ export async function writeAgenticCodingApprovalSnapshot(
 ): Promise<string> {
   const resolved = path.resolve(approvalFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(buildAgenticCodingApprovalSnapshot(report), null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(buildAgenticCodingApprovalSnapshot(report), null, 2)}\n`);
   return resolved;
 }
 
@@ -5937,7 +6121,7 @@ export async function writeAgenticCodingEditProposalReviewSnapshot(
 ): Promise<string> {
   const resolved = path.resolve(editProposalReviewFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(buildAgenticCodingEditProposalReviewSnapshot(report), null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(buildAgenticCodingEditProposalReviewSnapshot(report), null, 2)}\n`);
   return resolved;
 }
 
@@ -5947,7 +6131,7 @@ export async function writeAgenticCodingWorkflowCanvas(
 ): Promise<string> {
   const resolved = path.resolve(workflowFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(buildAgenticCodingWorkflowCanvas(report), null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(buildAgenticCodingWorkflowCanvas(report), null, 2)}\n`);
   return resolved;
 }
 
@@ -5962,7 +6146,7 @@ export async function writeAgenticCodingWorkflowBuilderProposalCanvas(
 
   const resolved = path.resolve(workflowBuilderProposalCanvasFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(canvas, null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(canvas, null, 2)}\n`);
   return resolved;
 }
 
@@ -5972,7 +6156,7 @@ export async function writeAgenticCodingWorkflowProgressSnapshot(
 ): Promise<string> {
   const resolved = path.resolve(workflowProgressFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(buildAgenticCodingWorkflowProgressSnapshot(report), null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(buildAgenticCodingWorkflowProgressSnapshot(report), null, 2)}\n`);
   return resolved;
 }
 
@@ -5982,7 +6166,7 @@ export async function writeAgenticCodingWorkflowEventsSnapshot(
 ): Promise<string> {
   const resolved = path.resolve(workflowEventsFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(buildAgenticCodingWorkflowEventsSnapshot(report), null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(buildAgenticCodingWorkflowEventsSnapshot(report), null, 2)}\n`);
   return resolved;
 }
 
@@ -5992,14 +6176,13 @@ export async function writeAgenticCodingProposalLoopSnapshot(
 ): Promise<string> {
   const resolved = path.resolve(proposalLoopFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(
+  await persistRunArtifact(
     resolved,
     `${JSON.stringify(
       buildAgenticCodingProposalLoopSnapshot(report, deriveAgenticCodingProposalLoopArtifacts(resolved)),
       null,
       2,
     )}\n`,
-    'utf8',
   );
   return resolved;
 }
@@ -6010,7 +6193,7 @@ export async function writeAgenticCodingProposalLoopCanvas(
 ): Promise<string> {
   const resolved = path.resolve(proposalLoopCanvasFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(
+  await persistRunArtifact(
     resolved,
     `${JSON.stringify(
       buildAgenticCodingProposalLoopCanvas(
@@ -6019,7 +6202,6 @@ export async function writeAgenticCodingProposalLoopCanvas(
       null,
       2,
     )}\n`,
-    'utf8',
   );
   return resolved;
 }
@@ -6030,7 +6212,7 @@ export async function writeAgenticCodingProposalLoopNextActionSnapshot(
 ): Promise<string> {
   const resolved = path.resolve(proposalLoopNextActionFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(
+  await persistRunArtifact(
     resolved,
     `${JSON.stringify(
       buildAgenticCodingProposalLoopNextActionSnapshot(
@@ -6040,7 +6222,6 @@ export async function writeAgenticCodingProposalLoopNextActionSnapshot(
       null,
       2,
     )}\n`,
-    'utf8',
   );
   return resolved;
 }
@@ -6055,10 +6236,9 @@ export async function writeAgenticCodingEditProposalProducerDispatch(
     editProposalProducerDispatchFile: resolved,
   };
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(
+  await persistRunArtifact(
     resolved,
     `${JSON.stringify(buildAgenticCodingEditProposalProducerDispatch(report, artifacts), null, 2)}\n`,
-    'utf8',
   );
   return resolved;
 }
@@ -6076,27 +6256,25 @@ export async function writeAgenticCodingProposalLoopArtifactBundle(
   const bundle = buildAgenticCodingProposalLoopArtifactBundle(report, artifacts);
   await fs.mkdir(path.dirname(artifacts.artifactBundleFile), { recursive: true });
   await Promise.all([
-    fs.writeFile(artifacts.proposalLoopFile, `${JSON.stringify(loop, null, 2)}\n`, 'utf8'),
-    fs.writeFile(artifacts.proposalLoopCanvasFile, `${JSON.stringify(canvas, null, 2)}\n`, 'utf8'),
-    fs.writeFile(artifacts.proposalPromptFile, `${loop.prompts.editProposal}\n`, 'utf8'),
-    fs.writeFile(artifacts.editProposalRequestFile, `${JSON.stringify(editProposalRequest, null, 2)}\n`, 'utf8'),
-    fs.writeFile(
+    persistRunArtifact(artifacts.proposalLoopFile, `${JSON.stringify(loop, null, 2)}\n`),
+    persistRunArtifact(artifacts.proposalLoopCanvasFile, `${JSON.stringify(canvas, null, 2)}\n`),
+    persistRunArtifact(artifacts.proposalPromptFile, `${loop.prompts.editProposal}\n`),
+    persistRunArtifact(artifacts.editProposalRequestFile, `${JSON.stringify(editProposalRequest, null, 2)}\n`),
+    persistRunArtifact(
       artifacts.editProposalProducerDispatchFile,
       `${JSON.stringify(editProposalProducerDispatch, null, 2)}\n`,
-      'utf8',
     ),
-    fs.writeFile(
+    persistRunArtifact(
       artifacts.editProposalReviewFile,
       `${JSON.stringify(buildAgenticCodingEditProposalReviewSnapshot(report), null, 2)}\n`,
-      'utf8',
     ),
-    fs.writeFile(artifacts.proposalLoopNextActionFile, `${JSON.stringify(nextAction, null, 2)}\n`, 'utf8'),
-    fs.writeFile(artifacts.approvalDecisionPromptFile, `${loop.prompts.approvalDecision}\n`, 'utf8'),
-    fs.writeFile(artifacts.approvalFile, `${JSON.stringify(buildAgenticCodingApprovalSnapshot(report), null, 2)}\n`, 'utf8'),
-    fs.writeFile(artifacts.workflowProgressFile, `${JSON.stringify(buildAgenticCodingWorkflowProgressSnapshot(report), null, 2)}\n`, 'utf8'),
-    fs.writeFile(artifacts.workflowEventsFile, `${JSON.stringify(buildAgenticCodingWorkflowEventsSnapshot(report), null, 2)}\n`, 'utf8'),
-    fs.writeFile(artifacts.seedReportFile, `${JSON.stringify(report, null, 2)}\n`, 'utf8'),
-    fs.writeFile(artifacts.artifactBundleFile, `${JSON.stringify(bundle, null, 2)}\n`, 'utf8'),
+    persistRunArtifact(artifacts.proposalLoopNextActionFile, `${JSON.stringify(nextAction, null, 2)}\n`),
+    persistRunArtifact(artifacts.approvalDecisionPromptFile, `${loop.prompts.approvalDecision}\n`),
+    persistRunArtifact(artifacts.approvalFile, `${JSON.stringify(buildAgenticCodingApprovalSnapshot(report), null, 2)}\n`),
+    persistRunArtifact(artifacts.workflowProgressFile, `${JSON.stringify(buildAgenticCodingWorkflowProgressSnapshot(report), null, 2)}\n`),
+    persistRunArtifact(artifacts.workflowEventsFile, `${JSON.stringify(buildAgenticCodingWorkflowEventsSnapshot(report), null, 2)}\n`),
+    persistRunArtifact(artifacts.seedReportFile, `${JSON.stringify(report, null, 2)}\n`),
+    persistRunArtifact(artifacts.artifactBundleFile, `${JSON.stringify(bundle, null, 2)}\n`),
   ]);
   return artifacts.artifactBundleFile;
 }
@@ -6108,10 +6286,9 @@ export async function writeAgenticCodingProposalLoopCoworkImport(
   const resolved = path.resolve(proposalLoopCoworkImportFile);
   const artifacts = deriveAgenticCodingProposalLoopArtifactBundlePaths(path.dirname(resolved));
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(
+  await persistRunArtifact(
     resolved,
     `${JSON.stringify(buildAgenticCodingProposalLoopCoworkImport(report, artifacts), null, 2)}\n`,
-    'utf8',
   );
   return resolved;
 }
@@ -7846,7 +8023,7 @@ export async function writeAgenticCodingProposalLoopCoworkImportCheck(
   const resolved = path.resolve(proposalLoopCoworkImportCheckFile);
   const check = await buildAgenticCodingProposalLoopCoworkImportCheck(proposalLoopCoworkImportFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(check, null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(check, null, 2)}\n`);
   return resolved;
 }
 
@@ -7878,7 +8055,7 @@ export async function writeAgenticCodingProposalLoopCoworkWorkspace(
     manifest,
   );
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${JSON.stringify(workspace, null, 2)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${JSON.stringify(workspace, null, 2)}\n`);
   return resolved;
 }
 
@@ -8076,7 +8253,7 @@ export async function writeAgenticCodingEditProposalPrompt(
 ): Promise<string> {
   const resolved = path.resolve(proposalPromptFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${renderAgenticCodingEditProposalPrompt(report, options)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${renderAgenticCodingEditProposalPrompt(report, options)}\n`);
   return resolved;
 }
 
@@ -8086,7 +8263,7 @@ export async function writeAgenticCodingApprovalDecisionPrompt(
 ): Promise<string> {
   const resolved = path.resolve(approvalDecisionPromptFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${renderAgenticCodingApprovalDecisionPrompt(report)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${renderAgenticCodingApprovalDecisionPrompt(report)}\n`);
   return resolved;
 }
 
@@ -8097,6 +8274,6 @@ export async function writeAgenticCodingWorkflowBuilderPrompt(
 ): Promise<string> {
   const resolved = path.resolve(workflowBuilderPromptFile);
   await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, `${renderAgenticCodingWorkflowBuilderPrompt(report, options)}\n`, 'utf8');
+  await persistRunArtifact(resolved, `${renderAgenticCodingWorkflowBuilderPrompt(report, options)}\n`);
   return resolved;
 }
