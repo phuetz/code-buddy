@@ -583,6 +583,21 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
   {
+    name: 'user_model_observe',
+    category: 'utility',
+    keywords: ['user', 'model', 'preference', 'observe', 'profile', 'personalization', 'working style', 'trait'],
+    priority: 4,
+    description: 'Propose an observation about the user for human review (no silent write)'
+  },
+  {
+    name: 'user_model_recall',
+    category: 'utility',
+    keywords: ['user', 'model', 'preference', 'recall', 'profile', 'personalization', 'who'],
+    priority: 4,
+    description: 'Recall accepted observations about the user',
+    fleetSafe: true,
+  },
+  {
     name: 'task_verify',
     category: 'utility',
     keywords: ['verify', 'test', 'typecheck', 'lint', 'check', 'validate', 'ci'],

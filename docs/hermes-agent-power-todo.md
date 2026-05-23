@@ -582,7 +582,15 @@ The gap is mainly product integration and durability:
       `getActiveMemoryProvider`). The default active provider is `local`, so the
       agent loop is unaffected until a caller explicitly registers and activates
       an adapter (Mem0/Honcho/Supermemory). Those network adapters and the
-      Cowork selector remain future work.
+      Cowork selector remain future work. A *structured local user model* now
+      also exists as a sibling system (`src/memory/user-model.ts`): typed,
+      review-gated observations (preference/trait/expertise/working-style) about
+      the user's working preferences, proposed via the `user_model_observe` tool
+      (or `buddy user-model observe`) and folded into the active model only on
+      explicit `buddy user-model accept --by <reviewer>`. A privacy screen
+      refuses health/finance/relationship/credential content. This is the
+      file-backed half of "a deepening model of who you are"; LLM dialectic
+      inference (Honcho-style) over it remains future work.
 
 25. Add hook lifecycle.
     - Hooks: before tool call, after tool call, before memory write, after

@@ -1,0 +1,107 @@
+/**
+ * Tests for `buddy user-model ...` CLI.
+ *
+ * Exercises the real LocalUserModel against a temp workDir (process.cwd is
+ * spied) so the propose→accept review flow and the no-silent-write guarantee
+ * are verified through the command wiring.
+ */
+
+import { Command } from 'commander';
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs-extra';
+import { createUserModelCommand } from '../../src/commands/user-model.js';
+import { resetUserModels } from '../../src/memory/user-model.js';
+
+function createProgram(): Command {
+  const program = new Command();
+  program.exitOverride();
+  program.configureOutput({ writeOut: () => {}, writeErr: () => {} });
+  program.addCommand(createUserModelCommand());
+  return program;
+}
+
+function getLogOutput(spy: jest.SpyInstance): string {
+  return (spy.mock.calls as unknown[][]).map((c) => c.join(' ')).join('\n');
+}
+
+describe('buddy user-model', () => {
+  let tmpDir: string;
+  let cwdSpy: jest.SpyInstance;
+  let consoleSpy: jest.SpyInstance;
+  let consoleErrSpy: jest.SpyInstance;
+  let processExitSpy: jest.SpyInstance;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'user-model-cli-'));
+    resetUserModels();
+    cwdSpy = jest.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    processExitSpy = jest.spyOn(process, 'exit').mockImplementation(
+      (() => {}) as unknown as (code?: number | string | null) => never,
+    );
+  });
+
+  afterEach(async () => {
+    cwdSpy.mockRestore();
+    consoleSpy.mockRestore();
+    consoleErrSpy.mockRestore();
+    processExitSpy.mockRestore();
+    resetUserModels();
+    await fs.remove(tmpDir);
+  });
+
+  it('observe → show: proposing does not put it in the active model', async () => {
+    const program = createProgram();
+    await program.parseAsync([
+      'node', 'buddy', 'user-model', 'observe', 'Prefers French explanations.', '--kind', 'preference',
+    ]);
+    expect(getLogOutput(consoleSpy)).toContain('Proposed observation');
+
+    consoleSpy.mockClear();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'show']);
+    expect(getLogOutput(consoleSpy)).toMatch(/no accepted observations/i);
+  });
+
+  it('refuses sensitive content', async () => {
+    const program = createProgram();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'observe', 'has a medical diagnosis']);
+    expect(getLogOutput(consoleErrSpy)).toMatch(/privacy scope/i);
+  });
+
+  it('accept requires --by and then appears in show', async () => {
+    const program = createProgram();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'observe', 'Wants tests before done', '--kind', 'working-style']);
+    const id = getLogOutput(consoleSpy).match(/\[(um-[a-z0-9]+)\]/)?.[1];
+    expect(id).toBeTruthy();
+
+    // Without --by, commander rejects the required option; nothing accepted.
+    try {
+      await program.parseAsync(['node', 'buddy', 'user-model', 'accept', id!]);
+    } catch {
+      /* expected */
+    }
+    consoleSpy.mockClear();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'show']);
+    expect(getLogOutput(consoleSpy)).toMatch(/no accepted observations/i);
+
+    consoleSpy.mockClear();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'accept', id!, '--by', 'Patrice']);
+    expect(getLogOutput(consoleSpy)).toContain('Accepted observation');
+
+    consoleSpy.mockClear();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'show']);
+    expect(getLogOutput(consoleSpy)).toContain('Wants tests before done');
+  });
+
+  it('list --json shows pending observations', async () => {
+    const program = createProgram();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'observe', 'a pending pref']);
+    consoleSpy.mockClear();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'list', '--status', 'pending', '--json']);
+    const parsed = JSON.parse(getLogOutput(consoleSpy));
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].status).toBe('pending');
+  });
+});

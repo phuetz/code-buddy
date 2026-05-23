@@ -14,6 +14,7 @@
  * - remember / recall / forget
  * - lead_scout_plan / lead_scout_run / lead_scout_enrichment_plan / lead_scout_lesson_candidates
  * - lessons_add / lessons_propose / lessons_search / lessons_list / lessons_graph
+ * - user_model_observe / user_model_recall
  * - task_verify
  */
 
@@ -931,6 +932,62 @@ export const LESSONS_GRAPH_TOOL: CodeBuddyTool = {
   },
 };
 
+export const USER_MODEL_OBSERVE_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'user_model_observe',
+    description:
+      'Propose an observation about the user for human review (does NOT write the model). Use after noticing a stable working preference, trait, expertise, or working style. The observation stays pending until a human accepts it via "buddy user-model". Scope is working preferences ONLY — never record health, finances, relationships, or credentials.',
+    parameters: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          enum: ['preference', 'trait', 'expertise', 'working-style'],
+          description: 'Observation kind',
+        },
+        content: {
+          type: 'string',
+          description: 'The observation about the user (working preferences only)',
+        },
+        confidence: {
+          type: 'number',
+          description: 'Optional 0..1 confidence in the observation',
+        },
+        note: {
+          type: 'string',
+          description: 'Optional provenance note (what prompted the observation)',
+        },
+      },
+      required: ['kind', 'content'],
+    },
+  },
+};
+
+export const USER_MODEL_RECALL_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'user_model_recall',
+    description:
+      'Recall what is known about the user (accepted observations only) to tailor your approach. Optionally filter by kind or a keyword query. Read-only: never proposes or writes observations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          enum: ['preference', 'trait', 'expertise', 'working-style'],
+          description: 'Optional: filter to a specific observation kind',
+        },
+        query: {
+          type: 'string',
+          description: 'Optional keyword to filter accepted observations',
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 export const TASK_VERIFY_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
@@ -981,5 +1038,7 @@ export const AGENT_TOOLS: CodeBuddyTool[] = [
   LESSONS_SEARCH_TOOL,
   LESSONS_LIST_TOOL,
   LESSONS_GRAPH_TOOL,
+  USER_MODEL_OBSERVE_TOOL,
+  USER_MODEL_RECALL_TOOL,
   TASK_VERIFY_TOOL,
 ];

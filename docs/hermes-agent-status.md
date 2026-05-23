@@ -37,7 +37,17 @@ Capabilities below follow the upstream README's headline table.
 | Skill creation from experience | `src/agent/research-script-skill-candidate.ts`; `buddy tools skill-candidate` | done (review-gated) |
 | Concept graph / Obsidian vault export | `LessonsTracker.buildConceptGraph` / `buddy lessons graph --vault` | done |
 | Cross-session recall | `RunStore.searchRuns`, `buildRunRecallPack`; `buddy run search / recall-pack` | done |
-| Honcho-style dialectic user modeling | — | future work (parity TODO #24 memory-provider boundary exists) |
+| **Structured user model ("deepening model of who you are")** | `src/memory/user-model.ts` + `user_model_observe`/`user_model_recall` tools + `buddy user-model` | **done (this change)** — local file-backed, propose/review, privacy-scoped; LLM dialectic inference (Honcho-style) still future work |
+
+The user model is the paired half of the learning loop. The agent proposes
+observations about the user's *working preferences* via `user_model_observe`
+(or `buddy user-model observe`); they persist to `.codebuddy/user-model.json`
+as **pending** and never enter the active model until a human runs
+`buddy user-model accept <id> --by <reviewer>`. A conservative privacy screen
+refuses health/finance/relationship/credential content at both propose and
+accept time. `user_model_recall` exposes the accepted summary to the agent on
+demand (automatic per-session prompt injection is future work). This is a local
+observation store, **not** Honcho's LLM-driven dialectic inference.
 
 The candidate queue is the new piece. Proposing a lesson — via the agent's
 `lessons_propose` tool or `buddy lessons candidate propose` — writes only to
@@ -116,7 +126,10 @@ buddy lessons candidate approve <id> --by "<your name>"
 
 ## Known gaps (tracked in the parity TODO)
 
-- Honcho-style dialectic user modeling (memory-provider adapter).
+- LLM dialectic inference over the user model (Honcho-style); the local
+  observation store + review queue now exist, the inference layer does not.
+- Automatic per-session injection of the user-model summary (currently
+  on-demand via `user_model_recall`).
 - Live mobile remote-supervision listener (only contracts/snapshots exist).
 - Cowork visual panels for the lesson-candidate queue and skill package manager.
 - Serverless terminal backends (Daytona/Modal/Vercel Sandbox).

@@ -2512,6 +2512,17 @@ addLazyCommand(
   },
 );
 
+// User model — structured model of the user's working preferences (propose/review)
+addLazyCommand(
+  program,
+  'user-model',
+  'Manage the local user model — working preferences, propose/review (no silent write)',
+  async () => {
+    const { createUserModelCommand } = await import('./commands/user-model.js');
+    return createUserModelCommand();
+  },
+);
+
 // Update — channel-based update management (stable/beta/dev)
 addLazyCommand(
   program,

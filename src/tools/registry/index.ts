@@ -181,6 +181,13 @@ export {
   createLessonsTools,
 } from './lessons-tools.js';
 
+// Tool Adapters - User Model (Hermes "deepening model of who you are")
+export {
+  UserModelObserveTool,
+  UserModelRecallTool,
+  createUserModelTools,
+} from './user-model-tools.js';
+
 // Tool Adapters - Multimodal (audio, video, PDF, OCR, QR, clipboard, diagram, document, export, archive)
 export {
   AudioExecuteTool,
@@ -389,6 +396,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createAttentionTools } = await import('./attention-tools.js');
   const { createAliasTools } = await import('./tool-aliases.js');
   const { createLessonsTools } = await import('./lessons-tools.js');
+  const { createUserModelTools } = await import('./user-model-tools.js');
   const { createMultimodalTools } = await import('./multimodal-tools.js');
   const { createAdvancedTools } = await import('./advanced-tools.js');
   const { createCanvasTools } = await import('./canvas-tools.js');
@@ -434,6 +442,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createPlanTools(),
     ...createAttentionTools(),
     ...createLessonsTools(),
+    ...createUserModelTools(),
     ...createMultimodalTools(),
     ...createAdvancedTools(),
     ...createCanvasTools(),
@@ -500,6 +509,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createParallelTools(),
     ...createAttentionTools(),
     ...createLessonsTools(),
+    ...createUserModelTools(),
     ...createMultimodalTools(),
     ...createAdvancedTools(),
     ...createCanvasTools(),
@@ -556,6 +566,7 @@ import { createMemoryTools } from './memory-tools.js';
 import { createParallelTools } from './parallel-tools.js';
 import { createAttentionTools } from './attention-tools.js';
 import { createLessonsTools } from './lessons-tools.js';
+import { createUserModelTools } from './user-model-tools.js';
 import { createMultimodalTools } from './multimodal-tools.js';
 import { createAdvancedTools } from './advanced-tools.js';
 import { createCanvasTools } from './canvas-tools.js';
