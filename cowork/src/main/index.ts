@@ -26,6 +26,7 @@ import {
   registerFleetIpcHandlers,
   type FleetDispatchInput,
 } from './ipc/fleet-ipc';
+import { wireFleetAggregator } from './fleet/aggregator-wiring';
 import { setMainWindow, setTray } from './window-management';
 import { registerTeamIpcHandlers } from './ipc/team-ipc';
 import { registerMentionIpcHandlers } from './ipc/mention-ipc';
@@ -1294,6 +1295,12 @@ app
       }
     }
 
+    // Fleet Council — wire the result-aggregator to a real LLM client so
+    // consensus dispatch actually arbitrates the N peer answers (instead of a
+    // labelled concat). Runs regardless of the embedded engine: the Council
+    // executes in this main process via saga-runner. Best-effort.
+    void wireFleetAggregator(configStore);
+
     // Single source of truth for which runtime is in use. Logged AFTER
     // the load attempt so it never contradicts the engine init log
     // above (an earlier "[Runtime] Using pi-coding-agent SDK..." line
@@ -2217,7 +2224,7 @@ registerSubAgentIpcHandlers(subAgentBridge);
 registerOrchestratorIpcHandlers(orchestratorBridge);
 
 // ── Fleet IPC handlers (GAP 3 — multi-host Code Buddy listener) ──────
-registerFleetIpcHandlers(() => fleetBridge, () => activityFeed);
+registerFleetIpcHandlers(() => fleetBridge, () => activityFeed, () => projectManager);
 
 // ── Team IPC handlers (Phase 4 layer 9 — Agent Teams observability) ──
 registerTeamIpcHandlers(teamBridge);

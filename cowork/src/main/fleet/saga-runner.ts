@@ -126,6 +126,28 @@ interface AggregatorModule {
   ) => Promise<{ finalText: string; consensus: ConsensusSummaryShape }>;
 }
 
+/**
+ * Core council→lesson bridge (`src/agent/council-lesson-proposer.ts`). Present
+ * since the consolidation change; older cores omit it and the auto-propose is a
+ * no-op.
+ */
+interface CouncilProposerModule {
+  proposeFromCouncilOutcome?: (
+    input: {
+      sagaId: string;
+      goal: string;
+      aggregation?: string;
+      consensus: {
+        score: number;
+        threshold: number;
+        total: number;
+        disagreements: Array<{ peerId: string; model: string; preview?: string }>;
+      };
+    },
+    workDir: string,
+  ) => { proposed: boolean; reason?: string; candidate?: { id: string } };
+}
+
 interface DispatchStatusResponse {
   found?: boolean;
   status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -194,6 +216,12 @@ export class SagaRunner {
     private readonly fleetBridge: FleetBridge,
     private readonly sendToRenderer: (event: ServerEvent) => void,
     private readonly activityFeed: ActivityFeed | null = null,
+    /**
+     * Resolves the working directory whose `.codebuddy/` hosts the lesson queue
+     * for council auto-proposals (B1). Defaults to "no project" → auto-propose
+     * is skipped (e.g. scheduled-task dispatch with no active project).
+     */
+    private readonly workDirResolver: () => string | null = () => null,
   ) {}
 
   /**
@@ -590,6 +618,9 @@ export class SagaRunner {
       saga.steps.length > 0 && saga.steps.every((s) => s.lane === 'chain');
     const isParallel = (saga.plan.parallel?.length ?? 0) > 0;
     let finalText: string | null = null;
+    // Captured when this is a council saga, so we can propose a review lesson
+    // from the agreement summary after the saga is durably finalised (B1).
+    let councilConsensus: ConsensusSummaryShape | null = null;
     try {
       if (isChainSaga) {
         // Chain saga: the final result is the LAST step's output.
@@ -614,6 +645,7 @@ export class SagaRunner {
           // without recomputing it.
           const { finalText: text, consensus } = await aggMod.aggregateWithConsensus(saga);
           finalText = text;
+          councilConsensus = consensus;
           await store.update(sagaId, (s) => {
             s.metadata = { ...(s.metadata ?? {}), consensus };
             return s;
@@ -632,6 +664,68 @@ export class SagaRunner {
     if (finalText !== null && finalText !== undefined) {
       await store.finalise(sagaId, finalText);
       this.emitSagaUpdate(sagaId);
+
+      // Close the autonomy loop: a council outcome that diverged (or only
+      // reached sub-threshold consensus) becomes a review-gated lesson
+      // candidate. Best-effort, host-resolved workDir — never blocks finalise.
+      if (councilConsensus) {
+        await this.proposeCouncilLesson(saga, councilConsensus);
+      }
+    }
+  }
+
+  /**
+   * B1 — turn a council outcome into a proposed lesson candidate for review.
+   * Host-resolved workDir (the active project's `.codebuddy/`), so it lands
+   * exactly where the Cowork LessonCandidatePanel reads. Fully best-effort.
+   */
+  private async proposeCouncilLesson(
+    saga: SagaShape,
+    consensus: ConsensusSummaryShape,
+  ): Promise<void> {
+    try {
+      const workDir = this.workDirResolver();
+      if (!workDir) {
+        log('[saga-runner] no active project workDir — skipping council lesson proposal', {
+          sagaId: saga.id,
+        });
+        return;
+      }
+      const mod = await loadCoreModule<CouncilProposerModule>('agent/council-lesson-proposer.js');
+      if (!mod?.proposeFromCouncilOutcome) {
+        logWarn('[saga-runner] council-lesson-proposer core module unavailable');
+        return;
+      }
+      const result = mod.proposeFromCouncilOutcome(
+        {
+          sagaId: saga.id,
+          goal: saga.goal,
+          aggregation:
+            typeof saga.metadata?.aggregation === 'string' ? saga.metadata.aggregation : undefined,
+          consensus: {
+            score: consensus.score,
+            threshold: consensus.threshold,
+            total: consensus.total,
+            disagreements: consensus.disagreements,
+          },
+        },
+        workDir,
+      );
+      if (result.proposed && result.candidate) {
+        log('[saga-runner] council outcome proposed a lesson candidate for review', {
+          sagaId: saga.id,
+          candidateId: result.candidate.id,
+        });
+        // Nudge the renderer so the council strip can badge "lesson proposed".
+        this.emitSagaUpdate(saga.id);
+      } else {
+        log('[saga-runner] council outcome did not propose a lesson', {
+          sagaId: saga.id,
+          reason: result.reason,
+        });
+      }
+    } catch (err) {
+      logWarn('[saga-runner] council lesson proposal failed (ignored):', err);
     }
   }
 

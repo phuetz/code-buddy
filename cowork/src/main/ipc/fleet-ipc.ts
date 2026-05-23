@@ -5,6 +5,7 @@ import { loadCoreModule } from '../utils/core-loader';
 import { SagaRunner } from '../fleet/saga-runner';
 import { sendToRenderer } from '../ipc-main-bridge';
 import type { ActivityFeed } from '../activity/activity-feed';
+import { resolveWorkDir, type ProjectManagerSource } from './ipc-workdir';
 import {
   buildFleetInternetProofPlan,
   buildInternetProofSummaryMetadata,
@@ -80,6 +81,10 @@ function isFleetDispatchProfile(value: unknown): value is FleetDispatchProfile {
 export function registerFleetIpcHandlers(
   fleetBridgeSource: FleetBridgeSource,
   activityFeedSource: ActivityFeedSource = null,
+  // B1 — resolves the active project's workDir so a finished council saga can
+  // auto-propose a review lesson into that project's `.codebuddy/`. Optional:
+  // omitted (null) → SagaRunner skips the auto-propose.
+  projectManagerSource: ProjectManagerSource = null,
 ) {
   let sagaRunner:
     | {
@@ -102,7 +107,12 @@ export function registerFleetIpcHandlers(
       sagaRunner = {
         bridge,
         activityFeed: currentActivityFeed,
-        runner: new SagaRunner(bridge, sendToRenderer, currentActivityFeed),
+        runner: new SagaRunner(
+          bridge,
+          sendToRenderer,
+          currentActivityFeed,
+          () => resolveWorkDir(projectManagerSource),
+        ),
       };
     }
     return sagaRunner.runner;

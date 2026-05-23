@@ -23,6 +23,14 @@ export interface IpcError {
 export type LessonCategory = 'PATTERN' | 'RULE' | 'CONTEXT' | 'INSIGHT';
 export type LessonCandidateStatus = 'pending' | 'approved' | 'discarded';
 
+export interface LessonCandidateProvenance {
+  runId?: string;
+  outcomeId?: string;
+  /** Set when a Fleet Council outcome auto-proposed this candidate (B1). */
+  sagaId?: string;
+  note?: string;
+}
+
 export interface LessonCandidate {
   id: string;
   category: LessonCategory;
@@ -31,6 +39,7 @@ export interface LessonCandidate {
   status: LessonCandidateStatus;
   createdAt: number;
   source: 'self_observed' | 'manual';
+  provenance?: LessonCandidateProvenance;
   reviewedAt?: number;
   reviewedBy?: string;
   reviewNote?: string;

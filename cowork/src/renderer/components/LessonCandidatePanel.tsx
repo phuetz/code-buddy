@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X, GraduationCap, Check, Trash2, AlertCircle, FolderOpen, RefreshCw } from 'lucide-react';
+import { X, GraduationCap, Check, Trash2, AlertCircle, FolderOpen, RefreshCw, Cpu } from 'lucide-react';
 import { useAppStore } from '../store';
 import {
   NO_ACTIVE_PROJECT,
@@ -248,6 +248,12 @@ export function LessonCandidatePanel() {
                     <p className="text-xs text-text-primary whitespace-pre-wrap">{c.content}</p>
                   )}
 
+                  {c.provenance?.sagaId && (
+                    <p className="flex items-center gap-1 text-[10px] text-accent" title={c.provenance.note}>
+                      <Cpu className="w-3 h-3 shrink-0" />
+                      proposed from Fleet Council · saga {c.provenance.sagaId.slice(0, 8)}
+                    </p>
+                  )}
                   {c.context && <p className="text-[10px] text-text-muted">context: {c.context}</p>}
                   {c.reviewedBy && (
                     <p className="text-[10px] text-text-muted">

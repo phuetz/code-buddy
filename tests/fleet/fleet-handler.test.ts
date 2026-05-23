@@ -879,7 +879,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
 
       const out = r.entry?.content ?? '';
       expect(out).toContain('Fleet route recommendation');
-      expect(out).toContain('Council: consensus over');
+      expect(out).toContain('Council: deterministic agreement score over');
     });
 
     it('--json emits the structured route payload', async () => {
