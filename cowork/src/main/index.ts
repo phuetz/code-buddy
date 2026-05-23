@@ -32,6 +32,9 @@ import { registerMentionIpcHandlers } from './ipc/mention-ipc';
 import { registerCommandIpcHandlers } from './ipc/command-ipc';
 import { registerSkillMdIpcHandlers } from './ipc/skill-md-ipc';
 import { registerKnowledgeIpcHandlers } from './ipc/knowledge-ipc';
+import { registerLessonCandidateIpcHandlers } from './ipc/lessons-candidate-ipc';
+import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
+import { registerSpecIpcHandlers } from './ipc/spec-ipc';
 import { initDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import {
@@ -2230,6 +2233,14 @@ registerSkillMdIpcHandlers(skillMdBridge);
 
 // ── Knowledge IPC handlers (Claude Cowork parity) ────────────────────
 registerKnowledgeIpcHandlers(knowledgeService, projectManager);
+
+// ── Hermes review-gated surfaces (CLI parity → Cowork) ───────────────
+// Lesson-candidate queue (item 7), user model (item 24), spec stories.
+// All resolve `.codebuddy/` under the ACTIVE project's workspace via the
+// projectManager getter (set during async boot, like fleetBridge above).
+registerLessonCandidateIpcHandlers(() => projectManager);
+registerUserModelIpcHandlers(() => projectManager);
+registerSpecIpcHandlers(() => projectManager);
 
 // ── Task dispatch IPC (mobile/remote → background session) ───────────
 ipcMain.handle('dispatch.task', async (_event, request: DispatchRequest) => {

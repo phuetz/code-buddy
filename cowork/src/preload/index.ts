@@ -36,6 +36,7 @@ import type {
   PairingRequest,
   RemoteSessionMapping,
 } from '../shared/ipc-types';
+import type { LessonCandidateApi, UserModelApi, SpecApi } from '../renderer/types/hermes';
 
 // Track registered callbacks to prevent duplicate listeners
 let registeredCallback: ((event: ServerEvent) => void) | null = null;
@@ -2268,6 +2269,92 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<Array<Record<string, unknown>>> =>
       ipcRenderer.invoke('knowledge.search', query, projectId, limit),
   },
+
+  // ── Hermes review-gated surfaces (CLI parity → Cowork) ──────────────
+  lessonCandidate: {
+    list: (status?: 'pending' | 'approved' | 'discarded', projectId?: string) =>
+      ipcRenderer.invoke('lessonCandidate.list', status, projectId),
+    stats: (projectId?: string) => ipcRenderer.invoke('lessonCandidate.stats', projectId),
+    get: (id: string, projectId?: string) =>
+      ipcRenderer.invoke('lessonCandidate.get', id, projectId),
+    approve: (
+      id: string,
+      input: {
+        reviewedBy: string;
+        content?: string;
+        category?: 'PATTERN' | 'RULE' | 'CONTEXT' | 'INSIGHT';
+        context?: string;
+        reviewNote?: string;
+      },
+      projectId?: string
+    ) => ipcRenderer.invoke('lessonCandidate.approve', id, input, projectId),
+    discard: (
+      id: string,
+      input: { reviewedBy?: string; reason?: string },
+      projectId?: string
+    ) => ipcRenderer.invoke('lessonCandidate.discard', id, input, projectId),
+  },
+
+  userModel: {
+    list: (status?: 'pending' | 'accepted' | 'discarded', projectId?: string) =>
+      ipcRenderer.invoke('userModel.list', status, projectId),
+    stats: (projectId?: string) => ipcRenderer.invoke('userModel.stats', projectId),
+    summarize: (projectId?: string) => ipcRenderer.invoke('userModel.summarize', projectId),
+    get: (id: string, projectId?: string) => ipcRenderer.invoke('userModel.get', id, projectId),
+    accept: (
+      id: string,
+      input: {
+        reviewedBy: string;
+        content?: string;
+        kind?: 'preference' | 'trait' | 'expertise' | 'working-style';
+        reviewNote?: string;
+      },
+      projectId?: string
+    ) => ipcRenderer.invoke('userModel.accept', id, input, projectId),
+    discard: (
+      id: string,
+      input: { reviewedBy?: string; reason?: string },
+      projectId?: string
+    ) => ipcRenderer.invoke('userModel.discard', id, input, projectId),
+  },
+
+  spec: {
+    listProjects: (coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.listProjects', coworkProjectId),
+    createProject: (title: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.createProject', title, coworkProjectId),
+    sprintStatus: (specProjectId?: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.sprintStatus', specProjectId, coworkProjectId),
+    listStories: (
+      specProjectId: string,
+      status?: 'draft' | 'approved' | 'in_progress' | 'done' | 'blocked',
+      coworkProjectId?: string
+    ) => ipcRenderer.invoke('spec.listStories', specProjectId, status, coworkProjectId),
+    getStory: (specProjectId: string, storyId: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.getStory', specProjectId, storyId, coworkProjectId),
+    addStory: (
+      specProjectId: string,
+      input: { title: string; epicId?: string; narrative?: string; acceptanceCriteria?: string[] },
+      coworkProjectId?: string
+    ) => ipcRenderer.invoke('spec.addStory', specProjectId, input, coworkProjectId),
+    approveStory: (specProjectId: string, storyId: string, reviewedBy: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.approveStory', specProjectId, storyId, reviewedBy, coworkProjectId),
+    startStory: (specProjectId: string, storyId: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.startStory', specProjectId, storyId, coworkProjectId),
+    completeStory: (specProjectId: string, storyId: string, evidence: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.completeStory', specProjectId, storyId, evidence, coworkProjectId),
+    blockStory: (specProjectId: string, storyId: string, reason: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.blockStory', specProjectId, storyId, reason, coworkProjectId),
+    reopenStory: (specProjectId: string, storyId: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.reopenStory', specProjectId, storyId, coworkProjectId),
+    listEpics: (specProjectId: string, coworkProjectId?: string) =>
+      ipcRenderer.invoke('spec.listEpics', specProjectId, coworkProjectId),
+    addEpic: (
+      specProjectId: string,
+      input: { title: string; summary?: string },
+      coworkProjectId?: string
+    ) => ipcRenderer.invoke('spec.addEpic', specProjectId, input, coworkProjectId),
+  },
 });
 
 // Type declaration for the renderer process
@@ -4063,6 +4150,9 @@ declare global {
           limit?: number
         ) => Promise<Array<Record<string, unknown>>>;
       };
+      lessonCandidate: LessonCandidateApi;
+      userModel: UserModelApi;
+      spec: SpecApi;
     };
   }
 }

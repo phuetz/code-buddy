@@ -1,4 +1,13 @@
 {
+  "lessonCandidate": {
+    "title": "Leçons candidates — file de revue"
+  },
+  "userModel": {
+    "title": "Modèle utilisateur — observations"
+  },
+  "spec": {
+    "title": "Backlog spec — stories à valider"
+  },
   "common": {
     "save": "Enregistrer",
     "cancel": "Annuler",

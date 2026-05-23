@@ -1,4 +1,4 @@
-import { Minus, Square, X, Copy, Bell, Activity, Star, BarChart3, Focus, Sparkles, Network, Users, HelpCircle, Power, Loader2, ClipboardCopy, Headphones, Cpu } from 'lucide-react';
+import { Minus, Square, X, Copy, Bell, Activity, Star, BarChart3, Focus, Sparkles, Network, Users, HelpCircle, Power, Loader2, ClipboardCopy, Headphones, Cpu, GraduationCap, UserCog, ListChecks } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
@@ -91,6 +91,39 @@ export function Titlebar() {
         aria-label="Open team panel"
       >
         <Users className="w-4 h-4 text-text-secondary" />
+      </button>
+
+      {/* Lesson candidates — review queue (Hermes item 7) */}
+      <button
+        onClick={() => useAppStore.getState().setShowLessonCandidatePanel(true)}
+        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
+        title={t('lessonCandidate.title', 'Lesson candidates — review queue')}
+        aria-label="Open lesson candidate panel"
+        data-testid="lesson-candidate-button"
+      >
+        <GraduationCap className="w-4 h-4 text-text-secondary" />
+      </button>
+
+      {/* User model — review queue (Hermes item 24) */}
+      <button
+        onClick={() => useAppStore.getState().setShowUserModelPanel(true)}
+        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
+        title={t('userModel.title', 'User model — observations')}
+        aria-label="Open user model panel"
+        data-testid="user-model-button"
+      >
+        <UserCog className="w-4 h-4 text-text-secondary" />
+      </button>
+
+      {/* Spec backlog — review-gated stories */}
+      <button
+        onClick={() => useAppStore.getState().setShowSpecPanel(true)}
+        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
+        title={t('spec.title', 'Spec backlog — review-gated stories')}
+        aria-label="Open spec backlog panel"
+        data-testid="spec-panel-button"
+      >
+        <ListChecks className="w-4 h-4 text-text-secondary" />
       </button>
 
       {/* Bookmarks panel (Phase 3 step 4) */}

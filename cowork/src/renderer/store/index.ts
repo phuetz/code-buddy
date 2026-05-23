@@ -365,6 +365,11 @@ interface AppState {
   teamMailbox: TeamMailboxMessage[];
   showTeamPanel: boolean;
 
+  // Hermes review-gated surfaces (CLI parity → Cowork)
+  showLessonCandidatePanel: boolean;
+  showUserModelPanel: boolean;
+  showSpecPanel: boolean;
+
   // Notifications (Claude Cowork parity)
   notifications: NotificationEntry[];
   showNotificationCenter: boolean;
@@ -608,6 +613,9 @@ interface AppState {
   upsertTeamTask: (task: TeamTask) => void;
   appendTeamMessage: (msg: TeamMailboxMessage) => void;
   setShowTeamPanel: (show: boolean) => void;
+  setShowLessonCandidatePanel: (show: boolean) => void;
+  setShowUserModelPanel: (show: boolean) => void;
+  setShowSpecPanel: (show: boolean) => void;
 
   // Notification actions
   addNotification: (notification: NotificationEntry) => void;
@@ -780,6 +788,9 @@ export const useAppStore = create<AppState>((set) => ({
   teamTasks: {},
   teamMailbox: [],
   showTeamPanel: false,
+  showLessonCandidatePanel: false,
+  showUserModelPanel: false,
+  showSpecPanel: false,
   notifications: [],
   showNotificationCenter: false,
 
@@ -1715,6 +1726,9 @@ export const useAppStore = create<AppState>((set) => ({
       return { teamMailbox: next };
     }),
   setShowTeamPanel: (show) => set({ showTeamPanel: show }),
+  setShowLessonCandidatePanel: (show) => set({ showLessonCandidatePanel: show }),
+  setShowUserModelPanel: (show) => set({ showUserModelPanel: show }),
+  setShowSpecPanel: (show) => set({ showSpecPanel: show }),
   clearSubAgents: (sessionId) =>
     set((state) => {
       const { [sessionId]: _dropped, ...rest } = state.subAgents;

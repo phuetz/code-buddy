@@ -1,4 +1,13 @@
 {
+  "lessonCandidate": {
+    "title": "Lesson candidates — review queue"
+  },
+  "userModel": {
+    "title": "User model — observations"
+  },
+  "spec": {
+    "title": "Spec backlog — review-gated stories"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

@@ -53,6 +53,9 @@ import { OrchestratorLauncher } from './components/OrchestratorLauncher';
 import { FleetPanel } from './components/FleetPanel';
 import { FleetCommandCenter } from './components/FleetCommandCenter';
 import { TeamPanel } from './components/TeamPanel';
+import { LessonCandidatePanel } from './components/LessonCandidatePanel';
+import { UserModelPanel } from './components/UserModelPanel';
+import { SpecPanel } from './components/SpecPanel';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SubAgentDashboard } from './components/SubAgentDashboard';
 import { DiagnosticsPanel } from './components/DiagnosticsPanel';
@@ -626,6 +629,11 @@ function App() {
 
       {/* Team panel — Agent Teams (Phase 4 layer 9) */}
       <TeamPanel />
+
+      {/* Hermes review-gated surfaces (CLI parity → Cowork) */}
+      <LessonCandidatePanel />
+      <UserModelPanel />
+      <SpecPanel />
     </div>
   );
 }
