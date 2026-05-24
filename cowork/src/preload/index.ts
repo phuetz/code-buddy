@@ -26,6 +26,7 @@ import type {
   CompanionPerceptModality,
   CompanionPerceptStats,
   CompanionStatus,
+  CompanionSelfEvaluation,
   CameraSnapshotResult,
 } from '../renderer/types';
 import type { DiagnosticInput, DiagnosticResult } from '../renderer/types';
@@ -772,6 +773,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('companion.percepts.stats', projectId),
     recordSelf: (projectId?: string): Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }> =>
       ipcRenderer.invoke('companion.self.record', projectId),
+    evaluate: (input?: {
+      projectId?: string;
+      recordSuggestions?: boolean;
+    }): Promise<{ ok: boolean; evaluation?: CompanionSelfEvaluation; error?: string }> =>
+      ipcRenderer.invoke('companion.evaluate', input),
     cameraStatus: (): Promise<{ ok: boolean; status?: Record<string, unknown>; error?: string }> =>
       ipcRenderer.invoke('companion.camera.status'),
     cameraSnapshot: (input?: {
@@ -2897,6 +2903,10 @@ declare global {
         }) => Promise<{ ok: boolean; items: CompanionPercept[]; error?: string }>;
         perceptStats: (projectId?: string) => Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }>;
         recordSelf: (projectId?: string) => Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }>;
+        evaluate: (input?: {
+          projectId?: string;
+          recordSuggestions?: boolean;
+        }) => Promise<{ ok: boolean; evaluation?: CompanionSelfEvaluation; error?: string }>;
         cameraStatus: () => Promise<{ ok: boolean; status?: Record<string, unknown>; error?: string }>;
         cameraSnapshot: (input?: {
           outputPath?: string;

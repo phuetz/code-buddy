@@ -18,6 +18,10 @@ import {
   readRecentCompanionPercepts,
   type CompanionPerceptModality,
 } from '../../companion/percepts.js';
+import {
+  evaluateCompanionSelf,
+  formatCompanionSelfEvaluation,
+} from '../../companion/self-evaluation.js';
 
 function entry(content: string): ChatEntry {
   return {
@@ -63,6 +67,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       entry: entry([
         'Usage: /companion percepts recent [--limit <n>] [--modality <vision|hearing|screen|self|memory|tool|suggestion>]',
         '       /companion percepts stats',
+        '       /companion evaluate [--no-record]',
       ].join('\n')),
     };
   }
@@ -75,6 +80,16 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
         `Self-state percept recorded: ${percept.id}`,
         percept.summary,
       ].join('\n')),
+    };
+  }
+
+  if (action === 'evaluate' || action === 'eval' || action === 'improve') {
+    const evaluation = await evaluateCompanionSelf({
+      recordSuggestions: !args.includes('--no-record'),
+    });
+    return {
+      handled: true,
+      entry: entry(formatCompanionSelfEvaluation(evaluation)),
     };
   }
 
@@ -172,6 +187,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       'Usage: /companion status',
       '       /companion setup [--force] [--no-voice] [--no-set-model]',
       '       /companion self',
+      '       /companion evaluate [--no-record]',
       '       /companion camera status',
       '       /companion camera snapshot [--output <path>] [--device <device>]',
       '       /companion percepts recent [--limit <n>] [--modality <name>]',

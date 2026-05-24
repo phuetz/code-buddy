@@ -439,6 +439,19 @@ export function registerCompanionCommands(program: Command): void {
       console.log(percept.summary);
     });
 
+  companion
+    .command('evaluate')
+    .description('Evaluate Buddy companion readiness and record self-improvement suggestions')
+    .option('--no-record', 'Do not write self-evaluation or suggestion percepts')
+    .action(async (opts: { record?: boolean }) => {
+      const {
+        evaluateCompanionSelf,
+        formatCompanionSelfEvaluation,
+      } = await import('../../companion/self-evaluation.js');
+      const evaluation = await evaluateCompanionSelf({ recordSuggestions: opts.record !== false });
+      console.log(formatCompanionSelfEvaluation(evaluation));
+    });
+
   const camera = companion
     .command('camera')
     .description('Manage the companion camera bridge');

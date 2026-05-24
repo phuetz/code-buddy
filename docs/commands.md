@@ -67,6 +67,7 @@
 | `/tts voice <voice>` | Set voice |
 | `/voice-code` | Voice-to-code pipeline |
 | `/companion status\|setup` | Configure/check Buddy as a ChatGPT-backed voice companion |
+| `/companion evaluate` | Score Buddy's companion readiness and record self-improvement suggestions |
 | `/companion camera status\|snapshot` | Check/capture the local webcam bridge for Buddy vision |
 | `/companion percepts recent\|stats` | Inspect Buddy's local sensory journal |
 
@@ -219,6 +220,7 @@ buddy speak [text] [--voice <name>] [--list-voices] [--speed <n>]
 buddy companion setup [--force] [--no-voice] [--no-set-model]
 buddy companion status
 buddy companion self
+buddy companion evaluate [--no-record]
 buddy companion camera status
 buddy companion camera snapshot [--output <path>] [--device <device>] [--timeout-ms <ms>]
 buddy companion percepts recent [--limit <n>] [--modality <name>]
@@ -236,6 +238,13 @@ model to the ChatGPT companion default when `buddy login` credentials are presen
 `buddy companion status` shows the readiness of the ChatGPT brain route, identity
 files, voice input, text-to-speech, the local camera bridge, and the
 companion percept journal.
+
+`buddy companion evaluate` turns that state into a small self-improvement loop:
+Buddy scores brain/auth, identity, voice, TTS, camera, vision/hearing/screen/self
+percepts, local memory, wake word readiness, and explicit safety boundaries. By
+default it records a `self` evaluation plus the top `suggestion` percepts; pass
+`--no-record` for a dry readout. Cowork exposes the same action in the Buddy
+companion panel.
 
 `buddy companion camera snapshot` captures one webcam frame into `.codebuddy/camera/`
 by default. It uses `ffmpeg` so it works without adding a new Node dependency; pass

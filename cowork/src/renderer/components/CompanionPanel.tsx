@@ -14,6 +14,7 @@ import {
   Bot,
   Brain,
   Camera,
+  ClipboardCheck,
   Eye,
   FolderOpen,
   Mic,
@@ -30,6 +31,7 @@ import type {
   CompanionPercept,
   CompanionPerceptModality,
   CompanionPerceptStats,
+  CompanionSelfEvaluation,
   CompanionStatus,
 } from '../types';
 
@@ -137,9 +139,10 @@ export function CompanionPanel() {
   const [status, setStatus] = useState<CompanionStatus | null>(null);
   const [stats, setStats] = useState<CompanionPerceptStats | null>(null);
   const [percepts, setPercepts] = useState<CompanionPercept[]>([]);
+  const [evaluation, setEvaluation] = useState<CompanionSelfEvaluation | null>(null);
   const [modality, setModality] = useState<CompanionPerceptModality | 'all'>('all');
   const [loading, setLoading] = useState(false);
-  const [busyAction, setBusyAction] = useState<'self' | 'camera' | null>(null);
+  const [busyAction, setBusyAction] = useState<'self' | 'camera' | 'evaluate' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSnapshot, setLastSnapshot] = useState<CameraSnapshotResult | null>(null);
 
@@ -205,6 +208,19 @@ export function CompanionPanel() {
       return;
     }
     setLastSnapshot(res.result ?? null);
+    await refresh();
+  };
+
+  const runEvaluation = async () => {
+    setBusyAction('evaluate');
+    setError(null);
+    const res = await window.electronAPI.companion.evaluate({ recordSuggestions: true });
+    setBusyAction(null);
+    if (!res.ok) {
+      setError(res.error ?? 'Self-evaluation failed');
+      return;
+    }
+    setEvaluation(res.evaluation ?? null);
     await refresh();
   };
 
@@ -314,6 +330,14 @@ export function CompanionPanel() {
               <Camera className="h-4 w-4" />
               {busyAction === 'camera' ? 'Capturing...' : 'Camera snapshot'}
             </button>
+            <button
+              disabled={busyAction !== null}
+              onClick={() => void runEvaluation()}
+              className="inline-flex items-center gap-2 rounded border border-border px-3 py-2 text-xs font-medium text-text-primary hover:bg-surface disabled:opacity-50"
+            >
+              <ClipboardCheck className="h-4 w-4" />
+              {busyAction === 'evaluate' ? 'Evaluating...' : 'Self-evaluate'}
+            </button>
             {lastSnapshot?.path && (
               <button
                 onClick={() => void window.electronAPI.showItemInFolder(lastSnapshot.path!)}
@@ -324,6 +348,63 @@ export function CompanionPanel() {
               </button>
             )}
           </section>
+
+          {evaluation && (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Self-evaluation</h3>
+                <span className="text-[10px] text-text-muted">
+                  {new Date(evaluation.timestamp).toLocaleString()}
+                </span>
+              </div>
+              <div className="rounded border border-border bg-surface/35 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <ClipboardCheck className="h-4 w-4 text-accent" />
+                    <span className="text-sm font-semibold text-text-primary">
+                      {evaluation.score}/100
+                    </span>
+                    <span className="rounded bg-background px-2 py-0.5 text-[10px] uppercase text-text-muted">
+                      {evaluation.level}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-text-muted">
+                    {evaluation.findings.length} finding(s)
+                  </span>
+                </div>
+                {evaluation.nextActions.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {evaluation.nextActions.slice(0, 3).map((action) => (
+                      <p key={action} className="text-xs text-text-secondary">
+                        {action}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {evaluation.findings.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {evaluation.findings.slice(0, 4).map((finding) => (
+                      <div key={finding.id} className="rounded bg-background px-2 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-semibold uppercase ${
+                            finding.severity === 'action'
+                              ? 'text-warning'
+                              : finding.severity === 'warning'
+                                ? 'text-warning'
+                                : 'text-text-muted'
+                          }`}>
+                            {finding.severity}
+                          </span>
+                          <span className="text-[10px] uppercase text-text-muted">{finding.area}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-text-primary">{finding.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           <section className="space-y-2">
             <div className="flex items-center justify-between">

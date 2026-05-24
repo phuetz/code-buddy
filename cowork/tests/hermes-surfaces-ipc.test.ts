@@ -174,6 +174,24 @@ describe('companion IPC', () => {
     expect(recordCompanionSelfState).toHaveBeenCalledWith({ cwd: '/tmp/proj' });
   });
 
+  it('runs companion self-evaluation in the active workspace', async () => {
+    const evaluateCompanionSelf = vi.fn(async () => ({ id: 'companion-eval-1', score: 80 }));
+    coreLoaderMock.loadCoreModule.mockResolvedValue({ evaluateCompanionSelf });
+    registerCompanionIpcHandlers(projectSource('/tmp/proj'));
+
+    const handler = electronMock.handlers.get('companion.evaluate');
+    const res = (await handler?.({}, { recordSuggestions: false })) as {
+      ok: boolean;
+      evaluation?: { id: string };
+    };
+    expect(res.ok).toBe(true);
+    expect(res.evaluation?.id).toBe('companion-eval-1');
+    expect(evaluateCompanionSelf).toHaveBeenCalledWith({
+      cwd: '/tmp/proj',
+      recordSuggestions: false,
+    });
+  });
+
   it('captures camera snapshots in the active workspace', async () => {
     const captureCameraSnapshot = vi.fn(async () => ({ success: true, path: '/tmp/proj/.codebuddy/camera/scene.png' }));
     coreLoaderMock.loadCoreModule.mockResolvedValue({ captureCameraSnapshot });

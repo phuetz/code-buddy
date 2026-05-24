@@ -40,6 +40,28 @@ interface CompanionPerceptStats {
   latestTimestamp?: string;
 }
 
+interface CompanionSelfEvaluationFinding {
+  id: string;
+  area: string;
+  severity: 'info' | 'warning' | 'action';
+  summary: string;
+  recommendation: string;
+  command?: string;
+  tags: string[];
+}
+
+interface CompanionSelfEvaluation {
+  id: string;
+  timestamp: string;
+  cwd: string;
+  score: number;
+  level: 'dormant' | 'awakening' | 'aware' | 'collaborative';
+  findings: CompanionSelfEvaluationFinding[];
+  strengths: string[];
+  nextActions: string[];
+  perceptStats: CompanionPerceptStats;
+}
+
 interface CameraSnapshotResult {
   success: boolean;
   path?: string;
@@ -74,6 +96,13 @@ type CompanionCameraMod = {
   }) => Promise<CameraSnapshotResult>;
 };
 
+type CompanionSelfEvaluationMod = {
+  evaluateCompanionSelf: (options: {
+    cwd?: string;
+    recordSuggestions?: boolean;
+  }) => Promise<CompanionSelfEvaluation>;
+};
+
 const NO_PROJECT = 'NO_ACTIVE_PROJECT';
 
 async function companionWorkDir(
@@ -95,6 +124,10 @@ async function loadPercepts(): Promise<CompanionPerceptsMod | null> {
 
 async function loadCamera(): Promise<CompanionCameraMod | null> {
   return loadCoreModule<CompanionCameraMod>('companion/camera.js');
+}
+
+async function loadSelfEvaluation(): Promise<CompanionSelfEvaluationMod | null> {
+  return loadCoreModule<CompanionSelfEvaluationMod>('companion/self-evaluation.js');
 }
 
 export function registerCompanionIpcHandlers(projectManagerSource: ProjectManagerSource): void {
@@ -168,6 +201,30 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
       return { ok: false as const, error: errorMessage(err) };
     }
   });
+
+  ipcMain.handle(
+    'companion.evaluate',
+    async (_e, input?: { projectId?: string; recordSuggestions?: boolean }) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      try {
+        const mod = await loadSelfEvaluation();
+        if (!mod?.evaluateCompanionSelf) {
+          return { ok: false as const, error: 'core self-evaluation module unavailable' };
+        }
+        return {
+          ok: true as const,
+          evaluation: await mod.evaluateCompanionSelf({
+            cwd,
+            recordSuggestions: input?.recordSuggestions !== false,
+          }),
+        };
+      } catch (err) {
+        logError('[companion.evaluate] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
 
   ipcMain.handle('companion.camera.status', async () => {
     try {

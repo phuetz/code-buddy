@@ -144,6 +144,7 @@ buddy identity awaken           # Install Buddy's companion identity for this pr
 buddy companion setup           # Install companion identity + voice/TTS defaults
 buddy companion status          # Check ChatGPT auth, identity, voice, TTS, and camera readiness
 buddy companion self            # Record Buddy's current self-state as a percept
+buddy companion evaluate        # Score readiness and record self-improvement suggestions
 buddy companion camera snapshot # Capture one webcam frame into .codebuddy/camera/
 buddy companion percepts recent # Read Buddy's local sensory journal
 buddy speak "Bonjour"           # Speak text aloud through the configured TTS provider
@@ -162,7 +163,9 @@ Successful snapshots append a `vision` percept to
 `.codebuddy/companion/percepts.jsonl`, which is the local sensory journal future
 Cowork panels and companion loops can reuse. Cowork also has a Buddy companion
 titlebar panel that shows readiness, recent percepts, self-state recording, and
-explicit camera snapshots for the active project.
+explicit camera snapshots for the active project. Use `buddy companion evaluate`
+or the panel's self-evaluation button to let Buddy score its own readiness and
+write concrete `suggestion` percepts for the next improvements it should pursue.
 The companion identity is still bounded by the normal safety and verification
 rules; it makes Buddy more present and conversational without pretending to be
 literally conscious.

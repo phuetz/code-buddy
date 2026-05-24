@@ -158,6 +158,31 @@ export interface CompanionStatus {
   percepts: CompanionPerceptStats;
 }
 
+export type CompanionEvaluationSeverity = 'info' | 'warning' | 'action';
+export type CompanionEvaluationLevel = 'dormant' | 'awakening' | 'aware' | 'collaborative';
+
+export interface CompanionSelfEvaluationFinding {
+  id: string;
+  area: string;
+  severity: CompanionEvaluationSeverity;
+  summary: string;
+  recommendation: string;
+  command?: string;
+  tags: string[];
+}
+
+export interface CompanionSelfEvaluation {
+  id: string;
+  timestamp: string;
+  cwd: string;
+  score: number;
+  level: CompanionEvaluationLevel;
+  findings: CompanionSelfEvaluationFinding[];
+  strengths: string[];
+  nextActions: string[];
+  perceptStats: CompanionPerceptStats;
+}
+
 export interface CameraSnapshotResult {
   success: boolean;
   path?: string;

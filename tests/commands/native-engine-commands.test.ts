@@ -75,6 +75,8 @@ const mockReadRecentCompanionPercepts = jest.fn();
 const mockFormatCompanionPercepts = jest.fn((percepts: unknown) => `percepts:${JSON.stringify(percepts)}`);
 const mockGetCompanionPerceptStats = jest.fn();
 const mockFormatCompanionPerceptStats = jest.fn((stats: unknown) => `percept-stats:${JSON.stringify(stats)}`);
+const mockEvaluateCompanionSelf = jest.fn();
+const mockFormatCompanionSelfEvaluation = jest.fn((evaluation: unknown) => `evaluation:${JSON.stringify(evaluation)}`);
 
 jest.mock('../../src/companion/companion-mode.js', () => ({
   setupCompanionMode: mockSetupCompanionMode,
@@ -94,6 +96,11 @@ jest.mock('../../src/companion/percepts.js', () => ({
   formatCompanionPercepts: mockFormatCompanionPercepts,
   getCompanionPerceptStats: mockGetCompanionPerceptStats,
   formatCompanionPerceptStats: mockFormatCompanionPerceptStats,
+}));
+
+jest.mock('../../src/companion/self-evaluation.js', () => ({
+  evaluateCompanionSelf: mockEvaluateCompanionSelf,
+  formatCompanionSelfEvaluation: mockFormatCompanionSelfEvaluation,
 }));
 
 const mockGroupSecurity = {
@@ -929,6 +936,11 @@ describe('Native Engine CLI Commands', () => {
         { id: 'percept-1', modality: 'vision', source: 'camera_snapshot' },
       ]);
       mockGetCompanionPerceptStats.mockResolvedValue({ total: 1 });
+      mockEvaluateCompanionSelf.mockResolvedValue({
+        id: 'companion-eval-1',
+        score: 72,
+        level: 'aware',
+      });
     });
 
     describe('companion setup', () => {
@@ -993,6 +1005,26 @@ describe('Native Engine CLI Commands', () => {
 
         expect(mockRecordCompanionSelfState).toHaveBeenCalled();
         expect(getLogOutput()).toContain('Self-state percept recorded: percept-self-1');
+      });
+    });
+
+    describe('companion evaluate', () => {
+      it('prints the formatted self-evaluation and records suggestions by default', async () => {
+        await program.parseAsync(['node', 'test', 'companion', 'evaluate']);
+
+        expect(mockEvaluateCompanionSelf).toHaveBeenCalledWith({ recordSuggestions: true });
+        expect(mockFormatCompanionSelfEvaluation).toHaveBeenCalledWith({
+          id: 'companion-eval-1',
+          score: 72,
+          level: 'aware',
+        });
+        expect(getLogOutput()).toContain('evaluation:');
+      });
+
+      it('can run self-evaluation without writing percepts', async () => {
+        await program.parseAsync(['node', 'test', 'companion', 'evaluate', '--no-record']);
+
+        expect(mockEvaluateCompanionSelf).toHaveBeenCalledWith({ recordSuggestions: false });
       });
     });
 
