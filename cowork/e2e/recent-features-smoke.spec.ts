@@ -7,9 +7,18 @@
  * via `voice.status`, and fails if the response never arrives. That's
  * the regression net for the dual-`mainWindow` bug we hunted with CDP.
  */
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
 const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+async function dismissOnboardingIfPresent(appPage: Page) {
+  const onboarding = appPage.getByTestId('onboarding-wizard');
+  if (await onboarding.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await appPage.getByTestId('onboarding-skip').click();
+    await expect(onboarding).toHaveCount(0);
+  }
+}
 
 test('titlebar help button is rendered with the right test id (Phase 1)', async ({ appPage }) => {
   const helpBtn = appPage.getByTestId('shortcuts-help-button');
@@ -36,9 +45,11 @@ test('voice IPC bridge is exposed to the renderer (Phase 8)', async ({ appPage }
   // signal: if voice.transcribe/voice.status are missing from preload,
   // the mic UI can't possibly work.
   const exposed = await appPage.evaluate(() => {
-    const api = (window as unknown as {
-      electronAPI?: { voice?: { transcribe?: unknown; status?: unknown } };
-    }).electronAPI;
+    const api = (
+      window as unknown as {
+        electronAPI?: { voice?: { transcribe?: unknown; status?: unknown } };
+      }
+    ).electronAPI;
     return {
       hasVoice: typeof api?.voice === 'object',
       hasTranscribe: typeof api?.voice?.transcribe === 'function',
@@ -61,9 +72,11 @@ test('IPC liveness — voice.status round-trips successfully (mainWindow regress
     timeout: 10000,
   });
   const result = await appPage.evaluate(async () => {
-    const api = (window as unknown as {
-      electronAPI?: { voice?: { status?: () => Promise<unknown> } };
-    }).electronAPI;
+    const api = (
+      window as unknown as {
+        electronAPI?: { voice?: { status?: () => Promise<unknown> } };
+      }
+    ).electronAPI;
     if (!api?.voice?.status) return { ok: false, reason: 'voice.status missing' };
     try {
       const r = await api.voice.status();
@@ -100,9 +113,11 @@ test('Phase 3 — runner.status IPC returns the documented shape', async ({ appP
     timeout: 10000,
   });
   const result = await appPage.evaluate(async () => {
-    const api = (window as unknown as {
-      electronAPI?: { runner?: { status?: () => Promise<unknown> } };
-    }).electronAPI;
+    const api = (
+      window as unknown as {
+        electronAPI?: { runner?: { status?: () => Promise<unknown> } };
+      }
+    ).electronAPI;
     if (!api?.runner?.status) return { ok: false, reason: 'runner.status missing' };
     try {
       const r = await api.runner.status();
@@ -123,6 +138,7 @@ test('Phase 3 — runner.status IPC returns the documented shape', async ({ appP
 });
 
 test('Phase 3 — clicking the runner badge opens the details dialog', async ({ appPage }) => {
+  await dismissOnboardingIfPresent(appPage);
   const badge = appPage.getByTestId('runner-badge');
   await expect(badge).toBeVisible({ timeout: 10000 });
   await badge.click();

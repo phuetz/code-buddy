@@ -51,7 +51,9 @@ async function writeReadableDocx(filePath: string, paragraphs: string[]) {
       '<?xml version="1.0" encoding="UTF-8"?>' +
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
         '<w:body>' +
-        paragraphs.map((paragraph) => `<w:p><w:r><w:t>${escapeXml(paragraph)}</w:t></w:r></w:p>`).join('') +
+        paragraphs
+          .map((paragraph) => `<w:p><w:r><w:t>${escapeXml(paragraph)}</w:t></w:r></w:p>`)
+          .join('') +
         '</w:body>' +
         '</w:document>'
     )
@@ -79,20 +81,30 @@ async function mockOpenFileDialog(electronApp: ElectronApplication, selectedPath
 
 async function dismissOptionalModelDialogs(appPage: Page) {
   await appPage.evaluate(() => {
-    const store = (window as unknown as {
-      useAppStore?: {
-        getState: () => {
-          setShowEnrollmentDialog?: (show: boolean) => void;
-          setShowModelInstallDialog?: (show: boolean) => void;
+    const store = (
+      window as unknown as {
+        useAppStore?: {
+          getState: () => {
+            setShowEnrollmentDialog?: (show: boolean) => void;
+            setShowModelInstallDialog?: (show: boolean) => void;
+          };
         };
-      };
-    }).useAppStore?.getState();
+      }
+    ).useAppStore?.getState();
 
     store?.setShowEnrollmentDialog?.(false);
     store?.setShowModelInstallDialog?.(false);
   });
 
   await expect(appPage.getByRole('heading', { name: /Buffalo/i })).toHaveCount(0);
+}
+
+async function dismissOnboardingIfPresent(appPage: Page) {
+  const onboarding = appPage.getByTestId('onboarding-wizard');
+  if (await onboarding.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await appPage.getByTestId('onboarding-skip').click();
+    await expect(onboarding).toBeHidden();
+  }
 }
 
 async function mockAuditEvalReviewHandlers(electronApp: ElectronApplication) {
@@ -197,9 +209,32 @@ async function mockAuditEvalReviewHandlers(electronApp: ElectronApplication) {
   });
 }
 
+test.beforeEach(async ({ appPage }, testInfo) => {
+  if (testInfo.title !== 'shows the welcome view on a fresh profile') {
+    await dismissOnboardingIfPresent(appPage);
+  }
+});
+
 test('shows the welcome view on a fresh profile', async ({ appPage }) => {
   await expect(appPage.getByTestId('welcome-view')).toBeVisible();
   await expect(appPage.getByTestId('welcome-api-settings-cta')).toBeVisible();
+  await expect(appPage.getByTestId('onboarding-wizard')).toBeVisible();
+  await expect(appPage.getByTestId('onboarding-path-quickstart')).toContainText('Quick start');
+
+  await appPage.getByTestId('onboarding-next').click();
+  await expect(appPage.getByTestId('onboarding-brain-options')).toBeVisible();
+  await expect(appPage.getByTestId('onboarding-brain-codebuddy')).toContainText('Code Buddy brain');
+
+  await appPage.getByTestId('onboarding-next').click();
+  await expect(appPage.getByTestId('onboarding-backend-mode')).toContainText('Local backend first');
+
+  await appPage.getByTestId('onboarding-next').click();
+  await expect(appPage.getByTestId('onboarding-companion-permissions')).toContainText(
+    'Camera vision'
+  );
+
+  await appPage.getByTestId('onboarding-next').click();
+  await expect(appPage.getByTestId('onboarding-ready-actions')).toContainText('First chat');
 });
 
 test('fills the Word-workshop prompt from a selected DOCX on the welcome view', async ({
@@ -211,6 +246,7 @@ test('fills the Word-workshop prompt from a selected DOCX on the welcome view', 
 
   writeSelectedDocxPlaceholder(docPath);
   await mockOpenFileDialog(electronApp, docPath);
+  await dismissOnboardingIfPresent(appPage);
   await dismissOptionalModelDialogs(appPage);
 
   await expect(appPage.getByTestId('welcome-view')).toBeVisible();
@@ -236,6 +272,7 @@ test('fills the Word-workshop prompt from a selected PDF on the welcome view', a
 
   writeFileSync(pdfPath, '%PDF-1.4 e2e placeholder for selected PDF attachment');
   await mockOpenFileDialog(electronApp, pdfPath);
+  await dismissOnboardingIfPresent(appPage);
   await dismissOptionalModelDialogs(appPage);
 
   await expect(appPage.getByTestId('welcome-view')).toBeVisible();
@@ -263,36 +300,42 @@ test('fills the Word-workshop prompt from a selected DOCX in an active chat', as
 
   writeSelectedDocxPlaceholder(docPath);
   await mockOpenFileDialog(electronApp, docPath);
+  await dismissOnboardingIfPresent(appPage);
   await dismissOptionalModelDialogs(appPage);
 
-  await appPage.evaluate(({ id, createdAt }) => {
-    const store = (window as unknown as {
-      useAppStore?: {
-        getState: () => {
-          addSession: (session: unknown) => void;
-          setActiveSession: (sessionId: string) => void;
-        };
-      };
-    }).useAppStore?.getState();
+  await appPage.evaluate(
+    ({ id, createdAt }) => {
+      const store = (
+        window as unknown as {
+          useAppStore?: {
+            getState: () => {
+              addSession: (session: unknown) => void;
+              setActiveSession: (sessionId: string) => void;
+            };
+          };
+        }
+      ).useAppStore?.getState();
 
-    if (!store) {
-      throw new Error('useAppStore missing');
-    }
+      if (!store) {
+        throw new Error('useAppStore missing');
+      }
 
-    store.addSession({
-      id,
-      title: 'Atelier Word e2e',
-      status: 'idle',
-      cwd: 'D:\\Atelier',
-      mountedPaths: [],
-      allowedTools: [],
-      memoryEnabled: false,
-      model: 'e2e-model',
-      createdAt,
-      updatedAt: createdAt,
-    });
-    store.setActiveSession(id);
-  }, { id: sessionId, createdAt: now });
+      store.addSession({
+        id,
+        title: 'Atelier Word e2e',
+        status: 'idle',
+        cwd: 'D:\\Atelier',
+        mountedPaths: [],
+        allowedTools: [],
+        memoryEnabled: false,
+        model: 'e2e-model',
+        createdAt,
+        updatedAt: createdAt,
+      });
+      store.setActiveSession(id);
+    },
+    { id: sessionId, createdAt: now }
+  );
 
   await expect(appPage.getByTestId('chat-attach-files')).toBeVisible();
   await appPage.getByTestId('chat-attach-files').click();
@@ -313,55 +356,59 @@ test('opens context artifacts in the file preview pane', async ({ appPage, userD
   const sessionId = `e2e-artifact-preview-session-${now}`;
   const artifactPath = path.join(userDataDir, 'artifact-preview.txt');
   writeFileSync(artifactPath, 'Artifact preview smoke from ContextPanel.');
+  await dismissOnboardingIfPresent(appPage);
   await dismissOptionalModelDialogs(appPage);
   await appPage.setViewportSize({ width: 1440, height: 900 });
 
-  await appPage.evaluate(({ id, createdAt, cwd, filePath }) => {
-    const store = (window as unknown as {
-      useAppStore?: {
-        getState: () => {
-          addSession: (session: unknown) => void;
-          setActiveSession: (sessionId: string) => void;
-          setContextPanelCollapsed: (collapsed: boolean) => void;
-          setTraceSteps: (sessionId: string, steps: unknown[]) => void;
-        };
-      };
-    }).useAppStore?.getState();
+  await appPage.evaluate(
+    ({ id, createdAt, cwd, filePath }) => {
+      const store = (
+        window as unknown as {
+          useAppStore?: {
+            getState: () => {
+              addSession: (session: unknown) => void;
+              setActiveSession: (sessionId: string) => void;
+              setContextPanelCollapsed: (collapsed: boolean) => void;
+              setTraceSteps: (sessionId: string, steps: unknown[]) => void;
+            };
+          };
+        }
+      ).useAppStore?.getState();
 
-    if (!store) {
-      throw new Error('useAppStore missing');
-    }
+      if (!store) {
+        throw new Error('useAppStore missing');
+      }
 
-    store.addSession({
-      id,
-      title: 'Artifact preview e2e',
-      status: 'idle',
-      cwd,
-      mountedPaths: [],
-      allowedTools: [],
-      memoryEnabled: false,
-      model: 'e2e-model',
-      createdAt,
-      updatedAt: createdAt,
-    });
-    store.setActiveSession(id);
-    store.setContextPanelCollapsed(false);
-    store.setTraceSteps(id, [
-      {
-        id: 'write-artifact-preview',
-        type: 'tool_call',
-        status: 'completed',
-        title: 'Write',
-        toolName: 'Write',
-        toolOutput: `File created successfully at: ${filePath}`,
-        timestamp: createdAt,
-      },
-    ]);
-  }, { id: sessionId, createdAt: now, cwd: userDataDir, filePath: artifactPath });
-
-  await expect(appPage.getByTestId('context-artifact-row-0')).toContainText(
-    'artifact-preview.txt'
+      store.addSession({
+        id,
+        title: 'Artifact preview e2e',
+        status: 'idle',
+        cwd,
+        mountedPaths: [],
+        allowedTools: [],
+        memoryEnabled: false,
+        model: 'e2e-model',
+        createdAt,
+        updatedAt: createdAt,
+      });
+      store.setActiveSession(id);
+      store.setContextPanelCollapsed(false);
+      store.setTraceSteps(id, [
+        {
+          id: 'write-artifact-preview',
+          type: 'tool_call',
+          status: 'completed',
+          title: 'Write',
+          toolName: 'Write',
+          toolOutput: `File created successfully at: ${filePath}`,
+          timestamp: createdAt,
+        },
+      ]);
+    },
+    { id: sessionId, createdAt: now, cwd: userDataDir, filePath: artifactPath }
   );
+
+  await expect(appPage.getByTestId('context-artifact-row-0')).toContainText('artifact-preview.txt');
   await appPage.getByTestId('context-artifact-row-0').click();
 
   await expect(appPage.getByTestId('file-preview-pane')).toBeVisible();
@@ -386,119 +433,123 @@ test('renders the complete Word-workshop progress rail from session evidence', a
   await dismissOptionalModelDialogs(appPage);
   await appPage.setViewportSize({ width: 1440, height: 900 });
 
-  await appPage.evaluate(({ id, createdAt, cwd, source, image, docx }) => {
-    const store = (window as unknown as {
-      useAppStore?: {
-        getState: () => {
-          addSession: (session: unknown) => void;
-          setActiveSession: (sessionId: string) => void;
-          setContextPanelCollapsed: (collapsed: boolean) => void;
-          setMessages: (sessionId: string, messages: unknown[]) => void;
-          setTraceSteps: (sessionId: string, steps: unknown[]) => void;
-        };
-      };
-    }).useAppStore?.getState();
+  await appPage.evaluate(
+    ({ id, createdAt, cwd, source, image, docx }) => {
+      const store = (
+        window as unknown as {
+          useAppStore?: {
+            getState: () => {
+              addSession: (session: unknown) => void;
+              setActiveSession: (sessionId: string) => void;
+              setContextPanelCollapsed: (collapsed: boolean) => void;
+              setMessages: (sessionId: string, messages: unknown[]) => void;
+              setTraceSteps: (sessionId: string, steps: unknown[]) => void;
+            };
+          };
+        }
+      ).useAppStore?.getState();
 
-    if (!store) {
-      throw new Error('useAppStore missing');
+      if (!store) {
+        throw new Error('useAppStore missing');
+      }
+
+      store.addSession({
+        id,
+        title: 'Atelier Word progress e2e',
+        status: 'idle',
+        cwd,
+        mountedPaths: [],
+        allowedTools: [],
+        memoryEnabled: false,
+        model: 'e2e-model',
+        createdAt,
+        updatedAt: createdAt,
+      });
+      store.setActiveSession(id);
+      store.setContextPanelCollapsed(false);
+      store.setMessages(id, [
+        {
+          id: 'user-docx',
+          sessionId: id,
+          role: 'user',
+          timestamp: createdAt,
+          content: [
+            {
+              type: 'file_attachment',
+              filename: 'Questions - Impacts.docx',
+              relativePath: source,
+              size: 4096,
+              mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            },
+          ],
+        },
+        {
+          id: 'assistant-progress',
+          sessionId: id,
+          role: 'assistant',
+          timestamp: createdAt + 1,
+          content: [
+            {
+              type: 'text',
+              text:
+                'Contexte fonctionnel capture\n' +
+                'Questions extraites\n' +
+                'OCR termine\n' +
+                'Reponses preparees',
+            },
+          ],
+        },
+      ]);
+      store.setTraceSteps(id, [
+        {
+          id: 'read',
+          type: 'tool_call',
+          status: 'completed',
+          title: 'Document read',
+          toolName: 'document',
+          toolInput: { operation: 'read' },
+          toolOutput: `Document read: ${source}`,
+          timestamp: createdAt,
+        },
+        {
+          id: 'images',
+          type: 'tool_call',
+          status: 'completed',
+          title: 'Extract images',
+          toolName: 'document',
+          toolInput: { operation: 'extract_images' },
+          toolOutput: `Extracted 1 embedded image(s)\n- ${image}`,
+          timestamp: createdAt + 1,
+        },
+        {
+          id: 'ocr',
+          type: 'tool_call',
+          status: 'completed',
+          title: 'OCR screenshots',
+          toolName: 'ocr_extract',
+          toolOutput: 'OCR termine pour image1.png',
+          timestamp: createdAt + 2,
+        },
+        {
+          id: 'docx',
+          type: 'tool_call',
+          status: 'completed',
+          title: 'Generate DOCX',
+          toolName: 'generate_document',
+          toolOutput: `Created DOCX: ${docx}`,
+          timestamp: createdAt + 3,
+        },
+      ]);
+    },
+    {
+      id: sessionId,
+      createdAt: now,
+      cwd: userDataDir,
+      source: sourcePath,
+      image: imagePath,
+      docx: docxPath,
     }
-
-    store.addSession({
-      id,
-      title: 'Atelier Word progress e2e',
-      status: 'idle',
-      cwd,
-      mountedPaths: [],
-      allowedTools: [],
-      memoryEnabled: false,
-      model: 'e2e-model',
-      createdAt,
-      updatedAt: createdAt,
-    });
-    store.setActiveSession(id);
-    store.setContextPanelCollapsed(false);
-    store.setMessages(id, [
-      {
-        id: 'user-docx',
-        sessionId: id,
-        role: 'user',
-        timestamp: createdAt,
-        content: [
-          {
-            type: 'file_attachment',
-            filename: 'Questions - Impacts.docx',
-            relativePath: source,
-            size: 4096,
-            mimeType:
-              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          },
-        ],
-      },
-      {
-        id: 'assistant-progress',
-        sessionId: id,
-        role: 'assistant',
-        timestamp: createdAt + 1,
-        content: [
-          {
-            type: 'text',
-            text:
-              'Contexte fonctionnel capture\n' +
-              'Questions extraites\n' +
-              'OCR termine\n' +
-              'Reponses preparees',
-          },
-        ],
-      },
-    ]);
-    store.setTraceSteps(id, [
-      {
-        id: 'read',
-        type: 'tool_call',
-        status: 'completed',
-        title: 'Document read',
-        toolName: 'document',
-        toolInput: { operation: 'read' },
-        toolOutput: `Document read: ${source}`,
-        timestamp: createdAt,
-      },
-      {
-        id: 'images',
-        type: 'tool_call',
-        status: 'completed',
-        title: 'Extract images',
-        toolName: 'document',
-        toolInput: { operation: 'extract_images' },
-        toolOutput: `Extracted 1 embedded image(s)\n- ${image}`,
-        timestamp: createdAt + 1,
-      },
-      {
-        id: 'ocr',
-        type: 'tool_call',
-        status: 'completed',
-        title: 'OCR screenshots',
-        toolName: 'ocr_extract',
-        toolOutput: 'OCR termine pour image1.png',
-        timestamp: createdAt + 2,
-      },
-      {
-        id: 'docx',
-        type: 'tool_call',
-        status: 'completed',
-        title: 'Generate DOCX',
-        toolName: 'generate_document',
-        toolOutput: `Created DOCX: ${docx}`,
-        timestamp: createdAt + 3,
-      },
-    ]);
-  }, {
-    id: sessionId,
-    createdAt: now,
-    cwd: userDataDir,
-    source: sourcePath,
-    image: imagePath,
-    docx: docxPath,
-  });
+  );
 
   await expect(appPage.getByTestId('context-document-workshop')).toBeVisible();
   await expect(appPage.getByTestId('context-document-workshop-progress')).toHaveText('9/9');
@@ -508,6 +559,7 @@ test('renders the complete Word-workshop progress rail from session evidence', a
   await expect(appPage.getByTestId('context-artifact-row-0')).toContainText(
     'Questions - Impacts-livrable.docx'
   );
+  await dismissOnboardingIfPresent(appPage);
   await appPage.getByTestId('context-artifact-row-0').click();
   await expect(appPage.getByTestId('file-preview-pane')).toBeVisible();
   await expect(appPage.getByText('Livrable Atelier Word valide.')).toBeVisible();
@@ -518,6 +570,7 @@ test('opens Settings and renders the A2A registry tab', async ({ appPage }) => {
   await appPage.getByTestId('sidebar-settings-button').click();
 
   await expect(appPage.getByTestId('settings-panel')).toBeVisible({ timeout: 20000 });
+  await dismissOnboardingIfPresent(appPage);
   await appPage.getByTestId('settings-tab-a2a').click();
   await expect(appPage.getByTestId('settings-a2a-agents')).toBeVisible();
   await expect(appPage.getByTestId('a2a-add-url-input')).toBeVisible();
@@ -557,6 +610,7 @@ test('reviews Audit Log golden and policy eval summaries in-place', async ({
 test('switches the renderer language to French from Settings', async ({ appPage }) => {
   await appPage.getByTestId('sidebar-settings-button').click();
   await expect(appPage.getByTestId('settings-panel')).toBeVisible({ timeout: 20000 });
+  await dismissOnboardingIfPresent(appPage);
   await appPage.getByTestId('settings-tab-general').click();
   await appPage.getByRole('button', { name: 'Français' }).click();
 
@@ -619,6 +673,7 @@ test('denies a permission request and opens permission rules prefilled for revie
   });
 
   await expect(appPage.getByTestId('permission-dialog')).toBeVisible();
+  await dismissOnboardingIfPresent(appPage);
   await appPage.getByTestId('permission-deny-review-button').click();
 
   await expect(appPage.getByTestId('settings-panel')).toBeVisible();
@@ -1000,7 +1055,9 @@ test('saves a bash deny rule and the next matching command is pre-blocked', asyn
   });
 
   await expect(appPage.getByTestId('permission-dialog')).toBeVisible();
-  await expect(appPage.getByTestId('permission-scoped-rule-draft-input')).toHaveValue('Bash(npm *)');
+  await expect(appPage.getByTestId('permission-scoped-rule-draft-input')).toHaveValue(
+    'Bash(npm *)'
+  );
   await appPage.getByTestId('permission-always-deny-target-button').click();
   await expect(appPage.getByTestId('permission-dialog')).toBeHidden();
 
@@ -1062,7 +1119,9 @@ test('saves a bash allow rule and the next matching command is pre-approved', as
   });
 
   await expect(appPage.getByTestId('permission-dialog')).toBeVisible();
-  await expect(appPage.getByTestId('permission-scoped-rule-draft-input')).toHaveValue('Bash(git *)');
+  await expect(appPage.getByTestId('permission-scoped-rule-draft-input')).toHaveValue(
+    'Bash(git *)'
+  );
   await appPage.getByTestId('permission-always-allow-target-button').click();
   await expect(appPage.getByTestId('permission-dialog')).toBeHidden();
 
@@ -1150,9 +1209,7 @@ test('reviews a more specific bash deny rule from a covered command', async ({
   await expect(appPage.getByTestId('settings-permission-rules')).toBeVisible();
   await expect(appPage.getByTestId('settings-rules-test-tool-input')).toHaveValue('Bash');
   await expect(appPage.getByTestId('settings-rules-test-arg-input')).toHaveValue('npm run build');
-  await expect(appPage.getByTestId('settings-rules-deny-input')).toHaveValue(
-    'Bash(npm run build)'
-  );
+  await expect(appPage.getByTestId('settings-rules-deny-input')).toHaveValue('Bash(npm run build)');
 });
 
 test('reviews a more specific bash allow rule from a covered command', async ({

@@ -2,11 +2,11 @@
  * OnboardingWizard — P1.6
  *
  * 5-step first-run wizard guiding the user through:
- *   1. Language + theme
+ *   1. Language + theme + first-run path
  *   2. AI provider + API key (light setup; full config still lives in Settings)
- *   3. Default workspace folder
- *   4. Optional capabilities tour (skills, plugins, fleet)
- *   5. First prompt — closes the wizard and pre-fills the chat composer
+ *   3. Default workspace folder + backend mode
+ *   4. Companion permissions tour (voice, camera, notifications, fleet)
+ *   5. First chat handoff
  *
  * The wizard marks the user as onboarded by writing
  * `onboardingCompleted: true` into the app config. App.tsx checks this flag
@@ -23,6 +23,13 @@ import {
   FolderOpen,
   Compass,
   Rocket,
+  Server,
+  ShieldCheck,
+  Mic,
+  Camera,
+  Bell,
+  MessageSquare,
+  BrainCircuit,
   ChevronLeft,
   ChevronRight,
   X,
@@ -154,7 +161,10 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
                     {t('onboarding.languageTitle', 'Choose your language')}
                   </h3>
                   <p className="text-xs text-text-muted">
-                    {t('onboarding.languageDesc', 'You can change this anytime in Settings → General.')}
+                    {t(
+                      'onboarding.languageDesc',
+                      'You can change this anytime in Settings → General.'
+                    )}
                   </p>
                 </div>
               </div>
@@ -210,6 +220,40 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
                   </button>
                 </div>
               </div>
+              <div
+                className="grid grid-cols-3 gap-2 border-t border-border-muted pt-4"
+                data-testid="onboarding-paths"
+              >
+                {[
+                  {
+                    testId: 'onboarding-path-quickstart',
+                    title: t('onboarding.pathQuickTitle', 'Quick start'),
+                    desc: t('onboarding.pathQuickDesc', 'Connect the brain and start chatting.'),
+                  },
+                  {
+                    testId: 'onboarding-path-control',
+                    title: t('onboarding.pathControlTitle', 'Full control'),
+                    desc: t(
+                      'onboarding.pathControlDesc',
+                      'Tune workspace, backend, and tool policy.'
+                    ),
+                  },
+                  {
+                    testId: 'onboarding-path-later',
+                    title: t('onboarding.pathLaterTitle', 'Configure later'),
+                    desc: t('onboarding.pathLaterDesc', 'Skip safely and keep setup reversible.'),
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.testId}
+                    className="rounded-lg border border-border-subtle bg-surface/40 p-3"
+                    data-testid={item.testId}
+                  >
+                    <p className="text-xs font-semibold text-text-primary">{item.title}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-text-muted">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -224,15 +268,51 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
                   <p className="text-xs text-text-muted">
                     {t(
                       'onboarding.providerDesc',
-                      'Cowork supports Anthropic, OpenAI, Gemini, Ollama, LM Studio, and any OpenAI-compatible endpoint.',
+                      'Cowork supports Anthropic, OpenAI, Gemini, Ollama, LM Studio, and any OpenAI-compatible endpoint.'
                     )}
                   </p>
                 </div>
               </div>
-              <div className="bg-surface/50 rounded-lg p-4 space-y-2 text-xs">
-                <p>{t('onboarding.providerBullet1', '• You will need an API key for cloud providers.')}</p>
-                <p>{t('onboarding.providerBullet2', '• For Ollama or LM Studio, just install them locally — Cowork auto-detects.')}</p>
-                <p>{t('onboarding.providerBullet3', '• Costs and budgets are tracked in the Cost panel.')}</p>
+              <div className="grid grid-cols-3 gap-2" data-testid="onboarding-brain-options">
+                {[
+                  {
+                    icon: BrainCircuit,
+                    testId: 'onboarding-brain-codebuddy',
+                    title: t('onboarding.brainCodeBuddyTitle', 'Code Buddy brain'),
+                    desc: t(
+                      'onboarding.brainCodeBuddyDesc',
+                      'Use your signed-in ChatGPT/Codex backend when available.'
+                    ),
+                  },
+                  {
+                    icon: Server,
+                    testId: 'onboarding-brain-local',
+                    title: t('onboarding.brainLocalTitle', 'Local runtimes'),
+                    desc: t(
+                      'onboarding.brainLocalDesc',
+                      'Ollama and LM Studio can be discovered on this machine.'
+                    ),
+                  },
+                  {
+                    icon: Key,
+                    testId: 'onboarding-brain-custom',
+                    title: t('onboarding.brainCustomTitle', 'Custom endpoint'),
+                    desc: t(
+                      'onboarding.brainCustomDesc',
+                      'OpenAI-compatible servers can coexist as named configs.'
+                    ),
+                  },
+                ].map(({ icon: Icon, testId, title, desc }) => (
+                  <div
+                    key={testId}
+                    className="rounded-lg border border-border-subtle bg-surface/40 p-3"
+                    data-testid={testId}
+                  >
+                    <Icon className="h-4 w-4 text-accent" />
+                    <p className="mt-2 text-xs font-semibold text-text-primary">{title}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-text-muted">{desc}</p>
+                  </div>
+                ))}
               </div>
               <button
                 type="button"
@@ -258,7 +338,7 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
                   <p className="text-xs text-text-muted">
                     {t(
                       'onboarding.workspaceDesc',
-                      'Cowork agents read and write files inside the workspace folder. You can pick a different one per session later.',
+                      'Cowork agents read and write files inside the workspace folder. You can pick a different one per session later.'
                     )}
                   </p>
                 </div>
@@ -275,9 +355,42 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
               <p className="text-[11px] text-text-muted italic">
                 {t(
                   'onboarding.workspaceHint',
-                  'Tip: pick a sandbox folder first — you can always swap to your real project later.',
+                  'Tip: pick a sandbox folder first — you can always swap to your real project later.'
                 )}
               </p>
+              <div
+                className="grid grid-cols-2 gap-2 rounded-lg border border-border-subtle bg-surface/40 p-3"
+                data-testid="onboarding-backend-mode"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Server className="h-4 w-4 text-accent" />
+                    <p className="text-xs font-semibold text-text-primary">
+                      {t('onboarding.localBackendTitle', 'Local backend first')}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-4 text-text-muted">
+                    {t(
+                      'onboarding.localBackendDesc',
+                      'Use loopback while testing tools, memory, and companion features.'
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-accent" />
+                    <p className="text-xs font-semibold text-text-primary">
+                      {t('onboarding.remoteBackendTitle', 'Remote later')}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-4 text-text-muted">
+                    {t(
+                      'onboarding.remoteBackendDesc',
+                      'Move to tailnet or SSH-hosted gateways after the local loop is healthy.'
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -287,35 +400,69 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
                 <Compass className="w-5 h-5 text-accent shrink-0" />
                 <div>
                   <h3 className="text-sm font-semibold">
-                    {t('onboarding.capabilitiesTitle', 'Power user toolkit')}
+                    {t('onboarding.capabilitiesTitle', 'Companion permissions')}
                   </h3>
                   <p className="text-xs text-text-muted">
-                    {t('onboarding.capabilitiesDesc', 'A few things worth knowing.')}
+                    {t(
+                      'onboarding.capabilitiesDesc',
+                      'Grant abilities one by one, then let Buddy explain what each one unlocks.'
+                    )}
                   </p>
                 </div>
               </div>
-              <ul className="text-xs space-y-2 text-text-secondary">
-                <li>
-                  <strong className="text-text-primary">{t('onboarding.cap1Title', 'Skills.')}</strong>{' '}
-                  {t('onboarding.cap1Desc', 'Reusable expert procedures (PDF, Excel, SQL, Security…). Settings → Skills.')}
-                </li>
-                <li>
-                  <strong className="text-text-primary">{t('onboarding.cap2Title', 'Plugins & MCP.')}</strong>{' '}
-                  {t('onboarding.cap2Desc', 'Extend the agent with custom tools. Settings → MCP marketplace.')}
-                </li>
-                <li>
-                  <strong className="text-text-primary">{t('onboarding.cap3Title', 'Fleet.')}</strong>{' '}
-                  {t('onboarding.cap3Desc', 'Distribute work across multiple peers on your network.')}
-                </li>
-                <li>
-                  <strong className="text-text-primary">{t('onboarding.cap4Title', 'Slash commands.')}</strong>{' '}
-                  {t('onboarding.cap4Desc', 'Type / in the composer to discover built-in commands.')}
-                </li>
-                <li>
-                  <strong className="text-text-primary">{t('onboarding.cap5Title', 'Cmd/Ctrl+K.')}</strong>{' '}
-                  {t('onboarding.cap5Desc', 'Opens the command palette from anywhere in the app.')}
-                </li>
-              </ul>
+              <div
+                className="grid grid-cols-2 gap-2"
+                data-testid="onboarding-companion-permissions"
+              >
+                {[
+                  {
+                    icon: Mic,
+                    testId: 'onboarding-permission-voice',
+                    title: t('onboarding.permissionVoiceTitle', 'Voice dialogue'),
+                    desc: t(
+                      'onboarding.permissionVoiceDesc',
+                      'Talk to Buddy and hear replies when TTS is enabled.'
+                    ),
+                  },
+                  {
+                    icon: Camera,
+                    testId: 'onboarding-permission-camera',
+                    title: t('onboarding.permissionCameraTitle', 'Camera vision'),
+                    desc: t(
+                      'onboarding.permissionCameraDesc',
+                      'Use snapshots, face cues, and hand landmarks when you allow it.'
+                    ),
+                  },
+                  {
+                    icon: Bell,
+                    testId: 'onboarding-permission-notifications',
+                    title: t('onboarding.permissionNotificationsTitle', 'Notifications'),
+                    desc: t(
+                      'onboarding.permissionNotificationsDesc',
+                      'Let the companion surface check-ins and finished work.'
+                    ),
+                  },
+                  {
+                    icon: MessageSquare,
+                    testId: 'onboarding-permission-channels',
+                    title: t('onboarding.permissionChannelsTitle', 'Channels and Fleet'),
+                    desc: t(
+                      'onboarding.permissionChannelsDesc',
+                      'Route work through peers, tools, and external channels later.'
+                    ),
+                  },
+                ].map(({ icon: Icon, testId, title, desc }) => (
+                  <div
+                    key={testId}
+                    className="rounded-lg border border-border-subtle bg-surface/40 p-3"
+                    data-testid={testId}
+                  >
+                    <Icon className="h-4 w-4 text-accent" />
+                    <p className="mt-2 text-xs font-semibold text-text-primary">{title}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-text-muted">{desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -323,14 +470,47 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
             <div className="space-y-4 text-center">
               <Rocket className="w-12 h-12 text-accent mx-auto" />
               <h3 className="text-base font-semibold">
-                {t('onboarding.readyTitle', 'Ready to ship.')}
+                {t('onboarding.readyTitle', 'Ready for the first companion chat.')}
               </h3>
               <p className="text-xs text-text-muted max-w-sm mx-auto">
                 {t(
                   'onboarding.readyDesc',
-                  'Start a session and ask Cowork to help with anything — debugging, refactoring, exploring a codebase, drafting a PR.',
+                  'Cowork keeps setup separate from your real sessions so Buddy can introduce itself, check readiness, and propose the next useful action.'
                 )}
               </p>
+              <div
+                className="grid grid-cols-3 gap-2 text-left"
+                data-testid="onboarding-ready-actions"
+              >
+                {[
+                  {
+                    title: t('onboarding.readyFirstChatTitle', 'First chat'),
+                    desc: t('onboarding.readyFirstChatDesc', 'Start with a concrete goal.'),
+                  },
+                  {
+                    title: t('onboarding.readyCompanionTitle', 'Companion'),
+                    desc: t(
+                      'onboarding.readyCompanionDesc',
+                      'Open Buddy for state, vision, and missions.'
+                    ),
+                  },
+                  {
+                    title: t('onboarding.readyHealthTitle', 'Health check'),
+                    desc: t(
+                      'onboarding.readyHealthDesc',
+                      'Verify model, backend, and permissions.'
+                    ),
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    className="rounded-lg border border-border-subtle bg-surface/40 p-3"
+                  >
+                    <p className="text-xs font-semibold text-text-primary">{item.title}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-text-muted">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -348,7 +528,7 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
           </button>
           <button
             type="button"
-            onClick={onClose}
+            onClick={markComplete}
             className="text-[11px] text-text-muted hover:text-text-primary"
             data-testid="onboarding-skip"
           >
