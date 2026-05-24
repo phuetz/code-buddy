@@ -314,7 +314,7 @@ export function SettingsCodeBuddy() {
     : availableModels;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="settings-codebuddy">
       {/* Header */}
       <div>
         <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
@@ -363,6 +363,7 @@ export function SettingsCodeBuddy() {
                   <button
                     key={preset.id}
                     type="button"
+                    data-testid={`codebuddy-endpoint-preset-${preset.id}`}
                     onClick={() => {
                       setConfig(c => ({ ...c, endpoint: preset.endpoint }));
                       setHealth({ status: 'unknown' });
@@ -388,6 +389,7 @@ export function SettingsCodeBuddy() {
           </div>
           <input
             type="url"
+            data-testid="codebuddy-endpoint-input"
             value={config.endpoint}
             onChange={e => {
               setConfig(c => ({ ...c, endpoint: e.target.value }));
@@ -423,6 +425,7 @@ export function SettingsCodeBuddy() {
             </label>
             <button
               type="button"
+              data-testid="codebuddy-models-refresh"
               onClick={() => void refreshModels()}
               disabled={isLoadingModels}
               className="inline-flex items-center gap-1.5 rounded-md border border-border-muted px-2.5 py-1 text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-50"
@@ -435,6 +438,7 @@ export function SettingsCodeBuddy() {
           </div>
           {modelChoices.length > 0 ? (
             <select
+              data-testid="codebuddy-model-select"
               value={config.model}
               onChange={e => setConfig(c => ({ ...c, model: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
@@ -447,6 +451,7 @@ export function SettingsCodeBuddy() {
           ) : (
             <input
               type="text"
+              data-testid="codebuddy-model-input"
               value={config.model}
               onChange={e => setConfig(c => ({ ...c, model: e.target.value }))}
               placeholder="Uses server default (e.g. gemini-3.1-flash-lite-preview)"
@@ -506,6 +511,7 @@ export function SettingsCodeBuddy() {
       <div className="flex gap-3">
         <button
           onClick={testConnection}
+          data-testid="codebuddy-test-connection"
           disabled={isTesting}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-secondary border border-border-muted text-text-primary text-sm hover:bg-surface-hover transition-colors disabled:opacity-50"
         >
@@ -514,6 +520,7 @@ export function SettingsCodeBuddy() {
         </button>
         <button
           onClick={saveConfig}
+          data-testid="codebuddy-save"
           disabled={isSaving}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm hover:bg-accent/90 transition-colors disabled:opacity-50"
         >

@@ -164,4 +164,52 @@ describe('SettingsCodeBuddy auto-start connection test', () => {
       }),
     }));
   });
+
+  it('does not auto-start the local backend for remote endpoints', async () => {
+    const serverStart = vi.fn().mockResolvedValue({
+      running: true,
+      port: 3000,
+      host: '127.0.0.1',
+      startedAt: Date.now(),
+      websocket: true,
+      error: null,
+    });
+    (window as unknown as {
+      electronAPI?: {
+        config: { get: () => Promise<Record<string, unknown>> };
+        server: { start: typeof serverStart };
+      };
+    }).electronAPI = {
+      config: {
+        get: vi.fn().mockResolvedValue({
+          codebuddy: {
+            enabled: true,
+            endpoint: 'http://100.73.222.64:3000',
+          },
+        }),
+      },
+      server: {
+        start: serverStart,
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')));
+
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    root = createRoot(target);
+
+    await act(async () => {
+      root?.render(React.createElement(SettingsCodeBuddy));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    await act(async () => {
+      Simulate.click(target.querySelector('[data-testid="codebuddy-test-connection"]') as HTMLButtonElement);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(serverStart).not.toHaveBeenCalled();
+    expect(target.textContent).toContain('Connection Failed');
+    expect(target.textContent).toContain('Failed to fetch');
+  });
 });
