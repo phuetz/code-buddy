@@ -328,6 +328,24 @@ export interface CameraSnapshotResult {
   perceptPath?: string;
 }
 
+export interface CompanionSetupResult {
+  cwd: string;
+  wroteSoul: boolean;
+  wroteBoot: boolean;
+  skippedSoul: boolean;
+  skippedBoot: boolean;
+  voiceConfigured: boolean;
+  modelConfigured: boolean;
+  model?: string;
+  status: CompanionStatus;
+}
+
+export interface CompanionSetupResponse {
+  setup: CompanionSetupResult;
+  selfPercept?: CompanionPercept;
+  selfPerceptError?: string;
+}
+
 export type VoiceConversationPhase =
   | 'idle'
   | 'listening'

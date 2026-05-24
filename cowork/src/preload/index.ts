@@ -38,6 +38,7 @@ import type {
   CompanionSafetyEventKind,
   CompanionSafetyEventRisk,
   CompanionSafetyLedgerStats,
+  CompanionSetupResponse,
   CompanionCard,
   CompanionCardKind,
   CompanionCardStatus,
@@ -796,6 +797,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   companion: {
+    setup: (input?: {
+      projectId?: string;
+      forceIdentity?: boolean;
+      configureVoice?: boolean;
+      configureModel?: boolean;
+      language?: string;
+      sttProvider?: string;
+      ttsProvider?: string;
+      ttsVoice?: string;
+      model?: string;
+      recordSelf?: boolean;
+    }): Promise<{ ok: boolean; result?: CompanionSetupResponse; error?: string }> =>
+      ipcRenderer.invoke('companion.setup', input),
     status: (projectId?: string): Promise<{ ok: boolean; status?: CompanionStatus; error?: string }> =>
       ipcRenderer.invoke('companion.status', projectId),
     recentPercepts: (input?: {
@@ -3026,6 +3040,18 @@ declare global {
         ) => Promise<{ ok: boolean; snapshot?: VoiceConversationSnapshot; error?: string }>;
       };
       companion: {
+        setup: (input?: {
+          projectId?: string;
+          forceIdentity?: boolean;
+          configureVoice?: boolean;
+          configureModel?: boolean;
+          language?: string;
+          sttProvider?: string;
+          ttsProvider?: string;
+          ttsVoice?: string;
+          model?: string;
+          recordSelf?: boolean;
+        }) => Promise<{ ok: boolean; result?: CompanionSetupResponse; error?: string }>;
         status: (projectId?: string) => Promise<{ ok: boolean; status?: CompanionStatus; error?: string }>;
         recentPercepts: (input?: {
           limit?: number;

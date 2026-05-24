@@ -132,6 +132,43 @@ describe('user-model IPC', () => {
 });
 
 describe('companion IPC', () => {
+  it('runs companion setup in the active project and records the first self-state', async () => {
+    const setupCompanionMode = vi.fn(async () => ({
+      cwd: '/tmp/proj',
+      wroteSoul: true,
+      wroteBoot: true,
+      skippedSoul: false,
+      skippedBoot: false,
+      voiceConfigured: true,
+      modelConfigured: true,
+      model: 'gpt-5.5',
+      status: { cwd: '/tmp/proj', model: 'gpt-5.5' },
+    }));
+    const recordCompanionSelfState = vi.fn(async () => ({ id: 'self-1', modality: 'self' }));
+    coreLoaderMock.loadCoreModule.mockResolvedValue({ setupCompanionMode, recordCompanionSelfState });
+    registerCompanionIpcHandlers(projectSource('/tmp/proj'));
+
+    const handler = electronMock.handlers.get('companion.setup');
+    const res = (await handler?.({}, { configureVoice: true, configureModel: true })) as {
+      ok: boolean;
+      result?: { selfPercept?: { id: string } };
+    };
+    expect(res.ok).toBe(true);
+    expect(res.result?.selfPercept?.id).toBe('self-1');
+    expect(setupCompanionMode).toHaveBeenCalledWith({
+      cwd: '/tmp/proj',
+      forceIdentity: undefined,
+      configureVoice: true,
+      configureModel: true,
+      language: undefined,
+      sttProvider: undefined,
+      ttsProvider: undefined,
+      ttsVoice: undefined,
+      model: undefined,
+    });
+    expect(recordCompanionSelfState).toHaveBeenCalledWith({ cwd: '/tmp/proj' });
+  });
+
   it('loads companion status from the active project workspace', async () => {
     const getCompanionStatus = vi.fn(async () => ({ cwd: '/tmp/proj', model: 'gpt-5.5' }));
     coreLoaderMock.loadCoreModule.mockResolvedValue({ getCompanionStatus });

@@ -47,6 +47,7 @@ import type {
   CompanionSafetyEvent,
   CompanionSafetyLedgerStats,
   CompanionSelfEvaluation,
+  CompanionSetupResponse,
   CompanionSkillCandidate,
   CompanionSkillCuratorResult,
   CompanionStatus,
@@ -426,10 +427,11 @@ export function CompanionPanel() {
   const [gateway, setGateway] = useState<CompanionGatewayProfile | null>(null);
   const [skillCandidates, setSkillCandidates] = useState<CompanionSkillCandidate[]>([]);
   const [skillCuratorResult, setSkillCuratorResult] = useState<CompanionSkillCuratorResult | null>(null);
+  const [setupResult, setSetupResult] = useState<CompanionSetupResponse | null>(null);
   const [voiceConversation, setVoiceConversation] = useState<VoiceConversationSnapshot | null>(null);
   const [modality, setModality] = useState<CompanionPerceptModality | 'all'>('all');
   const [loading, setLoading] = useState(false);
-  const [busyAction, setBusyAction] = useState<'self' | 'camera' | 'evaluate' | 'radar' | 'impulses' | 'missions' | 'runNext' | 'mission' | 'card' | 'gateway' | 'skills' | 'skill' | null>(null);
+  const [busyAction, setBusyAction] = useState<'setup' | 'self' | 'camera' | 'evaluate' | 'radar' | 'impulses' | 'missions' | 'runNext' | 'mission' | 'card' | 'gateway' | 'skills' | 'skill' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSnapshot, setLastSnapshot] = useState<CameraSnapshotResult | null>(null);
 
@@ -526,6 +528,26 @@ export function CompanionPanel() {
     if (!res.ok) {
       setError(res.error ?? 'Self-state recording failed');
       return;
+    }
+    await refresh();
+  };
+
+  const activateCompanion = async () => {
+    setBusyAction('setup');
+    setError(null);
+    const res = await window.electronAPI.companion.setup({
+      configureVoice: true,
+      configureModel: true,
+      recordSelf: true,
+    });
+    setBusyAction(null);
+    if (!res.ok) {
+      setError(res.error ?? 'Companion activation failed');
+      return;
+    }
+    setSetupResult(res.result ?? null);
+    if (res.result?.setup.status) {
+      setStatus(res.result.setup.status);
     }
     await refresh();
   };
@@ -792,8 +814,16 @@ export function CompanionPanel() {
           <section className="flex flex-wrap gap-2">
             <button
               disabled={busyAction !== null}
-              onClick={() => void recordSelf()}
+              onClick={() => void activateCompanion()}
               className="inline-flex items-center gap-2 rounded bg-accent px-3 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            >
+              <Bot className="h-4 w-4" />
+              {busyAction === 'setup' ? 'Activating...' : 'Activate companion'}
+            </button>
+            <button
+              disabled={busyAction !== null}
+              onClick={() => void recordSelf()}
+              className="inline-flex items-center gap-2 rounded border border-border px-3 py-2 text-xs font-medium text-text-primary hover:bg-surface disabled:opacity-50"
             >
               <Bot className="h-4 w-4" />
               {busyAction === 'self' ? 'Recording...' : 'Record self-state'}
@@ -864,6 +894,34 @@ export function CompanionPanel() {
               </button>
             )}
           </section>
+
+          {setupResult && (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Activation</h3>
+                <span className="text-[10px] text-text-muted">
+                  {setupResult.selfPercept ? 'self-state recorded' : 'setup complete'}
+                </span>
+              </div>
+              <div className="rounded border border-border bg-surface/35 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Bot className="h-4 w-4 text-accent" />
+                  <span className="text-xs font-semibold text-text-primary">
+                    Companion identity {setupResult.setup.wroteSoul || setupResult.setup.wroteBoot ? 'installed' : 'already present'}
+                  </span>
+                  <span className="rounded bg-background px-1.5 py-0.5 text-[10px] text-text-muted">
+                    voice {setupResult.setup.voiceConfigured ? 'configured' : 'skipped'}
+                  </span>
+                  <span className="rounded bg-background px-1.5 py-0.5 text-[10px] text-text-muted">
+                    model {setupResult.setup.modelConfigured ? setupResult.setup.model : 'unchanged'}
+                  </span>
+                </div>
+                {setupResult.selfPerceptError && (
+                  <p className="mt-2 text-xs text-warning">{setupResult.selfPerceptError}</p>
+                )}
+              </div>
+            </section>
+          )}
 
           {impulses && (
             <section className="space-y-3">

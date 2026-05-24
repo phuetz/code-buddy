@@ -203,6 +203,24 @@ interface CameraSnapshotResult {
   perceptPath?: string;
 }
 
+interface CompanionSetupResult {
+  cwd: string;
+  wroteSoul: boolean;
+  wroteBoot: boolean;
+  skippedSoul: boolean;
+  skippedBoot: boolean;
+  voiceConfigured: boolean;
+  modelConfigured: boolean;
+  model?: string;
+  status: Record<string, unknown>;
+}
+
+interface CompanionSetupResponse {
+  setup: CompanionSetupResult;
+  selfPercept?: CompanionPercept;
+  selfPerceptError?: string;
+}
+
 type CompanionCardKind =
   | 'status'
   | 'approval'
@@ -318,6 +336,17 @@ interface CompanionSkillPromotionResult {
 }
 
 type CompanionModeMod = {
+  setupCompanionMode: (options: {
+    cwd?: string;
+    forceIdentity?: boolean;
+    configureVoice?: boolean;
+    configureModel?: boolean;
+    language?: string;
+    sttProvider?: string;
+    ttsProvider?: string;
+    ttsVoice?: string;
+    model?: string;
+  }) => Promise<CompanionSetupResult>;
   getCompanionStatus: (options: { cwd?: string }) => Promise<Record<string, unknown>>;
   recordCompanionSelfState: (options: { cwd?: string }) => Promise<CompanionPercept>;
 };
@@ -498,6 +527,57 @@ async function loadSkillCurator(): Promise<CompanionSkillCuratorMod | null> {
 }
 
 export function registerCompanionIpcHandlers(projectManagerSource: ProjectManagerSource): void {
+  ipcMain.handle(
+    'companion.setup',
+    async (
+      _e,
+      input?: {
+        projectId?: string;
+        forceIdentity?: boolean;
+        configureVoice?: boolean;
+        configureModel?: boolean;
+        language?: string;
+        sttProvider?: string;
+        ttsProvider?: string;
+        ttsVoice?: string;
+        model?: string;
+        recordSelf?: boolean;
+      },
+    ): Promise<{ ok: true; result: CompanionSetupResponse } | { ok: false; error?: string }> => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      try {
+        const mod = await loadMode();
+        if (!mod?.setupCompanionMode) {
+          return { ok: false as const, error: 'core companion setup module unavailable' };
+        }
+        const setup = await mod.setupCompanionMode({
+          cwd,
+          forceIdentity: input?.forceIdentity,
+          configureVoice: input?.configureVoice,
+          configureModel: input?.configureModel,
+          language: input?.language,
+          sttProvider: input?.sttProvider,
+          ttsProvider: input?.ttsProvider,
+          ttsVoice: input?.ttsVoice,
+          model: input?.model,
+        });
+        const result: CompanionSetupResponse = { setup };
+        if (input?.recordSelf !== false && mod.recordCompanionSelfState) {
+          try {
+            result.selfPercept = await mod.recordCompanionSelfState({ cwd });
+          } catch (err) {
+            result.selfPerceptError = errorMessage(err);
+          }
+        }
+        return { ok: true as const, result };
+      } catch (err) {
+        logError('[companion.setup] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
+
   ipcMain.handle('companion.status', async (_e, projectId?: string) => {
     const { cwd, error } = await companionWorkDir(projectManagerSource, projectId);
     if (!cwd) return { ok: false as const, error };
