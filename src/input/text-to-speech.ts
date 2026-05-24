@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { commandExists } from '../utils/command-exists.js';
 
 export interface TTSConfig {
   enabled: boolean;
@@ -119,29 +120,19 @@ export class TextToSpeechManager extends EventEmitter {
       }
     }
 
-    return new Promise((resolve) => {
-      const command = this.config.provider === 'edge-tts' ? 'edge-tts' :
-                      this.config.provider === 'espeak' ? 'espeak' :
-                      this.config.provider === 'say' ? 'say' :
-                      this.config.provider === 'piper' ? 'piper' : 'edge-tts';
+    const command = this.config.provider === 'edge-tts' ? 'edge-tts' :
+                    this.config.provider === 'espeak' ? 'espeak' :
+                    this.config.provider === 'say' ? 'say' :
+                    this.config.provider === 'piper' ? 'piper' : 'edge-tts';
 
-      const check = spawn('which', [command]);
+    if (await commandExists(command)) {
+      return { available: true };
+    }
 
-      check.on('close', (code) => {
-        if (code === 0) {
-          resolve({ available: true });
-        } else {
-          resolve({
-            available: false,
-            reason: `${command} not found. Install with: pip3 install ${command === 'edge-tts' ? 'edge-tts' : command}`,
-          });
-        }
-      });
-
-      check.on('error', () => {
-        resolve({ available: false, reason: `Cannot check for ${command}` });
-      });
-    });
+    return {
+      available: false,
+      reason: `${command} not found. Install with: pip3 install ${command === 'edge-tts' ? 'edge-tts' : command}`,
+    };
   }
 
   /**

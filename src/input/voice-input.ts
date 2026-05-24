@@ -5,6 +5,7 @@ import os from "os";
 import { spawn, ChildProcess } from "child_process";
 import axios from "axios";
 import { getErrorMessage } from "../types/index.js";
+import { commandExists } from "../utils/command-exists.js";
 
 export interface VoiceConfig {
   provider: "whisper" | "deepgram" | "system";
@@ -61,11 +62,7 @@ export class VoiceInput extends EventEmitter {
    * Check if a command exists using spawn (secure alternative to exec)
    */
   private commandExists(command: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      const proc = spawn("which", [command]);
-      proc.on("close", (code) => resolve(code === 0));
-      proc.on("error", () => resolve(false));
-    });
+    return commandExists(command);
   }
 
   async startRecording(): Promise<string> {

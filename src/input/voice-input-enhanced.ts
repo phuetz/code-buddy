@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { getErrorMessage } from '../types/index.js';
+import { commandExists } from '../utils/command-exists.js';
 
 /**
  * Axios-like error response structure
@@ -182,12 +183,10 @@ export class VoiceInputManager extends EventEmitter {
    * Check if a command exists
    */
   private checkCommand(command: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const check = spawn('which', [command]);
-      check.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`${command} not found`));
-      });
+    return commandExists(command).then((exists) => {
+      if (!exists) {
+        throw new Error(`${command} not found`);
+      }
     });
   }
 

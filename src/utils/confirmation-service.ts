@@ -5,6 +5,7 @@ import type { RemoteApprovalService } from '../security/remote-approval.js';
 import { checkDeclarativePermission } from '../security/declarative-rules.js';
 import { getPermissionModeManager } from '../security/permission-modes.js';
 import { PolicyEngine, Capability } from '../security/policy-engine.js';
+import { commandExists } from './command-exists.js';
 
 export interface ConfirmationOptions {
   operation: string;
@@ -43,21 +44,6 @@ function spawnAsync(command: string, args: string[]): Promise<void> {
 
     // Give it a moment to start
     setTimeout(() => resolve(), 100);
-  });
-}
-
-/**
- * Check if a command exists in PATH
- */
-function commandExists(command: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn('which', [command], { stdio: 'pipe' });
-    proc.on('close', (code) => {
-      resolve(code === 0);
-    });
-    proc.on('error', () => {
-      resolve(false);
-    });
   });
 }
 

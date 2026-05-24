@@ -19,6 +19,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { WakeWordDetector } from '../voice/wake-word.js';
 import { logger } from '../utils/logger.js';
+import { commandExists } from '../utils/command-exists.js';
 
 export interface VoiceControlConfig {
   enabled: boolean;
@@ -347,12 +348,7 @@ export class VoiceControl extends EventEmitter {
    * Check if a command exists
    */
   private async checkCommand(command: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      const check = spawn('which', [command]);
-      const timeout = setTimeout(() => { check.kill(); resolve(false); }, 5000);
-      check.on('close', (code) => { clearTimeout(timeout); resolve(code === 0); });
-      check.on('error', () => { clearTimeout(timeout); resolve(false); });
-    });
+    return commandExists(command);
   }
 
   /**
