@@ -84,6 +84,37 @@ interface CompanionCompetitiveRadar {
   sourceNotes: string[];
 }
 
+type CompanionImpulseKind = 'readiness' | 'sense' | 'mission' | 'safety' | 'memory' | 'conversation';
+type CompanionImpulsePriority = 'high' | 'medium' | 'low';
+
+interface CompanionImpulse {
+  id: string;
+  kind: CompanionImpulseKind;
+  priority: CompanionImpulsePriority;
+  title: string;
+  message: string;
+  command?: string;
+  evidence: Array<{ label: string; value: string }>;
+  tags: string[];
+}
+
+interface CompanionImpulseBrief {
+  id: string;
+  timestamp: string;
+  cwd: string;
+  summary: string;
+  nextPrompt: string;
+  impulses: CompanionImpulse[];
+  context: {
+    perceptTotal: number;
+    openMissions: number;
+    inProgressMissions: number;
+    safetyEvents: number;
+    latestPerceptTimestamp?: string;
+    latestSafetyTimestamp?: string;
+  };
+}
+
 type CompanionMissionStatus = 'open' | 'in_progress' | 'done' | 'dismissed';
 type CompanionSafetyEventKind = 'sense' | 'tool' | 'mission' | 'permission' | 'data';
 type CompanionSafetyEventRisk = 'low' | 'medium' | 'high';
@@ -210,6 +241,13 @@ type CompanionCompetitiveRadarMod = {
   }) => Promise<CompanionCompetitiveRadar>;
 };
 
+type CompanionImpulsesMod = {
+  buildCompanionImpulseBrief: (options: {
+    cwd?: string;
+    recordSuggestions?: boolean;
+  }) => Promise<CompanionImpulseBrief>;
+};
+
 type CompanionMissionBoardMod = {
   syncCompanionMissionBoard: (options: {
     cwd?: string;
@@ -269,6 +307,10 @@ async function loadSelfEvaluation(): Promise<CompanionSelfEvaluationMod | null> 
 
 async function loadCompetitiveRadar(): Promise<CompanionCompetitiveRadarMod | null> {
   return loadCoreModule<CompanionCompetitiveRadarMod>('companion/competitive-radar.js');
+}
+
+async function loadImpulses(): Promise<CompanionImpulsesMod | null> {
+  return loadCoreModule<CompanionImpulsesMod>('companion/impulses.js');
 }
 
 async function loadMissionBoard(): Promise<CompanionMissionBoardMod | null> {
@@ -398,6 +440,30 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
         };
       } catch (err) {
         logError('[companion.radar] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'companion.impulses',
+    async (_e, input?: { projectId?: string; recordSuggestions?: boolean }) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      try {
+        const mod = await loadImpulses();
+        if (!mod?.buildCompanionImpulseBrief) {
+          return { ok: false as const, error: 'core companion impulses module unavailable' };
+        }
+        return {
+          ok: true as const,
+          brief: await mod.buildCompanionImpulseBrief({
+            cwd,
+            recordSuggestions: input?.recordSuggestions !== false,
+          }),
+        };
+      } catch (err) {
+        logError('[companion.impulses] failed:', err);
         return { ok: false as const, error: errorMessage(err) };
       }
     },

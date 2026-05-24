@@ -146,6 +146,7 @@ buddy companion status          # Check ChatGPT auth, identity, voice, TTS, and 
 buddy companion self            # Record Buddy's current self-state as a percept
 buddy companion evaluate        # Score readiness and record self-improvement suggestions
 buddy companion radar           # Compare Buddy to Hermes, OpenClaw, Lisa, and UNI
+buddy companion impulses        # Ask Buddy for the next proactive companion move
 buddy companion missions sync   # Turn radar gaps into a local mission board
 buddy companion missions run-next # Prepare the next mission brief
 buddy companion safety recent   # Inspect sensitive companion events
@@ -176,6 +177,10 @@ write concrete `suggestion` percepts for the next improvements it should pursue.
 Use `buddy companion radar` or the panel's radar button when you want Buddy to
 compare itself against Hermes-style learning loops, OpenClaw-style always-on
 integrations, Lisa-style senses/workflows, and UNI-style real-time companion UX.
+Use `buddy companion impulses` or the panel's impulses button when you want a
+short proactive check-in from Buddy. It summarizes readiness, stale senses,
+mission pressure, and safety events into a prioritized next move, and can record
+those impulses as `suggestion` percepts for the self-improvement loop.
 Then run `buddy companion missions sync` to persist those gaps as a P0/P1/P2
 mission board in `.codebuddy/companion/missions.json`; Cowork can display the
 same board, mark missions started or done, and run the next mission. `buddy

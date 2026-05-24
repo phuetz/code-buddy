@@ -79,6 +79,8 @@ const mockEvaluateCompanionSelf = jest.fn();
 const mockFormatCompanionSelfEvaluation = jest.fn((evaluation: unknown) => `evaluation:${JSON.stringify(evaluation)}`);
 const mockBuildCompanionCompetitiveRadar = jest.fn();
 const mockFormatCompanionCompetitiveRadar = jest.fn((radar: unknown) => `radar:${JSON.stringify(radar)}`);
+const mockBuildCompanionImpulseBrief = jest.fn();
+const mockFormatCompanionImpulseBrief = jest.fn((brief: unknown) => `impulses:${JSON.stringify(brief)}`);
 const mockSyncCompanionMissionBoard = jest.fn();
 const mockReadCompanionMissionBoard = jest.fn();
 const mockUpdateCompanionMissionStatus = jest.fn();
@@ -118,6 +120,11 @@ jest.mock('../../src/companion/self-evaluation.js', () => ({
 jest.mock('../../src/companion/competitive-radar.js', () => ({
   buildCompanionCompetitiveRadar: mockBuildCompanionCompetitiveRadar,
   formatCompanionCompetitiveRadar: mockFormatCompanionCompetitiveRadar,
+}));
+
+jest.mock('../../src/companion/impulses.js', () => ({
+  buildCompanionImpulseBrief: mockBuildCompanionImpulseBrief,
+  formatCompanionImpulseBrief: mockFormatCompanionImpulseBrief,
 }));
 
 jest.mock('../../src/companion/mission-board.js', () => ({
@@ -981,6 +988,11 @@ describe('Native Engine CLI Commands', () => {
         id: 'companion-radar-1',
         score: 64,
       });
+      mockBuildCompanionImpulseBrief.mockResolvedValue({
+        id: 'companion-impulses-1',
+        summary: 'Buddy has one impulse.',
+        impulses: [{ id: 'mission-1', priority: 'high' }],
+      });
       mockSyncCompanionMissionBoard.mockResolvedValue({
         radarId: 'companion-radar-1',
         created: 2,
@@ -1112,6 +1124,26 @@ describe('Native Engine CLI Commands', () => {
         await program.parseAsync(['node', 'test', 'companion', 'radar', '--no-record']);
 
         expect(mockBuildCompanionCompetitiveRadar).toHaveBeenCalledWith({ recordSuggestions: false });
+      });
+    });
+
+    describe('companion impulses', () => {
+      it('prints the formatted companion impulse brief and records suggestions by default', async () => {
+        await program.parseAsync(['node', 'test', 'companion', 'impulses']);
+
+        expect(mockBuildCompanionImpulseBrief).toHaveBeenCalledWith({ recordSuggestions: true });
+        expect(mockFormatCompanionImpulseBrief).toHaveBeenCalledWith({
+          id: 'companion-impulses-1',
+          summary: 'Buddy has one impulse.',
+          impulses: [{ id: 'mission-1', priority: 'high' }],
+        });
+        expect(getLogOutput()).toContain('impulses:');
+      });
+
+      it('can build impulses without writing percepts', async () => {
+        await program.parseAsync(['node', 'test', 'companion', 'impulses', '--no-record']);
+
+        expect(mockBuildCompanionImpulseBrief).toHaveBeenCalledWith({ recordSuggestions: false });
       });
     });
 

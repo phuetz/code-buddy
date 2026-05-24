@@ -33,6 +33,7 @@ import { useAppStore } from '../store';
 import type {
   CameraSnapshotResult,
   CompanionCompetitiveRadar,
+  CompanionImpulseBrief,
   CompanionMission,
   CompanionMissionRunResult,
   CompanionMissionStatus,
@@ -189,13 +190,14 @@ export function CompanionPanel() {
   const [percepts, setPercepts] = useState<CompanionPercept[]>([]);
   const [evaluation, setEvaluation] = useState<CompanionSelfEvaluation | null>(null);
   const [radar, setRadar] = useState<CompanionCompetitiveRadar | null>(null);
+  const [impulses, setImpulses] = useState<CompanionImpulseBrief | null>(null);
   const [missions, setMissions] = useState<CompanionMission[]>([]);
   const [missionRun, setMissionRun] = useState<CompanionMissionRunResult | null>(null);
   const [safetyEvents, setSafetyEvents] = useState<CompanionSafetyEvent[]>([]);
   const [safetyStats, setSafetyStats] = useState<CompanionSafetyLedgerStats | null>(null);
   const [modality, setModality] = useState<CompanionPerceptModality | 'all'>('all');
   const [loading, setLoading] = useState(false);
-  const [busyAction, setBusyAction] = useState<'self' | 'camera' | 'evaluate' | 'radar' | 'missions' | 'runNext' | 'mission' | null>(null);
+  const [busyAction, setBusyAction] = useState<'self' | 'camera' | 'evaluate' | 'radar' | 'impulses' | 'missions' | 'runNext' | 'mission' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSnapshot, setLastSnapshot] = useState<CameraSnapshotResult | null>(null);
 
@@ -210,10 +212,11 @@ export function CompanionPanel() {
     setError(null);
 
     const selected = modality === 'all' ? undefined : modality;
-    const [statusRes, recentRes, statsRes, missionsRes, safetyRecentRes, safetyStatsRes] = await Promise.all([
+    const [statusRes, recentRes, statsRes, impulsesRes, missionsRes, safetyRecentRes, safetyStatsRes] = await Promise.all([
       window.electronAPI.companion.status(),
       window.electronAPI.companion.recentPercepts({ limit: 30, modality: selected }),
       window.electronAPI.companion.perceptStats(),
+      window.electronAPI.companion.impulses({ recordSuggestions: false }),
       window.electronAPI.companion.listMissions(),
       window.electronAPI.companion.recentSafetyEvents({ limit: 8 }),
       window.electronAPI.companion.safetyStats(),
@@ -224,6 +227,7 @@ export function CompanionPanel() {
       setStatus(null);
       setStats(null);
       setPercepts([]);
+      setImpulses(null);
       setMissions([]);
       setSafetyEvents([]);
       setSafetyStats(null);
@@ -236,12 +240,14 @@ export function CompanionPanel() {
     setStatus(statusRes.status ?? null);
     setPercepts(recentRes.ok ? recentRes.items : []);
     setStats(statsRes.ok ? statsRes.stats ?? null : null);
+    setImpulses(impulsesRes.ok ? impulsesRes.brief ?? null : null);
     setMissions(missionsRes.ok ? missionsRes.items : []);
     setSafetyEvents(safetyRecentRes.ok ? safetyRecentRes.items : []);
     setSafetyStats(safetyStatsRes.ok ? safetyStatsRes.stats ?? null : null);
-    if (!recentRes.ok || !statsRes.ok || !missionsRes.ok || !safetyRecentRes.ok || !safetyStatsRes.ok) {
+    if (!recentRes.ok || !statsRes.ok || !impulsesRes.ok || !missionsRes.ok || !safetyRecentRes.ok || !safetyStatsRes.ok) {
       setError(recentRes.error
         ?? statsRes.error
+        ?? impulsesRes.error
         ?? missionsRes.error
         ?? safetyRecentRes.error
         ?? safetyStatsRes.error
@@ -301,6 +307,19 @@ export function CompanionPanel() {
       return;
     }
     setRadar(res.radar ?? null);
+    await refresh();
+  };
+
+  const runImpulses = async () => {
+    setBusyAction('impulses');
+    setError(null);
+    const res = await window.electronAPI.companion.impulses({ recordSuggestions: true });
+    setBusyAction(null);
+    if (!res.ok) {
+      setError(res.error ?? 'Companion impulses failed');
+      return;
+    }
+    setImpulses(res.brief ?? null);
     await refresh();
   };
 
@@ -466,6 +485,14 @@ export function CompanionPanel() {
             </button>
             <button
               disabled={busyAction !== null}
+              onClick={() => void runImpulses()}
+              className="inline-flex items-center gap-2 rounded border border-border px-3 py-2 text-xs font-medium text-text-primary hover:bg-surface disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4" />
+              {busyAction === 'impulses' ? 'Thinking...' : 'Build impulses'}
+            </button>
+            <button
+              disabled={busyAction !== null}
               onClick={() => void syncMissions()}
               className="inline-flex items-center gap-2 rounded border border-border px-3 py-2 text-xs font-medium text-text-primary hover:bg-surface disabled:opacity-50"
             >
@@ -490,6 +517,53 @@ export function CompanionPanel() {
               </button>
             )}
           </section>
+
+          {impulses && (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Impulses</h3>
+                <span className="text-[10px] text-text-muted">
+                  {new Date(impulses.timestamp).toLocaleString()}
+                </span>
+              </div>
+              <div className="rounded border border-border bg-surface/35 p-3">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-text-primary">{impulses.summary}</p>
+                    <p className="mt-1 text-xs text-text-secondary whitespace-pre-wrap">{impulses.nextPrompt}</p>
+                  </div>
+                </div>
+                {impulses.impulses.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {impulses.impulses.slice(0, 4).map((impulse) => (
+                      <div key={impulse.id} className="rounded bg-background px-2 py-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`text-[10px] font-semibold uppercase ${
+                            impulse.priority === 'high'
+                              ? 'text-warning'
+                              : impulse.priority === 'medium'
+                                ? 'text-accent'
+                                : 'text-text-muted'
+                          }`}>
+                            {impulse.priority}
+                          </span>
+                          <span className="text-[10px] uppercase text-text-muted">{impulse.kind}</span>
+                          <span className="text-xs font-medium text-text-primary">{impulse.title}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-text-secondary">{impulse.message}</p>
+                        {impulse.command && (
+                          <code className="mt-1 block truncate rounded bg-surface px-1.5 py-1 text-[10px] text-text-muted">
+                            {impulse.command}
+                          </code>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           {missionRun && (
             <section className="space-y-3">

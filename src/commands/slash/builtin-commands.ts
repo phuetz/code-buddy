@@ -1062,7 +1062,7 @@ const voiceCommands: SlashCommand[] = [
     filePath: '',
     isBuiltin: true,
     arguments: [
-      { name: 'action', description: 'status, setup, awaken, self, evaluate, radar, missions, safety, camera, percepts, or doctor', required: false }
+      { name: 'action', description: 'status, setup, awaken, self, evaluate, radar, impulses, missions, safety, camera, percepts, or doctor', required: false }
     ]
   }
 ];

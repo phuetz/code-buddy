@@ -27,6 +27,10 @@ import {
   formatCompanionCompetitiveRadar,
 } from '../../companion/competitive-radar.js';
 import {
+  buildCompanionImpulseBrief,
+  formatCompanionImpulseBrief,
+} from '../../companion/impulses.js';
+import {
   formatCompanionMissionBoard,
   readCompanionMissionBoard,
   syncCompanionMissionBoard,
@@ -92,6 +96,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
         '       /companion percepts stats',
         '       /companion evaluate [--no-record]',
         '       /companion radar [--no-record]',
+        '       /companion impulses [--no-record]',
         '       /companion missions sync|list|run-next|start|done|dismiss',
         '       /companion safety recent|stats',
       ].join('\n')),
@@ -126,6 +131,16 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     return {
       handled: true,
       entry: entry(formatCompanionCompetitiveRadar(radar)),
+    };
+  }
+
+  if (action === 'impulses' || action === 'brief' || action === 'check-in') {
+    const brief = await buildCompanionImpulseBrief({
+      recordSuggestions: !args.includes('--no-record'),
+    });
+    return {
+      handled: true,
+      entry: entry(formatCompanionImpulseBrief(brief)),
     };
   }
 
@@ -324,6 +339,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       '       /companion self',
       '       /companion evaluate [--no-record]',
       '       /companion radar [--no-record]',
+      '       /companion impulses [--no-record]',
       '       /companion missions sync|list|run-next|start|done|dismiss',
       '       /companion safety recent|stats',
       '       /companion camera status',

@@ -465,6 +465,20 @@ export function registerCompanionCommands(program: Command): void {
       console.log(formatCompanionCompetitiveRadar(radar));
     });
 
+  companion
+    .command('impulses')
+    .alias('brief')
+    .description('Build Buddy companion proactive impulses from readiness, senses, missions, and safety state')
+    .option('--no-record', 'Do not write impulse suggestion percepts')
+    .action(async (opts: { record?: boolean }) => {
+      const {
+        buildCompanionImpulseBrief,
+        formatCompanionImpulseBrief,
+      } = await import('../../companion/impulses.js');
+      const brief = await buildCompanionImpulseBrief({ recordSuggestions: opts.record !== false });
+      console.log(formatCompanionImpulseBrief(brief));
+    });
+
   const missions = companion
     .command('missions')
     .description('Manage Buddy companion self-improvement missions');

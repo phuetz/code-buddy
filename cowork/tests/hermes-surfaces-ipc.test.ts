@@ -210,6 +210,27 @@ describe('companion IPC', () => {
     });
   });
 
+  it('builds companion impulses in the active workspace', async () => {
+    const buildCompanionImpulseBrief = vi.fn(async () => ({
+      id: 'companion-impulses-1',
+      impulses: [{ id: 'mission-1', priority: 'high' }],
+    }));
+    coreLoaderMock.loadCoreModule.mockResolvedValue({ buildCompanionImpulseBrief });
+    registerCompanionIpcHandlers(projectSource('/tmp/proj'));
+
+    const handler = electronMock.handlers.get('companion.impulses');
+    const res = (await handler?.({}, { recordSuggestions: false })) as {
+      ok: boolean;
+      brief?: { id: string };
+    };
+    expect(res.ok).toBe(true);
+    expect(res.brief?.id).toBe('companion-impulses-1');
+    expect(buildCompanionImpulseBrief).toHaveBeenCalledWith({
+      cwd: '/tmp/proj',
+      recordSuggestions: false,
+    });
+  });
+
   it('syncs companion missions in the active workspace', async () => {
     const syncCompanionMissionBoard = vi.fn(async () => ({ radarId: 'radar-1', board: { missions: [] } }));
     coreLoaderMock.loadCoreModule.mockResolvedValue({ syncCompanionMissionBoard });

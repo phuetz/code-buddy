@@ -207,6 +207,37 @@ export interface CompanionCompetitiveRadar {
   sourceNotes: string[];
 }
 
+export type CompanionImpulseKind = 'readiness' | 'sense' | 'mission' | 'safety' | 'memory' | 'conversation';
+export type CompanionImpulsePriority = 'high' | 'medium' | 'low';
+
+export interface CompanionImpulse {
+  id: string;
+  kind: CompanionImpulseKind;
+  priority: CompanionImpulsePriority;
+  title: string;
+  message: string;
+  command?: string;
+  evidence: Array<{ label: string; value: string }>;
+  tags: string[];
+}
+
+export interface CompanionImpulseBrief {
+  id: string;
+  timestamp: string;
+  cwd: string;
+  summary: string;
+  nextPrompt: string;
+  impulses: CompanionImpulse[];
+  context: {
+    perceptTotal: number;
+    openMissions: number;
+    inProgressMissions: number;
+    safetyEvents: number;
+    latestPerceptTimestamp?: string;
+    latestSafetyTimestamp?: string;
+  };
+}
+
 export type CompanionMissionStatus = 'open' | 'in_progress' | 'done' | 'dismissed';
 export type CompanionMissionPriority = 'P0' | 'P1' | 'P2';
 

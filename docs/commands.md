@@ -69,6 +69,7 @@
 | `/companion status\|setup` | Configure/check Buddy as a ChatGPT-backed voice companion |
 | `/companion evaluate` | Score Buddy's companion readiness and record self-improvement suggestions |
 | `/companion radar` | Compare Buddy against Hermes, OpenClaw, Lisa, and open companion systems |
+| `/companion impulses` | Build proactive companion impulses from readiness, senses, missions, and safety state |
 | `/companion missions sync\|list\|run-next` | Turn radar gaps into a local companion mission board and prepare the next mission brief |
 | `/companion safety recent\|stats` | Inspect Buddy's local safety ledger for senses, missions, tools, and data actions |
 | `/companion camera status\|snapshot` | Check/capture the local webcam bridge for Buddy vision |
@@ -225,6 +226,7 @@ buddy companion status
 buddy companion self
 buddy companion evaluate [--no-record]
 buddy companion radar [--no-record]
+buddy companion impulses [--no-record]
 buddy companion missions sync [--no-record]
 buddy companion missions list [--status <open|in_progress|done|dismissed>]
 buddy companion missions run-next [--dry-run]
@@ -266,6 +268,13 @@ vision/hearing, multi-agent planning, checkpoints, and replayable computer
 skills; UNI for real-time interrupted voice, camera, UI cards, impulses, and
 local encrypted memory. The radar records the top gaps as `suggestion` percepts
 unless `--no-record` is passed.
+
+`buddy companion impulses` is Buddy's opt-in proactive check-in. It reads the
+current readiness, recent sensory percepts, mission board, and safety ledger,
+then returns a short "next useful move" prompt plus prioritized impulses such as
+connect ChatGPT, refresh camera context, continue the active mission, or review
+a safety event. By default it records the top impulses as `suggestion` percepts;
+pass `--no-record` for a read-only brief.
 
 `buddy companion missions sync` converts the radar gaps into
 `.codebuddy/companion/missions.json`, a local mission board with P0/P1/P2

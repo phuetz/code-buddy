@@ -190,10 +190,11 @@ function buildGaps(evaluation: CompanionSelfEvaluation): CompanionCompetitiveGap
     {
       id: 'companion-proactive-briefings',
       dimension: 'automation',
-      severity: 'gap',
-      summary: 'Schedulers exist, but the companion does not yet propose daily briefings, weekly reviews, or sensory reminders from its own radar.',
-      recommendation: 'Add opt-in companion impulses: daily readiness brief, weekly self-review, and reminders when vision/hearing/screen percepts go stale.',
+      severity: 'parity',
+      summary: 'Buddy can now generate opt-in companion impulses, but they are not yet scheduled or delivered across channels.',
+      recommendation: 'Connect companion impulses to heartbeat/automation so daily readiness briefs and stale-sense reminders can arrive proactively.',
       competitorRefs: ['openclaw', 'uni', 'hermes-agent'],
+      command: 'buddy companion impulses',
       tags: ['automation', 'briefing', 'impulses'],
     },
     {
