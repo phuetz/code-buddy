@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Zap, CheckCircle, XCircle, Loader2, RefreshCw, Globe } from 'lucide-react';
+import { Zap, CheckCircle, XCircle, Loader2, RefreshCw, Globe, Server } from 'lucide-react';
 
 interface CodeBuddyConfig {
   enabled: boolean;
@@ -26,6 +26,57 @@ interface ConnectionProbeSuccess {
   version: string;
   models: string[];
   tools: number;
+}
+
+interface EndpointPreset {
+  id: string;
+  label: string;
+  badge: string;
+  endpoint: string;
+}
+
+const ENDPOINT_PRESETS: EndpointPreset[] = [
+  {
+    id: 'local',
+    label: 'Local',
+    badge: 'Auto-start',
+    endpoint: 'http://localhost:3000',
+  },
+  {
+    id: 'darkstar',
+    label: 'DARKSTAR',
+    badge: 'Remote',
+    endpoint: 'http://100.73.222.64:3000',
+  },
+  {
+    id: 'ministar-linux',
+    label: 'Ministar Linux',
+    badge: 'Remote',
+    endpoint: 'http://100.98.18.76:3000',
+  },
+];
+
+function endpointUrl(endpoint: string, path: string): string {
+  const base = endpoint.trim().replace(/\/+$/, '');
+  const suffix = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${suffix}`;
+}
+
+function normalizeModelIds(payload: unknown): string[] {
+  const rawModels = (payload as { data?: unknown; models?: unknown })?.data
+    ?? (payload as { models?: unknown })?.models
+    ?? [];
+  if (!Array.isArray(rawModels)) return [];
+  return rawModels
+    .map((model) => {
+      if (typeof model === 'string') return model;
+      if (model && typeof model === 'object' && 'id' in model) {
+        return String((model as { id?: unknown }).id ?? '');
+      }
+      return '';
+    })
+    .map((id) => id.trim())
+    .filter(Boolean);
 }
 
 function parseLocalServerEndpoint(endpoint: string): { host: string; port: number } | null {
@@ -57,6 +108,9 @@ export function SettingsCodeBuddy() {
     geminiGroundingEnabled: false,
   });
   const [health, setHealth] = useState<HealthStatus>({ status: 'unknown' });
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [modelsMessage, setModelsMessage] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
@@ -78,7 +132,7 @@ export function SettingsCodeBuddy() {
   }, []);
 
   const probeConnection = useCallback(async (): Promise<ConnectionProbeSuccess> => {
-    const res = await fetch(`${config.endpoint}/api/health`, {
+    const res = await fetch(endpointUrl(config.endpoint, '/api/health'), {
       signal: AbortSignal.timeout(5000),
       headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {},
     });
@@ -90,16 +144,16 @@ export function SettingsCodeBuddy() {
     let models: string[] = [];
     let tools = 0;
     try {
-      const modelsRes = await fetch(`${config.endpoint}/v1/models`, {
+      const modelsRes = await fetch(endpointUrl(config.endpoint, '/v1/models'), {
         headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {},
       });
       if (modelsRes.ok) {
         const modelsData = await modelsRes.json();
-        models = modelsData.data?.map((m: { id: string }) => m.id) || [];
+        models = normalizeModelIds(modelsData);
       }
     } catch { /* optional */ }
     try {
-      const metricsRes = await fetch(`${config.endpoint}/api/metrics`, {
+      const metricsRes = await fetch(endpointUrl(config.endpoint, '/api/metrics'), {
         headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {},
       });
       if (metricsRes.ok) {
@@ -113,6 +167,32 @@ export function SettingsCodeBuddy() {
       models,
       tools,
     };
+  }, [config.endpoint, config.apiKey]);
+
+  const refreshModels = useCallback(async () => {
+    setIsLoadingModels(true);
+    setModelsMessage('');
+    try {
+      const res = await fetch(endpointUrl(config.endpoint, '/v1/models'), {
+        headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {},
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      const models = normalizeModelIds(await res.json());
+      setAvailableModels(models);
+      setHealth(h => ({ ...h, models }));
+      setModelsMessage(
+        models.length > 0
+          ? `${models.length} model${models.length > 1 ? 's' : ''} detected.`
+          : 'No models exposed by this Code Buddy server.',
+      );
+    } catch (err) {
+      setModelsMessage(err instanceof Error ? err.message : 'Model refresh failed');
+      setAvailableModels([]);
+    } finally {
+      setIsLoadingModels(false);
+    }
   }, [config.endpoint, config.apiKey]);
 
   const probeAfterStart = useCallback(async (): Promise<ConnectionProbeSuccess> => {
@@ -139,6 +219,7 @@ export function SettingsCodeBuddy() {
         models: connected.models,
         tools: connected.tools,
       });
+      setAvailableModels(connected.models);
     } catch (initialErr) {
       const localEndpoint = parseLocalServerEndpoint(config.endpoint);
       const serverApi = window.electronAPI?.server;
@@ -178,6 +259,7 @@ export function SettingsCodeBuddy() {
           tools: connected.tools,
           message: 'Started local Code Buddy backend automatically.',
         });
+        setAvailableModels(connected.models);
       } catch (err) {
         setHealth({
           status: 'error',
@@ -227,6 +309,10 @@ export function SettingsCodeBuddy() {
     }
   }, [config]);
 
+  const modelChoices = config.model && !availableModels.includes(config.model)
+    ? [config.model, ...availableModels]
+    : availableModels;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -266,13 +352,49 @@ export function SettingsCodeBuddy() {
       {/* Connection settings */}
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-text-primary mb-1.5">
-            Server Endpoint
-          </label>
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <label className="block text-sm font-medium text-text-primary">
+              Server Endpoint
+            </label>
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {ENDPOINT_PRESETS.map((preset) => {
+                const isActive = config.endpoint.trim().replace(/\/+$/, '') === preset.endpoint;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setConfig(c => ({ ...c, endpoint: preset.endpoint }));
+                      setHealth({ status: 'unknown' });
+                      setAvailableModels([]);
+                      setModelsMessage('');
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ${
+                      isActive
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-border-muted text-text-secondary hover:bg-surface-hover'
+                    }`}
+                    title={preset.endpoint}
+                  >
+                    <Server className="h-3.5 w-3.5" />
+                    <span>{preset.label}</span>
+                    <span className="rounded bg-surface-secondary px-1 text-[10px] text-text-muted">
+                      {preset.badge}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <input
             type="url"
             value={config.endpoint}
-            onChange={e => setConfig(c => ({ ...c, endpoint: e.target.value }))}
+            onChange={e => {
+              setConfig(c => ({ ...c, endpoint: e.target.value }));
+              setHealth({ status: 'unknown' });
+              setAvailableModels([]);
+              setModelsMessage('');
+            }}
             placeholder="http://localhost:3000"
             className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
           />
@@ -295,16 +417,49 @@ export function SettingsCodeBuddy() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text-primary mb-1.5">
-            Model Override <span className="text-text-muted">(optional)</span>
-          </label>
-          <input
-            type="text"
-            value={config.model}
-            onChange={e => setConfig(c => ({ ...c, model: e.target.value }))}
-            placeholder="Uses server default (e.g. gemini-3.1-flash-lite-preview)"
-            className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
-          />
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <label className="block text-sm font-medium text-text-primary">
+              Model Override <span className="text-text-muted">(optional)</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => void refreshModels()}
+              disabled={isLoadingModels}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border-muted px-2.5 py-1 text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+            >
+              {isLoadingModels
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RefreshCw className="h-3.5 w-3.5" />}
+              Models
+            </button>
+          </div>
+          {modelChoices.length > 0 ? (
+            <select
+              value={config.model}
+              onChange={e => setConfig(c => ({ ...c, model: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+            >
+              <option value="">Use server default</option>
+              {modelChoices.map(model => (
+                <option key={model} value={model}>{model}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={config.model}
+              onChange={e => setConfig(c => ({ ...c, model: e.target.value }))}
+              placeholder="Uses server default (e.g. gemini-3.1-flash-lite-preview)"
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+            />
+          )}
+          {modelsMessage && (
+            <p className={`text-xs mt-1 ${
+              availableModels.length > 0 ? 'text-green-400' : 'text-text-muted'
+            }`}>
+              {modelsMessage}
+            </p>
+          )}
         </div>
       </div>
 

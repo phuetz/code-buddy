@@ -90,4 +90,78 @@ describe('SettingsCodeBuddy auto-start connection test', () => {
     expect(target.textContent).toContain('Started local Code Buddy backend automatically.');
     expect(target.textContent).toContain('Version: 1.0.0-test');
   });
+
+  it('loads remote models into the override selector and saves the selected model', async () => {
+    const configSave = vi.fn().mockResolvedValue(undefined);
+    (window as unknown as {
+      electronAPI?: {
+        config: {
+          get: () => Promise<Record<string, unknown>>;
+          save: typeof configSave;
+        };
+      };
+    }).electronAPI = {
+      config: {
+        get: vi.fn().mockResolvedValue({
+          codebuddy: {
+            enabled: true,
+            endpoint: 'http://100.73.222.64:3000',
+            model: '',
+          },
+        }),
+        save: configSave,
+      },
+    };
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ version: 'remote-test' }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'gpt-remote' }, { id: 'qwen-remote:32b' }] }))
+      .mockResolvedValueOnce(jsonResponse({ toolCount: 118 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    root = createRoot(target);
+
+    await act(async () => {
+      root?.render(React.createElement(SettingsCodeBuddy));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    const testButton = Array.from(target.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Test Connection'));
+    expect(testButton).toBeTruthy();
+
+    await act(async () => {
+      Simulate.click(testButton as HTMLButtonElement);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    const modelSelect = target.querySelector('select') as HTMLSelectElement | null;
+    expect(modelSelect).toBeTruthy();
+    expect(Array.from(modelSelect?.options ?? []).map(option => option.value)).toContain('qwen-remote:32b');
+
+    await act(async () => {
+      if (!modelSelect) throw new Error('model select missing');
+      modelSelect.value = 'qwen-remote:32b';
+      Simulate.change(modelSelect, { target: { value: 'qwen-remote:32b' } } as unknown as Event);
+    });
+
+    const saveButton = Array.from(target.querySelectorAll('button'))
+      .find(button => button.textContent?.trim() === 'Save');
+    expect(saveButton).toBeTruthy();
+
+    await act(async () => {
+      Simulate.click(saveButton as HTMLButtonElement);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(configSave).toHaveBeenCalledWith(expect.objectContaining({
+      codebuddy: expect.objectContaining({
+        endpoint: 'http://100.73.222.64:3000',
+        model: 'qwen-remote:32b',
+      }),
+    }));
+  });
 });
