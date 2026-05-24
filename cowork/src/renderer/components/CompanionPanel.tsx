@@ -20,6 +20,7 @@ import {
   Mic,
   Monitor,
   Radio,
+  Radar,
   RefreshCw,
   Sparkles,
   Volume2,
@@ -28,6 +29,7 @@ import {
 import { useAppStore } from '../store';
 import type {
   CameraSnapshotResult,
+  CompanionCompetitiveRadar,
   CompanionPercept,
   CompanionPerceptModality,
   CompanionPerceptStats,
@@ -140,9 +142,10 @@ export function CompanionPanel() {
   const [stats, setStats] = useState<CompanionPerceptStats | null>(null);
   const [percepts, setPercepts] = useState<CompanionPercept[]>([]);
   const [evaluation, setEvaluation] = useState<CompanionSelfEvaluation | null>(null);
+  const [radar, setRadar] = useState<CompanionCompetitiveRadar | null>(null);
   const [modality, setModality] = useState<CompanionPerceptModality | 'all'>('all');
   const [loading, setLoading] = useState(false);
-  const [busyAction, setBusyAction] = useState<'self' | 'camera' | 'evaluate' | null>(null);
+  const [busyAction, setBusyAction] = useState<'self' | 'camera' | 'evaluate' | 'radar' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSnapshot, setLastSnapshot] = useState<CameraSnapshotResult | null>(null);
 
@@ -221,6 +224,19 @@ export function CompanionPanel() {
       return;
     }
     setEvaluation(res.evaluation ?? null);
+    await refresh();
+  };
+
+  const runRadar = async () => {
+    setBusyAction('radar');
+    setError(null);
+    const res = await window.electronAPI.companion.radar({ recordSuggestions: true });
+    setBusyAction(null);
+    if (!res.ok) {
+      setError(res.error ?? 'Competitive radar failed');
+      return;
+    }
+    setRadar(res.radar ?? null);
     await refresh();
   };
 
@@ -338,6 +354,14 @@ export function CompanionPanel() {
               <ClipboardCheck className="h-4 w-4" />
               {busyAction === 'evaluate' ? 'Evaluating...' : 'Self-evaluate'}
             </button>
+            <button
+              disabled={busyAction !== null}
+              onClick={() => void runRadar()}
+              className="inline-flex items-center gap-2 rounded border border-border px-3 py-2 text-xs font-medium text-text-primary hover:bg-surface disabled:opacity-50"
+            >
+              <Radar className="h-4 w-4" />
+              {busyAction === 'radar' ? 'Scanning...' : 'Competitive radar'}
+            </button>
             {lastSnapshot?.path && (
               <button
                 onClick={() => void window.electronAPI.showItemInFolder(lastSnapshot.path!)}
@@ -402,6 +426,50 @@ export function CompanionPanel() {
                     ))}
                   </div>
                 )}
+              </div>
+            </section>
+          )}
+
+          {radar && (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Competitive radar</h3>
+                <span className="text-[10px] text-text-muted">
+                  {radar.score}/100
+                </span>
+              </div>
+              <div className="rounded border border-border bg-surface/35 p-3">
+                <div className="flex items-center gap-2">
+                  <Radar className="h-4 w-4 text-accent" />
+                  <span className="text-sm font-semibold text-text-primary">Hermes / OpenClaw / Lisa / UNI gaps</span>
+                </div>
+                {radar.nextMoves.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {radar.nextMoves.slice(0, 3).map((move) => (
+                      <p key={move} className="text-xs text-text-secondary">
+                        {move}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 space-y-2">
+                  {radar.gaps.slice(0, 4).map((gap) => (
+                    <div key={gap.id} className="rounded bg-background px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-semibold uppercase ${
+                          gap.severity === 'gap' ? 'text-warning' : 'text-text-muted'
+                        }`}>
+                          {gap.severity}
+                        </span>
+                        <span className="text-[10px] uppercase text-text-muted">{gap.dimension}</span>
+                        <span className="truncate text-[10px] text-text-muted">
+                          {gap.competitorRefs.join(', ')}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-text-primary">{gap.summary}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </section>
           )}

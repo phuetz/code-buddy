@@ -183,6 +183,30 @@ export interface CompanionSelfEvaluation {
   perceptStats: CompanionPerceptStats;
 }
 
+export type CompanionRadarSeverity = 'lead' | 'parity' | 'gap';
+
+export interface CompanionCompetitiveGap {
+  id: string;
+  dimension: string;
+  severity: CompanionRadarSeverity;
+  summary: string;
+  recommendation: string;
+  competitorRefs: string[];
+  command?: string;
+  tags: string[];
+}
+
+export interface CompanionCompetitiveRadar {
+  id: string;
+  timestamp: string;
+  cwd: string;
+  score: number;
+  currentStrengths: string[];
+  gaps: CompanionCompetitiveGap[];
+  nextMoves: string[];
+  sourceNotes: string[];
+}
+
 export interface CameraSnapshotResult {
   success: boolean;
   path?: string;

@@ -22,6 +22,10 @@ import {
   evaluateCompanionSelf,
   formatCompanionSelfEvaluation,
 } from '../../companion/self-evaluation.js';
+import {
+  buildCompanionCompetitiveRadar,
+  formatCompanionCompetitiveRadar,
+} from '../../companion/competitive-radar.js';
 
 function entry(content: string): ChatEntry {
   return {
@@ -68,6 +72,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
         'Usage: /companion percepts recent [--limit <n>] [--modality <vision|hearing|screen|self|memory|tool|suggestion>]',
         '       /companion percepts stats',
         '       /companion evaluate [--no-record]',
+        '       /companion radar [--no-record]',
       ].join('\n')),
     };
   }
@@ -90,6 +95,16 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     return {
       handled: true,
       entry: entry(formatCompanionSelfEvaluation(evaluation)),
+    };
+  }
+
+  if (action === 'radar' || action === 'compare' || action === 'competitors') {
+    const radar = await buildCompanionCompetitiveRadar({
+      recordSuggestions: !args.includes('--no-record'),
+    });
+    return {
+      handled: true,
+      entry: entry(formatCompanionCompetitiveRadar(radar)),
     };
   }
 
@@ -188,6 +203,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       '       /companion setup [--force] [--no-voice] [--no-set-model]',
       '       /companion self',
       '       /companion evaluate [--no-record]',
+      '       /companion radar [--no-record]',
       '       /companion camera status',
       '       /companion camera snapshot [--output <path>] [--device <device>]',
       '       /companion percepts recent [--limit <n>] [--modality <name>]',

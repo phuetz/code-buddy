@@ -192,6 +192,24 @@ describe('companion IPC', () => {
     });
   });
 
+  it('builds the companion competitive radar in the active workspace', async () => {
+    const buildCompanionCompetitiveRadar = vi.fn(async () => ({ id: 'companion-radar-1', score: 70 }));
+    coreLoaderMock.loadCoreModule.mockResolvedValue({ buildCompanionCompetitiveRadar });
+    registerCompanionIpcHandlers(projectSource('/tmp/proj'));
+
+    const handler = electronMock.handlers.get('companion.radar');
+    const res = (await handler?.({}, { recordSuggestions: false })) as {
+      ok: boolean;
+      radar?: { id: string };
+    };
+    expect(res.ok).toBe(true);
+    expect(res.radar?.id).toBe('companion-radar-1');
+    expect(buildCompanionCompetitiveRadar).toHaveBeenCalledWith({
+      cwd: '/tmp/proj',
+      recordSuggestions: false,
+    });
+  });
+
   it('captures camera snapshots in the active workspace', async () => {
     const captureCameraSnapshot = vi.fn(async () => ({ success: true, path: '/tmp/proj/.codebuddy/camera/scene.png' }));
     coreLoaderMock.loadCoreModule.mockResolvedValue({ captureCameraSnapshot });

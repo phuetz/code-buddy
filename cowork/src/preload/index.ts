@@ -27,6 +27,7 @@ import type {
   CompanionPerceptStats,
   CompanionStatus,
   CompanionSelfEvaluation,
+  CompanionCompetitiveRadar,
   CameraSnapshotResult,
 } from '../renderer/types';
 import type { DiagnosticInput, DiagnosticResult } from '../renderer/types';
@@ -778,6 +779,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       recordSuggestions?: boolean;
     }): Promise<{ ok: boolean; evaluation?: CompanionSelfEvaluation; error?: string }> =>
       ipcRenderer.invoke('companion.evaluate', input),
+    radar: (input?: {
+      projectId?: string;
+      recordSuggestions?: boolean;
+    }): Promise<{ ok: boolean; radar?: CompanionCompetitiveRadar; error?: string }> =>
+      ipcRenderer.invoke('companion.radar', input),
     cameraStatus: (): Promise<{ ok: boolean; status?: Record<string, unknown>; error?: string }> =>
       ipcRenderer.invoke('companion.camera.status'),
     cameraSnapshot: (input?: {
@@ -2907,6 +2913,10 @@ declare global {
           projectId?: string;
           recordSuggestions?: boolean;
         }) => Promise<{ ok: boolean; evaluation?: CompanionSelfEvaluation; error?: string }>;
+        radar: (input?: {
+          projectId?: string;
+          recordSuggestions?: boolean;
+        }) => Promise<{ ok: boolean; radar?: CompanionCompetitiveRadar; error?: string }>;
         cameraStatus: () => Promise<{ ok: boolean; status?: Record<string, unknown>; error?: string }>;
         cameraSnapshot: (input?: {
           outputPath?: string;

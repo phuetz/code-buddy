@@ -68,6 +68,7 @@
 | `/voice-code` | Voice-to-code pipeline |
 | `/companion status\|setup` | Configure/check Buddy as a ChatGPT-backed voice companion |
 | `/companion evaluate` | Score Buddy's companion readiness and record self-improvement suggestions |
+| `/companion radar` | Compare Buddy against Hermes, OpenClaw, Lisa, and open companion systems |
 | `/companion camera status\|snapshot` | Check/capture the local webcam bridge for Buddy vision |
 | `/companion percepts recent\|stats` | Inspect Buddy's local sensory journal |
 
@@ -221,6 +222,7 @@ buddy companion setup [--force] [--no-voice] [--no-set-model]
 buddy companion status
 buddy companion self
 buddy companion evaluate [--no-record]
+buddy companion radar [--no-record]
 buddy companion camera status
 buddy companion camera snapshot [--output <path>] [--device <device>] [--timeout-ms <ms>]
 buddy companion percepts recent [--limit <n>] [--modality <name>]
@@ -245,6 +247,15 @@ percepts, local memory, wake word readiness, and explicit safety boundaries. By
 default it records a `self` evaluation plus the top `suggestion` percepts; pass
 `--no-record` for a dry readout. Cowork exposes the same action in the Buddy
 companion panel.
+
+`buddy companion radar` is the competitive self-improvement pass. It compares
+Buddy against source-backed profiles for Hermes Agent, OpenClaw, Lisa, and UNI:
+Hermes for closed-loop skills, channels, cron, and remote runtimes; OpenClaw for
+personal-agent integrations and always-on workflows; Lisa for browser-side
+vision/hearing, multi-agent planning, checkpoints, and replayable computer
+skills; UNI for real-time interrupted voice, camera, UI cards, impulses, and
+local encrypted memory. The radar records the top gaps as `suggestion` percepts
+unless `--no-record` is passed.
 
 `buddy companion camera snapshot` captures one webcam frame into `.codebuddy/camera/`
 by default. It uses `ffmpeg` so it works without adding a new Node dependency; pass

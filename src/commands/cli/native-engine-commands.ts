@@ -452,6 +452,19 @@ export function registerCompanionCommands(program: Command): void {
       console.log(formatCompanionSelfEvaluation(evaluation));
     });
 
+  companion
+    .command('radar')
+    .description('Compare Buddy against Hermes, OpenClaw, Lisa, and companion systems')
+    .option('--no-record', 'Do not write competitive radar suggestion percepts')
+    .action(async (opts: { record?: boolean }) => {
+      const {
+        buildCompanionCompetitiveRadar,
+        formatCompanionCompetitiveRadar,
+      } = await import('../../companion/competitive-radar.js');
+      const radar = await buildCompanionCompetitiveRadar({ recordSuggestions: opts.record !== false });
+      console.log(formatCompanionCompetitiveRadar(radar));
+    });
+
   const camera = companion
     .command('camera')
     .description('Manage the companion camera bridge');

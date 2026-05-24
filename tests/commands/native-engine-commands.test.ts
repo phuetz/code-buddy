@@ -77,6 +77,8 @@ const mockGetCompanionPerceptStats = jest.fn();
 const mockFormatCompanionPerceptStats = jest.fn((stats: unknown) => `percept-stats:${JSON.stringify(stats)}`);
 const mockEvaluateCompanionSelf = jest.fn();
 const mockFormatCompanionSelfEvaluation = jest.fn((evaluation: unknown) => `evaluation:${JSON.stringify(evaluation)}`);
+const mockBuildCompanionCompetitiveRadar = jest.fn();
+const mockFormatCompanionCompetitiveRadar = jest.fn((radar: unknown) => `radar:${JSON.stringify(radar)}`);
 
 jest.mock('../../src/companion/companion-mode.js', () => ({
   setupCompanionMode: mockSetupCompanionMode,
@@ -101,6 +103,11 @@ jest.mock('../../src/companion/percepts.js', () => ({
 jest.mock('../../src/companion/self-evaluation.js', () => ({
   evaluateCompanionSelf: mockEvaluateCompanionSelf,
   formatCompanionSelfEvaluation: mockFormatCompanionSelfEvaluation,
+}));
+
+jest.mock('../../src/companion/competitive-radar.js', () => ({
+  buildCompanionCompetitiveRadar: mockBuildCompanionCompetitiveRadar,
+  formatCompanionCompetitiveRadar: mockFormatCompanionCompetitiveRadar,
 }));
 
 const mockGroupSecurity = {
@@ -941,6 +948,10 @@ describe('Native Engine CLI Commands', () => {
         score: 72,
         level: 'aware',
       });
+      mockBuildCompanionCompetitiveRadar.mockResolvedValue({
+        id: 'companion-radar-1',
+        score: 64,
+      });
     });
 
     describe('companion setup', () => {
@@ -1025,6 +1036,25 @@ describe('Native Engine CLI Commands', () => {
         await program.parseAsync(['node', 'test', 'companion', 'evaluate', '--no-record']);
 
         expect(mockEvaluateCompanionSelf).toHaveBeenCalledWith({ recordSuggestions: false });
+      });
+    });
+
+    describe('companion radar', () => {
+      it('prints the formatted competitive radar and records suggestions by default', async () => {
+        await program.parseAsync(['node', 'test', 'companion', 'radar']);
+
+        expect(mockBuildCompanionCompetitiveRadar).toHaveBeenCalledWith({ recordSuggestions: true });
+        expect(mockFormatCompanionCompetitiveRadar).toHaveBeenCalledWith({
+          id: 'companion-radar-1',
+          score: 64,
+        });
+        expect(getLogOutput()).toContain('radar:');
+      });
+
+      it('can run the competitive radar without writing percepts', async () => {
+        await program.parseAsync(['node', 'test', 'companion', 'radar', '--no-record']);
+
+        expect(mockBuildCompanionCompetitiveRadar).toHaveBeenCalledWith({ recordSuggestions: false });
       });
     });
 

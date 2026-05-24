@@ -62,6 +62,28 @@ interface CompanionSelfEvaluation {
   perceptStats: CompanionPerceptStats;
 }
 
+interface CompanionCompetitiveGap {
+  id: string;
+  dimension: string;
+  severity: 'lead' | 'parity' | 'gap';
+  summary: string;
+  recommendation: string;
+  competitorRefs: string[];
+  command?: string;
+  tags: string[];
+}
+
+interface CompanionCompetitiveRadar {
+  id: string;
+  timestamp: string;
+  cwd: string;
+  score: number;
+  currentStrengths: string[];
+  gaps: CompanionCompetitiveGap[];
+  nextMoves: string[];
+  sourceNotes: string[];
+}
+
 interface CameraSnapshotResult {
   success: boolean;
   path?: string;
@@ -103,6 +125,13 @@ type CompanionSelfEvaluationMod = {
   }) => Promise<CompanionSelfEvaluation>;
 };
 
+type CompanionCompetitiveRadarMod = {
+  buildCompanionCompetitiveRadar: (options: {
+    cwd?: string;
+    recordSuggestions?: boolean;
+  }) => Promise<CompanionCompetitiveRadar>;
+};
+
 const NO_PROJECT = 'NO_ACTIVE_PROJECT';
 
 async function companionWorkDir(
@@ -128,6 +157,10 @@ async function loadCamera(): Promise<CompanionCameraMod | null> {
 
 async function loadSelfEvaluation(): Promise<CompanionSelfEvaluationMod | null> {
   return loadCoreModule<CompanionSelfEvaluationMod>('companion/self-evaluation.js');
+}
+
+async function loadCompetitiveRadar(): Promise<CompanionCompetitiveRadarMod | null> {
+  return loadCoreModule<CompanionCompetitiveRadarMod>('companion/competitive-radar.js');
 }
 
 export function registerCompanionIpcHandlers(projectManagerSource: ProjectManagerSource): void {
@@ -221,6 +254,30 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
         };
       } catch (err) {
         logError('[companion.evaluate] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'companion.radar',
+    async (_e, input?: { projectId?: string; recordSuggestions?: boolean }) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      try {
+        const mod = await loadCompetitiveRadar();
+        if (!mod?.buildCompanionCompetitiveRadar) {
+          return { ok: false as const, error: 'core competitive radar module unavailable' };
+        }
+        return {
+          ok: true as const,
+          radar: await mod.buildCompanionCompetitiveRadar({
+            cwd,
+            recordSuggestions: input?.recordSuggestions !== false,
+          }),
+        };
+      } catch (err) {
+        logError('[companion.radar] failed:', err);
         return { ok: false as const, error: errorMessage(err) };
       }
     },
