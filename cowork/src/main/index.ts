@@ -12,7 +12,18 @@
  * Dependencies: session-manager, config-store, mcp-manager, sandbox-adapter,
  *               skills-manager, scheduled-task-manager, nav-server, remote-manager
  */
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, Tray, globalShortcut, session } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  Menu,
+  nativeTheme,
+  Tray,
+  globalShortcut,
+  session,
+} from 'electron';
 import { join, resolve, dirname, isAbsolute, basename } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as fs from 'fs';
@@ -47,9 +58,7 @@ import {
   shouldLoadEngine,
 } from './engine/embedded-mode';
 import { applyGroundingToggle } from './codebuddy/grounding-handler';
-import {
-  ProjectManager,
-} from './project/project-manager';
+import { ProjectManager } from './project/project-manager';
 import { ProjectMemoryService } from './project/project-memory';
 import { SubAgentBridge } from './agent/sub-agent-bridge';
 import { OrchestratorBridge } from './agent/orchestrator-bridge';
@@ -75,7 +84,10 @@ import { getGitBridge } from './git/git-bridge';
 import { getModelCapabilities } from './config/model-capability-bridge';
 import { TemplateService } from './project/template-service';
 import { WorkflowBridge } from './workflows/workflow-bridge';
-import { VoiceConversationSession, type VoiceConversationEvent } from './voice/conversation-session';
+import {
+  VoiceConversationSession,
+  type VoiceConversationEvent,
+} from './voice/conversation-session';
 import { VoiceBridge } from './voice/voice-bridge';
 import { TTSBridge } from './voice/tts-bridge';
 import { KyutaiBridge } from './voice/kyutai-bridge';
@@ -171,6 +183,10 @@ import {
   hasCodexCredentials,
 } from '../../../src/providers/codex-oauth';
 
+const APP_NAME = 'Code Buddy Studio';
+
+app.setName(APP_NAME);
+
 // Current working directory (persisted between sessions)
 let currentWorkingDir: string | null = null;
 
@@ -202,13 +218,11 @@ let projectManager: ProjectManager | null = null;
 let subAgentBridge: SubAgentBridge | null = null;
 let orchestratorBridge: OrchestratorBridge | null = null;
 let fleetBridge: FleetBridge | null = null;
-let scheduledFleetSagaRunner:
-  | {
-      bridge: FleetBridge;
-      activityFeed: ActivityFeed | null;
-      runner: SagaRunner;
-    }
-  | null = null;
+let scheduledFleetSagaRunner: {
+  bridge: FleetBridge;
+  activityFeed: ActivityFeed | null;
+  runner: SagaRunner;
+} | null = null;
 let teamBridge: TeamBridge | null = null;
 let mentionProcessor: MentionProcessor | null = null;
 let slashCommandBridge: SlashCommandBridge | null = null;
@@ -292,13 +306,20 @@ function buildScheduledTaskFleetMetadata(
   if (!metadata) return {};
   const result: Record<string, unknown> = {};
   if (typeof metadata.source === 'string') result.source = metadata.source;
-  if (metadata.agentRun && typeof metadata.agentRun === 'object' && !Array.isArray(metadata.agentRun)) {
+  if (
+    metadata.agentRun &&
+    typeof metadata.agentRun === 'object' &&
+    !Array.isArray(metadata.agentRun)
+  ) {
     result.agentRun = metadata.agentRun;
   }
   if (typeof metadata.agentRunId === 'string' && metadata.agentRunId.trim()) {
     result.agentRunId = metadata.agentRunId.trim();
   }
-  if (typeof metadata.agentRunSchemaVersion === 'number' && Number.isFinite(metadata.agentRunSchemaVersion)) {
+  if (
+    typeof metadata.agentRunSchemaVersion === 'number' &&
+    Number.isFinite(metadata.agentRunSchemaVersion)
+  ) {
     result.agentRunSchemaVersion = metadata.agentRunSchemaVersion;
   }
   if (typeof metadata.parentRunId === 'string' && metadata.parentRunId.trim()) {
@@ -359,9 +380,7 @@ function buildScheduledTaskFleetMetadata(
 
 function metadataStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean);
+  return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean);
 }
 
 function buildScheduledTaskCreateMetadata(
@@ -405,16 +424,14 @@ function buildScheduledFleetDispatchInput(task: ScheduledTask): FleetDispatchInp
   const metadata = task.metadata;
   if (!metadata || metadata.source !== 'fleet-command-center') return null;
 
-  const goal = scheduledMetadataString(metadata, 'dispatchGoal')
-    ?? extractScheduledFleetGoal(task.prompt);
+  const goal =
+    scheduledMetadataString(metadata, 'dispatchGoal') ?? extractScheduledFleetGoal(task.prompt);
   if (!goal) return null;
 
   const profile = normalizeScheduledDispatchProfile(
-    scheduledMetadataString(metadata, 'dispatchProfile'),
+    scheduledMetadataString(metadata, 'dispatchProfile')
   );
-  const privacyTag = normalizeScheduledPrivacyTag(
-    scheduledMetadataString(metadata, 'privacyTag'),
-  );
+  const privacyTag = normalizeScheduledPrivacyTag(scheduledMetadataString(metadata, 'privacyTag'));
   const parallelism = scheduledMetadataNumber(metadata, 'parallelism');
   const targetPeerIds = metadataStringList(metadata.targetPeerIds);
   const targetPeerLabels = metadataStringList(metadata.targetPeerLabels);
@@ -462,18 +479,12 @@ function extractScheduledFleetGoal(prompt: string): string | null {
   return prompt.trim() || null;
 }
 
-function scheduledMetadataString(
-  metadata: ScheduledTaskMetadata,
-  key: string
-): string | null {
+function scheduledMetadataString(metadata: ScheduledTaskMetadata, key: string): string | null {
   const value = metadata[key];
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function scheduledMetadataNumber(
-  metadata: ScheduledTaskMetadata,
-  key: string
-): number | null {
+function scheduledMetadataNumber(metadata: ScheduledTaskMetadata, key: string): number | null {
   const value = metadata[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -679,7 +690,7 @@ function setupTray() {
 
   tray = new Tray(resolvedIconPath);
   setTray(tray); // Same pattern as setMainWindow — keeps getTray() in sync.
-  tray.setToolTip('Open Cowork');
+  tray.setToolTip(APP_NAME);
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -1125,37 +1136,33 @@ app
     // installed Cowork; the OS still gates physical access at the
     // audio-capture layer, so this is purely about Electron's own
     // intra-process permission gate.
-    session.defaultSession.setPermissionRequestHandler(
-      (_webContents, permission, callback) => {
-        // Electron's union for request-side permission includes
-        // 'media' (covers both audio + video capture in one bucket).
-        // Older Electrons also expose 'audioCapture' separately so we
-        // accept both via a permissive cast.
-        const p = permission as string;
-        if (p === 'media' || p === 'audioCapture') {
-          callback(true);
-          return;
-        }
-        callback(false);
-      },
-    );
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      // Electron's union for request-side permission includes
+      // 'media' (covers both audio + video capture in one bucket).
+      // Older Electrons also expose 'audioCapture' separately so we
+      // accept both via a permissive cast.
+      const p = permission as string;
+      if (p === 'media' || p === 'audioCapture') {
+        callback(true);
+        return;
+      }
+      callback(false);
+    });
     // Electron 11+ also queries via setPermissionCheckHandler before
     // actually firing the request — both must agree for getUserMedia
     // to succeed. The check-side union is slightly different from the
     // request-side; same permissive cast.
-    session.defaultSession.setPermissionCheckHandler(
-      (_webContents, permission) => {
-        const p = permission as string;
-        return p === 'media' || p === 'audioCapture';
-      },
-    );
+    session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+      const p = permission as string;
+      return p === 'media' || p === 'audioCapture';
+    });
 
     // Apply dev logs setting from config
     const enableDevLogs = configStore.get('enableDevLogs');
     setDevLogsEnabled(enableDevLogs);
 
     // Log environment variables for debugging
-    log('=== Open Cowork Starting ===');
+    log(`=== ${APP_NAME} Starting ===`);
     log('Config file:', configStore.getPath());
     log('Is configured:', configStore.isConfigured());
     log('Developer logs:', enableDevLogs ? 'Enabled' : 'Disabled');
@@ -1223,7 +1230,7 @@ app
         mainBundleDir,
       });
       log(
-        `[Main] Resolving Code Buddy engine: layer=${engineResolution.layer} path=${engineResolution.path}`,
+        `[Main] Resolving Code Buddy engine: layer=${engineResolution.layer} path=${engineResolution.path}`
       );
       try {
         // Node's ESM loader on Windows REQUIRES file:// URLs for absolute
@@ -1231,7 +1238,7 @@ app
         // pathToFileURL produces a cross-platform-safe `file:///D:/...`
         // form that the loader accepts on every platform.
         const adapterUrl = pathToFileURL(
-          resolve(engineResolution.path, 'desktop', 'codebuddy-engine-adapter.js'),
+          resolve(engineResolution.path, 'desktop', 'codebuddy-engine-adapter.js')
         ).href;
         const { CodeBuddyEngineAdapter } = await import(
           /* webpackIgnore: true */ /* @vite-ignore */ adapterUrl
@@ -1247,7 +1254,7 @@ app
         // Wire permission bridge for engine tool approvals
         try {
           const permBridgeUrl = pathToFileURL(
-            resolve(engineResolution.path, 'desktop', 'permission-bridge.js'),
+            resolve(engineResolution.path, 'desktop', 'permission-bridge.js')
           ).href;
           const { DesktopPermissionBridge } = await import(
             /* webpackIgnore: true */ /* @vite-ignore */ permBridgeUrl
@@ -1284,7 +1291,9 @@ app
           if (result.ok) {
             log('[Main] Gemini Google Search grounding enabled by user setting');
           } else {
-            log(`[Main] Gemini grounding toggle saved but not applied (reason: ${result.reason ?? 'unknown'})`);
+            log(
+              `[Main] Gemini grounding toggle saved but not applied (reason: ${result.reason ?? 'unknown'})`
+            );
           }
         }
 
@@ -1295,7 +1304,7 @@ app
             `[Main] Code Buddy engine not present at ${engineResolution.path}/desktop/codebuddy-engine-adapter.js ` +
               `(layer=${engineResolution.layer}). Falling back to pi-coding-agent runner. ` +
               `Fix: run \`npx tsc -p .\` at the repo root to build the core, ` +
-              `or set CODEBUDDY_ENGINE_PATH=/path/to/dist to point elsewhere.`,
+              `or set CODEBUDDY_ENGINE_PATH=/path/to/dist to point elsewhere.`
           );
         } else {
           logWarn('[Main] Failed to load Code Buddy engine, falling back to pi-coding-agent:', err);
@@ -1330,7 +1339,7 @@ app
       'codebuddy:set-gemini-grounding',
       async (_event, payload: { enabled: boolean }) => {
         return applyGroundingToggle(engineAdapter, payload.enabled === true);
-      },
+      }
     );
 
     // Initialize session manager before creating an interactive window.
@@ -1748,9 +1757,7 @@ app
           type: 'scheduledTask.failed',
           title: 'Scheduled task failed',
           description: task?.title ?? taskId,
-          metadata: task
-            ? buildScheduledTaskActivityMetadata(task, { error })
-            : { taskId, error },
+          metadata: task ? buildScheduledTaskActivityMetadata(task, { error }) : { taskId, error },
         });
         sendToRenderer({
           type: 'scheduled-task.error',
@@ -1825,7 +1832,7 @@ app
   .catch((error) => {
     logError('[App] Startup failed:', error);
     const message = error instanceof Error ? error.message : 'Unknown startup error';
-    dialog.showErrorBox('Open Cowork 启动失败', `${message}\n\n请查看日志获取更多信息。`);
+    dialog.showErrorBox(`${APP_NAME} 启动失败`, `${message}\n\n请查看日志获取更多信息。`);
     app.quit();
   });
 
@@ -1844,9 +1851,7 @@ async function scheduleFleetDiscovery(): Promise<void> {
     try {
       const { discoverPeers } = await import('./fleet/discovery');
       const all = await discoverPeers();
-      const known = new Set(
-        (await Promise.resolve(fleetBridge.listPeers())).map((p) => p.url),
-      );
+      const known = new Set((await Promise.resolve(fleetBridge.listPeers())).map((p) => p.url));
       const fresh = all.filter((p) => !known.has(p.url));
       if (fresh.length > 0) {
         sendToRenderer({
@@ -2228,7 +2233,10 @@ ipcMain.handle('config.codexOauthStatus', async () => {
 });
 
 // ── Project IPC handlers (Claude Cowork parity) ──────────────────────
-registerProjectIpcHandlers(() => projectManager, () => activityFeed);
+registerProjectIpcHandlers(
+  () => projectManager,
+  () => activityFeed
+);
 
 // ── Sub-agent IPC handlers (Claude Cowork parity) ────────────────────
 registerSubAgentIpcHandlers(subAgentBridge);
@@ -2237,7 +2245,11 @@ registerSubAgentIpcHandlers(subAgentBridge);
 registerOrchestratorIpcHandlers(orchestratorBridge);
 
 // ── Fleet IPC handlers (GAP 3 — multi-host Code Buddy listener) ──────
-registerFleetIpcHandlers(() => fleetBridge, () => activityFeed, () => projectManager);
+registerFleetIpcHandlers(
+  () => fleetBridge,
+  () => activityFeed,
+  () => projectManager
+);
 
 // ── Team IPC handlers (Phase 4 layer 9 — Agent Teams observability) ──
 registerTeamIpcHandlers(teamBridge);
@@ -2372,7 +2384,9 @@ ipcMain.handle('memory.delete', async (_event, entryIndex: number, projectId?: s
 // ── Pluggable memory provider selector (GAP-10) ─────────────────────────
 ipcMain.handle('memoryProvider.list', async () => {
   try {
-    const mod = await loadCoreModule<{ getMemoryProviderRegistry: () => any }>('memory/memory-provider.js');
+    const mod = await loadCoreModule<{ getMemoryProviderRegistry: () => any }>(
+      'memory/memory-provider.js'
+    );
     if (!mod) throw new Error('Failed to load memory provider module');
     return mod.getMemoryProviderRegistry().list();
   } catch (err) {
@@ -2395,7 +2409,9 @@ ipcMain.handle('memoryProvider.setActive', async (_event, providerId: string) =>
     configStore.update({ memoryProvider: providerId });
     configStore.applyToEnv();
     try {
-      const mod = await loadCoreModule<{ getMemoryProviderRegistry: () => any }>('memory/memory-provider.js');
+      const mod = await loadCoreModule<{ getMemoryProviderRegistry: () => any }>(
+        'memory/memory-provider.js'
+      );
       if (mod) {
         mod.getMemoryProviderRegistry().setActive(providerId);
       }
@@ -2416,7 +2432,7 @@ ipcMain.handle(
     _event,
     category: 'PATTERN' | 'RULE' | 'CONTEXT' | 'INSIGHT',
     content: string,
-    projectId?: string,
+    projectId?: string
   ) => {
     const trimmed = content.trim();
     if (!trimmed) return { success: false, error: 'Lesson content is empty' };
@@ -2428,7 +2444,7 @@ ipcMain.handle(
           add: (
             category: 'PATTERN' | 'RULE' | 'CONTEXT' | 'INSIGHT',
             content: string,
-            source?: 'user_correction' | 'self_observed' | 'manual',
+            source?: 'user_correction' | 'self_observed' | 'manual'
           ) => { id: string };
         };
       }>('agent/lessons-tracker.js');
@@ -2443,7 +2459,7 @@ ipcMain.handle(
       logError('[IPC] Lessons add failed:', err);
       return { success: false, error: message };
     }
-  },
+  }
 );
 
 function resolveLessonsWorkspace(projectId?: string): string {
@@ -2914,7 +2930,11 @@ ipcMain.handle('config.discover-lmstudio-local', async (_event, payload?: { base
     return await discoverLocalLmStudio(payload);
   } catch (error) {
     logError('[Config] Error discovering local LM Studio:', error);
-    return { available: false, baseUrl: payload?.baseUrl || 'http://localhost:1234/v1', status: 'unavailable' };
+    return {
+      available: false,
+      baseUrl: payload?.baseUrl || 'http://localhost:1234/v1',
+      status: 'unavailable',
+    };
   }
 });
 
@@ -3361,7 +3381,7 @@ async function recordCompanionPerceptFromMain(input: CompanionPerceptInput): Pro
     const mod = await loadCoreModule<{
       recordCompanionPercept: (
         input: CompanionPerceptInput,
-        options: { cwd?: string },
+        options: { cwd?: string }
       ) => Promise<unknown>;
     }>('companion/percepts.js');
     await mod?.recordCompanionPercept?.(input, { cwd });
@@ -3377,7 +3397,7 @@ async function recordCompanionSafetyEventFromMain(input: CompanionSafetyEventInp
     const mod = await loadCoreModule<{
       recordCompanionSafetyEvent: (
         input: CompanionSafetyEventInput,
-        options: { cwd?: string },
+        options: { cwd?: string }
       ) => Promise<unknown>;
     }>('companion/safety-ledger.js');
     await mod?.recordCompanionSafetyEvent?.(input, { cwd });
@@ -3400,18 +3420,15 @@ ipcMain.handle('voice.conversationStatus', async () => {
   return voiceConversation.snapshot();
 });
 
-ipcMain.handle(
-  'voice.conversationEvent',
-  async (_event, payload: VoiceConversationEvent) => {
-    try {
-      return { ok: true, snapshot: recordVoiceConversationEventFromMain(payload) };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logError('[voice.conversationEvent] failed:', message);
-      return { ok: false, error: message };
-    }
-  },
-);
+ipcMain.handle('voice.conversationEvent', async (_event, payload: VoiceConversationEvent) => {
+  try {
+    return { ok: true, snapshot: recordVoiceConversationEventFromMain(payload) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError('[voice.conversationEvent] failed:', message);
+    return { ok: false, error: message };
+  }
+});
 
 /**
  * Voice → text transcription (Phase 8 — mic button in ChatView).
@@ -3512,9 +3529,7 @@ ipcMain.handle('voice.status', async () => {
 });
 
 ipcMain.handle('voice.diagnostics', async () => {
-  const kyutai = kyutaiBridge
-    ? await kyutaiBridge.diagnostics({ timeoutMs: 750 })
-    : null;
+  const kyutai = kyutaiBridge ? await kyutaiBridge.diagnostics({ timeoutMs: 750 }) : null;
   const sttProvider = kyutai?.sttEnabled ? 'kyutai' : 'faster-whisper';
   const ttsProvider = kyutai?.ttsEnabled ? 'kyutai' : 'piper';
   const result = {
@@ -3522,7 +3537,10 @@ ipcMain.handle('voice.diagnostics', async () => {
     checkedAt: new Date().toISOString(),
     stt: {
       provider: sttProvider,
-      available: Boolean(kyutai?.sttEnabled) || Boolean(voiceBridge?.isReady()) || voiceBridge?.getBootError() === null,
+      available:
+        Boolean(kyutai?.sttEnabled) ||
+        Boolean(voiceBridge?.isReady()) ||
+        voiceBridge?.getBootError() === null,
       fallbackProvider: 'faster-whisper',
       fallbackAvailable: Boolean(voiceBridge?.isReady()) || voiceBridge?.getBootError() === null,
       bootError: voiceBridge?.getBootError() ?? null,
@@ -3573,7 +3591,7 @@ ipcMain.handle(
   'voice.speak',
   async (
     _event,
-    payload: { text: string; lengthScale?: number },
+    payload: { text: string; lengthScale?: number }
   ): Promise<{
     ok: boolean;
     audio?: ArrayBuffer;
@@ -3605,7 +3623,9 @@ ipcMain.handle(
           logWarn('[voice.speak] Kyutai failed; falling back to Piper:', kyutaiErr);
           if (!ttsBridge || !ttsBridge.isReady()) {
             const fallbackError = ttsBridge?.getBootError() ?? 'piper fallback not ready';
-            throw new Error(`${kyutaiErr instanceof Error ? kyutaiErr.message : String(kyutaiErr)}; ${fallbackError}`);
+            throw new Error(
+              `${kyutaiErr instanceof Error ? kyutaiErr.message : String(kyutaiErr)}; ${fallbackError}`
+            );
           }
         }
       }
@@ -3628,7 +3648,7 @@ ipcMain.handle(
       logError('[voice.speak] failed:', message);
       return { ok: false, error: message };
     }
-  },
+  }
 );
 
 ipcMain.handle('voice.ttsStatus', async () => {
@@ -3654,16 +3674,17 @@ ipcMain.handle(
       reason?: 'barge_in' | 'manual' | 'new_speech' | 'stop';
       hadPlayback?: boolean;
       timestamp?: number;
-    },
+    }
   ): Promise<{ ok: boolean; error?: string }> => {
     try {
       await recordCompanionSafetyEventFromMain({
         kind: 'permission',
         risk: payload.hadPlayback ? 'medium' : 'low',
         action: 'voice_playback_interrupted',
-        reason: payload.reason === 'barge_in'
-          ? 'User interrupted assistant speech to speak immediately.'
-          : `Assistant speech playback interruption: ${payload.reason || 'manual'}.`,
+        reason:
+          payload.reason === 'barge_in'
+            ? 'User interrupted assistant speech to speak immediately.'
+            : `Assistant speech playback interruption: ${payload.reason || 'manual'}.`,
         status: 'completed',
         source: 'cowork_voice_playback',
         payload: {
@@ -3685,7 +3706,7 @@ ipcMain.handle(
       logError('[voice.interrupted] failed:', message);
       return { ok: false, error: message };
     }
-  },
+  }
 );
 
 /**
@@ -3903,77 +3924,94 @@ ipcMain.handle('tools.list', async () => {
   }
 });
 
-ipcMain.handle('tools.skillCandidate.list', async (_event, payload?: {
-  cwd?: string;
-  eligibleOnly?: boolean;
-  limit?: number;
-  skillRoot?: string;
-}) => {
-  try {
-    const payloadCwd = typeof payload?.cwd === 'string' && isAbsolute(payload.cwd)
-      ? payload.cwd
-      : null;
-    return await listSkillCandidatesForReview({
-      rootDir: payloadCwd ?? getWorkingDir() ?? process.cwd(),
-      eligibleOnly: payload?.eligibleOnly,
-      limit: payload?.limit,
-      skillRoot: payload?.skillRoot,
-    });
-  } catch (err) {
-    logWarn('[tools.skillCandidate.list] failed:', err);
-    return [];
+ipcMain.handle(
+  'tools.skillCandidate.list',
+  async (
+    _event,
+    payload?: {
+      cwd?: string;
+      eligibleOnly?: boolean;
+      limit?: number;
+      skillRoot?: string;
+    }
+  ) => {
+    try {
+      const payloadCwd =
+        typeof payload?.cwd === 'string' && isAbsolute(payload.cwd) ? payload.cwd : null;
+      return await listSkillCandidatesForReview({
+        rootDir: payloadCwd ?? getWorkingDir() ?? process.cwd(),
+        eligibleOnly: payload?.eligibleOnly,
+        limit: payload?.limit,
+        skillRoot: payload?.skillRoot,
+      });
+    } catch (err) {
+      logWarn('[tools.skillCandidate.list] failed:', err);
+      return [];
+    }
   }
-});
+);
 
-ipcMain.handle('tools.lessonsVault.preview', async (_event, payload?: {
-  category?: string;
-  concept?: string;
-  cwd?: string;
-  includeKeywords?: boolean;
-  limit?: number;
-  query?: string;
-  vaultDir?: string;
-}) => {
-  try {
-    const payloadCwd = typeof payload?.cwd === 'string' && isAbsolute(payload.cwd)
-      ? payload.cwd
-      : null;
-    return await buildLessonsVaultPreview({
-      category: payload?.category,
-      concept: payload?.concept,
-      includeKeywords: payload?.includeKeywords,
-      limit: payload?.limit,
-      query: payload?.query,
-      rootDir: payloadCwd ?? getWorkingDir() ?? process.cwd(),
-      vaultDir: payload?.vaultDir,
-    });
-  } catch (err) {
-    logWarn('[tools.lessonsVault.preview] failed:', err);
-    return null;
+ipcMain.handle(
+  'tools.lessonsVault.preview',
+  async (
+    _event,
+    payload?: {
+      category?: string;
+      concept?: string;
+      cwd?: string;
+      includeKeywords?: boolean;
+      limit?: number;
+      query?: string;
+      vaultDir?: string;
+    }
+  ) => {
+    try {
+      const payloadCwd =
+        typeof payload?.cwd === 'string' && isAbsolute(payload.cwd) ? payload.cwd : null;
+      return await buildLessonsVaultPreview({
+        category: payload?.category,
+        concept: payload?.concept,
+        includeKeywords: payload?.includeKeywords,
+        limit: payload?.limit,
+        query: payload?.query,
+        rootDir: payloadCwd ?? getWorkingDir() ?? process.cwd(),
+        vaultDir: payload?.vaultDir,
+      });
+    } catch (err) {
+      logWarn('[tools.lessonsVault.preview] failed:', err);
+      return null;
+    }
   }
-});
+);
 
-ipcMain.handle('tools.lessonsVault.getConceptDetails', async (_event, payload?: {
-  conceptName: string;
-  cwd?: string;
-}) => {
-  try {
-    if (!payload?.conceptName) return null;
-    const payloadCwd = typeof payload?.cwd === 'string' && isAbsolute(payload.cwd)
-      ? payload.cwd
-      : null;
-    const rootDir = payloadCwd ?? getWorkingDir() ?? process.cwd();
-    const { loadCoreModule } = await import('./utils/core-loader');
-    const mod = await loadCoreModule<{ getLessonsTracker: (workDir: string) => any }>('agent/lessons-tracker.js');
-    if (!mod?.getLessonsTracker) return null;
-    const tracker = mod.getLessonsTracker(rootDir);
-    if (!tracker?.getConceptDetails) return null;
-    return tracker.getConceptDetails(payload.conceptName);
-  } catch (err) {
-    logWarn('[tools.lessonsVault.getConceptDetails] failed:', err);
-    return null;
+ipcMain.handle(
+  'tools.lessonsVault.getConceptDetails',
+  async (
+    _event,
+    payload?: {
+      conceptName: string;
+      cwd?: string;
+    }
+  ) => {
+    try {
+      if (!payload?.conceptName) return null;
+      const payloadCwd =
+        typeof payload?.cwd === 'string' && isAbsolute(payload.cwd) ? payload.cwd : null;
+      const rootDir = payloadCwd ?? getWorkingDir() ?? process.cwd();
+      const { loadCoreModule } = await import('./utils/core-loader');
+      const mod = await loadCoreModule<{ getLessonsTracker: (workDir: string) => any }>(
+        'agent/lessons-tracker.js'
+      );
+      if (!mod?.getLessonsTracker) return null;
+      const tracker = mod.getLessonsTracker(rootDir);
+      if (!tracker?.getConceptDetails) return null;
+      return tracker.getConceptDetails(payload.conceptName);
+    } catch (err) {
+      logWarn('[tools.lessonsVault.getConceptDetails] failed:', err);
+      return null;
+    }
   }
-});
+);
 
 // Project templates — Claude Cowork parity Phase 2 step 12
 ipcMain.handle('template.list', async () => {
@@ -4236,10 +4274,13 @@ ipcMain.handle('server.status', async () => {
   return getServerBridge().status();
 });
 
-ipcMain.handle('server.start', async (_event, userConfig?: { port?: number; host?: string; websocketEnabled?: boolean }) => {
-  const { getServerBridge } = await import('./server/server-bridge');
-  return getServerBridge().start(userConfig ?? {});
-});
+ipcMain.handle(
+  'server.start',
+  async (_event, userConfig?: { port?: number; host?: string; websocketEnabled?: boolean }) => {
+    const { getServerBridge } = await import('./server/server-bridge');
+    return getServerBridge().start(userConfig ?? {});
+  }
+);
 
 ipcMain.handle('server.stop', async () => {
   const { getServerBridge } = await import('./server/server-bridge');
@@ -4452,15 +4493,18 @@ ipcMain.handle('audit.buildPolicyEvalReport', async (_event, filter?: Record<str
   }
 });
 
-ipcMain.handle('audit.buildGoldenWorkflowEvalReport', async (_event, filter?: Record<string, unknown>) => {
-  try {
-    const { buildGoldenWorkflowEvalReport } = await import('./observability/audit-bridge');
-    return await buildGoldenWorkflowEvalReport(filter as never);
-  } catch (err) {
-    logError('[audit.buildGoldenWorkflowEvalReport] failed:', err);
-    return null;
+ipcMain.handle(
+  'audit.buildGoldenWorkflowEvalReport',
+  async (_event, filter?: Record<string, unknown>) => {
+    try {
+      const { buildGoldenWorkflowEvalReport } = await import('./observability/audit-bridge');
+      return await buildGoldenWorkflowEvalReport(filter as never);
+    } catch (err) {
+      logError('[audit.buildGoldenWorkflowEvalReport] failed:', err);
+      return null;
+    }
   }
-});
+);
 
 ipcMain.handle('audit.buildMobileSnapshot', async (_event, filter?: Record<string, unknown>) => {
   try {
@@ -4480,8 +4524,20 @@ ipcMain.handle('audit.buildMobileSnapshot', async (_event, filter?: Record<strin
         remoteExecutionDisabled: true,
         redaction: 'secrets-redacted',
       },
-      allowedActions: ['view_run_summary', 'open_artifact', 'copy_recall_pack', 'draft_followup_prompt'],
-      blockedActions: ['execute_tool', 'modify_files', 'send_email', 'approve_sensitive_operation', 'read_secret_values', 'push_changes'],
+      allowedActions: [
+        'view_run_summary',
+        'open_artifact',
+        'copy_recall_pack',
+        'draft_followup_prompt',
+      ],
+      blockedActions: [
+        'execute_tool',
+        'modify_files',
+        'send_email',
+        'approve_sensitive_operation',
+        'read_secret_values',
+        'push_changes',
+      ],
       redactionCount: 0,
       recallPack: {
         count: 0,
@@ -4505,70 +4561,20 @@ ipcMain.handle('audit.buildMobileSnapshot', async (_event, filter?: Record<strin
   }
 });
 
-ipcMain.handle('audit.buildMobileGatewayContract', async (_event, filter?: Record<string, unknown>) => {
-  try {
-    const { buildMobileGatewayContract } = await import('./observability/audit-bridge');
-    return await buildMobileGatewayContract(filter as never);
-  } catch (err) {
-    logError('[audit.buildMobileGatewayContract] failed:', err);
-    return {
-      schemaVersion: 1,
-      generatedAt: new Date().toISOString(),
-      mode: 'contract_only',
-      basePath: '/api/mobile',
-      query: '',
-      auth: {
-        required: true,
-        scheme: 'bearer_or_pairing_code',
-        scopes: ['mobile:read', 'mobile:draft'],
-        ttlSeconds: 900,
-      },
-      transport: {
-        exposure: 'local_first',
-        offDeviceTlsRequired: true,
-        remoteExecution: 'disabled',
-      },
-      endpoints: [],
-      blockedOperations: [
-        'execute_tool',
-        'modify_files',
-        'send_email',
-        'approve_sensitive_operation',
-        'read_secret_values',
-        'push_changes',
-      ].map((action) => ({
-        action,
-        policy: {
-          action,
-          allowed: false,
-          requiresLocalOperator: true,
-          reason: 'Blocked because mobile supervision disables remote execution and requires local operator approval.',
-        },
-      })),
-    };
-  }
-});
-
-ipcMain.handle('audit.buildMobileGatewayReviewDraft', async (_event, filter?: Record<string, unknown>) => {
-  try {
-    const { buildMobileGatewayReviewDraft } = await import('./observability/audit-bridge');
-    return await buildMobileGatewayReviewDraft(filter as never);
-  } catch (err) {
-    logError('[audit.buildMobileGatewayReviewDraft] failed:', err);
-    const method = String(filter?.method ?? 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET';
-    const action = String(filter?.action ?? 'view_run_summary').trim() || 'view_run_summary';
-    const path = String(filter?.path ?? '/api/mobile/snapshot').trim() || '/api/mobile/snapshot';
-    return {
-      schemaVersion: 1,
-      generatedAt: new Date().toISOString(),
-      query: String(filter?.query ?? '').trim(),
-      draftId: `mobile-review-${method.toLowerCase()}-${action}`,
-      contract: {
+ipcMain.handle(
+  'audit.buildMobileGatewayContract',
+  async (_event, filter?: Record<string, unknown>) => {
+    try {
+      const { buildMobileGatewayContract } = await import('./observability/audit-bridge');
+      return await buildMobileGatewayContract(filter as never);
+    } catch (err) {
+      logError('[audit.buildMobileGatewayContract] failed:', err);
+      return {
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
         mode: 'contract_only',
         basePath: '/api/mobile',
-        query: String(filter?.query ?? '').trim(),
+        query: '',
         auth: {
           required: true,
           scheme: 'bearer_or_pairing_code',
@@ -4581,234 +4587,309 @@ ipcMain.handle('audit.buildMobileGatewayReviewDraft', async (_event, filter?: Re
           remoteExecution: 'disabled',
         },
         endpoints: [],
-        blockedOperations: [],
-      },
-      request: { action, method, path },
-      decision: {
-        action,
-        allowed: false,
-        method,
-        path,
-        reason: 'Review draft builder failed; blocked for local operator review.',
-        requiresLocalOperator: true,
-        sideEffects: 'none',
-      },
-      status: 'blocked',
-      operatorActions: ['reject'],
-      safety: {
-        autoDispatch: false,
-        localOnly: true,
-        outreachDisabled: true,
-        remoteExecutionDisabled: true,
-      },
-    };
+        blockedOperations: [
+          'execute_tool',
+          'modify_files',
+          'send_email',
+          'approve_sensitive_operation',
+          'read_secret_values',
+          'push_changes',
+        ].map((action) => ({
+          action,
+          policy: {
+            action,
+            allowed: false,
+            requiresLocalOperator: true,
+            reason:
+              'Blocked because mobile supervision disables remote execution and requires local operator approval.',
+          },
+        })),
+      };
+    }
   }
-});
+);
 
-ipcMain.handle('audit.buildMobileGatewayListenerShell', async (_event, filter?: Record<string, unknown>) => {
-  try {
-    const { buildMobileGatewayListenerShell } = await import('./observability/audit-bridge');
-    return await buildMobileGatewayListenerShell(filter as never);
-  } catch (err) {
-    logError('[audit.buildMobileGatewayListenerShell] failed:', err);
-    const query = String(filter?.query ?? '').trim();
-    return {
-      schemaVersion: 1,
-      generatedAt: new Date().toISOString(),
-      kind: 'mobile_gateway_listener_shell',
-      query,
-      mode: 'disabled_shell',
-      basePath: '/api/mobile',
-      bind: {
-        host: '127.0.0.1',
-        networkExposure: 'loopback_only',
-        port: 0,
-        status: 'not_started',
-      },
-      auth: {
-        required: true,
-        scheme: 'bearer_or_pairing_code',
-        scopes: ['mobile:read', 'mobile:draft'],
-        ttlSeconds: 900,
-      },
-      transport: {
-        exposure: 'local_first',
-        offDeviceTlsRequired: true,
-        remoteExecution: 'disabled',
-        listener: 'not_started',
-      },
-      safety: {
-        localOperatorRequiredForDrafts: true,
-        mutationRoutesDisabled: true,
-        outreachDisabled: true,
-        remoteExecutionDisabled: true,
-        serverStarted: false,
-      },
-      routes: [],
-      blockedRoutes: [],
-      acceptanceChecks: ['No HTTP server is started by this shell.'],
-    };
-  }
-});
-
-ipcMain.handle('audit.buildMobilePairingState', async (_event, filter?: Record<string, unknown>) => {
-  try {
-    const { buildMobilePairingState } = await import('./observability/audit-bridge');
-    return await buildMobilePairingState(filter as never);
-  } catch (err) {
-    logError('[audit.buildMobilePairingState] failed:', err);
-    const rawTtlSeconds = Number(filter?.ttlSeconds);
-    const ttlSeconds = Number.isFinite(rawTtlSeconds) ? rawTtlSeconds : 300;
-    const generatedAt = new Date();
-    return {
-      schemaVersion: 1,
-      generatedAt: generatedAt.toISOString(),
-      kind: 'mobile_supervision_pairing_state',
-      mode: 'local_pairing_plan',
-      query: String(filter?.query ?? '').trim(),
-      basePath: '/api/mobile',
-      pairing: {
-        acceptedByListener: false,
-        codeFingerprint: 'unavailable',
-        deviceLabel: String(filter?.deviceLabel ?? 'cowork-mobile-supervisor').trim() || 'cowork-mobile-supervisor',
-        expiresAt: new Date(generatedAt.getTime() + ttlSeconds * 1000).toISOString(),
-        persisted: false,
-        previewCode: '000000',
-        scopes: ['mobile:read', 'mobile:draft'],
-        status: 'preview_only',
-        tokenIssued: false,
-        ttlSeconds,
-      },
-      listener: {
-        bindStatus: 'not_started',
-        listenerStatus: 'not_started',
-        networkExposure: 'loopback_only',
-        serverStarted: false,
-      },
-      safety: {
-        approvalMutationsDisabled: true,
-        notAcceptedByAnyServer: true,
-        pairingRequiresLocalOperator: true,
-        remoteExecutionDisabled: true,
-        secretMaterialPersisted: false,
-      },
-      operatorChecklist: ['No listener accepts this preview code.'],
-    };
-  }
-});
-
-ipcMain.handle('audit.buildMobilePairingAcceptancePlan', async (_event, filter?: Record<string, unknown>) => {
-  try {
-    const { buildMobilePairingAcceptancePlan } = await import('./observability/audit-bridge');
-    return await buildMobilePairingAcceptancePlan(filter as never);
-  } catch (err) {
-    logError('[audit.buildMobilePairingAcceptancePlan] failed:', err);
-    const query = String(filter?.query ?? '').trim();
-    const deviceLabel = String(filter?.deviceLabel ?? 'cowork-mobile-supervisor').trim() || 'cowork-mobile-supervisor';
-    const localOperatorLabel = String(filter?.localOperatorLabel ?? 'cowork-local-operator').trim() || 'cowork-local-operator';
-    return {
-      schemaVersion: 1,
-      generatedAt: new Date().toISOString(),
-      kind: 'mobile_supervision_pairing_acceptance_plan',
-      mode: 'acceptance_plan_only',
-      query,
-      basePath: '/api/mobile',
-      pairing: {
-        acceptedByListener: false,
-        codeFingerprint: 'unavailable',
-        deviceLabel,
-        expiresAt: new Date(Date.now() + 300_000).toISOString(),
-        scopes: ['mobile:read', 'mobile:draft'],
-        status: 'preview_only',
-        tokenIssued: false,
-      },
-      acceptance: {
-        canAcceptNow: false,
-        localOperatorLabel,
-        requestId: 'mobile-pairing-acceptance-unavailable',
-        status: 'blocked_until_listener_exists',
-        endpoint: {
-          action: 'accept_pairing_code',
-          enabled: false,
-          method: 'POST',
-          path: '/api/mobile/pairing/accept',
+ipcMain.handle(
+  'audit.buildMobileGatewayReviewDraft',
+  async (_event, filter?: Record<string, unknown>) => {
+    try {
+      const { buildMobileGatewayReviewDraft } = await import('./observability/audit-bridge');
+      return await buildMobileGatewayReviewDraft(filter as never);
+    } catch (err) {
+      logError('[audit.buildMobileGatewayReviewDraft] failed:', err);
+      const method = String(filter?.method ?? 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET';
+      const action = String(filter?.action ?? 'view_run_summary').trim() || 'view_run_summary';
+      const path = String(filter?.path ?? '/api/mobile/snapshot').trim() || '/api/mobile/snapshot';
+      return {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        query: String(filter?.query ?? '').trim(),
+        draftId: `mobile-review-${method.toLowerCase()}-${action}`,
+        contract: {
+          schemaVersion: 1,
+          generatedAt: new Date().toISOString(),
+          mode: 'contract_only',
+          basePath: '/api/mobile',
+          query: String(filter?.query ?? '').trim(),
+          auth: {
+            required: true,
+            scheme: 'bearer_or_pairing_code',
+            scopes: ['mobile:read', 'mobile:draft'],
+            ttlSeconds: 900,
+          },
+          transport: {
+            exposure: 'local_first',
+            offDeviceTlsRequired: true,
+            remoteExecution: 'disabled',
+          },
+          endpoints: [],
+          blockedOperations: [],
         },
-        requiredEvidence: [
-          'local_operator_confirmed_code',
-          'loopback_listener_started_explicitly',
-          'device_label_matches_pairing_request',
-          'pairing_code_not_expired',
+        request: { action, method, path },
+        decision: {
+          action,
+          allowed: false,
+          method,
+          path,
+          reason: 'Review draft builder failed; blocked for local operator review.',
+          requiresLocalOperator: true,
+          sideEffects: 'none',
+        },
+        status: 'blocked',
+        operatorActions: ['reject'],
+        safety: {
+          autoDispatch: false,
+          localOnly: true,
+          outreachDisabled: true,
+          remoteExecutionDisabled: true,
+        },
+      };
+    }
+  }
+);
+
+ipcMain.handle(
+  'audit.buildMobileGatewayListenerShell',
+  async (_event, filter?: Record<string, unknown>) => {
+    try {
+      const { buildMobileGatewayListenerShell } = await import('./observability/audit-bridge');
+      return await buildMobileGatewayListenerShell(filter as never);
+    } catch (err) {
+      logError('[audit.buildMobileGatewayListenerShell] failed:', err);
+      const query = String(filter?.query ?? '').trim();
+      return {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        kind: 'mobile_gateway_listener_shell',
+        query,
+        mode: 'disabled_shell',
+        basePath: '/api/mobile',
+        bind: {
+          host: '127.0.0.1',
+          networkExposure: 'loopback_only',
+          port: 0,
+          status: 'not_started',
+        },
+        auth: {
+          required: true,
+          scheme: 'bearer_or_pairing_code',
+          scopes: ['mobile:read', 'mobile:draft'],
+          ttlSeconds: 900,
+        },
+        transport: {
+          exposure: 'local_first',
+          offDeviceTlsRequired: true,
+          remoteExecution: 'disabled',
+          listener: 'not_started',
+        },
+        safety: {
+          localOperatorRequiredForDrafts: true,
+          mutationRoutesDisabled: true,
+          outreachDisabled: true,
+          remoteExecutionDisabled: true,
+          serverStarted: false,
+        },
+        routes: [],
+        blockedRoutes: [],
+        acceptanceChecks: ['No HTTP server is started by this shell.'],
+      };
+    }
+  }
+);
+
+ipcMain.handle(
+  'audit.buildMobilePairingState',
+  async (_event, filter?: Record<string, unknown>) => {
+    try {
+      const { buildMobilePairingState } = await import('./observability/audit-bridge');
+      return await buildMobilePairingState(filter as never);
+    } catch (err) {
+      logError('[audit.buildMobilePairingState] failed:', err);
+      const rawTtlSeconds = Number(filter?.ttlSeconds);
+      const ttlSeconds = Number.isFinite(rawTtlSeconds) ? rawTtlSeconds : 300;
+      const generatedAt = new Date();
+      return {
+        schemaVersion: 1,
+        generatedAt: generatedAt.toISOString(),
+        kind: 'mobile_supervision_pairing_state',
+        mode: 'local_pairing_plan',
+        query: String(filter?.query ?? '').trim(),
+        basePath: '/api/mobile',
+        pairing: {
+          acceptedByListener: false,
+          codeFingerprint: 'unavailable',
+          deviceLabel:
+            String(filter?.deviceLabel ?? 'cowork-mobile-supervisor').trim() ||
+            'cowork-mobile-supervisor',
+          expiresAt: new Date(generatedAt.getTime() + ttlSeconds * 1000).toISOString(),
+          persisted: false,
+          previewCode: '000000',
+          scopes: ['mobile:read', 'mobile:draft'],
+          status: 'preview_only',
+          tokenIssued: false,
+          ttlSeconds,
+        },
+        listener: {
+          bindStatus: 'not_started',
+          listenerStatus: 'not_started',
+          networkExposure: 'loopback_only',
+          serverStarted: false,
+        },
+        safety: {
+          approvalMutationsDisabled: true,
+          notAcceptedByAnyServer: true,
+          pairingRequiresLocalOperator: true,
+          remoteExecutionDisabled: true,
+          secretMaterialPersisted: false,
+        },
+        operatorChecklist: ['No listener accepts this preview code.'],
+      };
+    }
+  }
+);
+
+ipcMain.handle(
+  'audit.buildMobilePairingAcceptancePlan',
+  async (_event, filter?: Record<string, unknown>) => {
+    try {
+      const { buildMobilePairingAcceptancePlan } = await import('./observability/audit-bridge');
+      return await buildMobilePairingAcceptancePlan(filter as never);
+    } catch (err) {
+      logError('[audit.buildMobilePairingAcceptancePlan] failed:', err);
+      const query = String(filter?.query ?? '').trim();
+      const deviceLabel =
+        String(filter?.deviceLabel ?? 'cowork-mobile-supervisor').trim() ||
+        'cowork-mobile-supervisor';
+      const localOperatorLabel =
+        String(filter?.localOperatorLabel ?? 'cowork-local-operator').trim() ||
+        'cowork-local-operator';
+      return {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        kind: 'mobile_supervision_pairing_acceptance_plan',
+        mode: 'acceptance_plan_only',
+        query,
+        basePath: '/api/mobile',
+        pairing: {
+          acceptedByListener: false,
+          codeFingerprint: 'unavailable',
+          deviceLabel,
+          expiresAt: new Date(Date.now() + 300_000).toISOString(),
+          scopes: ['mobile:read', 'mobile:draft'],
+          status: 'preview_only',
+          tokenIssued: false,
+        },
+        acceptance: {
+          canAcceptNow: false,
+          localOperatorLabel,
+          requestId: 'mobile-pairing-acceptance-unavailable',
+          status: 'blocked_until_listener_exists',
+          endpoint: {
+            action: 'accept_pairing_code',
+            enabled: false,
+            method: 'POST',
+            path: '/api/mobile/pairing/accept',
+          },
+          requiredEvidence: [
+            'local_operator_confirmed_code',
+            'loopback_listener_started_explicitly',
+            'device_label_matches_pairing_request',
+            'pairing_code_not_expired',
+          ],
+        },
+        preconditions: [
+          {
+            id: 'loopback_listener_running',
+            label: 'A real loopback listener is running.',
+            passed: false,
+            evidence: 'Fallback artifact; listener is not started.',
+          },
         ],
-      },
-      preconditions: [
-        {
-          id: 'loopback_listener_running',
-          label: 'A real loopback listener is running.',
-          passed: false,
-          evidence: 'Fallback artifact; listener is not started.',
+        plannedMutations: [
+          {
+            id: 'mint_short_lived_mobile_token',
+            enabled: false,
+            description: 'Mint a short-lived bearer token scoped to mobile read/draft actions.',
+          },
+        ],
+        safety: {
+          approvalMutationEndpointEnabled: false,
+          autoAccept: false,
+          localOnly: true,
+          remoteExecutionDisabled: true,
+          secretMaterialPersisted: false,
+          serverStarted: false,
+          tokenIssued: false,
         },
-      ],
-      plannedMutations: [
-        {
-          id: 'mint_short_lived_mobile_token',
-          enabled: false,
-          description: 'Mint a short-lived bearer token scoped to mobile read/draft actions.',
-        },
-      ],
-      safety: {
-        approvalMutationEndpointEnabled: false,
-        autoAccept: false,
-        localOnly: true,
-        remoteExecutionDisabled: true,
-        secretMaterialPersisted: false,
-        serverStarted: false,
-        tokenIssued: false,
-      },
-      operatorChecklist: ['No pairing acceptance endpoint is enabled by this fallback artifact.'],
-    };
+        operatorChecklist: ['No pairing acceptance endpoint is enabled by this fallback artifact.'],
+      };
+    }
   }
-});
+);
 
-ipcMain.handle('audit.buildMobileApprovalQueue', async (_event, filter?: Record<string, unknown>) => {
-  try {
-    const { buildMobileApprovalQueue } = await import('./observability/audit-bridge');
-    return await buildMobileApprovalQueue(filter as never);
-  } catch (err) {
-    logError('[audit.buildMobileApprovalQueue] failed:', err);
-    return {
-      schemaVersion: 1,
-      generatedAt: new Date().toISOString(),
-      kind: 'mobile_supervision_approval_queue',
-      mode: 'local_review_queue',
-      query: String(filter?.query ?? '').trim(),
-      basePath: '/api/mobile',
-      pairing: {
-        acceptedByListener: false,
-        deviceLabel: 'cowork-mobile-supervisor',
-        status: 'preview_only',
-        tokenIssued: false,
-      },
-      listener: {
-        listenerStatus: 'not_started',
-        serverStarted: false,
-      },
-      counts: {
-        blocked: 0,
-        pending: 0,
-        ready: 0,
-        total: 0,
-      },
-      items: [],
-      safety: {
-        approvalMutationEndpointEnabled: false,
-        autoDispatch: false,
-        localOnly: true,
-        outreachDisabled: true,
-        remoteExecutionDisabled: true,
-      },
-    };
+ipcMain.handle(
+  'audit.buildMobileApprovalQueue',
+  async (_event, filter?: Record<string, unknown>) => {
+    try {
+      const { buildMobileApprovalQueue } = await import('./observability/audit-bridge');
+      return await buildMobileApprovalQueue(filter as never);
+    } catch (err) {
+      logError('[audit.buildMobileApprovalQueue] failed:', err);
+      return {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        kind: 'mobile_supervision_approval_queue',
+        mode: 'local_review_queue',
+        query: String(filter?.query ?? '').trim(),
+        basePath: '/api/mobile',
+        pairing: {
+          acceptedByListener: false,
+          deviceLabel: 'cowork-mobile-supervisor',
+          status: 'preview_only',
+          tokenIssued: false,
+        },
+        listener: {
+          listenerStatus: 'not_started',
+          serverStarted: false,
+        },
+        counts: {
+          blocked: 0,
+          pending: 0,
+          ready: 0,
+          total: 0,
+        },
+        items: [],
+        safety: {
+          approvalMutationEndpointEnabled: false,
+          autoDispatch: false,
+          localOnly: true,
+          outreachDisabled: true,
+          remoteExecutionDisabled: true,
+        },
+      };
+    }
   }
-});
+);
 
 ipcMain.handle('audit.exportCsv', async (_event, filter?: Record<string, unknown>) => {
   try {
@@ -5661,7 +5742,7 @@ ipcMain.handle('logs.export', async () => {
       });
       archive.append(
         [
-          'Open Cowork diagnostic bundle',
+          `${APP_NAME} diagnostic bundle`,
           `Exported at: ${diagnosticsSummary.exportedAt}`,
           '',
           'Included files:',

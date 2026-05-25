@@ -244,11 +244,11 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   const peers = useMemo(() => Object.values(fleetPeers), [fleetPeers]);
   const routablePeers = useMemo(
     () => peers.filter((p) => Boolean(p.capability?.models.length)),
-    [peers],
+    [peers]
   );
   const onlinePeers = useMemo(
     () => peers.filter((p) => p.status === 'authenticated' || p.status === 'connected'),
-    [peers],
+    [peers]
   );
   // Wiring W7 — bumped on every fleet.saga.update event so we re-fetch
   // sagas reactively instead of waiting for the 3s polling cycle.
@@ -282,15 +282,15 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   const [showLessonsGraph, setShowLessonsGraph] = useState(false);
   const runningSagas = useMemo(
     () => sagas.filter((s) => s.status === 'pending' || s.status === 'running').length,
-    [sagas],
+    [sagas]
   );
   const selectedSaga = useMemo(
     () => sagas.find((saga) => saga.id === selectedSagaId) ?? null,
-    [sagas, selectedSagaId],
+    [sagas, selectedSagaId]
   );
   const selectedOutcome = useMemo(
     () => fleetActivities.find((entry) => entry.id === selectedOutcomeId) ?? null,
-    [fleetActivities, selectedOutcomeId],
+    [fleetActivities, selectedOutcomeId]
   );
   const upcomingScheduledTasks = useMemo(
     () =>
@@ -303,23 +303,24 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
           return (left.nextRunAt ?? 0) - (right.nextRunAt ?? 0);
         })
         .slice(0, 3),
-    [scheduledTasks],
+    [scheduledTasks]
   );
   const recentFleetOutcomes = useMemo(
     () => fleetActivities.filter(isFleetTerminalActivity).slice(0, 3),
-    [fleetActivities],
+    [fleetActivities]
   );
   const recentFleetMemories = useMemo(
     () => fleetMemories.filter(isFleetOutcomeMemory).slice(-3).reverse(),
-    [fleetMemories],
+    [fleetMemories]
   );
   const activeWorkspaceCwd = useMemo(
-    () => sessions.find((session) => session.id === activeSessionId)?.cwd ?? workingDir ?? undefined,
-    [activeSessionId, sessions, workingDir],
+    () =>
+      sessions.find((session) => session.id === activeSessionId)?.cwd ?? workingDir ?? undefined,
+    [activeSessionId, sessions, workingDir]
   );
   const goalRunPreview = useMemo(
     () => (goalRunDraft ? buildAgentRunDraftPreview(goalRunDraft, t) : null),
-    [goalRunDraft, t],
+    [goalRunDraft, t]
   );
   const refreshingPeers = refreshingPeerId !== null;
   const readiness = getFleetReadiness(peers.length, onlinePeers.length, routablePeers.length);
@@ -339,22 +340,19 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
     setFleetGoalDraft(null);
   }, [fleetGoalDraft, isOpen, setFleetGoalDraft]);
 
-  const loadFleetActivities = useCallback(
-    async (isCancelled: () => boolean = () => false) => {
-      try {
-        const list = await getActivityApi()?.recent?.(60);
-        if (!isCancelled() && list) {
-          setFleetActivities(list.filter(isFleetActivity));
-          setActivityLoadError(null);
-        }
-      } catch (err) {
-        if (!isCancelled()) {
-          setActivityLoadError(err instanceof Error ? err.message : String(err));
-        }
+  const loadFleetActivities = useCallback(async (isCancelled: () => boolean = () => false) => {
+    try {
+      const list = await getActivityApi()?.recent?.(60);
+      if (!isCancelled() && list) {
+        setFleetActivities(list.filter(isFleetActivity));
+        setActivityLoadError(null);
       }
-    },
-    [],
-  );
+    } catch (err) {
+      if (!isCancelled()) {
+        setActivityLoadError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }, []);
 
   // ESC closes
   useEffect(() => {
@@ -558,7 +556,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
         trimmedGoal,
         dispatchProfile,
         dispatchMemories,
-        t,
+        t
       );
       const dispatchPeerTargets = routablePeers.map((peer) => ({
         id: peer.id,
@@ -610,13 +608,15 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
     };
     try {
       if (!api?.runNow) {
-        setScheduleLoadError(t('fleet.scheduledWork.runNowUnavailable', 'Schedule IPC bridge unavailable'));
+        setScheduleLoadError(
+          t('fleet.scheduledWork.runNowUnavailable', 'Schedule IPC bridge unavailable')
+        );
         return;
       }
       const updated = await api.runNow(taskId);
       if (updated) {
         setScheduledTasks((tasks) =>
-          tasks.map((task) => (task.id === updated.id ? updated : task)),
+          tasks.map((task) => (task.id === updated.id ? updated : task))
         );
         if (isFleetScheduledTask(updated) && updated.lastRunSessionId) {
           setSelectedSagaId(updated.lastRunSessionId);
@@ -643,10 +643,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
     onClose();
   };
 
-  const scheduleDispatchGoal = (
-    rawGoal: string,
-    metadataExtras: Record<string, unknown> = {},
-  ) => {
+  const scheduleDispatchGoal = (rawGoal: string, metadataExtras: Record<string, unknown> = {}) => {
     const trimmedGoal = rawGoal.trim();
     if (!trimmedGoal) return;
     const scheduleMemories =
@@ -655,11 +652,11 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
       trimmedGoal,
       dispatchProfile,
       scheduleMemories,
-      t,
+      t
     );
     const internetProofPlan = buildFleetInternetProofPlan(dispatchGoal);
     const internetProofMetadata = buildInternetProofSummaryMetadata(
-      summarizeInternetProofPlan(internetProofPlan),
+      summarizeInternetProofPlan(internetProofPlan)
     );
     const scheduledPeerTargets = routablePeers.map((peer) => ({
       id: peer.id,
@@ -683,7 +680,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
           ...inheritedRunMetadata,
           ...metadataExtras,
         },
-      }),
+      })
     );
     handleOpenScheduleSettings();
   };
@@ -754,7 +751,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const handleScheduleLeadDiscoveryWorkflow = (
     draft: string,
-    metadata: LeadDiscoveryWorkflowScheduleMetadata,
+    metadata: LeadDiscoveryWorkflowScheduleMetadata
   ) => {
     setGoalText(draft);
     setGoalRunDraft(null);
@@ -776,7 +773,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const handleScheduleBrowserOperatorDraft = (
     draft: string,
-    metadata: BrowserOperatorScheduleMetadata,
+    metadata: BrowserOperatorScheduleMetadata
   ) => {
     setGoalText(draft);
     setGoalRunDraft(null);
@@ -793,391 +790,387 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <>
-    <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      data-testid="fleet-command-center"
-    >
       <div
-        className="m-6 w-full max-w-7xl bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/35 p-4 backdrop-blur-sm lg:p-6"
+        onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        data-testid="fleet-command-center"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 shrink-0">
-          <div className="flex items-center gap-2">
-            <Network size={14} className="text-accent" />
-            <h2 className="text-sm font-medium text-zinc-200">
-              {t('fleet.title', 'Fleet Command Center')}
-            </h2>
-            <span className="text-[10px] text-zinc-500 ml-2">
-              {peers.length} {t('fleet.peers', 'peers')}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleRefreshPeers()}
-              disabled={refreshingPeers}
-              className="text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors"
-              aria-label={t('fleet.refreshCapabilities', 'Refresh peer capabilities')}
-              title={t('fleet.refreshCapabilities', 'Refresh peer capabilities')}
-            >
-              {refreshingPeers ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <RefreshCw size={15} />
-              )}
-            </button>
-            <button
-              onClick={onClose}
-              className="text-zinc-500 hover:text-zinc-300 transition-colors"
-              aria-label={t('common.close', 'Close')}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 flex min-h-0">
-          {/* Left — peer list */}
-          <div className="w-[35%] border-r border-zinc-800 overflow-y-auto">
-            <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-zinc-500 sticky top-0 bg-zinc-900 border-b border-zinc-800">
-              {t('fleet.peerList', 'Peers')}
+        <div
+          className="w-full max-w-[1440px] bg-background border border-border rounded-[1.5rem] shadow-elevated flex flex-col overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border-muted shrink-0">
+            <div className="flex items-center gap-2">
+              <Network size={14} className="text-accent" />
+              <h2 className="text-sm font-medium text-text-primary">
+                {t('fleet.title', 'Fleet Command Center')}
+              </h2>
+              <span className="text-[10px] text-text-muted ml-2">
+                {peers.length} {t('fleet.peers', 'peers')}
+              </span>
             </div>
-            {peers.length === 0 ? (
-              <div className="p-6 text-xs text-zinc-500 text-center">
-                {t(
-                  'fleet.noPeers',
-                  'Aucun peer configuré. Utilise Settings → A2A pour en ajouter, ou démarre un Code Buddy avec --serve sur le tailnet.',
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRefreshPeers()}
+                disabled={refreshingPeers}
+                className="text-text-muted hover:text-text-primary disabled:opacity-50 transition-colors"
+                aria-label={t('fleet.refreshCapabilities', 'Refresh peer capabilities')}
+                title={t('fleet.refreshCapabilities', 'Refresh peer capabilities')}
+              >
+                {refreshingPeers ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={15} />
                 )}
-              </div>
-            ) : (
-              <ul>
-                {peers.map((p) => (
-                  <PeerRow
-                    key={p.id}
-                    peer={p}
-                    selected={p.id === selectedPeerId}
-                    onSelect={() => {
-                      setSelectedPeerId(p.id);
-                      setSelectedSagaId(null);
-                      setSelectedOutcomeId(null);
-                    }}
-                  />
-                ))}
-              </ul>
-            )}
+              </button>
+              <button
+                onClick={onClose}
+                className="text-text-muted hover:text-text-primary transition-colors"
+                aria-label={t('common.close', 'Close')}
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
-          {/* Center — dispatch + sagas */}
-          <div className="w-[40%] flex flex-col min-h-0">
-            <div className="px-4 py-3 border-b border-zinc-800">
-              <div
-                className={`mb-3 flex items-center justify-between gap-3 border-l-2 pl-3 py-2 ${readiness.borderClass}`}
-              >
-                <div className="min-w-0">
-                  <div className={`text-[11px] font-medium ${readiness.textClass}`}>
-                    {t(readiness.titleKey, readiness.title)}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-zinc-500">
-                    <span>
-                      {routablePeers.length}/{peers.length} {t('fleet.routable', 'routable')}
-                    </span>
-                    <span>
-                      {onlinePeers.length} {t('fleet.online', 'online')}
-                    </span>
-                    <span>
-                      {runningSagas} {t('fleet.running', 'running')}
-                    </span>
-                  </div>
+          {/* Body */}
+          <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,0.9fr)_minmax(430px,1.2fr)_minmax(300px,0.95fr)]">
+            {/* Left — peer list */}
+            <div className="min-w-0 border-r border-border-muted overflow-y-auto">
+              <div className="sticky top-0 border-b border-border-muted bg-background/95 px-4 py-2 text-[10px] uppercase tracking-wider text-text-muted">
+                {t('fleet.peerList', 'Peers')}
+              </div>
+              {peers.length === 0 ? (
+                <div className="p-6 text-xs text-text-muted text-center">
+                  {t(
+                    'fleet.noPeers',
+                    'Aucun peer configuré. Utilise Settings → A2A pour en ajouter, ou démarre un Code Buddy avec --serve sur le tailnet.'
+                  )}
                 </div>
-                {readiness.action === 'refresh' && (
+              ) : (
+                <ul>
+                  {peers.map((p) => (
+                    <PeerRow
+                      key={p.id}
+                      peer={p}
+                      selected={p.id === selectedPeerId}
+                      onSelect={() => {
+                        setSelectedPeerId(p.id);
+                        setSelectedSagaId(null);
+                        setSelectedOutcomeId(null);
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Center — dispatch + sagas */}
+            <div className="min-w-0 flex flex-col min-h-0">
+              <div className="px-4 py-3 border-b border-border-muted">
+                <div
+                  className={`mb-3 flex items-center justify-between gap-3 border-l-2 pl-3 py-2 ${readiness.borderClass}`}
+                >
+                  <div className="min-w-0">
+                    <div className={`text-[11px] font-medium ${readiness.textClass}`}>
+                      {t(readiness.titleKey, readiness.title)}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-text-muted">
+                      <span>
+                        {routablePeers.length}/{peers.length} {t('fleet.routable', 'routable')}
+                      </span>
+                      <span>
+                        {onlinePeers.length} {t('fleet.online', 'online')}
+                      </span>
+                      <span>
+                        {runningSagas} {t('fleet.running', 'running')}
+                      </span>
+                    </div>
+                  </div>
+                  {readiness.action === 'refresh' && (
+                    <button
+                      type="button"
+                      onClick={() => void handleRefreshPeers()}
+                      disabled={refreshingPeers}
+                      className="shrink-0 rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:border-accent/60 hover:text-text-primary disabled:opacity-50"
+                    >
+                      {refreshingPeers
+                        ? t('fleet.refreshing', 'Refreshing')
+                        : t('fleet.refresh', 'Refresh')}
+                    </button>
+                  )}
+                </div>
+                <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">
+                  {t('fleet.dispatchGoal', 'Dispatch a goal to the fleet')}
+                </label>
+                <textarea
+                  value={goalText}
+                  onChange={(e) => {
+                    setGoalText(e.target.value);
+                    setGoalRunDraft(null);
+                  }}
+                  placeholder={t(
+                    'fleet.goalPlaceholder',
+                    'Décris ton objectif… le router choisira le meilleur peer × modèle (Cmd+Enter pour lancer)'
+                  )}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      void handleDispatch();
+                    }
+                  }}
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-border bg-surface p-2 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+                />
+                {goalRunPreview && (
+                  <div
+                    className="mt-2 rounded border border-accent/30 bg-accent/10 p-2"
+                    data-testid="fleet-agent-run-draft-preview"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] font-medium text-accent">
+                        {goalRunPreview.title}
+                      </div>
+                      <div className="shrink-0 font-mono text-[10px] text-text-secondary">
+                        {shortId(goalRunPreview.runId)}
+                      </div>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {goalRunPreview.chips.map((chip) => (
+                        <span
+                          key={chip}
+                          className="rounded border border-border bg-surface/70 px-1.5 py-0.5 text-[10px] text-text-secondary"
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+                      {goalRunPreview.promptPreview}
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <label className="text-[10px] text-text-muted">
+                    {t('fleet.parallelism', 'Parallel')}:
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={parallelism}
+                    onChange={(e) =>
+                      setParallelism(Math.max(1, Math.min(5, Number(e.target.value) || 1)))
+                    }
+                    className="w-12 rounded border border-border bg-surface px-1 py-0.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
+                  />
+                  <label className="text-[10px] text-text-muted ml-2">
+                    {t('fleet.privacy', 'Privacy')}:
+                  </label>
+                  <select
+                    value={privacyTag}
+                    onChange={(e) => setPrivacyTag(e.target.value as 'public' | 'sensitive')}
+                    className="rounded border border-border bg-surface px-1 py-0.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
+                  >
+                    <option value="public">{t('fleet.privacyPublic', 'public')}</option>
+                    <option value="sensitive">
+                      {t('fleet.privacySensitive', 'sensitive (no cloud)')}
+                    </option>
+                  </select>
+                  <label className="text-[10px] text-text-muted ml-2">
+                    {t('fleet.dispatchProfile', 'Profile')}:
+                  </label>
+                  <select
+                    value={dispatchProfile}
+                    onChange={(e) => setDispatchProfile(e.target.value as FleetDispatchProfile)}
+                    className="rounded border border-border bg-surface px-1 py-0.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
+                  >
+                    {FLEET_DISPATCH_PROFILES.map((profile) => (
+                      <option key={profile} value={profile}>
+                        {t(FLEET_DISPATCH_PROFILE_LABEL_KEYS[profile], profile)}
+                      </option>
+                    ))}
+                  </select>
+                  <label
+                    className="ml-2 flex items-center gap-1 text-[10px] text-text-secondary cursor-pointer select-none"
+                    title={t(
+                      'fleet.councilHint',
+                      'Ask the same question to ≥2 peers, then score their agreement and surface divergences. LLM arbitration of the final answer runs when an aggregator client is wired; otherwise the answers are concatenated.'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={council}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setCouncil(next);
+                        if (next && parallelism < 2) setParallelism(2);
+                      }}
+                      className="h-3 w-3 accent-accent"
+                    />
+                    {t('fleet.council', 'Council')}
+                  </label>
                   <button
                     type="button"
-                    onClick={() => void handleRefreshPeers()}
-                    disabled={refreshingPeers}
-                    className="shrink-0 rounded border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-50"
+                    onClick={handleScheduleDispatch}
+                    disabled={!goalText.trim()}
+                    className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-text-secondary transition-colors hover:border-accent/60 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {refreshingPeers
-                      ? t('fleet.refreshing', 'Refreshing')
-                      : t('fleet.refresh', 'Refresh')}
+                    <CalendarPlus size={11} />
+                    {t('fleet.scheduleDispatch', 'Schedule')}
                   </button>
-                )}
-              </div>
-              <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">
-                {t('fleet.dispatchGoal', 'Dispatch a goal to the fleet')}
-              </label>
-              <textarea
-                value={goalText}
-                onChange={(e) => {
-                  setGoalText(e.target.value);
-                  setGoalRunDraft(null);
-                }}
-                placeholder={t(
-                  'fleet.goalPlaceholder',
-                  'Décris ton objectif… le router choisira le meilleur peer × modèle (Cmd+Enter pour lancer)',
-                )}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    void handleDispatch();
-                  }
-                }}
-                rows={3}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded p-2 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-accent resize-none"
-              />
-              {goalRunPreview && (
-                <div
-                  className="mt-2 rounded border border-accent/30 bg-accent/10 p-2"
-                  data-testid="fleet-agent-run-draft-preview"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-medium text-accent">
-                      {goalRunPreview.title}
-                    </div>
-                    <div className="shrink-0 font-mono text-[10px] text-zinc-400">
-                      {shortId(goalRunPreview.runId)}
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleDispatch()}
+                    disabled={dispatchDisabled}
+                    className="ml-auto flex items-center gap-1 px-3 py-1 text-xs rounded bg-accent text-background hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {dispatching ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : (
+                      <Send size={11} />
+                    )}
+                    {t('fleet.dispatch', 'Dispatch')}
+                  </button>
+                </div>
+                {error && (
+                  <div className="mt-2 p-2 bg-error/10 border border-error/30 rounded text-error text-[11px] flex items-start gap-1.5">
+                    <AlertCircle size={11} className="mt-0.5 shrink-0" />
+                    <span>{error}</span>
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {goalRunPreview.chips.map((chip) => (
-                      <span
-                        key={chip}
-                        className="rounded border border-zinc-700 bg-zinc-900/70 px-1.5 py-0.5 text-[10px] text-zinc-300"
-                      >
-                        {chip}
+                )}
+                {!error && dispatchFeedback?.sagaId && (
+                  <div className="mt-2 rounded border border-success/30 bg-success/10 p-2 text-[11px] text-success">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 size={11} className="shrink-0" />
+                      <span className="min-w-0 truncate">
+                        {t('fleet.sagaStarted', 'Saga {{id}} started · privacy {{privacy}}', {
+                          id: shortId(dispatchFeedback.sagaId),
+                          privacy: dispatchFeedback.privacyTag ?? privacyTag,
+                        })}
                       </span>
-                    ))}
-                  </div>
-                  <div className="mt-1 text-[10px] leading-relaxed text-zinc-400">
-                    {goalRunPreview.promptPreview}
-                  </div>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <label className="text-[10px] text-zinc-500">
-                  {t('fleet.parallelism', 'Parallel')}:
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={parallelism}
-                  onChange={(e) =>
-                    setParallelism(Math.max(1, Math.min(5, Number(e.target.value) || 1)))
-                  }
-                  className="w-12 bg-zinc-800 border border-zinc-700 rounded px-1 py-0.5 text-[11px] text-zinc-200 focus:outline-none focus:border-accent"
-                />
-                <label className="text-[10px] text-zinc-500 ml-2">
-                  {t('fleet.privacy', 'Privacy')}:
-                </label>
-                <select
-                  value={privacyTag}
-                  onChange={(e) =>
-                    setPrivacyTag(e.target.value as 'public' | 'sensitive')
-                  }
-                  className="bg-zinc-800 border border-zinc-700 rounded px-1 py-0.5 text-[11px] text-zinc-200 focus:outline-none focus:border-accent"
-                >
-                  <option value="public">{t('fleet.privacyPublic', 'public')}</option>
-                  <option value="sensitive">
-                    {t('fleet.privacySensitive', 'sensitive (no cloud)')}
-                  </option>
-                </select>
-                <label className="text-[10px] text-zinc-500 ml-2">
-                  {t('fleet.dispatchProfile', 'Profile')}:
-                </label>
-                <select
-                  value={dispatchProfile}
-                  onChange={(e) =>
-                    setDispatchProfile(e.target.value as FleetDispatchProfile)
-                  }
-                  className="bg-zinc-800 border border-zinc-700 rounded px-1 py-0.5 text-[11px] text-zinc-200 focus:outline-none focus:border-accent"
-                >
-                  {FLEET_DISPATCH_PROFILES.map((profile) => (
-                    <option key={profile} value={profile}>
-                      {t(FLEET_DISPATCH_PROFILE_LABEL_KEYS[profile], profile)}
-                    </option>
-                  ))}
-                </select>
-                <label
-                  className="ml-2 flex items-center gap-1 text-[10px] text-zinc-400 cursor-pointer select-none"
-                  title={t(
-                    'fleet.councilHint',
-                    'Ask the same question to ≥2 peers, then score their agreement and surface divergences. LLM arbitration of the final answer runs when an aggregator client is wired; otherwise the answers are concatenated.',
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={council}
-                    onChange={(e) => {
-                      const next = e.target.checked;
-                      setCouncil(next);
-                      if (next && parallelism < 2) setParallelism(2);
-                    }}
-                    className="h-3 w-3 accent-accent"
-                  />
-                  {t('fleet.council', 'Council')}
-                </label>
-                <button
-                  type="button"
-                  onClick={handleScheduleDispatch}
-                  disabled={!goalText.trim()}
-                  className="flex items-center gap-1 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <CalendarPlus size={11} />
-                  {t('fleet.scheduleDispatch', 'Schedule')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDispatch()}
-                  disabled={dispatchDisabled}
-                  className="ml-auto flex items-center gap-1 px-3 py-1 text-xs rounded bg-accent text-background hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {dispatching ? (
-                    <Loader2 size={11} className="animate-spin" />
-                  ) : (
-                    <Send size={11} />
-                  )}
-                  {t('fleet.dispatch', 'Dispatch')}
-                </button>
-              </div>
-              {error && (
-                <div className="mt-2 p-2 bg-error/10 border border-error/30 rounded text-error text-[11px] flex items-start gap-1.5">
-                  <AlertCircle size={11} className="mt-0.5 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-              {!error && dispatchFeedback?.sagaId && (
-                <div className="mt-2 rounded border border-success/30 bg-success/10 p-2 text-[11px] text-success">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 size={11} className="shrink-0" />
-                    <span className="min-w-0 truncate">
-                      {t('fleet.sagaStarted', 'Saga {{id}} started · privacy {{privacy}}', {
-                        id: shortId(dispatchFeedback.sagaId),
-                        privacy: dispatchFeedback.privacyTag ?? privacyTag,
-                      })}
-                    </span>
-                  </div>
-                  {dispatchFeedback.lintWarning && (
-                    <div className="mt-1 text-warning">
-                      {dispatchFeedback.lintWarning}
                     </div>
-                  )}
-                </div>
-              )}
-              <ToolProfileInspectorStrip profile={dispatchProfile} />
-              <HermesPlanStrip
-                profile={dispatchProfile}
-                onUseAsGoal={handleUseHermesPlanAsGoal}
-                onScheduleGoal={handleScheduleHermesPlan}
-              />
-              <LessonsVaultStrip
-                cwd={activeWorkspaceCwd}
-                onBrowse={() => setShowLessonsGraph(true)}
-                onUseAsGoal={handleUseLessonsVaultAsGoal}
-              />
-              {dispatchProfile === 'research' && (
-                <>
-                  <LeadDiscoveryWorkflowStrip
-                    goal={goalText}
-                    onUseAsGoal={handleUseLeadDiscoveryWorkflowAsGoal}
-                    onScheduleGoal={handleScheduleLeadDiscoveryWorkflow}
-                  />
-                  <BrowserOperatorDraftStrip
-                    goal={goalText}
-                    onUseAsGoal={handleUseBrowserOperatorDraftAsGoal}
-                    onScheduleGoal={handleScheduleBrowserOperatorDraft}
-                  />
-                  <SkillCandidateReviewQueueStrip
-                    candidates={skillCandidates}
-                    error={skillCandidateLoadError}
-                    onUseAsGoal={handleUseSkillCandidateReviewAsGoal}
-                  />
-                </>
-              )}
-              <ScheduledWorkStrip
-                tasks={scheduledTasks}
-                upcomingTasks={upcomingScheduledTasks}
-                error={scheduleLoadError}
-                runningTaskId={runningScheduledTaskId}
-                onRunNow={(taskId) => void handleRunScheduledTaskNow(taskId)}
-                onOpenSettings={handleOpenScheduleSettings}
-              />
-              <FleetMemoryStrip
-                memories={recentFleetMemories}
-                error={memoryLoadError}
-                includeMemoryContext={includeMemoryContext}
-                onToggleInclude={setIncludeMemoryContext}
-              />
-              <FleetOutcomeStrip
-                entries={recentFleetOutcomes}
-                error={activityLoadError}
-                selectedEntryId={selectedOutcomeId}
-                onSelectOutcome={(entryId) => {
-                  setSelectedOutcomeId(entryId);
-                  setSelectedSagaId(null);
+                    {dispatchFeedback.lintWarning && (
+                      <div className="mt-1 text-warning">{dispatchFeedback.lintWarning}</div>
+                    )}
+                  </div>
+                )}
+                <ToolProfileInspectorStrip profile={dispatchProfile} />
+                <HermesPlanStrip
+                  profile={dispatchProfile}
+                  onUseAsGoal={handleUseHermesPlanAsGoal}
+                  onScheduleGoal={handleScheduleHermesPlan}
+                />
+                <LessonsVaultStrip
+                  cwd={activeWorkspaceCwd}
+                  onBrowse={() => setShowLessonsGraph(true)}
+                  onUseAsGoal={handleUseLessonsVaultAsGoal}
+                />
+                {dispatchProfile === 'research' && (
+                  <>
+                    <LeadDiscoveryWorkflowStrip
+                      goal={goalText}
+                      onUseAsGoal={handleUseLeadDiscoveryWorkflowAsGoal}
+                      onScheduleGoal={handleScheduleLeadDiscoveryWorkflow}
+                    />
+                    <BrowserOperatorDraftStrip
+                      goal={goalText}
+                      onUseAsGoal={handleUseBrowserOperatorDraftAsGoal}
+                      onScheduleGoal={handleScheduleBrowserOperatorDraft}
+                    />
+                    <SkillCandidateReviewQueueStrip
+                      candidates={skillCandidates}
+                      error={skillCandidateLoadError}
+                      onUseAsGoal={handleUseSkillCandidateReviewAsGoal}
+                    />
+                  </>
+                )}
+                <ScheduledWorkStrip
+                  tasks={scheduledTasks}
+                  upcomingTasks={upcomingScheduledTasks}
+                  error={scheduleLoadError}
+                  runningTaskId={runningScheduledTaskId}
+                  onRunNow={(taskId) => void handleRunScheduledTaskNow(taskId)}
+                  onOpenSettings={handleOpenScheduleSettings}
+                />
+                <FleetMemoryStrip
+                  memories={recentFleetMemories}
+                  error={memoryLoadError}
+                  includeMemoryContext={includeMemoryContext}
+                  onToggleInclude={setIncludeMemoryContext}
+                />
+                <FleetOutcomeStrip
+                  entries={recentFleetOutcomes}
+                  error={activityLoadError}
+                  selectedEntryId={selectedOutcomeId}
+                  onSelectOutcome={(entryId) => {
+                    setSelectedOutcomeId(entryId);
+                    setSelectedSagaId(null);
+                    setSelectedPeerId(null);
+                  }}
+                />
+              </div>
+
+              <SagaBoard
+                sagas={sagas}
+                selectedSagaId={selectedSagaId}
+                onSelectSaga={(sagaId) => {
+                  setSelectedSagaId(sagaId);
                   setSelectedPeerId(null);
+                  setSelectedOutcomeId(null);
                 }}
               />
             </div>
 
-            <SagaBoard
-              sagas={sagas}
-              selectedSagaId={selectedSagaId}
-              onSelectSaga={(sagaId) => {
-                setSelectedSagaId(sagaId);
-                setSelectedPeerId(null);
-                setSelectedOutcomeId(null);
-              }}
-            />
-          </div>
-
-          {/* Right — peer or saga detail */}
-          <div className="w-[25%] border-l border-zinc-800 overflow-y-auto">
-            <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-zinc-500 sticky top-0 bg-zinc-900 border-b border-zinc-800">
-              {selectedSaga
-                ? t('fleet.sagaDetail', 'Saga detail')
-                : selectedOutcome
-                  ? t('fleet.outcomeDetail', 'Fleet outcome')
-                : t('fleet.peerDetail', 'Peer detail')}
-            </div>
-            {selectedSaga ? (
-              <SagaDetail saga={selectedSaga} peersById={fleetPeers} />
-            ) : selectedOutcome ? (
-              <FleetOutcomeDetail
-                entry={selectedOutcome}
-                onUseAsGoal={handleUseOutcomeAsGoal}
-                onMemorySaved={() => setMemoryRefreshToken((token) => token + 1)}
-              />
-            ) : !selectedPeerId ? (
-              <div className="p-6 text-xs text-zinc-500 text-center">
-                {t(
-                  'fleet.selectPeerHint',
-                  'Sélectionne un peer ou une saga pour inspecter les détails.',
-                )}
+            {/* Right — peer or saga detail */}
+            <div className="min-w-0 border-l border-border-muted overflow-y-auto">
+              <div className="sticky top-0 border-b border-border-muted bg-background/95 px-4 py-2 text-[10px] uppercase tracking-wider text-text-muted">
+                {selectedSaga
+                  ? t('fleet.sagaDetail', 'Saga detail')
+                  : selectedOutcome
+                    ? t('fleet.outcomeDetail', 'Fleet outcome')
+                    : t('fleet.peerDetail', 'Peer detail')}
               </div>
-            ) : (
-              <PeerDetail
-                peer={fleetPeers[selectedPeerId]}
-                onRefreshCapabilities={(peerId) => void handleRefreshPeers(peerId)}
-                refreshing={
-                  refreshingPeerId === 'all' || refreshingPeerId === selectedPeerId
-                }
-              />
-            )}
+              {selectedSaga ? (
+                <SagaDetail saga={selectedSaga} peersById={fleetPeers} />
+              ) : selectedOutcome ? (
+                <FleetOutcomeDetail
+                  entry={selectedOutcome}
+                  onUseAsGoal={handleUseOutcomeAsGoal}
+                  onMemorySaved={() => setMemoryRefreshToken((token) => token + 1)}
+                />
+              ) : !selectedPeerId ? (
+                <div className="p-6 text-xs text-text-muted text-center">
+                  {t(
+                    'fleet.selectPeerHint',
+                    'Sélectionne un peer ou une saga pour inspecter les détails.'
+                  )}
+                </div>
+              ) : (
+                <PeerDetail
+                  peer={fleetPeers[selectedPeerId]}
+                  onRefreshCapabilities={(peerId) => void handleRefreshPeers(peerId)}
+                  refreshing={refreshingPeerId === 'all' || refreshingPeerId === selectedPeerId}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    {showLessonsGraph && <LessonsVaultGraph onClose={() => setShowLessonsGraph(false)} />}
+      {showLessonsGraph && <LessonsVaultGraph onClose={() => setShowLessonsGraph(false)} />}
     </>
   );
 };
 
-function getFleetReadiness(totalPeers: number, onlinePeers: number, routablePeers: number): {
+function getFleetReadiness(
+  totalPeers: number,
+  onlinePeers: number,
+  routablePeers: number
+): {
   action: 'none' | 'refresh';
   borderClass: string;
   textClass: string;
@@ -1187,8 +1180,8 @@ function getFleetReadiness(totalPeers: number, onlinePeers: number, routablePeer
   if (totalPeers === 0) {
     return {
       action: 'none',
-      borderClass: 'border-zinc-700',
-      textClass: 'text-zinc-400',
+      borderClass: 'border-border',
+      textClass: 'text-text-secondary',
       title: 'No peers configured',
       titleKey: 'fleet.readiness.none',
     };

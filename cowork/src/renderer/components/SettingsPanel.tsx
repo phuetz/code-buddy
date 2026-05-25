@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next';
 import { useWindowSize } from '../hooks/useWindowSize';
 import { RemoteControlPanel } from './RemoteControlPanel';
 import { useAppStore } from '../store';
+import { APP_NAME } from '../brand';
 import { SettingsAPI } from './settings/SettingsAPI';
 import { SettingsSandbox } from './settings/SettingsSandbox';
 import { SettingsConnectors } from './settings/SettingsConnectors';
@@ -223,7 +224,10 @@ export function SettingsPanel({ onClose, initialTab = 'api' }: SettingsPanelProp
       id: 'customize' as TabId,
       label: t('settings.customize', 'Customize'),
       icon: Blocks,
-      description: t('settings.customizeDesc', 'Plugins, connectors, workflows, hooks, and reusable workspace behavior'),
+      description: t(
+        'settings.customizeDesc',
+        'Plugins, connectors, workflows, hooks, and reusable workspace behavior'
+      ),
     },
     {
       id: 'projects' as TabId,
@@ -359,7 +363,7 @@ export function SettingsPanel({ onClose, initialTab = 'api' }: SettingsPanelProp
               {t('settings.title')}
             </p>
             <h2 className="mt-1 text-[1.24rem] font-semibold tracking-[-0.03em] text-text-primary">
-              Code Buddy Cowork
+              {APP_NAME}
             </h2>
             <p className="mt-1 text-[11px] leading-4 text-text-muted">{t('settings.panelDesc')}</p>
           </div>
@@ -379,7 +383,9 @@ export function SettingsPanel({ onClose, initialTab = 'api' }: SettingsPanelProp
             </div>
           </div>
         )}
-        <div className={`flex-1 ${compactSidebar ? 'p-1.5 space-y-1' : 'p-3 space-y-1.5'} overflow-y-auto`}>
+        <div
+          className={`flex-1 ${compactSidebar ? 'p-1.5 space-y-1' : 'p-3 space-y-1.5'} overflow-y-auto`}
+        >
           {filteredTabs.length === 0 && !compactSidebar && (
             <p className="px-2 py-3 text-[11px] text-text-muted italic">
               {t('settings.searchNoResults', 'No settings match your search.')}
@@ -521,7 +527,9 @@ export function SettingsPanel({ onClose, initialTab = 'api' }: SettingsPanelProp
                 {viewedTabs.has('cost') && <SettingsCostDashboard />}
               </div>
               <div className={activeTab === 'rules' ? '' : 'hidden'}>
-                {viewedTabs.has('rules') && <SettingsPermissionRules isActive={activeTab === 'rules'} />}
+                {viewedTabs.has('rules') && (
+                  <SettingsPermissionRules isActive={activeTab === 'rules'} />
+                )}
               </div>
               <div className={activeTab === 'mcpMarketplace' ? '' : 'hidden'}>
                 {viewedTabs.has('mcpMarketplace') && <SettingsMCPMarketplace />}

@@ -1,10 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { FleetPeer, ScheduleTask, ScheduleWeekday } from '../types';
 import { formatAppDateTime, joinAppList } from '../utils/i18n-format';
-import {
-  buildAgentRun,
-  buildAgentRunMetadata,
-} from '../../../../src/agent/agent-run-contract.js';
+import { buildAgentRun, buildAgentRunMetadata } from '../../../../src/agent/agent-run-contract.js';
 import type { AgentRun } from '../../../../src/agent/agent-run-contract.js';
 
 export type SagaStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -173,9 +170,7 @@ export function laneClass(lane: SagaSummary['steps'][number]['lane']): string {
  * a Draft→Review→Test workflow is currently in. Returns `null` for
  * non-chain sagas (caller falls back to status-based bucketing).
  */
-export function getActiveSagaStageColumn(
-  saga: SagaSummary,
-): SagaBoardColumnKey | null {
+export function getActiveSagaStageColumn(saga: SagaSummary): SagaBoardColumnKey | null {
   if (saga.steps.length === 0) return null;
   const isChain = saga.steps.every((s) => s.lane === 'chain');
   if (!isChain) return null;
@@ -230,10 +225,7 @@ export function formatScheduleRunAt(nextRunAt: number | null): string {
   });
 }
 
-export function formatFleetScheduleRule(
-  task: ScheduleTask,
-  t: FleetTranslate,
-): string {
+export function formatFleetScheduleRule(task: ScheduleTask, t: FleetTranslate): string {
   if (task.scheduleConfig?.kind === 'daily') {
     return t('fleet.scheduledWork.ruleDaily', 'Daily at {{times}}', {
       times: joinAppList(task.scheduleConfig.times),
@@ -263,10 +255,7 @@ export function formatFleetScheduleRule(
   });
 }
 
-export function buildFleetScheduledWorkChips(
-  task: ScheduleTask,
-  t: FleetTranslate,
-): string[] {
+export function buildFleetScheduledWorkChips(task: ScheduleTask, t: FleetTranslate): string[] {
   const chips = [formatFleetScheduleRule(task, t)];
 
   chips.push(
@@ -274,7 +263,7 @@ export function buildFleetScheduledWorkChips(
       ? t('fleet.scheduledWork.lastRunNever', 'Never run')
       : t('fleet.scheduledWork.lastRun', 'Last {{value}}', {
           value: formatScheduleRunAt(task.lastRunAt),
-        }),
+        })
   );
 
   const metadata = task.metadata ?? {};
@@ -286,8 +275,8 @@ export function buildFleetScheduledWorkChips(
         isFleetSource ? 'Saga {{value}}' : 'Session {{value}}',
         {
           value: shortId(task.lastRunSessionId),
-        },
-      ),
+        }
+      )
     );
   }
 
@@ -299,7 +288,7 @@ export function buildFleetScheduledWorkChips(
     chips.push(
       t('fleet.scheduledWork.hermesPlanChip', 'Hermes {{value}}', {
         value: hermesPlanProfile ?? 'plan',
-      }),
+      })
     );
   }
   const dispatchProfile = metadataString(metadata, 'dispatchProfile');
@@ -307,7 +296,7 @@ export function buildFleetScheduledWorkChips(
     chips.push(
       t('fleet.scheduledWork.profileChip', 'Profile {{value}}', {
         value: dispatchProfile,
-      }),
+      })
     );
   }
   const privacyTag = metadataString(metadata, 'privacyTag');
@@ -315,7 +304,7 @@ export function buildFleetScheduledWorkChips(
     chips.push(
       t('fleet.scheduledWork.privacyChip', 'Privacy {{value}}', {
         value: privacyTag,
-      }),
+      })
     );
   }
   const memoryCount = metadataNumber(metadata, 'memoryCount');
@@ -324,7 +313,7 @@ export function buildFleetScheduledWorkChips(
     chips.push(
       t('fleet.scheduledWork.peerCountChip', '{{count}} peers', {
         count: peerCount,
-      }),
+      })
     );
   }
   const targetPeerLabels = metadataStringList(metadata, 'targetPeerLabels');
@@ -333,7 +322,7 @@ export function buildFleetScheduledWorkChips(
       t('fleet.scheduledWork.targetPeersChip', 'Targets {{value}}', {
         value: joinAppList(targetPeerLabels.slice(0, 4)),
         count: targetPeerLabels.length,
-      }),
+      })
     );
   }
   const deliveryChannel = metadataString(metadata, 'deliveryChannel');
@@ -341,14 +330,14 @@ export function buildFleetScheduledWorkChips(
     chips.push(
       t('fleet.scheduledWork.deliveryChannelChip', 'Channel {{value}}', {
         value: deliveryChannel,
-      }),
+      })
     );
   }
   if (memoryCount !== null && memoryCount > 0) {
     chips.push(
       t('fleet.scheduledWork.memoryChip', 'Memory {{count}}', {
         count: memoryCount,
-      }),
+      })
     );
   }
   const internetProofChip = buildFleetInternetProofChip(metadata, t);
@@ -366,7 +355,7 @@ export function buildFleetScheduledWorkChips(
 export function buildFleetScheduledRunNowLabel(
   task: ScheduleTask,
   t: FleetTranslate,
-  running = false,
+  running = false
 ): string {
   const metadata = task.metadata ?? {};
   const hermesPlanProfile = metadataString(metadata, 'hermesPlanProfile');
@@ -425,10 +414,7 @@ export function isFleetTerminalActivity(entry: ActivityEntry): boolean {
   );
 }
 
-export function buildFleetOutcomeChips(
-  entry: ActivityEntry,
-  t: FleetTranslate,
-): string[] {
+export function buildFleetOutcomeChips(entry: ActivityEntry, t: FleetTranslate): string[] {
   const metadata = entry.metadata ?? {};
   const chips: string[] = [];
   if (typeof metadata.taskId === 'string') chips.push(`task ${shortId(metadata.taskId)}`);
@@ -444,7 +430,7 @@ export function buildFleetOutcomeChips(
       t('fleet.outcomes.targetPeersChip', 'Targets {{value}}', {
         value: joinAppList(targetPeerLabels.slice(0, 4)),
         count: targetPeerLabels.length,
-      }),
+      })
     );
   }
   const deliveryChannel = metadataString(metadata, 'deliveryChannel');
@@ -452,7 +438,7 @@ export function buildFleetOutcomeChips(
     chips.push(
       t('fleet.outcomes.deliveryChannelChip', 'Channel {{value}}', {
         value: deliveryChannel,
-      }),
+      })
     );
   }
   const memoryCount = metadataNumber(metadata, 'memoryCount');
@@ -460,25 +446,22 @@ export function buildFleetOutcomeChips(
     chips.push(
       t('fleet.outcomes.memoryChip', 'Memory {{count}}', {
         count: memoryCount,
-      }),
+      })
     );
   }
-  if (
-    typeof metadata.completedSteps === 'number' &&
-    typeof metadata.totalSteps === 'number'
-  ) {
+  if (typeof metadata.completedSteps === 'number' && typeof metadata.totalSteps === 'number') {
     chips.push(
       t('fleet.outcomes.doneChip', '{{completed}}/{{total}} done', {
         completed: metadata.completedSteps,
         total: metadata.totalSteps,
-      }),
+      })
     );
   }
   if (typeof metadata.failedSteps === 'number' && metadata.failedSteps > 0) {
     chips.push(
       t('fleet.outcomes.failedChip', '{{count}} failed', {
         count: metadata.failedSteps,
-      }),
+      })
     );
   }
   const policyChip = buildFleetToolPolicyChip(metadata);
@@ -492,17 +475,15 @@ export function buildFleetOutcomeChips(
   return chips;
 }
 
-export function buildFleetOutcomeFollowUpGoal(
-  entry: ActivityEntry,
-  t: FleetTranslate,
-): string {
+export function buildFleetOutcomeFollowUpGoal(entry: ActivityEntry, t: FleetTranslate): string {
   const metadata = entry.metadata ?? {};
   const sagaId = metadataString(metadata, 'sagaId');
   const status = metadataString(metadata, 'status') ?? outcomeStatusLabel(entry);
   const completedSteps = metadataNumber(metadata, 'completedSteps');
   const totalSteps = metadataNumber(metadata, 'totalSteps');
   const finalResultPreview = metadataString(metadata, 'finalResultPreview');
-  const errorSummary = metadataString(metadata, 'errorSummary') ?? metadataString(metadata, 'error');
+  const errorSummary =
+    metadataString(metadata, 'errorSummary') ?? metadataString(metadata, 'error');
   const hermesPlanSummary = buildHermesPlanSummary(metadata);
   const toolPolicySummary = buildFleetToolPolicyChip(metadata);
   const internetProofSummary = buildFleetInternetProofSummary(metadata);
@@ -521,9 +502,7 @@ export function buildFleetOutcomeFollowUpGoal(
   }
 
   if (completedSteps !== null && totalSteps !== null) {
-    lines.push(
-      `${t('fleet.followUp.steps', 'Steps')}: ${completedSteps}/${totalSteps}`,
-    );
+    lines.push(`${t('fleet.followUp.steps', 'Steps')}: ${completedSteps}/${totalSteps}`);
   }
 
   if (hermesPlanSummary) {
@@ -558,19 +537,18 @@ export function buildFleetOutcomeFollowUpGoal(
     lines.push(
       '',
       `${t('fleet.followUp.finalResultPreview', 'Previous final result preview')}:`,
-      finalResultPreview,
+      finalResultPreview
     );
   }
 
   if (errorSummary) {
-    lines.push(
-      '',
-      `${t('fleet.followUp.errorSummary', 'Previous error summary')}:`,
-      errorSummary,
-    );
+    lines.push('', `${t('fleet.followUp.errorSummary', 'Previous error summary')}:`, errorSummary);
   }
 
-  lines.push('', t('fleet.followUp.instruction', 'Use this context to execute the next useful step.'));
+  lines.push(
+    '',
+    t('fleet.followUp.instruction', 'Use this context to execute the next useful step.')
+  );
   return lines.join('\n').trim();
 }
 
@@ -586,7 +564,9 @@ export function buildFleetOutcomeFollowUpRun({
   const privacyTag = metadataString(metadata, 'privacyTag');
   const targetPeerLabels = metadataStringList(metadata, 'targetPeerLabels');
   const targetPeerIds = metadataStringList(metadata, 'targetPeerIds');
-  const peerCount = metadataNumber(metadata, 'peerCount') ?? Math.max(targetPeerIds.length, targetPeerLabels.length);
+  const peerCount =
+    metadataNumber(metadata, 'peerCount') ??
+    Math.max(targetPeerIds.length, targetPeerLabels.length);
   const memoryCount = metadataNumber(metadata, 'memoryCount') ?? 0;
   const proofSteps = Array.isArray(metadata.internetProofSteps)
     ? metadata.internetProofSteps.filter(isRecord)
@@ -601,7 +581,10 @@ export function buildFleetOutcomeFollowUpRun({
     privacyTag: privacyTag === 'public' || privacyTag === 'sensitive' ? privacyTag : undefined,
     lineage: {
       outcomeId,
-      parentRunId: metadataString(metadata, 'agentRunId') ?? metadataString(metadata, 'parentRunId') ?? undefined,
+      parentRunId:
+        metadataString(metadata, 'agentRunId') ??
+        metadataString(metadata, 'parentRunId') ??
+        undefined,
       sagaId: sagaId ?? undefined,
       scheduleTaskId: metadataString(metadata, 'taskId') ?? undefined,
       sourceSessionId: metadataString(metadata, 'sourceSessionId') ?? undefined,
@@ -641,10 +624,7 @@ export function buildFleetOutcomeFollowUpRun({
   });
 }
 
-export function buildAgentRunDraftPreview(
-  run: AgentRun,
-  t: FleetTranslate,
-): AgentRunDraftPreview {
+export function buildAgentRunDraftPreview(run: AgentRun, t: FleetTranslate): AgentRunDraftPreview {
   const chips = [`run ${shortId(run.id)}`];
   if (run.lineage?.parentRunId) {
     chips.push(`parent ${shortId(run.lineage.parentRunId)}`);
@@ -671,12 +651,12 @@ export function buildAgentRunDraftPreview(
     chips.push(`memory ${run.memory.count}`);
   }
   if (run.proof?.stepCount && run.proof.stepCount > 0) {
-    const requiredSuffix = run.proof.requiredCount && run.proof.requiredCount > 0
-      ? `/${run.proof.requiredCount}`
-      : '';
-    const assertionSuffix = run.proof.assertionCount && run.proof.assertionCount > 0
-      ? ` assert ${run.proof.assertionCount}`
-      : '';
+    const requiredSuffix =
+      run.proof.requiredCount && run.proof.requiredCount > 0 ? `/${run.proof.requiredCount}` : '';
+    const assertionSuffix =
+      run.proof.assertionCount && run.proof.assertionCount > 0
+        ? ` assert ${run.proof.assertionCount}`
+        : '';
     chips.push(`web proof ${run.proof.stepCount}${requiredSuffix}${assertionSuffix}`);
   }
   if (run.toolPolicy?.toolsetId) {
@@ -698,7 +678,8 @@ export function buildFleetOutcomeMemoryContent(entry: ActivityEntry): string {
   const completedSteps = metadataNumber(metadata, 'completedSteps');
   const totalSteps = metadataNumber(metadata, 'totalSteps');
   const finalResultPreview = metadataString(metadata, 'finalResultPreview');
-  const errorSummary = metadataString(metadata, 'errorSummary') ?? metadataString(metadata, 'error');
+  const errorSummary =
+    metadataString(metadata, 'errorSummary') ?? metadataString(metadata, 'error');
   const hermesPlanSummary = buildHermesPlanSummary(metadata);
   const toolPolicySummary = buildFleetToolPolicyChip(metadata);
   const internetProofSummary = buildFleetInternetProofSummary(metadata);
@@ -706,10 +687,7 @@ export function buildFleetOutcomeMemoryContent(entry: ActivityEntry): string {
   const targetPeerSummary = buildTargetPeerSummary(metadata);
   const deliveryChannel = metadataString(metadata, 'deliveryChannel');
   const memoryCount = metadataNumber(metadata, 'memoryCount');
-  const parts = [
-    `Fleet outcome lesson: ${entry.description ?? entry.title}`,
-    `status=${status}`,
-  ];
+  const parts = [`Fleet outcome lesson: ${entry.description ?? entry.title}`, `status=${status}`];
 
   if (sagaId) {
     parts.push(`saga=${sagaId}`);
@@ -765,7 +743,8 @@ export function buildFleetOutcomeLessonContent(entry: ActivityEntry): string {
   const agentRunId = metadataString(metadata, 'agentRunId');
   const parentRunId = metadataString(metadata, 'parentRunId');
   const finalResultPreview = metadataString(metadata, 'finalResultPreview');
-  const errorSummary = metadataString(metadata, 'errorSummary') ?? metadataString(metadata, 'error');
+  const errorSummary =
+    metadataString(metadata, 'errorSummary') ?? metadataString(metadata, 'error');
   const hermesPlanSummary = buildHermesPlanSummary(metadata);
   const toolPolicySummary = buildFleetToolPolicyChip(metadata);
   const internetProofSummary = buildFleetInternetProofSummary(metadata);
@@ -805,11 +784,12 @@ export function buildFleetOutcomeLessonContent(entry: ActivityEntry): string {
     '',
     'Verification:',
     '- The follow-up dispatch or scheduled task has agentRunId/outcomeId lineage.',
-    '- Activity Feed chips expose run, parent and outcome context.',
+    '- Activity Feed chips expose run, parent and outcome context.'
   );
 
   if (internetProofSteps) lines.push(`- Proof steps retained: ${internetProofSteps}`);
-  if (finalResultPreview) lines.push('', `Result preview: ${truncateMemorySegment(finalResultPreview)}`);
+  if (finalResultPreview)
+    lines.push('', `Result preview: ${truncateMemorySegment(finalResultPreview)}`);
   if (errorSummary) lines.push('', `Error summary: ${truncateMemorySegment(errorSummary)}`);
 
   return lines.join('\n');
@@ -822,7 +802,7 @@ export function isFleetOutcomeMemory(entry: FleetMemoryEntry): boolean {
 export function buildFleetDispatchGoalWithMemories(
   goal: string,
   memories: FleetMemoryEntry[],
-  t: FleetTranslate,
+  t: FleetTranslate
 ): string {
   if (memories.length === 0) return goal;
 
@@ -834,7 +814,7 @@ export function buildFleetDispatchGoalWithMemories(
     '',
     t(
       'fleet.memoryContext.instruction',
-      'Use these memories as background context; the dispatch goal above remains the priority.',
+      'Use these memories as background context; the dispatch goal above remains the priority.'
     ),
   ].join('\n');
 }
@@ -842,7 +822,7 @@ export function buildFleetDispatchGoalWithMemories(
 export function buildFleetDispatchGoalWithProfile(
   goal: string,
   profile: FleetDispatchProfile,
-  t: FleetTranslate,
+  t: FleetTranslate
 ): string {
   if (profile === 'balanced') return goal;
 
@@ -852,7 +832,7 @@ export function buildFleetDispatchGoalWithProfile(
     t('fleet.profileContext.heading', 'Dispatch profile:'),
     `- ${t(
       FLEET_DISPATCH_PROFILE_CONTEXT_KEYS[profile],
-      getFleetDispatchProfileFallback(profile),
+      getFleetDispatchProfileFallback(profile)
     )}`,
   ].join('\n');
 }
@@ -861,7 +841,7 @@ export function buildFleetDispatchGoalContext(
   goal: string,
   profile: FleetDispatchProfile,
   memories: FleetMemoryEntry[],
-  t: FleetTranslate,
+  t: FleetTranslate
 ): string {
   const withProfile = buildFleetDispatchGoalWithProfile(goal, profile, t);
   return buildFleetDispatchGoalWithMemories(withProfile, memories, t);
@@ -877,7 +857,7 @@ export function buildFleetScheduledDispatchPrompt(
     targetPeerIds?: string[];
     targetPeerLabels?: string[];
     deliveryChannel?: string;
-  } = {},
+  } = {}
 ): string {
   const targetPeerIds = normalizePromptStringList(options.targetPeerIds);
   const targetPeerLabels = normalizePromptStringList(options.targetPeerLabels);
@@ -903,12 +883,14 @@ export function buildFleetScheduledDispatchPrompt(
     '',
     t(
       'fleet.scheduledDispatch.instruction',
-      'Use the available Fleet dispatch/delegation tools to send the goal below to the best peers, preserve the requested profile and privacy, then summarize the saga outcome.',
+      'Use the available Fleet dispatch/delegation tools to send the goal below to the best peers, preserve the requested profile and privacy, then summarize the saga outcome.'
     ),
     '',
     `${t('fleet.scheduledDispatch.goal', 'Goal')}:`,
     dispatchGoal,
-  ].join('\n').trim();
+  ]
+    .join('\n')
+    .trim();
 }
 
 export function buildFleetScheduledDispatchDraft({
@@ -981,7 +963,7 @@ export function buildFleetScheduledDispatchDraft({
         targetPeerIds,
         targetPeerLabels,
         deliveryChannel,
-      },
+      }
     ),
     scheduleMode: 'once',
     enabled: true,
@@ -1033,18 +1015,12 @@ function getFleetDispatchProfileFallback(profile: FleetDispatchProfile): string 
   return 'Balanced: use the normal agent loop and choose tools as needed.';
 }
 
-export function metadataString(
-  metadata: Record<string, unknown>,
-  key: string,
-): string | null {
+export function metadataString(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-export function metadataNumber(
-  metadata: Record<string, unknown>,
-  key: string,
-): number | null {
+export function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
   const value = metadata[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -1052,9 +1028,7 @@ export function metadataNumber(
 export function metadataStringList(metadata: Record<string, unknown>, key: string): string[] {
   const value = metadata[key];
   if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean);
+  return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean);
 }
 
 export function isFleetDispatchProfile(value: string | null): value is FleetDispatchProfile {
@@ -1084,8 +1058,9 @@ export function outcomeStatusLabel(entry: ActivityEntry): string {
 
 export function outcomeStatusTone(entry: ActivityEntry): string {
   if (entry.type === 'fleet.saga.completed') return 'text-success';
-  if (entry.type === 'fleet.saga.failed' || entry.type === 'scheduledTask.failed') return 'text-error';
-  return 'text-zinc-300';
+  if (entry.type === 'fleet.saga.failed' || entry.type === 'scheduledTask.failed')
+    return 'text-error';
+  return 'text-text-secondary';
 }
 
 export function formatOutcomeDuration(durationMs: number): string {
@@ -1099,14 +1074,14 @@ export function peerStatusTone(status: FleetPeer['status']): string {
   if (status === 'authenticated' || status === 'connected') return 'text-success';
   if (status === 'connecting' || status === 'reconnecting') return 'text-warning';
   if (status === 'disconnected' || status === 'error') return 'text-error';
-  return 'text-zinc-300';
+  return 'text-text-secondary';
 }
 
 export function sagaStatusTone(status: SagaSummary['status']): string {
   if (status === 'completed') return 'text-success';
   if (status === 'running') return 'text-accent';
   if (status === 'failed' || status === 'cancelled') return 'text-error';
-  return 'text-zinc-300';
+  return 'text-text-secondary';
 }
 
 export function formatPeerSeenAt(lastSeenAt?: number): string {
@@ -1165,10 +1140,7 @@ function buildFleetToolPolicyChip(metadata: Record<string, unknown>): string | n
   return toolsetId ? `${toolsetId} ${decisionSummary}` : decisionSummary;
 }
 
-function buildHermesPlanChip(
-  metadata: Record<string, unknown>,
-  t: FleetTranslate,
-): string | null {
+function buildHermesPlanChip(metadata: Record<string, unknown>, t: FleetTranslate): string | null {
   const profile = metadataString(metadata, 'hermesPlanProfile');
   if (profile) {
     return t('fleet.outcomes.hermesPlanChip', 'Hermes {{value}}', { value: profile });
@@ -1188,7 +1160,9 @@ function buildHermesPlanSummary(metadata: Record<string, unknown>): string | nul
     id ? `id=${id}` : null,
     profile ? `profile=${profile}` : null,
     surface ? `surface=${surface}` : null,
-  ].filter((part): part is string => Boolean(part)).join(', ');
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(', ');
 }
 
 function buildTargetPeerSummary(metadata: Record<string, unknown>): string | null {
@@ -1199,13 +1173,14 @@ function buildTargetPeerSummary(metadata: Record<string, unknown>): string | nul
 }
 
 function isFleetScheduledTaskActivity(entry: ActivityEntry): boolean {
-  return entry.type.startsWith('scheduledTask.') &&
-    entry.metadata?.source === 'fleet-command-center';
+  return (
+    entry.type.startsWith('scheduledTask.') && entry.metadata?.source === 'fleet-command-center'
+  );
 }
 
 function buildFleetInternetProofChip(
   metadata: Record<string, unknown>,
-  t: FleetTranslate,
+  t: FleetTranslate
 ): string | null {
   const stepCount = metadataNumber(metadata, 'internetProofStepCount');
   if (stepCount === null || stepCount <= 0) return null;
@@ -1215,11 +1190,15 @@ function buildFleetInternetProofChip(
   const requiredSuffix = requiredCount !== null && requiredCount > 0 ? `/${requiredCount}` : '';
 
   if (assertionCount !== null && assertionCount > 0) {
-    return t('fleet.outcomes.webProofAssertChip', 'web proof {{steps}}{{required}} assert {{assertions}}', {
-      steps: stepCount,
-      required: requiredSuffix,
-      assertions: assertionCount,
-    });
+    return t(
+      'fleet.outcomes.webProofAssertChip',
+      'web proof {{steps}}{{required}} assert {{assertions}}',
+      {
+        steps: stepCount,
+        required: requiredSuffix,
+        assertions: assertionCount,
+      }
+    );
   }
 
   return t('fleet.outcomes.webProofChip', 'web proof {{steps}}{{required}} steps', {
@@ -1234,9 +1213,10 @@ function buildFleetInternetProofSummary(metadata: Record<string, unknown>): stri
 
   const requiredCount = metadataNumber(metadata, 'internetProofRequiredCount');
   const assertionCount = metadataNumber(metadata, 'internetProofAssertionCount');
-  const stepSummary = requiredCount !== null && requiredCount > 0
-    ? `${stepCount}/${requiredCount} steps`
-    : `${stepCount} steps`;
+  const stepSummary =
+    requiredCount !== null && requiredCount > 0
+      ? `${stepCount}/${requiredCount} steps`
+      : `${stepCount} steps`;
   const parts = [stepSummary];
 
   if (assertionCount !== null && assertionCount > 0) {

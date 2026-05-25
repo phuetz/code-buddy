@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useIPC } from '../hooks/useIPC';
 import { useActiveProjectId, usePermissionMode } from '../store/selectors';
+import { APP_NAME } from '../brand';
 import { ProjectSelector } from './ProjectSelector';
 import {
   ChevronLeft,
@@ -290,12 +291,12 @@ export function Sidebar() {
           <div className="min-w-0 flex items-center gap-3">
             <img
               src={sidebarLogoSrc}
-              alt={t('common.appLogoAlt')}
+              alt={t('common.appLogoAlt', { appName: APP_NAME })}
               className="w-10 h-10 rounded-2xl object-cover border border-border-subtle bg-background/60 flex-shrink-0"
             />
             <div className="min-w-0">
               <h1 className="text-[1.34rem] leading-none font-semibold tracking-[-0.035em] text-text-primary">
-                Open Cowork
+                {APP_NAME}
               </h1>
             </div>
           </div>

@@ -79,7 +79,9 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
       .catch((loadErrorValue: unknown) => {
         if (cancelled) return;
         setLoadedCandidates([]);
-        setLoadError(loadErrorValue instanceof Error ? loadErrorValue.message : String(loadErrorValue));
+        setLoadError(
+          loadErrorValue instanceof Error ? loadErrorValue.message : String(loadErrorValue)
+        );
       });
 
     return () => {
@@ -89,17 +91,17 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
 
   return (
     <section
-      className="mt-3 rounded border border-violet-900/60 bg-violet-950/15 p-2"
+      className="mt-3 rounded border border-border-muted bg-surface/60 p-2"
       data-testid="fleet-skill-candidate-review-queue"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <PackageCheck size={11} className="shrink-0 text-violet-300" />
-          <span className="truncate text-[10px] uppercase tracking-wider text-violet-200/70">
+          <PackageCheck size={11} className="shrink-0 text-accent" />
+          <span className="truncate text-[10px] uppercase tracking-wider text-accent">
             {t('fleet.skillCandidate.title', 'Skill candidate review')}
           </span>
         </div>
-        <span className="shrink-0 rounded bg-violet-950 px-1.5 py-0.5 text-[10px] text-violet-200/70">
+        <span className="shrink-0 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
           {t('fleet.skillCandidate.countChip', '{{count}} eligible', {
             count: eligibleCount,
           })}
@@ -107,29 +109,29 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
       </div>
 
       <div className="mt-1.5 flex flex-wrap gap-1">
-        <span className="rounded bg-violet-950/80 px-1 py-0.5 text-[9px] text-violet-200/60">
+        <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
           {t('fleet.skillCandidate.reviewChip', 'human approval required')}
         </span>
-        <span className="rounded bg-violet-950/80 px-1 py-0.5 text-[9px] text-violet-200/60">
+        <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
           {t('fleet.skillCandidate.noAutoInstallChip', 'no auto-install')}
         </span>
-        <span className="rounded bg-violet-950/80 px-1 py-0.5 text-[9px] text-violet-200/60">
+        <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
           {t('fleet.skillCandidate.publicDataChip', 'public-data guardrails')}
         </span>
       </div>
 
-      <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-400">
-        <ShieldCheck size={10} className="shrink-0 text-violet-300" />
+      <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-secondary">
+        <ShieldCheck size={10} className="shrink-0 text-accent" />
         <span className="line-clamp-2">
           {t(
             'fleet.skillCandidate.guardrail',
-            'Candidates can become workspace skills only after repeated successful runs and explicit reviewer approval.',
+            'Candidates can become workspace skills only after repeated successful runs and explicit reviewer approval.'
           )}
         </span>
       </div>
 
       {visibleError && (
-        <div className="mt-1.5 rounded border border-amber-900/70 bg-amber-950/20 px-2 py-1 text-[10px] text-amber-200/80">
+        <div className="mt-1.5 rounded border border-warning/30 bg-warning/10 px-2 py-1 text-[10px] text-warning">
           {t('fleet.skillCandidate.loadFailed', 'Candidate queue load failed')}: {visibleError}
         </div>
       )}
@@ -137,27 +139,24 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
       {visibleCandidates.length > 0 ? (
         <ul className="mt-1.5 space-y-1">
           {visibleCandidates.map((candidate) => (
-            <li
-              key={candidate.skillName}
-              className="min-w-0 rounded bg-zinc-950/60 px-2 py-1"
-            >
+            <li key={candidate.skillName} className="min-w-0 rounded bg-surface/80 px-2 py-1">
               <div className="flex min-w-0 items-center justify-between gap-2">
-                <span className="truncate text-[10px] text-zinc-300">
+                <span className="truncate text-[10px] text-text-secondary">
                   {candidate.skillName}
                 </span>
-                <span className="shrink-0 rounded bg-violet-950 px-1 py-0.5 text-[9px] text-violet-200/60">
+                <span className="shrink-0 rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
                   {candidate.successfulRunCount} runs
                 </span>
               </div>
-              <div className="mt-0.5 truncate text-[9px] text-zinc-500">
+              <div className="mt-0.5 truncate text-[9px] text-text-muted">
                 {candidate.sourceJobId} · {candidate.reason}
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-500">
-          <ListChecks size={10} className="shrink-0 text-zinc-500" />
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted">
+          <ListChecks size={10} className="shrink-0 text-text-muted" />
           <span className="truncate">
             {t('fleet.skillCandidate.empty', 'Use the CLI queue to list materialized candidates.')}
           </span>
@@ -168,9 +167,9 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
         {commands.slice(0, 2).map((command) => (
           <li
             key={command}
-            className="flex min-w-0 items-center gap-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-500"
+            className="flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted"
           >
-            <Terminal size={10} className="shrink-0 text-zinc-500" />
+            <Terminal size={10} className="shrink-0 text-text-muted" />
             <code className="truncate">{command}</code>
           </li>
         ))}
@@ -181,7 +180,7 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
           <button
             type="button"
             onClick={() => onUseAsGoal(goalDraft)}
-            className="flex items-center gap-1 rounded border border-violet-900/80 px-2 py-1 text-[10px] text-violet-100/80 transition-colors hover:border-violet-400 hover:text-violet-200"
+            className="flex items-center gap-1 rounded border border-accent/50 px-2 py-1 text-[10px] text-accent transition-colors hover:bg-accent/10"
           >
             <Route size={10} />
             {t('fleet.skillCandidate.useAsGoal', 'Review queue as goal')}

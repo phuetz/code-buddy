@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Brain, CheckCircle2, Copy, Lightbulb, Loader2, Network, Send, XCircle } from 'lucide-react';
+import {
+  Brain,
+  CheckCircle2,
+  Copy,
+  Lightbulb,
+  Loader2,
+  Network,
+  Send,
+  XCircle,
+} from 'lucide-react';
 import {
   buildFleetOutcomeChips,
   buildFleetOutcomeFollowUpGoal,
@@ -22,7 +31,7 @@ type MemoryApiBridge = {
   add?: (
     category: 'preference' | 'pattern' | 'context' | 'decision',
     content: string,
-    projectId?: string,
+    projectId?: string
   ) => Promise<{ success: boolean; error?: string }>;
 };
 
@@ -30,7 +39,7 @@ type LessonsApiBridge = {
   add?: (
     category: 'PATTERN' | 'RULE' | 'CONTEXT' | 'INSIGHT',
     content: string,
-    projectId?: string,
+    projectId?: string
   ) => Promise<{ success: boolean; error?: string; lessonId?: string }>;
 };
 
@@ -44,17 +53,17 @@ export const FleetOutcomeStrip: React.FC<{
 
   return (
     <section
-      className="mt-2 rounded border border-zinc-800 bg-zinc-950/35 p-2"
+      className="mt-2 rounded border border-border-muted bg-surface/60 p-2"
       data-testid="fleet-recent-outcomes"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <Network size={11} className="shrink-0 text-accent" />
-          <span className="truncate text-[10px] uppercase tracking-wider text-zinc-400">
+          <span className="truncate text-[10px] uppercase tracking-wider text-text-secondary">
             {t('fleet.outcomes.title', 'Recent Fleet outcomes')}
           </span>
         </div>
-        <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] tabular-nums text-zinc-300">
+        <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">
           {entries.length}
         </span>
       </div>
@@ -64,7 +73,7 @@ export const FleetOutcomeStrip: React.FC<{
           {t('fleet.outcomes.loadFailed', 'Activity load failed')}: {error}
         </div>
       ) : entries.length === 0 ? (
-        <div className="mt-1.5 text-[10px] text-zinc-600">
+        <div className="mt-1.5 text-[10px] text-text-muted">
           {t('fleet.outcomes.empty', 'No completed Fleet saga yet')}
         </div>
       ) : (
@@ -75,14 +84,18 @@ export const FleetOutcomeStrip: React.FC<{
             const failed = outcomeStatus === 'failed';
             const selected = entry.id === selectedEntryId;
             const outcomeChips = buildFleetOutcomeChips(entry, t);
-            const outcomeButtonLabel = t('fleet.outcomes.openOutcome', 'Open Fleet outcome: {{context}}', {
-              context: [entryTitle, outcomeStatus, ...outcomeChips].filter(Boolean).join(' - '),
-            });
+            const outcomeButtonLabel = t(
+              'fleet.outcomes.openOutcome',
+              'Open Fleet outcome: {{context}}',
+              {
+                context: [entryTitle, outcomeStatus, ...outcomeChips].filter(Boolean).join(' - '),
+              }
+            );
             return (
               <li
                 key={entry.id}
                 className={`rounded border transition-colors ${
-                  selected ? 'border-accent/60 bg-accent/10' : 'border-transparent bg-zinc-900/70'
+                  selected ? 'border-accent/60 bg-accent/10' : 'border-transparent bg-surface/70'
                 }`}
               >
                 <button
@@ -99,10 +112,10 @@ export const FleetOutcomeStrip: React.FC<{
                     ) : (
                       <CheckCircle2 size={10} className="shrink-0 text-success" />
                     )}
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-text-secondary">
                       {entryTitle}
                     </span>
-                    <span className="shrink-0 text-[10px] text-zinc-500">
+                    <span className="shrink-0 text-[10px] text-text-muted">
                       {formatActivityTime(entry.timestamp)}
                     </span>
                   </div>
@@ -110,7 +123,7 @@ export const FleetOutcomeStrip: React.FC<{
                     {outcomeChips.map((chip) => (
                       <span
                         key={chip}
-                        className="rounded border border-zinc-800 bg-zinc-950/70 px-1.5 py-0.5 text-[10px] text-zinc-500"
+                        className="rounded border border-border-muted bg-surface/80 px-1.5 py-0.5 text-[10px] text-text-muted"
                       >
                         {chip}
                       </span>
@@ -156,21 +169,29 @@ export const FleetOutcomeDetail: React.FC<{
   const useAsGoalLabel = [
     t('fleet.detail.useOutcomeAsGoal', 'Use as next goal'),
     outcomeActionContext,
-  ].filter(Boolean).join(' - ');
+  ]
+    .filter(Boolean)
+    .join(' - ');
   const saveAsMemoryLabel = [
     t('fleet.detail.saveOutcomeMemory', 'Save as memory'),
     outcomeActionContext,
-  ].filter(Boolean).join(' - ');
+  ]
+    .filter(Boolean)
+    .join(' - ');
   const saveAsLessonLabel = [
     t('fleet.detail.saveOutcomeLesson', 'Save as lesson'),
     outcomeActionContext,
-  ].filter(Boolean).join(' - ');
+  ]
+    .filter(Boolean)
+    .join(' - ');
   const copyOutcomeLabel = [
     copied
       ? t('fleet.detail.copiedOutcome', 'Copied')
       : t('fleet.detail.copyOutcome', 'Copy outcome'),
     outcomeActionContext,
-  ].filter(Boolean).join(' - ');
+  ]
+    .filter(Boolean)
+    .join(' - ');
   const memoryApi = getMemoryApi();
   const lessonsApi = getLessonsApi();
 
@@ -190,11 +211,15 @@ export const FleetOutcomeDetail: React.FC<{
   };
 
   const handleUseAsGoal = () => {
-    onUseAsGoal(entry, followUpGoal, buildFleetOutcomeFollowUpRun({
+    onUseAsGoal(
       entry,
       followUpGoal,
-      t,
-    }));
+      buildFleetOutcomeFollowUpRun({
+        entry,
+        followUpGoal,
+        t,
+      })
+    );
   };
 
   const handleSaveAsMemory = async () => {
@@ -212,7 +237,9 @@ export const FleetOutcomeDetail: React.FC<{
         return;
       }
       setMemoryStatus('error');
-      setMemoryError(result.error ?? t('fleet.detail.saveOutcomeMemoryFailed', 'Memory save failed'));
+      setMemoryError(
+        result.error ?? t('fleet.detail.saveOutcomeMemoryFailed', 'Memory save failed')
+      );
     } catch (err) {
       setMemoryStatus('error');
       setMemoryError(err instanceof Error ? err.message : String(err));
@@ -233,7 +260,9 @@ export const FleetOutcomeDetail: React.FC<{
         return;
       }
       setLessonStatus('error');
-      setLessonError(result.error ?? t('fleet.detail.saveOutcomeLessonFailed', 'Lesson save failed'));
+      setLessonError(
+        result.error ?? t('fleet.detail.saveOutcomeLessonFailed', 'Lesson save failed')
+      );
     } catch (err) {
       setLessonStatus('error');
       setLessonError(err instanceof Error ? err.message : String(err));
@@ -243,10 +272,8 @@ export const FleetOutcomeDetail: React.FC<{
   return (
     <div className="p-4 space-y-3 text-xs">
       <div>
-        <div className="text-zinc-200 font-medium">
-          {entry.description ?? entry.title}
-        </div>
-        <div className="mt-0.5 text-[11px] text-zinc-500">
+        <div className="text-text-primary font-medium">{entry.description ?? entry.title}</div>
+        <div className="mt-0.5 text-[11px] text-text-muted">
           {formatActivityDateTime(entry.timestamp)}
         </div>
       </div>
@@ -256,7 +283,7 @@ export const FleetOutcomeDetail: React.FC<{
           {outcomeChips.map((chip) => (
             <span
               key={chip}
-              className="rounded border border-zinc-800 bg-zinc-950/70 px-1.5 py-0.5 text-[10px] text-zinc-500"
+              className="rounded border border-border-muted bg-surface/80 px-1.5 py-0.5 text-[10px] text-text-muted"
             >
               {chip}
             </span>
@@ -274,9 +301,7 @@ export const FleetOutcomeDetail: React.FC<{
         <OutcomeStat
           label={t('fleet.detail.steps', 'Steps')}
           value={
-            completedSteps !== null && totalSteps !== null
-              ? `${completedSteps}/${totalSteps}`
-              : '-'
+            completedSteps !== null && totalSteps !== null ? `${completedSteps}/${totalSteps}` : '-'
           }
         />
         <OutcomeStat
@@ -286,11 +311,9 @@ export const FleetOutcomeDetail: React.FC<{
       </div>
 
       {sagaId && (
-        <div className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-600">Saga</div>
-          <div className="mt-0.5 break-all font-mono text-[11px] text-zinc-300">
-            {sagaId}
-          </div>
+        <div className="rounded border border-border-muted bg-surface/70 px-2 py-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-text-muted">Saga</div>
+          <div className="mt-0.5 break-all font-mono text-[11px] text-text-secondary">{sagaId}</div>
         </div>
       )}
 
@@ -311,7 +334,7 @@ export const FleetOutcomeDetail: React.FC<{
             onClick={() => void handleCopyOutcome()}
             aria-label={copyOutcomeLabel}
             title={copyOutcomeLabel}
-            className="inline-flex items-center gap-1 rounded border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 transition-colors hover:border-accent/60 hover:text-accent"
+            className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-text-secondary transition-colors hover:border-accent/60 hover:text-accent"
           >
             <Copy size={10} />
             {copied
@@ -387,10 +410,10 @@ export const FleetOutcomeDetail: React.FC<{
 
       {finalResultPreview && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+          <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
             {t('fleet.detail.finalResultPreview', 'Final result preview')}
           </div>
-          <pre className="max-h-52 overflow-y-auto whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950/60 p-2 text-[11px] text-zinc-300">
+          <pre className="max-h-52 overflow-y-auto whitespace-pre-wrap rounded border border-border-muted bg-surface/80 p-2 text-[11px] text-text-secondary">
             {finalResultPreview}
           </pre>
         </div>
@@ -398,7 +421,7 @@ export const FleetOutcomeDetail: React.FC<{
 
       {errorSummary && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+          <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
             {t('fleet.detail.errorSummary', 'Error summary')}
           </div>
           <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded border border-error/30 bg-error/10 p-2 text-[11px] text-error">
@@ -408,10 +431,10 @@ export const FleetOutcomeDetail: React.FC<{
       )}
 
       {!finalResultPreview && !errorSummary && (
-        <div className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-2 text-[11px] text-zinc-500">
+        <div className="rounded border border-border-muted bg-surface/70 px-2 py-2 text-[11px] text-text-muted">
           {t(
             'fleet.detail.noFinalPreview',
-            'Outcome metadata is available, but no final preview was recorded.',
+            'Outcome metadata is available, but no final preview was recorded.'
           )}
         </div>
       )}
@@ -424,9 +447,9 @@ const OutcomeStat: React.FC<{
   value: string;
   tone?: string;
 }> = ({ label, value, tone }) => (
-  <div className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-1.5">
-    <div className="uppercase tracking-wide text-zinc-600">{label}</div>
-    <div className={`mt-0.5 truncate ${tone ?? 'text-zinc-300'}`}>{value}</div>
+  <div className="rounded border border-border-muted bg-surface/70 px-2 py-1.5">
+    <div className="uppercase tracking-wide text-text-muted">{label}</div>
+    <div className={`mt-0.5 truncate ${tone ?? 'text-text-secondary'}`}>{value}</div>
   </div>
 );
 

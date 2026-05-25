@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { APP_NAME } from '../../brand';
 import { SettingsImportExport } from './SettingsImportExport';
 
 export function SettingsGeneral() {
@@ -40,8 +41,14 @@ export function SettingsGeneral() {
 
   useEffect(() => {
     if (window.electronAPI?.memoryProvider) {
-      window.electronAPI.memoryProvider.list().then(setProviders).catch(() => {});
-      window.electronAPI.memoryProvider.getActive().then(setActiveProvider).catch(() => {});
+      window.electronAPI.memoryProvider
+        .list()
+        .then(setProviders)
+        .catch(() => {});
+      window.electronAPI.memoryProvider
+        .getActive()
+        .then(setActiveProvider)
+        .catch(() => {});
     }
   }, []);
 
@@ -98,7 +105,9 @@ export function SettingsGeneral() {
 
       {/* Memory Provider (GAP-10) */}
       <div className="space-y-3 pt-4 border-t border-border">
-        <h4 className="text-sm font-medium text-text-primary">{t('general.memoryProvider', 'Memory Provider')}</h4>
+        <h4 className="text-sm font-medium text-text-primary">
+          {t('general.memoryProvider', 'Memory Provider')}
+        </h4>
         <p className="text-xs text-text-muted">
           {t(
             'general.memoryProviderDesc',
@@ -126,7 +135,9 @@ export function SettingsGeneral() {
       {/* About */}
       {appVer && (
         <div className="pt-4 border-t border-border">
-          <p className="text-xs text-text-muted">Open Cowork v{appVer}</p>
+          <p className="text-xs text-text-muted">
+            {APP_NAME} v{appVer}
+          </p>
         </div>
       )}
     </div>

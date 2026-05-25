@@ -19,6 +19,7 @@ import { useIPC } from './hooks/useIPC';
 import { useWindowSize } from './hooks/useWindowSize';
 import { useTabPinPersistence } from './hooks/useTabPinPersistence';
 import { Sidebar } from './components/Sidebar';
+import { ShellNavigation } from './components/ShellNavigation';
 import { WelcomeView } from './components/WelcomeView';
 import { PermissionDialog } from './components/PermissionDialog';
 import { SudoPasswordDialog } from './components/SudoPasswordDialog';
@@ -400,6 +401,10 @@ function App() {
 
       {/* Main Content */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
+        <PanelErrorBoundary name="ShellNavigation" fallback={<div className="w-0" />}>
+          <ShellNavigation />
+        </PanelErrorBoundary>
+
         {/* Sidebar */}
         <PanelErrorBoundary name="Sidebar" fallback={<div className="w-0" />}>
           <Sidebar />

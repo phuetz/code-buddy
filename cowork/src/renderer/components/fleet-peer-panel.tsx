@@ -2,10 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Cloud, HardDrive, Loader2, RefreshCw, Wifi } from 'lucide-react';
 import type { FleetPeer } from '../types';
-import {
-  formatPeerSeenAt,
-  peerStatusTone,
-} from './fleet-command-center-helpers';
+import { formatPeerSeenAt, peerStatusTone } from './fleet-command-center-helpers';
 
 export const PeerRow: React.FC<{
   peer: FleetPeer;
@@ -21,17 +18,17 @@ export const PeerRow: React.FC<{
       <button
         type="button"
         onClick={onSelect}
-        className={`w-full text-left px-4 py-2 border-b border-zinc-800/40 transition-colors ${
-          selected ? 'bg-accent/15' : 'hover:bg-zinc-800/40'
+        className={`w-full text-left px-4 py-2 border-b border-border-muted transition-colors ${
+          selected ? 'bg-accent/15' : 'hover:bg-surface-hover'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-zinc-200 font-medium truncate">
+          <span className="text-xs text-text-primary font-medium truncate">
             {peer.label ?? cap?.machineLabel ?? peer.id}
           </span>
           <StatusDot status={status} />
         </div>
-        <div className="flex items-center gap-1.5 mt-1 text-[10px] text-zinc-500">
+        <div className="flex items-center gap-1.5 mt-1 text-[10px] text-text-muted">
           <EgressChip egress={egress} />
           {cap && (
             <span>
@@ -72,10 +69,10 @@ export const PeerDetail: React.FC<{
   return (
     <div className="p-4 space-y-3 text-xs">
       <div>
-        <div className="text-zinc-200 font-medium">
+        <div className="text-text-primary font-medium">
           {peer.label ?? cap?.machineLabel ?? peer.id}
         </div>
-        <div className="text-zinc-500 text-[11px] truncate">{peer.url}</div>
+        <div className="text-text-muted text-[11px] truncate">{peer.url}</div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-[10px]">
         <PeerStat
@@ -103,16 +100,16 @@ export const PeerDetail: React.FC<{
           <div className="flex items-center gap-1.5 text-[11px]">
             <EgressChip egress={cap.egress} />
             {peer.peerChatProvider && (
-              <span className="min-w-0 truncate text-zinc-400">
+              <span className="min-w-0 truncate text-text-secondary">
                 {peer.peerChatProvider.provider} / {peer.peerChatProvider.model}
                 {peer.peerChatProvider.isLocal ? ' local' : ''}
               </span>
             )}
             {cap.machineSpec?.gpu && (
-              <span className="text-zinc-400">{cap.machineSpec.gpu}</span>
+              <span className="text-text-secondary">{cap.machineSpec.gpu}</span>
             )}
             {cap.machineSpec?.ramGb && (
-              <span className="text-zinc-500">
+              <span className="text-text-muted">
                 {t('fleet.detail.ramGb', '{{count}} GB', {
                   count: cap.machineSpec.ramGb,
                 })}
@@ -120,17 +117,14 @@ export const PeerDetail: React.FC<{
             )}
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+            <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
               {t('fleet.detail.models', 'Models')} ({cap.models.length})
             </div>
             <ul className="space-y-1.5">
               {cap.models.map((m) => (
-                <li
-                  key={m.id}
-                  className="p-2 rounded border border-zinc-800 bg-zinc-800/40"
-                >
-                  <div className="font-mono text-[11px] text-zinc-200">{m.id}</div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5">
+                <li key={m.id} className="p-2 rounded border border-border-muted bg-surface/70">
+                  <div className="font-mono text-[11px] text-text-primary">{m.id}</div>
+                  <div className="text-[10px] text-text-muted mt-0.5">
                     {m.provider} · {(m.contextWindow / 1000).toFixed(0)}k ctx
                     {m.costInputUsdPerMtok !== undefined && (
                       <span> · ${m.costInputUsdPerMtok}/Mtok in</span>
@@ -156,17 +150,17 @@ export const PeerDetail: React.FC<{
       )}
       {chatSessions.length > 0 && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+          <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
             {t('fleet.detail.chatSessions', 'Chat sessions')} ({chatSessions.length})
           </div>
           <ul className="space-y-1.5">
             {chatSessions.map((session) => (
               <li
                 key={session.sessionId}
-                className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-1.5"
+                className="rounded border border-border-muted bg-surface/70 px-2 py-1.5"
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="min-w-0 truncate font-mono text-[10px] text-zinc-300">
+                  <span className="min-w-0 truncate font-mono text-[10px] text-text-secondary">
                     {shortSessionId(session.sessionId)}
                   </span>
                   {session.dispatchProfile && (
@@ -175,7 +169,7 @@ export const PeerDetail: React.FC<{
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 truncate text-[10px] text-zinc-500">
+                <div className="mt-0.5 truncate text-[10px] text-text-muted">
                   {t('fleet.detail.turnCount', '{{count}} turn(s)', {
                     count: session.turnCount,
                   })}
@@ -189,10 +183,7 @@ export const PeerDetail: React.FC<{
       {!cap && (
         <div className="rounded border border-warning/30 bg-warning/10 px-3 py-2">
           <div className="text-[11px] text-warning">
-            {t(
-              'fleet.detail.capabilitiesMissing',
-              'Capabilities not yet received from this peer.',
-            )}
+            {t('fleet.detail.capabilitiesMissing', 'Capabilities not yet received from this peer.')}
           </div>
           <button
             type="button"
@@ -200,11 +191,7 @@ export const PeerDetail: React.FC<{
             disabled={refreshing}
             className="mt-2 inline-flex items-center gap-1 rounded border border-warning/40 px-2 py-1 text-[10px] text-warning hover:bg-warning/10 disabled:opacity-50"
           >
-            {refreshing ? (
-              <Loader2 size={10} className="animate-spin" />
-            ) : (
-              <RefreshCw size={10} />
-            )}
+            {refreshing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
             {t('fleet.detail.refreshThisPeer', 'Refresh this peer')}
           </button>
         </div>
@@ -222,9 +209,9 @@ export const PeerStat: React.FC<{
   value: string;
   tone?: string;
 }> = ({ label, value, tone }) => (
-  <div className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-1.5">
-    <div className="uppercase tracking-wide text-zinc-600">{label}</div>
-    <div className={`mt-0.5 truncate ${tone ?? 'text-zinc-300'}`}>{value}</div>
+  <div className="rounded border border-border-muted bg-surface/70 px-2 py-1.5">
+    <div className="uppercase tracking-wide text-text-muted">{label}</div>
+    <div className={`mt-0.5 truncate ${tone ?? 'text-text-secondary'}`}>{value}</div>
   </div>
 );
 
@@ -236,7 +223,7 @@ const StatusDot: React.FC<{ status: FleetPeer['status'] }> = ({ status }) => {
         ? 'bg-warning animate-pulse'
         : status === 'error' || status === 'disconnected'
           ? 'bg-error'
-          : 'bg-zinc-600';
+          : 'bg-border';
   return <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />;
 };
 

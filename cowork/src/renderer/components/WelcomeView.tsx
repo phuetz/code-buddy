@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { ProjectSelector } from './ProjectSelector';
 import { FileAttachmentChip } from './FileAttachmentChip';
+import { APP_NAME } from '../brand';
 
 import welcomeLogoSrc from '../assets/logo.png';
 
@@ -317,11 +318,7 @@ export function WelcomeView() {
       return;
 
     // Build content blocks
-    const contentBlocks = buildComposerContentBlocks(
-      currentPrompt,
-      attachedFiles,
-      pastedImages
-    );
+    const contentBlocks = buildComposerContentBlocks(currentPrompt, attachedFiles, pastedImages);
 
     // Use the global working directory (always available after app startup)
     setIsSubmitting(true);
@@ -446,12 +443,12 @@ export function WelcomeView() {
           <div className="flex items-center justify-center gap-4">
             <img
               src={welcomeLogoSrc}
-              alt={t('welcome.logoAlt')}
+              alt={t('welcome.logoAlt', { appName: APP_NAME })}
               className="w-16 h-16 md:w-20 md:h-20 rounded-[1.4rem] object-cover border border-border-subtle bg-background/60 shadow-soft"
             />
             <div className="text-left">
               <h1 className="text-[2.35rem] md:text-[3.1rem] leading-none font-semibold tracking-[-0.05em] text-text-primary">
-                Open Cowork
+                {APP_NAME}
               </h1>
             </div>
           </div>
@@ -641,7 +638,9 @@ export function WelcomeView() {
               >
                 <Brain className="w-4 h-4" />
                 <span className="hidden sm:inline">
-                  {memoryEnabled ? t('welcome.memoryEnabled', 'Memory On') : t('welcome.memoryDisabled', 'Memory Off')}
+                  {memoryEnabled
+                    ? t('welcome.memoryEnabled', 'Memory On')
+                    : t('welcome.memoryDisabled', 'Memory Off')}
                 </span>
               </button>
 

@@ -36,6 +36,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useAppStore } from '../store';
+import { APP_NAME } from '../brand';
 
 type Step = 0 | 1 | 2 | 3 | 4;
 
@@ -120,7 +121,10 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
             <div className="flex items-center gap-2">
               <Sparkles size={18} className="text-accent" />
               <h2 className="text-base font-semibold">
-                {t('onboarding.title', 'Welcome to Cowork')}
+                {t('onboarding.title', {
+                  appName: APP_NAME,
+                  defaultValue: `Welcome to ${APP_NAME}`,
+                })}
               </h2>
             </div>
             <button
@@ -268,7 +272,7 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
                   <p className="text-xs text-text-muted">
                     {t(
                       'onboarding.providerDesc',
-                      'Cowork supports Anthropic, OpenAI, Gemini, Ollama, LM Studio, and any OpenAI-compatible endpoint.'
+                      `${APP_NAME} supports Anthropic, OpenAI, Gemini, Ollama, LM Studio, and any OpenAI-compatible endpoint.`
                     )}
                   </p>
                 </div>
@@ -338,7 +342,7 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
                   <p className="text-xs text-text-muted">
                     {t(
                       'onboarding.workspaceDesc',
-                      'Cowork agents read and write files inside the workspace folder. You can pick a different one per session later.'
+                      `${APP_NAME} agents read and write files inside the workspace folder. You can pick a different one per session later.`
                     )}
                   </p>
                 </div>
@@ -475,7 +479,7 @@ export function OnboardingWizard({ onClose, onOpenApiSettings }: OnboardingWizar
               <p className="text-xs text-text-muted max-w-sm mx-auto">
                 {t(
                   'onboarding.readyDesc',
-                  'Cowork keeps setup separate from your real sessions so Buddy can introduce itself, check readiness, and propose the next useful action.'
+                  `${APP_NAME} keeps setup separate from your real sessions so Buddy can introduce itself, check readiness, and propose the next useful action.`
                 )}
               </p>
               <div

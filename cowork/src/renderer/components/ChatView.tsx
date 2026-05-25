@@ -29,6 +29,7 @@ import { ContextWindowGauge } from './ContextWindowGauge';
 import { LiveBudgetMeter } from './LiveBudgetMeter';
 import { ReasoningLevelPicker } from './ReasoningLevelPicker';
 import { YoloModeToggle } from './YoloModeToggle';
+import { APP_NAME } from '../brand';
 import type { ExecutionMode } from '../types';
 import { usePermissionMode, useSearchState } from '../store/selectors';
 import type { Message, ContentBlock, ScheduleCreateInput, ScheduleWeekday } from '../types';
@@ -212,12 +213,7 @@ export function ChatView() {
       }
     }, 50);
     return () => window.clearTimeout(handle);
-  }, [
-    activeSessionId,
-    clearFocusedMessageTarget,
-    displayedMessages.length,
-    focusedMessageTarget,
-  ]);
+  }, [activeSessionId, clearFocusedMessageTarget, displayedMessages.length, focusedMessageTarget]);
 
   useEffect(() => {
     setCurrentSearchMatch(0);
@@ -849,11 +845,7 @@ export function ChatView() {
       }
 
       // Build content blocks
-      const contentBlocks = buildComposerContentBlocks(
-        currentPrompt,
-        attachedFiles,
-        pastedImages
-      );
+      const contentBlocks = buildComposerContentBlocks(currentPrompt, attachedFiles, pastedImages);
 
       // Send message with content blocks
       await continueSession(activeSessionId, contentBlocks);
@@ -881,21 +873,18 @@ export function ChatView() {
   // P1.1 — Edit a user message: prefill the textarea and focus it.
   // Non-destructive: original message stays in history; the user resubmits
   // a new turn with the edited text.
-  const handleEditMessage = useCallback(
-    (_msg: Message, text: string) => {
-      setPrompt(text);
-      requestAnimationFrame(() => {
-        const ta = textareaRef.current;
-        if (ta) {
-          ta.value = text;
-          ta.focus();
-          const end = text.length;
-          ta.setSelectionRange(end, end);
-        }
-      });
-    },
-    []
-  );
+  const handleEditMessage = useCallback((_msg: Message, text: string) => {
+    setPrompt(text);
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.value = text;
+        ta.focus();
+        const end = text.length;
+        ta.setSelectionRange(end, end);
+      }
+    });
+  }, []);
 
   // P1.1 — Regenerate an assistant response by re-submitting the most
   // recent preceding user message verbatim via continueSession.
@@ -937,7 +926,7 @@ export function ChatView() {
         className="relative h-12 border-b border-border-muted grid grid-cols-[1fr_auto_1fr] items-center px-4 lg:px-8 bg-background/88 backdrop-blur-md"
       >
         <div className="text-[11px] font-medium tracking-[0.08em] uppercase text-text-muted">
-          Open Cowork
+          {APP_NAME}
         </div>
         <h2
           ref={titleRef}
@@ -1065,7 +1054,7 @@ export function ChatView() {
           {displayedMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-28 text-text-muted space-y-3 text-center">
               <p className="text-[11px] uppercase tracking-[0.16em] text-text-muted/80">
-                Open Cowork
+                {APP_NAME}
               </p>
               <p className="text-base text-text-secondary">{t('chat.startConversation')}</p>
             </div>
@@ -1114,12 +1103,18 @@ export function ChatView() {
                 </div>
                 {liveElapsed > 5000 && liveElapsed < 30000 && (
                   <span className="text-[11px] text-text-muted/70 ml-7 italic">
-                    {t('chat.modelLoading', 'Loading model or generating thinking — first token usually arrives within 30 s.')}
+                    {t(
+                      'chat.modelLoading',
+                      'Loading model or generating thinking — first token usually arrives within 30 s.'
+                    )}
                   </span>
                 )}
                 {liveElapsed >= 30000 && (
                   <span className="text-[11px] text-warning/80 ml-7 italic">
-                    {t('chat.modelColdStart', 'Cold start in progress (large local models can take 30–120 s on first run).')}
+                    {t(
+                      'chat.modelColdStart',
+                      'Cold start in progress (large local models can take 30–120 s on first run).'
+                    )}
                   </span>
                 )}
               </div>

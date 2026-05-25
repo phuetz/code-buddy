@@ -103,7 +103,9 @@ export const LessonsVaultStrip: React.FC<{
       .catch((loadErrorValue: unknown) => {
         if (cancelled) return;
         setLoadedPreview(null);
-        setLoadError(loadErrorValue instanceof Error ? loadErrorValue.message : String(loadErrorValue));
+        setLoadError(
+          loadErrorValue instanceof Error ? loadErrorValue.message : String(loadErrorValue)
+        );
       });
 
     return () => {
@@ -113,73 +115,80 @@ export const LessonsVaultStrip: React.FC<{
 
   return (
     <section
-      className="mt-3 rounded border border-cyan-900/60 bg-cyan-950/10 p-2"
+      className="mt-3 rounded border border-border-muted bg-surface/60 p-2"
       data-testid="fleet-lessons-vault"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <BookOpenText size={11} className="shrink-0 text-cyan-300" />
-          <span className="truncate text-[10px] uppercase tracking-wider text-cyan-200/70">
+          <BookOpenText size={11} className="shrink-0 text-accent" />
+          <span className="truncate text-[10px] uppercase tracking-wider text-accent">
             {t('fleet.lessonsVault.title', 'Lessons vault')}
           </span>
         </div>
-        <span className="shrink-0 rounded bg-cyan-950 px-1.5 py-0.5 text-[10px] text-cyan-200/70">
+        <span className="shrink-0 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
           {visiblePreview
             ? t('fleet.lessonsVault.countChip', '{{lessons}} lessons · {{concepts}} concepts', {
-              concepts: visiblePreview.counts.concepts,
-              lessons: visiblePreview.counts.lessons,
-            })
+                concepts: visiblePreview.counts.concepts,
+                lessons: visiblePreview.counts.lessons,
+              })
             : t('fleet.lessonsVault.pendingChip', 'preview')}
         </span>
       </div>
 
       <div className="mt-1.5 flex flex-wrap gap-1">
-        <span className="rounded bg-cyan-950/80 px-1 py-0.5 text-[9px] text-cyan-200/60">
+        <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
           {t('fleet.lessonsVault.readOnlyChip', 'read-only')}
         </span>
-        <span className="rounded bg-cyan-950/80 px-1 py-0.5 text-[9px] text-cyan-200/60">
+        <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
           {t('fleet.lessonsVault.markdownChip', 'Markdown vault')}
         </span>
-        <span className="rounded bg-cyan-950/80 px-1 py-0.5 text-[9px] text-cyan-200/60">
+        <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
           {t('fleet.lessonsVault.noAutoWriteChip', 'no auto-lesson write')}
         </span>
       </div>
 
       {visibleError && (
-        <div className="mt-1.5 rounded border border-amber-900/70 bg-amber-950/20 px-2 py-1 text-[10px] text-amber-200/80">
+        <div className="mt-1.5 rounded border border-warning/30 bg-warning/10 px-2 py-1 text-[10px] text-warning">
           {t('fleet.lessonsVault.loadFailed', 'Lessons vault preview failed')}: {visibleError}
         </div>
       )}
 
       {visiblePreview ? (
-        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-400">
-          <GitBranch size={10} className="shrink-0 text-cyan-300" />
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-secondary">
+          <GitBranch size={10} className="shrink-0 text-accent" />
           <span className="min-w-0 truncate">
-            {t('fleet.lessonsVault.summary', '{{relations}} relations · {{files}} generated files', {
-              files: visiblePreview.counts.files,
-              relations: visiblePreview.counts.relations,
-            })}
+            {t(
+              'fleet.lessonsVault.summary',
+              '{{relations}} relations · {{files}} generated files',
+              {
+                files: visiblePreview.counts.files,
+                relations: visiblePreview.counts.relations,
+              }
+            )}
           </span>
         </div>
       ) : (
-        <div className="mt-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-500">
-          {t('fleet.lessonsVault.empty', 'Export the vault from CLI to browse concepts and backlinks.')}
+        <div className="mt-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted">
+          {t(
+            'fleet.lessonsVault.empty',
+            'Export the vault from CLI to browse concepts and backlinks.'
+          )}
         </div>
       )}
 
       {concepts.length > 0 && (
         <ul className="mt-1.5 space-y-1">
           {concepts.map((concept) => (
-            <li key={concept.id} className="min-w-0 rounded bg-zinc-950/60 px-2 py-1">
+            <li key={concept.id} className="min-w-0 rounded bg-surface/80 px-2 py-1">
               <div className="flex min-w-0 items-center justify-between gap-2">
-                <span className="truncate text-[10px] text-zinc-300">{concept.label}</span>
-                <span className="shrink-0 rounded bg-cyan-950 px-1 py-0.5 text-[9px] text-cyan-200/60">
+                <span className="truncate text-[10px] text-text-secondary">{concept.label}</span>
+                <span className="shrink-0 rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
                   {t('fleet.lessonsVault.lessonCount', '{{count}} lesson(s)', {
                     count: concept.lessonCount,
                   })}
                 </span>
               </div>
-              <div className="mt-0.5 truncate text-[9px] text-zinc-500">{concept.path}</div>
+              <div className="mt-0.5 truncate text-[9px] text-text-muted">{concept.path}</div>
             </li>
           ))}
         </ul>
@@ -189,9 +198,9 @@ export const LessonsVaultStrip: React.FC<{
         {commands.slice(0, 2).map((command) => (
           <li
             key={command}
-            className="flex min-w-0 items-center gap-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-500"
+            className="flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted"
           >
-            <Terminal size={10} className="shrink-0 text-zinc-500" />
+            <Terminal size={10} className="shrink-0 text-text-muted" />
             <code className="truncate">{command}</code>
           </li>
         ))}
@@ -203,7 +212,7 @@ export const LessonsVaultStrip: React.FC<{
             <button
               type="button"
               onClick={onBrowse}
-              className="flex items-center gap-1 rounded border border-cyan-900/80 px-2 py-1 text-[10px] text-cyan-100/80 transition-colors hover:border-cyan-400 hover:text-cyan-200"
+              className="flex items-center gap-1 rounded border border-accent/50 px-2 py-1 text-[10px] text-accent transition-colors hover:bg-accent/10"
               data-testid="lessons-vault-browse"
             >
               <BookOpenText size={10} />
@@ -214,7 +223,7 @@ export const LessonsVaultStrip: React.FC<{
             <button
               type="button"
               onClick={() => onUseAsGoal(goalDraft)}
-              className="flex items-center gap-1 rounded border border-cyan-900/80 px-2 py-1 text-[10px] text-cyan-100/80 transition-colors hover:border-cyan-400 hover:text-cyan-200"
+              className="flex items-center gap-1 rounded border border-accent/50 px-2 py-1 text-[10px] text-accent transition-colors hover:bg-accent/10"
             >
               <Route size={10} />
               {t('fleet.lessonsVault.useAsGoal', 'Review vault as goal')}

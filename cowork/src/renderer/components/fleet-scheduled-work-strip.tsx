@@ -24,13 +24,13 @@ export const ScheduledWorkStrip: React.FC<{
 
   return (
     <section
-      className="mt-3 rounded border border-zinc-800 bg-zinc-950/35 p-2"
+      className="mt-3 rounded border border-border-muted bg-surface/60 p-2"
       data-testid="fleet-scheduled-work"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <CalendarClock size={11} className="shrink-0 text-accent" />
-          <span className="truncate text-[10px] uppercase tracking-wider text-zinc-400">
+          <span className="truncate text-[10px] uppercase tracking-wider text-text-secondary">
             {t('fleet.scheduledWork.title', 'Scheduled work')}
           </span>
         </div>
@@ -51,14 +51,14 @@ export const ScheduledWorkStrip: React.FC<{
             <button
               type="button"
               onClick={onOpenSettings}
-              className="rounded border border-zinc-800 p-1 text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-300"
+              className="rounded border border-border-muted p-1 text-text-muted transition-colors hover:border-accent/50 hover:text-text-primary"
               aria-label={t('fleet.scheduledWork.openSettings', 'Open schedule settings')}
               title={t('fleet.scheduledWork.openSettings', 'Open schedule settings')}
             >
               <Settings2 size={10} />
             </button>
           )}
-          <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] tabular-nums text-zinc-300">
+          <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">
             {enabledCount}/{tasks.length}
           </span>
         </div>
@@ -69,7 +69,7 @@ export const ScheduledWorkStrip: React.FC<{
           {t('fleet.scheduledWork.loadFailed', 'Schedule load failed')}: {error}
         </div>
       ) : upcomingTasks.length === 0 ? (
-        <div className="mt-1.5 text-[10px] text-zinc-600">
+        <div className="mt-1.5 text-[10px] text-text-muted">
           {t('fleet.scheduledWork.empty', 'No enabled scheduled run')}
         </div>
       ) : (
@@ -84,14 +84,12 @@ export const ScheduledWorkStrip: React.FC<{
                 className={`flex min-w-0 items-start justify-between gap-2 rounded border px-2 py-1 ${
                   task.lastError
                     ? 'border-warning/30 bg-warning/5'
-                    : 'border-zinc-800 bg-zinc-900/70'
+                    : 'border-border-muted bg-surface/70'
                 }`}
                 title={task.lastError || undefined}
               >
                 <div className="min-w-0">
-                  <div className="truncate text-[11px] text-zinc-300">
-                    {task.title}
-                  </div>
+                  <div className="truncate text-[11px] text-text-secondary">{task.title}</div>
                   <div className="mt-0.5 flex min-w-0 flex-wrap gap-1">
                     {chips.map((chip) => (
                       <span
@@ -99,7 +97,7 @@ export const ScheduledWorkStrip: React.FC<{
                         className={`max-w-full truncate rounded px-1 py-0.5 text-[9px] ${
                           chip === t('fleet.scheduledWork.errorChip', 'Last error')
                             ? 'bg-warning/10 text-warning'
-                            : 'bg-zinc-800/80 text-zinc-500'
+                            : 'bg-surface text-text-muted'
                         }`}
                       >
                         {chip}
@@ -108,7 +106,7 @@ export const ScheduledWorkStrip: React.FC<{
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <span className="text-[10px] text-zinc-500">
+                  <span className="text-[10px] text-text-muted">
                     {formatScheduleRunAt(task.nextRunAt)}
                   </span>
                   {onRunNow && (
@@ -116,7 +114,7 @@ export const ScheduledWorkStrip: React.FC<{
                       type="button"
                       onClick={() => onRunNow(task.id)}
                       disabled={runningTaskId !== null && runningTaskId !== undefined}
-                      className="rounded border border-zinc-700 p-1 text-zinc-500 transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded border border-border p-1 text-text-muted transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label={runNowLabel}
                       title={runNowLabel}
                     >

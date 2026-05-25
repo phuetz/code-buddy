@@ -25,7 +25,7 @@ export function summarizeHermesPlanRisks(plan: HermesIntegrationPlan): HermesPla
       }
       return summary;
     },
-    { readOnly: 0, localWrite: 0, interactive: 0 },
+    { readOnly: 0, localWrite: 0, interactive: 0 }
   );
 }
 
@@ -37,9 +37,7 @@ export function buildHermesPlanGoal(plan: HermesIntegrationPlan): string {
     `Recommended CLI check: ${plan.recommendedNextCommand}`,
     '',
     'Interaction surfaces:',
-    ...plan.interactionSurfaces.map(
-      (surface) => `- ${surface.label}: ${surface.primaryAction}`,
-    ),
+    ...plan.interactionSurfaces.map((surface) => `- ${surface.label}: ${surface.primaryAction}`),
     '',
     'Checklist:',
   ];
@@ -53,7 +51,10 @@ export function buildHermesPlanGoal(plan: HermesIntegrationPlan): string {
     lines.push(`  Acceptance: ${item.acceptanceCriteria.join(' | ')}`);
   }
 
-  lines.push('', 'Execute the safest next step, show evidence, and record lessons if a reusable pattern emerges.');
+  lines.push(
+    '',
+    'Execute the safest next step, show evidence, and record lessons if a reusable pattern emerges.'
+  );
   return lines.join('\n');
 }
 
@@ -71,38 +72,38 @@ export const HermesPlanStrip: React.FC<{
 
   return (
     <section
-      className="mt-3 rounded border border-zinc-800 bg-zinc-950/35 p-2"
+      className="mt-3 rounded border border-border-muted bg-surface/60 p-2"
       data-testid="fleet-hermes-plan"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <ClipboardList size={11} className="shrink-0 text-accent" />
-          <span className="truncate text-[10px] uppercase tracking-wider text-zinc-400">
+          <span className="truncate text-[10px] uppercase tracking-wider text-text-secondary">
             {t('fleet.hermesPlan.title', 'Hermes plan')}
           </span>
         </div>
-        <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
+        <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-secondary">
           {plan.toolsetId}
         </span>
       </div>
 
       <div className="mt-1.5 flex flex-wrap gap-1">
-        <span className="rounded bg-zinc-800/80 px-1 py-0.5 text-[9px] text-zinc-500">
+        <span className="rounded bg-surface px-1 py-0.5 text-[9px] text-text-muted">
           {t('fleet.hermesPlan.itemsChip', '{{count}} steps', {
             count: plan.items.length,
           })}
         </span>
-        <span className="rounded bg-zinc-800/80 px-1 py-0.5 text-[9px] text-zinc-500">
+        <span className="rounded bg-surface px-1 py-0.5 text-[9px] text-text-muted">
           {t('fleet.hermesPlan.readOnlyChip', '{{count}} read-only', {
             count: riskSummary.readOnly,
           })}
         </span>
-        <span className="rounded bg-zinc-800/80 px-1 py-0.5 text-[9px] text-zinc-500">
+        <span className="rounded bg-surface px-1 py-0.5 text-[9px] text-text-muted">
           {t('fleet.hermesPlan.localWriteChip', '{{count}} local-write', {
             count: riskSummary.localWrite,
           })}
         </span>
-        <span className="rounded bg-zinc-800/80 px-1 py-0.5 text-[9px] text-zinc-500">
+        <span className="rounded bg-surface px-1 py-0.5 text-[9px] text-text-muted">
           {t('fleet.hermesPlan.interactiveChip', '{{count}} interactive', {
             count: riskSummary.interactive,
           })}
@@ -110,14 +111,14 @@ export const HermesPlanStrip: React.FC<{
       </div>
 
       {cliSurface && (
-        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-zinc-900/70 px-2 py-1 text-[10px] text-zinc-500">
-          <TerminalSquare size={10} className="shrink-0 text-zinc-500" />
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/70 px-2 py-1 text-[10px] text-text-muted">
+          <TerminalSquare size={10} className="shrink-0 text-text-muted" />
           <code className="truncate">{cliSurface.entrypoint}</code>
         </div>
       )}
 
       {coworkSurface && (
-        <div className="mt-1.5 text-[10px] text-zinc-500 line-clamp-2">
+        <div className="mt-1.5 text-[10px] text-text-muted line-clamp-2">
           {coworkSurface.primaryAction}
         </div>
       )}
@@ -126,12 +127,10 @@ export const HermesPlanStrip: React.FC<{
         {visibleItems.map((item) => (
           <li
             key={item.id}
-            className="flex min-w-0 items-center justify-between gap-2 rounded bg-zinc-900/70 px-2 py-1"
+            className="flex min-w-0 items-center justify-between gap-2 rounded bg-surface/70 px-2 py-1"
           >
-            <span className="truncate text-[10px] text-zinc-400">
-              {item.title}
-            </span>
-            <span className="shrink-0 rounded bg-zinc-800 px-1 py-0.5 text-[9px] text-zinc-500">
+            <span className="truncate text-[10px] text-text-secondary">{item.title}</span>
+            <span className="shrink-0 rounded bg-surface px-1 py-0.5 text-[9px] text-text-muted">
               {item.risk}
             </span>
           </li>
@@ -144,7 +143,7 @@ export const HermesPlanStrip: React.FC<{
             <button
               type="button"
               onClick={() => onUseAsGoal(buildHermesPlanGoal(plan))}
-              className="flex items-center gap-1 rounded border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 transition-colors hover:border-accent hover:text-accent"
+              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-text-secondary transition-colors hover:border-accent hover:text-accent"
             >
               <Route size={10} />
               {t('fleet.hermesPlan.useAsGoal', 'Use as Fleet goal')}
@@ -154,7 +153,7 @@ export const HermesPlanStrip: React.FC<{
             <button
               type="button"
               onClick={() => onScheduleGoal(buildHermesPlanGoal(plan))}
-              className="flex items-center gap-1 rounded border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 transition-colors hover:border-accent hover:text-accent"
+              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-text-secondary transition-colors hover:border-accent hover:text-accent"
             >
               <CalendarPlus size={10} />
               {t('fleet.hermesPlan.schedule', 'Schedule plan')}

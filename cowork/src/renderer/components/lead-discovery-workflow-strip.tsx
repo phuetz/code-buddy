@@ -76,12 +76,12 @@ export function buildLeadDiscoveryWorkflowGoal(template: LeadDiscoveryWorkflowTe
     '',
     'Stages:',
     ...template.stages.map(
-      (stage) => `- ${stage.title} [${stage.id}] -> ${stage.outputs.join(', ')}`,
+      (stage) => `- ${stage.title} [${stage.id}] -> ${stage.outputs.join(', ')}`
     ),
     '',
     'Expected artifacts:',
     ...template.expectedArtifacts.map(
-      (artifact) => `- ${artifact.kind}: ${artifact.path} (${artifact.description})`,
+      (artifact) => `- ${artifact.kind}: ${artifact.path} (${artifact.description})`
     ),
     '',
     'Guardrails:',
@@ -95,7 +95,7 @@ export function buildLeadDiscoveryWorkflowGoal(template: LeadDiscoveryWorkflowTe
 }
 
 export function buildLeadDiscoveryWorkflowMetadata(
-  template: LeadDiscoveryWorkflowTemplate,
+  template: LeadDiscoveryWorkflowTemplate
 ): LeadDiscoveryWorkflowScheduleMetadata {
   return {
     leadDiscoveryWorkflowId: template.id,
@@ -127,14 +127,15 @@ export const LeadDiscoveryWorkflowStrip: React.FC<{
 }) => {
   const { t } = useTranslation();
   const template = useMemo(
-    () => buildLeadDiscoveryPreviewTemplate({
-      goal: normalizeGoal(goal),
-      maxProspects,
-      offer,
-      targetLabel,
-      zone,
-    }),
-    [goal, maxProspects, offer, targetLabel, zone],
+    () =>
+      buildLeadDiscoveryPreviewTemplate({
+        goal: normalizeGoal(goal),
+        maxProspects,
+        offer,
+        targetLabel,
+        zone,
+      }),
+    [goal, maxProspects, offer, targetLabel, zone]
   );
   const visibleStages = template.stages.slice(0, 4);
   const goalDraft = useMemo(() => buildLeadDiscoveryWorkflowGoal(template), [template]);
@@ -142,39 +143,39 @@ export const LeadDiscoveryWorkflowStrip: React.FC<{
 
   return (
     <section
-      className="mt-3 rounded border border-emerald-900/60 bg-emerald-950/20 p-2"
+      className="mt-3 rounded border border-border-muted bg-surface/60 p-2"
       data-testid="fleet-lead-discovery-workflow"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <SearchCheck size={11} className="shrink-0 text-emerald-300" />
-          <span className="truncate text-[10px] uppercase tracking-wider text-emerald-200/70">
+          <SearchCheck size={11} className="shrink-0 text-success" />
+          <span className="truncate text-[10px] uppercase tracking-wider text-success">
             {t('fleet.leadDiscovery.title', 'Public-data workflow')}
           </span>
         </div>
-        <span className="shrink-0 rounded bg-emerald-950 px-1.5 py-0.5 text-[10px] text-emerald-200/70">
+        <span className="shrink-0 rounded bg-success/10 px-1.5 py-0.5 text-[10px] text-success">
           {template.contactPolicy.mode.replaceAll('_', ' ')}
         </span>
       </div>
 
       <div className="mt-1.5 flex flex-wrap gap-1">
-        <span className="rounded bg-emerald-950/80 px-1 py-0.5 text-[9px] text-emerald-200/60">
+        <span className="rounded bg-success/10 px-1 py-0.5 text-[9px] text-success">
           {t('fleet.leadDiscovery.stagesChip', '{{count}} stages', {
             count: template.stages.length,
           })}
         </span>
-        <span className="rounded bg-emerald-950/80 px-1 py-0.5 text-[9px] text-emerald-200/60">
+        <span className="rounded bg-success/10 px-1 py-0.5 text-[9px] text-success">
           {t('fleet.leadDiscovery.artifactsChip', '{{count}} artifacts', {
             count: template.expectedArtifacts.length,
           })}
         </span>
-        <span className="rounded bg-emerald-950/80 px-1 py-0.5 text-[9px] text-emerald-200/60">
+        <span className="rounded bg-success/10 px-1 py-0.5 text-[9px] text-success">
           {t('fleet.leadDiscovery.reviewChip', 'review queue only')}
         </span>
       </div>
 
-      <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-400">
-        <ShieldCheck size={10} className="shrink-0 text-emerald-300" />
+      <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-secondary">
+        <ShieldCheck size={10} className="shrink-0 text-success" />
         <span className="truncate">
           {t('fleet.leadDiscovery.guardrail', 'Public data only; no automatic contact')}
         </span>
@@ -184,20 +185,18 @@ export const LeadDiscoveryWorkflowStrip: React.FC<{
         {visibleStages.map((stage) => (
           <li
             key={stage.id}
-            className="flex min-w-0 items-center justify-between gap-2 rounded bg-zinc-950/60 px-2 py-1"
+            className="flex min-w-0 items-center justify-between gap-2 rounded bg-surface/80 px-2 py-1"
           >
-            <span className="truncate text-[10px] text-zinc-300">
-              {stage.title}
-            </span>
-            <span className="shrink-0 rounded bg-emerald-950 px-1 py-0.5 text-[9px] text-emerald-200/60">
+            <span className="truncate text-[10px] text-text-secondary">{stage.title}</span>
+            <span className="shrink-0 rounded bg-success/10 px-1 py-0.5 text-[9px] text-success">
               {stage.id}
             </span>
           </li>
         ))}
       </ul>
 
-      <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-zinc-950/60 px-2 py-1 text-[10px] text-zinc-500">
-        <FileJson size={10} className="shrink-0 text-zinc-500" />
+      <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted">
+        <FileJson size={10} className="shrink-0 text-text-muted" />
         <code className="truncate">{template.scriptJobArtifact.files.script}</code>
       </div>
 
@@ -207,7 +206,7 @@ export const LeadDiscoveryWorkflowStrip: React.FC<{
             <button
               type="button"
               onClick={() => onUseAsGoal(goalDraft)}
-              className="flex items-center gap-1 rounded border border-emerald-900/80 px-2 py-1 text-[10px] text-emerald-100/80 transition-colors hover:border-emerald-400 hover:text-emerald-200"
+              className="flex items-center gap-1 rounded border border-success/50 px-2 py-1 text-[10px] text-success transition-colors hover:bg-success/10"
             >
               <Route size={10} />
               {t('fleet.leadDiscovery.useAsGoal', 'Use workflow as goal')}
@@ -217,7 +216,7 @@ export const LeadDiscoveryWorkflowStrip: React.FC<{
             <button
               type="button"
               onClick={() => onScheduleGoal(goalDraft, metadata)}
-              className="flex items-center gap-1 rounded border border-emerald-900/80 px-2 py-1 text-[10px] text-emerald-100/80 transition-colors hover:border-emerald-400 hover:text-emerald-200"
+              className="flex items-center gap-1 rounded border border-success/50 px-2 py-1 text-[10px] text-success transition-colors hover:bg-success/10"
             >
               <CalendarPlus size={10} />
               {t('fleet.leadDiscovery.schedule', 'Schedule workflow')}
@@ -243,11 +242,9 @@ function buildLeadDiscoveryPreviewTemplate(input: {
   targetLabel: string;
   zone: string;
 }): LeadDiscoveryWorkflowTemplate {
-  const id = `lead-discovery-public-${slugify(input.targetLabel)}-${stableHash([
-    input.goal,
-    input.zone,
-    input.offer,
-  ].join('|'))}`;
+  const id = `lead-discovery-public-${slugify(input.targetLabel)}-${stableHash(
+    [input.goal, input.zone, input.offer].join('|')
+  )}`;
   const root = `lead-discovery/${id}`;
   const scriptRoot = `research-scripts/${id}-script`;
 
@@ -356,12 +353,14 @@ function buildLeadDiscoveryPreviewTemplate(input: {
 }
 
 function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || 'leads';
+  return (
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'leads'
+  );
 }
 
 function stableHash(value: string): string {

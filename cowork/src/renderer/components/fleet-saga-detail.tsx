@@ -1,11 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FleetPeer } from '../types';
-import {
-  formatSagaAge,
-  laneClass,
-  sagaStatusTone,
-} from './fleet-command-center-helpers';
+import { formatSagaAge, laneClass, sagaStatusTone } from './fleet-command-center-helpers';
 import type { SagaSummary } from './fleet-command-center-helpers';
 import { buildFleetInternetProofStepLabels } from './activity-feed-helpers';
 import { PeerStat } from './fleet-peer-panel';
@@ -28,10 +24,8 @@ export const SagaDetail: React.FC<{
   return (
     <div className="p-4 space-y-3 text-xs">
       <div>
-        <div className="text-zinc-200 font-medium">{saga.goal}</div>
-        <div className="mt-0.5 text-[11px] text-zinc-500 break-all">
-          Saga {saga.id}
-        </div>
+        <div className="text-text-primary font-medium">{saga.goal}</div>
+        <div className="mt-0.5 text-[11px] text-text-muted break-all">Saga {saga.id}</div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[10px]">
@@ -62,14 +56,14 @@ export const SagaDetail: React.FC<{
 
       {proofSteps.length > 0 && (
         <div data-testid="fleet-saga-internet-proof-loop">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+          <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
             {t('fleet.detail.internetProofLoop', 'Web proof loop')} ({proofSteps.length})
           </div>
           <ol className="space-y-1">
             {proofSteps.map((step) => (
               <li
                 key={step}
-                className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-1 text-[10px] leading-4 text-zinc-400"
+                className="rounded border border-border-muted bg-surface/70 px-2 py-1 text-[10px] leading-4 text-text-secondary"
               >
                 {step}
               </li>
@@ -79,11 +73,11 @@ export const SagaDetail: React.FC<{
       )}
 
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+        <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
           {t('fleet.detail.routeTrace', 'Route trace')} ({total})
         </div>
         {total === 0 ? (
-          <div className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-2 text-zinc-500">
+          <div className="rounded border border-border-muted bg-surface/70 px-2 py-2 text-text-muted">
             {t('fleet.detail.noRoutedStep', 'No routed step yet.')}
           </div>
         ) : (
@@ -98,36 +92,30 @@ export const SagaDetail: React.FC<{
               return (
                 <li
                   key={`${step.peerId}-${step.model}-${step.lane}-${index}`}
-                  className="rounded border border-zinc-800 bg-zinc-800/40 px-2 py-1.5"
+                  className="rounded border border-border-muted bg-surface/70 px-2 py-1.5"
                 >
                   <div className="flex items-center gap-1.5">
                     <StepStatusIcon status={step.status} />
                     <span className={`shrink-0 uppercase tracking-wide ${laneClass(step.lane)}`}>
                       {step.lane}
                     </span>
-                    <span className="ml-auto text-[10px] text-zinc-500">
-                      #{index + 1}
-                    </span>
+                    <span className="ml-auto text-[10px] text-text-muted">#{index + 1}</span>
                   </div>
-                  <div className="mt-1 truncate text-[11px] text-zinc-300">
-                    {peerLabel}
-                  </div>
-                  <div className="mt-0.5 truncate font-mono text-[10px] text-zinc-500">
+                  <div className="mt-1 truncate text-[11px] text-text-secondary">{peerLabel}</div>
+                  <div className="mt-0.5 truncate font-mono text-[10px] text-text-muted">
                     {step.model}
                   </div>
                   {hasToolMetadata && (
-                    <div className="mt-1 rounded border border-zinc-700/70 bg-zinc-950/50 px-1.5 py-1">
-                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                    <div className="mt-1 rounded border border-border bg-surface/70 px-1.5 py-1">
+                      <div className="flex items-center gap-1.5 text-[10px] text-text-secondary">
                         <span className="uppercase tracking-wide">
                           {t('fleet.detail.toolPolicy', 'Tool policy')}
                         </span>
-                        <span className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[9px] text-zinc-300">
+                        <span className="rounded bg-surface px-1 py-0.5 font-mono text-[9px] text-text-secondary">
                           {step.toolPolicy?.policyProfile ?? step.toolPolicy?.profile ?? '-'}
                         </span>
                         {step.toolPolicy?.defaultAction && (
-                          <span className="text-zinc-500">
-                            {step.toolPolicy.defaultAction}
-                          </span>
+                          <span className="text-text-muted">{step.toolPolicy.defaultAction}</span>
                         )}
                         {step.toolset?.toolsetId && (
                           <span className="rounded bg-sky-950 px-1 py-0.5 font-mono text-[9px] text-sky-200/70">
@@ -136,7 +124,7 @@ export const SagaDetail: React.FC<{
                         )}
                       </div>
                       {step.toolPolicy?.summary && (
-                        <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-zinc-500">
+                        <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-text-muted">
                           {step.toolPolicy.summary}
                         </div>
                       )}
@@ -146,7 +134,7 @@ export const SagaDetail: React.FC<{
                             <span
                               key={`${decision.tool}-${decision.action}`}
                               className={`rounded border px-1 py-0.5 font-mono text-[9px] ${toolDecisionClass(
-                                decision.action,
+                                decision.action
                               )}`}
                               title={decision.matchedGroup}
                             >
@@ -166,10 +154,10 @@ export const SagaDetail: React.FC<{
 
       {saga.finalResult && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+          <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
             {t('fleet.detail.finalResult', 'Final result')}
           </div>
-          <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950/60 p-2 text-[11px] text-zinc-300">
+          <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded border border-border-muted bg-surface/80 p-2 text-[11px] text-text-secondary">
             {saga.finalResult}
           </pre>
         </div>

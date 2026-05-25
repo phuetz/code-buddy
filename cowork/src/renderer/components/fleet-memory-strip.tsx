@@ -14,22 +14,22 @@ export const FleetMemoryStrip: React.FC<{
 
   return (
     <section
-      className="mt-2 rounded border border-zinc-800 bg-zinc-950/35 p-2"
+      className="mt-2 rounded border border-border-muted bg-surface/60 p-2"
       data-testid="fleet-memory-context"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <Brain size={11} className="shrink-0 text-success" />
-          <span className="truncate text-[10px] uppercase tracking-wider text-zinc-400">
+          <span className="truncate text-[10px] uppercase tracking-wider text-text-secondary">
             {t('fleet.memoryContext.title', 'Fleet memory')}
           </span>
         </div>
-        <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] tabular-nums text-zinc-300">
+        <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">
           {memories.length}
         </span>
       </div>
 
-      <label className="mt-1.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
+      <label className="mt-1.5 flex items-center gap-1.5 text-[10px] text-text-secondary">
         <input
           type="checkbox"
           checked={hasMemories && includeMemoryContext}
@@ -45,7 +45,7 @@ export const FleetMemoryStrip: React.FC<{
           {t('fleet.memoryContext.loadFailed', 'Memory load failed')}: {error}
         </div>
       ) : !hasMemories ? (
-        <div className="mt-1.5 text-[10px] text-zinc-600">
+        <div className="mt-1.5 text-[10px] text-text-muted">
           {t('fleet.memoryContext.empty', 'No saved Fleet outcome memory yet')}
         </div>
       ) : (
@@ -53,7 +53,7 @@ export const FleetMemoryStrip: React.FC<{
           {memories.map((memory, index) => (
             <li
               key={`${memory.timestamp}-${index}`}
-              className="rounded bg-zinc-900/70 px-2 py-1 text-[10px] text-zinc-500"
+              className="rounded bg-surface/70 px-2 py-1 text-[10px] text-text-muted"
             >
               <span className="line-clamp-2">
                 {memory.content.replace(/^Fleet outcome lesson:\s*/, '')}

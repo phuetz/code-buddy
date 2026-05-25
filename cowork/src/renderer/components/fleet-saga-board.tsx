@@ -7,11 +7,7 @@ import {
   laneClass,
   summarizeSagaToolDecisions,
 } from './fleet-command-center-helpers';
-import type {
-  SagaBoardColumnKey,
-  SagaStatus,
-  SagaSummary,
-} from './fleet-command-center-helpers';
+import type { SagaBoardColumnKey, SagaStatus, SagaSummary } from './fleet-command-center-helpers';
 
 export const SAGA_BOARD_COLUMNS: Array<{
   key: SagaBoardColumnKey;
@@ -29,7 +25,7 @@ export const SAGA_BOARD_COLUMNS: Array<{
     emptyKey: 'fleet.sagaBoard.emptyQueued',
     empty: 'No queued work',
     statuses: ['pending'],
-    accentClass: 'bg-zinc-500',
+    accentClass: 'bg-border',
   },
   {
     key: 'running',
@@ -90,7 +86,7 @@ export const SAGA_BOARD_COLUMNS: Array<{
  * behaviour preserved here unchanged).
  */
 export function groupSagasForBoard(
-  sagas: SagaSummary[],
+  sagas: SagaSummary[]
 ): Record<SagaBoardColumnKey, SagaSummary[]> {
   const buckets: Record<SagaBoardColumnKey, SagaSummary[]> = {
     queued: [],
@@ -106,9 +102,7 @@ export function groupSagasForBoard(
       buckets[stageColumn].push(saga);
       continue;
     }
-    const column = SAGA_BOARD_COLUMNS.find((c) =>
-      c.statuses.includes(saga.status),
-    );
+    const column = SAGA_BOARD_COLUMNS.find((c) => c.statuses.includes(saga.status));
     if (column) {
       buckets[column.key].push(saga);
     }
@@ -126,11 +120,11 @@ export const SagaBoard: React.FC<{
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-zinc-500 sticky top-0 bg-zinc-900 border-b border-zinc-800">
+      <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-text-muted sticky top-0 bg-background border-b border-border-muted">
         {t('fleet.sagaBoard.title', 'Saga board')} ({sagas.length})
       </div>
       {sagas.length === 0 ? (
-        <div className="p-6 text-xs text-zinc-500 text-center">
+        <div className="p-6 text-xs text-text-muted text-center">
           {t('fleet.noSagas', 'Aucune saga en cours.')}
         </div>
       ) : (
@@ -161,32 +155,22 @@ const SagaBoardLane: React.FC<{
   sagas: SagaSummary[];
   selectedSagaId: string | null;
   onSelectSaga: (sagaId: string) => void;
-}> = ({
-  columnKey,
-  title,
-  emptyLabel,
-  accentClass,
-  sagas,
-  selectedSagaId,
-  onSelectSaga,
-}) => (
+}> = ({ columnKey, title, emptyLabel, accentClass, sagas, selectedSagaId, onSelectSaga }) => (
   <section
-    className="min-w-0 rounded border border-zinc-800 bg-zinc-950/35 overflow-hidden"
+    className="min-w-0 rounded border border-border-muted bg-surface/60 overflow-hidden"
     data-testid={`fleet-saga-lane-${columnKey}`}
   >
     <div className={`h-0.5 ${accentClass}`} />
-    <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-zinc-800">
-      <span className="min-w-0 truncate text-[10px] uppercase tracking-wider text-zinc-400">
+    <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-border-muted">
+      <span className="min-w-0 truncate text-[10px] uppercase tracking-wider text-text-secondary">
         {title}
       </span>
-      <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] tabular-nums text-zinc-300">
+      <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">
         {sagas.length}
       </span>
     </div>
     {sagas.length === 0 ? (
-      <div className="px-2 py-3 text-center text-[10px] text-zinc-600">
-        {emptyLabel}
-      </div>
+      <div className="px-2 py-3 text-center text-[10px] text-text-muted">{emptyLabel}</div>
     ) : (
       <ul className="space-y-1 p-1.5">
         {sagas.map((saga) => (
@@ -217,7 +201,7 @@ const SagaRow: React.FC<{
   return (
     <li
       className={`p-2 rounded border transition-colors ${
-        selected ? 'border-accent/60 bg-accent/10' : 'border-zinc-800 bg-zinc-800/30'
+        selected ? 'border-accent/60 bg-accent/10' : 'border-border-muted bg-surface/60'
       }`}
     >
       <button
@@ -228,14 +212,16 @@ const SagaRow: React.FC<{
       >
         <div className="flex items-center gap-2">
           <SagaStatusIcon status={saga.status} />
-          <span className="text-xs text-zinc-200 truncate flex-1">{saga.goal}</span>
-          <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 tabular-nums">
+          <span className="text-xs text-text-primary truncate flex-1">{saga.goal}</span>
+          <div className="flex items-center gap-1.5 text-[10px] text-text-muted tabular-nums">
             <span>{saga.status}</span>
             {age && <span>{age}</span>}
-            <span>{done}/{total}</span>
+            <span>
+              {done}/{total}
+            </span>
           </div>
         </div>
-        <div className="mt-1.5 h-1 bg-zinc-800 rounded overflow-hidden flex">
+        <div className="mt-1.5 h-1 bg-surface rounded overflow-hidden flex">
           <div
             className="bg-success transition-all"
             style={{ width: `${(done / Math.max(1, total)) * 100}%` }}
@@ -254,7 +240,7 @@ const SagaRow: React.FC<{
             data-testid="fleet-saga-tool-decision-summary"
             className="mt-1.5 flex flex-wrap items-center gap-1 text-[9px]"
           >
-            <span className="rounded border border-zinc-700 bg-zinc-900/80 px-1 py-0.5 uppercase tracking-wide text-zinc-500">
+            <span className="rounded border border-border bg-surface/80 px-1 py-0.5 uppercase tracking-wide text-text-muted">
               {t('fleet.detail.toolPolicy', 'Tool policy')}
             </span>
             <span className="rounded border border-success/30 bg-success/10 px-1 py-0.5 font-mono text-success">
@@ -271,23 +257,21 @@ const SagaRow: React.FC<{
       </button>
       {total > 0 && (
         <details className="mt-1.5">
-          <summary className="text-[10px] text-zinc-500 cursor-pointer hover:text-zinc-300">
+          <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-primary">
             {t('fleet.detail.trace', 'Trace')} ({total})
           </summary>
           <ol className="mt-1 space-y-1">
             {saga.steps.map((step, index) => (
               <li
                 key={`${step.peerId}-${step.model}-${step.lane}-${index}`}
-                className="flex items-center gap-2 rounded bg-zinc-900/70 px-2 py-1 text-[10px]"
+                className="flex items-center gap-2 rounded bg-surface/70 px-2 py-1 text-[10px]"
               >
                 <StepStatusIcon status={step.status} />
                 <span className={`shrink-0 uppercase tracking-wide ${laneClass(step.lane)}`}>
                   {step.lane}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-zinc-300">
-                  {step.peerId}
-                </span>
-                <span className="min-w-0 max-w-[42%] truncate font-mono text-zinc-500">
+                <span className="min-w-0 flex-1 truncate text-text-secondary">{step.peerId}</span>
+                <span className="min-w-0 max-w-[42%] truncate font-mono text-text-muted">
                   {step.model}
                 </span>
               </li>
@@ -297,10 +281,10 @@ const SagaRow: React.FC<{
       )}
       {saga.finalResult && (
         <details className="mt-1.5">
-          <summary className="text-[10px] text-zinc-500 cursor-pointer hover:text-zinc-300">
+          <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-primary">
             {t('fleet.detail.viewFinalResult', 'View final result')}
           </summary>
-          <pre className="mt-1 p-2 text-[11px] bg-zinc-900 rounded text-zinc-300 whitespace-pre-wrap overflow-x-auto max-h-32">
+          <pre className="mt-1 p-2 text-[11px] bg-background rounded text-text-secondary whitespace-pre-wrap overflow-x-auto max-h-32">
             {saga.finalResult}
           </pre>
         </details>
@@ -319,7 +303,7 @@ const SagaStatusIcon: React.FC<{ status: SagaSummary['status'] }> = ({ status })
   if (status === 'failed' || status === 'cancelled') {
     return <XCircle size={11} className="text-error shrink-0" />;
   }
-  return <CircleDashed size={11} className="text-zinc-500 shrink-0" />;
+  return <CircleDashed size={11} className="text-text-muted shrink-0" />;
 };
 
 export const StepStatusIcon: React.FC<{
@@ -335,7 +319,7 @@ export const StepStatusIcon: React.FC<{
     return <XCircle size={10} className="text-error shrink-0" />;
   }
   if (status === 'skipped') {
-    return <CircleDashed size={10} className="text-zinc-600 shrink-0" />;
+    return <CircleDashed size={10} className="text-text-muted shrink-0" />;
   }
-  return <CircleDashed size={10} className="text-zinc-500 shrink-0" />;
+  return <CircleDashed size={10} className="text-text-muted shrink-0" />;
 };

@@ -1,4 +1,15 @@
-import { Minus, Square, X, Copy, Bell, Activity, Star, BarChart3, Focus, Sparkles, Network, Users, HelpCircle, Power, Loader2, ClipboardCopy, Headphones, Cpu, GraduationCap, UserCog, ListChecks, Bot } from 'lucide-react';
+import {
+  Minus,
+  Square,
+  X,
+  Copy,
+  Bell,
+  HelpCircle,
+  Power,
+  Loader2,
+  ClipboardCopy,
+  Headphones,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
@@ -52,116 +63,6 @@ export function Titlebar() {
         />
       </div>
 
-      {/* Multi-agent orchestrator launcher (Ctrl+Shift+M). */}
-      <button
-        onClick={() => useAppStore.getState().setShowOrchestratorLauncher(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title="Spawn multi-agent team (Ctrl+Shift+M)"
-        aria-label="Spawn multi-agent team"
-      >
-        <Sparkles className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* Fleet panel — multi-host Code Buddy listener (GAP 3) */}
-      <button
-        onClick={() => useAppStore.getState().setShowFleetPanel(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title="Fleet — peer events"
-        aria-label="Open fleet panel"
-      >
-        <Network className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* Fleet Command Center — multi-AI dispatch (Fleet P5) */}
-      <button
-        onClick={() => useAppStore.getState().setShowFleetCommandCenter(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title="Fleet Command Center — dispatch goals across providers"
-        aria-label="Open fleet command center"
-        data-testid="fleet-command-center-button"
-      >
-        <Cpu className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* Team panel — Agent Teams (Phase 4 layer 9) */}
-      <button
-        onClick={() => useAppStore.getState().setShowTeamPanel(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title="Agent Team"
-        aria-label="Open team panel"
-      >
-        <Users className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* Lesson candidates — review queue (Hermes item 7) */}
-      <button
-        onClick={() => useAppStore.getState().setShowLessonCandidatePanel(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title={t('lessonCandidate.title', 'Lesson candidates — review queue')}
-        aria-label="Open lesson candidate panel"
-        data-testid="lesson-candidate-button"
-      >
-        <GraduationCap className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* User model — review queue (Hermes item 24) */}
-      <button
-        onClick={() => useAppStore.getState().setShowUserModelPanel(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title={t('userModel.title', 'User model — observations')}
-        aria-label="Open user model panel"
-        data-testid="user-model-button"
-      >
-        <UserCog className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* Spec backlog — review-gated stories */}
-      <button
-        onClick={() => useAppStore.getState().setShowSpecPanel(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title={t('spec.title', 'Spec backlog — review-gated stories')}
-        aria-label="Open spec backlog panel"
-        data-testid="spec-panel-button"
-      >
-        <ListChecks className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* Bookmarks panel (Phase 3 step 4) */}
-      <button
-        onClick={() => useAppStore.getState().setShowBookmarksPanel(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title={t('bookmarks.title')}
-      >
-        <Star className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      {/* Activity feed (Phase 2 step 18) */}
-      <button
-        onClick={() => useAppStore.getState().setShowActivityFeed(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title={t('activity.title')}
-      >
-        <Activity className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      <button
-        onClick={() => useAppStore.getState().setShowSessionInsights(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title={t('sessionInsights.title')}
-        data-testid="session-insights-button"
-      >
-        <BarChart3 className="w-4 h-4 text-text-secondary" />
-      </button>
-
-      <button
-        onClick={() => useAppStore.getState().setShowFocusView(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title={t('focusView.title')}
-        data-testid="focus-view-button"
-      >
-        <Focus className="w-4 h-4 text-text-secondary" />
-      </button>
-
       {/* Runner badge — shows engine vs pi status (Cowork-on-core migration P3) */}
       <RunnerBadge />
 
@@ -170,17 +71,6 @@ export function Titlebar() {
 
       {/* Voice chat overlay (Lisa-derived) */}
       <VoiceOverlayButton />
-
-      {/* Companion senses — Lisa-inspired local sensory journal. */}
-      <button
-        onClick={() => useAppStore.getState().setShowCompanionPanel(true)}
-        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
-        title="Buddy companion — senses and self-state"
-        aria-label="Open Buddy companion panel"
-        data-testid="companion-panel-button"
-      >
-        <Bot className="w-4 h-4 text-text-secondary" />
-      </button>
 
       {/* Code Buddy HTTP server toggle — boots `src/server/index.ts` in-process */}
       <ServerToggle />
@@ -312,6 +202,13 @@ function ClipboardButton() {
 function VoiceOverlayButton() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const openVoiceChat = () => setOpen(true);
+    window.addEventListener('cowork:open-voice-chat', openVoiceChat);
+    return () => window.removeEventListener('cowork:open-voice-chat', openVoiceChat);
+  }, []);
+
   return (
     <>
       <button
