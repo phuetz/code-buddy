@@ -85,7 +85,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "uuid": "^11.0.3",
-    "ws": "^8.19.0",
+    "ws": "^8.20.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
@@ -121,7 +121,9 @@
   },
   "overrides": {
     "fast-xml-parser": "^5.5.6",
-    "tar": "^7.5.11"
+    "tar": "^7.5.15",
+    "vite": "^7.3.3",
+    "ws": "^8.20.1"
   },
   "author": "Code Buddy Cowork Team",
   "license": "MIT",

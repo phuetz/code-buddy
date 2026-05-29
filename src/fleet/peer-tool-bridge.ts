@@ -349,6 +349,12 @@ export function wirePeerToolBridge(): void {
     return await runInvocation(params, ctx, true);
   });
 
+  if (!getWorkspaceRoot()) {
+    logger.error(
+      '[peer-tool-bridge] CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT is not set — peer.tool.invoke is registered but will fail closed (PEER_WORKSPACE_NOT_CONFIGURED) on every call. Set it to enable remote read-only tool access.',
+    );
+  }
+
   wired = true;
   logger.debug('[peer-tool-bridge] wired (peer.tool.invoke + peer.tool.invoke.stream)');
 }

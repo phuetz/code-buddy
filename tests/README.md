@@ -87,12 +87,14 @@ expect(mockFn).toHaveBeenCalledWith('arg1', 'arg2');
 
 ## Coverage Goals
 
-We aim for the following coverage targets:
+CI enforces the thresholds configured in `vitest.config.ts` (currently **70%** for
+statements, branches, functions, and lines — a realistic floor for this codebase size).
+Aim higher on core paths (`src/agent/`, `src/codebuddy/`), but the enforced gate is:
 
-- **Statements**: 80%+
-- **Branches**: 75%+
-- **Functions**: 80%+
-- **Lines**: 80%+
+- **Statements**: 70%
+- **Branches**: 70%
+- **Functions**: 70%
+- **Lines**: 70%
 
 View coverage report:
 ```bash

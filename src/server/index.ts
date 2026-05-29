@@ -24,6 +24,7 @@ try {
   /* ignore */
 }
 import type { ServerConfig } from './types.js';
+import { isOriginAllowed, isLoopbackHost, DEFAULT_LOCALHOST_ORIGINS } from './origin-check.js';
 import {
   createAuthMiddleware,
   requireScope,
@@ -117,7 +118,9 @@ const DEFAULT_CONFIG: ServerConfig = {
   port: parseInt(process.env.PORT || String(SERVER_CONFIG.DEFAULT_PORT), 10),
   host: process.env.HOST || SERVER_CONFIG.DEFAULT_HOST,
   cors: true,
-  corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['*'],
+  // Secure-by-default: localhost only. Server-to-server callers (e.g. the fleet hub)
+  // ignore CORS, so this does not affect the mesh; set CORS_ORIGINS (or '*') to widen.
+  corsOrigins: process.env.CORS_ORIGINS?.split(',') || DEFAULT_LOCALHOST_ORIGINS,
   rateLimit: true,
   rateLimitMax: parseInt(
     process.env.RATE_LIMIT_MAX || String(LIMIT_CONFIG.DEFAULT_RATE_LIMIT_MAX),
@@ -170,9 +173,18 @@ function createApp(config: ServerConfig): Application {
   // CORS
   if (config.cors) {
     const isWildcard = config.corsOrigins?.includes('*');
+    const allowedOrigins: string[] = Array.isArray(config.corsOrigins)
+      ? config.corsOrigins
+      : typeof config.corsOrigins === 'string'
+        ? config.corsOrigins.split(',')
+        : DEFAULT_LOCALHOST_ORIGINS;
     app.use(
       cors({
-        origin: isWildcard ? true : config.corsOrigins,
+        // Function form so wildcard-port patterns (e.g. http://localhost:*) match and
+        // non-browser clients (no Origin header) are allowed. '*' keeps legacy open behavior.
+        origin: isWildcard
+          ? true
+          : (origin, cb) => cb(null, !origin || isOriginAllowed(origin, allowedOrigins)),
         credentials: !isWildcard,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: [
@@ -1011,6 +1023,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
       logger.info(`Docs: ${baseUrl}/api/docs`);
       logger.info(`WebSocket: ${config.websocketEnabled ? 'Enabled (/ws)' : 'Disabled'}`);
       logger.info(`Auth: ${config.authEnabled ? 'Enabled' : 'Disabled'}`);
+      if (!isLoopbackHost(config.host)) {
+        logger.warn(
+          `Server is bound to ${config.host} (non-loopback) and is reachable from the network. ` +
+            `Auth is ${config.authEnabled ? 'ENABLED' : 'DISABLED'}; CORS origins: ${[config.corsOrigins ?? []].flat().join(', ') || '(none)'}. ` +
+            `Bind to localhost with HOST=127.0.0.1 if remote access is not intended.`,
+        );
+      }
       logger.info(
         `Rate Limit: ${config.rateLimit ? `${config.rateLimitMax} req/${config.rateLimitWindow / 1000}s` : 'Disabled'}`
       );

@@ -83,8 +83,17 @@ export class PermissionModeManager {
       logger.warn('Cannot enable bypassPermissions: disabled by managed setting');
       return false;
     }
+    const previous = this.config.mode;
     this.config.mode = mode;
-    logger.info(`Permission mode set to: ${mode}`);
+    if (mode === 'bypassPermissions' && previous !== 'bypassPermissions') {
+      // Escalate visibility: bypass auto-approves every operation with no confirmation.
+      logger.warn(
+        'Permission mode set to bypassPermissions — ALL operations are now auto-approved with NO confirmation. ' +
+          'Switch back to a safer mode (e.g. default) as soon as the unattended task completes.',
+      );
+    } else {
+      logger.info(`Permission mode set to: ${mode}`);
+    }
     return true;
   }
 

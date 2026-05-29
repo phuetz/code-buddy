@@ -194,5 +194,32 @@ describe('ConfirmationService', () => {
       expect(result.confirmed).toBe(false);
       expect(result.feedback).toBe('manual approval required');
     });
+
+    it('should not let AUTO_CONFIRM or policy-allow bypass a restrictive permission mode (plan)', async () => {
+      // Regression for the 0.2 hardening: shell:safe always evaluates to `allow`,
+      // and CODEBUDDY_AUTO_CONFIRM short-circuits, so without the early permission-mode
+      // deny check these would silently override `plan` mode (which blocks writes/bash).
+      const { getPermissionModeManager, resetPermissionModeManager } = await import('../../src/security/permission-modes.js');
+      getPermissionModeManager().setMode('plan');
+      process.env.CODEBUDDY_AUTO_CONFIRM = 'true';
+      try {
+        const writeResult = await service.requestConfirmation({
+          operation: 'write_file',
+          filename: 'somefile.txt',
+          riskLevel: 'low' as any,
+        }, 'file');
+        expect(writeResult.confirmed).toBe(false);
+        expect(writeResult.feedback).toContain('plan mode');
+
+        const bashResult = await service.requestConfirmation({
+          operation: 'run_command',
+          filename: 'echo hello',
+          riskLevel: 'low' as any,
+        }, 'bash');
+        expect(bashResult.confirmed).toBe(false);
+      } finally {
+        resetPermissionModeManager();
+      }
+    });
   });
 });

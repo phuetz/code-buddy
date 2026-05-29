@@ -57,6 +57,23 @@ vi.mock('ink', () => ({
   Box: ({ children }: { children?: React.ReactNode }) => children,
 }));
 
+// The lightweight render mock above invokes the Sidebar function component directly
+// (not through a React renderer), so the `useTheme()` hook would otherwise fail outside
+// a render context — making every content section render empty. Mock the theme so the
+// component's `colors` are available and the nested sections render.
+vi.mock('../../src/ui/context/theme-context.js', () => ({
+  useTheme: () => ({
+    colors: {
+      accent: 'cyan',
+      warning: 'yellow',
+      success: 'green',
+      secondary: 'magenta',
+      info: 'blue',
+      border: 'gray',
+    },
+  }),
+}));
+
 import { render } from 'ink-testing-library';
 import { Sidebar } from '../../src/ui/components/Sidebar.js';
 

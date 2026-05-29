@@ -61,6 +61,15 @@ function parseRule(rule: string): ParsedRule {
  * Only supports * (any chars) — not full glob.
  */
 function patternToRegex(pattern: string): RegExp {
+  // Defense-in-depth: a pathologically long pattern (e.g. injected via a compromised
+  // .codebuddy/settings.json) could compile to an expensive regex. Cap the source length
+  // and fail closed to a never-matching regex so the rule simply does not apply.
+  if (pattern.length > 500) {
+    logger.warn(
+      `Declarative rule pattern too long (${pattern.length} chars > 500); refusing to compile — rule will not match`,
+    );
+    return /(?!)/;
+  }
   const escaped = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*\*/g, '§DOUBLESTAR§')

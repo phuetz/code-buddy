@@ -9,6 +9,7 @@ import type { WebSocket, WebSocketServer, RawData } from 'ws';
 import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types.js';
 import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
+import { isOriginAllowed } from '../origin-check.js';
 import { verifyToken } from '../auth/jwt.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
 import {
@@ -535,6 +536,28 @@ export async function setupWebSocket(
   const wss = new WebSocketServer({
     server,
     path: '/ws',
+    verifyClient: (info, cb) => {
+      // Non-browser clients (CLI, fleet peers via the `ws` library) send no Origin
+      // header — allow them. Browser clients must present an allowed Origin, which
+      // blocks cross-site WebSocket hijacking (CSWSH). Mirrors the Gateway WS hardening
+      // (GHSA-5wcw-8jjv-m286); the REST `/ws` endpoint previously had no Origin check.
+      const origin = info.origin;
+      if (!origin) {
+        cb(true);
+        return;
+      }
+      const allowedOrigins: string[] = Array.isArray(config.corsOrigins)
+        ? config.corsOrigins
+        : typeof config.corsOrigins === 'string'
+          ? config.corsOrigins.split(',')
+          : [];
+      if (allowedOrigins.includes('*') || isOriginAllowed(origin, allowedOrigins)) {
+        cb(true);
+        return;
+      }
+      logger.warn(`[ws] Rejected WebSocket connection from disallowed origin: ${origin}`);
+      cb(false, 403, 'Forbidden origin');
+    },
   });
 
   wss.on('connection', (ws: WebSocket, _req) => {

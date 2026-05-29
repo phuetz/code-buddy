@@ -172,3 +172,14 @@ cowork/release/
 .omx/
 .antigravitycli/
 Doc/
+
+# OCR models and native desktop bridge binaries (large, machine-specific — not source)
+*.traineddata
+src/desktop-automation/*.exe
+
+# Scratch probe artifacts (experimental, not part of the build)
+scratch/*-result.json
+scratch/*-state.json
+scratch/*.png
+scratch/*.xlsx
+scratch/computer-use-runs/

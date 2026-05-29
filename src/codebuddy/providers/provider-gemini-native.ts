@@ -6,20 +6,22 @@
  *  - logger sources renamed `'CodeBuddyClient'` → `'GeminiNativeProvider'`
  *  - public methods renamed `geminiChat`/`geminiChatStream` → `chat`/`chatStream`
  *
- * Known asymmetry preserved (will be addressed in Phase C or later):
- *  - This provider uses raw `retry()` for fetch calls, NOT `withCircuitBreaker`.
- *    The OpenAI-compat path wraps both `chat` and `chatStream` in a circuit
- *    breaker. Aligning the two is out of scope for Phase B.
+ * Parity with OpenAI-compat (2026-05-29):
+ *  - `chat`/`chatStream` fetch calls are now wrapped in the shared circuit
+ *    breaker when the caller opts in via `ChatOptions.circuitBreaker`
+ *    (default off → common path unchanged).
+ *  - Response rate-limit headers are parsed via `parseRateLimitHeaders` and
+ *    surfaced through `/quota`.
+ * Remaining asymmetry (by design):
  *  - `trackPromptCache` is OpenAI-compat-only (Gemini does not surface
- *    `cached_tokens` in usageMetadata). This provider has no internal
- *    cache stats.
- *  - Rate-limit headers are not parsed (Gemini fetch bypasses
- *    `parseRateLimitHeaders`).
+ *    `cached_tokens` in usageMetadata), so this provider has no cache stats.
  */
 
 import type { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger } from '../../utils/logger.js';
 import { retry, RetryStrategies, RetryPredicates } from '../../utils/retry.js';
+import { getCircuitBreaker } from '../../providers/circuit-breaker.js';
+import { parseRateLimitHeaders, storeRateLimitInfo } from '../../utils/rate-limit-display.js';
 import type {
   CodeBuddyMessage,
   CodeBuddyTool,
@@ -345,6 +347,20 @@ export class GeminiNativeProvider implements Provider {
     return body;
   }
 
+  private getCircuitBreakerKey(): string {
+    return `provider:${this.baseURL}`;
+  }
+
+  /**
+   * Wrap a network call in the shared circuit breaker when the caller opts in
+   * (`ChatOptions.circuitBreaker`). When disabled (the default), runs the fn directly
+   * so the common path is unchanged. Mirrors the OpenAI-compat provider (parity fix).
+   */
+  private async withCircuitBreaker<T>(enabled: boolean | undefined, fn: () => Promise<T>): Promise<T> {
+    if (!enabled) return fn();
+    return getCircuitBreaker(this.getCircuitBreakerKey()).execute(fn);
+  }
+
   /**
    * Gemini-specific chat implementation
    */
@@ -372,8 +388,8 @@ export class GeminiNativeProvider implements Provider {
 
       let response: Response;
       try {
-        // Make request with retry
-        response = await retry(
+        // Make request with retry, optionally guarded by the circuit breaker.
+        response = await this.withCircuitBreaker(opts?.circuitBreaker, () => retry(
           async () => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
@@ -417,7 +433,7 @@ export class GeminiNativeProvider implements Provider {
               });
             },
           }
-        );
+        ));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const looksLikeModel404 =
@@ -439,6 +455,21 @@ export class GeminiNativeProvider implements Provider {
           });
         }
         throw error;
+      }
+
+      // Surface provider rate-limit headers for /quota visibility (parity with
+      // OpenAI-compat). Best-effort: never let telemetry affect the response path,
+      // and tolerate non-standard/mocked header objects.
+      try {
+        if (response.headers && typeof response.headers.forEach === 'function') {
+          const rlHeaders: Record<string, string> = {};
+          response.headers.forEach((value, key) => {
+            rlHeaders[key] = value;
+          });
+          storeRateLimitInfo(parseRateLimitHeaders(rlHeaders, 'gemini'));
+        }
+      } catch {
+        /* rate-limit telemetry is best-effort */
       }
 
       const data = await response.json() as {
@@ -774,7 +805,7 @@ export class GeminiNativeProvider implements Provider {
 
       let res: Response;
       try {
-        res = await fetch(streamUrl, {
+        res = await this.withCircuitBreaker(opts?.circuitBreaker, () => fetch(streamUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -782,7 +813,7 @@ export class GeminiNativeProvider implements Provider {
           },
           body: JSON.stringify(body),
           signal: controller.signal,
-        });
+        }));
       } finally {
         clearTimeout(timeoutId);
       }

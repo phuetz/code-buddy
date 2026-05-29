@@ -951,9 +951,10 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../../dist/index.html'));
   }
-  // Phase d.21 audit-debug — auto-open DevTools when NODE_ENV=development
-  // so React errors come with full stack + console logs are visible.
-  if (process.env.NODE_ENV === 'development' && mainWindow) {
+  // Auto-open DevTools only in a real dev session (vite dev server present) or when
+  // explicitly opted in via COWORK_DEVTOOLS=1 — never merely because NODE_ENV happens
+  // to be 'development', which could leak DevTools into a packaged release build.
+  if ((isDev || process.env.COWORK_DEVTOOLS === '1') && mainWindow) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
@@ -2183,13 +2184,18 @@ ipcMain.handle(
 // ── Workspace IPC handlers ────────────────────────────────────────────
 ipcMain.handle('workspace.readDir', async (_event, dirPath: string) => {
   try {
-    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    // Reject malformed input (non-string / empty / null byte) before touching the FS.
+    if (typeof dirPath !== 'string' || dirPath.length === 0 || dirPath.includes('\0')) {
+      return [];
+    }
+    const resolvedDir = resolve(dirPath);
+    const entries = await fs.promises.readdir(resolvedDir, { withFileTypes: true });
     return entries
       .filter((e) => !e.name.startsWith('.'))
       .map((e) => ({
         name: e.name,
         isDirectory: e.isDirectory(),
-        path: resolve(dirPath, e.name),
+        path: resolve(resolvedDir, e.name),
       }));
   } catch {
     return [];

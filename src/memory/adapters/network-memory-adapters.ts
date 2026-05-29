@@ -67,9 +67,9 @@ export class Mem0MemoryProvider implements MemoryProvider {
         },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as any;
+      const data = (await response.json()) as Array<{ memory?: string }>;
       if (Array.isArray(data) && data.length > 0) {
-        return data[0].memory || null;
+        return data[0]?.memory || null;
       }
       return null;
     } catch (err) {
@@ -98,9 +98,9 @@ export class Mem0MemoryProvider implements MemoryProvider {
         }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as any;
+      const data = (await response.json()) as Array<{ memory?: string }>;
       if (Array.isArray(data)) {
-        return data.map((item: any) => ({
+        return data.map((item) => ({
           key: query,
           value: item.memory || '',
           category: 'context' as const,
@@ -190,7 +190,7 @@ export class HonchoMemoryProvider implements MemoryProvider {
         },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as any;
+      const data = (await response.json()) as { value?: string };
       return data.value || null;
     } catch (err) {
       logger.warn('HonchoMemoryProvider: recall failed, falling back to local', {
@@ -212,9 +212,9 @@ export class HonchoMemoryProvider implements MemoryProvider {
         },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as any;
+      const data = (await response.json()) as Array<{ key?: string; value?: string }>;
       if (Array.isArray(data)) {
-        return data.map((item: any) => ({
+        return data.map((item) => ({
           key: item.key || query,
           value: item.value || '',
           category: 'preferences' as const,
@@ -304,7 +304,7 @@ export class SupermemoryMemoryProvider implements MemoryProvider {
         },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as any;
+      const data = (await response.json()) as { value?: string };
       return data.value || null;
     } catch (err) {
       logger.warn('SupermemoryMemoryProvider: recall failed, falling back to local', {
@@ -328,9 +328,9 @@ export class SupermemoryMemoryProvider implements MemoryProvider {
         body: JSON.stringify({ query, limit }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as any;
+      const data = (await response.json()) as Array<{ value?: string; text?: string }>;
       if (Array.isArray(data)) {
-        return data.map((item: any) => ({
+        return data.map((item) => ({
           key: query,
           value: item.value || item.text || '',
           category: 'context' as const,

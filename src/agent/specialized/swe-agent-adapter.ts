@@ -43,11 +43,23 @@ export class SWESpecializedAgent extends SpecializedAgent {
       // Apply per-agent config overrides from agent_defaults.agents.swe
       const configOptions = this.getConfig().options ?? {};
 
+      // Validate callable params at the adapter boundary so a malformed task
+      // fails with a clear message instead of a cryptic runtime error deep in the loop.
+      const llmCall = task.params?.llmCall;
+      const executeTool = task.params?.executeTool;
+      if (typeof llmCall !== 'function') {
+        throw new Error('SWE agent requires task.params.llmCall to be a function');
+      }
+      if (typeof executeTool !== 'function') {
+        throw new Error('SWE agent requires task.params.executeTool to be a function');
+      }
+
+      type SWEAgentOptions = Parameters<typeof createSWEAgent>[0];
       const agent = createSWEAgent({
         maxSteps: (task.params?.maxSteps as number) ?? 20,
         maxObserve: (task.params?.maxObserve as number) ?? (configOptions.maxTokens as number | undefined) ?? 10000,
-        llmCall: task.params?.llmCall as any,
-        executeTool: task.params?.executeTool as any,
+        llmCall: llmCall as SWEAgentOptions['llmCall'],
+        executeTool: executeTool as SWEAgentOptions['executeTool'],
       });
 
       const prompt = this.buildPrompt(task);

@@ -6,6 +6,7 @@ import { checkDeclarativePermission } from '../security/declarative-rules.js';
 import { getPermissionModeManager } from '../security/permission-modes.js';
 import { PolicyEngine, Capability } from '../security/policy-engine.js';
 import { commandExists } from './command-exists.js';
+import { logger } from './logger.js';
 
 export interface ConfirmationOptions {
   operation: string;
@@ -165,6 +166,14 @@ export class ConfirmationService extends EventEmitter {
    * Set the threshold for large change enhanced confirmation.
    */
   setLargeChangeThreshold(lines: number): void {
+    // Guard against pathological values: <1 over-triggers every edit; a very large
+    // value silently disables the large-change re-confirmation gate. Clamp to a sane range.
+    if (!Number.isFinite(lines) || lines < 1 || lines > 10000) {
+      logger.warn(
+        `setLargeChangeThreshold: ignoring out-of-range value ${lines} (allowed 1-10000); keeping ${this.largeChangeThreshold}`,
+      );
+      return;
+    }
     this.largeChangeThreshold = lines;
   }
 
@@ -228,6 +237,19 @@ export class ConfirmationService extends EventEmitter {
     }
 
     const isSelfImprovement = capability === 'self_improvement';
+
+    // SECURITY (CC18 hardening): an explicit permission-mode denial — e.g. `plan`
+    // mode blocking writes, or a declarative deny rule surfaced through the mode —
+    // must NEVER be overridden by the AUTO_CONFIRM / PolicyEngine-`allow` convenience
+    // short-circuits below. Without this, `CODEBUDDY_AUTO_CONFIRM=true` (or the fact
+    // that `shell:safe` always evaluates to `allow`) would silently bypass a
+    // restrictive mode. We only short-circuit to BLOCKED here; the permissive path
+    // (mode allows) falls through unchanged, so normal UX is preserved.
+    const modeToolName = operationType === 'bash' ? 'bash' : 'edit';
+    const earlyModeDecision = getPermissionModeManager().checkPermission(options.operation, modeToolName);
+    if (!isSelfImprovement && !earlyModeDecision.allowed) {
+      return { confirmed: false, feedback: earlyModeDecision.reason };
+    }
 
     if (!isSelfImprovement && process.env.CODEBUDDY_AUTO_CONFIRM === 'true') {
       return {

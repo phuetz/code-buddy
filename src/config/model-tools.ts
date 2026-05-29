@@ -62,6 +62,16 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 32768,
     patchFormat: 'unified',
   },
+  // o4 / o4-mini (2026 reasoning models)
+  {
+    model: 'o4*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 100000,
+    patchFormat: 'unified',
+  },
   // o3-mini (reasoning model)
   {
     model: 'o3-mini*',

@@ -29,6 +29,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import open from 'open';
+import { logger } from '../utils/logger.js';
 
 /** OpenAI's public OAuth client id for the Codex CLI. Not a secret —
  *  identifies the application to the IdP, paired with PKCE for security.
@@ -106,7 +107,7 @@ function loadAuthFile(): CodexAuthDotJson | null {
     const raw = fs.readFileSync(AUTH_FILE_PATH, 'utf-8');
     return JSON.parse(raw) as CodexAuthDotJson;
   } catch (err) {
-    console.error('Error reading codex-auth.json:', err);
+    logger.error('Error reading codex-auth.json', err instanceof Error ? err : { error: String(err) });
     return null;
   }
 }
@@ -122,7 +123,7 @@ function saveAuthFile(auth: CodexAuthDotJson): void {
       } catch { /* non-fatal */ }
     }
   } catch (err) {
-    console.error('Error writing codex-auth.json:', err);
+    logger.error('Error writing codex-auth.json', err instanceof Error ? err : { error: String(err) });
   }
 }
 
@@ -133,7 +134,7 @@ export function clearCodexCredentials(): void {
       fs.unlinkSync(AUTH_FILE_PATH);
     }
   } catch (err) {
-    console.error('Error clearing codex credentials:', err);
+    logger.error('Error clearing codex credentials', err instanceof Error ? err : { error: String(err) });
   }
 }
 
@@ -582,7 +583,7 @@ export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
     } catch (err) {
       // Refresh failed — token may have been revoked. Surface to caller
       // so they can decide whether to clear credentials.
-      console.error('ChatGPT token refresh failed:', err);
+      logger.error('ChatGPT token refresh failed', err instanceof Error ? err : { error: String(err) });
       return null;
     }
   }
