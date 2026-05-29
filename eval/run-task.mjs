@@ -29,11 +29,15 @@ const transientCodeBuddyPaths = new Set([
 ]);
 
 // Helper to run shell commands
-function runCmd(cmd, cwd = projectRoot) {
+function runCmd(cmd, cwd = projectRoot, options = {}) {
   try {
     return execSync(cmd, { cwd, encoding: 'utf8', stdio: 'pipe' });
   } catch (err) {
-    return err.stdout + err.stderr;
+    const output = `${err.stdout || ''}${err.stderr || ''}`;
+    if (options.allowFailure) {
+      return output;
+    }
+    throw new Error(`Command failed: ${cmd}\n${output}`);
   }
 }
 
@@ -101,7 +105,7 @@ function runTask(taskSlug) {
     const cmd = `node dist/index.js autonomous-code --task-file "${runtimeContractPath}" --apply-edits --run-verification --json ${additionalArgs}`;
 
     console.log(`Command: ${cmd}`);
-    const stdout = runCmd(cmd);
+    const stdout = runCmd(cmd, projectRoot, { allowFailure: true });
 
     let result;
     try {

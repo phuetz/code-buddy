@@ -94,6 +94,20 @@ Real validation:
   - adding `.codebuddy/settings.json` -> `blocked`, dirty file `?? .codebuddy/settings.json`.
 - `node eval/run-task.mjs` -> all 5 real tasks passed.
 
+### Step 5 - Continuation: fail-fast eval harness setup
+
+The L2 harness helper used to swallow every shell command failure and return stdout/stderr. That was useful for inspecting the CLI under test, but too permissive for setup commands such as `git init`, `git add`, `git commit`, or `git status`.
+
+Fix landed:
+
+- `eval/run-task.mjs` now fails fast by default when setup or git inspection commands fail.
+- Only the `node dist/index.js autonomous-code ...` command is allowed to return captured output on failure, because that is the product command under test and may need JSON/error inspection.
+
+Real validation:
+
+- `node --check eval/run-task.mjs` -> exit 0.
+- `node eval/run-task.mjs` -> all 5 real tasks passed.
+
 ## Verdict
 
-The branch is healthier than at the start of the pass: build/typecheck are green, the CLI L2 eval is a real executable signal again, Cowork smoke passes in real Electron, the Cowork ChatGPT path passed against the real backend, and strict preflight now tolerates Code Buddy's own runtime artifacts without hiding project configuration edits.
+The branch is healthier than at the start of the pass: build/typecheck are green, the CLI L2 eval is a real executable signal again, Cowork smoke passes in real Electron, the Cowork ChatGPT path passed against the real backend, strict preflight now tolerates Code Buddy's own runtime artifacts without hiding project configuration edits, and the eval harness no longer hides failed setup commands.
