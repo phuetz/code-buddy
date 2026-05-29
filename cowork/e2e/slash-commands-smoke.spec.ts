@@ -180,6 +180,21 @@ test('/knowledge-graph opens the lessons-vault graph (rendered in Fleet Command 
   await expect(appPage.getByTestId('lessons-vault-graph')).toBeVisible({ timeout: 10_000 });
 });
 
+test('Channels panel opens + channels.status IPC is reachable (read-only)', async ({ appPage }) => {
+  await appPage.evaluate(() => {
+    (window as unknown as { useAppStore?: { getState: () => { setShowChannelsPanel: (s: boolean) => void } } })
+      .useAppStore?.getState()
+      .setShowChannelsPanel(true);
+  });
+  await expect(appPage.getByTestId('channels-panel')).toBeVisible({ timeout: 10_000 });
+  const ok = await appPage.evaluate(async () => {
+    const api = (window as unknown as { electronAPI?: { channels?: { status?: () => Promise<{ ok: boolean }> } } }).electronAPI;
+    const res = await api?.channels?.status?.();
+    return res && typeof res.ok === 'boolean';
+  });
+  expect(ok).toBe(true);
+});
+
 test('orchestrator + subagent + knowledge IPC are reachable post-boot (getter sweep)', async ({ appPage }) => {
   const res = await appPage.evaluate(async () => {
     const api = (window as unknown as {

@@ -105,16 +105,18 @@ security design and must not be fabricated.
 - **Daemon / non-goal:** heartbeat, trigger (background daemons), cloud (remote sandbox — explicit non-goal).
 
 ## CLI groups (~40) — disposition
-- 🟢 pilotable (panel/app): server/gui (app), spec, skills, lessons, user-model, cron/schedule (SettingsSchedule), provider/config (Settings), mcp (marketplace), companion, run (audit log), identity + device (C3 panels).
-- 🟡 route/new-panel: secrets (vault UI — see gated note), research, flow (live launcher — see gated note), channels, groups, autonomous-code, gitnexus. (knowledge-graph is now 🟢 — the `/knowledge-graph` slash opens the LessonsVaultGraph.)
+- 🟢 pilotable (panel/app): server/gui (app), spec, skills, lessons, user-model, cron/schedule (SettingsSchedule), provider/config (Settings), mcp (marketplace), companion, run (audit log), identity + device + **channels** (read-only C3-pattern panels). knowledge-graph (`/knowledge-graph` → LessonsVaultGraph). autonomous-code runs surface via the run/audit log; gitnexus is an MCP tool reachable via the MCP marketplace.
+- 🟡 route/new-panel: research, flow (live launcher — new feature, value provider/key-gated; see gated note).
+- 🔒 security-adjacent (→ gated): secrets (vault UI), groups (`group-security` access-control config / allowlists — a security boundary, not a benign read-only list).
 - 🔴 CLI-only: completions, update, doctor, onboard, security-audit, deploy, nodes, daemon, backup (one-off / OS / maintenance).
 
 ## Gated (axis-A autonomy + axis-B surfaces that need live resources or a security design)
 Not fabricated as unverifiable code; each needs a real resource or its own review:
 - **D4 — gateway inbound listener** (always-joinable agent): separate plan with its own threat-model + ExitPlanMode. Posture fixed: inbound *proposes* `needs_local_operator`, never auto-dispatches.
 - **secrets vault EXECUTION**: encrypted vault + master key; security-sensitive, no reusable API surface — needs a dedicated secure design.
-- **research / flow LIVE**: depend on a configured provider + network; the panel can launch them but E2E verification needs live keys.
+- **research / flow LIVE**: depend on a configured provider + network; a launcher panel could exist but E2E could only prove "it launches", not the live result (provider/key-gated). New-feature scope, not a wire-an-existing-surface.
 - **browser-operator EXECUTION**: the `browser_operator` agent tool (D3) proposes a consent-gated session; the live browser run stays operator-driven behind the consent gate.
+- **groups (`group-security`)**: read-only listable, but the data is messaging/gateway access-control config (allowlists) — a security boundary. Belongs with the secrets/D4 security-design pass, not a casual read-only panel.
 
 ## Acceptance
 Axis-B is "done" when every command is 🟢 or 🔴-with-true-reason. **Current state:

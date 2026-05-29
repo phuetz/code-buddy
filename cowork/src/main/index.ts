@@ -48,6 +48,7 @@ import { registerLessonCandidateIpcHandlers } from './ipc/lessons-candidate-ipc'
 import { registerMobileSupervisionIpcHandlers } from './ipc/mobile-supervision-ipc';
 import { registerIdentityIpcHandlers } from './ipc/identity-ipc';
 import { registerDeviceIpcHandlers } from './ipc/device-ipc';
+import { registerChannelsIpcHandlers } from './ipc/channels-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
 import { registerCompanionIpcHandlers } from './ipc/companion-ipc';
 import { registerSpecIpcHandlers } from './ipc/spec-ipc';
@@ -2343,6 +2344,7 @@ registerLessonCandidateIpcHandlers(() => projectManager);
 registerUserModelIpcHandlers(() => projectManager);
 registerIdentityIpcHandlers(() => projectManager);
 registerDeviceIpcHandlers();
+registerChannelsIpcHandlers();
 registerMobileSupervisionIpcHandlers();
 registerCompanionIpcHandlers(() => projectManager);
 registerSpecIpcHandlers(() => projectManager, configStore);

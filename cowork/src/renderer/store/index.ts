@@ -385,6 +385,7 @@ interface AppState {
   showMobileSupervisionPanel: boolean;
   showIdentityPanel: boolean;
   showDevicePanel: boolean;
+  showChannelsPanel: boolean;
   showLessonsGraph: boolean;
   showCompanionPanel: boolean;
 
@@ -649,6 +650,7 @@ interface AppState {
   setShowMobileSupervisionPanel: (show: boolean) => void;
   setShowIdentityPanel: (show: boolean) => void;
   setShowDevicePanel: (show: boolean) => void;
+  setShowChannelsPanel: (show: boolean) => void;
   setShowLessonsGraph: (show: boolean) => void;
   setShowCompanionPanel: (show: boolean) => void;
 
@@ -831,6 +833,7 @@ export const useAppStore = create<AppState>((set) => ({
   showMobileSupervisionPanel: false,
   showIdentityPanel: false,
   showDevicePanel: false,
+  showChannelsPanel: false,
   showLessonsGraph: false,
   showCompanionPanel: false,
   notifications: [],
@@ -1782,6 +1785,7 @@ export const useAppStore = create<AppState>((set) => ({
   setShowMobileSupervisionPanel: (show) => set({ showMobileSupervisionPanel: show }),
   setShowIdentityPanel: (show) => set({ showIdentityPanel: show }),
   setShowDevicePanel: (show) => set({ showDevicePanel: show }),
+  setShowChannelsPanel: (show) => set({ showChannelsPanel: show }),
   setShowLessonsGraph: (show) => set({ showLessonsGraph: show }),
   setShowCompanionPanel: (show) => set({ showCompanionPanel: show }),
   clearSubAgents: (sessionId) =>

@@ -13,6 +13,7 @@ import {
   Smartphone,
   Fingerprint,
   MonitorSmartphone,
+  Radio,
   MessageSquare,
   Network,
   Package,
@@ -81,6 +82,8 @@ export function ShellNavigation() {
   const setShowIdentityPanel = useAppStore((s) => s.setShowIdentityPanel);
   const showDevicePanel = useAppStore((s) => s.showDevicePanel);
   const setShowDevicePanel = useAppStore((s) => s.setShowDevicePanel);
+  const showChannelsPanel = useAppStore((s) => s.showChannelsPanel);
+  const setShowChannelsPanel = useAppStore((s) => s.setShowChannelsPanel);
   const setShowCompanionPanel = useAppStore((s) => s.setShowCompanionPanel);
   const setShowBookmarksPanel = useAppStore((s) => s.setShowBookmarksPanel);
   const setShowActivityFeed = useAppStore((s) => s.setShowActivityFeed);
@@ -287,6 +290,14 @@ export function ShellNavigation() {
           active: showDevicePanel,
           onClick: () => setShowDevicePanel(true),
           testId: 'devices-button',
+        },
+        {
+          id: 'channels',
+          label: t('channels.title', 'Delivery channels'),
+          icon: Radio,
+          active: showChannelsPanel,
+          onClick: () => setShowChannelsPanel(true),
+          testId: 'channels-button',
         },
         {
           id: 'companion',
