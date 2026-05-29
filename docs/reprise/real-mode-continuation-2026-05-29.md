@@ -124,6 +124,24 @@ Real validation:
 - `TEMP` / `TMP` redirected to a directory with a space, then `node eval/run-task.mjs simple-edit` -> passed. This also exercised `D:\Program Files\nodejs\node.exe`.
 - `node eval/run-task.mjs` -> all 5 real tasks passed.
 
+### Step 7 - Continuation: file paths with spaces in L2 evals
+
+After shell-free execution, the harness still parsed `git status --porcelain` by splitting on whitespace. That silently loses path segments for files such as `eval/sandbox/target with space.txt`.
+
+Fixes landed:
+
+- Added a real L2 task, `space-path-edit`, that edits `eval/sandbox/target with space.txt`.
+- The isolated eval repo now copies the full `eval/sandbox/` fixture instead of only `target.txt`.
+- Modified-file parsing now keeps the whole porcelain path segment, including spaces.
+- The regression discovered during the full run (`eval/...` becoming `val/...` after trimming status columns) was fixed by preserving the leading status columns until after path extraction.
+
+Real validation:
+
+- `node --check eval/run-task.mjs` -> exit 0.
+- `node eval/run-task.mjs simple-edit` -> passed.
+- `node eval/run-task.mjs space-path-edit` -> passed, modified `eval/sandbox/target with space.txt`.
+- `node eval/run-task.mjs` -> all 6 real tasks passed.
+
 ## Verdict
 
-The branch is healthier than at the start of the pass: build/typecheck are green, the CLI L2 eval is a real executable signal again, Cowork smoke passes in real Electron, the Cowork ChatGPT path passed against the real backend, strict preflight now tolerates Code Buddy's own runtime artifacts without hiding project configuration edits, and the eval harness no longer hides failed setup commands or depends on shell quoting.
+The branch is healthier than at the start of the pass: build/typecheck are green, the CLI L2 eval is a real executable signal again, Cowork smoke passes in real Electron, the Cowork ChatGPT path passed against the real backend, strict preflight now tolerates Code Buddy's own runtime artifacts without hiding project configuration edits, and the eval harness no longer hides failed setup commands, depends on shell quoting, or loses filenames containing spaces.

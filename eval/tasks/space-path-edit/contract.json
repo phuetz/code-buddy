@@ -1,0 +1,21 @@
+{
+  "repo": "D:/CascadeProjects/grok-cli-weekend",
+  "task": "Modify eval/sandbox/target with space.txt to contain 'Hello, Space Buddy!'",
+  "allowedPaths": [
+    "eval/sandbox/target with space.txt"
+  ],
+  "verification": [
+    "node -e \"const fs = require('fs'); const content = fs.readFileSync('eval/sandbox/target with space.txt', 'utf8').trim(); if (content !== 'Hello, Space Buddy!') throw new Error('Verification failed: ' + content);\""
+  ],
+  "riskLevel": "low",
+  "output": "text",
+  "edits": [
+    {
+      "type": "replace_text",
+      "path": "eval/sandbox/target with space.txt",
+      "find": "Hello, Space World!",
+      "replace": "Hello, Space Buddy!",
+      "expectedOccurrences": 1
+    }
+  ]
+}

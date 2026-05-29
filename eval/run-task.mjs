@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 
 const projectRoot = path.resolve(__dirname, '..');
 const tasksDir = path.join(__dirname, 'tasks');
+const sandboxDir = path.join(__dirname, 'sandbox');
 const sandboxTarget = path.join(__dirname, 'sandbox', 'target.txt');
 const transientCodeBuddyPathPrefixes = [
   '.codebuddy/agent-memory/',
@@ -53,17 +54,17 @@ function toRepoPath(filePath) {
 
 function createIsolatedEvalRepo() {
   const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-eval-repo-'));
-  const targetPath = path.join(runRoot, 'eval', 'sandbox', 'target.txt');
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.copyFileSync(sandboxTarget, targetPath);
+  const targetDir = path.join(runRoot, 'eval', 'sandbox');
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.cpSync(sandboxDir, targetDir, { recursive: true });
 
   runCmd('git', ['init'], runRoot);
   runCmd('git', ['config', 'user.name', 'Code Buddy Eval'], runRoot);
   runCmd('git', ['config', 'user.email', 'eval@example.invalid'], runRoot);
-  runCmd('git', ['add', 'eval/sandbox/target.txt'], runRoot);
+  runCmd('git', ['add', 'eval/sandbox'], runRoot);
   runCmd('git', ['commit', '-m', 'initial eval sandbox'], runRoot);
 
-  return { runRoot, targetPath };
+  return { runRoot };
 }
 
 function isTransientCodeBuddyPath(filePath) {
@@ -73,7 +74,12 @@ function isTransientCodeBuddyPath(filePath) {
 
 // Clean sandbox state
 function cleanSandbox(runRoot) {
-  runCmd('git', ['restore', '--', 'eval/sandbox/target.txt'], runRoot);
+  runCmd('git', ['restore', '--', 'eval/sandbox'], runRoot);
+}
+
+function parseGitStatusPath(line) {
+  const rawPath = line.slice(3).split(' -> ').pop() || line.slice(3);
+  return rawPath.trim().replace(/\\/g, '/').replace(/^"|"$/g, '');
 }
 
 // Run a single task
@@ -144,13 +150,8 @@ function runTask(taskSlug) {
     const gitStatusOutput = runCmd('git', ['status', '--porcelain', '--untracked-files=all'], runRoot);
     const modifiedFiles = gitStatusOutput
       .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .map(line => {
-        // Line is like: M eval/sandbox/target.txt
-        const parts = line.split(/\s+/);
-        return parts[parts.length - 1];
-      })
+      .filter(line => line.trim().length > 0)
+      .map(parseGitStatusPath)
       .filter(file => {
         // Exclude transient .codebuddy paths from validation checks
         return !isTransientCodeBuddyPath(file);

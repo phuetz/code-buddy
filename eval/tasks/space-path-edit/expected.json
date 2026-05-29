@@ -1,0 +1,7 @@
+{
+  "status": "verified",
+  "maxFilesChanged": 1,
+  "mustTouchPaths": ["eval/sandbox/target with space.txt"],
+  "mustNotTouchOutside": true,
+  "verificationMustPass": true
+}
