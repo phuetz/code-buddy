@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // Automatically confirm approvals in non-interactive evaluation runner
@@ -28,16 +28,22 @@ const transientCodeBuddyPaths = new Set([
   '.codebuddy/repoProfile.json',
 ]);
 
-// Helper to run shell commands
-function runCmd(cmd, cwd = projectRoot, options = {}) {
+function formatCommand(command, args) {
+  return [command, ...args]
+    .map(part => (/[\s"]/).test(part) ? JSON.stringify(part) : part)
+    .join(' ');
+}
+
+// Helper to run process commands without shell quoting.
+function runCmd(command, args = [], cwd = projectRoot, options = {}) {
   try {
-    return execSync(cmd, { cwd, encoding: 'utf8', stdio: 'pipe' });
+    return execFileSync(command, args, { cwd, encoding: 'utf8', stdio: 'pipe' });
   } catch (err) {
     const output = `${err.stdout || ''}${err.stderr || ''}`;
     if (options.allowFailure) {
       return output;
     }
-    throw new Error(`Command failed: ${cmd}\n${output}`);
+    throw new Error(`Command failed: ${formatCommand(command, args)}\n${output}`);
   }
 }
 
@@ -51,11 +57,11 @@ function createIsolatedEvalRepo() {
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.copyFileSync(sandboxTarget, targetPath);
 
-  runCmd('git init', runRoot);
-  runCmd('git config user.name "Code Buddy Eval"', runRoot);
-  runCmd('git config user.email "eval@example.invalid"', runRoot);
-  runCmd('git add eval/sandbox/target.txt', runRoot);
-  runCmd('git commit -m "initial eval sandbox"', runRoot);
+  runCmd('git', ['init'], runRoot);
+  runCmd('git', ['config', 'user.name', 'Code Buddy Eval'], runRoot);
+  runCmd('git', ['config', 'user.email', 'eval@example.invalid'], runRoot);
+  runCmd('git', ['add', 'eval/sandbox/target.txt'], runRoot);
+  runCmd('git', ['commit', '-m', 'initial eval sandbox'], runRoot);
 
   return { runRoot, targetPath };
 }
@@ -67,7 +73,7 @@ function isTransientCodeBuddyPath(filePath) {
 
 // Clean sandbox state
 function cleanSandbox(runRoot) {
-  runCmd('git restore -- eval/sandbox/target.txt', runRoot);
+  runCmd('git', ['restore', '--', 'eval/sandbox/target.txt'], runRoot);
 }
 
 // Run a single task
@@ -101,11 +107,20 @@ function runTask(taskSlug) {
     };
     fs.writeFileSync(runtimeContractPath, `${JSON.stringify(runtimeContract, null, 2)}\n`, 'utf8');
 
-    const additionalArgs = expected.args ? expected.args.join(' ') : '';
-    const cmd = `node dist/index.js autonomous-code --task-file "${runtimeContractPath}" --apply-edits --run-verification --json ${additionalArgs}`;
+    const additionalArgs = Array.isArray(expected.args) ? expected.args : [];
+    const cmdArgs = [
+      'dist/index.js',
+      'autonomous-code',
+      '--task-file',
+      runtimeContractPath,
+      '--apply-edits',
+      '--run-verification',
+      '--json',
+      ...additionalArgs,
+    ];
 
-    console.log(`Command: ${cmd}`);
-    const stdout = runCmd(cmd, projectRoot, { allowFailure: true });
+    console.log(`Command: ${formatCommand(process.execPath, cmdArgs)}`);
+    const stdout = runCmd(process.execPath, cmdArgs, projectRoot, { allowFailure: true });
 
     let result;
     try {
@@ -126,7 +141,7 @@ function runTask(taskSlug) {
     }
 
     // Get git status to check modified files
-    const gitStatusOutput = runCmd('git status --porcelain --untracked-files=all', runRoot);
+    const gitStatusOutput = runCmd('git', ['status', '--porcelain', '--untracked-files=all'], runRoot);
     const modifiedFiles = gitStatusOutput
       .split('\n')
       .map(line => line.trim())

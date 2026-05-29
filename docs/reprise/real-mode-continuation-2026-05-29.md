@@ -108,6 +108,22 @@ Real validation:
 - `node --check eval/run-task.mjs` -> exit 0.
 - `node eval/run-task.mjs` -> all 5 real tasks passed.
 
+### Step 6 - Continuation: shell-free eval command execution
+
+The harness still assembled Git and CLI commands as shell strings. That worked on the current path, but made the real-mode signal more fragile on Windows paths with spaces and for future args containing spaces.
+
+Fix landed:
+
+- `eval/run-task.mjs` now uses `execFileSync(command, args)` for Git setup, Git status, and the product CLI invocation.
+- The log still prints a readable reconstructed command, but execution no longer depends on shell quoting.
+- The product CLI is launched through `process.execPath` so the same Node runtime is used even when Node lives in a path with spaces.
+
+Real validation:
+
+- `node --check eval/run-task.mjs` -> exit 0.
+- `TEMP` / `TMP` redirected to a directory with a space, then `node eval/run-task.mjs simple-edit` -> passed. This also exercised `D:\Program Files\nodejs\node.exe`.
+- `node eval/run-task.mjs` -> all 5 real tasks passed.
+
 ## Verdict
 
-The branch is healthier than at the start of the pass: build/typecheck are green, the CLI L2 eval is a real executable signal again, Cowork smoke passes in real Electron, the Cowork ChatGPT path passed against the real backend, strict preflight now tolerates Code Buddy's own runtime artifacts without hiding project configuration edits, and the eval harness no longer hides failed setup commands.
+The branch is healthier than at the start of the pass: build/typecheck are green, the CLI L2 eval is a real executable signal again, Cowork smoke passes in real Electron, the Cowork ChatGPT path passed against the real backend, strict preflight now tolerates Code Buddy's own runtime artifacts without hiding project configuration edits, and the eval harness no longer hides failed setup commands or depends on shell quoting.
