@@ -12,6 +12,7 @@ import {
   ListChecks,
   Smartphone,
   Fingerprint,
+  MonitorSmartphone,
   MessageSquare,
   Network,
   Package,
@@ -78,6 +79,8 @@ export function ShellNavigation() {
   const setShowMobileSupervisionPanel = useAppStore((s) => s.setShowMobileSupervisionPanel);
   const showIdentityPanel = useAppStore((s) => s.showIdentityPanel);
   const setShowIdentityPanel = useAppStore((s) => s.setShowIdentityPanel);
+  const showDevicePanel = useAppStore((s) => s.showDevicePanel);
+  const setShowDevicePanel = useAppStore((s) => s.setShowDevicePanel);
   const setShowCompanionPanel = useAppStore((s) => s.setShowCompanionPanel);
   const setShowBookmarksPanel = useAppStore((s) => s.setShowBookmarksPanel);
   const setShowActivityFeed = useAppStore((s) => s.setShowActivityFeed);
@@ -276,6 +279,14 @@ export function ShellNavigation() {
           active: showIdentityPanel,
           onClick: () => setShowIdentityPanel(true),
           testId: 'identity-button',
+        },
+        {
+          id: 'devices',
+          label: t('devices.title', 'Paired devices'),
+          icon: MonitorSmartphone,
+          active: showDevicePanel,
+          onClick: () => setShowDevicePanel(true),
+          testId: 'devices-button',
         },
         {
           id: 'companion',

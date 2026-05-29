@@ -2634,6 +2634,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('identityFiles.set', name, content, projectId),
   },
 
+  // C3: read-only view of paired device nodes (pairing stays on the CLI)
+  deviceNodes: {
+    list: () => ipcRenderer.invoke('deviceNodes.list'),
+  },
+
   // S6: supervision-only mobile gateway management (loopback to embedded server)
   mobileSupervision: {
     status: () => ipcRenderer.invoke('mobileSupervision.status'),
@@ -4725,6 +4730,24 @@ declare global {
       };
       lessonCandidate: LessonCandidateApi;
       userModel: UserModelApi;
+      deviceNodes: {
+        list: () => Promise<{
+          ok: boolean;
+          error?: string;
+          items: Array<{
+            id: string;
+            name: string;
+            type: string;
+            transportType: string;
+            capabilities: string[];
+            paired: boolean;
+            lastSeen: number;
+            address?: string;
+            port?: number;
+            username?: string;
+          }>;
+        }>;
+      };
       identityFiles: {
         list: (projectId?: string) => Promise<{
           ok: boolean;

@@ -60,6 +60,7 @@ import { UserModelPanel } from './components/UserModelPanel';
 import { SpecPanel } from './components/SpecPanel';
 import { MobileSupervisionPanel } from './components/MobileSupervisionPanel';
 import { IdentityPanel } from './components/IdentityPanel';
+import { DevicePanel } from './components/DevicePanel';
 import { CompanionPanel } from './components/CompanionPanel';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SubAgentDashboard } from './components/SubAgentDashboard';
@@ -646,6 +647,7 @@ function App() {
       <SpecPanel />
       <MobileSupervisionPanel />
       <IdentityPanel />
+      <DevicePanel />
       <CompanionPanel />
     </div>
   );

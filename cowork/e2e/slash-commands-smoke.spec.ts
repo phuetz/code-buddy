@@ -147,6 +147,21 @@ test('/identity opens the Identity panel + identityFiles IPC is reachable (C3)',
   expect(listOk).toBe(true);
 });
 
+test('Device panel opens + deviceNodes IPC is reachable (C3 read-only)', async ({ appPage }) => {
+  await appPage.evaluate(() => {
+    (window as unknown as { useAppStore?: { getState: () => { setShowDevicePanel: (s: boolean) => void } } })
+      .useAppStore?.getState()
+      .setShowDevicePanel(true);
+  });
+  await expect(appPage.getByTestId('device-panel')).toBeVisible({ timeout: 10_000 });
+  const listOk = await appPage.evaluate(async () => {
+    const api = (window as unknown as { electronAPI?: { deviceNodes?: { list?: () => Promise<{ ok: boolean }> } } }).electronAPI;
+    const res = await api?.deviceNodes?.list?.();
+    return res && typeof res.ok === 'boolean';
+  });
+  expect(listOk).toBe(true);
+});
+
 test('orchestrator + subagent + knowledge IPC are reachable post-boot (getter sweep)', async ({ appPage }) => {
   const res = await appPage.evaluate(async () => {
     const api = (window as unknown as {
