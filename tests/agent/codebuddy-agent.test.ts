@@ -270,6 +270,9 @@ jest.mock('../../src/hooks/lifecycle-hooks.js', () => ({
   getHooksManager: jest.fn().mockReturnValue({
     runHook: jest.fn().mockResolvedValue(undefined),
     getStatus: jest.fn().mockReturnValue('Hooks: none'),
+    // ToolHandler calls hooksManager.executeHooks(...) on every tool dispatch;
+    // without it the mock throws "executeHooks is not a function".
+    executeHooks: jest.fn().mockResolvedValue([]),
   }),
   HooksManager: jest.fn(),
 }));

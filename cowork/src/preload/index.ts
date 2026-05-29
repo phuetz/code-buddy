@@ -2471,7 +2471,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       handled?: boolean;
       action?: {
         type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-        uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team';
+        uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel';
         args?: string[];
         draft?: {
           prompt: string;
@@ -2623,6 +2623,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       chatHistory: Array<{ type: string; content: string }>,
       projectId?: string
     ) => ipcRenderer.invoke('userModel.runInference', chatHistory, projectId),
+  },
+
+  // C3: agent identity files (SOUL.md, USER.md, …). Named `identityFiles` to
+  // avoid colliding with the existing persona-activation `identity` API.
+  identityFiles: {
+    list: (projectId?: string) => ipcRenderer.invoke('identityFiles.list', projectId),
+    get: (name: string, projectId?: string) => ipcRenderer.invoke('identityFiles.get', name, projectId),
+    set: (name: string, content: string, projectId?: string) =>
+      ipcRenderer.invoke('identityFiles.set', name, content, projectId),
   },
 
   // S6: supervision-only mobile gateway management (loopback to embedded server)
@@ -4628,7 +4637,7 @@ declare global {
           handled?: boolean;
           action?: {
             type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-            uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team';
+            uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel';
             args?: string[];
             draft?: {
               prompt: string;
@@ -4716,6 +4725,19 @@ declare global {
       };
       lessonCandidate: LessonCandidateApi;
       userModel: UserModelApi;
+      identityFiles: {
+        list: (projectId?: string) => Promise<{
+          ok: boolean;
+          error?: string;
+          items: Array<{ name: string; content: string; source: 'project' | 'global'; path: string; lastModified: number }>;
+        }>;
+        get: (name: string, projectId?: string) => Promise<{
+          ok: boolean;
+          error?: string;
+          file?: { name: string; content: string; source: 'project' | 'global'; path: string; lastModified: number } | null;
+        }>;
+        set: (name: string, content: string, projectId?: string) => Promise<{ ok: boolean; error?: string }>;
+      };
       mobileSupervision: {
         status: () => Promise<{
           running: boolean;

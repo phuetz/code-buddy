@@ -7,6 +7,12 @@ const setShowOrchestratorLauncher = vi.fn();
 const setShowFleetCommandCenter = vi.fn();
 const setShowLessonCandidatePanel = vi.fn();
 const setShowTeamPanel = vi.fn();
+const setShowCompanionPanel = vi.fn();
+const setShowSpecPanel = vi.fn();
+const setSettingsTab = vi.fn();
+const setShowSettings = vi.fn();
+const setShowGlobalSearch = vi.fn();
+const setShowPersonaSwitcher = vi.fn();
 const setPermissionMode = vi.fn();
 const modelSwitch = vi.fn();
 const permissionSetMode = vi.fn();
@@ -28,6 +34,12 @@ beforeEach(() => {
   setShowFleetCommandCenter.mockReset();
   setShowLessonCandidatePanel.mockReset();
   setShowTeamPanel.mockReset();
+  setShowCompanionPanel.mockReset();
+  setShowSpecPanel.mockReset();
+  setSettingsTab.mockReset();
+  setShowSettings.mockReset();
+  setShowGlobalSearch.mockReset();
+  setShowPersonaSwitcher.mockReset();
   setPermissionMode.mockReset();
   modelSwitch.mockReset();
   permissionSetMode.mockReset();
@@ -40,6 +52,12 @@ beforeEach(() => {
     setShowFleetCommandCenter,
     setShowLessonCandidatePanel,
     setShowTeamPanel,
+    setShowCompanionPanel,
+    setShowSpecPanel,
+    setSettingsTab,
+    setShowSettings,
+    setShowGlobalSearch,
+    setShowPersonaSwitcher,
     setPermissionMode,
     appConfig: { model: 'old-model' },
     lastOrchestratorOptions: { strategy: 'hierarchical', maxRounds: 5 },
@@ -182,5 +200,53 @@ describe('applySlashCommandResult (renderer dispatch)', () => {
       ctx()
     );
     expect(setShowTeamPanel).toHaveBeenCalledWith(true);
+  });
+
+  it('open_companion opens the companion panel (C1)', () => {
+    applySlashCommandResult(
+      { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'open_companion', args: [] } },
+      ctx()
+    );
+    expect(setShowCompanionPanel).toHaveBeenCalledWith(true);
+  });
+
+  it('open_spec opens the Spec panel (C1)', () => {
+    applySlashCommandResult(
+      { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'open_spec', args: [] } },
+      ctx()
+    );
+    expect(setShowSpecPanel).toHaveBeenCalledWith(true);
+  });
+
+  it('open_settings opens the requested Settings tab (C2)', () => {
+    applySlashCommandResult(
+      { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'open_settings', args: ['workflows'] } },
+      ctx()
+    );
+    expect(setSettingsTab).toHaveBeenCalledWith('workflows');
+    expect(setShowSettings).toHaveBeenCalledWith(true);
+  });
+
+  it('open_panel opens the keyed panel (C-batch generic opener)', () => {
+    applySlashCommandResult(
+      { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'open_panel', args: ['global_search'] } },
+      ctx()
+    );
+    expect(setShowGlobalSearch).toHaveBeenCalledWith(true);
+
+    applySlashCommandResult(
+      { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'open_panel', args: ['persona'] } },
+      ctx()
+    );
+    expect(setShowPersonaSwitcher).toHaveBeenCalledWith(true);
+  });
+
+  it('open_panel with an unknown key is a safe no-op', () => {
+    expect(() =>
+      applySlashCommandResult(
+        { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'open_panel', args: ['nope'] } },
+        ctx()
+      )
+    ).not.toThrow();
   });
 });

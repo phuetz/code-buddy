@@ -24,7 +24,7 @@ export interface SlashExecuteResult {
   handled?: boolean;
   action?: {
     type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-    uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team';
+    uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel';
     args?: string[];
   };
 }
@@ -116,8 +116,40 @@ function applyUiEffect(result: SlashExecuteResult, ctx: SlashActionContext): voi
     case 'open_team':
       useAppStore.getState().setShowTeamPanel(true);
       break;
+    case 'open_companion':
+      useAppStore.getState().setShowCompanionPanel(true);
+      break;
+    case 'open_spec':
+      useAppStore.getState().setShowSpecPanel(true);
+      break;
+    case 'open_settings': {
+      const tab = action.args?.[0];
+      if (tab) useAppStore.getState().setSettingsTab(tab);
+      useAppStore.getState().setShowSettings(true);
+      break;
+    }
+    case 'open_panel': {
+      const key = action.args?.[0];
+      const setter = key ? PANEL_OPENERS[key] : undefined;
+      if (setter) setter(true);
+      break;
+    }
   }
 }
+
+/**
+ * Generic panel openers keyed by panel id (lets the bridge route many slash
+ * commands through a single `open_panel` ui_effect). Each maps to a confirmed
+ * store show-flag setter.
+ */
+const PANEL_OPENERS: Record<string, (show: boolean) => void> = {
+  global_search: (s) => useAppStore.getState().setShowGlobalSearch(s),
+  shortcuts: (s) => useAppStore.getState().setShowShortcutsDialog(s),
+  persona: (s) => useAppStore.getState().setShowPersonaSwitcher(s),
+  session_insights: (s) => useAppStore.getState().setShowSessionInsights(s),
+  memory: (s) => useAppStore.getState().setShowMemoryEditor(s),
+  identity: (s) => useAppStore.getState().setShowIdentityPanel(s),
+};
 
 /**
  * Apply a non-schedule slash-command result. Schedule actions

@@ -37,6 +37,17 @@ function bridgeWithCatalog(): SlashCommandBridge {
     { name: 'team', description: 'Team', prompt: '__TEAM__', isBuiltin: true },
     { name: 'plan', description: 'Plan mode', prompt: '__PLAN_MODE__', isBuiltin: true },
     { name: 'lessons', description: 'Lessons', prompt: '__LESSONS__', isBuiltin: true },
+    { name: 'companion', description: 'Companion', prompt: '__COMPANION__', isBuiltin: true },
+    { name: 'track', description: 'Track', prompt: '__TRACK__', isBuiltin: true },
+    { name: 'config', description: 'Config', prompt: '__CONFIG__', isBuiltin: true },
+    { name: 'workflow', description: 'Workflow', prompt: '__WORKFLOW__', isBuiltin: true },
+    { name: 'permissions', description: 'Permissions', prompt: '__PERMISSIONS__', isBuiltin: true },
+    { name: 'search', description: 'Search', prompt: '__SEARCH__', isBuiltin: true },
+    { name: 'hooks', description: 'Hooks', prompt: '__HOOKS__', isBuiltin: true },
+    { name: 'theme', description: 'Theme', prompt: '__THEME__', isBuiltin: true },
+    { name: 'persona', description: 'Persona', prompt: '__PERSONA__', isBuiltin: true },
+    { name: 'history', description: 'History', prompt: '__HISTORY__', isBuiltin: true },
+    { name: 'identity', description: 'Identity', prompt: '__IDENTITY__', isBuiltin: true },
   ];
   return bridge;
 }
@@ -102,15 +113,14 @@ describe('SlashCommandBridge headless routing (S0)', () => {
     expect(res.action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_orchestrator_launcher' });
   });
 
-  it('routes bare /agents to the orchestrator launcher', async () => {
-    const res = await bridge.execute('agents', []);
-    expect(res.action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_orchestrator_launcher' });
-  });
-
-  it('denies /agents <subcommand> honestly instead of silently opening a launcher', async () => {
-    const res = await bridge.execute('agents', ['stop']);
-    expect(res.action).toBeUndefined();
-    expect(res.message).toContain('pas encore pilotable');
+  it('routes /agents (bare and subcommands) to the orchestrator launcher (C1)', async () => {
+    expect((await bridge.execute('agents', [])).action).toMatchObject({
+      type: 'ui_effect',
+      uiEffect: 'open_orchestrator_launcher',
+    });
+    // C1: subcommands open the cockpit (carrying args), no longer denied.
+    const sub = await bridge.execute('agents', ['status']);
+    expect(sub.action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_orchestrator_launcher', args: ['status'] });
   });
 
   it('routes bare /fleet to the Fleet Command Center', async () => {
@@ -123,10 +133,9 @@ describe('SlashCommandBridge headless routing (S0)', () => {
     expect(res.action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_team' });
   });
 
-  it('denies /team <subcommand> (subcommands not driven from Cowork yet)', async () => {
-    const res = await bridge.execute('team', ['start']);
-    expect(res.action).toBeUndefined();
-    expect(res.message).toContain('pas encore pilotable');
+  it('routes /team subcommands to the Team panel cockpit (C1)', async () => {
+    const res = await bridge.execute('team', ['add', 'researcher']);
+    expect(res.action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_team', args: ['add', 'researcher'] });
   });
 
   it('routes /plan to the set_plan_mode ui_effect', async () => {
@@ -137,5 +146,48 @@ describe('SlashCommandBridge headless routing (S0)', () => {
   it('routes /lessons to the lesson candidate panel (S8)', async () => {
     const res = await bridge.execute('lessons', []);
     expect(res.action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_lessons' });
+  });
+
+  // --- C1/C2: panels & settings tabs ---
+
+  it('routes /companion to the companion panel (C1)', async () => {
+    expect((await bridge.execute('companion', ['status'])).action).toMatchObject({
+      type: 'ui_effect',
+      uiEffect: 'open_companion',
+    });
+  });
+
+  it('routes /track to the Spec backlog panel (C1)', async () => {
+    expect((await bridge.execute('track', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_spec' });
+  });
+
+  it('routes /config /workflow /permissions to the right Settings tab (C2)', async () => {
+    expect((await bridge.execute('config', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_settings', args: ['general'] });
+    expect((await bridge.execute('workflow', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_settings', args: ['workflows'] });
+    expect((await bridge.execute('permissions', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_settings', args: ['rules'] });
+  });
+
+  it('routes /hooks and /theme to their Settings tabs (C-batch)', async () => {
+    expect((await bridge.execute('hooks', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_settings', args: ['hooks'] });
+    expect((await bridge.execute('theme', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_settings', args: ['general'] });
+  });
+
+  it('routes /search and /persona to open_panel with a panel key (C-batch)', async () => {
+    expect((await bridge.execute('search', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_panel', args: ['global_search'] });
+    expect((await bridge.execute('persona', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_panel', args: ['persona'] });
+  });
+
+  it('runs /history headlessly now that it is allowlisted (C-batch)', async () => {
+    const res = await bridge.execute('history', []);
+    expect(res).toMatchObject({ success: true, handled: true });
+    expect(res.output).toBe('ran __HISTORY__');
+  });
+
+  it('routes /identity to the identity panel (C3)', async () => {
+    expect((await bridge.execute('identity', [])).action).toMatchObject({
+      type: 'ui_effect',
+      uiEffect: 'open_panel',
+      args: ['identity'],
+    });
   });
 });

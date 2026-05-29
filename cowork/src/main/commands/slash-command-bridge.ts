@@ -44,7 +44,11 @@ export type SlashUiEffectKind =
   | 'open_fleet'
   | 'set_plan_mode'
   | 'open_lessons'
-  | 'open_team';
+  | 'open_team'
+  | 'open_companion'
+  | 'open_spec'
+  | 'open_settings'
+  | 'open_panel';
 
 export interface SlashCommandExecuteResult {
   success: boolean;
@@ -391,6 +395,11 @@ const COWORK_HEADLESS_ALLOW: ReadonlySet<string> = new Set([
   '__WHOAMI__',
   '__STATUS__',
   '__FEATURES__',
+  // C-batch: read-only info commands (registered in EnhancedCommandHandler).
+  '__HISTORY__',
+  '__LOG__',
+  '__WORKSPACE__', // detect/show workspace config (read-only)
+  '__DIFF__', // show git/checkpoint diff (read-only)
 ]);
 
 type UiEffectResolution =
@@ -428,20 +437,63 @@ function resolveUiEffectAction(token: string, args: string[]): UiEffectResolutio
         ? { uiEffect: 'run_orchestrator', args }
         : { uiEffect: 'open_orchestrator_launcher', args: [] };
     case '__AGENTS__':
-      // Bare `/agents` = the native multi-agent cockpit. Subcommands
-      // (run/status/stop/metrics) are not driven from Cowork yet.
-      return args.length === 0 ? { uiEffect: 'open_orchestrator_launcher', args: [] } : 'deny';
+      // C1: the multi-agent cockpit. Any subcommand (run/plan/status/stop) is
+      // managed in the launcher — open it (run/inspect agents there).
+      return { uiEffect: 'open_orchestrator_launcher', args };
     case '__FLEET__':
-      // Bare `/fleet` opens the Fleet Command Center; subcommands
-      // (listen/route/chat/...) are not driven from Cowork yet.
-      return args.length === 0 ? { uiEffect: 'open_fleet', args: [] } : 'deny';
+      // C1: the Fleet Command Center is the cockpit for listen/status/route.
+      return { uiEffect: 'open_fleet', args };
     case '__TEAM__':
-      // S8: bare `/team` opens the Cowork Team panel; subcommands
-      // (start/add/status/...) are not driven from Cowork yet.
-      return args.length === 0 ? { uiEffect: 'open_team', args: [] } : 'deny';
+      // C1: the Team panel is where start/add/status/task/assign happen.
+      return { uiEffect: 'open_team', args };
     case '__LESSONS__':
-      // S8: `/lessons` opens the lesson candidate review panel.
-      return { uiEffect: 'open_lessons', args: [] };
+      return { uiEffect: 'open_lessons', args };
+    case '__COMPANION__':
+      // C1: companion config cockpit.
+      return { uiEffect: 'open_companion', args };
+    case '__TRACK__':
+      // C1: `/track` (spec-driven workflow) → the Spec backlog panel.
+      return { uiEffect: 'open_spec', args };
+    // C2: settings-backed commands open the relevant Settings tab.
+    case '__CONFIG__':
+      return { uiEffect: 'open_settings', args: ['general'] };
+    case '__WORKFLOW__':
+    case '__PIPELINE__':
+      return { uiEffect: 'open_settings', args: ['workflows'] };
+    case '__PERMISSIONS__':
+    case '__POLICY__':
+    case '__APPROVALS__':
+    case '__ELEVATED__':
+    case '__BATCH_REVIEW__':
+    case '__SECURITY__':
+      return { uiEffect: 'open_settings', args: ['rules'] };
+    case '__HOOKS__':
+      return { uiEffect: 'open_settings', args: ['hooks'] };
+    case '__THEME__':
+    case '__AVATAR__':
+    case '__VIM_MODE__':
+    case '__FAST_MODE__':
+    case '__DRY_RUN__':
+    case '__CACHE__':
+    case '__PROMPT_CACHE__':
+    case '__SELF_HEALING__':
+      return { uiEffect: 'open_settings', args: ['general'] };
+    // C-batch: generic panel opens (each key maps to a confirmed store setter).
+    case '__SEARCH__':
+      return { uiEffect: 'open_panel', args: ['global_search'] };
+    case '__SHORTCUTS__':
+      return { uiEffect: 'open_panel', args: ['shortcuts'] };
+    case '__PERSONA__':
+      return { uiEffect: 'open_panel', args: ['persona'] };
+    case '__SESSIONS__':
+      return { uiEffect: 'open_panel', args: ['session_insights'] };
+    case '__REMEMBER__':
+      return { uiEffect: 'open_panel', args: ['memory'] };
+    case '__IDENTITY__':
+      return { uiEffect: 'open_panel', args: ['identity'] };
+    case '__SUBAGENT__':
+    case '__AGENT__':
+      return { uiEffect: 'open_orchestrator_launcher', args };
     default:
       return undefined;
   }

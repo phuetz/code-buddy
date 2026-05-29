@@ -46,6 +46,7 @@ import { registerSkillMdIpcHandlers } from './ipc/skill-md-ipc';
 import { registerKnowledgeIpcHandlers } from './ipc/knowledge-ipc';
 import { registerLessonCandidateIpcHandlers } from './ipc/lessons-candidate-ipc';
 import { registerMobileSupervisionIpcHandlers } from './ipc/mobile-supervision-ipc';
+import { registerIdentityIpcHandlers } from './ipc/identity-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
 import { registerCompanionIpcHandlers } from './ipc/companion-ipc';
 import { registerSpecIpcHandlers } from './ipc/spec-ipc';
@@ -2301,10 +2302,12 @@ registerProjectIpcHandlers(
 );
 
 // ── Sub-agent IPC handlers (Claude Cowork parity) ────────────────────
-registerSubAgentIpcHandlers(subAgentBridge);
+// Getters: these bridges are assigned during async boot, after this top-level
+// registration runs. Passing the bare value would pin `null` (dead handlers).
+registerSubAgentIpcHandlers(() => subAgentBridge);
 
 // ── Orchestrator IPC handlers ────────────────────────────────────────
-registerOrchestratorIpcHandlers(orchestratorBridge);
+registerOrchestratorIpcHandlers(() => orchestratorBridge);
 
 // ── Fleet IPC handlers (GAP 3 — multi-host Code Buddy listener) ──────
 registerFleetIpcHandlers(
@@ -2314,20 +2317,22 @@ registerFleetIpcHandlers(
 );
 
 // ── Team IPC handlers (Phase 4 layer 9 — Agent Teams observability) ──
-registerTeamIpcHandlers(teamBridge);
+registerTeamIpcHandlers(() => teamBridge);
 
 // ── Mention IPC handlers (Claude Cowork parity) ──────────────────────
-registerMentionIpcHandlers(mentionProcessor);
+registerMentionIpcHandlers(() => mentionProcessor);
 
 // ── Slash command IPC handlers (Claude Cowork parity Phase 2) ────────
-registerCommandIpcHandlers(slashCommandBridge);
+// Getter, not value: the bridge is assigned during async boot, after this
+// top-level registration runs (see command-ipc.ts).
+registerCommandIpcHandlers(() => slashCommandBridge);
 
 // ── SKILL.md bridge IPC handlers (Claude Cowork parity Phase 2) ─────
-registerSkillMdIpcHandlers(skillMdBridge);
+registerSkillMdIpcHandlers(() => skillMdBridge);
 registerSkillsHubIpcHandlers(() => projectManager);
 
 // ── Knowledge IPC handlers (Claude Cowork parity) ────────────────────
-registerKnowledgeIpcHandlers(knowledgeService, projectManager);
+registerKnowledgeIpcHandlers(() => knowledgeService, () => projectManager);
 
 // ── Hermes review-gated surfaces (CLI parity → Cowork) ───────────────
 // Lesson-candidate queue (item 7), user model (item 24), spec stories.
@@ -2335,6 +2340,7 @@ registerKnowledgeIpcHandlers(knowledgeService, projectManager);
 // projectManager getter (set during async boot, like fleetBridge above).
 registerLessonCandidateIpcHandlers(() => projectManager);
 registerUserModelIpcHandlers(() => projectManager);
+registerIdentityIpcHandlers(() => projectManager);
 registerMobileSupervisionIpcHandlers();
 registerCompanionIpcHandlers(() => projectManager);
 registerSpecIpcHandlers(() => projectManager, configStore);

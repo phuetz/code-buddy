@@ -11,6 +11,7 @@ import {
   GraduationCap,
   ListChecks,
   Smartphone,
+  Fingerprint,
   MessageSquare,
   Network,
   Package,
@@ -75,6 +76,8 @@ export function ShellNavigation() {
   const setShowSpecPanel = useAppStore((s) => s.setShowSpecPanel);
   const showMobileSupervisionPanel = useAppStore((s) => s.showMobileSupervisionPanel);
   const setShowMobileSupervisionPanel = useAppStore((s) => s.setShowMobileSupervisionPanel);
+  const showIdentityPanel = useAppStore((s) => s.showIdentityPanel);
+  const setShowIdentityPanel = useAppStore((s) => s.setShowIdentityPanel);
   const setShowCompanionPanel = useAppStore((s) => s.setShowCompanionPanel);
   const setShowBookmarksPanel = useAppStore((s) => s.setShowBookmarksPanel);
   const setShowActivityFeed = useAppStore((s) => s.setShowActivityFeed);
@@ -265,6 +268,14 @@ export function ShellNavigation() {
           active: showMobileSupervisionPanel,
           onClick: () => setShowMobileSupervisionPanel(true),
           testId: 'mobile-supervision-button',
+        },
+        {
+          id: 'identity',
+          label: t('identity.title', 'Agent identity'),
+          icon: Fingerprint,
+          active: showIdentityPanel,
+          onClick: () => setShowIdentityPanel(true),
+          testId: 'identity-button',
         },
         {
           id: 'companion',

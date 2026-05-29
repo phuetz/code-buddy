@@ -59,6 +59,7 @@ import { LessonCandidatePanel } from './components/LessonCandidatePanel';
 import { UserModelPanel } from './components/UserModelPanel';
 import { SpecPanel } from './components/SpecPanel';
 import { MobileSupervisionPanel } from './components/MobileSupervisionPanel';
+import { IdentityPanel } from './components/IdentityPanel';
 import { CompanionPanel } from './components/CompanionPanel';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SubAgentDashboard } from './components/SubAgentDashboard';
@@ -644,6 +645,7 @@ function App() {
       <UserModelPanel />
       <SpecPanel />
       <MobileSupervisionPanel />
+      <IdentityPanel />
       <CompanionPanel />
     </div>
   );
