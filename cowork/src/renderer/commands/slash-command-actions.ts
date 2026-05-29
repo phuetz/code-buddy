@@ -24,7 +24,7 @@ export interface SlashExecuteResult {
   handled?: boolean;
   action?: {
     type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-    uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel';
+    uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel' | 'engine_action';
     args?: string[];
   };
 }
@@ -134,8 +134,23 @@ function applyUiEffect(result: SlashExecuteResult, ctx: SlashActionContext): voi
       if (setter) setter(true);
       break;
     }
+    case 'engine_action': {
+      const op = action.args?.[0];
+      const fn = op ? ENGINE_ACTIONS[op] : undefined;
+      if (fn) {
+        void fn();
+        notice('success', `Action: ${op}`);
+      }
+      break;
+    }
   }
 }
+
+/** Real side-effecting engine ops triggered from the slash palette via IPC. */
+const ENGINE_ACTIONS: Record<string, () => void> = {
+  undo: () => void window.electronAPI?.checkpoint?.undo(),
+  redo: () => void window.electronAPI?.checkpoint?.redo(),
+};
 
 /**
  * Generic panel openers keyed by panel id (lets the bridge route many slash
@@ -149,6 +164,8 @@ const PANEL_OPENERS: Record<string, (show: boolean) => void> = {
   session_insights: (s) => useAppStore.getState().setShowSessionInsights(s),
   memory: (s) => useAppStore.getState().setShowMemoryEditor(s),
   identity: (s) => useAppStore.getState().setShowIdentityPanel(s),
+  reasoning: (s) => useAppStore.getState().setShowReasoningViewer(s),
+  test_runner: (s) => useAppStore.getState().setShowTestRunner(s),
 };
 
 /**

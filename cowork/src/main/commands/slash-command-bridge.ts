@@ -48,7 +48,8 @@ export type SlashUiEffectKind =
   | 'open_companion'
   | 'open_spec'
   | 'open_settings'
-  | 'open_panel';
+  | 'open_panel'
+  | 'engine_action';
 
 export interface SlashCommandExecuteResult {
   success: boolean;
@@ -491,6 +492,15 @@ function resolveUiEffectAction(token: string, args: string[]): UiEffectResolutio
       return { uiEffect: 'open_panel', args: ['memory'] };
     case '__IDENTITY__':
       return { uiEffect: 'open_panel', args: ['identity'] };
+    case '__TEST__':
+      return { uiEffect: 'open_panel', args: ['test_runner'] };
+    case '__THINK__':
+      return { uiEffect: 'open_panel', args: ['reasoning'] };
+    // Engine actions: real side-effecting ops the renderer triggers via IPC.
+    case '__UNDO__':
+      return { uiEffect: 'engine_action', args: ['undo'] };
+    case '__REDO__':
+      return { uiEffect: 'engine_action', args: ['redo'] };
     case '__SUBAGENT__':
     case '__AGENT__':
       return { uiEffect: 'open_orchestrator_launcher', args };

@@ -48,6 +48,8 @@ function bridgeWithCatalog(): SlashCommandBridge {
     { name: 'persona', description: 'Persona', prompt: '__PERSONA__', isBuiltin: true },
     { name: 'history', description: 'History', prompt: '__HISTORY__', isBuiltin: true },
     { name: 'identity', description: 'Identity', prompt: '__IDENTITY__', isBuiltin: true },
+    { name: 'test', description: 'Test', prompt: '__TEST__', isBuiltin: true },
+    { name: 'undo', description: 'Undo', prompt: '__UNDO__', isBuiltin: true },
   ];
   return bridge;
 }
@@ -189,5 +191,13 @@ describe('SlashCommandBridge headless routing (S0)', () => {
       uiEffect: 'open_panel',
       args: ['identity'],
     });
+  });
+
+  it('routes /test to the test runner panel', async () => {
+    expect((await bridge.execute('test', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'open_panel', args: ['test_runner'] });
+  });
+
+  it('routes /undo and /redo to engine_action (real IPC ops)', async () => {
+    expect((await bridge.execute('undo', [])).action).toMatchObject({ type: 'ui_effect', uiEffect: 'engine_action', args: ['undo'] });
   });
 });

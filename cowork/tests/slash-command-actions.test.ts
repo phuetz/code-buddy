@@ -16,6 +16,7 @@ const setShowPersonaSwitcher = vi.fn();
 const setPermissionMode = vi.fn();
 const modelSwitch = vi.fn();
 const permissionSetMode = vi.fn();
+const checkpointUndo = vi.fn(() => Promise.resolve({}));
 const orchestratorRun = vi.fn(() => Promise.resolve({}));
 
 let storeState: Record<string, unknown>;
@@ -67,6 +68,7 @@ beforeEach(() => {
       model: { switch: modelSwitch },
       orchestrator: { run: orchestratorRun },
       permission: { setMode: permissionSetMode },
+      checkpoint: { undo: checkpointUndo },
     },
   };
 });
@@ -239,6 +241,24 @@ describe('applySlashCommandResult (renderer dispatch)', () => {
       ctx()
     );
     expect(setShowPersonaSwitcher).toHaveBeenCalledWith(true);
+  });
+
+  it('engine_action(undo) calls the checkpoint IPC', () => {
+    checkpointUndo.mockClear();
+    applySlashCommandResult(
+      { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'engine_action', args: ['undo'] } },
+      ctx()
+    );
+    expect(checkpointUndo).toHaveBeenCalled();
+  });
+
+  it('engine_action with an unknown op is a safe no-op', () => {
+    expect(() =>
+      applySlashCommandResult(
+        { success: true, handled: true, action: { type: 'ui_effect', uiEffect: 'engine_action', args: ['nope'] } },
+        ctx()
+      )
+    ).not.toThrow();
   });
 
   it('open_panel with an unknown key is a safe no-op', () => {

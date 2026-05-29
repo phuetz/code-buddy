@@ -2471,7 +2471,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       handled?: boolean;
       action?: {
         type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-        uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel';
+        uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel' | 'engine_action';
         args?: string[];
         draft?: {
           prompt: string;
@@ -4642,7 +4642,7 @@ declare global {
           handled?: boolean;
           action?: {
             type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-            uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel';
+            uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel' | 'engine_action';
             args?: string[];
             draft?: {
               prompt: string;
