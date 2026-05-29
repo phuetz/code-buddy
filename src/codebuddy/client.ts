@@ -419,6 +419,16 @@ export class CodeBuddyClient {
     return this.currentModel;
   }
 
+  /**
+   * True when the active strategy is the ChatGPT Codex OAuth backend, which is
+   * billed against the user's flat-fee Plus/Pro plan, not per token. Cost
+   * displays should report $0 here regardless of the reported model slug — the
+   * client's `currentModel` can lag the actual Codex model. (smoke-test F8)
+   */
+  isSubscriptionAuth(): boolean {
+    return this.isChatGptProvider;
+  }
+
   getBaseURL(): string {
     return this.baseURL;
   }

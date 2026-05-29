@@ -92,6 +92,31 @@ function pickFallbackModel(current: string): string | null {
   return FALLBACK_MODELS[idx + 1] ?? null;
 }
 
+/** Models served only by the classic OpenAI API — the ChatGPT/Codex backend
+ *  never exposes them. When one reaches this provider WITHOUT an explicit user
+ *  choice (e.g. a secondary call inheriting the global `gpt-4o` config default
+ *  instead of the active session model), remap proactively to the known-good
+ *  Codex model. This skips a guaranteed-failed round-trip and the noisy
+ *  user-facing warning. (smoke-test finding F7, 2026-05-29) */
+const CODEX_UNSUPPORTED_MODELS = new Set([
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-4-turbo',
+  'gpt-4',
+  'gpt-3.5-turbo',
+]);
+
+function resolveCodexModel(model: string, hasExplicitModel: boolean): string {
+  if (!hasExplicitModel && CODEX_UNSUPPORTED_MODELS.has(model)) {
+    const remapped = FALLBACK_MODELS[0] ?? 'gpt-5.2';
+    logger.debug(
+      `[chatgpt-responses] "${model}" is not served by the Codex backend; using "${remapped}". Set --model to override.`,
+    );
+    return remapped;
+  }
+  return model;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Type definitions for the Codex Responses API
 // ─────────────────────────────────────────────────────────────────────
@@ -246,7 +271,7 @@ export class ChatGptResponsesProvider implements Provider {
     tools: CodeBuddyTool[] = [],
     opts: ChatOptions = {}
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
-    const model = opts.model ?? this.currentModel;
+    const model = resolveCodexModel(opts.model ?? this.currentModel, opts.model != null);
     // If this is a brand-new conversational turn (last user message has
     // no preceding tool round in messages), drop any stale reasoning
     // blobs from the previous turn — they belonged to a different

@@ -1260,13 +1260,17 @@ export class AgentExecutor {
       // Display per-turn token usage (streaming path). Pass the model
       // name so estimateCost can zero out subscription-billed models
       // (e.g. gpt-5.5 via ChatGPT Codex backend) — flat-fee, not per token.
-      const streamTurnCost = estimateCost(
-        inputTokens,
-        totalOutputTokens,
-        undefined,
-        undefined,
-        this.deps.client.getCurrentModel(),
-      );
+      // Optional call: the real client always implements this, but test doubles
+      // may be partial mocks — fall through to estimateCost when it's absent.
+      const streamTurnCost = this.deps.client.isSubscriptionAuth?.()
+        ? 0
+        : estimateCost(
+            inputTokens,
+            totalOutputTokens,
+            undefined,
+            undefined,
+            this.deps.client.getCurrentModel(),
+          );
       const streamUsageDisplay = formatTokenUsage({ inputTokens, outputTokens: totalOutputTokens, cost: streamTurnCost });
       logger.info(`Token usage: ${streamUsageDisplay}`);
       yield { type: "content", content: `\n${streamUsageDisplay}` };

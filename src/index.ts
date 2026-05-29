@@ -1014,7 +1014,7 @@ async function processPromptHeadless(
 }
 
 program
-  .name("codebuddy")
+  .name("buddy")
   .description(
     "A conversational AI CLI tool powered by AI with text editor capabilities"
   )
