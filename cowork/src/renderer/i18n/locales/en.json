@@ -2257,6 +2257,15 @@
       "toolSequence": "Tools",
       "useAsGoal": "Review queue as goal"
     },
+    "learningUsage": {
+      "title": "Learning skill usage",
+      "countChip": "{{count}} skills",
+      "reinforcedChip": "{{count}} reinforced",
+      "deprecatedChip": "{{count}} deprecated",
+      "loadFailed": "Learning usage load failed",
+      "empty": "No Learning Agent skill usage recorded yet.",
+      "runsChip": "{{count}} runs"
+    },
     "browserOperator": {
       "title": "Browser Operator draft",
       "actionsChip": "{{count}} actions",

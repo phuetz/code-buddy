@@ -221,9 +221,11 @@ The gap is mainly product integration and durability:
      list/show/approve/discard` is the CLI review surface; `approve` requires an
      explicit `--by <reviewer>`, supports inline edits, routes the write through
      `LessonsTracker.add` with provenance, and links the created lesson id back
-     onto the candidate. A narrower research-script SKILL candidate queue
-     (`buddy tools skill-candidate`) covers script promotion. The Cowork
-     candidate-review panel remains future work.
+     onto the candidate. The shared SKILL candidate queue (`buddy tools
+     skill-candidate`) now covers research-script promotion and Learning Agent
+     Hermes-style SKILL.md candidates. Cowork exposes that review-gated queue
+     from the Fleet Command Center, including candidate kind, source run and
+     tool-sequence context.
 
 ### P1 - Toolsets and policy enforcement
 
@@ -745,8 +747,10 @@ The gap is mainly product integration and durability:
       enable/disable per profile and install only after review.
     - Status: CLI surface implemented (see item 26): `buddy skills
       list/usage/enable/disable`. Install-only-after-review already exists via
-      the skill-candidate queue (item 14, `buddy tools skill-candidate`). The
-      Cowork visual panel and per-profile scoping remain future work.
+      the skill-candidate queue (item 14, `buddy tools skill-candidate`). Cowork
+      now shows Learning Agent skill outcome telemetry and the shared SKILL
+      candidate review queue from the Fleet Command Center. Full package
+      manager depth and per-profile scoping remain future work.
 
 37. Add trajectory export with privacy redaction.
     - Benchmark: Codex eval workflows and Hermes research trajectories.

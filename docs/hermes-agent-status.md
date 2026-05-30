@@ -153,5 +153,8 @@ buddy lessons candidate approve <id> --by "<your name>"
 - Automatic per-session injection of the user-model summary (currently
   on-demand via `user_model_recall`).
 - Live mobile remote-supervision listener (only contracts/snapshots exist).
-- Cowork visual panels for the lesson-candidate queue and skill package manager.
+- Cowork visual panel for the lesson-candidate queue and deeper skill package
+  management. Cowork now exposes the shared SKILL candidate review queue and
+  Learning Agent skill-usage telemetry, but lesson-candidate approval and
+  per-profile skill scoping remain CLI/settings surfaces.
 - Serverless terminal backends (Daytona/Modal/Vercel Sandbox).

@@ -1046,7 +1046,7 @@ export class TestRunnerBridge extends EventEmitter {
           label: 'Cowork / knowledge Hermes presence bundle',
           group: 'Knowledge',
           description:
-            'Lesson candidates, lessons vault, user model/spec IPC, companion IPC, Hermes plan/tool profiles, skill candidate review and presence model flows',
+            'Lesson candidates, lessons vault, user model/spec IPC, companion IPC, Hermes plan/tool profiles, learning usage, skill candidate review and presence model flows',
           command: 'npx',
           args: [
             'vitest',
@@ -1056,6 +1056,8 @@ export class TestRunnerBridge extends EventEmitter {
             'tests/lessons-vault-bridge.test.ts',
             'tests/lessons-vault-graph.test.ts',
             'tests/lessons-vault-strip.test.ts',
+            'tests/learning-usage-bridge.test.ts',
+            'tests/learning-skill-usage-strip.test.ts',
             'tests/presence-bridge-download.test.ts',
             'tests/presence-bridge-model.test.ts',
             'tests/presence-service.test.ts',
@@ -1075,6 +1077,8 @@ export class TestRunnerBridge extends EventEmitter {
           path.join(coworkDir, 'tests', 'lessons-vault-bridge.test.ts'),
           path.join(coworkDir, 'tests', 'lessons-vault-graph.test.ts'),
           path.join(coworkDir, 'tests', 'lessons-vault-strip.test.ts'),
+          path.join(coworkDir, 'tests', 'learning-usage-bridge.test.ts'),
+          path.join(coworkDir, 'tests', 'learning-skill-usage-strip.test.ts'),
           path.join(coworkDir, 'tests', 'presence-bridge-download.test.ts'),
           path.join(coworkDir, 'tests', 'presence-bridge-model.test.ts'),
           path.join(coworkDir, 'tests', 'presence-service.test.ts'),

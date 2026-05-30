@@ -2244,6 +2244,15 @@
       "toolSequence": "工具",
       "useAsGoal": "将队列审查作为目标"
     },
+    "learningUsage": {
+      "title": "Learning skill 使用情况",
+      "countChip": "{{count}} 个 skill",
+      "reinforcedChip": "{{count}} 个强化",
+      "deprecatedChip": "{{count}} 个废弃",
+      "loadFailed": "Learning 使用情况加载失败",
+      "empty": "暂无 Learning Agent skill 使用记录。",
+      "runsChip": "{{count}} 次运行"
+    },
     "browserOperator": {
       "title": "Browser Operator 草稿",
       "actionsChip": "{{count}} 个动作",

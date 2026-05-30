@@ -1481,6 +1481,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   tools: {
     list: (): Promise<Array<{ name: string; description: string; category: string }>> =>
       ipcRenderer.invoke('tools.list'),
+    learningUsage: {
+      list: (options?: {
+        cwd?: string;
+        limit?: number;
+      }): Promise<Array<{
+        averageDurationMs?: number;
+        deprecated: boolean;
+        failureCount: number;
+        invocationCount: number;
+        lastDurationMs?: number;
+        lastError?: string;
+        lastRunId?: string;
+        lastUsedAt: string;
+        reinforced: boolean;
+        skillName: string;
+        successCount: number;
+      }>> => ipcRenderer.invoke('tools.learningUsage.list', options ?? {}),
+    },
     skillCandidate: {
       list: (options?: {
         cwd?: string;
@@ -3774,6 +3792,24 @@ declare global {
       };
       tools: {
         list: () => Promise<Array<{ name: string; description: string; category: string }>>;
+        learningUsage: {
+          list: (options?: {
+            cwd?: string;
+            limit?: number;
+          }) => Promise<Array<{
+            averageDurationMs?: number;
+            deprecated: boolean;
+            failureCount: number;
+            invocationCount: number;
+            lastDurationMs?: number;
+            lastError?: string;
+            lastRunId?: string;
+            lastUsedAt: string;
+            reinforced: boolean;
+            skillName: string;
+            successCount: number;
+          }>>;
+        };
         skillCandidate: {
           list: (options?: {
             cwd?: string;

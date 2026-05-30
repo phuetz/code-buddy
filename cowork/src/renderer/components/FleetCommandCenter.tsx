@@ -64,6 +64,7 @@ import {
   SkillCandidateReviewQueueStrip,
   type SkillCandidateReviewQueueItem,
 } from './skill-candidate-review-queue-strip';
+import { LearningSkillUsageStrip } from './learning-skill-usage-strip';
 import { LessonsVaultStrip } from './lessons-vault-strip';
 import { LessonsVaultGraph } from './LessonsVaultGraph';
 import { SagaBoard } from './fleet-saga-board';
@@ -1082,6 +1083,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                   onBrowse={() => setShowLessonsGraph(true)}
                   onUseAsGoal={handleUseLessonsVaultAsGoal}
                 />
+                <LearningSkillUsageStrip cwd={activeWorkspaceCwd} />
                 {dispatchProfile === 'research' && (
                   <>
                     <LeadDiscoveryWorkflowStrip

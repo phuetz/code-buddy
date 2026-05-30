@@ -2257,6 +2257,15 @@
       "toolSequence": "Outils",
       "useAsGoal": "Revoir la file comme objectif"
     },
+    "learningUsage": {
+      "title": "Usage des skills apprises",
+      "countChip": "{{count}} skill(s)",
+      "reinforcedChip": "{{count}} renforcée(s)",
+      "deprecatedChip": "{{count}} dépréciée(s)",
+      "loadFailed": "Chargement de l'usage Learning échoué",
+      "empty": "Aucun usage de skill Learning Agent enregistré.",
+      "runsChip": "{{count}} run(s)"
+    },
     "browserOperator": {
       "title": "Brouillon Browser Operator",
       "actionsChip": "{{count}} actions",

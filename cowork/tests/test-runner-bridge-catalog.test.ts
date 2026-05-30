@@ -116,6 +116,8 @@ function makeWorkspace(): string {
   writeFileSync(path.join(coworkDir, 'tests', 'lessons-vault-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'lessons-vault-graph.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'lessons-vault-strip.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'learning-usage-bridge.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'learning-skill-usage-strip.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'presence-bridge-download.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'presence-bridge-model.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'presence-service.test.ts'), '');

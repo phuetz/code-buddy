@@ -57,6 +57,10 @@ const skillCandidateReviewQueueStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/skill-candidate-review-queue-strip.tsx'
 );
+const learningSkillUsageStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/learning-skill-usage-strip.tsx'
+);
 const browserOperatorDraftStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/browser-operator-draft-strip.tsx'
@@ -204,6 +208,7 @@ describe('French renderer i18n support', () => {
       fs.readFileSync(fleetMemoryStripPath, 'utf8'),
       fs.readFileSync(hermesPlanStripPath, 'utf8'),
       fs.readFileSync(skillCandidateReviewQueueStripPath, 'utf8'),
+      fs.readFileSync(learningSkillUsageStripPath, 'utf8'),
       fs.readFileSync(browserOperatorDraftStripPath, 'utf8'),
     ].join('\n');
     const requiredFleetKeys = [
@@ -261,6 +266,13 @@ describe('French renderer i18n support', () => {
       'fleet.skillCandidate.researchKind',
       'fleet.skillCandidate.toolSequence',
       'fleet.skillCandidate.useAsGoal',
+      'fleet.learningUsage.title',
+      'fleet.learningUsage.countChip',
+      'fleet.learningUsage.reinforcedChip',
+      'fleet.learningUsage.deprecatedChip',
+      'fleet.learningUsage.loadFailed',
+      'fleet.learningUsage.empty',
+      'fleet.learningUsage.runsChip',
       'fleet.browserOperator.title',
       'fleet.browserOperator.actionsChip',
       'fleet.browserOperator.consentRequiredChip',
