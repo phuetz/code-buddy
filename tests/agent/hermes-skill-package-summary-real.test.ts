@@ -92,6 +92,7 @@ describe('Hermes skill package summary on real SkillsHub lockfiles', () => {
     });
     expect(summary.reviewCommands).toEqual([
       'buddy skills list --all --json',
+      'buddy skills doctor --json',
       'buddy skills learning-usage --json',
       'Use skill_manage with approved_by for enable/disable/deprecate/patch/rollback/update.',
     ]);

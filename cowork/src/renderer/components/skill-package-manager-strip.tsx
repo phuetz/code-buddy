@@ -218,7 +218,7 @@ export const SkillPackageManagerStrip: React.FC<{
       )}
 
       <ul className="mt-1.5 space-y-1">
-        {(visibleSummary?.reviewCommands ?? ['buddy skills list --all --json']).slice(0, 2).map((command) => (
+        {(visibleSummary?.reviewCommands ?? ['buddy skills list --all --json']).slice(0, 3).map((command) => (
           <li
             key={command}
             className="flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted"

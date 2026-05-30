@@ -90,6 +90,7 @@ describe('SkillPackageManagerStrip', () => {
             ],
             reviewCommands: [
               'buddy skills list --all --json',
+              'buddy skills doctor --json',
               'buddy skills learning-usage --json',
             ],
             rollbackableCount: 1,
@@ -115,6 +116,7 @@ describe('SkillPackageManagerStrip', () => {
     expect(strip?.textContent).toContain('2 run(s)');
     expect(strip?.textContent).toContain('Patrice: Reviewed wording.');
     expect(strip?.textContent).toContain('buddy skills list --all --json');
+    expect(strip?.textContent).toContain('buddy skills doctor --json');
     expect(strip?.textContent).toContain('buddy skills learning-usage --json');
 
     const button = target.querySelector('button');

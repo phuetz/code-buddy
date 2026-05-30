@@ -8,6 +8,7 @@
  * operator-facing management commands:
  *
  *   buddy skills list [--json] [--all]
+ *   buddy skills doctor [--json]
  *   buddy skills usage [--json]
  *   buddy skills learning-usage [--json]
  *   buddy skills enable <name>
@@ -51,6 +52,63 @@ export function registerSkillsCommands(program: Command): void {
         console.log(`  ${status} ${skill.name} v${skill.version} (${skill.source})${inv}${health}`);
       }
       console.log('');
+    });
+
+  skills
+    .command('doctor')
+    .description('Audit installed skill packages for missing or modified SKILL.md files')
+    .option('--json', 'output JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const skills = getSkillsHub().listWithIntegrity();
+      const issues = skills
+        .filter((skill) => !skill.exists || !skill.integrityOk)
+        .map((skill) => {
+          const issue = skill.exists ? 'integrity-mismatch' : 'missing-file';
+          return {
+            commands: issue === 'missing-file'
+              ? [
+                `skill_manage action=delete name=${skill.name} approved_by=<reviewer>`,
+              ]
+              : [
+                `skill_manage action=history name=${skill.name}`,
+                `skill_manage action=rollback name=${skill.name} approved_by=<reviewer>`,
+              ],
+            enabled: skill.enabled !== false,
+            issue,
+            name: skill.name,
+            path: skill.path,
+            recommendation: issue === 'missing-file'
+              ? 'Restore the SKILL.md file or remove the stale lockfile entry after reviewer approval.'
+              : 'Inspect local edits, then keep, patch, update, or rollback after reviewer approval.',
+            version: skill.version,
+          };
+        });
+      const result = {
+        healthyCount: skills.length - issues.length,
+        issueCount: issues.length,
+        issues,
+        ok: issues.length === 0,
+        total: skills.length,
+      };
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      if (issues.length === 0) {
+        console.log(`Skill package doctor: OK (${skills.length} installed).`);
+        return;
+      }
+
+      console.log(`Skill package doctor: ${issues.length} issue(s) across ${skills.length} installed package(s).`);
+      for (const issue of issues) {
+        console.log(`  ! ${issue.name} v${issue.version}: ${issue.issue}`);
+        console.log(`      path: ${issue.path}`);
+        console.log(`      next: ${issue.recommendation}`);
+        console.log(`      command: ${issue.commands[0]}`);
+      }
     });
 
   skills

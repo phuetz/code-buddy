@@ -51,7 +51,7 @@ Current measured state:
 
 - [ ] **Build a Cowork Skill Package Manager panel**
   - Why: Cowork now shows candidates and telemetry, but it cannot fully pilot installed skills, versions, and review decisions from one place.
-  - Done so far: Cowork Fleet now has a read-only installed-skill package strip backed by the real SkillsHub lockfile. It shows installed/enabled/inactive counts, deprecated skills first, integrity state, usage counts, lifecycle reviewer/reason, rollback snapshot counts, a short current `SKILL.md` preview, and review-safe CLI commands. The strip can seed a `skill_manage ... approved_by=<reviewer>` goal instead of mutating skills directly. `skills_list` and `buddy skills list --json` now also expose `exists`/`integrityOk` so stale lockfile entries are visible before reuse.
+  - Done so far: Cowork Fleet now has a read-only installed-skill package strip backed by the real SkillsHub lockfile. It shows installed/enabled/inactive counts, deprecated skills first, integrity state, usage counts, lifecycle reviewer/reason, rollback snapshot counts, a short current `SKILL.md` preview, and review-safe CLI commands. The strip can seed a `skill_manage ... approved_by=<reviewer>` goal instead of mutating skills directly. `skills_list` and `buddy skills list --json` now also expose `exists`/`integrityOk` so stale lockfile entries are visible before reuse, and `buddy skills doctor --json` reports missing/tampered packages with review-gated remediation commands.
   - Scope: installed skills list, candidate queue, SKILL.md preview, candidate-vs-installed diff, approve/install/disable/deprecate actions.
   - Remaining scope: turn the read-only strip into a full panel with SKILL.md preview, candidate-vs-installed diff, reviewer identity capture, and review-gated lifecycle actions.
   - Acceptance:
@@ -60,6 +60,7 @@ Current measured state:
     - All write actions require explicit reviewer identity.
   - Verification:
     - `npm test -- tests/agent/hermes-skill-package-summary-real.test.ts --run`
+    - `npm test -- tests/commands/skills-command-real.test.ts --run`
     - `npm test -- tests/tools/skills-inspection-real.test.ts tests/skills/hub.test.ts --run`
     - `(cd cowork && npm test -- tests/skill-package-manager-bridge.test.ts tests/skill-package-manager-strip.test.ts tests/i18n-french-support.test.ts tests/fleet-command-center-board.test.ts --run)`
     - Playwright flow over a temp workspace with a materialized skill candidate.
