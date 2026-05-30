@@ -38,6 +38,9 @@ describe('Agent tool activation in LLM schemas', () => {
       'view',
       'create',
       'discover',
+      'candidate_list',
+      'candidate_view',
+      'candidate_install',
     ]);
   });
 

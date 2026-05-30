@@ -642,9 +642,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'skill_manage',
     category: 'utility',
-    keywords: ['skill', 'skills', 'manage', 'list', 'view', 'create', 'discover', 'lifecycle', 'hub', 'hermes'],
+    keywords: ['skill', 'skills', 'manage', 'list', 'view', 'create', 'discover', 'candidate', 'review', 'install', 'lifecycle', 'hub', 'hermes'],
     priority: 6,
-    description: 'Hermes-style facade for listing, viewing, creating, and discovering SKILL.md packages',
+    description: 'Hermes-style facade for installed skills and review-gated SKILL.md candidates',
   },
   {
     name: 'device_manage',

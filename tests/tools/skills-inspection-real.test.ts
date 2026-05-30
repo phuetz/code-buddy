@@ -2,6 +2,12 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { buildResearchScriptJobArtifact } from '../../src/agent/research-script-job-artifact.js';
+import {
+  buildResearchScriptSkillCandidate,
+  materializeResearchScriptSkillCandidate,
+} from '../../src/agent/research-script-skill-candidate.js';
+import type { ResearchScriptJobRunResult } from '../../src/agent/research-script-job-runner.js';
 
 let tempHome: string;
 let tempWorkspace: string;
@@ -11,6 +17,23 @@ async function parseToolOutput(result: { success: boolean; output?: string; erro
   expect(result.success, result.error).toBe(true);
   expect(result.output).toBeTruthy();
   return JSON.parse(result.output as string) as Record<string, unknown>;
+}
+
+function runResult(overrides: Partial<ResearchScriptJobRunResult> = {}): ResearchScriptJobRunResult {
+  return {
+    commandPreview: 'node script.js',
+    durationMs: 25,
+    exitCode: 0,
+    jobId: 'research-skill-manage',
+    outputPath: 'research-scripts/skill-manage/output.json',
+    signal: null,
+    status: 'completed',
+    stderrPath: 'research-scripts/skill-manage/stderr.log',
+    stdoutPath: 'research-scripts/skill-manage/stdout.log',
+    summaryPath: 'research-scripts/skill-manage/summary.md',
+    timedOut: false,
+    ...overrides,
+  };
 }
 
 describe('skills_list and skill_view real SkillsHub integration', () => {
@@ -103,5 +126,57 @@ describe('skills_list and skill_view real SkillsHub integration', () => {
       'SKILL.md',
     );
     await expect(fs.readFile(createdFile, 'utf8')).resolves.toContain('Real Test Skill');
+
+    const job = buildResearchScriptJobArtifact({
+      id: 'research-skill-manage',
+      goal: 'Promote a repeated real workflow through skill_manage.',
+      title: 'Skill manage candidate',
+      language: 'javascript',
+      inputContract: { INPUT_JSON: 'Input.' },
+      outputContract: { OUTPUT_JSON: 'Output.' },
+      sandboxPolicy: { network: 'disabled' },
+    });
+    const candidate = buildResearchScriptSkillCandidate(job, [
+      runResult(),
+      runResult({ durationMs: 50 }),
+    ]);
+    const materialized = await materializeResearchScriptSkillCandidate(candidate, {
+      rootDir: tempWorkspace,
+    });
+    const candidateDir = path.dirname(materialized.skillPath);
+
+    const candidateList = await parseToolOutput(await manageTool!.execute({ action: 'candidate_list' }));
+    expect(candidateList.action).toBe('skill_manage_candidate_list');
+    expect(candidateList.count).toBe(1);
+
+    const candidateView = await parseToolOutput(await manageTool!.execute({
+      action: 'candidate_view',
+      candidate_path: candidateDir,
+    }));
+    expect(candidateView.action).toBe('skill_manage_candidate_view');
+    expect((candidateView.candidate as { skillName: string }).skillName).toBe('research-skill-manage-candidate');
+    expect(candidateView.content).toContain('Status: eligible for human review');
+
+    const installWithoutApproval = await manageTool!.execute({
+      action: 'candidate_install',
+      candidate_path: candidateDir,
+    });
+    expect(installWithoutApproval.success).toBe(false);
+    expect(installWithoutApproval.error).toContain('approved_by is required');
+
+    const installed = await parseToolOutput(await manageTool!.execute({
+      action: 'candidate_install',
+      approved_at: '2026-05-30T15:05:00.000Z',
+      approved_by: 'Patrice',
+      candidate_path: candidateDir,
+    }));
+    expect(installed.action).toBe('skill_manage_candidate_install');
+    expect((installed.installed as { approvedBy: string }).approvedBy).toBe('Patrice');
+    await expect(
+      fs.readFile(
+        path.join(tempWorkspace, '.codebuddy', 'skills', 'research-skill-manage-candidate', 'SKILL.md'),
+        'utf8',
+      ),
+    ).resolves.toContain('- Approved by: Patrice');
   });
 });

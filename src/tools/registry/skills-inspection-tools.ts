@@ -10,6 +10,12 @@ import {
 } from '../skills-inspection-tool.js';
 import { getCreateSkillTool } from '../create-skill-tool.js';
 import { SkillDiscoveryTool } from '../skill-discovery-tool.js';
+import {
+  installResearchScriptSkillCandidate,
+  listMaterializedResearchScriptSkillCandidates,
+  readMaterializedResearchScriptSkillCandidate,
+  type ResearchScriptSkillCandidate,
+} from '../../agent/research-script-skill-candidate.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
 
 class CodeBuddyToolAdapter implements ITool {
@@ -70,7 +76,14 @@ class CodeBuddyToolAdapter implements ITool {
   }
 }
 
-type SkillManageAction = 'list' | 'view' | 'create' | 'discover';
+type SkillManageAction =
+  | 'list'
+  | 'view'
+  | 'create'
+  | 'discover'
+  | 'candidate_list'
+  | 'candidate_view'
+  | 'candidate_install';
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -95,6 +108,34 @@ function readStringRecord(value: unknown): Record<string, string> | undefined {
     (entry): entry is [string, string] => typeof entry[1] === 'string',
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function serializePayload(payload: Record<string, unknown>): ToolResult {
+  return {
+    success: true,
+    output: JSON.stringify(payload, null, 2),
+    data: payload,
+  };
+}
+
+function summarizeCandidate(candidate: ResearchScriptSkillCandidate): Record<string, unknown> {
+  return {
+    eligible: candidate.eligible,
+    id: candidate.id,
+    kind: candidate.kind,
+    reason: candidate.reason,
+    skillName: candidate.skillName,
+    skillPath: candidate.skillPath,
+    sourceJobId: candidate.sourceJobId,
+    ...(candidate.sourceRunId ? { sourceRunId: candidate.sourceRunId } : {}),
+    successfulRunCount: candidate.successfulRunCount,
+    title: candidate.title,
+    ...(candidate.toolSequence ? { toolSequence: candidate.toolSequence } : {}),
+  };
+}
+
+function candidateReviewPath(candidate: ResearchScriptSkillCandidate): string {
+  return candidate.skillPath.replace(/\\/g, '/').replace(/\/?SKILL\.md$/i, '/candidate-review.json');
 }
 
 export class SkillManageExecuteTool implements ITool {
@@ -152,9 +193,71 @@ export class SkillManageExecuteTool implements ITool {
       });
     }
 
+    if (action === 'candidate_list') {
+      const candidates = await listMaterializedResearchScriptSkillCandidates({
+        rootDir: process.cwd(),
+        skillRoot: readString(input.skill_root) || undefined,
+      });
+      const shown = input.eligible_only === true
+        ? candidates.filter((candidate) => candidate.eligible)
+        : candidates;
+
+      return serializePayload({
+        action: 'skill_manage_candidate_list',
+        count: shown.length,
+        total: candidates.length,
+        candidates: shown.map(summarizeCandidate),
+      });
+    }
+
+    if (action === 'candidate_view') {
+      const candidatePath = readString(input.candidate_path);
+      if (!candidatePath) {
+        return { success: false, error: 'skill_manage candidate_view: candidate_path is required' };
+      }
+      const candidate = await readMaterializedResearchScriptSkillCandidate(candidatePath, {
+        rootDir: process.cwd(),
+      });
+
+      return serializePayload({
+        action: 'skill_manage_candidate_view',
+        candidate: summarizeCandidate(candidate),
+        reviewManifestPath: candidateReviewPath(candidate),
+        ...(input.include_content === false ? {} : { content: candidate.markdown }),
+      });
+    }
+
+    if (action === 'candidate_install') {
+      const candidatePath = readString(input.candidate_path);
+      const approvedBy = readString(input.approved_by);
+      if (!candidatePath) {
+        return { success: false, error: 'skill_manage candidate_install: candidate_path is required' };
+      }
+      if (!approvedBy) {
+        return { success: false, error: 'skill_manage candidate_install: approved_by is required' };
+      }
+
+      const candidate = await readMaterializedResearchScriptSkillCandidate(candidatePath, {
+        rootDir: process.cwd(),
+      });
+      const installed = await installResearchScriptSkillCandidate(candidate, {
+        approvedAt: readString(input.approved_at) || undefined,
+        approvedBy,
+        overwrite: input.overwrite === true,
+        rootDir: process.cwd(),
+        workspaceSkillRoot: readString(input.workspace_skill_root) || undefined,
+      });
+
+      return serializePayload({
+        action: 'skill_manage_candidate_install',
+        candidate: summarizeCandidate(candidate),
+        installed,
+      });
+    }
+
     return {
       success: false,
-      error: 'skill_manage: action must be one of list, view, create, discover',
+      error: 'skill_manage: action must be one of list, view, create, discover, candidate_list, candidate_view, candidate_install',
     };
   }
 
@@ -173,8 +276,19 @@ export class SkillManageExecuteTool implements ITool {
 
     const data = input as Record<string, unknown>;
     const action = readString(data.action);
-    if (!['list', 'view', 'create', 'discover'].includes(action)) {
-      return { valid: false, errors: ['action must be one of list, view, create, discover'] };
+    if (![
+      'list',
+      'view',
+      'create',
+      'discover',
+      'candidate_list',
+      'candidate_view',
+      'candidate_install',
+    ].includes(action)) {
+      return {
+        valid: false,
+        errors: ['action must be one of list, view, create, discover, candidate_list, candidate_view, candidate_install'],
+      };
     }
     if (action === 'view' && !readString(data.name)) {
       return { valid: false, errors: ['name is required for view'] };
@@ -188,6 +302,15 @@ export class SkillManageExecuteTool implements ITool {
         return { valid: false, errors: [`${missing.join(', ')} required for create`] };
       }
     }
+    if (action === 'candidate_view' && !readString(data.candidate_path)) {
+      return { valid: false, errors: ['candidate_path is required for candidate_view'] };
+    }
+    if (action === 'candidate_install') {
+      const missing = ['candidate_path', 'approved_by'].filter((key) => !readString(data[key]));
+      if (missing.length > 0) {
+        return { valid: false, errors: [`${missing.join(', ')} required for candidate_install`] };
+      }
+    }
     return { valid: true };
   }
 
@@ -196,7 +319,7 @@ export class SkillManageExecuteTool implements ITool {
       name: this.name,
       description: this.description,
       category: 'utility' as ToolCategoryType,
-      keywords: ['skills', 'skill', 'manage', 'list', 'view', 'create', 'discover', 'hermes'],
+      keywords: ['skills', 'skill', 'manage', 'list', 'view', 'create', 'discover', 'candidate', 'review', 'install', 'hermes'],
       priority: 6,
       modifiesFiles: true,
       makesNetworkRequests: true,

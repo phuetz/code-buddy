@@ -308,13 +308,13 @@ export const SKILL_MANAGE_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
     name: 'skill_manage',
-    description: 'Hermes-style skill management facade. Supports list, view, create, and discover through Code Buddy skills primitives; full update/delete/rollback lifecycle remains review-gated future work.',
+    description: 'Hermes-style skill management facade. Supports installed skill list/view, direct create/discover, and review-gated candidate list/view/install through Code Buddy skills primitives; full update/delete/rollback lifecycle remains future work.',
     parameters: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'view', 'create', 'discover'],
+          enum: ['list', 'view', 'create', 'discover', 'candidate_list', 'candidate_view', 'candidate_install'],
           description: 'Skill management action to run.',
         },
         name: {
@@ -357,7 +357,7 @@ export const SKILL_MANAGE_TOOL: CodeBuddyTool = {
         },
         include_content: {
           type: 'boolean',
-          description: 'Include SKILL.md file content on view. Default: true.',
+          description: 'Include SKILL.md file content on view/candidate_view. Default: true.',
         },
         query: {
           type: 'string',
@@ -370,6 +370,30 @@ export const SKILL_MANAGE_TOOL: CodeBuddyTool = {
         limit: {
           type: 'number',
           description: 'Maximum discovered skills to return. Default: 5.',
+        },
+        candidate_path: {
+          type: 'string',
+          description: 'Candidate SKILL.md path or candidate directory. Required for candidate_view and candidate_install.',
+        },
+        skill_root: {
+          type: 'string',
+          description: 'Candidate root to scan for candidate_list. Default: .codebuddy/skill-candidates.',
+        },
+        eligible_only: {
+          type: 'boolean',
+          description: 'Only show install-eligible candidates on candidate_list. Default: false.',
+        },
+        approved_by: {
+          type: 'string',
+          description: 'Human reviewer identity. Required for candidate_install.',
+        },
+        approved_at: {
+          type: 'string',
+          description: 'Optional approval timestamp for candidate_install.',
+        },
+        workspace_skill_root: {
+          type: 'string',
+          description: 'Workspace skill root for candidate_install. Default: .codebuddy/skills.',
         },
       },
       required: ['action'],
