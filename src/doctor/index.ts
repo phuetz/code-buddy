@@ -170,7 +170,7 @@ function checkConfigFiles(cwd: string): DoctorCheck[] {
       checks.push({
         name: 'settings.json schema',
         status: 'warn',
-        message: 'missing required fields (model, maxToolRounds, theme)',
+        message: 'uses legacy maxToolRounds field (migrate to maxRounds)',
         fixable: true,
         fix: async () => fixSettingsMigration(settingsFile),
       });
@@ -257,9 +257,13 @@ function checkGit(cwd: string): DoctorCheck {
 // ============================================================================
 
 const DEFAULT_SETTINGS = {
-  model: 'grok-code-fast-1',
-  maxToolRounds: 400,
-  theme: 'default',
+  maxRounds: 30,
+  autonomyLevel: 'confirm',
+  enableRAG: true,
+  parallelTools: true,
+  temperature: 0.7,
+  enableCheckpoints: true,
+  enableTelemetry: false,
 };
 
 function isJsonCorrupted(filePath: string): boolean {
@@ -276,8 +280,7 @@ function checkSettingsMigration(filePath: string): boolean {
   try {
     const content = readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(content);
-    const requiredKeys = ['model', 'maxToolRounds', 'theme'];
-    return requiredKeys.some(key => !(key in parsed));
+    return 'maxToolRounds' in parsed && !('maxRounds' in parsed);
   } catch {
     return false;
   }
@@ -372,12 +375,16 @@ async function fixSettingsMigration(filePath: string): Promise<FixResult> {
   try {
     const content = readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(content);
-    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...parsed };
+    if ('maxToolRounds' in merged && !('maxRounds' in merged)) {
+      merged.maxRounds = merged.maxToolRounds;
+      delete merged.maxToolRounds;
+    }
     writeFileSync(filePath, JSON.stringify(merged, null, 2));
     logger.info(`Migrated settings.json schema at ${filePath}`);
     return {
       success: true,
-      message: 'Added missing fields to settings.json',
+      message: 'Migrated maxToolRounds to maxRounds in settings.json',
       action: 'migrate-settings-schema',
     };
   } catch (err) {

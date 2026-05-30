@@ -161,38 +161,41 @@ describe('doctor --fix', () => {
       const content = JSON.parse(
         fs.readFileSync(path.join(codeBuddyDir, 'settings.json'), 'utf-8')
       );
-      expect(content.model).toBe('grok-code-fast-1');
-      expect(content.maxToolRounds).toBe(400);
-      expect(content.theme).toBe('default');
+      expect(content.maxRounds).toBe(30);
+      expect(content.autonomyLevel).toBe('confirm');
+      expect(content.enableRAG).toBe(true);
     });
   });
 
   describe('settings.json schema migration', () => {
-    it('should detect missing fields as fixable', async () => {
+    it('should not flag current minimal project settings as fixable', async () => {
       const codeBuddyDir = path.join(tmpDir, '.codebuddy');
       fs.mkdirSync(codeBuddyDir, { recursive: true });
       fs.writeFileSync(
         path.join(codeBuddyDir, 'settings.json'),
-        JSON.stringify({ model: 'grok-3' })
+        JSON.stringify({ model: 'grok-3', thinkingLevel: 'high' })
       );
 
       const checks = await runDoctorChecks(tmpDir);
       const schemaCheck = checks.find(c => c.name === 'settings.json schema');
 
-      expect(schemaCheck).toBeDefined();
-      expect(schemaCheck!.status).toBe('warn');
-      expect(schemaCheck!.fixable).toBe(true);
+      expect(schemaCheck).toBeUndefined();
     });
 
-    it('should add missing fields while preserving existing values', async () => {
+    it('should migrate legacy maxToolRounds while preserving existing values', async () => {
       const codeBuddyDir = path.join(tmpDir, '.codebuddy');
       fs.mkdirSync(codeBuddyDir, { recursive: true });
       fs.writeFileSync(
         path.join(codeBuddyDir, 'settings.json'),
-        JSON.stringify({ model: 'grok-3', customKey: 'keep-me' })
+        JSON.stringify({ model: 'grok-3', maxToolRounds: 400, customKey: 'keep-me' })
       );
 
       const checks = await runDoctorChecks(tmpDir);
+      const schemaCheck = checks.find(c => c.name === 'settings.json schema');
+      expect(schemaCheck).toBeDefined();
+      expect(schemaCheck!.status).toBe('warn');
+      expect(schemaCheck!.fixable).toBe(true);
+
       const results = await runFixes(checks);
 
       const migrateFix = results.find(r => r.action === 'migrate-settings-schema');
@@ -205,9 +208,9 @@ describe('doctor --fix', () => {
       // Existing value preserved
       expect(content.model).toBe('grok-3');
       expect(content.customKey).toBe('keep-me');
-      // Missing defaults added
-      expect(content.maxToolRounds).toBe(400);
-      expect(content.theme).toBe('default');
+      // Legacy value migrated
+      expect(content.maxRounds).toBe(400);
+      expect(content.maxToolRounds).toBeUndefined();
     });
   });
 
@@ -218,7 +221,7 @@ describe('doctor --fix', () => {
       fs.mkdirSync(codeBuddyDir, { recursive: true });
       fs.writeFileSync(
         path.join(codeBuddyDir, 'settings.json'),
-        JSON.stringify({ model: 'grok-code-fast-1', maxToolRounds: 400, theme: 'default' })
+        JSON.stringify({ model: 'grok-code-fast-1', maxRounds: 30, thinkingLevel: 'high' })
       );
 
       const checks = await runDoctorChecks(tmpDir);

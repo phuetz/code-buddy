@@ -5,6 +5,12 @@
  */
 
 import type { Command } from 'commander';
+import { resolve } from 'path';
+
+function resolveCommandDirectory(program: Command): string {
+  const directory = (program.opts() as { directory?: string }).directory;
+  return resolve(process.cwd(), directory || process.cwd());
+}
 
 /**
  * Register doctor, onboard, and webhook commands on the given program
@@ -18,7 +24,7 @@ export function registerUtilityCommands(program: Command): void {
     .option('--fix', 'Auto-fix issues that can be resolved automatically')
     .action(async (options: { verbose?: boolean; fix?: boolean }) => {
       const { runDoctorChecks, runFixes } = await import('../../doctor/index.js');
-      const checks = await runDoctorChecks(process.cwd());
+      const checks = await runDoctorChecks(resolveCommandDirectory(program));
 
       console.log('\n🔍 Code Buddy Doctor\n');
 
