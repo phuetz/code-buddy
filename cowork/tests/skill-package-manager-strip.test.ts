@@ -649,6 +649,12 @@ describe('SkillPackageManagerStrip', () => {
       await Promise.resolve();
     });
 
+    const patchPreview = target.querySelector('[data-testid="skill-package-patch-preview-patch-helper"]');
+    expect(patchPreview?.textContent).toContain('Patch preview');
+    expect(patchPreview?.textContent).toContain('1 exact replacement');
+    expect(patchPreview?.textContent).toContain('- Original patch wording.');
+    expect(patchPreview?.textContent).toContain('+ Reviewed patch wording.');
+
     patchButton = target.querySelector('[data-testid="skill-package-patch"]') as HTMLButtonElement;
     expect(patchButton.disabled).toBe(false);
 

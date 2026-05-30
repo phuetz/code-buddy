@@ -405,8 +405,12 @@ export const SkillPackageManagerStrip: React.FC<{
 
       {visiblePackages.length > 0 ? (
         <ul className="mt-1.5 space-y-1">
-          {visiblePackages.map((skill) => (
-            <li key={skill.name} className="min-w-0 rounded bg-surface/80 px-2 py-1">
+          {visiblePackages.map((skill) => {
+            const patchDraft = patchDrafts[skill.name] ?? { newText: '', oldText: '' };
+            const hasPatchPreview = patchDraft.oldText.length > 0 || patchDraft.newText.length > 0;
+
+            return (
+              <li key={skill.name} className="min-w-0 rounded bg-surface/80 px-2 py-1">
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="truncate text-[10px] text-text-secondary">
                   {skill.name}
@@ -446,7 +450,7 @@ export const SkillPackageManagerStrip: React.FC<{
                     data-testid={`skill-package-patch-old-${skill.name}`}
                     onChange={(event) => updatePatchDraft(skill.name, 'oldText', event.target.value)}
                     placeholder={t('fleet.skillPackage.patchOldText', 'Old text')}
-                    value={patchDrafts[skill.name]?.oldText ?? ''}
+                    value={patchDraft.oldText}
                   />
                   <textarea
                     aria-label={t('fleet.skillPackage.patchNewText', 'New text')}
@@ -454,8 +458,28 @@ export const SkillPackageManagerStrip: React.FC<{
                     data-testid={`skill-package-patch-new-${skill.name}`}
                     onChange={(event) => updatePatchDraft(skill.name, 'newText', event.target.value)}
                     placeholder={t('fleet.skillPackage.patchNewText', 'New text')}
-                    value={patchDrafts[skill.name]?.newText ?? ''}
+                    value={patchDraft.newText}
                   />
+                </div>
+              ) : null}
+              {hasPatchPreview ? (
+                <div
+                  className="mt-1 rounded border border-border-muted bg-surface px-2 py-1"
+                  data-testid={`skill-package-patch-preview-${skill.name}`}
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-2 text-[9px] text-text-muted">
+                    <span>{t('fleet.skillPackage.patchPreview', 'Patch preview')}</span>
+                    <span>{t('fleet.skillPackage.patchReplacementCount', '1 exact replacement')}</span>
+                  </div>
+                  <pre className="mt-1 whitespace-pre-wrap text-[9px] leading-snug">
+                    <span className="text-warning">
+                      - {patchDraft.oldText || t('fleet.skillPackage.emptyOldText', 'empty old text')}
+                    </span>
+                    {'\n'}
+                    <span className="text-success">
+                      + {patchDraft.newText || t('fleet.skillPackage.emptyNewText', 'empty new text')}
+                    </span>
+                  </pre>
                 </div>
               ) : null}
               {(skill.lastLifecycleReviewer || skill.lastLifecycleReason) ? (
@@ -512,7 +536,7 @@ export const SkillPackageManagerStrip: React.FC<{
                     disabled={
                       !reviewerName.trim()
                       || updatingSkillKey !== null
-                      || !(patchDrafts[skill.name]?.oldText.length)
+                      || !(patchDraft.oldText.length)
                     }
                     icon={PencilLine}
                     loading={updatingSkillKey === `${skill.name}:patch`}
@@ -536,8 +560,9 @@ export const SkillPackageManagerStrip: React.FC<{
                   onClick={() => void handlePackageAction(skill, 'delete')}
                 />
               </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted">
