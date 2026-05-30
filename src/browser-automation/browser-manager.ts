@@ -223,6 +223,13 @@ export class BrowserManager extends EventEmitter {
     });
 
     page.on('pageerror', (error: Error) => {
+      this.pushConsoleEntry({
+        type: 'pageerror',
+        text: error.message,
+        timestamp: new Date(),
+        pageId,
+        url: page.url(),
+      });
       this.emit('page-error', error);
     });
 
@@ -242,15 +249,13 @@ export class BrowserManager extends EventEmitter {
 
     page.on('console', (msg: PlaywrightConsoleMessage) => {
       this.emit('console', msg.type(), msg.text());
-      // Buffer console entries
-      this.consoleBuffer.push({
+      this.pushConsoleEntry({
         type: msg.type(),
         text: msg.text(),
         timestamp: new Date(),
+        pageId,
+        url: page.url(),
       });
-      if (this.consoleBuffer.length > BrowserManager.MAX_CONSOLE_ENTRIES) {
-        this.consoleBuffer.splice(0, this.consoleBuffer.length - BrowserManager.MAX_CONSOLE_ENTRIES);
-      }
     });
 
     page.on('request', (request: PlaywrightRequest) => {
@@ -1497,6 +1502,13 @@ export class BrowserManager extends EventEmitter {
    */
   clearConsoleHistory(): void {
     this.consoleBuffer = [];
+  }
+
+  private pushConsoleEntry(entry: ConsoleEntry): void {
+    this.consoleBuffer.push(entry);
+    if (this.consoleBuffer.length > BrowserManager.MAX_CONSOLE_ENTRIES) {
+      this.consoleBuffer.splice(0, this.consoleBuffer.length - BrowserManager.MAX_CONSOLE_ENTRIES);
+    }
   }
 
   // ============================================================================

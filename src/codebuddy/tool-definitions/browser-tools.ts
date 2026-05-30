@@ -441,6 +441,37 @@ visibility so the agent can inspect page media without taking a screenshot.`,
   },
 };
 
+export const BROWSER_CONSOLE_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'browser_console',
+    description: `List or clear browser console messages captured from the active browser session.
+
+Use this after navigation or interactions to inspect JavaScript console output,
+warnings, errors, and page runtime exceptions. This is read-only except for
+clearing Code Buddy's local console history buffer.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'clear'],
+          description: 'Console operation. Defaults to list.',
+        },
+        type: {
+          type: 'string',
+          description: 'Optional console type filter: log, warn, error, info, debug, pageerror.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of most recent entries to return.',
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 /**
  * Internet Scout Run Tool
  *
@@ -590,6 +621,7 @@ The plan sequences web_search, web_fetch, browser.observe, browser.extract, brow
 export const BROWSER_TOOLS: CodeBuddyTool[] = [
   INTERNET_SCOUT_RUN_TOOL,
   INTERNET_SCOUT_PLAN_TOOL,
+  BROWSER_CONSOLE_TOOL,
   BROWSER_GET_IMAGES_TOOL,
   BROWSER_DIALOG_TOOL,
   BROWSER_TOOL,

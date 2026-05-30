@@ -447,6 +447,10 @@ export interface ConsoleEntry {
   text: string;
   /** When the message was logged */
   timestamp: Date;
+  /** Browser page that produced the entry */
+  pageId?: string;
+  /** Page URL when the entry was captured */
+  url?: string;
 }
 
 // ============================================================================

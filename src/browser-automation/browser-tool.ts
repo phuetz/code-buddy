@@ -70,6 +70,7 @@ export type BrowserAction =
   | 'extract'
   | 'assert_text'
   | 'get_images'
+  | 'console'
   | 'dialog'
   // Info
   | 'get_url'
@@ -172,6 +173,9 @@ export interface BrowserToolInput {
   // Images
   limit?: number;
   visibleOnly?: boolean;
+  // Console
+  consoleAction?: 'list' | 'clear';
+  consoleType?: string;
   // Browser dialog
   dialogAction?: 'list' | 'accept' | 'dismiss';
   dialogId?: string;
@@ -446,6 +450,8 @@ export class BrowserTool {
           return this.assertText(input);
         case 'get_images':
           return this.getImages(input);
+        case 'console':
+          return this.consoleHistory(input);
         case 'dialog':
           return this.dialog(input);
 
@@ -1196,6 +1202,42 @@ export class BrowserTool {
       success: true,
       output,
       data: { images },
+    };
+  }
+
+  private async consoleHistory(input: BrowserToolInput): Promise<ToolResult> {
+    const consoleAction = input.consoleAction ?? 'list';
+
+    if (consoleAction === 'clear') {
+      this.manager.clearConsoleHistory();
+      return {
+        success: true,
+        output: 'Browser console history cleared.',
+        data: { entries: [] },
+      };
+    }
+
+    if (consoleAction !== 'list') {
+      return { success: false, error: `Unknown console action: ${consoleAction}` };
+    }
+
+    const entries = this.manager.getConsoleHistory(input.consoleType, input.limit);
+    if (entries.length === 0) {
+      return {
+        success: true,
+        output: 'No browser console entries.',
+        data: { entries },
+      };
+    }
+
+    return {
+      success: true,
+      output: entries.map((entry) => {
+        const when = entry.timestamp instanceof Date ? entry.timestamp.toISOString() : String(entry.timestamp);
+        const location = entry.url ? ` ${entry.url}` : '';
+        return `[${when}] ${entry.type}${location}: ${entry.text}`;
+      }).join('\n'),
+      data: { entries },
     };
   }
 

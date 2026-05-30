@@ -273,6 +273,11 @@ describe('Hermes CLI commands', () => {
           detectedCodeBuddyTools: ['browser_get_images'],
         }),
         expect.objectContaining({
+          name: 'browser_console',
+          status: 'exact',
+          detectedCodeBuddyTools: ['browser_console'],
+        }),
+        expect.objectContaining({
           name: 'browser_dialog',
           status: 'exact',
           detectedCodeBuddyTools: ['browser_dialog'],
@@ -295,6 +300,7 @@ describe('Hermes CLI commands', () => {
     const output = getLogOutput();
     expect(output).toContain('# Hermes Official Tool Parity Manifest');
     expect(output).toContain('## Summary');
+    expect(output).toContain('### browser_console');
     expect(output).toContain('### browser_get_images');
     expect(output).toContain('### browser_dialog');
     expect(output).toContain('- Status: `exact`');

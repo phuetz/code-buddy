@@ -229,8 +229,7 @@ const OFFICIAL_HERMES_TOOLS: HermesOfficialToolReference[] = [
     toolset: 'hermes-core',
     category: 'browser',
     officialSource: OFFICIAL_SOURCE_TOOLSETS,
-    equivalentCodeBuddyTools: ['browser'],
-    notes: 'Code Buddy browser exposes console/evaluate style capabilities through the unified browser tool.',
+    notes: 'Code Buddy exposes a dedicated browser_console prompt tool for listing and clearing captured Playwright console messages and page runtime errors.',
   },
   {
     name: 'browser_cdp',

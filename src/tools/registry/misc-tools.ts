@@ -94,7 +94,7 @@ const BROWSER_ACTIONS = [
   'screenshot', 'pdf',
   'get_cookies', 'set_cookie', 'clear_cookies', 'set_headers', 'set_offline',
   'emulate_device', 'set_geolocation',
-  'evaluate', 'get_content', 'extract', 'assert_text', 'get_images', 'dialog', 'get_url', 'get_title',
+  'evaluate', 'get_content', 'extract', 'assert_text', 'get_images', 'console', 'dialog', 'get_url', 'get_title',
 ] as const;
 
 /**
@@ -156,6 +156,8 @@ export class BrowserExecuteTool implements ITool {
           expression: { type: 'string', description: 'JavaScript code to evaluate in page' },
           limit: { type: 'number', description: 'Maximum number of images to return for action=get_images' },
           visibleOnly: { type: 'boolean', description: 'Only return visible images for action=get_images' },
+          consoleAction: { type: 'string', enum: ['list', 'clear'], description: 'Browser console operation for action=console' },
+          consoleType: { type: 'string', description: 'Optional console type filter: log, warn, error, info, debug, pageerror' },
           dialogAction: { type: 'string', enum: ['list', 'accept', 'dismiss'], description: 'Browser dialog operation for action=dialog' },
           dialogId: { type: 'string', description: 'Pending browser dialog id from browser_dialog list or browser snapshot' },
           promptText: { type: 'string', description: 'Text to enter when accepting a prompt dialog' },
@@ -207,6 +209,84 @@ export class BrowserExecuteTool implements ITool {
       resetBrowserTool();
       browserInstance = null;
     }
+  }
+}
+
+// ============================================================================
+// BrowserConsoleExecuteTool (Hermes browser_console parity)
+// ============================================================================
+
+export class BrowserConsoleExecuteTool implements ITool {
+  readonly name = 'browser_console';
+  readonly description = 'List or clear browser console messages and page runtime errors captured from the active Playwright session.';
+
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    const browser = await getBrowserAutomation();
+    return await browser.execute({
+      action: 'console',
+      consoleAction: (input.action as BrowserToolInput['consoleAction']) ?? 'list',
+      consoleType: input.type as string | undefined,
+      limit: input.limit as number | undefined,
+    });
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['list', 'clear'],
+            description: 'Console operation. Defaults to list.',
+          },
+          type: {
+            type: 'string',
+            description: 'Optional console type filter: log, warn, error, info, debug, pageerror.',
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum number of most recent entries to return.',
+          },
+        },
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+
+    const data = input as Record<string, unknown>;
+    if (data.action !== undefined && !['list', 'clear'].includes(data.action as string)) {
+      return { valid: false, errors: ['action must be one of list, clear'] };
+    }
+
+    if (data.limit !== undefined && (typeof data.limit !== 'number' || data.limit < 1)) {
+      return { valid: false, errors: ['limit must be a positive number'] };
+    }
+
+    return { valid: true };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'web' as ToolCategoryType,
+      keywords: ['browser', 'console', 'logs', 'javascript', 'pageerror', 'debug', 'playwright', 'hermes'],
+      priority: 7,
+      requiresConfirmation: true,
+      modifiesFiles: false,
+      makesNetworkRequests: false,
+    };
+  }
+
+  isAvailable(): boolean {
+    return true;
   }
 }
 
@@ -1270,6 +1350,7 @@ export class DocsSearchExecuteTool implements ITool {
 export function createMiscTools(): ITool[] {
   return [
     new BrowserExecuteTool(),
+    new BrowserConsoleExecuteTool(),
     new BrowserGetImagesExecuteTool(),
     new BrowserDialogExecuteTool(),
     new ComputerControlExecuteTool(),

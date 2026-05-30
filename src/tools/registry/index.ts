@@ -93,6 +93,7 @@ export {
 // Tool Adapters - Misc (Browser, Reasoning)
 export {
   BrowserExecuteTool,
+  BrowserConsoleExecuteTool,
   BrowserGetImagesExecuteTool,
   BrowserDialogExecuteTool,
   ReasoningExecuteTool,

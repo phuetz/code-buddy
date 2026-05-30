@@ -194,6 +194,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'List image elements on the active browser page with resolved URLs, alt text, dimensions, and visibility',
   },
   {
+    name: 'browser_console',
+    category: 'web',
+    keywords: ['browser', 'console', 'logs', 'javascript', 'pageerror', 'debug', 'playwright', 'hermes'],
+    priority: 7,
+    description: 'List or clear browser console messages and page runtime errors captured from the active browser session',
+  },
+  {
     name: 'lead_scout_plan',
     category: 'planning',
     keywords: ['lead scout', 'prospecting', 'prospect', 'leads', 'b2b', 'architectes', 'syndics', 'agences immobilieres', 'maitres oeuvre', 'promoteurs', 'bureaux etudes', 'sirene', 'rnc', 'osint', 'public data', 'script recipe', 'scoring', 'human review'],
