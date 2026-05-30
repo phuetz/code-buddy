@@ -63,6 +63,7 @@ buddy --agent hermes
 buddy hermes profile
 buddy hermes agent safe
 buddy hermes doctor
+buddy hermes tools --json
 ```
 
 `hermes` is not a vendored Hermes runtime. It is a Code Buddy system
@@ -76,6 +77,9 @@ source, the selected Fleet toolset, prompt boundary checks and the
 effective tool filter (`disabledTools` included). It is the quickest CLI
 sanity check after changing a local `~/.codebuddy/agents/hermes.toml`
 override.
+`buddy hermes tools [--json|--markdown]` is the short alias for the
+official Hermes tool parity manifest when you want to see exact,
+partial, and missing upstream tool coverage.
 
 When `hermes` is active, Code Buddy also records the agent's default
 Fleet dispatch profile in runtime context. `route_peer` and

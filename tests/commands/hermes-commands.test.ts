@@ -232,7 +232,7 @@ describe('Hermes CLI commands', () => {
 
     expect(output.kind).toBe('hermes_official_tool_parity_manifest');
     expect(output.schemaVersion).toBe(1);
-    expect(output.officialSource.inspectedCommit).toBe('61268ff7');
+    expect(output.officialSource.inspectedCommit).toBe('5f84c914');
     expect(output.officialSource.sourceFiles).toContain('toolsets.py::_HERMES_CORE_TOOLS');
     expect(output.codeBuddySource.localToolCount).toBeGreaterThan(0);
     expect(output.codeBuddySource.localToolNames).toContain('browser');
@@ -349,6 +349,25 @@ describe('Hermes CLI commands', () => {
         }),
       ]),
     );
+  });
+
+  it('accepts hermes tools as a discoverable alias for tool parity', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync(['node', 'test', 'hermes', 'tools', '--json']);
+
+    const output = JSON.parse(getLogOutput()) as {
+      kind: string;
+      summary: {
+        gaps: number;
+        total: number;
+      };
+    };
+
+    expect(output.kind).toBe('hermes_official_tool_parity_manifest');
+    expect(output.summary.total).toBeGreaterThan(0);
+    expect(output.summary.gaps).toBeGreaterThan(0);
   });
 
   it('prints Markdown for official Hermes tool parity', async () => {

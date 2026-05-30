@@ -479,6 +479,7 @@ export function registerHermesCommands(program: Command): void {
 
   hermes
     .command('tools-parity')
+    .alias('tools')
     .description('Compare official Hermes tool names against built-in Code Buddy tool schemas')
     .option('--json', 'output JSON')
     .option('--markdown', 'output Markdown')

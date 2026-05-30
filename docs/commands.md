@@ -160,7 +160,7 @@ The REST endpoint mirrors that shape with
 ```bash
 buddy research "<topic>" [--workers N] [--rounds N] [--output file.md]
 buddy flow "<goal>" [--max-retries N] [--verbose]
-buddy hermes profile|agent|doctor|plan|hooks|prompt-size|parity|tools-parity [dispatchProfile] [--json] [--markdown] [--plan-output file]
+buddy hermes profile|agent|doctor|plan|hooks|prompt-size|parity|tools-parity|tools [dispatchProfile] [--json] [--markdown] [--plan-output file]
 buddy tools browser-operator draft "<goal>" [--source-url URL] [--mode isolated|local] [--json]
 buddy tools skill-candidate list|inspect|install [candidatePath] [--approved-by name] [--json]
 ```
@@ -187,8 +187,9 @@ Hermes parity manifest created from the 2026-05-30 source/docs audit. Each row
 includes Code Buddy evidence paths, status, verification commands, notes, and
 next-work hints so future parity work does not rely on prose archaeology.
 
-`buddy hermes tools-parity [--json|--markdown]` prints the tool-level official
-Hermes parity manifest. It compares upstream Hermes tool names from
+`buddy hermes tools-parity [--json|--markdown]` (alias:
+`buddy hermes tools`) prints the tool-level official Hermes parity manifest.
+It compares upstream Hermes tool names from
 `toolsets.py` and dedicated tool source files against the built-in Code Buddy
 tool schemas, marking each row as exact, native equivalent, partial, or gap.
 This is the fastest way to see whether an upstream Hermes capability exists as
