@@ -74,7 +74,7 @@ mutation" acceptance.
 
 | Sub-capability | Where | Status |
 |---|---|---|
-| Cron jobs as agent tasks | `src/daemon/cron-agent-bridge.ts`; `buddy cron add/list/show/remove` | done |
+| Cron jobs as agent tasks | `src/daemon/cron-agent-bridge.ts`; `buddy cron add/list/show/pause/resume/run/remove` | done |
 | Pre-check scripts (skip expensive LLM work) | `src/scheduler/pre-check-runner.ts` | done |
 | No-agent watchdog jobs | `src/scheduler/watchdog-handlers.ts` | done |
 | Multi-target delivery + mobile-safe summaries | `src/scheduler/scheduled-delivery.ts` | done |

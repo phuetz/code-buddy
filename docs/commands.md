@@ -115,7 +115,7 @@ buddy daemon start [--detach] [--install-daemon] [--foreground]
 buddy daemon stop | restart | status | logs [--lines N]
 buddy heartbeat start | stop | status | tick
 buddy trigger list | add | remove
-buddy cron list [--json] | show <id> | remove <id>
+buddy cron list [--json] | show <id> | pause <id> | resume <id> | run <id> [--json] | remove <id>
 buddy cron add <name> --every <ms>|--cron <expr>|--at <iso> \
   [--message <text>] [--watchdog <json|@file>] [--pre-check <json|@file>] \
   [--deliver <type:id>...] [--format full|summary]
@@ -125,6 +125,9 @@ buddy skills list [--all] [--json] | usage [--json] | enable <name> | disable <n
 `buddy cron` authors scheduled jobs for the daemon's CronScheduler, including
 no-LLM `--watchdog` monitors (disk/http/repo/build) and `--pre-check` gates
 (file_changed/command) that skip expensive LLM runs when nothing changed.
+Use `pause`, `resume`, and `run` for live job control without starting the
+daemon tick loop. `CODEBUDDY_CRON_HOME` can point CLI smoke tests at an
+isolated cron store.
 
 ### Research and Orchestration
 

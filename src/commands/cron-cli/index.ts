@@ -8,6 +8,9 @@
  *
  *   buddy cron list [--json]
  *   buddy cron show <id> [--json]
+ *   buddy cron pause <id> [--json]
+ *   buddy cron resume <id> [--json]
+ *   buddy cron run <id> [--json]
  *   buddy cron remove <id>
  *   buddy cron add <name> --every <ms>|--cron <expr>|--at <iso>
  *        [--message <text>] [--watchdog <json|@file>] [--pre-check <json|@file>]
@@ -19,7 +22,7 @@
 
 import * as fs from 'fs';
 import type { Command } from 'commander';
-import type { CronJob, ScheduleType } from '../../scheduler/cron-scheduler.js';
+import type { CronJob, CronScheduler, ScheduleType } from '../../scheduler/cron-scheduler.js';
 
 export interface CronAddOptions {
   every?: string;
@@ -155,6 +158,26 @@ function collectOption(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
+async function getLoadedCronScheduler(): Promise<CronScheduler> {
+  const { getCronScheduler } = await import('../../scheduler/cron-scheduler.js');
+  const scheduler = getCronScheduler();
+  await loadPersistedJobs(scheduler);
+  return scheduler;
+}
+
+function findCronJob(jobs: CronJob[], id: string): CronJob | undefined {
+  return jobs.find((j) => j.id === id || j.id.startsWith(id));
+}
+
+function requireCronJob(jobs: CronJob[], id: string): CronJob {
+  const job = findCronJob(jobs, id);
+  if (!job) {
+    console.error(`Cron job not found: ${id}`);
+    process.exit(1);
+  }
+  return job;
+}
+
 export function registerCronCommands(program: Command): void {
   const cron = program
     .command('cron')
@@ -165,9 +188,7 @@ export function registerCronCommands(program: Command): void {
     .description('List scheduled cron jobs')
     .option('--json', 'output JSON')
     .action(async (opts: { json?: boolean }) => {
-      const { getCronScheduler } = await import('../../scheduler/cron-scheduler.js');
-      const scheduler = getCronScheduler();
-      await loadPersistedJobs(scheduler);
+      const scheduler = await getLoadedCronScheduler();
       const jobs = scheduler.listJobs();
       if (opts.json) {
         console.log(JSON.stringify({ count: jobs.length, jobs }, null, 2));
@@ -191,17 +212,67 @@ export function registerCronCommands(program: Command): void {
     .description('Show one cron job')
     .option('--json', 'output JSON')
     .action(async (id: string, opts: { json?: boolean }) => {
-      const { getCronScheduler } = await import('../../scheduler/cron-scheduler.js');
-      const scheduler = getCronScheduler();
-      await loadPersistedJobs(scheduler);
-      const job = scheduler.listJobs().find((j) => j.id === id || j.id.startsWith(id));
-      if (!job) {
+      const scheduler = await getLoadedCronScheduler();
+      const job = requireCronJob(scheduler.listJobs(), id);
+      console.log(JSON.stringify(job, null, 2));
+      if (!opts.json) { /* JSON is the readable form for a full job */ }
+    });
+
+  cron
+    .command('pause <id>')
+    .description('Pause a cron job by id (or id prefix)')
+    .option('--json', 'output JSON')
+    .action(async (id: string, opts: { json?: boolean }) => {
+      const scheduler = await getLoadedCronScheduler();
+      const job = requireCronJob(scheduler.listJobs(), id);
+      await scheduler.pauseJob(job.id);
+      const updated = scheduler.getJob(job.id) ?? job;
+      if (opts.json) {
+        console.log(JSON.stringify({ action: 'pause', job: updated }, null, 2));
+        return;
+      }
+      console.log(`Cron job paused: [${updated.id.slice(0, 8)}] ${updated.name}`);
+    });
+
+  cron
+    .command('resume <id>')
+    .description('Resume a cron job by id (or id prefix)')
+    .option('--json', 'output JSON')
+    .action(async (id: string, opts: { json?: boolean }) => {
+      const scheduler = await getLoadedCronScheduler();
+      const job = requireCronJob(scheduler.listJobs(), id);
+      await scheduler.resumeJob(job.id);
+      const updated = scheduler.getJob(job.id) ?? job;
+      if (opts.json) {
+        console.log(JSON.stringify({ action: 'resume', job: updated }, null, 2));
+        return;
+      }
+      console.log(`Cron job resumed: [${updated.id.slice(0, 8)}] ${updated.name}`);
+    });
+
+  cron
+    .command('run <id>')
+    .description('Run a cron job immediately by id (or id prefix)')
+    .option('--json', 'output JSON')
+    .action(async (id: string, opts: { json?: boolean }) => {
+      const scheduler = await getLoadedCronScheduler();
+      const job = requireCronJob(scheduler.listJobs(), id);
+      const run = await scheduler.runJobNow(job.id);
+      if (!run) {
         console.error(`Cron job not found: ${id}`);
         process.exit(1);
         return;
       }
-      console.log(JSON.stringify(job, null, 2));
-      if (!opts.json) { /* JSON is the readable form for a full job */ }
+      const updated = scheduler.getJob(job.id) ?? job;
+      if (opts.json) {
+        console.log(JSON.stringify({ action: 'run', job: updated, run }, null, 2));
+        return;
+      }
+      const duration = run.duration !== undefined ? `${run.duration}ms` : 'n/a';
+      console.log(`Cron job run completed: [${updated.id.slice(0, 8)}] ${updated.name} (${run.status}, ${duration})`);
+      if (run.status === 'error') {
+        process.exit(1);
+      }
     });
 
   cron
@@ -222,9 +293,7 @@ export function registerCronCommands(program: Command): void {
         process.exit(1);
         return;
       }
-      const { getCronScheduler } = await import('../../scheduler/cron-scheduler.js');
-      const scheduler = getCronScheduler();
-      await loadPersistedJobs(scheduler);
+      const scheduler = await getLoadedCronScheduler();
       const job = await scheduler.addJob(result.spec);
       console.log(`Cron job created: [${job.id.slice(0, 8)}] ${job.name} (${job.task.type}, ${job.type})`);
     });
@@ -233,15 +302,8 @@ export function registerCronCommands(program: Command): void {
     .command('remove <id>')
     .description('Remove a cron job by id (or id prefix)')
     .action(async (id: string) => {
-      const { getCronScheduler } = await import('../../scheduler/cron-scheduler.js');
-      const scheduler = getCronScheduler();
-      await loadPersistedJobs(scheduler);
-      const job = scheduler.listJobs().find((j) => j.id === id || j.id.startsWith(id));
-      if (!job) {
-        console.error(`Cron job not found: ${id}`);
-        process.exit(1);
-        return;
-      }
+      const scheduler = await getLoadedCronScheduler();
+      const job = requireCronJob(scheduler.listJobs(), id);
       await scheduler.removeJob(job.id);
       console.log(`Cron job removed: [${job.id.slice(0, 8)}] ${job.name}`);
     });
@@ -252,7 +314,7 @@ export function registerCronCommands(program: Command): void {
  * one-shot CLI command sees the existing job set before mutating it.
  */
 async function loadPersistedJobs(
-  scheduler: import('../../scheduler/cron-scheduler.js').CronScheduler,
+  scheduler: CronScheduler,
 ): Promise<void> {
   await scheduler.loadFromDisk();
 }

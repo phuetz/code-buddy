@@ -141,9 +141,13 @@ export interface CronSchedulerConfig {
   defaultTimezone: string;
 }
 
+const DEFAULT_CRON_ROOT = process.env.CODEBUDDY_CRON_HOME
+  ? path.resolve(process.env.CODEBUDDY_CRON_HOME)
+  : path.join(homedir(), '.codebuddy', 'cron');
+
 export const DEFAULT_CRON_SCHEDULER_CONFIG: CronSchedulerConfig = {
-  persistPath: path.join(homedir(), '.codebuddy', 'cron', 'jobs.json'),
-  historyPath: path.join(homedir(), '.codebuddy', 'cron', 'runs'),
+  persistPath: path.join(DEFAULT_CRON_ROOT, 'jobs.json'),
+  historyPath: path.join(DEFAULT_CRON_ROOT, 'runs'),
   maxHistoryPerJob: 100,
   tickIntervalMs: 1000,
   defaultTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -739,6 +743,7 @@ export class CronScheduler extends EventEmitter {
 
   private async saveRunHistory(run: JobRun): Promise<void> {
     try {
+      await fs.mkdir(this.config.historyPath, { recursive: true });
       const historyFile = path.join(this.config.historyPath, `${run.jobId}.jsonl`);
 
       // Append to JSONL

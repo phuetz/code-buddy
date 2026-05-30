@@ -64,7 +64,7 @@ several research/runtime backends. The first concrete gap from this audit,
 | Memory | Built-in memory plus external providers: Honcho, OpenViking, Mem0, Hindsight, Holographic, RetainDB, ByteRover, Supermemory | Local memory, FTS/session recall, user model, Mem0/Honcho/Supermemory adapters | Partial | Three external providers exist; the full Hermes provider matrix does not. Some older status docs still understate newer local dialectic work. |
 | Skills | Agentskills.io-compatible skills, hub/taps, direct URL install, trust/update lifecycle, curator, agent-managed skills | `src/skills/hub.ts`, skill loader/manager, skill discovery/install tool, skill curator/candidate review | Partial | Good native coverage; not proven identical to Hermes hub/tap/update/reset/trust behavior. |
 | Closed learning loop | Agent memory nudges, autonomous skill creation, self-improving skills, session search, Honcho modeling | Lessons, user model, session recall, skill candidate queue, curator | Partial | Comparable direction; Code Buddy keeps review gates and differs from Hermes' more autonomous posture. |
-| Cron/scheduling | Natural-language `cronjob` tool; create/list/update/pause/resume/run/remove; platform delivery; no-agent script-only jobs; chained jobs; skill-backed jobs | `buddy cron list/show/add/remove`, scheduler, pre-checks, watchdog, delivery, run recording; Cowork scheduled tasks | Partial | Missing exact `cronjob` agent tool semantics, update/pause/resume/run parity, skill-backed/chained/script-only details. |
+| Cron/scheduling | Natural-language `cronjob` tool; create/list/update/pause/resume/run/remove; platform delivery; no-agent script-only jobs; chained jobs; skill-backed jobs | `buddy cron list/show/add/pause/resume/run/remove`, scheduler, pre-checks, watchdog, delivery, run recording; Cowork scheduled tasks | Partial | Pause/resume/run now have CLI parity and real isolated-store smoke coverage. Still missing exact `cronjob` agent tool semantics, update parity, skill-backed/chained/script-only details. |
 | Delegation/parallelism | `delegate_task`, isolated subagents, `execute_code` scripts calling tools by RPC | Fleet peer chat/session/tool invoke, route_peer, subagents, agentic coding runner | Partial | Delegation is strong; `execute_code` RPC collapse was not found. |
 | Runs anywhere | Local, Docker, SSH, Singularity, Modal, Daytona terminal backends with hibernate/wake semantics | Local/desktop/server/fleet/sandbox/device work exists | Gap/partial | No full official backend matrix found. |
 | Research trajectories | Batch trajectory generation and trajectory compression for training/research | `buddy run trajectory-export`, golden/policy evals, run recall packs | Partial | Trajectory export/evals are real; official batch runner/compression parity not found. |
@@ -78,7 +78,7 @@ several research/runtime backends. The first concrete gap from this audit,
    - Each Hermes feature row should have local evidence paths, a status, and a
      verification command.
 2. Close the user-facing gaps first: provider/model setup clarity, gateway
-   status, cron pause/resume/update/run, and Cowork screens for the active
+   status, cron update, and Cowork screens for the active
    Hermes/Fleet toolset.
 3. Treat deep parity items as optional product decisions: Nous Portal, Camofox,
    full OpenClaw migration, official Kanban, all memory providers, Modal/Daytona.
