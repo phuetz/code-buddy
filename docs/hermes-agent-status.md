@@ -3,6 +3,11 @@
 Date: 2026-05-23
 Upstream reference: <https://github.com/nousresearch/hermes-agent> (MIT, Nous Research)
 
+Latest official parity audit: [`hermes-agent-official-parity-audit-2026-05-30.md`](hermes-agent-official-parity-audit-2026-05-30.md).
+That audit inspected upstream `NousResearch/hermes-agent` at `61268ff7` and
+concludes that Code Buddy has substantial Hermes-inspired coverage but **not**
+full feature-for-feature official Hermes parity.
+
 This is the "what implements what" map for the Hermes agent inside Code Buddy.
 Code Buddy does **not** vendor Hermes' Python; it maps the Hermes product
 pattern onto Code Buddy's TypeScript/Fleet primitives (see the non-goals in
