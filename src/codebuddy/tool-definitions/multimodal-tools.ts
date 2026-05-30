@@ -82,6 +82,59 @@ export const AUDIO_TOOL: CodeBuddyTool = {
   }
 };
 
+// Hermes Text-to-Speech Tool - Convert text to local speech audio
+export const TEXT_TO_SPEECH_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "text_to_speech",
+    description: "Convert text to a local speech audio file. Returns a MEDIA:path and writes the audio to disk using a configured or detected TTS provider.",
+    parameters: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description: "Text to convert to speech audio"
+        },
+        output_path: {
+          type: "string",
+          description: "Optional absolute or workspace-relative output path. Defaults to .codebuddy/tts/tts-<id>.<format>"
+        },
+        provider: {
+          type: "string",
+          enum: ["auto", "system", "edge-tts", "espeak", "say", "kokoro", "audioreader"],
+          description: "TTS provider. auto detects a local provider; system uses Windows SAPI"
+        },
+        voice: {
+          type: "string",
+          description: "Optional provider-specific voice name"
+        },
+        language: {
+          type: "string",
+          description: "Optional language code for providers such as espeak"
+        },
+        format: {
+          type: "string",
+          enum: ["wav", "mp3", "aiff"],
+          description: "Output audio format. Defaults by provider"
+        },
+        rate: {
+          type: "number",
+          description: "Optional provider-specific speech rate"
+        },
+        volume: {
+          type: "number",
+          description: "Optional provider-specific volume"
+        },
+        timeout_ms: {
+          type: "number",
+          description: "Provider timeout in milliseconds"
+        }
+      },
+      required: ["text"]
+    }
+  }
+};
+
 // Video Tool - Process video files and extract frames
 export const VIDEO_TOOL: CodeBuddyTool = {
   type: "function",
@@ -653,6 +706,7 @@ export const ARCHIVE_TOOL: CodeBuddyTool = {
 export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   PDF_TOOL,
   AUDIO_TOOL,
+  TEXT_TO_SPEECH_TOOL,
   VIDEO_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,

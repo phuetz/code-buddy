@@ -529,6 +529,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Process audio files'
   },
   {
+    name: 'text_to_speech',
+    category: 'media',
+    keywords: ['tts', 'speech', 'audio', 'voice', 'synthesize', 'hermes'],
+    priority: 7,
+    description: 'Convert text to a local speech audio file'
+  },
+  {
     name: 'video',
     category: 'media',
     keywords: ['video', 'movie', 'frames', 'thumbnail', 'mp4', 'extract'],

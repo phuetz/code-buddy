@@ -236,9 +236,9 @@ const OFFICIAL_HERMES_TOOLS: HermesOfficialToolReference[] = [
     toolset: 'hermes-core',
     category: 'media',
     officialSource: OFFICIAL_SOURCE_TOOLSETS,
-    equivalenceStatus: 'partial',
-    notes: 'Code Buddy has CLI/slash TTS managers, but no LLM tool schema named text_to_speech.',
-    nextWork: 'Expose TTS as a tool only if agent-triggered speech is product-relevant.',
+    equivalentCodeBuddyTools: ['audio'],
+    notes: 'Code Buddy exposes an exact text_to_speech prompt tool that writes a real local speech audio file and returns a MEDIA path using detected/configured providers.',
+    nextWork: 'Add provider-readiness status per TTS backend and live provider smokes as credentials or binaries are configured.',
   },
   {
     name: 'todo',

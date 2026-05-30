@@ -31,6 +31,11 @@ describe('local Hermes tool parity manifest', () => {
         detectedCodeBuddyTools: expect.arrayContaining(['browser_vision']),
       }),
       expect.objectContaining({
+        name: 'text_to_speech',
+        status: 'exact',
+        detectedCodeBuddyTools: expect.arrayContaining(['text_to_speech']),
+      }),
+      expect.objectContaining({
         name: 'kanban_show',
         status: 'exact',
         detectedCodeBuddyTools: ['kanban_show'],

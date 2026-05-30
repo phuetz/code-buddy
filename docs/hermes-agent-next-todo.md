@@ -8,7 +8,7 @@ Source of truth:
 
 Current measured state:
 - Feature parity manifest: 19 areas, 3 covered-partial, 14 partial, 2 gaps.
-- Tool parity manifest: 71 official tools, 35 exact, 6 native-equivalent, 6 partial, 24 gaps.
+- Tool parity manifest: 71 official tools, 36 exact, 6 native-equivalent, 5 partial, 24 gaps.
 - Important product choice: Code Buddy maps Hermes Agent onto native TypeScript/Fleet/Cowork primitives. It does not vendor the upstream Python runtime.
 
 ## P0 — Finish the core learning loop
@@ -68,9 +68,9 @@ Current measured state:
 
 - [x] **Add a Hermes toolset/catalog status surface**
   - Why: `buddy hermes tools` is now discoverable, but Cowork should also show exact/partial/gap status by category.
-  - Done: Cowork Fleet now has a read-only Hermes tool catalog strip backed by the same local parity manifest as `buddy hermes tools --json`. It shows exact/native/partial/gap counts and prioritized work such as `skill_manage`, `text_to_speech`, and `video_analyze`. Kanban, `send_message`, `execute_code`, `vision_analyze`, and `browser_vision` exact tool-name gaps have since been closed in the core registry.
+  - Done: Cowork Fleet now has a read-only Hermes tool catalog strip backed by the same local parity manifest as `buddy hermes tools --json`. It shows exact/native/partial/gap counts and prioritized work such as `skill_manage`, `video_analyze`, and media generation gaps. Kanban, `send_message`, `execute_code`, `vision_analyze`, `browser_vision`, and `text_to_speech` exact tool-name gaps have since been closed in the core registry.
   - Acceptance:
-    - Cowork shows summary counts and top core gaps such as `skill_manage`, `text_to_speech`, and `video_analyze`.
+    - Cowork shows summary counts and top core gaps such as `skill_manage`, `video_analyze`, and media generation.
     - Platform-only gaps do not hide the prioritized coding-agent work because the bridge orders core priority items first.
   - Verification:
     - `npx tsx src/index.ts hermes tools --json`
@@ -109,6 +109,16 @@ Current measured state:
   - Verification:
     - `npm test -- tests/tools/vision-analyze-real.test.ts --run`
     - `npm test -- tests/tools/vision-analyze-real.test.ts tests/agent/hermes-tool-parity-local.test.ts tests/commands/hermes-commands.test.ts --run`
+
+- [x] **Add exact `text_to_speech` prompt tool**
+  - Why: Code Buddy had voice/TTS managers, but Hermes exposes a direct `text_to_speech` tool that writes audio and returns a media path.
+  - Done: Code Buddy now exposes exact `text_to_speech`. It writes a real local speech audio file under `.codebuddy/tts` by default, returns `MEDIA:<path>`, supports output paths, and uses detected/configured providers: Windows SAPI (`system`), macOS `say`, `edge-tts`, `espeak`, Kokoro, or AudioReader.
+  - Guardrail: providers that need network, models, or local services remain explicit; `auto` only picks immediately available local providers.
+  - Acceptance:
+    - Real provider available -> generated audio file exists, is non-empty, and has a valid audio header.
+    - Tool parity marks `text_to_speech` exact.
+  - Verification:
+    - `npm test -- tests/tools/text-to-speech-real.test.ts --run`
 
 - [x] **Add an exact `send_message` prompt tool over existing channel adapters**
   - Why: channels and scheduled delivery exist, but Hermes has a direct messaging tool surface.

@@ -47,7 +47,7 @@ Tool Gateway, all memory providers, OpenClaw migration, and several optional
 platform connectors. Several concrete gaps from this audit now have native
 Code Buddy equivalents: `buddy hermes prompt-size`, exact `kanban_*`,
 exact `send_message`, exact `execute_code` with persisted run artifacts, and
-exact local `vision_analyze` / `browser_vision` tools.
+exact local `vision_analyze` / `browser_vision` / `text_to_speech` tools.
 
 ## Parity matrix
 
@@ -58,7 +58,7 @@ exact local `vision_analyze` / `browser_vision` tools.
 | Prompt-size diagnostic | `hermes prompt-size` offline byte breakdown for system prompt and tool schemas | `buddy hermes prompt-size [profile] [--json]`; `tests/commands/hermes-commands.test.ts` | Covered/partial | Runs offline and reports Hermes prompt, profile/toolset/plan JSON, local skills/memory footprint metadata, active tool schemas, and profile-filtered tools. It is native Code Buddy output, not byte-for-byte upstream Hermes output. |
 | Providers/models | Nous Portal, OpenRouter, OpenAI/Codex, Copilot, Anthropic, Gemini, Hugging Face, Novita, z.ai, Kimi, MiniMax, Bedrock, Azure, local/custom, etc. | Code Buddy provider routing, OpenAI-compatible client, Gemini native path, model tools config | Covered/partial | Strong coverage, but exact provider list and setup flows differ. |
 | Toolsets | Core/composite/platform/dynamic toolsets; per-platform `hermes-cli`, `hermes-discord`, `hermes-feishu`, etc. | Fleet dispatch profiles and `fleet.hermes.<profile>` descriptors; active tool filter enforcement | Partial | Code Buddy has useful Hermes-style filters, not the full official per-platform toolset catalog. |
-| Built-in tools | Browser, file, terminal/process, web, Home Assistant, Spotify, Kanban, `execute_code`, `cronjob`, `session_search`, skills, TTS, image/video, vision, messaging, MOA, X search, Yuanbao, MCP | Code Buddy has many native tools plus Firecrawl, browser/CDP, sessions, skills, Fleet, image/vision/voice pieces, exact `kanban_*`, exact `send_message`, exact `execute_code`, exact `vision_analyze`, and exact `browser_vision` | Partial | Not a one-to-one tool-name or capability set; no proof for Home Assistant, Spotify, or Yuanbao. Kanban, send_message, execute_code, vision_analyze, and browser_vision now have exact prompt-tool names with native safety boundaries. |
+| Built-in tools | Browser, file, terminal/process, web, Home Assistant, Spotify, Kanban, `execute_code`, `cronjob`, `session_search`, skills, TTS, image/video, vision, messaging, MOA, X search, Yuanbao, MCP | Code Buddy has many native tools plus Firecrawl, browser/CDP, sessions, skills, Fleet, image/vision/voice pieces, exact `kanban_*`, exact `send_message`, exact `execute_code`, exact `vision_analyze`, exact `browser_vision`, and exact `text_to_speech` | Partial | Not a one-to-one tool-name or capability set; no proof for Home Assistant, Spotify, or Yuanbao. Kanban, send_message, execute_code, vision_analyze, browser_vision, and text_to_speech now have exact prompt-tool names with native safety boundaries. |
 | Messaging gateway | Single gateway process across Telegram, Discord, Slack, WhatsApp, Signal, SMS, Email, Home Assistant, Mattermost, Matrix, DingTalk, Feishu, WeCom, Weixin, BlueBubbles, QQ, Yuanbao, Teams, LINE, ntfy, Open WebUI, etc. | `src/channels/*`, `src/channels/send-message.ts`, `docs/channels.md`, `src/server/channel-a2a-bridge.ts`, `buddy channels status --json`; many channels including Telegram/Discord/Slack/WhatsApp/Signal/Matrix/Teams/LINE/Feishu/iMessage/etc. | Partial | Code Buddy is broad, gateway readiness is machine-readable without secret leakage, and `send_message` now dry-runs to a real outbox by default with approval-gated live delivery. The official Hermes platform list, per-platform toolsets, gateway lifecycle, and slash parity are still not identical. |
 | Browser automation | Browserbase, Browser Use, Firecrawl, Camofox/Camoufox, local CDP, agent-browser, hybrid public/private routing, dialog handling, session recording | Stagehand/CDP/browser automation, Firecrawl tools, browser watchdogs, exact browser dialog and browser vision surfaces, security audit around CDP | Partial | Strong local browser work, but no complete proof of Hermes backend parity for Camofox, Browser Use gateway mode, hybrid private routing, and session recording. |
 | Nous Portal Tool Gateway | OAuth setup, `hermes portal status`, gateway-routed Firecrawl/FAL/OpenAI TTS/Browser Use | Separate provider/tool integrations; no Nous Portal command surface found | Gap | This is an upstream subscription-specific integration, not currently a Code Buddy equivalent. |
@@ -99,6 +99,7 @@ exact local `vision_analyze` / `browser_vision` tools.
 - `npm test -- tests/tools/send-message-real.test.ts --run`
 - `npm test -- tests/tools/execute-code-real.test.ts --run`
 - `npm test -- tests/tools/vision-analyze-real.test.ts --run`
+- `npm test -- tests/tools/text-to-speech-real.test.ts --run`
 - `npx tsx src/index.ts hermes kanban list --json`
 - `npx tsx src/index.ts hermes parity --json`
 

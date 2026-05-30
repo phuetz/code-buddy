@@ -9,7 +9,12 @@
  */
 
 import type { ToolResult } from '../../types/index.js';
-import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
+import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
+import {
+  synthesizeTextToSpeech,
+  type TextToSpeechOptions,
+  type TextToSpeechProvider,
+} from '../text-to-speech-tool.js';
 
 // ============================================================================
 // Lazy-loaded tool instances
@@ -179,6 +184,118 @@ export class AudioExecuteTool implements ITool {
 
   getMetadata(): IToolMetadata {
     return { name: this.name, description: this.description, category: 'utility' as ToolCategoryType, keywords: ['audio', 'transcribe', 'whisper', 'sound', 'music'], priority: 3, modifiesFiles: false, makesNetworkRequests: true };
+  }
+
+  isAvailable(): boolean { return true; }
+}
+
+// ============================================================================
+// TextToSpeechTool
+// ============================================================================
+
+export class TextToSpeechTool implements ITool {
+  readonly name = 'text_to_speech';
+  readonly description = 'Convert text to a local speech audio file using the configured or detected TTS provider.';
+
+  constructor(private readonly options: TextToSpeechOptions = {}) {}
+
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    try {
+      const result = await synthesizeTextToSpeech({
+        text: requiredString(input, 'text'),
+        outputPath: optionalString(input, 'output_path'),
+        provider: optionalProvider(input.provider),
+        voice: optionalString(input, 'voice'),
+        language: optionalString(input, 'language'),
+        format: optionalFormat(input.format),
+        rate: optionalNumber(input, 'rate'),
+        volume: optionalNumber(input, 'volume'),
+        timeoutMs: optionalNumber(input, 'timeout_ms'),
+      }, {
+        ...this.options,
+        rootDir: this.options.rootDir ?? context?.cwd,
+      });
+      return {
+        success: true,
+        output: JSON.stringify(result, null, 2),
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Text to convert to speech audio.',
+          },
+          output_path: {
+            type: 'string',
+            description: 'Optional absolute or workspace-relative output path. Defaults to .codebuddy/tts/tts-<id>.<format>.',
+          },
+          provider: {
+            type: 'string',
+            enum: ['auto', 'system', 'edge-tts', 'espeak', 'say', 'kokoro', 'audioreader'],
+            description: 'TTS provider. auto detects a local provider; system uses Windows SAPI.',
+          },
+          voice: {
+            type: 'string',
+            description: 'Optional provider-specific voice name.',
+          },
+          language: {
+            type: 'string',
+            description: 'Optional language code for providers such as espeak.',
+          },
+          format: {
+            type: 'string',
+            enum: ['wav', 'mp3', 'aiff'],
+            description: 'Output audio format. Defaults by provider.',
+          },
+          rate: {
+            type: 'number',
+            description: 'Optional provider-specific speech rate; Windows system clamps to -10..10.',
+          },
+          volume: {
+            type: 'number',
+            description: 'Optional provider-specific volume; Windows system clamps to 0..100.',
+          },
+          timeout_ms: {
+            type: 'number',
+            description: 'Provider timeout in milliseconds. Default 120000.',
+          },
+        },
+        required: ['text'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) return { valid: false, errors: ['Input must be an object'] };
+    const d = input as Record<string, unknown>;
+    if (typeof d.text !== 'string' || !d.text.trim()) return { valid: false, errors: ['text is required'] };
+    return { valid: true };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'media' as ToolCategoryType,
+      keywords: ['tts', 'speech', 'audio', 'voice', 'hermes', 'text_to_speech'],
+      priority: 7,
+      modifiesFiles: true,
+      makesNetworkRequests: true,
+    };
   }
 
   isAvailable(): boolean { return true; }
@@ -828,6 +945,7 @@ export class ArchiveExecuteTool implements ITool {
 export function createMultimodalTools(): ITool[] {
   return [
     new AudioExecuteTool(),
+    new TextToSpeechTool(),
     new VideoExecuteTool(),
     new PDFExecuteTool(),
     new OCRExecuteTool(),
@@ -838,4 +956,40 @@ export function createMultimodalTools(): ITool[] {
     new ExportExecuteTool(),
     new ArchiveExecuteTool(),
   ];
+}
+
+function requiredString(data: Record<string, unknown>, key: string): string {
+  const value = optionalString(data, key);
+  if (!value) {
+    throw new Error(`${key} is required`);
+  }
+  return value;
+}
+
+function optionalString(data: Record<string, unknown>, key: string): string | undefined {
+  const value = data[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function optionalNumber(data: Record<string, unknown>, key: string): number | undefined {
+  const value = data[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalProvider(value: unknown): TextToSpeechProvider | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const provider = value.trim();
+  if (['auto', 'system', 'edge-tts', 'espeak', 'say', 'kokoro', 'audioreader'].includes(provider)) {
+    return provider as TextToSpeechProvider;
+  }
+  throw new Error(`Unsupported text_to_speech provider: ${provider}`);
+}
+
+function optionalFormat(value: unknown): 'wav' | 'mp3' | 'aiff' | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const format = value.trim();
+  if (format === 'wav' || format === 'mp3' || format === 'aiff') {
+    return format;
+  }
+  throw new Error(`Unsupported text_to_speech format: ${format}`);
 }

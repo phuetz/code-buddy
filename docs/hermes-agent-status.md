@@ -113,6 +113,12 @@ change-control surface.
 | Hermes `execute_code` subprocess boundary | `src/tools/execute-code-runner.ts`, `src/tools/registry/execute-code-tools.ts`, `tests/tools/execute-code-real.test.ts` | done — exact prompt tool name, real local subprocess, timeout, and `.codebuddy/execute-code/<run-id>` artifacts; generated-code-to-tool RPC remains intentionally separate |
 | Subagents / swarm | `/agents`, `/swarm`, `/team` | done |
 
+### Voice and media generation
+
+| Sub-capability | Where | Status |
+|---|---|---|
+| Hermes `text_to_speech` audio generation | `src/tools/text-to-speech-tool.ts`, `src/tools/registry/multimodal-tools.ts`, `tests/tools/text-to-speech-real.test.ts` | done — exact prompt tool name, real local speech audio file, `MEDIA:<path>` result, provider detection for Windows SAPI/macOS `say`/`edge-tts`/`espeak`, plus explicit Kokoro/AudioReader paths |
+
 ### Vision and browser inspection
 
 | Sub-capability | Where | Status |

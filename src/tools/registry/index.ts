@@ -235,6 +235,7 @@ export {
 // Tool Adapters - Multimodal (audio, video, PDF, OCR, QR, clipboard, diagram, document, export, archive)
 export {
   AudioExecuteTool,
+  TextToSpeechTool,
   VideoExecuteTool,
   PDFExecuteTool,
   OCRExecuteTool,

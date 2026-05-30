@@ -112,14 +112,15 @@ const FEATURES: HermesParityFeature[] = [
       'src/tools/metadata.ts',
       'src/channels/send-message.ts',
       'src/tools/execute-code-runner.ts',
+      'src/tools/text-to-speech-tool.ts',
       'src/tools/vision/vision-analysis.ts',
     ],
     status: 'partial',
     verificationCommands: [
       'npx tsx src/index.ts tools profile hermes-balanced --json',
-      'npm test -- tests/tools/execute-code-real.test.ts tests/tools/send-message-real.test.ts tests/tools/kanban-real.test.ts tests/tools/vision-analyze-real.test.ts --run',
+      'npm test -- tests/tools/execute-code-real.test.ts tests/tools/send-message-real.test.ts tests/tools/kanban-real.test.ts tests/tools/vision-analyze-real.test.ts tests/tools/text-to-speech-real.test.ts --run',
     ],
-    notes: 'Code Buddy has many native tools and now exact Kanban, send_message, execute_code, vision_analyze, and browser_vision tool names, but not all official third-party integrations.',
+    notes: 'Code Buddy has many native tools and now exact Kanban, send_message, execute_code, vision_analyze, browser_vision, and text_to_speech tool names, but not all official third-party integrations.',
     nextWork: 'Track tool-level parity in a second-level manifest.',
   },
   {

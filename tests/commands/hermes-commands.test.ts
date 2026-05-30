@@ -434,6 +434,11 @@ describe('Hermes CLI commands', () => {
           status: 'exact',
           detectedCodeBuddyTools: expect.arrayContaining(['vision_analyze']),
         }),
+        expect.objectContaining({
+          name: 'text_to_speech',
+          status: 'exact',
+          detectedCodeBuddyTools: expect.arrayContaining(['text_to_speech']),
+        }),
       ]),
     );
   });
