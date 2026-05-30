@@ -66,7 +66,7 @@ Code Buddy auto-detects your provider from the API key environment variables. Se
 buddy -p "create a hello world Express app" --output-format json > result.json
 
 # Pipe into other tools
-buddy -p "explain this code" --output-format json 2>/dev/null | jq '.content'
+buddy -p "explain this code" --output-format json 2>/dev/null | jq '.result'
 
 # CI with full autonomy
 buddy -p "run tests and fix failures" \
