@@ -77,6 +77,10 @@ const skillCandidateReviewQueueStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/skill-candidate-review-queue-strip.tsx',
 );
+const lessonCandidateReviewStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/lesson-candidate-review-strip.tsx',
+);
 const learningSkillUsageStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/learning-skill-usage-strip.tsx',
@@ -125,6 +129,7 @@ describe('FleetCommandCenter saga board', () => {
       fs.readFileSync(hermesPlanStripPath, 'utf8'),
       fs.readFileSync(toolProfileInspectorStripPath, 'utf8'),
       fs.readFileSync(skillCandidateReviewQueueStripPath, 'utf8'),
+      fs.readFileSync(lessonCandidateReviewStripPath, 'utf8'),
       fs.readFileSync(learningSkillUsageStripPath, 'utf8'),
     ].join('\n');
 
@@ -168,6 +173,11 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('LearningSkillUsageStrip');
     expect(source).toContain('fleet-learning-skill-usage');
     expect(source).toContain('buddy skills learning-usage --json');
+    expect(source).toContain('LessonCandidateReviewStrip');
+    expect(source).toContain('fleet-lesson-candidate-review');
+    expect(source).toContain('lesson-candidate-open-review');
+    expect(source).toContain('buddy lessons candidate list --status pending');
+    expect(source).toContain('setShowLessonCandidatePanel(true)');
     expect(source).toContain('getSkillCandidateApi');
     expect(source).toContain('skillCandidate?: SkillCandidateApiBridge');
     expect(source).toContain('setSkillCandidates(list)');

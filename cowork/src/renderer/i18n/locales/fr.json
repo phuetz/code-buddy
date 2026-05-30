@@ -2257,6 +2257,16 @@
       "toolSequence": "Outils",
       "useAsGoal": "Revoir la file comme objectif"
     },
+    "lessonCandidate": {
+      "title": "Revue des candidates lesson",
+      "countChip": "{{count}} en attente",
+      "pendingChip": "{{count}} en attente",
+      "approvedChip": "{{count}} approuvée(s)",
+      "discardedChip": "{{count}} écartée(s)",
+      "loadFailed": "Chargement des statistiques de candidates lesson échoué",
+      "guardrail": "Les lessons sont écrites uniquement après ouverture de la file de revue et approbation humaine d'une candidate en attente.",
+      "openReview": "Ouvrir le panneau de revue"
+    },
     "learningUsage": {
       "title": "Usage des skills apprises",
       "countChip": "{{count}} skill(s)",

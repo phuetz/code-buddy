@@ -2244,6 +2244,16 @@
       "toolSequence": "工具",
       "useAsGoal": "将队列审查作为目标"
     },
+    "lessonCandidate": {
+      "title": "Lesson 候选审查",
+      "countChip": "{{count}} 个待审",
+      "pendingChip": "{{count}} 个待审",
+      "approvedChip": "{{count}} 个已批准",
+      "discardedChip": "{{count}} 个已丢弃",
+      "loadFailed": "Lesson 候选统计加载失败",
+      "guardrail": "只有在人工打开审查队列并批准待审候选项后，才会写入 lesson。",
+      "openReview": "打开审查面板"
+    },
     "learningUsage": {
       "title": "Learning skill 使用情况",
       "countChip": "{{count}} 个 skill",

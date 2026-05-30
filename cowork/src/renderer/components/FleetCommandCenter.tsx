@@ -65,6 +65,7 @@ import {
   type SkillCandidateReviewQueueItem,
 } from './skill-candidate-review-queue-strip';
 import { LearningSkillUsageStrip } from './learning-skill-usage-strip';
+import { LessonCandidateReviewStrip } from './lesson-candidate-review-strip';
 import { LessonsVaultStrip } from './lessons-vault-strip';
 import { LessonsVaultGraph } from './LessonsVaultGraph';
 import { SagaBoard } from './fleet-saga-board';
@@ -242,6 +243,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   const setScheduleDraft = useAppStore((s) => s.setScheduleDraft);
   const fleetGoalDraft = useAppStore((s) => s.fleetGoalDraft);
   const setFleetGoalDraft = useAppStore((s) => s.setFleetGoalDraft);
+  const setShowLessonCandidatePanel = useAppStore((s) => s.setShowLessonCandidatePanel);
   const peers = useMemo(() => Object.values(fleetPeers), [fleetPeers]);
   const routablePeers = useMemo(
     () => peers.filter((p) => Boolean(p.capability?.models.length)),
@@ -1082,6 +1084,9 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                   cwd={activeWorkspaceCwd}
                   onBrowse={() => setShowLessonsGraph(true)}
                   onUseAsGoal={handleUseLessonsVaultAsGoal}
+                />
+                <LessonCandidateReviewStrip
+                  onOpenReview={() => setShowLessonCandidatePanel(true)}
                 />
                 <LearningSkillUsageStrip cwd={activeWorkspaceCwd} />
                 <SkillCandidateReviewQueueStrip

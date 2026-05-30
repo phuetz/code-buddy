@@ -2257,6 +2257,16 @@
       "toolSequence": "Tools",
       "useAsGoal": "Review queue as goal"
     },
+    "lessonCandidate": {
+      "title": "Lesson candidate review",
+      "countChip": "{{count}} pending",
+      "pendingChip": "{{count}} pending",
+      "approvedChip": "{{count}} approved",
+      "discardedChip": "{{count}} discarded",
+      "loadFailed": "Lesson candidate stats failed",
+      "guardrail": "Lessons are written only after a human opens the review queue and approves a pending candidate.",
+      "openReview": "Open review panel"
+    },
     "learningUsage": {
       "title": "Learning skill usage",
       "countChip": "{{count}} skills",
