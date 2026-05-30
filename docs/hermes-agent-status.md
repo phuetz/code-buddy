@@ -94,6 +94,7 @@ change-control surface.
 | Tool parity catalog | `buddy hermes tools --json`; Cowork Fleet Hermes tool catalog strip | done — CLI and Cowork share the same local manifest and show exact/native/partial/gap counts plus prioritized gaps; current measured tool parity is 65 exact, 6 native-equivalent, 0 partial, 0 gaps |
 | Provider/model readiness | `src/agent/hermes-agent-diagnostics.ts`; `buddy hermes doctor --json`; `cowork/src/main/tools/hermes-provider-readiness-bridge.ts`; `cowork/src/renderer/components/hermes-provider-readiness-strip.tsx` | covered/partial — active model source, inferred provider, env/OAuth credential source names, tool-call/reasoning/vision flags, context/output limits, Nous Portal status, remediation hints, and Cowork rendering in Settings -> API plus Fleet Command Center |
 | Nous Portal readiness | `src/agent/hermes-portal-status.ts`; `buddy hermes portal status|tools|open`; embedded in `buddy hermes doctor --json` | covered/partial — local auth/source readiness, subscription/docs links, Tool Gateway URL/flag detection, managed-vs-direct routing for Firecrawl/FAL/TTS/Browser Use/Modal, and no secret-value output; no live OAuth device-code or Nous proxy runtime yet |
+| Runtime backend inventory | `src/agent/hermes-runtime-backends.ts`; embedded in `buddy hermes doctor --json` | partial — real non-destructive probes for local Node, native OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox, with version/status, credential source names only, and smoke commands; first-class managed remote runners remain future work |
 
 ### Scheduled automations
 
@@ -146,7 +147,7 @@ change-control surface.
 | Hermes Feishu document/comment tools | `src/tools/feishu-tool.ts`, `src/tools/registry/feishu-tools.ts`, `tests/tools/feishu-tool-real.test.ts` | done — exact `feishu_doc_read`, `feishu_drive_list_comments`, `feishu_drive_list_comment_replies`, `feishu_drive_reply_comment`, and `feishu_drive_add_comment`; real Feishu/Lark Open API HTTP paths tested |
 | Hermes Yuanbao group/DM/sticker tools | `src/tools/yuanbao-tool.ts`, `src/tools/registry/yuanbao-tools.ts`, `tests/tools/yuanbao-tool-real.test.ts` | done — exact `yb_query_group_info`, `yb_query_group_members`, `yb_send_dm`, `yb_search_sticker`, and `yb_send_sticker`; real HTTP gateway path tested; external sends approval-gated |
 | Mobile-safe remote supervision | `buddy run mobile-snapshot / mobile-gateway-*` | contract/preview only; no live listener yet (parity TODO #15/#34) |
-| Terminal backends (Docker/SSH/sandbox) | `src/security/` sandbox registry, `SandboxBackendInterface` | local + Docker/OS; Daytona/Modal/Vercel not ported |
+| Terminal backends (Docker/SSH/sandbox) | `src/security/` sandbox registry, `SandboxBackendInterface`, `src/agent/hermes-runtime-backends.ts` | local + Docker/OS/WSL/SSH inventory now visible in Hermes doctor; Daytona/Modal/Vercel are detected/configuration-reported but not first-class managed runners |
 
 ### Research evidence
 
@@ -194,7 +195,7 @@ buddy lessons candidate approve <id> --by "<your name>"
   skill-usage telemetry, and read-only installed skill package state, but it
   still needs SKILL.md preview/diff plus reviewer-gated install/disable/
   deprecate/rollback controls.
-- Serverless terminal backends (Daytona/Modal/Vercel Sandbox).
+- Serverless terminal backends (Daytona/Modal/Vercel Sandbox) are now inventoried by `buddy hermes doctor --json`, but not first-class managed runners.
 - Exact `skill_manage` prompt-tool parity is closed; wider CLI hub/tap/trust product-surface behavior is still only partially proven.
 - Nous Portal status/catalog parity is covered locally; live OAuth/device-code login
   and actual Nous-managed Tool Gateway proxying remain product/credential work.

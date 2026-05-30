@@ -981,6 +981,18 @@ export function registerHermesCommands(program: Command): void {
       console.log(
         `    Nous Tool Gateway: ${diagnostics.providerReadiness.portal.portal.toolGatewayConfigured ? 'configured' : 'not configured'}`,
       );
+      console.log('  Runtime backends:');
+      console.log(
+        `    Available: ${diagnostics.runtimeBackends.availableCount}/${diagnostics.runtimeBackends.backends.length}, ` +
+        `runnable: ${diagnostics.runtimeBackends.runnableCount}/${diagnostics.runtimeBackends.backends.length}, ` +
+        `configured remote: ${diagnostics.runtimeBackends.configuredRemoteCount}`,
+      );
+      for (const backend of diagnostics.runtimeBackends.backends) {
+        console.log(
+          `    ${backend.id}: ${backend.status}` +
+          `${backend.version ? ` (${backend.version})` : ''}`,
+        );
+      }
       console.log('  Dispatch profile selection:');
       for (const guidance of diagnostics.dispatchProfileGuidance) {
         console.log(`    ${guidance.profile}: ${guidance.useWhen}`);
@@ -1015,11 +1027,27 @@ export function registerHermesCommands(program: Command): void {
         }
       }
 
+      if (diagnostics.runtimeBackends.issues.length > 0) {
+        console.log('\nRuntime backend issues:');
+        for (const issue of diagnostics.runtimeBackends.issues) {
+          console.log(`  - ${issue}`);
+        }
+      }
+
+      if (diagnostics.runtimeBackends.recommendations.length > 0) {
+        console.log('\nRuntime backend recommendations:');
+        for (const recommendation of diagnostics.runtimeBackends.recommendations) {
+          console.log(`  - ${recommendation}`);
+        }
+      }
+
       if (
         diagnostics.issues.length === 0 &&
         diagnostics.recommendations.length === 0 &&
         diagnostics.providerReadiness.issues.length === 0 &&
-        diagnostics.providerReadiness.recommendations.length === 0
+        diagnostics.providerReadiness.recommendations.length === 0 &&
+        diagnostics.runtimeBackends.issues.length === 0 &&
+        diagnostics.runtimeBackends.recommendations.length === 0
       ) {
         console.log('\nNo issues or recommendations.');
       }

@@ -1036,6 +1036,15 @@ describe('Hermes CLI commands', () => {
               };
             };
           };
+          runtimeBackends: {
+            backends: Array<{
+              id: string;
+              runnable: boolean;
+              smokeCommand: string | null;
+              status: string;
+            }>;
+            runnableCount: number;
+          };
         };
       };
 
@@ -1055,6 +1064,17 @@ describe('Hermes CLI commands', () => {
       expect(output.diagnostics.providerReadiness.portal.portal.credentialSources).toContain('CODEBUDDY_NOUS_ACCESS_TOKEN');
       expect(output.diagnostics.providerReadiness.portal.portal.toolGatewayConfigured).toBe(true);
       expect(output.diagnostics.providerReadiness.portal.toolGateway.managedByNousCount).toBe(2);
+      expect(output.diagnostics.runtimeBackends.backends).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'local',
+            runnable: true,
+            status: 'available',
+            smokeCommand: expect.stringContaining('OK-HERMES-LOCAL'),
+          }),
+        ]),
+      );
+      expect(output.diagnostics.runtimeBackends.runnableCount).toBeGreaterThanOrEqual(1);
       expect(raw).not.toContain('secret-openai-key');
       expect(raw).not.toContain('secret-nous-token');
     } finally {

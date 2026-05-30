@@ -185,9 +185,11 @@ goal without parsing CLI prose.
 
 `buddy hermes doctor [profile] [--json]` checks the active Hermes custom-agent
 mapping, effective tool filter, active model, inferred provider, detected
-credential source names, model capabilities, context/output limits, and Nous
-Portal readiness. The JSON form is safe for Cowork because it reports credential
-sources only, never secret values.
+credential source names, model capabilities, context/output limits, Nous
+Portal readiness, and runtime backend inventory for local, OS sandbox, Docker,
+WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. The JSON
+form is safe for Cowork because it reports credential source names and smoke
+commands only, never secret values.
 
 `buddy hermes parity [--json|--markdown]` prints the machine-checkable official
 Hermes parity manifest created from the 2026-05-30 source/docs audit. Each row

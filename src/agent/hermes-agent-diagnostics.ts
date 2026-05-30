@@ -29,6 +29,10 @@ import {
   buildHermesPortalStatus,
   type HermesPortalStatus,
 } from './hermes-portal-status.js';
+import {
+  buildHermesRuntimeBackendsReadiness,
+  type HermesRuntimeBackendsReadiness,
+} from './hermes-runtime-backends.js';
 
 export interface HermesPromptChecks {
   mentionsCodeBuddyRuntime: boolean;
@@ -91,6 +95,7 @@ export interface HermesAgentDiagnostics {
   nativeSurfaceIds: string[];
   promptChecks: HermesPromptChecks;
   providerReadiness: HermesProviderReadiness;
+  runtimeBackends: HermesRuntimeBackendsReadiness;
   issues: string[];
   recommendations: string[];
 }
@@ -446,6 +451,11 @@ export function buildHermesAgentDiagnostics(
       : 'user';
   const promptChecks = buildPromptChecks(agent);
   const providerReadiness = buildProviderReadiness(options);
+  const runtimeBackends = buildHermesRuntimeBackendsReadiness({
+    env: options.env,
+    homeDir: options.homeDir,
+    now: options.now,
+  });
   const issues: string[] = [];
   const recommendations: string[] = [];
 
@@ -491,6 +501,7 @@ export function buildHermesAgentDiagnostics(
     nativeSurfaceIds: hermesProfile.nativeSurfaces.map((surface) => surface.id),
     promptChecks,
     providerReadiness,
+    runtimeBackends,
     issues,
     recommendations,
   };

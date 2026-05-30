@@ -119,4 +119,42 @@ describe('Hermes Agent diagnostics', () => {
     expect(JSON.stringify(diagnostics)).not.toContain('secret-openai-key');
     expect(JSON.stringify(diagnostics)).not.toContain('secret-nous-token');
   });
+
+  it('reports runtime backend inventory from real local probes', () => {
+    const loader = new CustomAgentLoader(makeTempDir());
+    const diagnostics = buildHermesAgentDiagnostics({
+      loader,
+      now: () => new Date('2026-05-30T13:00:00.000Z'),
+    });
+
+    expect(diagnostics.runtimeBackends.generatedAt).toBe('2026-05-30T13:00:00.000Z');
+    expect(diagnostics.runtimeBackends.backends.map((backend) => backend.id)).toEqual(
+      expect.arrayContaining([
+        'local',
+        'os-sandbox',
+        'docker',
+        'wsl',
+        'ssh',
+        'singularity',
+        'modal',
+        'daytona',
+        'vercel-sandbox',
+      ]),
+    );
+
+    const local = diagnostics.runtimeBackends.backends.find((backend) => backend.id === 'local');
+    expect(local).toMatchObject({
+      status: 'available',
+      installed: true,
+      configured: true,
+      runnable: true,
+      command: process.execPath,
+    });
+    expect(local?.version).toMatch(/^v\d+\./);
+    expect(local?.smokeCommand).toContain('OK-HERMES-LOCAL');
+
+    const docker = diagnostics.runtimeBackends.backends.find((backend) => backend.id === 'docker');
+    expect(docker?.smokeCommand).toContain('OK-HERMES-DOCKER');
+    expect(JSON.stringify(diagnostics.runtimeBackends)).not.toContain(process.env.OPENAI_API_KEY ?? '__no_openai_key__');
+  });
 });

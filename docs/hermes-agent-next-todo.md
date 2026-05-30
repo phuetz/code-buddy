@@ -206,7 +206,9 @@ Current measured state:
 
 - [ ] **Runtime backend inventory**
   - Scope: detect/configure local, Docker, SSH, WSL, sandbox, Vercel Sandbox/Modal/Daytona if product-relevant.
-  - Acceptance: `buddy hermes doctor --json` reports available backends and smoke commands.
+  - Done so far: `buddy hermes doctor --json` now reports a non-destructive runtime backend inventory for local Node, native OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. Each row reports installed/configured/runnable state, version when a real CLI probe can provide it, credential source names only, notes/remediation, and copy/paste smoke commands for heavier real validation.
+  - Acceptance: `buddy hermes doctor --json` reports available backends and smoke commands. **Done for CLI JSON.**
+  - Remaining scope: turn configured backends into first-class managed runners where product-relevant, and surface the same inventory in Cowork.
 
 - [x] **Yuanbao platform connector parity**
   - Done: exact `yb_query_group_info`, `yb_query_group_members`, `yb_send_dm`, `yb_search_sticker`, and `yb_send_sticker` prompt tools now exist.
@@ -220,5 +222,5 @@ Current measured state:
 
 1. Remaining skills polish: larger SKILL.md diff/review UX and exact CLI hub/tap/trust product-surface deltas.
 2. Cowork provider/model readiness polish for media, tool parity, and skill lifecycle.
-3. Runtime backend inventory and provider-readiness smoke matrix.
+3. Cowork runtime/backend readiness rendering and provider-readiness smoke matrix.
 4. OpenClaw migration last, after the Hermes core and cockpit work are stable.
