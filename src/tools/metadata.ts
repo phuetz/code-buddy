@@ -474,6 +474,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Prepare or deliver outbound channel messages with dry-run outbox logging by default',
   },
   {
+    name: 'discord',
+    category: 'web',
+    keywords: ['discord', 'server', 'guild', 'channel', 'messages', 'members', 'thread', 'hermes'],
+    priority: 8,
+    description: 'Read Discord channel messages, search members, and create threads via the Discord REST API',
+  },
+  {
     name: 'cronjob',
     category: 'planning',
     keywords: ['cron', 'cronjob', 'schedule', 'scheduled', 'job', 'jobs', 'reminder', 'monitor', 'heartbeat', 'watchdog', 'hermes'],

@@ -8,7 +8,7 @@ Source of truth:
 
 Current measured state:
 - Feature parity manifest: 19 areas, 3 covered-partial, 14 partial, 2 gaps.
-- Tool parity manifest: 71 official tools, 36 exact, 6 native-equivalent, 5 partial, 24 gaps.
+- Tool parity manifest: 71 official tools, 37 exact, 6 native-equivalent, 4 partial, 24 gaps.
 - Important product choice: Code Buddy maps Hermes Agent onto native TypeScript/Fleet/Cowork primitives. It does not vendor the upstream Python runtime.
 
 ## P0 — Finish the core learning loop
@@ -68,7 +68,7 @@ Current measured state:
 
 - [x] **Add a Hermes toolset/catalog status surface**
   - Why: `buddy hermes tools` is now discoverable, but Cowork should also show exact/partial/gap status by category.
-  - Done: Cowork Fleet now has a read-only Hermes tool catalog strip backed by the same local parity manifest as `buddy hermes tools --json`. It shows exact/native/partial/gap counts and prioritized work such as `skill_manage`, `video_analyze`, and media generation gaps. Kanban, `send_message`, `execute_code`, `vision_analyze`, `browser_vision`, and `text_to_speech` exact tool-name gaps have since been closed in the core registry.
+  - Done: Cowork Fleet now has a read-only Hermes tool catalog strip backed by the same local parity manifest as `buddy hermes tools --json`. It shows exact/native/partial/gap counts and prioritized work such as `skill_manage`, `video_analyze`, and media generation gaps. Kanban, `send_message`, `discord`, `execute_code`, `vision_analyze`, `browser_vision`, and `text_to_speech` exact tool-name gaps have since been closed in the core registry.
   - Acceptance:
     - Cowork shows summary counts and top core gaps such as `skill_manage`, `video_analyze`, and media generation.
     - Platform-only gaps do not hide the prioritized coding-agent work because the bridge orders core priority items first.
@@ -119,6 +119,13 @@ Current measured state:
     - Tool parity marks `text_to_speech` exact.
   - Verification:
     - `npm test -- tests/tools/text-to-speech-real.test.ts --run`
+
+- [x] **Add exact Discord core prompt tool**
+  - Why: upstream Hermes exposes a `discord` tool for core Discord REST participation; having only channel adapters was not exact parity.
+  - Done: Code Buddy now exposes exact `discord` with `fetch_messages`, `search_members`, and `create_thread`, backed by Discord REST API calls and token-based auth.
+  - Guardrail: the tool never accepts a token in model input; it uses configured environment/options only. Server-management actions remain separate under the still-missing `discord_admin`.
+  - Verification:
+    - `npm test -- tests/tools/discord-tool-real.test.ts --run`
 
 - [x] **Add an exact `send_message` prompt tool over existing channel adapters**
   - Why: channels and scheduled delivery exist, but Hermes has a direct messaging tool surface.

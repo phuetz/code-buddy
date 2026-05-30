@@ -60,6 +60,7 @@ export {
 // Messaging tools
 export {
   SEND_MESSAGE_TOOL,
+  DISCORD_TOOL,
   MESSAGING_TOOLS,
 } from './messaging-tools.js';
 

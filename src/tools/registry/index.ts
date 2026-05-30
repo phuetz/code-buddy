@@ -74,6 +74,11 @@ export {
   createSendMessageTools,
 } from './send-message-tools.js';
 
+export {
+  DiscordTool,
+  createDiscordTools,
+} from './discord-tools.js';
+
 // Tool Adapters - Cron jobs
 export {
   CronjobExecuteTool,
@@ -427,6 +432,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createTodoTools } = await import('./todo-tools.js');
   const { createKanbanTools } = await import('./kanban-tools.js');
   const { createSendMessageTools } = await import('./send-message-tools.js');
+  const { createDiscordTools } = await import('./discord-tools.js');
   const { createCronjobTools } = await import('./cronjob-tools.js');
   const { createDockerTools } = await import('./docker-tools.js');
   const { createKubernetesTools } = await import('./kubernetes-tools.js');
@@ -477,6 +483,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createTodoTools(),
     ...createKanbanTools(),
     ...createSendMessageTools(),
+    ...createDiscordTools(),
     ...createCronjobTools(),
     ...createDockerTools(),
     ...createKubernetesTools(),
@@ -549,6 +556,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createTodoTools(),
     ...createKanbanTools(),
     ...createSendMessageTools(),
+    ...createDiscordTools(),
     ...createCronjobTools(),
     ...createDockerTools(),
     ...createKubernetesTools(),
@@ -611,6 +619,7 @@ import { createWebTools } from './web-tools.js';
 import { createTodoTools } from './todo-tools.js';
 import { createKanbanTools } from './kanban-tools.js';
 import { createSendMessageTools } from './send-message-tools.js';
+import { createDiscordTools } from './discord-tools.js';
 import { createCronjobTools } from './cronjob-tools.js';
 import { createDockerTools } from './docker-tools.js';
 import { createKubernetesTools } from './kubernetes-tools.js';

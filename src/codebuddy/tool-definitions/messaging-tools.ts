@@ -71,6 +71,65 @@ export const SEND_MESSAGE_TOOL: CodeBuddyTool = {
   },
 };
 
+export const DISCORD_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'discord',
+    description: [
+      'Read and participate in a Discord server through the Discord REST API.',
+      'Use fetch_messages for recent channel messages, search_members to find user IDs, and create_thread to create a public thread.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['fetch_messages', 'search_members', 'create_thread'],
+          description: 'Discord action to run',
+        },
+        guild_id: {
+          type: 'string',
+          description: 'Discord server (guild) ID; required for search_members',
+        },
+        channel_id: {
+          type: 'string',
+          description: 'Discord channel ID; required for fetch_messages and create_thread',
+        },
+        query: {
+          type: 'string',
+          description: 'Member name prefix to search for (search_members)',
+        },
+        name: {
+          type: 'string',
+          description: 'New thread name (create_thread)',
+        },
+        message_id: {
+          type: 'string',
+          description: 'Optional message ID to anchor create_thread to an existing message',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Max results for fetch_messages or search_members; default 50',
+        },
+        before: {
+          type: 'string',
+          description: 'Snowflake ID for reverse pagination (fetch_messages)',
+        },
+        after: {
+          type: 'string',
+          description: 'Snowflake ID for forward pagination (fetch_messages)',
+        },
+        auto_archive_duration: {
+          type: 'integer',
+          description: 'Thread archive duration in minutes (create_thread); default 1440',
+        },
+      },
+      required: ['action'],
+    },
+  },
+};
+
 export const MESSAGING_TOOLS: CodeBuddyTool[] = [
   SEND_MESSAGE_TOOL,
+  DISCORD_TOOL,
 ];

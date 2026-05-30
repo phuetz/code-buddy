@@ -441,8 +441,8 @@ const OFFICIAL_HERMES_TOOLS: HermesOfficialToolReference[] = [
     toolset: 'discord',
     category: 'platform',
     officialSource: OFFICIAL_SOURCE_TOOLSETS,
-    equivalenceStatus: 'partial',
-    notes: 'Code Buddy has Discord channel adapters, but not an exact prompt tool named discord.',
+    notes: 'Code Buddy exposes an exact discord prompt tool for core Discord REST actions: fetch_messages, search_members, and create_thread.',
+    nextWork: 'Add live Discord credential smoke coverage when a real bot token and guild are available; keep discord_admin separate for server-management actions.',
   },
   {
     name: 'discord_admin',

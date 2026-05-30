@@ -430,6 +430,11 @@ describe('Hermes CLI commands', () => {
           detectedCodeBuddyTools: ['send_message'],
         }),
         expect.objectContaining({
+          name: 'discord',
+          status: 'exact',
+          detectedCodeBuddyTools: ['discord'],
+        }),
+        expect.objectContaining({
           name: 'vision_analyze',
           status: 'exact',
           detectedCodeBuddyTools: expect.arrayContaining(['vision_analyze']),

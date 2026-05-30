@@ -50,6 +50,11 @@ describe('local Hermes tool parity manifest', () => {
         status: 'exact',
         detectedCodeBuddyTools: ['send_message'],
       }),
+      expect.objectContaining({
+        name: 'discord',
+        status: 'exact',
+        detectedCodeBuddyTools: ['discord'],
+      }),
     ]));
   });
 });
