@@ -29,6 +29,8 @@ Resultat attendu:
 
 - `--help` affiche les commandes principales (`doctor`, `onboard`,
   `server`, `research`, etc.).
+- L'aide racine affiche le format canonique `--output-format <format>`
+  sans doubler avec l'ancien alias compatible `--output <format>`.
 - `doctor` liste les providers detectes et les problemes d'environnement
   lisiblement.
 

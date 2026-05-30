@@ -2,7 +2,7 @@
 // Record startup time as early as possible
 const STARTUP_TIME = Date.now();
 
-import { program } from "commander";
+import { Option, program } from "commander";
 import { readFileSync } from "fs";
 import * as nodeFs from "fs";
 import * as nodeOs from "os";
@@ -1055,6 +1055,12 @@ program
     "-o, --output-format <format>",
     "output format for headless mode: json, stream-json, text, markdown"
   )
+  .addOption(
+    new Option(
+      "--output <format>",
+      "legacy alias for --output-format"
+    ).hideHelp()
+  )
   .option(
     "--init",
     "initialize .codebuddy directory with templates and exit"
@@ -1115,11 +1121,6 @@ program
     "--max-price <dollars>",
     "maximum cost in dollars before stopping (like mistral-vibe)",
     "10.0"
-  )
-  .option(
-    "--output <format>",
-    "output format for headless mode: text, json, streaming (like mistral-vibe)",
-    "json"
   )
   .option(
     "--auto-approve",
