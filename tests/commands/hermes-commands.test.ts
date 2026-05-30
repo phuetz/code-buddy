@@ -200,7 +200,7 @@ describe('Hermes CLI commands', () => {
     expect(output.kind).toBe('hermes_official_parity_manifest');
     expect(output.schemaVersion).toBe(1);
     expect(output.officialSource.repository).toBe('https://github.com/NousResearch/hermes-agent');
-    expect(output.officialSource.inspectedCommit).toBe('61268ff7');
+    expect(output.officialSource.inspectedCommit).toBe('5921d667');
     expect(output.officialSource.auditDocument).toBe('docs/hermes-agent-official-parity-audit-2026-05-30.md');
     expect(output.summary.total).toBe(output.features.length);
     expect(output.summary.partial).toBeGreaterThan(0);
@@ -283,7 +283,7 @@ describe('Hermes CLI commands', () => {
 
     expect(output.kind).toBe('hermes_official_tool_parity_manifest');
     expect(output.schemaVersion).toBe(1);
-    expect(output.officialSource.inspectedCommit).toBe('5f84c914');
+    expect(output.officialSource.inspectedCommit).toBe('5921d667');
     expect(output.officialSource.sourceFiles).toContain('toolsets.py::_HERMES_CORE_TOOLS');
     expect(output.codeBuddySource.localToolCount).toBeGreaterThan(0);
     expect(output.codeBuddySource.localToolNames).toContain('browser');
@@ -400,6 +400,11 @@ describe('Hermes CLI commands', () => {
           detectedCodeBuddyTools: ['browser_press'],
         }),
         expect.objectContaining({
+          name: 'browser_vision',
+          status: 'exact',
+          detectedCodeBuddyTools: expect.arrayContaining(['browser_vision']),
+        }),
+        expect.objectContaining({
           name: 'browser_dialog',
           status: 'exact',
           detectedCodeBuddyTools: ['browser_dialog'],
@@ -423,6 +428,11 @@ describe('Hermes CLI commands', () => {
           name: 'send_message',
           status: 'exact',
           detectedCodeBuddyTools: ['send_message'],
+        }),
+        expect.objectContaining({
+          name: 'vision_analyze',
+          status: 'exact',
+          detectedCodeBuddyTools: expect.arrayContaining(['vision_analyze']),
         }),
       ]),
     );

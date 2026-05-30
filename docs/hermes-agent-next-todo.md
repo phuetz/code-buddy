@@ -8,7 +8,7 @@ Source of truth:
 
 Current measured state:
 - Feature parity manifest: 19 areas, 3 covered-partial, 14 partial, 2 gaps.
-- Tool parity manifest: 71 official tools, 33 exact, 6 native-equivalent, 8 partial, 24 gaps.
+- Tool parity manifest: 71 official tools, 35 exact, 6 native-equivalent, 6 partial, 24 gaps.
 - Important product choice: Code Buddy maps Hermes Agent onto native TypeScript/Fleet/Cowork primitives. It does not vendor the upstream Python runtime.
 
 ## P0 — Finish the core learning loop
@@ -68,9 +68,9 @@ Current measured state:
 
 - [x] **Add a Hermes toolset/catalog status surface**
   - Why: `buddy hermes tools` is now discoverable, but Cowork should also show exact/partial/gap status by category.
-  - Done: Cowork Fleet now has a read-only Hermes tool catalog strip backed by the same local parity manifest as `buddy hermes tools --json`. It shows exact/native/partial/gap counts and prioritized work such as `skill_manage`, `vision_analyze`, and `browser_vision`. Kanban, `send_message`, and `execute_code` exact tool-name gaps have since been closed in the core registry.
+  - Done: Cowork Fleet now has a read-only Hermes tool catalog strip backed by the same local parity manifest as `buddy hermes tools --json`. It shows exact/native/partial/gap counts and prioritized work such as `skill_manage`, `text_to_speech`, and `video_analyze`. Kanban, `send_message`, `execute_code`, `vision_analyze`, and `browser_vision` exact tool-name gaps have since been closed in the core registry.
   - Acceptance:
-    - Cowork shows summary counts and top core gaps: `skill_manage`, `vision_analyze`, `browser_vision`.
+    - Cowork shows summary counts and top core gaps such as `skill_manage`, `text_to_speech`, and `video_analyze`.
     - Platform-only gaps do not hide the prioritized coding-agent work because the bridge orders core priority items first.
   - Verification:
     - `npx tsx src/index.ts hermes tools --json`
@@ -99,15 +99,16 @@ Current measured state:
     - `npm test -- tests/tools/execute-code-real.test.ts --run`
     - `npm test -- tests/tools/execute-code-real.test.ts tests/agent/hermes-tool-parity-local.test.ts tests/commands/hermes-commands.test.ts --run`
 
-- [ ] **Add unified `vision_analyze` / `browser_vision` semantics**
+- [x] **Add unified `vision_analyze` / `browser_vision` semantics**
   - Why: Code Buddy has screenshots/OCR/browser image inventory, but no one-shot Hermes-like vision analysis surface.
-  - Scope: expose a tool that can analyze a local image, screenshot, or active browser viewport and return structured observations.
+  - Done: Code Buddy now exposes exact `vision_analyze` and `browser_vision` prompt tools. `vision_analyze` inspects a real local image with `sharp`, reports dimensions/format/size/dominant color/labels, writes a durable `.codebuddy/vision-analysis/*.json` report, and can attempt local OCR. `browser_vision` opens/captures a real Playwright browser page, writes the screenshot under `.codebuddy/browser-vision`, analyzes that image, and can include accessibility snapshot context.
   - Guardrail: keep image capture local unless user/provider configuration explicitly allows remote vision.
   - Acceptance:
     - Local HTML page -> screenshot -> vision/OCR result -> assertion in test.
-    - Tool parity marks `vision_analyze` and/or `browser_vision` at least native-equivalent.
+    - Tool parity marks `vision_analyze` and `browser_vision` exact.
   - Verification:
-    - Playwright local page test, no network dependency.
+    - `npm test -- tests/tools/vision-analyze-real.test.ts --run`
+    - `npm test -- tests/tools/vision-analyze-real.test.ts tests/agent/hermes-tool-parity-local.test.ts tests/commands/hermes-commands.test.ts --run`
 
 - [x] **Add an exact `send_message` prompt tool over existing channel adapters**
   - Why: channels and scheduled delivery exist, but Hermes has a direct messaging tool surface.
@@ -143,6 +144,6 @@ Current measured state:
 ## Immediate next implementation order
 
 1. Cowork Skill Package Manager panel.
-2. Unified `vision_analyze` / `browser_vision`.
+2. Expose provider/model readiness for Hermes.
 3. Runtime backend inventory.
 4. Optional platform connectors only on demand.

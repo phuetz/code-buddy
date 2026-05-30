@@ -274,6 +274,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Press a keyboard key in the active browser page',
   },
   {
+    name: 'browser_vision',
+    category: 'web',
+    keywords: ['browser', 'vision', 'screenshot', 'analyze', 'playwright', 'hermes'],
+    priority: 8,
+    description: 'Capture and analyze the active browser page with local vision evidence',
+  },
+  {
     name: 'browser_dialog',
     category: 'web',
     keywords: ['browser', 'dialog', 'alert', 'confirm', 'prompt', 'beforeunload', 'modal', 'playwright', 'hermes'],
@@ -534,6 +541,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['ocr', 'text', 'extract', 'image', 'recognize', 'read'],
     priority: 5,
     description: 'Extract text from images'
+  },
+  {
+    name: 'vision_analyze',
+    category: 'media',
+    keywords: ['vision', 'image', 'analyze', 'metadata', 'ocr', 'hermes'],
+    priority: 8,
+    description: 'Analyze a local image with metadata, colors, labels, and optional OCR evidence',
   },
   {
     name: 'clipboard',

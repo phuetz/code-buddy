@@ -136,6 +136,8 @@ export {
 
 // Tool Adapters - Vision (ocr_extract, image_analyze)
 export {
+  VisionAnalyzeTool,
+  BrowserVisionTool,
   OcrExtractTool,
   ImageAnalyzeTool,
   CameraSnapshotTool,

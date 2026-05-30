@@ -6,9 +6,271 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
+import fs from 'fs/promises';
+import path from 'path';
 import { OcrTool } from '../vision/ocr-tool.js';
 import { ImageProcessorTool } from '../vision/image-processor.js';
+import {
+  analyzeVisionImage,
+  type VisionAnalysisOptions,
+} from '../vision/vision-analysis.js';
 import { captureCameraSnapshot } from '../../companion/camera.js';
+import { BrowserExecuteTool } from './misc-tools.js';
+
+// ============================================================================
+// VisionAnalyzeTool (Hermes vision_analyze parity)
+// ============================================================================
+
+export class VisionAnalyzeTool implements ITool {
+  readonly name = 'vision_analyze';
+  readonly description = 'Analyze a local image with real metadata, color, and optional local OCR evidence.';
+
+  constructor(private readonly options: VisionAnalysisOptions = {}) {}
+
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    try {
+      const result = await analyzeVisionImage(requiredString(input, 'image_path'), {
+        ...this.options,
+        rootDir: this.options.rootDir ?? context?.cwd,
+        includeOcr: input.include_ocr === true,
+        ocrLanguage: optionalString(input, 'ocr_language') ?? 'eng',
+        source: 'image',
+      });
+      return {
+        success: true,
+        output: JSON.stringify(result, null, 2),
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          image_path: {
+            type: 'string',
+            description: 'Absolute or workspace-relative path to the image file to inspect.',
+          },
+          include_ocr: {
+            type: 'boolean',
+            description: 'Attempt local OCR and include the result or OCR error in the report. Default false.',
+          },
+          ocr_language: {
+            type: 'string',
+            description: 'OCR language code when include_ocr is true. Default eng.',
+          },
+        },
+        required: ['image_path'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+    const data = input as Record<string, unknown>;
+    if (typeof data.image_path !== 'string' || !data.image_path.trim()) {
+      return { valid: false, errors: ['image_path is required'] };
+    }
+    return { valid: true };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'media' as ToolCategoryType,
+      keywords: ['vision', 'image', 'analyze', 'metadata', 'ocr', 'hermes'],
+      priority: 8,
+      modifiesFiles: true,
+      makesNetworkRequests: false,
+    };
+  }
+
+  isAvailable(): boolean { return true; }
+}
+
+// ============================================================================
+// BrowserVisionTool (Hermes browser_vision parity)
+// ============================================================================
+
+export class BrowserVisionTool implements ITool {
+  readonly name = 'browser_vision';
+  readonly description = 'Capture the active browser page and analyze the screenshot with local vision evidence.';
+
+  private readonly browser = new BrowserExecuteTool();
+
+  constructor(private readonly options: VisionAnalysisOptions = {}) {}
+
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    try {
+      const rootDir = path.resolve(this.options.rootDir ?? context?.cwd ?? process.cwd());
+      const url = optionalString(input, 'url');
+      const launched = await this.browser.execute({
+        action: 'launch',
+        headless: input.headless !== false,
+      });
+      if (!launched.success) return launched;
+
+      if (url) {
+        const navigated = await this.browser.execute({
+          action: 'navigate',
+          url,
+          waitUntil: optionalString(input, 'wait_until') ?? 'domcontentloaded',
+          timeout: typeof input.timeout_ms === 'number' ? input.timeout_ms : undefined,
+        });
+        if (!navigated.success) return navigated;
+      }
+
+      const screenshotDir = path.join(rootDir, '.codebuddy', 'browser-vision');
+      await fs.mkdir(screenshotDir, { recursive: true });
+      const screenshotPath = path.join(
+        screenshotDir,
+        `browser-vision-${sanitizeFilename(this.options.createId?.() ?? String(Date.now()))}.png`,
+      );
+
+      const screenshot = await this.browser.execute({
+        action: 'screenshot',
+        fullPage: input.full_page === true,
+        format: 'png',
+        outputPath: screenshotPath,
+      });
+      if (!screenshot.success) return screenshot;
+
+      const analysis = await analyzeVisionImage(screenshotPath, {
+        ...this.options,
+        rootDir,
+        includeOcr: input.include_ocr === true,
+        ocrLanguage: optionalString(input, 'ocr_language') ?? 'eng',
+        source: 'browser_screenshot',
+        sourceUrl: url,
+        reportPrefix: 'browser-vision',
+      });
+
+      let snapshot: string | undefined;
+      if (input.include_snapshot !== false) {
+        const snap = await this.browser.execute({
+          action: 'snapshot',
+          interactiveOnly: input.interactive_only === true,
+          maxElements: typeof input.max_elements === 'number' ? input.max_elements : 80,
+        });
+        if (snap.success) {
+          snapshot = snap.output;
+        }
+      }
+
+      const result = {
+        kind: 'browser_vision_result',
+        ok: true,
+        url,
+        screenshotPath,
+        analysis,
+        ...(snapshot ? { snapshot } : {}),
+      };
+
+      return {
+        success: true,
+        output: JSON.stringify(result, null, 2),
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'Optional URL to navigate before capture. Supports file:, data:, http:, and https: through the browser tool.',
+          },
+          full_page: {
+            type: 'boolean',
+            description: 'Capture the full page instead of the viewport. Default false.',
+          },
+          include_snapshot: {
+            type: 'boolean',
+            description: 'Include an accessibility snapshot alongside image evidence. Default true.',
+          },
+          include_ocr: {
+            type: 'boolean',
+            description: 'Attempt local OCR on the screenshot. Default false.',
+          },
+          ocr_language: {
+            type: 'string',
+            description: 'OCR language code when include_ocr is true. Default eng.',
+          },
+          headless: {
+            type: 'boolean',
+            description: 'Run the Playwright browser headless. Default true.',
+          },
+          wait_until: {
+            type: 'string',
+            enum: ['load', 'domcontentloaded', 'networkidle'],
+            description: 'Navigation completion condition when url is provided. Default domcontentloaded.',
+          },
+          timeout_ms: {
+            type: 'number',
+            description: 'Navigation timeout in milliseconds.',
+          },
+          max_elements: {
+            type: 'number',
+            description: 'Maximum elements to include in the optional snapshot.',
+          },
+          interactive_only: {
+            type: 'boolean',
+            description: 'Limit the optional snapshot to interactive elements only. Default false.',
+          },
+        },
+        required: [],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+    return { valid: true };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'web' as ToolCategoryType,
+      keywords: ['browser', 'vision', 'screenshot', 'analyze', 'playwright', 'hermes'],
+      priority: 8,
+      modifiesFiles: true,
+      makesNetworkRequests: true,
+    };
+  }
+
+  isAvailable(): boolean { return true; }
+
+  async dispose(): Promise<void> {
+    await this.browser.execute({ action: 'close' }).catch(() => undefined);
+    await this.browser.dispose?.();
+  }
+}
 
 // ============================================================================
 // OcrExtractTool
@@ -232,10 +494,29 @@ export class CameraSnapshotTool implements ITool {
 // Factory Function
 // ============================================================================
 
-export function createVisionTools(): ITool[] {
+export function createVisionTools(options: VisionAnalysisOptions = {}): ITool[] {
   return [
+    new VisionAnalyzeTool(options),
+    new BrowserVisionTool(options),
     new OcrExtractTool(),
     new ImageAnalyzeTool(),
     new CameraSnapshotTool(),
   ];
+}
+
+function requiredString(data: Record<string, unknown>, key: string): string {
+  const value = optionalString(data, key);
+  if (!value) {
+    throw new Error(`${key} is required`);
+  }
+  return value;
+}
+
+function optionalString(data: Record<string, unknown>, key: string): string | undefined {
+  const value = data[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function sanitizeFilename(id: string): string {
+  return id.trim().replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || String(Date.now());
 }

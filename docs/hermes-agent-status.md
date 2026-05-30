@@ -5,7 +5,7 @@ Upstream reference: <https://github.com/nousresearch/hermes-agent> (MIT, Nous Re
 
 Latest official parity audit: [`hermes-agent-official-parity-audit-2026-05-30.md`](hermes-agent-official-parity-audit-2026-05-30.md).
 Prioritized implementation backlog: [`hermes-agent-next-todo.md`](hermes-agent-next-todo.md).
-That audit was refreshed against upstream `NousResearch/hermes-agent` at `5f84c914` and
+That audit was refreshed against upstream `NousResearch/hermes-agent` at `5921d667` and
 concludes that Code Buddy has substantial Hermes-inspired coverage but **not**
 full feature-for-feature official Hermes parity.
 
@@ -112,6 +112,13 @@ change-control surface.
 | Read-only peer tool invoke (gated) | `src/fleet/peer-tool-bridge.ts`, `src/fleet/permissions.ts` | done |
 | Hermes `execute_code` subprocess boundary | `src/tools/execute-code-runner.ts`, `src/tools/registry/execute-code-tools.ts`, `tests/tools/execute-code-real.test.ts` | done — exact prompt tool name, real local subprocess, timeout, and `.codebuddy/execute-code/<run-id>` artifacts; generated-code-to-tool RPC remains intentionally separate |
 | Subagents / swarm | `/agents`, `/swarm`, `/team` | done |
+
+### Vision and browser inspection
+
+| Sub-capability | Where | Status |
+|---|---|---|
+| Hermes `vision_analyze` local image inspection | `src/tools/vision/vision-analysis.ts`, `src/tools/registry/vision-tools.ts`, `tests/tools/vision-analyze-real.test.ts` | done — exact prompt tool name, real image metadata via `sharp`, dominant color/labels, optional local OCR attempt, durable `.codebuddy/vision-analysis/*.json` report |
+| Hermes `browser_vision` page screenshot analysis | `src/tools/registry/vision-tools.ts`, `src/codebuddy/tool-definitions/browser-tools.ts`, `tests/tools/vision-analyze-real.test.ts` | done — exact prompt tool name, real Playwright screenshot under `.codebuddy/browser-vision`, local analysis, optional accessibility snapshot context; remote semantic vision remains opt-in/future provider work |
 
 ### Runs everywhere / gateway / mobile
 

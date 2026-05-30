@@ -303,6 +303,33 @@ export const OCR_TOOL: CodeBuddyTool = {
   }
 };
 
+// Hermes Vision Analyze Tool - one-shot local image inspection
+export const VISION_ANALYZE_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "vision_analyze",
+    description: "Analyze a local image with real metadata, dominant color, labels, and optional local OCR evidence.",
+    parameters: {
+      type: "object",
+      properties: {
+        image_path: {
+          type: "string",
+          description: "Absolute or workspace-relative path to the image file"
+        },
+        include_ocr: {
+          type: "boolean",
+          description: "Attempt local OCR and include text or OCR errors in the report (default: false)"
+        },
+        ocr_language: {
+          type: "string",
+          description: "OCR language code when include_ocr is true (default: eng)"
+        }
+      },
+      required: ["image_path"]
+    }
+  }
+};
+
 // Diagram Tool - Generate diagrams
 export const DIAGRAM_TOOL: CodeBuddyTool = {
   type: "function",
@@ -632,6 +659,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   CLIPBOARD_TOOL,
   DOCUMENT_TOOL,
   OCR_TOOL,
+  VISION_ANALYZE_TOOL,
   DIAGRAM_TOOL,
   EXPORT_TOOL,
   QR_TOOL,

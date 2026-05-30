@@ -110,9 +110,8 @@ const OFFICIAL_HERMES_TOOLS: HermesOfficialToolReference[] = [
     category: 'media',
     officialSource: OFFICIAL_SOURCE_TOOLSETS,
     equivalentCodeBuddyTools: ['ocr', 'screenshot', 'camera_snapshot'],
-    equivalenceStatus: 'partial',
-    notes: 'Code Buddy has OCR, screenshot, and camera primitives, but not a one-to-one vision_analyze prompt tool.',
-    nextWork: 'Add or document an image_analyze prompt tool if full Hermes vision parity is desired.',
+    notes: 'Code Buddy exposes an exact vision_analyze prompt tool for local image metadata, dominant color, labels, persisted reports, and optional local OCR evidence.',
+    nextWork: 'Add model-backed semantic captioning only when provider configuration explicitly allows remote vision.',
   },
   {
     name: 'image_generate',
@@ -208,8 +207,7 @@ const OFFICIAL_HERMES_TOOLS: HermesOfficialToolReference[] = [
     category: 'browser',
     officialSource: OFFICIAL_SOURCE_TOOLSETS,
     equivalentCodeBuddyTools: ['browser', 'screenshot'],
-    equivalenceStatus: 'partial',
-    notes: 'Screenshots and browser evidence exist; exact browser_vision backend parity is not established.',
+    notes: 'Code Buddy exposes an exact browser_vision prompt tool that captures a real Playwright screenshot, analyzes it locally, and can include accessibility snapshot context.',
   },
   {
     name: 'browser_console',
@@ -645,7 +643,7 @@ export function buildHermesToolParityManifest(
     officialSource: {
       repository: 'https://github.com/NousResearch/hermes-agent',
       docs: 'https://hermes-agent.nousresearch.com/docs/reference/tools-reference',
-      inspectedCommit: '5f84c914',
+      inspectedCommit: '5921d667',
       latestTagObserved: 'v2026.5.29.2',
       sourceFiles: [
         'toolsets.py::_HERMES_CORE_TOOLS',

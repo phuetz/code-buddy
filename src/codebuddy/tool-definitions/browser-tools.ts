@@ -652,6 +652,65 @@ state may have changed.`,
   },
 };
 
+export const BROWSER_VISION_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'browser_vision',
+    description: `Capture the active browser page and return local vision evidence.
+
+This Hermes-compatible tool can optionally navigate first, capture a real
+Playwright screenshot, analyze the image metadata/colors locally, and include
+an accessibility snapshot for text/element context. OCR is optional and local.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'Optional URL to navigate before capture. Supports file:, data:, http:, and https: through the browser tool.',
+        },
+        full_page: {
+          type: 'boolean',
+          description: 'Capture the full page instead of the viewport. Default false.',
+        },
+        include_snapshot: {
+          type: 'boolean',
+          description: 'Include an accessibility snapshot alongside image evidence. Default true.',
+        },
+        include_ocr: {
+          type: 'boolean',
+          description: 'Attempt local OCR on the screenshot. Default false.',
+        },
+        ocr_language: {
+          type: 'string',
+          description: 'OCR language code when include_ocr is true. Default eng.',
+        },
+        headless: {
+          type: 'boolean',
+          description: 'Run the Playwright browser headless. Default true.',
+        },
+        wait_until: {
+          type: 'string',
+          enum: ['load', 'domcontentloaded', 'networkidle'],
+          description: 'Navigation completion condition when url is provided. Default domcontentloaded.',
+        },
+        timeout_ms: {
+          type: 'number',
+          description: 'Navigation timeout in milliseconds.',
+        },
+        max_elements: {
+          type: 'number',
+          description: 'Maximum elements to include in the optional snapshot.',
+        },
+        interactive_only: {
+          type: 'boolean',
+          description: 'Limit the optional snapshot to interactive elements only. Default false.',
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 /**
  * Internet Scout Run Tool
  *
@@ -808,6 +867,7 @@ export const BROWSER_TOOLS: CodeBuddyTool[] = [
   BROWSER_SCROLL_TOOL,
   BROWSER_BACK_TOOL,
   BROWSER_PRESS_TOOL,
+  BROWSER_VISION_TOOL,
   BROWSER_CONSOLE_TOOL,
   BROWSER_GET_IMAGES_TOOL,
   BROWSER_DIALOG_TOOL,

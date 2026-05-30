@@ -22,7 +22,13 @@ describe('local Hermes tool parity manifest', () => {
       }),
       expect.objectContaining({
         name: 'vision_analyze',
-        status: 'partial',
+        status: 'exact',
+        detectedCodeBuddyTools: expect.arrayContaining(['vision_analyze']),
+      }),
+      expect.objectContaining({
+        name: 'browser_vision',
+        status: 'exact',
+        detectedCodeBuddyTools: expect.arrayContaining(['browser_vision']),
       }),
       expect.objectContaining({
         name: 'kanban_show',
