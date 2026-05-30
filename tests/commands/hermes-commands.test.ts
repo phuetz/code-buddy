@@ -76,6 +76,57 @@ describe('Hermes CLI commands', () => {
     expect(output).toContain('Do not pretend to be the external Hermes Python runtime');
   });
 
+  it('prints an offline Hermes prompt-size diagnostic', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync(['node', 'test', 'hermes', 'prompt-size', 'safe', '--json']);
+
+    const output = JSON.parse(getLogOutput()) as {
+      kind: string;
+      schemaVersion: number;
+      dispatchProfile: string;
+      toolsetId: string;
+      source: string;
+      totals: { bytes: number; chars: number; lines: number };
+      tools: {
+        totalBuiltinTools: number;
+        activeToolSchemas: number;
+        filteredToolSchemas: number;
+        activeToolNames: string[];
+        filteredToolNames: string[];
+        largestSchemas: Array<{ name: string; bytes: number }>;
+      };
+      sections: Array<{ id: string; bytes: number; chars: number; lines: number }>;
+      notes: string[];
+    };
+
+    expect(output.kind).toBe('hermes_prompt_size_diagnostic');
+    expect(output.schemaVersion).toBe(1);
+    expect(output.dispatchProfile).toBe('safe');
+    expect(output.toolsetId).toBe('fleet.hermes.safe');
+    expect(output.source).toBe('offline-built-in');
+    expect(output.totals.bytes).toBeGreaterThan(0);
+    expect(output.totals.chars).toBeGreaterThan(0);
+    expect(output.totals.lines).toBeGreaterThan(0);
+    expect(output.tools.totalBuiltinTools).toBeGreaterThan(0);
+    expect(output.tools.activeToolSchemas).toBeGreaterThan(0);
+    expect(output.tools.filteredToolSchemas).toBeGreaterThan(0);
+    expect(output.tools.filteredToolNames).toContain('bash');
+    expect(output.tools.activeToolNames).not.toContain('bash');
+    expect(output.tools.largestSchemas[0]?.bytes).toBeGreaterThan(0);
+    expect(output.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'systemPrompt', bytes: expect.any(Number) }),
+        expect.objectContaining({ id: 'profile', bytes: expect.any(Number) }),
+        expect.objectContaining({ id: 'toolSchemas', bytes: expect.any(Number) }),
+        expect.objectContaining({ id: 'skillsIndex', bytes: expect.any(Number) }),
+        expect.objectContaining({ id: 'memoryFootprint', bytes: expect.any(Number) }),
+      ]),
+    );
+    expect(output.notes.join(' ')).toContain('Runs offline');
+  });
+
   it('prints JSON for the Hermes integration plan', async () => {
     const program = createProgram();
     registerHermesCommands(program);

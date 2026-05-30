@@ -7,11 +7,14 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import type { Command } from 'commander';
 
 import {
   FLEET_DISPATCH_PROFILES,
+  buildDispatchToolFilter,
+  buildHermesToolsetDescriptor,
   normalizeDispatchProfile,
 } from '../../fleet/dispatch-profile.js';
 import {
@@ -25,11 +28,73 @@ import {
   buildHermesHookLifecycleManifest,
   renderHermesHookLifecycleManifest,
 } from '../../hooks/hermes-lifecycle-hooks.js';
+import type { CodeBuddyTool } from '../../codebuddy/client.js';
+import {
+  CORE_TOOLS,
+  MORPH_EDIT_TOOL,
+  isMorphEnabled,
+  SEARCH_TOOLS,
+  TODO_TOOLS,
+  WEB_TOOLS,
+  ADVANCED_TOOLS,
+  MULTIMODAL_TOOLS,
+  COMPUTER_CONTROL_TOOLS,
+  BROWSER_TOOLS,
+  CANVAS_TOOLS,
+  AGENT_TOOLS,
+  FIRECRAWL_TOOLS,
+  LSP_TOOLS,
+  SECRETS_TOOLS,
+  ADVISOR_TOOLS,
+  ASK_USER_QUESTION_TOOLS,
+  EXIT_PLAN_MODE_TOOLS,
+  CODEBASE_REPLACE_TOOLS,
+  SESSION_TOOLS,
+  GITNEXUS_TOOLS,
+} from '../../codebuddy/tool-definitions/index.js';
+import { FLEET_TOOLS } from '../../codebuddy/fleet-tool-defs.js';
+import { filterTools } from '../../utils/tool-filter.js';
 
 interface HermesCommandOptions {
   json?: boolean;
   markdown?: boolean;
   planOutput?: string;
+}
+
+interface HermesPromptSizeSection {
+  id: string;
+  label: string;
+  bytes: number;
+  chars: number;
+  lines: number;
+}
+
+interface HermesPromptSizeDiagnostic {
+  kind: 'hermes_prompt_size_diagnostic';
+  schemaVersion: 1;
+  generatedAt: string;
+  requestedProfile: string;
+  dispatchProfile: ReturnType<typeof normalizeDispatchProfile>;
+  toolsetId: string;
+  source: 'offline-built-in';
+  totals: {
+    bytes: number;
+    chars: number;
+    lines: number;
+  };
+  tools: {
+    totalBuiltinTools: number;
+    activeToolSchemas: number;
+    filteredToolSchemas: number;
+    activeToolNames: string[];
+    filteredToolNames: string[];
+    largestSchemas: Array<{
+      name: string;
+      bytes: number;
+    }>;
+  };
+  sections: HermesPromptSizeSection[];
+  notes: string[];
 }
 
 type HermesPlanOutputFormat = 'text' | 'json' | 'markdown';
@@ -119,6 +184,225 @@ function writeHermesPlanOutput(outputPath: string, content: string): void {
   fs.writeFileSync(outputPath, content, 'utf-8');
 }
 
+function byteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8');
+}
+
+function countLines(value: string): number {
+  if (value.length === 0) return 0;
+  return value.split(/\r\n|\r|\n/).length;
+}
+
+function sectionFromText(id: string, label: string, text: string): HermesPromptSizeSection {
+  return {
+    id,
+    label,
+    bytes: byteLength(text),
+    chars: text.length,
+    lines: countLines(text),
+  };
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+function collectOfflineBuiltinTools(): CodeBuddyTool[] {
+  const groups: CodeBuddyTool[][] = [
+    CORE_TOOLS,
+    ...(isMorphEnabled() ? [[MORPH_EDIT_TOOL]] : []),
+    SEARCH_TOOLS,
+    TODO_TOOLS,
+    WEB_TOOLS,
+    ADVANCED_TOOLS,
+    MULTIMODAL_TOOLS,
+    COMPUTER_CONTROL_TOOLS,
+    BROWSER_TOOLS,
+    CANVAS_TOOLS,
+    AGENT_TOOLS,
+    ...(process.env.FIRECRAWL_API_KEY ? [FIRECRAWL_TOOLS] : []),
+    LSP_TOOLS,
+    SECRETS_TOOLS,
+    ADVISOR_TOOLS,
+    ASK_USER_QUESTION_TOOLS,
+    EXIT_PLAN_MODE_TOOLS,
+    CODEBASE_REPLACE_TOOLS,
+    SESSION_TOOLS,
+    FLEET_TOOLS,
+    GITNEXUS_TOOLS,
+  ];
+  const byName = new Map<string, CodeBuddyTool>();
+  for (const tool of groups.flat()) {
+    if (!byName.has(tool.function.name)) {
+      byName.set(tool.function.name, tool);
+    }
+  }
+  return [...byName.values()];
+}
+
+function readFileSizeIfPresent(filePath: string): number {
+  try {
+    const stat = fs.statSync(filePath);
+    return stat.isFile() ? stat.size : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function buildLocalMemoryFootprint(cwd: string): Record<string, number> {
+  return {
+    projectMemoryMarkdownBytes: readFileSizeIfPresent(path.join(cwd, '.codebuddy', 'CODEBUDDY_MEMORY.md')),
+    projectUserModelBytes: readFileSizeIfPresent(path.join(cwd, '.codebuddy', 'user-model.json')),
+    userMemoryMarkdownBytes: readFileSizeIfPresent(path.join(os.homedir(), '.codebuddy', 'memory.md')),
+  };
+}
+
+function buildInstalledSkillsIndexFootprint(): Record<string, unknown> {
+  const lockfilePath = path.join(os.homedir(), '.codebuddy', 'hub', 'lock.json');
+  try {
+    if (!fs.existsSync(lockfilePath)) {
+      return { lockfilePath, installedSkillCount: 0, enabledSkillCount: 0, skills: [] };
+    }
+    const parsed = JSON.parse(fs.readFileSync(lockfilePath, 'utf-8')) as {
+      skills?: Record<string, { version?: string; enabled?: boolean; source?: string; path?: string }>;
+    };
+    const skills = Object.entries(parsed.skills ?? {})
+      .map(([name, skill]) => ({
+        name,
+        version: skill.version ?? 'unknown',
+        source: skill.source ?? 'unknown',
+        enabled: skill.enabled !== false,
+        path: skill.path ?? '',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      lockfilePath,
+      installedSkillCount: skills.length,
+      enabledSkillCount: skills.filter((skill) => skill.enabled).length,
+      skills,
+    };
+  } catch (err) {
+    return {
+      lockfilePath,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export function buildHermesPromptSizeDiagnostic(
+  profileArg: string = 'balanced',
+  cwd: string = process.cwd(),
+): HermesPromptSizeDiagnostic {
+  const dispatchProfile = normalizeDispatchProfile(profileArg);
+  const systemPrompt = buildHermesAgentSystemPrompt(dispatchProfile);
+  const profile = buildHermesAgentProfile(dispatchProfile);
+  const toolset = buildHermesToolsetDescriptor(dispatchProfile);
+  const plan = buildHermesIntegrationPlan(dispatchProfile);
+  const allTools = collectOfflineBuiltinTools();
+  const profileFilter = buildDispatchToolFilter(
+    dispatchProfile,
+    allTools.map((tool) => tool.function.name),
+  );
+  const filterResult = filterTools(allTools, profileFilter);
+  const activeTools = filterResult.tools;
+  const toolSchemas = stableJson(activeTools);
+  const skillsIndex = stableJson(buildInstalledSkillsIndexFootprint());
+  const memoryFootprint = stableJson(buildLocalMemoryFootprint(cwd));
+  const profileJson = stableJson(profile);
+  const toolsetJson = stableJson(toolset);
+  const planJson = stableJson(plan);
+
+  const sections = [
+    sectionFromText('systemPrompt', 'Hermes system prompt', systemPrompt),
+    sectionFromText('profile', 'Hermes profile JSON', profileJson),
+    sectionFromText('toolset', 'Hermes toolset descriptor JSON', toolsetJson),
+    sectionFromText('integrationPlan', 'Hermes integration plan JSON', planJson),
+    sectionFromText('skillsIndex', 'Installed skills index footprint', skillsIndex),
+    sectionFromText('memoryFootprint', 'Memory/profile file footprint', memoryFootprint),
+    sectionFromText('toolSchemas', 'Active built-in tool schemas JSON', toolSchemas),
+  ];
+  const totals = sections.reduce(
+    (acc, section) => ({
+      bytes: acc.bytes + section.bytes,
+      chars: acc.chars + section.chars,
+      lines: acc.lines + section.lines,
+    }),
+    { bytes: 0, chars: 0, lines: 0 },
+  );
+
+  const largestSchemas = activeTools
+    .map((tool) => ({
+      name: tool.function.name,
+      bytes: byteLength(stableJson(tool)),
+    }))
+    .sort((a, b) => b.bytes - a.bytes)
+    .slice(0, 10);
+
+  return {
+    kind: 'hermes_prompt_size_diagnostic',
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    requestedProfile: profileArg,
+    dispatchProfile,
+    toolsetId: `fleet.hermes.${dispatchProfile}`,
+    source: 'offline-built-in',
+    totals,
+    tools: {
+      totalBuiltinTools: allTools.length,
+      activeToolSchemas: activeTools.length,
+      filteredToolSchemas: filterResult.filtered.length,
+      activeToolNames: activeTools.map((tool) => tool.function.name),
+      filteredToolNames: filterResult.filtered,
+      largestSchemas,
+    },
+    sections,
+    notes: [
+      'Runs offline: no LLM call, no MCP startup, no remote provider request.',
+      'Tool schemas are built-in Code Buddy definitions after Hermes dispatch-profile filtering.',
+      'Skills and memory are reported as local footprint metadata only; their content is not printed.',
+    ],
+  };
+}
+
+function renderHermesPromptSizeDiagnostic(diagnostic: HermesPromptSizeDiagnostic): string {
+  const lines = [
+    `Hermes prompt size (${diagnostic.dispatchProfile}, ${diagnostic.toolsetId}):`,
+    `  Total: ${diagnostic.totals.bytes} bytes, ${diagnostic.totals.chars} chars, ${diagnostic.totals.lines} lines`,
+    `  Tool schemas: ${diagnostic.tools.activeToolSchemas}/${diagnostic.tools.totalBuiltinTools} active (${diagnostic.tools.filteredToolSchemas} filtered)`,
+    `  Source: ${diagnostic.source}`,
+    '',
+    'Sections:',
+  ];
+
+  for (const section of diagnostic.sections) {
+    lines.push(
+      `  ${section.id}: ${section.bytes} bytes, ${section.chars} chars, ${section.lines} lines - ${section.label}`,
+    );
+  }
+
+  lines.push('');
+  lines.push('Largest active tool schemas:');
+  for (const tool of diagnostic.tools.largestSchemas) {
+    lines.push(`  ${tool.name}: ${tool.bytes} bytes`);
+  }
+
+  if (diagnostic.tools.filteredToolNames.length > 0) {
+    lines.push('');
+    lines.push(`Filtered by Hermes profile: ${diagnostic.tools.filteredToolNames.slice(0, 20).join(', ')}`);
+    if (diagnostic.tools.filteredToolNames.length > 20) {
+      lines.push(`  (+${diagnostic.tools.filteredToolNames.length - 20} more)`);
+    }
+  }
+
+  lines.push('');
+  lines.push('Notes:');
+  for (const note of diagnostic.notes) {
+    lines.push(`  - ${note}`);
+  }
+
+  return lines.join('\n');
+}
+
 export function registerHermesCommands(program: Command): void {
   const hermes = program
     .command('hermes')
@@ -166,6 +450,22 @@ export function registerHermesCommands(program: Command): void {
       }
       console.log('\nUse with: buddy --agent hermes');
       console.log('');
+    });
+
+  hermes
+    .command('prompt-size')
+    .description('Show an offline byte breakdown of the Hermes prompt and active tool schemas')
+    .argument('[dispatchProfile]', `default Fleet profile (${FLEET_DISPATCH_PROFILES.join(', ')})`, 'balanced')
+    .option('--json', 'output JSON')
+    .action((profileArg: string, options: HermesCommandOptions) => {
+      const diagnostic = buildHermesPromptSizeDiagnostic(profileArg);
+
+      if (options.json) {
+        console.log(stableJson(diagnostic));
+        return;
+      }
+
+      console.log(renderHermesPromptSizeDiagnostic(diagnostic));
     });
 
   hermes

@@ -41,18 +41,20 @@ channels, browser tooling, MCP, and run trajectories. The local Hermes surface
 is explicitly a native TypeScript/Fleet mapping, not a vendored Hermes runtime
 (`buddy hermes profile/plan/doctor/hooks`).
 
-The missing pieces are mostly **exact upstream product surfaces**:
-`hermes prompt-size`, full official gateway/toolset matrix, complete browser
-backend matrix, Nous Portal Tool Gateway, all memory providers, Kanban tools,
-OpenClaw migration, and several research/runtime backends.
+The missing pieces are mostly **exact upstream product surfaces**: full
+official gateway/toolset matrix, complete browser backend matrix, Nous Portal
+Tool Gateway, all memory providers, Kanban tools, OpenClaw migration, and
+several research/runtime backends. The first concrete gap from this audit,
+`hermes prompt-size`, now has a native Code Buddy equivalent:
+`buddy hermes prompt-size`.
 
 ## Parity matrix
 
 | Area | Official Hermes surface | Code Buddy evidence | Status | Notes |
 |---|---|---|---|---|
 | Agent identity | Hermes product agent with its own Python runtime | `src/agent/hermes-agent-profile.ts`, `src/commands/cli/hermes-commands.ts` | Partial | Code Buddy maps Hermes ideas to native primitives; it does not vendor or run upstream Hermes Python. |
-| CLI/TUI | Full terminal TUI, `hermes chat`, `hermes model`, `hermes tools`, `hermes prompt-size`, etc. | Main CLI, slash commands, `buddy hermes *`, `buddy tools *`, `buddy cron *` | Partial | No exact `hermes model` provider setup wizard or `prompt-size` equivalent found. |
-| Prompt-size diagnostic | `hermes prompt-size` offline byte breakdown for system prompt and tool schemas | Token counters and context handlers exist; no `prompt-size` command found | Gap | Best first implementation candidate: small, deterministic, useful for local LLM UX. |
+| CLI/TUI | Full terminal TUI, `hermes chat`, `hermes model`, `hermes tools`, `hermes prompt-size`, etc. | Main CLI, slash commands, `buddy hermes *`, `buddy tools *`, `buddy cron *`, `buddy hermes prompt-size` | Partial | No exact `hermes model` provider setup wizard found; prompt-size now has a native Hermes-style equivalent. |
+| Prompt-size diagnostic | `hermes prompt-size` offline byte breakdown for system prompt and tool schemas | `buddy hermes prompt-size [profile] [--json]`; `tests/commands/hermes-commands.test.ts` | Covered/partial | Runs offline and reports Hermes prompt, profile/toolset/plan JSON, local skills/memory footprint metadata, active tool schemas, and profile-filtered tools. It is native Code Buddy output, not byte-for-byte upstream Hermes output. |
 | Providers/models | Nous Portal, OpenRouter, OpenAI/Codex, Copilot, Anthropic, Gemini, Hugging Face, Novita, z.ai, Kimi, MiniMax, Bedrock, Azure, local/custom, etc. | Code Buddy provider routing, OpenAI-compatible client, Gemini native path, model tools config | Covered/partial | Strong coverage, but exact provider list and setup flows differ. |
 | Toolsets | Core/composite/platform/dynamic toolsets; per-platform `hermes-cli`, `hermes-discord`, `hermes-feishu`, etc. | Fleet dispatch profiles and `fleet.hermes.<profile>` descriptors; active tool filter enforcement | Partial | Code Buddy has useful Hermes-style filters, not the full official per-platform toolset catalog. |
 | Built-in tools | Browser, file, terminal/process, web, Home Assistant, Spotify, Kanban, `execute_code`, `cronjob`, `session_search`, skills, TTS, image/video, vision, messaging, MOA, X search, Yuanbao, MCP | Code Buddy has many native tools plus Firecrawl, browser/CDP, sessions, skills, Fleet, image/vision/voice pieces | Partial | Not a one-to-one tool-name or capability set; no proof for Home Assistant, Spotify, Yuanbao, `execute_code` RPC, or Kanban tools. |
@@ -72,18 +74,13 @@ OpenClaw migration, and several research/runtime backends.
 
 ## Highest-value next work
 
-1. Add a deterministic `buddy prompt-size` or `buddy hermes prompt-size`.
-   - It should report byte/token estimates for the resolved system prompt,
-     active skills, memory/profile/context blocks, and active model-facing tool
-     schemas.
-   - It should run offline and have a CLI unit test.
-2. Convert this audit into a machine-checkable parity manifest.
+1. Convert this audit into a machine-checkable parity manifest.
    - Each Hermes feature row should have local evidence paths, a status, and a
      verification command.
-3. Close the user-facing gaps first: provider/model setup clarity, prompt size,
-   gateway status, cron pause/resume/update/run, and Cowork screens for the
-   active Hermes/Fleet toolset.
-4. Treat deep parity items as optional product decisions: Nous Portal, Camofox,
+2. Close the user-facing gaps first: provider/model setup clarity, gateway
+   status, cron pause/resume/update/run, and Cowork screens for the active
+   Hermes/Fleet toolset.
+3. Treat deep parity items as optional product decisions: Nous Portal, Camofox,
    full OpenClaw migration, official Kanban, all memory providers, Modal/Daytona.
 
 ## Commands used locally
@@ -97,6 +94,8 @@ OpenClaw migration, and several research/runtime backends.
 - `rg --files src/channels`
 - `rg -n "Mem0|Honcho|Supermemory|OpenViking|Hindsight|Holographic|RetainDB|ByteRover" src tests docs cowork`
 - `rg -n "execute_code|delegate_task|mixture_of_agents|session_search|skill_manage|skills_list|skill_view|send_message|text_to_speech|image_generate|video_generate|vision_analyze|video_analyze|computer_use|homeassistant|spotify|x_search|kanban_" src/codebuddy src/tools src/commands tests docs`
+- `npm test -- tests/commands/hermes-commands.test.ts --run`
+- `npx tsx src/index.ts hermes prompt-size safe --json`
 
 ## Caveats
 

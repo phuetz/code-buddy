@@ -23,7 +23,7 @@ The Hermes agent is a **built-in custom agent** — run it with `buddy --agent h
 |---|---|---|
 | Built-in agent registration | `src/agent/custom/custom-agent-loader.ts` (`BUILT_IN_AGENTS`, ~L132) | `id: hermes`, `disabledTools: [git_push, delete_file]`, `fleetDispatchProfile: balanced`, `requireExplicitDispatchProfile: true`; a user `hermes.toml` overrides it |
 | Profile + system prompt | `src/agent/hermes-agent-profile.ts` | `buildHermesAgentProfile`, `buildHermesAgentSystemPrompt`, `buildHermesIntegrationPlan` |
-| CLI surface | `src/commands/cli/hermes-commands.ts` (registered `src/index.ts` ~L2389) | `buddy hermes plan / profile / doctor / hooks` |
+| CLI surface | `src/commands/cli/hermes-commands.ts` (registered `src/index.ts` ~L2389) | `buddy hermes plan / profile / doctor / hooks / prompt-size` |
 | Diagnostics | `src/agent/hermes-agent-diagnostics.ts` | `buddy hermes doctor <profile>` |
 | Lifecycle hooks | `src/hooks/hermes-lifecycle-hooks.ts` | canonical manifest across Code Buddy hook systems |
 | Tests | `tests/agent/custom-agent-loader-hermes.test.ts`, `tests/agent/hermes-agent-profile.test.ts`, `tests/commands/hermes-commands.test.ts`, `tests/hooks/hermes-lifecycle-hooks.test.ts`, `tests/agent/hermes-agent-diagnostics.test.ts` | 20 specs, green |
