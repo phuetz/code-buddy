@@ -13,7 +13,8 @@
  *   buddy skills learning-usage [--json]
  *   buddy skills enable <name>
  *   buddy skills disable <name>
- *   buddy skills tap list|add|remove|trust
+ *   buddy skills tap list|add|remove|trust|refresh
+ *   buddy skills well-known <url>
  *
  * Selection-time enforcement of the disabled flag (so a disabled package is
  * excluded from prompt injection) reads `SkillsHub.listEnabled()`.
@@ -284,6 +285,46 @@ export function registerSkillsCommands(program: Command): void {
         return;
       }
       console.log(`Skill tap trust updated: ${updated.repo} trust=${updated.trust}`);
+    });
+
+  tap
+    .command('refresh [repo]')
+    .description('Refresh the local discovery cache from GitHub-backed taps')
+    .option('--json', 'output JSON')
+    .action(async (repo: string | undefined, opts: { json?: boolean }) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const result = await getSkillsHub().refreshTapIndex(repo);
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      console.log(`Refreshed ${result.skillCount} skill(s) from ${result.taps.length} tap(s).`);
+      for (const skill of result.skills) {
+        console.log(`  ${skill.identifier}  ${skill.description}`);
+      }
+      for (const error of result.errors) {
+        console.log(`  ! ${error.repo}: ${error.error}`);
+      }
+    });
+
+  skills
+    .command('well-known <url>')
+    .description('Discover skills from a /.well-known/skills/index.json endpoint')
+    .option('--json', 'output JSON')
+    .action(async (url: string, opts: { json?: boolean }) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const result = await getSkillsHub().discoverWellKnownSkills(url);
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      console.log(`Discovered ${result.skillCount} well-known skill(s) from ${result.indexUrl}.`);
+      for (const skill of result.skills) {
+        console.log(`  ${skill.identifier}  ${skill.description}`);
+      }
+      for (const error of result.errors) {
+        console.log(`  ! ${error}`);
+      }
     });
 }
 

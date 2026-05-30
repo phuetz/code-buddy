@@ -222,6 +222,7 @@ const FEATURES: HermesParityFeature[] = [
     verificationCommands: [
       'npx tsx src/index.ts skills list --json',
       'npx tsx src/index.ts skills doctor --json',
+      'npx tsx src/index.ts skills tap list --json',
       'npm test -- tests/agent/research-script-skill-candidate.test.ts --run',
       'npm test -- tests/agent/hermes-skill-package-summary-real.test.ts --run',
       'npm test -- tests/tools/skills-inspection-real.test.ts --run',
@@ -229,8 +230,8 @@ const FEATURES: HermesParityFeature[] = [
       '(cd cowork && npm test -- tests/skill-package-manager-bridge.test.ts tests/skill-package-manager-strip.test.ts --run)',
       'npm test -- tests/skills/hub.test.ts tests/commands/skills-command-real.test.ts --run',
     ],
-    notes: 'Native skill coverage is good and the exact skill_manage prompt-tool action surface now covers official create(content), edit(content), patch(old_string/new_string/file_path/replace_all), write_file, and remove_file semantics with Code Buddy review gates. Candidate review plus Cowork also surface installed package state, current SKILL.md previews, candidate install-state comparisons, bounded unified and expanded side-by-side candidate diffs, reviewer-gated candidate install/overwrite, and reviewer-gated enable/disable/deprecate/rollback/delete/update/patch from the real SkillsHub lockfile. Repository tap/trust management now persists owner/repo taps with path and trust metadata through buddy skills tap list/add/remove/trust. Wider direct GitHub/well-known tap discovery, remote update diff previews, and reset behavior are not proven identical.',
-    nextWork: 'Add direct GitHub/well-known tap skill discovery and optional remote release diff previews.',
+    notes: 'Native skill coverage is good and the exact skill_manage prompt-tool action surface now covers official create(content), edit(content), patch(old_string/new_string/file_path/replace_all), write_file, and remove_file semantics with Code Buddy review gates. Candidate review plus Cowork also surface installed package state, current SKILL.md previews, candidate install-state comparisons, bounded unified and expanded side-by-side candidate diffs, reviewer-gated candidate install/overwrite, and reviewer-gated enable/disable/deprecate/rollback/delete/update/patch from the real SkillsHub lockfile. Repository tap/trust management persists owner/repo taps with path and trust metadata through buddy skills tap list/add/remove/trust/refresh, and direct .well-known skill catalogs are cached through buddy skills well-known <url>. Remote update diff previews and reset behavior are not proven identical.',
+    nextWork: 'Add optional remote release diff previews and reset behavior.',
   },
   {
     id: 'closed-learning-loop',

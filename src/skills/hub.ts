@@ -252,6 +252,41 @@ export interface SkillTap {
   addedBy?: string;
 }
 
+export type HubSkillSource = 'registry' | 'github-tap' | 'well-known';
+
+export interface DiscoveredHubSkill extends HubSkill {
+  /** Source used to discover this skill before install. */
+  source: HubSkillSource;
+  /** Stable install identifier such as owner/repo/skill or well-known:<url>. */
+  identifier: string;
+  /** Trust level to apply before install/review. */
+  trust: SkillTapTrust;
+  /** Direct SKILL.md URL when available. */
+  contentUrl?: string;
+  /** Tap repo for GitHub-backed skills. */
+  tapRepo?: string;
+  /** Path to the skill directory inside a GitHub tap. */
+  skillPath?: string;
+  /** URL of the index endpoint for well-known skills. */
+  indexUrl?: string;
+}
+
+export interface SkillTapDiscoveryResult {
+  errors: Array<{ repo: string; error: string }>;
+  refreshedAt: string;
+  skillCount: number;
+  skills: DiscoveredHubSkill[];
+  taps: SkillTap[];
+}
+
+export interface WellKnownSkillDiscoveryResult {
+  errors: string[];
+  indexUrl: string;
+  refreshedAt: string;
+  skillCount: number;
+  skills: DiscoveredHubSkill[];
+}
+
 export interface HubConfig {
   /** Remote registry API base URL */
   registryUrl: string;
@@ -263,6 +298,10 @@ export interface HubConfig {
   lockfilePath: string;
   /** Path to the tap registry file for GitHub/repository-based skill sources */
   tapsPath: string;
+  /** GitHub Contents API base URL. Override in tests or self-hosted gateways. */
+  githubApiBaseUrl: string;
+  /** GitHub raw content base URL. Override in tests or self-hosted gateways. */
+  githubRawBaseUrl: string;
   /** Whether to auto-update on sync */
   autoUpdate: boolean;
   /** Interval in ms between update checks */
@@ -296,6 +335,13 @@ interface TapsFile {
   taps: SkillTap[];
 }
 
+interface GitHubContentEntry {
+  name: string;
+  path?: string;
+  type: 'dir' | 'file' | string;
+  download_url?: string | null;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -306,6 +352,8 @@ const DEFAULT_HUB_CONFIG: HubConfig = {
   skillsDir: path.join(os.homedir(), '.codebuddy', 'skills', 'managed'),
   lockfilePath: path.join(os.homedir(), '.codebuddy', 'hub', 'lock.json'),
   tapsPath: path.join(os.homedir(), '.codebuddy', 'hub', 'taps.json'),
+  githubApiBaseUrl: 'https://api.github.com',
+  githubRawBaseUrl: 'https://raw.githubusercontent.com',
   autoUpdate: false,
   checkIntervalMs: 24 * 60 * 60 * 1000, // 24 hours
 };
@@ -550,6 +598,85 @@ export class SkillsHub extends EventEmitter {
     return tap?.trust ?? this.defaultTapTrust(normalizedRepo);
   }
 
+  /**
+   * Discover SKILL.md packages from configured GitHub taps. This is read-only:
+   * it indexes remote metadata into the local cache but does not install or
+   * trust any skill content automatically.
+   */
+  async refreshTapIndex(repo?: string): Promise<SkillTapDiscoveryResult> {
+    const selectedTaps = repo
+      ? this.listTaps().filter((tap) => tap.repo === this.normalizeTapRepo(repo))
+      : this.listTaps();
+    if (repo && selectedTaps.length === 0) {
+      throw new Error(`Skill tap not found: ${repo}`);
+    }
+
+    const skills: DiscoveredHubSkill[] = [];
+    const errors: Array<{ repo: string; error: string }> = [];
+    for (const tap of selectedTaps) {
+      try {
+        skills.push(...await this.discoverGitHubTapSkills(tap));
+      } catch (err) {
+        errors.push({
+          repo: tap.repo,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const refreshedAt = new Date().toISOString();
+    this.replaceTapCacheForTaps(skills, selectedTaps.map((tap) => tap.repo), refreshedAt);
+    return {
+      errors,
+      refreshedAt,
+      skillCount: skills.length,
+      skills,
+      taps: selectedTaps,
+    };
+  }
+
+  /**
+   * Discover skills from a site exposing `/.well-known/skills/index.json`.
+   * The index parser is intentionally tolerant because the convention is
+   * designed for independent publishers.
+   */
+  async discoverWellKnownSkills(inputUrl: string): Promise<WellKnownSkillDiscoveryResult> {
+    const indexUrl = this.resolveWellKnownIndexUrl(inputUrl);
+    const response = await fetch(indexUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'codebuddy-hub/1.0',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      throw new Error(`Well-known skills index returned ${response.status}: ${response.statusText}`);
+    }
+
+    const body = await response.json() as unknown;
+    const entries = this.extractWellKnownEntries(body);
+    const errors: string[] = [];
+    const skills: DiscoveredHubSkill[] = [];
+    for (const entry of entries) {
+      try {
+        skills.push(this.discoveredSkillFromWellKnownEntry(entry, indexUrl));
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    const refreshedAt = new Date().toISOString();
+    this.mergeTapCache(skills, refreshedAt);
+    return {
+      errors,
+      indexUrl,
+      refreshedAt,
+      skillCount: skills.length,
+      skills,
+    };
+  }
+
   private readTapsFile(): TapsFile {
     try {
       if (fs.existsSync(this.config.tapsPath)) {
@@ -645,6 +772,244 @@ export class SkillsHub extends EventEmitter {
     return TRUSTED_TAP_REPOS.has(repo.toLowerCase()) ? 'trusted' : 'community';
   }
 
+  private async discoverGitHubTapSkills(tap: SkillTap): Promise<DiscoveredHubSkill[]> {
+    const directories = await this.fetchGitHubDirectory(tap.repo, tap.path);
+    const skills: DiscoveredHubSkill[] = [];
+    for (const entry of directories) {
+      if (entry.type !== 'dir' || entry.name.startsWith('.') || entry.name.startsWith('_')) {
+        continue;
+      }
+      const skillPath = `${tap.path}${entry.name}`;
+      const skillMdPath = `${skillPath}/SKILL.md`;
+      try {
+        const content = await this.fetchGitHubFile(tap.repo, skillMdPath);
+        const skill = parseSkillFile(content, skillMdPath, 'managed');
+        const description = skill.metadata.description || `${skill.metadata.name} from ${tap.repo}`;
+        const version = skill.metadata.version || '0.0.0';
+        const tags = skill.metadata.tags || [];
+        skills.push({
+          name: skill.metadata.name,
+          version,
+          description,
+          author: skill.metadata.author || tap.repo,
+          tags,
+          downloads: 0,
+          stars: 0,
+          updatedAt: new Date().toISOString(),
+          checksum: computeChecksum(content),
+          size: Buffer.byteLength(content, 'utf-8'),
+          repository: `https://github.com/${tap.repo}`,
+          source: 'github-tap',
+          identifier: `${tap.repo}/${entry.name}`,
+          trust: tap.trust,
+          contentUrl: this.rawGitHubUrl(tap.repo, skillMdPath),
+          tapRepo: tap.repo,
+          skillPath,
+        });
+      } catch (err) {
+        logger.debug('Skipping invalid GitHub tap skill', {
+          repo: tap.repo,
+          path: skillMdPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return skills;
+  }
+
+  private async fetchGitHubDirectory(repo: string, tapPath: string): Promise<GitHubContentEntry[]> {
+    const url = `${this.config.githubApiBaseUrl.replace(/\/+$/, '')}/repos/${repo}/contents/${this.encodeGitHubContentPath(tapPath.replace(/\/+$/, ''))}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.githubHeaders('application/vnd.github+json'),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub contents returned ${response.status}: ${response.statusText}`);
+    }
+    const json = await response.json() as unknown;
+    if (!Array.isArray(json)) {
+      throw new Error(`GitHub contents for ${repo}/${tapPath} did not return a directory listing`);
+    }
+    return json.filter((item): item is GitHubContentEntry => (
+      Boolean(item)
+      && typeof item === 'object'
+      && typeof (item as GitHubContentEntry).name === 'string'
+      && typeof (item as GitHubContentEntry).type === 'string'
+    ));
+  }
+
+  private async fetchGitHubFile(repo: string, filePath: string): Promise<string> {
+    const url = `${this.config.githubApiBaseUrl.replace(/\/+$/, '')}/repos/${repo}/contents/${this.encodeGitHubContentPath(filePath)}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.githubHeaders('application/vnd.github.raw'),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub file returned ${response.status}: ${response.statusText}`);
+    }
+    return await response.text();
+  }
+
+  private encodeGitHubContentPath(filePath: string): string {
+    return filePath.split('/').map((part) => encodeURIComponent(part)).join('/');
+  }
+
+  private githubHeaders(accept: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Accept': accept,
+      'User-Agent': 'codebuddy-hub/1.0',
+    };
+    const token = process.env['GITHUB_TOKEN'];
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  }
+
+  private rawGitHubUrl(repo: string, filePath: string): string {
+    return `${this.config.githubRawBaseUrl.replace(/\/+$/, '')}/${repo}/HEAD/${filePath}`;
+  }
+
+  private getTapCacheFile(): string {
+    return path.join(this.config.cacheDir, 'tap-cache.json');
+  }
+
+  private getTapCacheSkills(): DiscoveredHubSkill[] {
+    try {
+      const cacheFile = this.getTapCacheFile();
+      if (!fs.existsSync(cacheFile)) {
+        return [];
+      }
+      const raw = fs.readFileSync(cacheFile, 'utf-8');
+      const parsed = JSON.parse(raw) as { skills?: DiscoveredHubSkill[] };
+      return Array.isArray(parsed.skills) ? parsed.skills : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeTapCache(skills: DiscoveredHubSkill[], cachedAt: string): void {
+    const cacheFile = this.getTapCacheFile();
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    fs.writeFileSync(cacheFile, JSON.stringify({ cachedAt, skills }, null, 2), 'utf-8');
+  }
+
+  private mergeTapCache(skills: DiscoveredHubSkill[], cachedAt: string): void {
+    const merged = new Map<string, DiscoveredHubSkill>();
+    for (const skill of this.getTapCacheSkills()) {
+      merged.set(skill.identifier, skill);
+    }
+    for (const skill of skills) {
+      merged.set(skill.identifier, skill);
+    }
+    this.writeTapCache([...merged.values()], cachedAt);
+  }
+
+  private replaceTapCacheForTaps(skills: DiscoveredHubSkill[], tapRepos: string[], cachedAt: string): void {
+    const selectedRepos = new Set(tapRepos);
+    const retained = this.getTapCacheSkills().filter((skill) => (
+      skill.source !== 'github-tap'
+      || !skill.tapRepo
+      || !selectedRepos.has(skill.tapRepo)
+    ));
+    this.writeTapCache([...retained, ...skills], cachedAt);
+  }
+
+  private resolveWellKnownIndexUrl(inputUrl: string): string {
+    const normalized = inputUrl.trim().replace(/^well-known:/, '');
+    const url = new URL(normalized);
+    if (url.pathname.endsWith('/.well-known/skills/index.json')) {
+      return url.toString();
+    }
+    return new URL('/.well-known/skills/index.json', url.origin).toString();
+  }
+
+  private extractWellKnownEntries(body: unknown): unknown[] {
+    if (Array.isArray(body)) {
+      return body;
+    }
+    if (!body || typeof body !== 'object') {
+      return [];
+    }
+    const record = body as Record<string, unknown>;
+    for (const key of ['skills', 'items', 'entries']) {
+      if (Array.isArray(record[key])) {
+        return record[key] as unknown[];
+      }
+    }
+    return [];
+  }
+
+  private discoveredSkillFromWellKnownEntry(entry: unknown, indexUrl: string): DiscoveredHubSkill {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error('Well-known skill entry must be an object');
+    }
+    const record = entry as Record<string, unknown>;
+    const name = this.readStringField(record, ['name', 'id', 'slug']);
+    const description = this.readStringField(record, ['description', 'summary']) || `${name} from well-known index`;
+    const version = this.readStringField(record, ['version']) || '0.0.0';
+    const contentUrl = this.resolveWellKnownSkillUrl(record, indexUrl, name);
+    return {
+      name,
+      version,
+      description,
+      author: this.readStringField(record, ['author', 'publisher']) || new URL(indexUrl).hostname,
+      tags: this.readStringArrayField(record, ['tags', 'keywords']),
+      downloads: 0,
+      stars: 0,
+      updatedAt: this.readStringField(record, ['updatedAt', 'updated_at', 'modified']) || new Date().toISOString(),
+      checksum: this.readStringField(record, ['checksum', 'sha256']) || computeChecksum(`${name}:${version}:${contentUrl}`),
+      size: Number(record['size']) || 0,
+      repository: this.readStringField(record, ['repository', 'repo']),
+      source: 'well-known',
+      identifier: `well-known:${contentUrl.replace(/\/SKILL\.md$/i, '')}`,
+      trust: 'community',
+      contentUrl,
+      indexUrl,
+    };
+  }
+
+  private readStringField(record: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return '';
+  }
+
+  private readStringArrayField(record: Record<string, unknown>, keys: string[]): string[] {
+    for (const key of keys) {
+      const value = record[key];
+      if (Array.isArray(value)) {
+        return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+      }
+      if (typeof value === 'string' && value.trim()) {
+        return value.split(',').map((item) => item.trim()).filter(Boolean);
+      }
+    }
+    return [];
+  }
+
+  private resolveWellKnownSkillUrl(record: Record<string, unknown>, indexUrl: string, name: string): string {
+    const explicit = this.readStringField(record, [
+      'skillMdUrl',
+      'skill_md_url',
+      'skillUrl',
+      'skill_url',
+      'url',
+      'href',
+    ]);
+    if (explicit) {
+      return new URL(explicit, indexUrl).toString();
+    }
+    const base = indexUrl.replace(/\/index\.json(?:[?#].*)?$/, '/');
+    return new URL(`${encodeURIComponent(name)}/SKILL.md`, base).toString();
+  }
+
   // ==========================================================================
   // Search
   // ==========================================================================
@@ -674,6 +1039,7 @@ export class SkillsHub extends EventEmitter {
       logger.debug('Remote fetch failed, using local cache');
       allSkills = this.getLocalCacheSkills();
     }
+    allSkills = this.mergeDiscoveredSkills(allSkills, this.getTapCacheSkills());
 
     // Filter by query
     const queryLower = query.toLowerCase();
@@ -713,6 +1079,17 @@ export class SkillsHub extends EventEmitter {
     const skills = filtered.slice(start, start + pageSize);
 
     return { skills, total, page, pageSize };
+  }
+
+  private mergeDiscoveredSkills(base: HubSkill[], discovered: HubSkill[]): HubSkill[] {
+    const merged = new Map<string, HubSkill>();
+    for (const skill of base) {
+      merged.set(`${skill.name}@${skill.version}:${skill.repository ?? ''}`, skill);
+    }
+    for (const skill of discovered) {
+      merged.set(`${skill.name}@${skill.version}:${skill.repository ?? ''}`, skill);
+    }
+    return [...merged.values()];
   }
 
   /**
