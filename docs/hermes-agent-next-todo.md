@@ -54,6 +54,7 @@ Current measured state:
   - Verification:
     - `npm test -- tests/agent/learning-agent-real.test.ts --run`
     - `npm test -- tests/agent/learning-agent-real.test.ts tests/commands/learning-retrospective-command.test.ts --run`
+    - `npx tsx src/index.ts hermes learning status --json`
     - `(cd cowork && npm test -- tests/test-runner-bridge-catalog.test.ts --run)` confirms the safe Cowork Test Runner smoke entry.
     - `(cd cowork && npm test -- tests/learning-usage-bridge.test.ts tests/learning-skill-usage-strip.test.ts --run)`
 

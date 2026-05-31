@@ -5,6 +5,8 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registerHermesCommands } from '../../src/commands/cli/hermes-commands.js';
+import { runLearningRetrospective } from '../../src/agent/learning-agent.js';
+import { resetLessonCandidateQueues } from '../../src/agent/lesson-candidate-queue.js';
 import { resetMemoryProviderRegistry } from '../../src/memory/memory-provider.js';
 import { getUserModel, resetUserModels } from '../../src/memory/user-model.js';
 import { RunStore } from '../../src/observability/run-store.js';
@@ -228,6 +230,121 @@ describe('Hermes CLI commands', () => {
         else process.env[key] = value;
       }
       resetMemoryProviderRegistry();
+    }
+  });
+
+  it('prints Hermes learning loop status from real local state without private observation content', async () => {
+    const oldCwd = process.cwd();
+    const oldRunsDir = process.env.CODEBUDDY_RUNS_DIR;
+    const oldLearningAgent = process.env.CODEBUDDY_LEARNING_AGENT;
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-learning-status-'));
+    const runsDir = path.join(tmpDir, 'runs');
+    let store: RunStore | null = null;
+
+    try {
+      process.chdir(tmpDir);
+      process.env.CODEBUDDY_RUNS_DIR = runsDir;
+      process.env.CODEBUDDY_LEARNING_AGENT = 'false';
+      resetLessonCandidateQueues();
+      resetUserModels();
+
+      store = new RunStore(runsDir);
+      const runId = store.startRun('Hermes learning status proof', {
+        channel: 'cli',
+        tags: ['hermes', 'learning-status'],
+      });
+      store.emit(runId, {
+        type: 'skill_selected',
+        data: {
+          confidence: 0.9,
+          reason: 'real status proof',
+          skillName: 'web-audit',
+        },
+      });
+      for (const [toolCallId, toolName] of [
+        ['call_search', 'search'],
+        ['call_read', 'view_file'],
+        ['call_test', 'bash'],
+      ] as const) {
+        store.emit(runId, {
+          type: 'tool_call',
+          data: { toolCallId, toolName, args: { query: 'learning status' } },
+        });
+        store.emit(runId, {
+          type: 'tool_result',
+          data: { durationMs: 20, output: `${toolName} ok`, success: true, toolName },
+        });
+      }
+      store.saveArtifact(runId, 'summary.md', 'Real learning status proof passed.');
+      store.endRun(runId, 'completed');
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      await runLearningRetrospective(store, runId, {
+        force: true,
+        workDir: tmpDir,
+      });
+
+      const privatePreference = 'Prefers real tests before marking work done.';
+      const userModel = getUserModel(tmpDir);
+      const observation = userModel.observe({
+        content: privatePreference,
+        kind: 'working-style',
+      });
+      userModel.accept(observation.observation.id, { reviewedBy: 'Patrice' });
+
+      const program = createProgram();
+      registerHermesCommands(program);
+      await program.parseAsync(['node', 'test', 'hermes', 'learning', 'status', '--json', '--limit', '5']);
+
+      const raw = getLogOutput();
+      const output = JSON.parse(raw) as {
+        kind: string;
+        schemaVersion: number;
+        summary: {
+          acceptedUserObservationCount: number;
+          pendingLessonCandidateCount: number;
+          recentRunCount: number;
+          retrospectiveArtifactCount: number;
+          skillUsageCount: number;
+        };
+        autoRetrospective: { enabled: boolean; mode: string };
+        reviewGates: Record<string, boolean>;
+        state: {
+          recentRuns: Array<{ hasLearningRetrospective: boolean; runId: string }>;
+          skillCandidates: { learningCandidateCount: number };
+          skillUsage: { top: Array<{ recommendation: string; skillName: string }> };
+        };
+        commands: { retrospective: string };
+      };
+
+      expect(output.kind).toBe('hermes_learning_loop_status');
+      expect(output.schemaVersion).toBe(1);
+      expect(output.summary.recentRunCount).toBe(1);
+      expect(output.summary.retrospectiveArtifactCount).toBe(1);
+      expect(output.summary.pendingLessonCandidateCount).toBeGreaterThan(0);
+      expect(output.summary.acceptedUserObservationCount).toBe(1);
+      expect(output.summary.skillUsageCount).toBe(1);
+      expect(output.autoRetrospective).toMatchObject({ enabled: false, mode: 'disabled' });
+      expect(Object.values(output.reviewGates).every(Boolean)).toBe(true);
+      expect(output.state.recentRuns[0]).toMatchObject({
+        hasLearningRetrospective: true,
+        runId,
+      });
+      expect(output.state.skillCandidates.learningCandidateCount).toBe(1);
+      expect(output.state.skillUsage.top).toEqual([
+        expect.objectContaining({ recommendation: 'observe', skillName: 'web-audit' }),
+      ]);
+      expect(output.commands.retrospective).toBe('buddy run retrospective <run-id> --force --json');
+      expect(raw).not.toContain(privatePreference);
+    } finally {
+      store?.dispose();
+      process.chdir(oldCwd);
+      if (oldRunsDir === undefined) delete process.env.CODEBUDDY_RUNS_DIR;
+      else process.env.CODEBUDDY_RUNS_DIR = oldRunsDir;
+      if (oldLearningAgent === undefined) delete process.env.CODEBUDDY_LEARNING_AGENT;
+      else process.env.CODEBUDDY_LEARNING_AGENT = oldLearningAgent;
+      resetLessonCandidateQueues();
+      resetUserModels();
+      await fs.remove(tmpDir);
     }
   });
 

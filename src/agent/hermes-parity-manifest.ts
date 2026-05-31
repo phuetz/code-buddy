@@ -328,6 +328,7 @@ const FEATURES: HermesParityFeature[] = [
     codeBuddyEvidence: [
       'src/agent/lesson-candidate-queue.ts',
       'src/agent/learning-agent.ts',
+      'src/agent/hermes-learning-loop-status.ts',
       'src/memory/user-model.ts',
       'src/commands/user-model.ts',
       'src/observability/run-store.ts',
@@ -341,8 +342,9 @@ const FEATURES: HermesParityFeature[] = [
       'npm test -- tests/agent/execution/context-pipeline-user-model.test.ts tests/commands/hermes-commands.test.ts --run',
       'npm test -- tests/agent/learning-agent-real.test.ts --run',
       'npm test -- tests/tools/skills-inspection-real.test.ts tests/agent/learning-agent-real.test.ts --run',
+      'npx tsx src/index.ts hermes learning status --json',
     ],
-    notes: 'Comparable direction with stricter review gates. Accepted user-model observations are injected per turn and counted by prompt-size diagnostics; reusable skill outcomes now keep scored recommendation history with reasons and next actions, and approved skill_manage mutations record rollback snapshot ids in Learning Agent telemetry. Honcho-style LLM inference and credential-free deterministic local inference both propose pending observations only; a real CLI test proves session analysis writes candidates without silently accepting them.',
+    notes: 'Comparable direction with stricter review gates. Accepted user-model observations are injected per turn and counted by prompt-size diagnostics; reusable skill outcomes now keep scored recommendation history with reasons and next actions, and approved skill_manage mutations record rollback snapshot ids in Learning Agent telemetry. `buddy hermes learning status --json` now summarizes real local runs, retrospectives, lesson candidates, user-model observations, skill scoring, pattern library state, and review gates without printing private model content. Honcho-style LLM inference and credential-free deterministic local inference both propose pending observations only; a real CLI test proves session analysis writes candidates without silently accepting them.',
     nextWork: 'Add provider-backed Honcho-style remote inference only if credentials and operator workflow justify it; keep all inferred observations behind explicit review.',
   },
   {

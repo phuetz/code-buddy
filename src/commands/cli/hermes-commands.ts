@@ -76,6 +76,10 @@ import {
   renderHermesMemoryProvidersReadiness,
 } from '../../agent/hermes-memory-providers.js';
 import {
+  buildHermesLearningLoopStatus,
+  renderHermesLearningLoopStatus,
+} from '../../agent/hermes-learning-loop-status.js';
+import {
   buildMobileSupervisionGatewayContract,
   type MobileSupervisionGatewayContract,
 } from '../../observability/mobile-supervision-gateway-contract.js';
@@ -156,6 +160,10 @@ interface HermesTrajectoriesStatusOptions extends HermesCommandOptions {
   includeArtifactContent?: boolean;
   maxArtifactBytes?: string;
   runId?: string;
+}
+
+interface HermesLearningStatusOptions extends HermesCommandOptions {
+  limit?: string;
 }
 
 interface HermesPromptSizeSection {
@@ -1458,6 +1466,28 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesMemoryProvidersReadiness(readiness));
+    });
+
+  const learning = hermes
+    .command('learning')
+    .description('Inspect Hermes closed learning loop readiness');
+
+  learning
+    .command('status')
+    .description('Print Learning Agent, lesson, user-model, skill telemetry and review-gate readiness')
+    .option('--json', 'output JSON')
+    .option('--limit <n>', 'number of recent runs to inspect', '10')
+    .action((options: HermesLearningStatusOptions) => {
+      const status = buildHermesLearningLoopStatus({
+        limit: parseOptionalPositiveInteger(options.limit, '--limit'),
+      });
+
+      if (options.json) {
+        console.log(stableJson(status));
+        return;
+      }
+
+      console.log(renderHermesLearningLoopStatus(status));
     });
 
   const messaging = hermes
