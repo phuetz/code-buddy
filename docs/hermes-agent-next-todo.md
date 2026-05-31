@@ -180,6 +180,8 @@ Current measured state:
   - Guardrail: credentials are never accepted in model input. Tests use a real local HTTP server and the production `/responses` request shape rather than mocked fetch.
   - Verification:
     - `npm test -- tests/tools/x-search-tool-real.test.ts --run`
+    - `npm test -- tests/tools/discord-tool-real.test.ts tests/tools/homeassistant-tool-real.test.ts tests/tools/mixture-of-agents-real.test.ts tests/tools/spotify-tool-real.test.ts tests/tools/feishu-tool-real.test.ts tests/tools/yuanbao-tool-real.test.ts tests/tools/x-search-tool-real.test.ts --run`
+    - `(cd cowork && npm test -- tests/test-runner-bridge-catalog.test.ts --run)` confirms the safe Cowork Test Runner platform-connector smoke entry.
 
 - [x] **Add exact Feishu document/comment prompt tools**
   - Why: upstream Hermes exposes a Feishu/Lark document reader plus four drive comment tools, scoped to intelligent document-comment workflows.
@@ -228,6 +230,7 @@ Current measured state:
   - Guardrail: DM and sticker delivery require `approved_by` unless an operator explicitly sets `CODEBUDDY_YUANBAO_ALLOW_SENDS=true`.
   - Verification:
     - `npm test -- tests/tools/yuanbao-tool-real.test.ts --run`
+    - `npm test -- tests/tools/discord-tool-real.test.ts tests/tools/homeassistant-tool-real.test.ts tests/tools/mixture-of-agents-real.test.ts tests/tools/spotify-tool-real.test.ts tests/tools/feishu-tool-real.test.ts tests/tools/yuanbao-tool-real.test.ts tests/tools/x-search-tool-real.test.ts --run`
     - `npx tsx src/index.ts hermes tools --json`
 
 ## Immediate next implementation order

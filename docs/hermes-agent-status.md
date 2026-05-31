@@ -156,6 +156,10 @@ Cowork Test Runner now exposes a safe `Hermes / media vision real smoke` catalog
 | Mobile-safe remote supervision | `buddy run mobile-snapshot / mobile-gateway-*` | contract/preview only; no live listener yet (parity TODO #15/#34) |
 | Terminal backends (Docker/SSH/sandbox) | `src/security/` sandbox registry, `SandboxBackendInterface`, `src/agent/hermes-runtime-backends.ts`, Cowork runtime readiness strip | local + Docker/OS/WSL/SSH inventory now visible in Hermes doctor and Cowork; local + WSL live smokes are available when runnable; Daytona/Modal/Vercel are detected/configuration-reported but not first-class managed runners |
 
+Cowork Test Runner now exposes a safe `Hermes / platform connectors real smoke`
+entry that reruns the localhost HTTP connector proofs for Discord, Home
+Assistant, MoA, Spotify, Feishu, Yuanbao, and X search.
+
 Cowork Test Runner now exposes a safe `Hermes / core workspace real smoke`
 entry for the local core alias, `send_message` outbox, and Kanban workspace
 persistence proofs.

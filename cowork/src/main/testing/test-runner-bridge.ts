@@ -1163,6 +1163,42 @@ export class TestRunnerBridge extends EventEmitter {
       addIfFilesExist(
         items,
         {
+          id: 'code-buddy-hermes-platform-connectors-real-smoke',
+          label: 'Hermes / platform connectors real smoke',
+          group: 'Hermes',
+          description:
+            'Runs real localhost HTTP smokes for Discord, Home Assistant, MoA, Spotify, Feishu, Yuanbao, and X search connectors',
+          command: 'npm',
+          args: [
+            'test',
+            '--',
+            'tests/tools/discord-tool-real.test.ts',
+            'tests/tools/homeassistant-tool-real.test.ts',
+            'tests/tools/mixture-of-agents-real.test.ts',
+            'tests/tools/spotify-tool-real.test.ts',
+            'tests/tools/feishu-tool-real.test.ts',
+            'tests/tools/yuanbao-tool-real.test.ts',
+            'tests/tools/x-search-tool-real.test.ts',
+            '--run',
+          ],
+          cwd: workspace,
+          kind: 'integration',
+          safeToRun: true,
+          timeoutMs: 180_000,
+        },
+        [
+          path.join(workspace, 'tests', 'tools', 'discord-tool-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'homeassistant-tool-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'mixture-of-agents-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'spotify-tool-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'feishu-tool-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'yuanbao-tool-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'x-search-tool-real.test.ts'),
+        ]
+      );
+      addIfFilesExist(
+        items,
+        {
           id: 'code-buddy-hermes-learning-loop-real-smoke',
           label: 'Hermes / learning loop real smoke',
           group: 'Hermes',
