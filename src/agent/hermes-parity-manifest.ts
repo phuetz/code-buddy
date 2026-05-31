@@ -587,8 +587,9 @@ export function buildHermesParityTodo(options: {
   const limit = Math.max(1, options.limit ?? 7);
   const allTodos = orderHermesTodoFeatures(manifest.features.filter(isActiveTodoFeature));
   const deferredFeatures = allTodos.filter(isDeferredHermesTodo);
-  const activeFeatures = allTodos.filter((feature) => options.includeDeferred || !isDeferredHermesTodo(feature));
-  const todos = activeFeatures
+  const activeFeatures = allTodos.filter((feature) => !isDeferredHermesTodo(feature));
+  const todoFeatures = options.includeDeferred ? [...activeFeatures, ...deferredFeatures] : activeFeatures;
+  const todos = todoFeatures
     .slice(0, limit)
     .map((feature, index) => toHermesTodoItem(feature, index + 1));
   const deferred = deferredFeatures.map((feature, index) => toHermesTodoItem(feature, index + 1));
@@ -609,7 +610,7 @@ export function buildHermesParityTodo(options: {
     deferred,
     notes: [
       'Derived from the same official Hermes feature parity manifest as `buddy hermes parity --json`.',
-      'OpenClaw migration is deferred by user decision and excluded from active todos unless --include-deferred is passed.',
+      'OpenClaw migration is deferred by user decision and appended only after active work when --include-deferred is passed.',
       'Each todo keeps one real verification command so the next agent can prove progress without relying on mocks.',
     ],
   };

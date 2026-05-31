@@ -880,19 +880,23 @@ describe('Hermes CLI commands', () => {
     expect(output.notes.join(' ')).toContain('OpenClaw migration is deferred');
   });
 
-  it('can include deliberately deferred Hermes work when requested', async () => {
+  it('appends deliberately deferred Hermes work after active priorities when requested', async () => {
     const program = createProgram();
     registerHermesCommands(program);
 
-    await program.parseAsync(['node', 'test', 'hermes', 'todo', '--json', '--include-deferred', '--limit', '7']);
+    await program.parseAsync(['node', 'test', 'hermes', 'todo', '--json', '--include-deferred', '--limit', '20']);
 
     const output = JSON.parse(getLogOutput()) as {
-      summary: { includedDeferred: boolean };
-      todos: Array<{ id: string }>;
+      summary: { activeTodoCount: number; includedDeferred: boolean };
+      todos: Array<{ id: string; priority: number }>;
     };
 
     expect(output.summary.includedDeferred).toBe(true);
-    expect(output.todos.map((item) => item.id)).toContain('openclaw-migration');
+    expect(output.todos.at(-1)).toMatchObject({
+      id: 'openclaw-migration',
+      priority: output.todos.length,
+    });
+    expect(output.summary.activeTodoCount).toBe(output.todos.length - 1);
   });
 
   it('prints readable Hermes TODO output', async () => {
