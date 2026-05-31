@@ -77,6 +77,10 @@ const hermesBrowserBackendsStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-browser-backends-strip.tsx'
 );
+const hermesProtocolGatewaysStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-protocol-gateways-strip.tsx'
+);
 const hermesMessagingGatewayStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-messaging-gateway-strip.tsx'
@@ -253,6 +257,7 @@ describe('French renderer i18n support', () => {
       fs.readFileSync(hermesMemoryProvidersStripPath, 'utf8'),
       fs.readFileSync(hermesRuntimeBackendsStripPath, 'utf8'),
       fs.readFileSync(hermesBrowserBackendsStripPath, 'utf8'),
+      fs.readFileSync(hermesProtocolGatewaysStripPath, 'utf8'),
       fs.readFileSync(hermesMessagingGatewayStripPath, 'utf8'),
       fs.readFileSync(hermesMobileSupervisionStripPath, 'utf8'),
       fs.readFileSync(skillCandidateReviewQueueStripPath, 'utf8'),
@@ -393,6 +398,23 @@ describe('French renderer i18n support', () => {
       'fleet.hermesBrowserBackends.status.configured',
       'fleet.hermesBrowserBackends.status.missing',
       'fleet.hermesBrowserBackends.status.unsupported',
+      'fleet.hermesProtocolGateways.title',
+      'fleet.hermesProtocolGateways.readyChip',
+      'fleet.hermesProtocolGateways.attentionChip',
+      'fleet.hermesProtocolGateways.loadingChip',
+      'fleet.hermesProtocolGateways.availableLabel',
+      'fleet.hermesProtocolGateways.availableValue',
+      'fleet.hermesProtocolGateways.partialLabel',
+      'fleet.hermesProtocolGateways.routesLabel',
+      'fleet.hermesProtocolGateways.runSmoke',
+      'fleet.hermesProtocolGateways.smokeUnavailable',
+      'fleet.hermesProtocolGateways.smokePassed',
+      'fleet.hermesProtocolGateways.smokeFailed',
+      'fleet.hermesProtocolGateways.unavailable',
+      'fleet.hermesProtocolGateways.loadFailed',
+      'fleet.hermesProtocolGateways.status.available',
+      'fleet.hermesProtocolGateways.status.partial',
+      'fleet.hermesProtocolGateways.status.missing',
       'fleet.hermesMessagingGateway.title',
       'fleet.hermesMessagingGateway.readyChip',
       'fleet.hermesMessagingGateway.attentionChip',

@@ -196,10 +196,16 @@ for persisted cron job list/trigger plus daemon and heartbeat report endpoints.
 
 | Sub-capability | Where | Status |
 |---|---|---|
-| MCP client/server | `src/mcp/`; `buddy hermes protocols status --json` | done |
-| A2A HTTP gateway | `/api/a2a/*`; `buddy hermes protocols-smoke local --json` | done |
-| ACP HTTP gateway | `/api/acp/*`; `buddy hermes protocols-smoke local --json` | done |
+| MCP client/server | `src/mcp/`; `buddy hermes protocols status --json`; Cowork Hermes protocol gateways strip | done |
+| A2A HTTP gateway | `/api/a2a/*`; `buddy hermes protocols-smoke local --json`; Cowork opt-in protocol smoke | done |
+| ACP HTTP gateway | `/api/acp/*`; `buddy hermes protocols-smoke local --json`; Cowork opt-in protocol smoke | done |
 | ACP editor packaging parity | `buddy hermes protocols status --json` | partial: protocol routes exist, packaged editor workflow not claimed |
+
+Cowork Fleet Command Center now renders the same protocol readiness through
+`tools.hermesProtocolGateways.get` and can launch the local smoke through
+`tools.hermesProtocolGateways.smoke`. The smoke remains local-only and
+non-mutating: it starts a temporary MCP stdio server and loopback A2A/ACP HTTP
+routes, then reports the MCP echo and route statuses.
 
 ## How to verify
 

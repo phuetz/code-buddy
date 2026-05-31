@@ -1695,6 +1695,64 @@ contextBridge.exposeInMainWorld('electronAPI', {
         };
       }> => ipcRenderer.invoke('tools.hermesBrowserBackends.smoke', options),
     },
+    hermesProtocolGateways: {
+      get: (): Promise<{
+        capabilities: Array<{
+          commands: string[];
+          endpoints: string[];
+          evidence: string[];
+          id: string;
+          label: string;
+          notes: string[];
+          officialSurface: string;
+          status: 'available' | 'partial' | 'missing';
+        }>;
+        generatedAt: string;
+        kind: 'hermes_protocol_gateway_readiness';
+        officialSurface: string;
+        ok: boolean;
+        recommendations: string[];
+        schemaVersion: 1;
+        smokeCommand: string;
+        summary: {
+          availableCount: number;
+          missingCount: number;
+          partialCount: number;
+          total: number;
+        };
+      } | null> => ipcRenderer.invoke('tools.hermesProtocolGateways.get'),
+      smoke: (): Promise<{
+        error?: string;
+        ok: boolean;
+        result?: {
+          durationMs: number;
+          generatedAt: string;
+          httpRoutes: {
+            a2aAgentName?: string;
+            acpSessionCount?: number;
+            baseUrl?: string;
+            error?: string;
+            ok: boolean;
+            routes: Array<{
+              ok: boolean;
+              path: string;
+              status: number;
+            }>;
+          };
+          kind: 'hermes_protocol_gateway_smoke';
+          mcpStdio: {
+            echoText?: string;
+            error?: string;
+            ok: boolean;
+            serverName: string;
+            toolCount: number;
+            transport?: string;
+          };
+          ok: boolean;
+          schemaVersion: 1;
+        };
+      }> => ipcRenderer.invoke('tools.hermesProtocolGateways.smoke'),
+    },
     hermesMobileSupervision: {
       get: (options?: {
         query?: string;
@@ -4564,6 +4622,64 @@ declare global {
               status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
               stderr: string;
               stdout: string;
+            };
+          }>;
+        };
+        hermesProtocolGateways: {
+          get: () => Promise<{
+            capabilities: Array<{
+              commands: string[];
+              endpoints: string[];
+              evidence: string[];
+              id: string;
+              label: string;
+              notes: string[];
+              officialSurface: string;
+              status: 'available' | 'partial' | 'missing';
+            }>;
+            generatedAt: string;
+            kind: 'hermes_protocol_gateway_readiness';
+            officialSurface: string;
+            ok: boolean;
+            recommendations: string[];
+            schemaVersion: 1;
+            smokeCommand: string;
+            summary: {
+              availableCount: number;
+              missingCount: number;
+              partialCount: number;
+              total: number;
+            };
+          } | null>;
+          smoke: () => Promise<{
+            error?: string;
+            ok: boolean;
+            result?: {
+              durationMs: number;
+              generatedAt: string;
+              httpRoutes: {
+                a2aAgentName?: string;
+                acpSessionCount?: number;
+                baseUrl?: string;
+                error?: string;
+                ok: boolean;
+                routes: Array<{
+                  ok: boolean;
+                  path: string;
+                  status: number;
+                }>;
+              };
+              kind: 'hermes_protocol_gateway_smoke';
+              mcpStdio: {
+                echoText?: string;
+                error?: string;
+                ok: boolean;
+                serverName: string;
+                toolCount: number;
+                transport?: string;
+              };
+              ok: boolean;
+              schemaVersion: 1;
             };
           }>;
         };

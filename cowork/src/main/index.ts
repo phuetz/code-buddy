@@ -193,6 +193,10 @@ import {
   getHermesBrowserBackendsForReview,
   runHermesBrowserBackendSmokeForReview,
 } from './tools/hermes-browser-backends-bridge';
+import {
+  getHermesProtocolGatewaysForReview,
+  runHermesProtocolGatewaysSmokeForReview,
+} from './tools/hermes-protocol-gateways-bridge';
 import { getHermesMobileSupervisionForReview } from './tools/hermes-mobile-supervision-bridge';
 import { getHermesToolCatalogForReview } from './tools/hermes-tool-catalog-bridge';
 import { getHermesToolsetsForReview } from './tools/hermes-toolsets-bridge';
@@ -4167,6 +4171,28 @@ ipcMain.handle(
     }
   }
 );
+
+ipcMain.handle('tools.hermesProtocolGateways.get', async () => {
+  try {
+    return await getHermesProtocolGatewaysForReview();
+  } catch (err) {
+    logWarn('[tools.hermesProtocolGateways.get] failed:', err);
+    return null;
+  }
+});
+
+ipcMain.handle('tools.hermesProtocolGateways.smoke', async () => {
+  try {
+    const result = await runHermesProtocolGatewaysSmokeForReview();
+    return { ok: true as const, result };
+  } catch (err) {
+    logWarn('[tools.hermesProtocolGateways.smoke] failed:', err);
+    return {
+      error: err instanceof Error ? err.message : String(err),
+      ok: false as const,
+    };
+  }
+});
 
 ipcMain.handle(
   'tools.hermesMobileSupervision.get',

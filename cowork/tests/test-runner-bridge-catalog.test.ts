@@ -150,6 +150,9 @@ function makeWorkspace(): string {
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-mobile-supervision-bridge-real.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-mobile-supervision-strip.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-plan-strip.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-protocol-gateways-bridge.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-protocol-gateways-bridge-real.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-protocol-gateways-strip.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-provider-readiness-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-provider-readiness-bridge-real.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-provider-readiness-strip.test.ts'), '');
@@ -1086,6 +1089,9 @@ describe('TestRunnerBridge catalog', () => {
         'tests/hermes-mobile-supervision-bridge.test.ts',
         'tests/hermes-mobile-supervision-bridge-real.test.ts',
         'tests/hermes-mobile-supervision-strip.test.ts',
+        'tests/hermes-protocol-gateways-bridge.test.ts',
+        'tests/hermes-protocol-gateways-bridge-real.test.ts',
+        'tests/hermes-protocol-gateways-strip.test.ts',
         'tests/hermes-provider-readiness-bridge.test.ts',
         'tests/hermes-provider-readiness-bridge-real.test.ts',
         'tests/hermes-provider-readiness-strip.test.ts',

@@ -101,6 +101,10 @@ const hermesMobileSupervisionStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-mobile-supervision-strip.tsx',
 );
+const hermesProtocolGatewaysStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-protocol-gateways-strip.tsx',
+);
 
 const t = ((key: string, fallbackOrOptions?: string | Record<string, unknown>, maybeOptions?: Record<string, unknown>) => {
   const template = typeof fallbackOrOptions === 'string' ? fallbackOrOptions : key;
@@ -151,6 +155,7 @@ describe('FleetCommandCenter saga board', () => {
       fs.readFileSync(lessonCandidateReviewStripPath, 'utf8'),
       fs.readFileSync(learningSkillUsageStripPath, 'utf8'),
       fs.readFileSync(hermesMobileSupervisionStripPath, 'utf8'),
+      fs.readFileSync(hermesProtocolGatewaysStripPath, 'utf8'),
     ].join('\n');
 
     expect(source).toContain('SAGA_BOARD_COLUMNS');
@@ -202,6 +207,9 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('HermesMobileSupervisionStrip');
     expect(source).toContain('fleet-hermes-mobile-supervision');
     expect(source).toContain('buddy hermes mobile status');
+    expect(source).toContain('HermesProtocolGatewaysStrip');
+    expect(source).toContain('fleet-hermes-protocol-gateways');
+    expect(source).toContain('buddy hermes protocols-smoke local --json');
     expect(source).toContain('SkillPackageManagerStrip');
     expect(source).toContain('fleet-skill-package-manager');
     expect(source).toContain('skillPackage?: SkillPackageManagerApi');

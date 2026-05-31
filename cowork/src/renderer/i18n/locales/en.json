@@ -2350,6 +2350,27 @@
         "unsupported": "unsupported"
       }
     },
+    "hermesProtocolGateways": {
+      "title": "Hermes protocol gateways",
+      "readyChip": "protocols ready",
+      "attentionChip": "protocols attention",
+      "loadingChip": "protocols",
+      "availableLabel": "Available",
+      "availableValue": "{{count}}/{{total}}",
+      "partialLabel": "Partial",
+      "routesLabel": "Routes",
+      "runSmoke": "Run protocol smoke",
+      "smokeUnavailable": "Protocol smoke runner is unavailable.",
+      "smokePassed": "smoke passed: MCP {{mcp}}, HTTP {{routes}} routes",
+      "smokeFailed": "smoke failed: MCP {{mcp}}, HTTP {{routes}} routes",
+      "unavailable": "Hermes protocol gateways are not loaded yet.",
+      "loadFailed": "Hermes protocol gateway load failed",
+      "status": {
+        "available": "available",
+        "partial": "partial",
+        "missing": "missing"
+      }
+    },
     "hermesMessagingGateway": {
       "title": "Hermes messaging gateway",
       "readyChip": "gateway ready",
