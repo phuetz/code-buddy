@@ -2486,6 +2486,8 @@
       "skillsChip": "{{reinforced}} reinforced / {{deprecated}} deprecated",
       "skillCandidatesChip": "{{count}} skill candidates",
       "skillScoreChip": "{{score}}/100 {{state}}",
+      "nextRetrospectiveLabel": "Next retrospective",
+      "nextRetrospectiveMeta": "{{status}} | {{artifacts}} artifacts",
       "reviewGate": "Review gates enabled: lessons, user model, skill candidates and skill lifecycle all require approval.",
       "reviewGateMissing": "Review gates need attention before automatic learning output can be trusted.",
       "unavailable": "Hermes learning loop status is not loaded yet.",

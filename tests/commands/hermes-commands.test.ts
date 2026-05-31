@@ -283,6 +283,22 @@ describe('Hermes CLI commands', () => {
         workDir: tmpDir,
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const pendingRetrospectiveRunId = store.startRun('Hermes learning candidate proof', {
+        channel: 'cowork',
+        tags: ['hermes', 'needs-retrospective'],
+      });
+      store.emit(pendingRetrospectiveRunId, {
+        type: 'tool_call',
+        data: { toolCallId: 'call_real_cowork', toolName: 'bash', args: { command: 'npm test -- --run' } },
+      });
+      store.emit(pendingRetrospectiveRunId, {
+        type: 'tool_result',
+        data: { durationMs: 42, output: 'real cowork smoke ok', success: true, toolName: 'bash' },
+      });
+      store.saveArtifact(pendingRetrospectiveRunId, 'summary.md', 'Real candidate run needs a Learning Agent retrospective.');
+      store.endRun(pendingRetrospectiveRunId, 'completed');
+
       const privatePreference = 'Prefers real tests before marking work done.';
       const userModel = getUserModel(tmpDir);
       const observation = userModel.observe({
@@ -298,6 +314,7 @@ describe('Hermes CLI commands', () => {
       const raw = getLogOutput();
       const output = JSON.parse(raw) as {
         kind: string;
+        recommendations: string[];
         schemaVersion: number;
         summary: {
           acceptedUserObservationCount: number;
@@ -307,6 +324,11 @@ describe('Hermes CLI commands', () => {
           skillUsageCount: number;
         };
         autoRetrospective: { enabled: boolean; mode: string };
+        nextRetrospectiveRun?: {
+          command: string;
+          runId: string;
+          status: string;
+        };
         reviewGates: Record<string, boolean>;
         state: {
           recentRuns: Array<{ hasLearningRetrospective: boolean; runId: string }>;
@@ -318,17 +340,33 @@ describe('Hermes CLI commands', () => {
 
       expect(output.kind).toBe('hermes_learning_loop_status');
       expect(output.schemaVersion).toBe(1);
-      expect(output.summary.recentRunCount).toBe(1);
+      expect(output.summary.recentRunCount).toBe(2);
       expect(output.summary.retrospectiveArtifactCount).toBe(1);
       expect(output.summary.pendingLessonCandidateCount).toBeGreaterThan(0);
       expect(output.summary.acceptedUserObservationCount).toBe(1);
       expect(output.summary.skillUsageCount).toBe(1);
       expect(output.autoRetrospective).toMatchObject({ enabled: false, mode: 'disabled' });
       expect(Object.values(output.reviewGates).every(Boolean)).toBe(true);
-      expect(output.state.recentRuns[0]).toMatchObject({
-        hasLearningRetrospective: true,
-        runId,
+      expect(output.state.recentRuns).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            hasLearningRetrospective: true,
+            runId,
+          }),
+          expect.objectContaining({
+            hasLearningRetrospective: false,
+            runId: pendingRetrospectiveRunId,
+          }),
+        ]),
+      );
+      expect(output.nextRetrospectiveRun).toMatchObject({
+        command: `buddy run retrospective ${pendingRetrospectiveRunId} --force --json`,
+        runId: pendingRetrospectiveRunId,
+        status: 'completed',
       });
+      expect(output.recommendations).toEqual(
+        expect.arrayContaining([expect.stringContaining(`buddy run retrospective ${pendingRetrospectiveRunId}`)]),
+      );
       expect(output.state.skillCandidates.learningCandidateCount).toBe(1);
       expect(output.state.skillUsage.top).toEqual([
         expect.objectContaining({ recommendation: 'observe', skillName: 'web-audit' }),

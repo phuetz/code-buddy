@@ -9,6 +9,24 @@ import {
 import { getUserModel } from '../memory/user-model.js';
 import { RunStore, type RunSummary } from '../observability/run-store.js';
 
+export interface HermesLearningLoopRunRow {
+  artifactCount: number;
+  channel?: string;
+  hasLearningRetrospective: boolean;
+  runId: string;
+  status: RunSummary['status'];
+  tags: string[];
+}
+
+export interface HermesLearningLoopRetrospectiveCandidate {
+  artifactCount: number;
+  channel?: string;
+  command: string;
+  runId: string;
+  status: RunSummary['status'];
+  tags: string[];
+}
+
 export interface HermesLearningLoopStatus {
   kind: 'hermes_learning_loop_status';
   schemaVersion: 1;
@@ -38,15 +56,9 @@ export interface HermesLearningLoopStatus {
     skillCandidatesRequireReview: boolean;
     skillLifecycleRequiresApproval: boolean;
   };
+  nextRetrospectiveRun?: HermesLearningLoopRetrospectiveCandidate;
   state: {
-    recentRuns: Array<{
-      artifactCount: number;
-      channel?: string;
-      hasLearningRetrospective: boolean;
-      runId: string;
-      status: RunSummary['status'];
-      tags: string[];
-    }>;
+    recentRuns: HermesLearningLoopRunRow[];
     lessonCandidates: ReturnType<ReturnType<typeof getLessonCandidateQueue>['getStats']>;
     userModel: ReturnType<ReturnType<typeof getUserModel>['getStats']>;
     skillUsage: {
@@ -96,6 +108,34 @@ interface PatternLibraryFile {
   patterns?: Array<{ status?: string }>;
 }
 
+const RETROSPECTIVE_READY_STATUSES = new Set<RunSummary['status']>([
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+function buildRetrospectiveCommand(runId: string): string {
+  return `buddy run retrospective ${runId} --force --json`;
+}
+
+function selectNextRetrospectiveRun(
+  runRows: HermesLearningLoopRunRow[],
+): HermesLearningLoopRetrospectiveCandidate | undefined {
+  const readyRuns = runRows.filter((row) =>
+    !row.hasLearningRetrospective && RETROSPECTIVE_READY_STATUSES.has(row.status)
+  );
+  const run = readyRuns.find((row) => row.artifactCount > 0) ?? readyRuns[0];
+  if (!run) return undefined;
+  return {
+    artifactCount: run.artifactCount,
+    ...(run.channel ? { channel: run.channel } : {}),
+    command: buildRetrospectiveCommand(run.runId),
+    runId: run.runId,
+    status: run.status,
+    tags: run.tags,
+  };
+}
+
 function countLearningSkillCandidates(workDir: string): { learningCandidateCount: number; root: string } {
   const root = path.join(workDir, '.codebuddy', 'skill-candidates', 'learning');
   let learningCandidateCount = 0;
@@ -143,8 +183,10 @@ function buildRecommendations(status: HermesLearningLoopStatus): string[] {
   if (!status.autoRetrospective.enabled) {
     recommendations.push('Set CODEBUDDY_LEARNING_AGENT=true to enable automatic post-run retrospectives outside forced CLI runs.');
   }
-  if (status.summary.recentRunCount > 0 && status.summary.retrospectiveArtifactCount === 0) {
-    recommendations.push('Run buddy run retrospective <run-id> --force --json on a real complex run to seed the Learning Agent loop.');
+  if (status.nextRetrospectiveRun) {
+    recommendations.push(`Run ${status.nextRetrospectiveRun.command} on the next finished real run to feed the Learning Agent loop.`);
+  } else if (status.summary.recentRunCount > 0 && status.summary.retrospectiveArtifactCount === 0) {
+    recommendations.push('Wait for a real run to finish, then run buddy run retrospective <run-id> --force --json to seed the Learning Agent loop.');
   }
   if (status.summary.pendingLessonCandidateCount > 0) {
     recommendations.push('Review pending lesson candidates before relying on them in future prompt context.');
@@ -165,7 +207,7 @@ export function buildHermesLearningLoopStatus(
   const store = options.store ?? new RunStore();
   const limit = Math.max(1, options.limit ?? 10);
   const recentRuns = store.listRuns(limit);
-  const runRows = recentRuns.map((run) => {
+  const runRows: HermesLearningLoopRunRow[] = recentRuns.map((run) => {
     const record = store.getRun(run.runId);
     return {
       artifactCount: record?.artifacts.length ?? run.artifactCount,
@@ -176,6 +218,7 @@ export function buildHermesLearningLoopStatus(
       tags: run.metadata?.tags ?? [],
     };
   });
+  const nextRetrospectiveRun = selectNextRetrospectiveRun(runRows);
   const lessonCandidates = getLessonCandidateQueue(workDir).getStats();
   const userModel = getUserModel(workDir).getStats();
   const skillUsageRecords = listLearningSkillUsage(workDir);
@@ -212,6 +255,7 @@ export function buildHermesLearningLoopStatus(
       skillCandidatesRequireReview: true,
       skillLifecycleRequiresApproval: true,
     },
+    ...(nextRetrospectiveRun ? { nextRetrospectiveRun } : {}),
     state: {
       recentRuns: runRows,
       lessonCandidates,
@@ -254,6 +298,15 @@ export function renderHermesLearningLoopStatus(status: HermesLearningLoopStatus)
     `  Skill usage records: ${status.summary.skillUsageCount} (${status.summary.reinforcedSkillCount} reinforced, ${status.summary.deprecatedSkillCount} deprecated)`,
     `  Pattern records: ${status.summary.patternCount}`,
     `  Learning skill candidates: ${status.state.skillCandidates.learningCandidateCount}`,
+  ];
+
+  if (status.nextRetrospectiveRun) {
+    lines.push(
+      `  Next retrospective run: ${status.nextRetrospectiveRun.runId} (${status.nextRetrospectiveRun.status}, ${status.nextRetrospectiveRun.artifactCount} artifacts)`,
+    );
+  }
+
+  lines.push(
     '',
     'Review gates:',
     `  Lesson writes require approval: ${status.reviewGates.lessonWritesRequireApproval ? 'yes' : 'no'}`,
@@ -263,10 +316,17 @@ export function renderHermesLearningLoopStatus(status: HermesLearningLoopStatus)
     '',
     'Commands:',
     `  Retrospective: ${status.commands.retrospective}`,
+  );
+
+  if (status.nextRetrospectiveRun) {
+    lines.push(`  Retrospective candidate: ${status.nextRetrospectiveRun.command}`);
+  }
+
+  lines.push(
     `  Skill usage: ${status.commands.skillUsage}`,
     `  Lesson candidates: ${status.commands.lessonCandidates}`,
     `  User model: ${status.commands.userModel}`,
-  ];
+  );
 
   if (status.recommendations.length > 0) {
     lines.push('', 'Recommendations:');

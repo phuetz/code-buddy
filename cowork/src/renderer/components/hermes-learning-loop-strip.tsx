@@ -26,6 +26,14 @@ export interface HermesLearningLoopStatus {
   generatedAt: string;
   kind: 'hermes_learning_loop_status';
   ok: boolean;
+  nextRetrospectiveRun?: {
+    artifactCount: number;
+    channel?: string;
+    command: string;
+    runId: string;
+    status: string;
+    tags: string[];
+  };
   recommendations: string[];
   reviewGates: {
     lessonWritesRequireApproval: boolean;
@@ -205,6 +213,27 @@ export const HermesLearningLoopStrip: React.FC<{
               })}
             </span>
           </div>
+
+          {visibleStatus.nextRetrospectiveRun ? (
+            <div className="mt-1.5 flex min-w-0 items-start gap-1.5 rounded border border-warning/30 bg-warning/10 px-2 py-1 text-[10px] text-warning">
+              <Terminal size={10} className="mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <div className="truncate">
+                  {t('fleet.hermesLearningLoop.nextRetrospectiveLabel', 'Next retrospective')}: {' '}
+                  {visibleStatus.nextRetrospectiveRun.runId}
+                </div>
+                <div className="truncate text-[9px] text-text-muted">
+                  {t('fleet.hermesLearningLoop.nextRetrospectiveMeta', '{{status}} | {{artifacts}} artifacts', {
+                    artifacts: visibleStatus.nextRetrospectiveRun.artifactCount,
+                    status: visibleStatus.nextRetrospectiveRun.status,
+                  })}
+                </div>
+                <code className="block truncate text-[9px] text-warning">
+                  {visibleStatus.nextRetrospectiveRun.command}
+                </code>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-1.5 grid gap-1">
             {visibleStatus.state.skillUsage.top.slice(0, 3).map((skill) => (

@@ -42,8 +42,17 @@ const learningStatus: HermesLearningLoopStatus = {
   generatedAt: '2026-05-31T21:45:00.000Z',
   kind: 'hermes_learning_loop_status',
   ok: true,
+  nextRetrospectiveRun: {
+    artifactCount: 1,
+    channel: 'cowork',
+    command: 'buddy run retrospective run-needs-retro --force --json',
+    runId: 'run-needs-retro',
+    status: 'completed',
+    tags: ['real'],
+  },
   recommendations: [
     'Set CODEBUDDY_LEARNING_AGENT=true to enable automatic post-run retrospectives outside forced CLI runs.',
+    'Run buddy run retrospective run-needs-retro --force --json on the next finished real run to feed the Learning Agent loop.',
   ],
   reviewGates: {
     lessonWritesRequireApproval: true,
@@ -57,6 +66,14 @@ const learningStatus: HermesLearningLoopStatus = {
         artifactCount: 2,
         hasLearningRetrospective: true,
         runId: 'run-learning-loop',
+        status: 'completed',
+        tags: ['real'],
+      },
+      {
+        artifactCount: 1,
+        channel: 'cowork',
+        hasLearningRetrospective: false,
+        runId: 'run-needs-retro',
         status: 'completed',
         tags: ['real'],
       },
@@ -91,7 +108,7 @@ const learningStatus: HermesLearningLoopStatus = {
     lessonCandidateCount: 2,
     patternCount: 2,
     pendingLessonCandidateCount: 1,
-    recentRunCount: 1,
+    recentRunCount: 2,
     reinforcedSkillCount: 1,
     retrospectiveArtifactCount: 1,
     skillUsageCount: 1,
@@ -133,7 +150,7 @@ describe('HermesLearningLoopStrip', () => {
     expect(strip?.textContent).toContain('Hermes learning loop');
     expect(strip?.textContent).toContain('learning attention');
     expect(strip?.textContent).toContain('Runs');
-    expect(strip?.textContent).toContain('1/1');
+    expect(strip?.textContent).toContain('1/2');
     expect(strip?.textContent).toContain('Candidates');
     expect(strip?.textContent).toContain('1/2');
     expect(strip?.textContent).toContain('Patterns');
@@ -141,6 +158,10 @@ describe('HermesLearningLoopStrip', () => {
     expect(strip?.textContent).toContain('3 accepted observations');
     expect(strip?.textContent).toContain('1 reinforced / 0 deprecated');
     expect(strip?.textContent).toContain('1 skill candidates');
+    expect(strip?.textContent).toContain('Next retrospective');
+    expect(strip?.textContent).toContain('run-needs-retro');
+    expect(strip?.textContent).toContain('completed | 1 artifacts');
+    expect(strip?.textContent).toContain('buddy run retrospective run-needs-retro --force --json');
     expect(strip?.textContent).toContain('learned-search-view-file-bash');
     expect(strip?.textContent).toContain('95/100 reinforce');
     expect(strip?.textContent).toContain('Review gates enabled');

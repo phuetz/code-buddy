@@ -31,6 +31,13 @@ describe('Hermes learning loop bridge', () => {
       generatedAt: '2026-05-31T21:40:00.000Z',
       kind: 'hermes_learning_loop_status',
       ok: true,
+      nextRetrospectiveRun: {
+        artifactCount: 1,
+        command: 'buddy run retrospective run-needs-retro --force --json',
+        runId: 'run-needs-retro',
+        status: 'completed',
+        tags: ['real'],
+      },
       recommendations: ['Review pending lesson candidates before relying on them.'],
       reviewGates: {
         lessonWritesRequireApproval: true,
@@ -103,6 +110,10 @@ describe('Hermes learning loop bridge', () => {
     expect(status?.commands).toMatchObject({
       retrospective: 'buddy run retrospective <run-id> --force --json',
       skillUsage: 'buddy skills learning-usage --json',
+    });
+    expect(status?.nextRetrospectiveRun).toMatchObject({
+      command: 'buddy run retrospective run-needs-retro --force --json',
+      runId: 'run-needs-retro',
     });
     expect(status?.summary.pendingLessonCandidateCount).toBe(1);
     expect(JSON.stringify(status)).not.toContain('salary');

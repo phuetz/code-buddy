@@ -2473,6 +2473,8 @@
       "skillsChip": "{{reinforced}} 个强化 / {{deprecated}} 个废弃",
       "skillCandidatesChip": "{{count}} 个 skill 候选",
       "skillScoreChip": "{{score}}/100 {{state}}",
+      "nextRetrospectiveLabel": "下一次复盘",
+      "nextRetrospectiveMeta": "{{status}} | {{artifacts}} 个产物",
       "reviewGate": "审查门控已启用：lessons、用户模型、skill 候选和 skill 生命周期都需要批准。",
       "reviewGateMissing": "信任自动学习输出前，需要先检查审查门控。",
       "unavailable": "Hermes 学习闭环状态尚未加载。",

@@ -17,6 +17,14 @@ export interface HermesLearningLoopStatusForReview {
   generatedAt: string;
   kind: 'hermes_learning_loop_status';
   ok: boolean;
+  nextRetrospectiveRun?: {
+    artifactCount: number;
+    channel?: string;
+    command: string;
+    runId: string;
+    status: string;
+    tags: string[];
+  };
   recommendations: string[];
   reviewGates: {
     lessonWritesRequireApproval: boolean;
