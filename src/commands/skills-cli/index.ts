@@ -57,6 +57,38 @@ function buildSkillDoctorIssue(skill: InstalledSkillStatus): {
   };
 }
 
+function buildSkillListHealth(
+  all: InstalledSkillStatus[],
+  shown: InstalledSkillStatus[],
+): {
+  disabledCount: number;
+  enabledCount: number;
+  healthyCount: number;
+  integrityMismatchCount: number;
+  issueCount: number;
+  missingFileCount: number;
+  nextCommand: string;
+  ok: boolean;
+  shownCount: number;
+  total: number;
+} {
+  const missingFileCount = all.filter((skill) => !skill.exists).length;
+  const integrityMismatchCount = all.filter((skill) => skill.exists && !skill.integrityOk).length;
+  const issueCount = missingFileCount + integrityMismatchCount;
+  return {
+    disabledCount: all.filter((skill) => skill.enabled === false).length,
+    enabledCount: all.filter((skill) => skill.enabled !== false).length,
+    healthyCount: all.length - issueCount,
+    integrityMismatchCount,
+    issueCount,
+    missingFileCount,
+    nextCommand: issueCount > 0 ? 'buddy skills doctor --json' : 'buddy skills learning-usage --json',
+    ok: issueCount === 0,
+    shownCount: shown.length,
+    total: all.length,
+  };
+}
+
 export function registerSkillsCommands(program: Command): void {
   const skills = program
     .command('skills')
@@ -72,9 +104,10 @@ export function registerSkillsCommands(program: Command): void {
       const hub = getSkillsHub();
       const all = hub.listWithIntegrity();
       const shown = opts.all ? all : all.filter((s) => s.enabled !== false);
+      const health = buildSkillListHealth(all, shown);
 
       if (opts.json) {
-        console.log(JSON.stringify({ count: shown.length, total: all.length, skills: shown }, null, 2));
+        console.log(JSON.stringify({ count: shown.length, health, total: all.length, skills: shown }, null, 2));
         return;
       }
       if (shown.length === 0) {
@@ -87,6 +120,9 @@ export function registerSkillsCommands(program: Command): void {
         const inv = skill.usage ? `  used ${skill.usage.invocationCount}×` : '';
         const health = skill.integrityOk ? '' : skill.exists ? '  integrity mismatch' : '  missing SKILL.md';
         console.log(`  ${status} ${skill.name} v${skill.version} (${skill.source})${inv}${health}`);
+      }
+      if (!health.ok) {
+        console.log(`\nHealth: ${health.healthyCount} ok / ${health.issueCount} issue(s). Run ${health.nextCommand}.`);
       }
       console.log('');
     });

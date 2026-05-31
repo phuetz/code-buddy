@@ -201,6 +201,75 @@ describe('buddy skills command with real SkillsHub state', () => {
     expect(getSkillsHub().list()).toHaveLength(3);
   });
 
+  it('lists installed skills with a machine-readable health summary', async () => {
+    const hub = getSkillsHub({
+      cacheDir: path.join(tempHome, 'cache'),
+      lockfilePath: path.join(tempHome, 'lock.json'),
+      skillsDir: path.join(tempHome, 'skills'),
+    });
+    await hub.installFromContent(
+      'healthy-helper',
+      skillContent('healthy-helper', '1.0.0', 'Healthy package.'),
+    );
+    const missing = await hub.installFromContent(
+      'missing-helper',
+      skillContent('missing-helper', '1.0.0', 'Will be removed from disk.'),
+    );
+    const tampered = await hub.installFromContent(
+      'tampered-helper',
+      skillContent('tampered-helper', '1.0.0', 'Will be edited on disk.'),
+    );
+    await fs.rm(missing.path, { force: true });
+    await fs.writeFile(tampered.path, 'manual edit', 'utf-8');
+    hub.setEnabled('missing-helper', false, {
+      actor: 'Patrice',
+      reason: 'Paused while stale.',
+    });
+
+    const program = createProgram();
+    await program.parseAsync(['node', 'buddy', 'skills', 'list', '--all', '--json']);
+
+    const result = JSON.parse(getLogOutput()) as {
+      count: number;
+      health: {
+        disabledCount: number;
+        enabledCount: number;
+        healthyCount: number;
+        integrityMismatchCount: number;
+        issueCount: number;
+        missingFileCount: number;
+        nextCommand: string;
+        ok: boolean;
+        shownCount: number;
+        total: number;
+      };
+      skills: Array<{ integrityOk: boolean; name: string }>;
+      total: number;
+    };
+
+    expect(result).toMatchObject({
+      count: 3,
+      health: {
+        disabledCount: 1,
+        enabledCount: 2,
+        healthyCount: 1,
+        integrityMismatchCount: 1,
+        issueCount: 2,
+        missingFileCount: 1,
+        nextCommand: 'buddy skills doctor --json',
+        ok: false,
+        shownCount: 3,
+        total: 3,
+      },
+      total: 3,
+    });
+    expect(result.skills).toEqual(expect.arrayContaining([
+      expect.objectContaining({ integrityOk: true, name: 'healthy-helper' }),
+      expect.objectContaining({ integrityOk: false, name: 'missing-helper' }),
+      expect.objectContaining({ integrityOk: false, name: 'tampered-helper' }),
+    ]));
+  });
+
   it('repairs missing skill lockfile entries through the real CLI with reviewer approval', async () => {
     const hub = getSkillsHub({
       cacheDir: path.join(tempHome, '.codebuddy', 'hub', 'cache'),
@@ -261,10 +330,15 @@ describe('buddy skills command with real SkillsHub state', () => {
     ]);
 
     const listed = runBuddyCliJson(['skills', 'list', '--all', '--json']) as {
+      health: { issueCount: number; missingFileCount: number };
       skills: Array<{ name: string }>;
       total: number;
     };
     expect(listed.total).toBe(2);
+    expect(listed.health).toMatchObject({
+      issueCount: 1,
+      missingFileCount: 0,
+    });
     expect(listed.skills.map((skill) => skill.name)).toEqual([
       'healthy-helper',
       'tampered-helper',
