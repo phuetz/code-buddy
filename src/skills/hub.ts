@@ -1432,6 +1432,30 @@ export class SkillsHub extends EventEmitter {
     return true;
   }
 
+  /**
+   * Remove a stale lockfile row only when its recorded SKILL.md is already
+   * missing. Unlike uninstall(), this never deletes files from skillsDir.
+   */
+  removeMissingSkillRecord(skillName: string): boolean {
+    const installed = this.lockfile.skills[skillName];
+    if (!installed) {
+      logger.warn('Cannot prune missing skill record because it is not in the lockfile', { name: skillName });
+      return false;
+    }
+    if (fs.existsSync(installed.path)) {
+      logger.warn('Refusing to prune skill record because SKILL.md still exists', {
+        name: skillName,
+        path: installed.path,
+      });
+      return false;
+    }
+
+    delete this.lockfile.skills[skillName];
+    this.writeLockfile();
+    this.emit('skill:removed', skillName);
+    return true;
+  }
+
   // ==========================================================================
   // Update
   // ==========================================================================

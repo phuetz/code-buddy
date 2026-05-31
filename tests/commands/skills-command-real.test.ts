@@ -1,7 +1,9 @@
 import fs from 'fs/promises';
+import { spawnSync } from 'child_process';
 import { createServer, type Server } from 'http';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +14,8 @@ let tempHome: string;
 let originalHome: string | undefined;
 let originalUserProfile: string | undefined;
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
 function createProgram(): Command {
   const program = new Command();
@@ -37,6 +41,28 @@ function skillContent(name: string, version: string, body: string): string {
 
 function getLogOutput(): string {
   return consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+}
+
+function runBuddyCliJson(args: string[]): unknown {
+  const result = spawnSync(process.execPath, [tsxCli, path.join(repoRoot, 'src/index.ts'), ...args], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      FORCE_COLOR: '0',
+      HOME: tempHome,
+      NO_COLOR: '1',
+      USERPROFILE: tempHome,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 90_000,
+    windowsHide: true,
+  });
+
+  expect(result.error, result.stderr).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout.trim()).toMatch(/^\{/);
+  return JSON.parse(result.stdout) as unknown;
 }
 
 async function startSkillDiscoveryServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
@@ -173,6 +199,76 @@ describe('buddy skills command with real SkillsHub state', () => {
       }),
     ]));
     expect(getSkillsHub().list()).toHaveLength(3);
+  });
+
+  it('repairs missing skill lockfile entries through the real CLI with reviewer approval', async () => {
+    const hub = getSkillsHub({
+      cacheDir: path.join(tempHome, '.codebuddy', 'hub', 'cache'),
+      lockfilePath: path.join(tempHome, '.codebuddy', 'hub', 'lock.json'),
+      skillsDir: path.join(tempHome, '.codebuddy', 'skills', 'managed'),
+      tapsPath: path.join(tempHome, '.codebuddy', 'hub', 'taps.json'),
+    });
+    await hub.installFromContent(
+      'healthy-helper',
+      skillContent('healthy-helper', '1.0.0', 'Healthy package.'),
+    );
+    const missing = await hub.installFromContent(
+      'missing-helper',
+      skillContent('missing-helper', '1.0.0', 'Will be removed from disk.'),
+    );
+    const tampered = await hub.installFromContent(
+      'tampered-helper',
+      skillContent('tampered-helper', '1.0.0', 'Will be edited on disk.'),
+    );
+    await fs.rm(missing.path, { force: true });
+    await fs.writeFile(tampered.path, 'manual edit', 'utf-8');
+
+    const repaired = runBuddyCliJson([
+      'skills',
+      'doctor',
+      '--repair-missing',
+      '--approved-by',
+      'Patrice',
+      '--json',
+    ]) as {
+      issueCount: number;
+      issues: Array<{ issue: string; name: string }>;
+      ok: boolean;
+      repair: {
+        approvedBy: string;
+        missingRemovedCount: number;
+        removed: Array<{ name: string; removed: boolean }>;
+        remainingIssueNames: string[];
+      };
+      total: number;
+    };
+
+    expect(repaired).toMatchObject({
+      issueCount: 1,
+      ok: false,
+      repair: {
+        approvedBy: 'Patrice',
+        missingRemovedCount: 1,
+        remainingIssueNames: ['tampered-helper'],
+      },
+      total: 2,
+    });
+    expect(repaired.repair.removed).toEqual([
+      { name: 'missing-helper', removed: true },
+    ]);
+    expect(repaired.issues).toEqual([
+      expect.objectContaining({ issue: 'integrity-mismatch', name: 'tampered-helper' }),
+    ]);
+
+    const listed = runBuddyCliJson(['skills', 'list', '--all', '--json']) as {
+      skills: Array<{ name: string }>;
+      total: number;
+    };
+    expect(listed.total).toBe(2);
+    expect(listed.skills.map((skill) => skill.name)).toEqual([
+      'healthy-helper',
+      'tampered-helper',
+    ]);
   });
 
   it('manages skill taps with a real persisted taps file', async () => {

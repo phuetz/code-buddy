@@ -123,12 +123,16 @@ buddy cron add <name> --every <ms>|--cron <expr>|--at <iso> \
 buddy cron update <id> [--name <name>] [--every <ms>|--cron <expr>|--at <iso>] \
   [--message <text>|--watchdog <json|@file>] [--pre-check <json|@file>|--clear-pre-check] \
   [--deliver <type:id>...] [--format full|summary] [--clear-delivery] [--json]
-buddy skills list [--all] [--json] | usage [--json] | enable <name> | disable <name>
+buddy skills list [--all] [--json] | doctor [--json] [--repair-missing --approved-by <reviewer>]
+buddy skills usage [--json] | learning-usage [--json] | enable <name> | disable <name>
 ```
 
 Installed skills can also be inspected by agents through the read-only
 `skills_list` and `skill_view` tools, backed by the same SkillsHub lockfile as
 `buddy skills list --json`.
+`buddy skills doctor --repair-missing --approved-by <reviewer>` removes only
+stale lockfile rows whose `SKILL.md` is already missing; integrity mismatches
+remain review-only so local edits are not overwritten or deleted silently.
 
 `buddy cron` authors scheduled jobs for the daemon's CronScheduler, including
 no-LLM `--watchdog` monitors (disk/http/repo/build) and `--pre-check` gates

@@ -23,6 +23,39 @@
  */
 
 import type { Command } from 'commander';
+import type { InstalledSkillStatus } from '../../skills/hub.js';
+
+function buildSkillDoctorIssue(skill: InstalledSkillStatus): {
+  commands: string[];
+  enabled: boolean;
+  issue: 'integrity-mismatch' | 'missing-file';
+  name: string;
+  path: string;
+  recommendation: string;
+  version: string;
+} {
+  const issue = skill.exists ? 'integrity-mismatch' : 'missing-file';
+  return {
+    commands: issue === 'missing-file'
+      ? [
+        `skill_manage action=reset name=${skill.name} approved_by=<reviewer>`,
+        `skill_manage action=delete name=${skill.name} approved_by=<reviewer>`,
+      ]
+      : [
+        `skill_manage action=history name=${skill.name}`,
+        `skill_manage action=reset name=${skill.name} approved_by=<reviewer>`,
+        `skill_manage action=rollback name=${skill.name} approved_by=<reviewer>`,
+      ],
+    enabled: skill.enabled !== false,
+    issue,
+    name: skill.name,
+    path: skill.path,
+    recommendation: issue === 'missing-file'
+      ? 'Reset from hub/cache, restore the SKILL.md file, or remove the stale lockfile entry after reviewer approval.'
+      : 'Inspect local edits, then keep, patch, reset, update, or rollback after reviewer approval.',
+    version: skill.version,
+  };
+}
 
 export function registerSkillsCommands(program: Command): void {
   const skills = program
@@ -61,41 +94,62 @@ export function registerSkillsCommands(program: Command): void {
   skills
     .command('doctor')
     .description('Audit installed skill packages for missing or modified SKILL.md files')
+    .option('--repair-missing', 'remove missing-file lockfile entries after explicit reviewer approval')
+    .option('--approved-by <reviewer>', 'reviewer/operator approving --repair-missing')
     .option('--json', 'output JSON')
-    .action(async (opts: { json?: boolean }) => {
+    .action(async (opts: { approvedBy?: string; json?: boolean; repairMissing?: boolean }) => {
       const { getSkillsHub } = await import('../../skills/hub.js');
-      const skills = getSkillsHub().listWithIntegrity();
+      const hub = getSkillsHub();
+      const skills = hub.listWithIntegrity();
       const issues = skills
         .filter((skill) => !skill.exists || !skill.integrityOk)
-        .map((skill) => {
-          const issue = skill.exists ? 'integrity-mismatch' : 'missing-file';
-          return {
-            commands: issue === 'missing-file'
-              ? [
-                `skill_manage action=reset name=${skill.name} approved_by=<reviewer>`,
-                `skill_manage action=delete name=${skill.name} approved_by=<reviewer>`,
-              ]
-              : [
-                `skill_manage action=history name=${skill.name}`,
-                `skill_manage action=reset name=${skill.name} approved_by=<reviewer>`,
-                `skill_manage action=rollback name=${skill.name} approved_by=<reviewer>`,
-              ],
-            enabled: skill.enabled !== false,
-            issue,
-            name: skill.name,
-            path: skill.path,
-            recommendation: issue === 'missing-file'
-              ? 'Reset from hub/cache, restore the SKILL.md file, or remove the stale lockfile entry after reviewer approval.'
-              : 'Inspect local edits, then keep, patch, reset, update, or rollback after reviewer approval.',
-            version: skill.version,
-          };
-        });
+        .map(buildSkillDoctorIssue);
+      const repairRequested = opts.repairMissing === true;
+      const approvedBy = opts.approvedBy?.trim();
+      if (repairRequested && !approvedBy) {
+        const message = '--approved-by is required when using --repair-missing';
+        if (opts.json) {
+          console.log(JSON.stringify({ error: message, ok: false }, null, 2));
+        } else {
+          console.error(message);
+        }
+        process.exit(1);
+        return;
+      }
+
+      const repairedMissing = repairRequested
+        ? issues
+          .filter((issue) => issue.issue === 'missing-file')
+          .map((issue) => ({
+            name: issue.name,
+            removed: false,
+          }))
+        : [];
+      if (repairRequested) {
+        for (const item of repairedMissing) {
+          item.removed = hub.removeMissingSkillRecord(item.name);
+        }
+      }
+      const inspectedAfterRepair = repairRequested ? hub.listWithIntegrity() : skills;
+      const finalIssues = repairRequested
+        ? inspectedAfterRepair
+          .filter((skill) => !skill.exists || !skill.integrityOk)
+          .map(buildSkillDoctorIssue)
+        : issues;
       const result = {
-        healthyCount: skills.length - issues.length,
-        issueCount: issues.length,
-        issues,
-        ok: issues.length === 0,
-        total: skills.length,
+        healthyCount: inspectedAfterRepair.length - finalIssues.length,
+        issueCount: finalIssues.length,
+        issues: finalIssues,
+        ok: finalIssues.length === 0,
+        ...(repairRequested ? {
+          repair: {
+            approvedBy,
+            missingRemovedCount: repairedMissing.filter((item) => item.removed).length,
+            removed: repairedMissing,
+            remainingIssueNames: finalIssues.map((issue) => issue.name),
+          },
+        } : {}),
+        total: inspectedAfterRepair.length,
       };
 
       if (opts.json) {
@@ -114,6 +168,12 @@ export function registerSkillsCommands(program: Command): void {
         console.log(`      path: ${issue.path}`);
         console.log(`      next: ${issue.recommendation}`);
         console.log(`      command: ${issue.commands[0]}`);
+      }
+      if (repairRequested) {
+        console.log(`\nRepaired missing lockfile entries: ${repairedMissing.filter((item) => item.removed).length}`);
+        if (finalIssues.length) {
+          console.log(`Remaining issues: ${finalIssues.map((issue) => issue.name).join(', ')}`);
+        }
       }
     });
 
