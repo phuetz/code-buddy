@@ -2241,6 +2241,7 @@
       "loadFailed": "Hermes 功能对齐加载失败",
       "empty": "没有优先 Hermes 功能缺口。",
       "unavailable": "Hermes 功能对齐尚未加载。",
+      "deferredLabel": "已推迟",
       "status": {
         "covered": "已覆盖",
         "covered-partial": "覆盖/部分",

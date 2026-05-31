@@ -17,6 +17,7 @@ export interface HermesFeatureParityItem {
 export interface HermesFeatureParitySummary {
   auditDocument: string;
   command: string;
+  deferredWork?: HermesFeatureParityItem[];
   generatedAt: string;
   inspectedCommit: string;
   latestTagObserved: string;
@@ -29,6 +30,7 @@ export interface HermesFeatureParitySummary {
     total: number;
   };
   topWork: HermesFeatureParityItem[];
+  todoCommand?: string;
 }
 
 interface HermesFeatureParityApi {
@@ -37,6 +39,10 @@ interface HermesFeatureParityApi {
 
 export function buildHermesFeatureParityCommand(): string {
   return 'buddy hermes parity --json';
+}
+
+export function buildHermesFeatureTodoCommand(): string {
+  return 'buddy hermes todo --json';
 }
 
 function formatHermesFeatureParityStatus(
@@ -65,11 +71,13 @@ export const HermesFeatureParityStrip: React.FC<{
   const [loadedParity, setLoadedParity] = useState<HermesFeatureParitySummary | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const command = useMemo(() => buildHermesFeatureParityCommand(), []);
+  const todoCommand = useMemo(() => buildHermesFeatureTodoCommand(), []);
   const visibleParity = parity ?? loadedParity;
   const visibleError = error ?? loadError;
   const summary = visibleParity?.summary;
   const substantiallyCovered = summary ? summary.covered + summary.coveredPartial : 0;
   const gapCount = summary?.gaps ?? 0;
+  const deferredWork = visibleParity?.deferredWork ?? [];
 
   useEffect(() => {
     if (parity !== undefined) return;
@@ -201,8 +209,26 @@ export const HermesFeatureParityStrip: React.FC<{
         </div>
       )}
 
+      {deferredWork.length ? (
+        <div className="mt-1.5 rounded border border-warning/20 bg-warning/5 px-2 py-1 text-[10px] text-text-muted">
+          <span className="text-warning">
+            {t('fleet.hermesFeatureParity.deferredLabel', 'Deferred')}
+          </span>
+          {': '}
+          {deferredWork
+            .map((feature) =>
+              feature.nextWork ? `${feature.area} - ${feature.nextWork}` : feature.area,
+            )
+            .join(', ')}
+        </div>
+      ) : null}
+
       <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted">
         <Terminal size={10} className="shrink-0 text-text-muted" />
+        <code className="truncate">{visibleParity?.todoCommand || todoCommand}</code>
+      </div>
+      <div className="mt-1 flex min-w-0 items-center gap-1.5 rounded bg-surface/60 px-2 py-1 text-[9px] text-text-muted">
+        <Terminal size={9} className="shrink-0 text-text-muted" />
         <code className="truncate">{visibleParity?.command || command}</code>
       </div>
     </section>

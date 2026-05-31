@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadCoreModule } from '../src/main/utils/core-loader';
 import {
   buildHermesFeatureParityCommand,
+  buildHermesFeatureTodoCommand,
   getHermesFeatureParityForReview,
 } from '../src/main/tools/hermes-feature-parity-bridge';
 
@@ -65,6 +66,30 @@ describe('Hermes feature parity bridge', () => {
           },
         ],
       }),
+      buildHermesParityTodo: () => ({
+        todos: [
+          {
+            area: 'Closed learning loop',
+            id: 'closed-learning-loop',
+            nextWork: 'Keep skill mutation outcomes tied to rollback history.',
+            officialSurface: 'Memory nudges and autonomous skill creation',
+            priority: 1,
+            status: 'partial',
+            verificationCommand: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+          },
+        ],
+        deferred: [
+          {
+            area: 'OpenClaw migration',
+            id: 'openclaw-migration',
+            nextWork: 'Do this at the end.',
+            officialSurface: 'hermes claw migrate',
+            priority: 1,
+            status: 'gap',
+            verificationCommand: 'rg -n "openclaw" src tests docs',
+          },
+        ],
+      }),
     });
 
     const summary = await getHermesFeatureParityForReview();
@@ -73,6 +98,16 @@ describe('Hermes feature parity bridge', () => {
     expect(summary).toEqual({
       auditDocument: 'docs/hermes-agent-official-parity-audit-2026-05-30.md',
       command: 'buddy hermes parity --json',
+      deferredWork: [
+        {
+          area: 'OpenClaw migration',
+          id: 'openclaw-migration',
+          nextWork: 'Do this at the end.',
+          officialSurface: 'hermes claw migrate',
+          status: 'gap',
+          verificationCommands: ['rg -n "openclaw" src tests docs'],
+        },
+      ],
       generatedAt: '2026-05-31T18:00:00.000Z',
       inspectedCommit: '5921d667',
       latestTagObserved: 'v2026.5.29.2',
@@ -93,15 +128,8 @@ describe('Hermes feature parity bridge', () => {
           status: 'partial',
           verificationCommands: ['npm test -- tests/agent/learning-agent-real.test.ts --run'],
         },
-        {
-          area: 'OpenClaw migration',
-          id: 'openclaw-migration',
-          nextWork: 'Do this at the end.',
-          officialSurface: 'hermes claw migrate',
-          status: 'gap',
-          verificationCommands: ['rg -n "openclaw" src tests docs'],
-        },
       ],
+      todoCommand: 'buddy hermes todo --json',
     });
   });
 
@@ -113,5 +141,6 @@ describe('Hermes feature parity bridge', () => {
 
   it('keeps the CLI command helper stable', () => {
     expect(buildHermesFeatureParityCommand()).toBe('buddy hermes parity --json');
+    expect(buildHermesFeatureTodoCommand()).toBe('buddy hermes todo --json');
   });
 });

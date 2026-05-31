@@ -2254,6 +2254,7 @@
       "loadFailed": "Chargement de la parité fonctionnalités Hermes échoué",
       "empty": "Aucun manque fonctionnel Hermes prioritaire.",
       "unavailable": "La parité fonctionnalités Hermes n'est pas encore chargée.",
+      "deferredLabel": "Différé",
       "status": {
         "covered": "couvert",
         "covered-partial": "couvert/partiel",

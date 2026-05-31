@@ -32,7 +32,9 @@ describe.skipIf(!hasBuiltParityCore)('Hermes feature parity bridge real core int
     });
     expect(summary?.summary.total).toBeGreaterThanOrEqual(20);
     expect(summary?.summary.gaps).toBeGreaterThanOrEqual(1);
-    expect(summary?.topWork.map((feature) => feature.id)).toContain('openclaw-migration');
+    expect(summary?.topWork.map((feature) => feature.id)).not.toContain('openclaw-migration');
+    expect(summary?.deferredWork.map((feature) => feature.id)).toContain('openclaw-migration');
     expect(summary?.topWork.some((feature) => feature.verificationCommands.length > 0)).toBe(true);
+    expect(summary?.todoCommand).toBe('buddy hermes todo --json');
   });
 });

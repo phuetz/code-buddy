@@ -241,6 +241,7 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('buildHermesPlanGoal');
     expect(source).toContain('HermesFeatureParityStrip');
     expect(source).toContain('fleet-hermes-feature-parity');
+    expect(source).toContain('buddy hermes todo --json');
     expect(source).toContain('buddy hermes parity --json');
     expect(source).toContain('buildFleetDispatchGoalContext');
     expect(source).toContain('fleet-recent-outcomes');

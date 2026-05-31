@@ -1507,6 +1507,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       get: (): Promise<{
         auditDocument: string;
         command: string;
+        deferredWork: Array<{
+          area: string;
+          id: string;
+          nextWork?: string;
+          officialSurface: string;
+          status: 'covered' | 'covered-partial' | 'partial' | 'gap';
+          verificationCommands: string[];
+        }>;
         generatedAt: string;
         inspectedCommit: string;
         latestTagObserved: string;
@@ -1526,6 +1534,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           status: 'covered' | 'covered-partial' | 'partial' | 'gap';
           verificationCommands: string[];
         }>;
+        todoCommand: string;
       } | null> => ipcRenderer.invoke('tools.hermesFeatureParity.get'),
     },
     hermesToolsets: {
@@ -4462,6 +4471,14 @@ declare global {
           get: () => Promise<{
             auditDocument: string;
             command: string;
+            deferredWork: Array<{
+              area: string;
+              id: string;
+              nextWork?: string;
+              officialSurface: string;
+              status: 'covered' | 'covered-partial' | 'partial' | 'gap';
+              verificationCommands: string[];
+            }>;
             generatedAt: string;
             inspectedCommit: string;
             latestTagObserved: string;
@@ -4481,6 +4498,7 @@ declare global {
               status: 'covered' | 'covered-partial' | 'partial' | 'gap';
               verificationCommands: string[];
             }>;
+            todoCommand: string;
           } | null>;
         };
         hermesToolsets: {

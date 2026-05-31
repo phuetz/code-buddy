@@ -14,6 +14,7 @@ export interface HermesFeatureParityItem {
 export interface HermesFeatureParitySummary {
   auditDocument: string;
   command: string;
+  deferredWork: HermesFeatureParityItem[];
   generatedAt: string;
   inspectedCommit: string;
   latestTagObserved: string;
@@ -26,6 +27,7 @@ export interface HermesFeatureParitySummary {
     total: number;
   };
   topWork: HermesFeatureParityItem[];
+  todoCommand: string;
 }
 
 interface HermesParityManifest {
@@ -77,10 +79,14 @@ export function buildHermesFeatureParityCommand(): string {
   return 'buddy hermes parity --json';
 }
 
+export function buildHermesFeatureTodoCommand(): string {
+  return 'buddy hermes todo --json';
+}
+
 function fallbackTopWorkFromManifest(manifest: HermesParityManifest): HermesParityTodoItem[] {
   const needsWork = (manifest.features ?? []).filter(
     (feature): feature is HermesParityFeature & { status: 'partial' | 'gap' } =>
-      feature.status === 'gap' || feature.status === 'partial',
+      feature.id !== 'openclaw-migration' && (feature.status === 'gap' || feature.status === 'partial'),
   );
   const priorityIds = new Set(FALLBACK_PRIORITY_FEATURE_IDS);
   return [
@@ -98,29 +104,52 @@ function fallbackTopWorkFromManifest(manifest: HermesParityManifest): HermesPari
   }));
 }
 
+function fallbackDeferredWorkFromManifest(manifest: HermesParityManifest): HermesParityTodoItem[] {
+  return (manifest.features ?? [])
+    .filter(
+      (feature): feature is HermesParityFeature & { status: 'gap' } =>
+        feature.id === 'openclaw-migration' && feature.status === 'gap',
+    )
+    .map((feature) => ({
+      area: feature.area,
+      id: feature.id,
+      nextWork: feature.nextWork ?? feature.notes,
+      officialSurface: feature.officialSurface,
+      status: feature.status,
+      verificationCommand: feature.verificationCommands[0] ?? 'n/a',
+    }));
+}
+
+function toHermesFeatureParityItem(feature: HermesParityTodoItem): HermesFeatureParityItem {
+  return {
+    area: feature.area,
+    id: feature.id,
+    nextWork: feature.nextWork,
+    officialSurface: feature.officialSurface,
+    status: feature.status,
+    verificationCommands: [feature.verificationCommand].filter(Boolean).slice(0, 3),
+  };
+}
+
 export async function getHermesFeatureParityForReview(): Promise<HermesFeatureParitySummary | null> {
   const mod = await loadCoreModule<HermesParityManifestModule>('agent/hermes-parity-manifest.js');
   if (!mod?.buildHermesParityManifest) return null;
 
   const manifest = mod.buildHermesParityManifest();
-  const todo = mod.buildHermesParityTodo?.({ includeDeferred: true, limit: 7 });
+  const todo = mod.buildHermesParityTodo?.({ includeDeferred: false, limit: 7 });
   const topWork = todo?.todos ?? fallbackTopWorkFromManifest(manifest);
+  const deferredWork = todo?.deferred ?? fallbackDeferredWorkFromManifest(manifest);
 
   return {
     auditDocument: manifest.officialSource.auditDocument,
     command: buildHermesFeatureParityCommand(),
+    deferredWork: deferredWork.map(toHermesFeatureParityItem),
     generatedAt: manifest.generatedAt,
     inspectedCommit: manifest.officialSource.inspectedCommit,
     latestTagObserved: manifest.officialSource.latestTagObserved,
     source: manifest.officialSource.repository,
     summary: manifest.summary,
-    topWork: topWork.map((feature) => ({
-      area: feature.area,
-      id: feature.id,
-      nextWork: feature.nextWork,
-      officialSurface: feature.officialSurface,
-      status: feature.status,
-      verificationCommands: [feature.verificationCommand].filter(Boolean).slice(0, 3),
-    })),
+    topWork: topWork.map(toHermesFeatureParityItem),
+    todoCommand: buildHermesFeatureTodoCommand(),
   };
 }

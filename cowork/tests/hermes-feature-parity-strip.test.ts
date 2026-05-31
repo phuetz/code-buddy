@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   HermesFeatureParityStrip,
   buildHermesFeatureParityCommand,
+  buildHermesFeatureTodoCommand,
 } from '../src/renderer/components/hermes-feature-parity-strip';
 
 vi.mock('react-i18next', () => ({
@@ -53,6 +54,16 @@ describe('HermesFeatureParityStrip', () => {
           parity: {
             auditDocument: 'docs/hermes-agent-official-parity-audit-2026-05-30.md',
             command: 'buddy hermes parity --json',
+            deferredWork: [
+              {
+                area: 'OpenClaw migration',
+                id: 'openclaw-migration',
+                nextWork: 'Do this at the end.',
+                officialSurface: 'hermes claw migrate',
+                status: 'gap',
+                verificationCommands: ['rg -n "openclaw" src tests docs'],
+              },
+            ],
             generatedAt: '2026-05-31T18:00:00.000Z',
             inspectedCommit: '5921d667',
             latestTagObserved: 'v2026.5.29.2',
@@ -73,15 +84,8 @@ describe('HermesFeatureParityStrip', () => {
                 status: 'partial',
                 verificationCommands: ['npm test -- tests/agent/learning-agent-real.test.ts --run'],
               },
-              {
-                area: 'OpenClaw migration',
-                id: 'openclaw-migration',
-                nextWork: 'Do this at the end.',
-                officialSurface: 'hermes claw migrate',
-                status: 'gap',
-                verificationCommands: ['rg -n "openclaw" src tests docs'],
-              },
             ],
+            todoCommand: 'buddy hermes todo --json',
           },
         }),
       );
@@ -99,11 +103,14 @@ describe('HermesFeatureParityStrip', () => {
     expect(strip?.textContent).toContain('Closed learning loop');
     expect(strip?.textContent).toContain('OpenClaw migration');
     expect(strip?.textContent).toContain('Do this at the end.');
+    expect(strip?.textContent).toContain('Deferred');
+    expect(strip?.textContent).toContain('buddy hermes todo --json');
     expect(strip?.textContent).toContain('buddy hermes parity --json');
   });
 
   it('keeps the CLI helper command stable', () => {
     expect(buildHermesFeatureParityCommand()).toBe('buddy hermes parity --json');
+    expect(buildHermesFeatureTodoCommand()).toBe('buddy hermes todo --json');
   });
 
   it('loads the parity summary from the readonly Electron bridge when no parity is provided', async () => {
@@ -111,6 +118,7 @@ describe('HermesFeatureParityStrip', () => {
     const get = vi.fn().mockResolvedValue({
       auditDocument: 'docs/hermes-agent-official-parity-audit-2026-05-30.md',
       command: 'buddy hermes parity --json',
+      deferredWork: [],
       generatedAt: '2026-05-31T18:05:00.000Z',
       inspectedCommit: '5921d667',
       latestTagObserved: 'v2026.5.29.2',
@@ -131,6 +139,7 @@ describe('HermesFeatureParityStrip', () => {
           verificationCommands: ['npx tsx src/index.ts hermes runtime status --json'],
         },
       ],
+      todoCommand: 'buddy hermes todo --json',
     });
     (window as unknown as {
       electronAPI?: {
@@ -157,5 +166,6 @@ describe('HermesFeatureParityStrip', () => {
     expect(get).toHaveBeenCalledWith();
     expect(target.textContent).toContain('Runtime backends');
     expect(target.textContent).toContain('5/20 major areas');
+    expect(target.textContent).toContain('buddy hermes todo --json');
   });
 });

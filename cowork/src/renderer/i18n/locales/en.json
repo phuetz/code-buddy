@@ -2254,6 +2254,7 @@
       "loadFailed": "Hermes feature parity load failed",
       "empty": "No prioritized Hermes feature gaps.",
       "unavailable": "Hermes feature parity is not loaded yet.",
+      "deferredLabel": "Deferred",
       "status": {
         "covered": "covered",
         "covered-partial": "covered/partial",

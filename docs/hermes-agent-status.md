@@ -10,8 +10,8 @@ concludes that Code Buddy has substantial Hermes-inspired coverage but **not**
 full feature-for-feature official Hermes parity.
 Cowork's Fleet Command Center now exposes the same feature-level parity summary
 through `tools.hermesFeatureParity.get`, so operators can see the current
-feature count, prioritized partials, and the deliberately deferred OpenClaw gap
-without leaving the cockpit.
+feature count, active prioritized partials, and the deliberately deferred
+OpenClaw gap without leaving the cockpit.
 For CLI triage, `buddy hermes todo --json` now gives the compact active Hermes
 TODO list from the same manifest and keeps OpenClaw out of active work by
 default.

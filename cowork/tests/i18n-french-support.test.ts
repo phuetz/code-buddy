@@ -324,6 +324,7 @@ describe('French renderer i18n support', () => {
       'fleet.hermesFeatureParity.loadFailed',
       'fleet.hermesFeatureParity.empty',
       'fleet.hermesFeatureParity.unavailable',
+      'fleet.hermesFeatureParity.deferredLabel',
       'fleet.hermesFeatureParity.status.covered',
       'fleet.hermesFeatureParity.status.covered-partial',
       'fleet.hermesFeatureParity.status.partial',
