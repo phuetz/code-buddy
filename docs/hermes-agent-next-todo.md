@@ -129,6 +129,8 @@ Current measured state:
   - Verification:
     - `npm test -- tests/tools/vision-analyze-real.test.ts --run`
     - `npm test -- tests/tools/vision-analyze-real.test.ts tests/agent/hermes-tool-parity-local.test.ts tests/commands/hermes-commands.test.ts --run`
+    - `npm test -- tests/tools/browser-console-real.test.ts tests/tools/browser-dialog-real.test.ts tests/tools/browser-get-images-real.test.ts tests/tools/browser-hermes-actions-real.test.ts tests/tools/browser-snapshot-real.test.ts --run`
+    - `(cd cowork && npm test -- tests/test-runner-bridge-catalog.test.ts --run)` confirms the safe Cowork Test Runner browser smoke entry.
 
 - [x] **Add exact `text_to_speech` prompt tool**
   - Why: Code Buddy had voice/TTS managers, but Hermes exposes a direct `text_to_speech` tool that writes audio and returns a media path.

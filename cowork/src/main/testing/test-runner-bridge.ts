@@ -1231,6 +1231,38 @@ export class TestRunnerBridge extends EventEmitter {
       addIfFilesExist(
         items,
         {
+          id: 'code-buddy-hermes-browser-real-smoke',
+          label: 'Hermes / browser real smoke',
+          group: 'Hermes',
+          description:
+            'Runs real Playwright browser smokes for Hermes actions, snapshots, console, dialogs, and image discovery',
+          command: 'npm',
+          args: [
+            'test',
+            '--',
+            'tests/tools/browser-console-real.test.ts',
+            'tests/tools/browser-dialog-real.test.ts',
+            'tests/tools/browser-get-images-real.test.ts',
+            'tests/tools/browser-hermes-actions-real.test.ts',
+            'tests/tools/browser-snapshot-real.test.ts',
+            '--run',
+          ],
+          cwd: workspace,
+          kind: 'integration',
+          safeToRun: true,
+          timeoutMs: 180_000,
+        },
+        [
+          path.join(workspace, 'tests', 'tools', 'browser-console-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'browser-dialog-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'browser-get-images-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'browser-hermes-actions-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'browser-snapshot-real.test.ts'),
+        ]
+      );
+      addIfFilesExist(
+        items,
+        {
           id: 'code-buddy-hermes-learning-loop-real-smoke',
           label: 'Hermes / learning loop real smoke',
           group: 'Hermes',

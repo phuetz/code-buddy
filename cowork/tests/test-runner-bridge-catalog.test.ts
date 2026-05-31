@@ -587,6 +587,11 @@ function makeWorkspace(): string {
   writeFileSync(path.join(root, 'tests', 'tools', 'cronjob-tool-real.test.ts'), '');
   writeFileSync(path.join(root, 'tests', 'tools', 'session-search-real.test.ts'), '');
   writeFileSync(path.join(root, 'tests', 'tools', 'skills-inspection-real.test.ts'), '');
+  writeFileSync(path.join(root, 'tests', 'tools', 'browser-console-real.test.ts'), '');
+  writeFileSync(path.join(root, 'tests', 'tools', 'browser-dialog-real.test.ts'), '');
+  writeFileSync(path.join(root, 'tests', 'tools', 'browser-get-images-real.test.ts'), '');
+  writeFileSync(path.join(root, 'tests', 'tools', 'browser-hermes-actions-real.test.ts'), '');
+  writeFileSync(path.join(root, 'tests', 'tools', 'browser-snapshot-real.test.ts'), '');
   writeFileSync(path.join(root, 'tests', 'tools', 'discord-tool-real.test.ts'), '');
   writeFileSync(path.join(root, 'tests', 'tools', 'homeassistant-tool-real.test.ts'), '');
   writeFileSync(path.join(root, 'tests', 'tools', 'mixture-of-agents-real.test.ts'), '');
@@ -888,6 +893,7 @@ describe('TestRunnerBridge catalog', () => {
     expect(labels).toContain('Hermes / core workspace real smoke');
     expect(labels).toContain('Hermes / persistence skills real smoke');
     expect(labels).toContain('Hermes / platform connectors real smoke');
+    expect(labels).toContain('Hermes / browser real smoke');
     expect(labels).toContain('Hermes / learning loop real smoke');
     expect(labels).toContain('Hermes / execute_code real smoke');
     expect(labels).toContain('Hermes / media vision real smoke');
@@ -1083,6 +1089,22 @@ describe('TestRunnerBridge catalog', () => {
         'tests/tools/feishu-tool-real.test.ts',
         'tests/tools/yuanbao-tool-real.test.ts',
         'tests/tools/x-search-tool-real.test.ts',
+        '--run',
+      ],
+      kind: 'integration',
+      safeToRun: true,
+      timeoutMs: 180_000,
+    });
+    expect(catalog.find((item) => item.label === 'Hermes / browser real smoke')).toMatchObject({
+      command: 'npm',
+      args: [
+        'test',
+        '--',
+        'tests/tools/browser-console-real.test.ts',
+        'tests/tools/browser-dialog-real.test.ts',
+        'tests/tools/browser-get-images-real.test.ts',
+        'tests/tools/browser-hermes-actions-real.test.ts',
+        'tests/tools/browser-snapshot-real.test.ts',
         '--run',
       ],
       kind: 'integration',

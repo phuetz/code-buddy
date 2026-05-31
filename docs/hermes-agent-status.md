@@ -143,6 +143,10 @@ Cowork Test Runner now exposes a safe `Hermes / media vision real smoke` catalog
 | Hermes `vision_analyze` local image inspection | `src/tools/vision/vision-analysis.ts`, `src/tools/registry/vision-tools.ts`, `tests/tools/vision-analyze-real.test.ts` | done — exact prompt tool name, real image metadata via `sharp`, dominant color/labels, optional local OCR attempt, durable `.codebuddy/vision-analysis/*.json` report |
 | Hermes `browser_vision` page screenshot analysis | `src/tools/registry/vision-tools.ts`, `src/codebuddy/tool-definitions/browser-tools.ts`, `tests/tools/vision-analyze-real.test.ts` | done — exact prompt tool name, real Playwright screenshot under `.codebuddy/browser-vision`, local analysis, optional accessibility snapshot context; remote semantic vision remains opt-in/future provider work |
 
+Cowork Test Runner now exposes a safe `Hermes / browser real smoke` entry that
+reruns the real Playwright browser action, snapshot, console, dialog, and image
+discovery proofs.
+
 ### Runs everywhere / gateway / mobile
 
 | Sub-capability | Where | Status |
