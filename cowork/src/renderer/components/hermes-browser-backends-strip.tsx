@@ -41,6 +41,13 @@ export interface HermesBrowserBackendsReview {
 }
 
 export interface HermesBrowserBackendSmokeResult {
+  artifacts?: Array<{
+    exists: boolean;
+    kind: 'playwright-trace';
+    label: string;
+    path: string;
+    sizeBytes: number;
+  }>;
   backendId: string;
   command: string | null;
   durationMs: number;
@@ -260,6 +267,7 @@ const BrowserBackendRow: React.FC<{
       : 'text-text-muted';
   const smoke = backend.smokeCommand ?? backend.command ?? backend.id;
   const canSmoke = Boolean(onRunSmoke && backend.runnable && backend.smokeCommand);
+  const recordingArtifact = smokeResult?.artifacts?.find((artifact) => artifact.kind === 'playwright-trace');
   const statusLabels: Record<HermesBrowserBackendStatus, string> = {
     available: t('fleet.hermesBrowserBackends.status.available', 'available'),
     configured: t('fleet.hermesBrowserBackends.status.configured', 'configured'),
@@ -315,6 +323,17 @@ const BrowserBackendRow: React.FC<{
               }
             )
             : smokeError}
+        </div>
+      ) : null}
+      {recordingArtifact ? (
+        <div
+          className="mt-0.5 truncate rounded bg-background px-1 py-0.5 font-mono text-[9px] text-text-muted"
+          data-testid={`hermes-browser-recording-${backend.id}`}
+          title={recordingArtifact.path}
+        >
+          {t('fleet.hermesBrowserBackends.recordingArtifact', 'recording: {{path}}', {
+            path: recordingArtifact.path,
+          })}
         </div>
       ) : null}
     </div>

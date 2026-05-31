@@ -1894,8 +1894,9 @@ describe('Hermes CLI commands', () => {
         }),
         expect.objectContaining({
           id: 'session-recording',
-          runnable: false,
-          status: 'missing',
+          runnable: true,
+          smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+          status: 'available',
         }),
       ]),
     );
@@ -1912,6 +1913,12 @@ describe('Hermes CLI commands', () => {
       kind: string;
       schemaVersion: number;
       result: {
+        artifacts?: Array<{
+          exists: boolean;
+          kind: string;
+          path: string;
+          sizeBytes: number;
+        }>;
         backendId: string;
         command: string | null;
         ok: boolean;
@@ -1931,5 +1938,15 @@ describe('Hermes CLI commands', () => {
     });
     expect(output.result.stdout).toContain('OK-HERMES-BROWSER');
     expect(output.result.output).toContain('OK-HERMES-BROWSER');
+    expect(output.result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exists: true,
+          kind: 'playwright-trace',
+          sizeBytes: expect.any(Number),
+        }),
+      ]),
+    );
+    expect(output.result.artifacts?.[0]?.sizeBytes).toBeGreaterThan(0);
   });
 });

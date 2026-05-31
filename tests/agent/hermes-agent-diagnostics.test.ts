@@ -201,6 +201,12 @@ describe('Hermes Agent diagnostics', () => {
       status: 'configured',
       credentialSources: ['CODEBUDDY_BROWSER_CDP_URL'],
     });
+    const recording = diagnostics.browserBackends.backends.find((backend) => backend.id === 'session-recording');
+    expect(recording).toMatchObject({
+      status: 'available',
+      runnable: true,
+      smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+    });
     expect(JSON.stringify(diagnostics.browserBackends)).not.toContain('secret-');
     expect(JSON.stringify(diagnostics.browserBackends)).not.toContain('ws://secret-cdp-host');
   });

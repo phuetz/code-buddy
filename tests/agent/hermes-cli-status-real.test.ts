@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import { existsSync, statSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
@@ -131,7 +132,13 @@ describe('Hermes CLI status real smoke', () => {
 
     const browserSmoke = runHermesJson(['browser-smoke', 'local-playwright']) as {
       kind: string;
-      result: { backendId: string; ok: boolean; output: string; status: string };
+      result: {
+        artifacts?: Array<{ exists: boolean; kind: string; path: string; sizeBytes: number }>;
+        backendId: string;
+        ok: boolean;
+        output: string;
+        status: string;
+      };
     };
     expect(browserSmoke.kind).toBe('hermes_browser_backend_smoke');
     expect(browserSmoke.result).toMatchObject({
@@ -140,6 +147,12 @@ describe('Hermes CLI status real smoke', () => {
       status: 'passed',
     });
     expect(browserSmoke.result.output).toContain('OK-HERMES-BROWSER');
+    const traceArtifact = browserSmoke.result.artifacts?.find((artifact) => artifact.kind === 'playwright-trace');
+    expect(traceArtifact).toMatchObject({ exists: true });
+    expect(traceArtifact?.sizeBytes).toBeGreaterThan(0);
+    expect(traceArtifact?.path).toBeTruthy();
+    expect(existsSync(traceArtifact!.path)).toBe(true);
+    expect(statSync(traceArtifact!.path).size).toBeGreaterThan(0);
 
     const protocols = runHermesJson(['protocols', 'status']) as {
       kind: string;

@@ -55,8 +55,9 @@ describe('Hermes browser backend readiness and live smoke', () => {
         }),
         expect.objectContaining({
           id: 'session-recording',
-          runnable: false,
-          status: 'missing',
+          runnable: true,
+          smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+          status: 'available',
         }),
       ]),
     );
@@ -78,5 +79,15 @@ describe('Hermes browser backend readiness and live smoke', () => {
     });
     expect(result.stdout).toContain('OK-HERMES-BROWSER');
     expect(result.output).toContain('OK-HERMES-BROWSER');
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exists: true,
+          kind: 'playwright-trace',
+          sizeBytes: expect.any(Number),
+        }),
+      ]),
+    );
+    expect(result.artifacts?.[0]?.sizeBytes).toBeGreaterThan(0);
   });
 });

@@ -8,6 +8,10 @@
 
 import { createRequire } from 'module';
 import { spawnSync } from 'child_process';
+import { mkdir, mkdtemp, stat } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join, resolve } from 'path';
+import type { Browser, BrowserContext } from 'playwright';
 
 export type HermesBrowserBackendStatus = 'available' | 'configured' | 'missing' | 'unsupported';
 export type HermesBrowserSmokeStatus = 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
@@ -40,6 +44,7 @@ export interface HermesBrowserBackendsReadiness {
 }
 
 export interface HermesBrowserBackendSmokeResult {
+  artifacts?: HermesBrowserSmokeArtifact[];
   backendId: string;
   command: string | null;
   durationMs: number;
@@ -53,12 +58,21 @@ export interface HermesBrowserBackendSmokeResult {
   stderr: string;
 }
 
+export interface HermesBrowserSmokeArtifact {
+  exists: boolean;
+  kind: 'playwright-trace';
+  label: string;
+  path: string;
+  sizeBytes: number;
+}
+
 export interface HermesBrowserBackendsOptions {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
 }
 
 export interface HermesBrowserBackendSmokeOptions extends HermesBrowserBackendsOptions {
+  artifactsDir?: string;
   backendId: string;
 }
 
@@ -232,20 +246,26 @@ function camofoxBackend(env: NodeJS.ProcessEnv): HermesBrowserBackend {
 }
 
 function recordingBackend(): HermesBrowserBackend {
+  const version = packageVersion('playwright');
+  const installed = Boolean(version);
   return {
     id: 'session-recording',
     label: 'Browser session recording',
     officialSurface: 'browser session replay/recording',
-    status: 'missing',
-    installed: false,
-    configured: false,
-    runnable: false,
-    command: null,
-    version: null,
+    status: installed ? 'available' : 'missing',
+    installed,
+    configured: installed,
+    runnable: installed,
+    command: installed ? process.execPath : null,
+    version,
     credentialSources: [],
-    smokeCommand: null,
-    notes: ['Browser Operator exports proof artifacts and action logs, but not full upstream-style session recording.'],
-    remediation: ['Add recording artifacts before marking browser session recording as covered.'],
+    smokeCommand: installed ? 'buddy hermes browser-smoke local-playwright --json' : null,
+    notes: [
+      installed
+        ? 'The local Playwright smoke writes a trace.zip session recording artifact for replay/debugging.'
+        : 'Browser Operator exports proof artifacts and action logs, but Playwright trace recording is unavailable.',
+    ],
+    remediation: installed ? [] : ['Install Playwright before marking browser session recording as available.'],
   };
 }
 
@@ -326,23 +346,72 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function runLocalPlaywrightSmoke(now: () => Date): Promise<HermesBrowserBackendSmokeResult> {
+async function createBrowserSmokeArtifactDir(artifactsDir?: string): Promise<string> {
+  if (artifactsDir?.trim()) {
+    const target = resolve(artifactsDir);
+    await mkdir(target, { recursive: true });
+    return target;
+  }
+
+  return mkdtemp(join(tmpdir(), 'codebuddy-hermes-browser-'));
+}
+
+async function runLocalPlaywrightSmoke(
+  now: () => Date,
+  options: { artifactsDir?: string } = {},
+): Promise<HermesBrowserBackendSmokeResult> {
   const started = now();
   const startedAtMs = Date.now();
-  let browser: Awaited<ReturnType<typeof import('playwright')['chromium']['launch']>> | null = null;
+  let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
 
   try {
     const playwright = await import('playwright');
     browser = await playwright.chromium.launch({ headless: true });
-    const page = await browser.newPage();
+    context = await browser.newContext();
+    const artifactDir = await createBrowserSmokeArtifactDir(options.artifactsDir);
+    const tracePath = join(artifactDir, 'local-playwright-trace.zip');
+
+    await context.tracing.start({
+      screenshots: true,
+      snapshots: true,
+      sources: false,
+    });
+
+    const page = await context.newPage();
     await page.goto('data:text/html,<title>OK-HERMES-BROWSER</title><h1>OK-HERMES-BROWSER</h1>', {
       waitUntil: 'domcontentloaded',
     });
     const title = await page.title();
     const heading = await page.locator('h1').textContent();
-    const ok = title === 'OK-HERMES-BROWSER' && heading === 'OK-HERMES-BROWSER';
-    const output = `title=${title}; heading=${heading ?? ''}`;
+    const pageOk = title === 'OK-HERMES-BROWSER' && heading === 'OK-HERMES-BROWSER';
+    let traceError: string | null = null;
+
+    try {
+      await context.tracing.stop({ path: tracePath });
+    } catch (error) {
+      traceError = errorMessage(error);
+    }
+
+    const traceStats = traceError ? null : await stat(tracePath).catch(() => null);
+    const traceExists = Boolean(traceStats?.isFile() && traceStats.size > 0);
+    if (!traceError && !traceExists) {
+      traceError = 'Playwright trace recording was not written.';
+    }
+
+    const artifacts: HermesBrowserSmokeArtifact[] = traceStats
+      ? [{
+        exists: traceExists,
+        kind: 'playwright-trace',
+        label: 'Local Playwright trace',
+        path: tracePath,
+        sizeBytes: traceStats.size,
+      }]
+      : [];
+    const ok = pageOk && !traceError && traceExists;
+    const output = `title=${title}; heading=${heading ?? ''}; trace=${tracePath}`;
     return {
+      artifacts,
       backendId: 'local-playwright',
       command: process.execPath,
       durationMs: Math.max(0, Date.now() - startedAtMs),
@@ -353,7 +422,10 @@ async function runLocalPlaywrightSmoke(now: () => Date): Promise<HermesBrowserBa
       startedAt: started.toISOString(),
       status: ok ? 'passed' : 'failed',
       stdout: output,
-      stderr: ok ? '' : 'Unexpected browser page content.',
+      stderr: [
+        pageOk ? null : 'Unexpected browser page content.',
+        traceError,
+      ].filter(Boolean).join('\n'),
     };
   } catch (error) {
     const message = errorMessage(error);
@@ -371,6 +443,7 @@ async function runLocalPlaywrightSmoke(now: () => Date): Promise<HermesBrowserBa
       stderr: message,
     };
   } finally {
+    await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
 }
@@ -392,7 +465,7 @@ export async function runHermesBrowserBackendSmoke(
   }
 
   if (backend.id === 'local-playwright') {
-    return runLocalPlaywrightSmoke(now);
+    return runLocalPlaywrightSmoke(now, { artifactsDir: options.artifactsDir });
   }
 
   if (!backend.runnable) {
@@ -437,10 +510,21 @@ export function renderHermesBrowserBackendsReadiness(readiness: HermesBrowserBac
 }
 
 export function renderHermesBrowserSmoke(result: HermesBrowserBackendSmokeResult): string {
-  return [
+  const lines = [
     `Hermes browser smoke (${result.backendId}): ${result.status}`,
     `Command: ${result.command ?? 'none'}`,
     `Duration: ${result.durationMs}ms`,
     `Output: ${result.output || 'none'}`,
-  ].join('\n');
+  ];
+
+  if (result.artifacts?.length) {
+    lines.push(
+      'Artifacts:',
+      ...result.artifacts.map((artifact) =>
+        `- ${artifact.kind}: ${artifact.path} (${artifact.sizeBytes} bytes)`,
+      ),
+    );
+  }
+
+  return lines.join('\n');
 }

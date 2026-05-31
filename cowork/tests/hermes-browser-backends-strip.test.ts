@@ -58,19 +58,19 @@ const readyBrowserBackends: HermesBrowserBackendsReview = {
       version: '3.4.0',
     },
     {
-      command: null,
-      configured: false,
+      command: process.execPath,
+      configured: true,
       credentialSources: [],
       id: 'session-recording',
-      installed: false,
+      installed: true,
       label: 'Browser session recording',
-      notes: ['Not implemented yet.'],
+      notes: ['Local Playwright trace recording is available.'],
       officialSurface: 'browser session replay/recording',
-      remediation: ['Add recording artifacts.'],
-      runnable: false,
-      smokeCommand: null,
-      status: 'missing',
-      version: null,
+      remediation: [],
+      runnable: true,
+      smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+      status: 'available',
+      version: '1.58.2',
     },
   ],
   command: 'buddy hermes browser status --json',
@@ -80,7 +80,7 @@ const readyBrowserBackends: HermesBrowserBackendsReview = {
   managedConfiguredCount: 1,
   ok: true,
   platform: 'win32',
-  recommendations: ['Add a real browser session recording artifact before claiming full Hermes browser backend parity.'],
+  recommendations: ['Configure managed browser backends only if the operator workflow requires them.'],
 };
 
 describe('HermesBrowserBackendsStrip', () => {
@@ -152,6 +152,15 @@ describe('HermesBrowserBackendsStrip', () => {
     const smoke = vi.fn().mockResolvedValue({
       ok: true,
       result: {
+        artifacts: [
+          {
+            exists: true,
+            kind: 'playwright-trace',
+            label: 'Local Playwright trace',
+            path: 'C:\\Temp\\codebuddy-hermes-browser\\local-playwright-trace.zip',
+            sizeBytes: 4096,
+          },
+        ],
         backendId: 'local-playwright',
         command: process.execPath,
         durationMs: 31,
@@ -200,5 +209,7 @@ describe('HermesBrowserBackendsStrip', () => {
     const result = target.querySelector('[data-testid="hermes-browser-smoke-result-local-playwright"]');
     expect(result?.textContent).toContain('smoke passed');
     expect(result?.textContent).toContain('OK-HERMES-BROWSER');
+    const recording = target.querySelector('[data-testid="hermes-browser-recording-local-playwright"]');
+    expect(recording?.textContent).toContain('local-playwright-trace.zip');
   });
 });

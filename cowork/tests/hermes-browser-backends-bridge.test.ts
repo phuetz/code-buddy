@@ -56,6 +56,12 @@ describe.skipIf(!hasBuiltCore)('Hermes browser backends bridge real core integra
             credentialSources: ['BROWSERBASE_API_KEY', 'BROWSERBASE_PROJECT_ID'],
             status: 'configured',
           }),
+          expect.objectContaining({
+            id: 'session-recording',
+            runnable: true,
+            smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+            status: 'available',
+          }),
         ]),
       );
       expect(JSON.stringify(readiness)).not.toContain('secret-');
@@ -80,5 +86,15 @@ describe.skipIf(!hasBuiltCore)('Hermes browser backends bridge real core integra
       status: 'passed',
     });
     expect(result.output).toContain('OK-HERMES-BROWSER');
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exists: true,
+          kind: 'playwright-trace',
+          sizeBytes: expect.any(Number),
+        }),
+      ]),
+    );
+    expect(result.artifacts?.[0]?.sizeBytes).toBeGreaterThan(0);
   });
 });

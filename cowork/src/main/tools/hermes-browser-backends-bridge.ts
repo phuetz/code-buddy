@@ -31,6 +31,13 @@ export interface HermesBrowserBackendsReview {
 }
 
 export interface HermesBrowserBackendSmokeResult {
+  artifacts?: Array<{
+    exists: boolean;
+    kind: 'playwright-trace';
+    label: string;
+    path: string;
+    sizeBytes: number;
+  }>;
   backendId: string;
   command: string | null;
   durationMs: number;

@@ -136,7 +136,9 @@ interface HermesTodoOptions extends HermesCommandOptions {
   limit?: string;
 }
 
-type HermesBrowserSmokeOptions = HermesCommandOptions;
+interface HermesBrowserSmokeOptions extends HermesCommandOptions {
+  recordingDir?: string;
+}
 
 type HermesProtocolSmokeOptions = HermesCommandOptions;
 
@@ -1843,9 +1845,13 @@ export function registerHermesCommands(program: Command): void {
     .command('browser-smoke')
     .description('Run an opt-in live smoke for one Hermes browser backend')
     .argument('<backendId>', 'backend id from buddy hermes browser status, for example local-playwright')
+    .option('--recording-dir <dir>', 'directory for browser recording artifacts')
     .option('--json', 'output JSON')
     .action(async (backendId: string, options: HermesBrowserSmokeOptions) => {
-      const result = await runHermesBrowserBackendSmoke({ backendId });
+      const result = await runHermesBrowserBackendSmoke({
+        artifactsDir: options.recordingDir,
+        backendId,
+      });
       const payload = {
         kind: 'hermes_browser_backend_smoke',
         schemaVersion: 1,
