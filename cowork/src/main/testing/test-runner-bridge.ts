@@ -1132,6 +1132,34 @@ export class TestRunnerBridge extends EventEmitter {
         },
         path.join(workspace, 'tests', 'agent', 'hermes-cli-status-real.test.ts')
       );
+      addIfFilesExist(
+        items,
+        {
+          id: 'code-buddy-hermes-media-vision-real-smoke',
+          label: 'Hermes / media vision real smoke',
+          group: 'Hermes',
+          description:
+            'Runs real local TTS, Playwright browser vision, image analysis, and media-generation provider-path smokes',
+          command: 'npm',
+          args: [
+            'test',
+            '--',
+            'tests/tools/text-to-speech-real.test.ts',
+            'tests/tools/vision-analyze-real.test.ts',
+            'tests/tools/media-generation-real.test.ts',
+            '--run',
+          ],
+          cwd: workspace,
+          kind: 'integration',
+          safeToRun: true,
+          timeoutMs: 180_000,
+        },
+        [
+          path.join(workspace, 'tests', 'tools', 'text-to-speech-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'vision-analyze-real.test.ts'),
+          path.join(workspace, 'tests', 'tools', 'media-generation-real.test.ts'),
+        ]
+      );
       addIfFileExists(
         items,
         {

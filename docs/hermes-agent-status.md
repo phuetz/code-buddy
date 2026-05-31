@@ -126,6 +126,8 @@ change-control surface.
 | Hermes `video_analyze` | `src/tools/video-analysis-tool.ts`, `src/tools/registry/multimodal-tools.ts`, `tests/tools/media-generation-real.test.ts` | done — exact prompt tool name, local/remote video normalization, format and 50 MB caps, base64 `video_url` payload, and configured video-capable model dispatch |
 | Hermes `video_generate` | `src/tools/media-generation-tool.ts`, `src/tools/registry/multimodal-tools.ts`, `tests/tools/media-generation-real.test.ts` | done — exact prompt tool name, text-to-video and image-to-video over configured xAI or FAL-compatible HTTP backends, returned video cache under `.codebuddy/media-generation/videos` |
 
+Cowork Test Runner now exposes a safe `Hermes / media vision real smoke` catalog item that relaunches the local TTS, Playwright browser vision, image analysis, and media-generation provider-path smoke tests without requiring paid provider credentials.
+
 ### Vision and browser inspection
 
 | Sub-capability | Where | Status |
