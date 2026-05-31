@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import { spawnSync } from 'child_process';
 import os from 'os';
 import path from 'path';
@@ -47,6 +47,31 @@ function hasProcessWithMarker(marker: string): boolean {
     { encoding: 'utf8', timeout: 10_000 }
   );
   return result.status === 0 && result.stdout.trim().length > 0;
+}
+
+function listRealTestFiles(root: string, relativeDir = 'tests'): string[] {
+  const absoluteDir = path.join(root, relativeDir);
+  const files: string[] = [];
+  for (const entry of readdirSync(absoluteDir)) {
+    const relativePath = path.join(relativeDir, entry);
+    const absolutePath = path.join(root, relativePath);
+    if (statSync(absolutePath).isDirectory()) {
+      files.push(...listRealTestFiles(root, relativePath));
+      continue;
+    }
+    if (entry.includes('real') && entry.endsWith('.test.ts')) {
+      files.push(relativePath.split(path.sep).join('/'));
+    }
+  }
+  return files.sort();
+}
+
+function catalogTestFileArgs(catalog: Array<{ args: string[] }>): Set<string> {
+  return new Set(
+    catalog.flatMap((item) => item.args)
+      .filter((arg) => arg.startsWith('tests/') && arg.endsWith('.test.ts'))
+      .map((arg) => arg.replace(/\\/g, '/'))
+  );
 }
 
 function makeWorkspace(): string {
@@ -858,7 +883,8 @@ beforeEach(() => {
 describe('TestRunnerBridge catalog', () => {
   it('lists workspace, Cowork, and real-provider QA checks', () => {
     const bridge = new TestRunnerBridge();
-    bridge.setWorkspace(makeWorkspace());
+    const workspace = makeWorkspace();
+    bridge.setWorkspace(workspace);
 
     const catalog = bridge.getCatalog();
     const labels = catalog.map((item) => item.label);
@@ -1331,6 +1357,10 @@ describe('TestRunnerBridge catalog', () => {
       requiresEnv: 'CODEBUDDY_REAL_COMPUTER_USE',
       env: { CODEBUDDY_REAL_COMPUTER_USE: '1' },
     });
+
+    const uncatalogedRealTests = listRealTestFiles(workspace)
+      .filter((testPath) => !catalogTestFileArgs(catalog).has(testPath));
+    expect(uncatalogedRealTests).toEqual([]);
   });
 
   it('runs a catalog item and reports its status', async () => {
