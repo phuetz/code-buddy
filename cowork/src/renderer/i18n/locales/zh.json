@@ -2297,6 +2297,28 @@
         "unsupported": "不支持"
       }
     },
+    "hermesBrowserBackends": {
+      "title": "Hermes 浏览器后端",
+      "readyChip": "浏览器就绪",
+      "attentionChip": "浏览器需注意",
+      "loadingChip": "浏览器",
+      "localLabel": "本地",
+      "managedLabel": "托管",
+      "platformLabel": "平台",
+      "noVersion": "无版本",
+      "unavailable": "Hermes 浏览器后端尚未加载。",
+      "loadFailed": "Hermes 浏览器后端加载失败",
+      "runSmoke": "运行浏览器 smoke",
+      "smokeUnavailable": "实时 smoke runner 不可用。",
+      "smokePassed": "smoke 通过：{{output}}",
+      "smokeFailed": "smoke {{status}}：{{output}}",
+      "status": {
+        "available": "可用",
+        "configured": "已配置",
+        "missing": "缺失",
+        "unsupported": "不支持"
+      }
+    },
     "skillCandidate": {
       "title": "SKILL 候选审查",
       "countChip": "{{count}} 个合格",

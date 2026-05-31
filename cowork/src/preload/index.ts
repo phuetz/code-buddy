@@ -1621,6 +1621,52 @@ contextBridge.exposeInMainWorld('electronAPI', {
         };
       }> => ipcRenderer.invoke('tools.hermesRuntimeBackends.smoke', options),
     },
+    hermesBrowserBackends: {
+      get: (): Promise<{
+        backends: Array<{
+          command: string | null;
+          configured: boolean;
+          credentialSources: string[];
+          id: string;
+          installed: boolean;
+          label: string;
+          notes: string[];
+          officialSurface: string;
+          remediation: string[];
+          runnable: boolean;
+          smokeCommand: string | null;
+          status: 'available' | 'configured' | 'missing' | 'unsupported';
+          version: string | null;
+        }>;
+        command: string;
+        generatedAt: string;
+        issues: string[];
+        localRunnableCount: number;
+        managedConfiguredCount: number;
+        ok: boolean;
+        platform: string;
+        recommendations: string[];
+      } | null> => ipcRenderer.invoke('tools.hermesBrowserBackends.get'),
+      smoke: (options: {
+        backendId: string;
+      }): Promise<{
+        error?: string;
+        ok: boolean;
+        result?: {
+          backendId: string;
+          command: string | null;
+          durationMs: number;
+          finishedAt: string;
+          label: string | null;
+          ok: boolean;
+          output: string;
+          startedAt: string;
+          status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
+          stderr: string;
+          stdout: string;
+        };
+      }> => ipcRenderer.invoke('tools.hermesBrowserBackends.smoke', options),
+    },
     skillPackage: {
       list: (options?: {
         cwd?: string;
@@ -4345,6 +4391,52 @@ declare global {
               ok: boolean;
               output: string;
               signal: string | null;
+              startedAt: string;
+              status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
+              stderr: string;
+              stdout: string;
+            };
+          }>;
+        };
+        hermesBrowserBackends: {
+          get: () => Promise<{
+            backends: Array<{
+              command: string | null;
+              configured: boolean;
+              credentialSources: string[];
+              id: string;
+              installed: boolean;
+              label: string;
+              notes: string[];
+              officialSurface: string;
+              remediation: string[];
+              runnable: boolean;
+              smokeCommand: string | null;
+              status: 'available' | 'configured' | 'missing' | 'unsupported';
+              version: string | null;
+            }>;
+            command: string;
+            generatedAt: string;
+            issues: string[];
+            localRunnableCount: number;
+            managedConfiguredCount: number;
+            ok: boolean;
+            platform: string;
+            recommendations: string[];
+          } | null>;
+          smoke: (options: {
+            backendId: string;
+          }) => Promise<{
+            error?: string;
+            ok: boolean;
+            result?: {
+              backendId: string;
+              command: string | null;
+              durationMs: number;
+              finishedAt: string;
+              label: string | null;
+              ok: boolean;
+              output: string;
               startedAt: string;
               status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
               stderr: string;

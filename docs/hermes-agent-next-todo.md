@@ -231,8 +231,8 @@ Current measured state:
 
 - [ ] **Browser backend inventory**
   - Scope: detect/configure local Playwright, remote CDP, Browserbase/Stagehand, Browser Use gateway, Firecrawl, Camofox/Camoufox, and session recording.
-  - Done so far: `buddy hermes doctor --json` and `buddy hermes browser status --json` now report browser backend readiness with credential source names only. `buddy hermes browser-smoke local-playwright --json` launches a real headless Chromium page and verifies the local browser binary, not just package presence.
-  - Acceptance: local Playwright backend status and smoke are machine-readable. **Done for CLI JSON and real local smoke.**
+  - Done so far: `buddy hermes doctor --json` and `buddy hermes browser status --json` now report browser backend readiness with credential source names only. `buddy hermes browser-smoke local-playwright --json` launches a real headless Chromium page and verifies the local browser binary, not just package presence. Cowork renders the same readiness in Settings -> API and Fleet Command Center through `tools.hermesBrowserBackends.get`, and can trigger the local smoke through `tools.hermesBrowserBackends.smoke`.
+  - Acceptance: local Playwright backend status and smoke are machine-readable. **Done for CLI JSON, Cowork bridge/UI, and real local smoke.**
   - Remaining scope: first-class managed backend runners, hybrid routing, and full session recording.
 
 - [x] **Yuanbao platform connector parity**

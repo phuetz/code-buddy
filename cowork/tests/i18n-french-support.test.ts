@@ -69,6 +69,10 @@ const hermesRuntimeBackendsStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-runtime-backends-strip.tsx'
 );
+const hermesBrowserBackendsStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-browser-backends-strip.tsx'
+);
 const skillCandidateReviewQueueStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/skill-candidate-review-queue-strip.tsx'
@@ -235,6 +239,7 @@ describe('French renderer i18n support', () => {
       fs.readFileSync(hermesToolsetsStripPath, 'utf8'),
       fs.readFileSync(hermesProviderReadinessStripPath, 'utf8'),
       fs.readFileSync(hermesRuntimeBackendsStripPath, 'utf8'),
+      fs.readFileSync(hermesBrowserBackendsStripPath, 'utf8'),
       fs.readFileSync(skillCandidateReviewQueueStripPath, 'utf8'),
       fs.readFileSync(skillPackageManagerStripPath, 'utf8'),
       fs.readFileSync(lessonCandidateReviewStripPath, 'utf8'),
@@ -341,6 +346,24 @@ describe('French renderer i18n support', () => {
       'fleet.hermesRuntimeBackends.status.configured',
       'fleet.hermesRuntimeBackends.status.missing',
       'fleet.hermesRuntimeBackends.status.unsupported',
+      'fleet.hermesBrowserBackends.title',
+      'fleet.hermesBrowserBackends.readyChip',
+      'fleet.hermesBrowserBackends.attentionChip',
+      'fleet.hermesBrowserBackends.loadingChip',
+      'fleet.hermesBrowserBackends.localLabel',
+      'fleet.hermesBrowserBackends.managedLabel',
+      'fleet.hermesBrowserBackends.platformLabel',
+      'fleet.hermesBrowserBackends.noVersion',
+      'fleet.hermesBrowserBackends.unavailable',
+      'fleet.hermesBrowserBackends.loadFailed',
+      'fleet.hermesBrowserBackends.runSmoke',
+      'fleet.hermesBrowserBackends.smokeUnavailable',
+      'fleet.hermesBrowserBackends.smokePassed',
+      'fleet.hermesBrowserBackends.smokeFailed',
+      'fleet.hermesBrowserBackends.status.available',
+      'fleet.hermesBrowserBackends.status.configured',
+      'fleet.hermesBrowserBackends.status.missing',
+      'fleet.hermesBrowserBackends.status.unsupported',
       'fleet.skillCandidate.title',
       'fleet.skillCandidate.countChip',
       'fleet.skillCandidate.reviewChip',

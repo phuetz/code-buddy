@@ -2310,6 +2310,28 @@
         "unsupported": "non supporte"
       }
     },
+    "hermesBrowserBackends": {
+      "title": "Backends navigateur Hermes",
+      "readyChip": "navigateur pret",
+      "attentionChip": "navigateur a verifier",
+      "loadingChip": "navigateur",
+      "localLabel": "Local",
+      "managedLabel": "Geres",
+      "platformLabel": "Plateforme",
+      "noVersion": "pas de version",
+      "unavailable": "Les backends navigateur Hermes ne sont pas encore charges.",
+      "loadFailed": "Chargement des backends navigateur Hermes echoue",
+      "runSmoke": "Lancer le smoke navigateur",
+      "smokeUnavailable": "Le runner de smoke live est indisponible.",
+      "smokePassed": "smoke reussi : {{output}}",
+      "smokeFailed": "smoke {{status}} : {{output}}",
+      "status": {
+        "available": "disponible",
+        "configured": "configure",
+        "missing": "absent",
+        "unsupported": "non supporte"
+      }
+    },
     "skillCandidate": {
       "title": "Revue des candidates SKILL",
       "countChip": "{{count}} éligible(s)",

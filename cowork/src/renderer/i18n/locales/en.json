@@ -2310,6 +2310,28 @@
         "unsupported": "unsupported"
       }
     },
+    "hermesBrowserBackends": {
+      "title": "Hermes browser backends",
+      "readyChip": "browser ready",
+      "attentionChip": "browser attention",
+      "loadingChip": "browser",
+      "localLabel": "Local",
+      "managedLabel": "Managed",
+      "platformLabel": "Platform",
+      "noVersion": "no version",
+      "unavailable": "Hermes browser backends are not loaded yet.",
+      "loadFailed": "Hermes browser backend load failed",
+      "runSmoke": "Run browser smoke",
+      "smokeUnavailable": "Live smoke runner is unavailable.",
+      "smokePassed": "smoke passed: {{output}}",
+      "smokeFailed": "smoke {{status}}: {{output}}",
+      "status": {
+        "available": "available",
+        "configured": "configured",
+        "missing": "missing",
+        "unsupported": "unsupported"
+      }
+    },
     "skillCandidate": {
       "title": "Skill candidate review",
       "countChip": "{{count}} eligible",

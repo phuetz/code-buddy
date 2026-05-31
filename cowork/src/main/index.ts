@@ -188,6 +188,10 @@ import {
   getHermesRuntimeBackendsForReview,
   runHermesRuntimeBackendSmokeForReview,
 } from './tools/hermes-runtime-backends-bridge';
+import {
+  getHermesBrowserBackendsForReview,
+  runHermesBrowserBackendSmokeForReview,
+} from './tools/hermes-browser-backends-bridge';
 import { getHermesToolCatalogForReview } from './tools/hermes-tool-catalog-bridge';
 import { getHermesToolsetsForReview } from './tools/hermes-toolsets-bridge';
 import { listLearningSkillUsageForReview } from './tools/learning-usage-bridge';
@@ -4114,6 +4118,37 @@ ipcMain.handle(
       return { ok: true as const, result };
     } catch (err) {
       logWarn('[tools.hermesRuntimeBackends.smoke] failed:', err);
+      return {
+        error: err instanceof Error ? err.message : String(err),
+        ok: false as const,
+      };
+    }
+  }
+);
+
+ipcMain.handle('tools.hermesBrowserBackends.get', async () => {
+  try {
+    return await getHermesBrowserBackendsForReview();
+  } catch (err) {
+    logWarn('[tools.hermesBrowserBackends.get] failed:', err);
+    return null;
+  }
+});
+
+ipcMain.handle(
+  'tools.hermesBrowserBackends.smoke',
+  async (
+    _event,
+    payload?: {
+      backendId?: string;
+    }
+  ) => {
+    try {
+      const backendId = typeof payload?.backendId === 'string' ? payload.backendId : '';
+      const result = await runHermesBrowserBackendSmokeForReview(backendId);
+      return { ok: true as const, result };
+    } catch (err) {
+      logWarn('[tools.hermesBrowserBackends.smoke] failed:', err);
       return {
         error: err instanceof Error ? err.message : String(err),
         ok: false as const,
