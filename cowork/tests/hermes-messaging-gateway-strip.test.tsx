@@ -93,7 +93,7 @@ describe('HermesMessagingGatewayStrip', () => {
     expect(strip?.textContent).toContain('Configured');
     expect(strip?.textContent).toContain('1/1');
     expect(strip?.textContent).toContain('telegram');
-    expect(strip?.textContent).toContain('buddy channels status --json');
+    expect(strip?.textContent).toContain('buddy hermes messaging status --json');
   });
 
   it('loads gateway readiness from the existing channels IPC bridge', async () => {

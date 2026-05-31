@@ -15,7 +15,7 @@ export default defineConfig({
         inline: ['electron-store'],
       },
     },
-    include: ['src/**/*.{test,spec}.{js,ts}', 'tests/**/*.{test,spec}.{js,ts}'],
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'tests/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     exclude: ['node_modules', 'dist', 'dist-electron', '.claude'],
     coverage: {
       provider: 'v8',

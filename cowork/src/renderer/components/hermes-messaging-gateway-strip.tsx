@@ -68,7 +68,7 @@ export const HermesMessagingGatewayStrip: React.FC<{
   const [loadError, setLoadError] = useState<string | null>(null);
   const visibleStatus = status ?? loadedStatus;
   const visibleError = error ?? loadError;
-  const command = 'buddy channels status --json';
+  const command = 'buddy hermes messaging status --json';
   const readiness = useMemo(() => getGatewayReadiness(visibleStatus), [visibleStatus]);
   const statusClass = readiness.ready
     ? 'border-success/40 bg-success/10 text-success'

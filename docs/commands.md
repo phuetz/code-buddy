@@ -162,6 +162,7 @@ buddy research "<topic>" [--workers N] [--rounds N] [--output file.md]
 buddy flow "<goal>" [--max-retries N] [--verbose]
 buddy hermes profile|agent|doctor|plan|toolsets|hooks|prompt-size|parity|tools-parity|tools [dispatchProfile] [--json] [--markdown] [--plan-output file]
 buddy hermes portal status|tools|open [--json]
+buddy hermes messaging status [--json] [--config <path>]
 buddy hermes browser status [--json]
 buddy hermes browser-smoke local-playwright [--json]
 buddy hermes runtime status [--json]
@@ -223,6 +224,12 @@ configuration, and whether the official Firecrawl/FAL/TTS/Browser Use/Modal
 catalog is currently routed through Nous or through Code Buddy's direct/local
 providers. It never prints secret values. `portal tools` prints only the catalog
 view, and `portal open` prints the subscription URL without launching a browser.
+
+`buddy hermes messaging status [--json]` wraps the real channel gateway
+readiness report in a Hermes-scoped command. It includes configured/enabled
+channel counts, runtime connection/auth counts, and remediation hints without
+printing tokens or webhook URLs. `--config <path>` points at an isolated
+`.codebuddy/channels.json` file for setup checks.
 
 `buddy hermes browser status [--json]` prints a browser backend inventory for
 local Playwright, remote CDP, Browserbase/Stagehand, Browser Use gateway,

@@ -11,6 +11,7 @@ import os from 'os';
 import path from 'path';
 import type { Command } from 'commander';
 
+import { buildChannelStatusReport, type ChannelStatusReport } from '../handlers/channel-handlers.js';
 import {
   DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS,
   FLEET_DISPATCH_PROFILES,
@@ -99,6 +100,10 @@ interface HermesRuntimeSmokeOptions extends HermesCommandOptions {
 }
 
 type HermesBrowserSmokeOptions = HermesCommandOptions;
+
+interface HermesMessagingStatusOptions extends HermesCommandOptions {
+  config?: string;
+}
 
 interface HermesPromptSizeSection {
   id: string;
@@ -669,6 +674,59 @@ function printHermesPortalStatus(status: HermesPortalStatus, options: HermesComm
   console.log(toolsOnly ? renderHermesPortalTools(status) : renderHermesPortalStatus(status));
 }
 
+async function buildHermesMessagingGatewayStatus(configPath?: string): Promise<ChannelStatusReport> {
+  const { getChannelManager } = await import('../../channels/index.js');
+  const manager = getChannelManager();
+  return buildChannelStatusReport(manager.getStatus(), configPath);
+}
+
+function renderHermesMessagingGatewayStatus(report: ChannelStatusReport): string {
+  const lines = [
+    'Hermes messaging gateway:',
+    `  Configured: ${report.config.configuredCount} (${report.config.enabledCount} enabled, ${report.config.disabledCount} disabled)`,
+    `  Runtime: ${report.runtime.connectedCount}/${report.runtime.registeredCount} connected`,
+    `  Authenticated: ${report.runtime.authenticatedCount}`,
+  ];
+
+  if (report.config.path) {
+    lines.push(`  Config path: ${report.config.path}`);
+  }
+
+  if (report.config.channels.length > 0) {
+    lines.push('');
+    lines.push('Configured channels:');
+    for (const channel of report.config.channels) {
+      const credentials = [channel.hasToken ? 'token' : '', channel.hasWebhookUrl ? 'webhook' : ''].filter(Boolean);
+      lines.push(
+        `  - ${channel.type}: ${channel.enabled ? 'enabled' : 'disabled'}` +
+          `${credentials.length > 0 ? ` (${credentials.join(', ')})` : ''}`,
+      );
+    }
+  }
+
+  if (report.runtime.channels.length > 0) {
+    lines.push('');
+    lines.push('Runtime channels:');
+    for (const channel of report.runtime.channels) {
+      lines.push(
+        `  - ${channel.type}: ${channel.connected ? 'connected' : 'disconnected'}, ` +
+          `auth=${channel.authenticated ? 'yes' : 'no'}` +
+          `${channel.error ? `, error=${channel.error}` : ''}`,
+      );
+    }
+  }
+
+  if (report.recommendations.length > 0) {
+    lines.push('');
+    lines.push('Recommendations:');
+    for (const recommendation of report.recommendations) {
+      lines.push(`  - ${recommendation}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
 function registerHermesPortalCommands(hermes: Command): void {
   const portal = hermes
     .command('portal')
@@ -1046,6 +1104,31 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesMemoryProvidersReadiness(readiness));
+    });
+
+  const messaging = hermes
+    .command('messaging')
+    .description('Inspect Hermes messaging gateway readiness');
+
+  messaging
+    .command('status')
+    .description('Print configured and runtime messaging channel readiness')
+    .option('--json', 'output JSON')
+    .option('--config <path>', 'channel config path')
+    .action(async (options: HermesMessagingStatusOptions) => {
+      const status = await buildHermesMessagingGatewayStatus(options.config);
+      const payload = {
+        kind: 'hermes_messaging_gateway_status',
+        schemaVersion: 1,
+        status,
+      };
+
+      if (options.json) {
+        console.log(stableJson(payload));
+        return;
+      }
+
+      console.log(renderHermesMessagingGatewayStatus(status));
     });
 
   hermes

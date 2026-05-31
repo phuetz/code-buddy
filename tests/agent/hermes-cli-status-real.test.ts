@@ -95,6 +95,19 @@ describe('Hermes CLI status real smoke', () => {
     expect(runtime.readiness.runnableCount).toBeGreaterThanOrEqual(1);
     expect(runtime.readiness.backends.map((backend) => backend.id)).toContain('local');
 
+    const messaging = runHermesJson(['messaging', 'status']) as {
+      kind: string;
+      status: {
+        config: { configuredCount: number };
+        kind: string;
+        runtime: { registeredCount: number };
+      };
+    };
+    expect(messaging.kind).toBe('hermes_messaging_gateway_status');
+    expect(messaging.status.kind).toBe('codebuddy_channel_status');
+    expect(messaging.status.config.configuredCount).toBeGreaterThanOrEqual(0);
+    expect(messaging.status.runtime.registeredCount).toBeGreaterThanOrEqual(0);
+
     const promptSize = runHermesJson(['prompt-size', 'safe']) as {
       kind: string;
       sections: Array<{ id: string }>;

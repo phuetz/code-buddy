@@ -255,6 +255,85 @@ describe('Hermes CLI commands', () => {
     );
   });
 
+  it('prints Hermes messaging gateway readiness without leaking channel secrets', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-messaging-status-'));
+    const configPath = path.join(tmpDir, 'channels.json');
+    await fs.writeJson(configPath, {
+      channels: [
+        {
+          type: 'telegram',
+          enabled: true,
+          token: 'secret-telegram-token',
+          allowedUsers: ['patrice'],
+          options: { parseMode: 'markdown' },
+        },
+        {
+          type: 'discord',
+          enabled: false,
+          webhookUrl: 'https://example.invalid/webhook',
+        },
+      ],
+    });
+
+    try {
+      const program = createProgram();
+      registerHermesCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'hermes',
+        'messaging',
+        'status',
+        '--json',
+        '--config',
+        configPath,
+      ]);
+
+      const raw = getLogOutput();
+      const output = JSON.parse(raw) as {
+        kind: string;
+        schemaVersion: number;
+        status: {
+          config: {
+            configuredCount: number;
+            enabledCount: number;
+            path?: string;
+            channels: Array<{
+              hasToken: boolean;
+              hasWebhookUrl: boolean;
+              type: string;
+            }>;
+          };
+          kind: string;
+          recommendations: string[];
+          runtime: { registeredCount: number };
+        };
+      };
+
+      expect(output.kind).toBe('hermes_messaging_gateway_status');
+      expect(output.schemaVersion).toBe(1);
+      expect(output.status.kind).toBe('codebuddy_channel_status');
+      expect(output.status.config.path).toBe(configPath);
+      expect(output.status.config.configuredCount).toBe(2);
+      expect(output.status.config.enabledCount).toBe(1);
+      expect(output.status.config.channels).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'telegram', hasToken: true }),
+          expect.objectContaining({ type: 'discord', hasWebhookUrl: true }),
+        ]),
+      );
+      expect(output.status.runtime.registeredCount).toBeGreaterThanOrEqual(0);
+      expect(output.status.recommendations).toEqual(
+        expect.arrayContaining([expect.stringContaining('not registered')]),
+      );
+      expect(raw).not.toContain('secret-telegram-token');
+      expect(raw).not.toContain('example.invalid/webhook');
+    } finally {
+      await fs.remove(tmpDir);
+    }
+  });
+
   it('prints the machine-checkable Hermes parity manifest', async () => {
     const program = createProgram();
     registerHermesCommands(program);
