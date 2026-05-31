@@ -208,6 +208,20 @@ describe('Hermes CLI commands', () => {
     expect(output.features).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          id: 'built-in-tools',
+          status: 'covered-partial',
+          codeBuddyEvidence: expect.arrayContaining([
+            'src/agent/hermes-tool-parity-manifest.ts',
+            'cowork/src/main/tools/hermes-tool-catalog-bridge.ts',
+          ]),
+          verificationCommands: expect.arrayContaining([
+            'npx tsx src/index.ts hermes tools --json',
+            'npm test -- tests/agent/hermes-tool-parity-local.test.ts --run',
+          ]),
+          notes: expect.stringContaining('0 partial, and 0 gaps'),
+          nextWork: expect.not.stringContaining('Track tool-level parity'),
+        }),
+        expect.objectContaining({
           id: 'cron-scheduling',
           status: 'partial',
           codeBuddyEvidence: expect.arrayContaining([
