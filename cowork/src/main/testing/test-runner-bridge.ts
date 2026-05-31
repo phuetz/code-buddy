@@ -1046,7 +1046,7 @@ export class TestRunnerBridge extends EventEmitter {
           label: 'Cowork / knowledge Hermes presence bundle',
           group: 'Knowledge',
           description:
-            'Lesson candidates, lessons vault, user model/spec IPC, companion IPC, Hermes cockpit readiness, learning usage, skill candidate review and presence model flows',
+            'Lesson candidates, lessons vault, user model/spec IPC, companion IPC, Hermes cockpit parity/readiness, learning usage, skill candidate review and presence model flows',
           command: 'npx',
           args: [
             'vitest',
@@ -1061,6 +1061,9 @@ export class TestRunnerBridge extends EventEmitter {
             'tests/hermes-mobile-supervision-bridge.test.ts',
             'tests/hermes-mobile-supervision-bridge-real.test.ts',
             'tests/hermes-mobile-supervision-strip.test.ts',
+            'tests/hermes-feature-parity-bridge.test.ts',
+            'tests/hermes-feature-parity-bridge-real.test.ts',
+            'tests/hermes-feature-parity-strip.test.ts',
             'tests/hermes-plan-strip.test.ts',
             'tests/hermes-protocol-gateways-bridge.test.ts',
             'tests/hermes-protocol-gateways-bridge-real.test.ts',
@@ -1105,6 +1108,9 @@ export class TestRunnerBridge extends EventEmitter {
           path.join(coworkDir, 'tests', 'hermes-mobile-supervision-bridge.test.ts'),
           path.join(coworkDir, 'tests', 'hermes-mobile-supervision-bridge-real.test.ts'),
           path.join(coworkDir, 'tests', 'hermes-mobile-supervision-strip.test.ts'),
+          path.join(coworkDir, 'tests', 'hermes-feature-parity-bridge.test.ts'),
+          path.join(coworkDir, 'tests', 'hermes-feature-parity-bridge-real.test.ts'),
+          path.join(coworkDir, 'tests', 'hermes-feature-parity-strip.test.ts'),
           path.join(coworkDir, 'tests', 'hermes-plan-strip.test.ts'),
           path.join(coworkDir, 'tests', 'hermes-protocol-gateways-bridge.test.ts'),
           path.join(coworkDir, 'tests', 'hermes-protocol-gateways-bridge-real.test.ts'),

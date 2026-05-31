@@ -8,6 +8,10 @@ Prioritized implementation backlog: [`hermes-agent-next-todo.md`](hermes-agent-n
 That audit was refreshed against upstream `NousResearch/hermes-agent` at `5921d667` and
 concludes that Code Buddy has substantial Hermes-inspired coverage but **not**
 full feature-for-feature official Hermes parity.
+Cowork's Fleet Command Center now exposes the same feature-level parity summary
+through `tools.hermesFeatureParity.get`, so operators can see the current
+feature count, prioritized partials, and the deliberately deferred OpenClaw gap
+without leaving the cockpit.
 
 This is the "what implements what" map for the Hermes agent inside Code Buddy.
 Code Buddy does **not** vendor Hermes' Python; it maps the Hermes product
@@ -104,8 +108,9 @@ change-control surface.
 
 Cowork Test Runner exposes a safe `Cowork / knowledge Hermes presence bundle`
 that now relaunches the Fleet cockpit readiness bridges/strips for provider,
-memory, runtime, browser, messaging, mobile supervision, tool catalog, toolsets,
-learning usage, lessons, skills, and presence from one operator-visible entry.
+memory, runtime, browser, messaging, mobile supervision, feature parity, tool
+catalog, toolsets, learning usage, lessons, skills, and presence from one
+operator-visible entry.
 
 ### Scheduled automations
 

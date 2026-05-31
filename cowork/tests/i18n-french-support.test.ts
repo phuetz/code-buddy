@@ -53,6 +53,10 @@ const hermesPlanStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-plan-strip.tsx'
 );
+const hermesFeatureParityStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-feature-parity-strip.tsx'
+);
 const hermesToolCatalogStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-tool-catalog-strip.tsx'
@@ -251,6 +255,7 @@ describe('French renderer i18n support', () => {
       fs.readFileSync(fleetSagaDetailPath, 'utf8'),
       fs.readFileSync(fleetMemoryStripPath, 'utf8'),
       fs.readFileSync(hermesPlanStripPath, 'utf8'),
+      fs.readFileSync(hermesFeatureParityStripPath, 'utf8'),
       fs.readFileSync(hermesToolCatalogStripPath, 'utf8'),
       fs.readFileSync(hermesToolsetsStripPath, 'utf8'),
       fs.readFileSync(hermesProviderReadinessStripPath, 'utf8'),
@@ -309,6 +314,20 @@ describe('French renderer i18n support', () => {
       'fleet.hermesPlan.interactiveChip',
       'fleet.hermesPlan.useAsGoal',
       'fleet.hermesPlan.schedule',
+      'fleet.hermesFeatureParity.title',
+      'fleet.hermesFeatureParity.countChip',
+      'fleet.hermesFeatureParity.loadingChip',
+      'fleet.hermesFeatureParity.coveredChip',
+      'fleet.hermesFeatureParity.coveredPartialChip',
+      'fleet.hermesFeatureParity.partialChip',
+      'fleet.hermesFeatureParity.gapChip',
+      'fleet.hermesFeatureParity.loadFailed',
+      'fleet.hermesFeatureParity.empty',
+      'fleet.hermesFeatureParity.unavailable',
+      'fleet.hermesFeatureParity.status.covered',
+      'fleet.hermesFeatureParity.status.covered-partial',
+      'fleet.hermesFeatureParity.status.partial',
+      'fleet.hermesFeatureParity.status.gap',
       'fleet.hermesToolCatalog.title',
       'fleet.hermesToolCatalog.countChip',
       'fleet.hermesToolCatalog.loadingChip',

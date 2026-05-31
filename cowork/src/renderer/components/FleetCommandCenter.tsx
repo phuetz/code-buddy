@@ -58,6 +58,7 @@ import { HermesBrowserBackendsStrip } from './hermes-browser-backends-strip';
 import { HermesProtocolGatewaysStrip } from './hermes-protocol-gateways-strip';
 import { HermesMessagingGatewayStrip } from './hermes-messaging-gateway-strip';
 import { HermesMobileSupervisionStrip } from './hermes-mobile-supervision-strip';
+import { HermesFeatureParityStrip } from './hermes-feature-parity-strip';
 import { HermesToolCatalogStrip } from './hermes-tool-catalog-strip';
 import { HermesToolsetsStrip } from './hermes-toolsets-strip';
 import { ToolProfileInspectorStrip } from './tool-profile-inspector-strip';
@@ -1112,6 +1113,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                   onUseAsGoal={handleUseHermesPlanAsGoal}
                   onScheduleGoal={handleScheduleHermesPlan}
                 />
+                <HermesFeatureParityStrip />
                 <HermesToolCatalogStrip />
                 <LessonsVaultStrip
                   cwd={activeWorkspaceCwd}

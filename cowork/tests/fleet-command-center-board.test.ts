@@ -69,6 +69,10 @@ const hermesPlanStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-plan-strip.tsx',
 );
+const hermesFeatureParityStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-feature-parity-strip.tsx',
+);
 const hermesToolCatalogStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-tool-catalog-strip.tsx',
@@ -147,6 +151,7 @@ describe('FleetCommandCenter saga board', () => {
       fs.readFileSync(memoryStripPath, 'utf8'),
       fs.readFileSync(peerPanelPath, 'utf8'),
       fs.readFileSync(hermesPlanStripPath, 'utf8'),
+      fs.readFileSync(hermesFeatureParityStripPath, 'utf8'),
       fs.readFileSync(hermesToolCatalogStripPath, 'utf8'),
       fs.readFileSync(hermesToolsetsStripPath, 'utf8'),
       fs.readFileSync(toolProfileInspectorStripPath, 'utf8'),
@@ -234,6 +239,9 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('handleUseHermesPlanAsGoal');
     expect(source).toContain('buildHermesIntegrationPlan');
     expect(source).toContain('buildHermesPlanGoal');
+    expect(source).toContain('HermesFeatureParityStrip');
+    expect(source).toContain('fleet-hermes-feature-parity');
+    expect(source).toContain('buddy hermes parity --json');
     expect(source).toContain('buildFleetDispatchGoalContext');
     expect(source).toContain('fleet-recent-outcomes');
     expect(source).toContain('isFleetTerminalActivity');

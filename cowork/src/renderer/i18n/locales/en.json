@@ -2243,6 +2243,24 @@
       "useAsGoal": "Use as Fleet goal",
       "schedule": "Schedule plan"
     },
+    "hermesFeatureParity": {
+      "title": "Hermes feature parity",
+      "countChip": "{{covered}}/{{total}} major areas",
+      "loadingChip": "parity",
+      "coveredChip": "{{count}} covered",
+      "coveredPartialChip": "{{count}} covered/partial",
+      "partialChip": "{{count}} partial",
+      "gapChip": "{{count}} gaps",
+      "loadFailed": "Hermes feature parity load failed",
+      "empty": "No prioritized Hermes feature gaps.",
+      "unavailable": "Hermes feature parity is not loaded yet.",
+      "status": {
+        "covered": "covered",
+        "covered-partial": "covered/partial",
+        "partial": "partial",
+        "gap": "gap"
+      }
+    },
     "hermesToolCatalog": {
       "title": "Hermes tool catalog",
       "countChip": "{{covered}}/{{total}} covered",

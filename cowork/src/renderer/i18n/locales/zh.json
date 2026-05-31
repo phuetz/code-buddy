@@ -2230,6 +2230,24 @@
       "useAsGoal": "用作 Fleet 目标",
       "schedule": "计划此方案"
     },
+    "hermesFeatureParity": {
+      "title": "Hermes 功能对齐",
+      "countChip": "{{covered}}/{{total}} 个主要区域",
+      "loadingChip": "对齐",
+      "coveredChip": "{{count}} 个已覆盖",
+      "coveredPartialChip": "{{count}} 个覆盖/部分",
+      "partialChip": "{{count}} 个部分",
+      "gapChip": "{{count}} 个缺口",
+      "loadFailed": "Hermes 功能对齐加载失败",
+      "empty": "没有优先 Hermes 功能缺口。",
+      "unavailable": "Hermes 功能对齐尚未加载。",
+      "status": {
+        "covered": "已覆盖",
+        "covered-partial": "覆盖/部分",
+        "partial": "部分",
+        "gap": "缺口"
+      }
+    },
     "hermesToolCatalog": {
       "title": "Hermes 工具目录",
       "countChip": "{{covered}}/{{total}} 已覆盖",

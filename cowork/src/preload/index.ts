@@ -1503,6 +1503,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }>;
       } | null> => ipcRenderer.invoke('tools.hermesCatalog.get'),
     },
+    hermesFeatureParity: {
+      get: (): Promise<{
+        auditDocument: string;
+        command: string;
+        generatedAt: string;
+        inspectedCommit: string;
+        latestTagObserved: string;
+        source: string;
+        summary: {
+          covered: number;
+          coveredPartial: number;
+          gaps: number;
+          partial: number;
+          total: number;
+        };
+        topWork: Array<{
+          area: string;
+          id: string;
+          nextWork?: string;
+          officialSurface: string;
+          status: 'covered' | 'covered-partial' | 'partial' | 'gap';
+          verificationCommands: string[];
+        }>;
+      } | null> => ipcRenderer.invoke('tools.hermesFeatureParity.get'),
+    },
     hermesToolsets: {
       get: (options?: {
         profile?: string;
@@ -4430,6 +4455,31 @@ declare global {
               nextWork?: string;
               status: 'exact' | 'native-equivalent' | 'partial' | 'gap';
               toolset: string;
+            }>;
+          } | null>;
+        };
+        hermesFeatureParity: {
+          get: () => Promise<{
+            auditDocument: string;
+            command: string;
+            generatedAt: string;
+            inspectedCommit: string;
+            latestTagObserved: string;
+            source: string;
+            summary: {
+              covered: number;
+              coveredPartial: number;
+              gaps: number;
+              partial: number;
+              total: number;
+            };
+            topWork: Array<{
+              area: string;
+              id: string;
+              nextWork?: string;
+              officialSurface: string;
+              status: 'covered' | 'covered-partial' | 'partial' | 'gap';
+              verificationCommands: string[];
             }>;
           } | null>;
         };

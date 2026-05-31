@@ -2243,6 +2243,24 @@
       "useAsGoal": "Utiliser comme objectif Fleet",
       "schedule": "Planifier le plan"
     },
+    "hermesFeatureParity": {
+      "title": "Parité fonctionnalités Hermes",
+      "countChip": "{{covered}}/{{total}} zones majeures",
+      "loadingChip": "parité",
+      "coveredChip": "{{count}} couvert(s)",
+      "coveredPartialChip": "{{count}} couvert(s)/partiel(s)",
+      "partialChip": "{{count}} partiel(s)",
+      "gapChip": "{{count}} manque(s)",
+      "loadFailed": "Chargement de la parité fonctionnalités Hermes échoué",
+      "empty": "Aucun manque fonctionnel Hermes prioritaire.",
+      "unavailable": "La parité fonctionnalités Hermes n'est pas encore chargée.",
+      "status": {
+        "covered": "couvert",
+        "covered-partial": "couvert/partiel",
+        "partial": "partiel",
+        "gap": "manque"
+      }
+    },
     "hermesToolCatalog": {
       "title": "Catalogue d'outils Hermes",
       "countChip": "{{covered}}/{{total}} couverts",

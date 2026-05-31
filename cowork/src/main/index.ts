@@ -198,6 +198,7 @@ import {
   runHermesProtocolGatewaysSmokeForReview,
 } from './tools/hermes-protocol-gateways-bridge';
 import { getHermesMobileSupervisionForReview } from './tools/hermes-mobile-supervision-bridge';
+import { getHermesFeatureParityForReview } from './tools/hermes-feature-parity-bridge';
 import { getHermesToolCatalogForReview } from './tools/hermes-tool-catalog-bridge';
 import { getHermesToolsetsForReview } from './tools/hermes-toolsets-bridge';
 import { listLearningSkillUsageForReview } from './tools/learning-usage-bridge';
@@ -4071,6 +4072,15 @@ ipcMain.handle('tools.hermesCatalog.get', async () => {
     return await getHermesToolCatalogForReview();
   } catch (err) {
     logWarn('[tools.hermesCatalog.get] failed:', err);
+    return null;
+  }
+});
+
+ipcMain.handle('tools.hermesFeatureParity.get', async () => {
+  try {
+    return await getHermesFeatureParityForReview();
+  } catch (err) {
+    logWarn('[tools.hermesFeatureParity.get] failed:', err);
     return null;
   }
 });
