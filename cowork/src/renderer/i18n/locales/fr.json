@@ -2255,6 +2255,16 @@
       "empty": "Aucun manque Hermes prioritaire.",
       "unavailable": "Le catalogue d'outils Hermes n'est pas encore chargé."
     },
+    "hermesToolsets": {
+      "title": "Toolsets Hermes",
+      "loadingChip": "toolsets",
+      "allowChip": "{{count}} autorise(s)",
+      "confirmChip": "{{count}} confirmation(s)",
+      "denyChip": "{{count}} refuse(s)",
+      "profilesChip": "{{count}} profil(s)",
+      "loadFailed": "Chargement des toolsets Hermes echoue",
+      "unavailable": "Les toolsets Hermes ne sont pas encore charges."
+    },
     "hermesProviderReadiness": {
       "title": "Readiness provider Hermes",
       "readyChip": "pret",

@@ -57,6 +57,10 @@ const hermesToolCatalogStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-tool-catalog-strip.tsx'
 );
+const hermesToolsetsStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-toolsets-strip.tsx'
+);
 const hermesProviderReadinessStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-provider-readiness-strip.tsx'
@@ -228,6 +232,7 @@ describe('French renderer i18n support', () => {
       fs.readFileSync(fleetMemoryStripPath, 'utf8'),
       fs.readFileSync(hermesPlanStripPath, 'utf8'),
       fs.readFileSync(hermesToolCatalogStripPath, 'utf8'),
+      fs.readFileSync(hermesToolsetsStripPath, 'utf8'),
       fs.readFileSync(hermesProviderReadinessStripPath, 'utf8'),
       fs.readFileSync(hermesRuntimeBackendsStripPath, 'utf8'),
       fs.readFileSync(skillCandidateReviewQueueStripPath, 'utf8'),
@@ -289,6 +294,14 @@ describe('French renderer i18n support', () => {
       'fleet.hermesToolCatalog.loadFailed',
       'fleet.hermesToolCatalog.empty',
       'fleet.hermesToolCatalog.unavailable',
+      'fleet.hermesToolsets.title',
+      'fleet.hermesToolsets.loadingChip',
+      'fleet.hermesToolsets.allowChip',
+      'fleet.hermesToolsets.confirmChip',
+      'fleet.hermesToolsets.denyChip',
+      'fleet.hermesToolsets.profilesChip',
+      'fleet.hermesToolsets.loadFailed',
+      'fleet.hermesToolsets.unavailable',
       'fleet.hermesProviderReadiness.title',
       'fleet.hermesProviderReadiness.readyChip',
       'fleet.hermesProviderReadiness.attentionChip',

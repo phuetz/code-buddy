@@ -1503,6 +1503,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }>;
       } | null> => ipcRenderer.invoke('tools.hermesCatalog.get'),
     },
+    hermesToolsets: {
+      get: (options?: {
+        profile?: string;
+      }): Promise<{
+        activeProfile: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+        activeToolset: {
+          allowedTools: string[];
+          confirmTools: string[];
+          deniedTools: string[];
+          summary: string;
+          toolsetId: string;
+        };
+        command: string;
+        generatedAt: string;
+        kind: 'hermes_toolsets_catalog';
+        previewTools: string[];
+        requestedProfile: string;
+        schemaVersion: 1;
+        summary: {
+          profiles: Array<'balanced' | 'research' | 'code' | 'review' | 'safe'>;
+          totalToolsets: number;
+        };
+        toolsets: Array<{
+          allowedTools: string[];
+          confirmTools: string[];
+          deniedTools: string[];
+          intent: string;
+          profile: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+          summary: string;
+          toolsetId: string;
+        }>;
+      } | null> => ipcRenderer.invoke('tools.hermesToolsets.get', options),
+    },
     hermesProviderReadiness: {
       get: (): Promise<{
         command: string;
@@ -4198,6 +4231,39 @@ declare global {
               nextWork?: string;
               status: 'exact' | 'native-equivalent' | 'partial' | 'gap';
               toolset: string;
+            }>;
+          } | null>;
+        };
+        hermesToolsets: {
+          get: (options?: {
+            profile?: string;
+          }) => Promise<{
+            activeProfile: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+            activeToolset: {
+              allowedTools: string[];
+              confirmTools: string[];
+              deniedTools: string[];
+              summary: string;
+              toolsetId: string;
+            };
+            command: string;
+            generatedAt: string;
+            kind: 'hermes_toolsets_catalog';
+            previewTools: string[];
+            requestedProfile: string;
+            schemaVersion: 1;
+            summary: {
+              profiles: Array<'balanced' | 'research' | 'code' | 'review' | 'safe'>;
+              totalToolsets: number;
+            };
+            toolsets: Array<{
+              allowedTools: string[];
+              confirmTools: string[];
+              deniedTools: string[];
+              intent: string;
+              profile: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+              summary: string;
+              toolsetId: string;
             }>;
           } | null>;
         };

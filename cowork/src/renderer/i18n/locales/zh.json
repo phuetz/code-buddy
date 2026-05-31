@@ -2242,6 +2242,16 @@
       "empty": "没有优先 Hermes 工具缺口。",
       "unavailable": "Hermes 工具目录尚未加载。"
     },
+    "hermesToolsets": {
+      "title": "Hermes 工具集",
+      "loadingChip": "工具集",
+      "allowChip": "{{count}} 个允许",
+      "confirmChip": "{{count}} 个确认",
+      "denyChip": "{{count}} 个拒绝",
+      "profilesChip": "{{count}} 个 profile",
+      "loadFailed": "Hermes 工具集加载失败",
+      "unavailable": "Hermes 工具集尚未加载。"
+    },
     "hermesProviderReadiness": {
       "title": "Hermes 提供商就绪度",
       "readyChip": "就绪",

@@ -54,6 +54,7 @@ import { HermesPlanStrip } from './hermes-plan-strip';
 import { HermesProviderReadinessStrip } from './hermes-provider-readiness-strip';
 import { HermesRuntimeBackendsStrip } from './hermes-runtime-backends-strip';
 import { HermesToolCatalogStrip } from './hermes-tool-catalog-strip';
+import { HermesToolsetsStrip } from './hermes-toolsets-strip';
 import { ToolProfileInspectorStrip } from './tool-profile-inspector-strip';
 import {
   LeadDiscoveryWorkflowStrip,
@@ -1093,6 +1094,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                   </div>
                 )}
                 <ToolProfileInspectorStrip profile={dispatchProfile} />
+                <HermesToolsetsStrip profile={dispatchProfile} />
                 <HermesProviderReadinessStrip onOpenSettings={handleOpenApiSettings} />
                 <HermesRuntimeBackendsStrip />
                 <HermesPlanStrip

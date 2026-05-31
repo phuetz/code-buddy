@@ -2255,6 +2255,16 @@
       "empty": "No prioritized Hermes tool gaps.",
       "unavailable": "Hermes tool catalog is not loaded yet."
     },
+    "hermesToolsets": {
+      "title": "Hermes toolsets",
+      "loadingChip": "toolsets",
+      "allowChip": "{{count}} allow",
+      "confirmChip": "{{count}} confirm",
+      "denyChip": "{{count}} deny",
+      "profilesChip": "{{count}} profiles",
+      "loadFailed": "Hermes toolsets load failed",
+      "unavailable": "Hermes toolsets are not loaded yet."
+    },
     "hermesProviderReadiness": {
       "title": "Hermes provider readiness",
       "readyChip": "ready",

@@ -189,6 +189,7 @@ import {
   runHermesRuntimeBackendSmokeForReview,
 } from './tools/hermes-runtime-backends-bridge';
 import { getHermesToolCatalogForReview } from './tools/hermes-tool-catalog-bridge';
+import { getHermesToolsetsForReview } from './tools/hermes-toolsets-bridge';
 import { listLearningSkillUsageForReview } from './tools/learning-usage-bridge';
 import {
   deleteSkillPackageForReview,
@@ -4063,6 +4064,23 @@ ipcMain.handle('tools.hermesCatalog.get', async () => {
     return null;
   }
 });
+
+ipcMain.handle(
+  'tools.hermesToolsets.get',
+  async (
+    _event,
+    payload?: {
+      profile?: string;
+    }
+  ) => {
+    try {
+      return await getHermesToolsetsForReview(payload?.profile);
+    } catch (err) {
+      logWarn('[tools.hermesToolsets.get] failed:', err);
+      return null;
+    }
+  }
+);
 
 ipcMain.handle('tools.hermesProviderReadiness.get', async () => {
   try {

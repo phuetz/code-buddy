@@ -117,6 +117,8 @@ function makeWorkspace(): string {
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-runtime-backends-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-runtime-backends-strip.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-surfaces-ipc.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-toolsets-bridge.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-toolsets-strip.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'lessons-vault-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'lessons-vault-graph.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'lessons-vault-strip.test.ts'), '');
@@ -990,6 +992,12 @@ describe('TestRunnerBridge catalog', () => {
       kind: 'integration',
       safeToRun: true,
     });
+    expect(catalog.find((item) => item.label === 'Cowork / knowledge Hermes presence bundle')?.args).toEqual(
+      expect.arrayContaining([
+        'tests/hermes-toolsets-bridge.test.ts',
+        'tests/hermes-toolsets-strip.test.ts',
+      ])
+    );
     expect(catalog.find((item) => item.label === 'Hermes / runtime live smoke')).toMatchObject({
       command: 'npm',
       args: ['test', '--', 'tests/agent/hermes-runtime-backends-smoke-real.test.ts', '--run'],
