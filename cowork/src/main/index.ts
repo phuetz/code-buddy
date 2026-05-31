@@ -201,6 +201,7 @@ import { getHermesMobileSupervisionForReview } from './tools/hermes-mobile-super
 import { getHermesFeatureParityForReview } from './tools/hermes-feature-parity-bridge';
 import { getHermesToolCatalogForReview } from './tools/hermes-tool-catalog-bridge';
 import { getHermesToolsetsForReview } from './tools/hermes-toolsets-bridge';
+import { getHermesLearningLoopStatusForReview } from './tools/hermes-learning-loop-bridge';
 import { listLearningSkillUsageForReview } from './tools/learning-usage-bridge';
 import {
   deleteSkillPackageForReview,
@@ -4216,6 +4217,29 @@ ipcMain.handle(
       return await getHermesMobileSupervisionForReview(payload?.query);
     } catch (err) {
       logWarn('[tools.hermesMobileSupervision.get] failed:', err);
+      return null;
+    }
+  }
+);
+
+ipcMain.handle(
+  'tools.hermesLearningLoop.get',
+  async (
+    _event,
+    payload?: {
+      cwd?: string;
+      limit?: number;
+    }
+  ) => {
+    try {
+      const payloadCwd =
+        typeof payload?.cwd === 'string' && isAbsolute(payload.cwd) ? payload.cwd : null;
+      return await getHermesLearningLoopStatusForReview({
+        rootDir: payloadCwd ?? getWorkingDir() ?? process.cwd(),
+        limit: payload?.limit,
+      });
+    } catch (err) {
+      logWarn('[tools.hermesLearningLoop.get] failed:', err);
       return null;
     }
   }

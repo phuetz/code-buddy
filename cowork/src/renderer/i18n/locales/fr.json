@@ -2473,6 +2473,24 @@
       "reasonLabel": "raison",
       "nextLabel": "suite"
     },
+    "hermesLearningLoop": {
+      "title": "Boucle d'apprentissage Hermes",
+      "readyChip": "learning prêt",
+      "attentionChip": "learning à vérifier",
+      "loadingChip": "learning",
+      "runsLabel": "Runs",
+      "candidatesLabel": "Candidates",
+      "patternsLabel": "Patterns",
+      "autoChip": "auto {{mode}}",
+      "userModelChip": "{{count}} observation(s) acceptée(s)",
+      "skillsChip": "{{reinforced}} renforcée(s) / {{deprecated}} dépréciée(s)",
+      "skillCandidatesChip": "{{count}} candidate(s) skill",
+      "skillScoreChip": "{{score}}/100 {{state}}",
+      "reviewGate": "Garde-fous actifs : lessons, modèle utilisateur, candidates skill et cycle de vie des skills requièrent une approbation.",
+      "reviewGateMissing": "Les garde-fous de revue doivent être vérifiés avant de faire confiance aux sorties Learning automatiques.",
+      "unavailable": "Le statut de la boucle d'apprentissage Hermes n'est pas encore chargé.",
+      "loadFailed": "Chargement de la boucle d'apprentissage Hermes échoué"
+    },
     "browserOperator": {
       "title": "Brouillon Browser Operator",
       "actionsChip": "{{count}} actions",

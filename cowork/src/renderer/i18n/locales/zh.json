@@ -2460,6 +2460,24 @@
       "reasonLabel": "原因",
       "nextLabel": "下一步"
     },
+    "hermesLearningLoop": {
+      "title": "Hermes 学习闭环",
+      "readyChip": "学习就绪",
+      "attentionChip": "学习需关注",
+      "loadingChip": "学习",
+      "runsLabel": "运行",
+      "candidatesLabel": "候选",
+      "patternsLabel": "模式",
+      "autoChip": "auto {{mode}}",
+      "userModelChip": "{{count}} 条已接受观察",
+      "skillsChip": "{{reinforced}} 个强化 / {{deprecated}} 个废弃",
+      "skillCandidatesChip": "{{count}} 个 skill 候选",
+      "skillScoreChip": "{{score}}/100 {{state}}",
+      "reviewGate": "审查门控已启用：lessons、用户模型、skill 候选和 skill 生命周期都需要批准。",
+      "reviewGateMissing": "信任自动学习输出前，需要先检查审查门控。",
+      "unavailable": "Hermes 学习闭环状态尚未加载。",
+      "loadFailed": "Hermes 学习闭环加载失败"
+    },
     "browserOperator": {
       "title": "Browser Operator 草稿",
       "actionsChip": "{{count}} 个动作",

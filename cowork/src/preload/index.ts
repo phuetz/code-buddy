@@ -1854,6 +1854,78 @@ contextBridge.exposeInMainWorld('electronAPI', {
         };
       } | null> => ipcRenderer.invoke('tools.hermesMobileSupervision.get', options ?? {}),
     },
+    hermesLearningLoop: {
+      get: (options?: {
+        cwd?: string;
+        limit?: number;
+      }): Promise<{
+        autoRetrospective: {
+          enabled: boolean;
+          envVar: 'CODEBUDDY_LEARNING_AGENT';
+          mode: 'auto' | 'disabled';
+        };
+        commands: {
+          candidateReview: string;
+          lessonCandidates: string;
+          retrospective: string;
+          skillUsage: string;
+          userModel: string;
+        };
+        generatedAt: string;
+        kind: 'hermes_learning_loop_status';
+        ok: boolean;
+        recommendations: string[];
+        reviewGates: {
+          lessonWritesRequireApproval: boolean;
+          skillCandidatesRequireReview: boolean;
+          skillLifecycleRequiresApproval: boolean;
+          userModelWritesRequireApproval: boolean;
+        };
+        state: {
+          recentRuns: Array<{
+            artifactCount: number;
+            channel?: string;
+            hasLearningRetrospective: boolean;
+            runId: string;
+            status: string;
+            tags: string[];
+          }>;
+          patterns: {
+            deprecatedCount: number;
+            observedCount: number;
+            reinforcedCount: number;
+            total: number;
+          };
+          skillCandidates: {
+            learningCandidateCount: number;
+            root: string;
+          };
+          skillUsage: {
+            count: number;
+            deprecatedCount: number;
+            reinforcedCount: number;
+            top: Array<{
+              invocationCount: number;
+              recommendation: string;
+              score: number;
+              skillName: string;
+            }>;
+          };
+        };
+        summary: {
+          acceptedUserObservationCount: number;
+          deprecatedSkillCount: number;
+          lessonCandidateCount: number;
+          patternCount: number;
+          pendingLessonCandidateCount: number;
+          recentRunCount: number;
+          reinforcedSkillCount: number;
+          retrospectiveArtifactCount: number;
+          skillUsageCount: number;
+        };
+        workDir: string;
+      } | null> => ipcRenderer.invoke('tools.hermesLearningLoop.get', options ?? {}),
+    },
     skillPackage: {
       list: (options?: {
         cwd?: string;
@@ -4816,6 +4888,78 @@ declare global {
               offDeviceTlsRequired: boolean;
               remoteExecution: 'disabled';
             };
+          } | null>;
+        };
+        hermesLearningLoop: {
+          get: (options?: {
+            cwd?: string;
+            limit?: number;
+          }) => Promise<{
+            autoRetrospective: {
+              enabled: boolean;
+              envVar: 'CODEBUDDY_LEARNING_AGENT';
+              mode: 'auto' | 'disabled';
+            };
+            commands: {
+              candidateReview: string;
+              lessonCandidates: string;
+              retrospective: string;
+              skillUsage: string;
+              userModel: string;
+            };
+            generatedAt: string;
+            kind: 'hermes_learning_loop_status';
+            ok: boolean;
+            recommendations: string[];
+            reviewGates: {
+              lessonWritesRequireApproval: boolean;
+              skillCandidatesRequireReview: boolean;
+              skillLifecycleRequiresApproval: boolean;
+              userModelWritesRequireApproval: boolean;
+            };
+            state: {
+              recentRuns: Array<{
+                artifactCount: number;
+                channel?: string;
+                hasLearningRetrospective: boolean;
+                runId: string;
+                status: string;
+                tags: string[];
+              }>;
+              patterns: {
+                deprecatedCount: number;
+                observedCount: number;
+                reinforcedCount: number;
+                total: number;
+              };
+              skillCandidates: {
+                learningCandidateCount: number;
+                root: string;
+              };
+              skillUsage: {
+                count: number;
+                deprecatedCount: number;
+                reinforcedCount: number;
+                top: Array<{
+                  invocationCount: number;
+                  recommendation: string;
+                  score: number;
+                  skillName: string;
+                }>;
+              };
+            };
+            summary: {
+              acceptedUserObservationCount: number;
+              deprecatedSkillCount: number;
+              lessonCandidateCount: number;
+              patternCount: number;
+              pendingLessonCandidateCount: number;
+              recentRunCount: number;
+              reinforcedSkillCount: number;
+              retrospectiveArtifactCount: number;
+              skillUsageCount: number;
+            };
+            workDir: string;
           } | null>;
         };
         skillPackage: {

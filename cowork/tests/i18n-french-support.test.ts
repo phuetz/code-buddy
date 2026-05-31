@@ -109,6 +109,10 @@ const learningSkillUsageStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/learning-skill-usage-strip.tsx'
 );
+const hermesLearningLoopStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-learning-loop-strip.tsx'
+);
 const browserOperatorDraftStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/browser-operator-draft-strip.tsx'
@@ -269,6 +273,7 @@ describe('French renderer i18n support', () => {
       fs.readFileSync(skillPackageManagerStripPath, 'utf8'),
       fs.readFileSync(lessonCandidateReviewStripPath, 'utf8'),
       fs.readFileSync(learningSkillUsageStripPath, 'utf8'),
+      fs.readFileSync(hermesLearningLoopStripPath, 'utf8'),
       fs.readFileSync(browserOperatorDraftStripPath, 'utf8'),
     ].join('\n');
     const requiredFleetKeys = [
@@ -502,6 +507,22 @@ describe('French renderer i18n support', () => {
       'fleet.learningUsage.loadFailed',
       'fleet.learningUsage.empty',
       'fleet.learningUsage.runsChip',
+      'fleet.hermesLearningLoop.title',
+      'fleet.hermesLearningLoop.readyChip',
+      'fleet.hermesLearningLoop.attentionChip',
+      'fleet.hermesLearningLoop.loadingChip',
+      'fleet.hermesLearningLoop.runsLabel',
+      'fleet.hermesLearningLoop.candidatesLabel',
+      'fleet.hermesLearningLoop.patternsLabel',
+      'fleet.hermesLearningLoop.autoChip',
+      'fleet.hermesLearningLoop.userModelChip',
+      'fleet.hermesLearningLoop.skillsChip',
+      'fleet.hermesLearningLoop.skillCandidatesChip',
+      'fleet.hermesLearningLoop.skillScoreChip',
+      'fleet.hermesLearningLoop.reviewGate',
+      'fleet.hermesLearningLoop.reviewGateMissing',
+      'fleet.hermesLearningLoop.unavailable',
+      'fleet.hermesLearningLoop.loadFailed',
       'fleet.browserOperator.title',
       'fleet.browserOperator.actionsChip',
       'fleet.browserOperator.consentRequiredChip',

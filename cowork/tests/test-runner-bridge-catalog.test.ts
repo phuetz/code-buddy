@@ -153,6 +153,9 @@ function makeWorkspace(): string {
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-feature-parity-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-feature-parity-bridge-real.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-feature-parity-strip.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-learning-loop-bridge.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-learning-loop-bridge-real.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'hermes-learning-loop-strip.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-protocol-gateways-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-protocol-gateways-bridge-real.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'hermes-protocol-gateways-strip.test.ts'), '');
@@ -1095,6 +1098,9 @@ describe('TestRunnerBridge catalog', () => {
         'tests/hermes-feature-parity-bridge.test.ts',
         'tests/hermes-feature-parity-bridge-real.test.ts',
         'tests/hermes-feature-parity-strip.test.ts',
+        'tests/hermes-learning-loop-bridge.test.ts',
+        'tests/hermes-learning-loop-bridge-real.test.ts',
+        'tests/hermes-learning-loop-strip.test.ts',
         'tests/hermes-protocol-gateways-bridge.test.ts',
         'tests/hermes-protocol-gateways-bridge-real.test.ts',
         'tests/hermes-protocol-gateways-strip.test.ts',

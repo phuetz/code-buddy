@@ -101,6 +101,10 @@ const learningSkillUsageStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/learning-skill-usage-strip.tsx',
 );
+const hermesLearningLoopStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-learning-loop-strip.tsx',
+);
 const hermesMobileSupervisionStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-mobile-supervision-strip.tsx',
@@ -159,6 +163,7 @@ describe('FleetCommandCenter saga board', () => {
       fs.readFileSync(skillPackageManagerStripPath, 'utf8'),
       fs.readFileSync(lessonCandidateReviewStripPath, 'utf8'),
       fs.readFileSync(learningSkillUsageStripPath, 'utf8'),
+      fs.readFileSync(hermesLearningLoopStripPath, 'utf8'),
       fs.readFileSync(hermesMobileSupervisionStripPath, 'utf8'),
       fs.readFileSync(hermesProtocolGatewaysStripPath, 'utf8'),
     ].join('\n');
@@ -209,6 +214,10 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('LearningSkillUsageStrip');
     expect(source).toContain('fleet-learning-skill-usage');
     expect(source).toContain('buddy skills learning-usage --json');
+    expect(source).toContain('HermesLearningLoopStrip');
+    expect(source).toContain('fleet-hermes-learning-loop');
+    expect(source).toContain('buddy hermes learning status --json');
+    expect(source).toContain('hermesLearningLoop?: HermesLearningLoopApi');
     expect(source).toContain('HermesMobileSupervisionStrip');
     expect(source).toContain('fleet-hermes-mobile-supervision');
     expect(source).toContain('buddy hermes mobile status');
