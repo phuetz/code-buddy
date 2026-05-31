@@ -2289,6 +2289,10 @@
       "noVersion": "no version",
       "unavailable": "Hermes runtime backends are not loaded yet.",
       "loadFailed": "Hermes runtime backend load failed",
+      "runSmoke": "Run live smoke",
+      "smokeUnavailable": "Live smoke runner is unavailable.",
+      "smokePassed": "smoke passed: {{output}}",
+      "smokeFailed": "smoke {{status}}: {{output}}",
       "status": {
         "available": "available",
         "configured": "configured",

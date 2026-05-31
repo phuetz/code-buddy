@@ -2289,6 +2289,10 @@
       "noVersion": "pas de version",
       "unavailable": "Les backends d'execution Hermes ne sont pas encore charges.",
       "loadFailed": "Chargement des backends d'execution Hermes echoue",
+      "runSmoke": "Lancer le smoke live",
+      "smokeUnavailable": "Le runner de smoke live est indisponible.",
+      "smokePassed": "smoke reussi : {{output}}",
+      "smokeFailed": "smoke {{status}} : {{output}}",
       "status": {
         "available": "disponible",
         "configured": "configure",

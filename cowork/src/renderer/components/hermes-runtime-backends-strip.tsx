@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Cloud,
+  PlayCircle,
   Server,
   ShieldCheck,
   Terminal,
@@ -41,8 +42,32 @@ export interface HermesRuntimeBackendsReview {
   runnableCount: number;
 }
 
+export interface HermesRuntimeBackendSmokeResult {
+  args: string[];
+  backendId: string;
+  command: string | null;
+  durationMs: number;
+  exitCode: number | null;
+  finishedAt: string;
+  label: string | null;
+  ok: boolean;
+  output: string;
+  signal: string | null;
+  startedAt: string;
+  status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
+  stderr: string;
+  stdout: string;
+}
+
 interface HermesRuntimeBackendsApi {
   get?: () => Promise<HermesRuntimeBackendsReview | null>;
+  smoke?: (options: {
+    backendId: string;
+  }) => Promise<{
+    error?: string;
+    ok: boolean;
+    result?: HermesRuntimeBackendSmokeResult;
+  }>;
 }
 
 export const HermesRuntimeBackendsStrip: React.FC<{
@@ -52,6 +77,9 @@ export const HermesRuntimeBackendsStrip: React.FC<{
   const { t } = useTranslation();
   const [loadedReadiness, setLoadedReadiness] = useState<HermesRuntimeBackendsReview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [smokeErrors, setSmokeErrors] = useState<Record<string, string>>({});
+  const [smokeResults, setSmokeResults] = useState<Record<string, HermesRuntimeBackendSmokeResult>>({});
+  const [smokingBackendId, setSmokingBackendId] = useState<string | null>(null);
   const visibleReadiness = readiness ?? loadedReadiness;
   const visibleError = error ?? loadError;
   const command = useMemo(
@@ -90,6 +118,42 @@ export const HermesRuntimeBackendsStrip: React.FC<{
       cancelled = true;
     };
   }, [readiness]);
+
+  const handleRunSmoke = async (backend: HermesRuntimeBackendReviewItem) => {
+    const smoke = getHermesRuntimeBackendsApi()?.smoke;
+    if (!smoke) {
+      setSmokeErrors((current) => ({
+        ...current,
+        [backend.id]: t('fleet.hermesRuntimeBackends.smokeUnavailable', 'Live smoke runner is unavailable.'),
+      }));
+      return;
+    }
+
+    setSmokingBackendId(backend.id);
+    setSmokeErrors((current) => {
+      const next = { ...current };
+      delete next[backend.id];
+      return next;
+    });
+
+    try {
+      const response = await smoke({ backendId: backend.id });
+      if (!response.ok || !response.result) {
+        throw new Error(response.error ?? 'Runtime smoke failed.');
+      }
+      setSmokeResults((current) => ({
+        ...current,
+        [backend.id]: response.result!,
+      }));
+    } catch (smokeErrorValue) {
+      setSmokeErrors((current) => ({
+        ...current,
+        [backend.id]: smokeErrorValue instanceof Error ? smokeErrorValue.message : String(smokeErrorValue),
+      }));
+    } finally {
+      setSmokingBackendId(null);
+    }
+  };
 
   return (
     <section
@@ -139,7 +203,14 @@ export const HermesRuntimeBackendsStrip: React.FC<{
 
           <div className="mt-1.5 grid gap-1">
             {visibleReadiness.backends.map((backend) => (
-              <BackendRow key={backend.id} backend={backend} />
+              <BackendRow
+                key={backend.id}
+                backend={backend}
+                isSmokeRunning={smokingBackendId === backend.id}
+                onRunSmoke={handleRunSmoke}
+                smokeError={smokeErrors[backend.id]}
+                smokeResult={smokeResults[backend.id]}
+              />
             ))}
           </div>
 
@@ -182,7 +253,13 @@ export const HermesRuntimeBackendsStrip: React.FC<{
   );
 };
 
-const BackendRow: React.FC<{ backend: HermesRuntimeBackendReviewItem }> = ({ backend }) => {
+const BackendRow: React.FC<{
+  backend: HermesRuntimeBackendReviewItem;
+  isSmokeRunning?: boolean;
+  onRunSmoke?: (backend: HermesRuntimeBackendReviewItem) => void;
+  smokeError?: string;
+  smokeResult?: HermesRuntimeBackendSmokeResult;
+}> = ({ backend, isSmokeRunning = false, onRunSmoke, smokeError, smokeResult }) => {
   const { t } = useTranslation();
   const tone = backend.runnable
     ? 'text-success'
@@ -190,6 +267,7 @@ const BackendRow: React.FC<{ backend: HermesRuntimeBackendReviewItem }> = ({ bac
       ? 'text-warning'
       : 'text-text-muted';
   const smoke = backend.smokeCommand ?? backend.command ?? backend.id;
+  const canSmoke = Boolean(onRunSmoke && backend.runnable && backend.smokeCommand);
   const statusLabels: Record<HermesRuntimeBackendStatus, string> = {
     available: t('fleet.hermesRuntimeBackends.status.available', 'available'),
     configured: t('fleet.hermesRuntimeBackends.status.configured', 'configured'),
@@ -200,9 +278,24 @@ const BackendRow: React.FC<{ backend: HermesRuntimeBackendReviewItem }> = ({ bac
     <div className="min-w-0 rounded bg-surface/80 px-2 py-1 text-[10px]">
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate text-text-secondary">{backend.label}</span>
-        <span className={`shrink-0 rounded bg-background px-1 py-0.5 text-[9px] ${tone}`}>
-          {statusLabels[backend.status]}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {backend.smokeCommand ? (
+            <button
+              aria-label={t('fleet.hermesRuntimeBackends.runSmoke', 'Run live smoke')}
+              className="rounded border border-border-muted bg-background p-0.5 text-text-muted transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+              data-testid={`hermes-runtime-smoke-${backend.id}`}
+              disabled={!canSmoke || isSmokeRunning}
+              onClick={() => onRunSmoke?.(backend)}
+              title={t('fleet.hermesRuntimeBackends.runSmoke', 'Run live smoke')}
+              type="button"
+            >
+              <PlayCircle size={10} />
+            </button>
+          ) : null}
+          <span className={`rounded bg-background px-1 py-0.5 text-[9px] ${tone}`}>
+            {statusLabels[backend.status]}
+          </span>
+        </div>
       </div>
       <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[9px] text-text-muted">
         <span className="shrink-0">{backend.id}</span>
@@ -211,6 +304,27 @@ const BackendRow: React.FC<{ backend: HermesRuntimeBackendReviewItem }> = ({ bac
         </span>
       </div>
       <div className="mt-0.5 truncate font-mono text-[9px] text-text-muted">{smoke}</div>
+      {smokeResult || smokeError ? (
+        <div
+          className={`mt-0.5 truncate rounded bg-background px-1 py-0.5 text-[9px] ${
+            smokeResult?.ok ? 'text-success' : 'text-warning'
+          }`}
+          data-testid={`hermes-runtime-smoke-result-${backend.id}`}
+        >
+          {smokeResult
+            ? t(
+              smokeResult.ok
+                ? 'fleet.hermesRuntimeBackends.smokePassed'
+                : 'fleet.hermesRuntimeBackends.smokeFailed',
+              smokeResult.ok ? 'smoke passed: {{output}}' : 'smoke {{status}}: {{output}}',
+              {
+                output: smokeResult.output || smokeResult.status,
+                status: smokeResult.status,
+              }
+            )
+            : smokeError}
+        </div>
+      ) : null}
     </div>
   );
 };

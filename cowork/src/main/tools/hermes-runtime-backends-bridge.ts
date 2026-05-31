@@ -32,6 +32,23 @@ export interface HermesRuntimeBackendsReview {
   runnableCount: number;
 }
 
+export interface HermesRuntimeBackendSmokeResult {
+  args: string[];
+  backendId: string;
+  command: string | null;
+  durationMs: number;
+  exitCode: number | null;
+  finishedAt: string;
+  label: string | null;
+  ok: boolean;
+  output: string;
+  signal: string | null;
+  startedAt: string;
+  status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
+  stderr: string;
+  stdout: string;
+}
+
 interface HermesRuntimeBackendsReadiness {
   arch: string;
   availableCount: number;
@@ -51,6 +68,12 @@ interface HermesAgentDiagnostics {
 
 interface HermesAgentDiagnosticsModule {
   buildHermesAgentDiagnostics: () => HermesAgentDiagnostics;
+}
+
+interface HermesRuntimeBackendsModule {
+  runHermesRuntimeBackendSmoke: (options: {
+    backendId: string;
+  }) => HermesRuntimeBackendSmokeResult;
 }
 
 export async function getHermesRuntimeBackendsForReview(): Promise<HermesRuntimeBackendsReview | null> {
@@ -85,4 +108,20 @@ export async function getHermesRuntimeBackendsForReview(): Promise<HermesRuntime
     recommendations: readiness.recommendations,
     runnableCount: readiness.runnableCount,
   };
+}
+
+export async function runHermesRuntimeBackendSmokeForReview(
+  backendId: string,
+): Promise<HermesRuntimeBackendSmokeResult> {
+  const id = backendId.trim();
+  if (!id) {
+    throw new Error('backendId is required to run a Hermes runtime smoke.');
+  }
+
+  const mod = await loadCoreModule<HermesRuntimeBackendsModule>('agent/hermes-runtime-backends.js');
+  if (!mod?.runHermesRuntimeBackendSmoke) {
+    throw new Error('Core Hermes runtime smoke module is unavailable.');
+  }
+
+  return mod.runHermesRuntimeBackendSmoke({ backendId: id });
 }

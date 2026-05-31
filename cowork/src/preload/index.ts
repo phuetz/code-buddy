@@ -1565,6 +1565,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
         recommendations: string[];
         runnableCount: number;
       } | null> => ipcRenderer.invoke('tools.hermesRuntimeBackends.get'),
+      smoke: (options: {
+        backendId: string;
+      }): Promise<{
+        error?: string;
+        ok: boolean;
+        result?: {
+          args: string[];
+          backendId: string;
+          command: string | null;
+          durationMs: number;
+          exitCode: number | null;
+          finishedAt: string;
+          label: string | null;
+          ok: boolean;
+          output: string;
+          signal: string | null;
+          startedAt: string;
+          status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
+          stderr: string;
+          stdout: string;
+        };
+      }> => ipcRenderer.invoke('tools.hermesRuntimeBackends.smoke', options),
     },
     skillPackage: {
       list: (options?: {
@@ -4241,6 +4263,28 @@ declare global {
             recommendations: string[];
             runnableCount: number;
           } | null>;
+          smoke: (options: {
+            backendId: string;
+          }) => Promise<{
+            error?: string;
+            ok: boolean;
+            result?: {
+              args: string[];
+              backendId: string;
+              command: string | null;
+              durationMs: number;
+              exitCode: number | null;
+              finishedAt: string;
+              label: string | null;
+              ok: boolean;
+              output: string;
+              signal: string | null;
+              startedAt: string;
+              status: 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
+              stderr: string;
+              stdout: string;
+            };
+          }>;
         };
         skillPackage: {
           list: (options?: {

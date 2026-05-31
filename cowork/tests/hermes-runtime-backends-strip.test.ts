@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import React from 'react';
-import { act } from 'react-dom/test-utils';
+import { act, Simulate } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -151,5 +151,63 @@ describe('HermesRuntimeBackendsStrip', () => {
     expect(get).toHaveBeenCalledWith();
     expect(target.textContent).toContain('Vercel Sandbox');
     expect(target.textContent).toContain('vercel whoami');
+  });
+
+  it('runs an opt-in live smoke through the Electron bridge', async () => {
+    const target = container();
+    const smoke = vi.fn().mockResolvedValue({
+      ok: true,
+      result: {
+        args: ['-e', "console.log('OK-HERMES-LOCAL')"],
+        backendId: 'local',
+        command: 'node',
+        durationMs: 25,
+        exitCode: 0,
+        finishedAt: '2026-05-31T10:18:00.025Z',
+        label: 'Local process',
+        ok: true,
+        output: 'OK-HERMES-LOCAL',
+        signal: null,
+        startedAt: '2026-05-31T10:18:00.000Z',
+        status: 'passed',
+        stderr: '',
+        stdout: 'OK-HERMES-LOCAL',
+      },
+    });
+    (window as unknown as {
+      electronAPI?: {
+        tools?: {
+          hermesRuntimeBackends?: {
+            smoke: typeof smoke;
+          };
+        };
+      };
+    }).electronAPI = {
+      tools: {
+        hermesRuntimeBackends: {
+          smoke,
+        },
+      },
+    };
+    root = createRoot(target);
+
+    await act(async () => {
+      root?.render(React.createElement(HermesRuntimeBackendsStrip, { readiness: readyRuntime }));
+      await Promise.resolve();
+    });
+
+    const button = target.querySelector('[data-testid="hermes-runtime-smoke-local"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    await act(async () => {
+      Simulate.click(button);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(smoke).toHaveBeenCalledWith({ backendId: 'local' });
+    const result = target.querySelector('[data-testid="hermes-runtime-smoke-result-local"]');
+    expect(result?.textContent).toContain('smoke passed');
+    expect(result?.textContent).toContain('OK-HERMES-LOCAL');
   });
 });

@@ -184,7 +184,10 @@ import {
 import { listRecentWorkspaceFiles } from './utils/recent-workspace-files';
 import { buildDiagnosticsSummary } from './utils/diagnostics-summary';
 import { getHermesProviderReadinessForReview } from './tools/hermes-provider-readiness-bridge';
-import { getHermesRuntimeBackendsForReview } from './tools/hermes-runtime-backends-bridge';
+import {
+  getHermesRuntimeBackendsForReview,
+  runHermesRuntimeBackendSmokeForReview,
+} from './tools/hermes-runtime-backends-bridge';
 import { getHermesToolCatalogForReview } from './tools/hermes-tool-catalog-bridge';
 import { listLearningSkillUsageForReview } from './tools/learning-usage-bridge';
 import {
@@ -4078,6 +4081,28 @@ ipcMain.handle('tools.hermesRuntimeBackends.get', async () => {
     return null;
   }
 });
+
+ipcMain.handle(
+  'tools.hermesRuntimeBackends.smoke',
+  async (
+    _event,
+    payload?: {
+      backendId?: string;
+    }
+  ) => {
+    try {
+      const backendId = typeof payload?.backendId === 'string' ? payload.backendId : '';
+      const result = await runHermesRuntimeBackendSmokeForReview(backendId);
+      return { ok: true as const, result };
+    } catch (err) {
+      logWarn('[tools.hermesRuntimeBackends.smoke] failed:', err);
+      return {
+        error: err instanceof Error ? err.message : String(err),
+        ok: false as const,
+      };
+    }
+  }
+);
 
 ipcMain.handle(
   'tools.skillPackage.list',

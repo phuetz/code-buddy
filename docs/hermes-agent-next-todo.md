@@ -207,9 +207,9 @@ Current measured state:
 
 - [ ] **Runtime backend inventory**
   - Scope: detect/configure local, Docker, SSH, WSL, sandbox, Vercel Sandbox/Modal/Daytona if product-relevant.
-  - Done so far: `buddy hermes doctor --json` now reports a non-destructive runtime backend inventory for local Node, native OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. Each row reports installed/configured/runnable state, version when a real CLI probe can provide it, credential source names only, notes/remediation, and copy/paste smoke commands for heavier real validation. Cowork renders the same inventory in Settings -> API and the Fleet Command Center through `tools.hermesRuntimeBackends.get`.
+  - Done so far: `buddy hermes doctor --json` now reports a non-destructive runtime backend inventory for local Node, native OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. Each row reports installed/configured/runnable state, version when a real CLI probe can provide it, credential source names only, notes/remediation, and copy/paste smoke commands for heavier real validation. Cowork renders the same inventory in Settings -> API and the Fleet Command Center through `tools.hermesRuntimeBackends.get`, and can run opt-in live smoke checks through `tools.hermesRuntimeBackends.smoke`. The first live runner executes the local Node backend through a real subprocess; Docker remains guarded by `CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true`.
   - Acceptance: `buddy hermes doctor --json` reports available backends and smoke commands. **Done for CLI JSON.**
-  - Remaining scope: turn configured backends into first-class managed runners where product-relevant, and add opt-in live smoke execution buttons for configured runtimes.
+  - Remaining scope: turn configured backends into first-class managed runners where product-relevant, and expand live smoke execution to configured remote backends after product-specific safety decisions.
 
 - [x] **Yuanbao platform connector parity**
   - Done: exact `yb_query_group_info`, `yb_query_group_members`, `yb_send_dm`, `yb_search_sticker`, and `yb_send_sticker` prompt tools now exist.
@@ -223,5 +223,5 @@ Current measured state:
 
 1. Cowork provider/model readiness polish for media, tool parity, and skill lifecycle.
 2. Optional full-page Cowork skill manager if the Fleet cockpit strips become too cramped for daily use.
-3. Provider/runtime readiness smoke matrix and first-class managed remote runner decisions.
+3. Provider/runtime readiness smoke matrix beyond local Node and first-class managed remote runner decisions.
 4. OpenClaw migration last, after the Hermes core and cockpit work are stable.

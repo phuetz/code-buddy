@@ -42,10 +42,34 @@ export interface HermesRuntimeBackendsReadiness {
   recommendations: string[];
 }
 
+export type HermesRuntimeSmokeStatus = 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
+
+export interface HermesRuntimeSmokeResult {
+  args: string[];
+  backendId: string;
+  command: string | null;
+  durationMs: number;
+  exitCode: number | null;
+  finishedAt: string;
+  label: string | null;
+  ok: boolean;
+  output: string;
+  signal: NodeJS.Signals | null;
+  startedAt: string;
+  status: HermesRuntimeSmokeStatus;
+  stderr: string;
+  stdout: string;
+}
+
 export interface HermesRuntimeBackendsOptions {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   now?: () => Date;
+}
+
+export interface HermesRuntimeSmokeOptions extends HermesRuntimeBackendsOptions {
+  backendId: string;
+  timeoutMs?: number;
 }
 
 interface ProbeResult {
@@ -53,6 +77,123 @@ interface ProbeResult {
   ok: boolean;
   output: string;
   signal: NodeJS.Signals | null;
+}
+
+interface SmokeInvocation {
+  args: string[];
+  command: string;
+}
+
+function blockedSmokeResult(
+  backendId: string,
+  status: HermesRuntimeSmokeStatus,
+  output: string,
+  options: {
+    backend?: HermesRuntimeBackend;
+    command?: string | null;
+    args?: string[];
+    now: Date;
+  },
+): HermesRuntimeSmokeResult {
+  const timestamp = options.now.toISOString();
+  return {
+    args: options.args ?? [],
+    backendId,
+    command: options.command ?? null,
+    durationMs: 0,
+    exitCode: null,
+    finishedAt: timestamp,
+    label: options.backend?.label ?? null,
+    ok: false,
+    output,
+    signal: null,
+    startedAt: timestamp,
+    status,
+    stderr: output,
+    stdout: '',
+  };
+}
+
+function smokeInvocationForBackend(
+  backend: HermesRuntimeBackend,
+  env: NodeJS.ProcessEnv,
+): SmokeInvocation | null {
+  if (backend.id === 'local') {
+    return {
+      command: process.execPath,
+      args: ['-e', "console.log('OK-HERMES-LOCAL')"],
+    };
+  }
+
+  if (backend.id === 'docker') {
+    if (env.CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE !== 'true') {
+      return null;
+    }
+    return {
+      command: 'docker',
+      args: [
+        'run',
+        '--rm',
+        '--network',
+        'none',
+        'node:22-slim',
+        'node',
+        '-e',
+        "console.log('OK-HERMES-DOCKER')",
+      ],
+    };
+  }
+
+  if (backend.id === 'wsl') {
+    return {
+      command: 'wsl',
+      args: ['--exec', 'sh', '-lc', 'echo OK-HERMES-WSL'],
+    };
+  }
+
+  return null;
+}
+
+function runSmokeInvocation(
+  backend: HermesRuntimeBackend,
+  invocation: SmokeInvocation,
+  options: {
+    env: NodeJS.ProcessEnv;
+    now: () => Date;
+    timeoutMs: number;
+  },
+): HermesRuntimeSmokeResult {
+  const started = options.now();
+  const startedAtMs = Date.now();
+  const result = spawnSync(invocation.command, invocation.args, {
+    env: options.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: options.timeoutMs,
+    windowsHide: true,
+  });
+  const stdout = decodeProbeBuffer(result.stdout).trim();
+  const stderr = decodeProbeBuffer(result.stderr).trim();
+  const output = `${stdout}\n${stderr}`.trim();
+  const ok = !result.error && result.status === 0;
+  const errorOutput = result.error ? String(result.error.message || result.error) : '';
+  const combinedOutput = output || errorOutput;
+
+  return {
+    args: invocation.args,
+    backendId: backend.id,
+    command: invocation.command,
+    durationMs: Math.max(0, Date.now() - startedAtMs),
+    exitCode: result.status,
+    finishedAt: options.now().toISOString(),
+    label: backend.label,
+    ok,
+    output: combinedOutput,
+    signal: result.signal,
+    startedAt: started.toISOString(),
+    status: ok ? 'passed' : 'failed',
+    stderr: stderr || errorOutput,
+    stdout,
+  };
 }
 
 function runProbe(command: string, args: string[], env: NodeJS.ProcessEnv): ProbeResult {
@@ -414,4 +555,51 @@ export function buildHermesRuntimeBackendsReadiness(
     issues,
     recommendations,
   };
+}
+
+export function runHermesRuntimeBackendSmoke(
+  options: HermesRuntimeSmokeOptions,
+): HermesRuntimeSmokeResult {
+  const env = options.env ?? process.env;
+  const now = options.now ?? (() => new Date());
+  const readiness = buildHermesRuntimeBackendsReadiness({
+    env,
+    homeDir: options.homeDir,
+    now,
+  });
+  const backendId = options.backendId.trim();
+  const backend = readiness.backends.find((candidate) => candidate.id === backendId);
+  const timestamp = now();
+
+  if (!backend) {
+    return blockedSmokeResult(backendId, 'unsupported', `Unknown runtime backend: ${backendId}`, {
+      now: timestamp,
+    });
+  }
+
+  if (!backend.runnable) {
+    return blockedSmokeResult(backend.id, 'not-runnable', `${backend.label} is not runnable on this host.`, {
+      backend,
+      command: backend.command,
+      now: timestamp,
+    });
+  }
+
+  const invocation = smokeInvocationForBackend(backend, env);
+  if (!invocation) {
+    const reason = backend.id === 'docker'
+      ? 'Docker smoke is heavy and requires CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true.'
+      : `${backend.label} does not have a safe live smoke runner yet.`;
+    return blockedSmokeResult(backend.id, 'blocked', reason, {
+      backend,
+      command: backend.command,
+      now: timestamp,
+    });
+  }
+
+  return runSmokeInvocation(backend, invocation, {
+    env,
+    now,
+    timeoutMs: Math.max(1000, Math.min(options.timeoutMs ?? 15_000, 60_000)),
+  });
 }

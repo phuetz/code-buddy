@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadCoreModule } from '../src/main/utils/core-loader';
-import { getHermesRuntimeBackendsForReview } from '../src/main/tools/hermes-runtime-backends-bridge';
+import {
+  getHermesRuntimeBackendsForReview,
+  runHermesRuntimeBackendSmokeForReview,
+} from '../src/main/tools/hermes-runtime-backends-bridge';
 
 vi.mock('../src/main/utils/core-loader', () => ({
   loadCoreModule: vi.fn(),
@@ -93,5 +96,38 @@ describe('Hermes runtime backends bridge', () => {
     mockedLoadCoreModule.mockResolvedValue(null);
 
     await expect(getHermesRuntimeBackendsForReview()).resolves.toBeNull();
+  });
+
+  it('runs a backend smoke through the core live smoke module', async () => {
+    const runHermesRuntimeBackendSmoke = vi.fn(() => ({
+      args: ['-e', "console.log('OK-HERMES-LOCAL')"],
+      backendId: 'local',
+      command: 'node',
+      durationMs: 42,
+      exitCode: 0,
+      finishedAt: '2026-05-31T10:16:00.042Z',
+      label: 'Local process',
+      ok: true,
+      output: 'OK-HERMES-LOCAL',
+      signal: null,
+      startedAt: '2026-05-31T10:16:00.000Z',
+      status: 'passed',
+      stderr: '',
+      stdout: 'OK-HERMES-LOCAL',
+    }));
+    mockedLoadCoreModule.mockResolvedValue({
+      runHermesRuntimeBackendSmoke,
+    });
+
+    const result = await runHermesRuntimeBackendSmokeForReview(' local ');
+
+    expect(mockedLoadCoreModule).toHaveBeenCalledWith('agent/hermes-runtime-backends.js');
+    expect(runHermesRuntimeBackendSmoke).toHaveBeenCalledWith({ backendId: 'local' });
+    expect(result).toMatchObject({
+      backendId: 'local',
+      ok: true,
+      output: 'OK-HERMES-LOCAL',
+      status: 'passed',
+    });
   });
 });

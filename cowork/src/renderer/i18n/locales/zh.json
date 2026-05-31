@@ -2276,6 +2276,10 @@
       "noVersion": "无版本",
       "unavailable": "Hermes 运行后端尚未加载。",
       "loadFailed": "Hermes 运行后端加载失败",
+      "runSmoke": "运行实时 smoke",
+      "smokeUnavailable": "实时 smoke runner 不可用。",
+      "smokePassed": "smoke 通过：{{output}}",
+      "smokeFailed": "smoke {{status}}：{{output}}",
       "status": {
         "available": "可用",
         "configured": "已配置",
