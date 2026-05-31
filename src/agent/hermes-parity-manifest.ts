@@ -92,7 +92,7 @@ const FEATURES: HermesParityFeature[] = [
     status: 'covered-partial',
     verificationCommands: [
       'npm test -- tests/agent/hermes-agent-diagnostics.test.ts tests/commands/hermes-commands.test.ts --run',
-      'cd cowork && npm test -- --run tests/hermes-provider-readiness-bridge.test.ts tests/hermes-provider-readiness-strip.test.ts',
+      'cd cowork && npm test -- --run tests/hermes-provider-readiness-bridge.test.ts tests/hermes-provider-readiness-bridge-real.test.ts tests/hermes-provider-readiness-strip.test.ts',
       'npm test -- tests/codebuddy/client-stream-retry.test.ts tests/codebuddy/client-gemini-vision.test.ts --run',
       'npx tsx src/index.ts hermes providers status --json',
       'npx tsx src/index.ts hermes doctor balanced --json',
@@ -241,7 +241,7 @@ const FEATURES: HermesParityFeature[] = [
     verificationCommands: [
       'npx tsx src/index.ts hermes memory status --json',
       'npm test -- tests/agent/hermes-memory-providers.test.ts tests/memory/memory-provider.test.ts --run',
-      '(cd cowork && npm test -- tests/hermes-memory-providers-bridge.test.ts tests/hermes-memory-providers-strip.test.ts --run)',
+      '(cd cowork && npm test -- tests/hermes-memory-providers-bridge.test.ts tests/hermes-memory-providers-bridge-real.test.ts tests/hermes-memory-providers-strip.test.ts --run)',
       'npm test -- tests/memory tests/agent/lesson-candidate-queue.test.ts --run',
       'npx tsx src/index.ts user-model show --json',
     ],
@@ -352,7 +352,7 @@ const FEATURES: HermesParityFeature[] = [
     status: 'partial',
     verificationCommands: [
       'npm test -- tests/agent/hermes-runtime-backends-smoke-real.test.ts tests/agent/hermes-agent-diagnostics.test.ts tests/commands/hermes-commands.test.ts --run',
-      'cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-strip.test.ts',
+      'cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-bridge-real.test.ts tests/hermes-runtime-backends-strip.test.ts',
       'npx tsx src/index.ts hermes doctor balanced --json',
       'npx tsx src/index.ts hermes runtime status --json',
       'npx tsx src/index.ts hermes runtime-smoke local --json',

@@ -580,6 +580,16 @@ describe('Hermes CLI commands', () => {
           nextWork: expect.not.stringContaining('Create backend-specific browser smoke tests and status output'),
         }),
         expect.objectContaining({
+          id: 'providers-models',
+          status: 'covered-partial',
+          codeBuddyEvidence: expect.arrayContaining([
+            'cowork/src/main/tools/hermes-provider-readiness-bridge.ts',
+          ]),
+          verificationCommands: expect.arrayContaining([
+            'cd cowork && npm test -- --run tests/hermes-provider-readiness-bridge.test.ts tests/hermes-provider-readiness-bridge-real.test.ts tests/hermes-provider-readiness-strip.test.ts',
+          ]),
+        }),
+        expect.objectContaining({
           id: 'prompt-size',
           status: 'covered-partial',
           verificationCommands: expect.arrayContaining([
@@ -608,8 +618,19 @@ describe('Hermes CLI commands', () => {
           codeBuddyEvidence: expect.arrayContaining(['src/agent/hermes-memory-providers.ts']),
           verificationCommands: expect.arrayContaining([
             'npx tsx src/index.ts hermes memory status --json',
+            '(cd cowork && npm test -- tests/hermes-memory-providers-bridge.test.ts tests/hermes-memory-providers-bridge-real.test.ts tests/hermes-memory-providers-strip.test.ts --run)',
           ]),
           notes: expect.stringContaining('secret-safe provider readiness matrix'),
+        }),
+        expect.objectContaining({
+          id: 'runtime-backends',
+          status: 'partial',
+          codeBuddyEvidence: expect.arrayContaining([
+            'cowork/src/main/tools/hermes-runtime-backends-bridge.ts',
+          ]),
+          verificationCommands: expect.arrayContaining([
+            'cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-bridge-real.test.ts tests/hermes-runtime-backends-strip.test.ts',
+          ]),
         }),
       ]),
     );
