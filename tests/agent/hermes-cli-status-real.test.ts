@@ -121,6 +121,26 @@ describe('Hermes CLI status real smoke', () => {
     expect(messaging.status.config.configuredCount).toBeGreaterThanOrEqual(0);
     expect(messaging.status.runtime.registeredCount).toBeGreaterThanOrEqual(0);
 
+    const mobile = runHermesJson(['mobile', 'status', 'mobile', 'supervision']) as {
+      kind: string;
+      ok: boolean;
+      routeMount: { basePath: string; status: string };
+      summary: { draftOnlyEndpoints: number; readOnlyEndpoints: number };
+      approvalQueue: { autoDispatch: boolean; remoteExecutionDisabled: boolean };
+    };
+    expect(mobile.kind).toBe('hermes_mobile_supervision_status');
+    expect(mobile.ok).toBe(true);
+    expect(mobile.routeMount).toMatchObject({
+      basePath: '/api/mobile',
+      status: 'implemented_not_probed',
+    });
+    expect(mobile.summary.readOnlyEndpoints).toBe(3);
+    expect(mobile.summary.draftOnlyEndpoints).toBe(1);
+    expect(mobile.approvalQueue).toMatchObject({
+      autoDispatch: false,
+      remoteExecutionDisabled: true,
+    });
+
     const promptSize = runHermesJson(['prompt-size', 'safe']) as {
       kind: string;
       sections: Array<{ id: string }>;

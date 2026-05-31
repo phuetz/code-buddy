@@ -8,7 +8,7 @@ Source of truth:
 - Official audit: [`hermes-agent-official-parity-audit-2026-05-30.md`](hermes-agent-official-parity-audit-2026-05-30.md)
 
 Current measured state:
-- Feature parity manifest: 19 areas, 4 covered-partial, 14 partial, 1 gap.
+- Feature parity manifest: 20 areas, 5 covered-partial, 14 partial, 1 gap.
 - Tool parity manifest: 71 official tools, 65 exact, 6 native-equivalent, 0 partial, 0 gaps.
 - Important product choice: Code Buddy maps Hermes Agent onto native TypeScript/Fleet/Cowork primitives. It does not vendor the upstream Python runtime.
 
@@ -111,6 +111,15 @@ Current measured state:
     - `npx tsx src/index.ts hermes memory status --json`
     - `npm test -- tests/agent/hermes-memory-providers.test.ts tests/memory/memory-provider.test.ts --run`
     - `cd cowork && npm test -- --run tests/hermes-memory-providers-bridge.test.ts tests/hermes-memory-providers-strip.test.ts`
+
+- [x] **Expose mobile supervision readiness for Hermes**
+  - Why: mobile supervision existed across `buddy run mobile-*` commands and server routes, but there was no Hermes cockpit command that told an operator whether the route mount, auth policy, approval queue, and blocked operations were ready.
+  - Done: `buddy hermes mobile status [query...] --json` now builds the real mobile supervision contract, listener shell, pairing preview metadata, and approval queue without starting a listener or printing pairing codes. It reports the implemented `/api/mobile` route mount, read-only/draft-only endpoint counts, local-operator approval gates, remote-execution-disabled safety, and copy/paste `buddy run mobile-*` commands.
+  - Guardrail: the status command never dispatches work, never starts a server, and never exposes pairing secret material; mobile follow-up remains draft-only until a local operator reviews it.
+  - Verification:
+    - `npm test -- tests/commands/hermes-commands.test.ts tests/agent/hermes-cli-status-real.test.ts --run`
+    - `npx tsx src/index.ts hermes mobile status "mobile supervision" --json`
+    - `node dist/index.js hermes mobile status "mobile supervision" --json`
 
 ## P2 — Close high-value tool partials
 

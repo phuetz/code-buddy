@@ -164,6 +164,7 @@ buddy hermes profile|agent|doctor|plan|toolsets|hooks|prompt-size|parity|tools-p
 buddy hermes providers status [--json]
 buddy hermes portal status|tools|open [--json]
 buddy hermes messaging status [--json] [--config <path>]
+buddy hermes mobile status [query...] [--json]
 buddy hermes browser status [--json]
 buddy hermes browser-smoke local-playwright [--json]
 buddy hermes runtime status [--json]
@@ -237,6 +238,14 @@ readiness report in a Hermes-scoped command. It includes configured/enabled
 channel counts, runtime connection/auth counts, and remediation hints without
 printing tokens or webhook URLs. `--config <path>` points at an isolated
 `.codebuddy/channels.json` file for setup checks.
+
+`buddy hermes mobile status [query...] [--json]` wraps the real mobile
+supervision contract in a Hermes-scoped readiness report. It shows the
+implemented `/api/mobile` route mount, bearer or pairing-code auth policy,
+read-only versus draft-only route counts, blocked operations, local approval
+queue state, and copy/paste `buddy run mobile-*` commands. It does not start a
+listener or print pairing codes; mobile execution and file mutations remain
+local-operator-gated.
 
 `buddy hermes browser status [--json]` prints a browser backend inventory for
 local Playwright, remote CDP, Browserbase/Stagehand, Browser Use gateway,

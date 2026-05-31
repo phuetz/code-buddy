@@ -288,6 +288,114 @@ describe('Hermes CLI commands', () => {
     }
   });
 
+  it('prints Hermes mobile supervision readiness as a dedicated status command', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'hermes',
+      'mobile',
+      'status',
+      'mobile',
+      'supervision',
+      'gateway',
+      '--json',
+    ]);
+
+    const raw = getLogOutput();
+    const output = JSON.parse(raw) as {
+      kind: string;
+      schemaVersion: number;
+      ok: boolean;
+      query: string;
+      routeMount: {
+        basePath: string;
+        module: string;
+        serverCommand: string;
+        status: string;
+      };
+      summary: {
+        readOnlyEndpoints: number;
+        draftOnlyEndpoints: number;
+        blockedOperations: number;
+        pendingLocalApproval: number;
+      };
+      listener: {
+        bind: { networkExposure: string };
+        safety: {
+          remoteExecutionDisabled: boolean;
+          serverStarted: boolean;
+        };
+      };
+      endpoints: Array<{
+        action: string;
+        localApprovalRequired: boolean;
+        path: string;
+        sideEffects: string;
+      }>;
+      approvalQueue: {
+        autoDispatch: boolean;
+        localOnly: boolean;
+        remoteExecutionDisabled: boolean;
+      };
+      pairing: {
+        status: string;
+        tokenIssued: boolean;
+      };
+      commands: {
+        server: string;
+        approvals: string;
+      };
+    };
+
+    expect(output.kind).toBe('hermes_mobile_supervision_status');
+    expect(output.schemaVersion).toBe(1);
+    expect(output.ok).toBe(true);
+    expect(output.query).toBe('mobile supervision gateway');
+    expect(output.routeMount).toMatchObject({
+      basePath: '/api/mobile',
+      module: 'src/server/routes/mobile.ts',
+      serverCommand: 'buddy server --port 3000',
+      status: 'implemented_not_probed',
+    });
+    expect(output.summary.readOnlyEndpoints).toBe(3);
+    expect(output.summary.draftOnlyEndpoints).toBe(1);
+    expect(output.summary.blockedOperations).toBeGreaterThanOrEqual(1);
+    expect(output.summary.pendingLocalApproval).toBeGreaterThanOrEqual(1);
+    expect(output.endpoints).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'view_run_summary',
+          path: '/api/mobile/snapshot',
+          sideEffects: 'none',
+        }),
+        expect.objectContaining({
+          action: 'draft_followup_prompt',
+          path: '/api/mobile/followup-draft',
+          localApprovalRequired: true,
+          sideEffects: 'draft_only',
+        }),
+      ]),
+    );
+    expect(output.listener.bind.networkExposure).toBe('loopback_only');
+    expect(output.listener.safety.remoteExecutionDisabled).toBe(true);
+    expect(output.listener.safety.serverStarted).toBe(false);
+    expect(output.approvalQueue).toMatchObject({
+      autoDispatch: false,
+      localOnly: true,
+      remoteExecutionDisabled: true,
+    });
+    expect(output.pairing).toMatchObject({
+      status: 'preview_only',
+      tokenIssued: false,
+    });
+    expect(output.commands.server).toBe('buddy server --port 3000');
+    expect(output.commands.approvals).toContain('buddy run mobile-approval-queue');
+    expect(raw).not.toContain('previewCode');
+  });
+
   it('prints Hermes runtime backend readiness as a dedicated status command', async () => {
     const program = createProgram();
     registerHermesCommands(program);

@@ -68,6 +68,22 @@ import {
   renderHermesMemoryProvidersReadiness,
 } from '../../agent/hermes-memory-providers.js';
 import {
+  buildMobileSupervisionGatewayContract,
+  type MobileSupervisionGatewayContract,
+} from '../../observability/mobile-supervision-gateway-contract.js';
+import {
+  buildMobileSupervisionGatewayListenerShell,
+  type MobileSupervisionGatewayListenerShell,
+} from '../../observability/mobile-supervision-gateway-listener-shell.js';
+import {
+  buildMobileSupervisionPairingState,
+  type MobileSupervisionPairingState,
+} from '../../observability/mobile-supervision-pairing-state.js';
+import {
+  buildMobileSupervisionApprovalQueue,
+  type MobileSupervisionApprovalQueue,
+} from '../../observability/mobile-supervision-approval-queue.js';
+import {
   KanbanStore,
   type CreateKanbanCardInput,
   type KanbanPriority,
@@ -107,6 +123,11 @@ type HermesBrowserSmokeOptions = HermesCommandOptions;
 
 interface HermesMessagingStatusOptions extends HermesCommandOptions {
   config?: string;
+}
+
+interface HermesMobileStatusOptions extends HermesCommandOptions {
+  limit?: string;
+  source?: string[];
 }
 
 interface HermesPromptSizeSection {
@@ -165,6 +186,68 @@ interface HermesToolsetsCatalog {
   activeToolset: ReturnType<typeof buildHermesToolsetDescriptor>;
   toolsets: ReturnType<typeof buildHermesToolsetDescriptor>[];
   notes: string[];
+}
+
+interface HermesMobileSupervisionStatus {
+  kind: 'hermes_mobile_supervision_status';
+  schemaVersion: 1;
+  generatedAt: string;
+  ok: boolean;
+  query: string;
+  routeMount: {
+    basePath: string;
+    module: string;
+    mountedBy: string;
+    serverCommand: string;
+    status: 'implemented_not_probed';
+  };
+  summary: {
+    readOnlyEndpoints: number;
+    draftOnlyEndpoints: number;
+    blockedOperations: number;
+    readyReadOnly: number;
+    pendingLocalApproval: number;
+    blockedQueueItems: number;
+    totalQueueItems: number;
+  };
+  auth: MobileSupervisionGatewayContract['auth'];
+  transport: MobileSupervisionGatewayContract['transport'];
+  listener: {
+    bind: MobileSupervisionGatewayListenerShell['bind'];
+    mode: MobileSupervisionGatewayListenerShell['mode'];
+    listener: MobileSupervisionGatewayListenerShell['transport']['listener'];
+    safety: MobileSupervisionGatewayListenerShell['safety'];
+  };
+  endpoints: Array<Pick<
+    MobileSupervisionGatewayContract['endpoints'][number],
+    'action' | 'id' | 'localApprovalRequired' | 'method' | 'path' | 'sideEffects'
+  >>;
+  blockedOperations: Array<{
+    action: string;
+    reason: string;
+  }>;
+  approvalQueue: {
+    counts: MobileSupervisionApprovalQueue['counts'];
+    localOnly: boolean;
+    autoDispatch: boolean;
+    remoteExecutionDisabled: boolean;
+  };
+  pairing: {
+    deviceLabel: string;
+    scopes: string[];
+    status: MobileSupervisionPairingState['pairing']['status'];
+    tokenIssued: boolean;
+    ttlSeconds: number;
+  };
+  commands: {
+    status: string;
+    server: string;
+    snapshot: string;
+    contract: string;
+    pairing: string;
+    approvals: string;
+  };
+  recommendations: string[];
 }
 
 type HermesPlanOutputFormat = 'text' | 'json' | 'markdown';
@@ -775,6 +858,147 @@ function renderHermesProviderReadiness(readiness: HermesProviderReadiness): stri
   return lines.join('\n');
 }
 
+async function buildHermesMobileSupervisionStatus(
+  queryParts: string[] = [],
+  options: HermesMobileStatusOptions = {},
+): Promise<HermesMobileSupervisionStatus> {
+  const query = normalizeHermesMobileQuery(queryParts);
+  const limit = parseOptionalPositiveInteger(options.limit, '--limit') ?? 20;
+  const contract = await buildMobileSupervisionGatewayContract(query, {
+    includeAllContext: false,
+    includeSnapshot: false,
+    limit,
+    sources: options.source ?? [],
+  });
+  const listenerShell = buildMobileSupervisionGatewayListenerShell(contract);
+  const pairingState = buildMobileSupervisionPairingState(listenerShell, {
+    deviceLabel: 'Cowork mobile supervisor',
+  });
+  const approvalQueue = buildMobileSupervisionApprovalQueue(contract, pairingState);
+  const readOnlyEndpoints = contract.endpoints.filter((endpoint) => endpoint.sideEffects === 'none');
+  const draftOnlyEndpoints = contract.endpoints.filter((endpoint) => endpoint.sideEffects === 'draft_only');
+
+  return {
+    kind: 'hermes_mobile_supervision_status',
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    ok: true,
+    query: contract.query,
+    routeMount: {
+      basePath: contract.basePath,
+      module: 'src/server/routes/mobile.ts',
+      mountedBy: 'src/server/index.ts',
+      serverCommand: 'buddy server --port 3000',
+      status: 'implemented_not_probed',
+    },
+    summary: {
+      readOnlyEndpoints: readOnlyEndpoints.length,
+      draftOnlyEndpoints: draftOnlyEndpoints.length,
+      blockedOperations: contract.blockedOperations.length,
+      readyReadOnly: approvalQueue.counts.ready,
+      pendingLocalApproval: approvalQueue.counts.pending,
+      blockedQueueItems: approvalQueue.counts.blocked,
+      totalQueueItems: approvalQueue.counts.total,
+    },
+    auth: contract.auth,
+    transport: contract.transport,
+    listener: {
+      bind: listenerShell.bind,
+      mode: listenerShell.mode,
+      listener: listenerShell.transport.listener,
+      safety: listenerShell.safety,
+    },
+    endpoints: contract.endpoints.map((endpoint) => ({
+      action: endpoint.action,
+      id: endpoint.id,
+      localApprovalRequired: endpoint.localApprovalRequired,
+      method: endpoint.method,
+      path: endpoint.path,
+      sideEffects: endpoint.sideEffects,
+    })),
+    blockedOperations: contract.blockedOperations.map((operation) => ({
+      action: operation.action,
+      reason: operation.policy.reason,
+    })),
+    approvalQueue: {
+      counts: approvalQueue.counts,
+      localOnly: approvalQueue.safety.localOnly,
+      autoDispatch: approvalQueue.safety.autoDispatch,
+      remoteExecutionDisabled: approvalQueue.safety.remoteExecutionDisabled,
+    },
+    pairing: {
+      deviceLabel: pairingState.pairing.deviceLabel,
+      scopes: pairingState.pairing.scopes,
+      status: pairingState.pairing.status,
+      tokenIssued: pairingState.pairing.tokenIssued,
+      ttlSeconds: pairingState.pairing.ttlSeconds,
+    },
+    commands: {
+      status: 'buddy hermes mobile status --json',
+      server: 'buddy server --port 3000',
+      snapshot: `buddy run mobile-snapshot "${contract.query}" --json`,
+      contract: `buddy run mobile-gateway-contract "${contract.query}" --json`,
+      pairing: `buddy run mobile-pairing-state "${contract.query}" --json`,
+      approvals: `buddy run mobile-approval-queue "${contract.query}" --json`,
+    },
+    recommendations: [
+      'Start the local server before using a phone: buddy server --port 3000.',
+      'Pairing-code and approval routes are local-operator-only; do not expose them directly over LAN.',
+      'Mobile devices may read snapshots and submit draft prompts, but execution and file mutations remain local.',
+      'Use buddy run mobile-gateway-check to evaluate any new route before implementing it.',
+    ],
+  };
+}
+
+function renderHermesMobileSupervisionStatus(status: HermesMobileSupervisionStatus): string {
+  const lines = [
+    `Hermes mobile supervision: ${status.ok ? 'ready for local server' : 'needs attention'}`,
+    `  Query: ${status.query || '(empty)'}`,
+    `  Route mount: ${status.routeMount.basePath} (${status.routeMount.status})`,
+    `  Server: ${status.routeMount.serverCommand}`,
+    `  Auth: ${status.auth.scheme}, scopes=${status.auth.scopes.join(', ')}, ttl=${status.auth.ttlSeconds}s`,
+    `  Transport: ${status.transport.exposure}, remote execution ${status.transport.remoteExecution}, TLS required off-device`,
+    `  Listener: ${status.listener.listener}, bind ${status.listener.bind.host}:${status.listener.bind.port} (${status.listener.bind.networkExposure})`,
+    `  Routes: ${status.summary.readOnlyEndpoints} read-only, ${status.summary.draftOnlyEndpoints} draft-only, ${status.summary.blockedOperations} blocked`,
+    `  Approval queue: ready=${status.summary.readyReadOnly}, pending=${status.summary.pendingLocalApproval}, blocked=${status.summary.blockedQueueItems}`,
+    `  Safety: autoDispatch=${status.approvalQueue.autoDispatch}; remoteExecutionDisabled=${status.approvalQueue.remoteExecutionDisabled}`,
+    '',
+    'Endpoints:',
+  ];
+
+  for (const endpoint of status.endpoints) {
+    lines.push(
+      `  - ${endpoint.method} ${endpoint.path} -> ${endpoint.action}` +
+        ` (${endpoint.sideEffects}, localApprovalRequired=${endpoint.localApprovalRequired})`,
+    );
+  }
+
+  lines.push('', 'Commands:');
+  lines.push(`  - ${status.commands.server}`);
+  lines.push(`  - ${status.commands.snapshot}`);
+  lines.push(`  - ${status.commands.contract}`);
+  lines.push(`  - ${status.commands.pairing}`);
+  lines.push(`  - ${status.commands.approvals}`);
+
+  if (status.recommendations.length > 0) {
+    lines.push('', 'Recommendations:');
+    for (const recommendation of status.recommendations) {
+      lines.push(`  - ${recommendation}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function normalizeHermesMobileQuery(queryParts: string[]): string {
+  const query = queryParts.join(' ').trim();
+  return query || 'mobile supervision';
+}
+
+function collectHermesOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 function registerHermesPortalCommands(hermes: Command): void {
   const portal = hermes
     .command('portal')
@@ -1177,6 +1401,28 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesMessagingGatewayStatus(status));
+    });
+
+  const mobile = hermes
+    .command('mobile')
+    .description('Inspect Hermes mobile supervision gateway readiness');
+
+  mobile
+    .command('status')
+    .description('Print mobile supervision routes, policy, pairing, and approval queue readiness')
+    .argument('[query...]', 'run recall query for the mobile supervision snapshot')
+    .option('-n, --limit <n>', 'number of matching runs to inspect for snapshot readiness', '20')
+    .option('--source <source>', 'filter by source/channel/tag (repeatable: cli, cowork, fleet, scheduled, mobile)', collectHermesOption, [])
+    .option('--json', 'output JSON')
+    .action(async (queryParts: string[] | undefined, options: HermesMobileStatusOptions) => {
+      const status = await buildHermesMobileSupervisionStatus(queryParts ?? [], options);
+
+      if (options.json) {
+        console.log(stableJson(status));
+        return;
+      }
+
+      console.log(renderHermesMobileSupervisionStatus(status));
     });
 
   const providers = hermes

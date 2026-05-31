@@ -164,7 +164,7 @@ discovery proofs.
 | Hermes `x_search` | `src/tools/x-search-tool.ts`, `src/tools/registry/x-search-tools.ts`, `tests/tools/x-search-tool-real.test.ts` | done — exact xAI Responses `x_search` prompt tool; real HTTP path tested; handle/date validation and citation/degraded-result handling included |
 | Hermes Feishu document/comment tools | `src/tools/feishu-tool.ts`, `src/tools/registry/feishu-tools.ts`, `tests/tools/feishu-tool-real.test.ts` | done — exact `feishu_doc_read`, `feishu_drive_list_comments`, `feishu_drive_list_comment_replies`, `feishu_drive_reply_comment`, and `feishu_drive_add_comment`; real Feishu/Lark Open API HTTP paths tested |
 | Hermes Yuanbao group/DM/sticker tools | `src/tools/yuanbao-tool.ts`, `src/tools/registry/yuanbao-tools.ts`, `tests/tools/yuanbao-tool-real.test.ts` | done — exact `yb_query_group_info`, `yb_query_group_members`, `yb_send_dm`, `yb_search_sticker`, and `yb_send_sticker`; real HTTP gateway path tested; external sends approval-gated |
-| Mobile-safe remote supervision | `buddy run mobile-snapshot / mobile-gateway-*` | contract/preview only; no live listener yet (parity TODO #15/#34) |
+| Mobile-safe remote supervision | `buddy hermes mobile status --json`; `buddy run mobile-snapshot / mobile-gateway-*`; `/api/mobile/*` routes under `buddy server` | partial — local server routes exist for pairing, read-only snapshots, recall packs, artifact reads, and draft-only follow-up prompts; `buddy hermes mobile status --json` exposes the route mount, auth policy, approval queue, blocked operations, and safe next commands. Remote execution and auto-dispatch stay disabled; polished off-device TLS/client UX remains future work. |
 | Terminal backends (Docker/SSH/sandbox) | `src/security/` sandbox registry, `SandboxBackendInterface`, `src/agent/hermes-runtime-backends.ts`, Cowork runtime readiness strip | local + Docker/OS/WSL/SSH inventory now visible in Hermes doctor and Cowork; local + WSL live smokes are available when runnable; Daytona/Modal/Vercel are detected/configuration-reported but not first-class managed runners |
 
 Cowork Test Runner now exposes a safe `Hermes / platform connectors real smoke`
@@ -203,6 +203,7 @@ buddy hermes parity --json
 buddy hermes tools --json
 buddy hermes portal status --json
 buddy hermes portal tools --json
+buddy hermes mobile status --json
 buddy hermes runtime status --json
 buddy hermes runtime-smoke local --json
 buddy hermes runtime-smoke wsl --json
@@ -223,7 +224,9 @@ buddy lessons candidate approve <id> --by "<your name>"
 - LLM dialectic inference over the user model (Honcho-style); the local
   observation store + review queue now exist, the inference layer does not.
 - Stronger automatic promotion/deprecation scoring for generated skills.
-- Live mobile remote-supervision listener (only contracts/snapshots exist).
+- Polished mobile remote-supervision client/off-device TLS packaging. The local
+  `/api/mobile` routes and `buddy hermes mobile status --json` readiness surface
+  exist, but execution and file mutation remain deliberately local-operator gated.
 - Deeper Cowork skill package management is mostly covered in the Fleet
   cockpit. Remaining polish is an optional dedicated full-page space if daily
   skill operations need more room.
