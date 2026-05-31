@@ -70,6 +70,35 @@ describe('Hermes CLI status real smoke', () => {
     expect(tools.summary.exact).toBeGreaterThan(0);
     expect(tools.summary.gaps).toBe(0);
 
+    const todo = runHermesJson(['todo']) as {
+      command: string;
+      kind: string;
+      summary: { activeTodoCount: number; deferredCount: number; includedDeferred: boolean };
+      todos: Array<{ id: string }>;
+      deferred: Array<{ id: string; nextWork: string }>;
+    };
+    expect(todo.kind).toBe('hermes_parity_todo');
+    expect(todo.command).toBe('buddy hermes todo --json');
+    expect(todo.summary.includedDeferred).toBe(false);
+    expect(todo.summary.activeTodoCount).toBeGreaterThan(0);
+    expect(todo.summary.deferredCount).toBeGreaterThanOrEqual(1);
+    expect(todo.todos.map((item) => item.id)).not.toContain('openclaw-migration');
+    expect(todo.deferred).toEqual([
+      expect.objectContaining({
+        id: 'openclaw-migration',
+        nextWork: expect.stringContaining('Do this at the end'),
+      }),
+    ]);
+
+    const todoWithDeferred = runHermesJson(['todo', '--include-deferred']) as {
+      kind: string;
+      summary: { includedDeferred: boolean };
+      todos: Array<{ id: string }>;
+    };
+    expect(todoWithDeferred.kind).toBe('hermes_parity_todo');
+    expect(todoWithDeferred.summary.includedDeferred).toBe(true);
+    expect(todoWithDeferred.todos.map((item) => item.id)).toContain('openclaw-migration');
+
     const portal = runHermesJson(['portal', 'status']) as {
       kind: string;
       portal: { defaultPortalUrl: string };
@@ -153,5 +182,5 @@ describe('Hermes CLI status real smoke', () => {
     expect(promptSize.sections.map((section) => section.id)).toEqual(
       expect.arrayContaining(['systemPrompt', 'toolset', 'toolSchemas'])
     );
-  });
+  }, 90_000);
 });
