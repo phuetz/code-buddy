@@ -78,6 +78,26 @@ describe('LessonCandidateQueue', () => {
       expect(queue.list('pending')).toHaveLength(1);
     });
 
+    it('does not enqueue a new candidate for an already recorded lesson', async () => {
+      const queue = new LessonCandidateQueue(tmpDir);
+      const first = queue.propose({
+        category: 'RULE',
+        content: 'Do not re-review lessons that are already recorded.',
+      });
+
+      const { lesson } = await queue.approve(first.candidate.id, { reviewedBy: 'Patrice' });
+      const second = queue.propose({
+        category: 'RULE',
+        content: 'do not re-review lessons that are already recorded.  ',
+      });
+
+      expect(second.deduped).toBe(true);
+      expect(second.alreadyRecorded).toBe(true);
+      expect(second.existingLesson?.id).toBe(lesson.id);
+      expect(second.candidate).toBeUndefined();
+      expect(queue.list('pending')).toHaveLength(0);
+    });
+
     it('throws on empty content and on an invalid category', () => {
       const queue = new LessonCandidateQueue(tmpDir);
       expect(() => queue.propose({ category: 'RULE', content: '   ' })).toThrow(/content is required/i);

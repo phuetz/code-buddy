@@ -338,7 +338,7 @@ function createLessonCandidateCommand(): Command {
       }
       try {
         const queue = getLessonCandidateQueue(process.cwd());
-        const { candidate, deduped } = queue.propose({
+        const { candidate, existingLesson, deduped, alreadyRecorded } = queue.propose({
           category: cat,
           content,
           ...(opts.context ? { context: opts.context } : {}),
@@ -347,9 +347,29 @@ function createLessonCandidateCommand(): Command {
             ? { provenance: { ...(opts.run ? { runId: opts.run } : {}), ...(opts.note ? { note: opts.note } : {}) } }
             : {}),
         });
-        const reviewCommand = `buddy lessons candidate approve ${candidate.id} --by <name>`;
+        const reviewCommand = candidate
+          ? `buddy lessons candidate approve ${candidate.id} --by <name>`
+          : undefined;
         if (opts.json) {
-          console.log(JSON.stringify({ candidate, deduped, reviewCommand }, null, 2));
+          console.log(JSON.stringify({
+            candidate,
+            existingLesson,
+            deduped,
+            alreadyRecorded,
+            ...(reviewCommand ? { reviewCommand } : {}),
+          }, null, 2));
+          return;
+        }
+        if (alreadyRecorded && existingLesson) {
+          console.log(
+            `Lesson already recorded [${existingLesson.id}] (${existingLesson.category}): ` +
+            existingLesson.content,
+          );
+          console.log('No new review candidate was created.');
+          return;
+        }
+        if (!candidate || !reviewCommand) {
+          console.log('No new review candidate was created.');
           return;
         }
         const prefix = deduped ? 'Matched existing pending candidate' : 'Proposed candidate';

@@ -171,7 +171,7 @@ export class LessonsProposeTool implements ITool {
         // RunStore may not be active — provenance is best-effort.
       }
 
-      const { candidate, deduped } = queue.propose({
+      const { candidate, existingLesson, deduped, alreadyRecorded } = queue.propose({
         category,
         content,
         ...(context ? { context } : {}),
@@ -180,6 +180,21 @@ export class LessonsProposeTool implements ITool {
           ? { provenance: { ...(runId ? { runId } : {}), ...(note ? { note } : {}) } }
           : {}),
       });
+
+      if (alreadyRecorded && existingLesson) {
+        return {
+          success: true,
+          output:
+            `Lesson already recorded [${existingLesson.id}] (${existingLesson.category}): ${existingLesson.content}\n` +
+            'No new review candidate was created.',
+        };
+      }
+      if (!candidate) {
+        return {
+          success: true,
+          output: 'No new review candidate was created.',
+        };
+      }
 
       try {
         const { getActiveRunStore } = await import('../../observability/run-store.js');

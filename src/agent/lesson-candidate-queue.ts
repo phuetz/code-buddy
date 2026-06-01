@@ -12,8 +12,9 @@
  * per-turn injection hot path stay untouched:
  *
  *   - `propose(...)`  — enqueue a PENDING candidate. Never touches lessons.md.
- *                       Identical pending (category + content) proposals are
- *                       de-duplicated so an over-eager agent cannot spam.
+ *                       Identical pending (category + content) proposals, and
+ *                       proposals already recorded as lessons, are de-duplicated
+ *                       so an over-eager agent cannot spam review work.
  *   - `list(status?)` / `get(id)` — review surface.
  *   - `approve(id, …)` — the ONLY path that writes a lesson. Requires an
  *                        explicit human reviewer, supports inline edits, routes
@@ -23,7 +24,6 @@
  */
 
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 import { getLessonsTracker } from './lessons-tracker.js';
@@ -69,9 +69,12 @@ export interface ProposeLessonCandidateInput {
 }
 
 export interface ProposeLessonCandidateResult {
-  candidate: LessonCandidate;
-  /** True when an identical pending candidate already existed. */
+  candidate?: LessonCandidate;
+  /** Set when the proposed lesson is already recorded in lessons.md. */
+  existingLesson?: LessonItem;
+  /** True when an identical pending candidate already existed or the lesson is already recorded. */
   deduped: boolean;
+  alreadyRecorded?: boolean;
 }
 
 export interface ApproveLessonCandidateInput {
@@ -164,6 +167,13 @@ export class LessonCandidateQueue {
     );
     if (existing) {
       return { candidate: existing, deduped: true };
+    }
+
+    const existingLesson = getLessonsTracker(this.workDir)
+      .list(category)
+      .find((lesson) => lesson.content.trim().toLowerCase() === content.toLowerCase());
+    if (existingLesson) {
+      return { existingLesson, deduped: true, alreadyRecorded: true };
     }
 
     const candidate: LessonCandidate = {

@@ -98,13 +98,19 @@ export function proposeFromCouncilOutcome(
   }
 
   try {
-    const { candidate } = queue.propose({
+    const { candidate, alreadyRecorded } = queue.propose({
       category: 'INSIGHT',
       content: buildContent(input),
       context: `Fleet council · saga ${input.sagaId}`,
       source: 'self_observed',
       provenance: { sagaId: input.sagaId, note: 'auto-proposed from fleet council outcome' },
     });
+    if (!candidate) {
+      return {
+        proposed: false,
+        reason: alreadyRecorded ? 'lesson already recorded' : 'candidate not created',
+      };
+    }
     return { proposed: true, candidate };
   } catch (err) {
     logger.warn('[council-lesson] propose failed', {

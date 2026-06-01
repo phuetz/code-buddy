@@ -422,6 +422,26 @@ describe('Lessons Tool Adapters', () => {
       expect(pending[0].content).toContain('Wire new ITools');
     });
 
+    it('does not create a review candidate for an already recorded lesson', async () => {
+      const content = 'Do not re-review lessons that are already recorded.';
+      await new LessonsAddTool().execute({
+        category: 'RULE',
+        content,
+        source: 'manual',
+      });
+
+      const result = await tool.execute({
+        category: 'RULE',
+        content,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('Lesson already recorded');
+      expect(result.output).toContain('No new review candidate was created');
+      expect(result.output).not.toContain('Approve with: buddy lessons candidate approve');
+      expect(getLessonCandidateQueue(tmpDir).list('pending')).toHaveLength(0);
+    });
+
     it('rejects missing content and invalid category', async () => {
       expect((await tool.execute({ category: 'RULE' })).success).toBe(false);
       const bad = await tool.execute({ category: 'NOPE', content: 'x' });

@@ -108,6 +108,40 @@ describe('buddy lessons candidate', () => {
     expect(await fs.pathExists(lessonsMd())).toBe(false);
   });
 
+  it('propose --json omits review command when the lesson is already recorded', async () => {
+    const program = createProgram();
+    const content = 'Do not re-review lessons that are already recorded.';
+    await program.parseAsync([
+      'node', 'buddy', 'lessons', 'candidate', 'propose', content, '--category', 'RULE',
+    ]);
+    const id = getLogOutput(consoleSpy).match(/\[(lc-[a-z0-9]+)\]/)?.[1];
+    expect(id).toBeTruthy();
+
+    await program.parseAsync([
+      'node', 'buddy', 'lessons', 'candidate', 'approve', id!, '--by', 'Patrice',
+    ]);
+
+    consoleSpy.mockClear();
+    await program.parseAsync([
+      'node', 'buddy', 'lessons', 'candidate', 'propose', content, '--category', 'RULE', '--json',
+    ]);
+
+    const output = JSON.parse(getLogOutput(consoleSpy)) as {
+      alreadyRecorded?: boolean;
+      candidate?: unknown;
+      deduped: boolean;
+      existingLesson?: { content: string; id: string };
+      reviewCommand?: string;
+    };
+    expect(output).toMatchObject({
+      alreadyRecorded: true,
+      deduped: true,
+      existingLesson: { content },
+    });
+    expect(output.candidate).toBeUndefined();
+    expect(output.reviewCommand).toBeUndefined();
+  });
+
   it('list --json shows pending candidates', async () => {
     const program = createProgram();
     await program.parseAsync(['node', 'buddy', 'lessons', 'candidate', 'propose', 'a pending one']);

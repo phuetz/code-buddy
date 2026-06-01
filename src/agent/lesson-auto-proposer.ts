@@ -115,7 +115,7 @@ export async function proposeLessonsFromSession(
         source: 'self_observed',
         provenance: { note: 'auto-proposed after a complex session (D2)' },
       });
-      proposed.push(candidate);
+      if (candidate) proposed.push(candidate);
     } catch (err) {
       logger.debug('[lesson-auto-proposer] propose failed', { err });
     }
