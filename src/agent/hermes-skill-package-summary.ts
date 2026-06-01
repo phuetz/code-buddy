@@ -8,6 +8,7 @@ import {
   type SkillLifecycleState,
 } from '../skills/hub.js';
 import { safeWorkspacePath } from './hermes-public-paths.js';
+import { isInstalledFromCandidate, type SkillCandidateInstallState } from './research-script-skill-candidate.js';
 
 const LEARNING_SKILL_CANDIDATE_MIN_SUCCESSFUL_RUNS = 2;
 
@@ -41,13 +42,16 @@ export interface HermesSkillPackageEntry {
 
 export interface HermesSkillCandidateReviewStatus {
   eligibleCount: number;
+  installedCurrentCount: number;
   ineligibleCount: number;
   listCommand: string;
   nextInspectCommand?: string;
+  pendingCount: number;
   root: string;
   samples: Array<{
     candidateId: string;
     eligible: boolean;
+    installState: SkillCandidateInstallState;
     inspectCommand: string;
     kind: string;
     promotion?: {
@@ -192,7 +196,10 @@ export function renderHermesSkillPackageSummary(summary: HermesSkillPackageSumma
     `Health: ${summary.health.healthyCount} healthy, ${summary.health.issueCount} issue(s)`,
     `Next command: ${summary.health.nextCommand}`,
     `Skill candidates: ${summary.candidateReview.totalCount}` +
-      ` (${summary.candidateReview.eligibleCount} eligible, ${summary.candidateReview.ineligibleCount} not eligible)`,
+      ` (${summary.candidateReview.pendingCount} pending, ` +
+      `${summary.candidateReview.eligibleCount} eligible, ` +
+      `${summary.candidateReview.ineligibleCount} not eligible, ` +
+      `${summary.candidateReview.installedCurrentCount} installed current)`,
     `Candidate review: ${summary.candidateReview.listCommand}`,
     '',
     'Packages:',
@@ -233,23 +240,33 @@ export function renderHermesSkillPackageSummary(summary: HermesSkillPackageSumma
 function buildSkillCandidateReviewStatus(workDir: string): HermesSkillCandidateReviewStatus {
   const root = path.join(path.resolve(workDir), '.codebuddy', 'skill-candidates');
   const workspaceRoot = path.resolve(workDir);
-  const candidates = readSkillCandidateSamples(path.resolve(workDir), root)
+  const hub = buildWorkspaceSkillsHub(workDir).hub;
+  const candidates = readSkillCandidateSamples(path.resolve(workDir), root, hub)
     .sort((left, right) =>
-      Number(right.eligible) - Number(left.eligible)
+      Number(isReviewableSkillCandidateSample(right)) - Number(isReviewableSkillCandidateSample(left))
+      || installStateRank(left.installState) - installStateRank(right.installState)
+      || Number(right.eligible) - Number(left.eligible)
       || left.skillName.localeCompare(right.skillName),
     );
-  const eligibleCount = candidates.filter((candidate) => candidate.eligible).length;
+  const pendingCandidates = candidates.filter(isReviewableSkillCandidateSample);
+  const eligibleCount = pendingCandidates.filter((candidate) => candidate.eligible).length;
+  const installedCurrentCount = candidates.filter((candidate) =>
+    candidate.installState === 'installed-current'
+  ).length;
   const listCommand = eligibleCount > 0
     ? 'buddy tools skill-candidate list --eligible-only --json'
     : 'buddy tools skill-candidate list --json';
+  const samples = pendingCandidates.length > 0 ? pendingCandidates : candidates;
 
   return {
     eligibleCount,
-    ineligibleCount: candidates.length - eligibleCount,
+    installedCurrentCount,
+    ineligibleCount: pendingCandidates.length - eligibleCount,
     listCommand,
-    ...(candidates[0]?.inspectCommand ? { nextInspectCommand: candidates[0].inspectCommand } : {}),
+    ...(pendingCandidates[0]?.inspectCommand ? { nextInspectCommand: pendingCandidates[0].inspectCommand } : {}),
+    pendingCount: pendingCandidates.length,
     root: safeWorkspacePath(workspaceRoot, root),
-    samples: candidates.slice(0, 3),
+    samples: samples.slice(0, 3),
     totalCount: candidates.length,
   };
 }
@@ -257,6 +274,7 @@ function buildSkillCandidateReviewStatus(workDir: string): HermesSkillCandidateR
 function readSkillCandidateSamples(
   workDir: string,
   root: string,
+  hub: SkillsHub,
 ): HermesSkillCandidateReviewStatus['samples'] {
   if (!fs.existsSync(root)) return [];
   const samples: HermesSkillCandidateReviewStatus['samples'] = [];
@@ -283,9 +301,11 @@ function readSkillCandidateSamples(
         : undefined;
       const relativeDir = path.relative(workDir, candidateDir).replace(/\\/g, '/');
       const promotion = kind === 'learning' ? readCandidatePromotion(parsed) : undefined;
+      const installState = readSkillCandidateInstallState(hub, skillName, skillPath);
       samples.push({
         candidateId,
         eligible: isCandidateReviewEligible(parsed, kind, promotion),
+        installState,
         inspectCommand: `buddy tools skill-candidate inspect ${formatShellArg(relativeDir)} --json`,
         kind,
         ...(promotion ? { promotion } : {}),
@@ -349,6 +369,37 @@ function normalizePromotionReason(value: unknown, fallback: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) return fallback;
   const cleaned = value.trim().replace(/\s+/g, ' ');
   return cleaned.length > 240 ? `${cleaned.slice(0, 237)}...` : cleaned;
+}
+
+function readSkillCandidateInstallState(
+  hub: SkillsHub,
+  skillName: string,
+  skillPath: string,
+): SkillCandidateInstallState {
+  const installedDetail = hub.info(skillName);
+  if (!installedDetail) return 'not-installed';
+  if (typeof installedDetail.content !== 'string') return 'installed-missing';
+  try {
+    const candidateMarkdown = fs.readFileSync(skillPath, 'utf-8');
+    return isInstalledFromCandidate(installedDetail.content, candidateMarkdown)
+      ? 'installed-current'
+      : 'installed-different';
+  } catch {
+    return 'installed-different';
+  }
+}
+
+function isReviewableSkillCandidateSample(
+  candidate: HermesSkillCandidateReviewStatus['samples'][number],
+): boolean {
+  return candidate.installState !== 'installed-current';
+}
+
+function installStateRank(state: SkillCandidateInstallState): number {
+  if (state === 'not-installed') return 0;
+  if (state === 'installed-different') return 1;
+  if (state === 'installed-missing') return 2;
+  return 3;
 }
 
 function findCandidateReviewFiles(root: string): string[] {

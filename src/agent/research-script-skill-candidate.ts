@@ -494,7 +494,7 @@ function buildWorkspaceSkillsHub(rootDir: string): SkillsHub {
   });
 }
 
-function isInstalledFromCandidate(installedContent: string, candidateMarkdown: string): boolean {
+export function isInstalledFromCandidate(installedContent: string, candidateMarkdown: string): boolean {
   const candidateBody = candidateMarkdown.trimEnd();
   const installedBody = installedContent.trimEnd();
   return installedBody === candidateBody || installedBody.startsWith(`${candidateBody}\n\n## Human Approval`);

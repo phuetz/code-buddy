@@ -7,8 +7,10 @@ import {
   listLearningSkillUsage,
 } from './learning-agent.js';
 import { safeLocalPathLabel, safeWorkspacePath } from './hermes-public-paths.js';
+import { isInstalledFromCandidate, type SkillCandidateInstallState } from './research-script-skill-candidate.js';
 import { getUserModel } from '../memory/user-model.js';
 import { RunStore, type RunSummary } from '../observability/run-store.js';
+import { SkillsHub } from '../skills/hub.js';
 
 export interface HermesLearningLoopRunRow {
   artifactCount: number;
@@ -98,8 +100,10 @@ export interface HermesLearningLoopStatus {
     };
     skillCandidates: {
       eligibleCandidateCount: number;
+      installedCurrentCandidateCount: number;
       ineligibleCandidateCount: number;
       learningCandidateCount: number;
+      pendingCandidateCount: number;
       root: string;
       samples: HermesLearningLoopSkillCandidateSample[];
     };
@@ -134,6 +138,7 @@ export interface HermesLearningLoopNextAction {
 export interface HermesLearningLoopSkillCandidateSample {
   candidateId: string;
   eligible: boolean;
+  installState: SkillCandidateInstallState;
   inspectCommand: string;
   promotion: {
     reason: string;
@@ -236,8 +241,10 @@ function countLearningSkillCandidates(workDir: string): HermesLearningLoopStatus
   const root = path.join(workDir, '.codebuddy', 'skill-candidates', 'learning');
   const emptyState = {
     eligibleCandidateCount: 0,
+    installedCurrentCandidateCount: 0,
     ineligibleCandidateCount: 0,
     learningCandidateCount: 0,
+    pendingCandidateCount: 0,
     root: safeWorkspacePath(workDir, root),
     samples: [],
   };
@@ -245,21 +252,30 @@ function countLearningSkillCandidates(workDir: string): HermesLearningLoopStatus
     if (!fs.existsSync(root)) {
       return emptyState;
     }
+    const hub = buildWorkspaceSkillsHub(workDir);
     const candidates = fs.readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .filter((entry) => fs.existsSync(path.join(root, entry.name, 'SKILL.md')))
-      .map((entry) => readLearningSkillCandidateSample(workDir, root, entry.name))
+      .map((entry) => readLearningSkillCandidateSample(workDir, root, entry.name, hub))
       .sort((left, right) =>
-        Number(right.eligible) - Number(left.eligible)
+        Number(isReviewableLearningSkillCandidate(right)) - Number(isReviewableLearningSkillCandidate(left))
+        || installStateRank(left.installState) - installStateRank(right.installState)
+        || Number(right.eligible) - Number(left.eligible)
         || left.skillName.localeCompare(right.skillName),
       );
-    const eligibleCandidateCount = candidates.filter((candidate) => candidate.eligible).length;
+    const pendingCandidates = candidates.filter(isReviewableLearningSkillCandidate);
+    const eligibleCandidateCount = pendingCandidates.filter((candidate) => candidate.eligible).length;
+    const installedCurrentCandidateCount = candidates.filter((candidate) =>
+      candidate.installState === 'installed-current'
+    ).length;
     return {
       eligibleCandidateCount,
-      ineligibleCandidateCount: candidates.length - eligibleCandidateCount,
+      installedCurrentCandidateCount,
+      ineligibleCandidateCount: pendingCandidates.length - eligibleCandidateCount,
       learningCandidateCount: candidates.length,
+      pendingCandidateCount: pendingCandidates.length,
       root: safeWorkspacePath(workDir, root),
-      samples: candidates.slice(0, 3),
+      samples: (pendingCandidates.length > 0 ? pendingCandidates : candidates).slice(0, 3),
     };
   } catch {
     return emptyState;
@@ -270,9 +286,11 @@ function readLearningSkillCandidateSample(
   workDir: string,
   root: string,
   directoryName: string,
+  hub: SkillsHub,
 ): HermesLearningLoopSkillCandidateSample {
   const candidateDir = path.join(root, directoryName);
   const reviewPath = path.join(candidateDir, 'candidate-review.json');
+  const skillPath = path.join(candidateDir, 'SKILL.md');
   const fallbackId = directoryName;
   let parsed: SkillCandidateReviewFile = {};
   try {
@@ -294,15 +312,54 @@ function readLearningSkillCandidateSample(
     : undefined;
   const relativeDir = path.relative(workDir, candidateDir).replace(/\\/g, '/');
   const promotion = readSkillCandidatePromotion(parsed);
+  const installState = readSkillCandidateInstallState(hub, skillName, skillPath);
   return {
     candidateId,
     eligible: isLearningSkillCandidateEligible(parsed, promotion),
+    installState,
     inspectCommand: `buddy tools skill-candidate inspect ${formatShellArg(relativeDir)} --json`,
     promotion,
     skillName,
     ...(sourceJobId ? { sourceJobId } : {}),
     ...(sourceRunId ? { sourceRunId } : {}),
   };
+}
+
+function buildWorkspaceSkillsHub(rootDir: string): SkillsHub {
+  return new SkillsHub({
+    cacheDir: path.join(rootDir, '.codebuddy', 'skills-cache'),
+    lockfilePath: path.join(rootDir, '.codebuddy', 'skills-lock.json'),
+    skillsDir: path.join(rootDir, '.codebuddy', 'skills'),
+  });
+}
+
+function readSkillCandidateInstallState(
+  hub: SkillsHub,
+  skillName: string,
+  skillPath: string,
+): SkillCandidateInstallState {
+  const installedDetail = hub.info(skillName);
+  if (!installedDetail) return 'not-installed';
+  if (typeof installedDetail.content !== 'string') return 'installed-missing';
+  try {
+    const candidateMarkdown = fs.readFileSync(skillPath, 'utf-8');
+    return isInstalledFromCandidate(installedDetail.content, candidateMarkdown)
+      ? 'installed-current'
+      : 'installed-different';
+  } catch {
+    return 'installed-different';
+  }
+}
+
+function isReviewableLearningSkillCandidate(candidate: HermesLearningLoopSkillCandidateSample): boolean {
+  return candidate.installState !== 'installed-current';
+}
+
+function installStateRank(state: SkillCandidateInstallState): number {
+  if (state === 'not-installed') return 0;
+  if (state === 'installed-different') return 1;
+  if (state === 'installed-missing') return 2;
+  return 3;
 }
 
 function readSkillCandidatePromotion(
@@ -390,7 +447,7 @@ function buildRecommendations(status: HermesLearningLoopStatus): string[] {
   if (status.summary.pendingLessonCandidateCount > 0) {
     recommendations.push('Review pending lesson candidates before relying on them in future prompt context.');
   }
-  if (status.state.skillCandidates.learningCandidateCount > 0) {
+  if (status.state.skillCandidates.pendingCandidateCount > 0) {
     recommendations.push(`Review Learning Agent SKILL.md candidates through Cowork or ${status.commands.candidateReview} before installing.`);
   }
   if (recommendations.length === 0) {
@@ -428,7 +485,7 @@ function buildReviewQueue(
       ...(pendingUserObservationIds.length > 0 ? { sampleIds: pendingUserObservationIds } : {}),
     });
   }
-  if (skillCandidates.learningCandidateCount > 0) {
+  if (skillCandidates.pendingCandidateCount > 0) {
     const reviewableSkill = skillCandidates.samples.find((candidate) => candidate.eligible) ?? skillCandidates.samples[0];
     const hasEligibleSkillCandidate = skillCandidates.eligibleCandidateCount > 0;
     items.push({
@@ -440,7 +497,7 @@ function buildReviewQueue(
         : 'Learning Agent SKILL.md candidates exist but are not eligible yet; inspect reasons before installing anything.',
       kind: 'skill_candidate',
       ...(reviewableSkill ? { nextReviewCommand: reviewableSkill.inspectCommand } : {}),
-      pendingCount: skillCandidates.learningCandidateCount,
+      pendingCount: skillCandidates.pendingCandidateCount,
       reviewGate: 'skillCandidatesRequireReview',
       ...(skillCandidates.samples.length > 0 ? { sampleIds: skillCandidates.samples.map((candidate) => candidate.candidateId) } : {}),
     });
@@ -543,7 +600,7 @@ export function buildHermesLearningLoopStatus(
   const pendingReviewCount =
     lessonCandidates.byStatus.pending
     + userModel.byStatus.pending
-    + skillCandidates.learningCandidateCount;
+    + skillCandidates.pendingCandidateCount;
 
   const status: HermesLearningLoopStatus = {
     kind: 'hermes_learning_loop_status',
@@ -626,8 +683,10 @@ export function renderHermesLearningLoopStatus(status: HermesLearningLoopStatus)
     `  Skill usage records: ${status.summary.skillUsageCount} (${status.summary.reinforcedSkillCount} reinforced, ${status.summary.deprecatedSkillCount} deprecated)`,
     `  Pattern records: ${status.summary.patternCount}`,
     `  Learning skill candidates: ${status.state.skillCandidates.learningCandidateCount}` +
-      ` (${status.state.skillCandidates.eligibleCandidateCount} eligible, ` +
-      `${status.state.skillCandidates.ineligibleCandidateCount} not eligible)`,
+      ` (${status.state.skillCandidates.pendingCandidateCount} pending, ` +
+      `${status.state.skillCandidates.eligibleCandidateCount} eligible, ` +
+      `${status.state.skillCandidates.ineligibleCandidateCount} not eligible, ` +
+      `${status.state.skillCandidates.installedCurrentCandidateCount} installed current)`,
   ];
 
   if (status.nextRetrospectiveRun) {

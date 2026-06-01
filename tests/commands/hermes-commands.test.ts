@@ -7,6 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerHermesCommands } from '../../src/commands/cli/hermes-commands.js';
 import { runLearningRetrospective } from '../../src/agent/learning-agent.js';
 import { resetLessonCandidateQueues } from '../../src/agent/lesson-candidate-queue.js';
+import {
+  installResearchScriptSkillCandidate,
+  readMaterializedResearchScriptSkillCandidate,
+} from '../../src/agent/research-script-skill-candidate.js';
 import { resetMemoryProviderRegistry } from '../../src/memory/memory-provider.js';
 import { getUserModel, resetUserModels } from '../../src/memory/user-model.js';
 import { RunStore } from '../../src/observability/run-store.js';
@@ -1066,6 +1070,117 @@ describe('Hermes CLI commands', () => {
     }
   });
 
+  it('does not keep installed-current Learning Agent skill candidates in the pending review queue', async () => {
+    const oldCwd = process.cwd();
+    const oldRunsDir = process.env.CODEBUDDY_RUNS_DIR;
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-learning-installed-skill-'));
+    const candidateDir = path.join(tmpDir, '.codebuddy', 'skill-candidates', 'learning', 'already-installed');
+    fs.ensureDirSync(candidateDir);
+    fs.writeFileSync(path.join(candidateDir, 'SKILL.md'), createSkillContent('already-installed'));
+    fs.writeFileSync(path.join(candidateDir, 'candidate-review.json'), JSON.stringify({
+      approvalRequired: true,
+      candidateId: 'learning-skill-already-installed',
+      eligible: true,
+      generatedAt: '2026-06-01T03:30:00.000Z',
+      kind: 'learning',
+      promotionThreshold: 2,
+      reason: '2 successful observations reinforced this workflow.',
+      schemaVersion: 1,
+      skillName: 'already-installed',
+      sourceJobId: 'learning-agent',
+      sourceRunId: 'run-installed-skill',
+      status: 'awaiting_human_approval',
+      successfulRunCount: 2,
+    }, null, 2));
+
+    try {
+      process.chdir(tmpDir);
+      process.env.CODEBUDDY_RUNS_DIR = path.join(tmpDir, 'runs');
+      resetLessonCandidateQueues();
+      resetUserModels();
+      const candidate = await readMaterializedResearchScriptSkillCandidate(
+        '.codebuddy/skill-candidates/learning/already-installed',
+        { rootDir: tmpDir },
+      );
+      await installResearchScriptSkillCandidate(candidate, {
+        approvedBy: 'Patrice',
+        approvedAt: '2026-06-01T03:35:00.000Z',
+        rootDir: tmpDir,
+      });
+
+      const program = createProgram();
+      registerHermesCommands(program);
+      await program.parseAsync(['node', 'test', 'hermes', 'learning', 'status', '--json']);
+
+      const output = JSON.parse(getLogOutput()) as {
+        recommendations: string[];
+        reviewQueue: {
+          items: Array<{ kind: string; pendingCount: number }>;
+          totalPending: number;
+        };
+        summary: {
+          pendingReviewCount: number;
+        };
+        state: {
+          skillCandidates: {
+            eligibleCandidateCount: number;
+            installedCurrentCandidateCount: number;
+            learningCandidateCount: number;
+            pendingCandidateCount: number;
+            samples: Array<{ installState: string; skillName: string }>;
+          };
+        };
+      };
+
+      expect(output.state.skillCandidates).toMatchObject({
+        eligibleCandidateCount: 0,
+        installedCurrentCandidateCount: 1,
+        learningCandidateCount: 1,
+        pendingCandidateCount: 0,
+      });
+      expect(output.state.skillCandidates.samples).toEqual([
+        expect.objectContaining({
+          installState: 'installed-current',
+          skillName: 'already-installed',
+        }),
+      ]);
+      expect(output.summary.pendingReviewCount).toBe(0);
+      expect(output.reviewQueue.totalPending).toBe(0);
+      expect(output.reviewQueue.items.some((item) => item.kind === 'skill_candidate')).toBe(false);
+      expect(output.recommendations).not.toEqual(
+        expect.arrayContaining([expect.stringContaining('Review Learning Agent SKILL.md candidates')]),
+      );
+
+      consoleLogSpy.mockClear();
+      const skillsProgram = createProgram();
+      registerHermesCommands(skillsProgram);
+      await skillsProgram.parseAsync(['node', 'test', 'hermes', 'skills', 'status', '--json']);
+      const skillsOutput = JSON.parse(getLogOutput()) as {
+        summary: {
+          candidateReview: {
+            installedCurrentCount: number;
+            nextInspectCommand?: string;
+            pendingCount: number;
+            totalCount: number;
+          };
+        };
+      };
+      expect(skillsOutput.summary.candidateReview).toMatchObject({
+        installedCurrentCount: 1,
+        pendingCount: 0,
+        totalCount: 1,
+      });
+      expect(skillsOutput.summary.candidateReview.nextInspectCommand).toBeUndefined();
+    } finally {
+      process.chdir(oldCwd);
+      if (oldRunsDir === undefined) delete process.env.CODEBUDDY_RUNS_DIR;
+      else process.env.CODEBUDDY_RUNS_DIR = oldRunsDir;
+      resetLessonCandidateQueues();
+      resetUserModels();
+      await fs.remove(tmpDir);
+    }
+  });
+
   it('prints Learning Agent skill candidate eligibility split in human-readable status', async () => {
     const oldCwd = process.cwd();
     const oldRunsDir = process.env.CODEBUDDY_RUNS_DIR;
@@ -1104,7 +1219,7 @@ describe('Hermes CLI commands', () => {
       await program.parseAsync(['node', 'test', 'hermes', 'learning', 'status']);
 
       const output = getLogOutput();
-      expect(output).toContain('Learning skill candidates: 2 (1 eligible, 1 not eligible)');
+      expect(output).toContain('Learning skill candidates: 2 (2 pending, 1 eligible, 1 not eligible, 0 installed current)');
       expect(output).toContain('skill_candidate: 2 -> buddy tools skill-candidate list --eligible-only --json');
       expect(output).toContain('gate: skillCandidatesRequireReview');
       expect(output).toContain('why: Pending Learning Agent SKILL.md candidates; inspect diffs before install or overwrite.');
@@ -1277,7 +1392,7 @@ describe('Hermes CLI commands', () => {
       registerHermesCommands(textProgram);
       await textProgram.parseAsync(['node', 'test', 'hermes', 'skills', 'status', '--limit', '2']);
       const textOutput = getLogOutput();
-      expect(textOutput).toContain('Skill candidates: 1 (1 eligible, 0 not eligible)');
+      expect(textOutput).toContain('Skill candidates: 1 (1 pending, 1 eligible, 0 not eligible, 0 installed current)');
       expect(textOutput).toContain('Candidate review: buddy tools skill-candidate list --eligible-only --json');
       expect(textOutput).toContain('Candidate samples:');
       expect(textOutput).toContain('review-ready: awaiting_human_approval (2/2)');
