@@ -12,21 +12,25 @@ import { RunStore, type RunSummary } from '../observability/run-store.js';
 export interface HermesLearningLoopRunRow {
   artifactCount: number;
   channel?: string;
+  evidenceArtifactCount: number;
   eventCount: number;
   hasLearningRetrospective: boolean;
   runId: string;
   status: RunSummary['status'];
   tags: string[];
+  toolCallCount: number;
 }
 
 export interface HermesLearningLoopRetrospectiveCandidate {
   artifactCount: number;
   channel?: string;
   command: string;
+  evidenceArtifactCount: number;
   eventCount: number;
   runId: string;
   status: RunSummary['status'];
   tags: string[];
+  toolCallCount: number;
 }
 
 export interface HermesLearningLoopStatus {
@@ -119,9 +123,20 @@ const RETROSPECTIVE_READY_STATUSES = new Set<RunSummary['status']>([
   'failed',
   'cancelled',
 ]);
+const MIN_ACTIONABLE_TOOL_CALLS = 3;
+const LEARNING_RETROSPECTIVE_ARTIFACTS = new Set([
+  'learning-retrospective.json',
+  'learning-retrospective.md',
+]);
 
-function isRetrospectiveEligible(status: RunSummary['status']): boolean {
-  return RETROSPECTIVE_READY_STATUSES.has(status);
+function isRetrospectiveEligible(row: HermesLearningLoopRunRow): boolean {
+  return RETROSPECTIVE_READY_STATUSES.has(row.status) && isRetrospectiveActionable(row);
+}
+
+function isRetrospectiveActionable(row: HermesLearningLoopRunRow): boolean {
+  if (row.evidenceArtifactCount > 0) return true;
+  if (row.toolCallCount >= MIN_ACTIONABLE_TOOL_CALLS) return true;
+  return row.status === 'failed' && row.eventCount >= 3;
 }
 
 function buildRetrospectiveCommand(runId: string): string {
@@ -132,22 +147,35 @@ function selectNextRetrospectiveRun(
   runRows: HermesLearningLoopRunRow[],
 ): HermesLearningLoopRetrospectiveCandidate | undefined {
   const readyRuns = runRows.filter((row) =>
-    !row.hasLearningRetrospective && RETROSPECTIVE_READY_STATUSES.has(row.status)
+    !row.hasLearningRetrospective && isRetrospectiveEligible(row)
   );
   const run = [...readyRuns]
     .sort((left, right) =>
-      (right.artifactCount * 10 + right.eventCount) - (left.artifactCount * 10 + left.eventCount)
+      retrospectiveEvidenceScore(right) - retrospectiveEvidenceScore(left)
     )[0];
   if (!run) return undefined;
   return {
     artifactCount: run.artifactCount,
     ...(run.channel ? { channel: run.channel } : {}),
     command: buildRetrospectiveCommand(run.runId),
+    evidenceArtifactCount: run.evidenceArtifactCount,
     eventCount: run.eventCount,
     runId: run.runId,
     status: run.status,
     tags: run.tags,
+    toolCallCount: run.toolCallCount,
   };
+}
+
+function retrospectiveEvidenceScore(row: HermesLearningLoopRunRow): number {
+  return row.evidenceArtifactCount * 20 + row.toolCallCount * 5 + row.eventCount;
+}
+
+function countEvidenceArtifacts(artifacts: string[]): number {
+  return artifacts
+    .map((artifact) => artifact.replace(/\\/g, '/').split('/').pop() ?? artifact)
+    .filter((artifactName) => !LEARNING_RETROSPECTIVE_ARTIFACTS.has(artifactName))
+    .length;
 }
 
 function countLearningSkillCandidates(workDir: string): { learningCandidateCount: number; root: string } {
@@ -223,14 +251,18 @@ export function buildHermesLearningLoopStatus(
   const recentRuns = store.listRuns(limit);
   const runRows: HermesLearningLoopRunRow[] = recentRuns.map((run) => {
     const record = store.getRun(run.runId);
+    const artifacts = record?.artifacts ?? [];
+    const eventToolCallCount = store.getEvents(run.runId).filter((event) => event.type === 'tool_call').length;
     return {
-      artifactCount: record?.artifacts.length ?? run.artifactCount,
+      artifactCount: artifacts.length || run.artifactCount,
       ...(run.metadata?.channel ? { channel: run.metadata.channel } : {}),
+      evidenceArtifactCount: countEvidenceArtifacts(artifacts),
       eventCount: run.eventCount,
-      hasLearningRetrospective: record?.artifacts.includes('learning-retrospective.json') ?? false,
+      hasLearningRetrospective: artifacts.includes('learning-retrospective.json'),
       runId: run.runId,
       status: run.status,
       tags: run.metadata?.tags ?? [],
+      toolCallCount: eventToolCallCount || record?.metrics.toolCallCount || 0,
     };
   });
   const nextRetrospectiveRun = selectNextRetrospectiveRun(runRows);
@@ -240,8 +272,10 @@ export function buildHermesLearningLoopStatus(
   const patterns = readPatternStats(workDir);
   const skillCandidates = countLearningSkillCandidates(workDir);
   const autoEnabled = isLearningAgentEnabled();
-  const retrospectiveArtifactCount = runRows.filter((run) => run.hasLearningRetrospective).length;
-  const retrospectiveEligibleRunCount = runRows.filter((run) => isRetrospectiveEligible(run.status)).length;
+  const retrospectiveArtifactCount = runRows.filter((run) =>
+    isRetrospectiveEligible(run) && run.hasLearningRetrospective
+  ).length;
+  const retrospectiveEligibleRunCount = runRows.filter(isRetrospectiveEligible).length;
   const retrospectiveCoveragePercent = retrospectiveEligibleRunCount === 0
     ? 100
     : Math.round((retrospectiveArtifactCount / retrospectiveEligibleRunCount) * 100);
@@ -333,6 +367,7 @@ export function renderHermesLearningLoopStatus(status: HermesLearningLoopStatus)
     lines.push(
       `  Next retrospective run: ${status.nextRetrospectiveRun.runId} (${status.nextRetrospectiveRun.status}, ${status.nextRetrospectiveRun.artifactCount} artifacts)`,
       `  Next retrospective events: ${status.nextRetrospectiveRun.eventCount}`,
+      `  Next retrospective tool calls: ${status.nextRetrospectiveRun.toolCallCount}`,
     );
   }
 

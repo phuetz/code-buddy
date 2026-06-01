@@ -299,6 +299,19 @@ describe('Hermes CLI commands', () => {
       store.saveArtifact(pendingRetrospectiveRunId, 'summary.md', 'Real candidate run needs a Learning Agent retrospective.');
       store.endRun(pendingRetrospectiveRunId, 'completed');
 
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const lowSignalRunId = store.startRun('Hermes low-signal memory update', {
+        channel: 'terminal',
+        tags: ['hermes', 'low-signal'],
+      });
+      for (let index = 0; index < 20; index++) {
+        store.emit(lowSignalRunId, {
+          type: 'decision',
+          data: { note: `memory-only event ${index}` },
+        });
+      }
+      store.endRun(lowSignalRunId, 'completed');
+
       const privatePreference = 'Prefers real tests before marking work done.';
       const userModel = getUserModel(tmpDir);
       const observation = userModel.observe({
@@ -329,13 +342,21 @@ describe('Hermes CLI commands', () => {
         autoRetrospective: { enabled: boolean; mode: string };
         nextRetrospectiveRun?: {
           command: string;
+          evidenceArtifactCount: number;
           eventCount: number;
           runId: string;
           status: string;
+          toolCallCount: number;
         };
         reviewGates: Record<string, boolean>;
         state: {
-          recentRuns: Array<{ eventCount: number; hasLearningRetrospective: boolean; runId: string }>;
+          recentRuns: Array<{
+            evidenceArtifactCount: number;
+            eventCount: number;
+            hasLearningRetrospective: boolean;
+            runId: string;
+            toolCallCount: number;
+          }>;
           skillCandidates: { learningCandidateCount: number };
           skillUsage: { top: Array<{ recommendation: string; skillName: string }> };
         };
@@ -344,7 +365,7 @@ describe('Hermes CLI commands', () => {
 
       expect(output.kind).toBe('hermes_learning_loop_status');
       expect(output.schemaVersion).toBe(1);
-      expect(output.summary.recentRunCount).toBe(2);
+      expect(output.summary.recentRunCount).toBe(3);
       expect(output.summary.retrospectiveEligibleRunCount).toBe(2);
       expect(output.summary.retrospectiveArtifactCount).toBe(1);
       expect(output.summary.retrospectiveCoveragePercent).toBe(50);
@@ -357,24 +378,38 @@ describe('Hermes CLI commands', () => {
       expect(output.state.recentRuns).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            evidenceArtifactCount: expect.any(Number),
             eventCount: expect.any(Number),
             hasLearningRetrospective: true,
             runId,
+            toolCallCount: expect.any(Number),
           }),
           expect.objectContaining({
+            evidenceArtifactCount: expect.any(Number),
             eventCount: expect.any(Number),
             hasLearningRetrospective: false,
             runId: pendingRetrospectiveRunId,
+            toolCallCount: expect.any(Number),
+          }),
+          expect.objectContaining({
+            evidenceArtifactCount: 0,
+            eventCount: expect.any(Number),
+            hasLearningRetrospective: false,
+            runId: lowSignalRunId,
+            toolCallCount: 0,
           }),
         ]),
       );
       expect(output.nextRetrospectiveRun).toMatchObject({
         command: `buddy run retrospective ${pendingRetrospectiveRunId} --force --json`,
+        evidenceArtifactCount: 1,
         eventCount: expect.any(Number),
         runId: pendingRetrospectiveRunId,
         status: 'completed',
+        toolCallCount: 1,
       });
       expect(output.nextRetrospectiveRun?.eventCount).toBeGreaterThan(0);
+      expect(output.nextRetrospectiveRun?.runId).not.toBe(lowSignalRunId);
       expect(output.recommendations).toEqual(
         expect.arrayContaining([expect.stringContaining(`buddy run retrospective ${pendingRetrospectiveRunId}`)]),
       );
