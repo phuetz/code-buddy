@@ -179,7 +179,9 @@ Before committing or publishing a screenshot:
    manually reviewed.
 
 This page deliberately documents the reproducible commands and results instead
-of embedding fresh screenshots from a private workstation.
+of embedding screenshots while the capture-review pass is still in progress.
+Fresh screenshots from a private workstation should stay as QA evidence until
+they pass the same manual privacy review.
 
 ## Useful Entry Points
 

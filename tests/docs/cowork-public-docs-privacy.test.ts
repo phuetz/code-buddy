@@ -8,6 +8,11 @@ const rootReadme = path.join(repoRoot, 'README.md');
 const coworkReadme = path.join(repoRoot, 'cowork', 'readme.md');
 const publicCoworkDoc = path.join(repoRoot, 'docs', 'cowork.md');
 const publicCoworkQaDir = path.join(repoRoot, 'docs', 'qa', 'code-buddy-studio');
+const inProgressCaptureCandidates = [
+  '29-real-gpt55-cowork-gui.png',
+  '48-test-runner-cowork-real-gpt55.png',
+  '49-test-runner-server-real-gpt55.png',
+] as const;
 
 function publicTextFiles(dir: string): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -47,5 +52,15 @@ describe('Cowork public QA documentation privacy', () => {
     expect(publicCoworkText).toContain('COWORK_REAL_GPT55');
     expect(publicCoworkText).toContain('CODEBUDDY_REAL_GPT55_SERVER');
     expect(publicCoworkText).toContain('## Screenshot And Privacy Policy');
+  });
+
+  it('keeps in-progress real-provider capture candidates out of the GitHub-facing overview', () => {
+    const text = fs.readFileSync(publicCoworkDoc, 'utf8');
+
+    for (const screenshotName of inProgressCaptureCandidates) {
+      expect(text).not.toContain(screenshotName);
+    }
+
+    expect(text).toContain('capture-review pass is still in progress');
   });
 });
