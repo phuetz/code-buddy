@@ -246,6 +246,32 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(followupDrafts).toHaveLength(0);
   });
 
+  it('rejects new follow-up drafts when the pending review queue is full', async () => {
+    const token = await pairToken();
+    for (let i = 0; i < 100; i += 1) {
+      followupDrafts.push({
+        id: `seeded-pending-${i}`,
+        prompt: `pending prompt ${i}`,
+        status: 'needs_local_operator',
+        source: 'mobile_device',
+        createdAt: Date.now(),
+      });
+    }
+
+    const res = await fetch(`${baseUrl}/submit-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        prompt: 'This should not enter a full local review queue',
+        query: 'full mobile review queue',
+      }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(await res.text()).toContain('Mobile follow-up draft queue is full');
+    expect(followupDrafts).toHaveLength(100);
+  });
+
   it('rejects repeated mobile query parameters before recall builders receive them', async () => {
     const token = await pairToken();
 

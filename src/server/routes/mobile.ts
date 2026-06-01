@@ -18,6 +18,7 @@ const MAX_DEVICE_LABEL_CHARS = 120;
 const MAX_FOLLOWUP_PROMPT_CHARS = 12_000;
 const MAX_FOLLOWUP_QUERY_CHARS = 1_000;
 const MAX_ARTIFACT_INLINE_BYTES = 1_000_000;
+const MAX_PENDING_FOLLOWUP_DRAFTS = 100;
 
 mobileRouter.use((_req: Request, res: Response, next: NextFunction): void => {
   res.setHeader('Cache-Control', 'no-store');
@@ -89,6 +90,10 @@ function pruneExpiredTokens(now = Date.now()): void {
       activeTokens.delete(token);
     }
   }
+}
+
+function countPendingFollowupDrafts(): number {
+  return followupDrafts.filter((draft) => draft.status === 'needs_local_operator').length;
 }
 
 // Helper to check if a token is valid
@@ -470,6 +475,14 @@ mobileRouter.post('/followup-draft', async (req: Request, res: Response) => {
       res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
       return;
     }
+    if (countPendingFollowupDrafts() >= MAX_PENDING_FOLLOWUP_DRAFTS) {
+      res.status(429).json({
+        ok: false,
+        error: 'Mobile follow-up draft queue is full',
+        pendingLimit: MAX_PENDING_FOLLOWUP_DRAFTS,
+      });
+      return;
+    }
 
     const savedDraft = await enqueuePendingFollowupDraft(prompt, query, 'draft_only');
 
@@ -497,6 +510,14 @@ mobileRouter.post('/submit-prompt', async (req: Request, res: Response) => {
       || !isWithinCharLimit(query, MAX_FOLLOWUP_QUERY_CHARS)
     ) {
       res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
+      return;
+    }
+    if (countPendingFollowupDrafts() >= MAX_PENDING_FOLLOWUP_DRAFTS) {
+      res.status(429).json({
+        ok: false,
+        error: 'Mobile follow-up draft queue is full',
+        pendingLimit: MAX_PENDING_FOLLOWUP_DRAFTS,
+      });
       return;
     }
 
