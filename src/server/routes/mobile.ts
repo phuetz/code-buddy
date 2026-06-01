@@ -111,6 +111,14 @@ function pruneActiveTokensToLimit(): void {
   }
 }
 
+function revokeTokensForDeviceLabel(deviceLabel: string): void {
+  for (const [token, tokenData] of activeTokens) {
+    if (tokenData.deviceLabel === deviceLabel) {
+      activeTokens.delete(token);
+    }
+  }
+}
+
 function countPendingFollowupDrafts(): number {
   return followupDrafts.filter((draft) => draft.status === 'needs_local_operator').length;
 }
@@ -408,6 +416,7 @@ mobileRouter.post('/pair', (req: Request, res: Response) => {
 
   // Mint a short-lived token (15 mins = 900s)
   pruneExpiredTokens();
+  revokeTokensForDeviceLabel(deviceLabel);
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 900 * 1000;
   activeTokens.set(token, { deviceLabel, expiresAt });

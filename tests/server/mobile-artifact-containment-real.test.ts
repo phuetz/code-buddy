@@ -192,6 +192,36 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(newest.status).toBe(200);
   });
 
+  it('replaces an existing token when the same device pairs again', async () => {
+    const issuedTokens: string[] = [];
+
+    for (let i = 0; i < 12; i += 1) {
+      const res = await fetch(`${baseUrl}/pair`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: activePairingCode, deviceLabel: 'same-phone' }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { token: string };
+      issuedTokens.push(data.token);
+    }
+
+    const status = await fetch(`${baseUrl}/pairing-status`);
+    expect(status.status).toBe(200);
+    const data = await status.json() as { activeDevices: string[] };
+    expect(data.activeDevices).toEqual(['same-phone']);
+    expect(activeTokens.size).toBe(1);
+
+    const firstToken = await fetch(`${baseUrl}/snapshot?query=first-token`, {
+      headers: { Authorization: `Bearer ${issuedTokens[0]}` },
+    });
+    const latestToken = await fetch(`${baseUrl}/snapshot?query=latest-token`, {
+      headers: { Authorization: `Bearer ${issuedTokens.at(-1)}` },
+    });
+    expect(firstToken.status).toBe(401);
+    expect(latestToken.status).toBe(200);
+  });
+
   it('expires pairing codes before they can mint a token', async () => {
     const previousTtl = process.env.CODEBUDDY_MOBILE_PAIRING_CODE_TTL_MS;
     try {
