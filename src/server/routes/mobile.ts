@@ -15,6 +15,7 @@ const DEFAULT_PAIRING_CODE_TTL_MS = 5 * 60 * 1000;
 const MAX_PAIRING_CODE_TTL_MS = 15 * 60 * 1000;
 const MIN_PAIRING_CODE_TTL_MS = 50;
 const MAX_DEVICE_LABEL_CHARS = 120;
+const MAX_REVIEWER_LABEL_CHARS = 120;
 const MAX_FOLLOWUP_PROMPT_CHARS = 12_000;
 const MAX_FOLLOWUP_QUERY_CHARS = 1_000;
 const MAX_ARTIFACT_INLINE_BYTES = 1_000_000;
@@ -240,6 +241,20 @@ function normalizeRequiredString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeBoundedOptionalString(value: unknown, maxChars: number, fallback: string): string | null {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  return isWithinCharLimit(normalized, maxChars) ? normalized : null;
+}
+
 function normalizeOptionalString(value: unknown): string | null {
   if (value === undefined || value === null) {
     return '';
@@ -334,9 +349,11 @@ mobileRouter.post('/followup-draft/:id/approve', loopbackOnlyMiddleware, (req: R
     res.status(409).json({ ok: false, error: `Draft is not pending approval (status: ${draft.status})` });
     return;
   }
-  const reviewer = typeof req.body?.reviewer === 'string' && req.body.reviewer.trim()
-    ? req.body.reviewer.trim()
-    : 'local-operator';
+  const reviewer = normalizeBoundedOptionalString(req.body?.reviewer, MAX_REVIEWER_LABEL_CHARS, 'local-operator');
+  if (reviewer === null) {
+    res.status(400).json({ ok: false, error: 'Missing or invalid reviewer' });
+    return;
+  }
   draft.status = 'approved';
   draft.approvedBy = reviewer;
   draft.approvedAt = Date.now();

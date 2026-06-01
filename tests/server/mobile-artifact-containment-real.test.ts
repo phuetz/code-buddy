@@ -307,6 +307,32 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(followupDrafts).toHaveLength(0);
   });
 
+  it('rejects oversized local reviewer labels before storing approval metadata', async () => {
+    const token = await pairToken();
+    const submit = await fetch(`${baseUrl}/submit-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        prompt: 'Approve after reviewer validation',
+        query: 'reviewer label bound',
+      }),
+    });
+    expect(submit.status).toBe(200);
+    const { draft } = await submit.json() as { draft: { id: string } };
+
+    const approve = await fetch(`${baseUrl}/followup-draft/${draft.id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewer: 'operator-'.padEnd(50_000, 'x') }),
+    });
+
+    expect(approve.status).toBe(400);
+    expect(await approve.text()).toContain('Missing or invalid reviewer');
+    expect(followupDrafts).toHaveLength(1);
+    expect(followupDrafts[0].status).toBe('needs_local_operator');
+    expect(followupDrafts[0].approvedBy).toBeUndefined();
+  });
+
   it('rejects new follow-up drafts when the pending review queue is full', async () => {
     const token = await pairToken();
     for (let i = 0; i < 100; i += 1) {
