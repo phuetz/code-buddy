@@ -86,6 +86,37 @@ describe('buddy user-model', () => {
     expect(output.reviewCommand).toBe(`buddy user-model accept ${output.observation.id} --by <name>`);
   });
 
+  it('observe --json omits review command when it dedupes an accepted observation', async () => {
+    const program = createProgram();
+    await program.parseAsync([
+      'node', 'buddy', 'user-model', 'observe', 'Already reviewed preference.', '--kind', 'preference', '--json',
+    ]);
+    const first = JSON.parse(getLogOutput(consoleSpy)) as {
+      observation: { id: string };
+    };
+    consoleSpy.mockClear();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'accept', first.observation.id, '--by', 'Patrice']);
+    consoleSpy.mockClear();
+
+    await program.parseAsync([
+      'node', 'buddy', 'user-model', 'observe', 'Already reviewed preference.', '--kind', 'preference', '--json',
+    ]);
+
+    const output = JSON.parse(getLogOutput(consoleSpy)) as {
+      deduped: boolean;
+      observation: { id: string; status: string };
+      reviewCommand?: string;
+    };
+    expect(output).toMatchObject({
+      deduped: true,
+      observation: {
+        id: first.observation.id,
+        status: 'accepted',
+      },
+    });
+    expect(output.reviewCommand).toBeUndefined();
+  });
+
   it('refuses sensitive content', async () => {
     const program = createProgram();
     await program.parseAsync(['node', 'buddy', 'user-model', 'observe', 'has a medical diagnosis']);

@@ -92,14 +92,24 @@ export function createUserModelCommand(): Command {
           source: 'manual',
           ...(opts.note ? { provenance: { note: opts.note } } : {}),
         });
-        const reviewCommand = `buddy user-model accept ${observation.id} --by <name>`;
+        const reviewCommand = observation.status === 'pending'
+          ? `buddy user-model accept ${observation.id} --by <name>`
+          : undefined;
         if (opts.json) {
-          console.log(JSON.stringify({ deduped, observation, reviewCommand }, null, 2));
+          console.log(JSON.stringify({
+            deduped,
+            observation,
+            ...(reviewCommand ? { reviewCommand } : {}),
+          }, null, 2));
           return;
         }
         const prefix = deduped ? 'Matched existing observation' : 'Proposed observation';
         console.log(`${prefix} [${observation.id}] (${observation.kind}): ${observation.content}`);
-        console.log(`Accept it with: ${reviewCommand}`);
+        if (reviewCommand) {
+          console.log(`Accept it with: ${reviewCommand}`);
+        } else {
+          console.log(`Observation is already ${observation.status}; no review action is required.`);
+        }
       } catch (err) {
         if (err instanceof UserModelPrivacyError) {
           console.error(err.message);
