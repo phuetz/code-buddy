@@ -16,6 +16,11 @@ const MAX_PAIRING_CODE_TTL_MS = 15 * 60 * 1000;
 const MIN_PAIRING_CODE_TTL_MS = 50;
 const MAX_DEVICE_LABEL_CHARS = 120;
 
+mobileRouter.use((_req: Request, res: Response, next: NextFunction): void => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
 /** Mint a fresh 6-digit pairing code with a CSPRNG (never the literal default). */
 function generatePairingCode(): string {
   return crypto.randomInt(100000, 1000000).toString();

@@ -96,6 +96,23 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(activeTokens.size).toBe(0);
   });
 
+  it('marks mobile supervision responses no-store so pairing secrets are never cached', async () => {
+    const status = await fetch(`${baseUrl}/pairing-status`);
+    const rotate = await fetch(`${baseUrl}/pairing-code`, { method: 'POST' });
+    const pair = await fetch(`${baseUrl}/pair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: activePairingCode, deviceLabel: 'cache-check-device' }),
+    });
+
+    expect(status.status).toBe(200);
+    expect(rotate.status).toBe(200);
+    expect(pair.status).toBe(200);
+    expect(status.headers.get('cache-control')).toBe('no-store');
+    expect(rotate.headers.get('cache-control')).toBe('no-store');
+    expect(pair.headers.get('cache-control')).toBe('no-store');
+  });
+
   it('rotates the pairing code after a successful pair so captured codes are single-use', async () => {
     const capturedCode = activePairingCode;
     const first = await fetch(`${baseUrl}/pair`, {
