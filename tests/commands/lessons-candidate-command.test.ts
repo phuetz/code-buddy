@@ -81,6 +81,33 @@ describe('buddy lessons candidate', () => {
     expect(await fs.pathExists(path.join(tmpDir, '.codebuddy', 'lesson-candidates.json'))).toBe(true);
   });
 
+  it('propose --json returns the pending candidate and review command', async () => {
+    const program = createProgram();
+    await program.parseAsync([
+      'node', 'buddy', 'lessons', 'candidate', 'propose',
+      'Keep lesson review queues scriptable.',
+      '--category', 'INSIGHT',
+      '--run', 'run-json-propose',
+      '--json',
+    ]);
+
+    const output = JSON.parse(getLogOutput(consoleSpy)) as {
+      candidate: { content: string; id: string; provenance?: { runId?: string }; status: string };
+      deduped: boolean;
+      reviewCommand: string;
+    };
+    expect(output).toMatchObject({
+      candidate: {
+        content: 'Keep lesson review queues scriptable.',
+        provenance: { runId: 'run-json-propose' },
+        status: 'pending',
+      },
+      deduped: false,
+    });
+    expect(output.reviewCommand).toBe(`buddy lessons candidate approve ${output.candidate.id} --by <name>`);
+    expect(await fs.pathExists(lessonsMd())).toBe(false);
+  });
+
   it('list --json shows pending candidates', async () => {
     const program = createProgram();
     await program.parseAsync(['node', 'buddy', 'lessons', 'candidate', 'propose', 'a pending one']);

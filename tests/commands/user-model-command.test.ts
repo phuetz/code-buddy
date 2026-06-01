@@ -64,6 +64,28 @@ describe('buddy user-model', () => {
     expect(getLogOutput(consoleSpy)).toMatch(/no accepted observations/i);
   });
 
+  it('observe --json returns the pending observation and review command', async () => {
+    const program = createProgram();
+    await program.parseAsync([
+      'node', 'buddy', 'user-model', 'observe', 'Prefers compact JSON review queues.', '--kind', 'working-style', '--json',
+    ]);
+
+    const output = JSON.parse(getLogOutput(consoleSpy)) as {
+      deduped: boolean;
+      observation: { content: string; id: string; kind: string; status: string };
+      reviewCommand: string;
+    };
+    expect(output).toMatchObject({
+      deduped: false,
+      observation: {
+        content: 'Prefers compact JSON review queues.',
+        kind: 'working-style',
+        status: 'pending',
+      },
+    });
+    expect(output.reviewCommand).toBe(`buddy user-model accept ${output.observation.id} --by <name>`);
+  });
+
   it('refuses sensitive content', async () => {
     const program = createProgram();
     await program.parseAsync(['node', 'buddy', 'user-model', 'observe', 'has a medical diagnosis']);

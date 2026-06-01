@@ -329,7 +329,8 @@ function createLessonCandidateCommand(): Command {
     .option('--context <ctx>', 'Optional domain context (e.g. TypeScript, React)')
     .option('--run <runId>', 'Originating run id for provenance')
     .option('--note <note>', 'Free-form provenance note')
-    .action((content: string, opts: { category: string; context?: string; run?: string; note?: string }) => {
+    .option('--json', 'Output JSON')
+    .action((content: string, opts: { category: string; context?: string; json?: boolean; run?: string; note?: string }) => {
       const cat = opts.category.toUpperCase() as LessonCategory;
       if (!VALID_CATEGORIES.includes(cat)) {
         console.error(`Invalid category: ${cat}. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
@@ -346,9 +347,14 @@ function createLessonCandidateCommand(): Command {
             ? { provenance: { ...(opts.run ? { runId: opts.run } : {}), ...(opts.note ? { note: opts.note } : {}) } }
             : {}),
         });
+        const reviewCommand = `buddy lessons candidate approve ${candidate.id} --by <name>`;
+        if (opts.json) {
+          console.log(JSON.stringify({ candidate, deduped, reviewCommand }, null, 2));
+          return;
+        }
         const prefix = deduped ? 'Matched existing pending candidate' : 'Proposed candidate';
         console.log(`${prefix} [${candidate.id}] (${candidate.category}): ${candidate.content}`);
-        console.log('Approve it with: buddy lessons candidate approve ' + candidate.id + ' --by <name>');
+        console.log('Approve it with: ' + reviewCommand);
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);

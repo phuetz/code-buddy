@@ -76,7 +76,8 @@ export function createUserModelCommand(): Command {
     .option('-k, --kind <kind>', `Kind: ${USER_OBSERVATION_KINDS.join('|')}`, 'preference')
     .option('--confidence <n>', '0..1 confidence')
     .option('--note <note>', 'Provenance note')
-    .action((content: string, opts: { kind: string; confidence?: string; note?: string }) => {
+    .option('--json', 'Output JSON')
+    .action((content: string, opts: { kind: string; confidence?: string; json?: boolean; note?: string }) => {
       const kind = opts.kind.toLowerCase() as UserObservationKind;
       if (!USER_OBSERVATION_KINDS.includes(kind)) {
         console.error(`Invalid kind: ${opts.kind}. Must be one of: ${USER_OBSERVATION_KINDS.join(', ')}`);
@@ -91,9 +92,14 @@ export function createUserModelCommand(): Command {
           source: 'manual',
           ...(opts.note ? { provenance: { note: opts.note } } : {}),
         });
+        const reviewCommand = `buddy user-model accept ${observation.id} --by <name>`;
+        if (opts.json) {
+          console.log(JSON.stringify({ deduped, observation, reviewCommand }, null, 2));
+          return;
+        }
         const prefix = deduped ? 'Matched existing observation' : 'Proposed observation';
         console.log(`${prefix} [${observation.id}] (${observation.kind}): ${observation.content}`);
-        console.log(`Accept it with: buddy user-model accept ${observation.id} --by <name>`);
+        console.log(`Accept it with: ${reviewCommand}`);
       } catch (err) {
         if (err instanceof UserModelPrivacyError) {
           console.error(err.message);
