@@ -358,7 +358,7 @@ export function registerToolsCommands(program: Command): void {
   skillCandidate
     .command('list')
     .description('List materialized SKILL.md candidates awaiting review')
-    .option('--eligible-only', 'show only candidates that can be installed after approval')
+    .option('--eligible-only', 'show only candidates with an install or overwrite review action')
     .option('--skill-root <path>', 'candidate root to scan', '.codebuddy/skill-candidates')
     .option('--json', 'output JSON')
     .action(async (options: ToolsSkillCandidateListOptions) => {
@@ -367,7 +367,7 @@ export function registerToolsCommands(program: Command): void {
         skillRoot: options.skillRoot,
       });
       const candidates = options.eligibleOnly
-        ? allCandidates.filter((candidate) => candidate.eligible)
+        ? allCandidates.filter(isInstallReviewableSkillCandidate)
         : allCandidates;
 
       if (options.json) {
@@ -435,4 +435,8 @@ export function registerToolsCommands(program: Command): void {
       console.log(`  Workspace skill: ${installed.installedPath}`);
       console.log('');
     });
+}
+
+function isInstallReviewableSkillCandidate(candidate: ResearchScriptSkillCandidateWithInstallState): boolean {
+  return candidate.eligible && candidate.reviewCommands.some((command) => command.includes('candidate_install'));
 }

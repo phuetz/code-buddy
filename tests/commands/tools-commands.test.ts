@@ -410,7 +410,9 @@ describe('Tools CLI commands', () => {
       ).resolves.toContain('- Approved by: Patrice');
 
       consoleLogSpy.mockClear();
-      await program.parseAsync([
+      const allListProgram = createProgram();
+      registerToolsCommands(allListProgram);
+      await allListProgram.parseAsync([
         'node',
         'test',
         'tools',
@@ -425,12 +427,36 @@ describe('Tools CLI commands', () => {
           reviewCommands?: string[];
           skillName: string;
         }>;
+        count: number;
       };
-      expect(listOutput.candidates[0]).toMatchObject({
+      expect(listOutput).toMatchObject({
+        candidates: [],
+        count: 0,
+      });
+
+      consoleLogSpy.mockClear();
+      await program.parseAsync([
+        'node',
+        'test',
+        'tools',
+        'skill-candidate',
+        'list',
+        '--json',
+      ]);
+      const allListOutput = JSON.parse(getLogOutput()) as {
+        candidates: Array<{
+          installState?: string;
+          reviewCommands?: string[];
+          skillName: string;
+        }>;
+        count: number;
+      };
+      expect(allListOutput.count).toBe(1);
+      expect(allListOutput.candidates[0]).toMatchObject({
         installState: 'installed-current',
         skillName: 'research-cli-reviewed-workflow',
       });
-      expect(listOutput.candidates[0]?.reviewCommands).not.toEqual(
+      expect(allListOutput.candidates[0]?.reviewCommands).not.toEqual(
         expect.arrayContaining([
           expect.stringContaining('candidate_install'),
         ]),
