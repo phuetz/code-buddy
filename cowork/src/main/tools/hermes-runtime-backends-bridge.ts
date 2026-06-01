@@ -29,7 +29,16 @@ export interface HermesRuntimeBackendsReview {
   ok: boolean;
   platform: string;
   recommendations: string[];
+  routePlan?: HermesRuntimeBackendRoutePlan;
   runnableCount: number;
+}
+
+export interface HermesRuntimeBackendRoutePlan {
+  fallbackBackendIds: string[];
+  mode: 'hybrid';
+  primaryBackendId: string | null;
+  reason: string;
+  smokeCommand: string | null;
 }
 
 export interface HermesRuntimeBackendSmokeResult {
@@ -59,6 +68,7 @@ interface HermesRuntimeBackendsReadiness {
   ok: boolean;
   platform: string;
   recommendations: string[];
+  routePlan?: HermesRuntimeBackendRoutePlan;
   runnableCount: number;
 }
 
@@ -108,6 +118,7 @@ export async function getHermesRuntimeBackendsForReview(): Promise<HermesRuntime
     ok: readiness.ok,
     platform: readiness.platform,
     recommendations: readiness.recommendations,
+    routePlan: readiness.routePlan,
     runnableCount: readiness.runnableCount,
   };
 }

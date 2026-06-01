@@ -191,11 +191,19 @@ describe('Hermes CLI status real smoke', () => {
 
     const runtime = runHermesJson(['runtime', 'status']) as {
       kind: string;
-      readiness: { backends: Array<{ id: string; runnable: boolean }>; runnableCount: number };
+      readiness: {
+        backends: Array<{ id: string; runnable: boolean }>;
+        routePlan: { primaryBackendId: string | null; smokeCommand: string | null };
+        runnableCount: number;
+      };
     };
     expect(runtime.kind).toBe('hermes_runtime_backends_status');
     expect(runtime.readiness.runnableCount).toBeGreaterThanOrEqual(1);
     expect(runtime.readiness.backends.map((backend) => backend.id)).toContain('local');
+    expect(runtime.readiness.routePlan).toMatchObject({
+      primaryBackendId: 'local',
+      smokeCommand: 'buddy hermes runtime-smoke auto --json',
+    });
 
     const localRuntimeSmoke = runHermesJson(['runtime-smoke', 'local']) as {
       kind: string;
@@ -208,6 +216,18 @@ describe('Hermes CLI status real smoke', () => {
       status: 'passed',
     });
     expect(localRuntimeSmoke.result.output).toContain('OK-HERMES-LOCAL');
+
+    const autoRuntimeSmoke = runHermesJson(['runtime-smoke', 'auto']) as {
+      kind: string;
+      result: { backendId: string; ok: boolean; output: string; status: string };
+    };
+    expect(autoRuntimeSmoke.kind).toBe('hermes_runtime_backend_smoke');
+    expect(autoRuntimeSmoke.result).toMatchObject({
+      backendId: 'local',
+      ok: true,
+      status: 'passed',
+    });
+    expect(autoRuntimeSmoke.result.output).toContain('OK-HERMES-LOCAL');
 
     const wslBackend = runtime.readiness.backends.find((backend) => backend.id === 'wsl');
     if (wslBackend?.runnable) {

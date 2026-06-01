@@ -868,6 +868,11 @@ describe('Hermes CLI commands', () => {
       readiness: {
         availableCount: number;
         backends: Array<{ id: string; smokeCommand: string | null }>;
+        routePlan: {
+          mode: string;
+          primaryBackendId: string | null;
+          smokeCommand: string | null;
+        };
         runnableCount: number;
       };
     };
@@ -880,6 +885,11 @@ describe('Hermes CLI commands', () => {
     expect(output.readiness.backends.find((backend) => backend.id === 'local')?.smokeCommand).toContain(
       'OK-HERMES-LOCAL',
     );
+    expect(output.readiness.routePlan).toMatchObject({
+      mode: 'hybrid',
+      primaryBackendId: 'local',
+      smokeCommand: 'buddy hermes runtime-smoke auto --json',
+    });
   });
 
   it('prints Hermes messaging gateway readiness without leaking channel secrets', async () => {
@@ -2171,6 +2181,37 @@ describe('Hermes CLI commands', () => {
     registerHermesCommands(program);
 
     await program.parseAsync(['node', 'test', 'hermes', 'runtime-smoke', 'local', '--json']);
+
+    const output = JSON.parse(getLogOutput()) as {
+      kind: string;
+      schemaVersion: number;
+      result: {
+        backendId: string;
+        command: string | null;
+        ok: boolean;
+        output: string;
+        status: string;
+        stdout: string;
+      };
+    };
+
+    expect(output.kind).toBe('hermes_runtime_backend_smoke');
+    expect(output.schemaVersion).toBe(1);
+    expect(output.result).toMatchObject({
+      backendId: 'local',
+      command: process.execPath,
+      ok: true,
+      status: 'passed',
+    });
+    expect(output.result.stdout).toContain('OK-HERMES-LOCAL');
+    expect(output.result.output).toContain('OK-HERMES-LOCAL');
+  });
+
+  it('runs a real auto Hermes runtime smoke from the CLI', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync(['node', 'test', 'hermes', 'runtime-smoke', 'auto', '--json']);
 
     const output = JSON.parse(getLogOutput()) as {
       kind: string;

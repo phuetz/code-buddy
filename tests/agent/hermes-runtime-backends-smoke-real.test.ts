@@ -4,7 +4,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { runHermesRuntimeBackendSmoke } from '../../src/agent/hermes-runtime-backends.js';
+import {
+  buildHermesRuntimeBackendsReadiness,
+  runHermesRuntimeBackendSmoke,
+} from '../../src/agent/hermes-runtime-backends.js';
 
 function hasRunnableWsl(): boolean {
   if (process.platform !== 'win32') return false;
@@ -52,6 +55,24 @@ function writeFakeCli(directory: string, name: string, script: string): string {
 }
 
 describe('Hermes runtime backend live smoke runner', () => {
+  it('reports a safe local-first auto route without selecting gated runtimes', () => {
+    const readiness = buildHermesRuntimeBackendsReadiness({
+      env: process.env,
+      now: () => new Date('2026-06-01T01:55:00.000Z'),
+    });
+
+    expect(readiness.routePlan).toMatchObject({
+      mode: 'hybrid',
+      primaryBackendId: 'local',
+      smokeCommand: 'buddy hermes runtime-smoke auto --json',
+    });
+    expect(readiness.routePlan.fallbackBackendIds).not.toContain('docker');
+    expect(readiness.routePlan.fallbackBackendIds).not.toContain('ssh');
+    expect(readiness.routePlan.fallbackBackendIds).not.toContain('modal');
+    expect(readiness.routePlan.fallbackBackendIds).not.toContain('daytona');
+    expect(readiness.routePlan.fallbackBackendIds).not.toContain('vercel-sandbox');
+  });
+
   it('runs the local backend smoke through a real Node subprocess', () => {
     const result = runHermesRuntimeBackendSmoke({
       backendId: 'local',
@@ -67,6 +88,24 @@ describe('Hermes runtime backend live smoke runner', () => {
       status: 'passed',
     });
     expect(result.args).toContain('-e');
+    expect(result.stdout).toContain('OK-HERMES-LOCAL');
+    expect(result.output).toContain('OK-HERMES-LOCAL');
+  });
+
+  it('runs auto runtime smoke through a real safe subprocess', () => {
+    const result = runHermesRuntimeBackendSmoke({
+      backendId: 'auto',
+      env: process.env,
+      now: () => new Date('2026-06-01T01:56:00.000Z'),
+    });
+
+    expect(result).toMatchObject({
+      backendId: 'local',
+      command: process.execPath,
+      exitCode: 0,
+      ok: true,
+      status: 'passed',
+    });
     expect(result.stdout).toContain('OK-HERMES-LOCAL');
     expect(result.output).toContain('OK-HERMES-LOCAL');
   });

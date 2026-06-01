@@ -37,9 +37,18 @@ export interface HermesRuntimeBackendsReadiness {
   availableCount: number;
   configuredRemoteCount: number;
   runnableCount: number;
+  routePlan: HermesRuntimeBackendRoutePlan;
   backends: HermesRuntimeBackend[];
   issues: string[];
   recommendations: string[];
+}
+
+export interface HermesRuntimeBackendRoutePlan {
+  fallbackBackendIds: string[];
+  mode: 'hybrid';
+  primaryBackendId: string | null;
+  reason: string;
+  smokeCommand: string | null;
 }
 
 export type HermesRuntimeSmokeStatus = 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
@@ -93,6 +102,7 @@ interface SpawnInvocation {
 }
 
 const REMOTE_SMOKE_BACKEND_IDS = new Set(['ssh', 'modal', 'daytona', 'vercel-sandbox']);
+const SAFE_AUTO_RUNTIME_BACKEND_IDS = ['local', 'wsl', 'os-sandbox', 'singularity'];
 
 function firstPresentEnvValue(env: NodeJS.ProcessEnv, keys: readonly string[]): string | null {
   for (const key of keys) {
@@ -660,6 +670,36 @@ function vercelSandboxBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
   };
 }
 
+function buildRuntimeRoutePlan(backends: HermesRuntimeBackend[]): HermesRuntimeBackendRoutePlan {
+  const runnableSafeBackends = SAFE_AUTO_RUNTIME_BACKEND_IDS
+    .map((id) => backends.find((backend) => backend.id === id && backend.runnable))
+    .filter(Boolean) as HermesRuntimeBackend[];
+  const primary = runnableSafeBackends[0] ?? null;
+  const fallbacks = runnableSafeBackends
+    .filter((backend) => backend.id !== primary?.id)
+    .map((backend) => backend.id);
+
+  if (!primary) {
+    return {
+      fallbackBackendIds: [],
+      mode: 'hybrid',
+      primaryBackendId: null,
+      reason: 'No safe runtime backend is currently runnable; install Node.js, WSL, or a native sandbox first.',
+      smokeCommand: null,
+    };
+  }
+
+  return {
+    fallbackBackendIds: fallbacks,
+    mode: 'hybrid',
+    primaryBackendId: primary.id,
+    reason: fallbacks.length > 0
+      ? `Auto runtime smoke will use ${primary.label}, with ${fallbacks.join(', ')} as fallback candidates.`
+      : `Auto runtime smoke will use ${primary.label}; no secondary safe backend is currently runnable.`,
+    smokeCommand: 'buddy hermes runtime-smoke auto --json',
+  };
+}
+
 export function buildHermesRuntimeBackendsReadiness(
   options: HermesRuntimeBackendsOptions = {},
 ): HermesRuntimeBackendsReadiness {
@@ -683,6 +723,7 @@ export function buildHermesRuntimeBackendsReadiness(
   const configuredRemoteBackends = backends.filter((backend) =>
     ['ssh', 'modal', 'daytona', 'vercel-sandbox'].includes(backend.id) && backend.configured,
   );
+  const routePlan = buildRuntimeRoutePlan(backends);
   const issues: string[] = [];
   const recommendations: string[] = [];
 
@@ -706,6 +747,7 @@ export function buildHermesRuntimeBackendsReadiness(
     availableCount: backends.filter((backend) => backend.installed).length,
     configuredRemoteCount: configuredRemoteBackends.length,
     runnableCount: backends.filter((backend) => backend.runnable).length,
+    routePlan,
     backends,
     issues,
     recommendations,
@@ -719,6 +761,8 @@ export function renderHermesRuntimeBackendsReadiness(readiness: HermesRuntimeBac
     `Available: ${readiness.availableCount}/${readiness.backends.length}`,
     `Runnable: ${readiness.runnableCount}/${readiness.backends.length}`,
     `Configured remote: ${readiness.configuredRemoteCount}`,
+    `Hybrid route: ${readiness.routePlan.primaryBackendId ?? 'none'}` +
+      `${readiness.routePlan.smokeCommand ? ` | smoke: ${readiness.routePlan.smokeCommand}` : ''}`,
     '',
     'Backends:',
     ...readiness.backends.map((backend) =>
@@ -750,8 +794,24 @@ export function runHermesRuntimeBackendSmoke(
     now,
   });
   const backendId = options.backendId.trim();
-  const backend = readiness.backends.find((candidate) => candidate.id === backendId);
   const timestamp = now();
+  if (backendId === 'auto') {
+    const primaryBackendId = readiness.routePlan.primaryBackendId;
+    if (!primaryBackendId) {
+      return blockedSmokeResult('auto', 'not-runnable', readiness.routePlan.reason, {
+        command: readiness.routePlan.smokeCommand,
+        now: timestamp,
+      });
+    }
+    return runHermesRuntimeBackendSmoke({
+      ...options,
+      backendId: primaryBackendId,
+      env,
+      now,
+    });
+  }
+
+  const backend = readiness.backends.find((candidate) => candidate.id === backendId);
 
   if (!backend) {
     return blockedSmokeResult(backendId, 'unsupported', `Unknown runtime backend: ${backendId}`, {

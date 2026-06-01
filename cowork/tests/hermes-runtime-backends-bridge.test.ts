@@ -60,6 +60,13 @@ describe('Hermes runtime backends bridge', () => {
           ok: true,
           platform: 'win32',
           recommendations: ['Run Docker smoke when available.'],
+          routePlan: {
+            fallbackBackendIds: [],
+            mode: 'hybrid',
+            primaryBackendId: 'local',
+            reason: 'Auto runtime smoke will use Local process; no secondary safe backend is currently runnable.',
+            smokeCommand: 'buddy hermes runtime-smoke auto --json',
+          },
           runnableCount: 2,
         },
       }),
@@ -76,6 +83,10 @@ describe('Hermes runtime backends bridge', () => {
       availableCount: 3,
       configuredRemoteCount: 1,
       runnableCount: 2,
+      routePlan: expect.objectContaining({
+        primaryBackendId: 'local',
+        smokeCommand: 'buddy hermes runtime-smoke auto --json',
+      }),
       backends: [
         expect.objectContaining({
           id: 'local',

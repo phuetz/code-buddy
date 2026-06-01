@@ -82,6 +82,13 @@ const readyRuntime: HermesRuntimeBackendsReview = {
   ok: true,
   platform: 'win32',
   recommendations: ['Run the Docker smoke command when Docker is available.'],
+  routePlan: {
+    fallbackBackendIds: [],
+    mode: 'hybrid',
+    primaryBackendId: 'local',
+    reason: 'Auto runtime smoke will use Local process; no secondary safe backend is currently runnable.',
+    smokeCommand: 'buddy hermes runtime-smoke auto --json',
+  },
   runnableCount: 2,
 };
 
@@ -116,11 +123,14 @@ describe('HermesRuntimeBackendsStrip', () => {
     expect(strip?.textContent).toContain('2/3');
     expect(strip?.textContent).toContain('win32/x64');
     expect(strip?.textContent).toContain('Local process');
+    expect(strip?.textContent).toContain('Hybrid route');
+    expect(strip?.textContent).toContain('buddy hermes runtime-smoke auto --json');
     expect(strip?.textContent).toContain('Docker sandbox');
     expect(strip?.textContent).toContain('Vercel Sandbox');
     expect(strip?.textContent).toContain('OK-HERMES-LOCAL');
     expect(strip?.textContent).toContain('OK-HERMES-DOCKER');
     expect(strip?.textContent).toContain('buddy hermes doctor balanced --json');
+    expect(target.querySelector('[data-testid="hermes-runtime-route-plan"]')?.textContent).toContain('local');
   });
 
   it('loads runtime readiness from the readonly Electron bridge when no prop is provided', async () => {
