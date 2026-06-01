@@ -122,6 +122,13 @@ function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function optionalStringParam(params: Record<string, unknown>, key: string, errorMessage: string): string | undefined {
+  if (params[key] === undefined) return undefined;
+  const value = asString(params[key]);
+  if (!value) throw invalidParamsError(errorMessage);
+  return value;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -370,9 +377,10 @@ export class AcpStdioServer {
   }
 
   private handleNewSession(params: Record<string, unknown>): unknown {
+    const cwd = optionalStringParam(params, 'cwd', 'Invalid session/new cwd') ?? process.cwd();
     const sessionId = randomUUID();
     this.sessions.set(sessionId, {
-      cwd: asString(params.cwd) ?? process.cwd(),
+      cwd,
       active: null,
       history: [],
       updatedAt: new Date().toISOString(),
@@ -387,11 +395,7 @@ export class AcpStdioServer {
       throw error;
     }
 
-    if (params.cwd !== undefined && !asString(params.cwd)) {
-      throw invalidParamsError('Invalid session/list cwd');
-    }
-
-    const cwd = asString(params.cwd);
+    const cwd = optionalStringParam(params, 'cwd', 'Invalid session/list cwd');
     const sessions = [...this.sessions.entries()]
       .filter(([, session]) => !cwd || session.cwd === cwd)
       .sort(([, a], [, b]) => b.updatedAt.localeCompare(a.updatedAt))
@@ -423,7 +427,7 @@ export class AcpStdioServer {
       throw error;
     }
 
-    const cwd = asString(params.cwd);
+    const cwd = optionalStringParam(params, 'cwd', 'Invalid session/load cwd');
     if (cwd) session.cwd = cwd;
     session.updatedAt = new Date().toISOString();
 

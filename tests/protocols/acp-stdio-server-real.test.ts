@@ -197,6 +197,23 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     expect(harness.responseFor(2)?.result).toEqual({ stopReason: 'end_turn' });
   });
 
+  it('rejects malformed session/new cwd values instead of falling back to the server cwd', async () => {
+    harness = new AcpHarness(async () => ({ stopReason: 'end_turn' }));
+
+    harness.send({ jsonrpc: '2.0', id: 1, method: 'session/new', params: { cwd: [], mcpServers: [] } });
+    await harness.flush();
+
+    expect(harness.responseFor(1)?.error).toMatchObject({
+      code: -32602,
+      message: 'Invalid session/new cwd',
+    });
+    expect(harness.responseFor(1)?.result).toBeUndefined();
+
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/list', params: {} });
+    await harness.flush();
+    expect(harness.responseFor(2)?.result).toEqual({ sessions: [] });
+  });
+
   it('loads an in-process session and replays prior session updates', async () => {
     const seenCwds: string[] = [];
     const runner: AcpPromptRunner = async ({ cwd, prompt, sendUpdate }) => {
@@ -263,6 +280,43 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     await harness.flush();
     expect(seenCwds).toEqual(['/tmp/old', '/tmp/new']);
     expect(harness.responseFor(7)?.result).toEqual({ stopReason: 'end_turn' });
+  });
+
+  it('rejects malformed session/load cwd values instead of keeping the stale cwd silently', async () => {
+    const seenCwds: string[] = [];
+    const runner: AcpPromptRunner = async ({ cwd }) => {
+      seenCwds.push(cwd);
+      return { stopReason: 'end_turn' };
+    };
+    harness = new AcpHarness(runner);
+
+    harness.send({ jsonrpc: '2.0', id: 1, method: 'session/new', params: { cwd: '/tmp/old', mcpServers: [] } });
+    await harness.flush();
+    const sessionId = harness.responseFor(1)?.result.sessionId as string;
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'session/load',
+      params: { sessionId, cwd: [], mcpServers: [] },
+    });
+    await harness.flush();
+
+    expect(harness.responseFor(2)?.error).toMatchObject({
+      code: -32602,
+      message: 'Invalid session/load cwd',
+    });
+    expect(harness.responseFor(2)?.result).toBeUndefined();
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'session/prompt',
+      params: { sessionId, prompt: [{ type: 'text', text: 'after rejected load' }] },
+    });
+    await harness.flush();
+    expect(seenCwds).toEqual(['/tmp/old']);
+    expect(harness.responseFor(3)?.result).toEqual({ stopReason: 'end_turn' });
   });
 
   it('rejects session/load while a prompt is active', async () => {
