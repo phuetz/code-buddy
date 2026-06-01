@@ -593,4 +593,105 @@ describe('Tools CLI commands', () => {
       await fs.rm(rootDir, { recursive: true, force: true });
     }
   });
+
+  it('keeps listing valid skill candidates when one review manifest is malformed', async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tools-skill-candidate-malformed-list-'));
+    const previousCwd = process.cwd();
+    try {
+      const validDir = path.join(rootDir, '.codebuddy', 'skill-candidates', 'learning', 'valid-candidate');
+      const badDir = path.join(rootDir, '.codebuddy', 'skill-candidates', 'learning', 'bad-candidate');
+      await fs.mkdir(validDir, { recursive: true });
+      await fs.mkdir(badDir, { recursive: true });
+      await fs.writeFile(
+        path.join(validDir, 'SKILL.md'),
+        [
+          '---',
+          'name: valid-candidate',
+          'description: Valid Learning Agent candidate.',
+          'version: 1.0.0',
+          'author: Code Buddy Learning Agent',
+          'license: MIT',
+          'platforms: [linux, macos]',
+          'metadata:',
+          '  hermes:',
+          '    tags: [learning-agent, review-required]',
+          '    category: testing',
+          '---',
+          '',
+          '# Valid Candidate',
+          '',
+          '## When to Use',
+          'Use after review.',
+          '',
+          '## Procedure',
+          '1. Use `search`.',
+          '2. Use `view_file`.',
+          '3. Use `bash`.',
+          '',
+          '## Verification',
+          '- Real command passes.',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      await fs.writeFile(
+        path.join(validDir, 'candidate-review.json'),
+        `${JSON.stringify({
+          approvalRequired: true,
+          candidateId: 'learning-skill-valid',
+          eligible: true,
+          generatedAt: '2026-06-01T16:10:00.000Z',
+          promotionThreshold: 2,
+          reason: '2 successful observations reinforced this workflow.',
+          schemaVersion: 1,
+          skillName: 'valid-candidate',
+          sourceRunId: 'run-valid',
+          status: 'awaiting_human_approval',
+          successfulRunCount: 2,
+          toolSequence: ['search', 'view_file', 'bash'],
+        }, null, 2)}\n`,
+        'utf8',
+      );
+      await fs.writeFile(
+        path.join(badDir, 'SKILL.md'),
+        [
+          '---',
+          'name: bad-candidate',
+          'description: Corrupt candidate.',
+          'version: 1.0.0',
+          '---',
+          '',
+          '# Bad Candidate',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      await fs.writeFile(path.join(badDir, 'candidate-review.json'), '{ this is not json', 'utf8');
+
+      process.chdir(rootDir);
+      const program = createProgram();
+      registerToolsCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'tools',
+        'skill-candidate',
+        'list',
+        '--json',
+      ]);
+
+      const output = JSON.parse(getLogOutput()) as {
+        candidates: Array<{ skillName: string }>;
+        count: number;
+      };
+      expect(output.count).toBe(1);
+      expect(output.candidates).toEqual([
+        expect.objectContaining({ skillName: 'valid-candidate' }),
+      ]);
+    } finally {
+      process.chdir(previousCwd);
+      await fs.rm(rootDir, { recursive: true, force: true });
+    }
+  });
 });

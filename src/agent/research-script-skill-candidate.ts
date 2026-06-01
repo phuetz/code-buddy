@@ -246,12 +246,18 @@ export async function listMaterializedResearchScriptSkillCandidates(
   const skillRoot = normalizeSkillRoot(options.skillRoot ?? '.codebuddy/skill-candidates');
   const absoluteSkillRoot = resolvePathInsideRoot(rootDir, skillRoot);
   const reviewManifestPaths = await findReviewManifestPaths(absoluteSkillRoot);
-  const candidates = await Promise.all(
-    reviewManifestPaths.map((reviewManifestPath) => readMaterializedResearchScriptSkillCandidate(
-      path.dirname(reviewManifestPath),
-      { rootDir },
-    )),
-  );
+  const candidates: ResearchScriptSkillCandidate[] = [];
+  for (const reviewManifestPath of reviewManifestPaths) {
+    try {
+      candidates.push(await readMaterializedResearchScriptSkillCandidate(
+        path.dirname(reviewManifestPath),
+        { rootDir },
+      ));
+    } catch {
+      // Keep the review queue usable when one materialized candidate is corrupt.
+      // Inspecting that exact candidate path still surfaces the detailed error.
+    }
+  }
 
   return candidates.sort((left, right) => left.skillName.localeCompare(right.skillName));
 }
