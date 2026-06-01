@@ -31,6 +31,7 @@ export type ChannelType =
   | 'teams'
   | 'webchat'
   | 'dingtalk'
+  | 'wecom'
   | 'line'
   | 'nostr'
   | 'zalo'

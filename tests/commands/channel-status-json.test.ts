@@ -98,6 +98,12 @@ describe('buildChannelStatusReport', () => {
           status: 'available',
         }),
         expect.objectContaining({
+          channelTypes: ['wecom'],
+          localSurface: 'channel',
+          platform: 'WeCom',
+          status: 'available',
+        }),
+        expect.objectContaining({
           channelTypes: ['ntfy'],
           localSurface: 'channel',
           platform: 'ntfy',
@@ -201,6 +207,43 @@ describe('buildChannelStatusReport', () => {
       }));
       expect(JSON.stringify(report)).not.toContain('dingtalk-token');
       expect(JSON.stringify(report)).not.toContain('SEC-test');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('marks WeCom as configured without exposing webhook keys', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'channel-status-wecom-'));
+    const configPath = path.join(tempDir, 'channels.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      channels: [
+        {
+          type: 'wecom',
+          enabled: true,
+          token: 'wecom-key',
+          webhookUrl: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=wecom-key',
+          options: { msgType: 'markdown', mentionedList: ['@all'] },
+        },
+      ],
+    }), 'utf-8');
+
+    try {
+      const report = buildChannelStatusReport({}, configPath, '2026-05-30T12:30:01.000Z');
+      const wecom = report.hermes.platforms.find((platform) => platform.platform === 'WeCom');
+      expect(wecom).toEqual(expect.objectContaining({
+        channelTypes: ['wecom'],
+        configured: true,
+        localSurface: 'channel',
+        runtimeRegistered: false,
+        status: 'configured',
+      }));
+      expect(report.config.channels[0]).toEqual(expect.objectContaining({
+        hasToken: true,
+        hasWebhookUrl: true,
+        optionKeys: ['mentionedList', 'msgType'],
+        type: 'wecom',
+      }));
+      expect(JSON.stringify(report)).not.toContain('wecom-key');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

@@ -90,6 +90,7 @@ export const SEND_MESSAGE_CHANNELS = [
   'teams',
   'webchat',
   'dingtalk',
+  'wecom',
   'line',
   'nostr',
   'zalo',

@@ -162,6 +162,16 @@ describe('handleChannels additional channel activation', () => {
       },
     },
     {
+      type: 'wecom',
+      config: {
+        type: 'wecom',
+        enabled: true,
+        token: 'wecom-key',
+        webhookUrl: 'http://127.0.0.1:9/cgi-bin/webhook/send?key=wecom-key',
+        options: { msgType: 'text', mentionedList: ['@all'] },
+      },
+    },
+    {
       type: 'nostr',
       config: {
         type: 'nostr',

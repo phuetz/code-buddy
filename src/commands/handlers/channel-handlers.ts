@@ -197,7 +197,7 @@ const HERMES_OFFICIAL_MESSAGING_PLATFORMS: Array<{
   { platform: 'Matrix', officialSurface: 'Matrix gateway', localSurface: 'channel', channelTypes: ['matrix'] },
   { platform: 'DingTalk', officialSurface: 'DingTalk gateway', localSurface: 'channel', channelTypes: ['dingtalk'] },
   { platform: 'Feishu', officialSurface: 'Feishu/Lark gateway', localSurface: 'channel', channelTypes: ['feishu'] },
-  { platform: 'WeCom', officialSurface: 'WeCom gateway', localSurface: 'missing' },
+  { platform: 'WeCom', officialSurface: 'WeCom gateway', localSurface: 'channel', channelTypes: ['wecom'] },
   { platform: 'Weixin', officialSurface: 'Weixin gateway', localSurface: 'missing' },
   { platform: 'BlueBubbles', officialSurface: 'BlueBubbles/iMessage gateway', localSurface: 'channel', channelTypes: ['imessage'] },
   { platform: 'QQ', officialSurface: 'QQ gateway', localSurface: 'missing' },
@@ -617,6 +617,20 @@ export async function instantiateChannel(config: ChannelConfigEntry): Promise<im
           : undefined,
         isAtAll: typeof opts.isAtAll === 'boolean' ? opts.isAtAll : undefined,
       } as import('../../channels/index.js').DingTalkChannelConfig);
+    }
+    case 'wecom': {
+      const { WeComChannel } = await import('../../channels/wecom/index.js');
+      return new WeComChannel({
+        ...channelConfig,
+        key: typeof opts.key === 'string' ? opts.key : config.token,
+        msgType: opts.msgType === 'markdown' ? 'markdown' : opts.msgType === 'text' ? 'text' : undefined,
+        mentionedList: Array.isArray(opts.mentionedList)
+          ? opts.mentionedList.filter((value): value is string => typeof value === 'string')
+          : undefined,
+        mentionedMobileList: Array.isArray(opts.mentionedMobileList)
+          ? opts.mentionedMobileList.filter((value): value is string => typeof value === 'string')
+          : undefined,
+      } as import('../../channels/index.js').WeComChannelConfig);
     }
     case 'line': {
       const { LINEChannel } = await import('../../channels/line/index.js');
