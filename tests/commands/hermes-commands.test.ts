@@ -1084,6 +1084,9 @@ describe('Hermes CLI commands', () => {
       const output = getLogOutput();
       expect(output).toContain('Learning skill candidates: 2 (1 eligible, 1 not eligible)');
       expect(output).toContain('skill_candidate: 2 -> buddy tools skill-candidate list --eligible-only --json');
+      expect(output).toContain('gate: skillCandidatesRequireReview');
+      expect(output).toContain('why: Pending Learning Agent SKILL.md candidates; inspect diffs before install or overwrite.');
+      expect(output).toContain('samples: learning-skill-ready');
       expect(output).toContain(
         'next: buddy tools skill-candidate inspect .codebuddy/skill-candidates/learning/ready --json',
       );

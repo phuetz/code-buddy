@@ -625,6 +625,11 @@ export function renderHermesLearningLoopStatus(status: HermesLearningLoopStatus)
     lines.push('', `Review queue: ${status.reviewQueue.totalPending} pending`);
     for (const item of status.reviewQueue.items) {
       lines.push(`  - ${item.kind}: ${item.pendingCount} -> ${item.command}`);
+      lines.push(`    gate: ${item.reviewGate}`);
+      lines.push(`    why: ${item.description}`);
+      if (item.sampleIds?.length) {
+        lines.push(`    samples: ${formatLimitedList(item.sampleIds, 4)}`);
+      }
       if (item.nextReviewCommand) {
         lines.push(`    next: ${item.nextReviewCommand}`);
       }
@@ -656,4 +661,11 @@ export function renderHermesLearningLoopStatus(status: HermesLearningLoopStatus)
   }
 
   return lines.join('\n');
+}
+
+function formatLimitedList(values: readonly string[], limit: number): string {
+  if (values.length === 0) return 'none';
+  const shown = values.slice(0, limit).join(', ');
+  const hidden = values.length - limit;
+  return hidden > 0 ? `${shown} (+${hidden} more)` : shown;
 }
