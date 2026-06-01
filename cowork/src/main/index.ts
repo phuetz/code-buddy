@@ -197,6 +197,7 @@ import {
   getHermesProtocolGatewaysForReview,
   runHermesProtocolGatewaysSmokeForReview,
 } from './tools/hermes-protocol-gateways-bridge';
+import { runHermesLocalSmokeSuiteForReview } from './tools/hermes-local-smoke-bridge';
 import { getHermesMobileSupervisionForReview } from './tools/hermes-mobile-supervision-bridge';
 import { getHermesFeatureParityForReview } from './tools/hermes-feature-parity-bridge';
 import { getHermesToolCatalogForReview } from './tools/hermes-tool-catalog-bridge';
@@ -4206,6 +4207,19 @@ ipcMain.handle('tools.hermesProtocolGateways.smoke', async () => {
     return { ok: true as const, result };
   } catch (err) {
     logWarn('[tools.hermesProtocolGateways.smoke] failed:', err);
+    return {
+      error: err instanceof Error ? err.message : String(err),
+      ok: false as const,
+    };
+  }
+});
+
+ipcMain.handle('tools.hermesLocalSmoke.run', async () => {
+  try {
+    const result = await runHermesLocalSmokeSuiteForReview();
+    return { ok: true as const, result };
+  } catch (err) {
+    logWarn('[tools.hermesLocalSmoke.run] failed:', err);
     return {
       error: err instanceof Error ? err.message : String(err),
       ok: false as const,

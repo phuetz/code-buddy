@@ -85,6 +85,10 @@ const hermesProtocolGatewaysStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-protocol-gateways-strip.tsx'
 );
+const hermesLocalSmokeStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-local-smoke-strip.tsx'
+);
 const hermesMessagingGatewayStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-messaging-gateway-strip.tsx'
@@ -267,6 +271,7 @@ describe('French renderer i18n support', () => {
       fs.readFileSync(hermesRuntimeBackendsStripPath, 'utf8'),
       fs.readFileSync(hermesBrowserBackendsStripPath, 'utf8'),
       fs.readFileSync(hermesProtocolGatewaysStripPath, 'utf8'),
+      fs.readFileSync(hermesLocalSmokeStripPath, 'utf8'),
       fs.readFileSync(hermesMessagingGatewayStripPath, 'utf8'),
       fs.readFileSync(hermesMobileSupervisionStripPath, 'utf8'),
       fs.readFileSync(skillCandidateReviewQueueStripPath, 'utf8'),
@@ -440,6 +445,20 @@ describe('French renderer i18n support', () => {
       'fleet.hermesProtocolGateways.status.available',
       'fleet.hermesProtocolGateways.status.partial',
       'fleet.hermesProtocolGateways.status.missing',
+      'fleet.hermesLocalSmoke.title',
+      'fleet.hermesLocalSmoke.idleChip',
+      'fleet.hermesLocalSmoke.runningChip',
+      'fleet.hermesLocalSmoke.resultChip',
+      'fleet.hermesLocalSmoke.failedChip',
+      'fleet.hermesLocalSmoke.runSmoke',
+      'fleet.hermesLocalSmoke.unavailable',
+      'fleet.hermesLocalSmoke.readyHint',
+      'fleet.hermesLocalSmoke.smokePassed',
+      'fleet.hermesLocalSmoke.smokeFailed',
+      'fleet.hermesLocalSmoke.runtimeLabel',
+      'fleet.hermesLocalSmoke.browserLabel',
+      'fleet.hermesLocalSmoke.protocolsLabel',
+      'fleet.hermesLocalSmoke.protocolsValue',
       'fleet.hermesMessagingGateway.title',
       'fleet.hermesMessagingGateway.readyChip',
       'fleet.hermesMessagingGateway.attentionChip',

@@ -1789,6 +1789,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         };
       }> => ipcRenderer.invoke('tools.hermesProtocolGateways.smoke'),
     },
+    hermesLocalSmoke: {
+      run: (): Promise<{
+        error?: string;
+        ok: boolean;
+        result?: unknown;
+      }> => ipcRenderer.invoke('tools.hermesLocalSmoke.run'),
+    },
     hermesMobileSupervision: {
       get: (options?: {
         query?: string;
@@ -4857,6 +4864,13 @@ declare global {
               ok: boolean;
               schemaVersion: 1;
             };
+          }>;
+        };
+        hermesLocalSmoke: {
+          run: () => Promise<{
+            error?: string;
+            ok: boolean;
+            result?: unknown;
           }>;
         };
         hermesMobileSupervision: {

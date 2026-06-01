@@ -113,6 +113,10 @@ const hermesProtocolGatewaysStripPath = path.resolve(
   process.cwd(),
   'src/renderer/components/hermes-protocol-gateways-strip.tsx',
 );
+const hermesLocalSmokeStripPath = path.resolve(
+  process.cwd(),
+  'src/renderer/components/hermes-local-smoke-strip.tsx',
+);
 
 const t = ((key: string, fallbackOrOptions?: string | Record<string, unknown>, maybeOptions?: Record<string, unknown>) => {
   const template = typeof fallbackOrOptions === 'string' ? fallbackOrOptions : key;
@@ -166,6 +170,7 @@ describe('FleetCommandCenter saga board', () => {
       fs.readFileSync(hermesLearningLoopStripPath, 'utf8'),
       fs.readFileSync(hermesMobileSupervisionStripPath, 'utf8'),
       fs.readFileSync(hermesProtocolGatewaysStripPath, 'utf8'),
+      fs.readFileSync(hermesLocalSmokeStripPath, 'utf8'),
     ].join('\n');
 
     expect(source).toContain('SAGA_BOARD_COLUMNS');
@@ -217,6 +222,9 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('HermesLearningLoopStrip');
     expect(source).toContain('fleet-hermes-learning-loop');
     expect(source).toContain('buddy hermes learning status --json');
+    expect(source).toContain('HermesLocalSmokeStrip');
+    expect(source).toContain('fleet-hermes-local-smoke');
+    expect(source).toContain('buddy hermes smoke --json');
     expect(source).toContain('hermesLearningLoop?: HermesLearningLoopApi');
     expect(source).toContain('onOpenLessonReview={() => setShowLessonCandidatePanel(true)}');
     expect(source).toContain('HermesMobileSupervisionStrip');

@@ -2377,6 +2377,22 @@
         "missing": "缺失"
       }
     },
+    "hermesLocalSmoke": {
+      "title": "Hermes 本地 smoke",
+      "idleChip": "本地 smoke",
+      "runningChip": "运行中",
+      "resultChip": "{{passed}}/{{total}} 通过",
+      "failedChip": "smoke 失败",
+      "runSmoke": "运行本地 smoke",
+      "unavailable": "Hermes 本地 smoke runner 不可用。",
+      "readyHint": "可验证本地运行时、浏览器和协议。",
+      "smokePassed": "本地 smoke 通过：运行时 {{runtime}}，浏览器 {{browser}}，协议 {{protocols}}",
+      "smokeFailed": "本地 smoke 失败：运行时 {{runtime}}，浏览器 {{browser}}，协议 {{protocols}}",
+      "runtimeLabel": "运行时",
+      "browserLabel": "浏览器",
+      "protocolsLabel": "协议",
+      "protocolsValue": "MCP {{mcp}} / HTTP {{routes}}"
+    },
     "hermesMessagingGateway": {
       "title": "Hermes 消息网关",
       "readyChip": "网关就绪",

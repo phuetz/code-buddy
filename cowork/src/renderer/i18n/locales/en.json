@@ -2390,6 +2390,22 @@
         "missing": "missing"
       }
     },
+    "hermesLocalSmoke": {
+      "title": "Hermes local smoke",
+      "idleChip": "local smoke",
+      "runningChip": "running",
+      "resultChip": "{{passed}}/{{total}} passed",
+      "failedChip": "smoke failed",
+      "runSmoke": "Run local smoke",
+      "unavailable": "Hermes local smoke runner is unavailable.",
+      "readyHint": "Ready for local runtime, browser, and protocol proof.",
+      "smokePassed": "local smoke passed: runtime {{runtime}}, browser {{browser}}, protocols {{protocols}}",
+      "smokeFailed": "local smoke failed: runtime {{runtime}}, browser {{browser}}, protocols {{protocols}}",
+      "runtimeLabel": "Runtime",
+      "browserLabel": "Browser",
+      "protocolsLabel": "Protocols",
+      "protocolsValue": "MCP {{mcp}} / HTTP {{routes}}"
+    },
     "hermesMessagingGateway": {
       "title": "Hermes messaging gateway",
       "readyChip": "gateway ready",
