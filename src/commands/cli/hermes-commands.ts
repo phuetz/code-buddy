@@ -172,6 +172,44 @@ interface HermesLearningStatusOptions extends HermesCommandOptions {
   limit?: string;
 }
 
+interface HermesModelStatus {
+  kind: 'hermes_model_status';
+  schemaVersion: 1;
+  ok: boolean;
+  active: {
+    model: string;
+    provider: string;
+    providerLabel: string;
+    source: string;
+    configured: boolean;
+    credentialSources: string[];
+    contextWindow: number | null;
+    maxOutputTokens: number | null;
+    capabilities: {
+      toolCalls: boolean;
+      reasoning: boolean;
+      vision: boolean;
+    };
+  };
+  setup: {
+    loginCommand: string;
+    accountCommand: string;
+    providerMatrixCommand: string;
+    doctorCommand: string;
+    nextSteps: string[];
+  };
+  alternatives: Array<{
+    provider: string;
+    label: string;
+    configured: boolean;
+    local: boolean;
+    credentialSources: string[];
+    setupHints: string[];
+  }>;
+  issues: string[];
+  recommendations: string[];
+}
+
 interface HermesPromptSizeSection {
   id: string;
   label: string;
@@ -1495,6 +1533,106 @@ function renderHermesProviderReadiness(readiness: HermesProviderReadiness): stri
   return lines.join('\n');
 }
 
+function buildHermesModelStatus(readiness: HermesProviderReadiness = buildHermesProviderReadiness()): HermesModelStatus {
+  const configuredProviderCount = readiness.providers.filter((provider) => provider.configured).length;
+  const setupHints = readiness.ok
+    ? [...readiness.recommendations]
+    : [
+      ...readiness.activeProvider.remediation,
+      ...readiness.recommendations,
+    ];
+  const nextSteps = setupHints.length > 0 ? setupHints : [
+    'Run buddy whoami to confirm the current ChatGPT/Codex account when OAuth is the active credential source.',
+    'Run buddy hermes providers status --json when you need the full provider matrix.',
+  ];
+
+  return {
+    kind: 'hermes_model_status',
+    schemaVersion: 1,
+    ok: readiness.ok,
+    active: {
+      model: readiness.activeModel.model,
+      provider: readiness.activeModel.provider,
+      providerLabel: readiness.activeProvider.label,
+      source: readiness.activeModel.source,
+      configured: readiness.activeProvider.configured,
+      credentialSources: [...readiness.activeProvider.credentialSources],
+      contextWindow: readiness.activeModel.contextWindow,
+      maxOutputTokens: readiness.activeModel.maxOutputTokens,
+      capabilities: {
+        toolCalls: readiness.activeModel.supportsToolCalls,
+        reasoning: readiness.activeModel.supportsReasoning,
+        vision: readiness.activeModel.supportsVision,
+      },
+    },
+    setup: {
+      loginCommand: 'buddy login',
+      accountCommand: 'buddy whoami',
+      providerMatrixCommand: 'buddy hermes providers status --json',
+      doctorCommand: 'buddy hermes doctor safe --json',
+      nextSteps: Array.from(new Set(nextSteps)).slice(0, 8),
+    },
+    alternatives: readiness.providers
+      .filter((provider) => provider.provider !== readiness.activeModel.provider)
+      .map((provider) => ({
+        provider: provider.provider,
+        label: provider.label,
+        configured: provider.configured,
+        local: provider.local,
+        credentialSources: [...provider.credentialSources],
+        setupHints: [...provider.remediation],
+      })),
+    issues: [
+      ...readiness.issues,
+      ...(configuredProviderCount === 0 ? ['No configured providers were detected.'] : []),
+    ],
+    recommendations: [...readiness.recommendations],
+  };
+}
+
+function renderHermesModelStatus(status: HermesModelStatus): string {
+  const credentials = status.active.credentialSources.length > 0
+    ? status.active.credentialSources.join(', ')
+    : status.active.configured
+      ? 'local/configured endpoint'
+      : 'missing';
+  const configuredAlternatives = status.alternatives.filter((provider) => provider.configured);
+  const lines = [
+    `Hermes model: ${status.ok ? 'ok' : 'needs attention'}`,
+    `  Active: ${status.active.model} via ${status.active.providerLabel} (${status.active.source})`,
+    `  Credentials/endpoint: ${credentials}`,
+    `  Capabilities: tool-calls=${status.active.capabilities.toolCalls ? 'yes' : 'no'}, reasoning=${status.active.capabilities.reasoning ? 'yes' : 'no'}, vision=${status.active.capabilities.vision ? 'yes' : 'no'}`,
+    `  Context/output: ${status.active.contextWindow ?? 'unknown'} / ${status.active.maxOutputTokens ?? 'unknown'} tokens`,
+    `  Full provider matrix: ${status.setup.providerMatrixCommand}`,
+  ];
+
+  if (configuredAlternatives.length > 0) {
+    lines.push(`  Configured alternatives: ${configuredAlternatives.map((provider) => provider.label).join(', ')}`);
+  }
+
+  if (status.issues.length > 0) {
+    lines.push('');
+    lines.push('Issues:');
+    for (const issue of status.issues) {
+      lines.push(`  - ${issue}`);
+    }
+  }
+
+  if (status.setup.nextSteps.length > 0) {
+    lines.push('');
+    lines.push('Next steps:');
+    for (const step of status.setup.nextSteps) {
+      lines.push(`  - ${step}`);
+    }
+  }
+
+  lines.push('');
+  lines.push(`Account check: ${status.setup.accountCommand}`);
+  lines.push(`Safe doctor: ${status.setup.doctorCommand}`);
+
+  return lines.join('\n');
+}
+
 async function buildHermesMobileSupervisionStatus(
   queryParts: string[] = [],
   options: HermesMobileStatusOptions = {},
@@ -2285,6 +2423,26 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesProviderReadiness(readiness));
+    });
+
+  const model = hermes
+    .command('model')
+    .alias('models')
+    .description('Inspect the active Hermes model with compact setup guidance');
+
+  model
+    .command('status')
+    .description('Print active model, credential source names, and next setup checks')
+    .option('--json', 'output JSON')
+    .action((options: HermesCommandOptions) => {
+      const payload = buildHermesModelStatus();
+
+      if (options.json) {
+        console.log(stableJson(payload));
+        return;
+      }
+
+      console.log(renderHermesModelStatus(payload));
     });
 
   hermes

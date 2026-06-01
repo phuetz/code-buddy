@@ -167,6 +167,7 @@ buddy flow "<goal>" [--max-retries N] [--verbose]
 buddy hermes profile|agent|doctor|plan|toolsets|hooks|prompt-size|parity|tools-parity|tools [dispatchProfile] [--json] [--markdown] [--plan-output file]
 buddy hermes status [dispatchProfile] [--json]
 buddy hermes smoke [--json]
+buddy hermes model status [--json]
 buddy hermes providers status [--json]
 buddy hermes portal status|tools|open [--json]
 buddy hermes messaging status [--json] [--config <path>]
@@ -235,6 +236,14 @@ readiness report without the wider doctor payload. It includes the active
 model, inferred provider, tool-call/reasoning/vision capability flags,
 context/output limits, credential source names, configured-provider counts, and
 Nous Tool Gateway setup without printing secret values.
+
+`buddy hermes model status [--json]` prints the compact user-facing view for
+the active model. It keeps only the current model, inferred provider,
+credential source names, capability flags, context/output limits, configured
+alternatives, and copy/paste next-step commands such as `buddy whoami`,
+`buddy login`, `buddy hermes providers status --json`, and
+`buddy hermes doctor safe --json`. Use it when the full provider matrix is too
+noisy for setup troubleshooting or Cowork onboarding.
 
 `buddy hermes portal status [--json]` is the local Nous Portal readiness check.
 It reports credential source names, subscription/docs URLs, Tool Gateway routing

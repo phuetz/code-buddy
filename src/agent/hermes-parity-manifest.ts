@@ -94,14 +94,15 @@ const FEATURES: HermesParityFeature[] = [
     area: 'CLI/TUI',
     officialSurface: 'Terminal TUI plus hermes chat/model/tools/prompt-size style commands',
     codeBuddyEvidence: ['src/index.ts', 'src/commands/cli/hermes-commands.ts', 'docs/commands.md'],
-    status: 'partial',
+    status: 'covered-partial',
     verificationCommands: [
       'npx tsx src/index.ts hermes doctor safe --json',
+      'npx tsx src/index.ts hermes model status --json',
       'npx tsx src/index.ts hermes toolsets safe --json',
       'npx tsx src/index.ts hermes prompt-size safe --json',
     ],
-    notes: 'Code Buddy has native CLI/slash surfaces, Hermes diagnostics, dedicated toolset inspection, and prompt-size reporting, but not exact upstream command names or setup flows.',
-    nextWork: 'Improve provider/model setup clarity where it remains product-relevant.',
+    notes: 'Code Buddy has native CLI/slash surfaces, Hermes diagnostics, dedicated toolset inspection, prompt-size reporting, and a compact Hermes model status command for active provider/model setup. It is not a drop-in upstream TUI clone.',
+    nextWork: 'Keep command naming aligned with product-value Hermes surfaces instead of chasing cosmetic upstream parity.',
   },
   {
     id: 'prompt-size',

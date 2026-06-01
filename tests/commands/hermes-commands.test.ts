@@ -1144,6 +1144,103 @@ describe('Hermes CLI commands', () => {
     }
   });
 
+  it('prints compact Hermes model setup status without leaking secrets', async () => {
+    const keys = ['CODEBUDDY_MODEL', 'OPENAI_API_KEY', 'CODEBUDDY_NOUS_ACCESS_TOKEN', 'OLLAMA_HOST'];
+    const originalEnv = new Map(keys.map((key) => [key, process.env[key]]));
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    try {
+      for (const key of keys) {
+        delete process.env[key];
+      }
+      process.env.CODEBUDDY_MODEL = 'gpt-5.5';
+      process.env.OPENAI_API_KEY = 'secret-openai-model-key';
+      process.env.CODEBUDDY_NOUS_ACCESS_TOKEN = 'secret-nous-model-token';
+      process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
+
+      await program.parseAsync(['node', 'test', 'hermes', 'model', 'status', '--json']);
+
+      const raw = getLogOutput();
+      const output = JSON.parse(raw) as {
+        kind: string;
+        schemaVersion: number;
+        ok: boolean;
+        active: {
+          model: string;
+          provider: string;
+          providerLabel: string;
+          configured: boolean;
+          credentialSources: string[];
+          capabilities: {
+            toolCalls: boolean;
+            reasoning: boolean;
+            vision: boolean;
+          };
+        };
+        setup: {
+          accountCommand: string;
+          providerMatrixCommand: string;
+          doctorCommand: string;
+          nextSteps: string[];
+        };
+        alternatives: Array<{
+          label: string;
+          configured: boolean;
+        }>;
+      };
+
+      expect(output.kind).toBe('hermes_model_status');
+      expect(output.schemaVersion).toBe(1);
+      expect(output.ok).toBe(true);
+      expect(output.active).toMatchObject({
+        model: 'gpt-5.5',
+        provider: 'openai',
+        providerLabel: 'OpenAI / Codex-compatible',
+        configured: true,
+        credentialSources: expect.arrayContaining(['OPENAI_API_KEY']),
+        capabilities: {
+          toolCalls: true,
+          reasoning: true,
+          vision: true,
+        },
+      });
+      expect(output.setup).toMatchObject({
+        accountCommand: 'buddy whoami',
+        providerMatrixCommand: 'buddy hermes providers status --json',
+        doctorCommand: 'buddy hermes doctor safe --json',
+      });
+      expect(output.alternatives).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Ollama local',
+          configured: true,
+        }),
+      ]));
+      expect(raw).not.toContain('secret-openai-model-key');
+      expect(raw).not.toContain('secret-nous-model-token');
+
+      consoleLogSpy.mockClear();
+      const textProgram = createProgram();
+      registerHermesCommands(textProgram);
+      await textProgram.parseAsync(['node', 'test', 'hermes', 'model', 'status']);
+
+      const textOutput = getLogOutput();
+      expect(textOutput).toContain('Hermes model: ok');
+      expect(textOutput).toContain('Active: gpt-5.5 via OpenAI / Codex-compatible');
+      expect(textOutput).toContain('Credentials/endpoint: OPENAI_API_KEY');
+      expect(textOutput).toContain('Full provider matrix: buddy hermes providers status --json');
+      expect(textOutput).toContain('Account check: buddy whoami');
+      expect(textOutput).not.toContain('secret-openai-model-key');
+      expect(textOutput).not.toContain('secret-nous-model-token');
+    } finally {
+      for (const key of keys) {
+        const value = originalEnv.get(key);
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it('prints Hermes protocol gateway readiness as a dedicated status command', async () => {
     const program = createProgram();
     registerHermesCommands(program);
