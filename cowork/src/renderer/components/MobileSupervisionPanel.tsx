@@ -70,6 +70,8 @@ export function MobileSupervisionPanel() {
 
   const pending = (snap?.drafts ?? []).filter((d) => d.status === 'needs_local_operator');
   const reviewed = (snap?.drafts ?? []).filter((d) => d.status !== 'needs_local_operator');
+  const pendingCount = snap?.draftCounts?.needs_local_operator ?? pending.length;
+  const reviewedCount = (snap?.draftCounts?.approved ?? 0) + (snap?.draftCounts?.cancelled ?? 0) || reviewed.length;
 
   return (
     <div
@@ -131,7 +133,10 @@ export function MobileSupervisionPanel() {
                 </button>
               </div>
               {!!snap.devices?.length && (
-                <div className="mt-1 text-[11px] text-text-muted">Paired: {snap.devices.join(', ')}</div>
+                <div className="mt-1 text-[11px] text-text-muted">
+                  Paired: {snap.devices.length}
+                  {snap.activeDeviceLimit ? ` / ${snap.activeDeviceLimit}` : ''} · {snap.devices.join(', ')}
+                </div>
               )}
             </div>
 
@@ -149,6 +154,12 @@ export function MobileSupervisionPanel() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              <div className="text-[11px] text-text-muted">
+                Pending: {pendingCount}
+                {snap.draftLimits?.maxPendingDrafts ? ` / ${snap.draftLimits.maxPendingDrafts}` : ''} · Reviewed:{' '}
+                {reviewedCount}
+                {snap.draftLimits?.maxResolvedDrafts ? ` / ${snap.draftLimits.maxResolvedDrafts}` : ''}
+              </div>
               {pending.length === 0 && reviewed.length === 0 ? (
                 <EmptyState
                   icon={<Smartphone className="w-8 h-8 text-text-muted" />}

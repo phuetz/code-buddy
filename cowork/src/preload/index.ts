@@ -6410,6 +6410,7 @@ declare global {
           port: number | null;
           pairingCode?: string;
           devices?: string[];
+          activeDeviceLimit?: number;
           drafts?: Array<{
             id: string;
             prompt: string;
@@ -6418,6 +6419,15 @@ declare global {
             createdAt: number;
             approvedBy?: string;
           }>;
+          draftCounts?: {
+            needs_local_operator: number;
+            approved: number;
+            cancelled: number;
+          };
+          draftLimits?: {
+            maxPendingDrafts: number;
+            maxResolvedDrafts: number;
+          };
           error?: string;
         }>;
         approve: (id: string, reviewer?: string) => Promise<{ ok: boolean; error?: string }>;

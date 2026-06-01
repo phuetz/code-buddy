@@ -32,7 +32,17 @@ export interface MobileSupervisionSnapshot {
   port: number | null;
   pairingCode?: string;
   devices?: string[];
+  activeDeviceLimit?: number;
   drafts?: FollowupDraft[];
+  draftCounts?: {
+    needs_local_operator: number;
+    approved: number;
+    cancelled: number;
+  };
+  draftLimits?: {
+    maxPendingDrafts: number;
+    maxResolvedDrafts: number;
+  };
   error?: string;
 }
 
@@ -92,11 +102,33 @@ export async function fetchMobileSupervision(
       port,
       pairingCode: typeof pairing.pairingCode === 'string' ? pairing.pairingCode : undefined,
       devices: Array.isArray(pairing.activeDevices) ? (pairing.activeDevices as string[]) : [],
+      activeDeviceLimit: typeof pairing.activeDeviceLimit === 'number' ? pairing.activeDeviceLimit : undefined,
       drafts: Array.isArray(drafts.drafts) ? (drafts.drafts as FollowupDraft[]) : [],
+      draftCounts: isDraftCounts(drafts.counts) ? drafts.counts : undefined,
+      draftLimits: isDraftLimits(drafts.limits) ? drafts.limits : undefined,
     };
   } catch (err) {
     return { running: true, port, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+function isDraftCounts(value: unknown): value is MobileSupervisionSnapshot['draftCounts'] {
+  if (!value || typeof value !== 'object') return false;
+  const counts = value as Record<string, unknown>;
+  return (
+    typeof counts.needs_local_operator === 'number'
+    && typeof counts.approved === 'number'
+    && typeof counts.cancelled === 'number'
+  );
+}
+
+function isDraftLimits(value: unknown): value is MobileSupervisionSnapshot['draftLimits'] {
+  if (!value || typeof value !== 'object') return false;
+  const limits = value as Record<string, unknown>;
+  return (
+    typeof limits.maxPendingDrafts === 'number'
+    && typeof limits.maxResolvedDrafts === 'number'
+  );
 }
 
 /** Local-operator approve. Review marker only — never dispatches work. */

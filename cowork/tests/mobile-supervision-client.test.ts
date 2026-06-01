@@ -35,6 +35,26 @@ describe('mobile-supervision-client', () => {
     expect(snap.error).toBeUndefined();
   });
 
+  it('preserves mobile pairing and draft limits for Cowork visibility', async () => {
+    const fetchImpl = fakeFetch({
+      'GET /api/mobile/pairing-status': {
+        body: { ok: true, pairingCode: '123456', activeDevices: ['phone', 'tablet'], activeDeviceLimit: 20 },
+      },
+      'GET /api/mobile/followup-drafts': {
+        body: {
+          ok: true,
+          drafts: [{ id: 'd1', prompt: 'do X', status: 'needs_local_operator', source: 'mobile_device', createdAt: 1 }],
+          counts: { needs_local_operator: 1, approved: 2, cancelled: 3 },
+          limits: { maxPendingDrafts: 100, maxResolvedDrafts: 100 },
+        },
+      },
+    });
+    const snap = await fetchMobileSupervision(3000, true, fetchImpl);
+    expect(snap.activeDeviceLimit).toBe(20);
+    expect(snap.draftCounts).toEqual({ needs_local_operator: 1, approved: 2, cancelled: 3 });
+    expect(snap.draftLimits).toEqual({ maxPendingDrafts: 100, maxResolvedDrafts: 100 });
+  });
+
   it('surfaces a gateway error without throwing', async () => {
     const fetchImpl = fakeFetch({
       'GET /api/mobile/pairing-status': { ok: false, status: 403, body: { ok: false, error: 'loopback required' } },
