@@ -110,9 +110,9 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
   const [expandedDiffSkillName, setExpandedDiffSkillName] = useState<string | null>(null);
   const commands = useMemo(() => buildSkillCandidateReviewCommands(), []);
   const goalDraft = useMemo(() => buildSkillCandidateReviewQueueGoal(), []);
-  const reviewCandidates = candidates ?? loadedCandidates;
+  const reviewCandidates = (candidates ?? loadedCandidates).filter(isCandidateInstallActionVisible);
   const visibleError = error ?? loadError;
-  const eligibleCount = reviewCandidates.filter((candidate) => candidate.eligible).length;
+  const eligibleCount = reviewCandidates.length;
   const visibleCandidates = reviewCandidates.slice(0, 3);
 
   useEffect(() => {
@@ -525,7 +525,10 @@ function formatInstallState(
 
 function isCandidateInstallActionVisible(candidate: SkillCandidateReviewQueueItem): boolean {
   if (!candidate.eligible) return false;
-  return candidate.installState !== 'installed-current';
+  if (candidate.reviewCommands?.length) {
+    return candidate.reviewCommands.some((command) => command.includes('candidate_install'));
+  }
+  return candidate.installState !== 'installed-current' && candidate.installState !== 'installed-missing';
 }
 
 function buildCandidateInstallGoal(

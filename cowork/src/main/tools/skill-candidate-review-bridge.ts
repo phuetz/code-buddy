@@ -133,7 +133,7 @@ export async function listSkillCandidatesForReview(
     skillRoot: normalizeSkillRoot(options.skillRoot),
   });
   const visible = options.eligibleOnly
-    ? candidates.filter((candidate) => candidate.eligible)
+    ? candidates.filter(isInstallReviewableSkillCandidate)
     : candidates;
 
   return visible
@@ -207,6 +207,14 @@ function summarizeSkillCandidate(
     title: candidate.title,
     toolSequence: candidate.toolSequence,
   };
+}
+
+function isInstallReviewableSkillCandidate(candidate: ResearchScriptSkillCandidate): boolean {
+  if (!candidate.eligible) return false;
+  if (candidate.reviewCommands?.length) {
+    return candidate.reviewCommands.some((command) => command.includes('candidate_install'));
+  }
+  return candidate.installState !== 'installed-current' && candidate.installState !== 'installed-missing';
 }
 
 function normalizeAbsoluteRoot(value: string | undefined): string | null {

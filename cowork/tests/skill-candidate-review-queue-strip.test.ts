@@ -69,6 +69,7 @@ describe('SkillCandidateReviewQueueStrip', () => {
               reason: '2 successful runs met the promotion threshold.',
               reviewCommands: [
                 'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/learning/learned-search-view-file-bash/SKILL.md',
+                'skill_manage action=candidate_install candidate_path=.codebuddy/skill-candidates/learning/learned-search-view-file-bash/SKILL.md approved_by=<reviewer> overwrite=true',
               ],
               skillName: 'learned-search-view-file-bash',
               skillPath: '.codebuddy/skill-candidates/learning/learned-search-view-file-bash/SKILL.md',
@@ -121,6 +122,57 @@ describe('SkillCandidateReviewQueueStrip', () => {
     expect(goal).toContain('buddy tools skill-candidate list --eligible-only --json');
     expect(goal).toContain('Do not install a candidate automatically.');
     expect(goal).toContain('Install only after a human reviewer approves with --approved-by.');
+  });
+
+  it('hides installed-current candidates from the actionable Cowork queue', () => {
+    const target = container();
+    root = createRoot(target);
+
+    act(() => {
+      root?.render(
+        React.createElement(SkillCandidateReviewQueueStrip, {
+          candidates: [
+            {
+              eligible: true,
+              installState: 'installed-current',
+              kind: 'learning',
+              reason: 'Already approved and installed.',
+              reviewCommands: [
+                'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/learning/already-installed/SKILL.md',
+                'skill_manage action=view name=already-installed',
+              ],
+              skillName: 'already-installed',
+              skillPath: '.codebuddy/skill-candidates/learning/already-installed/SKILL.md',
+              sourceJobId: 'learning-agent',
+              sourceRunId: 'run-current',
+              successfulRunCount: 2,
+            },
+            {
+              eligible: true,
+              installState: 'not-installed',
+              kind: 'learning',
+              reason: '2 successful runs met the promotion threshold.',
+              reviewCommands: [
+                'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/learning/ready/SKILL.md',
+                'skill_manage action=candidate_install candidate_path=.codebuddy/skill-candidates/learning/ready/SKILL.md approved_by=<reviewer>',
+              ],
+              skillName: 'ready',
+              skillPath: '.codebuddy/skill-candidates/learning/ready/SKILL.md',
+              sourceJobId: 'learning-agent',
+              sourceRunId: 'run-ready',
+              successfulRunCount: 2,
+            },
+          ],
+        }),
+      );
+    });
+
+    const strip = target.querySelector('[data-testid="fleet-skill-candidate-review-queue"]');
+    expect(strip?.textContent).toContain('1 eligible');
+    expect(strip?.textContent).toContain('ready');
+    expect(strip?.textContent).not.toContain('already-installed');
+    expect(target.querySelector('[data-testid="skill-candidate-install-ready"]')).not.toBeNull();
+    expect(target.querySelector('[data-testid="skill-candidate-install-already-installed"]')).toBeNull();
   });
 
   it('expands candidate-vs-installed SKILL.md diffs into a side-by-side review panel', () => {

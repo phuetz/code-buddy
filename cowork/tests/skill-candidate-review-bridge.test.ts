@@ -96,7 +96,10 @@ describe('skill candidate review bridge', () => {
         installedVersion: '0.1.0',
         kind: 'learning',
         reason: '2 successful runs met the promotion threshold.',
-        reviewCommands: ['skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/research-ready/SKILL.md'],
+        reviewCommands: [
+          'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/research-ready/SKILL.md',
+          'skill_manage action=candidate_install candidate_path=.codebuddy/skill-candidates/research-ready/SKILL.md approved_by=<reviewer> overwrite=true',
+        ],
         skillName: 'research-ready',
         skillPath: '.codebuddy/skill-candidates/research-ready/SKILL.md',
         sourceJobId: '',
@@ -130,9 +133,82 @@ describe('skill candidate review bridge', () => {
       installState: 'installed-different',
       installedChecksum: 'installed-sha',
       installedVersion: '0.1.0',
-      reviewCommands: ['skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/research-ready/SKILL.md'],
+      reviewCommands: expect.arrayContaining([
+        'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/research-ready/SKILL.md',
+        expect.stringContaining('candidate_install'),
+      ]),
       skillName: 'research-ready',
     });
+  });
+
+  it('omits installed-current candidates from the eligible review queue while preserving full audit lists', async () => {
+    const installedCurrent = {
+      eligible: true,
+      id: 'candidate-current',
+      installState: 'installed-current' as const,
+      kind: 'learning',
+      reason: 'Already approved and installed.',
+      reviewCommands: [
+        'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/research-current/SKILL.md',
+        'skill_manage action=view name=research-current',
+      ],
+      skillName: 'research-current',
+      skillPath: '.codebuddy/skill-candidates/research-current/SKILL.md',
+      sourceJobId: 'learning-agent',
+      sourceRunId: 'run-current',
+      successfulRunCount: 2,
+      title: 'Current candidate',
+    };
+    const installable = {
+      eligible: true,
+      id: 'candidate-ready',
+      installState: 'not-installed' as const,
+      kind: 'learning',
+      reason: '2 successful runs met the promotion threshold.',
+      reviewCommands: [
+        'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/research-ready/SKILL.md',
+        'skill_manage action=candidate_install candidate_path=.codebuddy/skill-candidates/research-ready/SKILL.md approved_by=<reviewer>',
+      ],
+      skillName: 'research-ready',
+      skillPath: '.codebuddy/skill-candidates/research-ready/SKILL.md',
+      sourceJobId: 'learning-agent',
+      sourceRunId: 'run-ready',
+      successfulRunCount: 2,
+      title: 'Ready candidate',
+    };
+    const listMaterializedResearchScriptSkillCandidatesWithInstallState = vi.fn(async () => [
+      installedCurrent,
+      installable,
+    ]);
+    mockedLoadCoreModule.mockResolvedValue({
+      listMaterializedResearchScriptSkillCandidates: vi.fn(async () => []),
+      listMaterializedResearchScriptSkillCandidatesWithInstallState,
+    });
+
+    const rootDir = path.resolve('workspace');
+    await expect(listSkillCandidatesForReview({
+      rootDir,
+      eligibleOnly: true,
+    })).resolves.toEqual([
+      expect.objectContaining({
+        installState: 'not-installed',
+        skillName: 'research-ready',
+      }),
+    ]);
+
+    await expect(listSkillCandidatesForReview({
+      rootDir,
+      eligibleOnly: false,
+    })).resolves.toEqual([
+      expect.objectContaining({
+        installState: 'installed-current',
+        skillName: 'research-current',
+      }),
+      expect.objectContaining({
+        installState: 'not-installed',
+        skillName: 'research-ready',
+      }),
+    ]);
   });
 
   it('degrades to an empty queue when the core candidate module is unavailable', async () => {
