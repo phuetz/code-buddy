@@ -121,6 +121,7 @@ async function materializeLearningSkillCandidate(rootDir: string): Promise<strin
       reason: '2 successful observations reinforced this workflow.',
       schemaVersion: 1,
       skillName: 'learned-real-review',
+      sourceJobId: 'learning-agent',
       sourceRunId: 'run-real-review',
       status: 'awaiting_human_approval',
       successfulRunCount: 2,
@@ -435,6 +436,7 @@ describe('Tools CLI commands', () => {
           kind: string;
           reason: string;
           skillName: string;
+          sourceJobId: string;
           sourceRunId?: string;
           toolSequence?: string[];
         }>;
@@ -447,6 +449,7 @@ describe('Tools CLI commands', () => {
           kind: 'learning',
           reason: '2 successful observations reinforced this workflow.',
           skillName: 'learned-real-review',
+          sourceJobId: 'learning-agent',
           sourceRunId: 'run-real-review',
           toolSequence: ['search', 'view_file', 'bash'],
         }),
@@ -467,6 +470,7 @@ describe('Tools CLI commands', () => {
           kind: string;
           reason: string;
           skillName: string;
+          sourceJobId: string;
           sourceRunId?: string;
         };
       };
@@ -474,6 +478,7 @@ describe('Tools CLI commands', () => {
         kind: 'learning',
         reason: '2 successful observations reinforced this workflow.',
         skillName: 'learned-real-review',
+        sourceJobId: 'learning-agent',
         sourceRunId: 'run-real-review',
       });
 

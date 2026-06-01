@@ -598,6 +598,9 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
   };
 
   if (typeof parsed.sourceRunId === 'string' && parsed.sourceRunId.trim().length > 0) {
+    const sourceJobId = typeof parsed.sourceJobId === 'string' && parsed.sourceJobId.trim().length > 0
+      ? parsed.sourceJobId.trim()
+      : 'learning-agent';
     const successfulRunCount = typeof parsed.successfulRunCount === 'number' && Number.isFinite(parsed.successfulRunCount)
       ? Math.trunc(parsed.successfulRunCount)
       : 1;
@@ -608,7 +611,7 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
       ...base,
       eligible,
       kind: 'learning',
-      sourceJobId: '',
+      sourceJobId,
       sourceRunId: parsed.sourceRunId.trim(),
       status: eligible ? 'awaiting_human_approval' : 'not_eligible',
       successfulRunCount,
