@@ -215,6 +215,60 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     expect(harness.responseFor(5)?.result).toEqual({ stopReason: 'end_turn' });
   });
 
+  it('rejects session/load while a prompt is active', async () => {
+    const seenCwds: string[] = [];
+    const runner: AcpPromptRunner = ({ cwd, signal }) => {
+      seenCwds.push(cwd);
+      return new Promise((resolve) => {
+        if (signal.aborted) return resolve({ stopReason: 'cancelled' });
+        signal.addEventListener('abort', () => resolve({ stopReason: 'end_turn' }));
+      });
+    };
+    harness = new AcpHarness(runner);
+
+    harness.send({ jsonrpc: '2.0', id: 1, method: 'session/new', params: { cwd: '/tmp/old', mcpServers: [] } });
+    await harness.flush();
+    const sessionId = harness.responseFor(1)?.result.sessionId as string;
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'session/prompt',
+      params: { sessionId, prompt: [{ type: 'text', text: 'long prompt' }] },
+    });
+    await harness.flush();
+    expect(harness.responseFor(2)).toBeUndefined();
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'session/load',
+      params: { sessionId, cwd: '/tmp/new', mcpServers: [] },
+    });
+    await harness.flush();
+
+    expect(harness.responseFor(3)?.error).toMatchObject({
+      code: -32000,
+      message: 'Session has an active prompt; cancel or wait before loading',
+    });
+
+    harness.send({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId } });
+    await harness.flush();
+    expect(harness.responseFor(2)?.result).toEqual({ stopReason: 'cancelled' });
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'session/prompt',
+      params: { sessionId, prompt: [{ type: 'text', text: 'after failed load' }] },
+    });
+    harness.send({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId } });
+    await harness.flush();
+
+    expect(seenCwds).toEqual(['/tmp/old', '/tmp/old']);
+    expect(harness.responseFor(4)?.result).toEqual({ stopReason: 'cancelled' });
+  });
+
   it('lists in-process sessions with cwd filtering and prompt-derived metadata', async () => {
     const runner: AcpPromptRunner = async ({ prompt, sendUpdate }) => {
       sendUpdate({

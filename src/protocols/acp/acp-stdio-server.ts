@@ -355,6 +355,11 @@ export class AcpStdioServer {
       error.code = -32602;
       throw error;
     }
+    if (session.active) {
+      const error = new Error('Session has an active prompt; cancel or wait before loading') as Error & { code?: number };
+      error.code = -32000;
+      throw error;
+    }
 
     const cwd = asString(params.cwd);
     if (cwd) session.cwd = cwd;
