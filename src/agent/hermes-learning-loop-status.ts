@@ -547,7 +547,9 @@ export function renderHermesLearningLoopStatus(status: HermesLearningLoopStatus)
     `  Next action: ${status.nextAction.kind} -> ${status.nextAction.command}`,
     `  Skill usage records: ${status.summary.skillUsageCount} (${status.summary.reinforcedSkillCount} reinforced, ${status.summary.deprecatedSkillCount} deprecated)`,
     `  Pattern records: ${status.summary.patternCount}`,
-    `  Learning skill candidates: ${status.state.skillCandidates.learningCandidateCount}`,
+    `  Learning skill candidates: ${status.state.skillCandidates.learningCandidateCount}` +
+      ` (${status.state.skillCandidates.eligibleCandidateCount} eligible, ` +
+      `${status.state.skillCandidates.ineligibleCandidateCount} not eligible)`,
   ];
 
   if (status.nextRetrospectiveRun) {

@@ -652,6 +652,58 @@ describe('Hermes CLI commands', () => {
     }
   });
 
+  it('prints Learning Agent skill candidate eligibility split in human-readable status', async () => {
+    const oldCwd = process.cwd();
+    const oldRunsDir = process.env.CODEBUDDY_RUNS_DIR;
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-learning-text-skills-'));
+    const rootDir = path.join(tmpDir, '.codebuddy', 'skill-candidates', 'learning');
+
+    function writeLearningCandidate(directoryName: string, skillName: string, status: string): void {
+      const candidateDir = path.join(rootDir, directoryName);
+      fs.ensureDirSync(candidateDir);
+      fs.writeFileSync(path.join(candidateDir, 'SKILL.md'), createSkillContent(skillName));
+      fs.writeFileSync(path.join(candidateDir, 'candidate-review.json'), JSON.stringify({
+        approvalRequired: true,
+        candidateId: `learning-skill-${directoryName}`,
+        generatedAt: '2026-06-01T02:45:00.000Z',
+        kind: 'learning',
+        schemaVersion: 1,
+        skillName,
+        sourceJobId: 'learning-agent',
+        sourceRunId: 'run-text-candidates',
+        status,
+        successfulRunCount: status === 'awaiting_human_approval' ? 1 : 0,
+      }, null, 2));
+    }
+
+    try {
+      process.chdir(tmpDir);
+      process.env.CODEBUDDY_RUNS_DIR = path.join(tmpDir, 'runs');
+      resetLessonCandidateQueues();
+      resetUserModels();
+      writeLearningCandidate('not-ready', 'learned-not-ready', 'not_eligible');
+      writeLearningCandidate('ready', 'learned-ready', 'awaiting_human_approval');
+
+      const program = createProgram();
+      registerHermesCommands(program);
+      await program.parseAsync(['node', 'test', 'hermes', 'learning', 'status']);
+
+      const output = getLogOutput();
+      expect(output).toContain('Learning skill candidates: 2 (1 eligible, 1 not eligible)');
+      expect(output).toContain('skill_candidate: 2 -> buddy tools skill-candidate list --eligible-only --json');
+      expect(output).toContain(
+        'next: buddy tools skill-candidate inspect .codebuddy/skill-candidates/learning/ready --json',
+      );
+    } finally {
+      process.chdir(oldCwd);
+      if (oldRunsDir === undefined) delete process.env.CODEBUDDY_RUNS_DIR;
+      else process.env.CODEBUDDY_RUNS_DIR = oldRunsDir;
+      resetLessonCandidateQueues();
+      resetUserModels();
+      await fs.remove(tmpDir);
+    }
+  });
+
   it('prints Hermes skills status from the real workspace SkillsHub lockfile', async () => {
     const oldCwd = process.cwd();
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-skills-status-'));
