@@ -1,5 +1,5 @@
 import { PassThrough } from 'stream';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   AcpStdioServer,
@@ -66,6 +66,58 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     expect(res?.result.agentInfo.name).toBe('Code Buddy');
     expect(res?.result.authMethods).toEqual([]);
     expect(res?.result.agentCapabilities.promptCapabilities).toBeTruthy();
+  });
+
+  it('passes initialized client capabilities into prompt runners', async () => {
+    const runner: AcpPromptRunner = async ({ canRequestClient, clientCapabilities, sendUpdate }) => {
+      sendUpdate({
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: JSON.stringify({
+            read: clientCapabilities.fs?.readTextFile === true,
+            write: clientCapabilities.fs?.writeTextFile === true,
+            canRead: canRequestClient('fs/read_text_file'),
+            canWrite: canRequestClient('fs/write_text_file'),
+            canRequestPermission: canRequestClient('session/request_permission'),
+          }),
+        },
+      });
+      return { stopReason: 'end_turn' };
+    };
+    harness = new AcpHarness(runner);
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: 1,
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: false },
+          terminal: false,
+        },
+      },
+    });
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: '/tmp/project', mcpServers: [] } });
+    await harness.flush();
+    const sessionId = harness.responseFor(2)?.result.sessionId as string;
+    harness.send({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'session/prompt',
+      params: { sessionId, prompt: [{ type: 'text', text: 'capabilities' }] },
+    });
+    await harness.flush();
+
+    expect(harness.notifications('session/update').at(-1)?.params.update.content.text).toBe(JSON.stringify({
+      read: true,
+      write: false,
+      canRead: true,
+      canWrite: false,
+      canRequestPermission: true,
+    }));
+    expect(harness.responseFor(3)?.result).toEqual({ stopReason: 'end_turn' });
   });
 
   it('creates a session and runs a prompt, streaming an agent_message_chunk then end_turn', async () => {
@@ -175,12 +227,21 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     };
     harness = new AcpHarness(runner);
 
-    harness.send({ jsonrpc: '2.0', id: 1, method: 'session/new', params: { cwd: '/tmp/project', mcpServers: [] } });
-    await harness.flush();
-    const sessionId = harness.responseFor(1)?.result.sessionId as string;
     harness.send({
       jsonrpc: '2.0',
-      id: 2,
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: 1,
+        clientCapabilities: { fs: { readTextFile: true, writeTextFile: false } },
+      },
+    });
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: '/tmp/project', mcpServers: [] } });
+    await harness.flush();
+    const sessionId = harness.responseFor(2)?.result.sessionId as string;
+    harness.send({
+      jsonrpc: '2.0',
+      id: 3,
       method: 'session/prompt',
       params: { sessionId, prompt: [{ type: 'text', text: 'read file' }] },
     });
@@ -198,7 +259,7 @@ describe('AcpStdioServer (real ndjson transport)', () => {
       },
     });
     expect(typeof clientRequest?.id).toBe('string');
-    expect(harness.responseFor(2)).toBeUndefined();
+    expect(harness.responseFor(3)).toBeUndefined();
 
     harness.send({
       jsonrpc: '2.0',
@@ -211,7 +272,43 @@ describe('AcpStdioServer (real ndjson transport)', () => {
       sessionUpdate: 'agent_message_chunk',
       content: { type: 'text', text: 'client file: hello from unsaved editor buffer' },
     });
-    expect(harness.responseFor(2)?.result).toEqual({ stopReason: 'end_turn' });
+    expect(harness.responseFor(3)?.result).toEqual({ stopReason: 'end_turn' });
+  });
+
+  it('rejects optional client methods that were not advertised at initialize', async () => {
+    const runner: AcpPromptRunner = async ({ requestClient }) => {
+      await requestClient('fs/read_text_file', {
+        path: '/tmp/project/README.md',
+      });
+      return { stopReason: 'end_turn' };
+    };
+    harness = new AcpHarness(runner);
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: 1,
+        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+      },
+    });
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: '/tmp/project', mcpServers: [] } });
+    await harness.flush();
+    const sessionId = harness.responseFor(2)?.result.sessionId as string;
+    harness.send({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'session/prompt',
+      params: { sessionId, prompt: [{ type: 'text', text: 'read file' }] },
+    });
+    await harness.flush();
+
+    expect(harness.requestFor('fs/read_text_file')).toBeUndefined();
+    expect(harness.responseFor(3)?.error).toMatchObject({
+      code: -32601,
+      message: 'ACP client method is not advertised by initialize.clientCapabilities: fs/read_text_file',
+    });
   });
 
   it('aborts pending client method calls when a session is cancelled', async () => {

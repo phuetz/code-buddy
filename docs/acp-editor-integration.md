@@ -42,7 +42,9 @@ The agent uses your configured provider (auto-detected via the usual keys —
 The stdio transport can also issue agent→client JSON-RPC requests and await
 their responses. This is the protocol primitive needed for future
 `fs/read_text_file`, `fs/write_text_file`, and `session/request_permission`
-integration with editors that expose those client methods.
+integration with editors that expose those client methods. Optional filesystem
+requests are gated by the `clientCapabilities` advertised during `initialize`,
+as required by the ACP spec.
 
 ## Out of scope for v1 (not stubbed — deliberately deferred)
 

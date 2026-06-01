@@ -18,7 +18,8 @@
  * - `session/cancel`    → notification; aborts the active turn (→ `cancelled`).
  * - Agent→client calls  → prompt runners can call client methods such as
  *                         `fs/read_text_file` or `session/request_permission`
- *                         and await the JSON-RPC response.
+ *                         and await the JSON-RPC response. Optional client
+ *                         methods are gated by `initialize.clientCapabilities`.
  *
  * The transport + protocol layer is deliberate-and-tested; the `promptRunner`
  * is injected so the CLI wires the real agent while tests drive a deterministic
@@ -49,9 +50,20 @@ export interface AcpSessionUpdate {
   [key: string]: unknown;
 }
 
+export interface AcpClientCapabilities {
+  fs?: {
+    readTextFile?: boolean;
+    writeTextFile?: boolean;
+  };
+  terminal?: boolean;
+  [key: string]: unknown;
+}
+
 export interface AcpPromptContext {
   sessionId: string;
   cwd: string;
+  clientCapabilities: AcpClientCapabilities;
+  canRequestClient: (method: string) => boolean;
   prompt: AcpContentBlock[];
   signal: AbortSignal;
   requestClient: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -102,6 +114,12 @@ function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
 export class AcpStdioServer {
   private readonly input: Readable;
   private readonly output: Writable;
@@ -110,6 +128,7 @@ export class AcpStdioServer {
   private readonly protocolVersion: number;
   private readonly sessions = new Map<string, AcpSession>();
   private readonly pendingClientRequests = new Map<string, PendingClientRequest>();
+  private clientCapabilities: AcpClientCapabilities = {};
   private nextClientRequestId = 0;
   private buffer = '';
   private started = false;
@@ -163,6 +182,13 @@ export class AcpStdioServer {
     params: Record<string, unknown> = {},
     options: { signal?: AbortSignal } = {},
   ): Promise<unknown> {
+    if (!this.canRequestClient(method)) {
+      return Promise.reject(this.createClientRequestError(
+        `ACP client method is not advertised by initialize.clientCapabilities: ${method}`,
+        -32601,
+      ));
+    }
+
     const id = `codebuddy-${++this.nextClientRequestId}`;
     const signal = options.signal;
 
@@ -232,7 +258,7 @@ export class AcpStdioServer {
   private async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
     switch (method) {
       case 'initialize':
-        return this.handleInitialize();
+        return this.handleInitialize(params);
       case 'session/new':
         return this.handleNewSession(params);
       case 'session/load':
@@ -247,7 +273,8 @@ export class AcpStdioServer {
     }
   }
 
-  private handleInitialize(): unknown {
+  private handleInitialize(params: Record<string, unknown>): unknown {
+    this.clientCapabilities = normalizeClientCapabilities(params.clientCapabilities);
     return {
       protocolVersion: this.protocolVersion,
       agentCapabilities: {
@@ -302,6 +329,8 @@ export class AcpStdioServer {
       const { stopReason } = await this.promptRunner({
         sessionId,
         cwd: session.cwd,
+        clientCapabilities: this.clientCapabilities,
+        canRequestClient: (method) => this.canRequestClient(method),
         prompt,
         signal: controller.signal,
         requestClient: (method, requestParams = {}) => this.requestClient(method, requestParams, {
@@ -361,4 +390,29 @@ export class AcpStdioServer {
     if (data !== undefined) error.data = data;
     return error;
   }
+
+  private canRequestClient(method: string): boolean {
+    if (method === 'session/request_permission') return true;
+    if (method === 'fs/read_text_file') return this.clientCapabilities.fs?.readTextFile === true;
+    if (method === 'fs/write_text_file') return this.clientCapabilities.fs?.writeTextFile === true;
+    if (method.startsWith('terminal/')) return this.clientCapabilities.terminal === true;
+    return true;
+  }
+}
+
+function normalizeClientCapabilities(value: unknown): AcpClientCapabilities {
+  const input = asRecord(value);
+  if (!input) return {};
+  const fsCapabilities = asRecord(input.fs);
+  return {
+    ...input,
+    fs: fsCapabilities
+      ? {
+        ...fsCapabilities,
+        readTextFile: fsCapabilities.readTextFile === true,
+        writeTextFile: fsCapabilities.writeTextFile === true,
+      }
+      : undefined,
+    terminal: input.terminal === true,
+  };
 }
