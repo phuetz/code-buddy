@@ -155,6 +155,43 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(activeTokens.has('live-token')).toBe(true);
   });
 
+  it('keeps active mobile pairing tokens bounded to the newest devices', async () => {
+    const issuedTokens: string[] = [];
+
+    for (let i = 0; i < 35; i += 1) {
+      const res = await fetch(`${baseUrl}/pair`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: activePairingCode,
+          deviceLabel: `device-${String(i).padStart(2, '0')}`,
+        }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { activeDeviceLimit: number; token: string };
+      expect(data.activeDeviceLimit).toBe(20);
+      issuedTokens.push(data.token);
+    }
+
+    const status = await fetch(`${baseUrl}/pairing-status`);
+    expect(status.status).toBe(200);
+    const data = await status.json() as { activeDeviceLimit: number; activeDevices: string[] };
+    expect(data.activeDeviceLimit).toBe(20);
+    expect(data.activeDevices).toHaveLength(20);
+    expect(data.activeDevices[0]).toBe('device-15');
+    expect(data.activeDevices.at(-1)).toBe('device-34');
+    expect(activeTokens.size).toBe(20);
+
+    const evicted = await fetch(`${baseUrl}/snapshot?query=evicted-token`, {
+      headers: { Authorization: `Bearer ${issuedTokens[0]}` },
+    });
+    const newest = await fetch(`${baseUrl}/snapshot?query=newest-token`, {
+      headers: { Authorization: `Bearer ${issuedTokens.at(-1)}` },
+    });
+    expect(evicted.status).toBe(401);
+    expect(newest.status).toBe(200);
+  });
+
   it('expires pairing codes before they can mint a token', async () => {
     const previousTtl = process.env.CODEBUDDY_MOBILE_PAIRING_CODE_TTL_MS;
     try {

@@ -20,6 +20,7 @@ const MAX_FOLLOWUP_QUERY_CHARS = 1_000;
 const MAX_ARTIFACT_INLINE_BYTES = 1_000_000;
 const MAX_PENDING_FOLLOWUP_DRAFTS = 100;
 const MAX_RESOLVED_FOLLOWUP_DRAFTS = 100;
+const MAX_ACTIVE_MOBILE_TOKENS = 20;
 const MAX_FAILED_PAIRING_ATTEMPTS = 20;
 const PAIRING_ATTEMPT_WINDOW_MS = 60 * 1000;
 
@@ -94,6 +95,18 @@ function pruneExpiredTokens(now = Date.now()): void {
     if (now > tokenData.expiresAt) {
       activeTokens.delete(token);
     }
+  }
+}
+
+function pruneActiveTokensToLimit(): void {
+  const overflow = activeTokens.size - MAX_ACTIVE_MOBILE_TOKENS;
+  if (overflow <= 0) {
+    return;
+  }
+  const tokensByExpiry = Array.from(activeTokens.entries())
+    .sort((left, right) => left[1].expiresAt - right[1].expiresAt);
+  for (const [token] of tokensByExpiry.slice(0, overflow)) {
+    activeTokens.delete(token);
   }
 }
 
@@ -264,6 +277,7 @@ export function mobileAuthMiddleware(req: Request, res: Response, next: NextFunc
 // Pairing status (retrieved by local operator dashboard/CLI only — loopback gated)
 mobileRouter.get('/pairing-status', loopbackOnlyMiddleware, (req: Request, res: Response) => {
   pruneExpiredTokens();
+  pruneActiveTokensToLimit();
   ensureActivePairingCodeFresh();
   res.json({
     ok: true,
@@ -271,6 +285,7 @@ mobileRouter.get('/pairing-status', loopbackOnlyMiddleware, (req: Request, res: 
     pairingCodeExpiresAt: activePairingCodeExpiresAt,
     pairingCodeTtlSeconds: Math.ceil(Math.max(0, activePairingCodeExpiresAt - Date.now()) / 1000),
     activeDevices: Array.from(activeTokens.values()).map(d => d.deviceLabel),
+    activeDeviceLimit: MAX_ACTIVE_MOBILE_TOKENS,
   });
 });
 
@@ -375,9 +390,11 @@ mobileRouter.post('/pair', (req: Request, res: Response) => {
   }
 
   // Mint a short-lived token (15 mins = 900s)
+  pruneExpiredTokens();
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 900 * 1000;
   activeTokens.set(token, { deviceLabel, expiresAt });
+  pruneActiveTokensToLimit();
   rotatePairingCode();
 
   res.json({
@@ -385,6 +402,7 @@ mobileRouter.post('/pair', (req: Request, res: Response) => {
     token,
     scopes: ['mobile:read', 'mobile:draft'],
     expiresAt,
+    activeDeviceLimit: MAX_ACTIVE_MOBILE_TOKENS,
   });
 });
 
