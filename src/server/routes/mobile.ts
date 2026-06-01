@@ -15,6 +15,8 @@ const DEFAULT_PAIRING_CODE_TTL_MS = 5 * 60 * 1000;
 const MAX_PAIRING_CODE_TTL_MS = 15 * 60 * 1000;
 const MIN_PAIRING_CODE_TTL_MS = 50;
 const MAX_DEVICE_LABEL_CHARS = 120;
+const MAX_FOLLOWUP_PROMPT_CHARS = 12_000;
+const MAX_FOLLOWUP_QUERY_CHARS = 1_000;
 
 mobileRouter.use((_req: Request, res: Response, next: NextFunction): void => {
   res.setHeader('Cache-Control', 'no-store');
@@ -407,7 +409,12 @@ mobileRouter.post('/followup-draft', async (req: Request, res: Response) => {
   try {
     const prompt = normalizeRequiredString(req.body?.prompt);
     const query = normalizeOptionalString(req.body?.query);
-    if (!prompt || query === null) {
+    if (
+      !prompt
+      || query === null
+      || !isWithinCharLimit(prompt, MAX_FOLLOWUP_PROMPT_CHARS)
+      || !isWithinCharLimit(query, MAX_FOLLOWUP_QUERY_CHARS)
+    ) {
       res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
       return;
     }
@@ -431,7 +438,12 @@ mobileRouter.post('/submit-prompt', async (req: Request, res: Response) => {
   try {
     const prompt = normalizeRequiredString(req.body?.prompt);
     const query = normalizeOptionalString(req.body?.query);
-    if (!prompt || query === null) {
+    if (
+      !prompt
+      || query === null
+      || !isWithinCharLimit(prompt, MAX_FOLLOWUP_PROMPT_CHARS)
+      || !isWithinCharLimit(query, MAX_FOLLOWUP_QUERY_CHARS)
+    ) {
       res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
       return;
     }

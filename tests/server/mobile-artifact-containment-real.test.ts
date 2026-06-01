@@ -209,6 +209,42 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(followupDrafts).toHaveLength(0);
   });
 
+  it('rejects oversized follow-up drafts before storing operator-visible text', async () => {
+    const token = await pairToken();
+    const oversizedPrompt = 'review this '.padEnd(25_000, 'x');
+
+    const res = await fetch(`${baseUrl}/submit-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        prompt: oversizedPrompt,
+        query: 'oversized follow-up draft',
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Missing or invalid prompt or query');
+    expect(followupDrafts).toHaveLength(0);
+  });
+
+  it('rejects oversized follow-up queries before building gateway context', async () => {
+    const token = await pairToken();
+    const oversizedQuery = 'mobile query '.padEnd(5_000, 'q');
+
+    const res = await fetch(`${baseUrl}/submit-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        prompt: 'Summarize this run when a local operator approves it',
+        query: oversizedQuery,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Missing or invalid prompt or query');
+    expect(followupDrafts).toHaveLength(0);
+  });
+
   async function rawMobileGet(pathname: string, token: string): Promise<{ body: string; status: number }> {
     const address = server.address();
     if (!address || typeof address === 'string') {
