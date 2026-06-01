@@ -117,6 +117,8 @@ async function materializeLearningSkillCandidate(rootDir: string): Promise<strin
       candidateId: 'learning-skill-real-review',
       eligible: true,
       generatedAt: '2026-05-30T13:50:00.000Z',
+      promotionThreshold: 2,
+      reason: '2 successful observations reinforced this workflow.',
       schemaVersion: 1,
       skillName: 'learned-real-review',
       sourceRunId: 'run-real-review',
@@ -431,6 +433,7 @@ describe('Tools CLI commands', () => {
       const listOutput = JSON.parse(getLogOutput()) as {
         candidates: Array<{
           kind: string;
+          reason: string;
           skillName: string;
           sourceRunId?: string;
           toolSequence?: string[];
@@ -442,6 +445,7 @@ describe('Tools CLI commands', () => {
       expect(listOutput.candidates).toEqual([
         expect.objectContaining({
           kind: 'learning',
+          reason: '2 successful observations reinforced this workflow.',
           skillName: 'learned-real-review',
           sourceRunId: 'run-real-review',
           toolSequence: ['search', 'view_file', 'bash'],
@@ -461,12 +465,14 @@ describe('Tools CLI commands', () => {
       const inspectOutput = JSON.parse(getLogOutput()) as {
         candidate: {
           kind: string;
+          reason: string;
           skillName: string;
           sourceRunId?: string;
         };
       };
       expect(inspectOutput.candidate).toMatchObject({
         kind: 'learning',
+        reason: '2 successful observations reinforced this workflow.',
         skillName: 'learned-real-review',
         sourceRunId: 'run-real-review',
       });

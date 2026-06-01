@@ -40,6 +40,8 @@ export interface ResearchScriptSkillCandidateReviewManifest {
   eligible: boolean;
   generatedAt: string;
   kind?: MaterializedSkillCandidateKind;
+  promotionThreshold?: number;
+  reason?: string;
   schemaVersion: typeof RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION;
   skillName: string;
   sourceJobId: string;
@@ -124,6 +126,8 @@ interface RawResearchScriptSkillCandidateReviewManifest {
   eligible?: unknown;
   generatedAt?: unknown;
   kind?: unknown;
+  promotionThreshold?: unknown;
+  reason?: unknown;
   schemaVersion?: unknown;
   skillName?: unknown;
   sourceJobId?: unknown;
@@ -576,6 +580,12 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
     approvalRequired: true as const,
     candidateId: parsed.candidateId.trim(),
     generatedAt: typeof parsed.generatedAt === 'string' ? parsed.generatedAt : '',
+    ...(typeof parsed.promotionThreshold === 'number' && Number.isFinite(parsed.promotionThreshold)
+      ? { promotionThreshold: Math.max(1, Math.trunc(parsed.promotionThreshold)) }
+      : {}),
+    ...(typeof parsed.reason === 'string' && parsed.reason.trim().length > 0
+      ? { reason: parsed.reason.trim().replace(/\s+/g, ' ') }
+      : {}),
     schemaVersion: RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION as typeof RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION,
     skillName: parsed.skillName.trim(),
   };
@@ -642,6 +652,9 @@ async function findReviewManifestPaths(absoluteDirectory: string): Promise<strin
 }
 
 function reviewStatusReason(manifest: ResearchScriptSkillCandidateReviewManifest): string {
+  if (manifest.reason) {
+    return manifest.reason;
+  }
   if (manifest.kind === 'learning' && manifest.sourceRunId) {
     return manifest.eligible
       ? `Learning Agent candidate from run ${manifest.sourceRunId} is awaiting human approval.`
