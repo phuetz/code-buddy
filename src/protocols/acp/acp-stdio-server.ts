@@ -363,6 +363,7 @@ export class AcpStdioServer {
 
     const cwd = asString(params.cwd);
     if (cwd) session.cwd = cwd;
+    session.updatedAt = new Date().toISOString();
 
     for (const update of session.history) {
       this.sendUpdate(sessionId, update, { record: false });

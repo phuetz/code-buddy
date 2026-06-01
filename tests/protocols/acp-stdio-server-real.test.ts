@@ -184,10 +184,16 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     await harness.flush();
     expect(harness.responseFor(3)?.result).toEqual({ stopReason: 'end_turn' });
 
+    harness.send({ jsonrpc: '2.0', id: 4, method: 'session/list', params: {} });
+    await harness.flush();
+    const updatedBeforeLoad = harness.responseFor(4)?.result.sessions[0].updatedAt;
+    expect(updatedBeforeLoad).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
     const beforeLoadUpdateCount = harness.notifications('session/update').length;
     harness.send({
       jsonrpc: '2.0',
-      id: 4,
+      id: 5,
       method: 'session/load',
       params: { sessionId, cwd: '/tmp/new', mcpServers: [] },
     });
@@ -202,17 +208,21 @@ describe('AcpStdioServer (real ndjson transport)', () => {
         content: { type: 'text', text: 'history: first' },
       },
     });
-    expect(harness.responseFor(4)?.result).toEqual({ configOptions: null, modes: null });
+    expect(harness.responseFor(5)?.result).toEqual({ configOptions: null, modes: null });
+
+    harness.send({ jsonrpc: '2.0', id: 6, method: 'session/list', params: {} });
+    await harness.flush();
+    expect(harness.responseFor(6)?.result.sessions[0].updatedAt).not.toBe(updatedBeforeLoad);
 
     harness.send({
       jsonrpc: '2.0',
-      id: 5,
+      id: 7,
       method: 'session/prompt',
       params: { sessionId, prompt: [{ type: 'text', text: 'after-load' }] },
     });
     await harness.flush();
     expect(seenCwds).toEqual(['/tmp/old', '/tmp/new']);
-    expect(harness.responseFor(5)?.result).toEqual({ stopReason: 'end_turn' });
+    expect(harness.responseFor(7)?.result).toEqual({ stopReason: 'end_turn' });
   });
 
   it('rejects session/load while a prompt is active', async () => {

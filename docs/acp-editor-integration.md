@@ -36,7 +36,7 @@ The agent uses your configured provider (auto-detected via the usual keys —
 | `initialize` | Capability negotiation (`protocolVersion: 1`, text prompts). |
 | `session/new` | Returns a `sessionId`; records the editor `cwd`. |
 | `session/list` | Lists in-process sessions, with optional exact `cwd` filtering and prompt-derived metadata. |
-| `session/load` | Reloads an existing in-process session, replays prior `session/update` history, and refreshes the session `cwd`; rejected while a prompt is active. |
+| `session/load` | Reloads an existing in-process session, replays prior `session/update` history, and refreshes the session `cwd` / `updatedAt`; rejected while a prompt is active. |
 | `session/prompt` | Runs the prompt, streams `session/update` `agent_message_chunk` notifications, resolves with `{ stopReason }`; concurrent prompts for the same session are rejected. |
 | `session/cancel` | Aborts the active turn → `stopReason: "cancelled"`. |
 
