@@ -1648,6 +1648,23 @@ describe('Hermes CLI commands', () => {
       expect(raw).not.toContain('secret-nous-token');
       expect(raw).not.toContain('secret-firecrawl-key');
       expect(raw).not.toContain('secret-xai-key');
+
+      consoleLogSpy.mockClear();
+      const textProgram = createProgram();
+      registerHermesCommands(textProgram);
+      await textProgram.parseAsync(['node', 'test', 'hermes', 'portal', 'status']);
+
+      const textOutput = getLogOutput();
+      expect(textOutput).toContain('Tool Gateway: https://gateway.example.test');
+      expect(textOutput).toContain('Web search & extract');
+      expect(textOutput).toContain('via Nous Portal | configured=yes, viaNous=yes');
+      expect(textOutput).toContain('Image generation');
+      expect(textOutput).toContain('xAI image direct | configured=yes, viaNous=no');
+      expect(textOutput).toContain('Cloud terminal');
+      expect(textOutput).toContain('not configured | configured=no, viaNous=no');
+      expect(textOutput).not.toContain('secret-nous-token');
+      expect(textOutput).not.toContain('secret-firecrawl-key');
+      expect(textOutput).not.toContain('secret-xai-key');
     } finally {
       for (const key of managedKeys) {
         const value = originalEnv.get(key);
@@ -1668,6 +1685,8 @@ describe('Hermes CLI commands', () => {
     expect(toolsOutput).toContain('Hermes Nous Portal Tool Gateway tools:');
     expect(toolsOutput).toContain('Web search & extract');
     expect(toolsOutput).toContain('Browser automation');
+    expect(toolsOutput).toContain('configured=');
+    expect(toolsOutput).toContain('viaNous=');
 
     consoleLogSpy.mockClear();
     program = createProgram();

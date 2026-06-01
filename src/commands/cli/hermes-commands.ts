@@ -820,7 +820,8 @@ function renderHermesPortalTools(status: HermesPortalStatus): string {
     const state = tool.managedByNous
       ? 'via Nous Portal'
       : tool.currentProvider ?? 'not configured';
-    lines.push(`${tool.label.padEnd(22)} ${tool.partner.padEnd(28)} ${state}`);
+    const readinessFlags = `configured=${tool.configured ? 'yes' : 'no'}, viaNous=${tool.managedByNous ? 'yes' : 'no'}`;
+    lines.push(`${tool.label.padEnd(22)} ${tool.partner.padEnd(28)} ${state} | ${readinessFlags}`);
     if (tool.notes.length > 0) {
       lines.push(`  ${tool.notes.join(' ')}`);
     }
