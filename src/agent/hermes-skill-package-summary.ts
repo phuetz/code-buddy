@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 import {
   SkillsHub,
@@ -29,6 +30,7 @@ export interface HermesSkillPackageEntry {
   sizeBytes?: number;
   source: InstalledSkill['source'];
   status: HermesSkillPackageStatus;
+  staleTempPath?: boolean;
   successCount?: number;
   version: string;
 }
@@ -44,6 +46,7 @@ export interface HermesSkillPackageSummary {
     missingFileCount: number;
     nextCommand: string;
     ok: boolean;
+    staleTempMissingCount: number;
   };
   installedCount: number;
   lockfilePath: string;
@@ -142,6 +145,7 @@ export function buildHermesSkillPackageSummary(
 
 function buildPackageHealth(packages: HermesSkillPackageEntry[]): HermesSkillPackageSummary['health'] {
   const missingFileCount = packages.filter((skill) => !skill.exists).length;
+  const staleTempMissingCount = packages.filter((skill) => skill.staleTempPath).length;
   const integrityMismatchCount = packages.filter((skill) => skill.exists && !skill.integrityOk).length;
   const issueCount = missingFileCount + integrityMismatchCount;
   return {
@@ -151,6 +155,7 @@ function buildPackageHealth(packages: HermesSkillPackageEntry[]): HermesSkillPac
     missingFileCount,
     nextCommand: issueCount > 0 ? 'buddy skills doctor --json' : 'buddy skills learning-usage --json',
     ok: issueCount === 0,
+    staleTempMissingCount,
   };
 }
 
@@ -350,13 +355,15 @@ function summarizeInstalledSkill(
   const lifecycle = skill.lifecycle;
   const usage = skill.usage;
   const enabled = skill.enabled !== false;
+  const exists = history?.current.exists ?? false;
   const preview = buildContentPreview(content, previewChars);
+  const staleTempPath = !exists && isPathInside(os.tmpdir(), skill.path);
 
   return {
     ...(typeof usage?.averageDurationMs === 'number' ? { averageDurationMs: usage.averageDurationMs } : {}),
     ...preview,
     enabled,
-    exists: history?.current.exists ?? false,
+    exists,
     ...(typeof usage?.failureCount === 'number' ? { failureCount: usage.failureCount } : {}),
     installedAt: skill.installedAt,
     integrityOk: history?.current.integrityOk ?? false,
@@ -371,9 +378,17 @@ function summarizeInstalledSkill(
     ...(typeof history?.current.sizeBytes === 'number' ? { sizeBytes: history.current.sizeBytes } : {}),
     source: skill.source,
     status: lifecycleStatus(skill, lifecycle),
+    ...(staleTempPath ? { staleTempPath } : {}),
     ...(typeof usage?.successCount === 'number' ? { successCount: usage.successCount } : {}),
     version: skill.version,
   };
+}
+
+function isPathInside(parentDir: string, childPath: string): boolean {
+  const parent = path.resolve(parentDir);
+  const child = path.resolve(childPath);
+  const relative = path.relative(parent, child);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function buildWorkspaceSkillsHub(workDir: string): {

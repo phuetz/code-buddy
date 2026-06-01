@@ -2459,8 +2459,8 @@
       "disabledChip": "{{count}} inactif(s)",
       "rollbackChip": "{{count}} snapshot(s) rollback",
       "healthChip": "{{issues}} probleme(s)",
-      "healthWarning": "{{missing}} manquant(s) / {{mismatch}} mismatch. Suite : {{command}}",
-      "guardrail": "Les changements de cycle de vie restent validés par revue : utilise skill_manage avec approved_by avant activation, désactivation, patch, rollback ou suppression.",
+      "healthWarning": "{{missing}} manquant(s) / {{mismatch}} mismatch / {{temp}} temp obsolète(s). Suite : {{command}}",
+      "guardrail": "Les changements de cycle de vie restent validés par revue : utilise skill_manage avec approved_by avant activation, désactivation, patch, rollback, reset, update ou suppression.",
       "loadFailed": "Chargement des packages SKILL échoué",
       "empty": "Aucune skill d'espace de travail installée.",
       "useAsGoal": "Gérer les skills comme objectif"

@@ -102,6 +102,7 @@ describe('Hermes skill package summary on real SkillsHub lockfiles', () => {
         missingFileCount: 1,
         nextCommand: 'buddy skills doctor --json',
         ok: false,
+        staleTempMissingCount: 1,
       },
       installedCount: 3,
       rollbackableCount: 1,
@@ -133,6 +134,7 @@ describe('Hermes skill package summary on real SkillsHub lockfiles', () => {
         lastLifecycleReviewer: 'Patrice',
         name: 'disabled-helper',
         status: 'disabled',
+        staleTempPath: true,
       }),
       expect.objectContaining({
         enabled: false,

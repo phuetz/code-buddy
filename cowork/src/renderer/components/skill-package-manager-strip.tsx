@@ -42,6 +42,7 @@ export interface SkillPackageManagerEntry {
   sizeBytes?: number;
   source: 'hub' | 'local' | 'git';
   status: SkillPackageStatus;
+  staleTempPath?: boolean;
   successCount?: number;
   version: string;
 }
@@ -57,6 +58,7 @@ export interface SkillPackageManagerSummary {
     missingFileCount: number;
     nextCommand: string;
     ok: boolean;
+    staleTempMissingCount?: number;
   };
   installedCount: number;
   lockfilePath: string;
@@ -420,10 +422,11 @@ export const SkillPackageManagerStrip: React.FC<{
         <div className="mt-1.5 flex min-w-0 items-start gap-1.5 rounded border border-warning/30 bg-warning/10 px-2 py-1 text-[10px] text-warning">
           <AlertCircle size={10} className="mt-0.5 shrink-0" />
           <span className="min-w-0">
-            {t('fleet.skillPackage.healthWarning', '{{missing}} missing / {{mismatch}} mismatch. Next: {{command}}', {
+            {t('fleet.skillPackage.healthWarning', '{{missing}} missing / {{mismatch}} mismatch / {{temp}} temp stale. Next: {{command}}', {
               command: visibleSummary.health.nextCommand,
               mismatch: visibleSummary.health.integrityMismatchCount,
               missing: visibleSummary.health.missingFileCount,
+              temp: visibleSummary.health.staleTempMissingCount ?? 0,
             })}
           </span>
         </div>
@@ -488,6 +491,7 @@ export const SkillPackageManagerStrip: React.FC<{
                     ? ' - integrity ok'
                     : ' - integrity warning'}
                 {skill.rollbackableCount > 0 ? ` - ${skill.rollbackableCount} rollback` : ''}
+                {skill.staleTempPath ? ' - temp stale' : ''}
                 {typeof skill.invocationCount === 'number'
                   ? ` - ${skill.invocationCount} run(s)`
                   : ''}

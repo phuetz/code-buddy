@@ -2446,8 +2446,8 @@
       "disabledChip": "{{count}} 个停用",
       "rollbackChip": "{{count}} 个回滚快照",
       "healthChip": "{{issues}} 个问题",
-      "healthWarning": "{{missing}} 个缺失 / {{mismatch}} 个不匹配。下一步：{{command}}",
-      "guardrail": "生命周期变更保持审查门控：启用、停用、补丁、回滚或删除 skill 前使用带 approved_by 的 skill_manage。",
+      "healthWarning": "{{missing}} 个缺失 / {{mismatch}} 个不匹配 / {{temp}} 个临时目录陈旧项。下一步：{{command}}",
+      "guardrail": "生命周期变更保持审查门控：启用、停用、补丁、回滚、重置、更新或删除 skill 前使用带 approved_by 的 skill_manage。",
       "loadFailed": "SKILL 包加载失败",
       "empty": "暂无已安装的工作区 skill。",
       "useAsGoal": "将 skill 管理作为目标"
