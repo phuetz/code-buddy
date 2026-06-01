@@ -21,6 +21,15 @@ function generatePairingCode(): string {
 export let activePairingCode = generatePairingCode();
 export const activeTokens = new Map<string, { deviceLabel: string; expiresAt: number }>();
 
+function rotatePairingCode(): string {
+  let nextCode = generatePairingCode();
+  while (nextCode === activePairingCode) {
+    nextCode = generatePairingCode();
+  }
+  activePairingCode = nextCode;
+  return activePairingCode;
+}
+
 /**
  * A follow-up prompt review draft. The mobile device (or a draft-only call) can
  * *propose* a prompt, but it never executes: it lands here as
@@ -128,7 +137,7 @@ mobileRouter.get('/pairing-status', loopbackOnlyMiddleware, (req: Request, res: 
 
 // Generate new pairing code (local operator only — loopback gated)
 mobileRouter.post('/pairing-code', loopbackOnlyMiddleware, (req: Request, res: Response) => {
-  activePairingCode = generatePairingCode();
+  rotatePairingCode();
   res.json({
     ok: true,
     pairingCode: activePairingCode,
@@ -206,6 +215,7 @@ mobileRouter.post('/pair', (req: Request, res: Response) => {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 900 * 1000;
   activeTokens.set(token, { deviceLabel, expiresAt });
+  rotatePairingCode();
 
   res.json({
     ok: true,

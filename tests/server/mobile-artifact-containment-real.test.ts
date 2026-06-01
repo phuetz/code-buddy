@@ -79,6 +79,27 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(body).not.toContain('code.trim');
   });
 
+  it('rotates the pairing code after a successful pair so captured codes are single-use', async () => {
+    const capturedCode = activePairingCode;
+    const first = await fetch(`${baseUrl}/pair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: capturedCode, deviceLabel: 'first-device' }),
+    });
+    expect(first.status).toBe(200);
+    expect(activePairingCode).not.toBe(capturedCode);
+
+    const second = await fetch(`${baseUrl}/pair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: capturedCode, deviceLabel: 'second-device' }),
+    });
+    expect(second.status).toBe(401);
+    const secondBody = await second.text();
+    expect(secondBody).toContain('Invalid pairing code');
+    expect(activeTokens.size).toBe(1);
+  });
+
   async function rawMobileGet(pathname: string, token: string): Promise<{ body: string; status: number }> {
     const address = server.address();
     if (!address || typeof address === 'string') {
