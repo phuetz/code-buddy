@@ -271,7 +271,17 @@ export function renderHermesTrajectoryCompatibilityReport(
 
   for (const capability of report.capabilities) {
     lines.push(`- ${capability.status.padEnd(9)} ${capability.id}: ${capability.label}`);
-    lines.push(`  Command: ${capability.commands[0] ?? 'n/a'}`);
+    if (capability.commands.length === 0) {
+      lines.push('  Commands: n/a');
+    } else if (capability.commands.length === 1) {
+      lines.push(`  Command: ${capability.commands[0]}`);
+    } else {
+      lines.push('  Commands:');
+      for (const command of capability.commands) {
+        lines.push(`    - ${command}`);
+      }
+    }
+    lines.push(`  Evidence: ${capability.evidence.length} file/test reference(s)`);
   }
 
   if (report.probe?.trajectoryExport) {

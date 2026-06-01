@@ -1129,6 +1129,19 @@ describe('Hermes CLI commands', () => {
     }
   });
 
+  it('prints Hermes trajectory proof commands in text output', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync(['node', 'test', 'hermes', 'trajectories', 'status']);
+
+    const output = getLogOutput();
+    expect(output).toContain('Commands:');
+    expect(output).toContain('buddy run trajectory-export <run-id> --json');
+    expect(output).toContain('buddy hermes trajectories status --run-id <run-id> --json');
+    expect(output).toContain('Evidence: 3 file/test reference(s)');
+  });
+
   it('prints Hermes runtime backend readiness as a dedicated status command', async () => {
     const program = createProgram();
     registerHermesCommands(program);

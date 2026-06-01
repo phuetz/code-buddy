@@ -137,6 +137,10 @@ describe('buildHermesTrajectoryCompatibilityReport', () => {
     });
     expect(report.probe?.trajectoryExport?.redactionCount).toBeGreaterThan(0);
     expect(raw).not.toContain(secret);
-    expect(renderHermesTrajectoryCompatibilityReport(report)).toContain('Hermes trajectory compatibility:');
+    const textReport = renderHermesTrajectoryCompatibilityReport(report);
+    expect(textReport).toContain('Hermes trajectory compatibility:');
+    expect(textReport).toContain('Commands:');
+    expect(textReport).toContain('buddy hermes trajectories status --run-id <run-id> --json');
+    expect(textReport).toContain('Evidence: 3 file/test reference(s)');
   });
 });
