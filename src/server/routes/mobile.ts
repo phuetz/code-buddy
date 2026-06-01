@@ -144,6 +144,17 @@ function isPathInsideDirectory(rootDir: string, candidatePath: string): boolean 
   return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+function isSafePathSegment(value: string): boolean {
+  return (
+    value.length > 0
+    && value !== '.'
+    && value !== '..'
+    && !value.includes('/')
+    && !value.includes('\\')
+    && !path.isAbsolute(value)
+  );
+}
+
 function normalizeRequiredString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -319,13 +330,23 @@ mobileRouter.get('/runs/:runId/artifacts/*artifactPath', async (req: Request, re
       res.status(400).json({ ok: false, error: 'Missing runId or artifactPath' });
       return;
     }
+    const runIdString = String(runId);
+    if (!isSafePathSegment(runIdString)) {
+      res.status(403).json({ ok: false, error: 'Access denied: Invalid runId path segment' });
+      return;
+    }
 
     const runStore = getActiveRunStore();
     if (!runStore) {
       res.status(500).json({ ok: false, error: 'RunStore not initialized' });
       return;
     }
-    const runDir = path.join(runStore.getRunsDir(), String(runId));
+    const runsDir = path.resolve(runStore.getRunsDir());
+    const runDir = path.resolve(runsDir, runIdString);
+    if (!isPathInsideDirectory(runsDir, runDir) || runDir === runsDir) {
+      res.status(403).json({ ok: false, error: 'Access denied: Run traversal detected' });
+      return;
+    }
     if (!fs.existsSync(runDir)) {
       res.status(404).json({ ok: false, error: 'Run not found' });
       return;

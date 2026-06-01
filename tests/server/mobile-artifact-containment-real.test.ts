@@ -8,6 +8,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  unlink,
   writeFile,
 } from 'fs/promises';
 
@@ -302,6 +303,24 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(res.status).toBe(200);
     const data = await res.json() as { content: string; ok: boolean };
     expect(data).toMatchObject({ content: 'inside artifact', ok: true });
+  });
+
+  it('blocks encoded runId traversal before resolving artifact paths outside the run store', async () => {
+    const token = await pairToken();
+    const secretName = `outside-${Date.now()}.txt`;
+    const outsideArtifact = path.join(path.dirname(tempDir), 'artifacts', secretName);
+    await mkdir(path.dirname(outsideArtifact), { recursive: true });
+    await writeFile(outsideArtifact, 'outside run root secret', 'utf8');
+
+    try {
+      const result = await rawMobileGet(`/api/mobile/runs/%2e%2e/artifacts/${secretName}`, token);
+
+      expect(result.status).toBe(403);
+      expect(result.body).toContain('Invalid runId path segment');
+      expect(result.body).not.toContain('outside run root secret');
+    } finally {
+      await unlink(outsideArtifact).catch(() => undefined);
+    }
   });
 
   it('refuses to inline oversized artifacts over the mobile route', async () => {
