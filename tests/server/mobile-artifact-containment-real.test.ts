@@ -14,6 +14,7 @@ import {
 import {
   activePairingCode,
   activeTokens,
+  followupDrafts,
   mobileRouter,
 } from '../../src/server/routes/mobile.js';
 import { RunStore, setActiveRunStore } from '../../src/observability/run-store.js';
@@ -29,6 +30,7 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     store = new RunStore(tempDir);
     setActiveRunStore(store);
     activeTokens.clear();
+    followupDrafts.length = 0;
 
     const app = express();
     app.use(express.json());
@@ -45,6 +47,7 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
 
   afterEach(async () => {
     activeTokens.clear();
+    followupDrafts.length = 0;
     store.dispose();
     setActiveRunStore(null);
     await new Promise<void>((resolve, reject) => {
@@ -118,6 +121,26 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(data.activeDevices).toEqual(['live-phone']);
     expect(activeTokens.has('expired-token')).toBe(false);
     expect(activeTokens.has('live-token')).toBe(true);
+  });
+
+  it('rejects malformed follow-up draft payloads before building gateway context', async () => {
+    const token = await pairToken();
+
+    const res = await fetch(`${baseUrl}/submit-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        prompt: { nested: 'not-string' },
+        query: { also: 'not-string' },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = await res.text();
+    expect(body).toContain('Missing or invalid prompt or query');
+    expect(body).not.toContain('query.trim');
+    expect(followupDrafts).toHaveLength(0);
   });
 
   async function rawMobileGet(pathname: string, token: string): Promise<{ body: string; status: number }> {

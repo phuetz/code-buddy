@@ -115,6 +115,17 @@ function isPathInsideDirectory(rootDir: string, candidatePath: string): boolean 
   return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+function normalizeRequiredString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return typeof value === 'string' ? value.trim() : null;
+}
+
 // Authentication middleware for /api/mobile endpoints
 export function mobileAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -358,13 +369,14 @@ async function enqueuePendingFollowupDraft(
 // 5. POST /api/mobile/followup-draft: Save a local operator followup review draft
 mobileRouter.post('/followup-draft', async (req: Request, res: Response) => {
   try {
-    const { prompt, query } = req.body;
-    if (!prompt) {
-      res.status(400).json({ ok: false, error: 'Missing prompt' });
+    const prompt = normalizeRequiredString(req.body?.prompt);
+    const query = normalizeOptionalString(req.body?.query);
+    if (!prompt || query === null) {
+      res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
       return;
     }
 
-    const savedDraft = await enqueuePendingFollowupDraft(prompt, query || '', 'draft_only');
+    const savedDraft = await enqueuePendingFollowupDraft(prompt, query, 'draft_only');
 
     res.json({
       ok: true,
@@ -381,13 +393,14 @@ mobileRouter.post('/followup-draft', async (req: Request, res: Response) => {
 // queued for explicit local-operator approval — never executed directly.
 mobileRouter.post('/submit-prompt', async (req: Request, res: Response) => {
   try {
-    const { prompt, query } = req.body;
-    if (!prompt) {
-      res.status(400).json({ ok: false, error: 'Missing prompt' });
+    const prompt = normalizeRequiredString(req.body?.prompt);
+    const query = normalizeOptionalString(req.body?.query);
+    if (!prompt || query === null) {
+      res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
       return;
     }
 
-    const savedDraft = await enqueuePendingFollowupDraft(prompt, query || '', 'mobile_device');
+    const savedDraft = await enqueuePendingFollowupDraft(prompt, query, 'mobile_device');
 
     res.json({
       ok: true,
