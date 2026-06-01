@@ -99,7 +99,7 @@ buddy --prompt "analyze the codebase structure"
 buddy --yolo
 ```
 
-See [Getting Started](docs/getting-started.md) for installation options, headless mode, session management, and typical workflows. The ChatGPT Codex OAuth flow is documented with screenshots in [`docs/screenshots/`](docs/screenshots/README.md).
+See [Getting Started](docs/getting-started.md) for installation options, headless mode, session management, and typical workflows. The ChatGPT Codex OAuth flow is documented with screenshots in [`docs/screenshots/`](docs/screenshots/README.md). The desktop cockpit has a public overview in [Cowork Desktop](docs/cowork.md).
 
 ---
 
@@ -165,7 +165,7 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 | **AI Providers** | 15 providers (Grok, Claude, GPT, Gemini, Ollama, LM Studio, AWS Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral), circuit breaker, model pairs | [providers.md](docs/providers.md) |
 | **Tools** | ~110 tools with RAG selection, multi-strategy edit matching, Codex-style apply_patch, streaming, BM25 tool search, code exec sandbox | [tools-reference.md](docs/tools-reference.md) |
 | **Commands** | 190+ slash commands, CLI subcommands (`/dev`, `/pr`, `/lint`, `/switch`, `/think`, `/batch`, `/watch`, `/conflicts`, `/vulns`, `/replace`) | [commands.md](docs/commands.md) |
-| **Cowork Desktop** | Electron cockpit, embedded Code Buddy engine, backend health/start controls, model settings, permission rules, visual workflows, traces, artifacts, MCP/skills/plugin management | [cowork/README.md](cowork/README.md), [cowork/ARCHITECTURE.md](cowork/ARCHITECTURE.md) |
+| **Cowork Desktop** | Electron cockpit, embedded Code Buddy engine, backend health/start controls, model settings, permission rules, visual workflows, traces, artifacts, MCP/skills/plugin management | [Cowork Desktop](docs/cowork.md), [cowork/readme.md](cowork/readme.md), [cowork/ARCHITECTURE.md](cowork/ARCHITECTURE.md) |
 | **Buddy Companion** | ChatGPT-backed identity, voice/TTS, proactive check-ins, self-evaluation, competitive radar, mission board, learned routines, safety ledger, local percept journal | [commands.md](docs/commands.md) |
 | **Vision & Presence** | Opt-in webcam snapshots, MediaPipe face/hand/pose/finger-tip analysis, local face enrollment, presence state for the agent | [cowork/ARCHITECTURE.md](cowork/ARCHITECTURE.md) |
 | **Agents** | Multi-agent orchestration (5-tool API), 8 specialized agents, SWE agent, planning flow, A2A protocol, batch decomposition, agent teams | [agents.md](docs/agents.md) |
@@ -200,7 +200,8 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 | [Providers](docs/providers.md) | All 15 providers, connection profiles, model pairs, circuit breaker |
 | [Tools Reference](docs/tools-reference.md) | Tool categories, RAG selection, edit matching, apply_patch, streaming |
 | [Commands](docs/commands.md) | All slash commands, CLI subcommands, companion commands, global flags |
-| [Cowork README](cowork/README.md) | Desktop installation, features, source build, sandbox modes |
+| [Cowork Desktop](docs/cowork.md) | GitHub-visible overview, ChatGPT `gpt-5.5` route, real validation commands, screenshot privacy policy |
+| [Cowork README](cowork/readme.md) | Desktop installation, features, source build, sandbox modes |
 | [Cowork Architecture](cowork/ARCHITECTURE.md) | Electron contexts, bridges, embedded engine, persistence, runner model |
 | [Agents](docs/agents.md) | Multi-agent orchestration, roles, SWE agent, planning flow, A2A |
 | [Reasoning](docs/reasoning.md) | Extended thinking, Tree-of-Thought, MCTS, /think command |

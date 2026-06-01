@@ -32,6 +32,10 @@
 
 It provides a sandboxed workspace where AI can manage files, generate professional outputs (PPTX, DOCX, XLSX, etc.) through our built-in **Skills** system, and **connect to desktop apps via MCP** (browser, Notion, etc.) for better collaboration.
 
+For the Code Buddy integrated desktop overview, real ChatGPT `gpt-5.5`
+validation commands, and public screenshot privacy policy, see
+[`docs/cowork.md`](../docs/cowork.md).
+
 > [!WARNING]
 > **Disclaimer**: Code Buddy Cowork is an AI collaboration tool. Please exercise caution with its operations, especially when authorizing file modifications or deletions. We support VM-based sandbox isolation, but some operations may still carry risks.
 
