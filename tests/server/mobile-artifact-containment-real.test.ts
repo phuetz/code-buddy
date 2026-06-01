@@ -82,6 +82,20 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(body).not.toContain('code.trim');
   });
 
+  it('rejects oversized pairing device labels before minting a token', async () => {
+    const oversizedLabel = 'device-'.padEnd(5000, 'x');
+
+    const res = await fetch(`${baseUrl}/pair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: activePairingCode, deviceLabel: oversizedLabel }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Missing or invalid code or deviceLabel');
+    expect(activeTokens.size).toBe(0);
+  });
+
   it('rotates the pairing code after a successful pair so captured codes are single-use', async () => {
     const capturedCode = activePairingCode;
     const first = await fetch(`${baseUrl}/pair`, {
