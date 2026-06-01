@@ -24,9 +24,13 @@ import {
 } from '../../browser-automation/index.js';
 import {
   installResearchScriptSkillCandidate,
-  listMaterializedResearchScriptSkillCandidates,
+  listMaterializedResearchScriptSkillCandidatesWithInstallState,
   readMaterializedResearchScriptSkillCandidate,
+  readMaterializedResearchScriptSkillCandidateWithInstallState,
   type ResearchScriptSkillCandidate,
+  type ResearchScriptSkillCandidateWithInstallState,
+  type SkillCandidateDiffPreview,
+  type SkillCandidateInstallState,
 } from '../../agent/research-script-skill-candidate.js';
 
 interface ToolsProfileOptions {
@@ -74,10 +78,18 @@ interface NormalizedToolsProfile {
 }
 
 interface ResearchScriptSkillCandidateSummary {
+  candidateChecksum?: string;
+  candidateDiffPreview?: SkillCandidateDiffPreview;
   eligible: boolean;
   id: string;
+  installState?: SkillCandidateInstallState;
+  installedChecksum?: string;
+  installedIntegrityOk?: boolean;
+  installedPath?: string;
+  installedVersion?: string;
   kind: string;
   reason: string;
+  reviewCommands?: string[];
   skillName: string;
   skillPath: string;
   sourceJobId: string;
@@ -104,12 +116,25 @@ function normalizeToolsProfile(profileArg: string): NormalizedToolsProfile {
   };
 }
 
-function summarizeSkillCandidate(candidate: ResearchScriptSkillCandidate): ResearchScriptSkillCandidateSummary {
+type SkillCandidateSummarySource = ResearchScriptSkillCandidate
+  & Partial<ResearchScriptSkillCandidateWithInstallState>;
+
+function summarizeSkillCandidate(candidate: SkillCandidateSummarySource): ResearchScriptSkillCandidateSummary {
   return {
+    ...(candidate.candidateChecksum ? { candidateChecksum: candidate.candidateChecksum } : {}),
+    ...(candidate.candidateDiffPreview ? { candidateDiffPreview: candidate.candidateDiffPreview } : {}),
     eligible: candidate.eligible,
     id: candidate.id,
+    ...(candidate.installState ? { installState: candidate.installState } : {}),
+    ...(candidate.installedChecksum ? { installedChecksum: candidate.installedChecksum } : {}),
+    ...(typeof candidate.installedIntegrityOk === 'boolean'
+      ? { installedIntegrityOk: candidate.installedIntegrityOk }
+      : {}),
+    ...(candidate.installedPath ? { installedPath: candidate.installedPath } : {}),
+    ...(candidate.installedVersion ? { installedVersion: candidate.installedVersion } : {}),
     kind: candidate.kind,
     reason: candidate.reason,
+    ...(candidate.reviewCommands ? { reviewCommands: candidate.reviewCommands } : {}),
     skillName: candidate.skillName,
     skillPath: candidate.skillPath,
     sourceJobId: candidate.sourceJobId,
@@ -158,7 +183,7 @@ function normalizeInternetScoutIntent(value: string | undefined): InternetScoutI
   return value as InternetScoutIntent;
 }
 
-function printSkillCandidate(candidate: ResearchScriptSkillCandidate): void {
+function printSkillCandidate(candidate: SkillCandidateSummarySource): void {
   console.log(`\n${formatCandidateKind(candidate)} skill candidate: ${candidate.skillName}`);
   console.log(`  Candidate id: ${candidate.id}`);
   if (candidate.sourceRunId) {
@@ -167,6 +192,9 @@ function printSkillCandidate(candidate: ResearchScriptSkillCandidate): void {
     console.log(`  Source job: ${candidate.sourceJobId}`);
   }
   console.log(`  Status: ${candidate.eligible ? 'eligible for human approval' : 'not eligible yet'}`);
+  if (candidate.installState) {
+    console.log(`  Install state: ${candidate.installState}`);
+  }
   console.log(`  Successful runs: ${candidate.successfulRunCount}`);
   if (candidate.toolSequence?.length) {
     console.log(`  Tool sequence: ${candidate.toolSequence.join(' -> ')}`);
@@ -174,16 +202,22 @@ function printSkillCandidate(candidate: ResearchScriptSkillCandidate): void {
   console.log(`  Reason: ${candidate.reason}`);
   console.log(`  SKILL.md: ${candidate.skillPath}`);
   console.log(`  Review manifest: ${formatCandidateReviewPath(candidate)}`);
-  if (candidate.eligible) {
+  if (candidate.reviewCommands?.length) {
+    console.log('  Review commands:');
+    for (const command of candidate.reviewCommands) {
+      console.log(`    - ${command}`);
+    }
+  } else if (candidate.eligible) {
     console.log(`  Install: buddy tools skill-candidate install ${formatCandidateDirectory(candidate)} --approved-by <name>`);
   }
   console.log('');
 }
 
-function printSkillCandidateList(candidates: ResearchScriptSkillCandidate[]): void {
+function printSkillCandidateList(candidates: SkillCandidateSummarySource[]): void {
   console.log(`\nReview-gated skill candidates: ${candidates.length}`);
   for (const candidate of candidates) {
-    console.log(`  - ${candidate.skillName}: ${candidate.eligible ? 'eligible' : 'not eligible'} (${candidate.kind})`);
+    const installState = candidate.installState ? `, ${candidate.installState}` : '';
+    console.log(`  - ${candidate.skillName}: ${candidate.eligible ? 'eligible' : 'not eligible'} (${candidate.kind}${installState})`);
     if (candidate.sourceRunId) {
       console.log(`    Source run: ${candidate.sourceRunId}`);
     } else {
@@ -328,7 +362,7 @@ export function registerToolsCommands(program: Command): void {
     .option('--skill-root <path>', 'candidate root to scan', '.codebuddy/skill-candidates')
     .option('--json', 'output JSON')
     .action(async (options: ToolsSkillCandidateListOptions) => {
-      const allCandidates = await listMaterializedResearchScriptSkillCandidates({
+      const allCandidates = await listMaterializedResearchScriptSkillCandidatesWithInstallState({
         rootDir: process.cwd(),
         skillRoot: options.skillRoot,
       });
@@ -353,7 +387,7 @@ export function registerToolsCommands(program: Command): void {
     .argument('<candidatePath>', 'path to the candidate SKILL.md file or candidate directory')
     .option('--json', 'output JSON')
     .action(async (candidatePath: string, options: ToolsSkillCandidateInspectOptions) => {
-      const candidate = await readMaterializedResearchScriptSkillCandidate(candidatePath, {
+      const candidate = await readMaterializedResearchScriptSkillCandidateWithInstallState(candidatePath, {
         rootDir: process.cwd(),
       });
 

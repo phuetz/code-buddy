@@ -408,6 +408,33 @@ describe('Tools CLI commands', () => {
       await expect(
         fs.readFile(path.join(rootDir, '.codebuddy', 'skills', 'research-cli-reviewed-workflow', 'SKILL.md'), 'utf8'),
       ).resolves.toContain('- Approved by: Patrice');
+
+      consoleLogSpy.mockClear();
+      await program.parseAsync([
+        'node',
+        'test',
+        'tools',
+        'skill-candidate',
+        'list',
+        '--eligible-only',
+        '--json',
+      ]);
+      const listOutput = JSON.parse(getLogOutput()) as {
+        candidates: Array<{
+          installState?: string;
+          reviewCommands?: string[];
+          skillName: string;
+        }>;
+      };
+      expect(listOutput.candidates[0]).toMatchObject({
+        installState: 'installed-current',
+        skillName: 'research-cli-reviewed-workflow',
+      });
+      expect(listOutput.candidates[0]?.reviewCommands).not.toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('candidate_install'),
+        ]),
+      );
     } finally {
       process.chdir(previousCwd);
       await fs.rm(rootDir, { recursive: true, force: true });
