@@ -943,6 +943,7 @@ describe('Hermes CLI commands', () => {
       commands: {
         server: string;
         approvals: string;
+        gatewayCheck: string;
       };
     };
 
@@ -988,8 +989,29 @@ describe('Hermes CLI commands', () => {
       tokenIssued: false,
     });
     expect(output.commands.server).toBe('buddy server --port 3000');
+    expect(output.commands.gatewayCheck).toBe(
+      'buddy run mobile-gateway-check "mobile supervision gateway" --action view_run_summary --method GET --path /api/mobile/snapshot --json',
+    );
     expect(output.commands.approvals).toContain('buddy run mobile-approval-queue');
+    expect(output.recommendations).toContain(
+      'Use buddy run mobile-gateway-check "mobile supervision gateway" --action view_run_summary --method GET --path /api/mobile/snapshot --json as a safe GET policy smoke before implementing any new route.',
+    );
     expect(raw).not.toContain('previewCode');
+  });
+
+  it('prints actionable Hermes mobile status and gateway-check commands in text output', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync(['node', 'test', 'hermes', 'mobile', 'status', 'mobile', 'supervision']);
+
+    const output = getLogOutput();
+    expect(output).toContain('Commands:');
+    expect(output).toContain('buddy hermes mobile status --json');
+    expect(output).toContain(
+      'buddy run mobile-gateway-check "mobile supervision" --action view_run_summary --method GET --path /api/mobile/snapshot --json',
+    );
+    expect(output).toContain('safe GET policy smoke');
   });
 
   it('prints Hermes trajectory compatibility against a real RunStore probe', async () => {

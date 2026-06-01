@@ -286,6 +286,7 @@ interface HermesMobileSupervisionStatus {
     server: string;
     snapshot: string;
     contract: string;
+    gatewayCheck: string;
     pairing: string;
     approvals: string;
   };
@@ -968,6 +969,7 @@ async function buildHermesMobileSupervisionStatus(
   const approvalQueue = buildMobileSupervisionApprovalQueue(contract, pairingState);
   const readOnlyEndpoints = contract.endpoints.filter((endpoint) => endpoint.sideEffects === 'none');
   const draftOnlyEndpoints = contract.endpoints.filter((endpoint) => endpoint.sideEffects === 'draft_only');
+  const gatewayCheckCommand = `buddy run mobile-gateway-check "${contract.query}" --action view_run_summary --method GET --path /api/mobile/snapshot --json`;
 
   return {
     kind: 'hermes_mobile_supervision_status',
@@ -1029,6 +1031,7 @@ async function buildHermesMobileSupervisionStatus(
       server: 'buddy server --port 3000',
       snapshot: `buddy run mobile-snapshot "${contract.query}" --json`,
       contract: `buddy run mobile-gateway-contract "${contract.query}" --json`,
+      gatewayCheck: gatewayCheckCommand,
       pairing: `buddy run mobile-pairing-state "${contract.query}" --json`,
       approvals: `buddy run mobile-approval-queue "${contract.query}" --json`,
     },
@@ -1036,7 +1039,7 @@ async function buildHermesMobileSupervisionStatus(
       'Start the local server before using a phone: buddy server --port 3000.',
       'Pairing-code and approval routes are local-operator-only; do not expose them directly over LAN.',
       'Mobile devices may read snapshots and submit draft prompts, but execution and file mutations remain local.',
-      'Use buddy run mobile-gateway-check to evaluate any new route before implementing it.',
+      `Use ${gatewayCheckCommand} as a safe GET policy smoke before implementing any new route.`,
     ],
   };
 }
@@ -1065,9 +1068,11 @@ function renderHermesMobileSupervisionStatus(status: HermesMobileSupervisionStat
   }
 
   lines.push('', 'Commands:');
+  lines.push(`  - ${status.commands.status}`);
   lines.push(`  - ${status.commands.server}`);
   lines.push(`  - ${status.commands.snapshot}`);
   lines.push(`  - ${status.commands.contract}`);
+  lines.push(`  - ${status.commands.gatewayCheck}`);
   lines.push(`  - ${status.commands.pairing}`);
   lines.push(`  - ${status.commands.approvals}`);
 
