@@ -416,7 +416,9 @@ interface HermesOverviewStatus {
       enabledCount: number;
       healthIssueCount: number;
       eligibleCandidateCount: number;
+      installedCurrentCandidateCount: number;
       ineligibleCandidateCount: number;
+      pendingCandidateCount: number;
       totalCandidateCount: number;
       candidateListCommand: string;
       nextInspectCommand: string | null;
@@ -835,7 +837,7 @@ async function buildHermesOverviewStatus(profileArg: string): Promise<HermesOver
       : []),
   ].filter((recommendation, index, all) => all.indexOf(recommendation) === index);
   const skillsNextCommand = skills.candidateReview.nextInspectCommand ??
-    (skills.candidateReview.totalCount > 0 ? skills.candidateReview.listCommand : skills.health.nextCommand);
+    (skills.candidateReview.pendingCount > 0 ? skills.candidateReview.listCommand : skills.health.nextCommand);
   const ok =
     diagnostics.ok &&
     diagnostics.providerReadiness.ok &&
@@ -1021,7 +1023,9 @@ async function buildHermesOverviewStatus(profileArg: string): Promise<HermesOver
         enabledCount: skills.enabledCount,
         healthIssueCount: skills.health.issueCount,
         eligibleCandidateCount: skills.candidateReview.eligibleCount,
+        installedCurrentCandidateCount: skills.candidateReview.installedCurrentCount,
         ineligibleCandidateCount: skills.candidateReview.ineligibleCount,
+        pendingCandidateCount: skills.candidateReview.pendingCount,
         totalCandidateCount: skills.candidateReview.totalCount,
         candidateListCommand: skills.candidateReview.listCommand,
         nextInspectCommand: skills.candidateReview.nextInspectCommand ?? null,
@@ -1125,8 +1129,10 @@ function renderHermesOverviewStatus(status: HermesOverviewStatus): string {
       `missing: ${formatLimitedList(readiness.trajectories.missingCapabilityIds, 5)}, ` +
       `golden=${readiness.trajectories.goldenFixtureCount}, policy=${readiness.trajectories.policyEvalCount})`,
     `  Skills: ${readiness.skills.enabledCount}/${readiness.skills.installedCount} enabled, ` +
-      `candidates ${readiness.skills.eligibleCandidateCount} eligible / ` +
-      `${readiness.skills.ineligibleCandidateCount} not eligible`,
+      `candidates ${readiness.skills.pendingCandidateCount} pending ` +
+      `(${readiness.skills.eligibleCandidateCount} eligible / ` +
+      `${readiness.skills.ineligibleCandidateCount} not eligible, ` +
+      `${readiness.skills.installedCurrentCandidateCount} installed current)`,
     `  Protocol smoke: ${readiness.protocols.smokeCommand}`,
   );
 

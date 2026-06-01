@@ -300,9 +300,11 @@ describe('Hermes CLI commands', () => {
           skills: {
             candidateListCommand: string;
             eligibleCandidateCount: number;
+            installedCurrentCandidateCount: number;
             ineligibleCandidateCount: number;
             nextCommand: string;
             nextInspectCommand: string | null;
+            pendingCandidateCount: number;
             totalCandidateCount: number;
           };
         };
@@ -380,6 +382,9 @@ describe('Hermes CLI commands', () => {
       });
       expect(output.readiness.mobile.gatewayCheckCommand).toContain('buddy run mobile-gateway-check');
       expect(output.readiness.skills.totalCandidateCount).toBe(
+        output.readiness.skills.pendingCandidateCount + output.readiness.skills.installedCurrentCandidateCount,
+      );
+      expect(output.readiness.skills.pendingCandidateCount).toBe(
         output.readiness.skills.eligibleCandidateCount + output.readiness.skills.ineligibleCandidateCount,
       );
       expect(output.readiness.skills.candidateListCommand).toContain('buddy tools skill-candidate list');
@@ -1171,6 +1176,28 @@ describe('Hermes CLI commands', () => {
         totalCount: 1,
       });
       expect(skillsOutput.summary.candidateReview.nextInspectCommand).toBeUndefined();
+
+      consoleLogSpy.mockClear();
+      const overviewProgram = createProgram();
+      registerHermesCommands(overviewProgram);
+      await overviewProgram.parseAsync(['node', 'test', 'hermes', 'status', '--json']);
+      const overviewOutput = JSON.parse(getLogOutput()) as {
+        readiness: {
+          skills: {
+            installedCurrentCandidateCount: number;
+            nextCommand: string;
+            pendingCandidateCount: number;
+            totalCandidateCount: number;
+          };
+        };
+      };
+      expect(overviewOutput.readiness.skills).toMatchObject({
+        installedCurrentCandidateCount: 1,
+        pendingCandidateCount: 0,
+        totalCandidateCount: 1,
+      });
+      expect(overviewOutput.readiness.skills.nextCommand).not.toBe('buddy tools skill-candidate list --json');
+      expect(overviewOutput.readiness.skills.nextCommand).not.toBe('buddy tools skill-candidate list --eligible-only --json');
     } finally {
       process.chdir(oldCwd);
       if (oldRunsDir === undefined) delete process.env.CODEBUDDY_RUNS_DIR;
