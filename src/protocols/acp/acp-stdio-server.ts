@@ -387,6 +387,10 @@ export class AcpStdioServer {
       throw error;
     }
 
+    if (params.cwd !== undefined && !asString(params.cwd)) {
+      throw invalidParamsError('Invalid session/list cwd');
+    }
+
     const cwd = asString(params.cwd);
     const sessions = [...this.sessions.entries()]
       .filter(([, session]) => !cwd || session.cwd === cwd)

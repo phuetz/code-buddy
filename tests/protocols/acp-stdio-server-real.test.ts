@@ -400,6 +400,23 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     });
   });
 
+  it('rejects malformed session/list cwd filters instead of broadening visibility', async () => {
+    harness = new AcpHarness(async () => ({ stopReason: 'end_turn' }));
+
+    harness.send({ jsonrpc: '2.0', id: 1, method: 'session/new', params: { cwd: '/tmp/project-a', mcpServers: [] } });
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: '/tmp/project-b', mcpServers: [] } });
+    await harness.flush();
+
+    harness.send({ jsonrpc: '2.0', id: 3, method: 'session/list', params: { cwd: [] } });
+    await harness.flush();
+
+    expect(harness.responseFor(3)?.error).toMatchObject({
+      code: -32602,
+      message: 'Invalid session/list cwd',
+    });
+    expect(harness.responseFor(3)?.result).toBeUndefined();
+  });
+
   it('lets prompt runners call client methods and wait for JSON-RPC responses', async () => {
     const runner: AcpPromptRunner = async ({ requestClient, sessionId, sendUpdate }) => {
       const result = await requestClient('fs/read_text_file', {
