@@ -17,6 +17,7 @@ const MIN_PAIRING_CODE_TTL_MS = 50;
 const MAX_DEVICE_LABEL_CHARS = 120;
 const MAX_FOLLOWUP_PROMPT_CHARS = 12_000;
 const MAX_FOLLOWUP_QUERY_CHARS = 1_000;
+const MAX_ARTIFACT_INLINE_BYTES = 1_000_000;
 
 mobileRouter.use((_req: Request, res: Response, next: NextFunction): void => {
   res.setHeader('Cache-Control', 'no-store');
@@ -335,6 +336,20 @@ mobileRouter.get('/runs/:runId/artifacts/*artifactPath', async (req: Request, re
     const stat = fs.statSync(filePath);
     if (!stat.isFile()) {
       res.status(400).json({ ok: false, error: 'Target path is not a file' });
+      return;
+    }
+
+    if (stat.size > MAX_ARTIFACT_INLINE_BYTES) {
+      res.status(413).json({
+        ok: false,
+        error: 'Artifact file is too large to inline over mobile supervision',
+        metadata: {
+          name: path.basename(filePath),
+          size: stat.size,
+          mtime: stat.mtimeMs,
+          maxInlineBytes: MAX_ARTIFACT_INLINE_BYTES,
+        },
+      });
       return;
     }
 

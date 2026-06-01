@@ -286,6 +286,24 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(data).toMatchObject({ content: 'inside artifact', ok: true });
   });
 
+  it('refuses to inline oversized artifacts over the mobile route', async () => {
+    const token = await pairToken();
+    const runId = 'run-real-artifact-large';
+    const artifactPath = path.join(tempDir, runId, 'artifacts', 'large.txt');
+    await mkdir(path.dirname(artifactPath), { recursive: true });
+    await writeFile(artifactPath, 'artifact '.padEnd(1_500_000, 'x'), 'utf8');
+
+    const res = await fetch(`${baseUrl}/runs/${runId}/artifacts/large.txt`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(413);
+    const body = await res.text();
+    expect(body).toContain('Artifact file is too large to inline');
+    expect(body).toContain('"size":1500000');
+    expect(body).not.toContain('xxxxxxxxxxxxxxxxxxxxxxxx');
+  });
+
   it('blocks encoded traversal into sibling directories with the same prefix', async () => {
     const token = await pairToken();
     const runId = 'run-real-artifact-escape';
