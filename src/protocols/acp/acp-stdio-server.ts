@@ -254,6 +254,11 @@ export class AcpStdioServer {
       return;
     }
 
+    if (isRequest && typeof method !== 'string') {
+      this.write({ jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid Request' } });
+      return;
+    }
+
     // `session/cancel` is commonly sent as a notification, but some JSON-RPC
     // clients include an id. Keep both forms interoperable.
     if (method === 'session/cancel') {

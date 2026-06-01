@@ -936,6 +936,18 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     expect(parseError?.id).toBeNull();
   });
 
+  it('returns invalid-request for request messages without a string method', async () => {
+    harness = new AcpHarness(async () => ({ stopReason: 'end_turn' }));
+
+    harness.send({ jsonrpc: '2.0', id: 8, params: {} });
+    await harness.flush();
+
+    expect(harness.responseFor(8)?.error).toMatchObject({
+      code: -32600,
+      message: 'Invalid Request',
+    });
+  });
+
   it('returns method-not-found for unknown methods', async () => {
     harness = new AcpHarness(async () => ({ stopReason: 'end_turn' }));
     harness.send({ jsonrpc: '2.0', id: 9, method: 'does/not-exist', params: {} });
