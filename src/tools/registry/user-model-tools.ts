@@ -69,12 +69,15 @@ export class UserModelObserveTool implements ITool {
       });
 
       const verb = deduped ? 'Matched existing observation' : 'Proposed observation';
+      const reviewLine = observation.status === 'pending'
+        ? 'It is awaiting human review and is NOT yet part of the user model. ' +
+          `Accept with: buddy user-model accept ${observation.id} --by <name>`
+        : `Observation is already ${observation.status}; no review action is required.`;
       return {
         success: true,
         output:
           `${verb} [${observation.id}] (${kind}): ${content}\n` +
-          'It is awaiting human review and is NOT yet part of the user model. ' +
-          `Accept with: buddy user-model accept ${observation.id} --by <name>`,
+          reviewLine,
       };
     } catch (err) {
       if (err instanceof UserModelPrivacyError) {

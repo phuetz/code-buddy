@@ -90,6 +90,25 @@ describe('User model tool adapters', () => {
       expect(getUserModel(tmpDir).list('pending')).toHaveLength(1);
     });
 
+    it('does not suggest acceptance when dedupe finds an accepted observation', async () => {
+      const model = getUserModel(tmpDir);
+      const accepted = model.observe({
+        kind: 'preference',
+        content: 'Prefers concise tool review messages.',
+      }).observation;
+      model.accept(accepted.id, { reviewedBy: 'Patrice' });
+
+      const result = await new UserModelObserveTool().execute({
+        kind: 'preference',
+        content: 'Prefers concise tool review messages.',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('Matched existing observation');
+      expect(result.output).toContain('already accepted');
+      expect(result.output).not.toContain('Accept with: buddy user-model accept');
+    });
+
     it('refuses sensitive content with a privacy error', async () => {
       const tool = new UserModelObserveTool();
       const result = await tool.execute({ kind: 'trait', content: 'has a chronic illness' });
