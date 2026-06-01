@@ -2968,4 +2968,79 @@ describe('Hermes CLI commands', () => {
     });
     expect(output.result.output).toContain('OK-HERMES-BROWSER');
   });
+
+  it('runs the safe aggregate Hermes local smoke suite from the CLI', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync(['node', 'test', 'hermes', 'smoke', '--json']);
+
+    const output = JSON.parse(getLogOutput()) as {
+      kind: string;
+      ok: boolean;
+      schemaVersion: number;
+      commands: {
+        browser: string;
+        protocols: string;
+        runtime: string;
+      };
+      notes: string[];
+      results: {
+        browser: {
+          backendId: string;
+          ok: boolean;
+          output: string;
+          status: string;
+        };
+        protocols: {
+          ok: boolean;
+          httpRoutes: { ok: boolean };
+          mcpStdio: { ok: boolean; toolCount: number };
+        };
+        runtime: {
+          backendId: string;
+          ok: boolean;
+          output: string;
+          status: string;
+        };
+      };
+    };
+
+    expect(output.kind).toBe('hermes_local_smoke_suite');
+    expect(output.schemaVersion).toBe(1);
+    expect(output.ok).toBe(true);
+    expect(output.results.runtime).toMatchObject({
+      backendId: 'local',
+      ok: true,
+      status: 'passed',
+    });
+    expect(output.results.runtime.output).toContain('OK-HERMES-LOCAL');
+    expect(output.results.browser).toMatchObject({
+      backendId: 'local-playwright',
+      ok: true,
+      status: 'passed',
+    });
+    expect(output.results.browser.output).toContain('OK-HERMES-BROWSER');
+    expect(output.results.protocols.ok).toBe(true);
+    expect(output.results.protocols.mcpStdio.ok).toBe(true);
+    expect(output.results.protocols.mcpStdio.toolCount).toBeGreaterThan(0);
+    expect(output.results.protocols.httpRoutes.ok).toBe(true);
+    expect(output.commands).toEqual({
+      browser: 'buddy hermes browser-smoke auto --json',
+      protocols: 'buddy hermes protocols-smoke local --json',
+      runtime: 'buddy hermes runtime-smoke auto --json',
+    });
+    expect(output.notes.join(' ')).toContain('Remote providers');
+
+    consoleLogSpy.mockClear();
+    const textProgram = createProgram();
+    registerHermesCommands(textProgram);
+    await textProgram.parseAsync(['node', 'test', 'hermes', 'smoke']);
+    const textOutput = getLogOutput();
+    expect(textOutput).toContain('Hermes local smoke: ok');
+    expect(textOutput).toContain('Runtime: passed (local');
+    expect(textOutput).toContain('Browser: passed (local-playwright');
+    expect(textOutput).toContain('Protocols: passed');
+    expect(textOutput).toContain('Remote providers, Docker image pulls, and managed browser backends are intentionally not invoked');
+  });
 });

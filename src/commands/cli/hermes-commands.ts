@@ -341,6 +341,24 @@ interface HermesOverviewStatus {
   recommendations: string[];
 }
 
+interface HermesLocalSmokeSuite {
+  kind: 'hermes_local_smoke_suite';
+  schemaVersion: 1;
+  generatedAt: string;
+  ok: boolean;
+  results: {
+    browser: Awaited<ReturnType<typeof runHermesBrowserBackendSmoke>>;
+    protocols: Awaited<ReturnType<typeof runHermesProtocolGatewaySmoke>>;
+    runtime: HermesRuntimeSmokeResult;
+  };
+  commands: {
+    browser: string;
+    protocols: string;
+    runtime: string;
+  };
+  notes: string[];
+}
+
 interface HermesMobileSupervisionStatus {
   kind: 'hermes_mobile_supervision_status';
   schemaVersion: 1;
@@ -835,6 +853,54 @@ function renderHermesOverviewStatus(status: HermesOverviewStatus): string {
   );
 
   return lines.join('\n');
+}
+
+async function runHermesLocalSmokeSuite(): Promise<HermesLocalSmokeSuite> {
+  const [runtime, browser, protocols] = await Promise.all([
+    Promise.resolve(runHermesRuntimeBackendSmoke({ backendId: 'auto' })),
+    runHermesBrowserBackendSmoke({ backendId: 'auto' }),
+    runHermesProtocolGatewaySmoke(),
+  ]);
+
+  return {
+    kind: 'hermes_local_smoke_suite',
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    ok: runtime.ok && browser.ok && protocols.ok,
+    results: {
+      browser,
+      protocols,
+      runtime,
+    },
+    commands: {
+      browser: 'buddy hermes browser-smoke auto --json',
+      protocols: 'buddy hermes protocols-smoke local --json',
+      runtime: 'buddy hermes runtime-smoke auto --json',
+    },
+    notes: [
+      'Runs only the safe local-first Hermes smoke path: local runtime route, local Playwright route, and local protocol gateways.',
+      'Remote providers, Docker image pulls, and managed browser backends are intentionally not invoked by this suite.',
+    ],
+  };
+}
+
+function renderHermesLocalSmokeSuite(suite: HermesLocalSmokeSuite): string {
+  return [
+    `Hermes local smoke: ${formatOk(suite.ok)}`,
+    `  Runtime: ${suite.results.runtime.status} (${suite.results.runtime.backendId}, ${suite.results.runtime.durationMs}ms)`,
+    `  Browser: ${suite.results.browser.status} (${suite.results.browser.backendId}, ${suite.results.browser.durationMs}ms)`,
+    `  Protocols: ${suite.results.protocols.ok ? 'passed' : 'failed'} (${suite.results.protocols.durationMs}ms)`,
+    `  MCP stdio: ${suite.results.protocols.mcpStdio.ok ? 'ok' : 'failed'} (${suite.results.protocols.mcpStdio.toolCount} tools)`,
+    `  HTTP routes: ${suite.results.protocols.httpRoutes.ok ? 'ok' : 'failed'}`,
+    '',
+    'Commands:',
+    `  Runtime: ${suite.commands.runtime}`,
+    `  Browser: ${suite.commands.browser}`,
+    `  Protocols: ${suite.commands.protocols}`,
+    '',
+    'Notes:',
+    ...suite.notes.map((note) => `  - ${note}`),
+  ].join('\n');
 }
 
 function readFileSizeIfPresent(filePath: string): number {
@@ -1761,6 +1827,21 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesOverviewStatus(status));
+    });
+
+  hermes
+    .command('smoke')
+    .description('Run the safe local Hermes smoke suite for runtime, browser, and protocol gateways')
+    .option('--json', 'output JSON')
+    .action(async (options: HermesCommandOptions) => {
+      const suite = await runHermesLocalSmokeSuite();
+
+      if (options.json) {
+        console.log(stableJson(suite));
+        return;
+      }
+
+      console.log(renderHermesLocalSmokeSuite(suite));
     });
 
   hermes

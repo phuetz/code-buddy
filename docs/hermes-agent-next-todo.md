@@ -93,12 +93,14 @@ Current measured state:
     - `(cd cowork && npm test -- tests/test-runner-bridge-catalog.test.ts --run)`
     - `(cd cowork && npm test -- tests/hermes-tool-catalog-bridge.test.ts tests/hermes-tool-catalog-strip.test.ts --run)`
 
-- [x] **Add a one-command Hermes readiness overview**
+- [x] **Add one-command Hermes readiness and local smoke surfaces**
   - Why: Hermes evidence was available, but operators had to stitch together `todo`, `tools`, `providers`, `runtime`, `browser`, `protocols`, `memory`, `learning`, and `skills` commands by hand.
-  - Done: `buddy hermes status [profile]` now aggregates feature parity, tool parity, identity, provider/model readiness, runtime route, browser route, protocol gateways, memory providers, Learning Agent review queues, skill-package health, next active Hermes work, and the exact follow-up commands. The JSON output intentionally keeps credential source names only and sanitizes local credential file paths to the basename.
+  - Done: `buddy hermes status [profile]` now aggregates feature parity, tool parity, identity, provider/model readiness, runtime route, browser route, protocol gateways, memory providers, Learning Agent review queues, skill-package health, next active Hermes work, and the exact follow-up commands. `buddy hermes smoke --json` runs the safe local-first smoke suite in one command: auto runtime, auto browser, and local MCP/A2A/ACP protocol gateways. The JSON output intentionally keeps credential source names only and sanitizes local credential file paths to the basename.
   - Verification:
     - `npx tsx src/index.ts hermes status safe --json`
     - `npx tsx src/index.ts hermes status safe`
+    - `npx tsx src/index.ts hermes smoke --json`
+    - `npx tsx src/index.ts hermes smoke`
     - `npm test -- tests/commands/hermes-commands.test.ts --run`
     - `npm run typecheck`
     - `npx tsx src/index.ts hermes runtime-smoke auto --json`
