@@ -1493,7 +1493,7 @@ describe('Hermes CLI commands', () => {
     expect(textOutput).toContain('    - POST /api/a2a/tasks/:id/cancel');
     expect(textOutput).toContain('    - POST /api/acp/tasks/:id/resume');
     expect(textOutput).toContain('Evidence: 5 file/test reference(s)');
-    expect(textOutput).toContain('Notes: The protocol transport exists, but exact upstream Hermes editor integration and packaging are not yet claimed.');
+    expect(textOutput).toContain('Notes: The stdio ACP transport supports initialize, session/new, in-process session/list, session/load replay, session/prompt, session/cancel, and capability-gated agent-to-client JSON-RPC request/response correlation.');
   });
 
   it('prints Hermes mobile supervision readiness as a dedicated status command', async () => {
@@ -2118,6 +2118,8 @@ describe('Hermes CLI commands', () => {
             'npm test -- tests/agent/hermes-protocol-gateways.test.ts tests/mcp/mcp-stdio-real-fixture.test.ts tests/server/a2a-protocol.test.ts tests/server/acp-routes.test.ts --run',
             'npx tsx src/index.ts hermes protocols-smoke local --json',
           ]),
+          notes: expect.stringContaining('session.list / session.load'),
+          nextWork: expect.stringContaining('full agentic (tool-using) ACP turns'),
         }),
       ]),
     );

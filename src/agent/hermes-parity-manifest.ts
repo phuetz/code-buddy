@@ -525,13 +525,14 @@ const FEATURES: HermesParityFeature[] = [
     notes:
       'MCP client/server, A2A HTTP, ACP HTTP, channel-to-A2A bridge, and a Hermes-scoped readiness/smoke surface are present. ' +
       'Editor packaging: `buddy acp` implements the Agent Client Protocol over newline-delimited JSON-RPC on stdio ' +
-      '(initialize / session.new / session.prompt with streamed agent_message_chunk updates / session.cancel), bridged to the LLM ' +
+      '(initialize / session.new / session.list / session.load / session.prompt with streamed agent_message_chunk updates / session.cancel), bridged to the LLM ' +
       '(src/protocols/acp/acp-stdio-server.ts + src/commands/cli/acp-command.ts). Message shapes are grounded in the published spec ' +
-      'and round-trip tested, but not yet validated against a live editor (e.g. Zed). Client-side fs/permission calls, session/load, ' +
-      'and MCP passthrough remain out of scope for v1.',
+      'and round-trip tested, but not yet validated against a live editor (e.g. Zed). Agent-to-client request/response correlation is ' +
+      'implemented for capability-gated fs/*, terminal/*, and session/request_permission primitives; full tool-running turns over those ' +
+      'editor primitives, durable cross-process sessions, and MCP passthrough remain out of scope for v1.',
     nextWork:
-      'Extend the ACP agent with client-side fs/* + session/request_permission calls, session/load, and full agentic (tool-using) ' +
-      'turns; advertise richer prompt/MCP capabilities once those land.',
+      'Wire full agentic (tool-using) ACP turns through the existing client fs/* + session/request_permission primitives, validate ' +
+      'against a live editor, then add durable session storage and MCP passthrough before advertising richer prompt/MCP capabilities.',
   },
   {
     id: 'openclaw-migration',
