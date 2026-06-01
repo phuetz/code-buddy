@@ -276,6 +276,7 @@ interface LearningSkillCandidateReviewManifest {
   reason: string;
   schemaVersion: typeof LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION;
   skillName: string;
+  sourceJobId: 'learning-agent';
   sourceRunId: string;
   status: 'awaiting_human_approval' | 'not_eligible';
   successfulRunCount: number;
@@ -937,6 +938,7 @@ function materializeLearningSkillCandidates(
         reason,
         schemaVersion: LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION,
         skillName: candidate.skillName,
+        sourceJobId: 'learning-agent',
         sourceRunId: retrospective.run.runId,
         status: eligible ? 'awaiting_human_approval' : 'not_eligible',
         successfulRunCount,
