@@ -11,6 +11,7 @@ export const RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION = 1;
 const SKILL_CANDIDATE_DIFF_PREVIEW_CHARS = 900;
 const SKILL_CANDIDATE_DIFF_PREVIEW_LINES = 32;
 const LEARNING_SKILL_CANDIDATE_MIN_SUCCESSFUL_RUNS = 2;
+const SKILL_CANDIDATE_REASON_MAX_CHARS = 240;
 
 export type MaterializedSkillCandidateKind = 'research-script' | 'learning';
 
@@ -226,7 +227,7 @@ export async function readMaterializedResearchScriptSkillCandidate(
     eligible: manifest.eligible,
     id: manifest.candidateId,
     kind: manifest.kind ?? 'research-script',
-    reason: extractMarkdownField(markdown, 'Reason') || reviewStatusReason(manifest),
+    reason: normalizeCandidateReason(extractMarkdownField(markdown, 'Reason') || reviewStatusReason(manifest)),
     skillName: manifest.skillName,
     skillPath,
     sourceJobId: manifest.sourceJobId,
@@ -584,7 +585,7 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
       ? { promotionThreshold: Math.max(1, Math.trunc(parsed.promotionThreshold)) }
       : {}),
     ...(typeof parsed.reason === 'string' && parsed.reason.trim().length > 0
-      ? { reason: parsed.reason.trim().replace(/\s+/g, ' ') }
+      ? { reason: normalizeCandidateReason(parsed.reason) }
       : {}),
     schemaVersion: RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION as typeof RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION,
     skillName: parsed.skillName.trim(),
@@ -663,6 +664,14 @@ function reviewStatusReason(manifest: ResearchScriptSkillCandidateReviewManifest
   return manifest.eligible
     ? `${manifest.successfulRunCount} successful runs met the promotion threshold.`
     : `${manifest.successfulRunCount} successful runs; candidate is not eligible yet.`;
+}
+
+function normalizeCandidateReason(value: string): string {
+  const cleaned = value.trim().replace(/\s+/g, ' ');
+  if (cleaned.length <= SKILL_CANDIDATE_REASON_MAX_CHARS) {
+    return cleaned;
+  }
+  return `${cleaned.slice(0, SKILL_CANDIDATE_REASON_MAX_CHARS - 3)}...`;
 }
 
 function normalizeToolSequence(value: unknown): string[] | undefined {

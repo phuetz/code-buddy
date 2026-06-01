@@ -509,4 +509,88 @@ describe('Tools CLI commands', () => {
       await fs.rm(rootDir, { recursive: true, force: true });
     }
   });
+
+  it('bounds Learning Agent skill candidate promotion reasons in the real CLI review output', async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tools-learning-skill-candidate-reason-'));
+    const previousCwd = process.cwd();
+    try {
+      const candidateDir = path.join(rootDir, '.codebuddy', 'skill-candidates', 'learning', 'learned-long-reason');
+      await fs.mkdir(candidateDir, { recursive: true });
+      await fs.writeFile(
+        path.join(candidateDir, 'SKILL.md'),
+        [
+          '---',
+          'name: learned-long-reason',
+          'description: Reusable workflow learned from a real run.',
+          'version: 1.0.0',
+          'author: Code Buddy Learning Agent',
+          'license: MIT',
+          'platforms: [linux, macos]',
+          'metadata:',
+          '  hermes:',
+          '    tags: [learning-agent, review-required]',
+          '    category: testing',
+          '---',
+          '',
+          '# Learned Long Reason',
+          '',
+          '## When to Use',
+          'Use this skill after review.',
+          '',
+          '## Procedure',
+          '1. Use `search` for discovery.',
+          '2. Use `view_file` for targeted reads.',
+          '3. Use `bash` for real verification.',
+          '',
+          '## Verification',
+          '- The final task result is backed by a real verification command.',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      await fs.writeFile(
+        path.join(candidateDir, 'candidate-review.json'),
+        `${JSON.stringify({
+          approvalRequired: true,
+          candidateId: 'learning-skill-long-reason',
+          eligible: true,
+          generatedAt: '2026-06-01T16:00:00.000Z',
+          promotionThreshold: 2,
+          reason: 'A'.repeat(2_000),
+          schemaVersion: 1,
+          skillName: 'learned-long-reason',
+          sourceRunId: 'run-long-reason',
+          status: 'awaiting_human_approval',
+          successfulRunCount: 2,
+          toolSequence: ['search', 'view_file', 'bash'],
+        }, null, 2)}\n`,
+        'utf8',
+      );
+
+      process.chdir(rootDir);
+      const program = createProgram();
+      registerToolsCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'tools',
+        'skill-candidate',
+        'inspect',
+        '.codebuddy/skill-candidates/learning/learned-long-reason',
+        '--json',
+      ]);
+
+      const output = JSON.parse(getLogOutput()) as {
+        candidate: {
+          reason: string;
+        };
+      };
+      expect(output.candidate.reason).toHaveLength(240);
+      expect(output.candidate.reason).toMatch(/\.\.\.$/);
+    } finally {
+      process.chdir(previousCwd);
+      await fs.rm(rootDir, { recursive: true, force: true });
+    }
+  });
 });
