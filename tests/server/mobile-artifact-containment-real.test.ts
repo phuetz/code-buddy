@@ -296,6 +296,40 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(followupDrafts).toHaveLength(100);
   });
 
+  it('keeps resolved follow-up draft history bounded across submit and cancel cycles', async () => {
+    const token = await pairToken();
+
+    for (let i = 0; i < 125; i += 1) {
+      const submit = await fetch(`${baseUrl}/submit-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          prompt: `resolved cycle ${i}`,
+          query: `resolved history ${i}`,
+        }),
+      });
+      expect(submit.status).toBe(200);
+      const { draft } = await submit.json() as { draft: { id: string } };
+
+      const cancel = await fetch(`${baseUrl}/followup-draft/${draft.id}/cancel`, { method: 'POST' });
+      expect(cancel.status).toBe(200);
+    }
+
+    const list = await fetch(`${baseUrl}/followup-drafts`);
+    expect(list.status).toBe(200);
+    const data = await list.json() as {
+      counts: { cancelled: number };
+      drafts: Array<{ prompt: string; status: string }>;
+      limits: { maxResolvedDrafts: number };
+    };
+    expect(data.limits.maxResolvedDrafts).toBe(100);
+    expect(data.drafts).toHaveLength(100);
+    expect(data.counts.cancelled).toBe(100);
+    expect(data.drafts.every((draft) => draft.status === 'cancelled')).toBe(true);
+    expect(data.drafts[0].prompt).toBe('resolved cycle 25');
+    expect(followupDrafts).toHaveLength(100);
+  });
+
   it('rejects repeated mobile query parameters before recall builders receive them', async () => {
     const token = await pairToken();
 

@@ -19,6 +19,7 @@ const MAX_FOLLOWUP_PROMPT_CHARS = 12_000;
 const MAX_FOLLOWUP_QUERY_CHARS = 1_000;
 const MAX_ARTIFACT_INLINE_BYTES = 1_000_000;
 const MAX_PENDING_FOLLOWUP_DRAFTS = 100;
+const MAX_RESOLVED_FOLLOWUP_DRAFTS = 100;
 const MAX_FAILED_PAIRING_ATTEMPTS = 20;
 const PAIRING_ATTEMPT_WINDOW_MS = 60 * 1000;
 
@@ -98,6 +99,34 @@ function pruneExpiredTokens(now = Date.now()): void {
 
 function countPendingFollowupDrafts(): number {
   return followupDrafts.filter((draft) => draft.status === 'needs_local_operator').length;
+}
+
+function countFollowupDraftsByStatus(): Record<FollowupDraftStatus, number> {
+  return followupDrafts.reduce<Record<FollowupDraftStatus, number>>((counts, draft) => {
+    counts[draft.status] += 1;
+    return counts;
+  }, {
+    needs_local_operator: 0,
+    approved: 0,
+    cancelled: 0,
+  });
+}
+
+function pruneResolvedFollowupDraftHistory(): void {
+  const resolvedDrafts = followupDrafts
+    .filter((draft) => draft.status !== 'needs_local_operator')
+    .sort((left, right) => left.createdAt - right.createdAt);
+  const overflow = resolvedDrafts.length - MAX_RESOLVED_FOLLOWUP_DRAFTS;
+  if (overflow <= 0) {
+    return;
+  }
+  const removeIds = new Set(resolvedDrafts.slice(0, overflow).map((draft) => draft.id));
+  for (let index = followupDrafts.length - 1; index >= 0; index -= 1) {
+    const draft = followupDrafts[index];
+    if (draft && removeIds.has(draft.id)) {
+      followupDrafts.splice(index, 1);
+    }
+  }
 }
 
 // Helper to check if a token is valid
@@ -266,7 +295,16 @@ mobileRouter.post('/pairing-code', loopbackOnlyMiddleware, (req: Request, res: R
 
 // GET /api/mobile/followup-drafts: local operator lists the review queue.
 mobileRouter.get('/followup-drafts', loopbackOnlyMiddleware, (req: Request, res: Response) => {
-  res.json({ ok: true, drafts: followupDrafts });
+  pruneResolvedFollowupDraftHistory();
+  res.json({
+    ok: true,
+    drafts: followupDrafts,
+    counts: countFollowupDraftsByStatus(),
+    limits: {
+      maxPendingDrafts: MAX_PENDING_FOLLOWUP_DRAFTS,
+      maxResolvedDrafts: MAX_RESOLVED_FOLLOWUP_DRAFTS,
+    },
+  });
 });
 
 // POST /api/mobile/followup-draft/:id/approve: local operator approves a draft.
@@ -287,6 +325,7 @@ mobileRouter.post('/followup-draft/:id/approve', loopbackOnlyMiddleware, (req: R
   draft.status = 'approved';
   draft.approvedBy = reviewer;
   draft.approvedAt = Date.now();
+  pruneResolvedFollowupDraftHistory();
   res.json({
     ok: true,
     message: 'Draft approved by local operator. No work is dispatched automatically — execution stays local and explicit.',
@@ -307,6 +346,7 @@ mobileRouter.post('/followup-draft/:id/cancel', loopbackOnlyMiddleware, (req: Re
   }
   draft.status = 'cancelled';
   draft.cancelledAt = Date.now();
+  pruneResolvedFollowupDraftHistory();
   res.json({ ok: true, message: 'Draft cancelled by local operator.', draft });
 });
 
@@ -519,6 +559,7 @@ mobileRouter.post('/followup-draft', async (req: Request, res: Response) => {
       res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
       return;
     }
+    pruneResolvedFollowupDraftHistory();
     if (countPendingFollowupDrafts() >= MAX_PENDING_FOLLOWUP_DRAFTS) {
       res.status(429).json({
         ok: false,
@@ -556,6 +597,7 @@ mobileRouter.post('/submit-prompt', async (req: Request, res: Response) => {
       res.status(400).json({ ok: false, error: 'Missing or invalid prompt or query' });
       return;
     }
+    pruneResolvedFollowupDraftHistory();
     if (countPendingFollowupDrafts() >= MAX_PENDING_FOLLOWUP_DRAFTS) {
       res.status(429).json({
         ok: false,
