@@ -11,6 +11,7 @@ import { resetMemoryProviderRegistry } from '../../src/memory/memory-provider.js
 import { getUserModel, resetUserModels } from '../../src/memory/user-model.js';
 import { RunStore } from '../../src/observability/run-store.js';
 import { resetDataRedactionEngine } from '../../src/security/data-redaction.js';
+import { SkillsHub } from '../../src/skills/hub.js';
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
@@ -26,6 +27,25 @@ function createProgram(): Command {
 
 function getLogOutput(): string {
   return consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+}
+
+function createSkillContent(name: string, description = `${name} test skill`): string {
+  return [
+    '---',
+    `name: ${name}`,
+    'version: 1.0.0',
+    `description: ${description}`,
+    'author: Code Buddy Test',
+    'tags:',
+    '  - hermes',
+    '  - testing',
+    '---',
+    '',
+    `# ${name}`,
+    '',
+    `Body for ${name} should stay out of Hermes status output.`,
+    '',
+  ].join('\n');
 }
 
 describe('Hermes CLI commands', () => {
@@ -549,6 +569,79 @@ describe('Hermes CLI commands', () => {
       else process.env.CODEBUDDY_RUNS_DIR = oldRunsDir;
       resetLessonCandidateQueues();
       resetUserModels();
+      await fs.remove(tmpDir);
+    }
+  });
+
+  it('prints Hermes skills status from the real workspace SkillsHub lockfile', async () => {
+    const oldCwd = process.cwd();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-skills-status-'));
+    const hub = new SkillsHub({
+      cacheDir: path.join(tmpDir, '.codebuddy', 'skills-cache'),
+      lockfilePath: path.join(tmpDir, '.codebuddy', 'skills-lock.json'),
+      skillsDir: path.join(tmpDir, '.codebuddy', 'skills'),
+      tapsPath: path.join(tmpDir, '.codebuddy', 'skills-taps.json'),
+    });
+
+    try {
+      process.chdir(tmpDir);
+      await hub.installFromContent('healthy-helper', createSkillContent('healthy-helper'));
+      const missing = await hub.installFromContent('missing-helper', createSkillContent('missing-helper'));
+      await fs.remove(missing.path);
+
+      const program = createProgram();
+      registerHermesCommands(program);
+      await program.parseAsync(['node', 'test', 'hermes', 'skills', 'status', '--json', '--limit', '2']);
+
+      const raw = getLogOutput();
+      const output = JSON.parse(raw) as {
+        kind: string;
+        schemaVersion: number;
+        summary: {
+          installedCount: number;
+          health: {
+            missingFileCount: number;
+            nextCommand: string;
+            ok: boolean;
+          };
+          packages: Array<{
+            contentPreview?: string;
+            exists: boolean;
+            integrityOk: boolean;
+            name: string;
+          }>;
+          reviewCommands: string[];
+        };
+      };
+
+      expect(output.kind).toBe('hermes_skills_status');
+      expect(output.schemaVersion).toBe(1);
+      expect(output.summary.installedCount).toBe(2);
+      expect(output.summary.health.ok).toBe(false);
+      expect(output.summary.health.missingFileCount).toBe(1);
+      expect(output.summary.health.nextCommand).toBe('buddy skills doctor --json');
+      expect(output.summary.packages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            exists: true,
+            integrityOk: true,
+            name: 'healthy-helper',
+          }),
+          expect.objectContaining({
+            exists: false,
+            integrityOk: false,
+            name: 'missing-helper',
+          }),
+        ]),
+      );
+      expect(output.summary.packages.every((skill) => skill.contentPreview === undefined)).toBe(true);
+      expect(output.summary.reviewCommands).toContain('buddy skills list --all --json');
+      expect(output.summary.reviewCommands).toContain('buddy skills doctor --json');
+      expect(raw).not.toContain('Body for healthy-helper');
+      expect(raw).not.toContain('Body for missing-helper');
+    } finally {
+      hub.shutdown();
+      process.chdir(oldCwd);
       await fs.remove(tmpDir);
     }
   });

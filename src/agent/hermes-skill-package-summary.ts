@@ -143,6 +143,34 @@ export function buildHermesSkillPackageSummary(
   };
 }
 
+export function renderHermesSkillPackageSummary(summary: HermesSkillPackageSummary): string {
+  const lines = [
+    `Hermes skills: ${summary.health.ok ? 'ok' : 'needs attention'}`,
+    `Installed: ${summary.installedCount}`,
+    `Enabled: ${summary.enabledCount}`,
+    `Disabled: ${summary.disabledCount}`,
+    `Rollback snapshots: ${summary.rollbackableCount}`,
+    `Health: ${summary.health.healthyCount} healthy, ${summary.health.issueCount} issue(s)`,
+    `Next command: ${summary.health.nextCommand}`,
+    '',
+    'Packages:',
+  ];
+
+  for (const skill of summary.packages) {
+    lines.push(
+      `- ${skill.name}@${skill.version}: ${skill.status}` +
+      ` | exists=${skill.exists ? 'yes' : 'no'}` +
+      ` | integrity=${skill.integrityOk ? 'ok' : 'mismatch'}`,
+    );
+  }
+
+  if (summary.reviewCommands.length > 0) {
+    lines.push('', 'Review commands:', ...summary.reviewCommands.map((command) => `- ${command}`));
+  }
+
+  return lines.join('\n');
+}
+
 function buildPackageHealth(packages: HermesSkillPackageEntry[]): HermesSkillPackageSummary['health'] {
   const missingFileCount = packages.filter((skill) => !skill.exists).length;
   const staleTempMissingCount = packages.filter((skill) => skill.staleTempPath).length;

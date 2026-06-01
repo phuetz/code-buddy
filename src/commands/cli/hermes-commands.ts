@@ -80,6 +80,10 @@ import {
   renderHermesLearningLoopStatus,
 } from '../../agent/hermes-learning-loop-status.js';
 import {
+  buildHermesSkillPackageSummary,
+  renderHermesSkillPackageSummary,
+} from '../../agent/hermes-skill-package-summary.js';
+import {
   buildMobileSupervisionGatewayContract,
   type MobileSupervisionGatewayContract,
 } from '../../observability/mobile-supervision-gateway-contract.js';
@@ -1504,6 +1508,34 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesLearningLoopStatus(status));
+    });
+
+  const skills = hermes
+    .command('skills')
+    .description('Inspect Hermes-compatible skill package readiness');
+
+  skills
+    .command('status')
+    .description('Print installed SKILL.md package health and review-gated lifecycle commands')
+    .option('--json', 'output JSON')
+    .option('--limit <n>', 'number of installed skill packages to include', '20')
+    .action((options: HermesLearningStatusOptions) => {
+      const summary = buildHermesSkillPackageSummary(process.cwd(), {
+        limit: parseOptionalPositiveInteger(options.limit, '--limit'),
+        previewChars: 0,
+      });
+      const payload = {
+        kind: 'hermes_skills_status',
+        schemaVersion: 1,
+        summary,
+      };
+
+      if (options.json) {
+        console.log(stableJson(payload));
+        return;
+      }
+
+      console.log(renderHermesSkillPackageSummary(summary));
     });
 
   const messaging = hermes
