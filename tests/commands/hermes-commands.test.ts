@@ -248,7 +248,10 @@ describe('Hermes CLI commands', () => {
           };
           provider: {
             configured: boolean;
+            configuredProviderIds: string[];
             credentialSources: string[];
+            localProviderIds: string[];
+            missingProviderIds: string[];
             model: string;
           };
           runtime: {
@@ -290,6 +293,9 @@ describe('Hermes CLI commands', () => {
         model: 'gpt-5.5',
         credentialSources: expect.arrayContaining(['OPENAI_API_KEY']),
       });
+      expect(output.readiness.provider.configuredProviderIds).toContain('openai');
+      expect(output.readiness.provider.localProviderIds).toEqual(expect.arrayContaining(['ollama', 'lmstudio']));
+      expect(output.readiness.provider.missingProviderIds).toEqual(expect.arrayContaining(['anthropic', 'google']));
       expect(output.readiness.runtime.smokeCommand).toBe('buddy hermes runtime-smoke auto --json');
       expect(output.readiness.runtime.autoEligibleBackendIds).toContain('local');
       expect(output.readiness.runtime.gatedBackendCount).toBe(output.readiness.runtime.gatedBackendIds.length);
@@ -329,6 +335,8 @@ describe('Hermes CLI commands', () => {
       expect(textOutput).toContain('Feature parity:');
       expect(textOutput).toContain('Tool parity:');
       expect(textOutput).toContain('Readiness:');
+      expect(textOutput).toContain('Providers: configured');
+      expect(textOutput).toContain('missing:');
       expect(textOutput).toContain('(auto:');
       expect(textOutput).toContain('gated:');
       expect(textOutput).toContain('Protocols: available');

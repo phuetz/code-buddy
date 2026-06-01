@@ -299,6 +299,9 @@ interface HermesOverviewStatus {
       configured: boolean;
       credentialSources: string[];
       configuredProviderCount: number;
+      configuredProviderIds: string[];
+      localProviderIds: string[];
+      missingProviderIds: string[];
       supportsReasoning: boolean;
       supportsToolCalls: boolean;
       supportsVision: boolean;
@@ -811,6 +814,15 @@ function buildHermesOverviewStatus(profileArg: string): HermesOverviewStatus {
         configured: diagnostics.providerReadiness.activeProvider.configured,
         credentialSources: diagnostics.providerReadiness.activeProvider.credentialSources.map(sanitizeCredentialSource),
         configuredProviderCount: diagnostics.providerReadiness.providers.filter((provider) => provider.configured).length,
+        configuredProviderIds: diagnostics.providerReadiness.providers
+          .filter((provider) => provider.configured)
+          .map((provider) => provider.provider),
+        localProviderIds: diagnostics.providerReadiness.providers
+          .filter((provider) => provider.local)
+          .map((provider) => provider.provider),
+        missingProviderIds: diagnostics.providerReadiness.providers
+          .filter((provider) => !provider.configured)
+          .map((provider) => provider.provider),
         supportsReasoning: diagnostics.providerReadiness.activeModel.supportsReasoning,
         supportsToolCalls: diagnostics.providerReadiness.activeModel.supportsToolCalls,
         supportsVision: diagnostics.providerReadiness.activeModel.supportsVision,
@@ -949,6 +961,9 @@ function renderHermesOverviewStatus(status: HermesOverviewStatus): string {
     'Routes:',
     `  Provider: ${readiness.provider.label} / ${readiness.provider.model} ` +
       `(${readiness.provider.configured ? 'configured' : 'missing'})`,
+    `  Providers: configured ${formatList(readiness.provider.configuredProviderIds)} ` +
+      `(local: ${formatList(readiness.provider.localProviderIds)}, ` +
+      `missing: ${formatList(readiness.provider.missingProviderIds)})`,
     `  Runtime: ${readiness.runtime.primaryBackendId ?? 'none'} ` +
       `-> ${formatList(readiness.runtime.fallbackBackendIds)} ` +
       `(auto: ${formatList(readiness.runtime.autoEligibleBackendIds)}, gated: ${formatList(readiness.runtime.gatedBackendIds)})`,
