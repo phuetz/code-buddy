@@ -197,6 +197,19 @@ export function renderHermesSkillPackageSummary(summary: HermesSkillPackageSumma
     );
   }
 
+  if (summary.candidateReview.samples.length > 0) {
+    lines.push('', 'Candidate samples:');
+    for (const candidate of summary.candidateReview.samples) {
+      const promotionStatus = candidate.promotion
+        ? `${candidate.promotion.status} (${candidate.promotion.successfulRunCount}/${candidate.promotion.threshold})`
+        : candidate.eligible ? 'eligible' : 'not_eligible';
+      lines.push(`- ${candidate.skillName}: ${promotionStatus} -> ${candidate.inspectCommand}`);
+      if (candidate.promotion?.reason) {
+        lines.push(`  Reason: ${candidate.promotion.reason}`);
+      }
+    }
+  }
+
   if (summary.reviewCommands.length > 0) {
     lines.push('', 'Review commands:', ...summary.reviewCommands.map((command) => `- ${command}`));
   }

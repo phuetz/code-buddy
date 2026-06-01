@@ -1240,6 +1240,9 @@ describe('Hermes CLI commands', () => {
       const textOutput = getLogOutput();
       expect(textOutput).toContain('Skill candidates: 1 (1 eligible, 0 not eligible)');
       expect(textOutput).toContain('Candidate review: buddy tools skill-candidate list --eligible-only --json');
+      expect(textOutput).toContain('Candidate samples:');
+      expect(textOutput).toContain('review-ready: awaiting_human_approval (2/2)');
+      expect(textOutput).toContain('Reason: 2 successful observations meet the promotion threshold.');
       expect(textOutput).toContain('Next candidate: buddy tools skill-candidate inspect .codebuddy/skill-candidates/learning/review-ready --json');
       expect(textOutput).not.toContain('Ready candidate body must stay private.');
     } finally {
