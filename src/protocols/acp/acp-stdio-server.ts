@@ -10,6 +10,8 @@
  * Implemented methods (grounded in the published spec):
  * - `initialize`        → capability negotiation (integer protocolVersion).
  * - `session/new`       → `{ sessionId }`.
+ * - `session/list`      → discovers in-process sessions, optionally filtered
+ *                         by `cwd`.
  * - `session/load`      → resumes an in-process session and replays streamed
  *                         history (`session/update` notifications).
  * - `session/prompt`    → runs the injected prompt runner, streaming
@@ -101,6 +103,8 @@ interface AcpSession {
   cwd: string;
   active: AbortController | null;
   history: AcpSessionUpdate[];
+  title?: string;
+  updatedAt: string;
 }
 
 interface PendingClientRequest {
@@ -261,6 +265,8 @@ export class AcpStdioServer {
         return this.handleInitialize(params);
       case 'session/new':
         return this.handleNewSession(params);
+      case 'session/list':
+        return this.handleListSessions(params);
       case 'session/load':
         return this.handleLoadSession(params);
       case 'session/prompt':
@@ -281,6 +287,7 @@ export class AcpStdioServer {
         loadSession: true,
         promptCapabilities: { image: false, audio: false, embeddedContext: false },
         mcpCapabilities: { http: false, sse: false },
+        sessionCapabilities: { list: {} },
       },
       agentInfo: this.agentInfo,
       authMethods: [],
@@ -289,8 +296,37 @@ export class AcpStdioServer {
 
   private handleNewSession(params: Record<string, unknown>): unknown {
     const sessionId = randomUUID();
-    this.sessions.set(sessionId, { cwd: asString(params.cwd) ?? process.cwd(), active: null, history: [] });
+    this.sessions.set(sessionId, {
+      cwd: asString(params.cwd) ?? process.cwd(),
+      active: null,
+      history: [],
+      updatedAt: new Date().toISOString(),
+    });
     return { sessionId };
+  }
+
+  private handleListSessions(params: Record<string, unknown>): unknown {
+    if (params.cursor !== undefined) {
+      const error = new Error('Invalid or unsupported session/list cursor') as Error & { code?: number };
+      error.code = -32602;
+      throw error;
+    }
+
+    const cwd = asString(params.cwd);
+    const sessions = [...this.sessions.entries()]
+      .filter(([, session]) => !cwd || session.cwd === cwd)
+      .map(([sessionId, session]) => ({
+        sessionId,
+        cwd: session.cwd,
+        ...(session.title ? { title: session.title } : {}),
+        updatedAt: session.updatedAt,
+        _meta: {
+          messageCount: session.history.length,
+          active: session.active !== null,
+        },
+      }));
+
+    return { sessions };
   }
 
   private handleLoadSession(params: Record<string, unknown>): unknown {
@@ -326,6 +362,7 @@ export class AcpStdioServer {
     session.active = controller;
 
     try {
+      session.updatedAt = new Date().toISOString();
       const { stopReason } = await this.promptRunner({
         sessionId,
         cwd: session.cwd,
@@ -338,6 +375,10 @@ export class AcpStdioServer {
         }),
         sendUpdate: (update) => this.sendUpdate(sessionId, update),
       });
+      if (!session.title) {
+        session.title = buildSessionTitle(prompt);
+      }
+      session.updatedAt = new Date().toISOString();
       return { stopReason: controller.signal.aborted ? 'cancelled' : stopReason };
     } catch (err) {
       if (controller.signal.aborted) return { stopReason: 'cancelled' };
@@ -415,4 +456,14 @@ function normalizeClientCapabilities(value: unknown): AcpClientCapabilities {
       : undefined,
     terminal: input.terminal === true,
   };
+}
+
+function buildSessionTitle(prompt: AcpContentBlock[]): string | undefined {
+  const firstText = prompt
+    .find((block) => block.type === 'text' && typeof block.text === 'string')
+    ?.text
+    ?.replace(/\s+/g, ' ')
+    .trim();
+  if (!firstText) return undefined;
+  return firstText.length > 80 ? `${firstText.slice(0, 77)}...` : firstText;
 }

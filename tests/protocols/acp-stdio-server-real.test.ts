@@ -66,6 +66,7 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     expect(res?.result.agentInfo.name).toBe('Code Buddy');
     expect(res?.result.authMethods).toEqual([]);
     expect(res?.result.agentCapabilities.promptCapabilities).toBeTruthy();
+    expect(res?.result.agentCapabilities.sessionCapabilities).toEqual({ list: {} });
   });
 
   it('passes initialized client capabilities into prompt runners', async () => {
@@ -208,6 +209,66 @@ describe('AcpStdioServer (real ndjson transport)', () => {
     await harness.flush();
     expect(seenCwds).toEqual(['/tmp/old', '/tmp/new']);
     expect(harness.responseFor(5)?.result).toEqual({ stopReason: 'end_turn' });
+  });
+
+  it('lists in-process sessions with cwd filtering and prompt-derived metadata', async () => {
+    const runner: AcpPromptRunner = async ({ prompt, sendUpdate }) => {
+      sendUpdate({
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: `listed: ${prompt[0]?.text ?? ''}` },
+      });
+      return { stopReason: 'end_turn' };
+    };
+    harness = new AcpHarness(runner);
+
+    harness.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } });
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/list', params: {} });
+    await harness.flush();
+    expect(harness.responseFor(2)?.result).toEqual({ sessions: [] });
+
+    harness.send({ jsonrpc: '2.0', id: 3, method: 'session/new', params: { cwd: '/tmp/project-a', mcpServers: [] } });
+    harness.send({ jsonrpc: '2.0', id: 4, method: 'session/new', params: { cwd: '/tmp/project-b', mcpServers: [] } });
+    await harness.flush();
+    const sessionA = harness.responseFor(3)?.result.sessionId as string;
+
+    harness.send({
+      jsonrpc: '2.0',
+      id: 5,
+      method: 'session/prompt',
+      params: { sessionId: sessionA, prompt: [{ type: 'text', text: 'Implement session list API' }] },
+    });
+    await harness.flush();
+
+    harness.send({ jsonrpc: '2.0', id: 6, method: 'session/list', params: { cwd: '/tmp/project-a' } });
+    await harness.flush();
+
+    const listResult = harness.responseFor(6)?.result;
+    expect(listResult.sessions).toEqual([
+      expect.objectContaining({
+        sessionId: sessionA,
+        cwd: '/tmp/project-a',
+        title: 'Implement session list API',
+        _meta: {
+          active: false,
+          messageCount: 1,
+        },
+      }),
+    ]);
+    expect(listResult.sessions[0].updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(listResult.nextCursor).toBeUndefined();
+  });
+
+  it('rejects unsupported session/list cursors instead of pretending pagination exists', async () => {
+    harness = new AcpHarness(async () => ({ stopReason: 'end_turn' }));
+
+    harness.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } });
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/list', params: { cursor: 'opaque-next-page' } });
+    await harness.flush();
+
+    expect(harness.responseFor(2)?.error).toMatchObject({
+      code: -32602,
+      message: 'Invalid or unsupported session/list cursor',
+    });
   });
 
   it('lets prompt runners call client methods and wait for JSON-RPC responses', async () => {

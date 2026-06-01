@@ -36,7 +36,7 @@ describe('Hermes protocol gateway readiness', () => {
     expect(rendered).toContain('    - POST /api/acp/tasks/:id/resume');
     expect(rendered).toContain('    - stdio: buddy acp');
     expect(rendered).toContain('Evidence: 6 file/test reference(s)');
-    expect(rendered).toContain('Notes: The stdio ACP transport supports initialize, session/new, in-process session/load replay, session/prompt, session/cancel, and capability-gated agent-to-client JSON-RPC request/response correlation.');
+    expect(rendered).toContain('Notes: The stdio ACP transport supports initialize, session/new, in-process session/list, session/load replay, session/prompt, session/cancel, and capability-gated agent-to-client JSON-RPC request/response correlation.');
   });
 
   it('runs a real MCP stdio and loopback A2A/ACP HTTP smoke', async () => {

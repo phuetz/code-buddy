@@ -208,7 +208,7 @@ const CAPABILITIES: HermesProtocolGatewayCapability[] = [
       'npx tsx src/index.ts hermes protocols status --json',
     ],
     notes: [
-      'The stdio ACP transport supports initialize, session/new, in-process session/load replay, session/prompt, session/cancel, and capability-gated agent-to-client JSON-RPC request/response correlation.',
+      'The stdio ACP transport supports initialize, session/new, in-process session/list, session/load replay, session/prompt, session/cancel, and capability-gated agent-to-client JSON-RPC request/response correlation.',
       'Exact upstream Hermes editor packaging and live editor validation are not yet claimed.',
     ],
   },

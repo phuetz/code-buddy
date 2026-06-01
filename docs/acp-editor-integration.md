@@ -35,6 +35,7 @@ The agent uses your configured provider (auto-detected via the usual keys —
 |---|---|
 | `initialize` | Capability negotiation (`protocolVersion: 1`, text prompts). |
 | `session/new` | Returns a `sessionId`; records the editor `cwd`. |
+| `session/list` | Lists in-process sessions, with optional exact `cwd` filtering and prompt-derived metadata. |
 | `session/load` | Reloads an existing in-process session, replays prior `session/update` history, and refreshes the session `cwd`. |
 | `session/prompt` | Runs the prompt, streams `session/update` `agent_message_chunk` notifications, resolves with `{ stopReason }`. |
 | `session/cancel` | Aborts the active turn → `stopReason: "cancelled"`. |
@@ -50,7 +51,7 @@ as required by the ACP spec.
 
 - Full tool-running integration over `fs/read_text_file`,
   `fs/write_text_file`, and `session/request_permission`.
-- Durable cross-process session resumption and MCP passthrough.
+- Durable cross-process session list/load/resumption and MCP passthrough.
 - Full tool-using agentic turns (v1 bridges to a one-shot LLM completion).
 
 Implementation: `src/protocols/acp/acp-stdio-server.ts` (protocol layer,
