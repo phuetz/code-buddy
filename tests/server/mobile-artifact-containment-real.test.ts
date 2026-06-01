@@ -190,6 +190,30 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     }
   });
 
+  it('rate-limits repeated invalid pairing attempts from the same client', async () => {
+    const statuses: number[] = [];
+    try {
+      for (let i = 0; i < 21; i += 1) {
+        const res = await fetch(`${baseUrl}/pair`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: '000000', deviceLabel: `spray-device-${i}` }),
+        });
+        statuses.push(res.status);
+        if (i === 20) {
+          expect(res.headers.get('retry-after')).toBeTruthy();
+          expect(await res.text()).toContain('Too many invalid pairing attempts');
+        }
+      }
+
+      expect(statuses.slice(0, 20)).toEqual(Array.from({ length: 20 }, () => 401));
+      expect(statuses[20]).toBe(429);
+      expect(activeTokens.size).toBe(0);
+    } finally {
+      await fetch(`${baseUrl}/pairing-code`, { method: 'POST' });
+    }
+  });
+
   it('rejects malformed follow-up draft payloads before building gateway context', async () => {
     const token = await pairToken();
 

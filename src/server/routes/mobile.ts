@@ -19,6 +19,8 @@ const MAX_FOLLOWUP_PROMPT_CHARS = 12_000;
 const MAX_FOLLOWUP_QUERY_CHARS = 1_000;
 const MAX_ARTIFACT_INLINE_BYTES = 1_000_000;
 const MAX_PENDING_FOLLOWUP_DRAFTS = 100;
+const MAX_FAILED_PAIRING_ATTEMPTS = 20;
+const PAIRING_ATTEMPT_WINDOW_MS = 60 * 1000;
 
 mobileRouter.use((_req: Request, res: Response, next: NextFunction): void => {
   res.setHeader('Cache-Control', 'no-store');
@@ -43,6 +45,7 @@ function getPairingCodeTtlMs(): number {
 export let activePairingCode = generatePairingCode();
 export let activePairingCodeExpiresAt = Date.now() + getPairingCodeTtlMs();
 export const activeTokens = new Map<string, { deviceLabel: string; expiresAt: number }>();
+const pairingAttemptBuckets = new Map<string, { failedAttempts: number; windowStartedAt: number }>();
 
 function rotatePairingCode(): string {
   let nextCode = generatePairingCode();
@@ -51,6 +54,7 @@ function rotatePairingCode(): string {
   }
   activePairingCode = nextCode;
   activePairingCodeExpiresAt = Date.now() + getPairingCodeTtlMs();
+  pairingAttemptBuckets.clear();
   return activePairingCode;
 }
 
@@ -101,6 +105,36 @@ function isValidToken(token: string): boolean {
   pruneExpiredTokens();
   const tokenData = activeTokens.get(token);
   return !!tokenData;
+}
+
+function getPairingAttemptKey(req: Request): string {
+  return req.socket?.remoteAddress ?? 'unknown';
+}
+
+function getPairingAttemptBucket(req: Request, now = Date.now()): { failedAttempts: number; windowStartedAt: number } {
+  const key = getPairingAttemptKey(req);
+  const bucket = pairingAttemptBuckets.get(key);
+  if (!bucket || now - bucket.windowStartedAt >= PAIRING_ATTEMPT_WINDOW_MS) {
+    const freshBucket = { failedAttempts: 0, windowStartedAt: now };
+    pairingAttemptBuckets.set(key, freshBucket);
+    return freshBucket;
+  }
+  return bucket;
+}
+
+function isPairingAttemptRateLimited(req: Request, now = Date.now()): boolean {
+  const bucket = getPairingAttemptBucket(req, now);
+  return bucket.failedAttempts >= MAX_FAILED_PAIRING_ATTEMPTS;
+}
+
+function getPairingAttemptRetryAfterSeconds(req: Request, now = Date.now()): number {
+  const bucket = getPairingAttemptBucket(req, now);
+  return Math.max(1, Math.ceil((PAIRING_ATTEMPT_WINDOW_MS - (now - bucket.windowStartedAt)) / 1000));
+}
+
+function recordFailedPairingAttempt(req: Request): void {
+  const bucket = getPairingAttemptBucket(req);
+  bucket.failedAttempts += 1;
 }
 
 /**
@@ -285,7 +319,17 @@ mobileRouter.post('/pair', (req: Request, res: Response) => {
     return;
   }
   ensureActivePairingCodeFresh();
+  if (isPairingAttemptRateLimited(req)) {
+    res.setHeader('Retry-After', String(getPairingAttemptRetryAfterSeconds(req)));
+    res.status(429).json({
+      ok: false,
+      error: 'Too many invalid pairing attempts; retry after the cooldown or rotate the pairing code locally',
+      attemptLimit: MAX_FAILED_PAIRING_ATTEMPTS,
+    });
+    return;
+  }
   if (code !== activePairingCode) {
+    recordFailedPairingAttempt(req);
     res.status(401).json({ ok: false, error: 'Invalid pairing code' });
     return;
   }
