@@ -115,8 +115,9 @@ describe('Hermes skill package summary on real SkillsHub lockfiles', () => {
       'buddy skills disable <name> --approved-by <reviewer>',
       'buddy skills deprecate <name> --approved-by <reviewer>',
       'buddy skills delete <name> --approved-by <reviewer> --json',
+      'buddy skills rollback <name> --approved-by <reviewer> --json',
       'buddy skills reset <name> --approved-by <reviewer> --json',
-      'Use skill_manage with approved_by only for patch/rollback/update until CLI equivalents exist.',
+      'Use skill_manage with approved_by only for patch/update until CLI equivalents exist.',
     ]);
     expect(summary.packages).toEqual(expect.arrayContaining([
       expect.objectContaining({

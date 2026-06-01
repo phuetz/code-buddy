@@ -333,6 +333,69 @@ describe('buddy skills command with real SkillsHub state', () => {
     await expect(fs.readFile(installed.path, 'utf8')).rejects.toThrow();
   });
 
+  it('rolls back an installed skill through the reviewer-gated CLI', async () => {
+    const hub = getSkillsHub({
+      cacheDir: path.join(tempHome, 'cache'),
+      lockfilePath: path.join(tempHome, 'lock.json'),
+      skillsDir: path.join(tempHome, 'skills'),
+    });
+    const installed = await hub.installFromContent(
+      'rollback-cli-helper',
+      skillContent('rollback-cli-helper', '1.0.0', 'Original rollback CLI wording.'),
+    );
+    const patched = hub.patchInstalledSkill(
+      'rollback-cli-helper',
+      'Original rollback CLI wording.',
+      'Updated rollback CLI wording.',
+      {
+        actor: 'operator-patch',
+        reason: 'create rollback CLI evidence',
+      },
+    );
+    expect(patched?.snapshot.id).toBeTruthy();
+    await expect(fs.readFile(installed.path, 'utf8')).resolves.toContain('Updated rollback CLI wording.');
+
+    const program = createProgram();
+    await program.parseAsync([
+      'node',
+      'buddy',
+      'skills',
+      'rollback',
+      'rollback-cli-helper',
+      '--approved-by',
+      'operator-rollback',
+      '--reason',
+      'restore reviewed CLI snapshot',
+      '--json',
+    ]);
+
+    const result = JSON.parse(getLogOutput()) as {
+      approvedBy: string;
+      currentSnapshot: { id: string };
+      installed: { lifecycle: { reason: string; updatedBy: string }; name: string };
+      restoredSnapshot: { id: string };
+      rolledBack: boolean;
+    };
+
+    expect(result).toMatchObject({
+      approvedBy: 'operator-rollback',
+      installed: {
+        lifecycle: {
+          reason: 'restore reviewed CLI snapshot',
+          updatedBy: 'operator-rollback',
+        },
+        name: 'rollback-cli-helper',
+      },
+      restoredSnapshot: {
+        id: patched?.snapshot.id,
+      },
+      rolledBack: true,
+    });
+    expect(result.currentSnapshot.id).not.toBe(result.restoredSnapshot.id);
+    await expect(fs.readFile(installed.path, 'utf8')).resolves.toContain('Original rollback CLI wording.');
+    expect(hub.getInstalledSkillHistory('rollback-cli-helper')?.rollbackableCount).toBe(2);
+  });
+
   it('lists installed skills with a machine-readable health summary', async () => {
     const hub = getSkillsHub({
       cacheDir: path.join(tempHome, 'cache'),

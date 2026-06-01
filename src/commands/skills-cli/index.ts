@@ -17,6 +17,7 @@
  *   buddy skills disable <name> --approved-by <reviewer>
  *   buddy skills deprecate <name> --approved-by <reviewer>
  *   buddy skills delete <name> --approved-by <reviewer>
+ *   buddy skills rollback <name> --approved-by <reviewer>
  *   buddy skills tap list|add|remove|trust|refresh
  *   buddy skills well-known <url>
  *
@@ -468,6 +469,51 @@ export function registerSkillsCommands(program: Command): void {
         return;
       }
       console.log(`Skill deleted: ${name}`);
+    });
+
+  skills
+    .command('rollback <name>')
+    .description('Rollback an installed skill to a saved snapshot')
+    .requiredOption('--approved-by <reviewer>', 'reviewer/operator approving the rollback')
+    .option('--snapshot <id>', 'snapshot id to restore; defaults to the latest snapshot')
+    .option('--reason <reason>', 'review reason')
+    .option('--json', 'output JSON')
+    .action(async (
+      name: string,
+      opts: { approvedBy: string; json?: boolean; reason?: string; snapshot?: string },
+    ) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      try {
+        const result = getSkillsHub().rollbackInstalledSkill(name, opts.snapshot, {
+          actor: opts.approvedBy,
+          reason: opts.reason,
+        });
+        if (!result) {
+          const message = `Skill not found: ${name}`;
+          if (opts.json) {
+            console.log(JSON.stringify({ approvedBy: opts.approvedBy, error: message, name, rolledBack: false }, null, 2));
+          } else {
+            console.error(message);
+          }
+          process.exit(1);
+          return;
+        }
+        if (opts.json) {
+          console.log(JSON.stringify({ ...result, approvedBy: opts.approvedBy, rolledBack: true }, null, 2));
+          return;
+        }
+        console.log(
+          `Skill rolled back: ${name} restored=${result.restoredSnapshot.id} current=${result.currentSnapshot.id}`,
+        );
+      } catch (error) {
+        const message = `Skill rollback failed: ${error instanceof Error ? error.message : String(error)}`;
+        if (opts.json) {
+          console.log(JSON.stringify({ approvedBy: opts.approvedBy, error: message, name, rolledBack: false }, null, 2));
+        } else {
+          console.error(message);
+        }
+        process.exit(1);
+      }
     });
 
   const tap = skills
