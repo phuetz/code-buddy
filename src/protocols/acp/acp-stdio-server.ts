@@ -255,6 +255,14 @@ export class AcpStdioServer {
     }
 
     if (isRequest && typeof method !== 'string' && ('result' in msg || 'error' in msg)) {
+      if (msg.jsonrpc !== '2.0' || !isValidJsonRpcId(id)) {
+        this.handleClientResponse(String(id), {
+          jsonrpc: '2.0',
+          id: isValidJsonRpcId(id) ? id : null,
+          error: { code: -32600, message: 'Invalid ACP client response' },
+        });
+        return;
+      }
       this.handleClientResponse(String(id), msg);
       return;
     }
