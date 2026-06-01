@@ -142,6 +142,8 @@ export interface HermesLearningLoopSkillCandidateSample {
     threshold: number;
   };
   skillName: string;
+  sourceJobId?: string;
+  sourceRunId?: string;
 }
 
 interface BuildHermesLearningLoopStatusOptions {
@@ -163,6 +165,8 @@ interface SkillCandidateReviewFile {
   promotionThreshold?: unknown;
   reason?: unknown;
   skillName?: unknown;
+  sourceJobId?: unknown;
+  sourceRunId?: unknown;
   status?: unknown;
   successfulRunCount?: unknown;
 }
@@ -282,6 +286,12 @@ function readLearningSkillCandidateSample(
   const candidateId = typeof parsed.candidateId === 'string' && parsed.candidateId.trim()
     ? parsed.candidateId.trim()
     : fallbackId;
+  const sourceJobId = typeof parsed.sourceJobId === 'string' && parsed.sourceJobId.trim()
+    ? parsed.sourceJobId.trim()
+    : undefined;
+  const sourceRunId = typeof parsed.sourceRunId === 'string' && parsed.sourceRunId.trim()
+    ? parsed.sourceRunId.trim()
+    : undefined;
   const relativeDir = path.relative(workDir, candidateDir).replace(/\\/g, '/');
   const promotion = readSkillCandidatePromotion(parsed);
   return {
@@ -290,6 +300,8 @@ function readLearningSkillCandidateSample(
     inspectCommand: `buddy tools skill-candidate inspect ${formatShellArg(relativeDir)} --json`,
     promotion,
     skillName,
+    ...(sourceJobId ? { sourceJobId } : {}),
+    ...(sourceRunId ? { sourceRunId } : {}),
   };
 }
 

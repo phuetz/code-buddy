@@ -781,6 +781,8 @@ describe('Hermes CLI commands', () => {
                 threshold: number;
               };
               skillName: string;
+              sourceJobId?: string;
+              sourceRunId?: string;
             }>;
           };
           skillUsage: { top: Array<{ recommendation: string; skillName: string }> };
@@ -877,6 +879,8 @@ describe('Hermes CLI commands', () => {
             threshold: 2,
           }),
           skillName: expect.any(String),
+          sourceJobId: 'learning-agent',
+          sourceRunId: runId,
         }),
       ]);
       expect(output.state.skillUsage.top).toEqual([
@@ -1020,7 +1024,7 @@ describe('Hermes CLI commands', () => {
             eligibleCandidateCount: number;
             ineligibleCandidateCount: number;
             learningCandidateCount: number;
-            samples: Array<{ eligible: boolean; skillName: string }>;
+            samples: Array<{ eligible: boolean; skillName: string; sourceJobId?: string; sourceRunId?: string }>;
           };
         };
       };
@@ -1033,6 +1037,8 @@ describe('Hermes CLI commands', () => {
       expect(output.state.skillCandidates.samples[0]).toMatchObject({
         eligible: true,
         skillName: 'learned-ready',
+        sourceJobId: 'learning-agent',
+        sourceRunId: 'run-mixed-candidates',
       });
       expect(skillItem).toEqual(expect.objectContaining({
         command: 'buddy tools skill-candidate list --eligible-only --json',
@@ -1177,6 +1183,8 @@ describe('Hermes CLI commands', () => {
                 threshold: number;
               };
               skillName: string;
+              sourceJobId?: string;
+              sourceRunId?: string;
             }>;
             totalCount: number;
           };
@@ -1230,6 +1238,8 @@ describe('Hermes CLI commands', () => {
             threshold: 2,
           },
           skillName: 'review-ready',
+          sourceJobId: 'learning-agent',
+          sourceRunId: 'run-skills-status',
         }),
       ]);
       expect(output.summary.reviewCommands).toContain('buddy skills list --all --json');

@@ -57,6 +57,8 @@ export interface HermesSkillCandidateReviewStatus {
       threshold: number;
     };
     skillName: string;
+    sourceJobId?: string;
+    sourceRunId?: string;
   }>;
   totalCount: number;
 }
@@ -273,6 +275,12 @@ function readSkillCandidateSamples(
       const kind = typeof parsed.kind === 'string' && parsed.kind.trim()
         ? parsed.kind.trim()
         : inferCandidateKind(root, candidateDir);
+      const sourceJobId = typeof parsed.sourceJobId === 'string' && parsed.sourceJobId.trim()
+        ? parsed.sourceJobId.trim()
+        : undefined;
+      const sourceRunId = typeof parsed.sourceRunId === 'string' && parsed.sourceRunId.trim()
+        ? parsed.sourceRunId.trim()
+        : undefined;
       const relativeDir = path.relative(workDir, candidateDir).replace(/\\/g, '/');
       const promotion = kind === 'learning' ? readCandidatePromotion(parsed) : undefined;
       samples.push({
@@ -282,6 +290,8 @@ function readSkillCandidateSamples(
         kind,
         ...(promotion ? { promotion } : {}),
         skillName,
+        ...(sourceJobId ? { sourceJobId } : {}),
+        ...(sourceRunId ? { sourceRunId } : {}),
       });
     } catch {
       // Ignore malformed review manifests; `tools skill-candidate inspect` gives the detailed error.
