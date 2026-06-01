@@ -34,6 +34,49 @@ export interface HermesLocalSmokeSuiteReview {
   };
 }
 
+function basenameOnly(value: string): string {
+  return value.replace(/\\/g, '/').split('/').pop() || 'local-artifact';
+}
+
+function sanitizeSmokeCommand(command: string | null): string | null {
+  if (!command) return null;
+  if (command.includes('/') || command.includes('\\') || /^[A-Za-z]:/.test(command)) {
+    return basenameOnly(command);
+  }
+  return command;
+}
+
+function redactLocalSmokeText(value: string): string {
+  return value
+    .replace(/trace=([^;\r\n]+)/g, 'trace=[redacted-local-path]')
+    .replace(/[A-Za-z]:\\[^\r\n;]+/g, '[redacted-local-path]')
+    .replace(/\/(?:Users|home|tmp|var\/folders)\/[^\r\n;]+/g, '[redacted-local-path]');
+}
+
+function sanitizeRuntimeSmokeResult(result: HermesRuntimeBackendSmokeResult): HermesRuntimeBackendSmokeResult {
+  return {
+    ...result,
+    command: sanitizeSmokeCommand(result.command),
+    output: redactLocalSmokeText(result.output),
+    stderr: redactLocalSmokeText(result.stderr),
+    stdout: redactLocalSmokeText(result.stdout),
+  };
+}
+
+function sanitizeBrowserSmokeResult(result: HermesBrowserBackendSmokeResult): HermesBrowserBackendSmokeResult {
+  return {
+    ...result,
+    artifacts: result.artifacts?.map((artifact) => ({
+      ...artifact,
+      path: basenameOnly(artifact.path),
+    })),
+    command: sanitizeSmokeCommand(result.command),
+    output: redactLocalSmokeText(result.output),
+    stderr: redactLocalSmokeText(result.stderr),
+    stdout: redactLocalSmokeText(result.stdout),
+  };
+}
+
 export async function runHermesLocalSmokeSuiteForReview(): Promise<HermesLocalSmokeSuiteReview> {
   const [runtime, browser, protocols] = await Promise.all([
     runHermesRuntimeBackendSmokeForReview('auto'),
@@ -57,9 +100,9 @@ export async function runHermesLocalSmokeSuiteForReview(): Promise<HermesLocalSm
     ],
     ok: passed === 3,
     results: {
-      browser,
+      browser: sanitizeBrowserSmokeResult(browser),
       protocols,
-      runtime,
+      runtime: sanitizeRuntimeSmokeResult(runtime),
     },
     schemaVersion: 1,
     summary: {

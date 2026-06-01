@@ -31,7 +31,7 @@ describe('Hermes local smoke bridge', () => {
     mockedRuntimeSmoke.mockResolvedValue({
       args: ['-e', "console.log('OK-HERMES-LOCAL')"],
       backendId: 'local',
-      command: 'node',
+      command: 'C:\\Program Files\\nodejs\\node.exe',
       durationMs: 22,
       exitCode: 0,
       finishedAt: '2026-06-01T05:20:00.022Z',
@@ -45,18 +45,24 @@ describe('Hermes local smoke bridge', () => {
       stdout: 'OK-HERMES-LOCAL',
     });
     mockedBrowserSmoke.mockResolvedValue({
-      artifacts: [],
+      artifacts: [{
+        exists: true,
+        kind: 'playwright-trace',
+        label: 'Local Playwright trace',
+        path: 'C:\\Temp\\codebuddy-hermes-browser\\local-playwright-trace.zip',
+        sizeBytes: 1234,
+      }],
       backendId: 'local-playwright',
-      command: 'node',
+      command: 'C:\\Program Files\\nodejs\\node.exe',
       durationMs: 31,
       finishedAt: '2026-06-01T05:20:00.031Z',
       label: 'Local Playwright',
       ok: true,
-      output: 'title=OK-HERMES-BROWSER',
+      output: 'title=OK-HERMES-BROWSER; trace=C:\\Temp\\codebuddy-hermes-browser\\local-playwright-trace.zip',
       startedAt: '2026-06-01T05:20:00.000Z',
       status: 'passed',
       stderr: '',
-      stdout: 'title=OK-HERMES-BROWSER',
+      stdout: 'title=OK-HERMES-BROWSER; trace=C:\\Temp\\codebuddy-hermes-browser\\local-playwright-trace.zip',
     });
     mockedProtocolSmoke.mockResolvedValue({
       durationMs: 45,
@@ -104,6 +110,12 @@ describe('Hermes local smoke bridge', () => {
         total: 3,
       },
     });
+    expect(result.results.runtime.command).toBe('node.exe');
+    expect(result.results.browser.command).toBe('node.exe');
+    expect(result.results.browser.output).toContain('trace=[redacted-local-path]');
+    expect(result.results.browser.artifacts?.[0]?.path).toBe('local-playwright-trace.zip');
+    expect(JSON.stringify(result)).not.toMatch(/[A-Za-z]:\\\\/);
+    expect(JSON.stringify(result)).not.toContain('C:\\Temp');
   });
 
   it('marks the suite failed when one local smoke fails', async () => {
