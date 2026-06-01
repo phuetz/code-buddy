@@ -165,6 +165,8 @@ The REST endpoint mirrors that shape with
 buddy research "<topic>" [--workers N] [--rounds N] [--output file.md]
 buddy flow "<goal>" [--max-retries N] [--verbose]
 buddy hermes profile|agent|doctor|plan|toolsets|hooks|prompt-size|parity|tools-parity|tools [dispatchProfile] [--json] [--markdown] [--plan-output file]
+buddy hermes status [dispatchProfile] [--json]
+buddy hermes smoke [--json]
 buddy hermes providers status [--json]
 buddy hermes portal status|tools|open [--json]
 buddy hermes messaging status [--json] [--config <path>]

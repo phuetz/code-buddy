@@ -222,6 +222,7 @@ describe('Hermes CLI commands', () => {
           browser: string;
           doctor: string;
           runtime: string;
+          smoke: string;
           todo: string;
         };
       };
@@ -247,6 +248,7 @@ describe('Hermes CLI commands', () => {
         browser: 'buddy hermes browser status --json',
         doctor: 'buddy hermes doctor safe --json',
         runtime: 'buddy hermes runtime status --json',
+        smoke: 'buddy hermes smoke --json',
         todo: 'buddy hermes todo --json',
       });
       expect(raw).not.toContain('secret-overview-openai-key');
@@ -264,6 +266,7 @@ describe('Hermes CLI commands', () => {
       expect(textOutput).toContain('Feature parity:');
       expect(textOutput).toContain('Tool parity:');
       expect(textOutput).toContain('Readiness:');
+      expect(textOutput).toContain('Aggregate local smoke: buddy hermes smoke --json');
       expect(textOutput).toContain('Real runtime smoke: buddy hermes runtime-smoke auto --json');
       expect(textOutput).toContain('Real browser smoke: buddy hermes browser-smoke auto --json');
       expect(textOutput).not.toContain('secret-overview-openai-key');

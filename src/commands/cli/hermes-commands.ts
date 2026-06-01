@@ -335,6 +335,7 @@ interface HermesOverviewStatus {
     protocols: string;
     runtime: string;
     skills: string;
+    smoke: string;
     todo: string;
     tools: string;
   };
@@ -820,6 +821,7 @@ function buildHermesOverviewStatus(profileArg: string): HermesOverviewStatus {
       protocols: 'buddy hermes protocols status --json',
       runtime: 'buddy hermes runtime status --json',
       skills: 'buddy hermes skills status --json',
+      smoke: 'buddy hermes smoke --json',
       todo: 'buddy hermes todo --json',
       tools: 'buddy hermes tools --json',
     },
@@ -889,6 +891,7 @@ function renderHermesOverviewStatus(status: HermesOverviewStatus): string {
     'Commands:',
     `  Doctor: ${status.commands.doctor}`,
     `  Todo: ${status.commands.todo}`,
+    `  Aggregate local smoke: ${status.commands.smoke}`,
     `  Real runtime smoke: ${readiness.runtime.smokeCommand ?? 'n/a'}`,
     `  Real browser smoke: ${readiness.browser.smokeCommand ?? 'n/a'}`,
   );
