@@ -1219,6 +1219,50 @@ describe('Hermes CLI commands', () => {
     }
   });
 
+  it('prints Hermes messaging platform configured/runtime flags in text status', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-messaging-text-status-'));
+    const configPath = path.join(tmpDir, 'channels.json');
+    await fs.writeJson(configPath, {
+      channels: [
+        {
+          type: 'telegram',
+          enabled: true,
+          token: 'secret-telegram-token',
+          allowedUsers: ['patrice'],
+        },
+        {
+          type: 'discord',
+          enabled: false,
+          webhookUrl: 'https://example.invalid/webhook',
+        },
+      ],
+    });
+
+    try {
+      const program = createProgram();
+      registerHermesCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'hermes',
+        'messaging',
+        'status',
+        '--config',
+        configPath,
+      ]);
+
+      const output = getLogOutput();
+      expect(output).toContain('Telegram: configured/channel (telegram) | configured=yes, runtime=no');
+      expect(output).toContain('Discord: configured/channel (discord) | configured=yes, runtime=no');
+      expect(output).toContain('Slack: available/channel (slack) | configured=no, runtime=no');
+      expect(output).not.toContain('secret-telegram-token');
+      expect(output).not.toContain('example.invalid/webhook');
+    } finally {
+      await fs.remove(tmpDir);
+    }
+  });
+
   it('prints the machine-checkable Hermes parity manifest', async () => {
     const program = createProgram();
     registerHermesCommands(program);

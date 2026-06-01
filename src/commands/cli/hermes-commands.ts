@@ -886,7 +886,8 @@ function renderHermesMessagingGatewayStatus(report: ChannelStatusReport): string
     lines.push('Hermes platform coverage:');
     for (const platform of report.hermes.platforms.slice(0, 12)) {
       const channelSuffix = platform.channelTypes.length > 0 ? ` (${platform.channelTypes.join(', ')})` : '';
-      lines.push(`  - ${platform.platform}: ${platform.status}/${platform.localSurface}${channelSuffix}`);
+      const readinessFlags = `configured=${platform.configured ? 'yes' : 'no'}, runtime=${platform.runtimeRegistered ? 'yes' : 'no'}`;
+      lines.push(`  - ${platform.platform}: ${platform.status}/${platform.localSurface}${channelSuffix} | ${readinessFlags}`);
     }
     if (report.hermes.platforms.length > 12) {
       lines.push(`  ... ${report.hermes.platforms.length - 12} more`);
