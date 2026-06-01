@@ -30,7 +30,12 @@ describe('Hermes protocol gateway readiness', () => {
         expect.objectContaining({ id: 'acp-editor-integration', status: 'partial' }),
       ]),
     );
-    expect(renderHermesProtocolGatewayReadiness(readiness)).toContain('Hermes protocol gateway readiness:');
+    const rendered = renderHermesProtocolGatewayReadiness(readiness);
+    expect(rendered).toContain('Hermes protocol gateway readiness:');
+    expect(rendered).toContain('    - POST /api/a2a/tasks/:id/cancel');
+    expect(rendered).toContain('    - POST /api/acp/tasks/:id/resume');
+    expect(rendered).toContain('Evidence: 5 file/test reference(s)');
+    expect(rendered).toContain('Notes: The protocol transport exists, but exact upstream Hermes editor integration and packaging are not yet claimed.');
   });
 
   it('runs a real MCP stdio and loopback A2A/ACP HTTP smoke', async () => {

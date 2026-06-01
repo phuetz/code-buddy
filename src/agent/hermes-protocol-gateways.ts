@@ -238,9 +238,16 @@ export function renderHermesProtocolGatewayReadiness(readiness: HermesProtocolGa
   for (const capability of readiness.capabilities) {
     lines.push(`- ${capability.status.padEnd(9)} ${capability.id}: ${capability.label}`);
     if (capability.endpoints.length > 0) {
-      lines.push(`  Endpoints: ${capability.endpoints.slice(0, 4).join(', ')}`);
+      lines.push('  Endpoints:');
+      for (const endpoint of capability.endpoints) {
+        lines.push(`    - ${endpoint}`);
+      }
     }
     lines.push(`  Verify: ${capability.commands[0] ?? 'n/a'}`);
+    lines.push(`  Evidence: ${capability.evidence.length} file/test reference(s)`);
+    if (capability.notes.length > 0) {
+      lines.push(`  Notes: ${capability.notes.join(' ')}`);
+    }
   }
 
   if (readiness.recommendations.length > 0) {

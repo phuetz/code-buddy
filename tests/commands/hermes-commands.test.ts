@@ -960,6 +960,16 @@ describe('Hermes CLI commands', () => {
         }),
       ]),
     );
+
+    consoleLogSpy.mockClear();
+    const textProgram = createProgram();
+    registerHermesCommands(textProgram);
+    await textProgram.parseAsync(['node', 'test', 'hermes', 'protocols', 'status']);
+    const textOutput = getLogOutput();
+    expect(textOutput).toContain('    - POST /api/a2a/tasks/:id/cancel');
+    expect(textOutput).toContain('    - POST /api/acp/tasks/:id/resume');
+    expect(textOutput).toContain('Evidence: 5 file/test reference(s)');
+    expect(textOutput).toContain('Notes: The protocol transport exists, but exact upstream Hermes editor integration and packaging are not yet claimed.');
   });
 
   it('prints Hermes mobile supervision readiness as a dedicated status command', async () => {
