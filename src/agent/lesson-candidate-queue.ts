@@ -275,8 +275,8 @@ export class LessonCandidateQueue {
     if (!candidate) {
       throw new Error(`Lesson candidate not found: ${id}`);
     }
-    if (candidate.status === 'approved') {
-      throw new Error(`Lesson candidate ${id} was already approved and cannot be discarded.`);
+    if (candidate.status !== 'pending') {
+      throw new Error(`Lesson candidate ${id} is already ${candidate.status}; only pending candidates can be discarded.`);
     }
     candidate.status = 'discarded';
     candidate.reviewedAt = Date.now();

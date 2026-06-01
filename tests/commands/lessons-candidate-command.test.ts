@@ -196,4 +196,27 @@ describe('buddy lessons candidate', () => {
     expect(getLogOutput(consoleSpy)).toContain('Discarded candidate');
     expect(await fs.pathExists(lessonsMd())).toBe(false);
   });
+
+  it('refuses to discard the same candidate twice', async () => {
+    const program = createProgram();
+    await program.parseAsync(['node', 'buddy', 'lessons', 'candidate', 'propose', 'noisy idea']);
+    const id = getLogOutput(consoleSpy).match(/\[(lc-[a-z0-9]+)\]/)?.[1];
+    expect(id).toBeTruthy();
+
+    await program.parseAsync([
+      'node', 'buddy', 'lessons', 'candidate', 'discard', id!, '--by', 'Patrice', '--reason', 'first',
+    ]);
+    consoleErrSpy.mockClear();
+    processExitSpy.mockClear();
+
+    await program.parseAsync([
+      'node', 'buddy', 'lessons', 'candidate', 'discard', id!, '--by', 'Patrice', '--reason', 'second',
+    ]);
+
+    expect(getLogOutput(consoleErrSpy)).toContain('already discarded');
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+    const candidate = JSON.parse(await fs.readFile(path.join(tmpDir, '.codebuddy', 'lesson-candidates.json'), 'utf-8'))
+      .candidates.find((item: { id: string }) => item.id === id);
+    expect(candidate.reviewNote).toBe('first');
+  });
 });

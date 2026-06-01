@@ -211,6 +211,17 @@ describe('LessonCandidateQueue', () => {
       await queue.approve(candidate.id, { reviewedBy: 'reviewer' });
       expect(() => queue.discard(candidate.id)).toThrow(/already approved/i);
     });
+
+    it('refuses to discard an already-discarded candidate', () => {
+      const queue = new LessonCandidateQueue(tmpDir);
+      const { candidate } = queue.propose({ category: 'RULE', content: 'discard once' });
+      queue.discard(candidate.id, { reviewedBy: 'reviewer', reason: 'first reason' });
+
+      expect(() =>
+        queue.discard(candidate.id, { reviewedBy: 'reviewer', reason: 'second reason' }),
+      ).toThrow(/already discarded/i);
+      expect(queue.get(candidate.id)?.reviewNote).toBe('first reason');
+    });
   });
 
   describe('persistence', () => {
