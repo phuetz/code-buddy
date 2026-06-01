@@ -157,6 +157,45 @@ describe('Hermes runtime backend live smoke runner', () => {
     expect(JSON.stringify(readiness)).not.toContain(process.execPath);
   });
 
+  it('explains runnable Docker is gated out of auto routing until explicit opt-in', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-docker-route-gated-'));
+    try {
+      writeFakeCli(
+        tempDir,
+        'docker',
+        process.platform === 'win32'
+          ? '@echo off\r\nif "%1"=="--version" echo Docker version 99.0.0\r\nif "%1"=="info" echo 99.0.0\r\n'
+          : '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "Docker version 99.0.0"; fi\nif [ "$1" = "info" ]; then echo "99.0.0"; fi\n',
+      );
+      const env = prependPath({ ...process.env }, tempDir);
+      const readiness = buildHermesRuntimeBackendsReadiness({
+        env,
+        now: () => new Date('2026-06-01T02:05:00.000Z'),
+      });
+
+      expect(readiness.backends.find((backend) => backend.id === 'docker')).toMatchObject({
+        runnable: true,
+        status: 'available',
+      });
+      expect(readiness.routePlan.autoEligibleBackendIds).toContain('local');
+      expect(readiness.routePlan.fallbackBackendIds).not.toContain('docker');
+      expect(readiness.routePlan.gatedBackendIds).toContain('docker');
+      expect(readiness.routePlan.gatedBackends).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          backendId: 'docker',
+          reason: expect.stringContaining('--allow-docker'),
+          smokeCommand: expect.stringContaining('OK-HERMES-DOCKER'),
+        }),
+      ]));
+
+      const rendered = renderHermesRuntimeBackendsReadiness(readiness);
+      expect(rendered).toContain('Gated auto-route backends:');
+      expect(rendered).toContain('- docker: Docker is runnable but excluded from auto routing');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('runs the local backend smoke through a real Node subprocess', () => {
     const result = runHermesRuntimeBackendSmoke({
       backendId: 'local',

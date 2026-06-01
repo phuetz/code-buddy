@@ -44,9 +44,19 @@ export interface HermesRuntimeBackendsReadiness {
 }
 
 export interface HermesRuntimeBackendRoutePlan {
+  autoEligibleBackendIds?: string[];
   fallbackBackendIds: string[];
+  gatedBackendIds?: string[];
+  gatedBackends?: HermesRuntimeBackendRouteGate[];
   mode: 'hybrid';
   primaryBackendId: string | null;
+  reason: string;
+  smokeCommand: string | null;
+}
+
+export interface HermesRuntimeBackendRouteGate {
+  backendId: string;
+  label: string;
   reason: string;
   smokeCommand: string | null;
 }
@@ -686,6 +696,7 @@ function buildRuntimeRoutePlan(backends: HermesRuntimeBackend[]): HermesRuntimeB
   const runnableSafeBackends = SAFE_AUTO_RUNTIME_BACKEND_IDS
     .map((id) => backends.find((backend) => backend.id === id && backend.runnable))
     .filter(Boolean) as HermesRuntimeBackend[];
+  const gatedBackends = buildRuntimeRouteGates(backends);
   const primary = runnableSafeBackends[0] ?? null;
   const fallbacks = runnableSafeBackends
     .filter((backend) => backend.id !== primary?.id)
@@ -693,7 +704,10 @@ function buildRuntimeRoutePlan(backends: HermesRuntimeBackend[]): HermesRuntimeB
 
   if (!primary) {
     return {
+      autoEligibleBackendIds: [],
       fallbackBackendIds: [],
+      gatedBackendIds: gatedBackends.map((backend) => backend.backendId),
+      gatedBackends,
       mode: 'hybrid',
       primaryBackendId: null,
       reason: 'No safe runtime backend is currently runnable; install Node.js, WSL, or a native sandbox first.',
@@ -702,7 +716,10 @@ function buildRuntimeRoutePlan(backends: HermesRuntimeBackend[]): HermesRuntimeB
   }
 
   return {
+    autoEligibleBackendIds: runnableSafeBackends.map((backend) => backend.id),
     fallbackBackendIds: fallbacks,
+    gatedBackendIds: gatedBackends.map((backend) => backend.backendId),
+    gatedBackends,
     mode: 'hybrid',
     primaryBackendId: primary.id,
     reason: fallbacks.length > 0
@@ -710,6 +727,36 @@ function buildRuntimeRoutePlan(backends: HermesRuntimeBackend[]): HermesRuntimeB
       : `Auto runtime smoke will use ${primary.label}; no secondary safe backend is currently runnable.`,
     smokeCommand: 'buddy hermes runtime-smoke auto --json',
   };
+}
+
+function buildRuntimeRouteGates(backends: HermesRuntimeBackend[]): HermesRuntimeBackendRouteGate[] {
+  return backends.flatMap((backend) => {
+    const reason = runtimeRouteGateReason(backend);
+    return reason
+      ? [{
+        backendId: backend.id,
+        label: backend.label,
+        reason,
+        smokeCommand: backend.smokeCommand,
+      }]
+      : [];
+  });
+}
+
+function runtimeRouteGateReason(backend: HermesRuntimeBackend): string | null {
+  if (!backend.runnable || SAFE_AUTO_RUNTIME_BACKEND_IDS.includes(backend.id)) {
+    return null;
+  }
+
+  if (backend.id === 'docker') {
+    return 'Docker is runnable but excluded from auto routing because its smoke can pull images and consume disk/network; opt in with `buddy hermes runtime-smoke docker --allow-docker --json`.';
+  }
+
+  if (REMOTE_SMOKE_BACKEND_IDS.has(backend.id)) {
+    return `${backend.label} is runnable but excluded from auto routing because it may contact a remote service; opt in with \`buddy hermes runtime-smoke ${backend.id} --allow-remote --json\`.`;
+  }
+
+  return null;
 }
 
 export function buildHermesRuntimeBackendsReadiness(
@@ -786,6 +833,15 @@ export function renderHermesRuntimeBackendsReadiness(readiness: HermesRuntimeBac
 
   if (readiness.recommendations.length > 0) {
     lines.push('', 'Recommendations:', ...readiness.recommendations.map((recommendation) => `- ${recommendation}`));
+  }
+
+  const gatedBackends = readiness.routePlan.gatedBackends ?? [];
+  if (gatedBackends.length > 0) {
+    lines.push(
+      '',
+      'Gated auto-route backends:',
+      ...gatedBackends.map((backend) => `- ${backend.backendId}: ${backend.reason}`),
+    );
   }
 
   return lines.join('\n');
