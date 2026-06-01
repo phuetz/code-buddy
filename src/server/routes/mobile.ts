@@ -159,6 +159,14 @@ function isWithinCharLimit(value: string, maxChars: number): boolean {
   return Array.from(value).length <= maxChars;
 }
 
+function normalizeMobileQueryParam(value: unknown): string | null {
+  const query = normalizeOptionalString(value);
+  if (query === null || !isWithinCharLimit(query, MAX_FOLLOWUP_QUERY_CHARS)) {
+    return null;
+  }
+  return query;
+}
+
 // Authentication middleware for /api/mobile endpoints
 export function mobileAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -286,7 +294,11 @@ mobileRouter.use(mobileAuthMiddleware);
 // 2. GET /api/mobile/snapshot: Return active run snapshot summary
 mobileRouter.get('/snapshot', async (req: Request, res: Response) => {
   try {
-    const query = (req.query.query as string) || '';
+    const query = normalizeMobileQueryParam(req.query.query);
+    if (query === null) {
+      res.status(400).json({ ok: false, error: 'Missing or invalid query' });
+      return;
+    }
     const snapshot = await buildMobileSupervisionSnapshot(query, { includeAllContext: true });
     res.json({ ok: true, snapshot });
   } catch (err) {
@@ -372,7 +384,11 @@ mobileRouter.get('/runs/:runId/artifacts/*artifactPath', async (req: Request, re
 // 4. GET /api/mobile/recall-pack: Render active recall pack prompt
 mobileRouter.get('/recall-pack', async (req: Request, res: Response) => {
   try {
-    const query = (req.query.query as string) || '';
+    const query = normalizeMobileQueryParam(req.query.query);
+    if (query === null) {
+      res.status(400).json({ ok: false, error: 'Missing or invalid query' });
+      return;
+    }
     const pack = await buildRunRecallPackAsync(query, {
       includeLessons: true,
       includeMemories: true,

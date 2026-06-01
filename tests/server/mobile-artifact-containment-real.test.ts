@@ -245,6 +245,24 @@ describe('mobileRouter artifact containment (real HTTP)', () => {
     expect(followupDrafts).toHaveLength(0);
   });
 
+  it('rejects repeated mobile query parameters before recall builders receive them', async () => {
+    const token = await pairToken();
+
+    const snapshot = await fetch(`${baseUrl}/snapshot?query=one&query=two`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const recallPack = await fetch(`${baseUrl}/recall-pack?query=one&query=two`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(snapshot.status).toBe(400);
+    expect(recallPack.status).toBe(400);
+    expect(await snapshot.text()).toContain('Missing or invalid query');
+    const recallBody = await recallPack.text();
+    expect(recallBody).toContain('Missing or invalid query');
+    expect(recallBody).not.toContain('query.trim');
+  });
+
   async function rawMobileGet(pathname: string, token: string): Promise<{ body: string; status: number }> {
     const address = server.address();
     if (!address || typeof address === 'string') {
