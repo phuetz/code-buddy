@@ -158,11 +158,34 @@ describe('buddy user-model', () => {
     expect(parsed[0].status).toBe('pending');
   });
 
+  it('refuses to discard the same observation twice', async () => {
+    const program = createProgram();
+    await program.parseAsync(['node', 'buddy', 'user-model', 'observe', 'temporary preference']);
+    const id = getLogOutput(consoleSpy).match(/\[(um-[a-z0-9]+)\]/)?.[1];
+    expect(id).toBeTruthy();
+
+    await program.parseAsync([
+      'node', 'buddy', 'user-model', 'discard', id!, '--by', 'Patrice', '--reason', 'first',
+    ]);
+    consoleErrSpy.mockClear();
+    processExitSpy.mockClear();
+
+    await program.parseAsync([
+      'node', 'buddy', 'user-model', 'discard', id!, '--by', 'Patrice', '--reason', 'second',
+    ]);
+
+    expect(getLogOutput(consoleErrSpy)).toContain('already discarded');
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+    const observation = JSON.parse(await fs.readFile(path.join(tmpDir, '.codebuddy', 'user-model.json'), 'utf-8'))
+      .observations.find((item: { id: string }) => item.id === id);
+    expect(observation.reviewNote).toBe('first');
+  });
+
   it('runs analyze on a session and proposes observations', async () => {
     const { getSessionStore } = await import('../../src/persistence/session-store.js');
     const sessionStore = getSessionStore();
     const sessionId = 'test-session-123';
-    (sessionStore as any).currentSessionId = sessionId;
+    (sessionStore as unknown as { currentSessionId: string }).currentSessionId = sessionId;
 
     const loadSessionSpy = jest.spyOn(sessionStore, 'loadSession').mockResolvedValue({
       id: sessionId,
@@ -184,7 +207,7 @@ describe('buddy user-model', () => {
     });
 
     const { CodeBuddyClient } = await import('../../src/codebuddy/client.js');
-    const chatSpy = jest.spyOn(CodeBuddyClient.prototype, 'chat').mockResolvedValue({
+    const chatResponse = {
       choices: [
         {
           message: {
@@ -194,7 +217,8 @@ describe('buddy user-model', () => {
           }
         }
       ]
-    } as any);
+    } as Awaited<ReturnType<CodeBuddyClient['chat']>>;
+    const chatSpy = jest.spyOn(CodeBuddyClient.prototype, 'chat').mockResolvedValue(chatResponse);
 
     const program = createProgram();
     await program.parseAsync(['node', 'buddy', 'user-model', 'analyze']);

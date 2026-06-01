@@ -286,6 +286,9 @@ export class LocalUserModel {
     if (!obs) {
       throw new Error(`User observation not found: ${id}`);
     }
+    if (obs.status === 'discarded') {
+      throw new Error(`User observation ${id} is already discarded; discarded observations cannot be discarded again.`);
+    }
     obs.status = 'discarded';
     obs.reviewedAt = Date.now();
     if (input.reviewedBy?.trim()) {

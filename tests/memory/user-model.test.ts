@@ -161,6 +161,17 @@ describe('LocalUserModel', () => {
       expect(model.getAccepted()).toHaveLength(0);
       expect(model.get(observation.id)?.status).toBe('discarded');
     });
+
+    it('refuses to discard an already-discarded observation', () => {
+      const model = new LocalUserModel(tmpDir);
+      const { observation } = model.observe({ kind: 'preference', content: 'transient' });
+      model.discard(observation.id, { reviewedBy: 'reviewer', reason: 'first reason' });
+
+      expect(() =>
+        model.discard(observation.id, { reviewedBy: 'reviewer', reason: 'second reason' }),
+      ).toThrow(/already discarded/i);
+      expect(model.get(observation.id)?.reviewNote).toBe('first reason');
+    });
   });
 
   describe('summarize', () => {
