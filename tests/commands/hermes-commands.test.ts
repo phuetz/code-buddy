@@ -711,6 +711,11 @@ describe('Hermes CLI commands', () => {
         kind: 'working-style',
       });
       userModel.accept(observation.observation.id, { reviewedBy: 'Patrice' });
+      const pendingUserObservationContent = 'Prefers concise status updates during autonomous work.';
+      const pendingUserObservation = userModel.observe({
+        content: pendingUserObservationContent,
+        kind: 'preference',
+      });
 
       const program = createProgram();
       registerHermesCommands(program);
@@ -820,6 +825,12 @@ describe('Hermes CLI commands', () => {
           sampleIds: expect.arrayContaining([expect.stringMatching(/^lc-/)]),
         }),
         expect.objectContaining({
+          command: 'buddy user-model list --status pending --json',
+          kind: 'user_model_observation',
+          pendingCount: 1,
+          sampleIds: [pendingUserObservation.observation.id],
+        }),
+        expect.objectContaining({
           command: 'buddy tools skill-candidate list --json',
           kind: 'skill_candidate',
           nextReviewCommand: expect.stringContaining('buddy tools skill-candidate inspect .codebuddy/skill-candidates/learning/'),
@@ -889,6 +900,7 @@ describe('Hermes CLI commands', () => {
       expect(output.commands.retrospective).toBe('buddy run retrospective <run-id> --force --json');
       expect(raw).not.toContain(privatePreference);
       const serialized = JSON.stringify(output);
+      expect(serialized).not.toContain(pendingUserObservationContent);
       expect(serialized).not.toContain(tmpDir);
       expect(serialized).not.toContain(tmpDir.replace(/\\/g, '\\\\'));
       expect(serialized).not.toContain(runsDir);

@@ -404,6 +404,7 @@ function buildReviewQueue(
   userModel: ReturnType<ReturnType<typeof getUserModel>['getStats']>,
   skillCandidates: HermesLearningLoopStatus['state']['skillCandidates'],
   pendingLessonIds: string[],
+  pendingUserObservationIds: string[],
 ): HermesLearningLoopStatus['reviewQueue'] {
   const items: HermesLearningLoopReviewQueueItem[] = [];
   if (lessonCandidates.byStatus.pending > 0) {
@@ -419,11 +420,12 @@ function buildReviewQueue(
   }
   if (userModel.byStatus.pending > 0) {
     items.push({
-      command: 'buddy user-model show --json',
+      command: 'buddy user-model list --status pending --json',
       description: 'Pending user-model observations; review without exposing private content in Hermes status.',
       kind: 'user_model_observation',
       pendingCount: userModel.byStatus.pending,
       reviewGate: 'userModelWritesRequireApproval',
+      ...(pendingUserObservationIds.length > 0 ? { sampleIds: pendingUserObservationIds } : {}),
     });
   }
   if (skillCandidates.learningCandidateCount > 0) {
@@ -513,11 +515,22 @@ export function buildHermesLearningLoopStatus(
     .list('pending')
     .slice(0, 3)
     .map((candidate) => candidate.id);
-  const userModel = getUserModel(workDir).getStats();
+  const userModelStore = getUserModel(workDir);
+  const userModel = userModelStore.getStats();
+  const pendingUserObservationIds = userModelStore
+    .list('pending')
+    .slice(0, 3)
+    .map((observation) => observation.id);
   const skillUsageRecords = listLearningSkillUsage(workDir);
   const patterns = readPatternStats(workDir);
   const skillCandidates = countLearningSkillCandidates(workDir);
-  const reviewQueue = buildReviewQueue(lessonCandidates, userModel, skillCandidates, pendingLessonIds);
+  const reviewQueue = buildReviewQueue(
+    lessonCandidates,
+    userModel,
+    skillCandidates,
+    pendingLessonIds,
+    pendingUserObservationIds,
+  );
   const nextAction = buildNextAction(reviewQueue, nextRetrospectiveRun);
   const autoEnabled = isLearningAgentEnabled();
   const retrospectiveArtifactCount = runRows.filter((run) =>
