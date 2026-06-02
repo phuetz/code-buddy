@@ -327,7 +327,9 @@ same workflow has at least two successful observations and the pattern library
 marks it reinforced.
 The JSON list output includes a `summary` block with total, shown, eligible,
 and not-yet-eligible counts so review UIs can show queue readiness without
-reading candidate bodies.
+reading candidate bodies. Each candidate item also includes review-safe
+`candidatePath`, `reviewManifestPath`, and `inspectCommand` fields; eligible
+items include an `installCommand` template.
 
 ### Knowledge and Memory
 

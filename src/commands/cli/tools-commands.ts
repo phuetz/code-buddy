@@ -74,10 +74,14 @@ interface NormalizedToolsProfile {
 }
 
 interface ResearchScriptSkillCandidateSummary {
+  candidatePath: string;
   eligible: boolean;
   id: string;
+  inspectCommand: string;
+  installCommand?: string;
   kind: string;
   reason: string;
+  reviewManifestPath: string;
   skillName: string;
   skillPath: string;
   sourceJobId: string;
@@ -114,10 +118,16 @@ function normalizeToolsProfile(profileArg: string): NormalizedToolsProfile {
 
 function summarizeSkillCandidate(candidate: ResearchScriptSkillCandidate): ResearchScriptSkillCandidateSummary {
   return {
+    candidatePath: formatCandidateDirectory(candidate),
     eligible: candidate.eligible,
     id: candidate.id,
+    inspectCommand: `buddy tools skill-candidate inspect ${formatCandidateDirectory(candidate)} --json`,
+    installCommand: candidate.eligible
+      ? `buddy tools skill-candidate install ${formatCandidateDirectory(candidate)} --approved-by <name> --json`
+      : undefined,
     kind: candidate.kind,
     reason: candidate.reason,
+    reviewManifestPath: formatCandidateReviewPath(candidate),
     skillName: candidate.skillName,
     skillPath: candidate.skillPath,
     sourceJobId: candidate.sourceJobId,
@@ -223,6 +233,7 @@ function printSkillCandidateList(
       console.log(`    Tool sequence: ${candidate.toolSequence.join(' -> ')}`);
     }
     console.log(`    Path: ${candidate.skillPath}`);
+    console.log(`    Inspect: buddy tools skill-candidate inspect ${formatCandidateDirectory(candidate)} --json`);
     console.log(`    Reason: ${candidate.reason}`);
   }
   console.log('');

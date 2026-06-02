@@ -349,7 +349,11 @@ describe('Tools CLI commands', () => {
 
       const output = JSON.parse(getLogOutput()) as {
         candidates: Array<{
+          candidatePath: string;
           eligible: boolean;
+          inspectCommand: string;
+          installCommand?: string;
+          reviewManifestPath: string;
           skillName: string;
         }>;
         count: number;
@@ -372,7 +376,11 @@ describe('Tools CLI commands', () => {
       });
       expect(output.candidates).toEqual([
         expect.objectContaining({
+          candidatePath: '.codebuddy/skill-candidates/research-cli-reviewed-workflow',
           eligible: true,
+          inspectCommand: 'buddy tools skill-candidate inspect .codebuddy/skill-candidates/research-cli-reviewed-workflow --json',
+          installCommand: 'buddy tools skill-candidate install .codebuddy/skill-candidates/research-cli-reviewed-workflow --approved-by <name> --json',
+          reviewManifestPath: '.codebuddy/skill-candidates/research-cli-reviewed-workflow/candidate-review.json',
           skillName: 'research-cli-reviewed-workflow',
         }),
       ]);
@@ -444,7 +452,10 @@ describe('Tools CLI commands', () => {
       ]);
       const listOutput = JSON.parse(getLogOutput()) as {
         candidates: Array<{
+          candidatePath: string;
+          inspectCommand: string;
           kind: string;
+          reviewManifestPath: string;
           skillName: string;
           sourceRunId?: string;
           toolSequence?: string[];
@@ -469,7 +480,10 @@ describe('Tools CLI commands', () => {
       });
       expect(listOutput.candidates).toEqual([
         expect.objectContaining({
+          candidatePath: '.codebuddy/skill-candidates/learning/learned-real-review',
+          inspectCommand: 'buddy tools skill-candidate inspect .codebuddy/skill-candidates/learning/learned-real-review --json',
           kind: 'learning',
+          reviewManifestPath: '.codebuddy/skill-candidates/learning/learned-real-review/candidate-review.json',
           skillName: 'learned-real-review',
           sourceRunId: 'run-real-review',
           toolSequence: ['search', 'view_file', 'bash'],
