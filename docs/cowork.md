@@ -158,7 +158,10 @@ Latest local privacy proof on this branch:
 - `hermes learning status --json` reports `[workspace]` and `[codebuddy-runs]`
   labels instead of absolute paths.
 - `hermes skills status --json` reports `.codebuddy/...` relative paths for
-  skill caches, lockfiles, roots, and candidate review commands.
+  skill caches, lockfiles, roots, candidate review commands, and candidate
+  action metadata. Candidate samples expose `candidatePath`, `reviewManifestPath`,
+  `inspectCommand`, and eligible `installCommand` templates without printing
+  SKILL.md bodies.
 
 ## Screenshot And Privacy Policy
 

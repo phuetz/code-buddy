@@ -1177,7 +1177,7 @@ describe('Hermes CLI commands', () => {
       await hub.installFromContent('healthy-helper', createSkillContent('healthy-helper'));
       const missing = await hub.installFromContent('missing-helper', createSkillContent('missing-helper'));
       await fs.remove(missing.path);
-      const candidateDir = path.join(tmpDir, '.codebuddy', 'skill-candidates', 'learning', 'review-ready');
+      const candidateDir = path.join(tmpDir, '.codebuddy', 'skill-candidates', 'learning', 'review ready');
       fs.ensureDirSync(candidateDir);
       fs.writeFileSync(path.join(candidateDir, 'SKILL.md'), createSkillContent('review-ready', 'Ready candidate body must stay private.'));
       fs.writeFileSync(path.join(candidateDir, 'candidate-review.json'), JSON.stringify({
@@ -1224,8 +1224,10 @@ describe('Hermes CLI commands', () => {
             nextInspectCommand: string;
             root: string;
             samples: Array<{
+              candidatePath: string;
               candidateId: string;
               eligible: boolean;
+              installCommand?: string;
               kind: string;
               promotion?: {
                 reason: string;
@@ -1233,6 +1235,7 @@ describe('Hermes CLI commands', () => {
                 successfulRunCount: number;
                 threshold: number;
               };
+              reviewManifestPath: string;
               skillName: string;
             }>;
             totalCount: number;
@@ -1271,14 +1274,16 @@ describe('Hermes CLI commands', () => {
         eligibleCount: 1,
         ineligibleCount: 0,
         listCommand: 'buddy tools skill-candidate list --eligible-only --json',
-        nextInspectCommand: 'buddy tools skill-candidate inspect .codebuddy/skill-candidates/learning/review-ready --json',
+        nextInspectCommand: 'buddy tools skill-candidate inspect ".codebuddy/skill-candidates/learning/review ready" --json',
         root: '.codebuddy/skill-candidates',
         totalCount: 1,
       });
       expect(output.summary.candidateReview.samples).toEqual([
         expect.objectContaining({
+          candidatePath: '.codebuddy/skill-candidates/learning/review ready',
           candidateId: 'learning-skill-review-ready',
           eligible: true,
+          installCommand: 'buddy tools skill-candidate install ".codebuddy/skill-candidates/learning/review ready" --approved-by <name> --json',
           kind: 'learning',
           promotion: {
             reason: '2 successful observations meet the promotion threshold.',
@@ -1286,6 +1291,7 @@ describe('Hermes CLI commands', () => {
             successfulRunCount: 2,
             threshold: 2,
           },
+          reviewManifestPath: '.codebuddy/skill-candidates/learning/review ready/candidate-review.json',
           skillName: 'review-ready',
         }),
       ]);
@@ -1316,8 +1322,9 @@ describe('Hermes CLI commands', () => {
       expect(textOutput).toContain('Candidate review: buddy tools skill-candidate list --eligible-only --json');
       expect(textOutput).toContain('Candidate samples:');
       expect(textOutput).toContain('review-ready: awaiting_human_approval (2/2)');
+      expect(textOutput).toContain('Install: buddy tools skill-candidate install ".codebuddy/skill-candidates/learning/review ready" --approved-by <name> --json');
       expect(textOutput).toContain('Reason: 2 successful observations meet the promotion threshold.');
-      expect(textOutput).toContain('Next candidate: buddy tools skill-candidate inspect .codebuddy/skill-candidates/learning/review-ready --json');
+      expect(textOutput).toContain('Next candidate: buddy tools skill-candidate inspect ".codebuddy/skill-candidates/learning/review ready" --json');
       expect(textOutput).not.toContain('Ready candidate body must stay private.');
     } finally {
       hub.shutdown();

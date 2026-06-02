@@ -46,9 +46,11 @@ export interface HermesSkillCandidateReviewStatus {
   nextInspectCommand?: string;
   root: string;
   samples: Array<{
+    candidatePath: string;
     candidateId: string;
     eligible: boolean;
     inspectCommand: string;
+    installCommand?: string;
     kind: string;
     promotion?: {
       reason: string;
@@ -56,6 +58,7 @@ export interface HermesSkillCandidateReviewStatus {
       successfulRunCount: number;
       threshold: number;
     };
+    reviewManifestPath: string;
     skillName: string;
   }>;
   totalCount: number;
@@ -211,6 +214,9 @@ export function renderHermesSkillPackageSummary(summary: HermesSkillPackageSumma
         ? `${candidate.promotion.status} (${candidate.promotion.successfulRunCount}/${candidate.promotion.threshold})`
         : candidate.eligible ? 'eligible' : 'not_eligible';
       lines.push(`- ${candidate.skillName}: ${promotionStatus} -> ${candidate.inspectCommand}`);
+      if (candidate.installCommand) {
+        lines.push(`  Install: ${candidate.installCommand}`);
+      }
       if (candidate.promotion?.reason) {
         lines.push(`  Reason: ${candidate.promotion.reason}`);
       }
@@ -275,12 +281,19 @@ function readSkillCandidateSamples(
         : inferCandidateKind(root, candidateDir);
       const relativeDir = path.relative(workDir, candidateDir).replace(/\\/g, '/');
       const promotion = kind === 'learning' ? readCandidatePromotion(parsed) : undefined;
+      const eligible = isCandidateReviewEligible(parsed, kind, promotion);
+      const candidateArg = formatShellArg(relativeDir);
       samples.push({
+        candidatePath: relativeDir,
         candidateId,
-        eligible: isCandidateReviewEligible(parsed, kind, promotion),
-        inspectCommand: `buddy tools skill-candidate inspect ${formatShellArg(relativeDir)} --json`,
+        eligible,
+        inspectCommand: `buddy tools skill-candidate inspect ${candidateArg} --json`,
+        ...(eligible ? {
+          installCommand: `buddy tools skill-candidate install ${candidateArg} --approved-by <name> --json`,
+        } : {}),
         kind,
         ...(promotion ? { promotion } : {}),
+        reviewManifestPath: path.relative(workDir, reviewPath).replace(/\\/g, '/'),
         skillName,
       });
     } catch {
