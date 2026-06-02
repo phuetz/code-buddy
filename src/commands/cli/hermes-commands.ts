@@ -2563,12 +2563,19 @@ export function registerHermesCommands(program: Command): void {
     .option('--json', 'output JSON')
     .action((profileArg: string, options: HermesCommandOptions) => {
       const status = buildHermesIdentityStatus(profileArg);
+      const profileSuffix = status.identity.dispatchProfile === 'balanced' ? '' : ` ${status.identity.dispatchProfile}`;
+      const command = `buddy hermes identity status${profileSuffix} --json`;
+      const payload = {
+        command,
+        ...status,
+      };
 
       if (options.json) {
-        console.log(stableJson(status));
+        console.log(stableJson(payload));
         return;
       }
 
+      console.log(`Command: ${command}`);
       console.log(renderHermesIdentityStatus(status));
     });
 
@@ -2579,12 +2586,19 @@ export function registerHermesCommands(program: Command): void {
     .option('--json', 'output JSON')
     .action((profileArg: string, options: HermesCommandOptions) => {
       const diagnostic = buildHermesPromptSizeDiagnostic(profileArg);
+      const profileSuffix = diagnostic.dispatchProfile === 'balanced' ? '' : ` ${diagnostic.dispatchProfile}`;
+      const command = `buddy hermes prompt-size${profileSuffix} --json`;
+      const payload = {
+        command,
+        ...diagnostic,
+      };
 
       if (options.json) {
-        console.log(stableJson(diagnostic));
+        console.log(stableJson(payload));
         return;
       }
 
+      console.log(`Command: ${command}`);
       console.log(renderHermesPromptSizeDiagnostic(diagnostic));
     });
 

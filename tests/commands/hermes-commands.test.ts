@@ -123,6 +123,7 @@ describe('Hermes CLI commands', () => {
 
     const raw = getLogOutput();
     const output = JSON.parse(raw) as {
+      command: string;
       commands: {
         doctor: string;
         prompt: string;
@@ -154,6 +155,7 @@ describe('Hermes CLI commands', () => {
       schemaVersion: number;
     };
 
+    expect(output.command).toBe('buddy hermes identity status safe --json');
     expect(output).toMatchObject({
       kind: 'hermes_agent_identity_status',
       ok: true,
@@ -188,6 +190,7 @@ describe('Hermes CLI commands', () => {
     registerHermesCommands(textProgram);
     await textProgram.parseAsync(['node', 'test', 'hermes', 'id', 'status', 'safe']);
     const textOutput = getLogOutput();
+    expect(textOutput).toContain('Command: buddy hermes identity status safe --json');
     expect(textOutput).toContain('Hermes Agent identity: ok');
     expect(textOutput).toContain('Runtime mapping: code-buddy-native');
     expect(textOutput).toContain('Active toolset: fleet.hermes.safe');
@@ -512,6 +515,7 @@ describe('Hermes CLI commands', () => {
     await program.parseAsync(['node', 'test', 'hermes', 'prompt-size', 'safe', '--json']);
 
     const output = JSON.parse(getLogOutput()) as {
+      command: string;
       kind: string;
       schemaVersion: number;
       dispatchProfile: string;
@@ -530,6 +534,7 @@ describe('Hermes CLI commands', () => {
       notes: string[];
     };
 
+    expect(output.command).toBe('buddy hermes prompt-size safe --json');
     expect(output.kind).toBe('hermes_prompt_size_diagnostic');
     expect(output.schemaVersion).toBe(1);
     expect(output.dispatchProfile).toBe('safe');
@@ -554,6 +559,12 @@ describe('Hermes CLI commands', () => {
       ]),
     );
     expect(output.notes.join(' ')).toContain('Runs offline');
+
+    consoleLogSpy.mockClear();
+    const textProgram = createProgram();
+    registerHermesCommands(textProgram);
+    await textProgram.parseAsync(['node', 'test', 'hermes', 'prompt-size', 'safe']);
+    expect(getLogOutput()).toContain('Command: buddy hermes prompt-size safe --json');
   });
 
   it('counts injected accepted user-model context in the prompt-size diagnostic', async () => {
