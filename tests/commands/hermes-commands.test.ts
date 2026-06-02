@@ -1489,6 +1489,7 @@ describe('Hermes CLI commands', () => {
 
       const raw = getLogOutput();
       const output = JSON.parse(raw) as {
+        command: string;
         kind: string;
         schemaVersion: number;
         ok: boolean;
@@ -1516,6 +1517,7 @@ describe('Hermes CLI commands', () => {
         }>;
       };
 
+      expect(output.command).toBe('buddy hermes model status --json');
       expect(output.kind).toBe('hermes_model_status');
       expect(output.schemaVersion).toBe(1);
       expect(output.ok).toBe(true);
@@ -1551,6 +1553,7 @@ describe('Hermes CLI commands', () => {
       await textProgram.parseAsync(['node', 'test', 'hermes', 'model', 'status']);
 
       const textOutput = getLogOutput();
+      expect(textOutput).toContain('Command: buddy hermes model status --json');
       expect(textOutput).toContain('Hermes model: ok');
       expect(textOutput).toContain('Active: gpt-5.5 via OpenAI / Codex-compatible');
       expect(textOutput).toContain('Credentials/endpoint: OPENAI_API_KEY');

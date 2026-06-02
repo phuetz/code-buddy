@@ -2841,14 +2841,20 @@ export function registerHermesCommands(program: Command): void {
     .description('Print active model, credential source names, and next setup checks')
     .option('--json', 'output JSON')
     .action((options: HermesCommandOptions) => {
-      const payload = buildHermesModelStatus();
+      const status = buildHermesModelStatus();
+      const command = 'buddy hermes model status --json';
+      const payload = {
+        command,
+        ...status,
+      };
 
       if (options.json) {
         console.log(stableJson(payload));
         return;
       }
 
-      console.log(renderHermesModelStatus(payload));
+      console.log(`Command: ${command}`);
+      console.log(renderHermesModelStatus(status));
     });
 
   hermes
