@@ -1698,12 +1698,21 @@ function renderHermesPortalTools(status: HermesPortalStatus): string {
   return lines.join('\n');
 }
 
-function printHermesPortalStatus(status: HermesPortalStatus, options: HermesCommandOptions, toolsOnly = false): void {
+function printHermesPortalStatus(
+  status: HermesPortalStatus,
+  options: HermesCommandOptions,
+  toolsOnly = false,
+  command?: string,
+): void {
+  const payload = command ? { command, ...status } : status;
   if (options.json) {
-    console.log(stableJson(status));
+    console.log(stableJson(payload));
     return;
   }
 
+  if (command) {
+    console.log(`Command: ${command}`);
+  }
   console.log(toolsOnly ? renderHermesPortalTools(status) : renderHermesPortalStatus(status));
 }
 
@@ -2085,7 +2094,7 @@ function registerHermesPortalCommands(hermes: Command): void {
     .description('Show Nous Portal auth and Tool Gateway routing readiness')
     .option('--json', 'output JSON')
     .action((options: HermesCommandOptions) => {
-      printHermesPortalStatus(buildHermesPortalStatus(), options);
+      printHermesPortalStatus(buildHermesPortalStatus(), options, false, 'buddy hermes portal status --json');
     });
 
   portal
@@ -2093,7 +2102,7 @@ function registerHermesPortalCommands(hermes: Command): void {
     .description('List Tool Gateway tools and whether Code Buddy routes them via Nous or direct providers')
     .option('--json', 'output JSON')
     .action((options: HermesCommandOptions) => {
-      printHermesPortalStatus(buildHermesPortalStatus(), options, true);
+      printHermesPortalStatus(buildHermesPortalStatus(), options, true, 'buddy hermes portal tools --json');
     });
 
   portal

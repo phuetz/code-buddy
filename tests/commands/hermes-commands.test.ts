@@ -2413,6 +2413,7 @@ describe('Hermes CLI commands', () => {
 
       const raw = getLogOutput();
       const output = JSON.parse(raw) as {
+        command: string;
         kind: string;
         officialSource: { inspectedCommit: string; sourceFiles: string[] };
         portal: {
@@ -2434,6 +2435,7 @@ describe('Hermes CLI commands', () => {
         };
       };
 
+      expect(output.command).toBe('buddy hermes portal status --json');
       expect(output.kind).toBe('hermes_portal_status');
       expect(output.officialSource.inspectedCommit).toBe('5921d667');
       expect(output.officialSource.sourceFiles).toContain('hermes_cli/portal_cli.py');
@@ -2477,6 +2479,7 @@ describe('Hermes CLI commands', () => {
       await textProgram.parseAsync(['node', 'test', 'hermes', 'portal', 'status']);
 
       const textOutput = getLogOutput();
+      expect(textOutput).toContain('Command: buddy hermes portal status --json');
       expect(textOutput).toContain('Tool Gateway: https://gateway.example.test');
       expect(textOutput).toContain('Web search & extract');
       expect(textOutput).toContain('via Nous Portal | configured=yes, viaNous=yes');
@@ -2506,6 +2509,7 @@ describe('Hermes CLI commands', () => {
     await program.parseAsync(['node', 'test', 'hermes', 'portal', 'tools']);
 
     const toolsOutput = getLogOutput();
+    expect(toolsOutput).toContain('Command: buddy hermes portal tools --json');
     expect(toolsOutput).toContain('Hermes Nous Portal Tool Gateway tools:');
     expect(toolsOutput).toContain('Web search & extract');
     expect(toolsOutput).toContain('Browser automation');
