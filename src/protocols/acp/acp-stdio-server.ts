@@ -256,13 +256,11 @@ export class AcpStdioServer {
     const method = msg.method;
     const rawParams = msg.params;
 
-    if (isRequest && msg.jsonrpc !== '2.0' && !('result' in msg || 'error' in msg)) {
-      this.write({ jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid Request' } });
-      return;
-    }
-
-    if (isRequest && typeof method !== 'string' && ('result' in msg || 'error' in msg)) {
-      if (msg.jsonrpc !== '2.0' || !isValidJsonRpcId(id)) {
+    if (isRequest && typeof method !== 'string' && (
+      hasJsonRpcResponsePayload(msg)
+      || (isValidJsonRpcId(id) && this.pendingClientRequests.has(String(id)))
+    )) {
+      if (msg.jsonrpc !== '2.0' || !isValidJsonRpcId(id) || !hasExactlyOneJsonRpcResponsePayload(msg)) {
         this.handleClientResponse(String(id), {
           jsonrpc: '2.0',
           id: isValidJsonRpcId(id) ? id : null,
@@ -279,6 +277,11 @@ export class AcpStdioServer {
         return;
       }
       this.handleClientResponse(String(id), msg);
+      return;
+    }
+
+    if (isRequest && msg.jsonrpc !== '2.0' && !('result' in msg || 'error' in msg)) {
+      this.write({ jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid Request' } });
       return;
     }
 
@@ -583,6 +586,14 @@ function parseJsonRpcParams(value: unknown): Record<string, unknown> | undefined
 
 function isValidJsonRpcId(value: unknown): boolean {
   return value === null || typeof value === 'string' || typeof value === 'number';
+}
+
+function hasJsonRpcResponsePayload(msg: JsonRpcMessage): boolean {
+  return 'result' in msg || 'error' in msg;
+}
+
+function hasExactlyOneJsonRpcResponsePayload(msg: JsonRpcMessage): boolean {
+  return ('result' in msg) !== ('error' in msg);
 }
 
 function isJsonRpcErrorPayload(value: unknown): boolean {
