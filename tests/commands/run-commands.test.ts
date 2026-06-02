@@ -75,6 +75,13 @@ describe('Run CLI commands', () => {
     const staleRecord = store.getRun(staleRunId);
     expect(staleRecord).not.toBeNull();
     staleRecord!.summary.startedAt = Date.now() - (2 * 60 * 60 * 1000);
+    const privateTag = 'private-client-run-doctor-tag';
+    const privateTagRunId = startRun('Private tag stale run doctor proof', {
+      tags: [privateTag],
+    });
+    const privateTagRecord = store.getRun(privateTagRunId);
+    expect(privateTagRecord).not.toBeNull();
+    privateTagRecord!.summary.startedAt = Date.now() - (90 * 60 * 1000);
 
     const program = createProgram();
     registerRunCommands(program);
@@ -117,9 +124,9 @@ describe('Run CLI commands', () => {
     expect(output.filters).toEqual({ limit: 5, staleAfterMinutes: 60 });
     expect(output.summary).toMatchObject({
       completedRunCount: 1,
-      inspectedRunCount: 3,
-      runningRunCount: 2,
-      staleRunningRunCount: 1,
+      inspectedRunCount: 4,
+      runningRunCount: 3,
+      staleRunningRunCount: 2,
     });
     expect(output.runs).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -134,12 +141,20 @@ describe('Run CLI commands', () => {
         status: 'running',
       }),
       expect.objectContaining({
+        runId: privateTagRunId,
+        staleRunning: true,
+        status: 'running',
+      }),
+      expect.objectContaining({
         runId: completedRunId,
         status: 'completed',
       }),
     ]));
     const staleRun = output.runs.find((run) => run.runId === staleRunId);
     expect(staleRun?.runningForMinutes).toBeGreaterThanOrEqual(60);
+    const privateTagRun = output.runs.find((run) => run.runId === privateTagRunId);
+    expect(privateTagRun?.source).toBeUndefined();
+    expect(JSON.stringify(output)).not.toContain(privateTag);
     expect(output.recommendations[0]).toContain('Inspect stale running runs');
 
     consoleLogSpy.mockClear();
@@ -158,10 +173,11 @@ describe('Run CLI commands', () => {
 
     const textOutput = getLogOutput();
     expect(textOutput).toContain('Run doctor');
-    expect(textOutput).toContain('stale     : 1');
+    expect(textOutput).toContain('stale     : 2');
     expect(textOutput).toContain(staleRunId);
     expect(textOutput).toContain('source=cowork');
     expect(textOutput).not.toContain('Stale running run doctor proof');
+    expect(textOutput).not.toContain(privateTag);
   });
 
   it('prints JSON run search results for UI consumers', async () => {

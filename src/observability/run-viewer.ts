@@ -354,8 +354,7 @@ function normalizePositiveInteger(value: number | undefined, fallback: number): 
 }
 
 function runSource(summary: RunSummary): string | undefined {
-  if (summary.metadata?.channel) return summary.metadata.channel;
-  return summary.metadata?.tags?.[0];
+  return summary.metadata?.channel;
 }
 
 /**
