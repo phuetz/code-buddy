@@ -23,6 +23,7 @@ export interface HermesLearningLoopStatus {
     candidateReview: string;
     lessonCandidates: string;
     retrospective: string;
+    runDoctor: string;
     skillUsage: string;
     userModel: string;
   };
@@ -104,6 +105,7 @@ export interface HermesLearningLoopStatus {
   summary: {
     acceptedUserObservationCount: number;
     deprecatedSkillCount: number;
+    inspectedRunLimit: number;
     lessonCandidateCount: number;
     patternCount: number;
     pendingLessonCandidateCount: number;
@@ -114,7 +116,9 @@ export interface HermesLearningLoopStatus {
     retrospectiveEligibleRunCount: number;
     reinforcedSkillCount: number;
     retrospectiveArtifactCount: number;
+    runningRunCount: number;
     skillUsageCount: number;
+    staleRunningRunCount: number;
   };
   workDir: string;
 }
@@ -336,6 +340,31 @@ export const HermesLearningLoopStrip: React.FC<{
               })}
             </span>
           </div>
+
+          {visibleStatus.summary.staleRunningRunCount > 0 ? (
+            <div
+              className="mt-1.5 flex min-w-0 items-start gap-1.5 rounded border border-warning/30 bg-warning/10 px-2 py-1 text-[10px] text-warning"
+              data-testid="hermes-learning-run-doctor"
+            >
+              <AlertTriangle size={10} className="mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate">
+                  {t(
+                    'fleet.hermesLearningLoop.staleRuns',
+                    '{{stale}} stale / {{running}} running runs in last {{limit}} inspected',
+                    {
+                      limit: visibleStatus.summary.inspectedRunLimit,
+                      running: visibleStatus.summary.runningRunCount,
+                      stale: visibleStatus.summary.staleRunningRunCount,
+                    },
+                  )}
+                </div>
+                <code className="block truncate text-[9px] text-warning">
+                  {visibleStatus.commands.runDoctor}
+                </code>
+              </div>
+            </div>
+          ) : null}
 
           <div
             className={`mt-1.5 rounded border px-2 py-1 text-[10px] ${

@@ -11,6 +11,7 @@ export interface HermesLearningLoopStatusForReview {
     candidateReview: string;
     lessonCandidates: string;
     retrospective: string;
+    runDoctor: string;
     skillUsage: string;
     userModel: string;
   };
@@ -45,11 +46,15 @@ export interface HermesLearningLoopStatusForReview {
     recentRuns: Array<{
       artifactCount: number;
       channel?: string;
+      evidenceArtifactCount?: number;
       eventCount: number;
       hasLearningRetrospective: boolean;
+      runningForMinutes?: number;
       runId: string;
+      staleRunning?: boolean;
       status: string;
       tags: string[];
+      toolCallCount?: number;
     }>;
     lessonCandidates: {
       byStatus: Record<string, number>;
@@ -86,13 +91,20 @@ export interface HermesLearningLoopStatusForReview {
   summary: {
     acceptedUserObservationCount: number;
     deprecatedSkillCount: number;
+    inspectedRunLimit: number;
     lessonCandidateCount: number;
     patternCount: number;
     pendingLessonCandidateCount: number;
+    pendingReviewCount: number;
+    pendingUserObservationCount: number;
     recentRunCount: number;
+    retrospectiveCoveragePercent: number;
+    retrospectiveEligibleRunCount: number;
     reinforcedSkillCount: number;
     retrospectiveArtifactCount: number;
+    runningRunCount: number;
     skillUsageCount: number;
+    staleRunningRunCount: number;
   };
   workDir: string;
 }
@@ -170,10 +182,12 @@ export async function getHermesLearningLoopStatusForReview(
   if (!mod?.buildHermesLearningLoopStatus) return null;
 
   const rootDir = normalizeAbsoluteRoot(options.rootDir);
-  return mod.buildHermesLearningLoopStatus({
-    limit: normalizeLimit(options.limit),
+  const limit = normalizeLimit(options.limit);
+  const status = mod.buildHermesLearningLoopStatus({
+    limit,
     ...(rootDir ? { workDir: rootDir } : {}),
   });
+  return normalizeHermesLearningLoopStatus(status, limit);
 }
 
 export async function runHermesLearningRetrospectiveForReview(
@@ -228,6 +242,29 @@ function normalizeRunId(value: string | undefined): string {
     throw new Error('runId is required to run a Hermes learning retrospective.');
   }
   return trimmed;
+}
+
+function normalizeHermesLearningLoopStatus(
+  status: HermesLearningLoopStatusForReview,
+  limit: number,
+): HermesLearningLoopStatusForReview {
+  const runningRunCount = status.summary.runningRunCount
+    ?? status.state.recentRuns.filter((run) => run.status === 'running').length;
+  const staleRunningRunCount = status.summary.staleRunningRunCount
+    ?? status.state.recentRuns.filter((run) => run.staleRunning).length;
+  return {
+    ...status,
+    commands: {
+      ...status.commands,
+      runDoctor: status.commands.runDoctor ?? `buddy run doctor --json --limit ${limit}`,
+    },
+    summary: {
+      ...status.summary,
+      inspectedRunLimit: status.summary.inspectedRunLimit ?? limit,
+      runningRunCount,
+      staleRunningRunCount,
+    },
+  };
 }
 
 function normalizeLimit(value: number | undefined): number {

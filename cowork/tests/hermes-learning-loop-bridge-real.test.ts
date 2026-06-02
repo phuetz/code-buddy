@@ -46,6 +46,7 @@ describe.skipIf(!hasBuiltLearningCore)('Hermes learning loop bridge real core in
       ok: true,
     });
     expect(status?.commands.retrospective).toBe('buddy run retrospective <run-id> --force --json');
+    expect(status?.commands.runDoctor).toBe('buddy run doctor --json --limit 3');
     expect(status?.commands.skillUsage).toBe('buddy skills learning-usage --json');
     if (status?.nextRetrospectiveRun) {
       expect(status.nextRetrospectiveRun.command).toBe(
@@ -54,6 +55,8 @@ describe.skipIf(!hasBuiltLearningCore)('Hermes learning loop bridge real core in
       expect(['completed', 'failed', 'cancelled']).toContain(status.nextRetrospectiveRun.status);
     }
     expect(status?.summary.recentRunCount).toBeGreaterThanOrEqual(0);
+    expect(status?.summary.runningRunCount).toBeGreaterThanOrEqual(0);
+    expect(status?.summary.staleRunningRunCount).toBeGreaterThanOrEqual(0);
     expect(status?.reviewGates).toMatchObject({
       lessonWritesRequireApproval: true,
       skillCandidatesRequireReview: true,

@@ -2496,6 +2496,7 @@
       "pendingReviewChip": "{{count}} 待审查",
       "skillsChip": "{{reinforced}} 个强化 / {{deprecated}} 个废弃",
       "skillCandidatesChip": "{{count}} 个 skill 候选",
+      "staleRuns": "最近 {{limit}} 个已检查运行中，{{stale}} 个 stale / {{running}} 个 running",
       "skillScoreChip": "{{score}}/100 {{state}}",
       "nextRetrospectiveLabel": "下一次复盘",
       "nextRetrospectiveMeta": "{{status}} | {{artifacts}} 个产物",

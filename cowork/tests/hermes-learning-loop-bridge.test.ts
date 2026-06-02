@@ -28,6 +28,7 @@ describe('Hermes learning loop bridge', () => {
         candidateReview: 'skill_manage action=candidate_list',
         lessonCandidates: 'buddy lessons candidate list --json',
         retrospective: 'buddy run retrospective <run-id> --force --json',
+        runDoctor: 'buddy run doctor --json --limit 6',
         skillUsage: 'buddy skills learning-usage --json',
         userModel: 'buddy user-model show --json',
       },
@@ -98,13 +99,20 @@ describe('Hermes learning loop bridge', () => {
       summary: {
         acceptedUserObservationCount: 3,
         deprecatedSkillCount: 0,
+        inspectedRunLimit: 6,
         lessonCandidateCount: 2,
         patternCount: 2,
         pendingLessonCandidateCount: 1,
+        pendingReviewCount: 1,
+        pendingUserObservationCount: 0,
         recentRunCount: 1,
+        retrospectiveCoveragePercent: 100,
+        retrospectiveEligibleRunCount: 1,
         reinforcedSkillCount: 1,
         retrospectiveArtifactCount: 1,
+        runningRunCount: 1,
         skillUsageCount: 1,
+        staleRunningRunCount: 1,
       },
       workDir: path.resolve('workspace'),
     }));
@@ -120,6 +128,7 @@ describe('Hermes learning loop bridge', () => {
     });
     expect(status?.commands).toMatchObject({
       retrospective: 'buddy run retrospective <run-id> --force --json',
+      runDoctor: 'buddy run doctor --json --limit 6',
       skillUsage: 'buddy skills learning-usage --json',
     });
     expect(status?.nextAction).toMatchObject({
@@ -152,6 +161,7 @@ describe('Hermes learning loop bridge', () => {
         candidateReview: 'skill_manage action=candidate_list',
         lessonCandidates: 'buddy lessons candidate list --json',
         retrospective: 'buddy run retrospective <run-id> --force --json',
+        runDoctor: 'buddy run doctor --json --limit 10',
         skillUsage: 'buddy skills learning-usage --json',
         userModel: 'buddy user-model show --json',
       },
@@ -184,13 +194,20 @@ describe('Hermes learning loop bridge', () => {
       summary: {
         acceptedUserObservationCount: 0,
         deprecatedSkillCount: 0,
+        inspectedRunLimit: 10,
         lessonCandidateCount: 0,
         patternCount: 0,
         pendingLessonCandidateCount: 0,
+        pendingReviewCount: 0,
+        pendingUserObservationCount: 0,
         recentRunCount: 0,
+        retrospectiveCoveragePercent: 100,
+        retrospectiveEligibleRunCount: 0,
         reinforcedSkillCount: 0,
         retrospectiveArtifactCount: 0,
+        runningRunCount: 0,
         skillUsageCount: 0,
+        staleRunningRunCount: 0,
       },
       workDir: process.cwd(),
     }));

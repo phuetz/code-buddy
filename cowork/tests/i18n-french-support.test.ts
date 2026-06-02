@@ -545,6 +545,7 @@ describe('French renderer i18n support', () => {
       'fleet.hermesLearningLoop.pendingReviewChip',
       'fleet.hermesLearningLoop.skillsChip',
       'fleet.hermesLearningLoop.skillCandidatesChip',
+      'fleet.hermesLearningLoop.staleRuns',
       'fleet.hermesLearningLoop.skillScoreChip',
       'fleet.hermesLearningLoop.nextRetrospectiveLabel',
       'fleet.hermesLearningLoop.nextRetrospectiveMeta',

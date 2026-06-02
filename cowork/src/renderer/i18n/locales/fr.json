@@ -2509,6 +2509,7 @@
       "pendingReviewChip": "{{count}} en revue",
       "skillsChip": "{{reinforced}} renforcée(s) / {{deprecated}} dépréciée(s)",
       "skillCandidatesChip": "{{count}} candidate(s) skill",
+      "staleRuns": "{{stale}} stale / {{running}} run(s) running parmi les {{limit}} inspectés",
       "skillScoreChip": "{{score}}/100 {{state}}",
       "nextRetrospectiveLabel": "Prochaine rétro",
       "nextRetrospectiveMeta": "{{status}} | {{artifacts}} artefact(s)",

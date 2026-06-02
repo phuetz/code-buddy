@@ -37,6 +37,7 @@ const learningStatus: HermesLearningLoopStatus = {
     candidateReview: 'skill_manage action=candidate_list',
     lessonCandidates: 'buddy lessons candidate list --json',
     retrospective: 'buddy run retrospective <run-id> --force --json',
+    runDoctor: 'buddy run doctor --json --limit 6',
     skillUsage: 'buddy skills learning-usage --json',
     userModel: 'buddy user-model show --json',
   },
@@ -146,6 +147,7 @@ const learningStatus: HermesLearningLoopStatus = {
   summary: {
     acceptedUserObservationCount: 3,
     deprecatedSkillCount: 0,
+    inspectedRunLimit: 6,
     lessonCandidateCount: 2,
     patternCount: 2,
     pendingLessonCandidateCount: 1,
@@ -156,7 +158,9 @@ const learningStatus: HermesLearningLoopStatus = {
     retrospectiveEligibleRunCount: 2,
     reinforcedSkillCount: 1,
     retrospectiveArtifactCount: 1,
+    runningRunCount: 2,
     skillUsageCount: 1,
+    staleRunningRunCount: 1,
   },
   workDir: 'D:/CascadeProjects/grok-cli',
 };
@@ -208,6 +212,9 @@ describe('HermesLearningLoopStrip', () => {
     expect(strip?.textContent).toContain('lesson_candidate review is waiting behind lessonWritesRequireApproval.');
     expect(strip?.textContent).toContain('1 reinforced / 0 deprecated');
     expect(strip?.textContent).toContain('1 skill candidates');
+    expect(strip?.querySelector('[data-testid="hermes-learning-run-doctor"]')?.textContent)
+      .toContain('1 stale / 2 running runs in last 6 inspected');
+    expect(strip?.textContent).toContain('buddy run doctor --json --limit 6');
     expect(strip?.textContent).toContain('Review queue');
     expect(strip?.textContent).toContain('lesson_candidate: 1');
     expect(strip?.textContent).toContain('buddy lessons candidate show lc-real --json');
