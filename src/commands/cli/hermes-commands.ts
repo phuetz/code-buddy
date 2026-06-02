@@ -2639,7 +2639,9 @@ export function registerHermesCommands(program: Command): void {
         limit: parseOptionalPositiveInteger(options.limit, '--limit'),
         previewChars: 0,
       });
+      const command = 'buddy hermes skills status --json';
       const payload = {
+        command,
         kind: 'hermes_skills_status',
         schemaVersion: 1,
         summary,
@@ -2650,6 +2652,7 @@ export function registerHermesCommands(program: Command): void {
         return;
       }
 
+      console.log(`Command: ${command}`);
       console.log(renderHermesSkillPackageSummary(summary));
     });
 
