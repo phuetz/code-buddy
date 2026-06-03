@@ -23,6 +23,7 @@ const reset = () => {
     teamMembers: {},
     subAgents: {},
     subAgentOutputs: {},
+    workflowExecutions: {},
   });
 };
 
@@ -283,6 +284,33 @@ describe('Tab management — store actions', () => {
     expect(Object.keys(state.teamMembers)).toEqual([keepMember.id]);
     expect(Object.keys(state.subAgents)).toEqual(['s-keep']);
     expect(Object.keys(state.subAgentOutputs)).toEqual(['s-keep']);
+  });
+
+  it('applyWorkflowEvent resets loop body nodes to pending between iterations', () => {
+    const applyWorkflowEvent = useAppStore.getState().applyWorkflowEvent;
+
+    applyWorkflowEvent({
+      type: 'started',
+      workflowId: 'wf-loop',
+      instanceId: 'run-loop',
+    });
+    applyWorkflowEvent({
+      type: 'node_completed',
+      workflowId: 'wf-loop',
+      instanceId: 'run-loop',
+      nodeId: 'body-tool',
+      output: {},
+    });
+    applyWorkflowEvent({
+      type: 'node_reset',
+      workflowId: 'wf-loop',
+      instanceId: 'run-loop',
+      nodeId: 'body-tool',
+    });
+
+    expect(
+      useAppStore.getState().workflowExecutions['run-loop'].nodeStatuses['body-tool']
+    ).toBe('pending');
   });
 
   it('addMessage does NOT bump unread for the active session', () => {

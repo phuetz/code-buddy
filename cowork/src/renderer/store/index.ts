@@ -1360,6 +1360,16 @@ export const useAppStore = create<AppState>((set) => ({
               },
             },
           };
+        case 'node_reset':
+          return {
+            workflowExecutions: {
+              ...state.workflowExecutions,
+              [payload.instanceId]: {
+                ...base,
+                nodeStatuses: { ...base.nodeStatuses, [payload.nodeId]: 'pending' },
+              },
+            },
+          };
         case 'completed':
           return {
             workflowExecutions: {

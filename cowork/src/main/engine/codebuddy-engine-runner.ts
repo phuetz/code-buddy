@@ -314,7 +314,7 @@ export class CodeBuddyEngineRunner {
             case 'ask_user':
               if (event.askUser) {
                 const stepId = `ask_user_${Date.now()}`;
-                const inputData = { 
+                const inputData: Record<string, unknown> = {
                   questions: [ 
                     { 
                       question: event.askUser.question, 
@@ -323,7 +323,7 @@ export class CodeBuddyEngineRunner {
                   ] 
                 };
 
-                sendToRenderer({
+                const traceEvent: ServerEvent = {
                   type: 'trace.step',
                   payload: { 
                     sessionId: session.id, 
@@ -337,14 +337,16 @@ export class CodeBuddyEngineRunner {
                         timestamp: Date.now()
                     }
                   },
-                } as any);
+                };
+                sendToRenderer(traceEvent);
 
-                contentBlocks.push({
+                const askUserBlock: ToolUseContent = {
                   type: 'tool_use',
                   id: stepId,
                   name: 'AskUserQuestion',
                   input: inputData,
-                } as any);
+                };
+                contentBlocks.push(askUserBlock);
               }
               break;
 

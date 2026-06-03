@@ -12,7 +12,11 @@ interface HubConfig {
   checkIntervalMs?: number;
 }
 
-type SkillsHubEntry = Record<string, unknown>;
+interface SkillsHubEntry {
+  name: string;
+  enabled?: boolean;
+  [key: string]: unknown;
+}
 
 interface SkillsHubModule {
   getSkillsHub(config?: Partial<HubConfig>): {

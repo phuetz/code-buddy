@@ -2525,9 +2525,18 @@ ipcMain.handle('memory.delete', async (_event, entryIndex: number, projectId?: s
 });
 
 // ── Pluggable memory provider selector (GAP-10) ─────────────────────────
+interface MemoryProviderRegistryBridge {
+  list(): string[];
+  setActive(providerId: string): void;
+}
+
+interface MemoryProviderModuleBridge {
+  getMemoryProviderRegistry(): MemoryProviderRegistryBridge;
+}
+
 ipcMain.handle('memoryProvider.list', async () => {
   try {
-    const mod = await loadCoreModule<{ getMemoryProviderRegistry: () => any }>(
+    const mod = await loadCoreModule<MemoryProviderModuleBridge>(
       'memory/memory-provider.js'
     );
     if (!mod) throw new Error('Failed to load memory provider module');
@@ -2552,7 +2561,7 @@ ipcMain.handle('memoryProvider.setActive', async (_event, providerId: string) =>
     configStore.update({ memoryProvider: providerId });
     configStore.applyToEnv();
     try {
-      const mod = await loadCoreModule<{ getMemoryProviderRegistry: () => any }>(
+      const mod = await loadCoreModule<MemoryProviderModuleBridge>(
         'memory/memory-provider.js'
       );
       if (mod) {

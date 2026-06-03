@@ -497,7 +497,7 @@ export class WorkflowBridge {
           const bodyNodes = this.loopBodyNodes.get(evt.stepId) ?? [];
           for (const nodeId of bodyNodes) {
             this.emitWorkflowEvent({
-              type: 'node_reset' as any,
+              type: 'node_reset',
               workflowId: wfId,
               instanceId: evt.instanceId,
               nodeId,

@@ -27,6 +27,7 @@ import type {
   ConditionNodeConfig,
   ApprovalNodeConfig,
   LoopNodeConfig,
+  BatchNodeConfig,
   SetVariableNodeConfig,
 } from '../../shared/workflow-types';
 
@@ -49,7 +50,7 @@ export interface CoreTaskDefinition {
 export interface CoreWorkflowStep {
   id: string;
   name: string;
-  type: 'task' | 'parallel' | 'conditional' | 'loop';
+  type: 'task' | 'parallel' | 'conditional' | 'loop' | 'batch';
   tasks?: CoreTaskDefinition[];
   branches?: CoreWorkflowStep[][];
   condition?: string;
@@ -57,6 +58,10 @@ export interface CoreWorkflowStep {
   falseBranch?: CoreWorkflowStep[];
   loopCondition?: string;
   loopBody?: CoreWorkflowStep[];
+  batchItemsExpression?: string;
+  batchVariableName?: string;
+  batchConcurrencyLimit?: number;
+  batchBody?: CoreWorkflowStep[];
 }
 
 export interface CoreWorkflowDefinition {
@@ -134,7 +139,7 @@ function compileExpressions(str: string): string {
   return str.replace(/\$task_([a-zA-Z0-9_-]+)(?:\.output)?/g, '$task_task_$1');
 }
 
-function compileInput(input: any): any {
+function compileInput(input: unknown): unknown {
   if (typeof input === 'string') {
     return compileExpressions(input);
   }
@@ -142,8 +147,8 @@ function compileInput(input: any): any {
     return input.map(compileInput);
   }
   if (input !== null && typeof input === 'object') {
-    const res: Record<string, any> = {};
-    for (const [key, val] of Object.entries(input)) {
+    const res: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(input as Record<string, unknown>)) {
       res[key] = compileInput(val);
     }
     return res;
@@ -221,14 +226,8 @@ function ensureLoopConfig(node: WorkflowVisualNode): LoopNodeConfig {
   };
 }
 
-interface BatchNodeConfig {
-  itemsExpression: string;
-  variableName: string;
-  concurrencyLimit?: number;
-}
-
 function ensureBatchConfig(node: WorkflowVisualNode): BatchNodeConfig {
-  const cfg = node.config as any;
+  const cfg = node.config as Partial<BatchNodeConfig> | undefined;
   if (!cfg || typeof cfg.itemsExpression !== 'string' || cfg.itemsExpression.length === 0) {
     throw new CompilationError(
       `Node '${node.id}' (batch): missing config.itemsExpression`
@@ -602,12 +601,12 @@ function compileSingle(
       const stepBase: CoreWorkflowStep = {
         id: makeStepId('step', node.id),
         name: node.name || 'batch',
-        type: 'batch' as any,
+        type: 'batch',
         batchItemsExpression: compileExpressions(cfg.itemsExpression),
         batchVariableName: cfg.variableName,
         batchConcurrencyLimit: cfg.concurrencyLimit,
         batchBody,
-      } as any;
+      };
       return {
         step: stepBase,
         continueFrom: exitTarget,

@@ -75,6 +75,12 @@ import type {
 } from '../shared/ipc-types';
 import type { LessonCandidateApi, UserModelApi, SpecApi } from '../renderer/types/hermes';
 
+interface SkillsHubEntry {
+  name: string;
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
 // Track registered callbacks to prevent duplicate listeners
 let registeredCallback: ((event: ServerEvent) => void) | null = null;
 let ipcListener: ((event: Electron.IpcRendererEvent, data: ServerEvent) => void) | null = null;
@@ -3394,8 +3400,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ) => ipcRenderer.invoke('spec.addEpic', specProjectId, input, coworkProjectId),
   },
   skillsHub: {
-    list: (projectId?: string) => ipcRenderer.invoke('skillsHub.list', projectId),
-    listEnabled: (projectId?: string) => ipcRenderer.invoke('skillsHub.listEnabled', projectId),
+    list: (projectId?: string): Promise<SkillsHubEntry[]> => ipcRenderer.invoke('skillsHub.list', projectId),
+    listEnabled: (projectId?: string): Promise<SkillsHubEntry[]> => ipcRenderer.invoke('skillsHub.listEnabled', projectId),
     setEnabled: (name: string, enabled: boolean, projectId?: string, filePath?: string) =>
       ipcRenderer.invoke('skillsHub.setEnabled', name, enabled, projectId, filePath),
   },
@@ -6200,9 +6206,9 @@ declare global {
       };
       spec: SpecApi;
       skillsHub: {
-        list: (projectId?: string) => Promise<any[]>;
-        listEnabled: (projectId?: string) => Promise<any[]>;
-        setEnabled: (name: string, enabled: boolean, projectId?: string, filePath?: string) => Promise<any>;
+        list: (projectId?: string) => Promise<SkillsHubEntry[]>;
+        listEnabled: (projectId?: string) => Promise<SkillsHubEntry[]>;
+        setEnabled: (name: string, enabled: boolean, projectId?: string, filePath?: string) => Promise<unknown>;
       };
       memoryProvider: {
         list: () => Promise<string[]>;
