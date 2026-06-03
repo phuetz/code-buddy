@@ -43,7 +43,7 @@ Les donnees sont volontairement reconnaissables pour prouver que le test a bien 
 | MCP streamable HTTP | endpoint SSE-like local `/mcp`, transport `streamable_http` | Echec ferme explicite, aucun outil expose, aucune requete reseau envoyee. |
 | Fleet loopback reel | Gateway WebSocket local, API key scopee, `FleetListener`, fichier `hello.txt` | `hello from loopback` via `peer.tool.invoke` et chain/chat/session. |
 | Fleet mesh deux peers | Gateway WebSocket local, deux `FleetListener`, peers `mesh-alpha` et `mesh-beta` | Plan route avec primary, fallback et parallel lanes sur les deux peers. |
-| Serveur chat HTTP reel | serveur Express local, agent deterministe route par l'adaptateur reel | `/api/chat`, SSE legacy, `/api/chat/completions`, `/api/chat/models`. |
+| Serveur chat HTTP reel | serveur Express local, agent deterministe route par l'adaptateur reel | `/api/chat`, SSE legacy `SERVER_STREAM_PART_A:QA_STREAM_OK`, `/api/chat/completions`, `/api/chat/models`. |
 | Fleet/MCP local smoke depuis UI | catalogue `Tests & executions`, suites Fleet/MCP/server locales | Bouton lance depuis l'UI, statut `passed`, resultat `6 ok / 0 ko`. |
 | Serveur HTTP local depuis Test Runner | ligne `Server / local HTTP chat routes`, suite serveur deterministe | le panneau lance le vrai serveur Express local et affiche `1 ok / 0 ko`. |
 | Statuts erreurs provider serveur depuis Test Runner | ligne `Server / provider error status bundle`, provider local `429`/`503`, rate-limit serveur | le panneau lance les routes HTTP d'erreur et affiche `4 ok / 0 ko`, avec `Retry-After` et payloads OpenAI-compatibles. |
@@ -99,6 +99,8 @@ Les donnees sont volontairement reconnaissables pour prouver que le test a bien 
 La capture catalogue de reference pour les lignes opt-in du Test Runner est :
 
 ![Fenetre Tests & executions avec lignes opt-in](./screenshots/30-test-runner-window.png)
+
+Ces lignes opt-in gardent la regle de surete suivante : `real provider and real Docker rows are manual/safeToRun=false and excluded from safe checks`.
 
 ## Resultats GUI Cowork
 
@@ -269,7 +271,7 @@ Preuve apres correction :
 
 | Commande | Resultat |
 |---|---|
-| `npm test -- tests\unit\sync.test.ts tests\unit\sync-persistence.test.ts --run` | 2 fichiers OK, 129 tests OK |
+| `npm test -- tests\unit\sync.test.ts tests\unit\sync-persistence.test.ts --run` | `2 files, 129 tests passed` |
 | `npm run typecheck` racine | OK |
 | `npm test -- --run` racine | OK, aucune rejection globale SyncManager |
 

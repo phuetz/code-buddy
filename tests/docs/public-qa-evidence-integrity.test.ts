@@ -145,6 +145,38 @@ function collectJsonScreenshotRefs(
   return refs;
 }
 
+function collectJsonPublicationEvidenceRefs(
+  value: unknown,
+  pathParts: string[] = [],
+): Array<{ jsonPath: string; value: string }> {
+  const evidenceKeyPattern = /^(expected(Marker|Markers|MarkerAbsent|Text|Result|Output|Status|Safety)|dockerRuntimeMarker)$/i;
+  const collectStringLeaves = (leaf: unknown, jsonPath: string): Array<{ jsonPath: string; value: string }> => {
+    if (typeof leaf === 'string') return [{ jsonPath, value: leaf }];
+    if (Array.isArray(leaf)) {
+      return leaf.flatMap((item, index) => collectStringLeaves(item, `${jsonPath}.${index}`));
+    }
+    if (leaf && typeof leaf === 'object') {
+      return Object.entries(leaf).flatMap(([key, child]) => collectStringLeaves(child, `${jsonPath}.${key}`));
+    }
+    return [];
+  };
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => collectJsonPublicationEvidenceRefs(item, [...pathParts, String(index)]));
+  }
+  if (!value || typeof value !== 'object') return [];
+
+  const refs: Array<{ jsonPath: string; value: string }> = [];
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = [...pathParts, key];
+    if (evidenceKeyPattern.test(key)) {
+      refs.push(...collectStringLeaves(child, childPath.join('.')));
+    }
+    refs.push(...collectJsonPublicationEvidenceRefs(child, childPath));
+  }
+  return refs;
+}
+
 function reportedRunnerProofCount(report: QaReport, reportKey: string): number {
   const summary = asString(
     report.verificationSummary?.[reportKey],
@@ -403,5 +435,17 @@ describe('public QA evidence report integrity', () => {
     }
 
     expect(findings).toEqual([]);
+  });
+
+  it('keeps every overnight dataset expected evidence marker visible in the overnight campaign', async () => {
+    const dataset = JSON.parse(await fs.readFile(path.join(repoRoot, overnightDatasetPath), 'utf8')) as unknown;
+    const campaign = await fs.readFile(path.join(repoRoot, overnightCampaignPath), 'utf8');
+    const refs = collectJsonPublicationEvidenceRefs(dataset);
+    const missing = refs
+      .filter((ref) => !campaign.includes(ref.value))
+      .map((ref) => `${ref.jsonPath}: ${ref.value}`);
+
+    expect(refs.length).toBeGreaterThan(0);
+    expect(missing).toEqual([]);
   });
 });
