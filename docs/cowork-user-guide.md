@@ -132,9 +132,9 @@ For day-to-day confidence checks, start with the safe bundles. They do not requi
 
 | Need | Runner row | Proof |
 | --- | --- | --- |
-| Check installed plugins and reusable skills | `Plugins / skills bundle` | `755 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/80-test-runner-plugins-skills-bundle.png) |
+| Check installed plugins and reusable skills | `Plugins / skills bundle` | `751 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/80-test-runner-plugins-skills-bundle.png) |
 | Check the terminal UI and observer stack | `UI / terminal observer bundle` | `376 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/81-test-runner-terminal-ui-observer-bundle.png) |
-| Check session persistence, sync, and caches | `Data / session sync cache bundle` | `901 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/83-test-runner-data-session-sync-cache-bundle.png) |
+| Check session persistence, sync, and caches | `Data / session sync cache bundle` | `900 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/83-test-runner-data-session-sync-cache-bundle.png) |
 | Check voice, wake-word fallback, and TTS | `Voice / speech TTS bundle` | `164 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/87-test-runner-voice-speech-tts-bundle.png) |
 | Check schedules, hooks, webhooks, and notifications | `Automation / scheduler hooks notifications bundle` | `766 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/88-test-runner-scheduler-hooks-notifications-bundle.png) |
 | Check doctor, backup, settings, and migrations | `Maintenance / doctor backup settings bundle` | `254 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/89-test-runner-maintenance-doctor-backup-settings-bundle.png) |

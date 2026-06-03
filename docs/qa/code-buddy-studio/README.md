@@ -84,12 +84,12 @@ The current package build is green but not silent. Do not claim a zero-warning r
 
 | Bundle | Verified coverage | Runner proof |
 | --- | --- | --- |
-| CLI command surface | CLI flags, headless exit codes, model/session commands, slash/context/session/permission/security/tool handlers, backups, agents, run recall, worktrees, Fleet, auth, config, and memory commands | `562 ok / 0 ko` |
-| Plugins and skills | Plugin onboarding, SDK channel, manager, conflict detector, cloud providers, plugin CLI, skill registry, starter packs, layering, hub, eligibility, and deprecation warnings | `755 ok / 0 ko` |
+| CLI command surface | CLI flags, headless exit codes, model/session commands, slash/context/session/permission/security/tool handlers, backups, agents, run recall, worktrees, Fleet, auth, config, and memory commands | `561 ok / 0 ko` |
+| Plugins and skills | Plugin onboarding, SDK channel, manager, conflict detector, cloud providers, plugin CLI, skill registry, starter packs, layering, hub, eligibility, and deprecation warnings | `751 ok / 0 ko` |
 | Terminal UI and observer | Ink UI accessibility, chat rendering, diff logic, keyboard shortcuts, metrics dashboard, status line, themes, tool streams, clipboard, GUI tool, and screen observer | `376 ok / 0 ko` |
 | Config, auth, providers | Profile manager, ChatGPT OAuth, doctor checks, Codex OAuth, provider hooks, ChatGPT responses, Gemini CLI/vision, stream retry, model registry/pricing/defaults, migrations, env schema, TOML/JSONC, provider manager, and model snapshots | `849 ok / 0 ko` |
-| Data, sessions, sync, cache | Database layer, KV config, session locks/branches/timeline/replay/export/cleanup, cloud sync, peer session store, cron persistence, response cache, prompt cache, and distributed cache | `901 ok / 0 ko` |
-| Server, API, MCP platform | API server, auth, middleware, mobile/native routes, workflow builder, canvas, HTTP/REST, IDE server, LSP, MCP client/server/OAuth, and JSON-RPC integration | `703 ok / 0 ko` |
+| Data, sessions, sync, cache | Database layer, KV config, session locks/branches/timeline/replay/export/cleanup, cloud sync, peer session store, cron persistence, response cache, prompt cache, and distributed cache | `900 ok / 0 ko` |
+| Server, API, MCP platform | API server, auth, middleware, mobile/native routes, workflow builder, canvas, HTTP/REST, IDE server, LSP, MCP client/server/OAuth, and JSON-RPC integration | `702 ok / 0 ko` |
 | Fleet routing orchestration | TaskRouter, saga store, consensus, privacy lint, peer chat stream/factory, registry/listener/handler, dispatch profiles, cost tracking, compaction bridge, capability registry, and autonomous ticks | `357 ok / 0 ko` |
 | Context compression pruning | Web-search context, restorable compression gaps, dangling patches, context guardrails, observation variation, importance scoring, TTL/soft/hard pruning, and progressive/parallel/adaptive compaction | `282 ok / 0 ko` |
 | Voice, speech, TTS | Voice control, speech recognition, wake-word fallback, TTS providers, audio reader, audio tool, and voice-to-code | `164 ok / 0 ko` |
@@ -102,7 +102,7 @@ The current package build is green but not silent. Do not claim a zero-warning r
 | Device transport adapters | SSH, ADB, and local transports, transport helpers, and Tailscale dashboard node modeling | `178 ok / 0 ko` |
 | Cowork sandbox executor | Dangerous-command validation, workspace containment, WSL/Lima command-injection guards, stderr capture, and `rm -rf`/symlink protections | `42 ok / 0 ko` |
 | Project, session, and git | Git worktrees/compare, project selection, recent files, attachments, session CRUD/cache/search/resume, and session insights | `73 ok / 0 ko` |
-| Cowork UI localization layout | App/chat/welcome/message/config layouts, dark palette, French i18n, Fleet Command Center translations, settings/plugin/schedule surfaces, focus view, local links, LaTeX, markdown, and long attachment layout | `96 ok / 0 ko` |
+| Cowork UI localization layout | App/chat/welcome/message/config layouts, dark palette, French i18n, Fleet Command Center translations, settings/plugin/schedule surfaces, focus view, local links, LaTeX, markdown, and long attachment layout | `95 ok / 0 ko` |
 | Activity, audit, diagnostics | Activity feed, global search, audit recall, diagnostics renderer, preview service, event mapping, and recent files | `67 ok / 0 ko` |
 | Fleet command and team | FleetBridge, IPC dispatch, command-center board, discovery YAML, SagaRunner, internet-proof metadata, outcomes, scheduled work, and TeamBridge | `61 ok / 0 ko` |
 | Permission path rules | Computer-use permission dialog, quick rules, classification/preview/target rules, declarative fallback, path containment, UNC, and command path conversion | `58 ok / 0 ko` |

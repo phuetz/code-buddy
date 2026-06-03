@@ -29,6 +29,7 @@ type QaReport = {
   total?: unknown;
   passed?: unknown;
   failed?: unknown;
+  verificationSummary?: Record<string, unknown>;
   functionalCoverage?: {
     total?: unknown;
     real?: unknown;
@@ -78,6 +79,24 @@ function toMainDossierScreenshotRef(screenshot: string): string {
   return screenshot.replace('docs/qa/code-buddy-studio/', './');
 }
 
+function reportedRunnerProofCount(report: QaReport, reportKey: string): number {
+  const summary = asString(
+    report.verificationSummary?.[reportKey],
+    `verificationSummary.${reportKey}`,
+  );
+  const match = summary.match(/\b(?:reported|reports) (\d+) ok \/ 0 ko/);
+
+  expect(match, `verificationSummary.${reportKey} must include reported runner count`).not.toBeNull();
+  return Number(match?.[1]);
+}
+
+function expectQaHubRunnerProof(qaHub: string, report: QaReport, reportKey: string, hubLabel: string): void {
+  const count = reportedRunnerProofCount(report, reportKey);
+
+  expect(qaHub).toContain(`| ${hubLabel} |`);
+  expect(qaHub).toContain(`| \`${count} ok / 0 ko\` |`);
+}
+
 describe('public QA evidence report integrity', () => {
   it('keeps report totals, pass counts, and functional coverage aligned', async () => {
     const report = await readQaReport();
@@ -113,6 +132,36 @@ describe('public QA evidence report integrity', () => {
     expect(qaHub).toContain(`${coverageReal} real, ${coverageUsed} used, ${coveragePartial} partial`);
     expect(qaHub).toContain('./feature-qa-report.json');
     expect(qaHub).toContain('npm run test:docs-public');
+    expectQaHubRunnerProof(
+      qaHub,
+      report,
+      'testRunnerCliCommandSurfaceBundle',
+      'CLI command surface',
+    );
+    expectQaHubRunnerProof(
+      qaHub,
+      report,
+      'testRunnerPluginsSkillsBundle',
+      'Plugins and skills',
+    );
+    expectQaHubRunnerProof(
+      qaHub,
+      report,
+      'testRunnerDataSessionSyncCacheBundle',
+      'Data, sessions, sync, cache',
+    );
+    expectQaHubRunnerProof(
+      qaHub,
+      report,
+      'testRunnerServerApiMcpPlatformBundle',
+      'Server, API, MCP platform',
+    );
+    expectQaHubRunnerProof(
+      qaHub,
+      report,
+      'testRunnerCoworkUiLocalizationLayoutBundle',
+      'Cowork UI localization layout',
+    );
   });
 
   it('keeps every result uniquely identified and positively verified', async () => {
