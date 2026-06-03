@@ -42,6 +42,18 @@ Le premier écran affiche la surface de travail. Sélectionne un workspace, puis
 
 ![Surface de travail Cowork](./qa/code-buddy-studio/screenshots/01-home-work-surface.png)
 
+Pour vérifier un package avant release, construis l'app desktop puis lance l'exécutable Windows `win-unpacked` généré via le smoke opt-in :
+
+```bash
+npm run build:gui
+cd cowork
+COWORK_PACKAGED_EXE="release/win-unpacked/Code Buddy Cowork.exe" npx playwright test e2e/packaged-launch-smoke.spec.ts --reporter=list --timeout=120000
+```
+
+Ce smoke vérifie que l'app est réellement packagée, utilise un profil `userData` isolé, attend le shell renderer, puis publie cette capture :
+
+![Lancement win-unpacked packagé](./qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png)
+
 ## 3. Configurer la route agent
 
 Ouvre **Settings** pour choisir le provider, le modèle, le mode du moteur embarqué, l'URL backend, le comportement des permissions, les connecteurs MCP, les plugins et les quick prompts.

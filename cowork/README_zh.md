@@ -57,7 +57,9 @@
 <a id="真实使用证据"></a>
 ## 真实使用证据
 
-逐步使用指南见 [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md)，法语版见 [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md)。公开 QA hub 从 [`../docs/qa/code-buddy-studio/README.md`](../docs/qa/code-buddy-studio/README.md) 开始，完整命令档案在 [`feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中的 [Release Readiness Route](../docs/qa/code-buddy-studio/README.md#release-readiness-route) 说明发布前应按顺序核对用户文档、截图、机器报告、安全 runner bundles、opt-in 真实检查和发布 guard。它记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限、Computer Use 和 Hermes lifecycle 流程。公开截图发布前会清理账号、token 和本地路径信息。
+逐步使用指南见 [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md)，法语版见 [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md)。公开 QA hub 从 [`../docs/qa/code-buddy-studio/README.md`](../docs/qa/code-buddy-studio/README.md) 开始，完整命令档案在 [`feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中的 [Release Readiness Route](../docs/qa/code-buddy-studio/README.md#release-readiness-route) 说明发布前应按顺序核对用户文档、截图、机器报告、安全 runner bundles、opt-in 真实检查、打包应用启动和发布 guard。它记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限、Computer Use 和 Hermes lifecycle 流程。公开截图发布前会清理账号、token 和本地路径信息。
+
+![打包后的 win-unpacked 启动](../docs/qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png)
 
 ![Cowork ChatGPT gpt-5.5 真实运行](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 
@@ -92,7 +94,7 @@ Cowork 的独立 package 位于 `cowork/`。在该目录中可以使用 `npm run
 
 ### 方式二：安装包
 
-Windows 和 macOS 安装包会由本仓库 release pipeline 发布。若当前 release 尚未附带安装包，请优先使用上面的源码路径，以确保桌面端与当前 Code Buddy 核心一致。
+Windows 和 macOS 安装包会由本仓库 release pipeline 发布。若当前 release 尚未附带安装包，请优先使用上面的源码路径，以确保桌面端与当前 Code Buddy 核心一致。评审者可以先运行 `npm run build:gui`，然后在 `cowork/` 中运行 `COWORK_PACKAGED_EXE="release/win-unpacked/Code Buddy Cowork.exe" npx playwright test e2e/packaged-launch-smoke.spec.ts --reporter=list --timeout=120000` 来验证打包后的 Windows app 能以隔离 profile 启动。
 
 ### 沙盒支持
 

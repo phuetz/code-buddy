@@ -47,7 +47,12 @@ describe('public Cowork documentation discoverability', () => {
       'docs/qa/code-buddy-studio/feature-qa.md',
       'docs/qa/code-buddy-studio/screenshots/',
       'docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
+      'docs/qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png',
       'npm run test:docs-public',
+    ]);
+    expectText(readme, 'README.md', [
+      'Packaged desktop launch proof',
+      'e2e/packaged-launch-smoke.spec.ts',
     ]);
   });
 
@@ -67,10 +72,13 @@ describe('public Cowork documentation discoverability', () => {
         '../tests/docs/public-screenshot-privacy.test.ts',
         '../tests/docs/public-doc-links.test.ts',
         '../docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
+        '../docs/qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png',
         'npm run test:docs-public',
       ]);
       expectText(markdown, doc, [
         'Release Readiness Route',
+        'packaged',
+        'e2e/packaged-launch-smoke.spec.ts',
       ]);
     }
   });
@@ -90,9 +98,11 @@ describe('public Cowork documentation discoverability', () => {
         './qa/code-buddy-studio/screenshots/55-test-runner-permission-real-flow.png',
         './qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png',
         './qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
+        './qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png',
       ]);
       expectText(markdown, doc, [
         'buddy tools skill-candidate inspect',
+        'e2e/packaged-launch-smoke.spec.ts',
         'outputStatus: written',
         'outputVerified: true',
       ]);

@@ -44,6 +44,18 @@ The first screen is the work surface. Select a workspace, then start a chat or o
 
 ![Cowork home work surface](./qa/code-buddy-studio/screenshots/01-home-work-surface.png)
 
+For a release-review package check, build the desktop app and launch the generated Windows `win-unpacked` executable through the opt-in smoke:
+
+```bash
+npm run build:gui
+cd cowork
+COWORK_PACKAGED_EXE="release/win-unpacked/Code Buddy Cowork.exe" npx playwright test e2e/packaged-launch-smoke.spec.ts --reporter=list --timeout=120000
+```
+
+That smoke verifies the app is really packaged, uses an isolated `userData` profile, waits for the renderer shell, and publishes this capture:
+
+![Packaged win-unpacked launch](./qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png)
+
 ## 3. Configure the Agent Route
 
 Open **Settings** to select the provider, model, embedded engine mode, backend URL, permission behavior, MCP connectors, plugins, and quick prompts.
