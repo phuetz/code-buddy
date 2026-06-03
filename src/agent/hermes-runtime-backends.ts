@@ -82,6 +82,8 @@ interface ProbeResult {
 interface SmokeInvocation {
   args: string[];
   command: string;
+  displayArgs?: string[];
+  redactions?: Array<{ replacement: string; value: string }>;
 }
 
 function blockedSmokeResult(
@@ -151,7 +153,41 @@ function smokeInvocationForBackend(
     };
   }
 
+  if (backend.id === 'ssh') {
+    if (env.CODEBUDDY_HERMES_ALLOW_SSH_SMOKE !== 'true') {
+      return null;
+    }
+    const host = sshSmokeHost(env);
+    if (!host) {
+      return null;
+    }
+    return {
+      command: 'ssh',
+      args: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-T', host, 'true'],
+      displayArgs: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-T', '<configured-host>', 'true'],
+      redactions: [{ value: host, replacement: '<configured-host>' }],
+    };
+  }
+
   return null;
+}
+
+function sshSmokeHost(env: NodeJS.ProcessEnv): string | null {
+  for (const key of ['CODEBUDDY_SSH_HOST', 'SSH_HOST', 'CODEBUDDY_REMOTE_HOST']) {
+    const value = env[key]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function redactSmokeText(value: string, redactions: SmokeInvocation['redactions']): string {
+  if (!redactions || value.length === 0) return value;
+  let redacted = value;
+  for (const redaction of redactions) {
+    if (!redaction.value) continue;
+    redacted = redacted.split(redaction.value).join(redaction.replacement);
+  }
+  return redacted;
 }
 
 function runSmokeInvocation(
@@ -171,15 +207,15 @@ function runSmokeInvocation(
     timeout: options.timeoutMs,
     windowsHide: true,
   });
-  const stdout = decodeProbeBuffer(result.stdout).trim();
-  const stderr = decodeProbeBuffer(result.stderr).trim();
+  const stdout = redactSmokeText(decodeProbeBuffer(result.stdout).trim(), invocation.redactions);
+  const stderr = redactSmokeText(decodeProbeBuffer(result.stderr).trim(), invocation.redactions);
   const output = `${stdout}\n${stderr}`.trim();
   const ok = !result.error && result.status === 0;
   const errorOutput = result.error ? String(result.error.message || result.error) : '';
   const combinedOutput = output || errorOutput;
 
   return {
-    args: invocation.args,
+    args: invocation.displayArgs ?? invocation.args,
     backendId: backend.id,
     command: invocation.command,
     durationMs: Math.max(0, Date.now() - startedAtMs),
@@ -413,7 +449,7 @@ function sshBackend(env: NodeJS.ProcessEnv, homeDir: string): HermesRuntimeBacke
     command: 'ssh',
     version: firstLine(probe.output),
     credentialSources: configuredSources,
-    smokeCommand: configured ? 'ssh -T <configured-host> true' : 'ssh -V',
+    smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_SSH_SMOKE=true ssh -o BatchMode=yes -o ConnectTimeout=10 -T <configured-host> true' : 'ssh -V',
     notes: ['Code Buddy has SSH/device transport primitives; exact Hermes remote-backend lifecycle is still product-specific.'],
     remediation: probe.ok ? ['Configure CODEBUDDY_SSH_HOST or ~/.ssh/config before selecting SSH jobs.'] : ['Install an OpenSSH client.'],
   };
@@ -616,6 +652,8 @@ export function runHermesRuntimeBackendSmoke(
   if (!invocation) {
     const reason = backend.id === 'docker'
       ? 'Docker smoke is heavy and requires CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true.'
+      : backend.id === 'ssh'
+        ? 'SSH smoke requires CODEBUDDY_HERMES_ALLOW_SSH_SMOKE=true and an explicit CODEBUDDY_SSH_HOST/SSH_HOST/CODEBUDDY_REMOTE_HOST.'
       : `${backend.label} does not have a safe live smoke runner yet.`;
     return blockedSmokeResult(backend.id, 'blocked', reason, {
       backend,

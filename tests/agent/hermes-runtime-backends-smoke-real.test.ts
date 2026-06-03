@@ -22,6 +22,15 @@ function hasRunnableDocker(): boolean {
   return !result.error && result.status === 0;
 }
 
+function hasSshClient(): boolean {
+  const result = spawnSync('ssh', ['-V'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 5000,
+    windowsHide: true,
+  });
+  return !result.error && result.status === 0;
+}
+
 describe('Hermes runtime backend live smoke runner', () => {
   it('runs the local backend smoke through a real Node subprocess', () => {
     const result = runHermesRuntimeBackendSmoke({
@@ -113,4 +122,59 @@ describe('Hermes runtime backend live smoke runner', () => {
       expect(result.output).toContain('OK-HERMES-DOCKER');
     },
   );
+
+  it.skipIf(!hasSshClient())('keeps the SSH backend smoke blocked unless explicitly allowed', () => {
+    const env = {
+      ...process.env,
+      CODEBUDDY_SSH_HOST: 'hermes-private.example.invalid',
+    };
+    delete env.CODEBUDDY_HERMES_ALLOW_SSH_SMOKE;
+
+    const result = runHermesRuntimeBackendSmoke({
+      backendId: 'ssh',
+      env,
+      now: () => new Date('2026-05-31T10:17:00.000Z'),
+    });
+
+    expect(result).toMatchObject({
+      backendId: 'ssh',
+      command: 'ssh',
+      exitCode: null,
+      ok: false,
+      status: 'blocked',
+    });
+    expect(result.output).toContain('CODEBUDDY_HERMES_ALLOW_SSH_SMOKE=true');
+  });
+
+  it.skipIf(!hasSshClient())('redacts the configured SSH host from opt-in smoke results', () => {
+    const host = 'hermes-private.example.invalid';
+    const result = runHermesRuntimeBackendSmoke({
+      backendId: 'ssh',
+      env: {
+        ...process.env,
+        CODEBUDDY_HERMES_ALLOW_SSH_SMOKE: 'true',
+        CODEBUDDY_SSH_HOST: host,
+      },
+      timeoutMs: 3000,
+    });
+    const raw = JSON.stringify(result);
+
+    expect(result).toMatchObject({
+      backendId: 'ssh',
+      command: 'ssh',
+      ok: false,
+      status: 'failed',
+    });
+    expect(result.args).toEqual([
+      '-o',
+      'BatchMode=yes',
+      '-o',
+      'ConnectTimeout=10',
+      '-T',
+      '<configured-host>',
+      'true',
+    ]);
+    expect(raw).not.toContain(host);
+    expect(result.output).toContain('<configured-host>');
+  });
 });

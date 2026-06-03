@@ -404,8 +404,8 @@ const FEATURES: HermesParityFeature[] = [
       'npx tsx src/index.ts hermes runtime-smoke local --json',
       'rg -n "Docker|SSH|Daytona|Modal|Singularity|SandboxBackend" src tests docs',
     ],
-    notes: 'Local/desktop/server/fleet/sandbox/device work exists, and Hermes doctor plus Cowork now report real non-destructive probes plus smoke commands for local Node, OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. CLI and Cowork can run local Node and WSL backend smokes through real subprocesses when available; the Docker smoke is guarded by CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true and has an opt-in real-container test path with CODEBUDDY_REAL_DOCKER_SMOKE=1. Runtime credential source output is public-safe, including ~/.ssh/config instead of resolved local home paths. The full official managed backend lifecycle is not present.',
-    nextWork: 'Add opt-in live smoke runners for configured remote backends (SSH/Modal/Daytona/Vercel Sandbox) before claiming managed backend parity.',
+    notes: 'Local/desktop/server/fleet/sandbox/device work exists, and Hermes doctor plus Cowork now report real non-destructive probes plus smoke commands for local Node, OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. CLI and Cowork can run local Node and WSL backend smokes through real subprocesses when available; Docker and SSH have guarded opt-in smoke paths, with Docker covered by a real network-disabled container test and SSH result output redacting the configured host. Runtime credential source output is public-safe, including ~/.ssh/config instead of resolved local home paths. The full official managed backend lifecycle is not present.',
+    nextWork: 'Add opt-in live smoke runners for configured Modal/Daytona/Vercel Sandbox backends before claiming managed backend parity.',
   },
   {
     id: 'mobile-supervision',
