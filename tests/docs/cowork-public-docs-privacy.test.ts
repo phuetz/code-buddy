@@ -27,6 +27,12 @@ function markdownImageTargets(text: string): string[] {
   return Array.from(text.matchAll(/!\[[^\]]*]\(([^)]+)\)/g), (match) => match[1]);
 }
 
+function markdownLocalTargets(text: string): string[] {
+  return Array.from(text.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g), (match) => match[1])
+    .map((target) => target.trim())
+    .filter((target) => !/^(?:https?:|mailto:|#)/i.test(target));
+}
+
 describe('Cowork public QA documentation privacy', () => {
   it('does not publish private ChatGPT account identifiers in text ledgers', () => {
     const files = [publicCoworkDoc, ...publicTextFiles(publicCoworkQaDir)];
@@ -84,6 +90,19 @@ describe('Cowork public QA documentation privacy', () => {
     for (const target of targets) {
       expect(path.isAbsolute(target), target).toBe(false);
       expect(fs.existsSync(path.resolve(path.dirname(publicCoworkDoc), target)), target).toBe(true);
+    }
+  });
+
+  it('keeps every local Markdown target in the public Cowork overview resolvable from GitHub', () => {
+    const text = fs.readFileSync(publicCoworkDoc, 'utf8');
+    const targets = markdownLocalTargets(text);
+
+    expect(targets.length).toBeGreaterThan(0);
+
+    for (const target of targets) {
+      const [pathTarget] = target.split('#');
+      expect(path.isAbsolute(pathTarget), target).toBe(false);
+      expect(fs.existsSync(path.resolve(path.dirname(publicCoworkDoc), pathTarget)), target).toBe(true);
     }
   });
 
