@@ -34,7 +34,6 @@ import type {
   LocalOllamaDiscoveryResult,
 } from '../../renderer/types';
 import { log, logWarn } from '../utils/logger';
-import { probeWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { listLmStudioModels } from './lmstudio-api';
 import { fetchOllamaModelIndex } from './ollama-api';
 
@@ -459,6 +458,7 @@ async function stepModel(input: DiagnosticInput, step: DiagnosticStep): Promise<
     }
 
     const config = configStore.getAll();
+    const { probeWithClaudeSdk } = await import('../claude/claude-sdk-one-shot');
     const result = await probeWithClaudeSdk(
       {
         provider: input.provider,

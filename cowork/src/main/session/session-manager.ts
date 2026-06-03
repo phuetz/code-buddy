@@ -33,7 +33,6 @@ import {
   reinitializeSandbox,
 } from '../sandbox/sandbox-adapter';
 import { SandboxSync } from '../sandbox/sandbox-sync';
-import { ClaudeAgentRunner } from '../claude/agent-runner';
 import { configStore } from '../config/config-store';
 import { MCPManager, type MCPServerConfig } from '../mcp/mcp-manager';
 import { mcpConfigStore } from '../mcp/mcp-config-store';
@@ -57,7 +56,6 @@ import {
   buildAttachedFilesPromptContext,
   buildAttachmentOnlyPrompt,
 } from './file-attachment-context';
-import { generateTitleWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { buildScheduledTaskTitle } from '../../shared/schedule/task-title';
 import { CodeBuddyEngineRunner } from '../engine/codebuddy-engine-runner';
 
@@ -87,6 +85,94 @@ interface AgentRunner {
   run(session: Session, prompt: string, existingMessages: Message[]): Promise<void>;
   cancel(sessionId: string): void;
   clearSdkSession?(sessionId: string): void;
+  invalidateMcpServersCache?(): void;
+  invalidateSkillsSetup?(): void;
+}
+
+interface ClaudeRunnerCallbacks {
+  sendToRenderer: (event: ServerEvent) => void;
+  saveMessage: (message: Message) => void;
+  requestSudoPassword: (
+    sessionId: string,
+    toolUseId: string,
+    command: string
+  ) => Promise<string | null>;
+}
+
+class LazyClaudeAgentRunner implements AgentRunner {
+  private runner?: AgentRunner;
+  private runnerPromise?: Promise<AgentRunner>;
+
+  constructor(
+    private callbacks: ClaudeRunnerCallbacks,
+    private pathResolver: PathResolver,
+    private mcpManager: MCPManager,
+    private pluginRuntimeService?: PluginRuntimeService,
+  ) {}
+
+  async run(session: Session, prompt: string, existingMessages: Message[]): Promise<void> {
+    const runner = await this.getRunner();
+    return runner.run(session, prompt, existingMessages);
+  }
+
+  cancel(sessionId: string): void {
+    const runner = this.runner;
+    if (runner) {
+      runner.cancel(sessionId);
+      return;
+    }
+    if (this.runnerPromise) {
+      void this.runnerPromise
+        .then((loadedRunner) => loadedRunner.cancel(sessionId))
+        .catch((error) => logWarn('[LazyClaudeAgentRunner] cancel before load failed:', error));
+    }
+  }
+
+  clearSdkSession(sessionId: string): void {
+    this.callWhenLoaded((runner) => runner.clearSdkSession?.(sessionId), 'clearSdkSession');
+  }
+
+  invalidateMcpServersCache(): void {
+    this.callWhenLoaded(
+      (runner) => runner.invalidateMcpServersCache?.(),
+      'invalidateMcpServersCache'
+    );
+  }
+
+  invalidateSkillsSetup(): void {
+    this.callWhenLoaded((runner) => runner.invalidateSkillsSetup?.(), 'invalidateSkillsSetup');
+  }
+
+  private async getRunner(): Promise<AgentRunner> {
+    if (!this.runnerPromise) {
+      this.runnerPromise = import('../claude/agent-runner').then(({ ClaudeAgentRunner }) => {
+        this.runner = new ClaudeAgentRunner(
+          this.callbacks,
+          this.pathResolver,
+          this.mcpManager,
+          this.pluginRuntimeService
+        );
+        return this.runner;
+      });
+    }
+    return this.runnerPromise;
+  }
+
+  private callWhenLoaded(
+    action: (runner: AgentRunner) => void,
+    label: string,
+  ): void {
+    const runner = this.runner;
+    if (runner) {
+      action(runner);
+      return;
+    }
+    if (this.runnerPromise) {
+      void this.runnerPromise
+        .then(action)
+        .catch((error) => logWarn(`[LazyClaudeAgentRunner] ${label} before load failed:`, error));
+    }
+  }
 }
 
 /**
@@ -328,8 +414,8 @@ export class SessionManager {
     }
   }
 
-  private createClaudeAgentRunner(): ClaudeAgentRunner {
-    return new ClaudeAgentRunner(
+  private createClaudeAgentRunner(): AgentRunner {
+    return new LazyClaudeAgentRunner(
       {
         sendToRenderer: this.sendToRenderer,
         saveMessage: (message: Message) => this.saveMessage(message),
@@ -366,9 +452,7 @@ export class SessionManager {
    * Call after MCP server add/update/delete.
    */
   invalidateMcpServersCache(): void {
-    if (this.agentRunner && 'invalidateMcpServersCache' in this.agentRunner) {
-      (this.agentRunner as ClaudeAgentRunner).invalidateMcpServersCache();
-    }
+    this.agentRunner.invalidateMcpServersCache?.();
     // Phase 2 — Cowork-on-core migration: also push the new MCP server
     // list to the embedded engine adapter so its core MCPManager
     // singleton stays in sync with what the user has configured. The
@@ -400,9 +484,7 @@ export class SessionManager {
    * Call after skill install/uninstall/toggle.
    */
   invalidateSkillsSetup(): void {
-    if (this.agentRunner && 'invalidateSkillsSetup' in this.agentRunner) {
-      (this.agentRunner as ClaudeAgentRunner).invalidateSkillsSetup();
-    }
+    this.agentRunner.invalidateSkillsSetup?.();
     // Phase 10 — hot-reload the engine's skills registry too. Pi
     // rebuilds skills per query (above); engine caches a global
     // SKILL.md registry that needs an explicit reload after install.
@@ -1336,6 +1418,7 @@ export class SessionManager {
 
   private async generateTitleWithConfig(titlePrompt: string): Promise<string | null> {
     // Always use pi-ai SDK for title generation
+    const { generateTitleWithClaudeSdk } = await import('../claude/claude-sdk-one-shot');
     return normalizeGeneratedTitle(
       await generateTitleWithClaudeSdk(titlePrompt, configStore.getAll())
     );

@@ -73,7 +73,7 @@ The current package build is green but not silent. Do not claim a zero-warning r
 | --- | --- | --- |
 | `.claude/skills/` pre-build warning | Non-blocking on the current Windows package; pre-build still reports `8 passed, 1 warning, 0 failed` | Decide whether built-in skills should be staged into `.claude/skills/` or whether the warning should name the expected packaged path |
 | Vite chunk-size warnings | Do not suppress by raising `chunkSizeWarningLimit`; current evidence shows the package builds and launches, but large chunks remain a performance and review item | Split eager renderer/main imports only after measuring `npm run build:gui` output |
-| Dynamic/static import reporter warnings | Vite reports modules imported both ways, including `config-store`, `core-loader`, `server-bridge`, `sandbox-bootstrap`, `reasoning-bridge`, `@mariozechner/pi-ai`, and `@mariozechner/pi-coding-agent` | Prefer real import-boundary cleanup over hiding reporter output |
+| Dynamic/static import reporter warnings | Vite reports modules imported both ways, including `config-store`, `core-loader`, `server-bridge`, `sandbox-bootstrap`, and `reasoning-bridge`; the former `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` reporter entries were removed by lazy-loading the pi runner, title generation, clipboard summary, and provider probe paths | Prefer real import-boundary cleanup over hiding reporter output |
 | Node `DEP0190` during packaging | Build succeeds; warning points at child-process shell argument handling | Trace the caller before tightening packaging commands |
 
 ## Runner-Verified Cowork Bundles

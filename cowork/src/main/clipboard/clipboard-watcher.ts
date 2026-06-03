@@ -19,7 +19,6 @@
 import { clipboard } from 'electron';
 import { createHash } from 'node:crypto';
 import { log, logWarn } from '../utils/logger';
-import { summarizeForClipboard } from '../claude/claude-sdk-one-shot';
 import { configStore } from '../config/config-store';
 import type { ServerEvent } from '../../renderer/types';
 
@@ -122,6 +121,7 @@ export class ClipboardWatcher {
       const trimmed = text.length > MAX_INPUT_LENGTH
         ? text.slice(0, MAX_INPUT_LENGTH) + '…'
         : text;
+      const { summarizeForClipboard } = await import('../claude/claude-sdk-one-shot');
       const summary = await summarizeForClipboard(trimmed, config);
       const payload: ClipboardSummaryPayload = {
         hash: hashText(text),
