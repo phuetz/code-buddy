@@ -25,6 +25,7 @@ describe('public Cowork documentation discoverability', () => {
     expectLinks(script, 'package.json test:docs-public', [
       'tests/docs/public-doc-discoverability.test.ts',
       'tests/docs/public-doc-links.test.ts',
+      'tests/docs/public-qa-evidence-integrity.test.ts',
       'tests/docs/public-screenshot-privacy.test.ts',
       'tests/docs/renderers.test.ts',
       'eslint',
@@ -96,6 +97,7 @@ describe('public Cowork documentation discoverability', () => {
       './screenshots/108-test-runner-computer-use-real-suite.png',
       'tests/docs/public-doc-links.test.ts',
       'tests/docs/public-doc-discoverability.test.ts',
+      'tests/docs/public-qa-evidence-integrity.test.ts',
       'tests/docs/public-screenshot-privacy.test.ts',
       'npm run test:docs-public',
     ]);

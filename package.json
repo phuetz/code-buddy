@@ -67,7 +67,7 @@
     "smoke:docx": "tsx scripts/smoke-docx-workshop.ts",
     "pilot:validate": "pwsh -NoProfile -ExecutionPolicy Bypass -File scratch/run-all-probes.ps1",
     "test": "vitest run",
-    "test:docs-public": "vitest run tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run && eslint tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts",
+    "test:docs-public": "vitest run tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-qa-evidence-integrity.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run && eslint tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-qa-evidence-integrity.test.ts tests/docs/public-screenshot-privacy.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",

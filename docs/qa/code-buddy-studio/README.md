@@ -41,8 +41,9 @@ npm run test:docs-public
 ```
 
 This script runs the public documentation guards in `tests/docs/public-doc-links.test.ts`,
-`tests/docs/public-doc-discoverability.test.ts`, and
+`tests/docs/public-doc-discoverability.test.ts`,
+`tests/docs/public-qa-evidence-integrity.test.ts`, and
 `tests/docs/public-screenshot-privacy.test.ts`, plus the renderer checks in
 `tests/docs/renderers.test.ts`.
 
-The guards verify exact-case local links, relative screenshot references, real PNG files with minimum public-capture dimensions, and absence of obvious private strings in public docs or PNG metadata.
+The guards verify exact-case local links, relative screenshot references, machine-readable QA report counts and screenshot paths, real PNG files with minimum public-capture dimensions, and absence of obvious private strings in public docs or PNG metadata.
