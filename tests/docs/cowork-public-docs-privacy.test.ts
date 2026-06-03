@@ -9,6 +9,13 @@ const coworkReadme = path.join(repoRoot, 'cowork', 'readme.md');
 const publicCoworkDoc = path.join(repoRoot, 'docs', 'cowork.md');
 const publicDocsDir = path.join(repoRoot, 'docs');
 const publicCoworkQaDir = path.join(repoRoot, 'docs', 'qa', 'code-buddy-studio');
+const publicMarkdownLinkFiles = [
+  rootReadme,
+  coworkReadme,
+  publicCoworkDoc,
+  path.join(publicCoworkQaDir, 'feature-qa.md'),
+  path.join(publicCoworkQaDir, 'overnight-qa-campaign.md'),
+] as const;
 const realProviderScreenshotProducerFiles = [
   path.join(repoRoot, 'cowork', 'e2e', 'chat-real-gpt55.spec.ts'),
   path.join(repoRoot, 'cowork', 'e2e', 'test-runner-cowork-real-gpt55.spec.ts'),
@@ -112,6 +119,21 @@ describe('Cowork public QA documentation privacy', () => {
       const [pathTarget] = target.split('#');
       expect(path.isAbsolute(pathTarget), target).toBe(false);
       expect(fs.existsSync(path.resolve(path.dirname(publicCoworkDoc), pathTarget)), target).toBe(true);
+    }
+  });
+
+  it('keeps local Markdown targets in public Cowork QA docs resolvable from GitHub', () => {
+    for (const file of publicMarkdownLinkFiles) {
+      const text = fs.readFileSync(file, 'utf8');
+      const targets = markdownLocalTargets(text);
+
+      expect(targets.length, file).toBeGreaterThan(0);
+
+      for (const target of targets) {
+        const [pathTarget] = target.split('#');
+        expect(path.isAbsolute(pathTarget), `${file} -> ${target}`).toBe(false);
+        expect(fs.existsSync(path.resolve(path.dirname(file), pathTarget)), `${file} -> ${target}`).toBe(true);
+      }
     }
   });
 
