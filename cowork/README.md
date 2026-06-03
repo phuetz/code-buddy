@@ -57,7 +57,7 @@ It provides a sandboxed workspace where AI can manage files, generate profession
 <a id="verified-evidence"></a>
 ## Verified Real-Use Evidence
 
-The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md), with a French version in [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md). The public QA dossier is available in [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md). It documents non-mocked Cowork, Electron, Playwright, CLI, HTTP server, ChatGPT OAuth `gpt-5.5`, MCP, Fleet, Docker, permission, Computer Use, and Hermes lifecycle flows. Screenshots are scrubbed for private account, token, and local path data before publication.
+The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md), with a French version in [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md). The public QA hub starts at [`../docs/qa/code-buddy-studio/README.md`](../docs/qa/code-buddy-studio/README.md), with the full command dossier in [`feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md). Its [Release Readiness Route](../docs/qa/code-buddy-studio/README.md#release-readiness-route) documents the order for user docs, screenshots, machine reports, safe runner bundles, opt-in real checks, and publication guards. It covers non-mocked Cowork, Electron, Playwright, CLI, HTTP server, ChatGPT OAuth `gpt-5.5`, MCP, Fleet, Docker, permission, Computer Use, and Hermes lifecycle flows. Screenshots are scrubbed for private account, token, and local path data before publication.
 
 ![Cowork ChatGPT gpt-5.5 real run](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 

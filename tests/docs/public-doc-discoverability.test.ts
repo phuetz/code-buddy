@@ -62,11 +62,15 @@ describe('public Cowork documentation discoverability', () => {
       expectLinks(markdown, doc, [
         '../docs/cowork-user-guide.md',
         '../docs/cowork-guide-fr.md',
+        '../docs/qa/code-buddy-studio/README.md',
         '../tests/docs/public-doc-discoverability.test.ts',
         '../tests/docs/public-screenshot-privacy.test.ts',
         '../tests/docs/public-doc-links.test.ts',
         '../docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
         'npm run test:docs-public',
+      ]);
+      expectText(markdown, doc, [
+        'Release Readiness Route',
       ]);
     }
   });

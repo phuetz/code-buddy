@@ -57,7 +57,7 @@
 <a id="真实使用证据"></a>
 ## 真实使用证据
 
-逐步使用指南见 [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md)，法语版见 [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md)。公开 QA 档案见 [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限、Computer Use 和 Hermes lifecycle 流程。公开截图发布前会清理账号、token 和本地路径信息。
+逐步使用指南见 [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md)，法语版见 [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md)。公开 QA hub 从 [`../docs/qa/code-buddy-studio/README.md`](../docs/qa/code-buddy-studio/README.md) 开始，完整命令档案在 [`feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中的 [Release Readiness Route](../docs/qa/code-buddy-studio/README.md#release-readiness-route) 说明发布前应按顺序核对用户文档、截图、机器报告、安全 runner bundles、opt-in 真实检查和发布 guard。它记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限、Computer Use 和 Hermes lifecycle 流程。公开截图发布前会清理账号、token 和本地路径信息。
 
 ![Cowork ChatGPT gpt-5.5 真实运行](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 
