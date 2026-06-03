@@ -51,7 +51,7 @@ Cowork itself requires Node.js 22 or newer. The root CLI still supports Node.js
 ## Visual Tour
 
 These screenshots are public-safe captures from the QA workspace. They use
-synthetic prompts, local fixtures, or redacted paths; the real-provider
+synthetic prompts, local fixtures, or redacted paths; raw real-provider
 screenshots remain excluded until the capture-review pass is complete.
 
 ### Start A Session
@@ -145,6 +145,14 @@ Result:
 - Code Buddy HTTP server routes (`/api/chat`, SSE, OpenAI-compatible
   completions, model listing) through real ChatGPT `gpt-5.5`: passed.
 - Cowork `Tests & executions` launching the real server `gpt-5.5` smoke: passed.
+
+Public-safe real-provider proof screenshots:
+
+![Cowork real GPT-5.5 chat proof](qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png)
+
+![Cowork test runner launching real GPT-5.5 chat](qa/code-buddy-studio/screenshots/public-test-runner-cowork-real-gpt55.png)
+
+![Cowork test runner launching real GPT-5.5 server API proof](qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png)
 
 No functional bug was found in this pass. The only fix made here is a
 documentation visibility fix: GitHub links now point at the actual lower-case

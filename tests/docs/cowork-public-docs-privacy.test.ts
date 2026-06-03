@@ -85,6 +85,9 @@ describe('Cowork public QA documentation privacy', () => {
       'qa/code-buddy-studio/screenshots/30-test-runner-window.png',
       'qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
       'qa/code-buddy-studio/screenshots/41-permission-dialog-real-flow.png',
+      'qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png',
+      'qa/code-buddy-studio/screenshots/public-test-runner-cowork-real-gpt55.png',
+      'qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png',
     ]);
 
     for (const target of targets) {
@@ -113,6 +116,6 @@ describe('Cowork public QA documentation privacy', () => {
       expect(text).not.toContain(screenshotName);
     }
 
-    expect(text).toMatch(/real-provider\s+screenshots remain excluded until the capture-review pass is complete/);
+    expect(text).toMatch(/raw real-provider\s+screenshots remain excluded until the capture-review pass is complete/);
   });
 });
