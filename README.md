@@ -245,6 +245,16 @@ Highlights currently documented there:
 - Computer Use system proof for Windows Forms, dialog handling, Notepad profile save, and Excel COM automation.
 - Hermes built CLI smoke from the desktop runner: rebuild Code Buddy, run `node dist/index.js hermes tools --json` and `node dist/index.js hermes doctor safe --json`, prove `runtime lifecycle daytona attach`, prove guarded Daytona and Vercel Sandbox `--execute` stay blocked without allow flags, and document the Vercel Sandbox attach command. Capture: [`109-test-runner-hermes-built-cli-real.png`](docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png).
 
+Release-proof captures:
+
+<p align="center">
+  <img src="docs/qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png" alt="Packaged win-unpacked launch proof" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png" alt="Hermes built CLI lifecycle guard" width="900"/>
+</p>
+
 Publication safety for docs and screenshots is guarded by:
 
 ```bash

@@ -16,6 +16,19 @@ function expectLinks(markdown: string, doc: string, links: string[]): void {
   expect(missing, `${doc} is missing public discovery links`).toEqual([]);
 }
 
+function expectImages(markdown: string, doc: string, imageRefs: string[]): void {
+  const markdownImageRefs = [...markdown.matchAll(/!\[[^\]]*]\(([^)]+)\)/g)]
+    .map((match) => match[1]?.trim())
+    .filter((ref): ref is string => Boolean(ref));
+  const htmlImageRefs = [...markdown.matchAll(/<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi)]
+    .map((match) => match[1]?.trim())
+    .filter((ref): ref is string => Boolean(ref));
+  const refs = new Set([...markdownImageRefs, ...htmlImageRefs]);
+  const missing = imageRefs.filter((ref) => !refs.has(ref));
+
+  expect(missing, `${doc} is missing public image embeds`).toEqual([]);
+}
+
 function expectText(markdown: string, doc: string, snippets: string[]): void {
   const missing = snippets.filter((snippet) => !markdown.includes(snippet));
   expect(missing, `${doc} is missing public usage text`).toEqual([]);
@@ -103,6 +116,11 @@ describe('public Cowork documentation discoverability', () => {
     expectText(readme, 'README.md', [
       'Packaged desktop launch proof',
       'e2e/packaged-launch-smoke.spec.ts',
+      'Release-proof captures:',
+    ]);
+    expectImages(readme, 'README.md', [
+      'docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
+      'docs/qa/code-buddy-studio/screenshots/110-packaged-win-unpacked-launch.png',
     ]);
   });
 
