@@ -61,8 +61,20 @@ Use this matrix to decide which proof lane to re-run when the app, docs, capture
 | Safe publication | Any public docs or screenshot change | `npm run test:docs-public` | Guards links, screenshot dimensions, QA report integrity, and private-string leaks |
 | Source build/typecheck | TypeScript, renderer, or Cowork source changes | `npm run build`, `cd cowork && npm run typecheck`, `cd cowork && npm run build:e2e` | Evidence snapshot and Release Readiness Route gate 4 |
 | Packaged desktop | Release-review or packaging changes | `npm run build:gui`, then `COWORK_PACKAGED_EXE="release/win-unpacked/Code Buddy Cowork.exe" npx playwright test e2e/packaged-launch-smoke.spec.ts --reporter=list --timeout=120000` | [`110-packaged-win-unpacked-launch.png`](./screenshots/110-packaged-win-unpacked-launch.png) |
+| Packaging warning triage | Any claim that packaging is warning-free or release-silent | Inspect `npm run build:gui` output and keep `Known Packaging Warnings` below current | Publicly separates passing package evidence from remaining cleanup signals |
 | Safe runner bundles | Broad non-provider regression claims | Test Runner safe bundles for CLI, providers, server/API/MCP, Fleet, context, voice/TTS, automation, sessions/cache, permissions, and Cowork project/session flows | `Runner-Verified Cowork Bundles` below |
 | Opt-in real provider/system | Claims involving external credentials, Docker, Computer Use, mobile, Hermes built CLI, or live desktop automation | Opt-in real rows in the QA dossier and overnight campaign | [`./feature-qa.md`](./feature-qa.md), [`./overnight-qa-campaign.md`](./overnight-qa-campaign.md) |
+
+## Known Packaging Warnings
+
+The current package build is green but not silent. Do not claim a zero-warning release until these rows are resolved or explicitly accepted:
+
+| Warning | Current disposition | Follow-up |
+| --- | --- | --- |
+| `.claude/skills/` pre-build warning | Non-blocking on the current Windows package; pre-build still reports `8 passed, 1 warning, 0 failed` | Decide whether built-in skills should be staged into `.claude/skills/` or whether the warning should name the expected packaged path |
+| Vite chunk-size warnings | Do not suppress by raising `chunkSizeWarningLimit`; current evidence shows the package builds and launches, but large chunks remain a performance and review item | Split eager renderer/main imports only after measuring `npm run build:gui` output |
+| Dynamic/static import reporter warnings | Vite reports modules imported both ways, including `config-store`, `core-loader`, `server-bridge`, `sandbox-bootstrap`, `reasoning-bridge`, `@mariozechner/pi-ai`, and `@mariozechner/pi-coding-agent` | Prefer real import-boundary cleanup over hiding reporter output |
+| Node `DEP0190` during packaging | Build succeeds; warning points at child-process shell argument handling | Trace the caller before tightening packaging commands |
 
 ## Runner-Verified Cowork Bundles
 
