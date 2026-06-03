@@ -57,7 +57,7 @@
 <a id="真实使用证据"></a>
 ## 真实使用证据
 
-公开 QA 档案见 [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限和 Computer Use 流程。公开截图发布前会清理账号、token 和本地路径信息。
+逐步使用指南见 [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md)。公开 QA 档案见 [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限和 Computer Use 流程。公开截图发布前会清理账号、token 和本地路径信息。
 
 ![Cowork ChatGPT gpt-5.5 真实运行](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 

@@ -10,6 +10,7 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 
 const publicDocPaths = [
   'README.md',
+  'docs/cowork-user-guide.md',
   'docs/screenshots/README.md',
   'docs/qa/code-buddy-studio/feature-qa.md',
   'docs/qa/code-buddy-studio/feature-qa-report.json',
@@ -174,9 +175,11 @@ describe('public screenshot documentation privacy', () => {
   it('keeps screenshot references relative and present in GitHub-rendered docs', async () => {
     const docsWithScreenshotRefs = [
       'README.md',
+      'docs/cowork-user-guide.md',
       'docs/screenshots/README.md',
       'docs/qa/code-buddy-studio/feature-qa.md',
       'cowork/README.md',
+      'cowork/README_zh.md',
     ];
     const missingRefs: string[] = [];
     const unsafeRefs: string[] = [];

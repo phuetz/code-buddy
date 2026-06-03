@@ -8,6 +8,7 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 
 const publicDocs = [
   'README.md',
+  'docs/cowork-user-guide.md',
   'docs/screenshots/README.md',
   'docs/qa/code-buddy-studio/feature-qa.md',
   'docs/qa/code-buddy-studio/overnight-qa-campaign.md',
