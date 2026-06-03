@@ -56,6 +56,30 @@ describe('public Cowork documentation discoverability', () => {
     ]);
   });
 
+  it('keeps getting-started linked to Cowork guides and QA evidence', async () => {
+    const gettingStarted = await readPublicDoc('docs/getting-started.md');
+
+    expectLinks(gettingStarted, 'docs/getting-started.md', [
+      'cowork-user-guide.md',
+      'cowork-guide-fr.md',
+      'qa/code-buddy-studio/README.md',
+      './qa/code-buddy-studio/screenshots/01-home-work-surface.png',
+      './qa/code-buddy-studio/screenshots/30-test-runner-window.png',
+      'npm run test:docs-public',
+    ]);
+    expectText(gettingStarted, 'docs/getting-started.md', [
+      'Cowork Desktop Quickstart',
+      'Tests & executions',
+      'ChatGPT OAuth',
+      'local providers',
+      'MCP',
+      'Fleet',
+      'Hermes',
+      'PNG dimensions',
+      'private-token or local-path leaks',
+    ]);
+  });
+
   it('keeps Cowork README variants linked to user guides and publication guards', async () => {
     const coworkReadmes = [
       'cowork/README.md',
