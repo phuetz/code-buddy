@@ -216,23 +216,25 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 
 ---
 
-## Validation Snapshot
+## Validation Evidence
 
-Latest local verification for the Cowork + Buddy companion loop (2026-05-24):
+The public Cowork QA dossier is [`docs/qa/code-buddy-studio/feature-qa.md`](docs/qa/code-buddy-studio/feature-qa.md), with screenshots under [`docs/qa/code-buddy-studio/screenshots/`](docs/qa/code-buddy-studio/screenshots/). It records the current real-use proof set instead of a narrow smoke snapshot.
+
+Highlights currently documented there:
+
+- ChatGPT OAuth account check, provider direct calls, streaming, tool-call roundtrip, CLI text/JSON/stream-json runs, and HTTP server routes against real `gpt-5.5`.
+- Non-mocked Cowork/Electron ChatGPT run rendering `REAL-GPT55-COWORK-GUI`.
+- **Tests & executions** panel launching safe bundles and opt-in real checks: local HTTP routes, Fleet/MCP local smoke, Docker sandbox, Computer Use, Cowork GPT-5.5, server GPT-5.5, live companion IPC, permissions, cancellation, timeout, failure tracking, and re-run failing.
+- Runner-launched bundles for MCP transports, Fleet routing, context pruning, voice/TTS, scheduler/hooks/notifications, maintenance/doctor/backup/settings, provider resilience, tools/search, agent execution, autonomous multi-agent harness, companion behavior, browser/desktop automation, security hardening, CLI commands, plugins/skills, and UI/observer surfaces.
+- Computer Use system proof for Windows Forms, dialog handling, Notepad profile save, and Excel COM automation.
+- Hermes built CLI smoke from the desktop runner: rebuild Code Buddy, run `node dist/index.js hermes tools --json`, then `node dist/index.js hermes doctor safe --json`.
+
+Publication safety for docs and screenshots is guarded by:
 
 ```bash
-npm run typecheck
-cd cowork && npm run typecheck
-cd cowork && npm run build:e2e
-cd cowork && npx vitest run tests/kyutai-bridge.test.ts tests/voice-bridge.test.ts tests/tts-bridge.test.ts
-cd cowork && npx playwright test e2e/cowork-smoke.spec.ts --reporter=line --workers=1
-cd cowork && npx playwright test e2e/companion-panel.spec.ts --reporter=line --workers=1
-cd cowork && npx playwright test e2e/recent-features-smoke.spec.ts e2e/companion-panel.spec.ts --workers=1
-cd cowork && npx playwright test e2e/codebuddy-settings.spec.ts e2e/recent-features-smoke.spec.ts e2e/companion-panel.spec.ts e2e/companion-live.spec.ts --reporter=line --workers=1
-cd cowork && npx vitest run
+npm test -- tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run
+npx eslint tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
 ```
-
-Result: root and Cowork typechecks passed, Vite E2E build passed with existing chunk/dynamic-import warnings, Kyutai/voice bridge unit tests passed (`31` tests), focused companion panel Playwright passed (`1` test), recent-features IPC smoke passed (`9` tests), Cowork smoke passed (`29` tests), focused companion/settings/recent-feature Playwright suite passed (`11` passed, `1` live hardware test skipped unless `COWORK_LIVE_COMPANION=1`), and Cowork Vitest passed (`205` files, `1318` tests).
 
 ---
 
