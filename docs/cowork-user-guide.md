@@ -66,7 +66,17 @@ Typical workflow:
 
 Cowork keeps file operations scoped to the selected workspace, and the core engine applies the same transcript repair, output sanitizer, MCP routing, and model hot-swap behavior as the CLI.
 
-## 5. Review Permissions Before Risky Actions
+## 5. Work With Artifacts, Documents, and Schedules
+
+Generated artifacts stay attached to the conversation and can be opened through Cowork's preview/workshop surfaces. The verified artifact bundle covers artifact detection, file links, document workshop progress, tool-output path extraction, citation normalization, and document-ready message states.
+
+![Artifact and document bundle](./qa/code-buddy-studio/screenshots/99-test-runner-artifact-document-bundle.png)
+
+For follow-up work, use the scheduling surfaces from Settings or slash commands. The verified scheduling bundle covers one-shot and repeating tasks, run-now behavior, daily/weekly slots, session titles, slash `/schedule`, and schedule metadata shown back in Cowork.
+
+![Scheduling and session bundle](./qa/code-buddy-studio/screenshots/100-test-runner-scheduling-session-bundle.png)
+
+## 6. Review Permissions Before Risky Actions
 
 When the agent needs a sensitive operation, Cowork shows a permission dialog. The real permission E2E flow injects a Bash request, clicks **Allow**, persists a scoped write rule, and proves the runner can execute the flow from the desktop app.
 
@@ -79,7 +89,7 @@ Use narrow scopes when possible:
 - Keep destructive desktop automation opt-in.
 - Re-run the safe test bundle before publishing results.
 
-## 6. Run Real Verification From the Desktop
+## 7. Run Real Verification From the Desktop
 
 Open **Tests & executions** to launch safe local bundles and opt-in real checks. The runner tracks status, counts, environment badges, and execution history.
 
@@ -117,7 +127,7 @@ buddy tools skill-candidate inspect .codebuddy/skill-candidates/<candidate-dir>
 
 The successful run evidence must show a written local output artifact: `outputStatus: written` and `outputVerified: true`. A clean process exit with `outputStatus: placeholder` or `outputStatus: missing` means the remote or sandbox run did not return usable evidence yet, so Cowork and the CLI deliberately refuse to count it as repeatable proof for promotion.
 
-## 7. Extend Cowork With MCP, Fleet, and Skills
+## 8. Extend Cowork With MCP, Fleet, and Skills
 
 Use **MCP Connectors** to add external tools and local transports.
 
@@ -131,7 +141,7 @@ Use **Skills** and plugin surfaces when the task needs reusable workflows for do
 
 ![Plugins](./qa/code-buddy-studio/screenshots/26-plugins.png)
 
-## 8. Opt In to Desktop Automation Carefully
+## 9. Opt In to Desktop Automation Carefully
 
 Computer Use checks are opt-in because they touch real desktop applications. The verified suite drives Windows Forms controls, dialogs, Notepad save behavior, and Excel COM automation, then reports `1 ok / 0 ko` from the runner.
 
@@ -144,7 +154,7 @@ Before using desktop automation:
 - Prefer safe runner rows first.
 - Capture only redacted or non-private screenshots for public docs.
 
-## 9. Publish Evidence Safely
+## 10. Publish Evidence Safely
 
 Before publishing documentation or screenshots:
 

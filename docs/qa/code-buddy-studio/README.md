@@ -28,6 +28,7 @@ Start here when you want proof that the documented Cowork flows have been exerci
 - ChatGPT OAuth `gpt-5.5`: account check, provider direct call, stream, tool-call, CLI, server API, and Cowork/Electron.
 - Cowork desktop: workspace, settings, chat, IPC, companion, permissions, workflows, MCP, Fleet, plugins, and runner surfaces.
 - **Tests & executions**: safe bundles, opt-in real checks, cancellation, timeout, failure tracking, and re-run failing behavior.
+- Artifacts and scheduling: document workshop, file/link handling, scheduled tasks, slash `/schedule`, and session metadata.
 - Real infrastructure: local HTTP server, MCP stdio/HTTP fixtures, Fleet peer/tool checks, Docker sandbox, Computer Use, and Hermes built CLI smoke including guarded runtime lifecycle checks.
 - Mobile supervision: loopback-only local-operator routes, spoofed-forwarder denial, approval queue, Cowork bridge client, and disabled listener contract.
 - Publication safety: public docs and screenshots are checked for private account, token, local path, and screenshot metadata leaks.
@@ -39,6 +40,10 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ![Tests and executions window](./screenshots/30-test-runner-window.png)
 
 ![Permission real flow](./screenshots/55-test-runner-permission-real-flow.png)
+
+![Artifact and document bundle](./screenshots/99-test-runner-artifact-document-bundle.png)
+
+![Scheduling and session bundle](./screenshots/100-test-runner-scheduling-session-bundle.png)
 
 ![Computer Use real desktop suite](./screenshots/108-test-runner-computer-use-real-suite.png)
 

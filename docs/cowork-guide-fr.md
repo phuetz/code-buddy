@@ -64,7 +64,17 @@ Flux typique :
 
 Cowork garde les opérations de fichiers dans le workspace sélectionné. Le moteur applique les mêmes protections que le CLI : réparation de transcript, sanitizer de sortie, routage MCP et changement de modèle à chaud.
 
-## 5. Relire les permissions avant les actions risquées
+## 5. Travailler avec artefacts, documents et planifications
+
+Les artefacts générés restent attachés à la conversation et peuvent être ouverts depuis les surfaces de prévisualisation ou d'atelier Cowork. Le bundle artefacts vérifié couvre la détection d'artefacts, les liens de fichiers, la progression d'atelier document, l'extraction de chemins depuis les sorties d'outils, la normalisation des citations et les états de messages prêts pour document.
+
+![Bundle artefacts documents](./qa/code-buddy-studio/screenshots/99-test-runner-artifact-document-bundle.png)
+
+Pour les suivis, utilise les surfaces de planification depuis Settings ou les commandes slash. Le bundle scheduling vérifié couvre les tâches ponctuelles et répétées, `runNow`, les créneaux daily/weekly, les titres de session, `/schedule` et les métadonnées de planification visibles dans Cowork.
+
+![Bundle planification session](./qa/code-buddy-studio/screenshots/100-test-runner-scheduling-session-bundle.png)
+
+## 6. Relire les permissions avant les actions risquées
 
 Quand l'agent demande une opération sensible, Cowork affiche un dialogue de permission. Le flux E2E réel injecte une demande Bash, clique **Allow**, persiste une règle d'écriture à portée limitée, puis prouve que la fenêtre de tests peut rejouer ce scénario depuis l'application desktop.
 
@@ -77,7 +87,7 @@ Bonnes pratiques :
 - Garder l'automatisation desktop destructive en opt-in.
 - Relancer les tests sûrs avant de publier un résultat.
 
-## 6. Exécuter les vérifications réelles depuis le desktop
+## 7. Exécuter les vérifications réelles depuis le desktop
 
 La fenêtre **Tests & executions** lance les bundles locaux sûrs et les checks réels opt-in. Elle affiche le statut, les compteurs, les badges d'environnement et l'historique d'exécution.
 
@@ -115,7 +125,7 @@ buddy tools skill-candidate inspect .codebuddy/skill-candidates/<candidate-dir>
 
 La preuve de run réussi doit montrer un artefact local écrit : `outputStatus: written` et `outputVerified: true`. Un process qui sort proprement avec `outputStatus: placeholder` ou `outputStatus: missing` signifie que le run distant ou sandbox n'a pas encore rendu de preuve exploitable ; Cowork et le CLI refusent donc de le compter comme preuve répétable pour une promotion.
 
-## 7. Étendre Cowork avec MCP, Fleet et Skills
+## 8. Étendre Cowork avec MCP, Fleet et Skills
 
 Utilise **MCP Connectors** pour ajouter des outils externes et des transports locaux.
 
@@ -129,7 +139,7 @@ Utilise les surfaces **Skills** et plugins pour les documents, tableurs, présen
 
 ![Plugins](./qa/code-buddy-studio/screenshots/26-plugins.png)
 
-## 8. Activer prudemment l'automatisation desktop
+## 9. Activer prudemment l'automatisation desktop
 
 Les checks Computer Use sont opt-in car ils manipulent de vraies applications desktop. La suite validée pilote des contrôles Windows Forms, des dialogues, Notepad et Excel COM, puis affiche `1 ok / 0 ko` depuis le runner.
 
@@ -142,7 +152,7 @@ Avant d'utiliser Computer Use :
 - Préférer les lignes sûres du runner pour commencer.
 - Ne publier que des captures caviardées ou sans information privée.
 
-## 9. Publier des preuves sans fuite privée
+## 10. Publier des preuves sans fuite privée
 
 Avant de publier de la documentation ou des captures :
 
