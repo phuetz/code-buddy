@@ -219,6 +219,7 @@ describe('research script job runner', () => {
       sandboxPolicy: {
         network: 'disabled',
         provider: 'remote',
+        target: 'sandbox-legacy-remote-target',
         timeoutMs: 5000,
       },
     });
@@ -235,9 +236,12 @@ describe('research script job runner', () => {
     expect(spawnCall[0]).toBe('daytona');
     expect(spawnCall[1]).toContain('exec');
     expect(spawnCall[1]).toContain('-w');
-    expect(spawnCall[1]).toContain('research-script-remote-test');
+    expect(spawnCall[1]).toContain('sandbox-legacy-remote-target');
     expect(spawnCall[1]).toContain('--');
     expect(spawnCall[1]).toContain('env');
+    expect(spawnCall[1]).toContain('INPUT_JSON=codebuddy-research/research-script-remote-test/input.json');
+    expect(spawnCall[1]).toContain('OUTPUT_JSON=codebuddy-research/research-script-remote-test/output.json');
+    expect(spawnCall[1]).toContain('codebuddy-research/research-script-remote-test/script.js');
 
     expect(result.status).toBe('completed');
   });
@@ -276,6 +280,9 @@ describe('research script job runner', () => {
     expect(spawnCall[1]).toContain('sandbox-daytona-target');
     expect(spawnCall[1]).toContain('--');
     expect(spawnCall[1]).toContain('env');
+    expect(spawnCall[1]).toContain('INPUT_JSON=codebuddy-research/research-script-daytona-test/input.json');
+    expect(spawnCall[1]).toContain('OUTPUT_JSON=codebuddy-research/research-script-daytona-test/output.json');
+    expect(spawnCall[1]).toContain('codebuddy-research/research-script-daytona-test/script.js');
 
     expect(result.status).toBe('completed');
   });

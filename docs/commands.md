@@ -299,14 +299,16 @@ subprocess smoke for the selected backend.
 
 Research-script job artifacts can now select `sandboxPolicy.provider` values
 `local`, `docker`, `wsl`, `remote`, `daytona`, or `vercel-sandbox`.
-`remote` remains a Daytona alias for backward compatibility; `vercel-sandbox`
+`remote` remains a Daytona alias for backward compatibility; Daytona executes
+pre-staged remote files under `codebuddy-research/<job-id>/...` so it no
+longer sends local paths into the sandbox. `vercel-sandbox`
 uses the documented `sandbox exec --env KEY=VALUE <sandbox_id> <command>
 [...args]` CLI shape. Set `sandboxPolicy.target` to the existing remote
 workspace or sandbox id; the runner falls back to the job id only for legacy
 artifacts. For Vercel Sandbox, the runner also uses `sandbox copy` to upload
 the materialized script/input into `/home/sandbox/codebuddy-research/<job-id>`
 before execution and copy `output.json` back afterward. Live configured-account
-execution remains guarded follow-up work.
+execution and Daytona upload/download automation remain guarded follow-up work.
 
 `buddy hermes hooks [--json]` prints the canonical Hermes-style lifecycle
 hook manifest. It maps Code Buddy's existing user/tool hooks onto

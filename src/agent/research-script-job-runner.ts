@@ -149,7 +149,7 @@ export async function runMaterializedResearchScriptJob(
     }
     spawnArgs.push(wslExecutable, ...args.map(toWslPath));
   } else if (provider === 'remote' || provider === 'daytona') {
-    ({ spawnExecutable, spawnArgs } = buildDaytonaSpawn(job, env, args));
+    ({ spawnExecutable, spawnArgs } = buildDaytonaSpawn(job));
   } else if (provider === 'vercel-sandbox') {
     const plan = buildVercelSandboxSpawn(job, absoluteFiles);
     spawnExecutable = plan.spawnExecutable;
@@ -236,25 +236,25 @@ export async function runMaterializedResearchScriptJob(
 
 function buildDaytonaSpawn(
   job: ResearchScriptJobArtifact,
-  env: NodeJS.ProcessEnv,
-  args: string[],
 ): {
   spawnArgs: string[];
   spawnExecutable: string;
 } {
+  const target = job.sandboxPolicy.target ?? job.id;
   const cleanExec = path.basename(job.command.executable).replace(/\.(exe|cmd)$/i, '');
+  const remoteFiles = buildDaytonaRemoteFiles(job);
+  const remoteEnv = buildRemoteEnv(job, remoteFiles);
+  const remoteArgs = job.command.args.map((arg) => resolveRemoteCommandArg(job, remoteFiles, arg));
   const spawnArgs = [
     'exec',
-    '-w', job.sandboxPolicy.target ?? job.id,
+    '-w', target,
     '--',
     'env',
   ];
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) {
-      spawnArgs.push(`${key}=${value}`);
-    }
+  for (const [key, value] of Object.entries(remoteEnv)) {
+    spawnArgs.push(`${key}=${value}`);
   }
-  spawnArgs.push(cleanExec, ...args);
+  spawnArgs.push(cleanExec, ...remoteArgs);
   return {
     spawnExecutable: 'daytona',
     spawnArgs,
@@ -306,6 +306,21 @@ function buildVercelSandboxSpawn(
     ],
     spawnExecutable: 'sandbox',
     spawnArgs,
+  };
+}
+
+function buildDaytonaRemoteFiles(job: ResearchScriptJobArtifact): RemoteResearchScriptFiles {
+  const root = `codebuddy-research/${sanitizeRemotePathSegment(job.id)}`;
+  return {
+    root,
+    manifest: `${root}/manifest.json`,
+    readme: `${root}/README.md`,
+    script: `${root}/${path.basename(job.files.script)}`,
+    input: `${root}/input.json`,
+    output: `${root}/output.json`,
+    stdout: `${root}/stdout.log`,
+    stderr: `${root}/stderr.log`,
+    summary: `${root}/summary.md`,
   };
 }
 
