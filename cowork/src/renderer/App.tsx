@@ -287,6 +287,10 @@ function App() {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   // P3.9 — /btw quick ask popup (Cmd+Shift+/)
   const [showBtwQuickAsk, setShowBtwQuickAsk] = useState(false);
+  const closeEnrollmentDialog = useCallback(() => {
+    setShowEnrollmentDialog(false);
+  }, [setShowEnrollmentDialog]);
+
   useEffect(() => {
     if (!appConfig) return;
     const config = appConfig as unknown as { onboardingCompleted?: boolean; apiKey?: string };
@@ -816,8 +820,8 @@ function App() {
         <Suspense fallback={null}>
           <EnrollmentDialog
             isOpen={showEnrollmentDialog}
-            onClose={() => setShowEnrollmentDialog(false)}
-            onEnrolled={() => setShowEnrollmentDialog(false)}
+            onClose={closeEnrollmentDialog}
+            onEnrolled={closeEnrollmentDialog}
           />
         </Suspense>
       )}

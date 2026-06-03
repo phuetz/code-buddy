@@ -86,6 +86,27 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
   const startedAtRef = useRef<number>(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const stopAllStreams = useCallback(() => {
+    streamRef.current?.getTracks().forEach((tr) => tr.stop());
+    streamRef.current = null;
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+    if (tickRef.current) clearInterval(tickRef.current);
+    stopTimerRef.current = null;
+    tickRef.current = null;
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (rec !== 'recording') return;
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state === 'recording') {
+      recordVoiceEvent({ type: 'listening_stopped' });
+      recorder.stop();
+      setRec('transcribing');
+    } else {
+      setRec('idle');
+    }
+  }, [rec]);
+
   // ESC to close (when not recording — stop recording first).
   useEffect(() => {
     if (!isOpen) return;
@@ -101,7 +122,7 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, rec, onClose]);
+  }, [isOpen, rec, onClose, stopRecording]);
 
   // Reset state on open.
   useEffect(() => {
@@ -120,17 +141,7 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
     return () => {
       stopAllStreams();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const stopAllStreams = useCallback(() => {
-    streamRef.current?.getTracks().forEach((tr) => tr.stop());
-    streamRef.current = null;
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-    if (tickRef.current) clearInterval(tickRef.current);
-    stopTimerRef.current = null;
-    tickRef.current = null;
-  }, []);
+  }, [stopAllStreams]);
 
   const startRecording = async () => {
     if (rec !== 'idle' && rec !== 'error') return;
@@ -182,18 +193,6 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
       stopAllStreams();
     }
   };
-
-  const stopRecording = useCallback(() => {
-    if (rec !== 'recording') return;
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state === 'recording') {
-      recordVoiceEvent({ type: 'listening_stopped' });
-      recorder.stop();
-      setRec('transcribing');
-    } else {
-      setRec('idle');
-    }
-  }, [rec]);
 
   const transcribe = async (blob: Blob) => {
     try {

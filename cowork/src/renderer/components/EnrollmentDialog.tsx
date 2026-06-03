@@ -153,7 +153,7 @@ export function EnrollmentDialog({ isOpen, onClose, onEnrolled }: EnrollmentDial
       setStatus('idle');
       setLatestDetection(null);
     };
-  }, [isOpen]);
+  }, [isOpen, onClose, setShowModelInstallDialog]);
 
   const handleCapture = async () => {
     if (!latestDetection || !videoRef.current || !window.electronAPI) {
