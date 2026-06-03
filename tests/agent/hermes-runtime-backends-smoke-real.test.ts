@@ -13,6 +13,15 @@ function hasRunnableWsl(): boolean {
   return !result.error && result.status === 0;
 }
 
+function hasRunnableDocker(): boolean {
+  const result = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 5000,
+    windowsHide: true,
+  });
+  return !result.error && result.status === 0;
+}
+
 describe('Hermes runtime backend live smoke runner', () => {
   it('runs the local backend smoke through a real Node subprocess', () => {
     const result = runHermesRuntimeBackendSmoke({
@@ -50,4 +59,58 @@ describe('Hermes runtime backend live smoke runner', () => {
     expect(result.stdout).toContain('OK-HERMES-WSL');
     expect(result.output).toContain('OK-HERMES-WSL');
   });
+
+  it.skipIf(!hasRunnableDocker())('keeps the Docker backend smoke blocked unless explicitly allowed', () => {
+    const env = { ...process.env };
+    delete env.CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE;
+
+    const result = runHermesRuntimeBackendSmoke({
+      backendId: 'docker',
+      env,
+      now: () => new Date('2026-05-31T10:16:00.000Z'),
+    });
+
+    expect(result).toMatchObject({
+      backendId: 'docker',
+      command: 'docker',
+      exitCode: null,
+      ok: false,
+      status: 'blocked',
+    });
+    expect(result.output).toContain('CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true');
+  });
+
+  it.skipIf(!hasRunnableDocker() || process.env.CODEBUDDY_REAL_DOCKER_SMOKE !== '1')(
+    'runs the Docker backend smoke through a real network-disabled container',
+    () => {
+      const result = runHermesRuntimeBackendSmoke({
+        backendId: 'docker',
+        env: {
+          ...process.env,
+          CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE: 'true',
+        },
+        timeoutMs: 60_000,
+      });
+
+      expect(result).toMatchObject({
+        backendId: 'docker',
+        command: 'docker',
+        exitCode: 0,
+        ok: true,
+        status: 'passed',
+      });
+      expect(result.args).toEqual([
+        'run',
+        '--rm',
+        '--network',
+        'none',
+        'node:22-slim',
+        'node',
+        '-e',
+        "console.log('OK-HERMES-DOCKER')",
+      ]);
+      expect(result.stdout).toContain('OK-HERMES-DOCKER');
+      expect(result.output).toContain('OK-HERMES-DOCKER');
+    },
+  );
 });
