@@ -26,6 +26,30 @@ function localImageTargets(text: string): string[] {
   );
 }
 
+function localReferenceTargets(text: string): string[] {
+  const markdownTargets = Array.from(
+    text.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g),
+    (match) => match[1].trim()
+  );
+  const htmlTargets = Array.from(
+    text.matchAll(/<(?:a|img)\s+[^>]*(?:href|src)=["']([^"']+)["'][^>]*>/gi),
+    (match) => match[1].trim()
+  );
+
+  return [...markdownTargets, ...htmlTargets].filter(
+    (target) => target && !/^(?:https?:|mailto:|#|data:)/i.test(target)
+  );
+}
+
+function expectResolvableLocalReference(sourceFile: string, target: string): void {
+  const [pathTarget] = target.split('#');
+  if (!pathTarget) return;
+
+  const label = `${sourceFile} -> ${target}`;
+  expect(path.isAbsolute(pathTarget), label).toBe(false);
+  expect(fs.existsSync(path.resolve(path.dirname(sourceFile), pathTarget)), label).toBe(true);
+}
+
 function expectValidPublicImage(sourceFile: string, target: string): void {
   const [pathTarget] = target.split('#');
   const label = `${sourceFile} -> ${target}`;
@@ -54,6 +78,23 @@ function expectValidPublicImage(sourceFile: string, target: string): void {
 }
 
 describe('public README screenshots', () => {
+  it('keeps GitHub-visible README local links resolvable', () => {
+    const targetsByFile = new Map<string, string[]>();
+
+    for (const file of publicScreenshotDocs) {
+      const text = fs.readFileSync(file, 'utf8');
+      const targets = localReferenceTargets(text);
+      targetsByFile.set(file, targets);
+
+      for (const target of targets) {
+        expectResolvableLocalReference(file, target);
+      }
+    }
+
+    expect(targetsByFile.get(path.join(repoRoot, 'README.md'))?.length).toBeGreaterThan(30);
+    expect(targetsByFile.get(path.join(repoRoot, 'docs', 'screenshots', 'README.md'))).toHaveLength(14);
+  });
+
   it('keeps screenshot gallery text free of personal workstation details', () => {
     for (const file of publicScreenshotDocs) {
       const text = fs.readFileSync(file, 'utf8');
