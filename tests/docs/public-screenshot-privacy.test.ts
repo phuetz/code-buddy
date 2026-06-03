@@ -13,6 +13,8 @@ const publicDocPaths = [
   'docs/getting-started.md',
   'docs/cowork-guide-fr.md',
   'docs/cowork-user-guide.md',
+  'docs/reprise/cli-smoke.md',
+  'docs/reprise/fleet-minimal.md',
   'docs/screenshots/README.md',
   'docs/qa/code-buddy-studio/README.md',
   'docs/qa/code-buddy-studio/feature-qa.md',
@@ -83,7 +85,7 @@ function collectSensitiveTextMatches(file: string, text: string): SensitiveMatch
   );
   addMatches(
     'non-placeholder API key assignment',
-    /\b(?:OPENAI|GROK|ANTHROPIC|GEMINI)_API_KEY\s*=\s*(?!your_|<redacted>|redacted\b)[^\s`'"]+/gi,
+    /\b(?:OPENAI|GROK|ANTHROPIC|GEMINI|CODEBUDDY_FLEET)_API_KEY\s*=\s*(?!your_|<redacted>|redacted\b)[^\s`'"]+/gi,
   );
 
   return matches;

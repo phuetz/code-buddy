@@ -11,6 +11,8 @@ const publicDocs = [
   'docs/getting-started.md',
   'docs/cowork-guide-fr.md',
   'docs/cowork-user-guide.md',
+  'docs/reprise/cli-smoke.md',
+  'docs/reprise/fleet-minimal.md',
   'docs/screenshots/README.md',
   'docs/qa/code-buddy-studio/README.md',
   'docs/qa/code-buddy-studio/feature-qa.md',

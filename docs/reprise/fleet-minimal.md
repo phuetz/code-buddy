@@ -10,7 +10,7 @@ canaux externes.
 ```text
 Machine A                              Machine B
 buddy server                           buddy
-CODEBUDDY_FLEET_API_KEY=...      ->   /fleet listen ws://A:3000/ws
+CODEBUDDY_FLEET_API_KEY=your_fleet_api_key -> /fleet listen ws://A:3000/ws
 CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT     /fleet status
                                       /fleet route ...
                                       /fleet chat ...
@@ -28,7 +28,7 @@ La cle utilisee par Machine B doit avoir:
 Sur Machine A:
 
 ```bash
-set CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT=D:\CascadeProjects\grok-cli
+set CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT=<workspace-path>
 set CODEBUDDY_FLEET_HOSTNAME=ministar-linux
 node dist/index.js server --host 0.0.0.0 --port 3000
 ```
@@ -45,7 +45,7 @@ Resultat attendu:
 Sur Machine B:
 
 ```bash
-set CODEBUDDY_FLEET_API_KEY=cb_sk_...
+set CODEBUDDY_FLEET_API_KEY=your_fleet_api_key
 node dist/index.js
 ```
 
