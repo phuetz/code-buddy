@@ -1085,6 +1085,9 @@ function sshBackend(env: NodeJS.ProcessEnv, homeDir: string): HermesRuntimeBacke
     ...readSshConfigSource(homeDir),
   ];
   const configured = configuredSources.length > 0;
+  const remediation = probe.ok
+    ? configured ? [] : ['Configure CODEBUDDY_SSH_HOST or ~/.ssh/config before selecting SSH jobs.']
+    : ['Install an OpenSSH client.'];
   return {
     id: 'ssh',
     label: 'SSH remote shell',
@@ -1099,7 +1102,7 @@ function sshBackend(env: NodeJS.ProcessEnv, homeDir: string): HermesRuntimeBacke
     lifecycleActions: ['attach'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_SSH_SMOKE=true ssh -o BatchMode=yes -o ConnectTimeout=10 -T <configured-host> true' : 'ssh -V',
     notes: ['Code Buddy has SSH/device transport primitives; exact Hermes remote-backend lifecycle is still product-specific.'],
-    remediation: probe.ok ? ['Configure CODEBUDDY_SSH_HOST or ~/.ssh/config before selecting SSH jobs.'] : ['Install an OpenSSH client.'],
+    remediation,
   };
 }
 
@@ -1130,6 +1133,9 @@ function modalBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
   const credentialSources = presentEnvKeys(env, ['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET', 'MODAL_PROFILE']);
   const configured = credentialSources.includes('MODAL_PROFILE') ||
     (credentialSources.includes('MODAL_TOKEN_ID') && credentialSources.includes('MODAL_TOKEN_SECRET'));
+  const remediation = probe.ok
+    ? configured ? [] : ['Configure Modal credentials before selecting Modal jobs.']
+    : ['Install the Modal CLI if cloud terminal jobs are required.'];
   return {
     id: 'modal',
     label: 'Modal',
@@ -1144,7 +1150,7 @@ function modalBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     lifecycleActions: ['provision', 'attach', 'teardown'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_MODAL_SMOKE=true modal profile current' : 'modal --version',
     notes: ['Modal is currently an optional provider/tool gateway surface; lifecycle plans map attach to the CLI and provision/teardown to the Sandbox SDK.'],
-    remediation: probe.ok ? ['Configure Modal credentials before selecting Modal jobs.'] : ['Install the Modal CLI if cloud terminal jobs are required.'],
+    remediation,
   };
 }
 
@@ -1152,6 +1158,9 @@ function daytonaBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
   const probe = runProbe('daytona', ['--version'], env);
   const credentialSources = presentEnvKeys(env, ['DAYTONA_API_KEY', 'DAYTONA_SERVER_URL', 'DAYTONA_PROFILE']);
   const configured = credentialSources.length > 0;
+  const remediation = probe.ok
+    ? configured ? [] : ['Configure Daytona credentials/workspaces before selecting remote jobs.']
+    : ['Install the Daytona CLI if this backend is required.'];
   return {
     id: 'daytona',
     label: 'Daytona',
@@ -1166,7 +1175,7 @@ function daytonaBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     lifecycleActions: ['provision', 'hibernate', 'wake', 'attach', 'teardown'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_DAYTONA_SMOKE=true daytona profile list' : 'daytona --version',
     notes: ['Research-script remote jobs translate to daytona exec; lifecycle plans now cover create/start/stop/ssh/delete but execution is still guarded.'],
-    remediation: probe.ok ? ['Configure Daytona credentials/workspaces before selecting remote jobs.'] : ['Install the Daytona CLI if this backend is required.'],
+    remediation,
   };
 }
 
@@ -1174,6 +1183,9 @@ function vercelSandboxBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
   const probe = runProbe('vercel', ['--version'], env);
   const credentialSources = presentEnvKeys(env, ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_ORG_ID']);
   const configured = credentialSources.includes('VERCEL_TOKEN');
+  const remediation = probe.ok
+    ? configured ? [] : ['Configure VERCEL_TOKEN before attempting remote Vercel jobs.']
+    : ['Install the Vercel CLI if this backend is required.'];
   return {
     id: 'vercel-sandbox',
     label: 'Vercel Sandbox',
@@ -1188,7 +1200,7 @@ function vercelSandboxBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     lifecycleActions: ['provision', 'hibernate', 'attach', 'teardown'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE=true vercel whoami' : 'vercel --version',
     notes: ['Vercel Sandbox is tracked as an optional remote backend; lifecycle plans use the separate sandbox CLI where provider docs require it.'],
-    remediation: probe.ok ? ['Configure VERCEL_TOKEN before attempting remote Vercel jobs.'] : ['Install the Vercel CLI if this backend is required.'],
+    remediation,
   };
 }
 

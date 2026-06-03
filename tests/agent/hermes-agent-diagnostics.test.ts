@@ -181,6 +181,7 @@ describe('Hermes Agent diagnostics', () => {
     expect(ssh).toMatchObject({
       configured: true,
       credentialSources: ['~/.ssh/config'],
+      remediation: [],
     });
     expect(raw).not.toContain(dir);
     expect(raw).not.toContain(sshConfigPath);

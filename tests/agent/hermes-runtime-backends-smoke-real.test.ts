@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 
 import {
+  buildHermesRuntimeBackendsReadiness,
   buildHermesRuntimeLifecyclePlan,
   runHermesRuntimeBackendSmoke,
   runHermesRuntimeLifecycleAction,
@@ -235,6 +236,73 @@ function withVercelLifecycleFixture(run: (env: NodeJS.ProcessEnv) => void): void
 }
 
 describe('Hermes runtime backend live smoke runner', () => {
+  it('keeps setup remediation only on unconfigured managed runtime backends', () => {
+    withFixturePath(
+      { command: 'modal', output: 'modal-profile secret-modal-profile', version: 'modal 1.0.0' },
+      (env) => {
+        const unconfigured = buildHermesRuntimeBackendsReadiness({ env });
+        const unconfiguredModal = unconfigured.backends.find((backend) => backend.id === 'modal');
+        expect(unconfiguredModal).toMatchObject({
+          configured: false,
+          remediation: ['Configure Modal credentials before selecting Modal jobs.'],
+          status: 'available',
+        });
+
+        const configured = buildHermesRuntimeBackendsReadiness({
+          env: {
+            ...env,
+            MODAL_PROFILE: 'secret-modal-profile',
+          },
+        });
+        const configuredModal = configured.backends.find((backend) => backend.id === 'modal');
+        expect(configuredModal).toMatchObject({
+          configured: true,
+          remediation: [],
+          status: 'configured',
+        });
+        expect(JSON.stringify(configured)).not.toContain('secret-modal-profile');
+      },
+    );
+
+    const managedCases = [
+      {
+        command: 'daytona',
+        config: { DAYTONA_API_KEY: 'secret-daytona-key' },
+        id: 'daytona',
+        version: 'daytona 1.0.0',
+      },
+      {
+        command: 'vercel',
+        config: { VERCEL_TOKEN: 'secret-vercel-token' },
+        id: 'vercel-sandbox',
+        version: 'Vercel CLI 1.0.0',
+      },
+    ] as const;
+
+    for (const item of managedCases) {
+      withFixturePath(
+        { command: item.command, output: `${item.command} fixture`, version: item.version },
+        (env) => {
+          const readiness = buildHermesRuntimeBackendsReadiness({
+            env: {
+              ...env,
+              ...item.config,
+            },
+          });
+          const backend = readiness.backends.find((candidate) => candidate.id === item.id);
+          const raw = JSON.stringify(readiness);
+
+          expect(backend).toMatchObject({
+            configured: true,
+            remediation: [],
+            status: 'configured',
+          });
+          expect(raw).not.toContain('secret-');
+        },
+      );
+    }
+  });
+
   it('runs the local backend smoke through a real Node subprocess', () => {
     const result = runHermesRuntimeBackendSmoke({
       backendId: 'local',
