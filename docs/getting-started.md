@@ -160,6 +160,51 @@ buddy server --port 3000        # Expose REST/WebSocket API
 
 Code Buddy autonomously reads files, writes code, runs commands, and fixes errors -- typically 5-15 tool calls per task (up to 50, or 400 in YOLO mode). After each edit, it can auto-commit (Aider-style), run linters, and execute tests automatically.
 
+## Cowork Desktop Quickstart
+
+Cowork is the Electron desktop cockpit for the same Code Buddy engine. Use it
+when you want the chat, workspace picker, settings, permissions, Fleet, MCP,
+plugins, companion controls, and the **Tests & executions** runner in one
+visual surface.
+
+From a source checkout:
+
+```bash
+npm run dev:gui
+```
+
+For provider-backed desktop checks, sign in or start the local server first:
+
+```bash
+buddy login
+buddy whoami
+buddy server --port 3000
+```
+
+The desktop guide has the step-by-step usage path in English and French:
+[`cowork-user-guide.md`](cowork-user-guide.md) and
+[`cowork-guide-fr.md`](cowork-guide-fr.md). The public QA evidence hub starts
+at [`qa/code-buddy-studio/`](qa/code-buddy-studio/README.md).
+
+![Cowork home work surface](./qa/code-buddy-studio/screenshots/01-home-work-surface.png)
+
+Before publishing a screenshot or claiming a desktop flow works, open
+**Tests & executions** and run the relevant safe bundle or opt-in real check.
+The public docs currently link the runner captures and command evidence for
+ChatGPT OAuth, local providers, MCP, Fleet, permissions, Computer Use, mobile
+supervision, Hermes, plugins, sessions/cache, voice/TTS, scheduler/hooks, and
+maintenance.
+
+![Tests and executions window](./qa/code-buddy-studio/screenshots/30-test-runner-window.png)
+
+```bash
+npm run test:docs-public
+```
+
+That guard verifies public doc links, screenshot paths, QA report integrity,
+PNG dimensions, and obvious private-token or local-path leaks before the docs
+are pushed to GitHub.
+
 For a ChatGPT-subscription-backed companion flow, run `buddy login`, then
 `buddy companion setup`, then switch to `/persona use companion` in chat. In
 Cowork, use the mic button or the titlebar voice overlay and enable voice output.
