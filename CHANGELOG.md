@@ -743,7 +743,7 @@ existing infrastructure rather than inventing new modules.
 - **Claude Code subagent + plan mode audit**
   (`claude-et-patrice/propositions/AUDIT-CLAUDE-CODE-SUBAGENT-2026-05-04.md`,
   268 lines) — 3rd iteration of the audit-doc pattern, this time with
-  direct access to the Claude Code source (`D:\CascadeProjects\claude-code-source-code-main`).
+  direct access to a local Claude Code source checkout (`<claude-code-source-checkout>`).
   Audited 4 zones: plan mode workflow phasé (⚠️ partial), structured user
   questions (✅ complete parity), subagent specialization (⚠️ partial — the
   central gap), background scheduling (⚠️ partial). Identifies 3-phase
