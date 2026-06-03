@@ -2955,13 +2955,20 @@ export function registerHermesCommands(program: Command): void {
     .option('--json', 'output JSON')
     .action((options: HermesCommandOptions) => {
       const manifest = buildHermesHookLifecycleManifest(process.cwd());
+      const command = 'buddy hermes hooks --json';
+      const publicManifest = {
+        command,
+        ...manifest,
+        workingDirectory: '[workspace]',
+      };
 
       if (options.json) {
-        console.log(JSON.stringify(manifest, null, 2));
+        console.log(stableJson(publicManifest));
         return;
       }
 
-      console.log(renderHermesHookLifecycleManifest(manifest));
+      console.log(`Command: ${command}`);
+      console.log(renderHermesHookLifecycleManifest(publicManifest));
     });
 
   hermes

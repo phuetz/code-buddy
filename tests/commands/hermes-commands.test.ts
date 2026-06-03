@@ -3168,8 +3168,10 @@ describe('Hermes CLI commands', () => {
     await program.parseAsync(['node', 'test', 'hermes', 'hooks', '--json']);
 
     const output = JSON.parse(getLogOutput()) as {
+      command: string;
       kind: string;
       schemaVersion: number;
+      workingDirectory: string;
       stages: Array<{
         stage: string;
         userHookEvent: string;
@@ -3177,8 +3179,10 @@ describe('Hermes CLI commands', () => {
       }>;
     };
 
+    expect(output.command).toBe('buddy hermes hooks --json');
     expect(output.kind).toBe('hermes_hook_lifecycle_manifest');
     expect(output.schemaVersion).toBe(1);
+    expect(output.workingDirectory).toBe('[workspace]');
     expect(output.stages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -3202,7 +3206,10 @@ describe('Hermes CLI commands', () => {
     await program.parseAsync(['node', 'test', 'hermes', 'hooks']);
 
     const output = getLogOutput();
+    expect(output).toContain('Command: buddy hermes hooks --json');
     expect(output).toContain('Hermes hook lifecycle:');
+    expect(output).toContain('Workspace: [workspace]');
+    expect(output).not.toContain(process.cwd());
     expect(output).toContain('Active stages: 0/5');
     expect(output).toContain('Blocking stages: 3/5');
     expect(output).toContain('Before memory write (before_memory_write)');
