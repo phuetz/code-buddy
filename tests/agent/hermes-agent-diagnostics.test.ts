@@ -112,7 +112,11 @@ describe('Hermes Agent diagnostics', () => {
       provider: 'openai',
       configured: true,
       credentialSources: ['OPENAI_API_KEY'],
+      remediation: [],
     });
+    expect(
+      diagnostics.providerReadiness.providers.find((provider) => provider.provider === 'anthropic')?.remediation,
+    ).toEqual(['Set ANTHROPIC_API_KEY or switch to another configured model.']);
     expect(diagnostics.providerReadiness.portal.portal.credentialSources).toContain('CODEBUDDY_NOUS_ACCESS_TOKEN');
     expect(diagnostics.providerReadiness.portal.portal.toolGatewayConfigured).toBe(true);
     expect(diagnostics.providerReadiness.portal.toolGateway.managedByNousCount).toBe(2);
@@ -144,6 +148,7 @@ describe('Hermes Agent diagnostics', () => {
       provider: 'openai',
       configured: true,
       credentialSources: ['~/.codebuddy/codex-auth.json'],
+      remediation: [],
     });
     expect(diagnostics.providerReadiness.portal.portal).toMatchObject({
       authFilePath: '~/.codebuddy/nous_auth.json',

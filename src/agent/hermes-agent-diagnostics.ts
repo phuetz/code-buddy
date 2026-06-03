@@ -337,6 +337,7 @@ function buildProviderStatuses(env: NodeJS.ProcessEnv, homeDir: string): HermesP
     }
     const baseUrl = envValue(env, ...definition.baseUrlEnv) ?? definition.defaultBaseUrl ?? null;
     const configured = definition.local === true ? Boolean(baseUrl) : credentialSources.length > 0;
+    const remediation = configured ? [] : definition.remediation ?? [];
     return {
       provider: definition.provider,
       label: definition.label,
@@ -347,7 +348,7 @@ function buildProviderStatuses(env: NodeJS.ProcessEnv, homeDir: string): HermesP
       baseUrlEnv: presentEnvKeys(env, definition.baseUrlEnv),
       baseUrl,
       notes: definition.notes ?? [],
-      remediation: definition.remediation ?? [],
+      remediation,
     };
   });
 }

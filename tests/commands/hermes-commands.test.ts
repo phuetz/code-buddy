@@ -261,6 +261,7 @@ describe('Hermes CLI commands', () => {
             configured: boolean;
             credentialSources: string[];
             provider: string;
+            remediation: string[];
           };
           providers: unknown[];
         };
@@ -277,6 +278,7 @@ describe('Hermes CLI commands', () => {
         provider: 'openai',
         configured: true,
         credentialSources: expect.arrayContaining(['OPENAI_API_KEY']),
+        remediation: [],
       });
       expect(output.readiness.providers.length).toBeGreaterThan(0);
       expect(raw).not.toContain('secret-openai-provider-key');
@@ -1866,6 +1868,7 @@ describe('Hermes CLI commands', () => {
               provider: string;
               configured: boolean;
               credentialSources: string[];
+              remediation: string[];
             };
             portal: {
               portal: {
@@ -1910,6 +1913,7 @@ describe('Hermes CLI commands', () => {
         provider: 'openai',
         configured: true,
         credentialSources: expect.arrayContaining(['OPENAI_API_KEY']),
+        remediation: [],
       });
       expect(output.diagnostics.providerReadiness.portal.portal.credentialSources).toContain('CODEBUDDY_NOUS_ACCESS_TOKEN');
       expect(output.diagnostics.providerReadiness.portal.portal.toolGatewayConfigured).toBe(true);
