@@ -15,31 +15,31 @@ const userGuidePaths = [
   'docs/cowork-user-guide.md',
   'docs/cowork-guide-fr.md',
 ];
-const qaHubRunnerProofs: Array<[reportKey: string, hubLabel: string]> = [
-  ['testRunnerCliCommandSurfaceBundle', 'CLI command surface'],
-  ['testRunnerPluginsSkillsBundle', 'Plugins and skills'],
-  ['testRunnerTerminalUiObserverBundle', 'Terminal UI and observer'],
-  ['testRunnerConfigAuthProviderBundle', 'Config, auth, providers'],
-  ['testRunnerDataSessionSyncCacheBundle', 'Data, sessions, sync, cache'],
-  ['testRunnerServerApiMcpPlatformBundle', 'Server, API, MCP platform'],
-  ['testRunnerFleetRoutingOrchestrationBundle', 'Fleet routing orchestration'],
-  ['testRunnerContextCompressionPruningBundle', 'Context compression pruning'],
-  ['testRunnerVoiceSpeechTtsBundle', 'Voice, speech, TTS'],
-  ['testRunnerProviderResilienceErrorBundle', 'Provider resilience errors'],
-  ['testRunnerServerProviderErrorStatusBundle', 'Server provider error status'],
-  ['testRunnerInfraMcpSandboxAdaptersBundle', 'Infrastructure MCP sandbox adapters'],
-  ['testRunnerSchedulerHooksNotificationsBundle', 'Automation scheduler hooks notifications'],
-  ['testRunnerMaintenanceDoctorBackupSettingsBundle', 'Maintenance doctor backup settings'],
-  ['testRunnerCoworkRemoteControlBundle', 'Remote control'],
-  ['testRunnerDeviceTransportAdaptersBundle', 'Device transport adapters'],
-  ['testRunnerCoworkSandboxExecutorBundle', 'Cowork sandbox executor'],
-  ['testRunnerCoworkProjectSessionGitBundle', 'Project, session, and git'],
-  ['testRunnerCoworkUiLocalizationLayoutBundle', 'Cowork UI localization layout'],
-  ['testRunnerCoworkActivityAuditDiagnosticsBundle', 'Activity, audit, diagnostics'],
-  ['testRunnerCoworkFleetCommandTeamBundle', 'Fleet command and team'],
-  ['testRunnerCoworkPermissionPathRulesBundle', 'Permission path rules'],
-  ['testRunnerCoworkSettingsHooksMcpWorkflowsBundle', 'Settings, hooks, MCP, workflows'],
-  ['testRunnerCoworkCustomCommandsSlashBundle', 'Custom commands and slash'],
+const qaHubRunnerProofs: Array<[reportKey: string, hubLabel: string, screenshotRef: string]> = [
+  ['testRunnerCliCommandSurfaceBundle', 'CLI command surface', './screenshots/79-test-runner-cli-command-surface-bundle.png'],
+  ['testRunnerPluginsSkillsBundle', 'Plugins and skills', './screenshots/80-test-runner-plugins-skills-bundle.png'],
+  ['testRunnerTerminalUiObserverBundle', 'Terminal UI and observer', './screenshots/81-test-runner-terminal-ui-observer-bundle.png'],
+  ['testRunnerConfigAuthProviderBundle', 'Config, auth, providers', './screenshots/82-test-runner-config-auth-provider-bundle.png'],
+  ['testRunnerDataSessionSyncCacheBundle', 'Data, sessions, sync, cache', './screenshots/83-test-runner-data-session-sync-cache-bundle.png'],
+  ['testRunnerServerApiMcpPlatformBundle', 'Server, API, MCP platform', './screenshots/84-test-runner-server-api-mcp-platform-bundle.png'],
+  ['testRunnerFleetRoutingOrchestrationBundle', 'Fleet routing orchestration', './screenshots/85-test-runner-fleet-routing-orchestration-bundle.png'],
+  ['testRunnerContextCompressionPruningBundle', 'Context compression pruning', './screenshots/86-test-runner-context-compression-pruning-bundle.png'],
+  ['testRunnerVoiceSpeechTtsBundle', 'Voice, speech, TTS', './screenshots/87-test-runner-voice-speech-tts-bundle.png'],
+  ['testRunnerProviderResilienceErrorBundle', 'Provider resilience errors', './screenshots/91-test-runner-provider-resilience-error-bundle.png'],
+  ['testRunnerServerProviderErrorStatusBundle', 'Server provider error status', './screenshots/92-test-runner-server-provider-error-status-bundle.png'],
+  ['testRunnerInfraMcpSandboxAdaptersBundle', 'Infrastructure MCP sandbox adapters', './screenshots/93-test-runner-infra-mcp-sandbox-adapters-bundle.png'],
+  ['testRunnerSchedulerHooksNotificationsBundle', 'Automation scheduler hooks notifications', './screenshots/88-test-runner-scheduler-hooks-notifications-bundle.png'],
+  ['testRunnerMaintenanceDoctorBackupSettingsBundle', 'Maintenance doctor backup settings', './screenshots/89-test-runner-maintenance-doctor-backup-settings-bundle.png'],
+  ['testRunnerCoworkRemoteControlBundle', 'Remote control', './screenshots/94-test-runner-remote-control-bundle.png'],
+  ['testRunnerDeviceTransportAdaptersBundle', 'Device transport adapters', './screenshots/95-test-runner-device-transport-adapters-bundle.png'],
+  ['testRunnerCoworkSandboxExecutorBundle', 'Cowork sandbox executor', './screenshots/96-test-runner-cowork-sandbox-executor-bundle.png'],
+  ['testRunnerCoworkProjectSessionGitBundle', 'Project, session, and git', './screenshots/97-test-runner-project-session-git-bundle.png'],
+  ['testRunnerCoworkUiLocalizationLayoutBundle', 'Cowork UI localization layout', './screenshots/98-test-runner-ui-localization-layout-bundle.png'],
+  ['testRunnerCoworkActivityAuditDiagnosticsBundle', 'Activity, audit, diagnostics', './screenshots/102-test-runner-activity-audit-diagnostics-bundle.png'],
+  ['testRunnerCoworkFleetCommandTeamBundle', 'Fleet command and team', './screenshots/103-test-runner-fleet-command-team-bundle.png'],
+  ['testRunnerCoworkPermissionPathRulesBundle', 'Permission path rules', './screenshots/104-test-runner-permission-path-rules-bundle.png'],
+  ['testRunnerCoworkSettingsHooksMcpWorkflowsBundle', 'Settings, hooks, MCP, workflows', './screenshots/105-test-runner-settings-hooks-mcp-workflows-bundle.png'],
+  ['testRunnerCoworkCustomCommandsSlashBundle', 'Custom commands and slash', './screenshots/106-test-runner-custom-commands-slash-bundle.png'],
 ];
 const userGuideRunnerProofs: Array<[reportKey: string, runnerRow: string]> = [
   ['testRunnerPluginsSkillsBundle', 'Plugins / skills bundle'],
@@ -243,8 +243,24 @@ function collectFencedCommandBlocks(markdown: string): string[] {
     .filter((block) => block !== '');
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function expectQaHubRunnerProof(qaHub: string, report: QaReport, reportKey: string, hubLabel: string): void {
   expect(qaHubRunnerProofCount(qaHub, hubLabel)).toBe(reportedRunnerProofCount(report, reportKey));
+}
+
+function expectQaHubRunnerCapture(qaHub: string, hubLabel: string, screenshotRef: string): void {
+  const representativeCapturesIndex = qaHub.indexOf('## Representative Captures');
+  expect(representativeCapturesIndex, `${qaHubPath} must include Representative Captures`).toBeGreaterThanOrEqual(0);
+
+  const representativeCaptures = qaHub.slice(representativeCapturesIndex);
+  const imagePattern = new RegExp(`!\\[[^\\]]+]\\(${escapeRegExp(screenshotRef)}\\)`);
+  expect(
+    imagePattern.test(representativeCaptures),
+    `${qaHubPath} must include a representative capture for ${hubLabel}: ${screenshotRef}`,
+  ).toBe(true);
 }
 
 describe('public QA evidence report integrity', () => {
@@ -283,8 +299,14 @@ describe('public QA evidence report integrity', () => {
     expect(qaHub).toContain('./feature-qa-report.json');
     expect(qaHub).toContain('npm run test:docs-public');
 
-    for (const [reportKey, hubLabel] of qaHubRunnerProofs) {
+    const qaHubDir = path.dirname(path.join(repoRoot, qaHubPath));
+    for (const [reportKey, hubLabel, screenshotRef] of qaHubRunnerProofs) {
       expectQaHubRunnerProof(qaHub, report, reportKey, hubLabel);
+      expectQaHubRunnerCapture(qaHub, hubLabel, screenshotRef);
+
+      const absoluteTarget = path.resolve(qaHubDir, screenshotRef);
+      expect(absoluteTarget.startsWith(repoRoot), `${screenshotRef} must stay inside the repository`).toBe(true);
+      expect(await exactCasePathExists(absoluteTarget), `${screenshotRef} must exist with exact casing`).toBe(true);
     }
   });
 
