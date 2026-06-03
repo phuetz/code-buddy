@@ -161,6 +161,8 @@ describe('public Cowork documentation discoverability', () => {
       'lazy-loading the pi runner',
       '@mariozechner/pi-ai',
       'DEP0190',
+      'NODE_OPTIONS=--trace-deprecation npm run build:gui',
+      'app-builder-lib/src/node-module-collector/nodeModulesCollector.ts',
       'Safe runner bundles',
       'Opt-in real provider/system',
       'Safe runner bundles cover CLI',
