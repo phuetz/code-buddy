@@ -54,6 +54,17 @@ function expectValidPublicImage(sourceFile: string, target: string): void {
 }
 
 describe('public README screenshots', () => {
+  it('keeps screenshot gallery text free of personal workstation details', () => {
+    for (const file of publicScreenshotDocs) {
+      const text = fs.readFileSync(file, 'utf8');
+
+      expect(text, file).not.toMatch(/\bPatrice\b/i);
+      expect(text, file).not.toContain('patrice.huetz');
+      expect(text, file).not.toMatch(/[A-Z]:\\(?:Users|CascadeProjects)\\/i);
+      expect(text, file).not.toMatch(/\/(?:Users|home)\/[^\s`]+/);
+    }
+  });
+
   it('keeps all GitHub-visible README screenshots resolvable and valid images', () => {
     const targetsByFile = new Map<string, string[]>();
 

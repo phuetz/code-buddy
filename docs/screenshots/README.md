@@ -1,8 +1,8 @@
 # Screenshots — Visual changelog
 
 Visual record of two consecutive sessions documented in this repo.
-Captured live by Patrice while building the integration; nothing
-staged, nothing scripted.
+Captured live while building the integration; nothing staged, nothing
+scripted.
 
 The narrative goes from **Cowork desktop bootstrap fixes** (Phase d.21,
 morning) to **ChatGPT Codex OAuth integration** (Phase d.23 → d.25,
@@ -17,7 +17,7 @@ debugging the React side.
 
 ### 1.1 React error #185 — minified, no clue
 
-Patrice's first hint: a useless minified production-mode error.
+The first hint: a useless minified production-mode error.
 
 ![Cowork React error 185](./cowork-react-error-185.png)
 
