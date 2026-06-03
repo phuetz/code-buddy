@@ -13,4 +13,15 @@ describe('vite watch ignores build artifacts', () => {
     expect(viteConfigContent).toContain("'**/dist-electron/**'");
     expect(viteConfigContent).toContain('ignored: ignoredWatchPaths');
   });
+
+  it('keeps renderer chunk warnings fixed by measured splitting, not by raising the limit', () => {
+    expect(viteConfigContent).toContain('function rendererManualChunks');
+    expect(viteConfigContent).toContain("return 'vendor-react';");
+    expect(viteConfigContent).toContain("return 'vendor-icons';");
+    expect(viteConfigContent).toContain("return 'vendor-highlight';");
+    expect(viteConfigContent).toContain("return 'vendor-katex';");
+    expect(viteConfigContent).toContain("return 'vendor-markdown';");
+    expect(viteConfigContent).toContain('manualChunks: rendererManualChunks');
+    expect(viteConfigContent).not.toContain('chunkSizeWarningLimit');
+  });
 });

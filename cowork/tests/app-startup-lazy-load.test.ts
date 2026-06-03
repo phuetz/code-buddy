@@ -5,23 +5,72 @@ import path from 'node:path';
 const appPath = path.resolve(process.cwd(), 'src/renderer/App.tsx');
 
 describe('App startup lazy loading', () => {
-  it('defers non-welcome panels behind lazy imports', () => {
+  it('defers heavyweight and closed-by-default panels behind lazy imports', () => {
     const source = fs.readFileSync(appPath, 'utf8');
+    const deferredComponents = [
+      'ChatView',
+      'ContextPanel',
+      'ConfigModal',
+      'SettingsPanel',
+      'WelcomeView',
+      'CommandPalette',
+      'KeyboardShortcutsDialog',
+      'GlobalSearchDialog',
+      'PermissionDialog',
+      'SudoPasswordDialog',
+      'SandboxSetupDialog',
+      'UpdateNotification',
+      'ActivityFeed',
+      'SessionInsightsPanel',
+      'SessionResumeDialog',
+      'BookmarksPanel',
+      'SnippetsLibrary',
+      'PersonaSwitcherDialog',
+      'TestRunnerPanel',
+      'ReasoningTraceViewer',
+      'FocusView',
+      'NotificationCenter',
+      'EnrollmentDialog',
+      'OrchestratorLauncher',
+      'FleetPanel',
+      'FleetCommandCenter',
+      'TeamPanel',
+      'LessonCandidatePanel',
+      'UserModelPanel',
+      'SpecPanel',
+      'MobileSupervisionPanel',
+      'IdentityPanel',
+      'DevicePanel',
+      'ChannelsPanel',
+      'CompanionPanel',
+      'OnboardingWizard',
+      'SubAgentDashboard',
+      'DiagnosticsPanel',
+      'BtwQuickAsk',
+    ];
 
-    expect(source).not.toContain("import { ChatView } from './components/ChatView';");
-    expect(source).not.toContain("import { ContextPanel } from './components/ContextPanel';");
-    expect(source).not.toContain("import { ConfigModal } from './components/ConfigModal';");
-    expect(source).not.toContain("import { SettingsPanel } from './components/SettingsPanel';");
-
-    expect(source).toContain('const ChatView = lazy(() =>');
-    expect(source).toContain('const ContextPanel = lazy(() =>');
-    expect(source).toContain('const ConfigModal = lazy(() =>');
-    expect(source).toContain('const SettingsPanel = lazy(() =>');
+    for (const component of deferredComponents) {
+      expect(source).not.toContain(
+        `import { ${component} } from './components/${component}';`
+      );
+      expect(source).toContain(`const ${component} = lazy(() =>`);
+      expect(source).toContain(`default: module.${component}`);
+    }
   });
 
   it('uses suspense boundaries for deferred panels', () => {
     const source = fs.readFileSync(appPath, 'utf8');
 
     expect(source).toContain('<Suspense fallback=');
+  });
+
+  it('keeps the presence model install probe mounted eagerly', () => {
+    const source = fs.readFileSync(appPath, 'utf8');
+
+    expect(source).toContain(
+      "import { ModelInstallDialog } from './components/ModelInstallDialog';"
+    );
+    expect(source).toContain('<ModelInstallDialog />');
+    expect(source).not.toContain('const ModelInstallDialog = lazy(() =>');
   });
 });
