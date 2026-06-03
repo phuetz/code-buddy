@@ -141,6 +141,10 @@ Use **Skills** and plugin surfaces when the task needs reusable workflows for do
 
 ![Plugins](./qa/code-buddy-studio/screenshots/26-plugins.png)
 
+For learning and Hermes-oriented operation, use the knowledge surfaces to review lesson candidates before they become durable lessons, browse the lessons vault, inspect Hermes plans/tool profiles, review skill candidates, and check local presence model readiness. The verified knowledge bundle covers those paths without silently writing memory or lessons.
+
+![Knowledge Hermes presence bundle](./qa/code-buddy-studio/screenshots/107-test-runner-knowledge-hermes-presence-bundle.png)
+
 ## 9. Opt In to Desktop Automation Carefully
 
 Computer Use checks are opt-in because they touch real desktop applications. The verified suite drives Windows Forms controls, dialogs, Notepad save behavior, and Excel COM automation, then reports `1 ok / 0 ko` from the runner.

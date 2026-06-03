@@ -139,6 +139,10 @@ Utilise les surfaces **Skills** et plugins pour les documents, tableurs, présen
 
 ![Plugins](./qa/code-buddy-studio/screenshots/26-plugins.png)
 
+Pour l'apprentissage et les opérations Hermes, utilise les surfaces knowledge pour relire les lesson candidates avant qu'elles deviennent des leçons durables, parcourir le lessons vault, inspecter les plans/profils d'outils Hermes, relire les skill candidates et vérifier la readiness du modèle de présence local. Le bundle knowledge vérifié couvre ces chemins sans écrire silencieusement de mémoire ou de leçons.
+
+![Bundle knowledge Hermes presence](./qa/code-buddy-studio/screenshots/107-test-runner-knowledge-hermes-presence-bundle.png)
+
 ## 9. Activer prudemment l'automatisation desktop
 
 Les checks Computer Use sont opt-in car ils manipulent de vraies applications desktop. La suite validée pilote des contrôles Windows Forms, des dialogues, Notepad et Excel COM, puis affiche `1 ok / 0 ko` depuis le runner.

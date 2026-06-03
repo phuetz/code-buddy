@@ -29,6 +29,7 @@ Start here when you want proof that the documented Cowork flows have been exerci
 - Cowork desktop: workspace, settings, chat, IPC, companion, permissions, workflows, MCP, Fleet, plugins, and runner surfaces.
 - **Tests & executions**: safe bundles, opt-in real checks, cancellation, timeout, failure tracking, and re-run failing behavior.
 - Artifacts and scheduling: document workshop, file/link handling, scheduled tasks, slash `/schedule`, and session metadata.
+- Knowledge and Hermes surfaces: lesson candidates, lessons vault, user model/spec IPC, Hermes plans/tool profiles, skill-candidate review, and presence model readiness.
 - Real infrastructure: local HTTP server, MCP stdio/HTTP fixtures, Fleet peer/tool checks, Docker sandbox, Computer Use, and Hermes built CLI smoke including guarded runtime lifecycle checks.
 - Mobile supervision: loopback-only local-operator routes, spoofed-forwarder denial, approval queue, Cowork bridge client, and disabled listener contract.
 - Publication safety: public docs and screenshots are checked for private account, token, local path, and screenshot metadata leaks.
@@ -44,6 +45,8 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ![Artifact and document bundle](./screenshots/99-test-runner-artifact-document-bundle.png)
 
 ![Scheduling and session bundle](./screenshots/100-test-runner-scheduling-session-bundle.png)
+
+![Knowledge Hermes presence bundle](./screenshots/107-test-runner-knowledge-hermes-presence-bundle.png)
 
 ![Computer Use real desktop suite](./screenshots/108-test-runner-computer-use-real-suite.png)
 
