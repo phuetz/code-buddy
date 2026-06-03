@@ -46,6 +46,9 @@ test('runs the real workflow bridge integration suite from the test runner windo
     '8 ok / 0 ko',
     { timeout: 150_000 }
   );
+  const outputText = await appPage.getByTestId('test-runner-output').textContent();
+  expect(outputText ?? '').not.toContain('\u001b');
+  expect(outputText ?? '').not.toContain('[32m');
 
   await appPage.screenshot({
     path: path.resolve(

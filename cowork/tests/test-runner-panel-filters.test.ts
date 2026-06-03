@@ -40,6 +40,12 @@ describe('TestRunnerPanel catalog filters', () => {
     expect(source).toContain('visible: filteredCatalog.length');
   });
 
+  it('strips ANSI control sequences before rendering runner output', () => {
+    const source = fs.readFileSync(panelPath, 'utf8');
+    expect(source).toContain('function stripAnsi(text: string): string');
+    expect(source).toContain('setOutput((prev) => prev + stripAnsi(payload.text))');
+  });
+
   it('ships localized filter labels for all supported locales', () => {
     for (const localePath of localePaths) {
       const locale = JSON.parse(fs.readFileSync(localePath, 'utf8')) as {

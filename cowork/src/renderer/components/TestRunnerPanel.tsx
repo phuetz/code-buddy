@@ -463,6 +463,16 @@ function commandPreview(item: TestCatalogItem): string {
   return [item.command, ...item.args].join(' ');
 }
 
+function stripAnsi(text: string): string {
+  const esc = String.fromCharCode(27);
+  const csi = String.fromCharCode(155);
+  const ansiPattern = new RegExp(
+    `[${esc}${csi}][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqty=><]`,
+    'g'
+  );
+  return text.replace(ansiPattern, '');
+}
+
 export function TestRunnerPanel({ isOpen, onClose }: TestRunnerPanelProps) {
   const { t } = useTranslation();
   const [framework, setFramework] = useState<string | null>(null);
@@ -554,7 +564,7 @@ export function TestRunnerPanel({ isOpen, onClose }: TestRunnerPanelProps) {
           break;
         case 'test.output': {
           const payload = event.payload as { stream: string; text: string };
-          setOutput((prev) => prev + payload.text);
+          setOutput((prev) => prev + stripAnsi(payload.text));
           break;
         }
         case 'test.complete':
