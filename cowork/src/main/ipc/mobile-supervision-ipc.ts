@@ -11,7 +11,6 @@
 
 import { ipcMain } from 'electron';
 import { logError } from '../utils/logger';
-import { getServerBridge } from '../server/server-bridge';
 import {
   fetchMobileSupervision,
   approveFollowupDraft,
@@ -21,15 +20,20 @@ import {
 
 const SERVER_DOWN = 'Embedded server is not running — start it to manage mobile supervision.';
 
+async function serverBridge() {
+  const { getServerBridge } = await import('../server/server-bridge');
+  return getServerBridge();
+}
+
 async function port(): Promise<number | null> {
-  const status = await getServerBridge().status();
+  const status = await (await serverBridge()).status();
   return status.running ? status.port : null;
 }
 
 export function registerMobileSupervisionIpcHandlers(): void {
   ipcMain.handle('mobileSupervision.status', async () => {
     try {
-      const status = await getServerBridge().status();
+      const status = await (await serverBridge()).status();
       return await fetchMobileSupervision(status.port, status.running, fetch as never);
     } catch (err) {
       logError('[mobileSupervision.status] failed:', err);

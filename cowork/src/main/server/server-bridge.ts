@@ -10,7 +10,6 @@
  */
 import * as crypto from 'crypto';
 import { log, logError } from '../utils/logger';
-import { loadCoreModule } from '../utils/core-loader';
 
 interface CoreServerModule {
   startServer: (config?: Record<string, unknown>) => Promise<{
@@ -45,6 +44,11 @@ interface CoreDatabaseModule {
     isInitialized(): boolean;
     initialize(): Promise<void>;
   };
+}
+
+async function loadCoreModule<T>(relativePath: string): Promise<T | null> {
+  const mod = await import('../utils/core-loader');
+  return mod.loadCoreModule<T>(relativePath);
 }
 
 export interface ServerStatus {

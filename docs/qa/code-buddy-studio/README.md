@@ -72,7 +72,7 @@ The current package build is green but not silent. Do not claim a zero-warning r
 | Warning | Current disposition | Follow-up |
 | --- | --- | --- |
 | Vite chunk-size warnings | Do not suppress by raising `chunkSizeWarningLimit`; current evidence shows the package builds and launches, but large chunks remain a performance and review item | Split eager renderer/main imports only after measuring `npm run build:gui` output |
-| Dynamic/static import reporter warnings | Vite reports modules imported both ways, including `config-store`, `core-loader`, `server-bridge`, `sandbox-bootstrap`, and `reasoning-bridge`; the former `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` reporter entries were removed by lazy-loading the pi runner, title generation, clipboard summary, and provider probe paths | Prefer real import-boundary cleanup over hiding reporter output |
+| Dynamic/static import reporter warnings | Vite reports modules imported both ways, currently `core-loader`, `sandbox-bootstrap`, and `reasoning-bridge`; `server-bridge` is now a lazy chunk loaded by mobile supervision/server actions, while the former `config-store` and `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` reporter entries were removed by lazy-loading the pi runner, title generation, clipboard summary, provider probe paths, and mobile supervision server bridge | Prefer real import-boundary cleanup over hiding reporter output |
 | Node `DEP0190` during packaging | Build succeeds; warning points at child-process shell argument handling | Trace the caller before tightening packaging commands |
 
 ## Runner-Verified Cowork Bundles
