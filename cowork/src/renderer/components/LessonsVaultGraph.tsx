@@ -21,6 +21,67 @@ interface LessonEntry {
   createdAt?: number;
 }
 
+interface LessonsVaultPreview {
+  concepts: Array<{
+    id: string;
+    label: string;
+  }>;
+  lessons: Array<{
+    category: string;
+    conceptIds: string[];
+    id: string;
+    path: string;
+  }>;
+}
+
+interface ConceptDetails {
+  concept: { id: string; label: string; weight: number };
+  lessons: Array<{
+    id: string;
+    category: string;
+    content: string;
+    context?: string;
+    createdBy?: { runId?: string; outcomeId?: string; sagaId?: string; note?: string; at: number };
+    usedBy?: Array<{ runId: string; at: number }>;
+  }>;
+  backlinks: string[];
+}
+
+interface LessonsVaultApi {
+  preview?: () => Promise<LessonsVaultPreview | LessonEntry[] | null>;
+  getConceptDetails?: (options: {
+    conceptName: string;
+    cwd?: string;
+  }) => Promise<ConceptDetails | null>;
+}
+
+function lessonsVaultApi(): LessonsVaultApi | undefined {
+  return (
+    window.electronAPI as unknown as {
+      tools?: { lessonsVault?: LessonsVaultApi };
+    }
+  )?.tools?.lessonsVault;
+}
+
+function toLessonEntries(preview: LessonsVaultPreview | LessonEntry[] | null): LessonEntry[] {
+  if (!preview) return [];
+  if (Array.isArray(preview)) return preview;
+  const conceptLabels = new Map(
+    (preview.concepts ?? []).map((concept) => [concept.id, concept.label])
+  );
+  return (preview.lessons ?? []).map((lesson) => {
+    const tags = lesson.conceptIds
+      .map((conceptId) => conceptLabels.get(conceptId) ?? conceptId)
+      .filter(Boolean);
+    return {
+      id: lesson.id,
+      title: lesson.id,
+      tags: tags.length > 0 ? tags : [lesson.category.toLowerCase()],
+      summary: lesson.path,
+    };
+  });
+}
+
 export function LessonsVaultGraph({ onClose }: LessonsVaultGraphProps) {
   const { t } = useTranslation();
   const [lessons, setLessons] = useState<LessonEntry[]>([]);
@@ -37,17 +98,13 @@ export function LessonsVaultGraph({ onClose }: LessonsVaultGraphProps) {
   }, [onClose]);
 
   useEffect(() => {
-    const api = (
-      window.electronAPI as unknown as {
-        tools?: { lessonsVault?: { preview?: () => Promise<LessonEntry[]> } };
-      }
-    )?.tools?.lessonsVault?.preview;
+    const api = lessonsVaultApi()?.preview;
     if (!api) {
       setLoading(false);
       return;
     }
     api()
-      .then((list) => setLessons(list ?? []))
+      .then((preview) => setLessons(toLessonEntries(preview)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -170,19 +227,6 @@ export function LessonsVaultGraph({ onClose }: LessonsVaultGraphProps) {
   );
 }
 
-interface ConceptDetails {
-  concept: { id: string; label: string; weight: number };
-  lessons: Array<{
-    id: string;
-    category: string;
-    content: string;
-    context?: string;
-    createdBy?: { runId?: string; outcomeId?: string; sagaId?: string; note?: string; at: number };
-    usedBy?: Array<{ runId: string; at: number }>;
-  }>;
-  backlinks: string[];
-}
-
 function ConceptDetailsView({
   conceptName,
   onClose,
@@ -197,13 +241,13 @@ function ConceptDetailsView({
 
   useEffect(() => {
     setLoading(true);
-    const api = (window.electronAPI as any)?.tools?.lessonsVault?.getConceptDetails;
+    const api = lessonsVaultApi()?.getConceptDetails;
     if (!api) {
       setLoading(false);
       return;
     }
     api({ conceptName })
-      .then((data: any) => setDetails(data))
+      .then((data) => setDetails(data))
       .finally(() => setLoading(false));
   }, [conceptName]);
 

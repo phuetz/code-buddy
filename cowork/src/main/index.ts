@@ -4594,9 +4594,11 @@ ipcMain.handle(
       const payloadCwd =
         typeof payload?.cwd === 'string' && isAbsolute(payload.cwd) ? payload.cwd : null;
       const rootDir = payloadCwd ?? getWorkingDir() ?? process.cwd();
-      const mod = await loadCoreModule<{ getLessonsTracker: (workDir: string) => any }>(
-        'agent/lessons-tracker.js'
-      );
+      const mod = await loadCoreModule<{
+        getLessonsTracker: (workDir: string) => {
+          getConceptDetails?: (conceptName: string) => unknown;
+        };
+      }>('agent/lessons-tracker.js');
       if (!mod?.getLessonsTracker) return null;
       const tracker = mod.getLessonsTracker(rootDir);
       if (!tracker?.getConceptDetails) return null;

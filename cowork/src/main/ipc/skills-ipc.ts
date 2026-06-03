@@ -12,11 +12,17 @@ interface HubConfig {
   checkIntervalMs?: number;
 }
 
+type SkillsHubEntry = Record<string, unknown>;
+
 interface SkillsHubModule {
   getSkillsHub(config?: Partial<HubConfig>): {
-    list(): any[];
-    listEnabled(): any[];
-    setEnabled(name: string, enabled: boolean, options?: { path?: string; version?: string }): any;
+    list(): SkillsHubEntry[];
+    listEnabled(): SkillsHubEntry[];
+    setEnabled(
+      name: string,
+      enabled: boolean,
+      options?: { path?: string; version?: string }
+    ): unknown;
   };
 }
 

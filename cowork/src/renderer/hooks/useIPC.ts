@@ -20,6 +20,14 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI !== undef
 const autoInferredUserModelSessions = new Set<string>();
 const autoProposedLessonSessions = new Set<string>();
 
+interface GeminiOauthTokens extends Record<string, unknown> {
+  access_token?: string;
+  expiry_date?: number;
+  refresh_token?: string;
+  scope?: string;
+  token_type?: string;
+}
+
 /**
  * D1 — when a session goes terminal, auto-propose user-model observations from
  * its transcript (guarded, once-per-session, ≥N user turns). Fire-and-forget;
@@ -1021,7 +1029,7 @@ export function useIPC() {
 
   const geminiOauthLogin = useCallback(async () => {
     if (!isElectron) return { success: false, error: 'Not running in Electron' };
-    return invoke<{ success: boolean; tokens?: any; error?: string }>({
+    return invoke<{ success: boolean; tokens?: GeminiOauthTokens; error?: string }>({
       type: 'config.geminiOauthLogin',
       payload: {},
     });

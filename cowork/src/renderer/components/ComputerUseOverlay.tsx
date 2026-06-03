@@ -27,6 +27,13 @@ import {
 import { useAppStore } from '../store';
 import { useIPC } from '../hooks/useIPC';
 
+function macroActionLabel(result: unknown): string {
+  if (result && typeof result === 'object' && 'action' in result) {
+    return String((result as { action?: unknown }).action);
+  }
+  return String(result);
+}
+
 export const ComputerUseOverlay: React.FC = () => {
   const { t } = useTranslation();
   const { stopSession } = useIPC();
@@ -75,6 +82,10 @@ export const ComputerUseOverlay: React.FC = () => {
     : current?.screenshot
       ? `file://${current.screenshot.replace(/\\/g, '/')}`
       : undefined;
+  const macroResults =
+    current?.action === 'macro' && Array.isArray(current.details?.macroResults)
+      ? current.details.macroResults
+      : [];
 
   if (minimized) {
     return (
@@ -205,13 +216,16 @@ export const ComputerUseOverlay: React.FC = () => {
             {`OCR Click: "${String(current.details.text)}"`}
           </div>
         )}
-        {current?.action === 'macro' && !!current?.details?.macroResults && (
+        {macroResults.length > 0 && (
           <div className="text-[10px] text-text-muted mt-1 flex flex-col gap-0.5">
             <span className="font-semibold opacity-80">Macro Sequence:</span>
             <div className="flex flex-wrap gap-1 mt-0.5">
-              {(current.details.macroResults as any[]).map((res, i) => (
-                <span key={i} className="px-1.5 py-[1px] bg-background border border-border-muted rounded-sm text-[9px]">
-                  {String(res.action)}
+              {macroResults.map((res, i) => (
+                <span
+                  key={i}
+                  className="px-1.5 py-[1px] bg-background border border-border-muted rounded-sm text-[9px]"
+                >
+                  {macroActionLabel(res)}
                 </span>
               ))}
             </div>
