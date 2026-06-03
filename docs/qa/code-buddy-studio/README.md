@@ -52,6 +52,18 @@ Use this order before claiming the desktop app is ready for a public user or rel
 | 6. Opt-in real checks are explicit | Real ChatGPT OAuth, Docker, Computer Use, mobile, Hermes built CLI, and desktop automation are documented as opt-in and have separate captures | [`./feature-qa.md`](./feature-qa.md), [`./overnight-qa-campaign.md`](./overnight-qa-campaign.md) |
 | 7. Publication guard passes | Local links, PNG dimensions, report integrity, and obvious private strings are checked before pushing public docs | `npm run test:docs-public` |
 
+## Evidence Matrix
+
+Use this matrix to decide which proof lane to re-run when the app, docs, captures, or release package changes:
+
+| Lane | Run when | Command or proof | Public evidence |
+| --- | --- | --- | --- |
+| Safe publication | Any public docs or screenshot change | `npm run test:docs-public` | Guards links, screenshot dimensions, QA report integrity, and private-string leaks |
+| Source build/typecheck | TypeScript, renderer, or Cowork source changes | `npm run build`, `cd cowork && npm run typecheck`, `cd cowork && npm run build:e2e` | Evidence snapshot and Release Readiness Route gate 4 |
+| Packaged desktop | Release-review or packaging changes | `npm run build:gui`, then `COWORK_PACKAGED_EXE="release/win-unpacked/Code Buddy Cowork.exe" npx playwright test e2e/packaged-launch-smoke.spec.ts --reporter=list --timeout=120000` | [`110-packaged-win-unpacked-launch.png`](./screenshots/110-packaged-win-unpacked-launch.png) |
+| Safe runner bundles | Broad non-provider regression claims | Test Runner safe bundles for CLI, providers, server/API/MCP, Fleet, context, voice/TTS, automation, sessions/cache, permissions, and Cowork project/session flows | `Runner-Verified Cowork Bundles` below |
+| Opt-in real provider/system | Claims involving external credentials, Docker, Computer Use, mobile, Hermes built CLI, or live desktop automation | Opt-in real rows in the QA dossier and overnight campaign | [`./feature-qa.md`](./feature-qa.md), [`./overnight-qa-campaign.md`](./overnight-qa-campaign.md) |
+
 ## Runner-Verified Cowork Bundles
 
 | Bundle | Verified coverage | Runner proof |
