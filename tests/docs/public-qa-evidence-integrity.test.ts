@@ -47,6 +47,12 @@ const userGuideRunnerProofs: Array<[reportKey: string, runnerRow: string]> = [
   ['testRunnerSchedulerHooksNotificationsBundle', 'Automation / scheduler hooks notifications bundle'],
   ['testRunnerMaintenanceDoctorBackupSettingsBundle', 'Maintenance / doctor backup settings bundle'],
 ];
+const userGuideNarrativeProofs: Array<[reportKey: string, screenshotRef: string]> = [
+  ['testRunnerCoworkLocalProviderConfigBundle', './qa/code-buddy-studio/screenshots/101-test-runner-local-provider-config-bundle.png'],
+  ['testRunnerCoworkIpcChat', './qa/code-buddy-studio/screenshots/59-test-runner-cowork-ipc-chat.png'],
+  ['testRunnerWorkflowBridgeIntegration', './qa/code-buddy-studio/screenshots/54-test-runner-workflow-integration.png'],
+  ['testRunnerComputerUseRealSuite', './qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png'],
+];
 
 type QaReportResult = {
   slug?: unknown;
@@ -152,6 +158,17 @@ function guideRunnerProofCount(guide: string, docPath: string, runnerRow: string
   return Number(match?.[1]);
 }
 
+function guideNarrativeProofCount(guide: string, docPath: string, screenshotRef: string): number {
+  const screenshotIndex = guide.indexOf(screenshotRef);
+  expect(screenshotIndex, `${docPath} must include ${screenshotRef}`).toBeGreaterThanOrEqual(0);
+
+  const nearbyText = guide.slice(Math.max(0, screenshotIndex - 1000), screenshotIndex);
+  const matches = [...nearbyText.matchAll(/\b(\d+) ok \/ 0 ko\b/g)];
+  expect(matches.length, `${docPath} must include a runner proof count before ${screenshotRef}`).toBeGreaterThan(0);
+
+  return Number(matches.at(-1)?.[1]);
+}
+
 function collectGuidePngRefs(markdown: string): string[] {
   const refs = new Set<string>();
   for (const match of markdown.matchAll(/!\[[^\]]*]\(([^)]+\.png)\)/g)) {
@@ -224,6 +241,19 @@ describe('public QA evidence report integrity', () => {
       const guide = await fs.readFile(path.join(repoRoot, docPath), 'utf8');
       for (const [reportKey, runnerRow] of userGuideRunnerProofs) {
         expect(guideRunnerProofCount(guide, docPath, runnerRow)).toBe(
+          reportedRunnerProofCount(report, reportKey),
+        );
+      }
+    }
+  });
+
+  it('keeps user guide narrative proofs aligned with the machine-readable report', async () => {
+    const report = await readQaReport();
+
+    for (const docPath of userGuidePaths) {
+      const guide = await fs.readFile(path.join(repoRoot, docPath), 'utf8');
+      for (const [reportKey, screenshotRef] of userGuideNarrativeProofs) {
+        expect(guideNarrativeProofCount(guide, docPath, screenshotRef)).toBe(
           reportedRunnerProofCount(report, reportKey),
         );
       }
