@@ -1,7 +1,7 @@
 # Code Buddy Studio - Campagne QA autonome
 
 Date de lancement : 25 mai 2026, nuit Europe/Paris
-Workspace : `D:\CascadeProjects\grok-cli-weekend`
+Workspace : `<local-workspace>`
 Application : Code Buddy Studio / Code Buddy core
 Jeux de tests : [`overnight-test-datasets.json`](./overnight-test-datasets.json)
 Rapport fonctionnel : [`feature-qa.md`](./feature-qa.md)
@@ -201,7 +201,7 @@ Captures principales :
 | `npm test -- tests/cli/cli-flags.test.ts tests/cli/headless-exit-code.test.ts --run` | OK, 2 fichiers, 23 tests ; vrai lancement CLI contre provider HTTP 500, exit code `1` |
 | `CODEBUDDY_REAL_DOCKER_SANDBOX=1 npm test -- tests/sandbox/docker-sandbox-real-smoke.test.ts --run` | OK, 1 test ; vrai conteneur Docker `node:22-slim`, reseau coupe, read-only, marker `OK-DOCKER-SANDBOX-REAL` |
 | `node dist\index.js --help` | OK, CLI charge et liste les commandes |
-| `node dist\index.js whoami` | OK, ChatGPT connecte, compte `patrice.huetz@gmail.com`, plan `pro` |
+| `node dist\index.js whoami` | OK, ChatGPT connecte, compte redige, plan `pro` |
 | `node dist\index.js provider models chatgpt` | OK, `gpt-5.5` default/active |
 | `node dist\index.js --prompt "Reply exactly: REAL-GPT55-HEARTBEAT-PERMISSIONS" --output-format text --quiet --model gpt-5.5 --disabled-tools "*" --ephemeral` | OK, reponse exacte `REAL-GPT55-HEARTBEAT-PERMISSIONS` |
 | `node dist\index.js doctor --quiet` | OK, 8 checks OK, 11 warnings, 0 erreur |
@@ -249,7 +249,7 @@ Fichiers corriges :
 Symptome : pendant la relance complete racine, `npm test -- --run` echouait avec des rejections globales issues de `tests/unit/sync.test.ts` :
 
 ```text
-Unhandled Rejection Error: UNKNOWN: unknown error, open 'D:\CascadeProjects\grok-cli-weekend\.codebuddy\sync\state.json'
+Unhandled Rejection Error: UNKNOWN: unknown error, open '<local-workspace>\.codebuddy\sync\state.json'
 ```
 
 Cause : `SyncManager.save()` et `SyncManager.load()` emettaient l'evenement special Node `error` dans un bloc async. Sans listener `error`, `EventEmitter` transforme cet evenement en exception. Comme `save()` est appele en fire-and-forget apres les mutations d'etat, l'exception devenait une rejection non geree et faisait echouer Vitest.
@@ -1967,7 +1967,7 @@ Capture :
 
 ## Passe Antigravity V1.1 handover
 
-J'ai retrouve le rapport Antigravity hors repo dans `C:\Users\patri\.gemini\antigravity-cli\brain\ccf28eb6-1fa1-4c98-8724-5f3f1c2216bb\handover_report.md`, puis j'ai verifie les 7 lots annonces : self-healing JSON, facts memory, watchdog navigateur, GPR/BALD, DAG workflow loop/batch, Kokoro TTS et alignement securite OSINT.
+J'ai retrouve le rapport Antigravity hors repo dans `<user-home>\.gemini\antigravity-cli\brain\<run-id>\handover_report.md`, puis j'ai verifie les 7 lots annonces : self-healing JSON, facts memory, watchdog navigateur, GPR/BALD, DAG workflow loop/batch, Kokoro TTS et alignement securite OSINT.
 
 Bugs/endurcissements appliques pendant cette passe :
 

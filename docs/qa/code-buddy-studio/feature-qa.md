@@ -13,7 +13,7 @@ La verification couvre le rendu, l'ouverture des surfaces utilisateur, le chat U
 
 Verification complementaire :
 
-- Auth ChatGPT : `node dist\index.js whoami` OK, compte `patrice.huetz@gmail.com`, plan `pro`.
+- Auth ChatGPT : `node dist\index.js whoami` OK, compte redige, plan `pro` confirme.
 - Provider direct ChatGPT `gpt-5.5` : chat non-stream OK (`REAL-GPT55-PROVIDER-DIRECT`, 1883 ms), stream OK (`REAL-GPT55-STREAM-DIRECT`, 9 chunks, 2269 ms), tool-call OK (`qa_probe`, puis `REAL-GPT55-TOOL-ROUNDTRIP`, 2499 ms).
 - CLI reel `gpt-5.5` : texte OK (`REAL-GPT55-CLI-FILE2`, ~27 s), JSON OK (`REAL-GPT55-CLI-JSON`, ~30 s), stream-json OK (`REAL-GPT55-CLI-STREAMJSON`), `view_file` OK (`REAL-GPT55-VIEW-FILE:1.0.0-rc.5`), `bash` OK (`REAL-GPT55-BASH-OK`).
 - CLI headless erreur provider : `npm test -- tests/cli/cli-flags.test.ts tests/cli/headless-exit-code.test.ts --run` OK (23 tests). Le test lance vraiment `src/index.ts --prompt ... --quiet --output-format json` contre un provider HTTP local qui renvoie `500 qa forced provider failure` ; la sortie JSON conserve l'erreur et le process termine maintenant en exit code `1`.

@@ -13,7 +13,7 @@
   },
   "verificationSummary": {
     "provider": "gpt-5.5 via ChatGPT OAuth",
-    "chatgptAuth": "whoami passed; patrice.huetz@gmail.com, pro plan",
+    "chatgptAuth": "whoami passed; account redacted, pro plan",
     "providerSmoke": "direct chat REAL-GPT55-PROVIDER-DIRECT in 1883ms; stream REAL-GPT55-STREAM-DIRECT in 9 chunks; tool-call qa_probe then REAL-GPT55-TOOL-ROUNDTRIP",
     "cliRealGpt55": "text, json, stream-json, view_file and bash passed with gpt-5.5",
     "serverRealGpt55": "passed; CODEBUDDY_REAL_GPT55_SERVER=1 npm test -- tests/server/chat-route-real-gpt55.test.ts --run; real Express /api/chat, legacy SSE, /api/chat/completions and /api/chat/models through ChatGPT OAuth gpt-5.5",

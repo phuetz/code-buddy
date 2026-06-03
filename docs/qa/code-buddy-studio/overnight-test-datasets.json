@@ -431,7 +431,7 @@
       "model": "gpt-5.5",
       "expectedGuiMarker": "REAL-GPT55-COWORK-GUI",
       "expectedHeartbeatMarker": "REAL-GPT55-HEARTBEAT-PERMISSIONS",
-      "authAccount": "patrice.huetz@gmail.com",
+      "authAccount": "<redacted-chatgpt-account>",
       "plan": "pro"
     },
     "permissionRealFlow": {
