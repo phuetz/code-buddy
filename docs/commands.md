@@ -167,7 +167,7 @@ buddy flow "<goal>" [--max-retries N] [--verbose]
 buddy hermes profile|agent|doctor|plan|toolsets|hooks|prompt-size|parity|tools-parity|tools [dispatchProfile] [--json] [--markdown] [--plan-output file]
 buddy hermes providers status [--json]
 buddy hermes portal status|tools|open [--json]
-buddy hermes messaging status [--json] [--config <path>]
+buddy hermes messaging status|start|stop [--json] [--config <path>]
 buddy hermes mobile status [query...] [--json]
 buddy hermes trajectories status [query...] [--run-id <id>] [--json]
 buddy hermes protocols status [--json]
@@ -250,9 +250,11 @@ view, and `portal open` prints the subscription URL without launching a browser.
 
 `buddy hermes messaging status [--json]` wraps the real channel gateway
 readiness report in a Hermes-scoped command. It includes configured/enabled
-channel counts, runtime connection/auth counts, and remediation hints without
-printing tokens or webhook URLs. `--config <path>` points at an isolated
-`.codebuddy/channels.json` file for setup checks.
+channel counts, runtime connection/auth counts, remediation hints, and safe
+operator commands without printing tokens or webhook URLs. `start` and `stop`
+return structured lifecycle results for the same Hermes gateway surface.
+`--config <path>` points at an isolated `.codebuddy/channels.json` file for
+setup checks and guarded startup.
 
 `buddy hermes mobile status [query...] [--json]` wraps the real mobile
 supervision contract in a Hermes-scoped readiness report. It shows the

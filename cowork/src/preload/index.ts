@@ -6156,6 +6156,12 @@ declare global {
             };
             generatedAt: string;
             kind: 'codebuddy_channel_status';
+            operatorCommands: Array<{
+              command: string;
+              description: string;
+              id: string;
+              label: string;
+            }>;
             recommendations: string[];
             runtime: {
               authenticatedCount: number;

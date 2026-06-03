@@ -780,6 +780,7 @@ describe('Hermes CLI commands', () => {
             }>;
           };
           kind: string;
+          operatorCommands: Array<{ command: string; id: string; label: string }>;
           recommendations: string[];
           runtime: { registeredCount: number };
         };
@@ -801,8 +802,85 @@ describe('Hermes CLI commands', () => {
       expect(output.status.recommendations).toEqual(
         expect.arrayContaining([expect.stringContaining('not registered')]),
       );
+      expect(output.status.operatorCommands).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'messaging-status',
+            command: expect.stringContaining('buddy hermes messaging status --json'),
+          }),
+          expect.objectContaining({
+            id: 'messaging-start',
+            command: expect.stringContaining('buddy hermes messaging start --json'),
+          }),
+        ]),
+      );
       expect(raw).not.toContain('secret-telegram-token');
       expect(raw).not.toContain('example.invalid/webhook');
+    } finally {
+      await fs.remove(tmpDir);
+    }
+  });
+
+  it('exposes safe Hermes messaging lifecycle controls as JSON', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-messaging-lifecycle-'));
+    const missingConfigPath = path.join(tmpDir, 'missing-channels.json');
+
+    try {
+      const startProgram = createProgram();
+      registerHermesCommands(startProgram);
+
+      await startProgram.parseAsync([
+        'node',
+        'test',
+        'hermes',
+        'messaging',
+        'start',
+        '--json',
+        '--config',
+        missingConfigPath,
+      ]);
+
+      const startOutput = JSON.parse(getLogOutput()) as {
+        kind: string;
+        result: {
+          action: string;
+          command: string;
+          noConfig: boolean;
+          ok: boolean;
+        };
+        schemaVersion: number;
+      };
+      expect(startOutput.kind).toBe('hermes_messaging_gateway_lifecycle');
+      expect(startOutput.schemaVersion).toBe(1);
+      expect(startOutput.result).toMatchObject({
+        action: 'start',
+        noConfig: true,
+        ok: false,
+      });
+      expect(startOutput.result.command).toContain('buddy hermes messaging start --json');
+      expect(startOutput.result.command).toContain(missingConfigPath);
+
+      vi.mocked(console.log).mockClear();
+      const stopProgram = createProgram();
+      registerHermesCommands(stopProgram);
+      await stopProgram.parseAsync(['node', 'test', 'hermes', 'messaging', 'stop', '--json']);
+
+      const stopOutput = JSON.parse(getLogOutput()) as {
+        kind: string;
+        result: {
+          action: string;
+          ok: boolean;
+          stopped: string[];
+        };
+        schemaVersion: number;
+      };
+      expect(stopOutput.kind).toBe('hermes_messaging_gateway_lifecycle');
+      expect(stopOutput.schemaVersion).toBe(1);
+      expect(stopOutput.result).toMatchObject({
+        action: 'stop',
+        ok: true,
+      });
+      expect(Array.isArray(stopOutput.result.stopped)).toBe(true);
     } finally {
       await fs.remove(tmpDir);
     }

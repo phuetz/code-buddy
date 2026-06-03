@@ -28,6 +28,12 @@ export interface ChannelGatewayStatusReport {
   };
   generatedAt: string;
   kind: 'codebuddy_channel_status';
+  operatorCommands: Array<{
+    command: string;
+    description: string;
+    id: string;
+    label: string;
+  }>;
   recommendations: string[];
   runtime: {
     authenticatedCount: number;
@@ -100,6 +106,12 @@ function sanitizeReport(
 ): ChannelGatewayStatusReport {
   return {
     ...report,
+    operatorCommands: (report.operatorCommands ?? []).map((command) => ({
+      command: command.command,
+      description: command.description,
+      id: command.id,
+      label: command.label,
+    })),
     runtime: {
       ...report.runtime,
       channels: report.runtime.channels.map((channel) => ({

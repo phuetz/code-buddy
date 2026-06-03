@@ -77,6 +77,18 @@ describe.skipIf(!hasBuiltCore)('channel gateway readiness bridge real core integ
         }),
       ]),
     );
+    expect(payload.report?.operatorCommands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'messaging-status',
+          command: expect.stringContaining('buddy hermes messaging status --json'),
+        }),
+        expect.objectContaining({
+          id: 'messaging-start',
+          command: expect.stringContaining('buddy hermes messaging start --json'),
+        }),
+      ]),
+    );
     expect(JSON.stringify(payload)).not.toContain('secret-telegram-token');
     expect(JSON.stringify(payload)).not.toContain('secret-webhook');
   });

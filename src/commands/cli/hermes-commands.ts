@@ -11,7 +11,11 @@ import os from 'os';
 import path from 'path';
 import type { Command } from 'commander';
 
-import { buildChannelStatusReport, type ChannelStatusReport } from '../handlers/channel-handlers.js';
+import {
+  buildChannelStatusReport,
+  startConfiguredChannels,
+  type ChannelStatusReport,
+} from '../handlers/channel-handlers.js';
 import {
   DEFAULT_DISPATCH_POLICY_PREVIEW_TOOLS,
   FLEET_DISPATCH_PROFILES,
@@ -157,6 +161,8 @@ type HermesProtocolSmokeOptions = HermesCommandOptions;
 interface HermesMessagingStatusOptions extends HermesCommandOptions {
   config?: string;
 }
+
+type HermesMessagingLifecycleOptions = HermesMessagingStatusOptions;
 
 interface HermesMobileStatusOptions extends HermesCommandOptions {
   limit?: string;
@@ -944,6 +950,84 @@ function renderHermesMessagingGatewayStatus(report: ChannelStatusReport): string
     }
   }
 
+  if (report.operatorCommands.length > 0) {
+    lines.push('');
+    lines.push('Operator commands:');
+    for (const command of report.operatorCommands) {
+      lines.push(`  - ${command.label}: ${command.command}`);
+      lines.push(`    ${command.description}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+async function runHermesMessagingGatewayStart(
+  options: HermesMessagingLifecycleOptions,
+): Promise<{
+  action: 'start';
+  command: string;
+  failed: Array<{ type: string; error: string }>;
+  noConfig: boolean;
+  ok: boolean;
+  registered: string[];
+  skipped: string[];
+}> {
+  const result = await startConfiguredChannels(options.config);
+  return {
+    action: 'start',
+    command: `buddy hermes messaging start --json${options.config ? ` --config "${options.config.replace(/"/g, '\\"')}"` : ''}`,
+    failed: result.failed,
+    noConfig: result.noConfig,
+    ok: !result.noConfig && result.failed.length === 0,
+    registered: result.registered,
+    skipped: result.skipped,
+  };
+}
+
+async function runHermesMessagingGatewayStop(): Promise<{
+  action: 'stop';
+  command: string;
+  ok: boolean;
+  stopped: string[];
+}> {
+  const { getChannelManager } = await import('../../channels/index.js');
+  const manager = getChannelManager();
+  const stopped = Object.keys(manager.getStatus()).sort();
+  await manager.disconnectAll();
+  return {
+    action: 'stop',
+    command: 'buddy hermes messaging stop --json',
+    ok: true,
+    stopped,
+  };
+}
+
+type HermesMessagingLifecycleResult =
+  | Awaited<ReturnType<typeof runHermesMessagingGatewayStart>>
+  | Awaited<ReturnType<typeof runHermesMessagingGatewayStop>>;
+
+function renderHermesMessagingLifecycleResult(
+  result: HermesMessagingLifecycleResult,
+): string {
+  const lines = [
+    `Hermes messaging gateway ${result.action}: ${result.ok ? 'ok' : 'needs attention'}`,
+    `  Command: ${result.command}`,
+  ];
+
+  if (result.action === 'start') {
+    lines.push(`  Registered: ${result.registered.length > 0 ? result.registered.join(', ') : 'none'}`);
+    lines.push(`  Skipped disabled: ${result.skipped.length > 0 ? result.skipped.join(', ') : 'none'}`);
+    if (result.noConfig) {
+      lines.push('  No channel configuration found. Create .codebuddy/channels.json or pass --config.');
+    }
+    for (const failed of result.failed) {
+      lines.push(`  Failed ${failed.type}: ${failed.error}`);
+    }
+  } else {
+    lines.push(`  Stopped: ${result.stopped.length > 0 ? result.stopped.join(', ') : 'none'}`);
+  }
+
   return lines.join('\n');
 }
 
@@ -1562,6 +1646,47 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesMessagingGatewayStatus(status));
+    });
+
+  messaging
+    .command('start')
+    .description('Start the configured Hermes messaging gateway channels')
+    .option('--json', 'output JSON')
+    .option('--config <path>', 'channel config path')
+    .action(async (options: HermesMessagingLifecycleOptions) => {
+      const result = await runHermesMessagingGatewayStart(options);
+      const payload = {
+        kind: 'hermes_messaging_gateway_lifecycle',
+        schemaVersion: 1,
+        result,
+      };
+
+      if (options.json) {
+        console.log(stableJson(payload));
+        return;
+      }
+
+      console.log(renderHermesMessagingLifecycleResult(result));
+    });
+
+  messaging
+    .command('stop')
+    .description('Stop the runtime Hermes messaging gateway channels in this process')
+    .option('--json', 'output JSON')
+    .action(async (options: HermesCommandOptions) => {
+      const result = await runHermesMessagingGatewayStop();
+      const payload = {
+        kind: 'hermes_messaging_gateway_lifecycle',
+        schemaVersion: 1,
+        result,
+      };
+
+      if (options.json) {
+        console.log(stableJson(payload));
+        return;
+      }
+
+      console.log(renderHermesMessagingLifecycleResult(result));
     });
 
   const mobile = hermes

@@ -191,7 +191,7 @@ const FEATURES: HermesParityFeature[] = [
       'npm test -- tests/agent/hermes-tool-parity-local.test.ts --run',
       'npm test -- tests/tools/execute-code-real.test.ts tests/tools/send-message-real.test.ts tests/tools/discord-tool-real.test.ts tests/tools/homeassistant-tool-real.test.ts tests/tools/mixture-of-agents-real.test.ts tests/tools/spotify-tool-real.test.ts tests/tools/x-search-tool-real.test.ts tests/tools/feishu-tool-real.test.ts tests/tools/yuanbao-tool-real.test.ts tests/tools/kanban-real.test.ts tests/tools/vision-analyze-real.test.ts tests/tools/text-to-speech-real.test.ts tests/tools/media-generation-real.test.ts --run',
     ],
-    notes: 'Code Buddy now has a second-level official tool parity manifest and the current measured tool-level state is 65 exact, 6 native-equivalent, 0 partial, and 0 gaps. Broader product differences such as gateway lifecycle, managed browser backends, provider setup, and remote runtimes remain tracked by their dedicated feature rows instead of this built-in tools row.',
+    notes: 'Code Buddy now has a second-level official tool parity manifest and the current measured tool-level state is 65 exact, 6 native-equivalent, 0 partial, and 0 gaps. Broader product differences such as messaging admin/slash parity, managed browser backends, provider setup, and remote runtimes remain tracked by their dedicated feature rows instead of this built-in tools row.',
     nextWork: 'Keep the official tool parity manifest current when upstream Hermes adds or changes tools.',
   },
   {
@@ -215,10 +215,12 @@ const FEATURES: HermesParityFeature[] = [
       'cd cowork && npm test -- --run tests/channel-gateway-readiness-bridge.test.ts tests/hermes-messaging-gateway-strip.test.tsx',
       'rg --files src/channels',
       'npx tsx src/index.ts hermes messaging status --json',
+      'npx tsx src/index.ts hermes messaging start --json --config <missing-or-real-config>',
+      'npx tsx src/index.ts hermes messaging stop --json',
       'npx tsx src/index.ts channels status --json',
     ],
-    notes: 'Channel coverage is broad, gateway readiness is machine-readable through dedicated Hermes CLI status plus Cowork, send_message exists with dry-run outbox plus approval-gated live delivery, and the exact discord tool covers upstream core REST actions. The official Hermes platform list, gateway lifecycle, admin actions, and slash parity are still not identical.',
-    nextWork: 'Add per-platform slash parity checks and lifecycle controls only after the operator workflow requires them.',
+    notes: 'Channel coverage is broad, gateway readiness is machine-readable through dedicated Hermes CLI status plus Cowork, Hermes-scoped start/stop lifecycle commands now return structured JSON, send_message exists with dry-run outbox plus approval-gated live delivery, and the exact discord tool covers upstream core REST actions. The official Hermes platform list, admin actions, and slash parity are still not identical.',
+    nextWork: 'Add per-platform slash parity checks and admin actions only after the operator workflow requires them.',
   },
   {
     id: 'browser-automation',

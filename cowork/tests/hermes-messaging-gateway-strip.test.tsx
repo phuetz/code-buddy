@@ -45,6 +45,26 @@ const cleanGatewayStatus: ChannelGatewayStatusReport = {
   },
   generatedAt: '2026-05-31T13:58:00.000Z',
   kind: 'codebuddy_channel_status',
+  operatorCommands: [
+    {
+      command: 'buddy hermes messaging status --json --config "D:/workspace/.codebuddy/channels.json"',
+      description: 'Refresh the Hermes messaging gateway readiness report.',
+      id: 'messaging-status',
+      label: 'Inspect readiness',
+    },
+    {
+      command: 'buddy hermes messaging start --json --config "D:/workspace/.codebuddy/channels.json"',
+      description: 'Register and connect every enabled messaging channel from the current config.',
+      id: 'messaging-start',
+      label: 'Start gateway',
+    },
+    {
+      command: 'buddy hermes messaging stop --json',
+      description: 'Disconnect all runtime messaging channels in the current process.',
+      id: 'messaging-stop',
+      label: 'Stop gateway',
+    },
+  ],
   recommendations: [],
   runtime: {
     authenticatedCount: 1,
@@ -94,6 +114,8 @@ describe('HermesMessagingGatewayStrip', () => {
     expect(strip?.textContent).toContain('1/1');
     expect(strip?.textContent).toContain('telegram');
     expect(strip?.textContent).toContain('buddy hermes messaging status --json');
+    expect(strip?.textContent).toContain('buddy hermes messaging start --json');
+    expect(strip?.textContent).toContain('buddy hermes messaging stop --json');
   });
 
   it('loads gateway readiness from the existing channels IPC bridge', async () => {

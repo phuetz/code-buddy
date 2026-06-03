@@ -61,6 +61,12 @@ export interface ChannelStatusReport {
       info?: Record<string, unknown>;
     }>;
   };
+  operatorCommands: Array<{
+    id: string;
+    label: string;
+    command: string;
+    description: string;
+  }>;
   recommendations: string[];
 }
 
@@ -161,6 +167,50 @@ function summarizeConfig(config: ChannelsConfig | null): ChannelStatusReport['co
   };
 }
 
+function quoteCliArg(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+function buildConfigFlag(configPath?: string): string {
+  return configPath ? ` --config ${quoteCliArg(configPath)}` : '';
+}
+
+function buildOperatorCommands(
+  config: ChannelStatusReport['config'],
+  runtimeChannels: ChannelStatusReport['runtime']['channels'],
+  configPath?: string,
+): ChannelStatusReport['operatorCommands'] {
+  const configFlag = buildConfigFlag(configPath);
+  const commands: ChannelStatusReport['operatorCommands'] = [
+    {
+      id: 'messaging-status',
+      label: 'Inspect readiness',
+      command: `buddy hermes messaging status --json${configFlag}`,
+      description: 'Refresh the Hermes messaging gateway readiness report.',
+    },
+  ];
+
+  if (config.enabledCount > 0) {
+    commands.push({
+      id: 'messaging-start',
+      label: 'Start gateway',
+      command: `buddy hermes messaging start --json${configFlag}`,
+      description: 'Register and connect every enabled messaging channel from the current config.',
+    });
+  }
+
+  if (runtimeChannels.length > 0) {
+    commands.push({
+      id: 'messaging-stop',
+      label: 'Stop gateway',
+      command: 'buddy hermes messaging stop --json',
+      description: 'Disconnect all runtime messaging channels in the current process.',
+    });
+  }
+
+  return commands;
+}
+
 export function buildChannelStatusReport(
   allStatus: Record<string, import('../../channels/index.js').ChannelStatus>,
   configPath?: string,
@@ -211,6 +261,7 @@ export function buildChannelStatusReport(
       authenticatedCount: runtimeChannels.filter((status) => status.authenticated).length,
       channels: runtimeChannels,
     },
+    operatorCommands: buildOperatorCommands(config, runtimeChannels, loadedConfig?.path ?? configPath),
     recommendations,
   };
 }

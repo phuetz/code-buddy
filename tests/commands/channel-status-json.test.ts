@@ -68,6 +68,22 @@ describe('buildChannelStatusReport', () => {
         authenticated: true,
         lastActivity: '2026-05-30T10:00:00.000Z',
       }));
+      expect(report.operatorCommands).toEqual([
+        expect.objectContaining({
+          id: 'messaging-status',
+          command: expect.stringContaining('buddy hermes messaging status --json'),
+        }),
+        expect.objectContaining({
+          id: 'messaging-start',
+          command: expect.stringContaining('buddy hermes messaging start --json'),
+        }),
+        expect.objectContaining({
+          id: 'messaging-stop',
+          command: 'buddy hermes messaging stop --json',
+        }),
+      ]);
+      expect(JSON.stringify(report.operatorCommands)).not.toContain('secret-token');
+      expect(JSON.stringify(report.operatorCommands)).not.toContain('example.invalid/webhook');
       expect(report.recommendations).toEqual([]);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -83,5 +99,11 @@ describe('buildChannelStatusReport', () => {
       expect.stringContaining('Create .codebuddy/channels.json'),
       expect.stringContaining('No runtime channels'),
     ]));
+    expect(report.operatorCommands).toEqual([
+      expect.objectContaining({
+        id: 'messaging-status',
+        command: expect.stringContaining('buddy hermes messaging status --json'),
+      }),
+    ]);
   });
 });

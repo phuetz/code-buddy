@@ -38,6 +38,12 @@ export interface ChannelGatewayStatusReport {
   };
   generatedAt: string;
   kind: 'codebuddy_channel_status';
+  operatorCommands: Array<{
+    command: string;
+    description: string;
+    id: string;
+    label: string;
+  }>;
   recommendations: string[];
   runtime: {
     authenticatedCount: number;
@@ -70,6 +76,7 @@ export const HermesMessagingGatewayStrip: React.FC<{
   const visibleError = error ?? loadError;
   const command = 'buddy hermes messaging status --json';
   const readiness = useMemo(() => getGatewayReadiness(visibleStatus), [visibleStatus]);
+  const operatorCommands = visibleStatus?.operatorCommands ?? [];
   const statusClass = readiness.ready
     ? 'border-success/40 bg-success/10 text-success'
     : 'border-warning/40 bg-warning/10 text-warning';
@@ -173,6 +180,23 @@ export const HermesMessagingGatewayStrip: React.FC<{
                 <AlertTriangle size={10} className="mt-0.5 shrink-0" />
               )}
               <span className="min-w-0">{readiness.message}</span>
+            </div>
+          ) : null}
+
+          {operatorCommands.length > 0 ? (
+            <div className="mt-1.5 grid gap-1" data-testid="hermes-messaging-gateway-operator-commands">
+              {operatorCommands.slice(0, 3).map((operatorCommand) => (
+                <div
+                  key={operatorCommand.id}
+                  className="min-w-0 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted"
+                >
+                  <div className="flex min-w-0 items-center gap-1 text-text-secondary">
+                    <Terminal size={10} className="shrink-0 text-text-muted" />
+                    <span className="truncate">{operatorCommand.label}</span>
+                  </div>
+                  <code className="mt-0.5 block truncate">{operatorCommand.command}</code>
+                </div>
+              ))}
             </div>
           ) : null}
         </>
