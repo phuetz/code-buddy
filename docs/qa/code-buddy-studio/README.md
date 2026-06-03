@@ -35,6 +35,19 @@ Start here when you want proof that the documented Cowork flows have been exerci
 - Mobile supervision: loopback-only local-operator routes, spoofed-forwarder denial, approval queue, Cowork bridge client, and disabled listener contract.
 - Publication safety: public docs and screenshots are checked for private account, token, local path, and screenshot metadata leaks.
 
+## Release Readiness Route
+
+Use this order before claiming the desktop app is ready for a public user or release candidate:
+
+| Gate | Evidence to collect | Where it lives |
+| --- | --- | --- |
+| 1. User path is documented | Install, launch, provider setup, Cowork usage, and French/English guides are linked from the main getting-started flow | [`../../getting-started.md`](../../getting-started.md), [`../../cowork-user-guide.md`](../../cowork-user-guide.md), [`../../cowork-guide-fr.md`](../../cowork-guide-fr.md) |
+| 2. Visual proof exists | Public PNG captures show the work surface, settings, permissions, Test Runner, real provider checks, Hermes, mobile supervision, Computer Use, and runner bundles | [`./screenshots/`](./screenshots/) and the captures below |
+| 3. Machine report agrees | Functional rows, coverage split, screenshot paths, and public capture metadata are machine-checkable | [`./feature-qa-report.json`](./feature-qa-report.json), `npm run test:docs-public` |
+| 4. Safe checks pass | Safe runner bundles cover CLI, providers, server/API/MCP, Fleet, context, voice/TTS, scheduler/hooks, sessions/cache, plugins/skills, UI, permissions, and Cowork project/session flows | `Runner-Verified Cowork Bundles` below |
+| 5. Opt-in real checks are explicit | Real ChatGPT OAuth, Docker, Computer Use, mobile, Hermes built CLI, and desktop automation are documented as opt-in and have separate captures | [`./feature-qa.md`](./feature-qa.md), [`./overnight-qa-campaign.md`](./overnight-qa-campaign.md) |
+| 6. Publication guard passes | Local links, PNG dimensions, report integrity, and obvious private strings are checked before pushing public docs | `npm run test:docs-public` |
+
 ## Runner-Verified Cowork Bundles
 
 | Bundle | Verified coverage | Runner proof |

@@ -99,6 +99,9 @@ describe('public Cowork documentation discoverability', () => {
     const qaHub = await readPublicDoc('docs/qa/code-buddy-studio/README.md');
 
     expectLinks(qaHub, 'docs/qa/code-buddy-studio/README.md', [
+      '../../getting-started.md',
+      '../../cowork-user-guide.md',
+      '../../cowork-guide-fr.md',
       './feature-qa.md',
       './feature-qa-report.json',
       './overnight-qa-campaign.md',
@@ -114,6 +117,12 @@ describe('public Cowork documentation discoverability', () => {
       'tests/docs/public-qa-evidence-integrity.test.ts',
       'tests/docs/public-screenshot-privacy.test.ts',
       'npm run test:docs-public',
+    ]);
+    expectText(qaHub, 'docs/qa/code-buddy-studio/README.md', [
+      'Release Readiness Route',
+      'Safe runner bundles cover CLI',
+      'Opt-in real checks are explicit',
+      'Publication guard passes',
     ]);
   });
 });
