@@ -133,7 +133,7 @@ nc -zv <peer-ip> 3000
 #   fleet:listen          for /fleet listen
 #   peer:invoke           for /fleet send, /fleet chat, /fleet tool
 #   fleet:listen,peer:invoke for both observe + invoke workflows
-CODEBUDDY_FLEET_API_KEY=cb_sk_...
+CODEBUDDY_FLEET_API_KEY=<redacted>
 
 # 3. CORS (on the peer)
 CODEBUDDY_FLEET_CORS_ORIGINS=http://<listener-host>:* buddy serve

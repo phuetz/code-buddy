@@ -1,7 +1,7 @@
 # Cowork competitor parity audit
 
 Date: 2026-05-18
-Workspace: `D:\CascadeProjects\grok-cli-weekend`
+Workspace: `<code-buddy repo root>`
 
 ## Scope
 
