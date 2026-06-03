@@ -124,6 +124,10 @@ describe('public Cowork documentation discoverability', () => {
     ]);
     expectText(qaHub, 'docs/qa/code-buddy-studio/README.md', [
       'Release Readiness Route',
+      'Build/typecheck gates pass',
+      'npm run build',
+      'cd cowork && npm run typecheck',
+      'cd cowork && npm run build:e2e',
       'Safe runner bundles cover CLI',
       'Opt-in real checks are explicit',
       'Publication guard passes',
