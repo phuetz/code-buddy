@@ -60,10 +60,21 @@ function markdownImageTargets(text: string): string[] {
     .filter((target) => !/^(?:https?:|mailto:|#)/i.test(target));
 }
 
-function markdownLocalTargets(text: string): string[] {
-  return Array.from(text.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g), (match) => match[1])
-    .map((target) => target.trim())
-    .filter((target) => !/^(?:https?:|mailto:|#)/i.test(target));
+function localFileTargets(text: string): string[] {
+  const markdownTargets = Array.from(
+    text.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g),
+    (match) => match[1].trim()
+  );
+  const htmlTargets = Array.from(
+    text.matchAll(/<(?:a|img)\s+[^>]*(?:href|src)=["']([^"']+)["'][^>]*>/gi),
+    (match) => match[1].trim()
+  );
+
+  return [...markdownTargets, ...htmlTargets].filter((target) => {
+    if (!target || /^(?:https?:|mailto:|#|data:)/i.test(target)) return false;
+    const [pathTarget] = target.split('#');
+    return Boolean(pathTarget);
+  });
 }
 
 function trackedPublicCoworkScreenshotFiles(): string[] {
@@ -252,9 +263,9 @@ describe('Cowork public QA documentation privacy', () => {
     }
   });
 
-  it('keeps every local Markdown target in the public Cowork overview resolvable from GitHub', () => {
+  it('keeps every local Markdown or HTML target in the public Cowork overview resolvable from GitHub', () => {
     const text = fs.readFileSync(publicCoworkDoc, 'utf8');
-    const targets = markdownLocalTargets(text);
+    const targets = localFileTargets(text);
 
     expect(targets.length).toBeGreaterThan(0);
 
@@ -265,10 +276,10 @@ describe('Cowork public QA documentation privacy', () => {
     }
   });
 
-  it('keeps local Markdown targets in public Cowork QA docs resolvable from GitHub', () => {
+  it('keeps local Markdown and HTML targets in public Cowork docs resolvable from GitHub', () => {
     for (const file of publicMarkdownLinkFiles) {
       const text = fs.readFileSync(file, 'utf8');
-      const targets = markdownLocalTargets(text);
+      const targets = localFileTargets(text);
 
       expect(targets.length, file).toBeGreaterThan(0);
 
@@ -278,6 +289,16 @@ describe('Cowork public QA documentation privacy', () => {
         expect(fs.existsSync(path.resolve(path.dirname(file), pathTarget)), `${file} -> ${target}`).toBe(true);
       }
     }
+
+    expect(localFileTargets(fs.readFileSync(coworkReadme, 'utf8'))).toEqual(
+      expect.arrayContaining([
+        'resources/logo.png',
+        './README_zh.md',
+        '../docs/cowork.md',
+        './RUNNER_AUDIT.md',
+        'resources/WeChat.jpg',
+      ])
+    );
   });
 
   it('keeps raw real-provider capture candidates out of public docs', () => {
