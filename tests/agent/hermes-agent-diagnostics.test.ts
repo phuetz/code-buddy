@@ -158,6 +158,29 @@ describe('Hermes Agent diagnostics', () => {
     expect(raw).not.toContain('secret-nous-file-token');
   });
 
+  it('reports SSH config readiness without leaking the local home path', () => {
+    const dir = makeTempDir();
+    const sshDir = path.join(dir, '.ssh');
+    const sshConfigPath = path.join(sshDir, 'config');
+    fs.mkdirSync(sshDir, { recursive: true });
+    fs.writeFileSync(sshConfigPath, 'Host hermes-fixture\n  HostName example.test\n');
+
+    const loader = new CustomAgentLoader(dir);
+    const diagnostics = buildHermesAgentDiagnostics({
+      homeDir: dir,
+      loader,
+    });
+    const ssh = diagnostics.runtimeBackends.backends.find((backend) => backend.id === 'ssh');
+    const raw = JSON.stringify(diagnostics.runtimeBackends);
+
+    expect(ssh).toMatchObject({
+      configured: true,
+      credentialSources: ['~/.ssh/config'],
+    });
+    expect(raw).not.toContain(dir);
+    expect(raw).not.toContain(sshConfigPath);
+  });
+
   it('reports runtime backend inventory from real local probes', () => {
     const loader = new CustomAgentLoader(makeTempDir());
     const diagnostics = buildHermesAgentDiagnostics({

@@ -265,7 +265,7 @@ function detectLandlockSupport(): boolean {
 function readSshConfigSource(homeDir: string): string[] {
   const sshConfigPath = path.join(homeDir, '.ssh', 'config');
   try {
-    return fs.existsSync(sshConfigPath) ? [sshConfigPath] : [];
+    return fs.existsSync(sshConfigPath) ? ['~/.ssh/config'] : [];
   } catch {
     return [];
   }
