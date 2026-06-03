@@ -96,6 +96,10 @@ Les donnees sont volontairement reconnaissables pour prouver que le test a bien 
 | Supervision mobile gateway | snapshots mobile, pairing preview-only, plan d'acceptation sans reseau, gateway policy/contract/listener, approval queue | le panneau lance les 8 fichiers mobile/gateway et affiche `39 ok / 0 ko`. |
 | Securite chemin | UNC `\\server\share\report.txt` | Rejet immediat hors workspace. |
 
+La capture catalogue de reference pour les lignes opt-in du Test Runner est :
+
+![Fenetre Tests & executions avec lignes opt-in](./screenshots/30-test-runner-window.png)
+
 ## Resultats GUI Cowork
 
 | Commande | Resultat | Couverture |

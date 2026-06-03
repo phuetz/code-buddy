@@ -8,6 +8,8 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 const reportPath = 'docs/qa/code-buddy-studio/feature-qa-report.json';
 const mainDossierPath = 'docs/qa/code-buddy-studio/feature-qa.md';
 const qaHubPath = 'docs/qa/code-buddy-studio/README.md';
+const overnightDatasetPath = 'docs/qa/code-buddy-studio/overnight-test-datasets.json';
+const overnightCampaignPath = 'docs/qa/code-buddy-studio/overnight-qa-campaign.md';
 const screenshotPrefix = 'docs/qa/code-buddy-studio/screenshots/';
 const userGuidePaths = [
   'docs/cowork-user-guide.md',
@@ -121,6 +123,26 @@ function asString(value: unknown, label: string): string {
 
 function toMainDossierScreenshotRef(screenshot: string): string {
   return screenshot.replace('docs/qa/code-buddy-studio/', './');
+}
+
+function collectJsonScreenshotRefs(
+  value: unknown,
+  pathParts: string[] = [],
+): Array<{ jsonPath: string; value: unknown }> {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => collectJsonScreenshotRefs(item, [...pathParts, String(index)]));
+  }
+  if (!value || typeof value !== 'object') return [];
+
+  const refs: Array<{ jsonPath: string; value: unknown }> = [];
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = [...pathParts, key];
+    if (/screenshot/i.test(key)) {
+      refs.push({ jsonPath: childPath.join('.'), value: child });
+    }
+    refs.push(...collectJsonScreenshotRefs(child, childPath));
+  }
+  return refs;
 }
 
 function reportedRunnerProofCount(report: QaReport, reportKey: string): number {
@@ -345,6 +367,38 @@ describe('public QA evidence report integrity', () => {
       const markdownRef = toMainDossierScreenshotRef(screenshot);
       if (!mainDossier.includes(markdownRef)) {
         findings.push(`${mainDossierPath}: missing ${markdownRef}`);
+      }
+    }
+
+    expect(findings).toEqual([]);
+  });
+
+  it('keeps every overnight dataset screenshot present and visible in the overnight campaign', async () => {
+    const dataset = JSON.parse(await fs.readFile(path.join(repoRoot, overnightDatasetPath), 'utf8')) as unknown;
+    const campaign = await fs.readFile(path.join(repoRoot, overnightCampaignPath), 'utf8');
+    const refs = collectJsonScreenshotRefs(dataset);
+    const findings: string[] = [];
+
+    expect(refs.length).toBeGreaterThan(0);
+
+    for (const ref of refs) {
+      if (typeof ref.value !== 'string') {
+        findings.push(`${ref.jsonPath}: expected screenshot path string`);
+        continue;
+      }
+      if (!ref.value.startsWith(screenshotPrefix) || !ref.value.endsWith('.png')) {
+        findings.push(`${ref.jsonPath}: unsafe screenshot path ${ref.value}`);
+        continue;
+      }
+
+      const absoluteTarget = path.resolve(repoRoot, ref.value);
+      if (!absoluteTarget.startsWith(repoRoot) || !(await exactCasePathExists(absoluteTarget))) {
+        findings.push(`${ref.jsonPath}: missing screenshot ${ref.value}`);
+      }
+
+      const campaignRef = toMainDossierScreenshotRef(ref.value);
+      if (!campaign.includes(campaignRef)) {
+        findings.push(`${overnightCampaignPath}: missing ${campaignRef} for ${ref.jsonPath}`);
       }
     }
 
