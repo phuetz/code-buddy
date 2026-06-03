@@ -9,7 +9,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { spawnSync } from 'child_process';
+import { type SpawnSyncReturns, spawnSync } from 'child_process';
 
 export type HermesRuntimeBackendStatus = 'available' | 'configured' | 'missing' | 'unsupported';
 
@@ -83,6 +83,7 @@ interface SmokeInvocation {
   args: string[];
   command: string;
   displayArgs?: string[];
+  outputPlaceholder?: string;
   redactions?: Array<{ replacement: string; value: string }>;
 }
 
@@ -169,6 +170,42 @@ function smokeInvocationForBackend(
     };
   }
 
+  if (backend.id === 'modal') {
+    if (env.CODEBUDDY_HERMES_ALLOW_MODAL_SMOKE !== 'true') {
+      return null;
+    }
+    return {
+      command: 'modal',
+      args: ['profile', 'current'],
+      outputPlaceholder: '<modal-smoke-output-redacted>',
+      redactions: redactionsForEnv(env, ['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET', 'MODAL_PROFILE']),
+    };
+  }
+
+  if (backend.id === 'daytona') {
+    if (env.CODEBUDDY_HERMES_ALLOW_DAYTONA_SMOKE !== 'true') {
+      return null;
+    }
+    return {
+      command: 'daytona',
+      args: ['profile', 'list'],
+      outputPlaceholder: '<daytona-smoke-output-redacted>',
+      redactions: redactionsForEnv(env, ['DAYTONA_API_KEY', 'DAYTONA_SERVER_URL', 'DAYTONA_PROFILE']),
+    };
+  }
+
+  if (backend.id === 'vercel-sandbox') {
+    if (env.CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE !== 'true') {
+      return null;
+    }
+    return {
+      command: 'vercel',
+      args: ['whoami'],
+      outputPlaceholder: '<vercel-smoke-output-redacted>',
+      redactions: redactionsForEnv(env, ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_ORG_ID']),
+    };
+  }
+
   return null;
 }
 
@@ -190,6 +227,24 @@ function redactSmokeText(value: string, redactions: SmokeInvocation['redactions'
   return redacted;
 }
 
+function redactManagedSmokeOutput(value: string, placeholder: string | undefined): string {
+  return placeholder && value.length > 0 ? placeholder : value;
+}
+
+function redactionsForEnv(
+  env: NodeJS.ProcessEnv,
+  keys: readonly string[],
+): Array<{ replacement: string; value: string }> {
+  const values = new Set<string>();
+  for (const key of keys) {
+    const value = env[key]?.trim();
+    if (value) values.add(value);
+  }
+  return Array.from(values)
+    .sort((left, right) => right.length - left.length)
+    .map((value) => ({ value, replacement: '<configured-secret>' }));
+}
+
 function runSmokeInvocation(
   backend: HermesRuntimeBackend,
   invocation: SmokeInvocation,
@@ -201,14 +256,15 @@ function runSmokeInvocation(
 ): HermesRuntimeSmokeResult {
   const started = options.now();
   const startedAtMs = Date.now();
-  const result = spawnSync(invocation.command, invocation.args, {
-    env: options.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: options.timeoutMs,
-    windowsHide: true,
-  });
-  const stdout = redactSmokeText(decodeProbeBuffer(result.stdout).trim(), invocation.redactions);
-  const stderr = redactSmokeText(decodeProbeBuffer(result.stderr).trim(), invocation.redactions);
+  const result = spawnTool(invocation.command, invocation.args, options.env, options.timeoutMs);
+  const stdout = redactManagedSmokeOutput(
+    redactSmokeText(decodeProbeBuffer(result.stdout).trim(), invocation.redactions),
+    invocation.outputPlaceholder,
+  );
+  const stderr = redactManagedSmokeOutput(
+    redactSmokeText(decodeProbeBuffer(result.stderr).trim(), invocation.redactions),
+    invocation.outputPlaceholder,
+  );
   const output = `${stdout}\n${stderr}`.trim();
   const ok = !result.error && result.status === 0;
   const errorOutput = result.error ? String(result.error.message || result.error) : '';
@@ -234,12 +290,7 @@ function runSmokeInvocation(
 
 function runProbe(command: string, args: string[], env: NodeJS.ProcessEnv): ProbeResult {
   try {
-    const result = spawnSync(command, args, {
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 5000,
-      windowsHide: true,
-    });
+    const result = spawnTool(command, args, env, 5000);
     const stdout = decodeProbeBuffer(result.stdout);
     const stderr = decodeProbeBuffer(result.stderr);
     const output = `${stdout}\n${stderr}`.trim();
@@ -257,6 +308,52 @@ function runProbe(command: string, args: string[], env: NodeJS.ProcessEnv): Prob
       signal: null,
     };
   }
+}
+
+function spawnTool(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  timeout: number,
+): SpawnSyncReturns<Buffer> {
+  const resolvedCommand = resolveCommandPath(command, env) ?? command;
+  if (os.platform() === 'win32' && /\.(?:bat|cmd)$/i.test(resolvedCommand)) {
+    return spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/c', resolvedCommand, ...args], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout,
+      windowsHide: true,
+    });
+  }
+
+  return spawnSync(resolvedCommand, args, {
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout,
+    windowsHide: true,
+  });
+}
+
+function resolveCommandPath(command: string, env: NodeJS.ProcessEnv): string | null {
+  if (path.isAbsolute(command) || command.includes(path.sep) || (path.sep === '\\' && command.includes('/'))) {
+    return command;
+  }
+
+  const probe = os.platform() === 'win32'
+    ? spawnSync('where.exe', [command], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 5000,
+      windowsHide: true,
+    })
+    : spawnSync('which', [command], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 5000,
+      windowsHide: true,
+    });
+  if (probe.error || probe.status !== 0) return null;
+  return firstLine(decodeProbeBuffer(probe.stdout)) ?? null;
 }
 
 function decodeProbeBuffer(value: string | Buffer | null | undefined): string {
@@ -493,7 +590,7 @@ function modalBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     command: 'modal',
     version: firstLine(probe.output),
     credentialSources,
-    smokeCommand: configured ? 'modal profile current' : 'modal --version',
+    smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_MODAL_SMOKE=true modal profile current' : 'modal --version',
     notes: ['Modal is currently an optional provider/tool gateway surface, not a full terminal backend.'],
     remediation: probe.ok ? ['Configure Modal credentials before selecting Modal jobs.'] : ['Install the Modal CLI if cloud terminal jobs are required.'],
   };
@@ -514,7 +611,7 @@ function daytonaBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     command: 'daytona',
     version: firstLine(probe.output),
     credentialSources,
-    smokeCommand: configured ? 'daytona profile list' : 'daytona --version',
+    smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_DAYTONA_SMOKE=true daytona profile list' : 'daytona --version',
     notes: ['Research-script remote jobs currently translate to daytona exec, but no managed lifecycle is claimed.'],
     remediation: probe.ok ? ['Configure Daytona credentials/workspaces before selecting remote jobs.'] : ['Install the Daytona CLI if this backend is required.'],
   };
@@ -535,7 +632,7 @@ function vercelSandboxBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     command: 'vercel',
     version: firstLine(probe.output),
     credentialSources,
-    smokeCommand: configured ? 'vercel whoami' : 'vercel --version',
+    smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE=true vercel whoami' : 'vercel --version',
     notes: ['Vercel Sandbox is tracked as an optional remote backend; Code Buddy has no first-class runner yet.'],
     remediation: probe.ok ? ['Configure VERCEL_TOKEN before attempting remote Vercel jobs.'] : ['Install the Vercel CLI if this backend is required.'],
   };
@@ -654,6 +751,12 @@ export function runHermesRuntimeBackendSmoke(
       ? 'Docker smoke is heavy and requires CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true.'
       : backend.id === 'ssh'
         ? 'SSH smoke requires CODEBUDDY_HERMES_ALLOW_SSH_SMOKE=true and an explicit CODEBUDDY_SSH_HOST/SSH_HOST/CODEBUDDY_REMOTE_HOST.'
+      : backend.id === 'modal'
+        ? 'Modal smoke requires CODEBUDDY_HERMES_ALLOW_MODAL_SMOKE=true and configured Modal credentials.'
+      : backend.id === 'daytona'
+        ? 'Daytona smoke requires CODEBUDDY_HERMES_ALLOW_DAYTONA_SMOKE=true and configured Daytona credentials.'
+      : backend.id === 'vercel-sandbox'
+        ? 'Vercel Sandbox smoke requires CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE=true and VERCEL_TOKEN.'
       : `${backend.label} does not have a safe live smoke runner yet.`;
     return blockedSmokeResult(backend.id, 'blocked', reason, {
       backend,

@@ -782,7 +782,7 @@ describe('Hermes CLI commands', () => {
             'cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-bridge-real.test.ts tests/hermes-runtime-backends-strip.test.ts',
           ]),
           notes: expect.stringContaining('~/.ssh/config'),
-          nextWork: expect.stringContaining('configured Modal/Daytona/Vercel Sandbox backends'),
+          nextWork: expect.stringContaining('first-class managed lifecycle controls'),
         }),
         expect.objectContaining({
           id: 'mobile-supervision',
@@ -865,7 +865,8 @@ describe('Hermes CLI commands', () => {
     });
     expect(output.todos.map((item) => item.id)).toContain('runtime-backends');
     const runtimeTodo = output.todos.find((item) => item.id === 'runtime-backends');
-    expect(runtimeTodo?.nextWork).toContain('configured Modal/Daytona/Vercel Sandbox backends');
+    expect(runtimeTodo?.nextWork).toContain('first-class managed lifecycle controls');
+    expect(runtimeTodo?.nextWork).not.toContain('live smoke runners');
     expect(runtimeTodo?.nextWork).not.toContain('Docker/remote');
     expect(runtimeTodo?.nextWork).not.toContain('SSH/');
     expect(output.todos.map((item) => item.id)).not.toContain('openclaw-migration');

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 import { runHermesRuntimeBackendSmoke } from '../../src/agent/hermes-runtime-backends.js';
 
@@ -29,6 +32,65 @@ function hasSshClient(): boolean {
     windowsHide: true,
   });
   return !result.error && result.status === 0;
+}
+
+interface CliFixtureOptions {
+  command: string;
+  output: string;
+  version: string;
+}
+
+function writeCliFixture(dir: string, options: CliFixtureOptions): void {
+  if (process.platform === 'win32') {
+    fs.writeFileSync(
+      path.join(dir, `${options.command}.cmd`),
+      [
+        '@echo off',
+        'if "%1"=="--version" (',
+        `  echo ${options.version}`,
+        '  exit /b 0',
+        ')',
+        `echo ${options.output}`,
+        'exit /b 0',
+        '',
+      ].join('\r\n'),
+    );
+    return;
+  }
+
+  const filePath = path.join(dir, options.command);
+  fs.writeFileSync(
+    filePath,
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "--version" ]; then',
+      `  echo '${options.version}'`,
+      '  exit 0',
+      'fi',
+      `echo '${options.output}'`,
+      'exit 0',
+      '',
+    ].join('\n'),
+  );
+  fs.chmodSync(filePath, 0o755);
+}
+
+function withFixturePath(
+  command: CliFixtureOptions,
+  run: (env: NodeJS.ProcessEnv) => void,
+): void {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-hermes-runtime-cli-'));
+  try {
+    writeCliFixture(dir, command);
+    const fixturePath = `${dir}${path.delimiter}${process.env.PATH ?? process.env.Path ?? ''}`;
+    run({
+      ...process.env,
+      PATH: fixturePath,
+      Path: fixturePath,
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 describe('Hermes runtime backend live smoke runner', () => {
@@ -176,5 +238,98 @@ describe('Hermes runtime backend live smoke runner', () => {
     ]);
     expect(raw).not.toContain(host);
     expect(result.output).toContain('<configured-host>');
+  });
+
+  it('keeps managed remote backend smokes blocked unless explicitly allowed', () => {
+    withFixturePath(
+      { command: 'modal', output: 'modal-profile secret-modal-profile', version: 'modal 1.0.0' },
+      (env) => {
+        const result = runHermesRuntimeBackendSmoke({
+          backendId: 'modal',
+          env: {
+            ...env,
+            MODAL_PROFILE: 'secret-modal-profile',
+          },
+          now: () => new Date('2026-05-31T10:18:00.000Z'),
+        });
+
+        expect(result).toMatchObject({
+          backendId: 'modal',
+          command: 'modal',
+          exitCode: null,
+          ok: false,
+          status: 'blocked',
+        });
+        expect(result.output).toContain('CODEBUDDY_HERMES_ALLOW_MODAL_SMOKE=true');
+      },
+    );
+  });
+
+  it('redacts managed remote smoke command output', () => {
+    const cases = [
+      {
+        allowKey: 'CODEBUDDY_HERMES_ALLOW_MODAL_SMOKE',
+        backendId: 'modal',
+        command: 'modal',
+        config: { MODAL_PROFILE: 'secret-modal-profile' },
+        expectedArgs: ['profile', 'current'],
+        output: 'modal-profile secret-modal-profile',
+        placeholder: '<modal-smoke-output-redacted>',
+        secret: 'secret-modal-profile',
+        version: 'modal 1.0.0',
+      },
+      {
+        allowKey: 'CODEBUDDY_HERMES_ALLOW_DAYTONA_SMOKE',
+        backendId: 'daytona',
+        command: 'daytona',
+        config: { DAYTONA_API_KEY: 'secret-daytona-key', DAYTONA_PROFILE: 'secret-daytona-profile' },
+        expectedArgs: ['profile', 'list'],
+        output: 'daytona-profile secret-daytona-key secret-daytona-profile',
+        placeholder: '<daytona-smoke-output-redacted>',
+        secret: 'secret-daytona-key',
+        version: 'daytona 1.0.0',
+      },
+      {
+        allowKey: 'CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE',
+        backendId: 'vercel-sandbox',
+        command: 'vercel',
+        config: { VERCEL_TOKEN: 'secret-vercel-token' },
+        expectedArgs: ['whoami'],
+        output: 'vercel-user secret-vercel-token',
+        placeholder: '<vercel-smoke-output-redacted>',
+        secret: 'secret-vercel-token',
+        version: 'Vercel CLI 1.0.0',
+      },
+    ] as const;
+
+    for (const item of cases) {
+      withFixturePath(
+        { command: item.command, output: item.output, version: item.version },
+        (env) => {
+          const result = runHermesRuntimeBackendSmoke({
+            backendId: item.backendId,
+            env: {
+              ...env,
+              ...item.config,
+              [item.allowKey]: 'true',
+            },
+            now: () => new Date('2026-05-31T10:19:00.000Z'),
+          });
+          const raw = JSON.stringify(result);
+
+          expect(result).toMatchObject({
+            backendId: item.backendId,
+            command: item.command,
+            exitCode: 0,
+            ok: true,
+            status: 'passed',
+          });
+          expect(result.args).toEqual(item.expectedArgs);
+          expect(result.stdout).toBe(item.placeholder);
+          expect(result.output).toBe(item.placeholder);
+          expect(raw).not.toContain(item.secret);
+        },
+      );
+    }
   });
 });
