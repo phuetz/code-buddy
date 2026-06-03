@@ -368,8 +368,9 @@ that proposes higher-order user-model observations — still **review-gated** (p
 
 #### GAP-12 · Serverless/remote terminal & research-script backends — OPEN
 Sandbox supports local + Docker + OS (`src/security/sandbox.ts`, `method: none|firejail|docker|native`);
-the research-script runner is local-spawn only. `ResearchScriptSandboxProvider` declares `remote`/`wsl`
-(unimplemented); Daytona/Modal/Vercel not ported.
+the research-script runner now covers local execution plus Docker/WSL spawn translation and named
+Daytona/Vercel Sandbox CLI-backed translations. `remote` is retained as the legacy Daytona alias;
+Modal SDK execution and true remote artifact sync/live provider execution are still open.
 - **Anchors:** `src/security/` sandbox registry (`SandboxBackendInterface`), `src/agent/autonomous/`
   research-script runner (`runMaterializedResearchScriptJob`, `research-script-job-artifact.ts`).
 - **Accept:** a research-script job runs in Docker/WSL (and a remote provider) writing into the

@@ -309,7 +309,7 @@ The gap is mainly product integration and durability:
 12. Add sandboxed "research script" runner.
     - Use current Node/PowerShell/Python environment as a controlled local
       executor first.
-    - Later add Docker/WSL/remote sandbox providers.
+    - Later add full remote artifact sync/live cloud execution.
     - Acceptance: script runs write into a run-specific artifact folder.
     - Status: first local pass implemented. `materializeResearchScriptJobArtifact`
       creates the run-specific artifact folder without executing network
@@ -320,7 +320,11 @@ The gap is mainly product integration and durability:
       jobs with spawn-without-shell, executable allowlist, minimal inherited
       environment, output/log/summary capture, timeout handling, and a
       default refusal for network-enabled policies unless the caller opts in.
-      Docker/WSL/remote isolation remains future work.
+      The runner also has Docker/WSL spawn translation plus `remote`/`daytona`
+      Daytona CLI translation and `vercel-sandbox` Vercel Sandbox CLI
+      translation, each covered by runner tests. Full remote artifact
+      upload/download, live cloud account execution, and Modal SDK execution
+      remain future work.
 
 13. Add OSINT/lead discovery workflow template.
     - Inputs: public search query, region, target role, allowed sources,

@@ -3,7 +3,14 @@ import type { AgentRunArtifact } from './agent-run-contract.js';
 export const RESEARCH_SCRIPT_JOB_SCHEMA_VERSION = 1;
 
 export type ResearchScriptLanguage = 'javascript' | 'python' | 'shell' | 'typescript';
-export type ResearchScriptSandboxProvider = 'docker' | 'local' | 'manual_review' | 'remote' | 'wsl';
+export type ResearchScriptSandboxProvider =
+  | 'daytona'
+  | 'docker'
+  | 'local'
+  | 'manual_review'
+  | 'remote'
+  | 'vercel-sandbox'
+  | 'wsl';
 export type ResearchScriptNetworkPolicy = 'allowlist_only' | 'disabled' | 'https_only_public_web';
 export type ResearchScriptWritePolicy = 'artifact_dir_only' | 'output_path_only';
 export type ResearchScriptCleanupPolicy = 'delete_tmp_keep_outputs' | 'keep_all_artifacts' | 'manual_review';
@@ -35,6 +42,7 @@ export interface ResearchScriptJobSandboxPolicy {
   pageBudget: number;
   provider: ResearchScriptSandboxProvider;
   stopOn: string[];
+  target: string | null;
   timeoutMs: number;
   writes: ResearchScriptWritePolicy;
 }
@@ -127,6 +135,7 @@ export function renderResearchScriptJobReadme(job: ResearchScriptJobArtifact): s
     `Goal: ${job.goal}`,
     `Language: ${job.language}`,
     `Sandbox: ${job.sandboxPolicy.provider}`,
+    ...(job.sandboxPolicy.target ? [`Target: ${job.sandboxPolicy.target}`] : []),
     `Network: ${job.sandboxPolicy.network}`,
     `Writes: ${job.sandboxPolicy.writes}`,
     `Timeout: ${job.sandboxPolicy.timeoutMs}ms`,
@@ -194,6 +203,7 @@ function buildSandboxPolicy(policy: Partial<ResearchScriptJobSandboxPolicy> | un
     stopOn: normalizeStringArray(policy?.stopOn).length > 0
       ? normalizeStringArray(policy?.stopOn)
       : DEFAULT_STOP_REASONS,
+    target: normalizeText(policy?.target) || null,
     cleanup: policy?.cleanup ?? 'keep_all_artifacts',
   };
 }

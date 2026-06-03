@@ -297,6 +297,16 @@ Sandbox maps to the official `sandbox` CLI, including
 for state snapshots. `buddy hermes runtime-smoke local --json` runs a real local
 subprocess smoke for the selected backend.
 
+Research-script job artifacts can now select `sandboxPolicy.provider` values
+`local`, `docker`, `wsl`, `remote`, `daytona`, or `vercel-sandbox`.
+`remote` remains a Daytona alias for backward compatibility; `vercel-sandbox`
+uses the documented `sandbox exec --env KEY=VALUE <sandbox_id> <command>
+[...args]` CLI shape. Set `sandboxPolicy.target` to the existing remote
+workspace or sandbox id; the runner falls back to the job id only for legacy
+artifacts. These provider paths are still runner-level command translations;
+full remote artifact upload/download and live configured-account execution
+remain guarded follow-up work.
+
 `buddy hermes hooks [--json]` prints the canonical Hermes-style lifecycle
 hook manifest. It maps Code Buddy's existing user/tool hooks onto
 `before_tool_call`, `after_tool_call`, `before_memory_write`,

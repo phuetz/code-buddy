@@ -19,9 +19,9 @@ Verification: core typecheck PASS · Cowork typecheck PASS · 8 new/changed test
 | GAP-9 recall FTS5 trigram + snippets | PARTIAL | ✅ **DONE** | trigram tokenizer + rebuild + `snippet()` highlight + renderer `<mark>` |
 | GAP-10 memory provider adapters + selector | OPEN | ✅ **DONE** | 3 network adapters w/ local fallback, registry, env, Cowork selector |
 | GAP-11 LLM dialectic over user model | OPEN | ✅ **DONE** | `runUserDialecticInference` proposes *pending*, privacy-screened, `user-model analyze` |
-| GAP-12 remote terminal / research-script backends | OPEN | 🟡 **DONE (core scope)** | local/docker/wsl + guards + artifact folder; true *remote* provider unimplemented |
+| GAP-12 remote terminal / research-script backends | OPEN | 🟡 **DONE (core scope)** | local/docker/wsl + Daytona/Vercel CLI-backed runner translations + guards + artifact folder; full remote artifact sync/live cloud execution still open |
 
-**Score: 11 fully done · GAP-12 done minus the remote backend.**
+**Score: 11 fully done · GAP-12 done minus full remote artifact sync/live cloud execution.**
 Every durable mutation reviewed keeps the review-gate (user-model proposals → `accept --by`,
 lessons provenance). Typecheck + the touched tests are green.
 
@@ -108,11 +108,17 @@ proposes higher-order observations, each privacy-screened (`screenUserModelConte
 automatic per-turn pass.
 
 **GAP-12 🟡 DONE (core scope)** — `src/agent/research-script-job-runner.ts` now accepts
-`local|docker|wsl`: Docker maps language→image, mounts `-v cwd:/workspace`, applies `--network none`
-when sandbox network is disabled, injects env; WSL translates paths via `toWslPath()`. Allowlist /
-network-refusal guards and the run artifact folder are preserved. 5 tests assert the spawn-arg
-translation. *Gap:* the declared **remote** provider (Daytona/Modal/Vercel) is **not implemented**, and
-Docker/WSL are tested only at the spawn-arg level (no live execution).
+`local|docker|wsl|remote|daytona|vercel-sandbox`: Docker maps language→image, mounts
+`-v cwd:/workspace`, applies `--network none` when sandbox network is disabled, injects env; WSL
+translates paths via `toWslPath()`. `remote` remains the legacy Daytona alias, `daytona` maps to
+`daytona exec -w <target> -- env ...`, and `vercel-sandbox` maps to Vercel's documented
+`sandbox exec --env KEY=VALUE <sandbox_id> <command> [...args]` CLI shape. The optional
+`sandboxPolicy.target` carries the remote workspace/sandbox id, with `job.id` retained as a legacy
+fallback. Allowlist /
+network-refusal guards and the run artifact folder are preserved. 8 tests assert local execution,
+timeout/log capture, network refusal, and Docker/WSL/Daytona/Vercel spawn-arg translation. *Gap:* the
+remote providers are still CLI-backed command translations only; artifact upload/download, live
+configured-account execution, state reconciliation, and Modal SDK execution remain open.
 
 ---
 
@@ -141,8 +147,9 @@ Docker/WSL are tested only at the spawn-arg level (no live execution).
    without a separately-started `buddy channels` process; per-channel enablement + auth.
 
 ### P3 — Larger / external-dependency lifts
-9. **GAP-12 remote backend:** implement a real remote `ResearchScriptSandboxProvider`
-   (Daytona/Modal/Vercel) behind the same guards; add a live (or recorded) Docker execution test.
+9. **GAP-12 remote backend:** finish real remote `ResearchScriptSandboxProvider`
+   artifact sync/live execution for Daytona/Vercel and Modal SDK support behind the same guards; add
+   live provider smokes when credentials are configured.
 10. **GAP-10 live adapters:** integration tests against real Mem0/Honcho/Supermemory APIs (gated by
     keys); keep local default.
 11. **GAP-11 closer to runtime (optional):** an opt-in hook that triggers dialectic inference at
@@ -214,7 +221,7 @@ tests pass (82 new/changed core tests + 21 Cowork tests across the files below).
    `tests/server/channel-intake.test.ts`.
 
 ### Still open — P3 (external-dependency lifts, deferred)
-- **GAP-12 remote backend** (Daytona/Modal/Vercel `ResearchScriptSandboxProvider`) + live Docker test.
+- **GAP-12 remote backend** full artifact sync/live execution for Daytona/Vercel and Modal SDK support.
 - **GAP-10 live adapters** integration tests against real Mem0/Honcho/Supermemory APIs.
 - **GAP-11** optional opt-in session-end dialectic hook (still propose→accept, never auto-applied).
 

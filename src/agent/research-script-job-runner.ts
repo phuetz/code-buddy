@@ -53,8 +53,15 @@ export async function runMaterializedResearchScriptJob(
   options: RunMaterializedResearchScriptJobOptions,
 ): Promise<ResearchScriptJobRunResult> {
   const provider = job.sandboxPolicy.provider;
-  if (provider !== 'local' && provider !== 'docker' && provider !== 'wsl' && provider !== 'remote') {
-    throw new Error(`Research script runner only supports local, docker, wsl, and remote providers: ${provider}`);
+  if (
+    provider !== 'local'
+    && provider !== 'docker'
+    && provider !== 'wsl'
+    && provider !== 'remote'
+    && provider !== 'daytona'
+    && provider !== 'vercel-sandbox'
+  ) {
+    throw new Error(`Research script runner only supports local, docker, wsl, remote, daytona, and vercel-sandbox providers: ${provider}`);
   }
   if (job.sandboxPolicy.network !== 'disabled' && !options.allowNetwork) {
     throw new Error(`Research script job requires network policy ${job.sandboxPolicy.network}; pass allowNetwork to run it locally.`);
@@ -130,21 +137,10 @@ export async function runMaterializedResearchScriptJob(
       }
     }
     spawnArgs.push(wslExecutable, ...args.map(toWslPath));
-  } else if (provider === 'remote') {
-    const cleanExec = path.basename(job.command.executable).replace(/\.(exe|cmd)$/i, '');
-    spawnExecutable = 'daytona';
-    spawnArgs = [
-      'exec',
-      '-w', job.id,
-      '--',
-      'env'
-    ];
-    for (const [key, value] of Object.entries(env)) {
-      if (value !== undefined) {
-        spawnArgs.push(`${key}=${value}`);
-      }
-    }
-    spawnArgs.push(cleanExec, ...args);
+  } else if (provider === 'remote' || provider === 'daytona') {
+    ({ spawnExecutable, spawnArgs } = buildDaytonaSpawn(job, env, args));
+  } else if (provider === 'vercel-sandbox') {
+    ({ spawnExecutable, spawnArgs } = buildVercelSandboxSpawn(job, env, args));
   }
 
   const result = await spawnAndCapture(spawnExecutable, spawnArgs, {
@@ -189,6 +185,57 @@ export async function runMaterializedResearchScriptJob(
     stdoutPath: absoluteFiles.stdout,
     summaryPath: absoluteFiles.summary,
     timedOut: result.timedOut,
+  };
+}
+
+function buildDaytonaSpawn(
+  job: ResearchScriptJobArtifact,
+  env: NodeJS.ProcessEnv,
+  args: string[],
+): {
+  spawnArgs: string[];
+  spawnExecutable: string;
+} {
+  const cleanExec = path.basename(job.command.executable).replace(/\.(exe|cmd)$/i, '');
+  const spawnArgs = [
+    'exec',
+    '-w', job.sandboxPolicy.target ?? job.id,
+    '--',
+    'env',
+  ];
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined) {
+      spawnArgs.push(`${key}=${value}`);
+    }
+  }
+  spawnArgs.push(cleanExec, ...args);
+  return {
+    spawnExecutable: 'daytona',
+    spawnArgs,
+  };
+}
+
+function buildVercelSandboxSpawn(
+  job: ResearchScriptJobArtifact,
+  env: NodeJS.ProcessEnv,
+  args: string[],
+): {
+  spawnArgs: string[];
+  spawnExecutable: string;
+} {
+  const cleanExec = path.basename(job.command.executable).replace(/\.(exe|cmd)$/i, '');
+  const spawnArgs = [
+    'exec',
+  ];
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined) {
+      spawnArgs.push('--env', `${key}=${value}`);
+    }
+  }
+  spawnArgs.push(job.sandboxPolicy.target ?? job.id, cleanExec, ...args);
+  return {
+    spawnExecutable: 'sandbox',
+    spawnArgs,
   };
 }
 

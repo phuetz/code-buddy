@@ -12,7 +12,7 @@ vi.mock('child_process', async (importOriginal) => {
     ...original,
     spawn: vi.fn((...args: any[]) => {
       const command = args[0];
-      if (command === 'docker' || command === 'wsl' || command === 'daytona') {
+      if (command === 'docker' || command === 'wsl' || command === 'daytona' || command === 'sandbox') {
         (globalThis as any).__lastSpawnArgs = args;
         const mockChild: any = {
           stdout: { setEncoding: vi.fn(), on: vi.fn() },
@@ -199,7 +199,7 @@ describe('research script job runner', () => {
     expect(result.status).toBe('completed');
   });
 
-  it('translates command and arguments correctly for remote provider (daytona)', async () => {
+  it('translates command and arguments correctly for legacy remote provider (daytona alias)', async () => {
     (globalThis as any).__lastSpawnArgs = null;
 
     const job = buildResearchScriptJobArtifact({
@@ -231,6 +231,79 @@ describe('research script job runner', () => {
     expect(spawnCall[1]).toContain('research-script-remote-test');
     expect(spawnCall[1]).toContain('--');
     expect(spawnCall[1]).toContain('env');
+
+    expect(result.status).toBe('completed');
+  });
+
+  it('translates command and arguments correctly for named daytona provider', async () => {
+    (globalThis as any).__lastSpawnArgs = null;
+
+    const job = buildResearchScriptJobArtifact({
+      id: 'research-script-daytona-test',
+      goal: 'Named Daytona run test',
+      title: 'Named Daytona run test',
+      language: 'javascript',
+      inputContract: { INPUT_JSON: 'Input.' },
+      outputContract: { OUTPUT_JSON: 'Output.' },
+      sandboxPolicy: {
+        network: 'disabled',
+        provider: 'daytona',
+        target: 'sandbox-daytona-target',
+        timeoutMs: 5000,
+      },
+    });
+
+    await materializeResearchScriptJobArtifact(job, {
+      rootDir: tempDir,
+      scriptSource: 'console.log("daytona run");',
+    });
+
+    const result = await runMaterializedResearchScriptJob(job, { rootDir: tempDir });
+
+    const spawnCall = (globalThis as any).__lastSpawnArgs;
+    expect(spawnCall).toBeTruthy();
+    expect(spawnCall[0]).toBe('daytona');
+    expect(spawnCall[1]).toContain('exec');
+    expect(spawnCall[1]).toContain('-w');
+    expect(spawnCall[1]).toContain('sandbox-daytona-target');
+    expect(spawnCall[1]).toContain('--');
+    expect(spawnCall[1]).toContain('env');
+
+    expect(result.status).toBe('completed');
+  });
+
+  it('translates command and arguments correctly for vercel sandbox provider', async () => {
+    (globalThis as any).__lastSpawnArgs = null;
+
+    const job = buildResearchScriptJobArtifact({
+      id: 'research-script-vercel-test',
+      goal: 'Vercel Sandbox run test',
+      title: 'Vercel Sandbox run test',
+      language: 'javascript',
+      inputContract: { INPUT_JSON: 'Input.' },
+      outputContract: { OUTPUT_JSON: 'Output.' },
+      sandboxPolicy: {
+        network: 'disabled',
+        provider: 'vercel-sandbox',
+        target: 'sb_research_script_vercel_test',
+        timeoutMs: 5000,
+      },
+    });
+
+    await materializeResearchScriptJobArtifact(job, {
+      rootDir: tempDir,
+      scriptSource: 'console.log("vercel sandbox run");',
+    });
+
+    const result = await runMaterializedResearchScriptJob(job, { rootDir: tempDir });
+
+    const spawnCall = (globalThis as any).__lastSpawnArgs;
+    expect(spawnCall).toBeTruthy();
+    expect(spawnCall[0]).toBe('sandbox');
+    expect(spawnCall[1]).toContain('exec');
+    expect(spawnCall[1]).toContain('--env');
+    expect(spawnCall[1]).toContain('sb_research_script_vercel_test');
+    expect(spawnCall[1]).toContain('node');
 
     expect(result.status).toBe('completed');
   });
