@@ -232,8 +232,8 @@ Highlights currently documented there:
 Publication safety for docs and screenshots is guarded by:
 
 ```bash
-npm test -- tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run
-npx eslint tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
+npm test -- tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run
+npx eslint tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
 ```
 
 ---

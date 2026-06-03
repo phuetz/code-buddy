@@ -39,6 +39,7 @@ describe('public Cowork documentation discoverability', () => {
       expectLinks(markdown, doc, [
         '../docs/cowork-user-guide.md',
         '../docs/cowork-guide-fr.md',
+        '../tests/docs/public-doc-discoverability.test.ts',
         '../tests/docs/public-screenshot-privacy.test.ts',
         '../tests/docs/public-doc-links.test.ts',
       ]);
@@ -77,6 +78,7 @@ describe('public Cowork documentation discoverability', () => {
       './screenshots/55-test-runner-permission-real-flow.png',
       './screenshots/108-test-runner-computer-use-real-suite.png',
       'tests/docs/public-doc-links.test.ts',
+      'tests/docs/public-doc-discoverability.test.ts',
       'tests/docs/public-screenshot-privacy.test.ts',
     ]);
   });
