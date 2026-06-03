@@ -72,7 +72,7 @@ import. Four resolution layers, narrow → broad
 (`cowork/src/main/engine/embedded-mode.ts`):
 
 1. **`CODEBUDDY_ENGINE_PATH` env override** — used verbatim when set.
-   Example: `CODEBUDDY_ENGINE_PATH=/home/patrice/DEV/code-buddy/dist`
+   Example: `CODEBUDDY_ENGINE_PATH=/home/user/code-buddy/dist`
 2. **Packaged mode** — `<install>/resources/dist/`.
 3. **Dev (from bundle)** — `import.meta.url` of the main bundle, then
    `<bundleDir>/../../../dist/`. Stable regardless of how Electron was
@@ -85,7 +85,7 @@ import. Four resolution layers, narrow → broad
 The startup log shows which layer was used:
 
 ```
-[Main] Resolving Code Buddy engine: layer=dev-from-bundle path=/home/patrice/DEV/code-buddy/dist
+[Main] Resolving Code Buddy engine: layer=dev-from-bundle path=/home/user/code-buddy/dist
 ```
 
 ### Symptom — pi-coding-agent runner is used instead of the engine
@@ -107,7 +107,7 @@ If you see this near the top of the log:
   bypassed `buddy gui` / `npm run dev`):
 
   ```bash
-  CODEBUDDY_ENGINE_PATH=/home/patrice/DEV/code-buddy/dist \
+  CODEBUDDY_ENGINE_PATH=/home/user/code-buddy/dist \
   DISPLAY=:0 NODE_ENV=production \
     ./cowork/node_modules/electron/dist/electron \
     --no-sandbox --disable-gpu \

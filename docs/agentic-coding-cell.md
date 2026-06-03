@@ -46,7 +46,7 @@ line prompt. This keeps the autonomy explicit and reviewable.
 
 ```json
 {
-  "repo": "D:/CascadeProjects/grok-cli-weekend",
+  "repo": "<repo>",
   "task": "Fix the targeted behavior or add the bounded capability.",
   "allowedPaths": ["src/...", "tests/..."],
   "verification": ["npm run typecheck", "npm test -- tests/example.test.ts"],
@@ -652,7 +652,7 @@ an approval decision:
   "kind": "agentic-coding-approval-decision",
   "schemaVersion": 1,
   "decision": "approved",
-  "reviewer": "patrice",
+  "reviewer": "human-reviewer",
   "reason": "Preview reviewed in Cowork."
 }
 ```
