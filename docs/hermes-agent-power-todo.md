@@ -1,7 +1,7 @@
 # Hermes Agent power parity TODO
 
 Date: 2026-05-18
-Workspace: `D:\CascadeProjects\grok-cli-weekend`
+Workspace: `<code-buddy repo root>`
 Goal: make Code Buddy approach the useful power of Hermes Agent without
 becoming a Hermes fork.
 
@@ -19,7 +19,7 @@ becoming a Hermes fork.
 - Codex ChatGPT plan / remote-control controls:
   https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan
 - Manus Browser Operator: https://manus.im/docs/features/browser-operator
-- Local reference clone: `D:\CascadeProjects\_external\hermes-agent`
+- Local reference clone: `<external hermes-agent checkout>`
 - Local reviewed commit: `d725407`
 
 ## Architecture read
@@ -429,7 +429,7 @@ The gap is mainly product integration and durability:
       the agent loop.
     - Status: implemented over the existing channel layer. `CronJob.delivery`
       now supports multiple `type:id` `targets` (e.g. `telegram:123`,
-      `discord:456`, `email:ops@x.com`) in addition to the legacy single
+      `discord:456`, `email:ops@example.com`) in addition to the legacy single
       `channel`, and `CronAgentBridge.deliverResult` fans out to all targets in
       one pass through the existing `getChannelManager().send()`, surviving a
       single channel failure and reporting the delivered `channels[]`.

@@ -9,7 +9,7 @@ External reference snapshot:
 
 - Repository: `https://github.com/NousResearch/hermes-agent`
 - Public docs: `https://hermes-agent.nousresearch.com/docs/`
-- Local review clone: `D:\CascadeProjects\_external\hermes-agent`
+- Local review clone: `<external hermes-agent checkout>`
 - Reviewed commit: `d725407`
 - Latest public release seen during review: Hermes Agent v0.14.0
   (2026-05-16)
