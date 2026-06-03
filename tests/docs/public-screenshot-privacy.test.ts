@@ -15,6 +15,8 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 
 const minimumCaptureWidth = 500;
 const minimumCaptureHeight = 80;
+const minimumVisualColorBuckets = 4;
+const minimumVisualLumaStdev = 3;
 
 type SensitiveMatch = {
   file: string;
@@ -38,6 +40,10 @@ async function collectPngFiles(dir: string): Promise<string[]> {
     .filter((entry) => entry.isFile() && entry.name.endsWith('.png'))
     .map((entry) => path.join(absoluteDir, entry.name))
     .sort();
+}
+
+async function collectPublicPngFiles(): Promise<string[]> {
+  return (await Promise.all(publicScreenshotDirs.map(collectPngFiles))).flat();
 }
 
 function collectSensitiveTextMatches(file: string, text: string): SensitiveMatch[] {
@@ -155,6 +161,28 @@ function collectPngMetadataText(buffer: Buffer): string[] {
   return chunks;
 }
 
+async function getVisualSignal(imagePath: string): Promise<{ colorBuckets: number; lumaStdev: number }> {
+  const { data, info } = await sharp(imagePath)
+    .removeAlpha()
+    .resize({ width: 96, height: 96, fit: 'inside' })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const colorBuckets = new Set<string>();
+  const lumas: number[] = [];
+
+  for (let index = 0; index < data.length; index += info.channels) {
+    const red = data[index] ?? 0;
+    const green = data[index + 1] ?? 0;
+    const blue = data[index + 2] ?? 0;
+    colorBuckets.add(`${red >> 4},${green >> 4},${blue >> 4}`);
+    lumas.push((0.2126 * red) + (0.7152 * green) + (0.0722 * blue));
+  }
+
+  const mean = lumas.reduce((sum, value) => sum + value, 0) / lumas.length;
+  const variance = lumas.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / lumas.length;
+  return { colorBuckets: colorBuckets.size, lumaStdev: Math.sqrt(variance) };
+}
+
 describe('public screenshot documentation privacy', () => {
   it('keeps public QA and screenshot docs free of private account, token, and local path strings', async () => {
     const findings: SensitiveMatch[] = [];
@@ -196,7 +224,7 @@ describe('public screenshot documentation privacy', () => {
   });
 
   it('keeps tracked public PNG captures free of embedded private metadata strings', async () => {
-    const imagePaths = (await Promise.all(publicScreenshotDirs.map(collectPngFiles))).flat();
+    const imagePaths = await collectPublicPngFiles();
     const findings: SensitiveMatch[] = [];
     const metadataFindings: string[] = [];
 
@@ -227,5 +255,27 @@ describe('public screenshot documentation privacy', () => {
 
     expect(metadataFindings).toEqual([]);
     expect(findings).toEqual([]);
+  });
+
+  it('keeps tracked public PNG captures visually non-blank', async () => {
+    const imagePaths = await collectPublicPngFiles();
+    const blankFindings: string[] = [];
+
+    expect(imagePaths.length).toBeGreaterThan(0);
+
+    for (const imagePath of imagePaths) {
+      const relativePath = path.relative(repoRoot, imagePath);
+      const signal = await getVisualSignal(imagePath);
+      if (
+        signal.colorBuckets < minimumVisualColorBuckets
+        || signal.lumaStdev < minimumVisualLumaStdev
+      ) {
+        blankFindings.push(
+          `${relativePath}: expected visual signal >= ${minimumVisualColorBuckets} color buckets and ${minimumVisualLumaStdev} luma stdev, got ${signal.colorBuckets} and ${signal.lumaStdev.toFixed(2)}`,
+        );
+      }
+    }
+
+    expect(blankFindings).toEqual([]);
   });
 });
