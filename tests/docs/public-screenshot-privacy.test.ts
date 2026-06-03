@@ -96,6 +96,19 @@ function collectMarkdownImageRefs(markdown: string): string[] {
   return refs;
 }
 
+function collectMarkdownPngRefs(markdown: string): string[] {
+  const refs = new Set<string>();
+  for (const match of markdown.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g)) {
+    if (match[1]) refs.add(match[1].trim());
+  }
+  for (const match of markdown.matchAll(/<(?:a|img)\s+[^>]*(?:href|src)=["']([^"']+)["'][^>]*>/gi)) {
+    if (match[1]) refs.add(match[1].trim());
+  }
+  return [...refs]
+    .map((ref) => ref.replace(/^<|>$/g, '').split('#')[0]?.split('?')[0]?.trim() ?? '')
+    .filter((ref) => ref.endsWith('.png'));
+}
+
 function splitNullTerminatedFields(buffer: Buffer, start: number): Array<{ value: Buffer; next: number }> {
   const fields: Array<{ value: Buffer; next: number }> = [];
   let offset = start;
@@ -221,6 +234,31 @@ describe('public screenshot documentation privacy', () => {
 
     expect(unsafeRefs).toEqual([]);
     expect(missingRefs).toEqual([]);
+  });
+
+  it('keeps every tracked public PNG capture discoverable from public docs', async () => {
+    const discoverableRefs = new Set<string>();
+
+    for (const docPath of publicMarkdownDocs) {
+      const absoluteDocPath = path.join(repoRoot, docPath);
+      const docDir = path.dirname(absoluteDocPath);
+      const markdown = await fs.readFile(absoluteDocPath, 'utf8');
+      const refs = collectMarkdownPngRefs(markdown);
+
+      for (const ref of refs) {
+        if (ref.startsWith('http://') || ref.startsWith('https://') || path.isAbsolute(ref)) continue;
+        const targetPath = path.resolve(docDir, ref);
+        if (targetPath.startsWith(repoRoot)) {
+          discoverableRefs.add(path.relative(repoRoot, targetPath));
+        }
+      }
+    }
+
+    const orphanedCaptures = (await collectPublicPngFiles())
+      .map((imagePath) => path.relative(repoRoot, imagePath))
+      .filter((relativePath) => !discoverableRefs.has(relativePath));
+
+    expect(orphanedCaptures).toEqual([]);
   });
 
   it('keeps tracked public PNG captures free of embedded private metadata strings', async () => {

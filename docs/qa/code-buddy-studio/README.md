@@ -185,6 +185,32 @@ The current package build is green but not silent. Do not claim a zero-warning r
 
 ![Hermes built CLI lifecycle guard](./screenshots/109-test-runner-hermes-built-cli-real.png)
 
+## Supplemental Surface Captures
+
+These older public captures are kept discoverable for reviewers who want to inspect
+the breadth of the Cowork cockpit beyond the representative release evidence above.
+
+| Surface | Capture |
+| --- | --- |
+| Clipboard summary | [`03-clipboard-summary.png`](./screenshots/03-clipboard-summary.png) |
+| Voice overlay | [`04-voice-overlay.png`](./screenshots/04-voice-overlay.png) |
+| Orchestrator | [`06-orchestrator.png`](./screenshots/06-orchestrator.png) |
+| Fleet events | [`08-fleet-events.png`](./screenshots/08-fleet-events.png) |
+| Agent team | [`09-agent-team.png`](./screenshots/09-agent-team.png) |
+| Workflows | [`10-workflows.png`](./screenshots/10-workflows.png) |
+| Schedules | [`11-schedules.png`](./screenshots/11-schedules.png) |
+| Hooks and triggers | [`12-hooks-triggers.png`](./screenshots/12-hooks-triggers.png) |
+| Custom commands | [`13-custom-commands.png`](./screenshots/13-custom-commands.png) |
+| Bookmarks | [`14-bookmarks.png`](./screenshots/14-bookmarks.png) |
+| Activity | [`15-activity.png`](./screenshots/15-activity.png) |
+| Session insights | [`16-session-insights.png`](./screenshots/16-session-insights.png) |
+| Focus view | [`17-focus-view.png`](./screenshots/17-focus-view.png) |
+| Lesson candidates | [`18-lesson-candidates.png`](./screenshots/18-lesson-candidates.png) |
+| User model | [`19-user-model.png`](./screenshots/19-user-model.png) |
+| Spec backlog | [`20-spec-backlog.png`](./screenshots/20-spec-backlog.png) |
+| Buddy companion | [`21-buddy-companion.png`](./screenshots/21-buddy-companion.png) |
+| Permission rules | [`25-permission-rules.png`](./screenshots/25-permission-rules.png) |
+
 ## Re-run Public Documentation Guards
 
 Run these before publishing new public documentation or captures:
