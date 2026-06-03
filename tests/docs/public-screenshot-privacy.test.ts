@@ -4,47 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
+import {
+  publicMarkdownDocs,
+  publicPrivacyDocs,
+  publicScreenshotDirs,
+} from './public-doc-fixtures.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
-
-const publicDocPaths = [
-  'CHANGELOG.md',
-  'CLAUDE.md',
-  'README.md',
-  'cowork/ARCHITECTURE.md',
-  'cowork/README.md',
-  'cowork/README_zh.md',
-  'cowork/RUNNER_AUDIT.md',
-  'docs/agents.md',
-  'docs/channels.md',
-  'docs/commands.md',
-  'docs/configuration.md',
-  'docs/context-engine.md',
-  'docs/cowork-guide-fr.md',
-  'docs/cowork-user-guide.md',
-  'docs/development.md',
-  'docs/fleet-guide.md',
-  'docs/getting-started.md',
-  'docs/infrastructure.md',
-  'docs/providers.md',
-  'docs/reasoning.md',
-  'docs/reprise/cli-smoke.md',
-  'docs/reprise/fleet-minimal.md',
-  'docs/screenshots/README.md',
-  'docs/security.md',
-  'docs/tools-reference.md',
-  'docs/qa/code-buddy-studio/README.md',
-  'docs/qa/code-buddy-studio/feature-qa.md',
-  'docs/qa/code-buddy-studio/feature-qa-report.json',
-  'docs/qa/code-buddy-studio/overnight-qa-campaign.md',
-  'docs/qa/code-buddy-studio/overnight-test-datasets.json',
-];
-
-const screenshotDirs = [
-  'docs/screenshots',
-  'docs/qa/code-buddy-studio/screenshots',
-];
 
 const minimumCaptureWidth = 500;
 const minimumCaptureHeight = 80;
@@ -192,7 +159,7 @@ describe('public screenshot documentation privacy', () => {
   it('keeps public QA and screenshot docs free of private account, token, and local path strings', async () => {
     const findings: SensitiveMatch[] = [];
 
-    for (const publicDocPath of publicDocPaths) {
+    for (const publicDocPath of publicPrivacyDocs) {
       const absolutePath = path.join(repoRoot, publicDocPath);
       const content = await fs.readFile(absolutePath, 'utf8');
       findings.push(...collectSensitiveTextMatches(publicDocPath, content));
@@ -202,22 +169,10 @@ describe('public screenshot documentation privacy', () => {
   });
 
   it('keeps screenshot references relative and present in GitHub-rendered docs', async () => {
-    const docsWithScreenshotRefs = [
-      'README.md',
-      'docs/getting-started.md',
-      'docs/cowork-guide-fr.md',
-      'docs/cowork-user-guide.md',
-      'docs/screenshots/README.md',
-      'docs/qa/code-buddy-studio/README.md',
-      'docs/qa/code-buddy-studio/feature-qa.md',
-      'docs/qa/code-buddy-studio/overnight-qa-campaign.md',
-      'cowork/README.md',
-      'cowork/README_zh.md',
-    ];
     const missingRefs: string[] = [];
     const unsafeRefs: string[] = [];
 
-    for (const docPath of docsWithScreenshotRefs) {
+    for (const docPath of publicMarkdownDocs) {
       const absoluteDocPath = path.join(repoRoot, docPath);
       const docDir = path.dirname(absoluteDocPath);
       const markdown = await fs.readFile(absoluteDocPath, 'utf8');
@@ -241,7 +196,7 @@ describe('public screenshot documentation privacy', () => {
   });
 
   it('keeps tracked public PNG captures free of embedded private metadata strings', async () => {
-    const imagePaths = (await Promise.all(screenshotDirs.map(collectPngFiles))).flat();
+    const imagePaths = (await Promise.all(publicScreenshotDirs.map(collectPngFiles))).flat();
     const findings: SensitiveMatch[] = [];
     const metadataFindings: string[] = [];
 

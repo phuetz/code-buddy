@@ -2,40 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { publicMarkdownDocs } from './public-doc-fixtures.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
-
-const publicDocs = [
-  'CHANGELOG.md',
-  'CLAUDE.md',
-  'README.md',
-  'cowork/ARCHITECTURE.md',
-  'cowork/README.md',
-  'cowork/README_zh.md',
-  'cowork/RUNNER_AUDIT.md',
-  'docs/agents.md',
-  'docs/channels.md',
-  'docs/commands.md',
-  'docs/configuration.md',
-  'docs/context-engine.md',
-  'docs/cowork-guide-fr.md',
-  'docs/cowork-user-guide.md',
-  'docs/development.md',
-  'docs/fleet-guide.md',
-  'docs/getting-started.md',
-  'docs/infrastructure.md',
-  'docs/providers.md',
-  'docs/reasoning.md',
-  'docs/reprise/cli-smoke.md',
-  'docs/reprise/fleet-minimal.md',
-  'docs/screenshots/README.md',
-  'docs/security.md',
-  'docs/tools-reference.md',
-  'docs/qa/code-buddy-studio/README.md',
-  'docs/qa/code-buddy-studio/feature-qa.md',
-  'docs/qa/code-buddy-studio/overnight-qa-campaign.md',
-];
 
 type LinkFinding = {
   doc: string;
@@ -91,7 +61,7 @@ describe('public documentation links', () => {
   it('keeps GitHub-visible local links present with exact path casing', async () => {
     const findings: LinkFinding[] = [];
 
-    for (const doc of publicDocs) {
+    for (const doc of publicMarkdownDocs) {
       const absoluteDocPath = path.join(repoRoot, doc);
       const docContent = await fs.readFile(absoluteDocPath, 'utf8');
       const docDir = path.dirname(absoluteDocPath);

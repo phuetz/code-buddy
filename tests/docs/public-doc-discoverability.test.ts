@@ -28,6 +28,7 @@ describe('public Cowork documentation discoverability', () => {
     const script = packageJson.scripts?.['test:docs-public'] ?? '';
 
     expectLinks(script, 'package.json test:docs-public', [
+      'tests/docs/public-doc-fixtures.ts',
       'tests/docs/public-doc-discoverability.test.ts',
       'tests/docs/public-doc-links.test.ts',
       'tests/docs/public-qa-evidence-integrity.test.ts',
