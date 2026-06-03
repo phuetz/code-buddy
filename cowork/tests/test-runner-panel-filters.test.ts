@@ -46,6 +46,13 @@ describe('TestRunnerPanel catalog filters', () => {
     expect(source).toContain('setOutput((prev) => prev + stripAnsi(payload.text))');
   });
 
+  it('keeps functional chat coverage tied to the IPC runner capture', () => {
+    const source = fs.readFileSync(panelPath, 'utf8');
+    expect(source).toContain('Prompt rapide + chat IPC runner verifie');
+    expect(source).toContain('59-test-runner-cowork-ipc-chat.png');
+    expect(source).not.toContain('28-chat-ui-mock.png');
+  });
+
   it('ships localized filter labels for all supported locales', () => {
     for (const localePath of localePaths) {
       const locale = JSON.parse(fs.readFileSync(localePath, 'utf8')) as {

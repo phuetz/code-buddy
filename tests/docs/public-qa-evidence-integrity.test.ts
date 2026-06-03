@@ -13,6 +13,7 @@ const screenshotPrefix = 'docs/qa/code-buddy-studio/screenshots/';
 type QaReportResult = {
   slug?: unknown;
   label?: unknown;
+  action?: unknown;
   ok?: unknown;
   verification?: {
     ok?: unknown;
@@ -136,6 +137,22 @@ describe('public QA evidence report integrity', () => {
     }
 
     expect(findings).toEqual([]);
+  });
+
+  it('keeps the public Chat UI row backed by the real IPC runner proof', async () => {
+    const report = await readQaReport();
+    const results = asResults(report);
+    const chatResult = results.find((result) => result.label === 'Chat UI');
+
+    expect(chatResult, 'Chat UI result must exist').toBeDefined();
+    expect(chatResult?.slug).toBe('28-chat-ui-ipc');
+    expect(chatResult?.action).toBe('launch Cowork / IPC chat flow from Tests & executions');
+    expect(chatResult?.verification?.proof).toContain('Cowork / IPC chat flow');
+    expect(chatResult?.verification?.proof).toContain('OK-CHAT-IPC continue');
+    expect(chatResult?.verification?.proof).not.toContain('Mock response to');
+    expect(chatResult?.screenshot).toBe(
+      'docs/qa/code-buddy-studio/screenshots/59-test-runner-cowork-ipc-chat.png',
+    );
   });
 
   it('keeps every machine-readable screenshot path relative, present, and exact-case', async () => {

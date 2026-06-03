@@ -119,6 +119,8 @@ The current package build is green but not silent. Do not claim a zero-warning r
 
 ![Tests and executions window](./screenshots/30-test-runner-window.png)
 
+![Cowork IPC chat flow](./screenshots/59-test-runner-cowork-ipc-chat.png)
+
 ![Permission real flow](./screenshots/55-test-runner-permission-real-flow.png)
 
 ![Workflow bridge integration](./screenshots/54-test-runner-workflow-integration.png)

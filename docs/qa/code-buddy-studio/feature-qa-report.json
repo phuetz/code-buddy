@@ -93,7 +93,7 @@
     "testRunnerFleetRoutingOrchestrationBundle": "passed; direct npm test -- tests/fleet/task-router.test.ts tests/fleet/saga-store.test.ts tests/fleet/result-aggregator-consensus.test.ts tests/fleet/privacy-lint.test.ts tests/fleet/peer-chat-stream.test.ts tests/fleet/peer-chat-client-factory.test.ts tests/fleet/fleet-registry.test.ts tests/fleet/fleet-listener.test.ts tests/fleet/fleet-handler.test.ts tests/fleet/fleet-chat-helper.test.ts tests/fleet/dispatch-profile.test.ts tests/fleet/cost-tracker.test.ts tests/fleet/compaction-bridge.test.ts tests/fleet/capability-registry.test.ts tests/fleet/autonomous-tick-broadcaster.test.ts --run returned 15 files and 357 tests passed; after npm run build:e2e, npx playwright test e2e/test-runner-fleet-routing-orchestration-bundle.spec.ts --reporter=list --timeout=280000 launched Fleet / routing orchestration bundle from the UI and reported 357 ok / 0 ko; screenshot 85",
     "mcpRealTransportDirect": "passed; npm test -- tests/mcp/mcp-stdio-real-fixture.test.ts tests/mcp/mcp-http-real-fixture.test.ts tests/mcp/mcp-streamable-http-limitation.test.ts --run; 3 files, 3 tests covering real MCP stdio fixture, real HTTP JSON-RPC fixture, and explicit streamable_http fail-closed behavior",
     "testRunnerMcpRealTransport": "passed; npx playwright test e2e/test-runner-mcp-real-transport.spec.ts --reporter=list --timeout=200000 after npm run build:e2e; UI row MCP / real transport suite is visible, launches real MCP transport fixtures, and reports 3 ok / 0 ko; screenshot 58",
-    "testRunnerCoworkIpcChat": "passed; npx playwright test e2e/test-runner-cowork-ipc-chat.spec.ts --reporter=list --timeout=220000 after npm run build:e2e; UI row Cowork / IPC chat flow is visible, launches e2e/chat-flow.spec.ts, starts and continues a chat through Electron IPC, and reports 1 ok / 0 ko; screenshot 59",
+    "testRunnerCoworkIpcChat": "passed; retested 2026-06-03T20:30:39+02:00 after npm run build:e2e; npx playwright test e2e/test-runner-cowork-ipc-chat.spec.ts --reporter=list --timeout=220000 passed; UI row Cowork / IPC chat flow is visible, launches e2e/chat-flow.spec.ts, starts and continues a chat through Electron IPC, and reports 1 ok / 0 ko; screenshot 59",
     "testRunnerCompanionDeterministicPanel": "passed; npx playwright test e2e/test-runner-companion-deterministic-panel.spec.ts --reporter=list --timeout=340000 after npm run build:e2e; UI row Cowork / companion deterministic panel is visible, launches e2e/companion-panel.spec.ts, drives project setup, pulse, self-state, camera, voice diagnostics, missions and improvement loop, and reports 1 ok / 0 ko; screenshot 60",
     "testRunnerPanelUsageDepth": "passed; direct npx playwright test e2e/panel-usage-depth.spec.ts --reporter=list --timeout=220000 returned 2 tests passed; after npm run build:e2e, npx playwright test e2e/test-runner-panel-usage-depth.spec.ts --reporter=list --timeout=320000 launched the row Cowork / panel usage depth from the UI and reported 2 ok / 0 ko; screenshot 61",
     "testRunnerFeatureCompletionDepth": "passed; direct npx playwright test e2e/feature-completion-depth.spec.ts --reporter=list --timeout=260000 returned 4 tests passed; after npm run build:e2e, npx playwright test e2e/test-runner-feature-completion-depth.spec.ts --reporter=list --timeout=440000 launched the row Cowork / feature completion depth from the UI and reported 4 ok / 0 ko; screenshot 62",
@@ -488,16 +488,16 @@
       "screenshot": "docs/qa/code-buddy-studio/screenshots/27-quick-prompts.png"
     },
     {
-      "slug": "28-chat-ui-mock",
+      "slug": "28-chat-ui-ipc",
       "label": "Chat UI",
-      "action": "fill testid:welcome-prompt-input and press Enter",
+      "action": "launch Cowork / IPC chat flow from Tests & executions",
       "ok": true,
       "verification": {
         "ok": true,
-        "proof": "text:Mock response to"
+        "proof": "text:Cowork / IPC chat flow, text:1 ok / 0 ko, text:OK-CHAT-IPC start, text:OK-CHAT-IPC continue"
       },
       "error": null,
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/28-chat-ui-mock.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/59-test-runner-cowork-ipc-chat.png"
     },
     {
       "slug": "29-test-runner-window",

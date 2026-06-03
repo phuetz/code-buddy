@@ -116,8 +116,8 @@ const functionalCoverage: FunctionalCoverageItem[] = [
     surface: 'Welcome view',
     level: 'used',
     status: 'passed',
-    proof: 'Prompt rapide + lancement de chat preview',
-    evidence: '27-quick-prompts.png, 28-chat-ui-mock.png',
+    proof: 'Prompt rapide + chat IPC runner verifie',
+    evidence: '27-quick-prompts.png, 59-test-runner-cowork-ipc-chat.png',
   },
   {
     id: 'shortcuts',
