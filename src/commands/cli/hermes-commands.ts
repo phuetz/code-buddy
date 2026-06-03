@@ -2753,18 +2753,36 @@ export function registerHermesCommands(program: Command): void {
     .option('--max-artifact-bytes <bytes>', 'max redacted artifact preview bytes for the run export probe', '4000')
     .option('--json', 'output JSON')
     .action((queryParts: string[] | undefined, options: HermesTrajectoriesStatusOptions) => {
+      const query = (queryParts ?? []).join(' ');
+      const maxArtifactBytes = parseOptionalPositiveInteger(options.maxArtifactBytes, '--max-artifact-bytes');
+      const commandParts = ['buddy hermes trajectories status'];
+      if (query.trim()) {
+        commandParts.push('<query>');
+      }
+      if (options.runId?.trim()) {
+        commandParts.push(`--run-id ${options.runId.trim()}`);
+      }
+      if (options.includeArtifactContent === true) {
+        commandParts.push('--include-artifact-content');
+      }
+      if (String(maxArtifactBytes) !== '4000') {
+        commandParts.push(`--max-artifact-bytes ${maxArtifactBytes}`);
+      }
+      commandParts.push('--json');
+      const command = commandParts.join(' ');
       const report = buildHermesTrajectoryCompatibilityReport({
         includeArtifactContent: options.includeArtifactContent === true,
-        maxArtifactBytes: parseOptionalPositiveInteger(options.maxArtifactBytes, '--max-artifact-bytes'),
-        query: (queryParts ?? []).join(' '),
+        maxArtifactBytes,
+        query,
         runId: options.runId,
       });
 
       if (options.json) {
-        console.log(stableJson(report));
+        console.log(stableJson({ command, ...report }));
         return;
       }
 
+      console.log(`Command: ${command}`);
       console.log(renderHermesTrajectoryCompatibilityReport(report));
     });
 

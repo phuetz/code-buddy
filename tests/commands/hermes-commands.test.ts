@@ -1818,6 +1818,7 @@ describe('Hermes CLI commands', () => {
 
       const raw = getLogOutput();
       const output = JSON.parse(raw) as {
+        command: string;
         kind: string;
         ok: boolean;
         capabilities: Array<{ id: string; status: string }>;
@@ -1834,6 +1835,7 @@ describe('Hermes CLI commands', () => {
         };
       };
 
+      expect(output.command).toBe(`buddy hermes trajectories status <query> --run-id ${runId} --json`);
       expect(output.kind).toBe('hermes_trajectory_compatibility_report');
       expect(output.ok).toBe(true);
       expect(output.capabilities).toEqual(
@@ -1871,6 +1873,7 @@ describe('Hermes CLI commands', () => {
     await program.parseAsync(['node', 'test', 'hermes', 'trajectories', 'status']);
 
     const output = getLogOutput();
+    expect(output).toContain('Command: buddy hermes trajectories status --json');
     expect(output).toContain('Commands:');
     expect(output).toContain('buddy run trajectory-export <run-id> --json');
     expect(output).toContain('buddy hermes trajectories status --run-id <run-id> --json');
