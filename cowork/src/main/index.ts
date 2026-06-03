@@ -136,7 +136,6 @@ import { getSandboxAdapter, shutdownSandbox } from './sandbox/sandbox-adapter';
 import { SandboxSync } from './sandbox/sandbox-sync';
 import { WSLBridge } from './sandbox/wsl-bridge';
 import { LimaBridge } from './sandbox/lima-bridge';
-import { getSandboxBootstrap } from './sandbox/sandbox-bootstrap';
 import type { MCPServerConfig } from './mcp/mcp-manager';
 import type {
   ClientEvent,
@@ -149,6 +148,7 @@ import { remoteManager, type AgentExecutor } from './remote/remote-manager';
 import { remoteConfigStore } from './remote/remote-config-store';
 import type { GatewayConfig, FeishuChannelConfig, ChannelType } from './remote/types';
 import { startNavServer, stopNavServer } from './nav-server';
+
 import {
   ScheduledTaskManager,
   type ScheduledTask,
@@ -225,6 +225,11 @@ import {
 } from '../../../src/providers/codex-oauth';
 import Module from 'module';
 import { createRequire } from 'module';
+
+async function getLazySandboxBootstrap() {
+  const mod = await import('./sandbox/sandbox-bootstrap');
+  return mod.getSandboxBootstrap();
+}
 
 // Intercept Module resolution for better-sqlite3 to redirect from the root node_modules to cowork's node_modules.
 // Because the core database modules are resolved relative to the dist/ directory, Node's normal resolution walks up
@@ -1179,7 +1184,7 @@ async function startSandboxBootstrap(): Promise<void> {
     return;
   }
 
-  const bootstrap = getSandboxBootstrap();
+  const bootstrap = await getLazySandboxBootstrap();
 
   // Skip if already complete
   if (bootstrap.isComplete()) {
@@ -6682,7 +6687,7 @@ ipcMain.handle('sandbox.retryLimaSetup', async () => {
   }
 
   try {
-    const bootstrap = getSandboxBootstrap();
+    const bootstrap = await getLazySandboxBootstrap();
     bootstrap.setProgressCallback((progress) => {
       sendToRenderer({
         type: 'sandbox.progress',
@@ -6709,7 +6714,7 @@ ipcMain.handle('sandbox.retryLimaSetup', async () => {
 // Generic retry setup for both WSL and Lima
 ipcMain.handle('sandbox.retrySetup', async () => {
   try {
-    const bootstrap = getSandboxBootstrap();
+    const bootstrap = await getLazySandboxBootstrap();
     bootstrap.setProgressCallback((progress) => {
       sendToRenderer({
         type: 'sandbox.progress',

@@ -16,7 +16,6 @@ import { log, logWarn, logError } from '../utils/logger';
 import { WSLBridge, pathConverter } from './wsl-bridge';
 import { LimaBridge, limaPathConverter } from './lima-bridge';
 import { NativeExecutor } from './native-executor';
-import { getSandboxBootstrap } from './sandbox-bootstrap';
 import { configStore } from '../config/config-store';
 import type {
   SandboxConfig,
@@ -45,6 +44,11 @@ interface SandboxState {
   limaStatus?: LimaStatus;
   initialized: boolean;
   workspacePath: string;
+}
+
+async function getLazySandboxBootstrap() {
+  const mod = await import('./sandbox-bootstrap');
+  return mod.getSandboxBootstrap();
 }
 
 /**
@@ -162,7 +166,7 @@ export class SandboxAdapter implements SandboxExecutor {
     log('[SandboxAdapter] Checking WSL2 availability...');
 
     // Try to use cached status from bootstrap first (much faster)
-    const bootstrap = getSandboxBootstrap();
+    const bootstrap = await getLazySandboxBootstrap();
     let wslStatus = bootstrap.getCachedWSLStatus();
 
     if (wslStatus) {
@@ -251,7 +255,7 @@ export class SandboxAdapter implements SandboxExecutor {
     log('[SandboxAdapter] Checking Lima availability...');
 
     // Try to use cached status from bootstrap first (much faster)
-    const bootstrap = getSandboxBootstrap();
+    const bootstrap = await getLazySandboxBootstrap();
     let limaStatus = bootstrap.getCachedLimaStatus();
 
     if (limaStatus) {
@@ -626,7 +630,7 @@ export class SandboxAdapter implements SandboxExecutor {
       await this.shutdown();
 
       // Also reset bootstrap cache so it will re-check WSL/Lima status
-      const bootstrap = getSandboxBootstrap();
+      const bootstrap = await getLazySandboxBootstrap();
       bootstrap.reset();
 
       const initConfig = config || this._config || { workspacePath: this.state.workspacePath };
