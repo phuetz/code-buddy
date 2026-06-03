@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { publicMarkdownDocs } from './public-doc-fixtures.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -18,6 +19,38 @@ function expectLinks(markdown: string, doc: string, links: string[]): void {
 function expectText(markdown: string, doc: string, snippets: string[]): void {
   const missing = snippets.filter((snippet) => !markdown.includes(snippet));
   expect(missing, `${doc} is missing public usage text`).toEqual([]);
+}
+
+function stripLinkTarget(rawHref: string): string {
+  return rawHref
+    .trim()
+    .replace(/^<|>$/g, '')
+    .split('#')[0]
+    ?.split('?')[0]
+    ?.trim() ?? '';
+}
+
+function isExternalOrAnchor(href: string): boolean {
+  return href === ''
+    || href.startsWith('#')
+    || /^[a-z][a-z0-9+.-]*:/i.test(href);
+}
+
+function toRepoRelative(absolutePath: string): string {
+  return path.relative(repoRoot, absolutePath).split(path.sep).join('/');
+}
+
+function collectLocalRefs(markdown: string): string[] {
+  const refs = new Set<string>();
+  for (const match of markdown.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g)) {
+    if (match[1]) refs.add(match[1]);
+  }
+  for (const match of markdown.matchAll(/<(?:a|img)\s+[^>]*(?:href|src)=["']([^"']+)["'][^>]*>/gi)) {
+    if (match[1]) refs.add(match[1]);
+  }
+  return [...refs]
+    .map(stripLinkTarget)
+    .filter((href) => !isExternalOrAnchor(href));
 }
 
 describe('public Cowork documentation discoverability', () => {
@@ -42,8 +75,18 @@ describe('public Cowork documentation discoverability', () => {
     const readme = await readPublicDoc('README.md');
 
     expectLinks(readme, 'README.md', [
+      'docs/troubleshooting.md',
       'docs/cowork-user-guide.md',
       'docs/cowork-guide-fr.md',
+      'docs/channel-a2a-bridge.md',
+      'docs/computer-use-application-profiles.md',
+      'docs/spec-pipeline.md',
+      'docs/cowork-pilotability-matrix.md',
+      'docs/hermes-agent-strategy.md',
+      'docs/code-buddy-hermes-gap-analysis.md',
+      'docs/code-buddy-hermes-gap-audit-2026-05-24.md',
+      'docs/hermes-cowork-cli-improvement-plan.md',
+      'docs/migration.md',
       'docs/qa/code-buddy-studio/README.md',
       'docs/qa/code-buddy-studio/feature-qa.md',
       'docs/qa/code-buddy-studio/screenshots/',
@@ -55,6 +98,37 @@ describe('public Cowork documentation discoverability', () => {
       'Packaged desktop launch proof',
       'e2e/packaged-launch-smoke.spec.ts',
     ]);
+  });
+
+  it('keeps every guarded public markdown doc reachable from the public doc graph', async () => {
+    const entrypoints = new Set(['README.md', 'CHANGELOG.md', 'CLAUDE.md']);
+    const publicDocs = new Set<string>(publicMarkdownDocs);
+    const incomingRefs = new Map<string, string[]>(
+      publicMarkdownDocs.map((docPath) => [docPath, []]),
+    );
+
+    for (const sourceDoc of publicMarkdownDocs) {
+      const absoluteSource = path.join(repoRoot, sourceDoc);
+      const sourceDir = path.dirname(absoluteSource);
+      const markdown = await fs.readFile(absoluteSource, 'utf8');
+
+      for (const ref of collectLocalRefs(markdown)) {
+        const absoluteTarget = path.resolve(sourceDir, ref);
+        let target = toRepoRelative(absoluteTarget);
+        if (!publicDocs.has(target) && publicDocs.has(`${target}/README.md`)) {
+          target = `${target}/README.md`;
+        }
+        if (target !== sourceDoc && publicDocs.has(target)) {
+          incomingRefs.get(target)?.push(sourceDoc);
+        }
+      }
+    }
+
+    const orphanedDocs = [...incomingRefs.entries()]
+      .filter(([docPath, incoming]) => !entrypoints.has(docPath) && incoming.length === 0)
+      .map(([docPath]) => docPath);
+
+    expect(orphanedDocs).toEqual([]);
   });
 
   it('keeps getting-started linked to Cowork guides and QA evidence', async () => {

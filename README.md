@@ -204,14 +204,24 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 | [Guide Cowork FR](docs/cowork-guide-fr.md) | Guide utilisateur en français avec captures réelles et vérifications |
 | [Cowork README](cowork/README.md) | Desktop installation, features, source build, sandbox modes |
 | [Cowork Architecture](cowork/ARCHITECTURE.md) | Electron contexts, bridges, embedded engine, persistence, runner model |
+| [Troubleshooting](docs/troubleshooting.md) | Common startup, native binding, JWT, Fleet, Ollama, session, and CI fixes |
 | [Agents](docs/agents.md) | Multi-agent orchestration, roles, SWE agent, planning flow, A2A |
+| [A2A Bridge](docs/channel-a2a-bridge.md) | Channel-to-A2A bridge model, route shape, and supervision contract |
 | [Reasoning](docs/reasoning.md) | Extended thinking, Tree-of-Thought, MCTS, /think command |
 | [Security](docs/security.md) | Permission modes, Guardian Agent, sandboxing, SSRF, secrets vault |
 | [Channels](docs/channels.md) | 20+ messaging channels, DM pairing, send policy |
 | [Context Engine](docs/context-engine.md) | Compression, tool output masking, JIT context, pre-compaction flush |
 | [Infrastructure](docs/infrastructure.md) | HTTP server, WebSocket gateway, daemon, cron, deploy, plugins |
 | [Fleet Guide](docs/fleet-guide.md) | **Multi-AI hub** — `/fleet listen` + `/fleet send peer.chat`, env-driven multi-provider auto-detect, Tailscale lab examples |
+| [Spec Pipeline](docs/spec-pipeline.md) | Review-gated `buddy spec` workflow, durable stories, evidence gates |
+| [Computer Use Profiles](docs/computer-use-application-profiles.md) | Desktop automation profiles, risk policy, dialog handling, proof artifacts |
+| [Cowork Pilotability Matrix](docs/cowork-pilotability-matrix.md) | Product-readiness matrix for Cowork supervision and proof surfaces |
+| [Hermes Strategy](docs/hermes-agent-strategy.md) | Hermes-inspired product strategy and benchmark translation notes |
+| [Hermes Gap Analysis](docs/code-buddy-hermes-gap-analysis.md) | Full Hermes capability brief and native Code Buddy mapping |
+| [Hermes Gap Audit](docs/code-buddy-hermes-gap-audit-2026-05-24.md) | Implementation audit and next-step evidence for Hermes parity |
+| [Hermes / Cowork / CLI Plan](docs/hermes-cowork-cli-improvement-plan.md) | Historical improvement log connecting CLI, Cowork, Fleet, and Hermes goals |
 | [Configuration](docs/configuration.md) | Environment variables, TOML config, project settings, model limits |
+| [Migration](docs/migration.md) | Upgrade and compatibility notes for current configuration files |
 | [Development](docs/development.md) | Build, test, architecture, coding conventions, adding tools |
 
 ---
