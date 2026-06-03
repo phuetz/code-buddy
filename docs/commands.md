@@ -176,6 +176,7 @@ buddy hermes browser status [--json]
 buddy hermes browser-smoke local-playwright [--json]
 buddy hermes runtime status [--json]
 buddy hermes runtime lifecycle daytona attach --target <sandbox> [--json]
+buddy hermes runtime lifecycle daytona hibernate --target <sandbox> --execute [--json]
 buddy hermes runtime-smoke local [--json]
 buddy tools browser-operator draft "<goal>" [--source-url URL] [--mode isolated|local] [--json]
 buddy tools skill-candidate list|inspect|install [candidatePath] [--approved-by name] [--json]
@@ -283,11 +284,18 @@ Apptainer, Modal, Daytona, and Vercel Sandbox without requiring the larger
 `hermes doctor` payload. `buddy hermes runtime lifecycle <backend> <action>
 --target <id> --json` prints a provider-specific managed lifecycle plan for
 `provision`, `hibernate`, `wake`, `attach`, and `teardown` without executing
-destructive cloud operations. Daytona maps to CLI `create/start/stop/ssh/delete`,
-Modal maps attach to `modal shell` and creation/termination to the Sandbox SDK,
-and Vercel Sandbox maps to the official `sandbox` CLI. `buddy hermes
-runtime-smoke local --json` runs a real local subprocess smoke for the selected
-backend.
+destructive cloud operations. Add `--execute` only when the operator has set
+`CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true` plus the backend-specific allow
+flag such as `CODEBUDDY_HERMES_ALLOW_DAYTONA_LIFECYCLE=true`; interactive
+attach actions require the additional
+`CODEBUDDY_HERMES_ALLOW_INTERACTIVE_LIFECYCLE=true` guard. Daytona maps to CLI
+`create/start/stop/ssh/delete` and captures `daytona list --format json` before
+and after guarded execution; Modal maps attach to `modal shell` and
+creation/termination to the Sandbox SDK, which remains plan-only; Vercel
+Sandbox maps to the official `sandbox` CLI, including
+`sandbox exec --interactive --tty <id> bash` for attach and `sandbox list --all`
+for state snapshots. `buddy hermes runtime-smoke local --json` runs a real local
+subprocess smoke for the selected backend.
 
 `buddy hermes hooks [--json]` prints the canonical Hermes-style lifecycle
 hook manifest. It maps Code Buddy's existing user/tool hooks onto

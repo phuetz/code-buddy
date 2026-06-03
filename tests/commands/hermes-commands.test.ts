@@ -617,6 +617,64 @@ describe('Hermes CLI commands', () => {
     expect(output.plan.docs).toContain('https://www.daytona.io/docs/tools/cli/');
   });
 
+  it('keeps Hermes runtime lifecycle execution blocked without explicit allow flags', async () => {
+    const keys = [
+      'CODEBUDDY_HERMES_ALLOW_DAYTONA_LIFECYCLE',
+      'CODEBUDDY_HERMES_ALLOW_INTERACTIVE_LIFECYCLE',
+      'CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC',
+    ];
+    const originalEnv = new Map(keys.map((key) => [key, process.env[key]]));
+    try {
+      for (const key of keys) {
+        delete process.env[key];
+      }
+
+      const program = createProgram();
+      registerHermesCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'hermes',
+        'runtime',
+        'lifecycle',
+        'daytona',
+        'hibernate',
+        '--target',
+        'sandbox-demo',
+        '--execute',
+        '--json',
+      ]);
+
+      const output = JSON.parse(getLogOutput()) as {
+        kind: string;
+        result: {
+          command: string | null;
+          exitCode: number | null;
+          ok: boolean;
+          output: string;
+          status: string;
+        };
+        schemaVersion: number;
+      };
+
+      expect(output.kind).toBe('hermes_runtime_lifecycle_result');
+      expect(output.schemaVersion).toBe(1);
+      expect(output.result).toMatchObject({
+        command: null,
+        exitCode: null,
+        ok: false,
+        status: 'blocked',
+      });
+      expect(output.result.output).toContain('CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true');
+    } finally {
+      for (const [key, value] of originalEnv) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it('prints Hermes messaging gateway readiness without leaking channel secrets', async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-messaging-status-'));
     const configPath = path.join(tmpDir, 'channels.json');
@@ -832,7 +890,7 @@ describe('Hermes CLI commands', () => {
             'cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-bridge-real.test.ts tests/hermes-runtime-backends-strip.test.ts',
           ]),
           notes: expect.stringContaining('~/.ssh/config'),
-          nextWork: expect.stringContaining('guarded execution and state reconciliation'),
+          nextWork: expect.stringContaining('real configured Daytona/Vercel accounts'),
         }),
         expect.objectContaining({
           id: 'mobile-supervision',
@@ -915,7 +973,7 @@ describe('Hermes CLI commands', () => {
     });
     expect(output.todos.map((item) => item.id)).toContain('runtime-backends');
     const runtimeTodo = output.todos.find((item) => item.id === 'runtime-backends');
-    expect(runtimeTodo?.nextWork).toContain('guarded execution and state reconciliation');
+    expect(runtimeTodo?.nextWork).toContain('real configured Daytona/Vercel accounts');
     expect(runtimeTodo?.nextWork).not.toContain('live smoke runners');
     expect(runtimeTodo?.nextWork).not.toContain('Docker/remote');
     expect(runtimeTodo?.nextWork).not.toContain('SSH/');

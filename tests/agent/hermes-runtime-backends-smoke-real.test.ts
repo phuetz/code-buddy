@@ -7,6 +7,7 @@ import path from 'path';
 import {
   buildHermesRuntimeLifecyclePlan,
   runHermesRuntimeBackendSmoke,
+  runHermesRuntimeLifecycleAction,
 } from '../../src/agent/hermes-runtime-backends.js';
 
 function hasRunnableWsl(): boolean {
@@ -85,6 +86,64 @@ function withFixturePath(
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-hermes-runtime-cli-'));
   try {
     writeCliFixture(dir, command);
+    const fixturePath = `${dir}${path.delimiter}${process.env.PATH ?? process.env.Path ?? ''}`;
+    run({
+      ...process.env,
+      PATH: fixturePath,
+      Path: fixturePath,
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function writeDaytonaLifecycleFixture(dir: string): void {
+  if (process.platform === 'win32') {
+    fs.writeFileSync(
+      path.join(dir, 'daytona.cmd'),
+      [
+        '@echo off',
+        'if "%1"=="--version" (',
+        '  echo daytona 1.0.0',
+        '  exit /b 0',
+        ')',
+        'if "%1"=="list" (',
+        '  echo [{"id":"sandbox-demo","state":"started","token":"secret-daytona-key"}]',
+        '  exit /b 0',
+        ')',
+        'echo daytona lifecycle %* secret-daytona-key',
+        'exit /b 0',
+        '',
+      ].join('\r\n'),
+    );
+    return;
+  }
+
+  const filePath = path.join(dir, 'daytona');
+  fs.writeFileSync(
+    filePath,
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "--version" ]; then',
+      "  echo 'daytona 1.0.0'",
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "list" ]; then',
+      "  echo '[{\"id\":\"sandbox-demo\",\"state\":\"started\",\"token\":\"secret-daytona-key\"}]'",
+      '  exit 0',
+      'fi',
+      "echo \"daytona lifecycle $* secret-daytona-key\"",
+      'exit 0',
+      '',
+    ].join('\n'),
+  );
+  fs.chmodSync(filePath, 0o755);
+}
+
+function withDaytonaLifecycleFixture(run: (env: NodeJS.ProcessEnv) => void): void {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-hermes-runtime-lifecycle-'));
+  try {
+    writeDaytonaLifecycleFixture(dir);
     const fixturePath = `${dir}${path.delimiter}${process.env.PATH ?? process.env.Path ?? ''}`;
     run({
       ...process.env,
@@ -386,5 +445,116 @@ describe('Hermes runtime backend live smoke runner', () => {
       status: 'blocked',
     });
     expect(result.notes.join(' ')).toContain('requires --target');
+  });
+
+  it('plans Vercel Sandbox attach through the documented interactive exec path', () => {
+    const result = buildHermesRuntimeLifecyclePlan({
+      action: 'attach',
+      backendId: 'vercel-sandbox',
+      env: process.env,
+      now: () => new Date('2026-06-03T13:21:30.000Z'),
+      target: 'sb_abc123xyz',
+    });
+
+    expect(result).toMatchObject({
+      action: 'attach',
+      args: ['exec', '--interactive', '--tty', 'sb_abc123xyz', 'bash'],
+      backendId: 'vercel-sandbox',
+      command: 'sandbox',
+      displayCommand: 'sandbox exec --interactive --tty sb_abc123xyz bash',
+      ok: true,
+      status: 'planned',
+      target: 'sb_abc123xyz',
+    });
+    expect(result.docs).toContain('https://vercel.com/docs/vercel-sandbox/cli-reference');
+  });
+
+  it('keeps lifecycle execution blocked unless global and provider allow flags are present', () => {
+    withDaytonaLifecycleFixture((env) => {
+      const result = runHermesRuntimeLifecycleAction({
+        action: 'hibernate',
+        backendId: 'daytona',
+        env: {
+          ...env,
+          DAYTONA_API_KEY: 'secret-daytona-key',
+        },
+        now: () => new Date('2026-06-03T13:22:00.000Z'),
+        target: 'sandbox-demo',
+      });
+
+      expect(result).toMatchObject({
+        command: null,
+        exitCode: null,
+        ok: false,
+        status: 'blocked',
+      });
+      expect(result.output).toContain('CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true');
+    });
+  });
+
+  it('executes a guarded Daytona lifecycle command and captures redacted state snapshots', () => {
+    withDaytonaLifecycleFixture((env) => {
+      const result = runHermesRuntimeLifecycleAction({
+        action: 'hibernate',
+        backendId: 'daytona',
+        env: {
+          ...env,
+          CODEBUDDY_HERMES_ALLOW_DAYTONA_LIFECYCLE: 'true',
+          CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC: 'true',
+          DAYTONA_API_KEY: 'secret-daytona-key',
+        },
+        now: () => new Date('2026-06-03T13:23:00.000Z'),
+        target: 'sandbox-demo',
+      });
+      const raw = JSON.stringify(result);
+
+      expect(result).toMatchObject({
+        args: ['stop', 'sandbox-demo'],
+        command: 'daytona',
+        exitCode: 0,
+        ok: true,
+        status: 'passed',
+      });
+      expect(result.output).toContain('daytona lifecycle stop sandbox-demo');
+      expect(result.stateBefore).toMatchObject({
+        args: ['list', '--format', 'json'],
+        command: 'daytona',
+        ok: true,
+        targetSeen: true,
+      });
+      expect(result.stateAfter).toMatchObject({
+        args: ['list', '--format', 'json'],
+        command: 'daytona',
+        ok: true,
+        targetSeen: true,
+      });
+      expect(raw).not.toContain('secret-daytona-key');
+      expect(raw).toContain('<configured-secret>');
+    });
+  });
+
+  it('keeps interactive lifecycle actions blocked behind a separate opt-in flag', () => {
+    withDaytonaLifecycleFixture((env) => {
+      const result = runHermesRuntimeLifecycleAction({
+        action: 'attach',
+        backendId: 'daytona',
+        env: {
+          ...env,
+          CODEBUDDY_HERMES_ALLOW_DAYTONA_LIFECYCLE: 'true',
+          CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC: 'true',
+          DAYTONA_API_KEY: 'secret-daytona-key',
+        },
+        now: () => new Date('2026-06-03T13:24:00.000Z'),
+        target: 'sandbox-demo',
+      });
+
+      expect(result).toMatchObject({
+        command: null,
+        exitCode: null,
+        ok: false,
+        status: 'blocked',
+      });
+      expect(result.output).toContain('CODEBUDDY_HERMES_ALLOW_INTERACTIVE_LIFECYCLE=true');
+    });
   });
 });

@@ -13,6 +13,7 @@ import { type SpawnSyncReturns, spawnSync } from 'child_process';
 
 export type HermesRuntimeBackendStatus = 'available' | 'configured' | 'missing' | 'unsupported';
 export type HermesRuntimeLifecycleAction = 'provision' | 'hibernate' | 'wake' | 'attach' | 'teardown';
+export type HermesRuntimeLifecycleRunStatus = 'passed' | 'failed' | 'blocked' | 'unsupported' | 'not-runnable';
 export type HermesRuntimeLifecycleStatus = 'blocked' | 'planned' | 'unsupported';
 
 export interface HermesRuntimeBackend {
@@ -81,6 +82,10 @@ export interface HermesRuntimeLifecycleOptions extends HermesRuntimeBackendsOpti
   target?: string;
 }
 
+export interface HermesRuntimeLifecycleRunOptions extends HermesRuntimeLifecycleOptions {
+  timeoutMs?: number;
+}
+
 export interface HermesRuntimeLifecyclePlan {
   action: HermesRuntimeLifecycleAction;
   args: string[];
@@ -97,6 +102,36 @@ export interface HermesRuntimeLifecyclePlan {
   sideEffect: string;
   status: HermesRuntimeLifecycleStatus;
   target: string | null;
+}
+
+export interface HermesRuntimeLifecycleStateSnapshot {
+  args: string[];
+  command: string | null;
+  exitCode: number | null;
+  ok: boolean;
+  output: string;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+  stdout: string;
+  targetSeen: boolean | null;
+}
+
+export interface HermesRuntimeLifecycleResult {
+  args: string[];
+  command: string | null;
+  durationMs: number;
+  exitCode: number | null;
+  finishedAt: string;
+  ok: boolean;
+  output: string;
+  plan: HermesRuntimeLifecyclePlan;
+  signal: NodeJS.Signals | null;
+  startedAt: string;
+  stateAfter: HermesRuntimeLifecycleStateSnapshot | null;
+  stateBefore: HermesRuntimeLifecycleStateSnapshot | null;
+  status: HermesRuntimeLifecycleRunStatus;
+  stderr: string;
+  stdout: string;
 }
 
 interface ProbeResult {
@@ -121,6 +156,11 @@ interface LifecycleInvocation {
   notes?: string[];
   requiresApproval?: boolean;
   sideEffect: string;
+}
+
+interface LifecycleStateProbeInvocation {
+  args: string[];
+  command: string;
 }
 
 const DAYTONA_DOCS_URL = 'https://www.daytona.io/docs/tools/cli/';
@@ -328,6 +368,55 @@ function blockedLifecyclePlan(
   };
 }
 
+function blockedLifecycleResult(
+  plan: HermesRuntimeLifecyclePlan,
+  status: HermesRuntimeLifecycleRunStatus,
+  output: string,
+  now: Date,
+): HermesRuntimeLifecycleResult {
+  const timestamp = now.toISOString();
+  return {
+    args: [],
+    command: null,
+    durationMs: 0,
+    exitCode: null,
+    finishedAt: timestamp,
+    ok: false,
+    output,
+    plan,
+    signal: null,
+    startedAt: timestamp,
+    stateAfter: null,
+    stateBefore: null,
+    status,
+    stderr: output,
+    stdout: '',
+  };
+}
+
+function lifecycleAllowFlagForBackend(backendId: string): string | null {
+  switch (backendId) {
+    case 'daytona':
+      return 'CODEBUDDY_HERMES_ALLOW_DAYTONA_LIFECYCLE';
+    case 'modal':
+      return 'CODEBUDDY_HERMES_ALLOW_MODAL_LIFECYCLE';
+    case 'ssh':
+      return 'CODEBUDDY_HERMES_ALLOW_SSH_LIFECYCLE';
+    case 'vercel-sandbox':
+      return 'CODEBUDDY_HERMES_ALLOW_VERCEL_LIFECYCLE';
+    default:
+      return null;
+  }
+}
+
+function isInteractiveLifecycleAction(plan: HermesRuntimeLifecyclePlan): boolean {
+  if (plan.action === 'attach') return true;
+  if (plan.backendId === 'vercel-sandbox' && plan.args.includes('--interactive')) return true;
+  if (plan.backendId === 'modal' && plan.command === 'modal') return true;
+  if (plan.backendId === 'ssh') return true;
+  return false;
+}
+
 function lifecycleInvocationForBackend(
   backendId: string,
   action: HermesRuntimeLifecycleAction,
@@ -410,7 +499,7 @@ function lifecycleInvocationForBackend(
     if (action === 'attach') {
       return {
         command: 'sandbox',
-        args: ['connect', target],
+        args: ['exec', '--interactive', '--tty', target, 'bash'],
         docs: [VERCEL_SANDBOX_DOCS_URL],
         sideEffect: 'opens an interactive shell in an existing Vercel Sandbox',
       };
@@ -505,7 +594,7 @@ export function buildHermesRuntimeLifecyclePlan(
       backend.runnable
         ? 'Plan is backed by an installed/configured runtime surface on this host.'
         : 'Plan is provider-specific, but this host is not currently installed/configured enough to execute it.',
-      'This command is reported as a plan only; execution still needs an explicit guarded runner.',
+      'Use --execute only with CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true and the matching backend lifecycle allow flag.',
     ],
     ok: true,
     remediation: backend.runnable ? [] : backend.remediation,
@@ -513,6 +602,196 @@ export function buildHermesRuntimeLifecyclePlan(
     sideEffect: invocation.sideEffect,
     status: 'planned',
     target,
+  };
+}
+
+function lifecycleStateProbeForBackend(
+  backendId: string,
+): LifecycleStateProbeInvocation | null {
+  if (backendId === 'daytona') {
+    return {
+      command: 'daytona',
+      args: ['list', '--format', 'json'],
+    };
+  }
+
+  if (backendId === 'vercel-sandbox') {
+    return {
+      command: 'sandbox',
+      args: ['list', '--all'],
+    };
+  }
+
+  return null;
+}
+
+function lifecycleRedactions(
+  backendId: string,
+  env: NodeJS.ProcessEnv,
+): Array<{ replacement: string; value: string }> {
+  switch (backendId) {
+    case 'daytona':
+      return redactionsForEnv(env, ['DAYTONA_API_KEY', 'DAYTONA_SERVER_URL', 'DAYTONA_PROFILE']);
+    case 'modal':
+      return redactionsForEnv(env, ['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET', 'MODAL_PROFILE']);
+    case 'ssh':
+      return redactionsForEnv(env, ['CODEBUDDY_SSH_HOST', 'SSH_HOST', 'CODEBUDDY_REMOTE_HOST']);
+    case 'vercel-sandbox':
+      return redactionsForEnv(env, ['VERCEL_TOKEN', 'VERCEL_TEAM_ID', 'VERCEL_ORG_ID']);
+    default:
+      return [];
+  }
+}
+
+function decodeLifecycleOutput(
+  result: SpawnSyncReturns<Buffer>,
+  redactions: Array<{ replacement: string; value: string }>,
+): Pick<HermesRuntimeLifecycleStateSnapshot, 'output' | 'stderr' | 'stdout'> {
+  const stdout = redactSmokeText(decodeProbeBuffer(result.stdout).trim(), redactions);
+  const stderr = redactSmokeText(decodeProbeBuffer(result.stderr).trim(), redactions);
+  return {
+    output: `${stdout}\n${stderr}`.trim() || (result.error ? String(result.error.message || result.error) : ''),
+    stderr: stderr || (result.error ? String(result.error.message || result.error) : ''),
+    stdout,
+  };
+}
+
+function runLifecycleStateProbe(
+  plan: HermesRuntimeLifecyclePlan,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): HermesRuntimeLifecycleStateSnapshot | null {
+  const invocation = lifecycleStateProbeForBackend(plan.backendId);
+  if (!invocation) return null;
+
+  const result = spawnTool(invocation.command, invocation.args, env, timeoutMs);
+  const decoded = decodeLifecycleOutput(result, lifecycleRedactions(plan.backendId, env));
+  const target = plan.target?.trim() || null;
+  return {
+    args: invocation.args,
+    command: invocation.command,
+    exitCode: result.status,
+    ok: !result.error && result.status === 0,
+    output: decoded.output,
+    signal: result.signal,
+    stderr: decoded.stderr,
+    stdout: decoded.stdout,
+    targetSeen: target ? decoded.output.includes(target) : null,
+  };
+}
+
+function runLifecyclePlanCommand(
+  plan: HermesRuntimeLifecyclePlan,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Pick<HermesRuntimeLifecycleResult, 'exitCode' | 'output' | 'signal' | 'stderr' | 'stdout'> {
+  if (!plan.command) {
+    return {
+      exitCode: null,
+      output: 'Lifecycle plan has no executable command.',
+      signal: null,
+      stderr: 'Lifecycle plan has no executable command.',
+      stdout: '',
+    };
+  }
+
+  const result = spawnTool(plan.command, plan.args, env, timeoutMs);
+  const decoded = decodeLifecycleOutput(result, lifecycleRedactions(plan.backendId, env));
+  return {
+    exitCode: result.status,
+    output: decoded.output,
+    signal: result.signal,
+    stderr: decoded.stderr,
+    stdout: decoded.stdout,
+  };
+}
+
+export function runHermesRuntimeLifecycleAction(
+  options: HermesRuntimeLifecycleRunOptions,
+): HermesRuntimeLifecycleResult {
+  const env = options.env ?? process.env;
+  const now = options.now ?? (() => new Date());
+  const plan = buildHermesRuntimeLifecyclePlan(options);
+  const timestamp = now();
+
+  if (!plan.ok) {
+    return blockedLifecycleResult(plan, plan.status === 'unsupported' ? 'unsupported' : 'blocked', plan.notes.join(' '), timestamp);
+  }
+
+  const backendAllowFlag = lifecycleAllowFlagForBackend(plan.backendId);
+  if (!backendAllowFlag) {
+    return blockedLifecycleResult(plan, 'unsupported', `${plan.backendId} has no guarded lifecycle execution runner.`, timestamp);
+  }
+
+  if (env.CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC !== 'true') {
+    return blockedLifecycleResult(
+      plan,
+      'blocked',
+      'Lifecycle execution is blocked unless CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true.',
+      timestamp,
+    );
+  }
+
+  if (env[backendAllowFlag] !== 'true') {
+    return blockedLifecycleResult(
+      plan,
+      'blocked',
+      `${plan.label ?? plan.backendId} lifecycle execution requires ${backendAllowFlag}=true.`,
+      timestamp,
+    );
+  }
+
+  if (plan.command === 'modal-python-sdk') {
+    return blockedLifecycleResult(
+      plan,
+      'unsupported',
+      'Modal Sandbox lifecycle execution is SDK-based and is not wired to a guarded shell runner yet.',
+      timestamp,
+    );
+  }
+
+  if (!plan.command || !hasExecutable(plan.command, env)) {
+    return blockedLifecycleResult(
+      plan,
+      'not-runnable',
+      `${plan.label ?? plan.backendId} lifecycle command is not runnable on this host: ${plan.command ?? 'none'}.`,
+      timestamp,
+    );
+  }
+
+  if (isInteractiveLifecycleAction(plan) && env.CODEBUDDY_HERMES_ALLOW_INTERACTIVE_LIFECYCLE !== 'true') {
+    return blockedLifecycleResult(
+      plan,
+      'blocked',
+      'Interactive lifecycle actions are blocked unless CODEBUDDY_HERMES_ALLOW_INTERACTIVE_LIFECYCLE=true.',
+      timestamp,
+    );
+  }
+
+  const timeoutMs = Math.max(1000, Math.min(options.timeoutMs ?? 15_000, 60_000));
+  const started = timestamp;
+  const startedAtMs = Date.now();
+  const stateBefore = runLifecycleStateProbe(plan, env, timeoutMs);
+  const commandResult = runLifecyclePlanCommand(plan, env, timeoutMs);
+  const stateAfter = runLifecycleStateProbe(plan, env, timeoutMs);
+  const ok = commandResult.exitCode === 0;
+
+  return {
+    args: plan.args,
+    command: plan.command,
+    durationMs: Math.max(0, Date.now() - startedAtMs),
+    exitCode: commandResult.exitCode,
+    finishedAt: now().toISOString(),
+    ok,
+    output: commandResult.output,
+    plan,
+    signal: commandResult.signal,
+    startedAt: started.toISOString(),
+    stateAfter,
+    stateBefore,
+    status: ok ? 'passed' : 'failed',
+    stderr: commandResult.stderr,
+    stdout: commandResult.stdout,
   };
 }
 
