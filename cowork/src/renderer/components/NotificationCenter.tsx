@@ -2,7 +2,7 @@
  * NotificationCenter — Panel with notification history
  * Claude Cowork parity: grouped by date, unread counts, mark-all-read.
  */
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bell, X, Check, Trash2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -94,7 +94,7 @@ const NotificationRow: React.FC<NotificationRowProps> = ({
 };
 
 export const NotificationCenter: React.FC = () => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const show = useShowNotificationCenter();
   const notifications = useNotifications();
   const setShow = useAppStore((s) => s.setShowNotificationCenter);
@@ -102,7 +102,7 @@ export const NotificationCenter: React.FC = () => {
   const markAllRead = useAppStore((s) => s.markAllNotificationsRead);
   const remove = useAppStore((s) => s.removeNotification);
 
-  function formatDateGroup(timestamp: number): string {
+  const formatDateGroup = useCallback((timestamp: number): string => {
     const now = new Date();
     const date = new Date(timestamp);
     const diffMs = now.getTime() - date.getTime();
@@ -113,7 +113,7 @@ export const NotificationCenter: React.FC = () => {
     if (diffHours < 48) return t('time.yesterday', 'Yesterday');
     if (diffHours < 24 * 7) return t('time.thisWeek', 'This week');
     return t('time.older', 'Older');
-  }
+  }, [t]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, NotificationEntry[]>();
@@ -123,7 +123,7 @@ export const NotificationCenter: React.FC = () => {
       groups.get(key)!.push(n);
     }
     return Array.from(groups.entries());
-  }, [notifications, i18n.resolvedLanguage]);
+  }, [notifications, formatDateGroup]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

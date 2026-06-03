@@ -28,7 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store';
-import { formatAppDate, formatAppTime } from '../utils/i18n-format';
+import { formatAppTime, getAppLocale } from '../utils/i18n-format';
 import {
   buildFleetActivityChips,
   buildFleetInternetProofStepLabels,
@@ -70,14 +70,15 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   'fleet.chatSession.ended': Network,
 };
 
-function groupByDay(entries: ActivityEntry[]): Array<[string, ActivityEntry[]]> {
+function groupByDay(entries: ActivityEntry[], language: string): Array<[string, ActivityEntry[]]> {
   const groups = new Map<string, ActivityEntry[]>();
+  const formatter = new Intl.DateTimeFormat(getAppLocale(language), {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
   for (const entry of entries) {
-    const key = formatAppDate(entry.timestamp, {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
-    });
+    const key = formatter.format(new Date(entry.timestamp));
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(entry);
   }
@@ -130,9 +131,10 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ open, onClose }) => 
     () => filterActivityEntries(entries, filter),
     [entries, filter],
   );
+  const activityLocale = i18n.resolvedLanguage || i18n.language;
   const grouped = useMemo(
-    () => groupByDay(visibleEntries),
-    [visibleEntries, i18n.resolvedLanguage],
+    () => groupByDay(visibleEntries, activityLocale),
+    [visibleEntries, activityLocale],
   );
 
   const handleClick = (entry: ActivityEntry) => {
