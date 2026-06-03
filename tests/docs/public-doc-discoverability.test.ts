@@ -96,6 +96,7 @@ describe('public Cowork documentation discoverability', () => {
         './qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png',
         './qa/code-buddy-studio/screenshots/30-test-runner-window.png',
         './qa/code-buddy-studio/screenshots/54-test-runner-workflow-integration.png',
+        './qa/code-buddy-studio/screenshots/59-test-runner-cowork-ipc-chat.png',
         './qa/code-buddy-studio/screenshots/55-test-runner-permission-real-flow.png',
         './qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png',
         './qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',

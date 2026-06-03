@@ -82,6 +82,10 @@ Typical workflow:
 
 Cowork keeps file operations scoped to the selected workspace, and the core engine applies the same transcript repair, output sanitizer, MCP routing, and model hot-swap behavior as the CLI.
 
+The desktop runner proof below starts a chat session through Electron IPC, renders the initial user message, receives `OK-CHAT-IPC start`, continues the same session, and verifies `OK-CHAT-IPC continue` with `1 ok / 0 ko`.
+
+![Cowork IPC chat flow](./qa/code-buddy-studio/screenshots/59-test-runner-cowork-ipc-chat.png)
+
 ## 5. Work With Artifacts, Documents, and Schedules
 
 Generated artifacts stay attached to the conversation and can be opened through Cowork's preview/workshop surfaces. The verified artifact bundle covers artifact detection, file links, document workshop progress, tool-output path extraction, citation normalization, and document-ready message states.

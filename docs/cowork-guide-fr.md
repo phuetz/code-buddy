@@ -80,6 +80,10 @@ Flux typique :
 
 Cowork garde les opérations de fichiers dans le workspace sélectionné. Le moteur applique les mêmes protections que le CLI : réparation de transcript, sanitizer de sortie, routage MCP et changement de modèle à chaud.
 
+La preuve runner ci-dessous démarre une session chat via IPC Electron, rend le premier message utilisateur, reçoit `OK-CHAT-IPC start`, continue la même session et vérifie `OK-CHAT-IPC continue` avec `1 ok / 0 ko`.
+
+![Flux chat IPC Cowork](./qa/code-buddy-studio/screenshots/59-test-runner-cowork-ipc-chat.png)
+
 ## 5. Travailler avec artefacts, documents et planifications
 
 Les artefacts générés restent attachés à la conversation et peuvent être ouverts depuis les surfaces de prévisualisation ou d'atelier Cowork. Le bundle artefacts vérifié couvre la détection d'artefacts, les liens de fichiers, la progression d'atelier document, l'extraction de chemins depuis les sorties d'outils, la normalisation des citations et les états de messages prêts pour document.
