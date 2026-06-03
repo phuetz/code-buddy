@@ -75,6 +75,8 @@ win:
   extraResources:
     - from: .bundle-resources/mcp
       to: mcp
+    - from: .claude/skills
+      to: skills
     - from: resources/node/win32-x64
       to: node
     - from: dist-wsl-agent
@@ -109,6 +111,8 @@ mac:
   extraResources:
     - from: .bundle-resources/mcp
       to: mcp
+    - from: .claude/skills
+      to: skills
     - from: resources/node/darwin-${arch}
       to: node
     # Bundled Python runtime + site-packages for GUI automation helpers (Pillow, pyobjc/Quartz)
@@ -137,6 +141,8 @@ linux:
   extraResources:
     - from: .bundle-resources/mcp
       to: mcp
+    - from: .claude/skills
+      to: skills
     - from: resources/node/linux-x64
       to: node
     - from: resources/python/linux-${arch}

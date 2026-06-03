@@ -22,7 +22,7 @@ Start here when you want proof that the documented Cowork flows have been exerci
 | Coverage split | 3 real, 26 used, 0 partial |
 | Machine report | [`feature-qa-report.json`](./feature-qa-report.json) |
 | Build/typecheck guard | `npm run build`, `cd cowork && npm run typecheck`, `cd cowork && npm run build:e2e` |
-| Packaging guard | `npm run build:gui` (`electron-builder` win-x64 NSIS; pre-build check: 8 passed, 1 warning, 0 failed) |
+| Packaging guard | `npm run build:gui` (`electron-builder` win-x64 NSIS; pre-build check: 9 passed, 0 warnings, 0 failed) |
 | Packaged launch guard | `COWORK_PACKAGED_EXE="release/win-unpacked/Code Buddy Cowork.exe" npx playwright test e2e/packaged-launch-smoke.spec.ts --reporter=list --timeout=120000` (1 passed; capture [`110`](./screenshots/110-packaged-win-unpacked-launch.png)) |
 | Screenshot guard | `npm run test:docs-public` |
 
@@ -71,7 +71,6 @@ The current package build is green but not silent. Do not claim a zero-warning r
 
 | Warning | Current disposition | Follow-up |
 | --- | --- | --- |
-| `.claude/skills/` pre-build warning | Non-blocking on the current Windows package; pre-build still reports `8 passed, 1 warning, 0 failed` | Decide whether built-in skills should be staged into `.claude/skills/` or whether the warning should name the expected packaged path |
 | Vite chunk-size warnings | Do not suppress by raising `chunkSizeWarningLimit`; current evidence shows the package builds and launches, but large chunks remain a performance and review item | Split eager renderer/main imports only after measuring `npm run build:gui` output |
 | Dynamic/static import reporter warnings | Vite reports modules imported both ways, including `config-store`, `core-loader`, `server-bridge`, `sandbox-bootstrap`, and `reasoning-bridge`; the former `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` reporter entries were removed by lazy-loading the pi runner, title generation, clipboard summary, and provider probe paths | Prefer real import-boundary cleanup over hiding reporter output |
 | Node `DEP0190` during packaging | Build succeeds; warning points at child-process shell argument handling | Trace the caller before tightening packaging commands |

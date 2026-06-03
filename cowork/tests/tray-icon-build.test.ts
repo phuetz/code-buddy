@@ -26,10 +26,11 @@ describe('tray icon build helper', () => {
     expect(winSection).not.toContain('resources/tray-icon.png');
   });
 
-  it('does not package absent built-in skills as mandatory extraResources', () => {
+  it('packages generated built-in skills through extraResources', () => {
     const builderConfig = fs.readFileSync(builderConfigPath, 'utf8');
 
-    expect(builderConfig).not.toContain('.claude/skills');
+    expect(builderConfig).toContain('.claude/skills');
+    expect(builderConfig).toContain('to: skills');
   });
 
   it('does not ask electron-builder to rebuild optional native accelerators', () => {
