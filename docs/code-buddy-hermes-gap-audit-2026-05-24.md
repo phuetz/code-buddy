@@ -19,9 +19,9 @@ Verification: core typecheck PASS · Cowork typecheck PASS · 8 new/changed test
 | GAP-9 recall FTS5 trigram + snippets | PARTIAL | ✅ **DONE** | trigram tokenizer + rebuild + `snippet()` highlight + renderer `<mark>` |
 | GAP-10 memory provider adapters + selector | OPEN | ✅ **DONE** | 3 network adapters w/ local fallback, registry, env, Cowork selector |
 | GAP-11 LLM dialectic over user model | OPEN | ✅ **DONE** | `runUserDialecticInference` proposes *pending*, privacy-screened, `user-model analyze` |
-| GAP-12 remote terminal / research-script backends | OPEN | 🟡 **DONE (core scope)** | local/docker/wsl + Daytona/Vercel CLI-backed runner translations + guards + artifact folder; full remote artifact sync/live cloud execution still open |
+| GAP-12 remote terminal / research-script backends | OPEN | 🟡 **DONE (core scope)** | local/docker/wsl + Daytona CLI translation + Vercel CLI artifact sync + guards + artifact folder; live cloud execution still open |
 
-**Score: 11 fully done · GAP-12 done minus full remote artifact sync/live cloud execution.**
+**Score: 11 fully done · GAP-12 done minus live cloud execution / Daytona artifact sync / Modal SDK.**
 Every durable mutation reviewed keeps the review-gate (user-model proposals → `accept --by`,
 lessons provenance). Typecheck + the touched tests are green.
 
@@ -114,11 +114,12 @@ translates paths via `toWslPath()`. `remote` remains the legacy Daytona alias, `
 `daytona exec -w <target> -- env ...`, and `vercel-sandbox` maps to Vercel's documented
 `sandbox exec --env KEY=VALUE <sandbox_id> <command> [...args]` CLI shape. The optional
 `sandboxPolicy.target` carries the remote workspace/sandbox id, with `job.id` retained as a legacy
-fallback. Allowlist /
-network-refusal guards and the run artifact folder are preserved. 8 tests assert local execution,
-timeout/log capture, network refusal, and Docker/WSL/Daytona/Vercel spawn-arg translation. *Gap:* the
-remote providers are still CLI-backed command translations only; artifact upload/download, live
-configured-account execution, state reconciliation, and Modal SDK execution remain open.
+fallback. Vercel Sandbox now creates `/home/sandbox/codebuddy-research/<job-id>`, copies local
+script/input into it, runs with remote `INPUT_JSON`/`OUTPUT_JSON`, and copies `output.json` back.
+Allowlist / network-refusal guards and the run artifact folder are preserved. 8 tests assert local
+execution, timeout/log capture, network refusal, Docker/WSL/Daytona spawn-arg translation, and the
+5-step Vercel setup/upload/exec/download command sequence. *Gap:* live configured-account execution,
+Daytona artifact upload/download, state reconciliation, and Modal SDK execution remain open.
 
 ---
 
@@ -147,9 +148,9 @@ configured-account execution, state reconciliation, and Modal SDK execution rema
    without a separately-started `buddy channels` process; per-channel enablement + auth.
 
 ### P3 — Larger / external-dependency lifts
-9. **GAP-12 remote backend:** finish real remote `ResearchScriptSandboxProvider`
-   artifact sync/live execution for Daytona/Vercel and Modal SDK support behind the same guards; add
-   live provider smokes when credentials are configured.
+9. **GAP-12 remote backend:** finish live remote `ResearchScriptSandboxProvider`
+   execution for Vercel, Daytona artifact sync, and Modal SDK support behind the same guards; add live
+   provider smokes when credentials are configured.
 10. **GAP-10 live adapters:** integration tests against real Mem0/Honcho/Supermemory APIs (gated by
     keys); keep local default.
 11. **GAP-11 closer to runtime (optional):** an opt-in hook that triggers dialectic inference at
@@ -221,7 +222,7 @@ tests pass (82 new/changed core tests + 21 Cowork tests across the files below).
    `tests/server/channel-intake.test.ts`.
 
 ### Still open — P3 (external-dependency lifts, deferred)
-- **GAP-12 remote backend** full artifact sync/live execution for Daytona/Vercel and Modal SDK support.
+- **GAP-12 remote backend** live execution for Vercel, Daytona artifact sync, and Modal SDK support.
 - **GAP-10 live adapters** integration tests against real Mem0/Honcho/Supermemory APIs.
 - **GAP-11** optional opt-in session-end dialectic hook (still propose→accept, never auto-applied).
 

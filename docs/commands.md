@@ -303,9 +303,10 @@ Research-script job artifacts can now select `sandboxPolicy.provider` values
 uses the documented `sandbox exec --env KEY=VALUE <sandbox_id> <command>
 [...args]` CLI shape. Set `sandboxPolicy.target` to the existing remote
 workspace or sandbox id; the runner falls back to the job id only for legacy
-artifacts. These provider paths are still runner-level command translations;
-full remote artifact upload/download and live configured-account execution
-remain guarded follow-up work.
+artifacts. For Vercel Sandbox, the runner also uses `sandbox copy` to upload
+the materialized script/input into `/home/sandbox/codebuddy-research/<job-id>`
+before execution and copy `output.json` back afterward. Live configured-account
+execution remains guarded follow-up work.
 
 `buddy hermes hooks [--json]` prints the canonical Hermes-style lifecycle
 hook manifest. It maps Code Buddy's existing user/tool hooks onto

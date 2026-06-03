@@ -14,6 +14,10 @@ vi.mock('child_process', async (importOriginal) => {
       const command = args[0];
       if (command === 'docker' || command === 'wsl' || command === 'daytona' || command === 'sandbox') {
         (globalThis as any).__lastSpawnArgs = args;
+        (globalThis as any).__spawnCalls = [
+          ...((globalThis as any).__spawnCalls ?? []),
+          args,
+        ];
         const mockChild: any = {
           stdout: { setEncoding: vi.fn(), on: vi.fn() },
           stderr: { setEncoding: vi.fn(), on: vi.fn() },
@@ -131,6 +135,7 @@ describe('research script job runner', () => {
 
   it('translates command and arguments correctly for docker provider', async () => {
     (globalThis as any).__lastSpawnArgs = null;
+    (globalThis as any).__spawnCalls = [];
 
     const job = buildResearchScriptJobArtifact({
       id: 'research-script-docker-test',
@@ -167,6 +172,7 @@ describe('research script job runner', () => {
 
   it('translates command, paths, and arguments correctly for wsl provider', async () => {
     (globalThis as any).__lastSpawnArgs = null;
+    (globalThis as any).__spawnCalls = [];
 
     const job = buildResearchScriptJobArtifact({
       id: 'research-script-wsl-test',
@@ -201,6 +207,7 @@ describe('research script job runner', () => {
 
   it('translates command and arguments correctly for legacy remote provider (daytona alias)', async () => {
     (globalThis as any).__lastSpawnArgs = null;
+    (globalThis as any).__spawnCalls = [];
 
     const job = buildResearchScriptJobArtifact({
       id: 'research-script-remote-test',
@@ -237,6 +244,7 @@ describe('research script job runner', () => {
 
   it('translates command and arguments correctly for named daytona provider', async () => {
     (globalThis as any).__lastSpawnArgs = null;
+    (globalThis as any).__spawnCalls = [];
 
     const job = buildResearchScriptJobArtifact({
       id: 'research-script-daytona-test',
@@ -274,6 +282,7 @@ describe('research script job runner', () => {
 
   it('translates command and arguments correctly for vercel sandbox provider', async () => {
     (globalThis as any).__lastSpawnArgs = null;
+    (globalThis as any).__spawnCalls = [];
 
     const job = buildResearchScriptJobArtifact({
       id: 'research-script-vercel-test',
@@ -297,13 +306,43 @@ describe('research script job runner', () => {
 
     const result = await runMaterializedResearchScriptJob(job, { rootDir: tempDir });
 
-    const spawnCall = (globalThis as any).__lastSpawnArgs;
-    expect(spawnCall).toBeTruthy();
-    expect(spawnCall[0]).toBe('sandbox');
-    expect(spawnCall[1]).toContain('exec');
-    expect(spawnCall[1]).toContain('--env');
-    expect(spawnCall[1]).toContain('sb_research_script_vercel_test');
-    expect(spawnCall[1]).toContain('node');
+    const spawnCalls = (globalThis as any).__spawnCalls as any[][];
+    expect(spawnCalls).toHaveLength(5);
+    expect(spawnCalls.every((call) => call[0] === 'sandbox')).toBe(true);
+    expect(spawnCalls[0][1]).toEqual([
+      'exec',
+      'sb_research_script_vercel_test',
+      'mkdir',
+      '-p',
+      '/home/sandbox/codebuddy-research/research-script-vercel-test',
+    ]);
+    expect(spawnCalls[1][1]).toEqual(expect.arrayContaining([
+      'copy',
+      expect.stringContaining('script.js'),
+      'sb_research_script_vercel_test:/home/sandbox/codebuddy-research/research-script-vercel-test/script.js',
+    ]));
+    expect(spawnCalls[2][1]).toEqual(expect.arrayContaining([
+      'copy',
+      expect.stringContaining('input.json'),
+      'sb_research_script_vercel_test:/home/sandbox/codebuddy-research/research-script-vercel-test/input.json',
+    ]));
+    expect(spawnCalls[3][1]).toEqual(expect.arrayContaining([
+      'exec',
+      '--workdir',
+      '/home/sandbox/codebuddy-research/research-script-vercel-test',
+      '--env',
+      'INPUT_JSON=/home/sandbox/codebuddy-research/research-script-vercel-test/input.json',
+      '--env',
+      'OUTPUT_JSON=/home/sandbox/codebuddy-research/research-script-vercel-test/output.json',
+      'sb_research_script_vercel_test',
+      'node',
+      '/home/sandbox/codebuddy-research/research-script-vercel-test/script.js',
+    ]));
+    expect(spawnCalls[4][1]).toEqual(expect.arrayContaining([
+      'copy',
+      'sb_research_script_vercel_test:/home/sandbox/codebuddy-research/research-script-vercel-test/output.json',
+      expect.stringContaining('output.json'),
+    ]));
 
     expect(result.status).toBe('completed');
   });

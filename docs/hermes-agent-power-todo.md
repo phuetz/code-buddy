@@ -322,9 +322,9 @@ The gap is mainly product integration and durability:
       default refusal for network-enabled policies unless the caller opts in.
       The runner also has Docker/WSL spawn translation plus `remote`/`daytona`
       Daytona CLI translation and `vercel-sandbox` Vercel Sandbox CLI
-      translation, each covered by runner tests. Full remote artifact
-      upload/download, live cloud account execution, and Modal SDK execution
-      remain future work.
+      setup/upload/exec/download using `sandbox copy` plus `sandbox exec`, each
+      covered by runner tests. Live cloud account execution, Daytona artifact
+      sync, and Modal SDK execution remain future work.
 
 13. Add OSINT/lead discovery workflow template.
     - Inputs: public search query, region, target role, allowed sources,

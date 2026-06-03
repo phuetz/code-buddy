@@ -31,6 +31,15 @@ export interface ResearchScriptJobRunResult {
   timedOut: boolean;
 }
 
+interface SpawnInvocation {
+  args: string[];
+  executable: string;
+}
+
+type RemoteResearchScriptFiles = ReturnType<typeof resolveResearchScriptJobFiles> & {
+  root: string;
+};
+
 const DEFAULT_ALLOWED_EXECUTABLES = new Set([
   'bash',
   'node',
@@ -86,6 +95,8 @@ export async function runMaterializedResearchScriptJob(
 
   let spawnExecutable = job.command.executable;
   let spawnArgs = args;
+  const preRunSteps: SpawnInvocation[] = [];
+  const postRunSteps: SpawnInvocation[] = [];
 
   if (provider === 'docker') {
     const cleanExec = path.basename(job.command.executable).replace(/\.(exe|cmd)$/i, '');
@@ -140,14 +151,49 @@ export async function runMaterializedResearchScriptJob(
   } else if (provider === 'remote' || provider === 'daytona') {
     ({ spawnExecutable, spawnArgs } = buildDaytonaSpawn(job, env, args));
   } else if (provider === 'vercel-sandbox') {
-    ({ spawnExecutable, spawnArgs } = buildVercelSandboxSpawn(job, env, args));
+    const plan = buildVercelSandboxSpawn(job, absoluteFiles);
+    spawnExecutable = plan.spawnExecutable;
+    spawnArgs = plan.spawnArgs;
+    preRunSteps.push(...plan.preRunSteps);
+    postRunSteps.push(...plan.postRunSteps);
   }
 
-  const result = await spawnAndCapture(spawnExecutable, spawnArgs, {
+  for (const step of preRunSteps) {
+    const preRunResult = await spawnAndCapture(step.executable, step.args, {
+      cwd,
+      env,
+      timeoutMs,
+    });
+    assertRemoteStepSucceeded(step, preRunResult, 'setup');
+  }
+
+  let result = await spawnAndCapture(spawnExecutable, spawnArgs, {
     cwd,
     env,
     timeoutMs,
   });
+
+  if (result.exitCode === 0 && !result.timedOut) {
+    for (const step of postRunSteps) {
+      const postRunResult = await spawnAndCapture(step.executable, step.args, {
+        cwd,
+        env,
+        timeoutMs,
+      });
+      result.stdout += postRunResult.stdout;
+      result.stderr += postRunResult.stderr;
+      if (postRunResult.timedOut || postRunResult.exitCode !== 0) {
+        result = {
+          ...result,
+          exitCode: postRunResult.exitCode ?? 1,
+          signal: postRunResult.signal,
+          stderr: `${result.stderr}\nRemote artifact sync failed: ${formatSpawnInvocation(step)}`.trim(),
+          timedOut: result.timedOut || postRunResult.timedOut,
+        };
+        break;
+      }
+    }
+  }
   const durationMs = Date.now() - startedAt;
   const status: ResearchScriptJobRunStatus = result.timedOut
     ? 'timed_out'
@@ -217,26 +263,127 @@ function buildDaytonaSpawn(
 
 function buildVercelSandboxSpawn(
   job: ResearchScriptJobArtifact,
-  env: NodeJS.ProcessEnv,
-  args: string[],
+  absoluteFiles: ReturnType<typeof resolveResearchScriptJobFiles>,
 ): {
+  postRunSteps: SpawnInvocation[];
+  preRunSteps: SpawnInvocation[];
   spawnArgs: string[];
   spawnExecutable: string;
 } {
+  const target = job.sandboxPolicy.target ?? job.id;
   const cleanExec = path.basename(job.command.executable).replace(/\.(exe|cmd)$/i, '');
+  const remoteFiles = buildVercelRemoteFiles(job);
+  const remoteEnv = buildRemoteEnv(job, remoteFiles);
+  const remoteArgs = job.command.args.map((arg) => resolveRemoteCommandArg(job, remoteFiles, arg));
   const spawnArgs = [
     'exec',
+    '--workdir', remoteFiles.root,
   ];
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) {
-      spawnArgs.push('--env', `${key}=${value}`);
-    }
+  for (const [key, value] of Object.entries(remoteEnv)) {
+    spawnArgs.push('--env', `${key}=${value}`);
   }
-  spawnArgs.push(job.sandboxPolicy.target ?? job.id, cleanExec, ...args);
+  spawnArgs.push(target, cleanExec, ...remoteArgs);
   return {
+    preRunSteps: [
+      {
+        executable: 'sandbox',
+        args: ['exec', target, 'mkdir', '-p', remoteFiles.root],
+      },
+      {
+        executable: 'sandbox',
+        args: ['copy', absoluteFiles.script, `${target}:${remoteFiles.script}`],
+      },
+      {
+        executable: 'sandbox',
+        args: ['copy', absoluteFiles.input, `${target}:${remoteFiles.input}`],
+      },
+    ],
+    postRunSteps: [
+      {
+        executable: 'sandbox',
+        args: ['copy', `${target}:${remoteFiles.output}`, absoluteFiles.output],
+      },
+    ],
     spawnExecutable: 'sandbox',
     spawnArgs,
   };
+}
+
+function buildVercelRemoteFiles(job: ResearchScriptJobArtifact): RemoteResearchScriptFiles {
+  const root = `/home/sandbox/codebuddy-research/${sanitizeRemotePathSegment(job.id)}`;
+  return {
+    root,
+    manifest: `${root}/manifest.json`,
+    readme: `${root}/README.md`,
+    script: `${root}/${path.basename(job.files.script)}`,
+    input: `${root}/input.json`,
+    output: `${root}/output.json`,
+    stdout: `${root}/stdout.log`,
+    stderr: `${root}/stderr.log`,
+    summary: `${root}/summary.md`,
+  };
+}
+
+function buildRemoteEnv(
+  job: ResearchScriptJobArtifact,
+  remoteFiles: RemoteResearchScriptFiles,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(job.command.env)
+      .map(([key, value]) => [key, resolveRemoteEnvValue(job, remoteFiles, value)] as const)
+      .filter(([key, value]) => key.length > 0 && value.length > 0),
+  );
+}
+
+function resolveRemoteEnvValue(
+  job: ResearchScriptJobArtifact,
+  remoteFiles: RemoteResearchScriptFiles,
+  value: string,
+): string {
+  const fileEntries = Object.entries(job.files) as Array<[keyof typeof job.files, string]>;
+  const matchedFile = fileEntries.find(([, relativePath]) => relativePath === value);
+  if (matchedFile) {
+    return remoteFiles[matchedFile[0]];
+  }
+  if (value === 'input.json') return remoteFiles.input;
+  if (value === 'output.json') return remoteFiles.output;
+  return value;
+}
+
+function resolveRemoteCommandArg(
+  job: ResearchScriptJobArtifact,
+  remoteFiles: RemoteResearchScriptFiles,
+  arg: string,
+): string {
+  if (arg === job.files.script) {
+    return remoteFiles.script;
+  }
+  const fileEntries = Object.entries(job.files) as Array<[keyof typeof job.files, string]>;
+  const matchedFile = fileEntries.find(([, relativePath]) => relativePath === arg);
+  if (matchedFile) {
+    return remoteFiles[matchedFile[0]];
+  }
+  return arg;
+}
+
+function assertRemoteStepSucceeded(
+  step: SpawnInvocation,
+  result: Awaited<ReturnType<typeof spawnAndCapture>>,
+  phase: string,
+): void {
+  if (!result.timedOut && result.exitCode === 0) {
+    return;
+  }
+  const detail = result.stderr || result.stdout || `exitCode=${result.exitCode ?? 'null'}`;
+  throw new Error(`Research script remote ${phase} failed: ${formatSpawnInvocation(step)}\n${detail}`);
+}
+
+function formatSpawnInvocation(invocation: SpawnInvocation): string {
+  return [invocation.executable, ...invocation.args].join(' ');
+}
+
+function sanitizeRemotePathSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'job';
 }
 
 function assertExecutableAllowed(executable: string, allowedExecutables: string[] | undefined): void {
