@@ -294,14 +294,13 @@ function App() {
   }, [appConfig, isConfigured]);
 
   useEffect(() => {
-    // Only run once on mount
     if (initialized.current) return;
     initialized.current = true;
 
     if (isElectron) {
       listSessions();
     }
-  }, []); // Empty deps - run once
+  }, [isElectron, listSessions]);
 
   // Apply theme to document root
   useEffect(() => {
@@ -384,7 +383,7 @@ function App() {
         setAppConfig(result.config);
       }
     },
-    [setIsConfigured, setAppConfig]
+    [isElectron, setIsConfigured, setAppConfig]
   );
 
   // Handle config modal close
