@@ -109,6 +109,17 @@ Lignes utiles :
 | `Hermes / built CLI real smoke` | Rebuild Code Buddy, vérifie tools/doctor Hermes, prouve le garde-fou lifecycle et documente l'attach Vercel Sandbox |
 | `Mobile / supervision gateway bundle` | Routes pairing/status en loopback, file d'approbation et bridge Cowork |
 
+Pour les vérifications quotidiennes, commence par les bundles sûrs. Ils ne demandent ni vrai token provider, ni Docker, ni opt-in d'automatisation desktop :
+
+| Besoin | Ligne runner | Preuve |
+| --- | --- | --- |
+| Vérifier les plugins et skills réutilisables | `Plugins / skills bundle` | `755 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/80-test-runner-plugins-skills-bundle.png) |
+| Vérifier l'UI terminal et l'observer | `UI / terminal observer bundle` | `376 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/81-test-runner-terminal-ui-observer-bundle.png) |
+| Vérifier les sessions, la sync et les caches | `Data / session sync cache bundle` | `901 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/83-test-runner-data-session-sync-cache-bundle.png) |
+| Vérifier la voix, le wake-word fallback et la TTS | `Voice / speech TTS bundle` | `164 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/87-test-runner-voice-speech-tts-bundle.png) |
+| Vérifier les planifications, hooks, webhooks et notifications | `Automation / scheduler hooks notifications bundle` | `766 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/88-test-runner-scheduler-hooks-notifications-bundle.png) |
+| Vérifier doctor, backup, settings et migrations | `Maintenance / doctor backup settings bundle` | `254 ok / 0 ko`, [capture](./qa/code-buddy-studio/screenshots/89-test-runner-maintenance-doctor-backup-settings-bundle.png) |
+
 Le runner expose aussi le suivi des exécutions :
 
 ![Suivi des exécutions](./qa/code-buddy-studio/screenshots/31-test-runner-executions.png)
