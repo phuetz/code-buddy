@@ -34,6 +34,7 @@ describe('Hermes provider readiness bridge', () => {
             credentialSources: ['OPENAI_API_KEY'],
             label: 'OpenAI / Codex-compatible',
             local: false,
+            setupCommands: [],
           },
           providers: [{ configured: true }, { configured: false }],
           portal: {
@@ -69,6 +70,7 @@ describe('Hermes provider readiness bridge', () => {
       activeProvider: {
         configured: true,
         credentialSources: ['OPENAI_API_KEY'],
+        setupCommands: [],
       },
       portal: {
         credentialPresent: true,

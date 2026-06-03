@@ -233,7 +233,10 @@ an LLM-callable Code Buddy tool or only as a nearby CLI/runtime feature.
 readiness report without the wider doctor payload. It includes the active
 model, inferred provider, tool-call/reasoning/vision capability flags,
 context/output limits, credential source names, configured-provider counts, and
-Nous Tool Gateway setup without printing secret values.
+Nous Tool Gateway setup without printing secret values. When the active provider
+is missing credentials or an endpoint, the JSON payload and readable output also
+include safe setup commands such as `buddy login`, `buddy --setup`, or
+`buddy hermes providers status --json`.
 
 `buddy hermes portal status [--json]` is the local Nous Portal readiness check.
 It reports credential source names, subscription/docs URLs, Tool Gateway routing

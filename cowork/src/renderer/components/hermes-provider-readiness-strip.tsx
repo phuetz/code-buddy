@@ -29,6 +29,7 @@ export interface HermesProviderReadinessReview {
     credentialSources: string[];
     label: string;
     local: boolean;
+    setupCommands: string[];
   };
   configuredProviderCount: number;
   issues: string[];
@@ -57,6 +58,7 @@ export const HermesProviderReadinessStrip: React.FC<{
   const [loadError, setLoadError] = useState<string | null>(null);
   const visibleReadiness = readiness ?? loadedReadiness;
   const visibleError = error ?? loadError;
+  const firstSetupCommand = visibleReadiness?.activeProvider.setupCommands?.[0] ?? null;
   const command = useMemo(
     () => visibleReadiness?.command ?? 'buddy hermes providers status --json',
     [visibleReadiness?.command]
@@ -195,6 +197,16 @@ export const HermesProviderReadinessStrip: React.FC<{
           {visibleReadiness.issues.length === 0 && visibleReadiness.recommendations[0] ? (
             <div className="mt-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted">
               {visibleReadiness.recommendations[0]}
+            </div>
+          ) : null}
+
+          {firstSetupCommand ? (
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded bg-surface/80 px-2 py-1 text-[10px] text-text-muted">
+              <Terminal size={10} className="shrink-0 text-text-muted" />
+              <span className="shrink-0">
+                {t('fleet.hermesProviderReadiness.setupCommandLabel', 'Setup')}
+              </span>
+              <code className="truncate">{firstSetupCommand}</code>
             </div>
           ) : null}
         </>

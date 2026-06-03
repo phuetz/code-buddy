@@ -55,6 +55,7 @@ export interface HermesProviderStatus {
   baseUrl: string | null;
   notes: string[];
   remediation: string[];
+  setupCommands: string[];
 }
 
 export interface HermesProviderReadiness {
@@ -131,6 +132,7 @@ interface ProviderDefinition {
   local?: boolean;
   notes?: string[];
   remediation?: string[];
+  setupCommands?: string[];
 }
 
 const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
@@ -141,6 +143,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     modelEnv: ['GROK_MODEL'],
     baseUrlEnv: ['GROK_BASE_URL'],
     remediation: ['Set GROK_API_KEY or XAI_API_KEY, or choose a configured provider/model.'],
+    setupCommands: ['buddy --setup', 'buddy onboard'],
   },
   {
     provider: 'openai',
@@ -149,6 +152,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     modelEnv: ['OPENAI_MODEL'],
     baseUrlEnv: ['OPENAI_BASE_URL', 'CODEBUDDY_OPENAI_BASE_URL'],
     remediation: ['Run buddy login for ChatGPT-backed routes or set OPENAI_API_KEY for API-backed routes.'],
+    setupCommands: ['buddy login', 'buddy --setup'],
   },
   {
     provider: 'anthropic',
@@ -157,6 +161,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     modelEnv: ['ANTHROPIC_MODEL', 'CLAUDE_MODEL'],
     baseUrlEnv: ['ANTHROPIC_BASE_URL'],
     remediation: ['Set ANTHROPIC_API_KEY or switch to another configured model.'],
+    setupCommands: ['buddy --setup', 'buddy hermes providers status --json'],
   },
   {
     provider: 'google',
@@ -165,6 +170,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     modelEnv: ['GEMINI_MODEL'],
     baseUrlEnv: ['GEMINI_BASE_URL', 'GOOGLE_GENERATIVE_AI_BASE_URL'],
     remediation: ['Set GEMINI_API_KEY or switch to another configured model.'],
+    setupCommands: ['buddy --setup', 'buddy hermes providers status --json'],
   },
   {
     provider: 'ollama',
@@ -176,6 +182,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     local: true,
     notes: ['Local provider; readiness means the endpoint is configured, not that a model pull was tested.'],
     remediation: ['Start Ollama and pull the selected model if local inference fails.'],
+    setupCommands: ['ollama serve', 'ollama pull <model>'],
   },
   {
     provider: 'lmstudio',
@@ -187,6 +194,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     local: true,
     notes: ['Local OpenAI-compatible provider; readiness does not start LM Studio.'],
     remediation: ['Start the LM Studio local server if model calls fail.'],
+    setupCommands: ['buddy --setup', 'buddy hermes providers status --json'],
   },
   {
     provider: 'deepseek',
@@ -195,6 +203,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     modelEnv: ['DEEPSEEK_MODEL'],
     baseUrlEnv: ['DEEPSEEK_BASE_URL'],
     remediation: ['Set DEEPSEEK_API_KEY or switch to another configured model.'],
+    setupCommands: ['buddy --setup', 'buddy hermes providers status --json'],
   },
   {
     provider: 'mistral',
@@ -203,6 +212,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     modelEnv: ['MISTRAL_MODEL'],
     baseUrlEnv: ['MISTRAL_BASE_URL'],
     remediation: ['Set MISTRAL_API_KEY or switch to another configured model.'],
+    setupCommands: ['buddy --setup', 'buddy hermes providers status --json'],
   },
 ];
 
@@ -338,6 +348,7 @@ function buildProviderStatuses(env: NodeJS.ProcessEnv, homeDir: string): HermesP
     const baseUrl = envValue(env, ...definition.baseUrlEnv) ?? definition.defaultBaseUrl ?? null;
     const configured = definition.local === true ? Boolean(baseUrl) : credentialSources.length > 0;
     const remediation = configured ? [] : definition.remediation ?? [];
+    const setupCommands = configured ? [] : definition.setupCommands ?? [];
     return {
       provider: definition.provider,
       label: definition.label,
@@ -349,6 +360,7 @@ function buildProviderStatuses(env: NodeJS.ProcessEnv, homeDir: string): HermesP
       baseUrl,
       notes: definition.notes ?? [],
       remediation,
+      setupCommands,
     };
   });
 }
@@ -365,6 +377,7 @@ function unknownProviderStatus(provider: 'unknown'): HermesProviderStatus {
     baseUrl: null,
     notes: ['The active model name does not match a known Code Buddy provider prefix.'],
     remediation: ['Use a known model prefix or set CODEBUDDY_PROVIDER to a supported provider.'],
+    setupCommands: ['buddy --setup', 'buddy hermes providers status --json'],
   };
 }
 

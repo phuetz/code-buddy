@@ -1596,6 +1596,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           credentialSources: string[];
           label: string;
           local: boolean;
+          setupCommands: string[];
         };
         configuredProviderCount: number;
         issues: string[];
@@ -4560,6 +4561,7 @@ declare global {
               credentialSources: string[];
               label: string;
               local: boolean;
+              setupCommands: string[];
             };
             configuredProviderCount: number;
             issues: string[];

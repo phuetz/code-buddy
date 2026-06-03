@@ -19,6 +19,7 @@ export interface HermesProviderReadinessReview {
     credentialSources: string[];
     local: boolean;
     baseUrl: string | null;
+    setupCommands: string[];
   };
   portal: {
     credentialPresent: boolean;
@@ -94,6 +95,7 @@ export async function getHermesProviderReadinessForReview(): Promise<HermesProvi
       credentialSources: readiness.activeProvider.credentialSources,
       local: readiness.activeProvider.local,
       baseUrl: readiness.activeProvider.baseUrl,
+      setupCommands: readiness.activeProvider.setupCommands ?? [],
     },
     portal: {
       credentialPresent: readiness.portal.portal.credentialPresent,

@@ -2289,6 +2289,7 @@
       "visionChip": "vision",
       "providersChip": "{{configured}}/{{total}} 个提供商",
       "contextLine": "上下文/输出：{{context}} / {{output}} tokens",
+      "setupCommandLabel": "设置",
       "unavailable": "Hermes 提供商就绪度尚未加载。",
       "loadFailed": "Hermes 提供商就绪度加载失败",
       "openSettings": "打开 API 设置"

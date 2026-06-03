@@ -364,6 +364,7 @@ describe('French renderer i18n support', () => {
       'fleet.hermesProviderReadiness.visionChip',
       'fleet.hermesProviderReadiness.providersChip',
       'fleet.hermesProviderReadiness.contextLine',
+      'fleet.hermesProviderReadiness.setupCommandLabel',
       'fleet.hermesProviderReadiness.unavailable',
       'fleet.hermesProviderReadiness.loadFailed',
       'fleet.hermesProviderReadiness.openSettings',

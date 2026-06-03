@@ -2302,6 +2302,7 @@
       "visionChip": "vision",
       "providersChip": "{{configured}}/{{total}} providers",
       "contextLine": "Context/output: {{context}} / {{output}} tokens",
+      "setupCommandLabel": "Setup",
       "unavailable": "Hermes provider readiness is not loaded yet.",
       "loadFailed": "Hermes provider readiness load failed",
       "openSettings": "Open API settings"

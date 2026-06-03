@@ -963,6 +963,14 @@ function renderHermesProviderReadiness(readiness: HermesProviderReadiness): stri
     lines.push(`  Credential sources: ${readiness.activeProvider.credentialSources.join(', ')}`);
   }
 
+  if (readiness.activeProvider.setupCommands.length > 0) {
+    lines.push('');
+    lines.push('Setup commands:');
+    for (const command of readiness.activeProvider.setupCommands) {
+      lines.push(`  - ${command}`);
+    }
+  }
+
   if (readiness.providers.length > 0) {
     lines.push('');
     lines.push('Providers:');

@@ -44,6 +44,7 @@ const readyProvider: HermesProviderReadinessReview = {
     credentialSources: ['OPENAI_API_KEY'],
     label: 'OpenAI / Codex-compatible',
     local: false,
+    setupCommands: [],
   },
   configuredProviderCount: 1,
   issues: [],
@@ -56,6 +57,18 @@ const readyProvider: HermesProviderReadinessReview = {
   },
   providerCount: 8,
   recommendations: ['Run buddy hermes portal status --json.'],
+};
+
+const missingProvider: HermesProviderReadinessReview = {
+  ...readyProvider,
+  ok: false,
+  activeProvider: {
+    ...readyProvider.activeProvider,
+    configured: false,
+    credentialSources: [],
+    setupCommands: ['buddy login', 'buddy --setup'],
+  },
+  issues: ['Active provider OpenAI / Codex-compatible has no detected credential or local endpoint.'],
 };
 
 describe('HermesProviderReadinessStrip', () => {
@@ -102,12 +115,31 @@ describe('HermesProviderReadinessStrip', () => {
     expect(strip?.textContent).toContain('1/8 providers');
     expect(strip?.textContent).toContain('Context/output: 200000 / 64000 tokens');
     expect(strip?.textContent).toContain('buddy hermes providers status --json');
+    expect(strip?.textContent).not.toContain('Setupbuddy login');
 
     const button = target.querySelector('button');
     act(() => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the first safe provider setup command when credentials are missing', () => {
+    const target = container();
+    root = createRoot(target);
+
+    act(() => {
+      root?.render(
+        React.createElement(HermesProviderReadinessStrip, {
+          readiness: missingProvider,
+        }),
+      );
+    });
+
+    expect(target.textContent).toContain('attention');
+    expect(target.textContent).toContain('missing');
+    expect(target.textContent).toContain('Setup');
+    expect(target.textContent).toContain('buddy login');
   });
 
   it('loads readiness from the readonly Electron bridge when no prop is provided', async () => {

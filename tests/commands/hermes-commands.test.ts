@@ -262,6 +262,7 @@ describe('Hermes CLI commands', () => {
             credentialSources: string[];
             provider: string;
             remediation: string[];
+            setupCommands: string[];
           };
           providers: unknown[];
         };
@@ -279,10 +280,61 @@ describe('Hermes CLI commands', () => {
         configured: true,
         credentialSources: expect.arrayContaining(['OPENAI_API_KEY']),
         remediation: [],
+        setupCommands: [],
       });
       expect(output.readiness.providers.length).toBeGreaterThan(0);
       expect(raw).not.toContain('secret-openai-provider-key');
       expect(raw).not.toContain('secret-nous-provider-token');
+    } finally {
+      for (const key of keys) {
+        const value = originalEnv.get(key);
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('prints safe setup commands when the active Hermes provider is missing credentials', async () => {
+    const keys = ['CODEBUDDY_MODEL', 'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'];
+    const originalEnv = new Map(keys.map((key) => [key, process.env[key]]));
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    try {
+      for (const key of keys) {
+        delete process.env[key];
+      }
+      process.env.CODEBUDDY_MODEL = 'claude-3-5-sonnet-latest';
+
+      await program.parseAsync(['node', 'test', 'hermes', 'providers', 'status', '--json']);
+
+      const jsonOutput = JSON.parse(getLogOutput()) as {
+        readiness: {
+          activeProvider: {
+            configured: boolean;
+            provider: string;
+            setupCommands: string[];
+          };
+          issues: string[];
+        };
+      };
+      expect(jsonOutput.readiness.activeProvider).toMatchObject({
+        provider: 'anthropic',
+        configured: false,
+        setupCommands: ['buddy --setup', 'buddy hermes providers status --json'],
+      });
+      expect(jsonOutput.readiness.issues).toContain(
+        'Active provider Anthropic / Claude has no detected credential or local endpoint.',
+      );
+
+      consoleLogSpy.mockClear();
+      const textProgram = createProgram();
+      registerHermesCommands(textProgram);
+      await textProgram.parseAsync(['node', 'test', 'hermes', 'providers', 'status']);
+      const textOutput = getLogOutput();
+      expect(textOutput).toContain('Setup commands:');
+      expect(textOutput).toContain('buddy --setup');
+      expect(textOutput).toContain('buddy hermes providers status --json');
     } finally {
       for (const key of keys) {
         const value = originalEnv.get(key);
