@@ -12,6 +12,8 @@ import path from 'path';
 import { type SpawnSyncReturns, spawnSync } from 'child_process';
 
 export type HermesRuntimeBackendStatus = 'available' | 'configured' | 'missing' | 'unsupported';
+export type HermesRuntimeLifecycleAction = 'provision' | 'hibernate' | 'wake' | 'attach' | 'teardown';
+export type HermesRuntimeLifecycleStatus = 'blocked' | 'planned' | 'unsupported';
 
 export interface HermesRuntimeBackend {
   id: string;
@@ -24,6 +26,7 @@ export interface HermesRuntimeBackend {
   command: string | null;
   version: string | null;
   credentialSources: string[];
+  lifecycleActions?: HermesRuntimeLifecycleAction[];
   smokeCommand: string | null;
   notes: string[];
   remediation: string[];
@@ -72,6 +75,30 @@ export interface HermesRuntimeSmokeOptions extends HermesRuntimeBackendsOptions 
   timeoutMs?: number;
 }
 
+export interface HermesRuntimeLifecycleOptions extends HermesRuntimeBackendsOptions {
+  action: HermesRuntimeLifecycleAction;
+  backendId: string;
+  target?: string;
+}
+
+export interface HermesRuntimeLifecyclePlan {
+  action: HermesRuntimeLifecycleAction;
+  args: string[];
+  backendId: string;
+  command: string | null;
+  displayCommand: string | null;
+  docs: string[];
+  generatedAt: string;
+  label: string | null;
+  notes: string[];
+  ok: boolean;
+  remediation: string[];
+  requiresApproval: boolean;
+  sideEffect: string;
+  status: HermesRuntimeLifecycleStatus;
+  target: string | null;
+}
+
 interface ProbeResult {
   exitCode: number | null;
   ok: boolean;
@@ -86,6 +113,28 @@ interface SmokeInvocation {
   outputPlaceholder?: string;
   redactions?: Array<{ replacement: string; value: string }>;
 }
+
+interface LifecycleInvocation {
+  args: string[];
+  command: string;
+  docs: string[];
+  notes?: string[];
+  requiresApproval?: boolean;
+  sideEffect: string;
+}
+
+const DAYTONA_DOCS_URL = 'https://www.daytona.io/docs/tools/cli/';
+const MODAL_SHELL_DOCS_URL = 'https://modal.com/docs/reference/cli/shell';
+const MODAL_SANDBOX_DOCS_URL = 'https://modal.com/docs/reference/modal.Sandbox';
+const VERCEL_SANDBOX_DOCS_URL = 'https://vercel.com/docs/vercel-sandbox/cli-reference';
+
+const HERMES_RUNTIME_LIFECYCLE_ACTIONS: HermesRuntimeLifecycleAction[] = [
+  'provision',
+  'hibernate',
+  'wake',
+  'attach',
+  'teardown',
+];
 
 function blockedSmokeResult(
   backendId: string,
@@ -243,6 +292,228 @@ function redactionsForEnv(
   return Array.from(values)
     .sort((left, right) => right.length - left.length)
     .map((value) => ({ value, replacement: '<configured-secret>' }));
+}
+
+export function isHermesRuntimeLifecycleAction(value: string): value is HermesRuntimeLifecycleAction {
+  return HERMES_RUNTIME_LIFECYCLE_ACTIONS.includes(value as HermesRuntimeLifecycleAction);
+}
+
+function blockedLifecyclePlan(
+  backendId: string,
+  action: HermesRuntimeLifecycleAction,
+  output: string,
+  options: {
+    backend?: HermesRuntimeBackend;
+    docs?: string[];
+    now: Date;
+    target?: string | null;
+  },
+): HermesRuntimeLifecyclePlan {
+  return {
+    action,
+    args: [],
+    backendId,
+    command: null,
+    displayCommand: null,
+    docs: options.docs ?? [],
+    generatedAt: options.now.toISOString(),
+    label: options.backend?.label ?? null,
+    notes: [output],
+    ok: false,
+    remediation: options.backend?.remediation ?? [],
+    requiresApproval: false,
+    sideEffect: 'none',
+    status: options.backend ? 'blocked' : 'unsupported',
+    target: options.target ?? null,
+  };
+}
+
+function lifecycleInvocationForBackend(
+  backendId: string,
+  action: HermesRuntimeLifecycleAction,
+  target: string | null,
+): LifecycleInvocation | null {
+  if (backendId === 'ssh') {
+    if (action !== 'attach' || !target) return null;
+    return {
+      command: 'ssh',
+      args: ['-T', target],
+      docs: ['https://man.openbsd.org/ssh'],
+      sideEffect: 'opens a remote shell session',
+    };
+  }
+
+  if (backendId === 'daytona') {
+    if (action === 'provision') {
+      return {
+        command: 'daytona',
+        args: target ? ['create', '--name', target] : ['create'],
+        docs: [DAYTONA_DOCS_URL],
+        sideEffect: 'creates a Daytona sandbox',
+      };
+    }
+    if (!target) return null;
+    const actionArgs: Record<Exclude<HermesRuntimeLifecycleAction, 'provision'>, string[]> = {
+      attach: ['ssh', target],
+      hibernate: ['stop', target],
+      teardown: ['delete', target],
+      wake: ['start', target],
+    };
+    return {
+      command: 'daytona',
+      args: actionArgs[action],
+      docs: [DAYTONA_DOCS_URL],
+      sideEffect: daytonaLifecycleSideEffect(action),
+    };
+  }
+
+  if (backendId === 'modal') {
+    if (action === 'attach' && target) {
+      return {
+        command: 'modal',
+        args: ['shell', target],
+        docs: [MODAL_SHELL_DOCS_URL],
+        sideEffect: 'opens a shell in a Modal container or running Sandbox',
+      };
+    }
+    if (action === 'provision') {
+      return {
+        command: 'modal-python-sdk',
+        args: ['Sandbox.create(...)'],
+        docs: [MODAL_SANDBOX_DOCS_URL],
+        notes: ['Modal Sandbox creation is an SDK operation; use this as an implementation target, not a shell command.'],
+        sideEffect: 'creates a Modal Sandbox through the Python SDK',
+      };
+    }
+    if (action === 'teardown' && target) {
+      return {
+        command: 'modal-python-sdk',
+        args: ['Sandbox.from_id(...)', 'terminate(wait=True)'],
+        docs: [MODAL_SANDBOX_DOCS_URL],
+        notes: ['Modal Sandbox teardown is an SDK operation; the target Sandbox id is resolved through Sandbox.from_id.'],
+        sideEffect: 'terminates a Modal Sandbox through the Python SDK',
+      };
+    }
+    return null;
+  }
+
+  if (backendId === 'vercel-sandbox') {
+    if (action === 'provision') {
+      return {
+        command: 'sandbox',
+        args: ['create'],
+        docs: [VERCEL_SANDBOX_DOCS_URL],
+        sideEffect: 'creates a Vercel Sandbox',
+      };
+    }
+    if (!target) return null;
+    if (action === 'attach') {
+      return {
+        command: 'sandbox',
+        args: ['connect', target],
+        docs: [VERCEL_SANDBOX_DOCS_URL],
+        sideEffect: 'opens an interactive shell in an existing Vercel Sandbox',
+      };
+    }
+    if (action === 'hibernate' || action === 'teardown') {
+      return {
+        command: 'sandbox',
+        args: ['stop', target],
+        docs: [VERCEL_SANDBOX_DOCS_URL],
+        notes: ['The Vercel Sandbox CLI documents stop with rm/remove aliases; treat teardown semantics as provider-specific.'],
+        sideEffect: action === 'hibernate' ? 'stops a running Vercel Sandbox' : 'removes or stops a Vercel Sandbox',
+      };
+    }
+    return null;
+  }
+
+  return null;
+}
+
+function daytonaLifecycleSideEffect(action: HermesRuntimeLifecycleAction): string {
+  switch (action) {
+    case 'attach':
+      return 'opens SSH into a Daytona sandbox';
+    case 'hibernate':
+      return 'stops a Daytona sandbox';
+    case 'provision':
+      return 'creates a Daytona sandbox';
+    case 'teardown':
+      return 'deletes a Daytona sandbox';
+    case 'wake':
+      return 'starts a Daytona sandbox';
+  }
+}
+
+function displayCommand(command: string, args: string[]): string {
+  return [command, ...args].map(quoteCommandArg).join(' ');
+}
+
+function quoteCommandArg(value: string): string {
+  if (/^[A-Za-z0-9_./:@=-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function buildHermesRuntimeLifecyclePlan(
+  options: HermesRuntimeLifecycleOptions,
+): HermesRuntimeLifecyclePlan {
+  const env = options.env ?? process.env;
+  const now = options.now ?? (() => new Date());
+  const target = options.target?.trim() || null;
+  const readiness = buildHermesRuntimeBackendsReadiness({
+    env,
+    homeDir: options.homeDir,
+    now,
+  });
+  const backendId = options.backendId.trim();
+  const backend = readiness.backends.find((candidate) => candidate.id === backendId);
+  const timestamp = now();
+
+  if (!backend) {
+    return blockedLifecyclePlan(
+      backendId,
+      options.action,
+      `Unknown runtime backend: ${backendId}`,
+      { now: timestamp, target },
+    );
+  }
+
+  const invocation = lifecycleInvocationForBackend(backend.id, options.action, target);
+  if (!invocation) {
+    const requiresTarget = ['attach', 'hibernate', 'teardown', 'wake'].includes(options.action) && !target;
+    return blockedLifecyclePlan(
+      backend.id,
+      options.action,
+      requiresTarget
+        ? `${backend.label} lifecycle action ${options.action} requires --target <sandbox-or-host>.`
+        : `${backend.label} does not expose a safe ${options.action} lifecycle plan yet.`,
+      { backend, now: timestamp, target },
+    );
+  }
+
+  return {
+    action: options.action,
+    args: invocation.args,
+    backendId: backend.id,
+    command: invocation.command,
+    displayCommand: displayCommand(invocation.command, invocation.args),
+    docs: invocation.docs,
+    generatedAt: timestamp.toISOString(),
+    label: backend.label,
+    notes: [
+      ...(invocation.notes ?? []),
+      backend.runnable
+        ? 'Plan is backed by an installed/configured runtime surface on this host.'
+        : 'Plan is provider-specific, but this host is not currently installed/configured enough to execute it.',
+      'This command is reported as a plan only; execution still needs an explicit guarded runner.',
+    ],
+    ok: true,
+    remediation: backend.runnable ? [] : backend.remediation,
+    requiresApproval: invocation.requiresApproval ?? true,
+    sideEffect: invocation.sideEffect,
+    status: 'planned',
+    target,
+  };
 }
 
 function runSmokeInvocation(
@@ -546,6 +817,7 @@ function sshBackend(env: NodeJS.ProcessEnv, homeDir: string): HermesRuntimeBacke
     command: 'ssh',
     version: firstLine(probe.output),
     credentialSources: configuredSources,
+    lifecycleActions: ['attach'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_SSH_SMOKE=true ssh -o BatchMode=yes -o ConnectTimeout=10 -T <configured-host> true' : 'ssh -V',
     notes: ['Code Buddy has SSH/device transport primitives; exact Hermes remote-backend lifecycle is still product-specific.'],
     remediation: probe.ok ? ['Configure CODEBUDDY_SSH_HOST or ~/.ssh/config before selecting SSH jobs.'] : ['Install an OpenSSH client.'],
@@ -590,8 +862,9 @@ function modalBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     command: 'modal',
     version: firstLine(probe.output),
     credentialSources,
+    lifecycleActions: ['provision', 'attach', 'teardown'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_MODAL_SMOKE=true modal profile current' : 'modal --version',
-    notes: ['Modal is currently an optional provider/tool gateway surface, not a full terminal backend.'],
+    notes: ['Modal is currently an optional provider/tool gateway surface; lifecycle plans map attach to the CLI and provision/teardown to the Sandbox SDK.'],
     remediation: probe.ok ? ['Configure Modal credentials before selecting Modal jobs.'] : ['Install the Modal CLI if cloud terminal jobs are required.'],
   };
 }
@@ -611,8 +884,9 @@ function daytonaBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     command: 'daytona',
     version: firstLine(probe.output),
     credentialSources,
+    lifecycleActions: ['provision', 'hibernate', 'wake', 'attach', 'teardown'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_DAYTONA_SMOKE=true daytona profile list' : 'daytona --version',
-    notes: ['Research-script remote jobs currently translate to daytona exec, but no managed lifecycle is claimed.'],
+    notes: ['Research-script remote jobs translate to daytona exec; lifecycle plans now cover create/start/stop/ssh/delete but execution is still guarded.'],
     remediation: probe.ok ? ['Configure Daytona credentials/workspaces before selecting remote jobs.'] : ['Install the Daytona CLI if this backend is required.'],
   };
 }
@@ -632,8 +906,9 @@ function vercelSandboxBackend(env: NodeJS.ProcessEnv): HermesRuntimeBackend {
     command: 'vercel',
     version: firstLine(probe.output),
     credentialSources,
+    lifecycleActions: ['provision', 'hibernate', 'attach', 'teardown'],
     smokeCommand: configured ? 'CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE=true vercel whoami' : 'vercel --version',
-    notes: ['Vercel Sandbox is tracked as an optional remote backend; Code Buddy has no first-class runner yet.'],
+    notes: ['Vercel Sandbox is tracked as an optional remote backend; lifecycle plans use the separate sandbox CLI where provider docs require it.'],
     remediation: probe.ok ? ['Configure VERCEL_TOKEN before attempting remote Vercel jobs.'] : ['Install the Vercel CLI if this backend is required.'],
   };
 }

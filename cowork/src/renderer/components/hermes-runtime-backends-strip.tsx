@@ -19,6 +19,7 @@ export interface HermesRuntimeBackendReviewItem {
   id: string;
   installed: boolean;
   label: string;
+  lifecycleActions?: string[];
   notes: string[];
   officialSurface: string;
   remediation: string[];
@@ -304,6 +305,11 @@ const BackendRow: React.FC<{
         </span>
       </div>
       <div className="mt-0.5 truncate font-mono text-[9px] text-text-muted">{smoke}</div>
+      {backend.lifecycleActions && backend.lifecycleActions.length > 0 ? (
+        <div className="mt-0.5 truncate text-[9px] text-text-muted">
+          lifecycle: {backend.lifecycleActions.join(', ')}
+        </div>
+      ) : null}
       {smokeResult || smokeError ? (
         <div
           className={`mt-0.5 truncate rounded bg-background px-1 py-0.5 text-[9px] ${

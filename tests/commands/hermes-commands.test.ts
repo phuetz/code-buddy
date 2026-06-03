@@ -567,6 +567,56 @@ describe('Hermes CLI commands', () => {
     );
   });
 
+  it('prints a safe Hermes runtime lifecycle plan', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'hermes',
+      'runtime',
+      'lifecycle',
+      'daytona',
+      'attach',
+      '--target',
+      'sandbox-demo',
+      '--json',
+    ]);
+
+    const output = JSON.parse(getLogOutput()) as {
+      kind: string;
+      plan: {
+        action: string;
+        args: string[];
+        backendId: string;
+        command: string;
+        displayCommand: string;
+        docs: string[];
+        ok: boolean;
+        requiresApproval: boolean;
+        status: string;
+        target: string;
+      };
+      schemaVersion: number;
+    };
+
+    expect(output.kind).toBe('hermes_runtime_lifecycle_plan');
+    expect(output.schemaVersion).toBe(1);
+    expect(output.plan).toMatchObject({
+      action: 'attach',
+      args: ['ssh', 'sandbox-demo'],
+      backendId: 'daytona',
+      command: 'daytona',
+      displayCommand: 'daytona ssh sandbox-demo',
+      ok: true,
+      requiresApproval: true,
+      status: 'planned',
+      target: 'sandbox-demo',
+    });
+    expect(output.plan.docs).toContain('https://www.daytona.io/docs/tools/cli/');
+  });
+
   it('prints Hermes messaging gateway readiness without leaking channel secrets', async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-messaging-status-'));
     const configPath = path.join(tmpDir, 'channels.json');
@@ -782,7 +832,7 @@ describe('Hermes CLI commands', () => {
             'cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-bridge-real.test.ts tests/hermes-runtime-backends-strip.test.ts',
           ]),
           notes: expect.stringContaining('~/.ssh/config'),
-          nextWork: expect.stringContaining('first-class managed lifecycle controls'),
+          nextWork: expect.stringContaining('guarded execution and state reconciliation'),
         }),
         expect.objectContaining({
           id: 'mobile-supervision',
@@ -865,7 +915,7 @@ describe('Hermes CLI commands', () => {
     });
     expect(output.todos.map((item) => item.id)).toContain('runtime-backends');
     const runtimeTodo = output.todos.find((item) => item.id === 'runtime-backends');
-    expect(runtimeTodo?.nextWork).toContain('first-class managed lifecycle controls');
+    expect(runtimeTodo?.nextWork).toContain('guarded execution and state reconciliation');
     expect(runtimeTodo?.nextWork).not.toContain('live smoke runners');
     expect(runtimeTodo?.nextWork).not.toContain('Docker/remote');
     expect(runtimeTodo?.nextWork).not.toContain('SSH/');

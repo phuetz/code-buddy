@@ -9,6 +9,7 @@ export interface HermesRuntimeBackendReviewItem {
   id: string;
   installed: boolean;
   label: string;
+  lifecycleActions?: string[];
   notes: string[];
   officialSurface: string;
   remediation: string[];
@@ -91,6 +92,7 @@ export async function getHermesRuntimeBackendsForReview(): Promise<HermesRuntime
       id: backend.id,
       installed: backend.installed,
       label: backend.label,
+      lifecycleActions: backend.lifecycleActions,
       notes: backend.notes,
       officialSurface: backend.officialSurface,
       remediation: backend.remediation,

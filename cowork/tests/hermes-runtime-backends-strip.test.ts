@@ -66,11 +66,12 @@ const readyRuntime: HermesRuntimeBackendsReview = {
       id: 'vercel-sandbox',
       installed: true,
       label: 'Vercel Sandbox',
+      lifecycleActions: ['provision', 'attach', 'teardown'],
       notes: ['Remote backend.'],
       officialSurface: 'Vercel Sandbox remote backend',
       remediation: [],
       runnable: true,
-      smokeCommand: 'vercel whoami',
+      smokeCommand: 'CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE=true vercel whoami',
       status: 'configured',
       version: 'Vercel CLI 42.0.0',
     },
@@ -118,6 +119,7 @@ describe('HermesRuntimeBackendsStrip', () => {
     expect(strip?.textContent).toContain('Local process');
     expect(strip?.textContent).toContain('Docker sandbox');
     expect(strip?.textContent).toContain('Vercel Sandbox');
+    expect(strip?.textContent).toContain('lifecycle: provision, attach, teardown');
     expect(strip?.textContent).toContain('OK-HERMES-LOCAL');
     expect(strip?.textContent).toContain('OK-HERMES-DOCKER');
     expect(strip?.textContent).toContain('buddy hermes doctor balanced --json');
@@ -150,7 +152,7 @@ describe('HermesRuntimeBackendsStrip', () => {
 
     expect(get).toHaveBeenCalledWith();
     expect(target.textContent).toContain('Vercel Sandbox');
-    expect(target.textContent).toContain('vercel whoami');
+    expect(target.textContent).toContain('CODEBUDDY_HERMES_ALLOW_VERCEL_SMOKE=true vercel whoami');
   });
 
   it('runs an opt-in live smoke through the Electron bridge', async () => {

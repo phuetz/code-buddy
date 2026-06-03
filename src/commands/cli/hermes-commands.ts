@@ -60,9 +60,12 @@ import {
   type HermesPortalStatus,
 } from '../../agent/hermes-portal-status.js';
 import {
+  buildHermesRuntimeLifecyclePlan,
   buildHermesRuntimeBackendsReadiness,
+  isHermesRuntimeLifecycleAction,
   renderHermesRuntimeBackendsReadiness,
   runHermesRuntimeBackendSmoke,
+  type HermesRuntimeLifecyclePlan,
   type HermesRuntimeSmokeResult,
 } from '../../agent/hermes-runtime-backends.js';
 import {
@@ -129,6 +132,10 @@ interface HermesKanbanOptions extends HermesCommandOptions {
 
 interface HermesRuntimeSmokeOptions extends HermesCommandOptions {
   timeoutMs?: string;
+}
+
+interface HermesRuntimeLifecycleOptions extends HermesCommandOptions {
+  target?: string;
 }
 
 interface HermesTodoOptions extends HermesCommandOptions {
@@ -717,6 +724,31 @@ function renderHermesRuntimeSmoke(result: HermesRuntimeSmokeResult): string {
 
   if (result.output) {
     lines.push(`  Output: ${result.output}`);
+  }
+
+  return lines.join('\n');
+}
+
+function renderHermesRuntimeLifecyclePlan(plan: HermesRuntimeLifecyclePlan): string {
+  const lines = [
+    `Hermes runtime lifecycle (${plan.backendId}/${plan.action}): ${plan.status}`,
+    `  Backend: ${plan.label ?? plan.backendId}`,
+    `  Target: ${plan.target ?? 'n/a'}`,
+    `  Command: ${plan.displayCommand ?? 'none'}`,
+    `  Side effect: ${plan.sideEffect}`,
+    `  Requires approval: ${plan.requiresApproval ? 'yes' : 'no'}`,
+  ];
+
+  if (plan.docs.length > 0) {
+    lines.push(`  Docs: ${plan.docs.join(', ')}`);
+  }
+
+  if (plan.notes.length > 0) {
+    lines.push('', 'Notes:', ...plan.notes.map((note) => `  - ${note}`));
+  }
+
+  if (plan.remediation.length > 0) {
+    lines.push('', 'Remediation:', ...plan.remediation.map((item) => `  - ${item}`));
   }
 
   return lines.join('\n');
@@ -1891,6 +1923,37 @@ export function registerHermesCommands(program: Command): void {
       }
 
       console.log(renderHermesRuntimeBackendsReadiness(readiness));
+    });
+
+  runtime
+    .command('lifecycle')
+    .description('Plan a guarded lifecycle action for a managed remote runtime backend')
+    .argument('<backendId>', 'backend id from buddy hermes runtime status, for example daytona')
+    .argument('<action>', 'one of provision, hibernate, wake, attach, teardown')
+    .option('--target <id>', 'sandbox, workspace, or host id/name required by attach/hibernate/wake/teardown')
+    .option('--json', 'output JSON')
+    .action((backendId: string, actionArg: string, options: HermesRuntimeLifecycleOptions) => {
+      if (!isHermesRuntimeLifecycleAction(actionArg)) {
+        throw new Error('action must be one of: provision, hibernate, wake, attach, teardown');
+      }
+
+      const plan = buildHermesRuntimeLifecyclePlan({
+        action: actionArg,
+        backendId,
+        target: options.target,
+      });
+      const payload = {
+        kind: 'hermes_runtime_lifecycle_plan',
+        schemaVersion: 1,
+        plan,
+      };
+
+      if (options.json) {
+        console.log(stableJson(payload));
+        return;
+      }
+
+      console.log(renderHermesRuntimeLifecyclePlan(plan));
     });
 
   hermes

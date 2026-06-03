@@ -4,7 +4,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { runHermesRuntimeBackendSmoke } from '../../src/agent/hermes-runtime-backends.js';
+import {
+  buildHermesRuntimeLifecyclePlan,
+  runHermesRuntimeBackendSmoke,
+} from '../../src/agent/hermes-runtime-backends.js';
 
 function hasRunnableWsl(): boolean {
   if (process.platform !== 'win32') return false;
@@ -331,5 +334,57 @@ describe('Hermes runtime backend live smoke runner', () => {
         },
       );
     }
+  });
+
+  it('plans Daytona managed lifecycle commands without leaking credentials', () => {
+    withFixturePath(
+      { command: 'daytona', output: 'daytona 1.0.0', version: 'daytona 1.0.0' },
+      (env) => {
+        const result = buildHermesRuntimeLifecyclePlan({
+          action: 'attach',
+          backendId: 'daytona',
+          env: {
+            ...env,
+            DAYTONA_API_KEY: 'secret-daytona-key',
+          },
+          now: () => new Date('2026-06-03T13:20:00.000Z'),
+          target: 'sandbox-demo',
+        });
+        const raw = JSON.stringify(result);
+
+        expect(result).toMatchObject({
+          action: 'attach',
+          args: ['ssh', 'sandbox-demo'],
+          backendId: 'daytona',
+          command: 'daytona',
+          displayCommand: 'daytona ssh sandbox-demo',
+          ok: true,
+          requiresApproval: true,
+          status: 'planned',
+          target: 'sandbox-demo',
+        });
+        expect(result.docs).toContain('https://www.daytona.io/docs/tools/cli/');
+        expect(result.notes.join(' ')).toContain('installed/configured');
+        expect(raw).not.toContain('secret-daytona-key');
+      },
+    );
+  });
+
+  it('blocks target-specific lifecycle commands until a target is provided', () => {
+    const result = buildHermesRuntimeLifecyclePlan({
+      action: 'teardown',
+      backendId: 'daytona',
+      env: process.env,
+      now: () => new Date('2026-06-03T13:21:00.000Z'),
+    });
+
+    expect(result).toMatchObject({
+      action: 'teardown',
+      backendId: 'daytona',
+      command: null,
+      ok: false,
+      status: 'blocked',
+    });
+    expect(result.notes.join(' ')).toContain('requires --target');
   });
 });

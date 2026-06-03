@@ -175,6 +175,7 @@ buddy hermes protocols-smoke local [--json]
 buddy hermes browser status [--json]
 buddy hermes browser-smoke local-playwright [--json]
 buddy hermes runtime status [--json]
+buddy hermes runtime lifecycle daytona attach --target <sandbox> [--json]
 buddy hermes runtime-smoke local [--json]
 buddy tools browser-operator draft "<goal>" [--source-url URL] [--mode isolated|local] [--json]
 buddy tools skill-candidate list|inspect|install [candidatePath] [--approved-by name] [--json]
@@ -279,8 +280,14 @@ local Playwright backend can execute, instead of only checking package presence.
 `buddy hermes runtime status [--json]` prints a dedicated runtime backend
 inventory for local Node, native OS sandbox, Docker, WSL, SSH, Singularity or
 Apptainer, Modal, Daytona, and Vercel Sandbox without requiring the larger
-`hermes doctor` payload. `buddy hermes runtime-smoke local --json` runs a real
-local subprocess smoke for the selected backend.
+`hermes doctor` payload. `buddy hermes runtime lifecycle <backend> <action>
+--target <id> --json` prints a provider-specific managed lifecycle plan for
+`provision`, `hibernate`, `wake`, `attach`, and `teardown` without executing
+destructive cloud operations. Daytona maps to CLI `create/start/stop/ssh/delete`,
+Modal maps attach to `modal shell` and creation/termination to the Sandbox SDK,
+and Vercel Sandbox maps to the official `sandbox` CLI. `buddy hermes
+runtime-smoke local --json` runs a real local subprocess smoke for the selected
+backend.
 
 `buddy hermes hooks [--json]` prints the canonical Hermes-style lifecycle
 hook manifest. It maps Code Buddy's existing user/tool hooks onto
