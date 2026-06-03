@@ -96,7 +96,7 @@ Connect to a peer Code Buddy's WebSocket and subscribe to its
 
 ```bash
 /fleet listen ws://100.98.18.76:3000/ws \
-  --api-key cb_sk_xxx \
+  --api-key your_fleet_api_key \
   --auto-reconnect \
   --max-attempts 5 \
   --name ministar-linux
@@ -586,7 +586,7 @@ future roadmap idea.
 export GOOGLE_API_KEY="AIza..."         # → cloud fallback when needed
 export OLLAMA_HOST="http://localhost:11434"   # → priority 1
 export CODEBUDDY_FLEET_HOSTNAME="ministar-ubuntu"
-export CODEBUDDY_FLEET_API_KEY="cb_sk_xxx"
+export CODEBUDDY_FLEET_API_KEY="your_fleet_api_key"
 
 buddy server --port 3000
 # log: [fleet] peer.chat wired: ollama (qwen2.5-coder:7b, local)
@@ -595,7 +595,7 @@ buddy server --port 3000
 ### Connect from MINISTAR (Windows G7 PT)
 
 ```bash
-# In D:\CascadeProjects\grok-cli
+# In <workspace-path>
 # .env already loads the keys
 buddy
 > /fleet listen ws://100.98.18.76:3000/ws --auto-reconnect --name ministar-linux --api-key $env:CODEBUDDY_FLEET_API_KEY

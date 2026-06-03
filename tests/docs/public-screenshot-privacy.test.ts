@@ -10,6 +10,7 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 
 const publicDocPaths = [
   'README.md',
+  'docs/fleet-guide.md',
   'docs/getting-started.md',
   'docs/cowork-guide-fr.md',
   'docs/cowork-user-guide.md',
@@ -82,6 +83,11 @@ function collectSensitiveTextMatches(file: string, text: string): SensitiveMatch
   addMatches(
     'raw OAuth token value',
     /\b(?:access|refresh|id)_token["']?\s*[:=]\s*["']?(?!<redacted>|redacted|null\b)[A-Za-z0-9._-]{12,}/gi,
+  );
+  addMatches(
+    'Code Buddy API key value',
+    /\bcb_sk_[A-Za-z0-9_-]{3,}\b/g,
+    (value) => value === 'cb_sk_placeholder',
   );
   addMatches(
     'non-placeholder API key assignment',
