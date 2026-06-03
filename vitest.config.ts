@@ -99,11 +99,7 @@ export default defineConfig({
     include: ['tests/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'tests/_archived/**'],
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        execArgv: ['--max-old-space-size=8192'],
-      },
-    },
+    execArgv: ['--max-old-space-size=8192'],
   },
   resolve: {
     alias: {
