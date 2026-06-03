@@ -157,7 +157,24 @@ describe('Hermes browser backend readiness and live smoke', () => {
           id: 'browserbase',
           configured: true,
           credentialSources: ['BROWSERBASE_API_KEY', 'BROWSERBASE_PROJECT_ID'],
+          remediation: [],
           runnable: false,
+          status: 'configured',
+        }),
+        expect.objectContaining({
+          id: 'browser-use',
+          configured: true,
+          credentialSources: ['BROWSER_USE_API_KEY'],
+          remediation: [],
+          runnable: false,
+          status: 'configured',
+        }),
+        expect.objectContaining({
+          id: 'firecrawl',
+          configured: true,
+          credentialSources: ['FIRECRAWL_API_KEY'],
+          remediation: [],
+          runnable: true,
           status: 'configured',
         }),
         expect.objectContaining({
@@ -170,6 +187,34 @@ describe('Hermes browser backend readiness and live smoke', () => {
     );
     expect(JSON.stringify(readiness)).not.toContain('secret-');
     expect(JSON.stringify(readiness)).not.toContain('ws://secret-cdp-host');
+  });
+
+  it('keeps Browser Use setup remediation only when no gateway credential is configured', () => {
+    const unconfigured = buildHermesBrowserBackendsReadiness({ env: {} });
+    const unconfiguredBrowserUse = unconfigured.backends.find((backend) => backend.id === 'browser-use');
+    expect(unconfiguredBrowserUse).toMatchObject({
+      configured: false,
+      remediation: [
+        'Set BROWSER_USE_API_KEY or CODEBUDDY_NOUS_TOOL_GATEWAY_URL before selecting Browser Use managed browser mode.',
+      ],
+      status: 'missing',
+    });
+
+    const configured = buildHermesBrowserBackendsReadiness({
+      env: {
+        CODEBUDDY_NOUS_TOOL_GATEWAY_URL: 'https://gateway.example.test',
+      },
+    });
+    const configuredBrowserUse = configured.backends.find((backend) => backend.id === 'browser-use');
+    const raw = JSON.stringify(configured);
+
+    expect(configuredBrowserUse).toMatchObject({
+      configured: true,
+      credentialSources: ['CODEBUDDY_NOUS_TOOL_GATEWAY_URL'],
+      remediation: [],
+      status: 'configured',
+    });
+    expect(raw).not.toContain('gateway.example.test');
   });
 
   it('launches Chromium through a real local Playwright smoke', async () => {

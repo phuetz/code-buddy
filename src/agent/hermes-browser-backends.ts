@@ -180,7 +180,11 @@ function browserbaseBackend(env: NodeJS.ProcessEnv): HermesBrowserBackend {
     version: stagehandVersion,
     credentialSources,
     smokeCommand: null,
-    notes: ['Stagehand is installed locally; managed Browserbase execution still requires project credentials.'],
+    notes: [
+      configured
+        ? 'Stagehand is installed locally and Browserbase credentials are configured; no safe live Browserbase smoke runner is wired yet.'
+        : 'Stagehand is installed locally; managed Browserbase execution still requires project credentials.',
+    ],
     remediation: configured ? [] : ['Set BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID for managed browser sessions.'],
   };
 }
@@ -201,7 +205,7 @@ function browserUseBackend(env: NodeJS.ProcessEnv): HermesBrowserBackend {
     credentialSources,
     smokeCommand: null,
     notes: ['Tracked for Hermes parity; Code Buddy does not yet expose a first-class Browser Use runtime runner.'],
-    remediation: ['Use local Playwright today, or wire the Nous Tool Gateway before claiming Browser Use backend parity.'],
+    remediation: configured ? [] : ['Set BROWSER_USE_API_KEY or CODEBUDDY_NOUS_TOOL_GATEWAY_URL before selecting Browser Use managed browser mode.'],
   };
 }
 
@@ -220,7 +224,11 @@ function firecrawlBackend(env: NodeJS.ProcessEnv): HermesBrowserBackend {
     version: null,
     credentialSources,
     smokeCommand: configured ? 'buddy hermes portal tools --json' : null,
-    notes: ['Code Buddy has a native Firecrawl tool surface; live calls require FIRECRAWL_API_KEY.'],
+    notes: [
+      configured
+        ? 'Code Buddy has a native Firecrawl tool surface and a credential source is configured.'
+        : 'Code Buddy has a native Firecrawl tool surface; live calls require FIRECRAWL_API_KEY.',
+    ],
     remediation: configured ? [] : ['Set FIRECRAWL_API_KEY when live Firecrawl extraction is required.'],
   };
 }
