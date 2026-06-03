@@ -15,6 +15,11 @@ function expectLinks(markdown: string, doc: string, links: string[]): void {
   expect(missing, `${doc} is missing public discovery links`).toEqual([]);
 }
 
+function expectText(markdown: string, doc: string, snippets: string[]): void {
+  const missing = snippets.filter((snippet) => !markdown.includes(snippet));
+  expect(missing, `${doc} is missing public usage text`).toEqual([]);
+}
+
 describe('public Cowork documentation discoverability', () => {
   it('keeps the aggregate public-docs script wired to every guard', async () => {
     const packageJson = JSON.parse(await readPublicDoc('package.json')) as {
@@ -81,6 +86,11 @@ describe('public Cowork documentation discoverability', () => {
         './qa/code-buddy-studio/screenshots/55-test-runner-permission-real-flow.png',
         './qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png',
         './qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
+      ]);
+      expectText(markdown, doc, [
+        'buddy tools skill-candidate inspect',
+        'outputStatus: written',
+        'outputVerified: true',
       ]);
     }
   });

@@ -104,6 +104,14 @@ The Hermes row is a manual real smoke because it rebuilds the compiled CLI befor
 
 ![Hermes built CLI lifecycle guard](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 
+When a Hermes research-script job proposes a reusable SKILL.md candidate, inspect the candidate before installing it:
+
+```bash
+buddy tools skill-candidate inspect .codebuddy/skill-candidates/<candidate-dir>
+```
+
+The successful run evidence must show a written local output artifact: `outputStatus: written` and `outputVerified: true`. A clean process exit with `outputStatus: placeholder` or `outputStatus: missing` means the remote or sandbox run did not return usable evidence yet, so Cowork and the CLI deliberately refuse to count it as repeatable proof for promotion.
+
 ## 7. Extend Cowork With MCP, Fleet, and Skills
 
 Use **MCP Connectors** to add external tools and local transports.

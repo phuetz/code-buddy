@@ -102,6 +102,14 @@ La ligne Hermes reste manuelle car elle reconstruit le CLI compilé avant de l'e
 
 ![Guard lifecycle Hermes built CLI](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 
+Quand un job Hermes research-script propose un candidat SKILL.md réutilisable, inspecte le candidat avant installation :
+
+```bash
+buddy tools skill-candidate inspect .codebuddy/skill-candidates/<candidate-dir>
+```
+
+La preuve de run réussi doit montrer un artefact local écrit : `outputStatus: written` et `outputVerified: true`. Un process qui sort proprement avec `outputStatus: placeholder` ou `outputStatus: missing` signifie que le run distant ou sandbox n'a pas encore rendu de preuve exploitable ; Cowork et le CLI refusent donc de le compter comme preuve répétable pour une promotion.
+
 ## 7. Étendre Cowork avec MCP, Fleet et Skills
 
 Utilise **MCP Connectors** pour ajouter des outils externes et des transports locaux.
