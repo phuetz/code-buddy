@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
 const reportPath = 'docs/qa/code-buddy-studio/feature-qa-report.json';
+const mainDossierPath = 'docs/qa/code-buddy-studio/feature-qa.md';
 const screenshotPrefix = 'docs/qa/code-buddy-studio/screenshots/';
 
 type QaReportResult = {
@@ -71,6 +72,10 @@ function asString(value: unknown, label: string): string {
   return value as string;
 }
 
+function toMainDossierScreenshotRef(screenshot: string): string {
+  return screenshot.replace('docs/qa/code-buddy-studio/', './');
+}
+
 describe('public QA evidence report integrity', () => {
   it('keeps report totals, pass counts, and functional coverage aligned', async () => {
     const report = await readQaReport();
@@ -132,6 +137,27 @@ describe('public QA evidence report integrity', () => {
       const absoluteTarget = path.resolve(repoRoot, screenshot);
       if (!absoluteTarget.startsWith(repoRoot) || !(await exactCasePathExists(absoluteTarget))) {
         findings.push(`${slug}: missing screenshot ${screenshot}`);
+      }
+    }
+
+    expect(findings).toEqual([]);
+  });
+
+  it('keeps every machine-readable screenshot visible in the main QA dossier', async () => {
+    const report = await readQaReport();
+    const results = asResults(report);
+    const mainDossier = await fs.readFile(path.join(repoRoot, mainDossierPath), 'utf8');
+    const findings: string[] = [];
+    const screenshots = new Set(
+      results
+        .map((result) => (typeof result.screenshot === 'string' ? result.screenshot : ''))
+        .filter((screenshot) => screenshot !== ''),
+    );
+
+    for (const screenshot of screenshots) {
+      const markdownRef = toMainDossierScreenshotRef(screenshot);
+      if (!mainDossier.includes(markdownRef)) {
+        findings.push(`${mainDossierPath}: missing ${markdownRef}`);
       }
     }
 
