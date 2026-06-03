@@ -246,10 +246,12 @@ Current measured state:
 
 - [ ] **Runtime backend inventory**
   - Scope: detect/configure local, Docker, SSH, WSL, sandbox, Vercel Sandbox/Modal/Daytona if product-relevant.
-  - Done so far: `buddy hermes doctor --json` and `buddy hermes runtime status --json` now report a non-destructive runtime backend inventory for local Node, native OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. Each row reports installed/configured/runnable state, version when a real CLI probe can provide it, credential source names only, notes/remediation, and copy/paste smoke commands for heavier real validation. `buddy hermes runtime-smoke local --json`, `buddy hermes runtime-smoke wsl --json`, and Cowork's `tools.hermesRuntimeBackends.smoke` can run opt-in live smoke checks. The local Node and WSL runners execute real subprocesses; Docker remains guarded by `CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true`.
+  - Done so far: `buddy hermes doctor --json` and `buddy hermes runtime status --json` now report a non-destructive runtime backend inventory for local Node, native OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. Each row reports installed/configured/runnable state, version when a real CLI probe can provide it, credential source names only, notes/remediation, and copy/paste smoke commands for heavier real validation. `buddy hermes runtime-smoke local --json`, `buddy hermes runtime-smoke wsl --json`, and Cowork's `tools.hermesRuntimeBackends.smoke` can run opt-in live smoke checks. The local Node and WSL runners execute real subprocesses. Docker remains guarded by `CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true`, with a real network-disabled container test path under `CODEBUDDY_REAL_DOCKER_SMOKE=1`. SSH readiness reports `~/.ssh/config` instead of resolved local home paths.
   - Acceptance: `buddy hermes runtime status --json` reports available backends and smoke commands. **Done for CLI JSON.**
-  - Remaining scope: turn configured backends into first-class managed runners where product-relevant, and expand live smoke execution to Docker/remote backends after product-specific safety decisions.
+  - Remaining scope: turn configured remote backends into first-class managed runners where product-relevant, and expand live smoke execution to SSH/Modal/Daytona/Vercel Sandbox after product-specific safety decisions.
   - Verification:
+    - `npm test -- tests/agent/hermes-runtime-backends-smoke-real.test.ts tests/agent/hermes-agent-diagnostics.test.ts tests/commands/hermes-commands.test.ts --run`
+    - `CODEBUDDY_REAL_DOCKER_SMOKE=1 npm test -- tests/agent/hermes-runtime-backends-smoke-real.test.ts --run`
     - `cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-bridge-real.test.ts tests/hermes-runtime-backends-strip.test.ts`
 
 - [ ] **Browser backend inventory**
@@ -273,5 +275,5 @@ Current measured state:
 
 1. Cowork provider/model readiness polish for media, tool parity, and skill lifecycle.
 2. Optional full-page Cowork skill manager if the Fleet cockpit strips become too cramped for daily use.
-3. Provider/runtime readiness smoke matrix beyond local Node and first-class managed remote runner decisions.
+3. Provider/runtime readiness smoke matrix for configured remote backends and first-class managed remote runner decisions.
 4. OpenClaw migration last, after the Hermes core and cockpit work are stable.

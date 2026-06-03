@@ -397,14 +397,15 @@ const FEATURES: HermesParityFeature[] = [
     status: 'partial',
     verificationCommands: [
       'npm test -- tests/agent/hermes-runtime-backends-smoke-real.test.ts tests/agent/hermes-agent-diagnostics.test.ts tests/commands/hermes-commands.test.ts --run',
+      'CODEBUDDY_REAL_DOCKER_SMOKE=1 npm test -- tests/agent/hermes-runtime-backends-smoke-real.test.ts --run',
       'cd cowork && npm test -- --run tests/hermes-runtime-backends-bridge.test.ts tests/hermes-runtime-backends-bridge-real.test.ts tests/hermes-runtime-backends-strip.test.ts',
       'npx tsx src/index.ts hermes doctor balanced --json',
       'npx tsx src/index.ts hermes runtime status --json',
       'npx tsx src/index.ts hermes runtime-smoke local --json',
       'rg -n "Docker|SSH|Daytona|Modal|Singularity|SandboxBackend" src tests docs',
     ],
-    notes: 'Local/desktop/server/fleet/sandbox/device work exists, and Hermes doctor plus Cowork now report real non-destructive probes plus smoke commands for local Node, OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. CLI and Cowork can run local Node and WSL backend smokes through real subprocesses when available. The full official managed backend lifecycle is not present.',
-    nextWork: 'Add opt-in live smoke runners for configured Docker/remote backends before claiming managed backend parity.',
+    notes: 'Local/desktop/server/fleet/sandbox/device work exists, and Hermes doctor plus Cowork now report real non-destructive probes plus smoke commands for local Node, OS sandbox, Docker, WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. CLI and Cowork can run local Node and WSL backend smokes through real subprocesses when available; the Docker smoke is guarded by CODEBUDDY_HERMES_ALLOW_DOCKER_SMOKE=true and has an opt-in real-container test path with CODEBUDDY_REAL_DOCKER_SMOKE=1. Runtime credential source output is public-safe, including ~/.ssh/config instead of resolved local home paths. The full official managed backend lifecycle is not present.',
+    nextWork: 'Add opt-in live smoke runners for configured remote backends (SSH/Modal/Daytona/Vercel Sandbox) before claiming managed backend parity.',
   },
   {
     id: 'mobile-supervision',
