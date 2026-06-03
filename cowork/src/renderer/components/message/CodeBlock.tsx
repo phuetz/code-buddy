@@ -1,7 +1,48 @@
 // Fenced code block with syntax highlighting (highlight.js) and copy button
 import { useState, useMemo, memo } from 'react';
 import { Copy, Check } from 'lucide-react';
-import hljs from 'highlight.js';
+import type { LanguageFn } from 'highlight.js';
+import hljs from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import css from 'highlight.js/lib/languages/css';
+import diff from 'highlight.js/lib/languages/diff';
+import dockerfile from 'highlight.js/lib/languages/dockerfile';
+import ini from 'highlight.js/lib/languages/ini';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import markdown from 'highlight.js/lib/languages/markdown';
+import plaintext from 'highlight.js/lib/languages/plaintext';
+import powershell from 'highlight.js/lib/languages/powershell';
+import python from 'highlight.js/lib/languages/python';
+import sql from 'highlight.js/lib/languages/sql';
+import typescript from 'highlight.js/lib/languages/typescript';
+import xml from 'highlight.js/lib/languages/xml';
+import yaml from 'highlight.js/lib/languages/yaml';
+
+const languageDefinitions: Array<[name: string, definition: LanguageFn, aliases?: string[]]> = [
+  ['bash', bash, ['sh', 'shell', 'zsh']],
+  ['css', css],
+  ['diff', diff, ['patch']],
+  ['dockerfile', dockerfile, ['docker']],
+  ['ini', ini, ['toml', 'properties', 'env']],
+  ['javascript', javascript, ['js', 'jsx', 'mjs', 'cjs']],
+  ['json', json, ['jsonc']],
+  ['markdown', markdown, ['md']],
+  ['plaintext', plaintext, ['text', 'txt']],
+  ['powershell', powershell, ['ps1', 'pwsh']],
+  ['python', python, ['py']],
+  ['sql', sql],
+  ['typescript', typescript, ['ts', 'tsx']],
+  ['xml', xml, ['html', 'svg']],
+  ['yaml', yaml, ['yml']],
+];
+
+for (const [name, definition, aliases] of languageDefinitions) {
+  hljs.registerLanguage(name, definition);
+  if (aliases) {
+    hljs.registerAliases(aliases, { languageName: name });
+  }
+}
 
 // Sanitize highlight.js output - only allow highlight span tags
 const sanitizeHighlight = (html: string): string =>
@@ -19,12 +60,12 @@ export const CodeBlock = memo(function CodeBlock({ language, children }: CodeBlo
 
   const highlightedHtml = useMemo(() => {
     try {
-      const lang = language.toLowerCase();
+      const lang = language.trim().toLowerCase();
       let result: string;
       if (hljs.getLanguage(lang)) {
         result = hljs.highlight(children, { language: lang }).value;
       } else {
-        result = hljs.highlightAuto(children).value;
+        result = hljs.highlightAuto(children, hljs.listLanguages()).value;
       }
       return sanitizeHighlight(result);
     } catch {

@@ -71,13 +71,13 @@ The current package build is green but not silent. Do not claim a zero-warning r
 
 | Warning | Current disposition | Follow-up |
 | --- | --- | --- |
-| Vite chunk-size warnings | Do not suppress by raising `chunkSizeWarningLimit`; current evidence shows the package builds and launches, but large chunks remain a performance and review item | Split eager renderer/main imports only after measuring `npm run build:gui` output |
 | Node `DEP0190` during packaging | Build succeeds; `NODE_OPTIONS=--trace-deprecation npm run build:gui` traces the warning to electron-builder's third-party `app-builder-lib/src/node-module-collector/nodeModulesCollector.ts` while collecting npm modules, not to a repo-owned packaging script | Track upstream electron-builder/app-builder-lib behavior before attempting a local workaround |
 
 ## Resolved Packaging Signals
 
 | Signal | Evidence |
 | --- | --- |
+| Vite chunk-size warnings | `npm run build:gui` now reports 0 occurrences of `Some chunks`; the renderer entry chunk is 496.11 kB after lazy-loading closed-by-default Cowork surfaces, replacing full `highlight.js` with core language registration, and adding measured renderer vendor chunks without raising `chunkSizeWarningLimit` |
 | Dynamic/static import reporter warnings | `npm run build:gui` now reports 0 occurrences of `vite:reporter`, `core-loader`, or `Dynamic/static import`; the former mixed `core-loader` boundary was removed by replacing redundant dynamic helper imports while keeping `server-bridge`, `sandbox-bootstrap`, and `reasoning-bridge` as action-path lazy chunks |
 
 ## Runner-Verified Cowork Bundles

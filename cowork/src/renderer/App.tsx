@@ -20,53 +20,18 @@ import { useWindowSize } from './hooks/useWindowSize';
 import { useTabPinPersistence } from './hooks/useTabPinPersistence';
 import { Sidebar } from './components/Sidebar';
 import { ShellNavigation } from './components/ShellNavigation';
-import { WelcomeView } from './components/WelcomeView';
-import { PermissionDialog } from './components/PermissionDialog';
-import { SudoPasswordDialog } from './components/SudoPasswordDialog';
 import { Titlebar } from './components/Titlebar';
-import { SandboxSetupDialog } from './components/SandboxSetupDialog';
 import { SandboxSyncToast } from './components/SandboxSyncToast';
 import { GlobalNoticeToast } from './components/GlobalNoticeToast';
 import { PanelErrorBoundary } from './components/PanelErrorBoundary';
-import { CommandPalette } from './components/CommandPalette';
-import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog';
-import { GlobalSearchDialog } from './components/GlobalSearchDialog';
 import { FilePreviewPane } from './components/FilePreviewPane';
 import { ArtifactPanel } from './components/ArtifactPanel';
 import { ComputerUseOverlay } from './components/ComputerUseOverlay';
 import { BrowserOperatorOverlay } from './components/BrowserOperatorOverlay';
 import { ApprovalDialog } from './components/ApprovalDialog';
-import { ActivityFeed } from './components/ActivityFeed';
-import { SessionInsightsPanel } from './components/SessionInsightsPanel';
-import { SessionResumeDialog } from './components/SessionResumeDialog';
-import { BookmarksPanel } from './components/BookmarksPanel';
-import { SnippetsLibrary } from './components/SnippetsLibrary';
-import { PersonaSwitcherDialog } from './components/PersonaSwitcherDialog';
-import { TestRunnerPanel } from './components/TestRunnerPanel';
-import { ReasoningTraceViewer } from './components/ReasoningTraceViewer';
-import { FocusView } from './components/FocusView';
 import { SplitPaneLayout } from './components/SplitPaneLayout';
-import { UpdateNotification } from './components/UpdateNotification';
 import { NotificationToastContainer } from './components/NotificationToast';
-import { NotificationCenter } from './components/NotificationCenter';
-import { EnrollmentDialog } from './components/EnrollmentDialog';
 import { ModelInstallDialog } from './components/ModelInstallDialog';
-import { OrchestratorLauncher } from './components/OrchestratorLauncher';
-import { FleetPanel } from './components/FleetPanel';
-import { FleetCommandCenter } from './components/FleetCommandCenter';
-import { TeamPanel } from './components/TeamPanel';
-import { LessonCandidatePanel } from './components/LessonCandidatePanel';
-import { UserModelPanel } from './components/UserModelPanel';
-import { SpecPanel } from './components/SpecPanel';
-import { MobileSupervisionPanel } from './components/MobileSupervisionPanel';
-import { IdentityPanel } from './components/IdentityPanel';
-import { DevicePanel } from './components/DevicePanel';
-import { ChannelsPanel } from './components/ChannelsPanel';
-import { CompanionPanel } from './components/CompanionPanel';
-import { OnboardingWizard } from './components/OnboardingWizard';
-import { SubAgentDashboard } from './components/SubAgentDashboard';
-import { DiagnosticsPanel } from './components/DiagnosticsPanel';
-import { BtwQuickAsk } from './components/BtwQuickAsk';
 import { PresenceService } from './services/presence/PresenceService';
 import type { AppConfig } from './types';
 import type { GlobalNoticeAction } from './store';
@@ -82,6 +47,143 @@ const ConfigModal = lazy(() =>
 );
 const SettingsPanel = lazy(() =>
   import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel }))
+);
+const WelcomeView = lazy(() =>
+  import('./components/WelcomeView').then((module) => ({ default: module.WelcomeView }))
+);
+const CommandPalette = lazy(() =>
+  import('./components/CommandPalette').then((module) => ({ default: module.CommandPalette }))
+);
+const KeyboardShortcutsDialog = lazy(() =>
+  import('./components/KeyboardShortcutsDialog').then((module) => ({
+    default: module.KeyboardShortcutsDialog,
+  }))
+);
+const GlobalSearchDialog = lazy(() =>
+  import('./components/GlobalSearchDialog').then((module) => ({
+    default: module.GlobalSearchDialog,
+  }))
+);
+const PermissionDialog = lazy(() =>
+  import('./components/PermissionDialog').then((module) => ({
+    default: module.PermissionDialog,
+  }))
+);
+const SudoPasswordDialog = lazy(() =>
+  import('./components/SudoPasswordDialog').then((module) => ({
+    default: module.SudoPasswordDialog,
+  }))
+);
+const SandboxSetupDialog = lazy(() =>
+  import('./components/SandboxSetupDialog').then((module) => ({
+    default: module.SandboxSetupDialog,
+  }))
+);
+const UpdateNotification = lazy(() =>
+  import('./components/UpdateNotification').then((module) => ({
+    default: module.UpdateNotification,
+  }))
+);
+const ActivityFeed = lazy(() =>
+  import('./components/ActivityFeed').then((module) => ({ default: module.ActivityFeed }))
+);
+const SessionInsightsPanel = lazy(() =>
+  import('./components/SessionInsightsPanel').then((module) => ({
+    default: module.SessionInsightsPanel,
+  }))
+);
+const SessionResumeDialog = lazy(() =>
+  import('./components/SessionResumeDialog').then((module) => ({
+    default: module.SessionResumeDialog,
+  }))
+);
+const BookmarksPanel = lazy(() =>
+  import('./components/BookmarksPanel').then((module) => ({ default: module.BookmarksPanel }))
+);
+const SnippetsLibrary = lazy(() =>
+  import('./components/SnippetsLibrary').then((module) => ({ default: module.SnippetsLibrary }))
+);
+const PersonaSwitcherDialog = lazy(() =>
+  import('./components/PersonaSwitcherDialog').then((module) => ({
+    default: module.PersonaSwitcherDialog,
+  }))
+);
+const TestRunnerPanel = lazy(() =>
+  import('./components/TestRunnerPanel').then((module) => ({ default: module.TestRunnerPanel }))
+);
+const ReasoningTraceViewer = lazy(() =>
+  import('./components/ReasoningTraceViewer').then((module) => ({
+    default: module.ReasoningTraceViewer,
+  }))
+);
+const FocusView = lazy(() =>
+  import('./components/FocusView').then((module) => ({ default: module.FocusView }))
+);
+const NotificationCenter = lazy(() =>
+  import('./components/NotificationCenter').then((module) => ({
+    default: module.NotificationCenter,
+  }))
+);
+const EnrollmentDialog = lazy(() =>
+  import('./components/EnrollmentDialog').then((module) => ({ default: module.EnrollmentDialog }))
+);
+const OrchestratorLauncher = lazy(() =>
+  import('./components/OrchestratorLauncher').then((module) => ({
+    default: module.OrchestratorLauncher,
+  }))
+);
+const FleetPanel = lazy(() =>
+  import('./components/FleetPanel').then((module) => ({ default: module.FleetPanel }))
+);
+const FleetCommandCenter = lazy(() =>
+  import('./components/FleetCommandCenter').then((module) => ({
+    default: module.FleetCommandCenter,
+  }))
+);
+const TeamPanel = lazy(() =>
+  import('./components/TeamPanel').then((module) => ({ default: module.TeamPanel }))
+);
+const LessonCandidatePanel = lazy(() =>
+  import('./components/LessonCandidatePanel').then((module) => ({
+    default: module.LessonCandidatePanel,
+  }))
+);
+const UserModelPanel = lazy(() =>
+  import('./components/UserModelPanel').then((module) => ({ default: module.UserModelPanel }))
+);
+const SpecPanel = lazy(() =>
+  import('./components/SpecPanel').then((module) => ({ default: module.SpecPanel }))
+);
+const MobileSupervisionPanel = lazy(() =>
+  import('./components/MobileSupervisionPanel').then((module) => ({
+    default: module.MobileSupervisionPanel,
+  }))
+);
+const IdentityPanel = lazy(() =>
+  import('./components/IdentityPanel').then((module) => ({ default: module.IdentityPanel }))
+);
+const DevicePanel = lazy(() =>
+  import('./components/DevicePanel').then((module) => ({ default: module.DevicePanel }))
+);
+const ChannelsPanel = lazy(() =>
+  import('./components/ChannelsPanel').then((module) => ({ default: module.ChannelsPanel }))
+);
+const CompanionPanel = lazy(() =>
+  import('./components/CompanionPanel').then((module) => ({ default: module.CompanionPanel }))
+);
+const OnboardingWizard = lazy(() =>
+  import('./components/OnboardingWizard').then((module) => ({ default: module.OnboardingWizard }))
+);
+const SubAgentDashboard = lazy(() =>
+  import('./components/SubAgentDashboard').then((module) => ({
+    default: module.SubAgentDashboard,
+  }))
+);
+const DiagnosticsPanel = lazy(() =>
+  import('./components/DiagnosticsPanel').then((module) => ({ default: module.DiagnosticsPanel }))
+);
+const BtwQuickAsk = lazy(() =>
+  import('./components/BtwQuickAsk').then((module) => ({ default: module.BtwQuickAsk }))
 );
 
 function MainPanelFallback() {
@@ -121,6 +223,8 @@ function App() {
   const showSessionInsights = useAppStore((s) => s.showSessionInsights);
   const showResumeChooser = useAppStore((s) => s.showResumeChooser);
   const showFocusView = useAppStore((s) => s.showFocusView);
+  const showBookmarksPanel = useAppStore((s) => s.showBookmarksPanel);
+  const showSnippetsLibrary = useAppStore((s) => s.showSnippetsLibrary);
   const setBookmarkedMessageIds = useAppStore((s) => s.setBookmarkedMessageIds);
   const setShowSnippetsLibrary = useAppStore((s) => s.setShowSnippetsLibrary);
   const showPersonaSwitcher = useAppStore((s) => s.showPersonaSwitcher);
@@ -131,6 +235,18 @@ function App() {
   const setShowReasoningViewer = useAppStore((s) => s.setShowReasoningViewer);
   const showEnrollmentDialog = useAppStore((s) => s.showEnrollmentDialog);
   const setShowEnrollmentDialog = useAppStore((s) => s.setShowEnrollmentDialog);
+  const showOrchestratorLauncher = useAppStore((s) => s.showOrchestratorLauncher);
+  const showFleetPanel = useAppStore((s) => s.showFleetPanel);
+  const showTeamPanel = useAppStore((s) => s.showTeamPanel);
+  const showLessonCandidatePanel = useAppStore((s) => s.showLessonCandidatePanel);
+  const showUserModelPanel = useAppStore((s) => s.showUserModelPanel);
+  const showSpecPanel = useAppStore((s) => s.showSpecPanel);
+  const showMobileSupervisionPanel = useAppStore((s) => s.showMobileSupervisionPanel);
+  const showIdentityPanel = useAppStore((s) => s.showIdentityPanel);
+  const showDevicePanel = useAppStore((s) => s.showDevicePanel);
+  const showChannelsPanel = useAppStore((s) => s.showChannelsPanel);
+  const showCompanionPanel = useAppStore((s) => s.showCompanionPanel);
+  const showNotificationCenter = useAppStore((s) => s.showNotificationCenter);
   const presenceEnabled = useAppStore((s) => s.presenceEnabled);
   const setShowOrchestratorLauncher = useAppStore((s) => s.setShowOrchestratorLauncher);
   const splitPaneEnabled = useAppStore((s) => s.splitPaneEnabled);
@@ -442,7 +558,9 @@ function App() {
               </Suspense>
             </PanelErrorBoundary>
           ) : (
-            <WelcomeView />
+            <Suspense fallback={<MainPanelFallback />}>
+              <WelcomeView />
+            </Suspense>
           )}
         </main>
 
@@ -461,32 +579,52 @@ function App() {
       </div>
 
       {/* Permission Dialog */}
-      {pendingPermission && <PermissionDialog permission={pendingPermission} />}
+      {pendingPermission && (
+        <Suspense fallback={null}>
+          <PermissionDialog permission={pendingPermission} />
+        </Suspense>
+      )}
 
       {/* Sudo Password Dialog */}
-      {pendingSudoPassword && <SudoPasswordDialog request={pendingSudoPassword} />}
+      {pendingSudoPassword && (
+        <Suspense fallback={null}>
+          <SudoPasswordDialog request={pendingSudoPassword} />
+        </Suspense>
+      )}
 
       {/* Onboarding Wizard (P1.6) — first-run only */}
       {showOnboarding && (
-        <OnboardingWizard
-          onClose={() => setShowOnboarding(false)}
-          onOpenApiSettings={() => {
-            setShowOnboarding(false);
-            setShowConfigModal(true);
-          }}
-        />
+        <Suspense fallback={null}>
+          <OnboardingWizard
+            onClose={() => setShowOnboarding(false)}
+            onOpenApiSettings={() => {
+              setShowOnboarding(false);
+              setShowConfigModal(true);
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Sub-agent dashboard (P2.6) — Cmd+Shift+A */}
       {showSubAgentDashboard && (
-        <SubAgentDashboard onClose={() => setShowSubAgentDashboard(false)} />
+        <Suspense fallback={null}>
+          <SubAgentDashboard onClose={() => setShowSubAgentDashboard(false)} />
+        </Suspense>
       )}
 
       {/* Security diagnostics panel (P3.4) — Cmd+Shift+D */}
-      {showDiagnostics && <DiagnosticsPanel onClose={() => setShowDiagnostics(false)} />}
+      {showDiagnostics && (
+        <Suspense fallback={null}>
+          <DiagnosticsPanel onClose={() => setShowDiagnostics(false)} />
+        </Suspense>
+      )}
 
       {/* /btw quick-ask popup (P3.9) — Cmd+Shift+/ */}
-      {showBtwQuickAsk && <BtwQuickAsk onClose={() => setShowBtwQuickAsk(false)} />}
+      {showBtwQuickAsk && (
+        <Suspense fallback={null}>
+          <BtwQuickAsk onClose={() => setShowBtwQuickAsk(false)} />
+        </Suspense>
+      )}
 
       {/* Config Modal */}
       <PanelErrorBoundary name="ConfigModal" fallback={null}>
@@ -503,10 +641,12 @@ function App() {
 
       {/* Sandbox Setup Dialog */}
       {showSandboxSetup && (
-        <SandboxSetupDialog
-          progress={sandboxSetupProgress}
-          onComplete={handleSandboxSetupComplete}
-        />
+        <Suspense fallback={null}>
+          <SandboxSetupDialog
+            progress={sandboxSetupProgress}
+            onComplete={handleSandboxSetupComplete}
+          />
+        </Suspense>
       )}
 
       {/* Sandbox Sync Toast */}
@@ -520,57 +660,67 @@ function App() {
 
       {/* Update notification banner */}
       {updateInfo && updateInfo.available && (
-        <UpdateNotification
-          updateInfo={updateInfo}
-          onDownload={() => window.electronAPI?.update?.download()}
-          onInstall={() => window.electronAPI?.update?.install()}
-          onDismiss={() => setUpdateInfo(null)}
-        />
+        <Suspense fallback={null}>
+          <UpdateNotification
+            updateInfo={updateInfo}
+            onDownload={() => window.electronAPI?.update?.download()}
+            onInstall={() => window.electronAPI?.update?.install()}
+            onDismiss={() => setUpdateInfo(null)}
+          />
+        </Suspense>
       )}
 
       {/* Command Palette (Cmd+K) */}
       {showCommandPalette && (
-        <CommandPalette
-          onClose={() => setShowCommandPalette(false)}
-          onNewSession={() => {
-            setShowSettings(false);
-            useAppStore.getState().setActiveSession(null);
-          }}
-          onResumeSession={() => setShowResumeChooser(true)}
-          onOpenSettings={() => setShowSettings(true)}
-          onToggleTheme={() => {
-            const newTheme = isDark ? 'light' : 'dark';
-            useAppStore.getState().updateSettings({ theme: newTheme });
-          }}
-          onShowShortcuts={() => setShowShortcutsDialog(true)}
-          isDark={isDark}
-          onShowDiagnostics={() => {
-            setShowCommandPalette(false);
-            setShowDiagnostics(true);
-          }}
-          onShowSubAgents={() => {
-            setShowCommandPalette(false);
-            setShowSubAgentDashboard(true);
-          }}
-          onShowBtw={() => {
-            setShowCommandPalette(false);
-            setShowBtwQuickAsk(true);
-          }}
-          onShowPlugins={() => {
-            setShowCommandPalette(false);
-            useAppStore.getState().setSettingsTab('plugins');
-            setShowSettings(true);
-          }}
-        />
+        <Suspense fallback={null}>
+          <CommandPalette
+            onClose={() => setShowCommandPalette(false)}
+            onNewSession={() => {
+              setShowSettings(false);
+              useAppStore.getState().setActiveSession(null);
+            }}
+            onResumeSession={() => setShowResumeChooser(true)}
+            onOpenSettings={() => setShowSettings(true)}
+            onToggleTheme={() => {
+              const newTheme = isDark ? 'light' : 'dark';
+              useAppStore.getState().updateSettings({ theme: newTheme });
+            }}
+            onShowShortcuts={() => setShowShortcutsDialog(true)}
+            isDark={isDark}
+            onShowDiagnostics={() => {
+              setShowCommandPalette(false);
+              setShowDiagnostics(true);
+            }}
+            onShowSubAgents={() => {
+              setShowCommandPalette(false);
+              setShowSubAgentDashboard(true);
+            }}
+            onShowBtw={() => {
+              setShowCommandPalette(false);
+              setShowBtwQuickAsk(true);
+            }}
+            onShowPlugins={() => {
+              setShowCommandPalette(false);
+              useAppStore.getState().setSettingsTab('plugins');
+              setShowSettings(true);
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Keyboard Shortcuts Dialog (Cmd+/) */}
       {showShortcutsDialog && (
-        <KeyboardShortcutsDialog onClose={() => setShowShortcutsDialog(false)} />
+        <Suspense fallback={null}>
+          <KeyboardShortcutsDialog onClose={() => setShowShortcutsDialog(false)} />
+        </Suspense>
       )}
 
       {/* Global Search Dialog (Cmd+P / Cmd+Shift+K) — Phase 2 step 8 */}
-      <GlobalSearchDialog open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} />
+      {showGlobalSearch && (
+        <Suspense fallback={null}>
+          <GlobalSearchDialog open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} />
+        </Suspense>
+      )}
 
       {/* File Preview Pane — Phase 2 step 9 (skipped when split-pane owns it) */}
       {!splitPaneEnabled && <FilePreviewPane />}
@@ -588,69 +738,158 @@ function App() {
       <ApprovalDialog />
 
       {/* Activity Feed — Phase 2 step 18 */}
-      <ActivityFeed open={showActivityFeed} onClose={() => setShowActivityFeed(false)} />
-      <SessionInsightsPanel
-        open={showSessionInsights}
-        onClose={() => setShowSessionInsights(false)}
-      />
-      <SessionResumeDialog open={showResumeChooser} onClose={() => setShowResumeChooser(false)} />
+      {showActivityFeed && (
+        <Suspense fallback={null}>
+          <ActivityFeed open={showActivityFeed} onClose={() => setShowActivityFeed(false)} />
+        </Suspense>
+      )}
+      {showSessionInsights && (
+        <Suspense fallback={null}>
+          <SessionInsightsPanel
+            open={showSessionInsights}
+            onClose={() => setShowSessionInsights(false)}
+          />
+        </Suspense>
+      )}
+      {showResumeChooser && (
+        <Suspense fallback={null}>
+          <SessionResumeDialog
+            open={showResumeChooser}
+            onClose={() => setShowResumeChooser(false)}
+          />
+        </Suspense>
+      )}
       {showFocusView && (
-        <FocusView
-          open={showFocusView}
-          onClose={() => setShowFocusView(false)}
-          onStopSession={stopSession}
-        />
+        <Suspense fallback={null}>
+          <FocusView
+            open={showFocusView}
+            onClose={() => setShowFocusView(false)}
+            onStopSession={stopSession}
+          />
+        </Suspense>
       )}
 
       {/* Bookmarks Panel — Phase 3 step 4 */}
-      <BookmarksPanel />
+      {showBookmarksPanel && (
+        <Suspense fallback={null}>
+          <BookmarksPanel />
+        </Suspense>
+      )}
 
       {/* Snippets Library — Phase 3 step 5 */}
-      <SnippetsLibrary />
-      <PersonaSwitcherDialog
-        isOpen={showPersonaSwitcher}
-        onClose={() => setShowPersonaSwitcher(false)}
-      />
-      <TestRunnerPanel isOpen={showTestRunner} onClose={() => setShowTestRunner(false)} />
-      <ReasoningTraceViewer
-        isOpen={showReasoningViewer}
-        onClose={() => setShowReasoningViewer(false)}
-      />
+      {showSnippetsLibrary && (
+        <Suspense fallback={null}>
+          <SnippetsLibrary />
+        </Suspense>
+      )}
+      {showPersonaSwitcher && (
+        <Suspense fallback={null}>
+          <PersonaSwitcherDialog
+            isOpen={showPersonaSwitcher}
+            onClose={() => setShowPersonaSwitcher(false)}
+          />
+        </Suspense>
+      )}
+      {showTestRunner && (
+        <Suspense fallback={null}>
+          <TestRunnerPanel isOpen={showTestRunner} onClose={() => setShowTestRunner(false)} />
+        </Suspense>
+      )}
+      {showReasoningViewer && (
+        <Suspense fallback={null}>
+          <ReasoningTraceViewer
+            isOpen={showReasoningViewer}
+            onClose={() => setShowReasoningViewer(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Notification toasts + center (Claude Cowork parity) */}
       <NotificationToastContainer />
-      <NotificationCenter />
+      {showNotificationCenter && (
+        <Suspense fallback={null}>
+          <NotificationCenter />
+        </Suspense>
+      )}
 
       {/* Presence — face memory enrollment + model install. */}
-      <EnrollmentDialog
-        isOpen={showEnrollmentDialog}
-        onClose={() => setShowEnrollmentDialog(false)}
-        onEnrolled={() => setShowEnrollmentDialog(false)}
-      />
+      {showEnrollmentDialog && (
+        <Suspense fallback={null}>
+          <EnrollmentDialog
+            isOpen={showEnrollmentDialog}
+            onClose={() => setShowEnrollmentDialog(false)}
+            onEnrolled={() => setShowEnrollmentDialog(false)}
+          />
+        </Suspense>
+      )}
       <ModelInstallDialog />
 
       {/* Multi-agent orchestrator launcher — opens via Sparkles button
           in Titlebar or Cmd/Ctrl+Shift+M. */}
-      <OrchestratorLauncher />
+      {showOrchestratorLauncher && (
+        <Suspense fallback={null}>
+          <OrchestratorLauncher />
+        </Suspense>
+      )}
 
       {/* Fleet panel — multi-host Code Buddy listener (GAP 3) */}
-      <FleetPanel />
+      {showFleetPanel && (
+        <Suspense fallback={null}>
+          <FleetPanel />
+        </Suspense>
+      )}
 
       {/* Fleet Command Center — multi-AI dispatch (Fleet P5) */}
       <FleetCommandCenterWrapper />
 
       {/* Team panel — Agent Teams (Phase 4 layer 9) */}
-      <TeamPanel />
+      {showTeamPanel && (
+        <Suspense fallback={null}>
+          <TeamPanel />
+        </Suspense>
+      )}
 
       {/* Hermes review-gated surfaces (CLI parity → Cowork) */}
-      <LessonCandidatePanel />
-      <UserModelPanel />
-      <SpecPanel />
-      <MobileSupervisionPanel />
-      <IdentityPanel />
-      <DevicePanel />
-      <ChannelsPanel />
-      <CompanionPanel />
+      {showLessonCandidatePanel && (
+        <Suspense fallback={null}>
+          <LessonCandidatePanel />
+        </Suspense>
+      )}
+      {showUserModelPanel && (
+        <Suspense fallback={null}>
+          <UserModelPanel />
+        </Suspense>
+      )}
+      {showSpecPanel && (
+        <Suspense fallback={null}>
+          <SpecPanel />
+        </Suspense>
+      )}
+      {showMobileSupervisionPanel && (
+        <Suspense fallback={null}>
+          <MobileSupervisionPanel />
+        </Suspense>
+      )}
+      {showIdentityPanel && (
+        <Suspense fallback={null}>
+          <IdentityPanel />
+        </Suspense>
+      )}
+      {showDevicePanel && (
+        <Suspense fallback={null}>
+          <DevicePanel />
+        </Suspense>
+      )}
+      {showChannelsPanel && (
+        <Suspense fallback={null}>
+          <ChannelsPanel />
+        </Suspense>
+      )}
+      {showCompanionPanel && (
+        <Suspense fallback={null}>
+          <CompanionPanel />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -666,5 +905,10 @@ export default App;
 function FleetCommandCenterWrapper() {
   const open = useAppStore((s) => s.showFleetCommandCenter);
   const close = useAppStore((s) => s.setShowFleetCommandCenter);
-  return <FleetCommandCenter isOpen={open} onClose={() => close(false)} />;
+  if (!open) return null;
+  return (
+    <Suspense fallback={null}>
+      <FleetCommandCenter isOpen={open} onClose={() => close(false)} />
+    </Suspense>
+  );
 }

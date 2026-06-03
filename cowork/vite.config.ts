@@ -40,6 +40,53 @@ const ignoredWatchPaths = [
   '**/dist-mcp/**',
 ];
 
+function rendererManualChunks(id: string): string | undefined {
+  const normalized = id.replace(/\\/g, '/');
+  if (!normalized.includes('/node_modules/')) {
+    return undefined;
+  }
+
+  if (
+    normalized.includes('/react/') ||
+    normalized.includes('/react-dom/') ||
+    normalized.includes('/scheduler/') ||
+    normalized.includes('/use-sync-external-store/') ||
+    normalized.includes('/zustand/') ||
+    normalized.includes('/i18next/') ||
+    normalized.includes('/react-i18next/')
+  ) {
+    return 'vendor-react';
+  }
+
+  if (normalized.includes('/lucide-react/')) {
+    return 'vendor-icons';
+  }
+
+  if (normalized.includes('/highlight.js/')) {
+    return 'vendor-highlight';
+  }
+
+  if (normalized.includes('/katex/')) {
+    return 'vendor-katex';
+  }
+
+  if (
+    normalized.includes('/react-markdown/') ||
+    normalized.includes('/remark-') ||
+    normalized.includes('/rehype-') ||
+    normalized.includes('/micromark') ||
+    normalized.includes('/mdast-') ||
+    normalized.includes('/hast-') ||
+    normalized.includes('/unified/') ||
+    normalized.includes('/unist-') ||
+    normalized.includes('/vfile')
+  ) {
+    return 'vendor-markdown';
+  }
+
+  return undefined;
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -119,6 +166,11 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     minify: process.env.NODE_ENV === 'production',
+    rollupOptions: {
+      output: {
+        manualChunks: rendererManualChunks,
+      },
+    },
   },
   define: {
     // Bake NODE_ENV at build time so React picks the correct prod/dev
