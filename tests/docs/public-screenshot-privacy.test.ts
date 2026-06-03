@@ -27,6 +27,9 @@ const screenshotDirs = [
   'docs/qa/code-buddy-studio/screenshots',
 ];
 
+const minimumCaptureWidth = 500;
+const minimumCaptureHeight = 80;
+
 type SensitiveMatch = {
   file: string;
   label: string;
@@ -223,6 +226,13 @@ describe('public screenshot documentation privacy', () => {
       const metadata = await sharp(imagePath).metadata();
       if (metadata.format !== 'png') {
         metadataFindings.push(`${relativePath}: expected png, got ${metadata.format ?? 'unknown'}`);
+      }
+      const width = metadata.width ?? 0;
+      const height = metadata.height ?? 0;
+      if (width < minimumCaptureWidth || height < minimumCaptureHeight) {
+        metadataFindings.push(
+          `${relativePath}: expected at least ${minimumCaptureWidth}x${minimumCaptureHeight}, got ${width}x${height}`,
+        );
       }
       if (metadata.exif || metadata.iptc || metadata.xmp) {
         metadataFindings.push(`${relativePath}: contains private metadata block`);

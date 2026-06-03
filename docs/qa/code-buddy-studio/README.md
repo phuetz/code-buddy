@@ -45,4 +45,4 @@ This script runs the public documentation guards in `tests/docs/public-doc-links
 `tests/docs/public-screenshot-privacy.test.ts`, plus the renderer checks in
 `tests/docs/renderers.test.ts`.
 
-The guards verify exact-case local links, relative screenshot references, real PNG files, and absence of obvious private strings in public docs or PNG metadata.
+The guards verify exact-case local links, relative screenshot references, real PNG files with minimum public-capture dimensions, and absence of obvious private strings in public docs or PNG metadata.
