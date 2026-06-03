@@ -54,18 +54,16 @@ at **selection time**: `src/skills/skill-manager.ts` (`matchSkills`, `getSkillPr
 and `src/skills/registry.ts` (`list`, `search`). Core tests assert disabled skills never reach the
 prompt. Fully wired.
 
-**GAP-5 ⚠️ PARTIAL + HIGH-severity security** — `src/server/routes/mobile.ts` mounts `/api/mobile/*`
-(pair, snapshot, artifact read with traversal guard, recall-pack, followup-draft) and token-gates the
-read/draft routes; 8 tests pass. **But:**
-- `GET /pairing-status` (`:46`) returns the **active pairing code unauthenticated**, and
-  `POST /pairing-code` (`:55`) lets **anyone rotate it unauthenticated**. There is **no loopback
-  binding** (`req.ip`/`remoteAddress` never checked). The brief's own contract
-  (`mobile-supervision-gateway-listener-shell.ts:39-41`) specifies `host:'127.0.0.1'` /
-  `networkExposure:'loopback_only'`. So any host on the LAN can GET the code → `POST /pair` → obtain a
-  15-min `mobile:read`+`mobile:draft` token (artifact reads). **Contract violation, fix before ship.**
-- `approve/cancel` and `submit prompt` routes from the brief are **not implemented** (only a
-  draft-only `followup-draft`). This is the safe-by-default subset; remaining routes are deferred.
-- Token expiry *is* enforced (`isValidToken`, `:23`). Default pairing code is the literal `'123456'`.
+**GAP-5 ✅ (security blocker resolved; remote execution still gated)** — `src/server/routes/mobile.ts`
+mounts `/api/mobile/*` with a split between device-facing paired routes and local-operator-only routes.
+`loopbackOnlyMiddleware` now checks the raw socket address, ignores spoofable forwarding headers, and
+gates `/pairing-status`, `/pairing-code`, `/followup-drafts`, `/followup-draft/:id/approve`, and
+`/followup-draft/:id/cancel`. `/pair` and paired read-only routes stay device-facing behind the
+short-lived bearer token. The initial literal code was replaced by a randomized 6-digit code, and
+`POST /submit-prompt` only enqueues a review draft; approval records the local decision and still does
+not dispatch dangerous work silently. Tests in `tests/server/mobile.test.ts` cover token expiry,
+loopback allow/deny, `X-Forwarded-For` spoof resistance, prompt submission, approve/cancel, and
+non-pending transition conflicts.
 
 **GAP-6 ✅** — `src/browser-automation/browser-operator-executor.ts` (new) drives a real backend via
 `getBrowserManager()`: consent gate throws `BrowserOperatorConsentRequired` until granted, iterates
@@ -81,12 +79,14 @@ inbound→agent→reply receiver loop **does exist** (fed by adapter polling, st
 `src/server/` anchor; the server only has the A2A-forwarding `channel-a2a-bridge`), and there is **no
 E2E test** of the full roundtrip or session resumption.
 
-**GAP-8 ⚠️ PARTIAL (dead UI)** — Backend is real: `LessonsTracker.getConceptDetails()`
-(`src/agent/lessons-tracker.ts:569-628`) returns concept node + lessons + provenance backlinks; IPC
+**GAP-8 ✅** — Backend is real: `LessonsTracker.getConceptDetails()`
+(`src/agent/lessons-tracker.ts`) returns concept node + lessons + provenance backlinks; IPC
 `tools.lessonsVault.getConceptDetails` and preload are wired; `cowork/.../LessonsVaultGraph.tsx`
-(+220) renders concept pages, backlinks, related runs. **But the component is imported nowhere**
-(grep = only self-reference) — it is **not mounted**, so the cockpit is unreachable from the UI. The
-feature is one wiring step from done.
+renders concept pages, backlinks, and related runs. The previously unreachable cockpit is now mounted:
+`LessonsVaultStrip` exposes a Browse vault trigger, and `FleetCommandCenter` renders
+`LessonsVaultGraph` from that trigger. Tests: `cowork/tests/lessons-vault-strip.test.ts`,
+`cowork/tests/lessons-vault-graph.test.ts`, and
+`cowork/tests/fleet-command-center-board.test.ts`.
 
 **GAP-9 ✅** — `src/database/schema.ts` bumps to v3 and builds `messages_fts` with `tokenize='trigram'`
 (substring/CJK fall out naturally); `cowork/.../db/database.ts` rebuilds the table if the tokenizer is
@@ -131,12 +131,13 @@ reconciliation, and Modal SDK execution remain open.
 
 ## La suite — prioritized backlog
 
-### P0 — Blockers (do before committing/merging this work)
-1. **GAP-5 security:** bind the mobile listener to `127.0.0.1` and enforce `loopback_only` per the
-   contract; stop returning the pairing code over the network — make `pairing-status`/`pairing-code`
-   local-operator-only (no remote read/rotate). Add allow/deny tests for non-loopback origins.
-2. **GAP-8 mount:** import & mount `LessonsVaultGraph` (nav entry/route + a trigger from the existing
-   `LessonsVaultStrip`), turning the already-built backend into a reachable cockpit. Add a Cowork test.
+### P0 — Resolved blockers (kept for traceability)
+1. **GAP-5 security:** `pairing-status` / `pairing-code` and local review endpoints are now
+   local-operator-only through `loopbackOnlyMiddleware`; non-loopback and spoofed-forwarder requests
+   are covered by `tests/server/mobile.test.ts`.
+2. **GAP-8 mount:** `LessonsVaultGraph` is imported and mounted from the Fleet command center through
+   the `LessonsVaultStrip` Browse vault trigger; Cowork tests cover the trigger, graph render contract,
+   and mount path.
 
 ### P1 — Definition-of-Done test holes (implementations exist, tests don't)
 3. Executor test: `<user_model_context>` appears once per turn when the model has accepted obs, and
@@ -148,8 +149,9 @@ reconciliation, and Modal SDK execution remain open.
 6. Inbound E2E test: channel message → route → agent → reply, plus same-session follow-up reuse (GAP-7).
 
 ### P2 — Feature completion
-7. **GAP-5 routes:** add the gated `approve`/`cancel`/`submit-prompt` endpoints (follow-ups require
-   explicit local approval; dangerous ops blocked), per the pairing-acceptance plan.
+7. **GAP-5 routes:** implemented: `submit-prompt` enqueues a draft, and loopback-only
+   `approve`/`cancel` endpoints record the local operator decision without silently dispatching risky
+   work.
 8. **GAP-7 server intake:** add a webhook/WS receiver in `buddy server` so inbound messaging works
    without a separately-started `buddy channels` process; per-channel enablement + auth.
 

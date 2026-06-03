@@ -3,6 +3,11 @@
 Date: 2026-05-24 · Verified against working tree `3b3bd18d` · `@phuetz/code-buddy@1.0.0-rc.5` · Node ≥ 18
 Reference: Hermes Agent (Nous Research) — <https://github.com/nousresearch/hermes-agent>
 
+> **Historical brief.** The gap statuses below describe the `3b3bd18d` baseline used to plan the
+> Hermes parity work. For current implementation status and verification evidence, read
+> `docs/code-buddy-hermes-gap-audit-2026-05-24.md`; GAP-5 and GAP-8 are no longer open blockers in
+> the current tree.
+
 > **Mission for Antigravity:** finalize Code Buddy to Hermes-agent capability parity by
 > closing the verified gaps in Part 5, following the architecture and conventions in
 > Parts 1–4, respecting the non-goals in Part 7, and meeting the Definition of Done in
@@ -14,12 +19,12 @@ Reference: Hermes Agent (Nous Research) — <https://github.com/nousresearch/her
 ## Part 0 — TL;DR
 
 Code Buddy is a **terminal-first, multi-provider AI coding agent** (TypeScript/ESM) with a
-desktop GUI (**Cowork**, Electron) and a multi-agent mesh (**Fleet**). It already implements
-most of Hermes' "agent operating system" surface: closed learning loop (lessons + user
-model, **review-gated**), enforced tool profiles, scheduled autonomy, peer delegation,
-durable runs, recall, evals, and a brand-new **BMAD spec pipeline**. The remaining gaps are
-**12 items** (Part 5), mostly "wire the runtime to specs that already exist" and a few
-larger/external lifts. Build them in the order in Part 6.5.
+desktop GUI (**Cowork**, Electron) and a multi-agent mesh (**Fleet**). At the audited baseline it
+already implemented most of Hermes' "agent operating system" surface: closed learning loop
+(lessons + user model, **review-gated**), enforced tool profiles, scheduled autonomy, peer delegation,
+durable runs, recall, evals, and a brand-new **BMAD spec pipeline**. Part 5 captured **12 baseline
+gaps**, mostly "wire the runtime to specs that already exist" and a few larger/external lifts; the
+current status has advanced beyond that baseline and is tracked in the companion audit.
 
 **Golden rule:** anything the agent learns or mutates durably is **proposed → human
 approves → then written** — never silent. Mirror `src/agent/lesson-candidate-queue.ts`.
@@ -303,6 +308,10 @@ exists but is NOT mounted, and **disabled skills are not excluded from prompt in
 ### P2 — Operator surface & execution reach (medium)
 
 #### GAP-5 · Mobile remote-supervision live listener — OPEN
+> Current tree: core security and local-operator routes are implemented. `src/server/routes/mobile.ts`
+> exposes `/api/mobile/*`, loopback-gates local-operator endpoints, randomizes the pairing code, and
+> review-gates submit/approve/cancel flows. See `tests/server/mobile.test.ts` and the companion audit.
+
 Rich contracts/snapshots/shells exist (`buddy run mobile-snapshot / mobile-gateway-contract /
 mobile-pairing-state / mobile-pairing-acceptance-plan / mobile-approval-queue /
 mobile-gateway-listener-shell`) but **no running listener** — no `/api/mobile/*` routes.
@@ -340,6 +349,10 @@ Outbound `delivery.targets` fanout is done; inbound is only types + helpers
 - **Tests:** inbound message → session routing → agent invocation (mock channel + agent).
 
 #### GAP-8 · Lessons cockpit: full backlink/outcome browsing — PARTIAL
+> Current tree: `LessonsVaultGraph` is mounted from the Fleet command center through the
+> `LessonsVaultStrip` Browse vault trigger. The concept/backlink render path is covered by Cowork
+> tests named in the companion audit.
+
 Cowork shows a read-only `LessonsVaultStrip` (counts + top concepts). Missing: concept pages,
 backlinks, related runs/outcomes.
 - **Anchors:** `tools.lessonsVault.preview` IPC, `LessonsTracker.buildConceptGraph`, `getRunLineage`,
