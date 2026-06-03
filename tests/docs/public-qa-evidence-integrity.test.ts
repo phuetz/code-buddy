@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
 const reportPath = 'docs/qa/code-buddy-studio/feature-qa-report.json';
 const mainDossierPath = 'docs/qa/code-buddy-studio/feature-qa.md';
+const qaHubPath = 'docs/qa/code-buddy-studio/README.md';
 const screenshotPrefix = 'docs/qa/code-buddy-studio/screenshots/';
 
 type QaReportResult = {
@@ -96,6 +97,21 @@ describe('public QA evidence report integrity', () => {
     expect(failed).toEqual([]);
     expect(coverageTotal).toBe(total);
     expect(coverageReal + coverageUsed + coveragePartial).toBe(total);
+  });
+
+  it('keeps the public QA hub snapshot aligned with the machine-readable report', async () => {
+    const report = await readQaReport();
+    const qaHub = await fs.readFile(path.join(repoRoot, qaHubPath), 'utf8');
+    const total = asNumber(report.total, 'report.total');
+    const passed = asNumber(report.passed, 'report.passed');
+    const coverageReal = asNumber(report.functionalCoverage?.real, 'functionalCoverage.real');
+    const coverageUsed = asNumber(report.functionalCoverage?.used, 'functionalCoverage.used');
+    const coveragePartial = asNumber(report.functionalCoverage?.partial, 'functionalCoverage.partial');
+
+    expect(qaHub).toContain(`${passed} / ${total} passed`);
+    expect(qaHub).toContain(`${coverageReal} real, ${coverageUsed} used, ${coveragePartial} partial`);
+    expect(qaHub).toContain('./feature-qa-report.json');
+    expect(qaHub).toContain('npm run test:docs-public');
   });
 
   it('keeps every result uniquely identified and positively verified', async () => {

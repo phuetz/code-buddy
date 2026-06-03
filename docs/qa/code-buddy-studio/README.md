@@ -14,6 +14,15 @@ Start here when you want proof that the documented Cowork flows have been exerci
 | [`overnight-test-datasets.json`](./overnight-test-datasets.json) | Structured dataset used by the overnight QA pass |
 | [`screenshots/`](./screenshots/) | Public PNG captures referenced by guides and reports |
 
+## Evidence Snapshot
+
+| Signal | Current proof |
+| --- | --- |
+| Functional rows | 29 / 29 passed |
+| Coverage split | 3 real, 26 used, 0 partial |
+| Machine report | [`feature-qa-report.json`](./feature-qa-report.json) |
+| Screenshot guard | `npm run test:docs-public` |
+
 ## Current Evidence Themes
 
 - ChatGPT OAuth `gpt-5.5`: account check, provider direct call, stream, tool-call, CLI, server API, and Cowork/Electron.
