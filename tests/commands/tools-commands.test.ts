@@ -35,6 +35,8 @@ function runResult(overrides: Partial<ResearchScriptJobRunResult> = {}): Researc
     exitCode: 0,
     jobId: 'research-script-cli',
     outputPath: 'research-scripts/cli/output.json',
+    outputStatus: 'written',
+    outputVerified: true,
     signal: null,
     status: 'completed',
     stderrPath: 'research-scripts/cli/stderr.log',

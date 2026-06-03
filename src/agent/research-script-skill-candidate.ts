@@ -138,7 +138,11 @@ export function buildResearchScriptSkillCandidate(
   options: BuildResearchScriptSkillCandidateOptions = {},
 ): ResearchScriptSkillCandidate {
   const minSuccessfulRuns = normalizeMinSuccessfulRuns(options.minSuccessfulRuns);
-  const successfulRuns = runs.filter((run) => run.status === 'completed' && run.exitCode === 0);
+  const successfulRuns = runs.filter((run) => (
+    run.status === 'completed'
+    && run.exitCode === 0
+    && run.outputVerified === true
+  ));
   const skillName = `research-${slugify(job.title)}`;
   const skillRoot = normalizeSkillRoot(options.skillRoot);
   const skillPath = `${skillRoot}/${skillName}/SKILL.md`;
@@ -371,7 +375,7 @@ function renderResearchScriptSkillCandidateMarkdown(
     `- Stop on: ${job.sandboxPolicy.stopOn.join(', ')}`,
     '',
     '## Successful Run Evidence',
-    ...successfulRuns.map((run) => `- ${run.jobId}: output ${run.outputPath}, summary ${run.summaryPath}, duration ${run.durationMs}ms`),
+    ...successfulRuns.map((run) => `- ${run.jobId}: output ${run.outputPath} (${run.outputStatus}), summary ${run.summaryPath}, duration ${run.durationMs}ms`),
     '',
     '## Candidate Installation Notes',
     `- Review and edit this candidate before copying it to ${candidate.skillPath}.`,

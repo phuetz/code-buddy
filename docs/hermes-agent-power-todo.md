@@ -325,7 +325,9 @@ The gap is mainly product integration and durability:
       `vercel-sandbox` Vercel Sandbox CLI setup/upload/exec/download using
       `sandbox copy` plus `sandbox exec`, each covered by runner tests. Live
       cloud account execution, Daytona artifact sync automation, and Modal SDK
-      execution remain future work.
+      execution remain future work. Runner results expose `outputStatus` and
+      `outputVerified`; generated skill candidates ignore completed runs whose
+      output remains the materialized `not_run` placeholder.
 
 13. Add OSINT/lead discovery workflow template.
     - Inputs: public search query, region, target role, allowed sources,

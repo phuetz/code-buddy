@@ -8,6 +8,8 @@ import { runMaterializedResearchScriptJob } from '../../src/agent/research-scrip
 
 vi.mock('child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('child_process')>();
+  const nodeFs = await import('fs');
+  const nodePath = await import('path');
   return {
     ...original,
     spawn: vi.fn((...args: any[]) => {
@@ -23,6 +25,10 @@ vi.mock('child_process', async (importOriginal) => {
           stderr: { setEncoding: vi.fn(), on: vi.fn() },
           on: vi.fn((event, callback) => {
             if (event === 'close') {
+              if (command === 'sandbox' && args[1]?.[0] === 'copy' && /^[^:]+:\//.test(String(args[1]?.[1] ?? ''))) {
+                nodeFs.mkdirSync(nodePath.dirname(args[1][2]), { recursive: true });
+                nodeFs.writeFileSync(args[1][2], JSON.stringify({ ok: true, provider: 'vercel-sandbox' }, null, 2));
+              }
               setTimeout(() => callback(0, null), 10);
             }
           }),
@@ -75,6 +81,8 @@ describe('research script job runner', () => {
 
     expect(result.status).toBe('completed');
     expect(result.exitCode).toBe(0);
+    expect(result.outputStatus).toBe('written');
+    expect(result.outputVerified).toBe(true);
     expect(result.timedOut).toBe(false);
     expect(fs.readFileSync(result.stdoutPath, 'utf8')).toContain('processed 1');
     expect(JSON.parse(fs.readFileSync(result.outputPath, 'utf8'))).toMatchObject({
@@ -128,6 +136,8 @@ describe('research script job runner', () => {
     });
 
     expect(result.status).toBe('timed_out');
+    expect(result.outputStatus).toBe('placeholder');
+    expect(result.outputVerified).toBe(false);
     expect(result.timedOut).toBe(true);
     expect(fs.readFileSync(result.stdoutPath, 'utf8')).toContain('started');
     expect(fs.readFileSync(result.summaryPath, 'utf8')).toContain('Status: timed_out');
@@ -168,6 +178,8 @@ describe('research script job runner', () => {
     expect(spawnCall[1]).toContain('node:20');
 
     expect(result.status).toBe('completed');
+    expect(result.outputStatus).toBe('placeholder');
+    expect(result.outputVerified).toBe(false);
   });
 
   it('translates command, paths, and arguments correctly for wsl provider', async () => {
@@ -203,6 +215,8 @@ describe('research script job runner', () => {
     expect(spawnCall[1]).toContain('env');
 
     expect(result.status).toBe('completed');
+    expect(result.outputStatus).toBe('placeholder');
+    expect(result.outputVerified).toBe(false);
   });
 
   it('translates command and arguments correctly for legacy remote provider (daytona alias)', async () => {
@@ -244,6 +258,8 @@ describe('research script job runner', () => {
     expect(spawnCall[1]).toContain('codebuddy-research/research-script-remote-test/script.js');
 
     expect(result.status).toBe('completed');
+    expect(result.outputStatus).toBe('placeholder');
+    expect(result.outputVerified).toBe(false);
   });
 
   it('translates command and arguments correctly for named daytona provider', async () => {
@@ -285,6 +301,8 @@ describe('research script job runner', () => {
     expect(spawnCall[1]).toContain('codebuddy-research/research-script-daytona-test/script.js');
 
     expect(result.status).toBe('completed');
+    expect(result.outputStatus).toBe('placeholder');
+    expect(result.outputVerified).toBe(false);
   });
 
   it('translates command and arguments correctly for vercel sandbox provider', async () => {
@@ -352,5 +370,11 @@ describe('research script job runner', () => {
     ]));
 
     expect(result.status).toBe('completed');
+    expect(result.outputStatus).toBe('written');
+    expect(result.outputVerified).toBe(true);
+    expect(JSON.parse(fs.readFileSync(result.outputPath, 'utf8'))).toMatchObject({
+      ok: true,
+      provider: 'vercel-sandbox',
+    });
   });
 });

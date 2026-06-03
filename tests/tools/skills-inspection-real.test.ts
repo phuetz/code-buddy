@@ -26,6 +26,8 @@ function runResult(overrides: Partial<ResearchScriptJobRunResult> = {}): Researc
     exitCode: 0,
     jobId: 'research-skill-manage',
     outputPath: 'research-scripts/skill-manage/output.json',
+    outputStatus: 'written',
+    outputVerified: true,
     signal: null,
     status: 'completed',
     stderrPath: 'research-scripts/skill-manage/stderr.log',

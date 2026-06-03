@@ -119,7 +119,9 @@ now creates `/home/sandbox/codebuddy-research/<job-id>`, copies local script/inp
 remote `INPUT_JSON`/`OUTPUT_JSON`, and copies `output.json` back. Allowlist / network-refusal guards
 and the run artifact folder are preserved. 8 tests assert local execution, timeout/log capture,
 network refusal, Docker/WSL/Daytona remote-path translation, and the 5-step Vercel
-setup/upload/exec/download command sequence. *Gap:* live configured-account execution, Daytona CLI
+setup/upload/exec/download command sequence. The runner now reports `outputStatus` and
+`outputVerified`; skill promotion only counts completed runs whose local `output.json` is no longer
+the materialized `not_run` placeholder. *Gap:* live configured-account execution, Daytona CLI
 artifact upload/download, state reconciliation, and Modal SDK execution remain open.
 
 ---

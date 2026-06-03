@@ -23,6 +23,8 @@ function runResult(overrides: Partial<ResearchScriptJobRunResult> = {}): Researc
     exitCode: 0,
     jobId: 'research-script-demo',
     outputPath: 'research-scripts/demo/output.json',
+    outputStatus: 'written',
+    outputVerified: true,
     signal: null,
     status: 'completed',
     stderrPath: 'research-scripts/demo/stderr.log',
@@ -104,6 +106,29 @@ describe('research script skill candidate', () => {
     expect(candidate.eligible).toBe(false);
     expect(candidate.reason).toContain('1/2 successful runs');
     expect(candidate.markdown).toContain('Status: not eligible yet');
+  });
+
+  it('does not promote completed runs whose output artifact was not verified', () => {
+    const job = buildResearchScriptJobArtifact({
+      id: 'research-script-placeholder-output',
+      goal: 'Avoid promoting placeholder output.',
+      title: 'Placeholder output',
+      language: 'javascript',
+      inputContract: { INPUT_JSON: 'Input.' },
+      outputContract: { OUTPUT_JSON: 'Output.' },
+      sandboxPolicy: {
+        network: 'disabled',
+      },
+    });
+
+    const candidate = buildResearchScriptSkillCandidate(job, [
+      runResult({ jobId: job.id, outputStatus: 'placeholder', outputVerified: false }),
+      runResult({ jobId: job.id, outputStatus: 'missing', outputVerified: false }),
+    ]);
+
+    expect(candidate.eligible).toBe(false);
+    expect(candidate.successfulRunCount).toBe(0);
+    expect(candidate.reason).toContain('0/2 successful runs');
   });
 
   it('materializes a review manifest beside the SKILL.md candidate', async () => {

@@ -309,6 +309,10 @@ artifacts. For Vercel Sandbox, the runner also uses `sandbox copy` to upload
 the materialized script/input into `/home/sandbox/codebuddy-research/<job-id>`
 before execution and copy `output.json` back afterward. Live configured-account
 execution and Daytona upload/download automation remain guarded follow-up work.
+Runner results include `outputStatus` and `outputVerified`; generated
+research-script SKILL candidates only count runs whose output artifact is
+verified, so a clean process exit with a stale `not_run` placeholder is not
+treated as repeatable proof.
 
 `buddy hermes hooks [--json]` prints the canonical Hermes-style lifecycle
 hook manifest. It maps Code Buddy's existing user/tool hooks onto

@@ -8,6 +8,7 @@ import {
 } from './research-script-job-materializer.js';
 
 export type ResearchScriptJobRunStatus = 'completed' | 'failed' | 'timed_out';
+export type ResearchScriptJobOutputStatus = 'missing' | 'placeholder' | 'written';
 
 export interface RunMaterializedResearchScriptJobOptions {
   allowNetwork?: boolean;
@@ -23,6 +24,8 @@ export interface ResearchScriptJobRunResult {
   exitCode: number | null;
   jobId: string;
   outputPath: string;
+  outputStatus: ResearchScriptJobOutputStatus;
+  outputVerified: boolean;
   signal: NodeJS.Signals | null;
   status: ResearchScriptJobRunStatus;
   stderrPath: string;
@@ -195,6 +198,8 @@ export async function runMaterializedResearchScriptJob(
     }
   }
   const durationMs = Date.now() - startedAt;
+  const outputStatus = await inspectOutputArtifact(absoluteFiles.output);
+  const outputVerified = outputStatus === 'written';
   const status: ResearchScriptJobRunStatus = result.timedOut
     ? 'timed_out'
     : result.exitCode === 0
@@ -211,6 +216,8 @@ export async function runMaterializedResearchScriptJob(
         durationMs,
         exitCode: result.exitCode,
         job,
+        outputStatus,
+        outputVerified,
         signal: result.signal,
         status,
         timedOut: result.timedOut,
@@ -225,6 +232,8 @@ export async function runMaterializedResearchScriptJob(
     exitCode: result.exitCode,
     jobId: job.id,
     outputPath: absoluteFiles.output,
+    outputStatus,
+    outputVerified,
     signal: result.signal,
     status,
     stderrPath: absoluteFiles.stderr,
@@ -232,6 +241,28 @@ export async function runMaterializedResearchScriptJob(
     summaryPath: absoluteFiles.summary,
     timedOut: result.timedOut,
   };
+}
+
+async function inspectOutputArtifact(outputPath: string): Promise<ResearchScriptJobOutputStatus> {
+  let raw = '';
+  try {
+    raw = await fs.readFile(outputPath, 'utf8');
+  } catch {
+    return 'missing';
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return 'missing';
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as { status?: unknown };
+    if (parsed && parsed.status === 'not_run') {
+      return 'placeholder';
+    }
+  } catch {
+    return 'written';
+  }
+  return 'written';
 }
 
 function buildDaytonaSpawn(
@@ -538,6 +569,8 @@ function renderRunSummary(input: {
   durationMs: number;
   exitCode: number | null;
   job: ResearchScriptJobArtifact;
+  outputStatus: ResearchScriptJobOutputStatus;
+  outputVerified: boolean;
   signal: NodeJS.Signals | null;
   status: ResearchScriptJobRunStatus;
   timedOut: boolean;
@@ -550,6 +583,8 @@ function renderRunSummary(input: {
     `Exit code: ${input.exitCode ?? 'null'}`,
     `Signal: ${input.signal ?? 'none'}`,
     `Timed out: ${input.timedOut ? 'yes' : 'no'}`,
+    `Output status: ${input.outputStatus}`,
+    `Output verified: ${input.outputVerified ? 'yes' : 'no'}`,
     `Duration: ${input.durationMs}ms`,
     `Command: ${input.commandPreview}`,
     '',
