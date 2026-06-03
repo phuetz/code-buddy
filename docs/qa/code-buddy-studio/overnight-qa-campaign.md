@@ -383,9 +383,9 @@ Capture :
 
 ![Fenetre Tests & executions - Docker reel](./screenshots/44-test-runner-docker-real.png)
 
-![Fenetre Tests & executions - Cowork GPT-5.5 reel](./screenshots/48-test-runner-cowork-real-gpt55.png)
+![Fenetre Tests & executions - Cowork GPT-5.5 reel](./screenshots/public-test-runner-cowork-real-gpt55.png)
 
-![Fenetre Tests & executions - serveur GPT-5.5 reel](./screenshots/49-test-runner-server-real-gpt55.png)
+![Fenetre Tests & executions - serveur GPT-5.5 reel](./screenshots/public-test-runner-server-real-gpt55.png)
 
 ![Companion live core IPC](./screenshots/52-companion-live-core-ipc.png)
 
@@ -1077,7 +1077,7 @@ Preuve commande : `COWORK_REAL_GPT55=1 npx playwright test e2e/test-runner-cowor
 
 Capture :
 
-![Fenetre Tests & executions - Cowork GPT-5.5 reel](./screenshots/48-test-runner-cowork-real-gpt55.png)
+![Fenetre Tests & executions - Cowork GPT-5.5 reel](./screenshots/public-test-runner-cowork-real-gpt55.png)
 
 ### Compagnon live depuis le runner
 
@@ -1172,7 +1172,7 @@ Preuves commandes :
 
 Capture :
 
-![Fenetre Tests & executions - serveur GPT-5.5 reel](./screenshots/49-test-runner-server-real-gpt55.png)
+![Fenetre Tests & executions - serveur GPT-5.5 reel](./screenshots/public-test-runner-server-real-gpt55.png)
 
 ![Fenetre Tests & executions - timeout script](./screenshots/50-test-runner-script-timeout.png)
 

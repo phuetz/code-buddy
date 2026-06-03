@@ -233,7 +233,7 @@
       "expectedChildMarker": "REAL-GPT55-COWORK-GUI",
       "expectedPanelResult": "1 ok / 0 ko",
       "safeToRun": false,
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/48-test-runner-cowork-real-gpt55.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/public-test-runner-cowork-real-gpt55.png"
     },
     "testRunnerCompanionLive": {
       "test": "cowork/e2e/test-runner-companion-live.spec.ts",
@@ -281,7 +281,7 @@
       "safeToRun": false,
       "timeoutGuardMs": 300000,
       "initialFailureObserved": "UI row stayed running for more than 6 minutes before TestRunnerBridge gained per-catalog timeoutMs",
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/49-test-runner-server-real-gpt55.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png"
     },
     "testRunnerTimeoutRegression": {
       "test": "cowork/tests/test-runner-bridge-catalog.test.ts",

@@ -61,7 +61,7 @@ Passed:
 
 The real ChatGPT spec exercised Cowork against the ChatGPT Codex backend with model `gpt-5.5` and updated the evidence screenshot:
 
-- `docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png`
+- `docs/qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png`
 
 ## Frictions / Risks
 

@@ -56,8 +56,8 @@ test('runs the real server ChatGPT gpt-5.5 API smoke from the test runner window
   await appPage.screenshot({
     path: path.resolve(
       process.cwd(),
-      '../docs/qa/code-buddy-studio/screenshots/49-test-runner-server-real-gpt55.png'
+      '../docs/qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png'
     ),
-    fullPage: true,
+    clip: { x: 640, y: 70, width: 460, height: 610 },
   });
 });

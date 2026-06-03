@@ -86,8 +86,8 @@ test('starts a real Cowork chat through ChatGPT gpt-5.5', async ({ appPage }) =>
   await appPage.screenshot({
     path: path.resolve(
       process.cwd(),
-      '../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png',
+      '../docs/qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png',
     ),
-    fullPage: true,
+    clip: { x: 350, y: 40, width: 760, height: 820 },
   });
 });

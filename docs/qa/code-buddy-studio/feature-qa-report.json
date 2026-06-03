@@ -17,7 +17,7 @@
     "providerSmoke": "direct chat REAL-GPT55-PROVIDER-DIRECT in 1883ms; stream REAL-GPT55-STREAM-DIRECT in 9 chunks; tool-call qa_probe then REAL-GPT55-TOOL-ROUNDTRIP",
     "cliRealGpt55": "text, json, stream-json, view_file and bash passed with gpt-5.5",
     "serverRealGpt55": "passed; CODEBUDDY_REAL_GPT55_SERVER=1 npm test -- tests/server/chat-route-real-gpt55.test.ts --run; real Express /api/chat, legacy SSE, /api/chat/completions and /api/chat/models through ChatGPT OAuth gpt-5.5",
-    "coworkRealGpt55": "passed; COWORK_REAL_GPT55=1 npx playwright test e2e/chat-real-gpt55.spec.ts; screenshot docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png",
+    "coworkRealGpt55": "passed; COWORK_REAL_GPT55=1 npx playwright test e2e/chat-real-gpt55.spec.ts; screenshot docs/qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png",
     "realGpt55BugsFixed": "provider models chatgpt support; Cowork ConfigStore runtime guards for chatgpt; embedded engine config hot-apply; headless provider error exits non-zero",
     "realGpt55RemainingWatch": "headless --quiet now exits non-zero on backend error; prompt load can still be optimized to reduce long ChatGPT timeout risk",
     "vitest": "passed after UNC path guard fix; 208 files, 1333 tests",

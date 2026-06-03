@@ -56,8 +56,8 @@ test('runs the real Cowork ChatGPT gpt-5.5 chat smoke from the test runner windo
   await appPage.screenshot({
     path: path.resolve(
       process.cwd(),
-      '../docs/qa/code-buddy-studio/screenshots/48-test-runner-cowork-real-gpt55.png'
+      '../docs/qa/code-buddy-studio/screenshots/public-test-runner-cowork-real-gpt55.png'
     ),
-    fullPage: true,
+    clip: { x: 640, y: 70, width: 460, height: 610 },
   });
 });

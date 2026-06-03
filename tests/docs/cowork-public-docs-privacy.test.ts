@@ -7,7 +7,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const rootReadme = path.join(repoRoot, 'README.md');
 const coworkReadme = path.join(repoRoot, 'cowork', 'readme.md');
 const publicCoworkDoc = path.join(repoRoot, 'docs', 'cowork.md');
+const publicDocsDir = path.join(repoRoot, 'docs');
 const publicCoworkQaDir = path.join(repoRoot, 'docs', 'qa', 'code-buddy-studio');
+const realProviderScreenshotProducerFiles = [
+  path.join(repoRoot, 'cowork', 'e2e', 'chat-real-gpt55.spec.ts'),
+  path.join(repoRoot, 'cowork', 'e2e', 'test-runner-cowork-real-gpt55.spec.ts'),
+  path.join(repoRoot, 'cowork', 'e2e', 'test-runner-server-real-gpt55.spec.ts'),
+] as const;
 const inProgressCaptureCandidates = [
   '29-real-gpt55-cowork-gui.png',
   '48-test-runner-cowork-real-gpt55.png',
@@ -109,13 +115,29 @@ describe('Cowork public QA documentation privacy', () => {
     }
   });
 
-  it('keeps in-progress real-provider capture candidates out of the GitHub-facing overview', () => {
-    const text = fs.readFileSync(publicCoworkDoc, 'utf8');
+  it('keeps raw real-provider capture candidates out of public docs', () => {
+    const files = publicTextFiles(publicDocsDir);
+    expect(files.length).toBeGreaterThan(0);
 
-    for (const screenshotName of inProgressCaptureCandidates) {
-      expect(text).not.toContain(screenshotName);
+    for (const file of files) {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const screenshotName of inProgressCaptureCandidates) {
+        expect(text, file).not.toContain(screenshotName);
+      }
     }
 
+    const text = fs.readFileSync(publicCoworkDoc, 'utf8');
     expect(text).toMatch(/raw real-provider\s+screenshots remain excluded until the capture-review pass is complete/);
+  });
+
+  it('writes real-provider proof screenshots to public-safe targets', () => {
+    for (const file of realProviderScreenshotProducerFiles) {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const screenshotName of inProgressCaptureCandidates) {
+        expect(text, file).not.toContain(screenshotName);
+      }
+      expect(text, file).toContain('public-');
+      expect(text, file).toContain('clip:');
+    }
   });
 });
