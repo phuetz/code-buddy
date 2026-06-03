@@ -1,12 +1,15 @@
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const screenshotGalleryDir = path.join(repoRoot, 'docs', 'screenshots');
+const screenshotGalleryReadme = path.join(screenshotGalleryDir, 'README.md');
 const publicScreenshotDocs = [
   path.join(repoRoot, 'README.md'),
-  path.join(repoRoot, 'docs', 'screenshots', 'README.md'),
+  screenshotGalleryReadme,
 ] as const;
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const jpegPrefix = Buffer.from([0xff, 0xd8, 0xff]);
@@ -77,6 +80,24 @@ function expectValidPublicImage(sourceFile: string, target: string): void {
   throw new Error(`Unsupported public screenshot extension: ${label}`);
 }
 
+function trackedScreenshotGalleryImages(): string[] {
+  const output = execFileSync('git', ['ls-files', 'docs/screenshots'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  return output
+    .trim()
+    .split(/\r?\n/)
+    .filter((file) => /\.(?:png|jpe?g)$/i.test(file))
+    .map((file) => path.normalize(file));
+}
+
+function normalizedGalleryTarget(target: string): string {
+  const [pathTarget] = target.split('#');
+  return pathTarget.replace(/^\.\//, '').replace(/\\/g, '/');
+}
+
 describe('public README screenshots', () => {
   it('keeps GitHub-visible README local links resolvable', () => {
     const targetsByFile = new Map<string, string[]>();
@@ -120,6 +141,18 @@ describe('public README screenshots', () => {
     }
 
     expect(targetsByFile.get(path.join(repoRoot, 'README.md'))).toHaveLength(3);
-    expect(targetsByFile.get(path.join(repoRoot, 'docs', 'screenshots', 'README.md'))).toHaveLength(14);
+    expect(targetsByFile.get(screenshotGalleryReadme)).toHaveLength(14);
+  });
+
+  it('keeps every tracked screenshot gallery image listed in the gallery README', () => {
+    const trackedTargets = trackedScreenshotGalleryImages()
+      .map((file) => path.relative(screenshotGalleryDir, path.join(repoRoot, file)).replace(/\\/g, '/'))
+      .sort();
+    const readmeTargets = localImageTargets(fs.readFileSync(screenshotGalleryReadme, 'utf8'))
+      .map(normalizedGalleryTarget)
+      .sort();
+
+    expect(trackedTargets).toHaveLength(14);
+    expect(readmeTargets).toEqual(trackedTargets);
   });
 });
