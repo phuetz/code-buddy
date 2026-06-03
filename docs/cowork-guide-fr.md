@@ -134,4 +134,4 @@ npm test -- tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-pri
 npx eslint tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
 ```
 
-Le dossier QA public est [`qa/code-buddy-studio/feature-qa.md`](./qa/code-buddy-studio/feature-qa.md). Il conserve les preuves de commandes réelles pour ChatGPT OAuth, Cowork/Electron, routes serveur, MCP, Fleet, permissions, Docker, Computer Use, Hermes et compagnon Buddy.
+Le dossier QA public commence dans [`qa/code-buddy-studio/`](./qa/code-buddy-studio/README.md). Son rapport complet conserve les preuves de commandes réelles pour ChatGPT OAuth, Cowork/Electron, routes serveur, MCP, Fleet, permissions, Docker, Computer Use, Hermes et compagnon Buddy.

@@ -218,7 +218,7 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 
 ## Validation Evidence
 
-The public Cowork QA dossier is [`docs/qa/code-buddy-studio/feature-qa.md`](docs/qa/code-buddy-studio/feature-qa.md), with screenshots under [`docs/qa/code-buddy-studio/screenshots/`](docs/qa/code-buddy-studio/screenshots/). It records the current real-use proof set instead of a narrow smoke snapshot.
+The public Cowork QA dossier starts at [`docs/qa/code-buddy-studio/`](docs/qa/code-buddy-studio/README.md), with the full report in [`feature-qa.md`](docs/qa/code-buddy-studio/feature-qa.md) and screenshots under [`screenshots/`](docs/qa/code-buddy-studio/screenshots/). It records the current real-use proof set instead of a narrow smoke snapshot.
 
 Highlights currently documented there:
 

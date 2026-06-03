@@ -136,4 +136,4 @@ npm test -- tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-pri
 npx eslint tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
 ```
 
-The current public QA dossier is [`qa/code-buddy-studio/feature-qa.md`](./qa/code-buddy-studio/feature-qa.md). It records the real command evidence for ChatGPT OAuth, Cowork/Electron, server routes, MCP, Fleet, permissions, Docker, Computer Use, Hermes, and companion flows.
+The current public QA dossier starts at [`qa/code-buddy-studio/`](./qa/code-buddy-studio/README.md). Its full report records the real command evidence for ChatGPT OAuth, Cowork/Electron, server routes, MCP, Fleet, permissions, Docker, Computer Use, Hermes, and companion flows.
