@@ -94,7 +94,7 @@ The current package build is green but not silent. Do not claim a zero-warning r
 | Context compression pruning | Web-search context, restorable compression gaps, dangling patches, context guardrails, observation variation, importance scoring, TTL/soft/hard pruning, and progressive/parallel/adaptive compaction | `282 ok / 0 ko` |
 | Voice, speech, TTS | Voice control, speech recognition, wake-word fallback, TTS providers, audio reader, audio tool, and voice-to-code | `164 ok / 0 ko` |
 | Provider resilience errors | Stream/client retry, backoff policy, rate limiting, rate-limit display, normalized errors, error-handling audit, client recovery, and malformed Gemini recovery | `367 ok / 0 ko` |
-| Server provider error status | Local provider `429`/`503` propagation, `Retry-After`, server rate-limit separation, and OpenAI-compatible error payloads | `5 ok / 0 ko` |
+| Server provider error status | Local provider `429`/`503` propagation, `Retry-After`, server rate-limit separation, and OpenAI-compatible error payloads | `4 ok / 0 ko` |
 | Infrastructure MCP sandbox adapters | MCP manager/discovery/tool adapter, Electron core adapter LRU/hotswap, sandbox registry, auto-sandbox, OS sandbox/exec policy, and E2B fallback | `190 ok / 0 ko` |
 | Automation scheduler hooks notifications | Watchdogs, scheduled delivery, cron prechecks/persistence, lifecycle/input/tool hooks, session lanes, webhooks, triggers, proactive notifications, and default sinks | `766 ok / 0 ko` |
 | Maintenance doctor backup settings | Doctor checks/fixes, ChatGPT OAuth diagnostics, onboarding wizard, backup handlers, update notifier, settings manager, update tags, migrations, and hooks/policies/memory settings | `254 ok / 0 ko` |

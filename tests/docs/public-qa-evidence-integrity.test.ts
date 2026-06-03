@@ -9,6 +9,32 @@ const reportPath = 'docs/qa/code-buddy-studio/feature-qa-report.json';
 const mainDossierPath = 'docs/qa/code-buddy-studio/feature-qa.md';
 const qaHubPath = 'docs/qa/code-buddy-studio/README.md';
 const screenshotPrefix = 'docs/qa/code-buddy-studio/screenshots/';
+const qaHubRunnerProofs: Array<[reportKey: string, hubLabel: string]> = [
+  ['testRunnerCliCommandSurfaceBundle', 'CLI command surface'],
+  ['testRunnerPluginsSkillsBundle', 'Plugins and skills'],
+  ['testRunnerTerminalUiObserverBundle', 'Terminal UI and observer'],
+  ['testRunnerConfigAuthProviderBundle', 'Config, auth, providers'],
+  ['testRunnerDataSessionSyncCacheBundle', 'Data, sessions, sync, cache'],
+  ['testRunnerServerApiMcpPlatformBundle', 'Server, API, MCP platform'],
+  ['testRunnerFleetRoutingOrchestrationBundle', 'Fleet routing orchestration'],
+  ['testRunnerContextCompressionPruningBundle', 'Context compression pruning'],
+  ['testRunnerVoiceSpeechTtsBundle', 'Voice, speech, TTS'],
+  ['testRunnerProviderResilienceErrorBundle', 'Provider resilience errors'],
+  ['testRunnerServerProviderErrorStatusBundle', 'Server provider error status'],
+  ['testRunnerInfraMcpSandboxAdaptersBundle', 'Infrastructure MCP sandbox adapters'],
+  ['testRunnerSchedulerHooksNotificationsBundle', 'Automation scheduler hooks notifications'],
+  ['testRunnerMaintenanceDoctorBackupSettingsBundle', 'Maintenance doctor backup settings'],
+  ['testRunnerCoworkRemoteControlBundle', 'Remote control'],
+  ['testRunnerDeviceTransportAdaptersBundle', 'Device transport adapters'],
+  ['testRunnerCoworkSandboxExecutorBundle', 'Cowork sandbox executor'],
+  ['testRunnerCoworkProjectSessionGitBundle', 'Project, session, and git'],
+  ['testRunnerCoworkUiLocalizationLayoutBundle', 'Cowork UI localization layout'],
+  ['testRunnerCoworkActivityAuditDiagnosticsBundle', 'Activity, audit, diagnostics'],
+  ['testRunnerCoworkFleetCommandTeamBundle', 'Fleet command and team'],
+  ['testRunnerCoworkPermissionPathRulesBundle', 'Permission path rules'],
+  ['testRunnerCoworkSettingsHooksMcpWorkflowsBundle', 'Settings, hooks, MCP, workflows'],
+  ['testRunnerCoworkCustomCommandsSlashBundle', 'Custom commands and slash'],
+];
 
 type QaReportResult = {
   slug?: unknown;
@@ -90,11 +116,20 @@ function reportedRunnerProofCount(report: QaReport, reportKey: string): number {
   return Number(match?.[1]);
 }
 
-function expectQaHubRunnerProof(qaHub: string, report: QaReport, reportKey: string, hubLabel: string): void {
-  const count = reportedRunnerProofCount(report, reportKey);
+function qaHubRunnerProofCount(qaHub: string, hubLabel: string): number {
+  const row = qaHub.split(/\r?\n/).find((line) => line.startsWith(`| ${hubLabel} |`));
+  expect(row, `${qaHubPath} must include ${hubLabel} runner proof row`).toBeDefined();
 
-  expect(qaHub).toContain(`| ${hubLabel} |`);
-  expect(qaHub).toContain(`| \`${count} ok / 0 ko\` |`);
+  const cells = row?.split('|').map((cell) => cell.trim()) ?? [];
+  const proofCell = cells.at(-2);
+  const match = proofCell?.match(/^`(\d+) ok \/ 0 ko`$/);
+
+  expect(match, `${qaHubPath} ${hubLabel} row must include a runner proof count`).toBeDefined();
+  return Number(match?.[1]);
+}
+
+function expectQaHubRunnerProof(qaHub: string, report: QaReport, reportKey: string, hubLabel: string): void {
+  expect(qaHubRunnerProofCount(qaHub, hubLabel)).toBe(reportedRunnerProofCount(report, reportKey));
 }
 
 describe('public QA evidence report integrity', () => {
@@ -132,36 +167,10 @@ describe('public QA evidence report integrity', () => {
     expect(qaHub).toContain(`${coverageReal} real, ${coverageUsed} used, ${coveragePartial} partial`);
     expect(qaHub).toContain('./feature-qa-report.json');
     expect(qaHub).toContain('npm run test:docs-public');
-    expectQaHubRunnerProof(
-      qaHub,
-      report,
-      'testRunnerCliCommandSurfaceBundle',
-      'CLI command surface',
-    );
-    expectQaHubRunnerProof(
-      qaHub,
-      report,
-      'testRunnerPluginsSkillsBundle',
-      'Plugins and skills',
-    );
-    expectQaHubRunnerProof(
-      qaHub,
-      report,
-      'testRunnerDataSessionSyncCacheBundle',
-      'Data, sessions, sync, cache',
-    );
-    expectQaHubRunnerProof(
-      qaHub,
-      report,
-      'testRunnerServerApiMcpPlatformBundle',
-      'Server, API, MCP platform',
-    );
-    expectQaHubRunnerProof(
-      qaHub,
-      report,
-      'testRunnerCoworkUiLocalizationLayoutBundle',
-      'Cowork UI localization layout',
-    );
+
+    for (const [reportKey, hubLabel] of qaHubRunnerProofs) {
+      expectQaHubRunnerProof(qaHub, report, reportKey, hubLabel);
+    }
   });
 
   it('keeps every result uniquely identified and positively verified', async () => {
