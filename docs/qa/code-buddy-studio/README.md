@@ -35,6 +35,16 @@ Start here when you want proof that the documented Cowork flows have been exerci
 - Mobile supervision: loopback-only local-operator routes, spoofed-forwarder denial, approval queue, Cowork bridge client, and disabled listener contract.
 - Publication safety: public docs and screenshots are checked for private account, token, local path, and screenshot metadata leaks.
 
+## Runner-Verified Cowork Bundles
+
+| Bundle | Verified coverage | Runner proof |
+| --- | --- | --- |
+| Activity, audit, diagnostics | Activity feed, global search, audit recall, diagnostics renderer, preview service, event mapping, and recent files | `67 ok / 0 ko` |
+| Fleet command and team | FleetBridge, IPC dispatch, command-center board, discovery YAML, SagaRunner, internet-proof metadata, outcomes, scheduled work, and TeamBridge | `61 ok / 0 ko` |
+| Permission path rules | Computer-use permission dialog, quick rules, classification/preview/target rules, declarative fallback, path containment, UNC, and command path conversion | `58 ok / 0 ko` |
+| Settings, hooks, MCP, workflows | Theme/autostart settings, hook dry-runs, MCP env/tool sync, staged MCP bundles, DAG workflow compilation, and the real Orchestrator | `62 ok / 0 ko` |
+| Custom commands and slash | Markdown persistence, slash-name normalization, invalid draft validation, delete flow, custom-over-builtin precedence, autocomplete, remote execution, and `/schedule` parsing | `11 ok / 0 ko` |
+
 ## Representative Captures
 
 ![Cowork ChatGPT gpt-5.5 real run](./screenshots/29-real-gpt55-cowork-gui.png)
@@ -48,6 +58,16 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ![Artifact and document bundle](./screenshots/99-test-runner-artifact-document-bundle.png)
 
 ![Scheduling and session bundle](./screenshots/100-test-runner-scheduling-session-bundle.png)
+
+![Activity audit diagnostics bundle](./screenshots/102-test-runner-activity-audit-diagnostics-bundle.png)
+
+![Fleet command team bundle](./screenshots/103-test-runner-fleet-command-team-bundle.png)
+
+![Permission path rules bundle](./screenshots/104-test-runner-permission-path-rules-bundle.png)
+
+![Settings hooks MCP workflows bundle](./screenshots/105-test-runner-settings-hooks-mcp-workflows-bundle.png)
+
+![Custom commands slash bundle](./screenshots/106-test-runner-custom-commands-slash-bundle.png)
 
 ![Knowledge Hermes presence bundle](./screenshots/107-test-runner-knowledge-hermes-presence-bundle.png)
 
