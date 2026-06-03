@@ -185,7 +185,7 @@
         "proof": "text:Raccourcis clavier"
       },
       "error": null,
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/02-shortcuts-dialog.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/02-shortcuts-dialog.jpg"
     },
     {
       "slug": "03-clipboard-summary",
@@ -221,7 +221,7 @@
         "proof": "testid:global-search-dialog"
       },
       "error": null,
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/05-global-search.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/05-global-search.jpg"
     },
     {
       "slug": "06-orchestrator",
@@ -425,7 +425,7 @@
         "proof": "testid:settings-panel"
       },
       "error": null,
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/22-settings.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/22-settings.jpg"
     },
     {
       "slug": "23-api-settings",
@@ -437,7 +437,7 @@
         "proof": "testid:settings-panel"
       },
       "error": null,
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/23-api-settings.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/23-api-settings.jpg"
     },
     {
       "slug": "24-mcp-connectors",
@@ -485,7 +485,7 @@
         "proof": "value:Créer un nouveau fichier"
       },
       "error": null,
-      "screenshot": "docs/qa/code-buddy-studio/screenshots/27-quick-prompts.png"
+      "screenshot": "docs/qa/code-buddy-studio/screenshots/27-quick-prompts.jpg"
     },
     {
       "slug": "28-chat-ui-mock",

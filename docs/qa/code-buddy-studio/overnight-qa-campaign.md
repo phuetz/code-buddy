@@ -23,7 +23,7 @@ La relance autonome de nuit est activee sur le thread toutes les 10 minutes pour
 
 Etat courant de la matrice : `29` fonctionnalites, `3` reelles, `26` utilisees, `0` partielle.
 
-![Zero fonctionnalite partielle](./screenshots/40-test-runner-zero-partial.png)
+![Zero fonctionnalite partielle](./screenshots/40-test-runner-zero-partial.jpg)
 
 ## Jeux de tests
 

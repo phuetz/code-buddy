@@ -10,6 +10,7 @@ const coworkReadme = path.join(repoRoot, 'cowork', 'readme.md');
 const publicCoworkDoc = path.join(repoRoot, 'docs', 'cowork.md');
 const publicDocsDir = path.join(repoRoot, 'docs');
 const publicCoworkQaDir = path.join(repoRoot, 'docs', 'qa', 'code-buddy-studio');
+const publicCoworkQaReport = path.join(publicCoworkQaDir, 'feature-qa-report.json');
 const publicMarkdownLinkFiles = [
   rootReadme,
   coworkReadme,
@@ -42,8 +43,15 @@ function publicTextFiles(dir: string): string[] {
   });
 }
 
+type FeatureQaReport = {
+  results?: Array<{
+    screenshot?: unknown;
+  }>;
+};
+
 function markdownImageTargets(text: string): string[] {
-  return Array.from(text.matchAll(/!\[[^\]]*]\(([^)]+)\)/g), (match) => match[1]);
+  return Array.from(text.matchAll(/!\[[^\]]*]\(([^)]+)\)/g), (match) => match[1].trim())
+    .filter((target) => !/^(?:https?:|mailto:|#)/i.test(target));
 }
 
 function markdownLocalTargets(text: string): string[] {
@@ -52,26 +60,31 @@ function markdownLocalTargets(text: string): string[] {
     .filter((target) => !/^(?:https?:|mailto:|#)/i.test(target));
 }
 
-function expectReviewedImageFile(target: string): void {
-  const filePath = path.resolve(path.dirname(publicCoworkDoc), target);
+function expectReviewedImagePath(filePath: string, label: string): void {
   const bytes = fs.readFileSync(filePath);
   const extension = path.extname(filePath).toLowerCase();
 
-  expect(bytes.length, target).toBeGreaterThan(10_000);
+  expect(bytes.length, label).toBeGreaterThan(10_000);
 
   if (extension === '.png') {
-    expect(bytes.subarray(0, pngSignature.length).equals(pngSignature), target).toBe(true);
-    expect(bytes.readUInt32BE(16), target).toBeGreaterThanOrEqual(400);
-    expect(bytes.readUInt32BE(20), target).toBeGreaterThanOrEqual(240);
+    expect(bytes.subarray(0, pngSignature.length).equals(pngSignature), label).toBe(true);
+    expect(bytes.readUInt32BE(16), label).toBeGreaterThanOrEqual(400);
+    expect(bytes.readUInt32BE(20), label).toBeGreaterThanOrEqual(240);
     return;
   }
 
   if (extension === '.jpg' || extension === '.jpeg') {
-    expect(bytes.subarray(0, jpegPrefix.length).equals(jpegPrefix), target).toBe(true);
+    expect(bytes.subarray(0, jpegPrefix.length).equals(jpegPrefix), label).toBe(true);
     return;
   }
 
-  throw new Error(`Unsupported public screenshot extension: ${target}`);
+  throw new Error(`Unsupported public screenshot extension: ${label}`);
+}
+
+function expectReviewedImageFile(sourceFile: string, target: string): void {
+  const [pathTarget] = target.split('#');
+  expect(path.isAbsolute(pathTarget), `${sourceFile} -> ${target}`).toBe(false);
+  expectReviewedImagePath(path.resolve(path.dirname(sourceFile), pathTarget), `${sourceFile} -> ${target}`);
 }
 
 describe('Cowork public QA documentation privacy', () => {
@@ -135,9 +148,37 @@ describe('Cowork public QA documentation privacy', () => {
     ]);
 
     for (const target of targets) {
+      expectReviewedImageFile(publicCoworkDoc, target);
+    }
+  });
+
+  it('keeps local screenshot targets in public Cowork QA Markdown docs valid images', () => {
+    let checkedImages = 0;
+
+    for (const file of publicMarkdownLinkFiles) {
+      const text = fs.readFileSync(file, 'utf8');
+      const targets = markdownImageTargets(text);
+
+      for (const target of targets) {
+        expectReviewedImageFile(file, target);
+        checkedImages += 1;
+      }
+    }
+
+    expect(checkedImages).toBeGreaterThan(50);
+  });
+
+  it('keeps public Cowork QA report screenshot paths valid images', () => {
+    const report = JSON.parse(fs.readFileSync(publicCoworkQaReport, 'utf8')) as FeatureQaReport;
+    const targets = (report.results ?? [])
+      .map((result) => result.screenshot)
+      .filter((target): target is string => typeof target === 'string');
+
+    expect(targets.length).toBeGreaterThan(20);
+
+    for (const target of targets) {
       expect(path.isAbsolute(target), target).toBe(false);
-      expect(fs.existsSync(path.resolve(path.dirname(publicCoworkDoc), target)), target).toBe(true);
-      expectReviewedImageFile(target);
+      expectReviewedImagePath(path.resolve(repoRoot, target), target);
     }
   });
 
