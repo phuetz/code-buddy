@@ -39,6 +39,10 @@ Start here when you want proof that the documented Cowork flows have been exerci
 
 | Bundle | Verified coverage | Runner proof |
 | --- | --- | --- |
+| Remote control | Remote manager, remote user messages, default workdir, `!cd`, cwd propagation, port conflict handling, remote panel links/layout, and remote slash-command bridge | `16 ok / 0 ko` |
+| Device transport adapters | SSH, ADB, and local transports, transport helpers, and Tailscale dashboard node modeling | `178 ok / 0 ko` |
+| Cowork sandbox executor | Dangerous-command validation, workspace containment, WSL/Lima command-injection guards, stderr capture, and `rm -rf`/symlink protections | `42 ok / 0 ko` |
+| Project, session, and git | Git worktrees/compare, project selection, recent files, attachments, session CRUD/cache/search/resume, and session insights | `73 ok / 0 ko` |
 | Activity, audit, diagnostics | Activity feed, global search, audit recall, diagnostics renderer, preview service, event mapping, and recent files | `67 ok / 0 ko` |
 | Fleet command and team | FleetBridge, IPC dispatch, command-center board, discovery YAML, SagaRunner, internet-proof metadata, outcomes, scheduled work, and TeamBridge | `61 ok / 0 ko` |
 | Permission path rules | Computer-use permission dialog, quick rules, classification/preview/target rules, declarative fallback, path containment, UNC, and command path conversion | `58 ok / 0 ko` |
@@ -58,6 +62,14 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ![Artifact and document bundle](./screenshots/99-test-runner-artifact-document-bundle.png)
 
 ![Scheduling and session bundle](./screenshots/100-test-runner-scheduling-session-bundle.png)
+
+![Remote control bundle](./screenshots/94-test-runner-remote-control-bundle.png)
+
+![Device transport adapters bundle](./screenshots/95-test-runner-device-transport-adapters-bundle.png)
+
+![Cowork sandbox executor bundle](./screenshots/96-test-runner-cowork-sandbox-executor-bundle.png)
+
+![Project session git bundle](./screenshots/97-test-runner-project-session-git-bundle.png)
 
 ![Activity audit diagnostics bundle](./screenshots/102-test-runner-activity-audit-diagnostics-bundle.png)
 
