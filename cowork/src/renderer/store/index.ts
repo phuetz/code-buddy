@@ -126,6 +126,12 @@ function getSession(states: Record<string, SessionState>, sessionId: string): Se
   return states[sessionId] ?? DEFAULT_SESSION_STATE;
 }
 
+function omitRecordKey<T>(records: Record<string, T>, key: string): Record<string, T> {
+  const next = { ...records };
+  delete next[key];
+  return next;
+}
+
 interface AppState {
   // Sessions
   sessions: Session[];
@@ -858,10 +864,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   removeSession: (sessionId) =>
     set((state) => {
-      const { [sessionId]: _, ...restSessionStates } = state.sessionStates;
       return {
         sessions: state.sessions.filter((s) => s.id !== sessionId),
-        sessionStates: restSessionStates,
+        sessionStates: omitRecordKey(state.sessionStates, sessionId),
         activeSessionId: state.activeSessionId === sessionId ? null : state.activeSessionId,
         openTabs: state.openTabs.filter((t) => t.sessionId !== sessionId),
       };
@@ -1256,8 +1261,7 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   clearDiffPreviews: (sessionId) =>
     set((state) => {
-      const { [sessionId]: _, ...rest } = state.diffPreviews;
-      return { diffPreviews: rest };
+      return { diffPreviews: omitRecordKey(state.diffPreviews, sessionId) };
     }),
 
   // Checkpoint actions
@@ -1699,9 +1703,8 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({ fleetPeers: { ...state.fleetPeers, [peer.id]: peer } })),
   removeFleetPeer: (peerId) =>
     set((state) => {
-      const { [peerId]: _dropped, ...rest } = state.fleetPeers;
       return {
-        fleetPeers: rest,
+        fleetPeers: omitRecordKey(state.fleetPeers, peerId),
         fleetEvents: state.fleetEvents.filter((e) => e.peerId !== peerId),
       };
     }),
@@ -1742,8 +1745,7 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({ a2aTasks: { ...state.a2aTasks, [task.taskId]: task } })),
   removeA2ATask: (taskId) =>
     set((state) => {
-      const { [taskId]: _dropped, ...rest } = state.a2aTasks;
-      return { a2aTasks: rest };
+      return { a2aTasks: omitRecordKey(state.a2aTasks, taskId) };
     }),
 
   // Team actions (Phase 4 layer 9)
@@ -1764,8 +1766,7 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   removeTeamMember: (memberId) =>
     set((state) => {
-      const { [memberId]: _dropped, ...rest } = state.teamMembers;
-      return { teamMembers: rest };
+      return { teamMembers: omitRecordKey(state.teamMembers, memberId) };
     }),
   upsertTeamTask: (task) =>
     set((state) => ({
@@ -1790,11 +1791,10 @@ export const useAppStore = create<AppState>((set) => ({
   setShowCompanionPanel: (show) => set({ showCompanionPanel: show }),
   clearSubAgents: (sessionId) =>
     set((state) => {
-      const { [sessionId]: _dropped, ...rest } = state.subAgents;
-      const { [sessionId]: _droppedOutputs, ...restOutputs } = state.subAgentOutputs;
-      void _dropped;
-      void _droppedOutputs;
-      return { subAgents: rest, subAgentOutputs: restOutputs };
+      return {
+        subAgents: omitRecordKey(state.subAgents, sessionId),
+        subAgentOutputs: omitRecordKey(state.subAgentOutputs, sessionId),
+      };
     }),
 
   // Notification actions

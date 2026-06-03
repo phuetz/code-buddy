@@ -7,7 +7,8 @@
  * regression net.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useAppStore } from '../src/renderer/store';
+import { useAppStore, type SessionState } from '../src/renderer/store';
+import type { A2ATask, DiffPreview, FleetPeer, SubAgent, TeamMember } from '../src/renderer/types';
 
 const reset = () => {
   // Drop everything to a known shape — store is a global singleton.
@@ -15,6 +16,13 @@ const reset = () => {
     openTabs: [],
     activeSessionId: null,
     sessionStates: {},
+    diffPreviews: {},
+    fleetPeers: {},
+    fleetEvents: [],
+    a2aTasks: {},
+    teamMembers: {},
+    subAgents: {},
+    subAgentOutputs: {},
   });
 };
 
@@ -131,6 +139,150 @@ describe('Tab management — store actions', () => {
     useAppStore.getState().setActiveSession('s-a');
     const tabA = useAppStore.getState().openTabs.find((t) => t.id === 'a');
     expect(tabA?.unread).toBe(0);
+  });
+
+  it('record removal actions drop only the targeted keys', () => {
+    const sessionState: SessionState = {
+      messages: [],
+      partialMessage: '',
+      partialThinking: '',
+      pendingTurns: [],
+      activeTurn: null,
+      executionClock: { startAt: null, endAt: null },
+      traceSteps: [],
+      contextWindow: 0,
+    };
+    const diffPreview: DiffPreview = {
+      turnId: 1,
+      sessionId: 's-target',
+      diffs: [],
+      timestamp: 1,
+      status: 'pending',
+    };
+    const targetPeer: FleetPeer = {
+      id: 'peer-target',
+      url: 'ws://target.example',
+      addedAt: 1,
+      status: 'connected',
+    };
+    const keepPeer: FleetPeer = {
+      id: 'peer-keep',
+      url: 'ws://keep.example',
+      addedAt: 2,
+      status: 'authenticated',
+    };
+    const targetTask: A2ATask = {
+      taskId: 'task-target',
+      agentId: 'agent-target',
+      status: 'working',
+      startedAt: 1,
+      updatedAt: 1,
+    };
+    const keepTask: A2ATask = {
+      taskId: 'task-keep',
+      agentId: 'agent-keep',
+      status: 'completed',
+      startedAt: 1,
+      updatedAt: 2,
+    };
+    const targetMember: TeamMember = {
+      id: 'member-target',
+      role: 'coder',
+      label: 'Target',
+      status: 'working',
+      currentTaskId: null,
+      completedTasks: 0,
+      joinedAt: '2026-06-03T00:00:00.000Z',
+    };
+    const keepMember: TeamMember = {
+      id: 'member-keep',
+      role: 'reviewer',
+      label: 'Keep',
+      status: 'idle',
+      currentTaskId: null,
+      completedTasks: 1,
+      joinedAt: '2026-06-03T00:00:00.000Z',
+    };
+    const targetSubAgent: SubAgent = {
+      id: 'sub-target',
+      nickname: 'Target',
+      role: 'worker',
+      status: 'running',
+      depth: 0,
+      parentId: null,
+      createdAt: 1,
+    };
+    const keepSubAgent: SubAgent = {
+      id: 'sub-keep',
+      nickname: 'Keep',
+      role: 'reviewer',
+      status: 'completed',
+      depth: 0,
+      parentId: null,
+      createdAt: 1,
+    };
+
+    useAppStore.setState({
+      sessions: [
+        {
+          id: 's-target',
+          title: 'Target',
+          status: 'idle',
+          mountedPaths: [],
+          allowedTools: [],
+          memoryEnabled: false,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 's-keep',
+          title: 'Keep',
+          status: 'idle',
+          mountedPaths: [],
+          allowedTools: [],
+          memoryEnabled: false,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeSessionId: 's-target',
+      openTabs: [
+        { id: 'tab-target', sessionId: 's-target', title: 'Target' },
+        { id: 'tab-keep', sessionId: 's-keep', title: 'Keep' },
+      ],
+      sessionStates: { 's-target': sessionState, 's-keep': sessionState },
+      diffPreviews: { 's-target': [diffPreview], 's-keep': [{ ...diffPreview, sessionId: 's-keep' }] },
+      fleetPeers: { [targetPeer.id]: targetPeer, [keepPeer.id]: keepPeer },
+      fleetEvents: [
+        { peerId: targetPeer.id, type: 'lost', payload: {}, receivedAt: 1 },
+        { peerId: keepPeer.id, type: 'kept', payload: {}, receivedAt: 2 },
+      ],
+      a2aTasks: { [targetTask.taskId]: targetTask, [keepTask.taskId]: keepTask },
+      teamMembers: { [targetMember.id]: targetMember, [keepMember.id]: keepMember },
+      subAgents: { 's-target': [targetSubAgent], 's-keep': [keepSubAgent] },
+      subAgentOutputs: { 's-target': { [targetSubAgent.id]: 'drop' }, 's-keep': { [keepSubAgent.id]: 'keep' } },
+    });
+
+    const actions = useAppStore.getState();
+    actions.removeSession('s-target');
+    actions.clearDiffPreviews('s-target');
+    actions.removeFleetPeer(targetPeer.id);
+    actions.removeA2ATask(targetTask.taskId);
+    actions.removeTeamMember(targetMember.id);
+    actions.clearSubAgents('s-target');
+
+    const state = useAppStore.getState();
+    expect(state.sessions.map((s) => s.id)).toEqual(['s-keep']);
+    expect(Object.keys(state.sessionStates)).toEqual(['s-keep']);
+    expect(state.activeSessionId).toBeNull();
+    expect(state.openTabs.map((t) => t.id)).toEqual(['tab-keep']);
+    expect(Object.keys(state.diffPreviews)).toEqual(['s-keep']);
+    expect(Object.keys(state.fleetPeers)).toEqual([keepPeer.id]);
+    expect(state.fleetEvents.map((event) => event.peerId)).toEqual([keepPeer.id]);
+    expect(Object.keys(state.a2aTasks)).toEqual([keepTask.taskId]);
+    expect(Object.keys(state.teamMembers)).toEqual([keepMember.id]);
+    expect(Object.keys(state.subAgents)).toEqual(['s-keep']);
+    expect(Object.keys(state.subAgentOutputs)).toEqual(['s-keep']);
   });
 
   it('addMessage does NOT bump unread for the active session', () => {
