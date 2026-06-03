@@ -15,19 +15,31 @@ vi.mock('child_process', async (importOriginal) => {
     spawn: vi.fn((...args: any[]) => {
       const command = args[0];
       if (command === 'docker' || command === 'wsl' || command === 'daytona' || command === 'sandbox') {
+        const commandArgs = args[1] as string[];
+        const isDaytonaOutputDownload = command === 'daytona'
+          && commandArgs[0] === 'exec'
+          && commandArgs.includes('cat')
+          && String(commandArgs.at(-1) ?? '').endsWith('/output.json');
         (globalThis as any).__lastSpawnArgs = args;
         (globalThis as any).__spawnCalls = [
           ...((globalThis as any).__spawnCalls ?? []),
           args,
         ];
         const mockChild: any = {
-          stdout: { setEncoding: vi.fn(), on: vi.fn() },
+          stdout: {
+            setEncoding: vi.fn(),
+            on: vi.fn((event, callback) => {
+              if (event === 'data' && isDaytonaOutputDownload) {
+                setTimeout(() => callback(JSON.stringify({ ok: true, provider: 'daytona' }, null, 2)), 0);
+              }
+            }),
+          },
           stderr: { setEncoding: vi.fn(), on: vi.fn() },
           on: vi.fn((event, callback) => {
             if (event === 'close') {
-              if (command === 'sandbox' && args[1]?.[0] === 'copy' && /^[^:]+:\//.test(String(args[1]?.[1] ?? ''))) {
-                nodeFs.mkdirSync(nodePath.dirname(args[1][2]), { recursive: true });
-                nodeFs.writeFileSync(args[1][2], JSON.stringify({ ok: true, provider: 'vercel-sandbox' }, null, 2));
+              if (command === 'sandbox' && commandArgs[0] === 'copy' && /^[^:]+:\//.test(String(commandArgs[1] ?? ''))) {
+                nodeFs.mkdirSync(nodePath.dirname(commandArgs[2]), { recursive: true });
+                nodeFs.writeFileSync(commandArgs[2], JSON.stringify({ ok: true, provider: 'vercel-sandbox' }, null, 2));
               }
               setTimeout(() => callback(0, null), 10);
             }
@@ -245,21 +257,56 @@ describe('research script job runner', () => {
 
     const result = await runMaterializedResearchScriptJob(job, { rootDir: tempDir });
 
-    const spawnCall = (globalThis as any).__lastSpawnArgs;
-    expect(spawnCall).toBeTruthy();
-    expect(spawnCall[0]).toBe('daytona');
-    expect(spawnCall[1]).toContain('exec');
-    expect(spawnCall[1]).toContain('-w');
-    expect(spawnCall[1]).toContain('sandbox-legacy-remote-target');
-    expect(spawnCall[1]).toContain('--');
-    expect(spawnCall[1]).toContain('env');
-    expect(spawnCall[1]).toContain('INPUT_JSON=codebuddy-research/research-script-remote-test/input.json');
-    expect(spawnCall[1]).toContain('OUTPUT_JSON=codebuddy-research/research-script-remote-test/output.json');
-    expect(spawnCall[1]).toContain('codebuddy-research/research-script-remote-test/script.js');
+    const spawnCalls = (globalThis as any).__spawnCalls as any[][];
+    expect(spawnCalls).toHaveLength(5);
+    expect(spawnCalls.every((call) => call[0] === 'daytona')).toBe(true);
+    expect(spawnCalls[0][1]).toEqual([
+      'exec',
+      '-w',
+      'sandbox-legacy-remote-target',
+      '--',
+      'mkdir',
+      '-p',
+      'codebuddy-research/research-script-remote-test',
+    ]);
+    expect(spawnCalls[1][1]).toEqual(expect.arrayContaining([
+      'exec',
+      '-w',
+      'sandbox-legacy-remote-target',
+      '--',
+      'sh',
+      '-lc',
+      expect.stringContaining("cat > 'codebuddy-research/research-script-remote-test/script.js'"),
+    ]));
+    expect(spawnCalls[2][1]).toEqual(expect.arrayContaining([
+      'exec',
+      '-w',
+      'sandbox-legacy-remote-target',
+      '--',
+      'sh',
+      '-lc',
+      expect.stringContaining("cat > 'codebuddy-research/research-script-remote-test/input.json'"),
+    ]));
+    expect(spawnCalls[3][1]).toContain('env');
+    expect(spawnCalls[3][1]).toContain('INPUT_JSON=codebuddy-research/research-script-remote-test/input.json');
+    expect(spawnCalls[3][1]).toContain('OUTPUT_JSON=codebuddy-research/research-script-remote-test/output.json');
+    expect(spawnCalls[3][1]).toContain('codebuddy-research/research-script-remote-test/script.js');
+    expect(spawnCalls[4][1]).toEqual([
+      'exec',
+      '-w',
+      'sandbox-legacy-remote-target',
+      '--',
+      'cat',
+      'codebuddy-research/research-script-remote-test/output.json',
+    ]);
 
     expect(result.status).toBe('completed');
-    expect(result.outputStatus).toBe('placeholder');
-    expect(result.outputVerified).toBe(false);
+    expect(result.outputStatus).toBe('written');
+    expect(result.outputVerified).toBe(true);
+    expect(JSON.parse(fs.readFileSync(result.outputPath, 'utf8'))).toMatchObject({
+      ok: true,
+      provider: 'daytona',
+    });
   });
 
   it('translates command and arguments correctly for named daytona provider', async () => {
@@ -288,21 +335,56 @@ describe('research script job runner', () => {
 
     const result = await runMaterializedResearchScriptJob(job, { rootDir: tempDir });
 
-    const spawnCall = (globalThis as any).__lastSpawnArgs;
-    expect(spawnCall).toBeTruthy();
-    expect(spawnCall[0]).toBe('daytona');
-    expect(spawnCall[1]).toContain('exec');
-    expect(spawnCall[1]).toContain('-w');
-    expect(spawnCall[1]).toContain('sandbox-daytona-target');
-    expect(spawnCall[1]).toContain('--');
-    expect(spawnCall[1]).toContain('env');
-    expect(spawnCall[1]).toContain('INPUT_JSON=codebuddy-research/research-script-daytona-test/input.json');
-    expect(spawnCall[1]).toContain('OUTPUT_JSON=codebuddy-research/research-script-daytona-test/output.json');
-    expect(spawnCall[1]).toContain('codebuddy-research/research-script-daytona-test/script.js');
+    const spawnCalls = (globalThis as any).__spawnCalls as any[][];
+    expect(spawnCalls).toHaveLength(5);
+    expect(spawnCalls.every((call) => call[0] === 'daytona')).toBe(true);
+    expect(spawnCalls[0][1]).toEqual([
+      'exec',
+      '-w',
+      'sandbox-daytona-target',
+      '--',
+      'mkdir',
+      '-p',
+      'codebuddy-research/research-script-daytona-test',
+    ]);
+    expect(spawnCalls[1][1]).toEqual(expect.arrayContaining([
+      'exec',
+      '-w',
+      'sandbox-daytona-target',
+      '--',
+      'sh',
+      '-lc',
+      expect.stringContaining("cat > 'codebuddy-research/research-script-daytona-test/script.js'"),
+    ]));
+    expect(spawnCalls[2][1]).toEqual(expect.arrayContaining([
+      'exec',
+      '-w',
+      'sandbox-daytona-target',
+      '--',
+      'sh',
+      '-lc',
+      expect.stringContaining("cat > 'codebuddy-research/research-script-daytona-test/input.json'"),
+    ]));
+    expect(spawnCalls[3][1]).toContain('env');
+    expect(spawnCalls[3][1]).toContain('INPUT_JSON=codebuddy-research/research-script-daytona-test/input.json');
+    expect(spawnCalls[3][1]).toContain('OUTPUT_JSON=codebuddy-research/research-script-daytona-test/output.json');
+    expect(spawnCalls[3][1]).toContain('codebuddy-research/research-script-daytona-test/script.js');
+    expect(spawnCalls[4][1]).toEqual([
+      'exec',
+      '-w',
+      'sandbox-daytona-target',
+      '--',
+      'cat',
+      'codebuddy-research/research-script-daytona-test/output.json',
+    ]);
 
     expect(result.status).toBe('completed');
-    expect(result.outputStatus).toBe('placeholder');
-    expect(result.outputVerified).toBe(false);
+    expect(result.outputStatus).toBe('written');
+    expect(result.outputVerified).toBe(true);
+    expect(JSON.parse(fs.readFileSync(result.outputPath, 'utf8'))).toMatchObject({
+      ok: true,
+      provider: 'daytona',
+    });
   });
 
   it('translates command and arguments correctly for vercel sandbox provider', async () => {

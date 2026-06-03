@@ -19,9 +19,9 @@ Verification: core typecheck PASS · Cowork typecheck PASS · 8 new/changed test
 | GAP-9 recall FTS5 trigram + snippets | PARTIAL | ✅ **DONE** | trigram tokenizer + rebuild + `snippet()` highlight + renderer `<mark>` |
 | GAP-10 memory provider adapters + selector | OPEN | ✅ **DONE** | 3 network adapters w/ local fallback, registry, env, Cowork selector |
 | GAP-11 LLM dialectic over user model | OPEN | ✅ **DONE** | `runUserDialecticInference` proposes *pending*, privacy-screened, `user-model analyze` |
-| GAP-12 remote terminal / research-script backends | OPEN | 🟡 **DONE (core scope)** | local/docker/wsl + Daytona remote-path CLI execution + Vercel CLI artifact sync + guards + artifact folder; live cloud execution still open |
+| GAP-12 remote terminal / research-script backends | OPEN | 🟡 **DONE (core scope)** | local/docker/wsl + Daytona/Vercel CLI artifact sync + guards + artifact folder; live cloud execution still open |
 
-**Score: 11 fully done · GAP-12 done minus live cloud execution / Daytona CLI artifact sync / Modal SDK.**
+**Score: 11 fully done · GAP-12 done minus live cloud execution / Modal SDK.**
 Every durable mutation reviewed keeps the review-gate (user-model proposals → `accept --by`,
 lessons provenance). Typecheck + the touched tests are green.
 
@@ -111,18 +111,21 @@ automatic per-turn pass.
 `local|docker|wsl|remote|daytona|vercel-sandbox`: Docker maps language→image, mounts
 `-v cwd:/workspace`, applies `--network none` when sandbox network is disabled, injects env; WSL
 translates paths via `toWslPath()`. `remote` remains the legacy Daytona alias, `daytona` maps to
-`daytona exec -w <target> -- env ...` using pre-staged `codebuddy-research/<job-id>/...` remote paths
+`daytona exec -w <target> -- env ...` using `codebuddy-research/<job-id>/...` remote paths
 instead of impossible local paths, and `vercel-sandbox` maps to Vercel's documented `sandbox exec
 --env KEY=VALUE <sandbox_id> <command> [...args]` CLI shape. The optional `sandboxPolicy.target`
 carries the remote workspace/sandbox id, with `job.id` retained as a legacy fallback. Vercel Sandbox
 now creates `/home/sandbox/codebuddy-research/<job-id>`, copies local script/input into it, runs with
-remote `INPUT_JSON`/`OUTPUT_JSON`, and copies `output.json` back. Allowlist / network-refusal guards
+remote `INPUT_JSON`/`OUTPUT_JSON`, and copies `output.json` back. Daytona now creates
+`codebuddy-research/<job-id>`, uploads script/input with guarded `daytona exec ... sh -lc`
+heredocs, runs with remote `INPUT_JSON`/`OUTPUT_JSON`, and downloads `output.json` through
+`daytona exec ... cat` into the local artifact. Allowlist / network-refusal guards
 and the run artifact folder are preserved. 8 tests assert local execution, timeout/log capture,
-network refusal, Docker/WSL/Daytona remote-path translation, and the 5-step Vercel
+network refusal, Docker/WSL translation, Daytona setup/upload/exec/download, and the 5-step Vercel
 setup/upload/exec/download command sequence. The runner now reports `outputStatus` and
 `outputVerified`; skill promotion only counts completed runs whose local `output.json` is no longer
-the materialized `not_run` placeholder. *Gap:* live configured-account execution, Daytona CLI
-artifact upload/download, state reconciliation, and Modal SDK execution remain open.
+the materialized `not_run` placeholder. *Gap:* live configured-account execution, state
+reconciliation, and Modal SDK execution remain open.
 
 ---
 

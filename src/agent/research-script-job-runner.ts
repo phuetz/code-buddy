@@ -37,6 +37,7 @@ export interface ResearchScriptJobRunResult {
 interface SpawnInvocation {
   args: string[];
   executable: string;
+  stdoutFile?: string;
 }
 
 type RemoteResearchScriptFiles = ReturnType<typeof resolveResearchScriptJobFiles> & {
@@ -152,7 +153,11 @@ export async function runMaterializedResearchScriptJob(
     }
     spawnArgs.push(wslExecutable, ...args.map(toWslPath));
   } else if (provider === 'remote' || provider === 'daytona') {
-    ({ spawnExecutable, spawnArgs } = buildDaytonaSpawn(job));
+    const plan = await buildDaytonaSpawn(job, absoluteFiles);
+    spawnExecutable = plan.spawnExecutable;
+    spawnArgs = plan.spawnArgs;
+    preRunSteps.push(...plan.preRunSteps);
+    postRunSteps.push(...plan.postRunSteps);
   } else if (provider === 'vercel-sandbox') {
     const plan = buildVercelSandboxSpawn(job, absoluteFiles);
     spawnExecutable = plan.spawnExecutable;
@@ -183,6 +188,9 @@ export async function runMaterializedResearchScriptJob(
         env,
         timeoutMs,
       });
+      if (!postRunResult.timedOut && postRunResult.exitCode === 0 && step.stdoutFile) {
+        await fs.writeFile(step.stdoutFile, postRunResult.stdout, 'utf8');
+      }
       result.stdout += postRunResult.stdout;
       result.stderr += postRunResult.stderr;
       if (postRunResult.timedOut || postRunResult.exitCode !== 0) {
@@ -265,17 +273,24 @@ async function inspectOutputArtifact(outputPath: string): Promise<ResearchScript
   return 'written';
 }
 
-function buildDaytonaSpawn(
+async function buildDaytonaSpawn(
   job: ResearchScriptJobArtifact,
-): {
+  absoluteFiles: ReturnType<typeof resolveResearchScriptJobFiles>,
+): Promise<{
+  postRunSteps: SpawnInvocation[];
+  preRunSteps: SpawnInvocation[];
   spawnArgs: string[];
   spawnExecutable: string;
-} {
+}> {
   const target = job.sandboxPolicy.target ?? job.id;
   const cleanExec = path.basename(job.command.executable).replace(/\.(exe|cmd)$/i, '');
   const remoteFiles = buildDaytonaRemoteFiles(job);
   const remoteEnv = buildRemoteEnv(job, remoteFiles);
   const remoteArgs = job.command.args.map((arg) => resolveRemoteCommandArg(job, remoteFiles, arg));
+  const [scriptSource, inputJson] = await Promise.all([
+    fs.readFile(absoluteFiles.script, 'utf8'),
+    fs.readFile(absoluteFiles.input, 'utf8'),
+  ]);
   const spawnArgs = [
     'exec',
     '-w', target,
@@ -287,6 +302,27 @@ function buildDaytonaSpawn(
   }
   spawnArgs.push(cleanExec, ...remoteArgs);
   return {
+    preRunSteps: [
+      {
+        executable: 'daytona',
+        args: ['exec', '-w', target, '--', 'mkdir', '-p', remoteFiles.root],
+      },
+      {
+        executable: 'daytona',
+        args: ['exec', '-w', target, '--', 'sh', '-lc', buildRemoteFileWriteCommand(remoteFiles.script, scriptSource, job.id, 'script')],
+      },
+      {
+        executable: 'daytona',
+        args: ['exec', '-w', target, '--', 'sh', '-lc', buildRemoteFileWriteCommand(remoteFiles.input, inputJson, job.id, 'input')],
+      },
+    ],
+    postRunSteps: [
+      {
+        executable: 'daytona',
+        args: ['exec', '-w', target, '--', 'cat', remoteFiles.output],
+        stdoutFile: absoluteFiles.output,
+      },
+    ],
     spawnExecutable: 'daytona',
     spawnArgs,
   };
@@ -426,6 +462,30 @@ function assertRemoteStepSucceeded(
 
 function formatSpawnInvocation(invocation: SpawnInvocation): string {
   return [invocation.executable, ...invocation.args].join(' ');
+}
+
+function buildRemoteFileWriteCommand(remotePath: string, content: string, jobId: string, role: string): string {
+  const delimiter = buildHeredocDelimiter(content, jobId, role);
+  return [
+    `cat > ${shellQuote(remotePath)} <<'${delimiter}'`,
+    content,
+    delimiter,
+  ].join('\n');
+}
+
+function buildHeredocDelimiter(content: string, jobId: string, role: string): string {
+  const base = `CODEBUDDY_${sanitizeRemotePathSegment(jobId).replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}_${role.toUpperCase()}_EOF`;
+  let delimiter = base;
+  let index = 0;
+  while (content.includes(delimiter)) {
+    index += 1;
+    delimiter = `${base}_${index}`;
+  }
+  return delimiter;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function sanitizeRemotePathSegment(value: string): string {

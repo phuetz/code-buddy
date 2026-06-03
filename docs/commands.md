@@ -300,15 +300,17 @@ subprocess smoke for the selected backend.
 Research-script job artifacts can now select `sandboxPolicy.provider` values
 `local`, `docker`, `wsl`, `remote`, `daytona`, or `vercel-sandbox`.
 `remote` remains a Daytona alias for backward compatibility; Daytona executes
-pre-staged remote files under `codebuddy-research/<job-id>/...` so it no
-longer sends local paths into the sandbox. `vercel-sandbox`
+remote files under `codebuddy-research/<job-id>/...` so it no longer sends
+local paths into the sandbox. `vercel-sandbox`
 uses the documented `sandbox exec --env KEY=VALUE <sandbox_id> <command>
 [...args]` CLI shape. Set `sandboxPolicy.target` to the existing remote
 workspace or sandbox id; the runner falls back to the job id only for legacy
 artifacts. For Vercel Sandbox, the runner also uses `sandbox copy` to upload
 the materialized script/input into `/home/sandbox/codebuddy-research/<job-id>`
-before execution and copy `output.json` back afterward. Live configured-account
-execution and Daytona upload/download automation remain guarded follow-up work.
+before execution and copy `output.json` back afterward. For Daytona, the runner
+uses `daytona exec` to create `codebuddy-research/<job-id>`, upload script/input
+with shell heredocs, execute the remote job, and stream `output.json` back with
+`cat`. Live configured-account execution remains guarded follow-up work.
 Runner results include `outputStatus` and `outputVerified`; generated
 research-script SKILL candidates only count runs whose output artifact is
 verified, so a clean process exit with a stale `not_run` placeholder is not

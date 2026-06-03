@@ -370,9 +370,9 @@ that proposes higher-order user-model observations — still **review-gated** (p
 Sandbox supports local + Docker + OS (`src/security/sandbox.ts`, `method: none|firejail|docker|native`);
 the research-script runner now covers local execution plus Docker/WSL spawn translation and named
 Daytona/Vercel Sandbox CLI-backed paths. `remote` is retained as the legacy Daytona alias; Vercel
-Sandbox includes a tested setup/upload/exec/download command sequence, while Daytona uses tested
-remote-path execution for pre-staged `codebuddy-research/<job-id>/...` artifacts. Modal SDK
-execution, Daytona artifact sync, and live configured-account provider execution are still open.
+Sandbox includes a tested setup/upload/exec/download command sequence, and Daytona now has a tested
+setup/upload/exec/download sequence through `daytona exec` heredoc upload plus stdout download.
+Modal SDK execution and live configured-account provider execution are still open.
 - **Anchors:** `src/security/` sandbox registry (`SandboxBackendInterface`), `src/agent/autonomous/`
   research-script runner (`runMaterializedResearchScriptJob`, `research-script-job-artifact.ts`).
 - **Accept:** a research-script job runs in Docker/WSL (and a remote provider) writing into the

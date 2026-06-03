@@ -309,7 +309,7 @@ The gap is mainly product integration and durability:
 12. Add sandboxed "research script" runner.
     - Use current Node/PowerShell/Python environment as a controlled local
       executor first.
-    - Later add full remote artifact sync/live cloud execution.
+    - Later add live cloud execution against configured accounts.
     - Acceptance: script runs write into a run-specific artifact folder.
     - Status: first local pass implemented. `materializeResearchScriptJobArtifact`
       creates the run-specific artifact folder without executing network
@@ -323,9 +323,10 @@ The gap is mainly product integration and durability:
       The runner also has Docker/WSL spawn translation plus `remote`/`daytona`
       Daytona CLI remote-path execution for pre-staged artifacts and
       `vercel-sandbox` Vercel Sandbox CLI setup/upload/exec/download using
-      `sandbox copy` plus `sandbox exec`, each covered by runner tests. Live
-      cloud account execution, Daytona artifact sync automation, and Modal SDK
-      execution remain future work. Runner results expose `outputStatus` and
+      `sandbox copy` plus `sandbox exec`; Daytona now uses `daytona exec`
+      heredoc upload plus stdout download for its setup/upload/exec/download
+      path. Each path is covered by runner tests. Live cloud account execution
+      and Modal SDK execution remain future work. Runner results expose `outputStatus` and
       `outputVerified`; generated skill candidates ignore completed runs whose
       output remains the materialized `not_run` placeholder.
 
