@@ -94,11 +94,15 @@ Useful rows include:
 | `Cowork / permission real flow` | Real permission prompt and persisted scoped rule |
 | `MCP / real transport suite` | Real stdio and HTTP MCP fixtures plus fail-closed guard |
 | `Computer Use / real desktop suite` | WinForms, dialog, Notepad, and Excel COM opt-in desktop automation |
-| `Hermes / built CLI real smoke` | Rebuilds Code Buddy and runs real Hermes CLI commands |
+| `Hermes / built CLI real smoke` | Rebuilds Code Buddy, verifies Hermes tools/doctor, proves guarded lifecycle execution, and documents Vercel Sandbox attach |
 
 The runner also exposes execution monitoring:
 
 ![Executions tracking](./qa/code-buddy-studio/screenshots/31-test-runner-executions.png)
+
+The Hermes row is a manual real smoke because it rebuilds the compiled CLI before executing it. It proves `hermes tools`, `hermes doctor safe`, the Daytona lifecycle attach plan, the blocked `--execute` guard without allow flags, and the Vercel Sandbox attach mapping.
+
+![Hermes built CLI lifecycle guard](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 
 ## 7. Extend Cowork With MCP, Fleet, and Skills
 

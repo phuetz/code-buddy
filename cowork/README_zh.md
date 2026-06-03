@@ -52,12 +52,12 @@
 - **实时 Trace**：在 Trace Panel 中观察 AI 推理、工具调用和执行状态。
 - **安全工作区**：文件操作限制在用户选择的 workspace folder 中。
 - **VM 级隔离**：Windows 可使用 WSL2，macOS 可使用 Lima，将命令放到隔离 Linux VM 中执行。
-- **Tests & executions**：从桌面端启动安全本地 bundle，以及 opt-in 的 ChatGPT、Docker、Computer Use、Fleet、MCP、companion 真实检查，并保留执行历史。
+- **Tests & executions**：从桌面端启动安全本地 bundle，以及 opt-in 的 ChatGPT、Docker、Computer Use、Fleet、MCP、Hermes lifecycle、companion 真实检查，并保留执行历史。
 
 <a id="真实使用证据"></a>
 ## 真实使用证据
 
-逐步使用指南见 [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md)，法语版见 [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md)。公开 QA 档案见 [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限和 Computer Use 流程。公开截图发布前会清理账号、token 和本地路径信息。
+逐步使用指南见 [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md)，法语版见 [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md)。公开 QA 档案见 [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md)。其中记录了非 mock 的 Cowork、Electron、Playwright、CLI、HTTP server、ChatGPT OAuth `gpt-5.5`、MCP、Fleet、Docker、权限、Computer Use 和 Hermes lifecycle 流程。公开截图发布前会清理账号、token 和本地路径信息。
 
 ![Cowork ChatGPT gpt-5.5 真实运行](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 
@@ -66,6 +66,8 @@
 ![权限真实流程](../docs/qa/code-buddy-studio/screenshots/55-test-runner-permission-real-flow.png)
 
 ![Computer Use 真实桌面套件](../docs/qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png)
+
+![Hermes built CLI lifecycle guard](../docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 
 公开文档隐私检查由 [`../tests/docs/public-screenshot-privacy.test.ts`](../tests/docs/public-screenshot-privacy.test.ts) 覆盖，GitHub 可见链接大小写检查由 [`../tests/docs/public-doc-links.test.ts`](../tests/docs/public-doc-links.test.ts) 覆盖，指南和证据入口检查由 [`../tests/docs/public-doc-discoverability.test.ts`](../tests/docs/public-doc-discoverability.test.ts) 覆盖。可用 `npm run test:docs-public` 一次运行。
 

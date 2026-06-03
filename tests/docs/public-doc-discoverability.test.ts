@@ -41,6 +41,7 @@ describe('public Cowork documentation discoverability', () => {
       'docs/qa/code-buddy-studio/README.md',
       'docs/qa/code-buddy-studio/feature-qa.md',
       'docs/qa/code-buddy-studio/screenshots/',
+      'docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
       'npm run test:docs-public',
     ]);
   });
@@ -59,6 +60,7 @@ describe('public Cowork documentation discoverability', () => {
         '../tests/docs/public-doc-discoverability.test.ts',
         '../tests/docs/public-screenshot-privacy.test.ts',
         '../tests/docs/public-doc-links.test.ts',
+        '../docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
         'npm run test:docs-public',
       ]);
     }
@@ -78,6 +80,7 @@ describe('public Cowork documentation discoverability', () => {
         './qa/code-buddy-studio/screenshots/30-test-runner-window.png',
         './qa/code-buddy-studio/screenshots/55-test-runner-permission-real-flow.png',
         './qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png',
+        './qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png',
       ]);
     }
   });
@@ -95,6 +98,7 @@ describe('public Cowork documentation discoverability', () => {
       './screenshots/30-test-runner-window.png',
       './screenshots/55-test-runner-permission-real-flow.png',
       './screenshots/108-test-runner-computer-use-real-suite.png',
+      './screenshots/109-test-runner-hermes-built-cli-real.png',
       'tests/docs/public-doc-links.test.ts',
       'tests/docs/public-doc-discoverability.test.ts',
       'tests/docs/public-qa-evidence-integrity.test.ts',

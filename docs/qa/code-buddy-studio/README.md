@@ -32,6 +32,8 @@ Start here when you want proof that the documented Cowork flows have been exerci
 
 ![Computer Use real desktop suite](./screenshots/108-test-runner-computer-use-real-suite.png)
 
+![Hermes built CLI lifecycle guard](./screenshots/109-test-runner-hermes-built-cli-real.png)
+
 ## Re-run Public Documentation Guards
 
 Run these before publishing new public documentation or captures:

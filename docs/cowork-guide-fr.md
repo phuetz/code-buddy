@@ -92,11 +92,15 @@ Lignes utiles :
 | `Cowork / permission real flow` | Prompt de permission réel et règle persistée |
 | `MCP / real transport suite` | Fixtures MCP stdio/HTTP et garde fail-closed |
 | `Computer Use / real desktop suite` | WinForms, dialogue, Notepad et Excel COM en opt-in |
-| `Hermes / built CLI real smoke` | Rebuild Code Buddy puis commandes Hermes CLI réelles |
+| `Hermes / built CLI real smoke` | Rebuild Code Buddy, vérifie tools/doctor Hermes, prouve le garde-fou lifecycle et documente l'attach Vercel Sandbox |
 
 Le runner expose aussi le suivi des exécutions :
 
 ![Suivi des exécutions](./qa/code-buddy-studio/screenshots/31-test-runner-executions.png)
+
+La ligne Hermes reste manuelle car elle reconstruit le CLI compilé avant de l'exécuter. Elle prouve `hermes tools`, `hermes doctor safe`, le plan Daytona attach, le blocage de `--execute` sans allow flags et le mapping Vercel Sandbox attach.
+
+![Guard lifecycle Hermes built CLI](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 
 ## 7. Étendre Cowork avec MCP, Fleet et Skills
 

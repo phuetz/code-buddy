@@ -52,12 +52,12 @@ It provides a sandboxed workspace where AI can manage files, generate profession
 - **Real-time Trace**: Watch AI reasoning and tool execution in the Trace Panel.
 - **Secure Workspace**: All operations confined to your chosen workspace folder.
 - **VM-Level Isolation**: WSL2 (Windows) and Lima (macOS) VM isolation—all commands execute in an isolated VM to protect your host system.
-- **Tests & executions**: launch safe local bundles, opt-in real ChatGPT, Docker, Computer Use, Fleet, MCP, and companion checks from the desktop app, with execution history.
+- **Tests & executions**: launch safe local bundles, opt-in real ChatGPT, Docker, Computer Use, Fleet, MCP, Hermes lifecycle, and companion checks from the desktop app, with execution history.
 
 <a id="verified-evidence"></a>
 ## Verified Real-Use Evidence
 
-The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md), with a French version in [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md). The public QA dossier is available in [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md). It documents non-mocked Cowork, Electron, Playwright, CLI, HTTP server, ChatGPT OAuth `gpt-5.5`, MCP, Fleet, Docker, permission, and Computer Use flows. Screenshots are scrubbed for private account, token, and local path data before publication.
+The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md), with a French version in [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md). The public QA dossier is available in [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md). It documents non-mocked Cowork, Electron, Playwright, CLI, HTTP server, ChatGPT OAuth `gpt-5.5`, MCP, Fleet, Docker, permission, Computer Use, and Hermes lifecycle flows. Screenshots are scrubbed for private account, token, and local path data before publication.
 
 ![Cowork ChatGPT gpt-5.5 real run](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 
@@ -66,6 +66,8 @@ The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../
 ![Permission real flow from the runner](../docs/qa/code-buddy-studio/screenshots/55-test-runner-permission-real-flow.png)
 
 ![Computer Use real desktop suite](../docs/qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png)
+
+![Hermes built CLI lifecycle guard](../docs/qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 
 Privacy guardrails are enforced by [`../tests/docs/public-screenshot-privacy.test.ts`](../tests/docs/public-screenshot-privacy.test.ts), public link casing is enforced by [`../tests/docs/public-doc-links.test.ts`](../tests/docs/public-doc-links.test.ts), and guide/evidence discoverability is enforced by [`../tests/docs/public-doc-discoverability.test.ts`](../tests/docs/public-doc-discoverability.test.ts). Run them together with `npm run test:docs-public`.
 
