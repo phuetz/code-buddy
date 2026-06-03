@@ -155,6 +155,85 @@ function withDaytonaLifecycleFixture(run: (env: NodeJS.ProcessEnv) => void): voi
   }
 }
 
+function writeVercelLifecycleFixture(dir: string): void {
+  if (process.platform === 'win32') {
+    fs.writeFileSync(
+      path.join(dir, 'vercel.cmd'),
+      [
+        '@echo off',
+        'if "%1"=="--version" (',
+        '  echo Vercel CLI 1.0.0',
+        '  exit /b 0',
+        ')',
+        'echo vercel fixture',
+        'exit /b 0',
+        '',
+      ].join('\r\n'),
+    );
+    fs.writeFileSync(
+      path.join(dir, 'sandbox.cmd'),
+      [
+        '@echo off',
+        'if "%1"=="list" (',
+        '  echo [{"id":"sb_abc123xyz","state":"running","token":"secret-vercel-token"}]',
+        '  exit /b 0',
+        ')',
+        'echo sandbox lifecycle %* secret-vercel-token',
+        'exit /b 0',
+        '',
+      ].join('\r\n'),
+    );
+    return;
+  }
+
+  const vercelPath = path.join(dir, 'vercel');
+  fs.writeFileSync(
+    vercelPath,
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "--version" ]; then',
+      "  echo 'Vercel CLI 1.0.0'",
+      '  exit 0',
+      'fi',
+      "echo 'vercel fixture'",
+      'exit 0',
+      '',
+    ].join('\n'),
+  );
+  fs.chmodSync(vercelPath, 0o755);
+
+  const sandboxPath = path.join(dir, 'sandbox');
+  fs.writeFileSync(
+    sandboxPath,
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "list" ]; then',
+      "  echo '[{\"id\":\"sb_abc123xyz\",\"state\":\"running\",\"token\":\"secret-vercel-token\"}]'",
+      '  exit 0',
+      'fi',
+      "echo \"sandbox lifecycle $* secret-vercel-token\"",
+      'exit 0',
+      '',
+    ].join('\n'),
+  );
+  fs.chmodSync(sandboxPath, 0o755);
+}
+
+function withVercelLifecycleFixture(run: (env: NodeJS.ProcessEnv) => void): void {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-hermes-vercel-lifecycle-'));
+  try {
+    writeVercelLifecycleFixture(dir);
+    const fixturePath = `${dir}${path.delimiter}${process.env.PATH ?? process.env.Path ?? ''}`;
+    run({
+      ...process.env,
+      PATH: fixturePath,
+      Path: fixturePath,
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 describe('Hermes runtime backend live smoke runner', () => {
   it('runs the local backend smoke through a real Node subprocess', () => {
     const result = runHermesRuntimeBackendSmoke({
@@ -555,6 +634,47 @@ describe('Hermes runtime backend live smoke runner', () => {
         status: 'blocked',
       });
       expect(result.output).toContain('CODEBUDDY_HERMES_ALLOW_INTERACTIVE_LIFECYCLE=true');
+    });
+  });
+
+  it('executes a guarded Vercel Sandbox lifecycle command and captures redacted state snapshots', () => {
+    withVercelLifecycleFixture((env) => {
+      const result = runHermesRuntimeLifecycleAction({
+        action: 'hibernate',
+        backendId: 'vercel-sandbox',
+        env: {
+          ...env,
+          CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC: 'true',
+          CODEBUDDY_HERMES_ALLOW_VERCEL_LIFECYCLE: 'true',
+          VERCEL_TOKEN: 'secret-vercel-token',
+        },
+        now: () => new Date('2026-06-03T13:25:00.000Z'),
+        target: 'sb_abc123xyz',
+      });
+      const raw = JSON.stringify(result);
+
+      expect(result).toMatchObject({
+        args: ['stop', 'sb_abc123xyz'],
+        command: 'sandbox',
+        exitCode: 0,
+        ok: true,
+        status: 'passed',
+      });
+      expect(result.output).toContain('sandbox lifecycle stop sb_abc123xyz');
+      expect(result.stateBefore).toMatchObject({
+        args: ['list', '--all'],
+        command: 'sandbox',
+        ok: true,
+        targetSeen: true,
+      });
+      expect(result.stateAfter).toMatchObject({
+        args: ['list', '--all'],
+        command: 'sandbox',
+        ok: true,
+        targetSeen: true,
+      });
+      expect(raw).not.toContain('secret-vercel-token');
+      expect(raw).toContain('<configured-secret>');
     });
   });
 });

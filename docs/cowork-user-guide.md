@@ -100,7 +100,7 @@ The runner also exposes execution monitoring:
 
 ![Executions tracking](./qa/code-buddy-studio/screenshots/31-test-runner-executions.png)
 
-The Hermes row is a manual real smoke because it rebuilds the compiled CLI before executing it. It proves `hermes tools`, `hermes doctor safe`, the Daytona lifecycle attach plan, the blocked `--execute` guard without allow flags, and the Vercel Sandbox attach mapping.
+The Hermes row is a manual real smoke because it rebuilds the compiled CLI before executing it. It proves `hermes tools`, `hermes doctor safe`, the Daytona lifecycle attach plan, the blocked Daytona and Vercel Sandbox `--execute` guards without allow flags, and the Vercel Sandbox attach mapping.
 
 ![Hermes built CLI lifecycle guard](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 

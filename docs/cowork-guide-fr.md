@@ -98,7 +98,7 @@ Le runner expose aussi le suivi des exécutions :
 
 ![Suivi des exécutions](./qa/code-buddy-studio/screenshots/31-test-runner-executions.png)
 
-La ligne Hermes reste manuelle car elle reconstruit le CLI compilé avant de l'exécuter. Elle prouve `hermes tools`, `hermes doctor safe`, le plan Daytona attach, le blocage de `--execute` sans allow flags et le mapping Vercel Sandbox attach.
+La ligne Hermes reste manuelle car elle reconstruit le CLI compilé avant de l'exécuter. Elle prouve `hermes tools`, `hermes doctor safe`, le plan Daytona attach, le blocage Daytona et Vercel Sandbox de `--execute` sans allow flags et le mapping Vercel Sandbox attach.
 
 ![Guard lifecycle Hermes built CLI](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
 

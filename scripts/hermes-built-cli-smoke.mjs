@@ -139,6 +139,38 @@ if (vercelAttachPlan.plan?.displayCommand !== 'sandbox exec --interactive --tty 
   throw new Error(`Unexpected Vercel Sandbox attach plan: ${vercelAttachPlan.plan?.displayCommand}`);
 }
 
+const vercelLifecycleBlocked = parseJson(
+  'built Hermes Vercel Sandbox guarded execution',
+  run(
+    'built Hermes Vercel Sandbox guarded execution',
+    process.execPath,
+    [
+      'dist/index.js',
+      'hermes',
+      'runtime',
+      'lifecycle',
+      'vercel-sandbox',
+      'hibernate',
+      '--target',
+      'sb_abc123xyz',
+      '--execute',
+      '--json',
+    ],
+    90_000
+  )
+);
+if (vercelLifecycleBlocked.kind !== 'hermes_runtime_lifecycle_result') {
+  throw new Error(`Unexpected Vercel lifecycle execution kind: ${vercelLifecycleBlocked.kind}`);
+}
+if (vercelLifecycleBlocked.result?.status !== 'blocked' || vercelLifecycleBlocked.result?.ok !== false) {
+  throw new Error(`Unexpected Vercel lifecycle execution status: ${JSON.stringify(vercelLifecycleBlocked.result)}`);
+}
+if (!vercelLifecycleBlocked.result?.output?.includes('CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true')) {
+  throw new Error(
+    `Vercel lifecycle execution did not stay blocked by the global guard: ${vercelLifecycleBlocked.result?.output}`
+  );
+}
+
 console.log(
   JSON.stringify(
     {
@@ -150,11 +182,13 @@ console.log(
         'node dist/index.js hermes runtime lifecycle daytona attach --target sandbox-demo --json',
         'node dist/index.js hermes runtime lifecycle daytona hibernate --target sandbox-demo --execute --json',
         'node dist/index.js hermes runtime lifecycle vercel-sandbox attach --target sb_abc123xyz --json',
+        'node dist/index.js hermes runtime lifecycle vercel-sandbox hibernate --target sb_abc123xyz --execute --json',
       ],
       toolSummary: tools.summary,
       activeToolset: doctor.diagnostics.activeToolset.toolsetId,
       lifecycleGuard: lifecycleBlocked.result.status,
       vercelAttach: vercelAttachPlan.plan.displayCommand,
+      vercelLifecycleGuard: vercelLifecycleBlocked.result.status,
     },
     null,
     2
