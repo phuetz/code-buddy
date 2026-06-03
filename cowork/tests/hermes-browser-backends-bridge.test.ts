@@ -60,7 +60,7 @@ describe.skipIf(!hasBuiltCore)('Hermes browser backends bridge real core integra
           expect.objectContaining({
             id: 'session-recording',
             runnable: true,
-            smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+            smokeCommand: 'buddy hermes browser-smoke session-recording --json',
             status: 'available',
           }),
         ]),
@@ -92,6 +92,30 @@ describe.skipIf(!hasBuiltCore)('Hermes browser backends bridge real core integra
         expect.objectContaining({
           exists: true,
           kind: 'playwright-trace',
+          sizeBytes: expect.any(Number),
+        }),
+      ]),
+    );
+    expect(result.artifacts?.[0]?.sizeBytes).toBeGreaterThan(0);
+  });
+
+  it('runs the real session-recording smoke through the bridge', async () => {
+    const result = await runHermesBrowserBackendSmokeForReview(' session-recording ');
+
+    expect(result).toMatchObject({
+      backendId: 'session-recording',
+      command: process.execPath,
+      ok: true,
+      status: 'passed',
+    });
+    expect(result.output).toContain('OK-HERMES-BROWSER');
+    expect(result.output).toContain('session-recording-trace.zip');
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exists: true,
+          kind: 'playwright-trace',
+          path: expect.stringContaining('session-recording-trace.zip'),
           sizeBytes: expect.any(Number),
         }),
       ]),

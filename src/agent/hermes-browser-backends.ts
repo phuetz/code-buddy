@@ -268,10 +268,10 @@ function recordingBackend(): HermesBrowserBackend {
     command: installed ? process.execPath : null,
     version,
     credentialSources: [],
-    smokeCommand: installed ? 'buddy hermes browser-smoke local-playwright --json' : null,
+    smokeCommand: installed ? 'buddy hermes browser-smoke session-recording --json' : null,
     notes: [
       installed
-        ? 'The local Playwright smoke writes a trace.zip session recording artifact for replay/debugging.'
+        ? 'The session-recording smoke writes a Playwright trace.zip artifact for replay/debugging.'
         : 'Browser Operator exports proof artifacts and action logs, but Playwright trace recording is unavailable.',
     ],
     remediation: installed ? [] : ['Install Playwright before marking browser session recording as available.'],
@@ -449,10 +449,18 @@ async function runRemoteCdpSmoke(
 
 async function runLocalPlaywrightSmoke(
   now: () => Date,
-  options: { artifactsDir?: string } = {},
+  options: {
+    artifactsDir?: string;
+    backendId?: string;
+    label?: string;
+    traceFilename?: string;
+  } = {},
 ): Promise<HermesBrowserBackendSmokeResult> {
   const started = now();
   const startedAtMs = Date.now();
+  const backendId = options.backendId ?? 'local-playwright';
+  const label = options.label ?? 'Local Playwright';
+  const traceFilename = options.traceFilename ?? 'local-playwright-trace.zip';
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
 
@@ -461,7 +469,7 @@ async function runLocalPlaywrightSmoke(
     browser = await playwright.chromium.launch({ headless: true });
     context = await browser.newContext();
     const artifactDir = await createBrowserSmokeArtifactDir(options.artifactsDir);
-    const tracePath = join(artifactDir, 'local-playwright-trace.zip');
+    const tracePath = join(artifactDir, traceFilename);
 
     await context.tracing.start({
       screenshots: true,
@@ -494,7 +502,7 @@ async function runLocalPlaywrightSmoke(
       ? [{
         exists: traceExists,
         kind: 'playwright-trace',
-        label: 'Local Playwright trace',
+        label: `${label} trace`,
         path: tracePath,
         sizeBytes: traceStats.size,
       }]
@@ -503,11 +511,11 @@ async function runLocalPlaywrightSmoke(
     const output = `title=${title}; heading=${heading ?? ''}; trace=${tracePath}`;
     return {
       artifacts,
-      backendId: 'local-playwright',
+      backendId,
       command: process.execPath,
       durationMs: Math.max(0, Date.now() - startedAtMs),
       finishedAt: now().toISOString(),
-      label: 'Local Playwright',
+      label,
       ok,
       output,
       startedAt: started.toISOString(),
@@ -521,11 +529,11 @@ async function runLocalPlaywrightSmoke(
   } catch (error) {
     const message = errorMessage(error);
     return {
-      backendId: 'local-playwright',
+      backendId,
       command: process.execPath,
       durationMs: Math.max(0, Date.now() - startedAtMs),
       finishedAt: now().toISOString(),
-      label: 'Local Playwright',
+      label,
       ok: false,
       output: message,
       startedAt: started.toISOString(),
@@ -559,6 +567,15 @@ export async function runHermesBrowserBackendSmoke(
 
   if (backend.id === 'local-playwright') {
     return runLocalPlaywrightSmoke(now, { artifactsDir: options.artifactsDir });
+  }
+
+  if (backend.id === 'session-recording') {
+    return runLocalPlaywrightSmoke(now, {
+      artifactsDir: options.artifactsDir,
+      backendId: backend.id,
+      label: backend.label,
+      traceFilename: 'session-recording-trace.zip',
+    });
   }
 
   if (backend.id === 'remote-cdp') {

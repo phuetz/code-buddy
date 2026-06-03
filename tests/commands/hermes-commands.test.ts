@@ -884,6 +884,7 @@ describe('Hermes CLI commands', () => {
           verificationCommands: expect.arrayContaining([
             'npx tsx src/index.ts hermes browser status --json',
             'npx tsx src/index.ts hermes browser-smoke local-playwright --json',
+            'npx tsx src/index.ts hermes browser-smoke session-recording --json',
             'npm test -- tests/agent/hermes-browser-backends-smoke-real.test.ts --run',
             'cd cowork && npm test -- --run tests/hermes-browser-backends-bridge.test.ts tests/hermes-browser-backends-strip.test.ts',
           ]),
@@ -2067,7 +2068,7 @@ describe('Hermes CLI commands', () => {
         expect.objectContaining({
           id: 'session-recording',
           runnable: true,
-          smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+          smokeCommand: 'buddy hermes browser-smoke session-recording --json',
           status: 'available',
         }),
       ]),
@@ -2115,6 +2116,54 @@ describe('Hermes CLI commands', () => {
         expect.objectContaining({
           exists: true,
           kind: 'playwright-trace',
+          sizeBytes: expect.any(Number),
+        }),
+      ]),
+    );
+    expect(output.result.artifacts?.[0]?.sizeBytes).toBeGreaterThan(0);
+  });
+
+  it('runs a real Hermes browser session-recording smoke from the CLI', async () => {
+    const program = createProgram();
+    registerHermesCommands(program);
+
+    await program.parseAsync(['node', 'test', 'hermes', 'browser-smoke', 'session-recording', '--json']);
+
+    const output = JSON.parse(getLogOutput()) as {
+      kind: string;
+      schemaVersion: number;
+      result: {
+        artifacts?: Array<{
+          exists: boolean;
+          kind: string;
+          path: string;
+          sizeBytes: number;
+        }>;
+        backendId: string;
+        command: string | null;
+        ok: boolean;
+        output: string;
+        status: string;
+        stdout: string;
+      };
+    };
+
+    expect(output.kind).toBe('hermes_browser_backend_smoke');
+    expect(output.schemaVersion).toBe(1);
+    expect(output.result).toMatchObject({
+      backendId: 'session-recording',
+      command: process.execPath,
+      ok: true,
+      status: 'passed',
+    });
+    expect(output.result.stdout).toContain('OK-HERMES-BROWSER');
+    expect(output.result.output).toContain('session-recording-trace.zip');
+    expect(output.result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exists: true,
+          kind: 'playwright-trace',
+          path: expect.stringContaining('session-recording-trace.zip'),
           sizeBytes: expect.any(Number),
         }),
       ]),

@@ -174,6 +174,7 @@ buddy hermes protocols status [--json]
 buddy hermes protocols-smoke local [--json]
 buddy hermes browser status [--json]
 buddy hermes browser-smoke local-playwright [--json]
+buddy hermes browser-smoke session-recording [--json]
 buddy hermes runtime status [--json]
 buddy hermes runtime lifecycle daytona attach --target <sandbox> [--json]
 buddy hermes runtime lifecycle daytona hibernate --target <sandbox> --execute [--json]
@@ -207,7 +208,9 @@ WSL, SSH, Singularity/Apptainer, Modal, Daytona, and Vercel Sandbox. It also
 embeds browser backend readiness for local Playwright, CDP, Browserbase,
 Browser Use, Firecrawl, Camofox, and session recording. The JSON form is safe
 for Cowork because it reports credential source names and smoke commands only,
-never secret values.
+never secret values. `browser-smoke local-playwright` verifies the local browser
+binary, while `browser-smoke session-recording` verifies a dedicated Playwright
+trace artifact (`session-recording-trace.zip`).
 
 `buddy hermes toolsets [profile] [--json]` prints the dedicated Fleet/Hermes
 toolset catalog without the wider doctor payload. It shows all five dispatch
@@ -280,6 +283,8 @@ local Playwright, remote CDP, Browserbase/Stagehand, Browser Use gateway,
 Firecrawl, Camofox/Camoufox, and session recording. `buddy hermes browser-smoke
 local-playwright --json` launches a real headless Chromium page and proves the
 local Playwright backend can execute, instead of only checking package presence.
+`buddy hermes browser-smoke session-recording --json` runs the same safe local
+browser path while requiring a dedicated `session-recording-trace.zip` artifact.
 
 `buddy hermes runtime status [--json]` prints a dedicated runtime backend
 inventory for local Node, native OS sandbox, Docker, WSL, SSH, Singularity or

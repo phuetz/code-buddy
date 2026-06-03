@@ -278,7 +278,7 @@ describe('Hermes Agent diagnostics', () => {
     expect(recording).toMatchObject({
       status: 'available',
       runnable: true,
-      smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+      smokeCommand: 'buddy hermes browser-smoke session-recording --json',
     });
     expect(JSON.stringify(diagnostics.browserBackends)).not.toContain('secret-');
     expect(JSON.stringify(diagnostics.browserBackends)).not.toContain('ws://secret-cdp-host');

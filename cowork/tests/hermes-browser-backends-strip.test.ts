@@ -68,7 +68,7 @@ const readyBrowserBackends: HermesBrowserBackendsReview = {
       officialSurface: 'browser session replay/recording',
       remediation: [],
       runnable: true,
-      smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+      smokeCommand: 'buddy hermes browser-smoke session-recording --json',
       status: 'available',
       version: '1.58.2',
     },
@@ -115,6 +115,7 @@ describe('HermesBrowserBackendsStrip', () => {
     expect(strip?.textContent).toContain('Browserbase / Stagehand');
     expect(strip?.textContent).toContain('Browser session recording');
     expect(strip?.textContent).toContain('buddy hermes browser-smoke local-playwright --json');
+    expect(strip?.textContent).toContain('buddy hermes browser-smoke session-recording --json');
     expect(strip?.textContent).toContain('buddy hermes browser status --json');
   });
 
@@ -211,5 +212,71 @@ describe('HermesBrowserBackendsStrip', () => {
     expect(result?.textContent).toContain('OK-HERMES-BROWSER');
     const recording = target.querySelector('[data-testid="hermes-browser-recording-local-playwright"]');
     expect(recording?.textContent).toContain('local-playwright-trace.zip');
+  });
+
+  it('runs a dedicated session recording smoke through the Electron bridge', async () => {
+    const target = container();
+    const smoke = vi.fn().mockResolvedValue({
+      ok: true,
+      result: {
+        artifacts: [
+          {
+            exists: true,
+            kind: 'playwright-trace',
+            label: 'Browser session recording trace',
+            path: 'C:\\Temp\\codebuddy-hermes-browser\\session-recording-trace.zip',
+            sizeBytes: 8192,
+          },
+        ],
+        backendId: 'session-recording',
+        command: process.execPath,
+        durationMs: 45,
+        finishedAt: '2026-05-31T13:52:00.045Z',
+        label: 'Browser session recording',
+        ok: true,
+        output: 'title=OK-HERMES-BROWSER; heading=OK-HERMES-BROWSER; trace=session-recording-trace.zip',
+        startedAt: '2026-05-31T13:52:00.000Z',
+        status: 'passed',
+        stderr: '',
+        stdout: 'title=OK-HERMES-BROWSER; heading=OK-HERMES-BROWSER; trace=session-recording-trace.zip',
+      },
+    });
+    (window as unknown as {
+      electronAPI?: {
+        tools?: {
+          hermesBrowserBackends?: {
+            smoke: typeof smoke;
+          };
+        };
+      };
+    }).electronAPI = {
+      tools: {
+        hermesBrowserBackends: {
+          smoke,
+        },
+      },
+    };
+    root = createRoot(target);
+
+    await act(async () => {
+      root?.render(React.createElement(HermesBrowserBackendsStrip, { readiness: readyBrowserBackends }));
+      await Promise.resolve();
+    });
+
+    const button = target.querySelector('[data-testid="hermes-browser-smoke-session-recording"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    await act(async () => {
+      Simulate.click(button);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(smoke).toHaveBeenCalledWith({ backendId: 'session-recording' });
+    const result = target.querySelector('[data-testid="hermes-browser-smoke-result-session-recording"]');
+    expect(result?.textContent).toContain('smoke passed');
+    expect(result?.textContent).toContain('session-recording-trace.zip');
+    const recording = target.querySelector('[data-testid="hermes-browser-recording-session-recording"]');
+    expect(recording?.textContent).toContain('session-recording-trace.zip');
   });
 });

@@ -180,7 +180,7 @@ describe('Hermes browser backend readiness and live smoke', () => {
         expect.objectContaining({
           id: 'session-recording',
           runnable: true,
-          smokeCommand: 'buddy hermes browser-smoke local-playwright --json',
+          smokeCommand: 'buddy hermes browser-smoke session-recording --json',
           status: 'available',
         }),
       ]),
@@ -236,6 +236,33 @@ describe('Hermes browser backend readiness and live smoke', () => {
         expect.objectContaining({
           exists: true,
           kind: 'playwright-trace',
+          sizeBytes: expect.any(Number),
+        }),
+      ]),
+    );
+    expect(result.artifacts?.[0]?.sizeBytes).toBeGreaterThan(0);
+  });
+
+  it('launches a real session-recording smoke with a dedicated trace artifact', async () => {
+    const result = await runHermesBrowserBackendSmoke({
+      backendId: 'session-recording',
+      now: () => new Date('2026-05-31T13:37:00.000Z'),
+    });
+
+    expect(result).toMatchObject({
+      backendId: 'session-recording',
+      command: process.execPath,
+      ok: true,
+      status: 'passed',
+    });
+    expect(result.stdout).toContain('OK-HERMES-BROWSER');
+    expect(result.output).toContain('session-recording-trace.zip');
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          exists: true,
+          kind: 'playwright-trace',
+          path: expect.stringContaining('session-recording-trace.zip'),
           sizeBytes: expect.any(Number),
         }),
       ]),

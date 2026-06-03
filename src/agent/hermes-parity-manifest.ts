@@ -237,12 +237,13 @@ const FEATURES: HermesParityFeature[] = [
     verificationCommands: [
       'npx tsx src/index.ts hermes browser status --json',
       'npx tsx src/index.ts hermes browser-smoke local-playwright --json',
+      'npx tsx src/index.ts hermes browser-smoke session-recording --json',
       'npm test -- tests/agent/hermes-browser-backends-smoke-real.test.ts --run',
       'cd cowork && npm test -- --run tests/hermes-browser-backends-bridge.test.ts tests/hermes-browser-backends-strip.test.ts',
       'npx tsx src/index.ts tools browser-operator draft "open example.com" --json',
       'npm test -- tests/tools/vision-analyze-real.test.ts --run',
     ],
-    notes: 'Strong local browser work exists, including exact browser_vision and browser_dialog prompt-tool surfaces plus machine-readable backend readiness for local Playwright, CDP, Browserbase/Stagehand, Browser Use gateway, Firecrawl, Camofox, and session recording. A real local Playwright smoke launches Chromium, verifies page content, and writes a trace.zip recording artifact; a real remote CDP smoke attaches to a live Chrome DevTools endpoint without leaking the endpoint. Complete backend parity for Camofox, Browser Use gateway mode, managed replay, and hybrid routing is still not proven.',
+    notes: 'Strong local browser work exists, including exact browser_vision and browser_dialog prompt-tool surfaces plus machine-readable backend readiness for local Playwright, CDP, Browserbase/Stagehand, Browser Use gateway, Firecrawl, Camofox, and session recording. A real local Playwright smoke launches Chromium and verifies page content; a dedicated session-recording smoke writes a Playwright trace.zip artifact; a real remote CDP smoke attaches to a live Chrome DevTools endpoint without leaking the endpoint. Complete backend parity for Camofox, Browser Use gateway mode, managed replay, and hybrid routing is still not proven.',
     nextWork: 'Wire first-class managed backend runners and hybrid browser routing before claiming full Hermes browser backend parity.',
   },
   {
