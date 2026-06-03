@@ -43,10 +43,15 @@ Start here when you want proof that the documented Cowork flows have been exerci
 | Config, auth, providers | Profile manager, ChatGPT OAuth, doctor checks, Codex OAuth, provider hooks, ChatGPT responses, Gemini CLI/vision, stream retry, model registry/pricing/defaults, migrations, env schema, TOML/JSONC, provider manager, and model snapshots | `849 ok / 0 ko` |
 | Server, API, MCP platform | API server, auth, middleware, mobile/native routes, workflow builder, canvas, HTTP/REST, IDE server, LSP, MCP client/server/OAuth, and JSON-RPC integration | `703 ok / 0 ko` |
 | Fleet routing orchestration | TaskRouter, saga store, consensus, privacy lint, peer chat stream/factory, registry/listener/handler, dispatch profiles, cost tracking, compaction bridge, capability registry, and autonomous ticks | `357 ok / 0 ko` |
+| Context compression pruning | Web-search context, restorable compression gaps, dangling patches, context guardrails, observation variation, importance scoring, TTL/soft/hard pruning, and progressive/parallel/adaptive compaction | `282 ok / 0 ko` |
+| Provider resilience errors | Stream/client retry, backoff policy, rate limiting, rate-limit display, normalized errors, error-handling audit, client recovery, and malformed Gemini recovery | `367 ok / 0 ko` |
+| Server provider error status | Local provider `429`/`503` propagation, `Retry-After`, server rate-limit separation, and OpenAI-compatible error payloads | `5 ok / 0 ko` |
+| Infrastructure MCP sandbox adapters | MCP manager/discovery/tool adapter, Electron core adapter LRU/hotswap, sandbox registry, auto-sandbox, OS sandbox/exec policy, and E2B fallback | `190 ok / 0 ko` |
 | Remote control | Remote manager, remote user messages, default workdir, `!cd`, cwd propagation, port conflict handling, remote panel links/layout, and remote slash-command bridge | `16 ok / 0 ko` |
 | Device transport adapters | SSH, ADB, and local transports, transport helpers, and Tailscale dashboard node modeling | `178 ok / 0 ko` |
 | Cowork sandbox executor | Dangerous-command validation, workspace containment, WSL/Lima command-injection guards, stderr capture, and `rm -rf`/symlink protections | `42 ok / 0 ko` |
 | Project, session, and git | Git worktrees/compare, project selection, recent files, attachments, session CRUD/cache/search/resume, and session insights | `73 ok / 0 ko` |
+| Cowork UI localization layout | App/chat/welcome/message/config layouts, dark palette, French i18n, Fleet Command Center translations, settings/plugin/schedule surfaces, focus view, local links, LaTeX, markdown, and long attachment layout | `96 ok / 0 ko` |
 | Activity, audit, diagnostics | Activity feed, global search, audit recall, diagnostics renderer, preview service, event mapping, and recent files | `67 ok / 0 ko` |
 | Fleet command and team | FleetBridge, IPC dispatch, command-center board, discovery YAML, SagaRunner, internet-proof metadata, outcomes, scheduled work, and TeamBridge | `61 ok / 0 ko` |
 | Permission path rules | Computer-use permission dialog, quick rules, classification/preview/target rules, declarative fallback, path containment, UNC, and command path conversion | `58 ok / 0 ko` |
@@ -75,6 +80,14 @@ Start here when you want proof that the documented Cowork flows have been exerci
 
 ![Fleet routing orchestration bundle](./screenshots/85-test-runner-fleet-routing-orchestration-bundle.png)
 
+![Context compression pruning bundle](./screenshots/86-test-runner-context-compression-pruning-bundle.png)
+
+![Provider resilience error bundle](./screenshots/91-test-runner-provider-resilience-error-bundle.png)
+
+![Server provider error status bundle](./screenshots/92-test-runner-server-provider-error-status-bundle.png)
+
+![Infrastructure MCP sandbox adapters bundle](./screenshots/93-test-runner-infra-mcp-sandbox-adapters-bundle.png)
+
 ![Remote control bundle](./screenshots/94-test-runner-remote-control-bundle.png)
 
 ![Device transport adapters bundle](./screenshots/95-test-runner-device-transport-adapters-bundle.png)
@@ -82,6 +95,8 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ![Cowork sandbox executor bundle](./screenshots/96-test-runner-cowork-sandbox-executor-bundle.png)
 
 ![Project session git bundle](./screenshots/97-test-runner-project-session-git-bundle.png)
+
+![Cowork UI localization layout bundle](./screenshots/98-test-runner-ui-localization-layout-bundle.png)
 
 ![Activity audit diagnostics bundle](./screenshots/102-test-runner-activity-audit-diagnostics-bundle.png)
 
