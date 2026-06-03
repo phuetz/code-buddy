@@ -120,6 +120,44 @@ describe('Hermes Agent diagnostics', () => {
     expect(JSON.stringify(diagnostics)).not.toContain('secret-nous-token');
   });
 
+  it('reports local auth files as safe sources without leaking absolute paths', () => {
+    const dir = makeTempDir();
+    const codebuddyDir = path.join(dir, '.codebuddy');
+    fs.mkdirSync(codebuddyDir, { recursive: true });
+    const codexAuthPath = path.join(codebuddyDir, 'codex-auth.json');
+    const nousAuthPath = path.join(codebuddyDir, 'nous_auth.json');
+    fs.writeFileSync(codexAuthPath, JSON.stringify({ tokens: { access_token: 'secret-codex-token' } }));
+    fs.writeFileSync(nousAuthPath, JSON.stringify({ access_token: 'secret-nous-file-token' }));
+
+    const loader = new CustomAgentLoader(dir);
+    const diagnostics = buildHermesAgentDiagnostics({
+      env: {
+        CODEBUDDY_MODEL: 'gpt-5.5',
+      },
+      homeDir: dir,
+      loader,
+      settingsModel: null,
+    });
+    const raw = JSON.stringify(diagnostics);
+
+    expect(diagnostics.providerReadiness.activeProvider).toMatchObject({
+      provider: 'openai',
+      configured: true,
+      credentialSources: ['~/.codebuddy/codex-auth.json'],
+    });
+    expect(diagnostics.providerReadiness.portal.portal).toMatchObject({
+      authFilePath: '~/.codebuddy/nous_auth.json',
+      authFilePresent: true,
+      credentialSources: ['~/.codebuddy/nous_auth.json'],
+      credentialPresent: true,
+    });
+    expect(raw).not.toContain(dir);
+    expect(raw).not.toContain(codexAuthPath);
+    expect(raw).not.toContain(nousAuthPath);
+    expect(raw).not.toContain('secret-codex-token');
+    expect(raw).not.toContain('secret-nous-file-token');
+  });
+
   it('reports runtime backend inventory from real local probes', () => {
     const loader = new CustomAgentLoader(makeTempDir());
     const diagnostics = buildHermesAgentDiagnostics({

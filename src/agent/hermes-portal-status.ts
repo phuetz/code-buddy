@@ -101,6 +101,10 @@ function hasTokenLikeField(value: Record<string, unknown> | null): boolean {
   });
 }
 
+function defaultHomeCredentialSource(fileName: string): string {
+  return `~/.codebuddy/${fileName}`;
+}
+
 function normalizedManagedToolSet(env: NodeJS.ProcessEnv): Set<string> | 'all' {
   const raw = envValue(env, 'CODEBUDDY_NOUS_MANAGED_TOOLS', 'NOUS_MANAGED_TOOLS');
   if (!raw) return 'all';
@@ -196,14 +200,17 @@ export function buildHermesPortalStatus(options: HermesPortalStatusOptions = {})
   const generatedAt = (options.now ?? (() => new Date()))().toISOString();
   const portalBaseUrl = envValue(env, 'CODEBUDDY_NOUS_PORTAL_URL', 'NOUS_PORTAL_BASE_URL') ?? DEFAULT_PORTAL_URL;
   const inferenceBaseUrl = envValue(env, 'CODEBUDDY_NOUS_INFERENCE_BASE_URL', 'NOUS_INFERENCE_BASE_URL') ?? DEFAULT_INFERENCE_URL;
-  const authFilePath = envValue(env, 'CODEBUDDY_NOUS_AUTH_FILE')
-    ?? path.join(homeDir, '.codebuddy', 'nous_auth.json');
+  const configuredAuthFilePath = envValue(env, 'CODEBUDDY_NOUS_AUTH_FILE');
+  const authFilePath = configuredAuthFilePath ?? path.join(homeDir, '.codebuddy', 'nous_auth.json');
+  const authFileSource = configuredAuthFilePath
+    ? 'CODEBUDDY_NOUS_AUTH_FILE'
+    : defaultHomeCredentialSource('nous_auth.json');
   const authFile = readJsonIfPresent(authFilePath);
   const authFilePresent = authFile !== null;
   const envCredentialSources = presentEnvKeys(env, NOUS_CREDENTIAL_ENVS);
   const credentialSources = [
     ...envCredentialSources,
-    ...(hasTokenLikeField(authFile) ? [authFilePath] : []),
+    ...(hasTokenLikeField(authFile) ? [authFileSource] : []),
   ];
   const credentialPresent = credentialSources.length > 0;
   const toolGatewayUrl = envValue(env, 'CODEBUDDY_NOUS_TOOL_GATEWAY_URL', 'NOUS_TOOL_GATEWAY_URL');
@@ -250,7 +257,7 @@ export function buildHermesPortalStatus(options: HermesPortalStatusOptions = {})
       docsUrl: DOCS_URL,
       portalBaseUrl,
       inferenceBaseUrl,
-      authFilePath,
+      authFilePath: authFileSource,
       authFilePresent,
       credentialPresent,
       credentialSources,
@@ -269,7 +276,7 @@ export function buildHermesPortalStatus(options: HermesPortalStatusOptions = {})
     },
     notes: [
       'This is a local readiness/status surface, not an OAuth device-code implementation.',
-      'Secrets are intentionally reported only by source name/path, never by value.',
+      'Secrets are intentionally reported only by source name or safe home-relative path, never by value.',
       'Nous-managed routing requires a Nous credential plus CODEBUDDY_NOUS_TOOL_GATEWAY_URL/NOUS_TOOL_GATEWAY_URL or CODEBUDDY_NOUS_TOOL_GATEWAY=1.',
     ],
   };

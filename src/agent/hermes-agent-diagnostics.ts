@@ -235,6 +235,10 @@ function hasTokenLikeJsonFile(filePath: string): boolean {
   }
 }
 
+function defaultHomeCredentialSource(fileName: string): string {
+  return `~/.codebuddy/${fileName}`;
+}
+
 function normalizeProviderHint(value: string | null): ProviderKey | null {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
@@ -328,7 +332,7 @@ function buildProviderStatuses(env: NodeJS.ProcessEnv, homeDir: string): HermesP
     if (definition.provider === 'openai') {
       const codexAuthPath = path.join(homeDir, '.codebuddy', 'codex-auth.json');
       if (hasTokenLikeJsonFile(codexAuthPath)) {
-        credentialSources.push(codexAuthPath);
+        credentialSources.push(defaultHomeCredentialSource('codex-auth.json'));
       }
     }
     const baseUrl = envValue(env, ...definition.baseUrlEnv) ?? definition.defaultBaseUrl ?? null;
