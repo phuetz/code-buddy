@@ -38,6 +38,8 @@ function formatTime(ts: number): string {
 
 type Mode = 'list' | 'timeline';
 
+const EMPTY_SNAPSHOTS: CheckpointTimeline['snapshots'] = [];
+
 export const CheckpointPanel: React.FC<CheckpointPanelProps> = ({
   timeline,
   onUndo,
@@ -51,7 +53,7 @@ export const CheckpointPanel: React.FC<CheckpointPanelProps> = ({
   const [compareB, setCompareB] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState(false);
 
-  const snapshots = timeline?.snapshots ?? [];
+  const snapshots = timeline?.snapshots ?? EMPTY_SNAPSHOTS;
   const currentIndex = timeline?.currentIndex ?? -1;
 
   const minTs = useMemo(() => (snapshots[0]?.timestamp ?? 0), [snapshots]);

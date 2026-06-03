@@ -39,6 +39,9 @@ interface TreeNode {
   children: TreeNode[];
 }
 
+const EMPTY_AGENTS: SubAgent[] = [];
+const EMPTY_OUTPUTS: Record<string, string> = {};
+
 function buildTree(agents: SubAgent[]): TreeNode[] {
   const byId = new Map<string, TreeNode>();
   for (const a of agents) byId.set(a.id, { agent: a, children: [] });
@@ -173,8 +176,8 @@ export function SubAgentDashboard({ onClose }: SubAgentDashboardProps) {
   const subAgentOutputs = useAppStore((s) => s.subAgentOutputs);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const agents = activeSessionId ? subAgents[activeSessionId] ?? [] : [];
-  const outputs = activeSessionId ? subAgentOutputs[activeSessionId] ?? {} : {};
+  const agents = activeSessionId ? subAgents[activeSessionId] ?? EMPTY_AGENTS : EMPTY_AGENTS;
+  const outputs = activeSessionId ? subAgentOutputs[activeSessionId] ?? EMPTY_OUTPUTS : EMPTY_OUTPUTS;
   const tree = useMemo(() => buildTree(agents), [agents]);
 
   // Expand all by default the first time we see agents
