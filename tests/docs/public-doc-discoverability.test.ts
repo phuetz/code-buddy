@@ -237,8 +237,10 @@ describe('public Cowork documentation discoverability', () => {
       './screenshots/110-packaged-win-unpacked-launch.png',
       'tests/docs/public-doc-links.test.ts',
       'tests/docs/public-doc-discoverability.test.ts',
+      'tests/docs/public-hermes-parity-doc.test.ts',
       'tests/docs/public-qa-evidence-integrity.test.ts',
       'tests/docs/public-screenshot-privacy.test.ts',
+      'tests/docs/renderers.test.ts',
       'npm run test:docs-public',
     ]);
     expectText(qaHub, 'docs/qa/code-buddy-studio/README.md', [
@@ -276,6 +278,8 @@ describe('public Cowork documentation discoverability', () => {
       'Opt-in real provider/system',
       'Safe runner bundles cover CLI',
       'Opt-in real checks are explicit',
+      'Hermes parity count claims',
+      'overnight dataset evidence markers',
       'Publication guard passes',
     ]);
   });
