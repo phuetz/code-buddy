@@ -40,13 +40,19 @@ Start here when you want proof that the documented Cowork flows have been exerci
 | Bundle | Verified coverage | Runner proof |
 | --- | --- | --- |
 | CLI command surface | CLI flags, headless exit codes, model/session commands, slash/context/session/permission/security/tool handlers, backups, agents, run recall, worktrees, Fleet, auth, config, and memory commands | `562 ok / 0 ko` |
+| Plugins and skills | Plugin onboarding, SDK channel, manager, conflict detector, cloud providers, plugin CLI, skill registry, starter packs, layering, hub, eligibility, and deprecation warnings | `755 ok / 0 ko` |
+| Terminal UI and observer | Ink UI accessibility, chat rendering, diff logic, keyboard shortcuts, metrics dashboard, status line, themes, tool streams, clipboard, GUI tool, and screen observer | `376 ok / 0 ko` |
 | Config, auth, providers | Profile manager, ChatGPT OAuth, doctor checks, Codex OAuth, provider hooks, ChatGPT responses, Gemini CLI/vision, stream retry, model registry/pricing/defaults, migrations, env schema, TOML/JSONC, provider manager, and model snapshots | `849 ok / 0 ko` |
+| Data, sessions, sync, cache | Database layer, KV config, session locks/branches/timeline/replay/export/cleanup, cloud sync, peer session store, cron persistence, response cache, prompt cache, and distributed cache | `901 ok / 0 ko` |
 | Server, API, MCP platform | API server, auth, middleware, mobile/native routes, workflow builder, canvas, HTTP/REST, IDE server, LSP, MCP client/server/OAuth, and JSON-RPC integration | `703 ok / 0 ko` |
 | Fleet routing orchestration | TaskRouter, saga store, consensus, privacy lint, peer chat stream/factory, registry/listener/handler, dispatch profiles, cost tracking, compaction bridge, capability registry, and autonomous ticks | `357 ok / 0 ko` |
 | Context compression pruning | Web-search context, restorable compression gaps, dangling patches, context guardrails, observation variation, importance scoring, TTL/soft/hard pruning, and progressive/parallel/adaptive compaction | `282 ok / 0 ko` |
+| Voice, speech, TTS | Voice control, speech recognition, wake-word fallback, TTS providers, audio reader, audio tool, and voice-to-code | `164 ok / 0 ko` |
 | Provider resilience errors | Stream/client retry, backoff policy, rate limiting, rate-limit display, normalized errors, error-handling audit, client recovery, and malformed Gemini recovery | `367 ok / 0 ko` |
 | Server provider error status | Local provider `429`/`503` propagation, `Retry-After`, server rate-limit separation, and OpenAI-compatible error payloads | `5 ok / 0 ko` |
 | Infrastructure MCP sandbox adapters | MCP manager/discovery/tool adapter, Electron core adapter LRU/hotswap, sandbox registry, auto-sandbox, OS sandbox/exec policy, and E2B fallback | `190 ok / 0 ko` |
+| Automation scheduler hooks notifications | Watchdogs, scheduled delivery, cron prechecks/persistence, lifecycle/input/tool hooks, session lanes, webhooks, triggers, proactive notifications, and default sinks | `766 ok / 0 ko` |
+| Maintenance doctor backup settings | Doctor checks/fixes, ChatGPT OAuth diagnostics, onboarding wizard, backup handlers, update notifier, settings manager, update tags, migrations, and hooks/policies/memory settings | `254 ok / 0 ko` |
 | Remote control | Remote manager, remote user messages, default workdir, `!cd`, cwd propagation, port conflict handling, remote panel links/layout, and remote slash-command bridge | `16 ok / 0 ko` |
 | Device transport adapters | SSH, ADB, and local transports, transport helpers, and Tailscale dashboard node modeling | `178 ok / 0 ko` |
 | Cowork sandbox executor | Dangerous-command validation, workspace containment, WSL/Lima command-injection guards, stderr capture, and `rm -rf`/symlink protections | `42 ok / 0 ko` |
@@ -74,7 +80,13 @@ Start here when you want proof that the documented Cowork flows have been exerci
 
 ![CLI command surface bundle](./screenshots/79-test-runner-cli-command-surface-bundle.png)
 
+![Plugins skills bundle](./screenshots/80-test-runner-plugins-skills-bundle.png)
+
+![Terminal UI observer bundle](./screenshots/81-test-runner-terminal-ui-observer-bundle.png)
+
 ![Config auth provider bundle](./screenshots/82-test-runner-config-auth-provider-bundle.png)
+
+![Data session sync cache bundle](./screenshots/83-test-runner-data-session-sync-cache-bundle.png)
 
 ![Server API MCP platform bundle](./screenshots/84-test-runner-server-api-mcp-platform-bundle.png)
 
@@ -82,11 +94,17 @@ Start here when you want proof that the documented Cowork flows have been exerci
 
 ![Context compression pruning bundle](./screenshots/86-test-runner-context-compression-pruning-bundle.png)
 
+![Voice speech TTS bundle](./screenshots/87-test-runner-voice-speech-tts-bundle.png)
+
 ![Provider resilience error bundle](./screenshots/91-test-runner-provider-resilience-error-bundle.png)
 
 ![Server provider error status bundle](./screenshots/92-test-runner-server-provider-error-status-bundle.png)
 
 ![Infrastructure MCP sandbox adapters bundle](./screenshots/93-test-runner-infra-mcp-sandbox-adapters-bundle.png)
+
+![Scheduler hooks notifications bundle](./screenshots/88-test-runner-scheduler-hooks-notifications-bundle.png)
+
+![Maintenance doctor backup settings bundle](./screenshots/89-test-runner-maintenance-doctor-backup-settings-bundle.png)
 
 ![Remote control bundle](./screenshots/94-test-runner-remote-control-bundle.png)
 
