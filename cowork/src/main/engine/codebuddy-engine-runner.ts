@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { log, logError } from '../utils/logger';
 import { isBrowserOperatorTool, buildBrowserActionPayload } from './browser-action';
 import { createReasoningCapture } from '../reasoning/reasoning-capture';
+import { loadCoreModule } from '../utils/core-loader';
 import type {
   Session,
   Message,
@@ -126,7 +127,6 @@ export class CodeBuddyEngineRunner {
     // Create checkpoint before this turn (ghost snapshot)
     try {
       if (session.cwd) {
-        const { loadCoreModule } = await import('../utils/core-loader');
         type GhostSnapshotMod = {
           getGhostSnapshotManager: (cwd: string) => {
             createSnapshot: (desc: string) => Promise<{

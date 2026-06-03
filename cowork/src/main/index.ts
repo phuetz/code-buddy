@@ -2581,7 +2581,6 @@ ipcMain.handle(
     if (!trimmed) return { success: false, error: 'Lesson content is empty' };
 
     try {
-      const { loadCoreModule } = await import('./utils/core-loader');
       const lessonsMod = await loadCoreModule<{
         getLessonsTracker: (workDir?: string) => {
           add: (
@@ -4047,7 +4046,6 @@ ipcMain.handle(
 // loadable (graceful degradation — the input falls back to a textfield).
 ipcMain.handle('tools.list', async () => {
   try {
-    const { loadCoreModule } = await import('./utils/core-loader');
     const reg = await loadCoreModule<{
       getFormalToolRegistry: () => {
         getAll: () => Array<{
@@ -4596,7 +4594,6 @@ ipcMain.handle(
       const payloadCwd =
         typeof payload?.cwd === 'string' && isAbsolute(payload.cwd) ? payload.cwd : null;
       const rootDir = payloadCwd ?? getWorkingDir() ?? process.cwd();
-      const { loadCoreModule } = await import('./utils/core-loader');
       const mod = await loadCoreModule<{ getLessonsTracker: (workDir: string) => any }>(
         'agent/lessons-tracker.js'
       );
