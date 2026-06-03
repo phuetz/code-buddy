@@ -1,12 +1,12 @@
 # Cowork competitor parity audit
 
 Date: 2026-05-18
-Workspace: `D:\CascadeProjects\grok-cli-weekend`
+Workspace: local Code Buddy checkout (redacted for public docs)
 
 ## Scope
 
-This audit compares Code Buddy + Cowork against the product shape Patrice
-named: Claude/Cowork-style desktop workbench, Codex on Windows, Hermes
+This audit compares Code Buddy + Cowork against the requested product
+shape: Claude/Cowork-style desktop workbench, Codex on Windows, Hermes
 Agent and Manus-style browser operator flows.
 
 The goal is not to clone any competitor. The goal is to identify the

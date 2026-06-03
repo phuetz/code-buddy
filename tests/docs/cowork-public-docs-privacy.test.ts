@@ -8,6 +8,10 @@ const gitignoreFile = path.join(repoRoot, '.gitignore');
 const rootReadme = path.join(repoRoot, 'README.md');
 const coworkReadme = path.join(repoRoot, 'cowork', 'readme.md');
 const publicCoworkDoc = path.join(repoRoot, 'docs', 'cowork.md');
+const publicCoworkPlanningDocs = [
+  path.join(repoRoot, 'docs', 'cowork-competitor-audit.md'),
+  path.join(repoRoot, 'docs', 'hermes-cowork-cli-improvement-plan.md'),
+] as const;
 const publicDocsDir = path.join(repoRoot, 'docs');
 const publicCoworkQaDir = path.join(repoRoot, 'docs', 'qa', 'code-buddy-studio');
 const publicCoworkQaReport = path.join(publicCoworkQaDir, 'feature-qa-report.json');
@@ -89,13 +93,14 @@ function expectReviewedImageFile(sourceFile: string, target: string): void {
 
 describe('Cowork public QA documentation privacy', () => {
   it('does not publish private ChatGPT account identifiers in text ledgers', () => {
-    const files = [publicCoworkDoc, ...publicTextFiles(publicCoworkQaDir)];
+    const files = [publicCoworkDoc, ...publicCoworkPlanningDocs, ...publicTextFiles(publicCoworkQaDir)];
     expect(files.length).toBeGreaterThan(0);
 
     for (const file of files) {
       const text = fs.readFileSync(file, 'utf8');
       expect(text, file).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
       expect(text, file).not.toContain('patrice.huetz');
+      expect(text, file).not.toMatch(/\bPatrice\b/i);
     }
   });
 
@@ -106,7 +111,7 @@ describe('Cowork public QA documentation privacy', () => {
   });
 
   it('does not publish local workstation paths in public QA text ledgers', () => {
-    const files = [publicCoworkDoc, ...publicTextFiles(publicCoworkQaDir)];
+    const files = [publicCoworkDoc, ...publicCoworkPlanningDocs, ...publicTextFiles(publicCoworkQaDir)];
 
     for (const file of files) {
       const text = fs.readFileSync(file, 'utf8');

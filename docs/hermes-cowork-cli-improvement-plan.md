@@ -1,7 +1,7 @@
 # Hermes / Cowork / CLI improvement log
 
 Date: 2026-05-18
-Workspace: `D:\CascadeProjects\grok-cli-weekend`
+Workspace: local Code Buddy checkout (redacted for public docs)
 Status: implementation plan plus first shipped slice
 
 ## Goal
