@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/logo.png" alt="Code Buddy Cowork Logo" width="280" />
+  <img src="public/logo.png" alt="Code Buddy Cowork Logo" width="280" />
 </p>
 
 <h1 align="center">🚀 Code Buddy Cowork: Your Personal AI Agent Desktop App</h1>

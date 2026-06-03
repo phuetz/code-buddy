@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/logo.png" alt="Open Cowork Logo" width="280" />
+  <img src="public/logo.png" alt="Open Cowork Logo" width="280" />
 </p>
 
 <h1 align="center">🚀 Open Cowork: 你的私人 AI 智能助手桌面应用</h1>
