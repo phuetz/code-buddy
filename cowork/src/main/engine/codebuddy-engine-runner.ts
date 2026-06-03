@@ -11,7 +11,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { log, logError } from '../utils/logger';
 import { isBrowserOperatorTool, buildBrowserActionPayload } from './browser-action';
-import { getReasoningBridge } from '../reasoning/reasoning-bridge';
 import { createReasoningCapture } from '../reasoning/reasoning-capture';
 import type {
   Session,
@@ -60,6 +59,11 @@ interface EngineStreamEvent {
     message?: string;
   };
   diffPreview?: { turnId: number; diffs: Array<Record<string, unknown>>; plan?: string };
+}
+
+async function getLazyReasoningBridge() {
+  const mod = await import('../reasoning/reasoning-bridge');
+  return mod.getReasoningBridge();
 }
 
 /** Callbacks injected by SessionManager */
@@ -173,7 +177,7 @@ export class CodeBuddyEngineRunner {
     let runtimeError: string | null = null;
     const contentBlocks: ContentBlock[] = [];
     const reasoningCapture = createReasoningCapture({
-      bridge: getReasoningBridge(),
+      bridge: await getLazyReasoningBridge(),
       toolUseId: `${session.id}:reasoning:${userMessageId}`,
       sessionId: session.id,
       problem: prompt,

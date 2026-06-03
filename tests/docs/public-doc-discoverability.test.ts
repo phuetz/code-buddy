@@ -157,6 +157,7 @@ describe('public Cowork documentation discoverability', () => {
       'core-loader',
       'mobile supervision server bridge',
       'sandbox bootstrap paths',
+      'reasoning capture bridge',
       'lazy-loading the pi runner',
       '@mariozechner/pi-ai',
       'DEP0190',

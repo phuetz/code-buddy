@@ -62,7 +62,6 @@ import {
 import { buildPiSessionRuntimeSignature } from './pi-session-runtime';
 import { ThinkTagStreamParser } from './think-tag-parser';
 import { fetchOllamaModelInfo } from '../config/ollama-api';
-import { getReasoningBridge } from '../reasoning/reasoning-bridge';
 import { createReasoningCapture } from '../reasoning/reasoning-capture';
 
 // Virtual workspace path shown to the model (hides real sandbox path)
@@ -83,6 +82,11 @@ function estimateCharsPerToken(sampleText: string): number {
 
 // Bundled node/npx paths never change at runtime — resolve once.
 let cachedBundledNodePaths: { node: string; npx: string } | null | undefined = undefined;
+
+async function getLazyReasoningBridge() {
+  const mod = await import('../reasoning/reasoning-bridge');
+  return mod.getReasoningBridge();
+}
 
 function getBundledNodePaths(): { node: string; npx: string } | null {
   if (cachedBundledNodePaths !== undefined) {
@@ -912,7 +916,7 @@ ${hints.join('\n')}
 
     const thinkingStepId = uuidv4();
     const reasoningCapture = createReasoningCapture({
-      bridge: getReasoningBridge(),
+      bridge: await getLazyReasoningBridge(),
       toolUseId: thinkingStepId,
       sessionId: session.id,
       problem: prompt,
