@@ -9,6 +9,10 @@ const reportPath = 'docs/qa/code-buddy-studio/feature-qa-report.json';
 const mainDossierPath = 'docs/qa/code-buddy-studio/feature-qa.md';
 const qaHubPath = 'docs/qa/code-buddy-studio/README.md';
 const screenshotPrefix = 'docs/qa/code-buddy-studio/screenshots/';
+const userGuidePaths = [
+  'docs/cowork-user-guide.md',
+  'docs/cowork-guide-fr.md',
+];
 const qaHubRunnerProofs: Array<[reportKey: string, hubLabel: string]> = [
   ['testRunnerCliCommandSurfaceBundle', 'CLI command surface'],
   ['testRunnerPluginsSkillsBundle', 'Plugins and skills'],
@@ -34,6 +38,14 @@ const qaHubRunnerProofs: Array<[reportKey: string, hubLabel: string]> = [
   ['testRunnerCoworkPermissionPathRulesBundle', 'Permission path rules'],
   ['testRunnerCoworkSettingsHooksMcpWorkflowsBundle', 'Settings, hooks, MCP, workflows'],
   ['testRunnerCoworkCustomCommandsSlashBundle', 'Custom commands and slash'],
+];
+const userGuideRunnerProofs: Array<[reportKey: string, runnerRow: string]> = [
+  ['testRunnerPluginsSkillsBundle', 'Plugins / skills bundle'],
+  ['testRunnerTerminalUiObserverBundle', 'UI / terminal observer bundle'],
+  ['testRunnerDataSessionSyncCacheBundle', 'Data / session sync cache bundle'],
+  ['testRunnerVoiceSpeechTtsBundle', 'Voice / speech TTS bundle'],
+  ['testRunnerSchedulerHooksNotificationsBundle', 'Automation / scheduler hooks notifications bundle'],
+  ['testRunnerMaintenanceDoctorBackupSettingsBundle', 'Maintenance / doctor backup settings bundle'],
 ];
 
 type QaReportResult = {
@@ -128,6 +140,18 @@ function qaHubRunnerProofCount(qaHub: string, hubLabel: string): number {
   return Number(match?.[1]);
 }
 
+function guideRunnerProofCount(guide: string, docPath: string, runnerRow: string): number {
+  const row = guide.split(/\r?\n/).find((line) => line.includes(`| \`${runnerRow}\` |`));
+  expect(row, `${docPath} must include ${runnerRow} proof row`).toBeDefined();
+
+  const cells = row?.split('|').map((cell) => cell.trim()) ?? [];
+  const proofCell = cells.at(-2);
+  const match = proofCell?.match(/^`(\d+) ok \/ 0 ko`, \[capture\]\(\.\/qa\/code-buddy-studio\/screenshots\/[^)]+\.png\)$/);
+
+  expect(match, `${docPath} ${runnerRow} row must include a screenshot-backed runner count`).toBeDefined();
+  return Number(match?.[1]);
+}
+
 function expectQaHubRunnerProof(qaHub: string, report: QaReport, reportKey: string, hubLabel: string): void {
   expect(qaHubRunnerProofCount(qaHub, hubLabel)).toBe(reportedRunnerProofCount(report, reportKey));
 }
@@ -170,6 +194,19 @@ describe('public QA evidence report integrity', () => {
 
     for (const [reportKey, hubLabel] of qaHubRunnerProofs) {
       expectQaHubRunnerProof(qaHub, report, reportKey, hubLabel);
+    }
+  });
+
+  it('keeps user guide safe bundle proofs aligned with the machine-readable report', async () => {
+    const report = await readQaReport();
+
+    for (const docPath of userGuidePaths) {
+      const guide = await fs.readFile(path.join(repoRoot, docPath), 'utf8');
+      for (const [reportKey, runnerRow] of userGuideRunnerProofs) {
+        expect(guideRunnerProofCount(guide, docPath, runnerRow)).toBe(
+          reportedRunnerProofCount(report, reportKey),
+        );
+      }
     }
   });
 
