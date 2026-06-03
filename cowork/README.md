@@ -2,16 +2,16 @@
   <img src="public/logo.png" alt="Code Buddy Cowork Logo" width="280" />
 </p>
 
-<h1 align="center">🚀 Code Buddy Cowork: Your Personal AI Agent Desktop App</h1>
+<h1 align="center">Code Buddy Cowork: Desktop Cockpit for Code Buddy</h1>
 
 <p align="center">
-  • Open Source Claude Cowork • One-Click Install 
+  ChatGPT OAuth • Embedded Code Buddy Engine • Real QA Evidence
 </p>
 
 <p align="center">
   <a href="./README_zh.md">中文文档</a> •
   <a href="#features">Features</a> •
-  <a href="#demo">Demo</a> •
+  <a href="#verified-evidence">Evidence</a> •
   <a href="#installation">Downloads</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#core-engine">Core Engine</a> •
@@ -21,16 +21,16 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-blue" alt="Platform" />
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License" />
-  <img src="https://img.shields.io/badge/Node.js-18+-brightgreen" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Node.js-22+-brightgreen" alt="Node.js" />
 </p>
 
 ---
 
 ## 📖 Introduction
 
-**Code Buddy Cowork** is an open-source implementation of **Claude Cowork**, with one-click installers for **Windows** and **macOS**—no coding required.
+**Code Buddy Cowork** is the Electron desktop cockpit for the Code Buddy CLI, server, Fleet hub, and Buddy companion. It runs the embedded Code Buddy core engine by default, so desktop chat, tools, traces, workflows, settings, permissions, models, MCP connectors, skills, artifacts, and companion controls all use the same agentic loop as the terminal.
 
-It provides a sandboxed workspace where AI can manage files, generate professional outputs (PPTX, DOCX, XLSX, etc.) through our built-in **Skills** system, and **connect to desktop apps via MCP** (browser, Notion, etc.) for better collaboration.
+It provides a sandboxed workspace where AI can manage files, generate professional outputs, run real verification suites from the **Tests & executions** panel, and connect to local or remote tooling through MCP and Fleet.
 
 > [!WARNING]
 > **Disclaimer**: Code Buddy Cowork is an AI collaboration tool. Please exercise caution with its operations, especially when authorizing file modifications or deletions. We support VM-based sandbox isolation, but some operations may still carry risks.
@@ -40,84 +40,62 @@ It provides a sandboxed workspace where AI can manage files, generate profession
 <a id="features"></a>
 ## ✨ Key Features
 
-|               | MCP & Skills | Remote Control | GUI Operation |
-| ------------- | ------------ | -------------- | ------------- |
-| Claude Cowork | ✓            | ✗              | ✗             |
-| Native Engine      | ✓            | ✓              | ✗             |
-| CodeBuddyCowork    | ✓            | ✓              | ✓             |
-
-- **One-Click Install, Ready to Use**: Pre-built installers for Windows and macOS, no environment setup needed—just download and start using.
-- **Flexible Model Support**: Supports **Claude**, **OpenAI-compatible APIs**, and Chinese models like **GLM**, **MiniMax**, **Kimi**. Use your OpenRouter, Anthropic, or other API keys with flexible configuration. More models coming soon!
-- **Remote Control**: Connect to collaboration platforms like **Feishu (Lark)** and other remote services to automate workflows and cross-platform operations.
-- **GUI Operation**: Control and interact with various desktop GUI applications on your computer. **Recommended model: Gemini-3-Pro** for optimal GUI understanding and control.
-- **Smart File Management**: Read, write, and organize files within your workspace.
-- **Skills System**: Built-in workflows for PPTX, DOCX, PDF, XLSX generation and processing. **Supports custom skill creation and deletion.**
-- **MCP External Service Support**: Integrate browser, Notion, custom apps and more through **MCP Connectors** to extend AI capabilities.
+- **ChatGPT subscription login**: use `buddy login` once, then Cowork can route through ChatGPT OAuth-backed `gpt-5.5` without exposing API keys in public docs or screenshots.
+- **Flexible model support**: OpenAI-compatible APIs, Claude, Grok, Gemini, Ollama, LM Studio, OpenRouter, vLLM, Copilot, Mistral, and other providers supported by the Code Buddy core.
+- **Embedded engine**: Cowork uses the built Code Buddy bundle by default and can fall back to the legacy runner when explicitly configured.
+- **Remote control and Fleet**: coordinate peers, scheduled work, command-center boards, and cross-surface workflows.
+- **GUI operation**: drive desktop applications and validate Computer Use flows through opt-in real suites.
+- **Smart file management**: read, write, organize, and attach files within the selected workspace.
+- **Skills system**: built-in workflows for PPTX, DOCX, PDF, XLSX generation and processing, plus custom skill creation.
+- **MCP external service support**: integrate browsers, local transports, Notion, custom apps, and other tools through **MCP Connectors**.
 - **Multimodal Input**: Drag & drop files and images directly into the chat input for seamless multimodal interaction.
 - **Real-time Trace**: Watch AI reasoning and tool execution in the Trace Panel.
 - **Secure Workspace**: All operations confined to your chosen workspace folder.
 - **VM-Level Isolation**: WSL2 (Windows) and Lima (macOS) VM isolation—all commands execute in an isolated VM to protect your host system.
-- **UI Enhancements**: Beautiful and flexible UI design, system language switching, comprehensive MCP/Skills/Tools call display.
+- **Tests & executions**: launch safe local bundles, opt-in real ChatGPT, Docker, Computer Use, Fleet, MCP, and companion checks from the desktop app, with execution history.
+
+<a id="verified-evidence"></a>
+## Verified Real-Use Evidence
+
+The public QA dossier is available in [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md). It documents non-mocked Cowork, Electron, Playwright, CLI, HTTP server, ChatGPT OAuth `gpt-5.5`, MCP, Fleet, Docker, permission, and Computer Use flows. Screenshots are scrubbed for private account, token, and local path data before publication.
+
+![Cowork ChatGPT gpt-5.5 real run](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
+
+![Tests and executions window](../docs/qa/code-buddy-studio/screenshots/30-test-runner-window.png)
+
+![Permission real flow from the runner](../docs/qa/code-buddy-studio/screenshots/55-test-runner-permission-real-flow.png)
+
+![Computer Use real desktop suite](../docs/qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png)
+
+Privacy guardrails are enforced by [`../tests/docs/public-screenshot-privacy.test.ts`](../tests/docs/public-screenshot-privacy.test.ts), and public link casing is enforced by [`../tests/docs/public-doc-links.test.ts`](../tests/docs/public-doc-links.test.ts).
 
 <a id="demo"></a>
+## Demo
 
-
-
-## 🎬 Demo
-
-See Code Buddy Cowork in action:
-
-### 1. Folder Organization & Cleanup 📂
-https://github.com/user-attachments/assets/dbeb0337-2d19-4b5d-a438-5220f2a87ca7
-
-### 2. Generate PPT from Files 📊
-https://github.com/user-attachments/assets/30299ded-0260-468f-b11d-d282bb9c97f2
-
-### 3. Generate XLSX Spreadsheets 📉
-https://github.com/user-attachments/assets/f57b9106-4b2c-4747-aecd-a07f78af5dfc
-
-### 4. GUI Operation🖥
-https://github.com/user-attachments/assets/75542c76-210f-414d-8182-1da988c148f2
-
-### 5. Remote control with Feishu(Lark) 🤖
-https://github.com/user-attachments/assets/05a703de-c0f5-407b-9a43-18b6a172fd74
+The older demo videos remain useful for broad workflow shape: folder organization, PPT/XLSX generation, GUI operation, and remote control. The verified screenshots above are the current source-of-truth for this repository.
 
 ---
 
 <a id="installation"></a>
 ## 📦 Installation
 
-### Option 1: Homebrew (macOS, Recommended)
+### Option 1: Build from Source
+
+For developers and reviewers, the source path is the authoritative GitHub flow:
 
 ```bash
-brew tap CodeBuddyCoworkAI/tap
-brew install --cask --no-quarantine codebuddy-cowork
-```
-
-> The `--no-quarantine` flag bypasses macOS Gatekeeper, so you won't see the "Apple cannot verify this app" warning.
-
-### Option 2: Download Installer
-
-Get the latest version from our [Releases Page](https://github.com/CodeBuddyCoworkAI/codebuddy-cowork/releases).
-
-| Platform | File Type |
-|----------|-----------|
-| **Windows** | `.exe` |
-| **macOS** (Apple Silicon) | `.dmg` |
-
-### Option 3: Build from Source
-
-For developers who want to contribute or modify the codebase:
-
-```bash
-git clone https://github.com/CodeBuddyCoworkAI/codebuddy-cowork.git
-cd codebuddy-cowork
+git clone https://github.com/phuetz/code-buddy.git
+cd code-buddy
 npm install
-npm run rebuild
-npm run dev
+npm run build
+npm run dev:gui
 ```
 
-To build the installer locally: `npm run build`
+Cowork's own package is under `cowork/`. From there, use `npm run dev` for the Vite + Electron loop, `npm test` for Vitest, and `npm run test:e2e` for Playwright.
+
+### Option 2: Packaged Installers
+
+Packaged Windows and macOS builds may be published from this repository's release pipeline. Until a release is attached, use the source build above so the desktop app matches the current Code Buddy core.
 
 ### Security Configuration: 🔒 Sandbox Support
 
@@ -141,7 +119,7 @@ Code Buddy Cowork provides **multi-level sandbox protection** to keep your syste
 Lima is auto-detected if installed. Install command:
 ```bash
 brew install lima
-# Code Buddy Cowork will automatically create and manage a 'claude-sandbox' VM
+# Code Buddy Cowork can automatically create and manage a local sandbox VM
 ```
 
 ---
@@ -149,27 +127,45 @@ brew install lima
 <a id="quick-start"></a>
 ## 🚀 Quick Start Guide
 
-### 1. Get an API Key
-You need an API key to power the agent. We support **OpenRouter**, **Anthropic**, and various cost-effective **Chinese Models**.
+### 1. Authenticate a Model
+
+Recommended for flat-fee ChatGPT plans:
+
+```bash
+buddy login
+buddy whoami
+```
+
+Cowork also supports API-key providers through Settings. Use this path for OpenRouter, Anthropic, local OpenAI-compatible gateways, Ollama, LM Studio, and other Code Buddy providers.
 
 | Provider | Get Key / Coding Plan | Base URL (Required) | Recommended Model |
 |----------|-----------------------|---------------------|-------------------|
+| **ChatGPT OAuth** | `buddy login` | `https://chatgpt.com/backend-api/codex` | `gpt-5.5` |
 | **OpenRouter** | [OpenRouter](https://openrouter.ai/) | `https://openrouter.ai/api` | `claude-4-5-sonnet` |
 | **Anthropic** | [Anthropic Console](https://console.anthropic.com/) | (Default) | `claude-4-5-sonnet` |
-| **Zhipu AI (GLM)** | [GLM Coding Plan](https://bigmodel.cn/glm-coding) (⚡️Chinese Deal) | `https://open.bigmodel.cn/api/anthropic` | `glm-4.7`, `glm-4.6` |
+| **Zhipu AI (GLM)** | [GLM Coding Plan](https://bigmodel.cn/glm-coding) | `https://open.bigmodel.cn/api/anthropic` | `glm-4.7`, `glm-4.6` |
 | **MiniMax** | [MiniMax Coding Plan](https://platform.minimaxi.com/subscribe/coding-plan) | `https://api.minimaxi.com/anthropic` | `minimax-m2` |
 | **Kimi** | [Kimi Coding Plan](https://www.kimi.com/membership/pricing) | `https://api.kimi.com/coding/` | `kimi-k2` |
 
-### 2. Configure
-1. Open the app and click the ⚙️ **Settings** icon in the bottom left.
-2. Paste your **API Key**.
-3. **Crucial**: Set the **Base URL** according to the table above (especially for Zhipu/MiniMax, etc.).
-4. Enter the **Model** name you want to use.
+### 2. Start the Desktop App
+
+```bash
+npm run dev:gui
+```
+
+For server-backed workflows:
+
+```bash
+buddy server --port 3000
+```
+
+Then open Settings in Cowork, select the provider/profile, and confirm backend health.
 
 ### 3. Start Coworking
-1. **Select a Workspace**: Choose a folder where Claude is allowed to work.
+1. **Select a Workspace**: Choose a folder where Code Buddy is allowed to work.
 2. **Enter a Prompt**:
    > "Read the financial_report.csv in this folder and create a PowerPoint summary with 5 slides."
+3. Open **Tests & executions** when you need to prove a flow against real local infrastructure before publishing results.
 
 <a id="core-engine"></a>
 ## Core Engine Runner
@@ -196,18 +192,15 @@ and deprecation notes.
 
 ### 📝 Important Notes
 
-1.  **macOS Installation**: If you downloaded the DMG directly (not via Homebrew) and see a security warning, go to **System Settings > Privacy & Security** and click **Open Anyway**. Or install via Homebrew to avoid this entirely:
-    ```bash
-    brew tap CodeBuddyCoworkAI/tap && brew install --cask --no-quarantine codebuddy-cowork
-    ```
-2.  **Network Access**: For tools like `WebSearch`, you may need to enable "Virtual Network Interface" (TUN Mode) in your proxy settings to ensure connectivity.
-3. **Notion Connector**: Besides setting the integration token, you also need to add connections in a root page. See https://www.notion.com/help/add-and-manage-connections-with-the-api for more details.
+1. **macOS installation**: If a packaged DMG is used and macOS shows a security warning, go to **System Settings > Privacy & Security** and click **Open Anyway**.
+2. **Network access**: For tools like `WebSearch`, you may need to enable "Virtual Network Interface" (TUN Mode) in your proxy settings to ensure connectivity.
+3. **Notion connector**: Besides setting the integration token, you also need to add connections in a root page. See https://www.notion.com/help/add-and-manage-connections-with-the-api for more details.
 ---
 
 <a id="skills"></a>
 ## 🧰 Skills Library
 
-Code Buddy Cowork ships with built-in skills under `.claude/skills/`, and supports user-added or custom skills, including:
+Code Buddy Cowork ships with bundled skills through the Code Buddy core and supports user-added custom skills, including:
 - `pptx` for PowerPoint generation
 - `docx` for Word document processing
 - `pdf` for PDF handling and forms
@@ -219,12 +212,11 @@ Code Buddy Cowork ships with built-in skills under `.claude/skills/`, and suppor
 ## 🏗️ Architecture
 
 ```
-codebuddy-cowork/
+code-buddy/cowork/
 ├── src/
 │   ├── main/                    # Electron Main Process (Node.js)
 │   │   ├── index.ts             # Main entry point
-│   │   ├── claude/              # Agent SDK & Runner
-│   │   │   └── agent-runner.ts  # AI agent execution logic
+│   │   ├── runner/              # Embedded Code Buddy runner integration
 │   │   ├── config/              # Configuration management
 │   │   │   └── config-store.ts  # Persistent settings storage
 │   │   ├── db/                  # Database layer
@@ -264,14 +256,7 @@ codebuddy-cowork/
 │       ├── types/               # TypeScript types
 │       │   └── index.ts
 │       └── utils/               # Utility functions
-├── .claude/
-│   └── skills/                  # Default Skill Definitions
-│       ├── pptx/                # PowerPoint generation
-│       ├── docx/                # Word document processing
-│       ├── pdf/                 # PDF handling & forms
-│       ├── xlsx/                # Excel spreadsheet support
-│       └── skill-creator/       # Skill development toolkit
-├── resources/                   # Static Assets (icons, images)
+├── public/                      # Static assets used by Vite/README
 ├── electron-builder.yml         # Build configuration
 ├── vite.config.ts               # Vite bundler config
 └── package.json                 # Dependencies & scripts
@@ -287,10 +272,11 @@ codebuddy-cowork/
 - [x] **VM Sandbox**: WSL2 (Windows) and Lima (macOS) isolation support
 - [x] **MCP Connectors**: Custom connector support for external service integration
 - [x] **Rich Input**: File upload and image input in chat
-- [x] **Multi-Model**: OpenAI-compatible API support (iterating)
+- [x] **Multi-Model**: ChatGPT OAuth and OpenAI-compatible API support
 - [x] **UI/UX**: Enhanced interface with English/Chinese localization
 - [x] **Memory Optimization**: Improved context management for longer sessions and cross-session memory.
-- [ ] **New Features**: Stay tuned!
+- [x] **Real QA Runner**: desktop launch surface for safe and opt-in real suites
+- [ ] **Release Packaging**: keep installers aligned with the current embedded Code Buddy engine
 
 ---
 
@@ -306,20 +292,16 @@ We welcome contributions! Whether it's a new Skill, a UI fix, or a security impr
 
 ## 💬 Community
 
-Join our WeChat group for support and discussion:
-
-<p align="center">
-  <img src="resources/WeChat.jpg" alt="WeChat Group" width="200" />
-</p>
+Use GitHub issues and pull requests in the main repository for support and discussion.
 
 ---
 
 ## 📄 License
 
-MIT © Code Buddy Cowork Team
+MIT © Code Buddy
 
 ---
 
 <p align="center">
-  Made with ❤️ by the Code Buddy Cowork Team with the help of opus4.5
+  Made by the Code Buddy community.
 </p>

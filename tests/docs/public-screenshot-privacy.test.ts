@@ -15,6 +15,8 @@ const publicDocPaths = [
   'docs/qa/code-buddy-studio/feature-qa-report.json',
   'docs/qa/code-buddy-studio/overnight-qa-campaign.md',
   'docs/qa/code-buddy-studio/overnight-test-datasets.json',
+  'cowork/README.md',
+  'cowork/README_zh.md',
 ];
 
 const screenshotDirs = [
@@ -174,6 +176,7 @@ describe('public screenshot documentation privacy', () => {
       'README.md',
       'docs/screenshots/README.md',
       'docs/qa/code-buddy-studio/feature-qa.md',
+      'cowork/README.md',
     ];
     const missingRefs: string[] = [];
     const unsafeRefs: string[] = [];
