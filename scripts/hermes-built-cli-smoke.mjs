@@ -67,6 +67,78 @@ if (doctor.diagnostics?.activeToolset?.toolsetId !== 'fleet.hermes.safe') {
   throw new Error(`Unexpected active toolset: ${doctor.diagnostics?.activeToolset?.toolsetId}`);
 }
 
+const lifecyclePlan = parseJson(
+  'built Hermes lifecycle plan',
+  run(
+    'built Hermes lifecycle plan',
+    process.execPath,
+    ['dist/index.js', 'hermes', 'runtime', 'lifecycle', 'daytona', 'attach', '--target', 'sandbox-demo', '--json'],
+    90_000
+  )
+);
+if (lifecyclePlan.kind !== 'hermes_runtime_lifecycle_plan') {
+  throw new Error(`Unexpected lifecycle plan kind: ${lifecyclePlan.kind}`);
+}
+if (lifecyclePlan.plan?.displayCommand !== 'daytona ssh sandbox-demo') {
+  throw new Error(`Unexpected lifecycle plan command: ${lifecyclePlan.plan?.displayCommand}`);
+}
+if (!lifecyclePlan.plan?.notes?.some((note) => note.includes('CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true'))) {
+  throw new Error(`Lifecycle plan did not explain execution guard: ${JSON.stringify(lifecyclePlan.plan?.notes)}`);
+}
+
+const lifecycleBlocked = parseJson(
+  'built Hermes lifecycle guarded execution',
+  run(
+    'built Hermes lifecycle guarded execution',
+    process.execPath,
+    [
+      'dist/index.js',
+      'hermes',
+      'runtime',
+      'lifecycle',
+      'daytona',
+      'hibernate',
+      '--target',
+      'sandbox-demo',
+      '--execute',
+      '--json',
+    ],
+    90_000
+  )
+);
+if (lifecycleBlocked.kind !== 'hermes_runtime_lifecycle_result') {
+  throw new Error(`Unexpected lifecycle execution kind: ${lifecycleBlocked.kind}`);
+}
+if (lifecycleBlocked.result?.status !== 'blocked' || lifecycleBlocked.result?.ok !== false) {
+  throw new Error(`Unexpected lifecycle execution status: ${JSON.stringify(lifecycleBlocked.result)}`);
+}
+if (!lifecycleBlocked.result?.output?.includes('CODEBUDDY_HERMES_ALLOW_LIFECYCLE_EXEC=true')) {
+  throw new Error(`Lifecycle execution did not stay blocked by the global guard: ${lifecycleBlocked.result?.output}`);
+}
+
+const vercelAttachPlan = parseJson(
+  'built Hermes Vercel Sandbox attach plan',
+  run(
+    'built Hermes Vercel Sandbox attach plan',
+    process.execPath,
+    [
+      'dist/index.js',
+      'hermes',
+      'runtime',
+      'lifecycle',
+      'vercel-sandbox',
+      'attach',
+      '--target',
+      'sb_abc123xyz',
+      '--json',
+    ],
+    90_000
+  )
+);
+if (vercelAttachPlan.plan?.displayCommand !== 'sandbox exec --interactive --tty sb_abc123xyz bash') {
+  throw new Error(`Unexpected Vercel Sandbox attach plan: ${vercelAttachPlan.plan?.displayCommand}`);
+}
+
 console.log(
   JSON.stringify(
     {
@@ -75,9 +147,14 @@ console.log(
         'node node_modules/typescript/bin/tsc',
         'node dist/index.js hermes tools --json',
         'node dist/index.js hermes doctor safe --json',
+        'node dist/index.js hermes runtime lifecycle daytona attach --target sandbox-demo --json',
+        'node dist/index.js hermes runtime lifecycle daytona hibernate --target sandbox-demo --execute --json',
+        'node dist/index.js hermes runtime lifecycle vercel-sandbox attach --target sb_abc123xyz --json',
       ],
       toolSummary: tools.summary,
       activeToolset: doctor.diagnostics.activeToolset.toolsetId,
+      lifecycleGuard: lifecycleBlocked.result.status,
+      vercelAttach: vercelAttachPlan.plan.displayCommand,
     },
     null,
     2

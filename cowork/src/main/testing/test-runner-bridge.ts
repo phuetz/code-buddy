@@ -1179,7 +1179,7 @@ export class TestRunnerBridge extends EventEmitter {
           label: 'Hermes / built CLI real smoke',
           group: 'Hermes',
           description:
-            'Rebuilds Code Buddy, then runs the compiled dist CLI for Hermes tool parity and doctor status',
+            'Rebuilds Code Buddy, then runs the compiled dist CLI for Hermes tool parity, doctor status, and guarded runtime lifecycle checks',
           command: 'node',
           args: ['scripts/hermes-built-cli-smoke.mjs'],
           cwd: workspace,

@@ -1126,6 +1126,7 @@ describe('TestRunnerBridge catalog', () => {
     });
     expect(catalog.find((item) => item.label === 'Hermes / built CLI real smoke')).toMatchObject({
       command: 'node',
+      description: expect.stringContaining('guarded runtime lifecycle checks'),
       args: ['scripts/hermes-built-cli-smoke.mjs'],
       kind: 'integration',
       safeToRun: false,
