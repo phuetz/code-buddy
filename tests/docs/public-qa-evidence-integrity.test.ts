@@ -152,6 +152,26 @@ function guideRunnerProofCount(guide: string, docPath: string, runnerRow: string
   return Number(match?.[1]);
 }
 
+function collectGuidePngRefs(markdown: string): string[] {
+  const refs = new Set<string>();
+  for (const match of markdown.matchAll(/!\[[^\]]*]\(([^)]+\.png)\)/g)) {
+    if (match[1]) refs.add(match[1].trim());
+  }
+  for (const match of markdown.matchAll(/\[[^\]]*]\(([^)]+\.png)\)/g)) {
+    if (match[1]) refs.add(match[1].trim());
+  }
+  for (const match of markdown.matchAll(/<img\s+[^>]*src=["']([^"']+\.png)["'][^>]*>/gi)) {
+    if (match[1]) refs.add(match[1].trim());
+  }
+  return [...refs].sort();
+}
+
+function collectFencedCommandBlocks(markdown: string): string[] {
+  return [...markdown.matchAll(/```(?:bash|sh|powershell)?\r?\n([\s\S]*?)```/g)]
+    .map((match) => match[1]?.trim() ?? '')
+    .filter((block) => block !== '');
+}
+
 function expectQaHubRunnerProof(qaHub: string, report: QaReport, reportKey: string, hubLabel: string): void {
   expect(qaHubRunnerProofCount(qaHub, hubLabel)).toBe(reportedRunnerProofCount(report, reportKey));
 }
@@ -208,6 +228,15 @@ describe('public QA evidence report integrity', () => {
         );
       }
     }
+  });
+
+  it('keeps English and French user guides aligned on visual and command evidence', async () => {
+    const [englishGuide, frenchGuide] = await Promise.all(
+      userGuidePaths.map((docPath) => fs.readFile(path.join(repoRoot, docPath), 'utf8')),
+    );
+
+    expect(collectGuidePngRefs(frenchGuide)).toEqual(collectGuidePngRefs(englishGuide));
+    expect(collectFencedCommandBlocks(frenchGuide)).toEqual(collectFencedCommandBlocks(englishGuide));
   });
 
   it('keeps every result uniquely identified and positively verified', async () => {
