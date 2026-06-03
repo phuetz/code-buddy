@@ -23,6 +23,7 @@ Start here when you want proof that the documented Cowork flows have been exerci
 | Machine report | [`feature-qa-report.json`](./feature-qa-report.json) |
 | Build/typecheck guard | `npm run build`, `cd cowork && npm run typecheck`, `cd cowork && npm run build:e2e` |
 | Packaging guard | `npm run build:gui` (`electron-builder` win-x64 NSIS; pre-build check: 8 passed, 1 warning, 0 failed) |
+| Packaged launch guard | `COWORK_PACKAGED_EXE="release/win-unpacked/Code Buddy Cowork.exe" npx playwright test e2e/packaged-launch-smoke.spec.ts --reporter=list --timeout=120000` (1 passed; capture [`110`](./screenshots/110-packaged-win-unpacked-launch.png)) |
 | Screenshot guard | `npm run test:docs-public` |
 
 ## Current Evidence Themes
@@ -44,9 +45,9 @@ Use this order before claiming the desktop app is ready for a public user or rel
 | Gate | Evidence to collect | Where it lives |
 | --- | --- | --- |
 | 1. User path is documented | Install, launch, provider setup, Cowork usage, and French/English guides are linked from the main getting-started flow | [`../../getting-started.md`](../../getting-started.md), [`../../cowork-user-guide.md`](../../cowork-user-guide.md), [`../../cowork-guide-fr.md`](../../cowork-guide-fr.md) |
-| 2. Visual proof exists | Public PNG captures show the work surface, settings, permissions, Test Runner, real provider checks, Hermes, mobile supervision, Computer Use, and runner bundles | [`./screenshots/`](./screenshots/) and the captures below |
+| 2. Visual proof exists | Public PNG captures show the packaged app shell, work surface, settings, permissions, Test Runner, real provider checks, Hermes, mobile supervision, Computer Use, and runner bundles | [`./screenshots/`](./screenshots/) and the captures below |
 | 3. Machine report agrees | Functional rows, coverage split, screenshot paths, and public capture metadata are machine-checkable | [`./feature-qa-report.json`](./feature-qa-report.json), `npm run test:docs-public` |
-| 4. Build/package gates pass | Root TypeScript build, Cowork typecheck, Cowork Vite/e2e build, and full Electron packaging succeed on the current checkout | `npm run build`, `cd cowork && npm run typecheck`, `cd cowork && npm run build:e2e`, `npm run build:gui` |
+| 4. Build/package gates pass | Root TypeScript build, Cowork typecheck, Cowork Vite/e2e build, full Electron packaging, and packaged app launch succeed on the current checkout | `npm run build`, `cd cowork && npm run typecheck`, `cd cowork && npm run build:e2e`, `npm run build:gui`, `COWORK_PACKAGED_EXE=... npx playwright test e2e/packaged-launch-smoke.spec.ts` |
 | 5. Safe checks pass | Safe runner bundles cover CLI, providers, server/API/MCP, Fleet, context, voice/TTS, scheduler/hooks, sessions/cache, plugins/skills, UI, permissions, and Cowork project/session flows | `Runner-Verified Cowork Bundles` below |
 | 6. Opt-in real checks are explicit | Real ChatGPT OAuth, Docker, Computer Use, mobile, Hermes built CLI, and desktop automation are documented as opt-in and have separate captures | [`./feature-qa.md`](./feature-qa.md), [`./overnight-qa-campaign.md`](./overnight-qa-campaign.md) |
 | 7. Publication guard passes | Local links, PNG dimensions, report integrity, and obvious private strings are checked before pushing public docs | `npm run test:docs-public` |
@@ -81,6 +82,8 @@ Use this order before claiming the desktop app is ready for a public user or rel
 | Custom commands and slash | Markdown persistence, slash-name normalization, invalid draft validation, delete flow, custom-over-builtin precedence, autocomplete, remote execution, and `/schedule` parsing | `11 ok / 0 ko` |
 
 ## Representative Captures
+
+![Packaged win-unpacked launch](./screenshots/110-packaged-win-unpacked-launch.png)
 
 ![Cowork ChatGPT gpt-5.5 real run](./screenshots/29-real-gpt55-cowork-gui.png)
 

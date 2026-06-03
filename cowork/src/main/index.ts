@@ -260,6 +260,11 @@ moduleWithResolver._resolveFilename = function (
 
 const APP_NAME = 'Code Buddy Studio';
 
+const e2eUserDataDir = process.env.COWORK_E2E_USER_DATA_DIR?.trim();
+if (process.env.COWORK_E2E === '1' && e2eUserDataDir) {
+  app.setPath('userData', resolve(e2eUserDataDir));
+}
+
 app.setName(APP_NAME);
 
 // Current working directory (persisted between sessions)
