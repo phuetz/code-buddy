@@ -330,10 +330,10 @@ For the reprise path, use the short operator checklists:
 
 ### "API key required" or "401 Unauthorized" at startup
 Most providers need an env var **and** the matching base URL. Common pairs:
-- Grok / xAI: `export GROK_API_KEY=...` (default base URL works)
-- Anthropic: `export ANTHROPIC_API_KEY=...`
-- Google Gemini: `export GOOGLE_API_KEY=...` or `GEMINI_API_KEY=...`
-- OpenAI: `export OPENAI_API_KEY=...`
+- Grok / xAI: `export GROK_API_KEY=your_grok_api_key` (default base URL works)
+- Anthropic: `export ANTHROPIC_API_KEY=your_anthropic_api_key`
+- Google Gemini: `export GOOGLE_API_KEY=your_google_api_key` or `GEMINI_API_KEY=your_gemini_api_key`
+- OpenAI: `export OPENAI_API_KEY=your_openai_api_key`
 - Ollama (local): no key needed, but pass `--base-url http://localhost:11434/v1 --model llama3`
 
 Run `buddy doctor` to verify which keys are detected. Check the active provider mid-session with `/status`.
@@ -370,7 +370,7 @@ required scopes. On the connecting instance, pass that key with
 `--api-key` or store it in `CODEBUDDY_FLEET_API_KEY`:
 
 ```
-CODEBUDDY_FLEET_API_KEY=cb_sk_...
+CODEBUDDY_FLEET_API_KEY=your_fleet_api_key
 ```
 
 ### Fleet: connection drops repeatedly
