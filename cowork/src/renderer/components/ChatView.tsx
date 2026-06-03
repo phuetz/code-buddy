@@ -269,7 +269,7 @@ export function ChatView() {
   const timerActive = Boolean(executionClock?.startAt && executionClock.endAt === null);
 
   // Debounced scroll function to prevent scroll conflicts
-  const scrollToBottom = useRef((behavior: ScrollBehavior = 'auto', immediate: boolean = false) => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto', immediate: boolean = false) => {
     // Cancel any pending scroll requests
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
@@ -305,7 +305,7 @@ export function ChatView() {
         scrollTimeoutRef.current = setTimeout(performScroll, 16); // ~1 frame delay
       });
     }
-  }).current;
+  }, []);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -348,7 +348,7 @@ export function ChatView() {
 
     prevMessageCountRef.current = messageCount;
     prevPartialLengthRef.current = partialLength;
-  }, [messages.length, partialMessage.length, partialThinking.length]);
+  }, [messages.length, partialMessage.length, partialThinking.length, scrollToBottom]);
 
   // Phase 2 step 11: speak the latest assistant message when TTS is enabled.
   const lastSpokenIdRef = useRef<string | null>(null);
@@ -387,7 +387,7 @@ export function ChatView() {
     return () => {
       resizeObserver.disconnect();
     };
-  }, []); // ResizeObserver is stable — no need to recreate on message count changes
+  }, [scrollToBottom]); // ResizeObserver is stable — no need to recreate on message count changes
 
   // Cleanup scroll timeouts on unmount
   useEffect(() => {
