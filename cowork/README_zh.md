@@ -67,7 +67,7 @@
 
 ![Computer Use 真实桌面套件](../docs/qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png)
 
-公开文档隐私检查由 [`../tests/docs/public-screenshot-privacy.test.ts`](../tests/docs/public-screenshot-privacy.test.ts) 覆盖，GitHub 可见链接大小写检查由 [`../tests/docs/public-doc-links.test.ts`](../tests/docs/public-doc-links.test.ts) 覆盖，指南和证据入口检查由 [`../tests/docs/public-doc-discoverability.test.ts`](../tests/docs/public-doc-discoverability.test.ts) 覆盖。
+公开文档隐私检查由 [`../tests/docs/public-screenshot-privacy.test.ts`](../tests/docs/public-screenshot-privacy.test.ts) 覆盖，GitHub 可见链接大小写检查由 [`../tests/docs/public-doc-links.test.ts`](../tests/docs/public-doc-links.test.ts) 覆盖，指南和证据入口检查由 [`../tests/docs/public-doc-discoverability.test.ts`](../tests/docs/public-doc-discoverability.test.ts) 覆盖。可用 `npm run test:docs-public` 一次运行。
 
 ---
 

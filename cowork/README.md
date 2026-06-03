@@ -67,7 +67,7 @@ The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../
 
 ![Computer Use real desktop suite](../docs/qa/code-buddy-studio/screenshots/108-test-runner-computer-use-real-suite.png)
 
-Privacy guardrails are enforced by [`../tests/docs/public-screenshot-privacy.test.ts`](../tests/docs/public-screenshot-privacy.test.ts), public link casing is enforced by [`../tests/docs/public-doc-links.test.ts`](../tests/docs/public-doc-links.test.ts), and guide/evidence discoverability is enforced by [`../tests/docs/public-doc-discoverability.test.ts`](../tests/docs/public-doc-discoverability.test.ts).
+Privacy guardrails are enforced by [`../tests/docs/public-screenshot-privacy.test.ts`](../tests/docs/public-screenshot-privacy.test.ts), public link casing is enforced by [`../tests/docs/public-doc-links.test.ts`](../tests/docs/public-doc-links.test.ts), and guide/evidence discoverability is enforced by [`../tests/docs/public-doc-discoverability.test.ts`](../tests/docs/public-doc-discoverability.test.ts). Run them together with `npm run test:docs-public`.
 
 <a id="demo"></a>
 ## Demo

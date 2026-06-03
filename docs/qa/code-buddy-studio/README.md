@@ -37,8 +37,12 @@ Start here when you want proof that the documented Cowork flows have been exerci
 Run these before publishing new public documentation or captures:
 
 ```bash
-npm test -- tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run
-npx eslint tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
+npm run test:docs-public
 ```
+
+This script runs the public documentation guards in `tests/docs/public-doc-links.test.ts`,
+`tests/docs/public-doc-discoverability.test.ts`, and
+`tests/docs/public-screenshot-privacy.test.ts`, plus the renderer checks in
+`tests/docs/renderers.test.ts`.
 
 The guards verify exact-case local links, relative screenshot references, real PNG files, and absence of obvious private strings in public docs or PNG metadata.

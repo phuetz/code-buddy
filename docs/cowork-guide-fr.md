@@ -130,8 +130,7 @@ Avant d'utiliser Computer Use :
 Avant de publier de la documentation ou des captures :
 
 ```bash
-npm test -- tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run
-npx eslint tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
+npm run test:docs-public
 ```
 
 Le dossier QA public commence dans [`qa/code-buddy-studio/`](./qa/code-buddy-studio/README.md). Son rapport complet conserve les preuves de commandes réelles pour ChatGPT OAuth, Cowork/Electron, routes serveur, MCP, Fleet, permissions, Docker, Computer Use, Hermes et compagnon Buddy.

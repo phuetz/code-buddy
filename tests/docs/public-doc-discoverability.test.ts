@@ -16,6 +16,21 @@ function expectLinks(markdown: string, doc: string, links: string[]): void {
 }
 
 describe('public Cowork documentation discoverability', () => {
+  it('keeps the aggregate public-docs script wired to every guard', async () => {
+    const packageJson = JSON.parse(await readPublicDoc('package.json')) as {
+      scripts?: Record<string, string>;
+    };
+    const script = packageJson.scripts?.['test:docs-public'] ?? '';
+
+    expectLinks(script, 'package.json test:docs-public', [
+      'tests/docs/public-doc-discoverability.test.ts',
+      'tests/docs/public-doc-links.test.ts',
+      'tests/docs/public-screenshot-privacy.test.ts',
+      'tests/docs/renderers.test.ts',
+      'eslint',
+    ]);
+  });
+
   it('keeps root README linked to user guides and the QA evidence hub', async () => {
     const readme = await readPublicDoc('README.md');
 
@@ -25,6 +40,7 @@ describe('public Cowork documentation discoverability', () => {
       'docs/qa/code-buddy-studio/README.md',
       'docs/qa/code-buddy-studio/feature-qa.md',
       'docs/qa/code-buddy-studio/screenshots/',
+      'npm run test:docs-public',
     ]);
   });
 
@@ -42,6 +58,7 @@ describe('public Cowork documentation discoverability', () => {
         '../tests/docs/public-doc-discoverability.test.ts',
         '../tests/docs/public-screenshot-privacy.test.ts',
         '../tests/docs/public-doc-links.test.ts',
+        'npm run test:docs-public',
       ]);
     }
   });
@@ -80,6 +97,7 @@ describe('public Cowork documentation discoverability', () => {
       'tests/docs/public-doc-links.test.ts',
       'tests/docs/public-doc-discoverability.test.ts',
       'tests/docs/public-screenshot-privacy.test.ts',
+      'npm run test:docs-public',
     ]);
   });
 });

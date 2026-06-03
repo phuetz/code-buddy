@@ -132,8 +132,7 @@ Before using desktop automation:
 Before publishing documentation or screenshots:
 
 ```bash
-npm test -- tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts tests/docs/renderers.test.ts --run
-npx eslint tests/docs/public-doc-discoverability.test.ts tests/docs/public-doc-links.test.ts tests/docs/public-screenshot-privacy.test.ts
+npm run test:docs-public
 ```
 
 The current public QA dossier starts at [`qa/code-buddy-studio/`](./qa/code-buddy-studio/README.md). Its full report records the real command evidence for ChatGPT OAuth, Cowork/Electron, server routes, MCP, Fleet, permissions, Docker, Computer Use, Hermes, and companion flows.
