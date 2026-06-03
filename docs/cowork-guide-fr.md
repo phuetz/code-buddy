@@ -118,6 +118,7 @@ Lignes utiles :
 | `Cowork / permission real flow` | Prompt de permission réel et règle persistée |
 | `MCP / real transport suite` | Fixtures MCP stdio/HTTP et garde fail-closed |
 | `Computer Use / real desktop suite` | WinForms, dialogue, Notepad et Excel COM en opt-in |
+| `Cowork / workflow bridge integration` | Exécution réelle du `Orchestrator` local depuis le runner desktop : branches parallèles, reprise approval, reset de boucle, join/convergence et sortie capturée sans codes ANSI visibles |
 | `Hermes / built CLI real smoke` | Rebuild Code Buddy, vérifie tools/doctor Hermes, prouve le garde-fou lifecycle et documente l'attach Vercel Sandbox |
 | `Mobile / supervision gateway bundle` | Routes pairing/status en loopback, file d'approbation et bridge Cowork |
 
@@ -135,6 +136,10 @@ Pour les vérifications quotidiennes, commence par les bundles sûrs. Ils ne dem
 Le runner expose aussi le suivi des exécutions :
 
 ![Suivi des exécutions](./qa/code-buddy-studio/screenshots/31-test-runner-executions.png)
+
+La ligne workflow bridge lance la suite d'intégration réelle depuis le runner desktop. Elle exerce le `Orchestrator` local, les branches parallèles, la pause/reprise approval, le reset d'un corps de boucle, le join/convergence, `setVariable` et `outputAs`, puis affiche `8 ok / 0 ko`.
+
+![Workflow bridge integration](./qa/code-buddy-studio/screenshots/54-test-runner-workflow-integration.png)
 
 La ligne Hermes reste manuelle car elle reconstruit le CLI compilé avant de l'exécuter. Elle prouve `hermes tools`, `hermes doctor safe`, le plan Daytona attach, le blocage Daytona et Vercel Sandbox de `--execute` sans allow flags et le mapping Vercel Sandbox attach.
 

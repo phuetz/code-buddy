@@ -121,6 +121,8 @@ The current package build is green but not silent. Do not claim a zero-warning r
 
 ![Permission real flow](./screenshots/55-test-runner-permission-real-flow.png)
 
+![Workflow bridge integration](./screenshots/54-test-runner-workflow-integration.png)
+
 ![Artifact and document bundle](./screenshots/99-test-runner-artifact-document-bundle.png)
 
 ![Scheduling and session bundle](./screenshots/100-test-runner-scheduling-session-bundle.png)

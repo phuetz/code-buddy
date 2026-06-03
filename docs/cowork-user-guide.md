@@ -120,6 +120,7 @@ Useful rows include:
 | `Cowork / permission real flow` | Real permission prompt and persisted scoped rule |
 | `MCP / real transport suite` | Real stdio and HTTP MCP fixtures plus fail-closed guard |
 | `Computer Use / real desktop suite` | WinForms, dialog, Notepad, and Excel COM opt-in desktop automation |
+| `Cowork / workflow bridge integration` | Real local `Orchestrator` execution from the desktop runner, including parallel branches, approval resume, loop reset, join/convergence, and captured output without visible ANSI control codes |
 | `Hermes / built CLI real smoke` | Rebuilds Code Buddy, verifies Hermes tools/doctor, proves guarded lifecycle execution, and documents Vercel Sandbox attach |
 | `Mobile / supervision gateway bundle` | Loopback-only pairing/status routes, approval queue, and Cowork bridge behavior |
 
@@ -137,6 +138,10 @@ For day-to-day confidence checks, start with the safe bundles. They do not requi
 The runner also exposes execution monitoring:
 
 ![Executions tracking](./qa/code-buddy-studio/screenshots/31-test-runner-executions.png)
+
+The workflow bridge row launches the real workflow integration suite from the desktop runner. It exercises the local `Orchestrator`, parallel branches, approval pause/resume, a loop body reset, join/convergence, `setVariable`, and `outputAs`, then reports `8 ok / 0 ko`.
+
+![Workflow bridge integration](./qa/code-buddy-studio/screenshots/54-test-runner-workflow-integration.png)
 
 The Hermes row is a manual real smoke because it rebuilds the compiled CLI before executing it. It proves `hermes tools`, `hermes doctor safe`, the Daytona lifecycle attach plan, the blocked Daytona and Vercel Sandbox `--execute` guards without allow flags, and the Vercel Sandbox attach mapping.
 
