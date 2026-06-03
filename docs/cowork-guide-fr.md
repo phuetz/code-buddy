@@ -52,6 +52,10 @@ Pour la route ChatGPT OAuth, lance d'abord `buddy login`, puis choisis le profil
 
 ![Cowork ChatGPT gpt-5.5 réel](./qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 
+Pour les providers locaux ou personnalisés, utilise le panneau de configuration API pour tester les profils, config sets, diagnostics, Ollama, LM Studio, gateways loopback et retry avant de router un chat dessus. Le bundle local provider vérifié exerce ces chemins depuis le runner desktop avec `143 ok / 0 ko`.
+
+![Bundle config providers locaux](./qa/code-buddy-studio/screenshots/101-test-runner-local-provider-config-bundle.png)
+
 ## 4. Utiliser chat, fichiers et contexte workspace
 
 Flux typique :

@@ -26,6 +26,7 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ## Current Evidence Themes
 
 - ChatGPT OAuth `gpt-5.5`: account check, provider direct call, stream, tool-call, CLI, server API, and Cowork/Electron.
+- Provider configuration: API config state/config sets, diagnostics, Ollama, LM Studio, local discovery, loopback gateways, and retry behavior.
 - Cowork desktop: workspace, settings, chat, IPC, companion, permissions, workflows, MCP, Fleet, plugins, and runner surfaces.
 - **Tests & executions**: safe bundles, opt-in real checks, cancellation, timeout, failure tracking, and re-run failing behavior.
 - Artifacts and scheduling: document workshop, file/link handling, scheduled tasks, slash `/schedule`, and session metadata.
@@ -37,6 +38,8 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ## Representative Captures
 
 ![Cowork ChatGPT gpt-5.5 real run](./screenshots/29-real-gpt55-cowork-gui.png)
+
+![Local provider config bundle](./screenshots/101-test-runner-local-provider-config-bundle.png)
 
 ![Tests and executions window](./screenshots/30-test-runner-window.png)
 
