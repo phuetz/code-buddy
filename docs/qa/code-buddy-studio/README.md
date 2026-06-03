@@ -39,6 +39,10 @@ Start here when you want proof that the documented Cowork flows have been exerci
 
 | Bundle | Verified coverage | Runner proof |
 | --- | --- | --- |
+| CLI command surface | CLI flags, headless exit codes, model/session commands, slash/context/session/permission/security/tool handlers, backups, agents, run recall, worktrees, Fleet, auth, config, and memory commands | `562 ok / 0 ko` |
+| Config, auth, providers | Profile manager, ChatGPT OAuth, doctor checks, Codex OAuth, provider hooks, ChatGPT responses, Gemini CLI/vision, stream retry, model registry/pricing/defaults, migrations, env schema, TOML/JSONC, provider manager, and model snapshots | `849 ok / 0 ko` |
+| Server, API, MCP platform | API server, auth, middleware, mobile/native routes, workflow builder, canvas, HTTP/REST, IDE server, LSP, MCP client/server/OAuth, and JSON-RPC integration | `703 ok / 0 ko` |
+| Fleet routing orchestration | TaskRouter, saga store, consensus, privacy lint, peer chat stream/factory, registry/listener/handler, dispatch profiles, cost tracking, compaction bridge, capability registry, and autonomous ticks | `357 ok / 0 ko` |
 | Remote control | Remote manager, remote user messages, default workdir, `!cd`, cwd propagation, port conflict handling, remote panel links/layout, and remote slash-command bridge | `16 ok / 0 ko` |
 | Device transport adapters | SSH, ADB, and local transports, transport helpers, and Tailscale dashboard node modeling | `178 ok / 0 ko` |
 | Cowork sandbox executor | Dangerous-command validation, workspace containment, WSL/Lima command-injection guards, stderr capture, and `rm -rf`/symlink protections | `42 ok / 0 ko` |
@@ -62,6 +66,14 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ![Artifact and document bundle](./screenshots/99-test-runner-artifact-document-bundle.png)
 
 ![Scheduling and session bundle](./screenshots/100-test-runner-scheduling-session-bundle.png)
+
+![CLI command surface bundle](./screenshots/79-test-runner-cli-command-surface-bundle.png)
+
+![Config auth provider bundle](./screenshots/82-test-runner-config-auth-provider-bundle.png)
+
+![Server API MCP platform bundle](./screenshots/84-test-runner-server-api-mcp-platform-bundle.png)
+
+![Fleet routing orchestration bundle](./screenshots/85-test-runner-fleet-routing-orchestration-bundle.png)
 
 ![Remote control bundle](./screenshots/94-test-runner-remote-control-bundle.png)
 
