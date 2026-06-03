@@ -1,5 +1,7 @@
 # Cowork User Guide
 
+Version française: [`cowork-guide-fr.md`](./cowork-guide-fr.md).
+
 Cowork is the desktop cockpit for Code Buddy. It gives you the same core agent as the CLI, but with project navigation, chat, traces, settings, permissions, workflows, MCP connectors, Fleet coordination, companion controls, and the **Tests & executions** runner in one Electron app.
 
 This guide is meant for GitHub readers: every screenshot below is a repository-local PNG, and the public evidence is guarded by `tests/docs/public-screenshot-privacy.test.ts`.

@@ -26,7 +26,7 @@
 
 **Now with a [Multi-AI Fleet Hub](docs/fleet-guide.md)** — multiple Code Buddy peers can observe each other's events live and invoke each other's LLMs via `/fleet send peer.chat`. Pilot local Ollama LLMs from any peer in your Tailscale network for free coding/reasoning. *(Phase (d).1 → (d).16a, May 2026.)*
 
-**Cowork + Buddy companion cockpit** — `buddy gui` / `buddy desktop` opens the Electron workspace powered by the same Code Buddy core engine. Buddy has a companion panel for ChatGPT-backed identity, voice, camera snapshots, MediaPipe face/hand/pose perception, self-evaluation, competitive radar, missions, routines, safety, and proactive check-ins. See the screenshot-backed [Cowork User Guide](docs/cowork-user-guide.md).
+**Cowork + Buddy companion cockpit** — `buddy gui` / `buddy desktop` opens the Electron workspace powered by the same Code Buddy core engine. Buddy has a companion panel for ChatGPT-backed identity, voice, camera snapshots, MediaPipe face/hand/pose perception, self-evaluation, competitive radar, missions, routines, safety, and proactive check-ins. See the screenshot-backed [Cowork User Guide](docs/cowork-user-guide.md) or the [French guide](docs/cowork-guide-fr.md).
 
 **Auto-memory writeback** — the agent persists what it learns (preferences, decisions, gotchas) to `.codebuddy/CODEBUDDY_MEMORY.md` across sessions. View with `/memory recent`. `buddy --init` also generates an `AGENTS.md` at the project root for cross-CLI compatibility (read by Claude Code, Gemini CLI, Cursor, Codex). *(rc.2, May 2026.)*
 
@@ -105,7 +105,7 @@ See [Getting Started](docs/getting-started.md) for installation options, headles
 
 ## Cowork Desktop + Buddy Companion
 
-Cowork is the desktop cockpit for Code Buddy: chat, tools, traces, workflows, settings, permissions, models, MCP connectors, skills, artifacts, and companion controls all run against the same core agent as the CLI. The Code Buddy settings panel can probe the local backend, start it when needed, discover models, and route Cowork turns through the embedded engine or a configured server endpoint. A step-by-step user guide with public screenshots lives in [docs/cowork-user-guide.md](docs/cowork-user-guide.md).
+Cowork is the desktop cockpit for Code Buddy: chat, tools, traces, workflows, settings, permissions, models, MCP connectors, skills, artifacts, and companion controls all run against the same core agent as the CLI. The Code Buddy settings panel can probe the local backend, start it when needed, discover models, and route Cowork turns through the embedded engine or a configured server endpoint. A step-by-step user guide with public screenshots lives in [docs/cowork-user-guide.md](docs/cowork-user-guide.md), with a French version in [docs/cowork-guide-fr.md](docs/cowork-guide-fr.md).
 
 ```bash
 # First-time identity and flat-fee brain route
@@ -201,6 +201,7 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 | [Tools Reference](docs/tools-reference.md) | Tool categories, RAG selection, edit matching, apply_patch, streaming |
 | [Commands](docs/commands.md) | All slash commands, CLI subcommands, companion commands, global flags |
 | [Cowork User Guide](docs/cowork-user-guide.md) | Desktop setup, ChatGPT OAuth route, permissions, runner checks, MCP/Fleet, real screenshots |
+| [Guide Cowork FR](docs/cowork-guide-fr.md) | Guide utilisateur en français avec captures réelles et vérifications |
 | [Cowork README](cowork/README.md) | Desktop installation, features, source build, sandbox modes |
 | [Cowork Architecture](cowork/ARCHITECTURE.md) | Electron contexts, bridges, embedded engine, persistence, runner model |
 | [Agents](docs/agents.md) | Multi-agent orchestration, roles, SWE agent, planning flow, A2A |

@@ -57,7 +57,7 @@ It provides a sandboxed workspace where AI can manage files, generate profession
 <a id="verified-evidence"></a>
 ## Verified Real-Use Evidence
 
-The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md). The public QA dossier is available in [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md). It documents non-mocked Cowork, Electron, Playwright, CLI, HTTP server, ChatGPT OAuth `gpt-5.5`, MCP, Fleet, Docker, permission, and Computer Use flows. Screenshots are scrubbed for private account, token, and local path data before publication.
+The step-by-step user guide is available in [`../docs/cowork-user-guide.md`](../docs/cowork-user-guide.md), with a French version in [`../docs/cowork-guide-fr.md`](../docs/cowork-guide-fr.md). The public QA dossier is available in [`../docs/qa/code-buddy-studio/feature-qa.md`](../docs/qa/code-buddy-studio/feature-qa.md). It documents non-mocked Cowork, Electron, Playwright, CLI, HTTP server, ChatGPT OAuth `gpt-5.5`, MCP, Fleet, Docker, permission, and Computer Use flows. Screenshots are scrubbed for private account, token, and local path data before publication.
 
 ![Cowork ChatGPT gpt-5.5 real run](../docs/qa/code-buddy-studio/screenshots/29-real-gpt55-cowork-gui.png)
 
