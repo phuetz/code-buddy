@@ -93,6 +93,7 @@ Lignes utiles :
 | `MCP / real transport suite` | Fixtures MCP stdio/HTTP et garde fail-closed |
 | `Computer Use / real desktop suite` | WinForms, dialogue, Notepad et Excel COM en opt-in |
 | `Hermes / built CLI real smoke` | Rebuild Code Buddy, vérifie tools/doctor Hermes, prouve le garde-fou lifecycle et documente l'attach Vercel Sandbox |
+| `Mobile / supervision gateway bundle` | Routes pairing/status en loopback, file d'approbation et bridge Cowork |
 
 Le runner expose aussi le suivi des exécutions :
 
@@ -101,6 +102,10 @@ Le runner expose aussi le suivi des exécutions :
 La ligne Hermes reste manuelle car elle reconstruit le CLI compilé avant de l'exécuter. Elle prouve `hermes tools`, `hermes doctor safe`, le plan Daytona attach, le blocage Daytona et Vercel Sandbox de `--execute` sans allow flags et le mapping Vercel Sandbox attach.
 
 ![Guard lifecycle Hermes built CLI](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
+
+La ligne supervision mobile vérifie la frontière local-operator avant de considérer un flux téléphone comme utilisable. Elle couvre les routes pairing/status limitées au loopback, le refus des en-têtes forwarder usurpés, l'approbation ou annulation des drafts de prompt, le client bridge mobile Cowork et le contrat de listener désactivé qui garde l'exécution off-device bloquée tant que TLS et l'auth ne sont pas configurés explicitement.
+
+![Bundle supervision mobile gateway](./qa/code-buddy-studio/screenshots/90-test-runner-mobile-supervision-gateway-bundle.png)
 
 Quand un job Hermes research-script propose un candidat SKILL.md réutilisable, inspecte le candidat avant installation :
 

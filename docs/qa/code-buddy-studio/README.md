@@ -29,6 +29,7 @@ Start here when you want proof that the documented Cowork flows have been exerci
 - Cowork desktop: workspace, settings, chat, IPC, companion, permissions, workflows, MCP, Fleet, plugins, and runner surfaces.
 - **Tests & executions**: safe bundles, opt-in real checks, cancellation, timeout, failure tracking, and re-run failing behavior.
 - Real infrastructure: local HTTP server, MCP stdio/HTTP fixtures, Fleet peer/tool checks, Docker sandbox, Computer Use, and Hermes built CLI smoke including guarded runtime lifecycle checks.
+- Mobile supervision: loopback-only local-operator routes, spoofed-forwarder denial, approval queue, Cowork bridge client, and disabled listener contract.
 - Publication safety: public docs and screenshots are checked for private account, token, local path, and screenshot metadata leaks.
 
 ## Representative Captures
@@ -40,6 +41,8 @@ Start here when you want proof that the documented Cowork flows have been exerci
 ![Permission real flow](./screenshots/55-test-runner-permission-real-flow.png)
 
 ![Computer Use real desktop suite](./screenshots/108-test-runner-computer-use-real-suite.png)
+
+![Mobile supervision gateway bundle](./screenshots/90-test-runner-mobile-supervision-gateway-bundle.png)
 
 ![Hermes built CLI lifecycle guard](./screenshots/109-test-runner-hermes-built-cli-real.png)
 

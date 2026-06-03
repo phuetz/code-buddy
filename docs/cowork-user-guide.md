@@ -95,6 +95,7 @@ Useful rows include:
 | `MCP / real transport suite` | Real stdio and HTTP MCP fixtures plus fail-closed guard |
 | `Computer Use / real desktop suite` | WinForms, dialog, Notepad, and Excel COM opt-in desktop automation |
 | `Hermes / built CLI real smoke` | Rebuilds Code Buddy, verifies Hermes tools/doctor, proves guarded lifecycle execution, and documents Vercel Sandbox attach |
+| `Mobile / supervision gateway bundle` | Loopback-only pairing/status routes, approval queue, and Cowork bridge behavior |
 
 The runner also exposes execution monitoring:
 
@@ -103,6 +104,10 @@ The runner also exposes execution monitoring:
 The Hermes row is a manual real smoke because it rebuilds the compiled CLI before executing it. It proves `hermes tools`, `hermes doctor safe`, the Daytona lifecycle attach plan, the blocked Daytona and Vercel Sandbox `--execute` guards without allow flags, and the Vercel Sandbox attach mapping.
 
 ![Hermes built CLI lifecycle guard](./qa/code-buddy-studio/screenshots/109-test-runner-hermes-built-cli-real.png)
+
+The mobile supervision row checks the local-operator boundary before any phone-facing workflow is treated as usable. It covers loopback-only pairing/status routes, spoofed-forwarder denial, prompt draft approval/cancel behavior, the Cowork mobile bridge client, and the disabled listener contract that keeps off-device execution gated until TLS and auth are deliberately configured.
+
+![Mobile supervision gateway bundle](./qa/code-buddy-studio/screenshots/90-test-runner-mobile-supervision-gateway-bundle.png)
 
 When a Hermes research-script job proposes a reusable SKILL.md candidate, inspect the candidate before installing it:
 
