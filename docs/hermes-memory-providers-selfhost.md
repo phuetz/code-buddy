@@ -128,6 +128,51 @@ is not configured (the adapter degraded to local memory rather than failing). A
 write-without-read on an extraction-based backend (Mem0/OpenViking run an LLM)
 can be eventual-consistency — re-run the probe, or check the server logs.
 
+## Validated live on a self-hosted box (2026-06-04, ministar)
+
+Honcho is **live-validated** end-to-end against a real self-hosted instance with
+a 100% local LLM stack (Ollama) — `buddy hermes memory probe honcho` → `PASS`,
+`remote=true`, `fellBackToLocal=false`; the Honcho server logs confirm real v3
+endpoints (`POST /v3/workspaces|/peers|/sessions|/messages|/search`). The exact
+recipe and the gotchas that bit us:
+
+1. **Ollama for the LLM stack** (sovereign, $0): chat = `qwen3.6:27b`
+   (tool-calling capable, required by Honcho), embeddings = `nomic-embed-text`
+   (**768-dim**). Ensure `OLLAMA_HOST=0.0.0.0` so containers can reach it.
+2. **Honcho `.env`** (point every text/embedding module at Ollama via
+   `host.docker.internal`):
+   ```
+   LLM_OPENAI_API_KEY=ollama                 # placeholder; Ollama ignores it but Honcho requires it set
+   EMBED_MESSAGES=true
+   EMBEDDING_VECTOR_DIMENSIONS=768           # MUST match nomic-embed-text
+   EMBEDDING_MODEL_CONFIG__TRANSPORT=openai
+   EMBEDDING_MODEL_CONFIG__MODEL=nomic-embed-text
+   EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://host.docker.internal:11434/v1
+   DERIVER_ENABLED=true
+   DERIVER_MODEL_CONFIG__TRANSPORT=openai
+   DERIVER_MODEL_CONFIG__MODEL=qwen3.6:27b
+   DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL=http://host.docker.internal:11434/v1
+   SUMMARY_MODEL_CONFIG__TRANSPORT=openai
+   SUMMARY_MODEL_CONFIG__MODEL=qwen3.6:27b
+   SUMMARY_MODEL_CONFIG__OVERRIDES__BASE_URL=http://host.docker.internal:11434/v1
+   ```
+   plus a `docker-compose.override.yml` giving `api` and `deriver`
+   `extra_hosts: ["host.docker.internal:host-gateway"]`.
+3. **Gotcha — ufw blocks container→host.** If `ufw` is active with
+   `deny (routed)` and only `lo`/`tailscale0` allowed in, containers cannot reach
+   the host's Ollama. Fix (local-only, reversible):
+   `sudo ufw allow from 172.16.0.0/12 to any port 11434 proto tcp`.
+4. **Gotcha — embedding dimension.** The DB migration creates the vector column
+   at 1536; nomic is 768. After first boot, reconcile with the prebuilt venv (not
+   `uv run`, which re-resolves and fails):
+   `docker compose run --rm -T --entrypoint "" api /app/.venv/bin/python scripts/configure_embeddings.py`
+   then restart `api`/`deriver`.
+5. **Gotcha — redis host-port conflict.** If another service already binds
+   `6379`, drop Honcho's redis host port publish (api reaches redis on the
+   internal network anyway).
+
+Then on the same host: `export CODEBUDDY_MEMORY_PROVIDER=honcho HONCHO_BASE_URL=http://localhost:8000` and `buddy hermes memory probe honcho`.
+
 ## Cloud providers (need an account)
 
 `Supermemory` and `RetainDB` are cloud-only. The adapters are implemented against
