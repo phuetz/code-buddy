@@ -1,5 +1,5 @@
 {
-  "detectedAt": "2026-04-06T17:26:36.281Z",
+  "detectedAt": "2026-05-02T23:53:13.678Z",
   "languages": [
     "TypeScript",
     "JavaScript"
@@ -26,9 +26,9 @@
     ]
   },
   "contextPack": "Language: TypeScript, JavaScript | Framework: Ink (terminal UI) | Package manager: npm | Commands: test=\"npm run test\", lint=\"npm run lint\", format=\"npm run format\", build=\"npm run build\", typecheck=\"npm run typecheck\", validate=\"npm run validate\" | Dirs: src=src, tests=tests, docs=docs | Naming: camelCase (JS/TS)",
-  "_configMtime": 1775495851313.3777,
+  "_configMtime": 1777664753676.4446,
   "name": "@phuetz/code-buddy",
-  "description": "Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.",
+  "description": "Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and Enterprise-grade architecture.",
   "moduleType": "esm",
   "testFramework": "Vitest",
   "entryPoints": [
@@ -57,28 +57,28 @@
   "cartography": {
     "fileStats": {
       "byExtension": {
-        ".ts": 2236,
+        ".ts": 2263,
         ".js": 27,
         ".tsx": 48
       },
       "locEstimate": {
-        "TypeScript": 765520,
+        "TypeScript": 771421,
         "JavaScript": 319
       },
-      "totalSourceFiles": 1535,
-      "totalTestFiles": 776,
+      "totalSourceFiles": 1547,
+      "totalTestFiles": 791,
       "largestFiles": [
         {
           "path": "src/index.ts",
-          "lines": 2276
+          "lines": 2310
         },
         {
-          "path": "src/agent/execution/agent-executor.ts",
-          "lines": 1824
+          "path": "tests/agent/execution/agent-executor.test.ts",
+          "lines": 1983
         },
         {
-          "path": "src/docs/docs-generator.ts",
-          "lines": 1668
+          "path": "tests/unit/codebuddy-client.test.ts",
+          "lines": 2250
         },
         {
           "path": "tests/unit/memory.test.ts",
@@ -97,16 +97,16 @@
           "lines": 1922
         },
         {
+          "path": "src/agent/codebuddy-agent.ts",
+          "lines": 1478
+        },
+        {
           "path": "src/tools/computer-control-tool.ts",
           "lines": 1890
         },
         {
           "path": "tests/channels/matrix.test.ts",
           "lines": 1890
-        },
-        {
-          "path": "src/codebuddy/client.ts",
-          "lines": 1658
         }
       ]
     },
@@ -115,12 +115,12 @@
         {
           "name": "Agent core",
           "directory": "src/agent",
-          "fileCount": 177
+          "fileCount": 185
         },
         {
           "name": "Tool implementations",
           "directory": "src/tools",
-          "fileCount": 156
+          "fileCount": 165
         },
         {
           "name": "Command handlers",
@@ -140,7 +140,7 @@
         {
           "name": "Context management",
           "directory": "src/context",
-          "fileCount": 62
+          "fileCount": 63
         },
         {
           "name": "Messaging channels",
@@ -150,12 +150,12 @@
         {
           "name": "Security",
           "directory": "src/security",
-          "fileCount": 50
+          "fileCount": 49
         },
         {
           "name": "codebuddy",
           "directory": "src/codebuddy",
-          "fileCount": 30
+          "fileCount": 34
         },
         {
           "name": "Configuration",
@@ -170,17 +170,17 @@
         {
           "name": "Knowledge base",
           "directory": "src/knowledge",
+          "fileCount": 29
+        },
+        {
+          "name": "Plugin system",
+          "directory": "src/plugins",
           "fileCount": 28
         },
         {
           "name": "HTTP server",
           "directory": "src/server",
           "fileCount": 28
-        },
-        {
-          "name": "Plugin system",
-          "directory": "src/plugins",
-          "fileCount": 27
         },
         {
           "name": "Hooks",
@@ -200,7 +200,7 @@
         {
           "name": "docs",
           "directory": "src/docs",
-          "fileCount": 17
+          "fileCount": 16
         },
         {
           "name": "MCP integration",
@@ -265,11 +265,6 @@
         {
           "name": "desktop",
           "directory": "src/desktop",
-          "fileCount": 9
-        },
-        {
-          "name": "fcs",
-          "directory": "src/fcs",
           "fileCount": 9
         },
         {
@@ -508,11 +503,6 @@
           "fileCount": 3
         },
         {
-          "name": "networking",
-          "directory": "src/networking",
-          "fileCount": 3
-        },
-        {
           "name": "screen-capture",
           "directory": "src/screen-capture",
           "fileCount": 3
@@ -568,6 +558,11 @@
           "fileCount": 2
         },
         {
+          "name": "networking",
+          "directory": "src/networking",
+          "fileCount": 2
+        },
+        {
           "name": "offline",
           "directory": "src/offline",
           "fileCount": 2
@@ -610,15 +605,15 @@
       "hotModules": [
         {
           "module": "src/utils/logger",
-          "importedBy": 495
+          "importedBy": 510
         },
         {
           "module": "src/types",
-          "importedBy": 159
+          "importedBy": 163
         },
         {
           "module": "src/codebuddy/client",
-          "importedBy": 67
+          "importedBy": 74
         },
         {
           "module": "src/services/vfs/unified-vfs-router",
@@ -630,11 +625,11 @@
         },
         {
           "module": "src/tools/registry/types",
-          "importedBy": 40
+          "importedBy": 42
         },
         {
           "module": "src/knowledge/knowledge-graph",
-          "importedBy": 33
+          "importedBy": 32
         },
         {
           "module": "src/commands/handlers/branch-handlers",
@@ -646,7 +641,7 @@
         },
         {
           "module": "src/codebuddy/tool-definitions/types",
-          "importedBy": 24
+          "importedBy": 23
         },
         {
           "module": "src/utils/confirmation-service",
@@ -658,7 +653,7 @@
         },
         {
           "module": "src/plugins/types",
-          "importedBy": 16
+          "importedBy": 17
         },
         {
           "module": "src/agent/repo-profiling/types",
@@ -670,6 +665,10 @@
         }
       ],
       "circularRisks": [
+        {
+          "a": "src/codebuddy/client",
+          "b": "src/codebuddy/providers/provider-openai-compat"
+        },
         {
           "a": "src/knowledge/knowledge-graph",
           "b": "src/knowledge/graph-embeddings"
@@ -704,11 +703,6 @@
     "apiSurface": {
       "restRoutes": [
         {
-          "method": "GET",
-          "path": "/api/csrf-token",
-          "file": "src/server/index.ts"
-        },
-        {
           "method": "USE",
           "path": "/api/health",
           "file": "src/server/index.ts"
@@ -721,6 +715,16 @@
         {
           "method": "USE",
           "path": "/metrics",
+          "file": "src/server/index.ts"
+        },
+        {
+          "method": "USE",
+          "path": "/api/a2a",
+          "file": "src/server/index.ts"
+        },
+        {
+          "method": "GET",
+          "path": "/api/csrf-token",
           "file": "src/server/index.ts"
         },
         {
@@ -746,11 +750,6 @@
         {
           "method": "USE",
           "path": "/api/workflows",
-          "file": "src/server/index.ts"
-        },
-        {
-          "method": "USE",
-          "path": "/api/a2a",
           "file": "src/server/index.ts"
         },
         {
@@ -981,6 +980,21 @@
         {
           "method": "GET",
           "path": "/agents/by-skill/:skillId",
+          "file": "src/server/routes/a2a-protocol.ts"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/register",
+          "file": "src/server/routes/a2a-protocol.ts"
+        },
+        {
+          "method": "POST",
+          "path": "/agents/:name/heartbeat",
+          "file": "src/server/routes/a2a-protocol.ts"
+        },
+        {
+          "method": "DELETE",
+          "path": "/agents/:name",
           "file": "src/server/routes/a2a-protocol.ts"
         },
         {
@@ -1424,7 +1438,7 @@
         "session:leave",
         "sessions"
       ],
-      "endpointCount": 158
+      "endpointCount": 161
     },
     "patterns": {
       "singletons": [
@@ -1477,8 +1491,11 @@
         "Dashboard",
         "UnifiedVfsRouter",
         "ThemeManager",
+        "AskUserQuestionReadlineProvider",
         "BrowserTool",
+        "ExitPlanModeReadlineProvider",
         "GatewayTool",
+        "mcp-manager",
         "MessageTool",
         "plan-tools",
         "FormalToolRegistry",
@@ -1716,6 +1733,7 @@
         "ComputerBrowser",
         "ComputerSkills",
         "InterpreterService",
+        "WorkspaceIndexer",
         "PersistentLearning",
         "LocationService",
         "MCPManager",
@@ -1731,7 +1749,6 @@
         "MetricsCollector",
         "ModelHub",
         "CodeReviewEngine",
-        "CircuitBreaker",
         "HealthCheckManager",
         "NodeManager",
         "MetricsCollector",
@@ -1995,6 +2012,10 @@
           "file": "src/tools/interactive-bash.ts"
         },
         {
+          "name": "InteractiveShellTool",
+          "file": "src/tools/interactive-shell-tool.ts"
+        },
+        {
           "name": "JSReplTool",
           "file": "src/tools/js-repl.ts"
         },
@@ -2067,12 +2088,20 @@
           "file": "src/tools/search.ts"
         },
         {
+          "name": "SemanticSearchTool",
+          "file": "src/tools/semantic-search.ts"
+        },
+        {
           "name": "SkillDiscoveryTool",
           "file": "src/tools/skill-discovery-tool.ts"
         },
         {
           "name": "SQLTool",
           "file": "src/tools/sql-tool.ts"
+        },
+        {
+          "name": "SubmitPlanTool",
+          "file": "src/tools/submit-plan-tool.ts"
         },
         {
           "name": "TestGeneratorTool",
@@ -2434,11 +2463,11 @@
         {
           "module": "codebuddy",
           "exports": [
+            "GeminiNativeProvider",
+            "OpenAICompatProvider",
             "CodeBuddyClient",
             "A2UI_TOOL",
-            "convertPluginToolToCodeBuddyTool",
-            "addPluginToolsToCodeBuddyTools",
-            "convertMCPToolToCodeBuddyTool"
+            "injectJsonSystemPromptForAnthropic"
           ]
         },
         {
@@ -2772,16 +2801,6 @@
           ]
         },
         {
-          "module": "networking",
-          "exports": [
-            "HealthCheckManager",
-            "CircuitBreaker",
-            "getAllCircuitBreakerStats",
-            "resetAllCircuitBreakers",
-            "resetHealthCheckManager"
-          ]
-        },
-        {
           "module": "nodes",
           "exports": [
             "DeviceNodeManager",
@@ -3054,11 +3073,11 @@
         {
           "module": "tools",
           "exports": [
+            "AskUserQuestionReadlineProvider",
+            "ExitPlanModeReadlineProvider",
             "GenerateDocumentExecuteTool",
             "ResolveConflictsExecuteTool",
-            "FirecrawlSearchExecuteTool",
-            "FirecrawlScrapeExecuteTool",
-            "ComputerControlExecuteTool"
+            "AskUserQuestionExecuteTool"
           ]
         },
         {
@@ -3088,7 +3107,7 @@
             "SessionPersistenceConfig",
             "SoundNotificationManager",
             "BashHistoryAutocomplete",
-            "CompositeErrorBoundary"
+            "StreamingErrorBoundary"
           ]
         },
         {
@@ -3224,6 +3243,14 @@
             "CodeReviewEngine",
             "createCodeReview",
             "reviewProject"
+          ]
+        },
+        {
+          "module": "networking",
+          "exports": [
+            "HealthCheckManager",
+            "resetHealthCheckManager",
+            "getHealthCheckManager"
           ]
         },
         {
