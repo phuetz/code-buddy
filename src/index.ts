@@ -2615,6 +2615,12 @@ addLazyCommandGroup(program, 'bundles', 'Group skills under a single named slash
   registerBundlesCommands(program);
 });
 
+// Improve — recursive self-improvement engine (empirically-gated, reversible)
+addLazyCommandGroup(program, 'improve', 'Recursive self-improvement: empirically validate and apply reversible learning improvements', async () => {
+  const { registerImproveCommands } = await import('./commands/cli/improve-command.js');
+  registerImproveCommands(program);
+});
+
 // LSP — Language Server Protocol diagnostics (Hermes parity: `hermes lsp`)
 addLazyCommandGroup(program, 'lsp', 'Language Server Protocol diagnostics', async () => {
   const { registerLspCommands } = await import('./commands/cli/lsp-command.js');
