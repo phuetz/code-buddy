@@ -395,6 +395,28 @@ export interface KanbanCardResponse {
   ok: boolean;
 }
 
+export interface KanbanBoardInfoPayload {
+  slug: string;
+  name: string;
+  createdAt: string;
+  archived: boolean;
+  current: boolean;
+  cardCount: number;
+  path: string;
+}
+
+export interface KanbanBoardListResponse {
+  boards?: KanbanBoardInfoPayload[];
+  error?: string;
+  ok: boolean;
+}
+
+export interface KanbanBoardResponse {
+  board?: KanbanBoardInfoPayload;
+  error?: string;
+  ok: boolean;
+}
+
 export interface HermesKanbanApi {
   list: (options?: {
     cwd?: string;
@@ -409,6 +431,11 @@ export interface HermesKanbanApi {
   unlink: (options: { cwd?: string; id: string; linkRef: string }) => Promise<KanbanCardResponse>;
   assign: (options: { assignee: string | null; cwd?: string; id: string }) => Promise<KanbanCardResponse>;
   archive: (options: { comment?: string; cwd?: string; id: string }) => Promise<KanbanCardResponse>;
+  boards: {
+    list: (options?: { cwd?: string; includeArchived?: boolean }) => Promise<KanbanBoardListResponse>;
+    create: (options: { cwd?: string; name?: string; slug: string }) => Promise<KanbanBoardResponse>;
+    switch: (options: { cwd?: string; slug: string }) => Promise<KanbanBoardResponse>;
+  };
 }
 
 // ── Hermes OpenClaw migration (dry-run preview + apply) ──────────────

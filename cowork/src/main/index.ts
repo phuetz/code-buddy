@@ -217,9 +217,12 @@ import {
   blockHermesKanbanCard,
   commentHermesKanbanCard,
   completeHermesKanbanCard,
+  createHermesKanbanBoard,
   createHermesKanbanCard,
   linkHermesKanbanCard,
+  listHermesKanbanBoards,
   listHermesKanbanCards,
+  switchHermesKanbanBoard,
   unblockHermesKanbanCard,
   unlinkHermesKanbanCard,
   type KanbanCreateInput,
@@ -4364,6 +4367,48 @@ ipcMain.handle(
       return { card, ok: true };
     } catch (err) {
       logWarn('[hermes.kanban.archive] failed:', err);
+      return { error: err instanceof Error ? err.message : String(err), ok: false };
+    }
+  }
+);
+
+ipcMain.handle(
+  'hermes.kanban.boards.list',
+  async (_event, payload?: { cwd?: string; includeArchived?: boolean }) => {
+    try {
+      const boards = await listHermesKanbanBoards({ cwd: payload?.cwd, includeArchived: payload?.includeArchived });
+      if (!boards) return { error: 'Kanban registry is unavailable.', ok: false };
+      return { boards, ok: true };
+    } catch (err) {
+      logWarn('[hermes.kanban.boards.list] failed:', err);
+      return { error: err instanceof Error ? err.message : String(err), ok: false };
+    }
+  }
+);
+
+ipcMain.handle(
+  'hermes.kanban.boards.create',
+  async (_event, payload: { cwd?: string; name?: string; slug: string }) => {
+    try {
+      const board = await createHermesKanbanBoard({ cwd: payload?.cwd, name: payload?.name, slug: payload.slug });
+      if (!board) return { error: 'Kanban registry is unavailable.', ok: false };
+      return { board, ok: true };
+    } catch (err) {
+      logWarn('[hermes.kanban.boards.create] failed:', err);
+      return { error: err instanceof Error ? err.message : String(err), ok: false };
+    }
+  }
+);
+
+ipcMain.handle(
+  'hermes.kanban.boards.switch',
+  async (_event, payload: { cwd?: string; slug: string }) => {
+    try {
+      const board = await switchHermesKanbanBoard({ cwd: payload?.cwd, slug: payload.slug });
+      if (!board) return { error: 'Kanban registry is unavailable.', ok: false };
+      return { board, ok: true };
+    } catch (err) {
+      logWarn('[hermes.kanban.boards.switch] failed:', err);
       return { error: err instanceof Error ? err.message : String(err), ok: false };
     }
   }

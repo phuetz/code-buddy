@@ -12,6 +12,7 @@ import { AlertTriangle, Archive, CheckCircle2, Link2, Loader2, MessageSquare, Pl
 import { useAppStore } from '../store';
 import { dialogA11yProps, trapFocus } from '../utils/a11y';
 import type {
+  KanbanBoardInfoPayload,
   KanbanCardPayload,
   KanbanPriority,
   KanbanStatus,
@@ -48,7 +49,10 @@ export function KanbanPanel({ onClose }: KanbanPanelProps) {
   );
 
   const [cards, setCards] = useState<KanbanCardPayload[]>([]);
-  const [boardPath, setBoardPath] = useState<string | null>(null);
+  const [boards, setBoards] = useState<KanbanBoardInfoPayload[]>([]);
+  const [currentBoard, setCurrentBoard] = useState<string>('default');
+  const [creatingBoard, setCreatingBoard] = useState(false);
+  const [newBoardSlug, setNewBoardSlug] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,10 +80,16 @@ export function KanbanPanel({ onClose }: KanbanPanelProps) {
     }
     setLoading(true);
     try {
+      if (api.boards?.list) {
+        const boardRes = await api.boards.list({ cwd });
+        if (boardRes.ok && boardRes.boards) {
+          setBoards(boardRes.boards);
+          setCurrentBoard(boardRes.boards.find((b) => b.current)?.slug ?? 'default');
+        }
+      }
       const res = await api.list({ cwd, filter: { includeDone: true } });
       if (!res.ok) throw new Error(res.error ?? 'Failed to load board.');
       setCards(res.cards ?? []);
-      setBoardPath(res.boardPath ?? null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -92,6 +102,40 @@ export function KanbanPanel({ onClose }: KanbanPanelProps) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const switchBoard = async (slug: string) => {
+    const api = getKanbanApi();
+    if (!api?.boards?.switch) return;
+    setBusy(true);
+    try {
+      const res = await api.boards.switch({ cwd, slug });
+      if (!res.ok) throw new Error(res.error ?? 'Failed to switch board.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createBoard = async () => {
+    const slug = newBoardSlug.trim();
+    if (!slug) return;
+    const api = getKanbanApi();
+    if (!api?.boards?.create) return;
+    setBusy(true);
+    try {
+      const res = await api.boards.create({ cwd, slug });
+      if (!res.ok) throw new Error(res.error ?? 'Failed to create board.');
+      setNewBoardSlug('');
+      setCreatingBoard(false);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const runMutation = async (fn: (api: HermesKanbanApi) => Promise<{ ok: boolean; error?: string }>) => {
     const api = getKanbanApi();
@@ -131,9 +175,49 @@ export function KanbanPanel({ onClose }: KanbanPanelProps) {
             <h2 className="text-sm font-semibold text-text-primary">
               {t('kanban.title', 'Hermes Kanban board')}
             </h2>
-            {boardPath ? (
-              <code className="hidden truncate text-[11px] text-text-muted sm:inline">{boardPath}</code>
-            ) : null}
+            {/* Board switcher (multi-board) */}
+            <select
+              aria-label={t('kanban.boardSwitcher', 'Active board')}
+              className="rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] text-text-primary"
+              data-testid="kanban-board-switcher"
+              disabled={busy}
+              onChange={(e) => void switchBoard(e.target.value)}
+              value={currentBoard}
+            >
+              {boards.map((b) => (
+                <option key={b.slug} value={b.slug}>
+                  {b.name} ({b.cardCount})
+                </option>
+              ))}
+            </select>
+            {creatingBoard ? (
+              <input
+                autoFocus
+                className="w-28 rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] text-text-primary"
+                data-testid="kanban-new-board-slug"
+                disabled={busy}
+                onBlur={() => !newBoardSlug.trim() && setCreatingBoard(false)}
+                onChange={(e) => setNewBoardSlug(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void createBoard();
+                  if (e.key === 'Escape') setCreatingBoard(false);
+                }}
+                placeholder={t('kanban.newBoardSlug', 'new-board-slug')}
+                value={newBoardSlug}
+              />
+            ) : (
+              <button
+                aria-label={t('kanban.newBoard', 'New board')}
+                className="rounded border border-border bg-surface p-0.5 text-text-muted hover:border-accent hover:text-accent"
+                data-testid="kanban-new-board"
+                disabled={busy}
+                onClick={() => setCreatingBoard(true)}
+                title={t('kanban.newBoard', 'New board')}
+                type="button"
+              >
+                <Plus size={12} />
+              </button>
+            )}
           </div>
           <button
             aria-label={t('common.close', 'Close')}

@@ -124,6 +124,7 @@ import {
   type KanbanStatus,
   type ListKanbanCardsFilter,
 } from '../../kanban/kanban-store.js';
+import { KanbanBoardRegistry } from '../../kanban/kanban-board-registry.js';
 import { isFeatureEnabled } from '../../config/feature-flags.js';
 import { getUserModel } from '../../memory/user-model.js';
 import { filterTools } from '../../utils/tool-filter.js';
@@ -147,6 +148,11 @@ interface HermesKanbanOptions extends HermesCommandOptions {
   reason?: string;
   target?: string;
   label?: string;
+  board?: string;
+  clear?: boolean;
+  name?: string;
+  delete?: boolean;
+  includeArchived?: boolean;
 }
 
 interface HermesRuntimeSmokeOptions extends HermesCommandOptions {
@@ -1639,16 +1645,24 @@ function renderHermesRuntimeSmoke(result: HermesRuntimeSmokeResult): string {
   return lines.join('\n');
 }
 
-function buildKanbanStore(): KanbanStore {
-  return new KanbanStore({ rootDir: process.cwd() });
+function buildKanbanStore(boardSlug?: string): KanbanStore {
+  const registry = new KanbanBoardRegistry({ rootDir: process.cwd() });
+  const slug = registry.resolveSlug(boardSlug);
+  return new KanbanStore({ boardPath: registry.boardPath(slug) });
 }
 
 function parseKanbanStatus(value: string | undefined): KanbanStatus | undefined {
   if (!value) return undefined;
-  if (value === 'todo' || value === 'in_progress' || value === 'blocked' || value === 'done') {
+  if (
+    value === 'todo' ||
+    value === 'in_progress' ||
+    value === 'blocked' ||
+    value === 'done' ||
+    value === 'archived'
+  ) {
     return value;
   }
-  throw new Error('status must be one of: todo, in_progress, blocked, done');
+  throw new Error('status must be one of: todo, in_progress, blocked, done, archived');
 }
 
 function parseKanbanPriority(value: string | undefined): KanbanPriority | undefined {
@@ -2246,7 +2260,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--tag <tag>', 'filter by tag')
     .option('--active', 'hide done cards')
     .action(async (options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const cards = await store.listCards(parseKanbanListFilter(options));
       printKanbanResult(
         { kind: 'hermes_kanban_list', boardPath: store.path, count: cards.length, cards },
@@ -2263,7 +2277,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .argument('<id>', 'card id')
     .option('--json', 'output JSON')
     .action(async (id: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.showCard(id);
       printKanbanResult(
         { kind: 'hermes_kanban_show', boardPath: store.path, card },
@@ -2293,7 +2307,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--assignee <assignee>', 'assignee')
     .option('--tag <tag...>', 'tag list, repeated or comma-separated')
     .action(async (title: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.createCard(parseKanbanCreateInput(title, options));
       printKanbanResult(
         { kind: 'hermes_kanban_create', boardPath: store.path, card },
@@ -2310,7 +2324,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--comment <comment>', 'completion note')
     .option('--author <author>', 'note author')
     .action(async (id: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.completeCard(id, options.comment, options.author);
       printKanbanResult(
         { kind: 'hermes_kanban_complete', boardPath: store.path, card },
@@ -2327,7 +2341,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--json', 'output JSON')
     .option('--author <author>', 'note author')
     .action(async (id: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.blockCard(id, options.reason ?? '', options.author);
       printKanbanResult(
         { kind: 'hermes_kanban_block', boardPath: store.path, card },
@@ -2344,7 +2358,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--comment <comment>', 'unblock note')
     .option('--author <author>', 'note author')
     .action(async (id: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.unblockCard(id, options.comment, options.author);
       printKanbanResult(
         { kind: 'hermes_kanban_unblock', boardPath: store.path, card },
@@ -2361,7 +2375,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--json', 'output JSON')
     .option('--author <author>', 'comment author')
     .action(async (id: string, text: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.commentCard(id, text, options.author);
       printKanbanResult(
         { kind: 'hermes_kanban_comment', boardPath: store.path, card },
@@ -2378,7 +2392,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--comment <comment>', 'progress note')
     .option('--author <author>', 'heartbeat author')
     .action(async (id: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.heartbeatCard(id, options.comment, options.author);
       printKanbanResult(
         { kind: 'hermes_kanban_heartbeat', boardPath: store.path, card },
@@ -2395,7 +2409,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--json', 'output JSON')
     .option('--label <label>', 'link label')
     .action(async (id: string, target: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.linkCard(id, target, options.label);
       printKanbanResult(
         { kind: 'hermes_kanban_link', boardPath: store.path, card },
@@ -2411,7 +2425,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .argument('<linkRef>', 'link id or target reference to remove')
     .option('--json', 'output JSON')
     .action(async (id: string, linkRef: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.unlinkCard(id, linkRef);
       printKanbanResult(
         { kind: 'hermes_kanban_unlink', boardPath: store.path, card },
@@ -2428,8 +2442,8 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--json', 'output JSON')
     .option('--clear', 'clear the assignee')
     .option('--author <author>', 'comment author')
-    .action(async (id: string, assignee: string | undefined, options: HermesKanbanOptions & { clear?: boolean }) => {
-      const store = buildKanbanStore();
+    .action(async (id: string, assignee: string | undefined, options: HermesKanbanOptions) => {
+      const store = buildKanbanStore(options.board);
       const card = await store.assignCard(id, options.clear ? null : assignee ?? null, options.author);
       printKanbanResult(
         { kind: 'hermes_kanban_assign', boardPath: store.path, card },
@@ -2446,7 +2460,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .option('--comment <comment>', 'archive note')
     .option('--author <author>', 'comment author')
     .action(async (id: string, options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const card = await store.archiveCard(id, options.comment, options.author);
       printKanbanResult(
         { kind: 'hermes_kanban_archive', boardPath: store.path, card },
@@ -2460,7 +2474,7 @@ function registerHermesKanbanCommands(hermes: Command): void {
     .description('Show per-status, per-priority, and per-assignee Kanban counts')
     .option('--json', 'output JSON')
     .action(async (options: HermesKanbanOptions) => {
-      const store = buildKanbanStore();
+      const store = buildKanbanStore(options.board);
       const stats = await store.stats();
       const text = [
         `Board: ${store.path}`,
@@ -2469,6 +2483,68 @@ function registerHermesKanbanCommands(hermes: Command): void {
         `Priority: ${Object.entries(stats.byPriority).map(([k, v]) => `${k}=${v}`).join(', ')}`,
       ].join('\n');
       printKanbanResult({ kind: 'hermes_kanban_stats', boardPath: store.path, ...stats }, options, text);
+    });
+
+  // Every card command can target a specific board with --board (else
+  // CODEBUDDY_KANBAN_BOARD / the active board / default).
+  for (const cmd of kanban.commands) {
+    cmd.option('--board <slug>', 'target board slug (else CODEBUDDY_KANBAN_BOARD, active board, or default)');
+  }
+
+  // --- Multi-board management: `hermes kanban boards …` ---
+  const boards = kanban.command('boards').description('Manage multiple Kanban boards');
+
+  boards
+    .command('list')
+    .description('List Kanban boards with card counts and the active board')
+    .option('--json', 'output JSON')
+    .option('--include-archived', 'include archived boards')
+    .action((options: HermesKanbanOptions) => {
+      const registry = new KanbanBoardRegistry({ rootDir: process.cwd() });
+      const list = registry.list(options.includeArchived === true);
+      const text = list
+        .map((b) => `${b.current ? '*' : ' '} ${b.slug} — ${b.name} (${b.cardCount} cards)${b.archived ? ' [archived]' : ''}`)
+        .join('\n');
+      printKanbanResult({ kind: 'hermes_kanban_boards_list', boards: list }, options, text || 'No boards.');
+    });
+
+  boards
+    .command('create')
+    .description('Create a new board and switch to it')
+    .argument('<slug>', 'board slug (lowercase letters, digits, hyphens)')
+    .option('--json', 'output JSON')
+    .option('--name <name>', 'human-readable board name')
+    .action((slug: string, options: HermesKanbanOptions) => {
+      const registry = new KanbanBoardRegistry({ rootDir: process.cwd() });
+      const board = registry.create(slug, options.name);
+      printKanbanResult({ kind: 'hermes_kanban_boards_create', board }, options, `Created and switched to board "${board.slug}".`);
+    });
+
+  boards
+    .command('switch')
+    .description('Switch the active board')
+    .argument('<slug>', 'board slug')
+    .option('--json', 'output JSON')
+    .action((slug: string, options: HermesKanbanOptions) => {
+      const registry = new KanbanBoardRegistry({ rootDir: process.cwd() });
+      const board = registry.switch(slug);
+      printKanbanResult({ kind: 'hermes_kanban_boards_switch', board }, options, `Switched to board "${board.slug}".`);
+    });
+
+  boards
+    .command('rm')
+    .description('Archive a board, or hard-delete it with --delete (the default board cannot be removed)')
+    .argument('<slug>', 'board slug')
+    .option('--json', 'output JSON')
+    .option('--delete', 'permanently delete the board file instead of archiving')
+    .action((slug: string, options: HermesKanbanOptions) => {
+      const registry = new KanbanBoardRegistry({ rootDir: process.cwd() });
+      registry.remove(slug, { hardDelete: options.delete === true });
+      printKanbanResult(
+        { kind: 'hermes_kanban_boards_rm', slug, deleted: options.delete === true },
+        options,
+        options.delete ? `Deleted board "${slug}".` : `Archived board "${slug}".`,
+      );
     });
 }
 

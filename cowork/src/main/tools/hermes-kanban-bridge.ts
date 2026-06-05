@@ -66,14 +66,81 @@ interface KanbanStoreInstance {
 }
 
 interface KanbanStoreModule {
-  KanbanStore: new (options: { rootDir?: string }) => KanbanStoreInstance;
+  KanbanStore: new (options: { rootDir?: string; boardPath?: string }) => KanbanStoreInstance;
 }
 
-async function buildStore(cwd?: string): Promise<KanbanStoreInstance | null> {
+export interface KanbanBoardInfo {
+  slug: string;
+  name: string;
+  createdAt: string;
+  archived: boolean;
+  current: boolean;
+  cardCount: number;
+  path: string;
+}
+
+interface KanbanBoardRegistryInstance {
+  resolveSlug: (explicit?: string) => string;
+  boardPath: (slug: string) => string;
+  list: (includeArchived?: boolean) => KanbanBoardInfo[];
+  create: (slug: string, name?: string) => KanbanBoardInfo;
+  switch: (slug: string) => KanbanBoardInfo;
+}
+
+interface KanbanBoardRegistryModule {
+  KanbanBoardRegistry: new (options: { rootDir?: string }) => KanbanBoardRegistryInstance;
+}
+
+async function buildRegistry(cwd?: string): Promise<KanbanBoardRegistryInstance | null> {
+  const mod = await loadCoreModule<KanbanBoardRegistryModule>('kanban/kanban-board-registry.js');
+  if (!mod?.KanbanBoardRegistry) return null;
+  const rootDir = cwd?.trim() || process.cwd();
+  return new mod.KanbanBoardRegistry({ rootDir });
+}
+
+async function buildStore(cwd?: string, boardSlug?: string): Promise<KanbanStoreInstance | null> {
   const mod = await loadCoreModule<KanbanStoreModule>('kanban/kanban-store.js');
   if (!mod?.KanbanStore) return null;
   const rootDir = cwd?.trim() || process.cwd();
+  // Resolve the active (or explicitly requested) board via the registry so the
+  // GUI honours multi-board selection; fall back to the legacy single board.
+  const registry = await buildRegistry(cwd);
+  if (registry) {
+    const slug = registry.resolveSlug(boardSlug);
+    return new mod.KanbanStore({ boardPath: registry.boardPath(slug) });
+  }
   return new mod.KanbanStore({ rootDir });
+}
+
+/** List Kanban boards. Mirrors `buddy hermes kanban boards list`. */
+export async function listHermesKanbanBoards(options: {
+  cwd?: string;
+  includeArchived?: boolean;
+}): Promise<KanbanBoardInfo[] | null> {
+  const registry = await buildRegistry(options.cwd);
+  if (!registry) return null;
+  return registry.list(options.includeArchived === true);
+}
+
+/** Create + switch to a board. Mirrors `buddy hermes kanban boards create`. */
+export async function createHermesKanbanBoard(options: {
+  cwd?: string;
+  name?: string;
+  slug: string;
+}): Promise<KanbanBoardInfo | null> {
+  const registry = await buildRegistry(options.cwd);
+  if (!registry) return null;
+  return registry.create(options.slug, options.name);
+}
+
+/** Switch the active board. Mirrors `buddy hermes kanban boards switch`. */
+export async function switchHermesKanbanBoard(options: {
+  cwd?: string;
+  slug: string;
+}): Promise<KanbanBoardInfo | null> {
+  const registry = await buildRegistry(options.cwd);
+  if (!registry) return null;
+  return registry.switch(options.slug);
 }
 
 export interface KanbanListResult {

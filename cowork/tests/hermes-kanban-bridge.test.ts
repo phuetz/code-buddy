@@ -6,9 +6,12 @@ import {
   blockHermesKanbanCard,
   commentHermesKanbanCard,
   completeHermesKanbanCard,
+  createHermesKanbanBoard,
   createHermesKanbanCard,
   linkHermesKanbanCard,
+  listHermesKanbanBoards,
   listHermesKanbanCards,
+  switchHermesKanbanBoard,
   unblockHermesKanbanCard,
   unlinkHermesKanbanCard,
 } from '../src/main/tools/hermes-kanban-bridge';
@@ -47,23 +50,48 @@ function makeStore() {
   };
 }
 
+function makeRegistry() {
+  const board = { slug: 'work', name: 'Work', createdAt: 'now', archived: false, current: true, cardCount: 0, path: '/ws/.codebuddy/kanban/work.json' };
+  return {
+    resolveSlug: vi.fn().mockReturnValue('default'),
+    boardPath: vi.fn().mockReturnValue('/ws/.codebuddy/kanban-board.json'),
+    list: vi.fn().mockReturnValue([
+      { slug: 'default', name: 'Default', createdAt: 'now', archived: false, current: true, cardCount: 2, path: '/ws/.codebuddy/kanban-board.json' },
+    ]),
+    create: vi.fn().mockReturnValue(board),
+    switch: vi.fn().mockReturnValue({ ...board, current: true }),
+  };
+}
+
 let store: ReturnType<typeof makeStore>;
+let registry: ReturnType<typeof makeRegistry>;
 let KanbanStore: ReturnType<typeof vi.fn>;
+let KanbanBoardRegistry: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   mockedLoadCoreModule.mockReset();
   store = makeStore();
-  // Use a normal function (not an arrow) so it is constructable with `new`.
+  registry = makeRegistry();
+  // Use normal functions (not arrows) so they are constructable with `new`.
   KanbanStore = vi.fn().mockImplementation(function (this: unknown) {
     return store;
   });
-  mockedLoadCoreModule.mockResolvedValue({ KanbanStore });
+  KanbanBoardRegistry = vi.fn().mockImplementation(function (this: unknown) {
+    return registry;
+  });
+  // Dispatch by module path: store vs board registry.
+  mockedLoadCoreModule.mockImplementation(async (relativePath: string) =>
+    relativePath.includes('kanban-board-registry') ? { KanbanBoardRegistry } : { KanbanStore },
+  );
 });
 
 describe('Hermes kanban bridge', () => {
   it('builds the store rooted at the provided workspace cwd', async () => {
     await listHermesKanbanCards({ cwd: '/ws', filter: { includeDone: true } });
-    expect(KanbanStore).toHaveBeenCalledWith({ rootDir: '/ws' });
+    // The active board is resolved through the registry (rooted at the cwd),
+    // and the store opens the resolved board file.
+    expect(KanbanBoardRegistry).toHaveBeenCalledWith({ rootDir: '/ws' });
+    expect(KanbanStore).toHaveBeenCalledWith({ boardPath: '/ws/.codebuddy/kanban-board.json' });
     expect(store.listCards).toHaveBeenCalledWith({ includeDone: true });
   });
 
@@ -85,6 +113,20 @@ describe('Hermes kanban bridge', () => {
     expect(store.unlinkCard).toHaveBeenCalledWith('card-1', 'l1');
     expect(store.assignCard).toHaveBeenCalledWith('card-1', 'alice');
     expect(store.archiveCard).toHaveBeenCalledWith('card-1', undefined);
+  });
+
+  it('lists, creates, and switches boards through the registry', async () => {
+    const boards = await listHermesKanbanBoards({ cwd: '/ws' });
+    expect(boards?.[0]).toMatchObject({ slug: 'default', current: true });
+    expect(KanbanBoardRegistry).toHaveBeenCalledWith({ rootDir: '/ws' });
+
+    const created = await createHermesKanbanBoard({ cwd: '/ws', slug: 'work', name: 'Work' });
+    expect(created?.slug).toBe('work');
+    expect(registry.create).toHaveBeenCalledWith('work', 'Work');
+
+    const switched = await switchHermesKanbanBoard({ cwd: '/ws', slug: 'work' });
+    expect(switched?.slug).toBe('work');
+    expect(registry.switch).toHaveBeenCalledWith('work');
   });
 
   it('returns null when the kanban store module is unavailable', async () => {
