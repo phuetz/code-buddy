@@ -260,9 +260,13 @@ export function registerImproveCommands(program: Command): void {
     .description('Propose one behavioral rule and validate it against the corpus')
     .option('--json', 'output JSON')
     .option('--apply', 'keep the rule if it correctly reclassifies recorded runs with no regression')
-    .action((options: ImproveOptions) => {
+    .option('--no-commit', 'do not version the learned rule in the git learning store')
+    .action(async (options: ImproveOptions) => {
       const engine = createWorkspaceRuleEngine(options.apply ? { autonomy: 'auto-apply' } : {});
       const result = engine.runCycle();
+      if (result.applied && options.apply && options.commit !== false) {
+        await createWorkspaceLearningStore().commitVersion({ reason: 'improve rules cycle' });
+      }
       const verdict = result.applied
         ? `LEARNED rule for "${result.targetId}" (Δ=${result.gate?.delta})`
         : result.gate?.accepted
@@ -280,9 +284,13 @@ export function registerImproveCommands(program: Command): void {
     .description('Learn rules until the corpus is fully and correctly classified')
     .option('--json', 'output JSON')
     .option('--apply', 'keep validated rules')
-    .action((options: ImproveOptions) => {
+    .option('--no-commit', 'do not version learned rules in the git learning store')
+    .action(async (options: ImproveOptions) => {
       const engine = createWorkspaceRuleEngine(options.apply ? { autonomy: 'auto-apply' } : {});
       const results = engine.runLoop();
+      if (results.some((r) => r.applied) && options.apply && options.commit !== false) {
+        await createWorkspaceLearningStore().commitVersion({ reason: 'improve rules loop' });
+      }
       const final = engine.status();
       const text = [
         `Cycles: ${results.length}, learned: ${results.filter((r) => r.applied).length}`,
