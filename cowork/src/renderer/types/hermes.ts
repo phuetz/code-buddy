@@ -330,7 +330,7 @@ export interface HermesTrajectoriesReviewPayload {
 }
 
 // ── Hermes Kanban board (CRUD) ───────────────────────────────────────
-export type KanbanStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
+export type KanbanStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'archived';
 export type KanbanPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface KanbanLinkPayload {
@@ -375,6 +375,7 @@ export interface KanbanCreateInputPayload {
 
 export interface KanbanListFilterPayload {
   assignee?: string;
+  includeArchived?: boolean;
   includeDone?: boolean;
   priority?: KanbanPriority;
   status?: KanbanStatus;
@@ -405,6 +406,9 @@ export interface HermesKanbanApi {
   unblock: (options: { comment?: string; cwd?: string; id: string }) => Promise<KanbanCardResponse>;
   comment: (options: { cwd?: string; id: string; text: string }) => Promise<KanbanCardResponse>;
   link: (options: { cwd?: string; id: string; label?: string; target: string }) => Promise<KanbanCardResponse>;
+  unlink: (options: { cwd?: string; id: string; linkRef: string }) => Promise<KanbanCardResponse>;
+  assign: (options: { assignee: string | null; cwd?: string; id: string }) => Promise<KanbanCardResponse>;
+  archive: (options: { comment?: string; cwd?: string; id: string }) => Promise<KanbanCardResponse>;
 }
 
 // ── Hermes OpenClaw migration (dry-run preview + apply) ──────────────

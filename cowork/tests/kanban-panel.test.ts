@@ -100,6 +100,29 @@ describe('KanbanPanel', () => {
     });
   });
 
+  it('archives a card through the bridge', async () => {
+    const list = vi.fn().mockResolvedValue({ ok: true, cards: [card()] });
+    const archive = vi.fn().mockResolvedValue({ ok: true, card: card({ status: 'archived' }) });
+    (window as unknown as {
+      electronAPI?: { tools?: { hermesKanban?: { list: typeof list; archive: typeof archive } } };
+    }).electronAPI = { tools: { hermesKanban: { list, archive } } };
+
+    const target = container();
+    root = createRoot(target);
+    await act(async () => {
+      root?.render(React.createElement(KanbanPanel, { onClose: () => {} }));
+      await Promise.resolve();
+    });
+
+    const archiveButton = target.querySelector('[data-testid="kanban-archive-card-1"]') as HTMLButtonElement;
+    expect(archiveButton).not.toBeNull();
+    await act(async () => {
+      Simulate.click(archiveButton);
+      await Promise.resolve();
+    });
+    expect(archive).toHaveBeenCalledWith({ cwd: '/ws', id: 'card-1' });
+  });
+
   it('completes a card through the bridge', async () => {
     const list = vi.fn().mockResolvedValue({ ok: true, cards: [card()] });
     const complete = vi.fn().mockResolvedValue({ ok: true, card: card({ status: 'done' }) });

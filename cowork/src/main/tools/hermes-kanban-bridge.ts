@@ -1,6 +1,6 @@
 import { loadCoreModule } from '../utils/core-loader';
 
-export type KanbanStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
+export type KanbanStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'archived';
 export type KanbanPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface KanbanLink {
@@ -60,6 +60,9 @@ interface KanbanStoreInstance {
   unblockCard: (id: string, comment?: string, author?: string) => Promise<KanbanCard>;
   commentCard: (id: string, text: string, author?: string) => Promise<KanbanCard>;
   linkCard: (id: string, target: string, label?: string) => Promise<KanbanCard>;
+  unlinkCard: (id: string, linkRef: string) => Promise<KanbanCard>;
+  assignCard: (id: string, assignee: string | null, author?: string) => Promise<KanbanCard>;
+  archiveCard: (id: string, comment?: string, author?: string) => Promise<KanbanCard>;
 }
 
 interface KanbanStoreModule {
@@ -153,4 +156,37 @@ export async function linkHermesKanbanCard(options: {
   const store = await buildStore(options.cwd);
   if (!store) return null;
   return store.linkCard(options.id, options.target, options.label);
+}
+
+/** Remove a link from a card. Mirrors `buddy hermes kanban unlink`. */
+export async function unlinkHermesKanbanCard(options: {
+  cwd?: string;
+  id: string;
+  linkRef: string;
+}): Promise<KanbanCard | null> {
+  const store = await buildStore(options.cwd);
+  if (!store) return null;
+  return store.unlinkCard(options.id, options.linkRef);
+}
+
+/** Assign (or clear) a card assignee. Mirrors `buddy hermes kanban assign`. */
+export async function assignHermesKanbanCard(options: {
+  assignee: string | null;
+  cwd?: string;
+  id: string;
+}): Promise<KanbanCard | null> {
+  const store = await buildStore(options.cwd);
+  if (!store) return null;
+  return store.assignCard(options.id, options.assignee);
+}
+
+/** Archive a card. Mirrors `buddy hermes kanban archive`. */
+export async function archiveHermesKanbanCard(options: {
+  comment?: string;
+  cwd?: string;
+  id: string;
+}): Promise<KanbanCard | null> {
+  const store = await buildStore(options.cwd);
+  if (!store) return null;
+  return store.archiveCard(options.id, options.comment);
 }

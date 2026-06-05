@@ -2225,7 +2225,7 @@ describe('Hermes CLI commands', () => {
           status: 'covered-partial',
           codeBuddyEvidence: expect.arrayContaining(['src/kanban/kanban-store.ts']),
           verificationCommands: expect.arrayContaining([
-            'npm test -- tests/tools/kanban-real.test.ts --run',
+            'npx tsx src/index.ts hermes kanban stats --json',
           ]),
         }),
         expect.objectContaining({

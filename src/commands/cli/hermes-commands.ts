@@ -2403,6 +2403,73 @@ function registerHermesKanbanCommands(hermes: Command): void {
         `Linked ${renderKanbanCardSummary(card)} -> ${target}`,
       );
     });
+
+  kanban
+    .command('unlink')
+    .description('Remove a link from a Kanban card by link id or target')
+    .argument('<id>', 'card id')
+    .argument('<linkRef>', 'link id or target reference to remove')
+    .option('--json', 'output JSON')
+    .action(async (id: string, linkRef: string, options: HermesKanbanOptions) => {
+      const store = buildKanbanStore();
+      const card = await store.unlinkCard(id, linkRef);
+      printKanbanResult(
+        { kind: 'hermes_kanban_unlink', boardPath: store.path, card },
+        options,
+        `Unlinked ${renderKanbanCardSummary(card)} -/-> ${linkRef}`,
+      );
+    });
+
+  kanban
+    .command('assign')
+    .description('Assign a Kanban card to a profile (or clear with --clear)')
+    .argument('<id>', 'card id')
+    .argument('[assignee]', 'profile/assignee name')
+    .option('--json', 'output JSON')
+    .option('--clear', 'clear the assignee')
+    .option('--author <author>', 'comment author')
+    .action(async (id: string, assignee: string | undefined, options: HermesKanbanOptions & { clear?: boolean }) => {
+      const store = buildKanbanStore();
+      const card = await store.assignCard(id, options.clear ? null : assignee ?? null, options.author);
+      printKanbanResult(
+        { kind: 'hermes_kanban_assign', boardPath: store.path, card },
+        options,
+        `Assigned ${renderKanbanCardSummary(card)} -> ${card.assignee ?? '(unassigned)'}`,
+      );
+    });
+
+  kanban
+    .command('archive')
+    .description('Archive a Kanban card (hidden from default lists)')
+    .argument('<id>', 'card id')
+    .option('--json', 'output JSON')
+    .option('--comment <comment>', 'archive note')
+    .option('--author <author>', 'comment author')
+    .action(async (id: string, options: HermesKanbanOptions) => {
+      const store = buildKanbanStore();
+      const card = await store.archiveCard(id, options.comment, options.author);
+      printKanbanResult(
+        { kind: 'hermes_kanban_archive', boardPath: store.path, card },
+        options,
+        `Archived ${renderKanbanCardSummary(card)}`,
+      );
+    });
+
+  kanban
+    .command('stats')
+    .description('Show per-status, per-priority, and per-assignee Kanban counts')
+    .option('--json', 'output JSON')
+    .action(async (options: HermesKanbanOptions) => {
+      const store = buildKanbanStore();
+      const stats = await store.stats();
+      const text = [
+        `Board: ${store.path}`,
+        `Total: ${stats.total} (unassigned: ${stats.unassigned})`,
+        `Status: ${Object.entries(stats.byStatus).map(([k, v]) => `${k}=${v}`).join(', ')}`,
+        `Priority: ${Object.entries(stats.byPriority).map(([k, v]) => `${k}=${v}`).join(', ')}`,
+      ].join('\n');
+      printKanbanResult({ kind: 'hermes_kanban_stats', boardPath: store.path, ...stats }, options, text);
+    });
 }
 
 export function registerHermesCommands(program: Command): void {

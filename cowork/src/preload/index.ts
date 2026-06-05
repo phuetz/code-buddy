@@ -1652,6 +1652,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       unblock: (options) => ipcRenderer.invoke('hermes.kanban.unblock', options),
       comment: (options) => ipcRenderer.invoke('hermes.kanban.comment', options),
       link: (options) => ipcRenderer.invoke('hermes.kanban.link', options),
+      unlink: (options) => ipcRenderer.invoke('hermes.kanban.unlink', options),
+      assign: (options) => ipcRenderer.invoke('hermes.kanban.assign', options),
+      archive: (options) => ipcRenderer.invoke('hermes.kanban.archive', options),
     } satisfies HermesKanbanApi,
     hermesMemoryProviders: {
       get: (): Promise<{

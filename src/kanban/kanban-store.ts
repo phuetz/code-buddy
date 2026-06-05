@@ -2,8 +2,17 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-export type KanbanStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
+export type KanbanStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'archived';
 export type KanbanPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+/** Per-status / per-assignee / per-priority counts (`hermes kanban stats`). */
+export interface KanbanStats {
+  total: number;
+  byStatus: Record<KanbanStatus, number>;
+  byPriority: Record<KanbanPriority, number>;
+  byAssignee: Record<string, number>;
+  unassigned: number;
+}
 
 export interface KanbanComment {
   id: string;
@@ -65,6 +74,8 @@ export interface ListKanbanCardsFilter {
   assignee?: string;
   tag?: string;
   includeDone?: boolean;
+  /** Include archived cards. Default false (archived cards are hidden). */
+  includeArchived?: boolean;
 }
 
 export interface KanbanStoreOptions {
@@ -132,9 +143,12 @@ export class KanbanStore {
     const board = await this.readBoard();
     const includeDone = filter.includeDone !== false;
 
+    const includeArchived = filter.includeArchived === true || filter.status === 'archived';
+
     return board.cards
       .filter((card) => {
         if (!includeDone && card.status === 'done') return false;
+        if (!includeArchived && card.status === 'archived') return false;
         if (filter.status && card.status !== filter.status) return false;
         if (filter.priority && card.priority !== filter.priority) return false;
         if (filter.assignee && card.assignee !== filter.assignee) return false;
@@ -218,6 +232,69 @@ export class KanbanStore {
         ...(label?.trim() ? { label: label.trim() } : {}),
       });
     });
+  }
+
+  /** Remove a link by its link id or by target id. Mirrors `hermes kanban unlink`. */
+  async unlinkCard(id: string, linkRef: string): Promise<KanbanCard> {
+    const ref = linkRef.trim();
+    if (!ref) {
+      throw new Error('linkRef is required');
+    }
+    return this.updateCard(id, (card) => {
+      const before = card.links.length;
+      card.links = card.links.filter((link) => link.id !== ref && link.target !== ref);
+      if (card.links.length === before) {
+        throw new Error(`kanban link not found: ${ref}`);
+      }
+    });
+  }
+
+  /** Set or clear a card assignee. Mirrors `hermes kanban assign`. */
+  async assignCard(id: string, assignee: string | null, author?: string): Promise<KanbanCard> {
+    const next = assignee?.trim() || undefined;
+    return this.updateCard(id, (card, now) => {
+      if (next) {
+        card.assignee = next;
+        card.comments.push(this.createComment(`Assigned to ${next}`, now, author));
+      } else {
+        delete card.assignee;
+        card.comments.push(this.createComment('Unassigned', now, author));
+      }
+    });
+  }
+
+  /** Archive a card (hidden from default lists). Mirrors `hermes kanban archive`. */
+  async archiveCard(id: string, comment?: string, author?: string): Promise<KanbanCard> {
+    return this.updateCard(id, (card, now) => {
+      card.status = 'archived';
+      delete card.blockedReason;
+      card.comments.push(this.createComment(comment?.trim() || 'Archived', now, author));
+    });
+  }
+
+  /** Per-status / per-priority / per-assignee counts. Mirrors `hermes kanban stats`. */
+  async stats(): Promise<KanbanStats> {
+    const board = await this.readBoard();
+    const byStatus: Record<KanbanStatus, number> = {
+      todo: 0,
+      in_progress: 0,
+      blocked: 0,
+      done: 0,
+      archived: 0,
+    };
+    const byPriority: Record<KanbanPriority, number> = { low: 0, medium: 0, high: 0, urgent: 0 };
+    const byAssignee: Record<string, number> = {};
+    let unassigned = 0;
+    for (const card of board.cards) {
+      byStatus[card.status] += 1;
+      byPriority[card.priority] += 1;
+      if (card.assignee) {
+        byAssignee[card.assignee] = (byAssignee[card.assignee] ?? 0) + 1;
+      } else {
+        unassigned += 1;
+      }
+    }
+    return { total: board.cards.length, byStatus, byPriority, byAssignee, unassigned };
   }
 
   async readBoard(): Promise<KanbanBoard> {
@@ -374,7 +451,13 @@ function normalizeHeartbeat(heartbeat: Partial<KanbanHeartbeat>): KanbanHeartbea
 }
 
 function normalizeStatus(status: unknown): KanbanStatus {
-  if (status === 'todo' || status === 'in_progress' || status === 'blocked' || status === 'done') {
+  if (
+    status === 'todo' ||
+    status === 'in_progress' ||
+    status === 'blocked' ||
+    status === 'done' ||
+    status === 'archived'
+  ) {
     return status;
   }
   return 'todo';
@@ -401,6 +484,7 @@ function compareCards(a: KanbanCard, b: KanbanCard): number {
     in_progress: 1,
     todo: 2,
     done: 3,
+    archived: 4,
   };
   const priorityOrder: Record<KanbanPriority, number> = {
     urgent: 0,

@@ -212,6 +212,8 @@ import {
   runHermesClawMigrationForReview,
 } from './tools/hermes-claw-migrate-bridge';
 import {
+  archiveHermesKanbanCard,
+  assignHermesKanbanCard,
   blockHermesKanbanCard,
   commentHermesKanbanCard,
   completeHermesKanbanCard,
@@ -219,6 +221,7 @@ import {
   linkHermesKanbanCard,
   listHermesKanbanCards,
   unblockHermesKanbanCard,
+  unlinkHermesKanbanCard,
   type KanbanCreateInput,
   type KanbanListFilter,
 } from './tools/hermes-kanban-bridge';
@@ -4319,6 +4322,48 @@ ipcMain.handle(
       return { card, ok: true };
     } catch (err) {
       logWarn('[hermes.kanban.link] failed:', err);
+      return { error: err instanceof Error ? err.message : String(err), ok: false };
+    }
+  }
+);
+
+ipcMain.handle(
+  'hermes.kanban.unlink',
+  async (_event, payload: { cwd?: string; id: string; linkRef: string }) => {
+    try {
+      const card = await unlinkHermesKanbanCard({ cwd: payload?.cwd, id: payload.id, linkRef: payload.linkRef });
+      if (!card) return { error: 'Kanban store is unavailable.', ok: false };
+      return { card, ok: true };
+    } catch (err) {
+      logWarn('[hermes.kanban.unlink] failed:', err);
+      return { error: err instanceof Error ? err.message : String(err), ok: false };
+    }
+  }
+);
+
+ipcMain.handle(
+  'hermes.kanban.assign',
+  async (_event, payload: { assignee: string | null; cwd?: string; id: string }) => {
+    try {
+      const card = await assignHermesKanbanCard({ assignee: payload.assignee, cwd: payload?.cwd, id: payload.id });
+      if (!card) return { error: 'Kanban store is unavailable.', ok: false };
+      return { card, ok: true };
+    } catch (err) {
+      logWarn('[hermes.kanban.assign] failed:', err);
+      return { error: err instanceof Error ? err.message : String(err), ok: false };
+    }
+  }
+);
+
+ipcMain.handle(
+  'hermes.kanban.archive',
+  async (_event, payload: { comment?: string; cwd?: string; id: string }) => {
+    try {
+      const card = await archiveHermesKanbanCard({ comment: payload?.comment, cwd: payload?.cwd, id: payload.id });
+      if (!card) return { error: 'Kanban store is unavailable.', ok: false };
+      return { card, ok: true };
+    } catch (err) {
+      logWarn('[hermes.kanban.archive] failed:', err);
       return { error: err instanceof Error ? err.message : String(err), ok: false };
     }
   }

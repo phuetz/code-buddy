@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadCoreModule } from '../src/main/utils/core-loader';
 import {
+  archiveHermesKanbanCard,
+  assignHermesKanbanCard,
   blockHermesKanbanCard,
   commentHermesKanbanCard,
   completeHermesKanbanCard,
@@ -8,6 +10,7 @@ import {
   linkHermesKanbanCard,
   listHermesKanbanCards,
   unblockHermesKanbanCard,
+  unlinkHermesKanbanCard,
 } from '../src/main/tools/hermes-kanban-bridge';
 
 vi.mock('../src/main/utils/core-loader', () => ({
@@ -38,6 +41,9 @@ function makeStore() {
     unblockCard: vi.fn().mockResolvedValue({ ...card, status: 'todo' }),
     commentCard: vi.fn().mockResolvedValue(card),
     linkCard: vi.fn().mockResolvedValue(card),
+    unlinkCard: vi.fn().mockResolvedValue({ ...card, links: [] }),
+    assignCard: vi.fn().mockResolvedValue({ ...card, assignee: 'alice' }),
+    archiveCard: vi.fn().mockResolvedValue({ ...card, status: 'archived' }),
   };
 }
 
@@ -70,6 +76,15 @@ describe('Hermes kanban bridge', () => {
     await linkHermesKanbanCard({ cwd: '/ws', id: 'card-1', target: 'https://x' });
     expect(store.commentCard).toHaveBeenCalledWith('card-1', 'hi');
     expect(store.linkCard).toHaveBeenCalledWith('card-1', 'https://x', undefined);
+  });
+
+  it('unlinks, assigns, and archives cards through the store', async () => {
+    expect((await unlinkHermesKanbanCard({ cwd: '/ws', id: 'card-1', linkRef: 'l1' }))?.links).toEqual([]);
+    expect((await assignHermesKanbanCard({ cwd: '/ws', id: 'card-1', assignee: 'alice' }))?.assignee).toBe('alice');
+    expect((await archiveHermesKanbanCard({ cwd: '/ws', id: 'card-1' }))?.status).toBe('archived');
+    expect(store.unlinkCard).toHaveBeenCalledWith('card-1', 'l1');
+    expect(store.assignCard).toHaveBeenCalledWith('card-1', 'alice');
+    expect(store.archiveCard).toHaveBeenCalledWith('card-1', undefined);
   });
 
   it('returns null when the kanban store module is unavailable', async () => {

@@ -2113,6 +2113,7 @@
     "unblock": "Unblock",
     "comment": "Comment",
     "link": "Link",
+    "archive": "Archive",
     "apply": "Apply",
     "blockReason": "Reason…",
     "linkTarget": "Target (URL or id)…",

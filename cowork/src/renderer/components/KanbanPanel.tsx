@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle2, Link2, Loader2, MessageSquare, Plus, X } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Link2, Loader2, MessageSquare, Plus, X } from 'lucide-react';
 import { useAppStore } from '../store';
 import { dialogA11yProps, trapFocus } from '../utils/a11y';
 import type {
@@ -222,6 +222,7 @@ export function KanbanPanel({ onClose }: KanbanPanelProps) {
                           onComment={(text) =>
                             runMutation((api) => api.comment({ cwd, id: card.id, text }))
                           }
+                          onArchive={() => runMutation((api) => api.archive({ cwd, id: card.id }))}
                           onComplete={() => runMutation((api) => api.complete({ cwd, id: card.id }))}
                           onLink={(target) =>
                             runMutation((api) => api.link({ cwd, id: card.id, target }))
@@ -244,12 +245,13 @@ export function KanbanPanel({ onClose }: KanbanPanelProps) {
 const KanbanCardView: React.FC<{
   busy: boolean;
   card: KanbanCardPayload;
+  onArchive: () => void;
   onBlock: (reason: string) => void;
   onComment: (text: string) => void;
   onComplete: () => void;
   onLink: (target: string) => void;
   onUnblock: () => void;
-}> = ({ busy, card, onBlock, onComment, onComplete, onLink, onUnblock }) => {
+}> = ({ busy, card, onArchive, onBlock, onComment, onComplete, onLink, onUnblock }) => {
   const { t } = useTranslation();
   const [drawer, setDrawer] = useState<'none' | 'comment' | 'block' | 'link'>('none');
   const [text, setText] = useState('');
@@ -330,6 +332,14 @@ const KanbanCardView: React.FC<{
           testid={`kanban-link-${card.id}`}
         >
           <Link2 size={12} />
+        </IconBtn>
+        <IconBtn
+          disabled={busy}
+          label={t('kanban.archive', 'Archive')}
+          onClick={onArchive}
+          testid={`kanban-archive-${card.id}`}
+        >
+          <Archive size={12} />
         </IconBtn>
       </div>
 
