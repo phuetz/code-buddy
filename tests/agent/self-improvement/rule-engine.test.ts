@@ -51,6 +51,27 @@ describe('RuleLearningEngine (execution-grounded loop)', () => {
     expect(accepted.some((s) => /must not call write_file/.test(s))).toBe(true);
   });
 
+  it('never forbids an inherently read-only tool, even with a degenerate corpus', () => {
+    // A single FAIL run, no good examples — naive "tool not in good set" would
+    // forbid the FIRST tool (view_file). The read-only guard forbids bash instead.
+    const corpus = [
+      { id: 'real-run', shouldPass: false, trajectory: { toolNames: ['view_file', 'bash'], text: 'safe run shelled out', profile: 'safe' } },
+    ];
+    const ruleStore = new RuleStore({ workDir: dir, now });
+    const engine = new RuleLearningEngine({
+      corpus,
+      proposer: new HeuristicRuleProposer(),
+      ruleStore,
+      autonomy: 'auto-apply',
+      now,
+    });
+    engine.runLoop();
+    const rules = ruleStore.list();
+    expect(rules).toHaveLength(1);
+    expect(rules[0]!.statement).toMatch(/must not call bash/);
+    expect(rules[0]!.statement).not.toMatch(/view_file/);
+  });
+
   it('propose-only validates but persists no rules', () => {
     const ruleStore = new RuleStore({ workDir: dir, now });
     const engine = new RuleLearningEngine({

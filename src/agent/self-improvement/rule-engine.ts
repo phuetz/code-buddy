@@ -30,9 +30,20 @@ export interface RuleProposer {
 }
 
 /**
+ * Tools that are inherently read-only — a rule about a read-only/safe run must
+ * never forbid these (forbidding `view_file` in a "must stay read-only" rule is
+ * self-evidently wrong). Guards against a degenerate corpus (e.g. a single bad
+ * example with no good runs) producing an over-broad rule.
+ */
+const KNOWN_READ_ONLY_TOOLS = new Set([
+  'view_file', 'read_file', 'list_directory', 'search', 'grep', 'glob', 'tool_search',
+]);
+
+/**
  * Deterministic proposer: for a bad run that currently slips through (should be
- * flagged but passes), forbid a tool it used that NO compliant run uses. That is
- * a sound, minimal rule grounded entirely in the recorded behavior.
+ * flagged but passes), forbid a tool it used that NO compliant run uses — and
+ * that is not inherently read-only. A sound, minimal rule grounded in the
+ * recorded behavior.
  */
 export class HeuristicRuleProposer implements RuleProposer {
   propose(
@@ -45,7 +56,9 @@ export class HeuristicRuleProposer implements RuleProposer {
     const goodTools = new Set(
       corpus.filter((c) => c.shouldPass).flatMap((c) => c.trajectory.toolNames),
     );
-    const offending = target.trajectory.toolNames.find((tool) => !goodTools.has(tool));
+    const offending = target.trajectory.toolNames.find(
+      (tool) => !goodTools.has(tool) && !KNOWN_READ_ONLY_TOOLS.has(tool),
+    );
     if (!offending) return null;
     const profile = target.trajectory.profile ? `${target.trajectory.profile}-profile` : 'read-only';
     return {
