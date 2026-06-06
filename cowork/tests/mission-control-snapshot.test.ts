@@ -89,6 +89,23 @@ describe('buildMissionControlSnapshot', () => {
     ];
 
     const snapshot = buildMissionControlSnapshot({
+      discoveredPeers: [
+        {
+          label: 'claude-ministar',
+          source: 'tailscale',
+          url: 'ws://100.64.0.10:3001/ws',
+        },
+        {
+          label: 'already-paired-ministar',
+          source: 'manual',
+          url: 'http://ministar:3000',
+        },
+        {
+          label: 'duplicate-claude-ministar',
+          source: 'manual',
+          url: 'ws://100.64.0.10:3001/ws',
+        },
+      ],
       hostname: 'patrice-win',
       now: new Date('2026-06-06T06:45:00.000Z'),
       peers,
@@ -111,7 +128,7 @@ describe('buildMissionControlSnapshot', () => {
       summary: {
         activeAgents: 2,
         activeWork: 1,
-        agentCount: 3,
+        agentCount: 4,
         errorAgents: 1,
         needsAttention: 1,
         provenWork: 1,
@@ -128,6 +145,23 @@ describe('buildMissionControlSnapshot', () => {
         id: 'reconnect',
       }),
     );
+    const discoveredAgent = snapshot.agents.find((agent) => agent.label === 'claude-ministar');
+    expect(discoveredAgent).toMatchObject({
+      activeWork: 0,
+      kind: 'fleet-peer',
+      machine: 'claude-ministar',
+      status: 'unknown',
+      statusDetail: 'discovered via Tailscale; not paired yet',
+      url: 'ws://100.64.0.10:3001/ws',
+    });
+    expect(discoveredAgent?.actions).toContainEqual(
+      expect.objectContaining({
+        enabled: false,
+        id: 'refresh',
+      }),
+    );
+    expect(snapshot.agents.some((agent) => agent.label === 'already-paired-ministar')).toBe(false);
+    expect(snapshot.agents.some((agent) => agent.label === 'duplicate-claude-ministar')).toBe(false);
     expect(snapshot.work.find((item) => item.id === 'run-proof123456')).toMatchObject({
       filesChanged: ['src/observability/proof-ledger.ts'],
       proof: {

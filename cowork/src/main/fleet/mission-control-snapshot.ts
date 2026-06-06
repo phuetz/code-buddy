@@ -61,6 +61,14 @@ export interface MissionControlAgent {
   url?: string;
 }
 
+export type MissionControlDiscoverySource = 'tailscale' | 'manual';
+
+export interface MissionControlDiscoveredPeer {
+  label: string;
+  source: MissionControlDiscoverySource;
+  url: string;
+}
+
 export interface MissionControlWorkItem {
   actions: MissionControlActionIntent[];
   agentId?: string;
@@ -166,6 +174,7 @@ export interface SagaSummaryLike {
 }
 
 export interface BuildMissionControlSnapshotInput {
+  discoveredPeers?: MissionControlDiscoveredPeer[];
   hostname?: string;
   now?: Date;
   peers: FleetPeer[];
@@ -179,6 +188,7 @@ export function buildMissionControlSnapshot(
   input: BuildMissionControlSnapshotInput,
 ): MissionControlSnapshot {
   const hostname = input.hostname ?? os.hostname();
+  const now = input.now ?? new Date();
   const runs = input.runs ?? input.runStore?.listRuns(25) ?? [];
   const sagas = input.sagas ?? [];
   const work = [
@@ -198,6 +208,7 @@ export function buildMissionControlSnapshot(
   const agents = [
     buildLocalAgent(hostname, localActiveWork),
     ...input.peers.map((peer) => buildPeerAgent(peer, activeWorkByAgent.get(peer.id) ?? 0)),
+    ...buildDiscoveredAgents(input.discoveredPeers ?? [], input.peers, now),
   ];
   const activeWork = work.filter((item) => isActiveWorkStatus(item.status)).length;
   const needsAttention = work.filter((item) =>
@@ -210,7 +221,7 @@ export function buildMissionControlSnapshot(
 
   return {
     schemaVersion: 1,
-    generatedAt: (input.now ?? new Date()).toISOString(),
+    generatedAt: now.toISOString(),
     hostname,
     summary: {
       activeAgents: agents.filter((agent) => agent.status === 'online' || agent.status === 'busy').length,
@@ -227,6 +238,55 @@ export function buildMissionControlSnapshot(
     agents,
     work,
   };
+}
+
+function buildDiscoveredAgents(
+  discoveredPeers: MissionControlDiscoveredPeer[],
+  configuredPeers: FleetPeer[],
+  now: Date,
+): MissionControlAgent[] {
+  const knownUrls = new Set(configuredPeers.map((peer) => peer.url).filter(Boolean));
+  const seenUrls = new Set<string>();
+  return discoveredPeers
+    .filter((peer) => {
+      const url = peer.url.trim();
+      if (!url || knownUrls.has(url) || seenUrls.has(url)) return false;
+      seenUrls.add(url);
+      return true;
+    })
+    .sort((left, right) => left.label.localeCompare(right.label))
+    .map((peer) => buildDiscoveredAgent(peer, now));
+}
+
+function buildDiscoveredAgent(peer: MissionControlDiscoveredPeer, now: Date): MissionControlAgent {
+  const sourceLabel = peer.source === 'tailscale' ? 'Tailscale' : 'manual config';
+  return {
+    actions: [
+      actionIntent('refresh', 'Refresh', discoveredAgentId(peer), 'fleet-peer', {
+        enabled: false,
+        reason: 'Pair this discovered peer from the Fleet panel before refreshing capabilities',
+      }),
+    ],
+    activeWork: 0,
+    id: discoveredAgentId(peer),
+    kind: 'fleet-peer',
+    label: peer.label,
+    lastSeenAt: now.getTime(),
+    machine: peer.label,
+    status: 'unknown',
+    statusDetail: `discovered via ${sourceLabel}; not paired yet`,
+    url: peer.url,
+  };
+}
+
+function discoveredAgentId(peer: MissionControlDiscoveredPeer): string {
+  return `discovered-${peer.source}-${sanitizeAgentId(peer.url)}`;
+}
+
+function sanitizeAgentId(value: string): string {
+  const cleaned = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  if (cleaned.length > 80) return cleaned.slice(0, 80).replace(/-+$/g, '');
+  return cleaned || 'peer';
 }
 
 function buildLocalAgent(hostname: string, activeWork: number): MissionControlAgent {

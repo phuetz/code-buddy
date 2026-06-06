@@ -18,6 +18,10 @@ const sagaRunnerMock = vi.hoisted(() => ({
   instances: [] as Array<{ start: ReturnType<typeof vi.fn> }>,
 }));
 
+const discoveryMock = vi.hoisted(() => ({
+  discoverPeers: vi.fn(),
+}));
+
 vi.mock('electron', () => ({
   ipcMain: {
     handle: electronMock.handle,
@@ -48,14 +52,21 @@ vi.mock('../src/main/utils/logger', () => ({
   logError: vi.fn(),
 }));
 
+vi.mock('../src/main/fleet/discovery', () => ({
+  discoverPeers: discoveryMock.discoverPeers,
+}));
+
 import { dispatchFleetSaga, registerFleetIpcHandlers } from '../src/main/ipc/fleet-ipc';
 import type { FleetBridge } from '../src/main/fleet/fleet-bridge';
+import type { MissionControlSnapshot } from '../src/main/fleet/mission-control-snapshot';
 
 describe('registerFleetIpcHandlers', () => {
   beforeEach(() => {
     electronMock.handlers.clear();
     electronMock.handle.mockClear();
     coreLoaderMock.loadCoreModule.mockReset();
+    discoveryMock.discoverPeers.mockReset();
+    discoveryMock.discoverPeers.mockResolvedValue([]);
     sagaRunnerMock.instances = [];
   });
 
@@ -199,6 +210,20 @@ describe('registerFleetIpcHandlers', () => {
         },
       ]),
     } as unknown as FleetBridge;
+    discoveryMock.discoverPeers.mockResolvedValue([
+      {
+        apiKey: 'manual-secret-token',
+        label: 'already-paired-ministar',
+        source: 'manual',
+        url: 'http://ministar:3000',
+      },
+      {
+        apiKey: 'tailnet-secret-token',
+        label: 'claude-ministar',
+        source: 'tailscale',
+        url: 'ws://100.64.0.10:3001/ws',
+      },
+    ]);
 
     registerFleetIpcHandlers(bridge);
 
@@ -208,6 +233,7 @@ describe('registerFleetIpcHandlers', () => {
     const result = await handler?.({});
 
     expect(bridge.listPeers).toHaveBeenCalled();
+    expect(discoveryMock.discoverPeers).toHaveBeenCalled();
     expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('observability/run-store.js');
     expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('observability/proof-ledger.js');
     expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('fleet/saga-store.js');
@@ -216,7 +242,7 @@ describe('registerFleetIpcHandlers', () => {
       schemaVersion: 1,
       summary: {
         activeWork: 1,
-        agentCount: 2,
+        agentCount: 3,
         provenWork: 1,
         workCount: 2,
       },
@@ -237,6 +263,18 @@ describe('registerFleetIpcHandlers', () => {
         }),
       ],
     });
+    const discoveredAgent = (result as MissionControlSnapshot).agents.find(
+      (agent) => agent.label === 'claude-ministar',
+    );
+    expect(discoveredAgent).toMatchObject({
+      status: 'unknown',
+      statusDetail: 'discovered via Tailscale; not paired yet',
+      url: 'ws://100.64.0.10:3001/ws',
+    });
+    expect(JSON.stringify(discoveredAgent)).not.toContain('tailnet-secret-token');
+    expect((result as MissionControlSnapshot).agents.some(
+      (agent) => agent.label === 'already-paired-ministar',
+    )).toBe(false);
   });
 
   it('refuses Fleet dispatch when no peer has known capabilities', async () => {

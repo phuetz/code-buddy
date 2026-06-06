@@ -11,6 +11,7 @@ import {
   type CoreProofLedgerModuleLike,
   type CoreRunStoreLike,
   type CoreRunSummaryLike,
+  type MissionControlDiscoveredPeer,
   type MissionControlSnapshot,
   type SagaSummaryLike,
 } from '../fleet/mission-control-snapshot';
@@ -234,9 +235,11 @@ export function registerFleetIpcHandlers(
     try {
       const fleetBridge = getFleetBridge();
       const peers = fleetBridge ? await Promise.resolve(fleetBridge.listPeers()) : [];
+      const discoveredPeers = await loadMissionControlDiscoveredPeers(peers);
       const { proofLedger, runs, runStore } = await loadMissionControlRuns();
       const sagas = await loadMissionControlSagas();
       return buildMissionControlSnapshot({
+        discoveredPeers,
         peers,
         proofLedger,
         runs,
@@ -248,6 +251,26 @@ export function registerFleetIpcHandlers(
       return buildMissionControlSnapshot({ peers: [] });
     }
   });
+}
+
+async function loadMissionControlDiscoveredPeers(
+  peers: Array<{ url?: string }>,
+): Promise<MissionControlDiscoveredPeer[]> {
+  try {
+    const { discoverPeers } = await import('../fleet/discovery');
+    const knownUrls = new Set(peers.map((peer) => peer.url).filter(Boolean));
+    const discovered = await discoverPeers();
+    return discovered
+      .filter((peer) => peer.url && !knownUrls.has(peer.url))
+      .map((peer) => ({
+        label: peer.label,
+        source: peer.source,
+        url: peer.url,
+      }));
+  } catch (err) {
+    logWarn('[fleet.missionControlSnapshot] peer discovery unavailable:', err);
+    return [];
+  }
 }
 
 async function loadMissionControlRuns(): Promise<{
