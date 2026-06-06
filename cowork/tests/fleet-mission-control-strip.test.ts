@@ -73,6 +73,7 @@ const snapshot: MissionControlSnapshot = {
         highRiskCount: 0,
         lastCommandDurationMs: 912,
         lastCommandStatus: 'passed',
+        lastCommandText: 'npm test -- tests/cowork/proof.test.ts --run',
         lastCommandTool: 'shell_exec',
         passedTests: 2,
         redactionCount: 0,
@@ -116,7 +117,7 @@ describe('MissionControlStrip', () => {
     expect(target.textContent).toContain('Review Fleet UI');
     expect(target.textContent).toContain('2/2 tests');
     expect(target.textContent).toContain('1 cmd');
-    expect(target.textContent).toContain('shell_exec passed 912ms');
+    expect(target.textContent).toContain('npm test -- tests/cowork/proof.test.ts --run passed 912ms');
     expect(target.textContent).toContain('attention');
 
     const reconnectButton = target.querySelector('button[aria-label="Reconnect"]');

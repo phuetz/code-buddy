@@ -36,6 +36,7 @@ export interface MissionControlProof {
   highRiskCount: number;
   lastCommandDurationMs?: number;
   lastCommandStatus?: 'passed' | 'failed' | 'unknown';
+  lastCommandText?: string;
   lastCommandTool?: string;
   passedTests: number;
   redactionCount: number;
@@ -118,6 +119,7 @@ export interface CoreRunStoreLike {
 }
 
 export interface CoreProofLedgerCommandLike {
+  command?: string;
   durationMs?: number;
   isTest?: boolean;
   sequence?: number;
@@ -375,6 +377,7 @@ function normalizeProof(
     highRiskCount: risks.filter((risk) => risk.level === 'high').length,
     lastCommandDurationMs: lastCommand?.durationMs,
     lastCommandStatus: lastCommand ? mapProofCommandStatus(lastCommand.success) : undefined,
+    lastCommandText: lastCommand?.command,
     lastCommandTool: lastCommand?.toolName,
     passedTests: proof.tests?.passed ?? 0,
     redactionCount: proof.privacy?.redactionCount ?? 0,
@@ -406,6 +409,9 @@ function normalizeProofCommands(commands?: CoreProofLedgerCommandLike[]): CorePr
     .filter((command) => command && typeof command === 'object')
     .map((command, index) => ({
       durationMs: typeof command.durationMs === 'number' ? command.durationMs : undefined,
+      command: typeof command.command === 'string' && command.command.trim()
+        ? command.command.trim()
+        : undefined,
       isTest: command.isTest === true,
       sequence: typeof command.sequence === 'number' ? command.sequence : index + 1,
       success: typeof command.success === 'boolean' ? command.success : undefined,

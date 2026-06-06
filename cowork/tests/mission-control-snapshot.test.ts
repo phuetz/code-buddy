@@ -26,6 +26,7 @@ describe('buildMissionControlSnapshot', () => {
         artifacts: [{ kind: 'summary', name: 'summary.md' }],
         commands: [
           {
+            command: 'npm test -- tests/observability/proof-ledger.test.ts --run',
             durationMs: 640,
             isTest: true,
             sequence: 3,
@@ -41,6 +42,7 @@ describe('buildMissionControlSnapshot', () => {
         tests: {
           commands: [
             {
+              command: 'npm test -- tests/observability/proof-ledger.test.ts --run',
               durationMs: 640,
               isTest: true,
               sequence: 3,
@@ -132,6 +134,7 @@ describe('buildMissionControlSnapshot', () => {
         commandCount: 1,
         lastCommandDurationMs: 640,
         lastCommandStatus: 'passed',
+        lastCommandText: 'npm test -- tests/observability/proof-ledger.test.ts --run',
         lastCommandTool: 'shell_exec',
         passedTests: 2,
         redactionCount: 1,

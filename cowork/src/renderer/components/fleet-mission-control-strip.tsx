@@ -171,6 +171,7 @@ const MissionWorkList: React.FC<{
         <ul className="space-y-1">
           {work.map((item) => {
             const lastCommandDuration = formatMissionDuration(item.proof.lastCommandDurationMs);
+            const lastCommandLabel = item.proof.lastCommandText ?? item.proof.lastCommandTool;
             return (
               <li
                 key={`${item.kind}:${item.id}`}
@@ -190,9 +191,9 @@ const MissionWorkList: React.FC<{
                     {(item.proof.commandCount ?? 0) > 0 && (
                       <MissionChip>{item.proof.commandCount} cmd</MissionChip>
                     )}
-                    {item.proof.lastCommandTool && item.proof.lastCommandStatus && (
+                    {lastCommandLabel && item.proof.lastCommandStatus && (
                       <MissionChip tone={item.proof.lastCommandStatus === 'failed' ? 'attention' : undefined}>
-                        {item.proof.lastCommandTool} {item.proof.lastCommandStatus}
+                        {lastCommandLabel} {item.proof.lastCommandStatus}
                         {lastCommandDuration ? ` ${lastCommandDuration}` : ''}
                       </MissionChip>
                     )}
