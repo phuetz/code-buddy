@@ -17,6 +17,8 @@ import {
   readMaterializedResearchScriptSkillCandidateWithInstallState,
   type ResearchScriptSkillCandidate,
   type ResearchScriptSkillCandidateWithInstallState,
+  type ResearchScriptSkillGradedTask,
+  type ResearchScriptSkillProofCommand,
 } from '../../agent/research-script-skill-candidate.js';
 import { recordLearningSkillUsage } from '../../agent/learning-agent.js';
 import { getSkillsHub } from '../../skills/hub.js';
@@ -182,11 +184,47 @@ function recordSkillManageMutationOutcome(input: {
 type SkillCandidateSummarySource = ResearchScriptSkillCandidate
   & Partial<ResearchScriptSkillCandidateWithInstallState>;
 
+function buildCandidateReplayCommands(candidate: {
+  gradedTasks?: ResearchScriptSkillGradedTask[];
+  proofCommands?: ResearchScriptSkillProofCommand[];
+}): string[] {
+  const commands = [
+    ...(candidate.gradedTasks ?? []).map((task) => task.command),
+    ...(candidate.proofCommands ?? []).map((command) => command.command ?? ''),
+  ]
+    .map((command) => command.trim())
+    .filter((command) => command.length > 0);
+
+  return [...new Set(commands)].slice(-10);
+}
+
+function summarizeCandidateProof(candidate: SkillCandidateSummarySource): Record<string, unknown> | undefined {
+  const gradedTasks = candidate.gradedTasks ?? [];
+  const proofCommands = candidate.proofCommands ?? [];
+  const replayCommands = buildCandidateReplayCommands(candidate);
+
+  if (gradedTasks.length === 0 && proofCommands.length === 0 && replayCommands.length === 0) {
+    return undefined;
+  }
+
+  return {
+    expected: gradedTasks.length > 0 ? 'pass' : 'unknown',
+    gradedTaskCount: gradedTasks.length,
+    latestReplayCommand: replayCommands.at(-1),
+    proofCommandCount: proofCommands.length,
+    replayCommandCount: replayCommands.length,
+    testCommandCount: gradedTasks.filter((task) => task.isTest === true).length,
+  };
+}
+
 function summarizeCandidate(candidate: SkillCandidateSummarySource): Record<string, unknown> {
+  const replayCommands = buildCandidateReplayCommands(candidate);
+  const proofSummary = summarizeCandidateProof(candidate);
   return {
     ...(candidate.candidateChecksum ? { candidateChecksum: candidate.candidateChecksum } : {}),
     ...(candidate.candidateDiffPreview ? { candidateDiffPreview: candidate.candidateDiffPreview } : {}),
     eligible: candidate.eligible,
+    ...(candidate.gradedTasks && candidate.gradedTasks.length > 0 ? { gradedTasks: candidate.gradedTasks } : {}),
     id: candidate.id,
     ...(candidate.installState ? { installState: candidate.installState } : {}),
     ...(candidate.installedChecksum ? { installedChecksum: candidate.installedChecksum } : {}),
@@ -196,7 +234,10 @@ function summarizeCandidate(candidate: SkillCandidateSummarySource): Record<stri
     ...(candidate.installedPath ? { installedPath: candidate.installedPath } : {}),
     ...(candidate.installedVersion ? { installedVersion: candidate.installedVersion } : {}),
     kind: candidate.kind,
+    ...(candidate.proofCommands && candidate.proofCommands.length > 0 ? { proofCommands: candidate.proofCommands } : {}),
+    ...(proofSummary ? { proofSummary } : {}),
     reason: candidate.reason,
+    ...(replayCommands.length > 0 ? { replayCommands } : {}),
     ...(candidate.reviewCommands ? { reviewCommands: candidate.reviewCommands } : {}),
     skillName: candidate.skillName,
     skillPath: candidate.skillPath,

@@ -172,7 +172,20 @@ describe('skills_list and skill_view real SkillsHub integration', () => {
     expect(candidateList.count).toBe(1);
     expect(candidateList.candidates).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        gradedTasks: expect.arrayContaining([
+          expect.objectContaining({
+            command: 'node script.js',
+            expected: 'pass',
+            toolName: 'research_script',
+          }),
+        ]),
         installState: 'not-installed',
+        proofSummary: expect.objectContaining({
+          expected: 'pass',
+          gradedTaskCount: 2,
+          replayCommandCount: 1,
+        }),
+        replayCommands: ['node script.js'],
         reviewCommands: expect.arrayContaining([
           `skill_manage action=candidate_install candidate_path=${candidate.skillPath} approved_by=<reviewer>`,
         ]),
@@ -186,6 +199,11 @@ describe('skills_list and skill_view real SkillsHub integration', () => {
     }));
     expect(candidateView.action).toBe('skill_manage_candidate_view');
     expect(candidateView.candidate).toMatchObject({
+      proofSummary: expect.objectContaining({
+        gradedTaskCount: 2,
+        latestReplayCommand: 'node script.js',
+      }),
+      replayCommands: ['node script.js'],
       installState: 'not-installed',
       skillName: 'research-skill-manage-candidate',
     });
