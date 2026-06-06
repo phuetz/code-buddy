@@ -127,13 +127,16 @@ export function buildMissionControlFocus(
   const agentFocus =
     snapshot.agents.find((agent) => agent.status === 'error') ??
     snapshot.agents.find((agent) => agent.status === 'busy') ??
+    snapshot.agents.find((agent) => agent.status === 'unknown') ??
     snapshot.agents[0];
   if (!agentFocus) return null;
   const prefix = agentFocus.status === 'error'
     ? 'Agent attention'
     : agentFocus.status === 'busy'
       ? 'Agent busy'
-      : 'Agent ready';
+      : agentFocus.status === 'unknown'
+        ? 'Agent discovered'
+        : 'Agent ready';
   return {
     chips: [
       { label: agentFocus.status, tone: agentFocus.status === 'error' ? 'attention' : undefined },
@@ -450,6 +453,7 @@ function StatusIcon({ status }: { status: MissionControlAgent['status'] }) {
   if (status === 'error') return <AlertTriangle size={12} className="shrink-0 text-error" />;
   if (status === 'busy') return <Activity size={12} className="shrink-0 text-accent" />;
   if (status === 'offline') return <Square size={12} className="shrink-0 text-text-muted" />;
+  if (status === 'unknown') return <Laptop2 size={12} className="shrink-0 text-text-muted" />;
   return <Laptop2 size={12} className="shrink-0 text-success" />;
 }
 

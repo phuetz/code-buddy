@@ -156,4 +156,46 @@ describe('MissionControlStrip', () => {
       tone: 'running',
     });
   });
+
+  it('describes unpaired discovered peers without marking them ready', () => {
+    expect(buildMissionControlFocus({
+      ...snapshot,
+      agents: [
+        {
+          actions: [
+            {
+              enabled: false,
+              id: 'refresh',
+              label: 'Refresh',
+              reason: 'Pair this discovered peer first',
+              targetId: 'discovered-tailscale-100-64-0-10',
+              targetKind: 'fleet-peer',
+            },
+          ],
+          activeWork: 0,
+          id: 'discovered-tailscale-100-64-0-10',
+          kind: 'fleet-peer',
+          label: 'claude-ministar',
+          machine: 'claude-ministar',
+          status: 'unknown',
+          statusDetail: 'discovered via Tailscale; not paired yet',
+        },
+      ],
+      summary: {
+        ...snapshot.summary,
+        activeAgents: 0,
+        activeWork: 0,
+        agentCount: 1,
+        errorAgents: 0,
+        needsAttention: 0,
+        workCount: 0,
+      },
+      work: [],
+    })).toEqual({
+      chips: [{ label: 'unknown' }],
+      detail: 'claude-ministar · discovered via Tailscale; not paired yet',
+      headline: 'Agent discovered: claude-ministar',
+      tone: 'neutral',
+    });
+  });
 });
