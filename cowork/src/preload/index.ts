@@ -2562,6 +2562,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         createdAt: number;
       }>
     > => ipcRenderer.invoke('fleet.listSagas'),
+    missionControlSnapshot: (): Promise<unknown> =>
+      ipcRenderer.invoke('fleet.missionControlSnapshot'),
   },
 
   // Reasoning trace viewer (Claude Cowork parity Phase 3 step 17)
@@ -5447,6 +5449,7 @@ declare global {
             createdAt: number;
           }>
         >;
+        missionControlSnapshot: () => Promise<unknown>;
       };
       team: {
         getStatus: () => Promise<unknown>;

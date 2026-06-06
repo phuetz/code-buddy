@@ -104,6 +104,110 @@ describe('registerFleetIpcHandlers', () => {
     await expect(listHandler?.({})).resolves.toEqual(peers);
   });
 
+  it('exposes an Agent Mission Control snapshot across Fleet, RunStore, proofs, and sagas', async () => {
+    const run = {
+      artifactCount: 1,
+      eventCount: 2,
+      metadata: { channel: 'cowork', tags: ['fleet'] },
+      objective: 'Ship proof ledger UI',
+      runId: 'run-proof123456',
+      startedAt: 1_780_000_000_000,
+      status: 'completed' as const,
+    };
+    const listRuns = vi.fn(() => [run]);
+    const getRun = vi.fn(() => ({ summary: run }));
+    const buildProofLedgerForRun = vi.fn(() => ({
+      artifacts: [{ kind: 'summary', name: 'summary.md' }],
+      filesChanged: ['cowork/src/main/fleet/mission-control-snapshot.ts'],
+      privacy: { redactionCount: 0 },
+      risks: [],
+      status: 'proven' as const,
+      tests: { failed: 0, passed: 1, total: 1 },
+    }));
+    coreLoaderMock.loadCoreModule.mockImplementation(async (moduleName: string) => {
+      switch (moduleName) {
+        case 'observability/run-store.js':
+          return {
+            RunStore: {
+              getInstance: () => ({ getRun, listRuns }),
+            },
+          };
+        case 'observability/proof-ledger.js':
+          return { buildProofLedgerForRun };
+        case 'fleet/saga-store.js':
+          return {
+            getSagaStore: () => ({
+              list: vi.fn(async () => [
+                {
+                  createdAt: 1_780_000_100_000,
+                  goal: 'Review Fleet UI',
+                  id: 'saga-review123456',
+                  status: 'running',
+                  steps: [{ peerId: 'ministar-linux', status: 'running' }],
+                },
+              ]),
+            }),
+          };
+        default:
+          return null;
+      }
+    });
+    const bridge = {
+      listPeers: vi.fn(async () => [
+        {
+          addedAt: 1,
+          capability: {
+            activeRequests: 1,
+            egress: 'lan',
+            machineLabel: 'ministar-linux',
+            models: [
+              {
+                contextWindow: 200_000,
+                id: 'gpt-5.4',
+                provider: 'chatgpt-oauth',
+                strengths: ['code'],
+              },
+            ],
+          },
+          id: 'ministar-linux',
+          status: 'authenticated',
+          url: 'http://ministar:3000',
+        },
+      ]),
+    } as unknown as FleetBridge;
+
+    registerFleetIpcHandlers(bridge);
+
+    const handler = electronMock.handlers.get('fleet.missionControlSnapshot');
+    expect(handler).toBeDefined();
+
+    const result = await handler?.({});
+
+    expect(bridge.listPeers).toHaveBeenCalled();
+    expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('observability/run-store.js');
+    expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('observability/proof-ledger.js');
+    expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('fleet/saga-store.js');
+    expect(buildProofLedgerForRun).toHaveBeenCalledWith(expect.any(Object), 'run-proof123456');
+    expect(result).toMatchObject({
+      schemaVersion: 1,
+      summary: {
+        activeWork: 1,
+        agentCount: 2,
+        provenWork: 1,
+        workCount: 2,
+      },
+      work: [
+        expect.objectContaining({ id: 'saga-review123456', kind: 'saga' }),
+        expect.objectContaining({
+          filesChanged: ['cowork/src/main/fleet/mission-control-snapshot.ts'],
+          id: 'run-proof123456',
+          kind: 'run',
+          proof: expect.objectContaining({ passedTests: 1, status: 'proven' }),
+        }),
+      ],
+    });
+  });
+
   it('refuses Fleet dispatch when no peer has known capabilities', async () => {
     const modules = installDispatchCoreModules();
     const bridge = {

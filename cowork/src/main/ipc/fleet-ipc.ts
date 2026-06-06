@@ -7,6 +7,14 @@ import { sendToRenderer } from '../ipc-main-bridge';
 import type { ActivityFeed } from '../activity/activity-feed';
 import { resolveWorkDir, type ProjectManagerSource } from './ipc-workdir';
 import {
+  buildMissionControlSnapshot,
+  type CoreProofLedgerModuleLike,
+  type CoreRunStoreLike,
+  type CoreRunSummaryLike,
+  type MissionControlSnapshot,
+  type SagaSummaryLike,
+} from '../fleet/mission-control-snapshot';
+import {
   buildFleetInternetProofPlan,
   buildInternetProofSummaryMetadata,
   summarizeInternetProofPlan,
@@ -221,6 +229,72 @@ export function registerFleetIpcHandlers(
       return [];
     }
   });
+
+  ipcMain.handle('fleet.missionControlSnapshot', async (): Promise<MissionControlSnapshot> => {
+    try {
+      const fleetBridge = getFleetBridge();
+      const peers = fleetBridge ? await Promise.resolve(fleetBridge.listPeers()) : [];
+      const { proofLedger, runs, runStore } = await loadMissionControlRuns();
+      const sagas = await loadMissionControlSagas();
+      return buildMissionControlSnapshot({
+        peers,
+        proofLedger,
+        runs,
+        runStore,
+        sagas,
+      });
+    } catch (err) {
+      logError('[fleet.missionControlSnapshot] failed:', err);
+      return buildMissionControlSnapshot({ peers: [] });
+    }
+  });
+}
+
+async function loadMissionControlRuns(): Promise<{
+  proofLedger: CoreProofLedgerModuleLike | null;
+  runs: CoreRunSummaryLike[];
+  runStore: CoreRunStoreLike | null;
+}> {
+  try {
+    type RunStoreMod = {
+      RunStore?: {
+        getInstance?: () => CoreRunStoreLike;
+      };
+    };
+    const runStoreMod = await loadCoreModule<RunStoreMod>('observability/run-store.js');
+    const runStore = runStoreMod?.RunStore?.getInstance?.() ?? null;
+    if (!runStore) {
+      return { proofLedger: null, runs: [], runStore: null };
+    }
+    let proofLedger: CoreProofLedgerModuleLike | null = null;
+    try {
+      proofLedger = await loadCoreModule<CoreProofLedgerModuleLike>('observability/proof-ledger.js');
+    } catch (err) {
+      logWarn('[fleet.missionControlSnapshot] proof ledger unavailable:', err);
+    }
+    return {
+      proofLedger,
+      runs: runStore.listRuns(25),
+      runStore,
+    };
+  } catch (err) {
+    logWarn('[fleet.missionControlSnapshot] run store unavailable:', err);
+    return { proofLedger: null, runs: [], runStore: null };
+  }
+}
+
+async function loadMissionControlSagas(): Promise<SagaSummaryLike[]> {
+  try {
+    type SagaMod = {
+      getSagaStore: () => { list: () => Promise<SagaSummaryLike[]> | SagaSummaryLike[] };
+    };
+    const sagaMod = await loadCoreModule<SagaMod>('fleet/saga-store.js');
+    if (!sagaMod) return [];
+    return await Promise.resolve(sagaMod.getSagaStore().list());
+  } catch (err) {
+    logWarn('[fleet.missionControlSnapshot] saga store unavailable:', err);
+    return [];
+  }
 }
 
 export async function dispatchFleetSaga(

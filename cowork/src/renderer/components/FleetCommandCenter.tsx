@@ -82,11 +82,16 @@ import { LessonsVaultGraph } from './LessonsVaultGraph';
 import { SagaBoard } from './fleet-saga-board';
 import { PeerDetail, PeerRow } from './fleet-peer-panel';
 import { SagaDetail } from './fleet-saga-detail';
+import { MissionControlStrip } from './fleet-mission-control-strip';
 import {
   buildFleetInternetProofPlan,
   buildInternetProofSummaryMetadata,
   summarizeInternetProofPlan,
 } from '../../shared/internet-proof-metadata';
+import type {
+  MissionControlActionIntent,
+  MissionControlSnapshot,
+} from '../../main/fleet/mission-control-snapshot';
 
 interface Props {
   isOpen: boolean;
@@ -176,6 +181,8 @@ function buildDispatchRunMetadata(run: AgentRun | null): Partial<FleetDispatchRe
 
 interface FleetApiBridge {
   list?: () => Promise<FleetPeer[]>;
+  missionControlSnapshot?: () => Promise<MissionControlSnapshot>;
+  reconnect?: (peerId: string) => Promise<{ success: boolean; error?: string }>;
   refreshCapabilities?: (peerId?: string) => Promise<FleetRefreshResult>;
 }
 
@@ -291,6 +298,9 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   const [skillCandidates, setSkillCandidates] = useState<SkillCandidateReviewQueueItem[]>([]);
   const [skillCandidateLoadError, setSkillCandidateLoadError] = useState<string | null>(null);
   const [skillCandidateRefreshToken, setSkillCandidateRefreshToken] = useState(0);
+  const [missionSnapshot, setMissionSnapshot] = useState<MissionControlSnapshot | null>(null);
+  const [missionSnapshotError, setMissionSnapshotError] = useState<string | null>(null);
+  const [missionRefreshToken, setMissionRefreshToken] = useState(0);
   const [includeMemoryContext, setIncludeMemoryContext] = useState(true);
   const [dispatching, setDispatching] = useState(false);
   const [refreshingPeerId, setRefreshingPeerId] = useState<string | null>(null);
@@ -408,6 +418,30 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
       cancelled = true;
     };
   }, [isOpen, setFleetPeers]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadMissionSnapshot = async () => {
+      try {
+        const snapshot = await getFleetApi()?.missionControlSnapshot?.();
+        if (!cancelled && snapshot) {
+          setMissionSnapshot(snapshot);
+          setMissionSnapshotError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setMissionSnapshotError(err instanceof Error ? err.message : String(err));
+        }
+      }
+    };
+    void loadMissionSnapshot();
+    const id = setInterval(loadMissionSnapshot, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [isOpen, missionRefreshToken, sagaUpdateToken]);
 
   // Refresh sagas every 3s while open.
   useEffect(() => {
@@ -552,6 +586,42 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRefreshingPeerId(null);
+    }
+  };
+
+  const handleMissionAction = async (action: MissionControlActionIntent) => {
+    if (action.targetKind === 'fleet-peer' && action.id === 'refresh') {
+      await handleRefreshPeers(action.targetId);
+      setMissionRefreshToken((value) => value + 1);
+      return;
+    }
+
+    if (action.targetKind === 'fleet-peer' && action.id === 'reconnect') {
+      if (refreshingPeerId) return;
+      setRefreshingPeerId(action.targetId);
+      setError(null);
+      try {
+        const api = getFleetApi();
+        const result = await api?.reconnect?.(action.targetId);
+        if (!result?.success) {
+          setError(result?.error ?? 'peer reconnect failed');
+          return;
+        }
+        const list = await api?.list?.();
+        if (list) setFleetPeers(list);
+        setMissionRefreshToken((value) => value + 1);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setRefreshingPeerId(null);
+      }
+      return;
+    }
+
+    if (action.targetKind === 'saga' && action.id === 'audit') {
+      setSelectedSagaId(action.targetId);
+      setSelectedPeerId(null);
+      setSelectedOutcomeId(null);
     }
   };
 
@@ -867,6 +937,13 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
               </button>
             </div>
           </div>
+
+          <MissionControlStrip
+            error={missionSnapshotError}
+            onAction={handleMissionAction}
+            refreshing={refreshingPeers}
+            snapshot={missionSnapshot}
+          />
 
           {/* Body */}
           <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,0.9fr)_minmax(430px,1.2fr)_minmax(300px,0.95fr)]">
