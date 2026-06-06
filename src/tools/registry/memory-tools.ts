@@ -57,6 +57,7 @@ export class RememberTool implements ITool {
           : category;
       }
 
+      scope = guardAutomatedMemoryScope(scope);
       await mm.remember(key, value, { scope, category });
       return {
         success: true,
@@ -131,6 +132,26 @@ export class RememberTool implements ITool {
   isAvailable(): boolean {
     return true;
   }
+}
+
+const AUTOMATED_MEMORY_SCOPE_GUARD_FLAGS = [
+  'CODEBUDDY_SELF_IMPROVEMENT',
+  'CODEBUDDY_SELF_IMPROVE',
+  'CODEBUDDY_LEARNING_BACKGROUND_REVIEW',
+  'CODEBUDDY_LEARNING_BACKGROUND_WRITE_SKILLS',
+  'CODEBUDDY_LEARNING_DAEMON',
+];
+
+function guardAutomatedMemoryScope(scope: 'project' | 'user'): 'project' | 'user' {
+  if (scope !== 'user') return scope;
+  return AUTOMATED_MEMORY_SCOPE_GUARD_FLAGS.some((name) => isTruthyEnv(process.env[name]))
+    ? 'project'
+    : scope;
+}
+
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  return !['0', 'false', 'off', 'no'].includes(value.trim().toLowerCase());
 }
 
 // ============================================================================
