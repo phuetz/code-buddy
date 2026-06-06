@@ -49,9 +49,10 @@ Code Buddy is an open-source multi-provider AI coding agent that runs in your te
 
 **ChatGPT Pro / Plus subscription login (Phase d.23+)** — `buddy login`, sign in once with your ChatGPT account, then chat with `gpt-5.5` directly from the terminal. No API key, cost reported as `$0.0000` (flat-fee plan).
 
-<p align="center">
-  <img src="docs/screenshots/chatgpt-oauth-login.png" alt="ChatGPT OAuth login flow" width="900"/>
-</p>
+Public OAuth screenshots are intentionally omitted: the browser callback and
+terminal success view can include account claims or short-lived authorization
+material. See [`docs/screenshots/`](docs/screenshots/README.md) for the
+redacted flow notes.
 
 **Interactive TUI + tool calling.** The agent reads project context, calls tools in parallel (`web_search` ×2 for the screenshot below), and streams the synthesised answer.
 
@@ -91,7 +92,7 @@ buddy --prompt "analyze the codebase structure"
 buddy --yolo
 ```
 
-See [Getting Started](docs/getting-started.md) for installation options, headless mode, session management, and typical workflows. The ChatGPT Codex OAuth flow is documented with screenshots in [`docs/screenshots/`](docs/screenshots/README.md).
+See [Getting Started](docs/getting-started.md) for installation options, headless mode, session management, and typical workflows. The ChatGPT Codex OAuth flow is documented with public-safe notes in [`docs/screenshots/`](docs/screenshots/README.md).
 
 ---
 

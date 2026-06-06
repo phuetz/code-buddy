@@ -83,7 +83,10 @@ the user signs in with their ChatGPT account, the callback returns to
 `~/.codebuddy/codex-auth.json`. Account claims (email, plan,
 account_id, FedRAMP) are extracted from the id_token.
 
-![ChatGPT OAuth login](./chatgpt-oauth-login.png)
+No public screenshot is embedded for this step. OAuth callback URLs, terminal
+success output, account identifiers, and token storage paths are easy to leak in
+full-screen captures, so publish only redacted crops or synthetic diagrams for
+this flow.
 
 ### 2.2 Backend rejects the model — `Instructions are required`
 
