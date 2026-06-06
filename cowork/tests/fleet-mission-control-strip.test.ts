@@ -68,12 +68,17 @@ const snapshot: MissionControlSnapshot = {
       kind: 'saga',
       proof: {
         artifactCount: 1,
+        commandCount: 1,
         failedTests: 0,
         highRiskCount: 0,
+        lastCommandDurationMs: 912,
+        lastCommandStatus: 'passed',
+        lastCommandTool: 'shell_exec',
         passedTests: 2,
         redactionCount: 0,
         riskCount: 0,
         status: 'proven',
+        testCommandCount: 1,
         totalTests: 2,
       },
       source: 'fleet',
@@ -110,6 +115,8 @@ describe('MissionControlStrip', () => {
     expect(target.textContent).toContain('MiniStar');
     expect(target.textContent).toContain('Review Fleet UI');
     expect(target.textContent).toContain('2/2 tests');
+    expect(target.textContent).toContain('1 cmd');
+    expect(target.textContent).toContain('shell_exec passed 912ms');
     expect(target.textContent).toContain('attention');
 
     const reconnectButton = target.querySelector('button[aria-label="Reconnect"]');

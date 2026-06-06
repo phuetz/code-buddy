@@ -169,40 +169,62 @@ const MissionWorkList: React.FC<{
         </div>
       ) : (
         <ul className="space-y-1">
-          {work.map((item) => (
-            <li
-              key={`${item.kind}:${item.id}`}
-              className="flex min-h-[42px] items-center gap-2 rounded border border-border-muted bg-background/50 px-2 py-1"
-            >
-              <ProofIcon status={item.proof.status} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[11px] text-text-secondary">{item.title}</div>
-                <div className="mt-0.5 flex flex-wrap gap-1">
-                  <MissionChip>{item.kind}</MissionChip>
-                  <MissionChip>{item.status}</MissionChip>
-                  {item.proof.totalTests > 0 && (
-                    <MissionChip>
-                      {item.proof.passedTests}/{item.proof.totalTests} tests
-                    </MissionChip>
-                  )}
-                  {item.filesChanged.length > 0 && (
-                    <MissionChip>{item.filesChanged.length} files</MissionChip>
-                  )}
-                  {item.proof.highRiskCount > 0 && (
-                    <MissionChip tone="attention">
-                      {item.proof.highRiskCount} high risk
-                    </MissionChip>
-                  )}
+          {work.map((item) => {
+            const lastCommandDuration = formatMissionDuration(item.proof.lastCommandDurationMs);
+            return (
+              <li
+                key={`${item.kind}:${item.id}`}
+                className="flex min-h-[42px] items-center gap-2 rounded border border-border-muted bg-background/50 px-2 py-1"
+              >
+                <ProofIcon status={item.proof.status} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[11px] text-text-secondary">{item.title}</div>
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    <MissionChip>{item.kind}</MissionChip>
+                    <MissionChip>{item.status}</MissionChip>
+                    {item.proof.totalTests > 0 && (
+                      <MissionChip>
+                        {item.proof.passedTests}/{item.proof.totalTests} tests
+                      </MissionChip>
+                    )}
+                    {(item.proof.commandCount ?? 0) > 0 && (
+                      <MissionChip>{item.proof.commandCount} cmd</MissionChip>
+                    )}
+                    {item.proof.lastCommandTool && item.proof.lastCommandStatus && (
+                      <MissionChip tone={item.proof.lastCommandStatus === 'failed' ? 'attention' : undefined}>
+                        {item.proof.lastCommandTool} {item.proof.lastCommandStatus}
+                        {lastCommandDuration ? ` ${lastCommandDuration}` : ''}
+                      </MissionChip>
+                    )}
+                    {item.filesChanged.length > 0 && (
+                      <MissionChip>{item.filesChanged.length} files</MissionChip>
+                    )}
+                    {item.proof.highRiskCount > 0 && (
+                      <MissionChip tone="attention">
+                        {item.proof.highRiskCount} high risk
+                      </MissionChip>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <MissionActions actions={item.actions} onAction={onAction} />
-            </li>
-          ))}
+                <MissionActions actions={item.actions} onAction={onAction} />
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
   );
 };
+
+function formatMissionDuration(ms?: number): string | null {
+  if (!ms || ms <= 0) return null;
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds - minutes * 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
 
 const MissionChip: React.FC<{
   children: React.ReactNode;

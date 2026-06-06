@@ -31,12 +31,17 @@ export interface MissionControlActionIntent {
 
 export interface MissionControlProof {
   artifactCount: number;
+  commandCount: number;
   failedTests: number;
   highRiskCount: number;
+  lastCommandDurationMs?: number;
+  lastCommandStatus?: 'passed' | 'failed' | 'unknown';
+  lastCommandTool?: string;
   passedTests: number;
   redactionCount: number;
   riskCount: number;
   status: MissionControlProofStatus;
+  testCommandCount: number;
   totalTests: number;
 }
 
@@ -112,8 +117,18 @@ export interface CoreRunStoreLike {
   listRuns(limit?: number): CoreRunSummaryLike[];
 }
 
+export interface CoreProofLedgerCommandLike {
+  durationMs?: number;
+  isTest?: boolean;
+  sequence?: number;
+  success?: boolean;
+  toolName?: string;
+  ts?: number;
+}
+
 export interface CoreProofLedgerLike {
   artifacts?: unknown[];
+  commands?: CoreProofLedgerCommandLike[];
   filesChanged?: unknown[];
   privacy?: {
     redactionCount?: number;
@@ -123,6 +138,7 @@ export interface CoreProofLedgerLike {
   }>;
   status?: MissionControlProofStatus;
   tests?: {
+    commands?: CoreProofLedgerCommandLike[];
     failed?: number;
     passed?: number;
     total?: number;
@@ -348,14 +364,23 @@ function normalizeProof(
     return emptyProof(run.status === 'completed' ? 'unknown' : run.status === 'failed' ? 'failed' : 'incomplete');
   }
   const risks = Array.isArray(proof.risks) ? proof.risks : [];
+  const commands = normalizeProofCommands(proof.commands);
+  const testCommands = normalizeProofCommands(proof.tests?.commands);
+  const commandTimeline = commands.length > 0 ? commands : testCommands;
+  const lastCommand = commandTimeline.at(-1);
   return {
     artifactCount: Array.isArray(proof.artifacts) ? proof.artifacts.length : run.artifactCount ?? 0,
+    commandCount: commandTimeline.length,
     failedTests: proof.tests?.failed ?? 0,
     highRiskCount: risks.filter((risk) => risk.level === 'high').length,
+    lastCommandDurationMs: lastCommand?.durationMs,
+    lastCommandStatus: lastCommand ? mapProofCommandStatus(lastCommand.success) : undefined,
+    lastCommandTool: lastCommand?.toolName,
     passedTests: proof.tests?.passed ?? 0,
     redactionCount: proof.privacy?.redactionCount ?? 0,
     riskCount: risks.length,
     status: proof.status ?? 'unknown',
+    testCommandCount: testCommands.length || commandTimeline.filter((command) => command.isTest).length,
     totalTests: proof.tests?.total ?? 0,
   };
 }
@@ -363,14 +388,39 @@ function normalizeProof(
 function emptyProof(status: MissionControlProofStatus): MissionControlProof {
   return {
     artifactCount: 0,
+    commandCount: 0,
     failedTests: 0,
     highRiskCount: 0,
     passedTests: 0,
     redactionCount: 0,
     riskCount: 0,
     status,
+    testCommandCount: 0,
     totalTests: 0,
   };
+}
+
+function normalizeProofCommands(commands?: CoreProofLedgerCommandLike[]): CoreProofLedgerCommandLike[] {
+  if (!Array.isArray(commands)) return [];
+  return commands
+    .filter((command) => command && typeof command === 'object')
+    .map((command, index) => ({
+      durationMs: typeof command.durationMs === 'number' ? command.durationMs : undefined,
+      isTest: command.isTest === true,
+      sequence: typeof command.sequence === 'number' ? command.sequence : index + 1,
+      success: typeof command.success === 'boolean' ? command.success : undefined,
+      toolName: typeof command.toolName === 'string' && command.toolName.trim()
+        ? command.toolName.trim()
+        : 'unknown_tool',
+      ts: typeof command.ts === 'number' ? command.ts : undefined,
+    }))
+    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+}
+
+function mapProofCommandStatus(success?: boolean): MissionControlProof['lastCommandStatus'] {
+  if (success === true) return 'passed';
+  if (success === false) return 'failed';
+  return 'unknown';
 }
 
 function mapPeerStatus(

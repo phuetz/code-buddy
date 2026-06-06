@@ -118,11 +118,35 @@ describe('registerFleetIpcHandlers', () => {
     const getRun = vi.fn(() => ({ summary: run }));
     const buildProofLedgerForRun = vi.fn(() => ({
       artifacts: [{ kind: 'summary', name: 'summary.md' }],
+      commands: [
+        {
+          durationMs: 520,
+          isTest: true,
+          sequence: 2,
+          success: true,
+          toolName: 'shell_exec',
+          ts: 1_780_000_000_200,
+        },
+      ],
       filesChanged: ['cowork/src/main/fleet/mission-control-snapshot.ts'],
       privacy: { redactionCount: 0 },
       risks: [],
       status: 'proven' as const,
-      tests: { failed: 0, passed: 1, total: 1 },
+      tests: {
+        commands: [
+          {
+            durationMs: 520,
+            isTest: true,
+            sequence: 2,
+            success: true,
+            toolName: 'shell_exec',
+            ts: 1_780_000_000_200,
+          },
+        ],
+        failed: 0,
+        passed: 1,
+        total: 1,
+      },
     }));
     coreLoaderMock.loadCoreModule.mockImplementation(async (moduleName: string) => {
       switch (moduleName) {
@@ -202,7 +226,14 @@ describe('registerFleetIpcHandlers', () => {
           filesChanged: ['cowork/src/main/fleet/mission-control-snapshot.ts'],
           id: 'run-proof123456',
           kind: 'run',
-          proof: expect.objectContaining({ passedTests: 1, status: 'proven' }),
+          proof: expect.objectContaining({
+            commandCount: 1,
+            lastCommandStatus: 'passed',
+            lastCommandTool: 'shell_exec',
+            passedTests: 1,
+            status: 'proven',
+            testCommandCount: 1,
+          }),
         }),
       ],
     });

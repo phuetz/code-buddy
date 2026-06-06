@@ -24,11 +24,31 @@ describe('buildMissionControlSnapshot', () => {
     const proofLedger: CoreProofLedgerModuleLike = {
       buildProofLedgerForRun: vi.fn(() => ({
         artifacts: [{ kind: 'summary', name: 'summary.md' }],
+        commands: [
+          {
+            durationMs: 640,
+            isTest: true,
+            sequence: 3,
+            success: true,
+            toolName: 'shell_exec',
+            ts: 1_780_000_000_200,
+          },
+        ],
         filesChanged: ['src/observability/proof-ledger.ts'],
         privacy: { redactionCount: 1 },
         risks: [],
         status: 'proven',
         tests: {
+          commands: [
+            {
+              durationMs: 640,
+              isTest: true,
+              sequence: 3,
+              success: true,
+              toolName: 'shell_exec',
+              ts: 1_780_000_000_200,
+            },
+          ],
           failed: 0,
           passed: 2,
           total: 2,
@@ -109,9 +129,14 @@ describe('buildMissionControlSnapshot', () => {
     expect(snapshot.work.find((item) => item.id === 'run-proof123456')).toMatchObject({
       filesChanged: ['src/observability/proof-ledger.ts'],
       proof: {
+        commandCount: 1,
+        lastCommandDurationMs: 640,
+        lastCommandStatus: 'passed',
+        lastCommandTool: 'shell_exec',
         passedTests: 2,
         redactionCount: 1,
         status: 'proven',
+        testCommandCount: 1,
         totalTests: 2,
       },
       source: 'fleet',
