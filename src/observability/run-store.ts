@@ -17,6 +17,7 @@ import { randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
 import { logger } from '../utils/logger.js';
 import { executeHermesLifecycleHook } from '../hooks/hermes-lifecycle-hooks.js';
+import { isProofLedgerArtifact } from './proof-ledger-constants.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -450,7 +451,17 @@ export class RunStore {
       // Ignore
     }
 
-    const afterStreamClosed = (): void => {
+    const afterStreamClosed = async (): Promise<void> => {
+      try {
+        const { writeRunProofLedgerArtifact } = await import('./proof-ledger.js');
+        writeRunProofLedgerArtifact(this, runId);
+      } catch (err) {
+        logger.debug('RunStore: Proof Ledger artifact failed', {
+          runId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
       executeHermesLifecycleHook(process.cwd(), 'after_run_complete', {
         runId,
         runStatus: status,
@@ -477,10 +488,14 @@ export class RunStore {
     // Close write stream before post-run analyzers read events.jsonl.
     const ws = this.handles.get(runId);
     if (ws) {
-      ws.end(afterStreamClosed);
+      ws.end(() => {
+        void afterStreamClosed();
+      });
       this.handles.delete(runId);
     } else {
-      queueMicrotask(afterStreamClosed);
+      queueMicrotask(() => {
+        void afterStreamClosed();
+      });
     }
 
     if (this._currentRunId === runId) {
@@ -500,20 +515,26 @@ export class RunStore {
     const artifactsDir = path.join(this.runDir(runId), 'artifacts');
     this.ensureDir(artifactsDir);
 
-    const filePath = path.join(artifactsDir, name);
+    const filePath = this.resolveArtifactPath(runId, name);
+    this.ensureDir(path.dirname(filePath));
     fs.writeFileSync(filePath, content, 'utf-8');
-    this.indexArtifactForSearch(runId, name, content);
+    const isSystemArtifact = isProofLedgerArtifact(name);
+    if (!isSystemArtifact) {
+      this.indexArtifactForSearch(runId, name, content);
+    }
 
     const summary = this.summaries.get(runId);
-    if (summary) {
+    if (summary && !isSystemArtifact) {
       summary.artifactCount = (summary.artifactCount || 0) + 1;
       this.saveSummary(runId, summary);
     }
 
-    this.emit(runId, {
-      type: 'patch_created',
-      data: { artifact: name, path: filePath },
-    });
+    if (!isSystemArtifact) {
+      this.emit(runId, {
+        type: 'patch_created',
+        data: { artifact: name, path: filePath },
+      });
+    }
 
     return filePath;
   }
@@ -562,7 +583,9 @@ export class RunStore {
     try {
       const artifactsDir = path.join(runDir, 'artifacts');
       if (fs.existsSync(artifactsDir)) {
-        artifacts.push(...fs.readdirSync(artifactsDir));
+        artifacts.push(...this.listArtifactNames(artifactsDir).filter((artifact) =>
+          !isProofLedgerArtifact(artifact),
+        ));
       }
     } catch {
       // Ignore
@@ -660,8 +683,8 @@ export class RunStore {
    * Read artifact content.
    */
   getArtifact(runId: string, name: string): string | null {
-    const filePath = path.join(this.runDir(runId), 'artifacts', name);
     try {
+      const filePath = this.resolveArtifactPath(runId, name);
       return fs.readFileSync(filePath, 'utf-8');
     } catch {
       return null;
@@ -743,6 +766,9 @@ export class RunStore {
       if (includeArtifacts) {
         const record = this.getRun(summary.runId);
         for (const artifact of record?.artifacts ?? []) {
+          if (isProofLedgerArtifact(artifact)) {
+            continue;
+          }
           if (indexedArtifacts.has(`${summary.runId}\u0000${artifact}`)) {
             continue;
           }
@@ -798,13 +824,18 @@ export class RunStore {
 
     if (!db) {
       result.skippedCount = selectedRuns.reduce((count, summary) =>
-        count + (this.getRun(summary.runId)?.artifacts.length ?? 0), 0);
+        count + (this.getRun(summary.runId)?.artifacts.filter((artifact) =>
+          !isProofLedgerArtifact(artifact),
+        ).length ?? 0), 0);
       return result;
     }
 
     for (const summary of selectedRuns) {
       const record = this.getRun(summary.runId);
       for (const artifact of record?.artifacts ?? []) {
+        if (isProofLedgerArtifact(artifact)) {
+          continue;
+        }
         result.artifactCount += 1;
         const artifactText = this.readArtifactForSearch(summary.runId, artifact);
         if (this.indexArtifactForSearch(summary.runId, artifact, artifactText)) {
@@ -1153,6 +1184,9 @@ export class RunStore {
 
       const hits: RunSearchResult[] = [];
       for (const row of rows) {
+        if (isProofLedgerArtifact(row.artifact)) {
+          continue;
+        }
         const summary = this.summaries.get(row.runId);
         if (!summary || !matchesRunSearchSources(summary, sources)) {
           continue;
@@ -1180,8 +1214,8 @@ export class RunStore {
   }
 
   private readArtifactForSearch(runId: string, name: string): string {
-    const filePath = path.join(this.runDir(runId), 'artifacts', name);
     try {
+      const filePath = this.resolveArtifactPath(runId, name);
       const stat = fs.statSync(filePath);
       if (!stat.isFile()) return '';
       const fd = fs.openSync(filePath, 'r');
@@ -1196,6 +1230,33 @@ export class RunStore {
     } catch {
       return '';
     }
+  }
+
+  private listArtifactNames(artifactsDir: string): string[] {
+    const names: string[] = [];
+    const visit = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          visit(fullPath);
+          continue;
+        }
+        if (entry.isFile()) {
+          names.push(path.relative(artifactsDir, fullPath).split(path.sep).join('/'));
+        }
+      }
+    };
+    visit(artifactsDir);
+    return names.sort((a, b) => a.localeCompare(b));
+  }
+
+  private resolveArtifactPath(runId: string, name: string): string {
+    const artifactsDir = path.resolve(this.runDir(runId), 'artifacts');
+    const filePath = path.resolve(artifactsDir, name);
+    if (filePath !== artifactsDir && filePath.startsWith(`${artifactsDir}${path.sep}`)) {
+      return filePath;
+    }
+    throw new Error(`Artifact path escapes run artifacts directory: ${name}`);
   }
 
   private ensureDir(dir: string): void {

@@ -14,6 +14,10 @@ import {
   renderRunTrajectoryExport,
 } from './run-trajectory-export.js';
 import {
+  buildProofLedgerForRun,
+  renderProofLedger,
+} from './proof-ledger.js';
+import {
   buildGoldenWorkflowEvalManifest,
   evaluateGoldenWorkflowRun,
   getGoldenWorkflowEvalFixture,
@@ -593,6 +597,26 @@ export async function showRunTrajectoryExport(
   }
 
   console.log(renderRunTrajectoryExport(exported));
+}
+
+/**
+ * Show the automatic proof ledger card for a run.
+ */
+export function showRunProofLedger(runId: string, json = false): void {
+  const store = RunStore.getInstance();
+  const entry = buildProofLedgerForRun(store, runId);
+
+  if (!entry) {
+    console.error(`Run not found: ${runId}`);
+    process.exit(1);
+  }
+
+  if (json) {
+    console.log(JSON.stringify(entry, null, 2));
+    return;
+  }
+
+  console.log(renderProofLedger(entry));
 }
 
 /**

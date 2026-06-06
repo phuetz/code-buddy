@@ -337,6 +337,71 @@ describe('Run CLI commands', () => {
     expect(JSON.stringify(output)).not.toContain(secret);
   });
 
+  it('prints JSON proof ledger cards for UI consumers', async () => {
+    const runId = startRun('Proof Ledger CLI card', {
+      channel: 'cowork',
+      tags: ['fleet'],
+    });
+    store.emit(runId, {
+      type: 'tool_call',
+      data: {
+        toolCallId: 'call_test',
+        toolName: 'bash',
+        args: { command: 'npm test -- tests/observability/proof-ledger.test.ts' },
+      },
+    });
+    store.emit(runId, {
+      type: 'tool_result',
+      data: {
+        success: true,
+        toolCallId: 'call_test',
+        toolName: 'bash',
+      },
+    });
+    store.saveArtifact(runId, 'summary.md', 'Proof Ledger CLI evidence.');
+    store.endRun(runId, 'completed');
+    activeRunIds = activeRunIds.filter((id) => id !== runId);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const program = createProgram();
+    registerRunCommands(program);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'run',
+      'proof',
+      '--json',
+      runId,
+    ]);
+
+    const output = JSON.parse(getLogOutput()) as {
+      kind: string;
+      run: {
+        runId: string;
+        source?: string;
+      };
+      status: string;
+      tests: {
+        passed: number;
+        total: number;
+      };
+    };
+
+    expect(output).toMatchObject({
+      kind: 'proof_ledger_entry',
+      run: {
+        runId,
+        source: 'fleet',
+      },
+      status: 'proven',
+      tests: {
+        passed: 1,
+        total: 1,
+      },
+    });
+  });
+
   it('prints JSON golden workflow eval manifests for repeatable workflow checks', async () => {
     const program = createProgram();
     registerRunCommands(program);

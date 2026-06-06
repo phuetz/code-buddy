@@ -6,6 +6,7 @@ import {
   type RunSummary,
   RunStore as DefaultRunStore,
 } from './run-store.js';
+import { isProofLedgerArtifact } from './proof-ledger-constants.js';
 
 export const RUN_TRAJECTORY_EXPORT_SCHEMA_VERSION = 1;
 
@@ -123,16 +124,17 @@ export function buildRunTrajectoryExport(
     count: 0,
     redactor: getDataRedactionEngine(),
   };
+  const exportArtifacts = record.artifacts.filter((artifact) => !isProofLedgerArtifact(artifact));
 
   const summary = record.summary;
-  const run = buildExportRun(summary, record.metrics);
+  const run = buildExportRun(summary, record.metrics, exportArtifacts.length);
   const prompt = buildPrompt(events, summary, redaction, maxEventValueBytes);
   const selectedContext = buildSelectedContext(events, redaction, maxEventValueBytes);
   const toolCalls = buildToolCalls(events, redaction, maxEventValueBytes);
   const toolResults = buildToolResults(events, redaction, maxEventValueBytes);
   const finalAnswer = buildFinalAnswer(events, redaction, maxEventValueBytes);
   const artifacts = buildArtifacts(
-    record.artifacts,
+    exportArtifacts,
     store,
     runId,
     options.includeArtifactContent === true,
@@ -226,10 +228,11 @@ export function renderRunTrajectoryExport(exported: RunTrajectoryExport): string
 function buildExportRun(
   summary: RunSummary,
   metrics: Partial<RunMetrics>,
+  artifactCount: number,
 ): RunTrajectoryExportRun {
   const metadata = summary.metadata;
   return {
-    artifactCount: summary.artifactCount,
+    artifactCount,
     channel: metadata?.channel,
     durationMs: metrics.durationMs,
     endedAt: summary.endedAt,

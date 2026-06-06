@@ -49,10 +49,48 @@ export interface AuditRunEvent {
   data: Record<string, unknown>;
 }
 
+export interface AuditProofLedgerEntry {
+  schemaVersion: 1;
+  generatedAt: string;
+  kind: 'proof_ledger_entry';
+  status: 'proven' | 'incomplete' | 'failed';
+  summary: string;
+  run: {
+    artifactCount: number;
+    eventCount: number;
+    objective: string;
+    runId: string;
+    source?: string;
+    status: 'running' | 'completed' | 'failed' | 'cancelled';
+    tags: string[];
+  };
+  privacy: {
+    artifactContentIncluded: false;
+    redaction: 'secrets-redacted';
+    redactionCount: number;
+  };
+  tests: {
+    failed: number;
+    passed: number;
+    total: number;
+  };
+  artifacts: Array<{
+    kind: string;
+    name: string;
+  }>;
+  filesChanged: string[];
+  risks: Array<{
+    detail: string;
+    level: 'low' | 'medium' | 'high';
+    source: string;
+  }>;
+}
+
 export interface AuditRunDetail extends AuditRunSummary {
   events: AuditRunEvent[];
   metrics: Record<string, number>;
   artifacts: string[];
+  proofLedger?: AuditProofLedgerEntry;
 }
 
 export interface AuditRunSearchFilter {
@@ -703,6 +741,13 @@ interface CoreRunStoreModule {
   };
 }
 
+interface CoreProofLedgerModule {
+  buildProofLedgerForRun?: (
+    store: CoreRunStoreInstance,
+    runId: string,
+  ) => AuditProofLedgerEntry | null;
+}
+
 interface CoreRunRecallPackModule {
   buildRunRecallPack?: (
     query: string,
@@ -851,6 +896,7 @@ interface CoreMobileSupervisionApprovalQueueModule {
 }
 
 let cachedModule: CoreRunStoreModule | null = null;
+let cachedProofLedgerModule: CoreProofLedgerModule | null = null;
 
 async function loadModule(): Promise<CoreRunStoreModule | null> {
   if (cachedModule) return cachedModule;
@@ -862,6 +908,15 @@ async function loadModule(): Promise<CoreRunStoreModule | null> {
     logWarn('[AuditBridge] Core RunStore unavailable');
   }
   return mod;
+}
+
+async function loadProofLedgerModule(): Promise<CoreProofLedgerModule | null> {
+  if (cachedProofLedgerModule) return cachedProofLedgerModule;
+  const mod = await loadCoreModule<CoreProofLedgerModule>('observability/proof-ledger.js');
+  if (mod?.buildProofLedgerForRun) {
+    cachedProofLedgerModule = mod;
+  }
+  return cachedProofLedgerModule;
 }
 
 function mergeSummary(
@@ -944,11 +999,14 @@ export async function getRunDetail(runId: string): Promise<AuditRunDetail | null
     for (const [k, v] of Object.entries(record.metrics)) {
       if (typeof v === 'number') metricsPlain[k] = v;
     }
+    const proofMod = await loadProofLedgerModule();
+    const proofLedger = proofMod?.buildProofLedgerForRun?.(store, runId) ?? undefined;
     return {
       ...summary,
       events,
       metrics: metricsPlain,
       artifacts: record.artifacts ?? [],
+      ...(proofLedger ? { proofLedger } : {}),
     };
   } catch (err) {
     logWarn('[AuditBridge] getRunDetail failed:', err);

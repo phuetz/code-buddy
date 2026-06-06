@@ -10,6 +10,7 @@
  *   buddy run lineage <runId>     → show the fork family tree of a run
  *   buddy run recall-pack <query> → build compact context from matching runs
  *   buddy run trajectory-export <runId> → export redacted run trajectory
+ *   buddy run proof <runId>       → show the automatic proof ledger card
  *   buddy run retrospective <runId> → run the Learning Agent over a trajectory
  *   buddy run golden-evals [fixtureId] [runId] → list/evaluate golden workflows
  *   buddy run policy-evals [policyId] [runId] → list/evaluate trajectory policies
@@ -162,6 +163,16 @@ export function registerRunCommands(program: Command): void {
         opts.includeArtifactContent === true,
         parseInt(opts.maxArtifactBytes, 10),
       );
+    });
+
+  // ── buddy run proof ──────────────────────────────────────────
+  run
+    .command('proof <runId>')
+    .description('Show the automatic proof ledger card for a run')
+    .option('--json', 'output JSON')
+    .action(async (runId: string, opts: { json?: boolean }) => {
+      const { showRunProofLedger } = await import('../../observability/run-viewer.js');
+      showRunProofLedger(runId, opts.json === true);
     });
 
   // ── buddy run retrospective ──────────────────────────────────

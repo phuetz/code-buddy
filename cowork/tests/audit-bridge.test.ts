@@ -11,6 +11,7 @@ import {
   buildGoldenWorkflowEvalReport,
   buildPolicyEvalReport,
   buildTrajectoryExport,
+  getRunDetail,
   buildRecallPack,
   listRuns,
   searchRuns,
@@ -71,14 +72,49 @@ describe('audit bridge run search', () => {
       metrics: { durationMs: 1000, toolCallCount: 2 },
       artifacts: [],
     }));
-    mockedLoadCoreModule.mockResolvedValue({
-      RunStore: {
-        getInstance: () => ({
-          getRun,
-          listRuns: coreListRuns,
-          searchRuns: coreSearchRuns,
-        }),
+    const buildProofLedgerForRun = vi.fn(() => ({
+      schemaVersion: 1 as const,
+      generatedAt: '2026-05-19T03:00:00.000Z',
+      kind: 'proof_ledger_entry' as const,
+      status: 'proven' as const,
+      summary: 'Completed with proof.',
+      run: {
+        artifactCount: 1,
+        eventCount: 3,
+        objective: 'Hermes candidate queue',
+        runId: 'run_hermes',
+        source: 'cowork',
+        status: 'completed' as const,
+        tags: ['fleet'],
       },
+      privacy: {
+        artifactContentIncluded: false as const,
+        redaction: 'secrets-redacted' as const,
+        redactionCount: 0,
+      },
+      tests: {
+        failed: 0,
+        passed: 1,
+        total: 1,
+      },
+      artifacts: [{ kind: 'summary', name: 'summary.md' }],
+      filesChanged: ['src/observability/proof-ledger.ts'],
+      risks: [],
+    }));
+    mockedLoadCoreModule.mockImplementation(async (modulePath: string) => {
+      if (modulePath === 'observability/proof-ledger.js') {
+        return { buildProofLedgerForRun };
+      }
+      return {
+        RunStore: {
+          getInstance: () => ({
+            getRun,
+            getEvents: () => [],
+            listRuns: coreListRuns,
+            searchRuns: coreSearchRuns,
+          }),
+        },
+      };
     });
 
     const response = await searchRuns({
@@ -113,6 +149,18 @@ describe('audit bridge run search', () => {
 
     const filtered = await listRuns({ limit: 20, sources: ['desktop'] });
     expect(filtered.map((run) => run.runId)).toEqual(['run_hermes']);
+
+    const detail = await getRunDetail('run_hermes');
+    expect(mockedLoadCoreModule).toHaveBeenCalledWith('observability/proof-ledger.js');
+    expect(buildProofLedgerForRun).toHaveBeenCalledWith(expect.any(Object), 'run_hermes');
+    expect(detail?.proofLedger).toMatchObject({
+      kind: 'proof_ledger_entry',
+      status: 'proven',
+      tests: {
+        passed: 1,
+        total: 1,
+      },
+    });
   });
 
   it('returns an empty envelope for blank queries without loading the core module', async () => {

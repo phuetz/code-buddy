@@ -173,6 +173,26 @@ describe('AuditLogViewer run recall', () => {
       ],
       metrics: {},
       artifacts: ['summary.md'],
+      proofLedger: {
+        schemaVersion: 1,
+        generatedAt: '2026-05-19T01:22:00.000Z',
+        kind: 'proof_ledger_entry',
+        status: 'proven',
+        summary: 'Completed with 1 recorded verification command and 1 supporting artifact.',
+        privacy: {
+          artifactContentIncluded: false,
+          redaction: 'secrets-redacted',
+          redactionCount: 0,
+        },
+        tests: {
+          failed: 0,
+          passed: 1,
+          total: 1,
+        },
+        artifacts: [{ kind: 'summary', name: 'summary.md' }],
+        filesChanged: ['src/observability/proof-ledger.ts'],
+        risks: [],
+      },
     });
     const buildTrajectoryExport = vi.fn().mockResolvedValue({
       schemaVersion: 1,
@@ -242,6 +262,11 @@ describe('AuditLogViewer run recall', () => {
       rowButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+
+    expect(target.textContent).toContain('Proof ledger');
+    expect(target.textContent).toContain('proven');
+    expect(target.textContent).toContain('Tests: 1 / 1');
+    expect(target.textContent).toContain('src/observability/proof-ledger.ts');
 
     const copyButton = Array.from(target.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('Copy trajectory')

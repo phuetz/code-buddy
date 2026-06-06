@@ -55,10 +55,39 @@ interface AuditRunEvent {
   data: Record<string, unknown>;
 }
 
+interface AuditProofLedgerEntry {
+  schemaVersion: 1;
+  generatedAt: string;
+  kind: 'proof_ledger_entry';
+  status: 'proven' | 'incomplete' | 'failed';
+  summary: string;
+  privacy: {
+    artifactContentIncluded: false;
+    redaction: 'secrets-redacted';
+    redactionCount: number;
+  };
+  tests: {
+    failed: number;
+    passed: number;
+    total: number;
+  };
+  artifacts: Array<{
+    kind: string;
+    name: string;
+  }>;
+  filesChanged: string[];
+  risks: Array<{
+    detail: string;
+    level: 'low' | 'medium' | 'high';
+    source: string;
+  }>;
+}
+
 interface AuditRunDetail extends AuditRunSummary {
   events: AuditRunEvent[];
   metrics: Record<string, number>;
   artifacts: string[];
+  proofLedger?: AuditProofLedgerEntry;
 }
 
 interface AuditRunSearchResult {
@@ -558,6 +587,18 @@ function statusClass(status: string): string {
     case 'running':
     default:
       return 'bg-accent/20 text-accent';
+  }
+}
+
+function proofStatusClass(status: AuditProofLedgerEntry['status']): string {
+  switch (status) {
+    case 'proven':
+      return 'bg-success/15 text-success border-success/30';
+    case 'failed':
+      return 'bg-error/15 text-error border-error/30';
+    case 'incomplete':
+    default:
+      return 'bg-warning/15 text-warning border-warning/30';
   }
 }
 
@@ -2044,6 +2085,70 @@ export function AuditLogViewer() {
                               : t('audit.copyPolicyEval', 'Copy policy eval')}
                           </button>
                         </div>
+                        {detail.proofLedger && (
+                          <div
+                            data-testid="audit-proof-ledger-card"
+                            className="rounded-md border border-border-muted bg-surface/40 px-3 py-2 text-[11px]"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <ListChecks size={13} className="text-text-muted" />
+                                <span className="font-medium text-text-primary">
+                                  {t('audit.proofLedgerTitle', 'Proof ledger')}
+                                </span>
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 ${proofStatusClass(detail.proofLedger.status)}`}
+                                >
+                                  {t(`audit.proofLedger.${detail.proofLedger.status}`, detail.proofLedger.status)}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 text-text-muted">
+                                <span className="rounded-full border border-border px-2 py-0.5">
+                                  {t('audit.proofLedgerTests', 'Tests')}: {formatAppNumber(detail.proofLedger.tests.passed)}
+                                  {' / '}
+                                  {formatAppNumber(detail.proofLedger.tests.total)}
+                                </span>
+                                <span className="rounded-full border border-border px-2 py-0.5">
+                                  {t('audit.proofLedgerArtifacts', 'Artifacts')}: {formatAppNumber(detail.proofLedger.artifacts.length)}
+                                </span>
+                                <span className="rounded-full border border-border px-2 py-0.5">
+                                  {detail.proofLedger.privacy.redaction}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="mt-1 text-text-secondary">
+                              {detail.proofLedger.summary}
+                            </div>
+                            {(detail.proofLedger.risks.length > 0 || detail.proofLedger.filesChanged.length > 0) && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {detail.proofLedger.risks.slice(0, 4).map((risk) => (
+                                  <span
+                                    key={`${risk.level}:${risk.source}:${risk.detail}`}
+                                    className={`max-w-[320px] truncate rounded-full px-2 py-0.5 ${
+                                      risk.level === 'high'
+                                        ? 'bg-error/15 text-error'
+                                        : risk.level === 'medium'
+                                          ? 'bg-warning/15 text-warning'
+                                          : 'bg-surface border border-border text-text-muted'
+                                    }`}
+                                    title={`${risk.level}: ${risk.detail}`}
+                                  >
+                                    {risk.level}: {risk.detail}
+                                  </span>
+                                ))}
+                                {detail.proofLedger.filesChanged.slice(0, 4).map((file) => (
+                                  <span
+                                    key={file}
+                                    className="max-w-[260px] truncate rounded-full border border-border px-2 py-0.5 font-mono text-text-muted"
+                                    title={file}
+                                  >
+                                    {file}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div className="max-h-60 overflow-y-auto border border-border-muted rounded-md">
                           {detail.events.length === 0 ? (
                             <div className="p-3 text-[11px] text-text-muted">
