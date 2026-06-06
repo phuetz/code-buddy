@@ -37,7 +37,7 @@ describe('buildMissionControlSnapshot', () => {
         ],
         filesChanged: ['src/observability/proof-ledger.ts'],
         privacy: { redactionCount: 1 },
-        risks: [],
+        risks: [{ level: 'low' }],
         status: 'proven',
         tests: {
           commands: [
@@ -131,6 +131,9 @@ describe('buildMissionControlSnapshot', () => {
         agentCount: 4,
         errorAgents: 1,
         needsAttention: 1,
+        privacyRedactions: 1,
+        proofHighRisks: 0,
+        proofRisks: 1,
         provenWork: 1,
         workCount: 2,
       },
@@ -179,6 +182,7 @@ describe('buildMissionControlSnapshot', () => {
         lastCommandTool: 'shell_exec',
         passedTests: 2,
         redactionCount: 1,
+        riskCount: 1,
         status: 'proven',
         testCommandCount: 1,
         totalTests: 2,

@@ -98,6 +98,9 @@ export interface MissionControlSnapshot {
     failedProof: number;
     incompleteProof: number;
     needsAttention: number;
+    privacyRedactions: number;
+    proofHighRisks: number;
+    proofRisks: number;
     provenWork: number;
     workCount: number;
   };
@@ -220,6 +223,9 @@ export function buildMissionControlSnapshot(
   ).length + agents.filter((agent) => agent.status === 'error').length;
   const failedProof = work.filter((item) => item.proof.status === 'failed').length;
   const incompleteProof = work.filter((item) => item.proof.status === 'incomplete').length;
+  const proofRisks = sumWorkProof(work, (proof) => proof.riskCount);
+  const proofHighRisks = sumWorkProof(work, (proof) => proof.highRiskCount);
+  const privacyRedactions = sumWorkProof(work, (proof) => proof.redactionCount);
 
   return {
     schemaVersion: 1,
@@ -234,12 +240,22 @@ export function buildMissionControlSnapshot(
       incompleteProof,
       needsAttention,
       offlineAgents: agents.filter((agent) => agent.status === 'offline').length,
+      privacyRedactions,
+      proofHighRisks,
+      proofRisks,
       provenWork: work.filter((item) => item.proof.status === 'proven').length,
       workCount: work.length,
     },
     agents,
     work,
   };
+}
+
+function sumWorkProof(
+  work: MissionControlWorkItem[],
+  select: (proof: MissionControlProof) => number,
+): number {
+  return work.reduce((total, item) => total + select(item.proof), 0);
 }
 
 function buildDiscoveredAgents(

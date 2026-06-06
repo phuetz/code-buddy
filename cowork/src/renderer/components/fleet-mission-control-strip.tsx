@@ -98,6 +98,10 @@ export const MissionControlStrip: React.FC<{
             />
           </div>
 
+          {hasMissionProofSignals(snapshot) && (
+            <MissionProofSignalSummary summary={snapshot.summary} />
+          )}
+
           {focus && <MissionFocusLine focus={focus} />}
 
           <MissionAgentList
@@ -300,6 +304,45 @@ const MissionMetric: React.FC<{
     <div className="truncate font-mono text-[12px] tabular-nums">{value}</div>
   </div>
 );
+
+const MissionProofSignalSummary: React.FC<{
+  summary: MissionControlSnapshot['summary'];
+}> = ({ summary }) => {
+  const { t } = useTranslation();
+  return (
+    <div
+      className="flex min-w-0 flex-wrap items-center gap-1 rounded border border-border-muted bg-background/50 px-2 py-1"
+      data-testid="fleet-mission-proof-summary"
+    >
+      <span className="mr-1 text-[9px] uppercase tracking-wider text-text-muted">
+        {t('fleet.mission.proofSignals', 'Proof signals')}
+      </span>
+      {summary.proofRisks > 0 && (
+        <MissionChip tone={summary.proofHighRisks > 0 ? 'attention' : undefined}>
+          {formatMissionCount(summary.proofRisks, 'risk')}
+        </MissionChip>
+      )}
+      {summary.proofHighRisks > 0 && (
+        <MissionChip tone="attention">
+          {formatMissionCount(summary.proofHighRisks, 'high risk')}
+        </MissionChip>
+      )}
+      {summary.privacyRedactions > 0 && (
+        <MissionChip tone="ok">
+          {formatMissionCount(summary.privacyRedactions, 'redaction')}
+        </MissionChip>
+      )}
+    </div>
+  );
+};
+
+function hasMissionProofSignals(snapshot: MissionControlSnapshot): boolean {
+  return (
+    snapshot.summary.proofRisks > 0 ||
+    snapshot.summary.proofHighRisks > 0 ||
+    snapshot.summary.privacyRedactions > 0
+  );
+}
 
 const MissionAgentList: React.FC<{
   agents: MissionControlAgent[];

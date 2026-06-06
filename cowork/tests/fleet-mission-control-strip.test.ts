@@ -55,6 +55,9 @@ const snapshot: MissionControlSnapshot = {
     incompleteProof: 0,
     needsAttention: 1,
     offlineAgents: 0,
+    privacyRedactions: 1,
+    proofHighRisks: 0,
+    proofRisks: 2,
     provenWork: 1,
     workCount: 1,
   },
@@ -125,6 +128,7 @@ describe('MissionControlStrip', () => {
     expect(target.textContent).toContain('Now: Review Fleet UI');
     expect(target.textContent).toContain('MiniStar · fleet · passed 912ms npm test -- tests/cowork/proof.test.ts --run');
     expect(target.textContent).toContain('ministar-linux · seen 30s ago · health probe failed');
+    expect(target.textContent).toContain('Proof signals');
     expect(target.textContent).toContain('proof proven');
     expect(target.textContent).toContain('2/2 tests');
     expect(target.textContent).toContain('1 cmd');
@@ -207,6 +211,9 @@ describe('MissionControlStrip', () => {
         agentCount: 1,
         errorAgents: 0,
         needsAttention: 0,
+        privacyRedactions: 0,
+        proofHighRisks: 0,
+        proofRisks: 0,
         workCount: 0,
       },
       work: [],
